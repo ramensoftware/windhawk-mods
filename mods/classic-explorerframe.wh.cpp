@@ -17,7 +17,6 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
 [Flexible Explorer Toolbars Deluxe](https://windhawk.net/mods/flexible-explorer-toolbars-deluxe), such as the Search bar.
 
 Note that to enable the menubar you need to install in addition the mod [ExplorerFrame and menubar fixes fork](https://windhawk.net/mods/restore-folder-menubar-25h2).
-
 */
 // ==/WindhawkModReadme==
 
@@ -26,7 +25,6 @@ Note that to enable the menubar you need to install in addition the mod [Explore
 #include <wininet.h>
 #include <shlobj.h>
 #include <strsafe.h>
-#include <wchar.h>
 #include <bcrypt.h>
 
 #ifndef ARRAYSIZE
@@ -52,9 +50,6 @@ Note that to enable the menubar you need to install in addition the mod [Explore
 #ifndef BCRYPT_SUCCESS
 #define BCRYPT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #endif
-
-// Windhawk API, предоставляется хостом
-extern size_t Wh_GetModStoragePath(PWSTR pathBuffer, size_t bufferChars);
 
 typedef struct _LDR_DATA_TABLE_ENTRY_FULL {
     LIST_ENTRY InLoadOrderLinks;
@@ -84,15 +79,13 @@ static const WCHAR* EXPECTED_SHA256_X64 =
 static const WCHAR* EXPECTED_SHA256_ARM64 =
     L"7f76b0e033e7c9ae01acdade97f8f857bb205dabb1f1aff59dbb489792454ea8";
 
-// ---------- архитектура текущего процесса (во время выполнения) ----------
-
+// Архитектура текущего процесса explorer.exe, проверка во время выполнения.
 static USHORT GetCurrentProcessMachine(void) {
     HMODULE hSelf = GetModuleHandleW(NULL);
     if (hSelf) {
         PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)hSelf;
         if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
             LONG lfanew = dos->e_lfanew;
-            // e_lfanew своего модуля всегда валиден, проверяем диапазон без SEH/__try
             if (lfanew >= 0 && lfanew < 0x100000) {
                 PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE*)hSelf + lfanew);
                 if (nt->Signature == IMAGE_NT_SIGNATURE) {
@@ -102,7 +95,6 @@ static USHORT GetCurrentProcessMachine(void) {
         }
     }
 
-    // Fallback: IsWow64Process2
     {
         HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
         if (hKernel32) {
@@ -112,7 +104,7 @@ static USHORT GetCurrentProcessMachine(void) {
             if (pIsWow64Process2) {
                 USHORT procMachine = 0, nativeMachine = 0;
                 if (pIsWow64Process2(GetCurrentProcess(), &procMachine, &nativeMachine)) {
-                    if (procMachine != 0) // IMAGE_FILE_MACHINE_UNKNOWN
+                    if (procMachine != 0)
                         return procMachine;
                     if (nativeMachine != 0)
                         return nativeMachine;
@@ -121,7 +113,7 @@ static USHORT GetCurrentProcessMachine(void) {
         }
     }
 
-#if defined(_M_ARM64) || defined(__aarch64__) || defined(_ARM64_)
+#if defined(_M_ARM64) || defined(__aarch64__)
     return IMAGE_FILE_MACHINE_ARM64;
 #else
     return IMAGE_FILE_MACHINE_AMD64;
@@ -142,8 +134,6 @@ static const WCHAR* CurrentUrl(void) {
 static const WCHAR* CurrentExpectedHash(void) {
     return g_isArm64 ? EXPECTED_SHA256_ARM64 : EXPECTED_SHA256_X64;
 }
-
-// ---------- SHA256 ----------
 
 static BOOL HexCharToNibble(WCHAR c, BYTE* out) {
     if (c >= L'0' && c <= L'9') { *out = (BYTE)(c - L'0'); return TRUE; }
@@ -219,8 +209,6 @@ static BOOL VerifyFileSHA256(const WCHAR* path, const WCHAR* expectedHex) {
     return TRUE;
 }
 
-// ---------- файлы / сеть ----------
-
 static BOOL EnsureDirectoryExists(const WCHAR* filePath) {
     WCHAR dirPath[MAX_PATH];
     WCHAR* lastSlash;
@@ -287,7 +275,7 @@ static BOOL DownloadFile(const WCHAR* url, const WCHAR* destPath) {
     return TRUE;
 }
 
-// Проверка + при необходимости замена файла. Используется и при старте, и перед LoadLibrary.
+// Проверка с заменой файла при неверной сумме. Вызывается при старте и перед загрузкой.
 static BOOL EnsureStagingFileValid(void) {
     if (VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash()))
         return TRUE;
@@ -315,26 +303,25 @@ static BOOL EnsureStagingFileValid(void) {
 static BOOL PrepareExplorerFrameDll(void) {
     WCHAR storageDir[MAX_PATH];
     WCHAR systemDir[MAX_PATH];
-    size_t len;
     HRESULT hr;
     DWORD attrs;
     const WCHAR* leaf;
 
-    // Важно: смотрим архитектуру именно текущего процесса explorer.exe,
-    // а не ОС. На ARM64 ОС explorer.exe может быть эмулированным x86-64.
+    // На ARM64 ОС explorer.exe может быть эмулированным x86-64,
+    // поэтому смотрим именно процесс, а не сборку мода.
     g_isArm64 = IsCurrentProcessArm64();
     Wh_Log(L"Архитектура текущего процесса: %s (Machine=0x%04X)",
         g_isArm64 ? L"ARM64" : L"x86-64", GetCurrentProcessMachine());
 
-    // Путь хранения только через Windhawk API
     memset(storageDir, 0, sizeof(storageDir));
-    len = Wh_GetModStoragePath(storageDir, ARRAYSIZE(storageDir));
-    if (len == 0 || len >= ARRAYSIZE(storageDir)) {
-        Wh_Log(L"Wh_GetModStoragePath failed: len=%Iu", (unsigned long long)len);
-        return FALSE;
+    {
+        size_t len = Wh_GetModStoragePath(storageDir, ARRAYSIZE(storageDir));
+        if (len == 0 || len >= ARRAYSIZE(storageDir)) {
+            Wh_Log(L"Wh_GetModStoragePath failed");
+            return FALSE;
+        }
     }
 
-    // Разные имена для разных архитектур, чтобы не было коллизии хешей
     leaf = g_isArm64 ? L"explorerframe_arm64.dll" : L"explorerframe_x64.dll";
     hr = StringCchPrintfW(g_stagingDllPath, MAX_PATH, L"%s\\%s", storageDir, leaf);
     if (FAILED(hr)) return FALSE;
@@ -380,8 +367,7 @@ static BOOL IsExplorerFrameByName(PCWSTR name) {
     return _wcsicmp(fileName, L"explorerframe.dll") == 0;
 }
 
-// PEB получаем через NtQueryInformationProcess — один и тот же код
-// компилируется и для x86-64, и для ARM64, без __readgsqword/__readx18qword и без __try.
+// PEB через NtQueryInformationProcess: один код для x64 и ARM64.
 static BOOL PatchLoaderEntryPath(HMODULE hModule) {
     HMODULE hNtdll;
     typedef NTSTATUS (NTAPI *NtQueryInformationProcess_t)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
@@ -422,12 +408,10 @@ static BOOL PatchLoaderEntryPath(HMODULE hModule) {
     head = &peb->Ldr->InMemoryOrderModuleList;
     current = head->Flink;
 
-    // Ограничение итераций — защита от битого списка без SEH
     for (i = 0; i < 4096 && current && current != head; i++) {
         PLDR_DATA_TABLE_ENTRY_FULL entry =
             CONTAINING_RECORD(current, LDR_DATA_TABLE_ENTRY_FULL, InMemoryOrderLinks);
 
-        // entry указывает внутрь PEB-LDR, в нормальном случае всегда валиден
         if (entry->DllBase == (PVOID)hModule) {
             fullLen = wcslen(g_canonicalDllPath);
             baseLen = wcslen(L"explorerframe.dll");
@@ -483,17 +467,15 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 
     Wh_Log(L"[LoadLibraryExW] Перехват: %s -> %s", lpLibFileName, g_stagingDllPath);
 
-    // Проверка SHA256 перед загрузкой в память. Если неправильная — заменяем.
     if (!VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
+        BOOL ok;
         Wh_Log(L"[LoadLibraryExW] Хеш неверный перед загрузкой");
         g_insideHook = TRUE;
-        {
-            BOOL ok = EnsureStagingFileValid();
-            g_insideHook = FALSE;
-            if (!ok) {
-                Wh_Log(L"[LoadLibraryExW] Не удалось восстановить файл, гружу оригинал");
-                return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-            }
+        ok = EnsureStagingFileValid();
+        g_insideHook = FALSE;
+        if (!ok) {
+            Wh_Log(L"[LoadLibraryExW] Не удалось восстановить файл, гружу оригинал");
+            return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
         }
     }
 
@@ -525,15 +507,14 @@ HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR lpLibFileName) {
     Wh_Log(L"[LoadLibraryW] Перехват: %s -> %s", lpLibFileName, g_stagingDllPath);
 
     if (!VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
+        BOOL ok;
         Wh_Log(L"[LoadLibraryW] Хеш неверный перед загрузкой");
         g_insideHook = TRUE;
-        {
-            BOOL ok = EnsureStagingFileValid();
-            g_insideHook = FALSE;
-            if (!ok) {
-                Wh_Log(L"[LoadLibraryW] Не удалось восстановить файл, гружу оригинал");
-                return LoadLibraryW_Original(lpLibFileName);
-            }
+        ok = EnsureStagingFileValid();
+        g_insideHook = FALSE;
+        if (!ok) {
+            Wh_Log(L"[LoadLibraryW] Не удалось восстановить файл, гружу оригинал");
+            return LoadLibraryW_Original(lpLibFileName);
         }
     }
 
@@ -557,7 +538,7 @@ BOOL Wh_ModInit(void) {
     FARPROC pLoadLibraryExW;
     FARPROC pLoadLibraryW;
 
-    Wh_Log(L"Инициализация ExplorerFrame Redirector v7.0 (x64/ARM64 runtime)");
+    Wh_Log(L"Инициализация ExplorerFrame Redirector v7.1 (x64/ARM64 runtime)");
 
     g_fileReady = PrepareExplorerFrameDll();
     if (!g_fileReady) {
