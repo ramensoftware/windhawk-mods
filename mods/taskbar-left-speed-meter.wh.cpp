@@ -4,7 +4,7 @@
 // @description     Displays real-time Internet download and upload speed on the bottom-left corner of the taskbar with full customization.
 // @version         1.1.0
 // @author          RAKIBUL ISLAM SANI
-// @github          https://github.com/rakibulislam
+// @github          https://github.com/rakibulislamsani
 // @include         explorer.exe
 // @compilerOptions -liphlpapi -lgdi32 -luser32
 // ==/WindhawkMod==
