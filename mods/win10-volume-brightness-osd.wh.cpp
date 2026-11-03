@@ -6,21 +6,22 @@
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -luuid -lwbemuuid -lgdi32 -luser32 -ldwmapi -ldxva2 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Windows 10 Style Volume & Brightness OSD
+# Windows 8/10 Style Volume & Brightness OSD
 
-Shows the vertical Windows 8/10 flyout for **volume** and **brightness** insted of windows 11 one
+Shows the vertical Windows 8/10 flyout for **volume** and **brightness** instead of the Windows 11 one.
 
 ## Windows 8/10 Theme
 
 ### Volume
 ![volume10](https://raw.githubusercontent.com/AdmXP8/assets/main/10vol.png)
 
-### Brightness 
+### Brightness
 ![brightness10](https://raw.githubusercontent.com/AdmXP8/assets/main/10brg.png)
 
 ## Developer Preview Theme
@@ -31,6 +32,89 @@ Shows the vertical Windows 8/10 flyout for **volume** and **brightness** insted 
 ### Brightness
 ![brightnessDP](https://raw.githubusercontent.com/AdmXP8/assets/main/dpbrg.png)
 
+## Volume
+* With "Capture the volume keys" (on by default) the volume keys (up / down /
+  mute) are taken **system-wide** with `RegisterHotKey`, so other applications
+  no longer receive them, but the flyout also appears when the volume is
+  already 0 or 100. Turn the option off if it conflicts with another program.
+* Optional (off by default, "Keyboard hook fallback"): a low-level keyboard
+  hook, running on its own thread, is used as a fallback signal when a volume
+  key does not reach the hotkey (for example when another app owns the
+  hotkey).
+* Volume changes from any other source (WASAPI) also show the flyout.
+* When muted, or at volume 0, a cross icon replaces the number.
+
+## Brightness
+* **Laptops:** the mod listens to the system brightness notification. The
+  Fn brightness keys keep working normally.
+* **Desktop PCs / external monitors:** enable "External monitor hotkeys". The
+  mod then uses DDC/CI to change the brightness of the monitor under the mouse
+  cursor with **Ctrl+Alt+Up / Ctrl+Alt+Down**.
+* These hotkeys are registered **system-wide** while the option is on.
+  Ctrl+Alt+Up / Down is also used by some applications (for example "add
+  cursor above/below" in VS Code) and by the screen rotation hotkey of some
+  Intel graphics drivers, so leave the option off if it conflicts. The flyout
+  is shown on the monitor that is being adjusted.
+* Brightness flyout trigger:
+  * *On every brightness change* - shows the flyout whenever the system reports
+    a new brightness (this includes automatic changes such as the ambient light
+    sensor or an AC/battery switch). When the brightness is already at its
+    minimum or maximum no change is reported, so the native OSD is used as a
+    trigger instead; this needs "Suppress the native OSD" to be on.
+  * *Only when the native OSD appears* - shows the flyout only when Windows
+    would have shown its own OSD. Works at the minimum/maximum and ignores
+    automatic changes. Depends on the native OSD detection described below.
+
+## Mouse
+The flyout can be dragged with the mouse to change whatever it is showing:
+the volume, the brightness of the internal (laptop) panel - set through WMI,
+the same way as the Fn keys - or, after the Ctrl+Alt+Up/Down hotkeys were
+used, the brightness of an external monitor (DDC/CI).
+
+## Always on top
+Enable **Always on top** to show the flyout above fullscreen UWP apps. The
+flyout window is created in the same Z-band as the native Windows OSD. The mod
+learns that band the first time the native OSD is detected (this needs
+"Suppress the native OSD" or the native-OSD brightness trigger to be on) and
+then recreates its window in that band automatically. If the band cannot be
+used, the mod falls back to a UIAccess band and then to a normal topmost
+window. Enable logging to see which band was used.
+
+## Native OSD suppression
+The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
+Small `XamlExplorerHostIslandWindow` windows are treated as candidates for the
+native OSD. Explorer hosts other flyouts in the same class, so two checks keep
+them apart:
+
+* Windows hosted by the `MultitaskingView` UI thread, or by a snap-related
+  thread, are never the indicator. This covers the virtual desktop switcher
+  shown when hovering the Task View button, the Snap Layouts flyout shown
+  when hovering a window's maximize/restore button (or pressing Win+Z), and
+  the Snap Assist bar shown when dragging a window to the top of the screen.
+* The first candidate that appears together with a real volume/brightness
+  event must be the true indicator, so its thread description and Z-band are
+  remembered as the indicator's signature. A candidate that appears without
+  such an event - a brightness key pressed at the minimum/maximum, for one -
+  is only accepted if it matches that signature.
+
+Enable logging in Windhawk to see the class, title, thread description, band
+and size of the windows that are treated as the OSD, and why other flyouts
+were rejected.
+
+## Known issues
+* Other hardware indicators that share the native flyout (for example airplane
+  mode) are hidden as well, and on a PC that reports a brightness value the
+  brightness flyout then appears in their place, because a native OSD without
+  a recent volume event is assumed to be a brightness change.
+* The OSD signature is learned from the first volume/brightness event after
+  Explorer starts. Until then only the thread name is used to recognise the
+  Snap Layouts flyout and similar windows, and "Always on top" has not yet
+  learned the Z-band of the native OSD.
+* If the Z-band of the native OSD cannot be used, the flyout may not appear
+  above fullscreen UWP apps.
+
+## Credits
+Special thanks to babamohammed2022 for the base version of the mod.
 */
 // ==/WindhawkModReadme==
 
@@ -157,6 +241,7 @@ int  g_level = 0;
 bool g_muted = false;
 bool g_dragging = false;
 HMONITOR g_brTarget = nullptr; 
+bool g_applyPending = false;    //a TIMER_APPLY is armed and not yet handled
 bool g_applyWmi = false;        
 int  g_wmiPending = 0;          
 ULONGLONG g_lastHotkeyTick = 0; 
@@ -495,7 +580,7 @@ struct DdcState {
     bool      quit = false;
     bool      doRead = false;  HMONITOR readMon = nullptr;
     bool      doSet = false;   HMONITOR setMon = nullptr;  DWORD setValue = 0;
-    bool      doWmiSet = false; int wmiValue = 0;   // internal panel (WMI)
+    bool      doWmiSet = false; int wmiValue = 0;   //internal panel (WMI)
     bool      resOk = false;   HMONITOR resMon = nullptr;
     DWORD     resMin = 0, resCur = 0, resMax = 0;
 };
@@ -740,6 +825,11 @@ void WmiApply() {
     g_ddc.doWmiSet = true;
     ReleaseSRWLockExclusive(&g_ddc.lock);
     SetEvent(g_ddc.ev);
+}
+
+static void ScheduleApply(HWND h) {
+    g_applyPending = true;
+    SetTimer(h, TIMER_APPLY, 60, nullptr);
 }
 
 //OSD window
@@ -1010,7 +1100,7 @@ static void ExtStep(HWND h, int delta) {
 
     ShowBrightness(h, g_extPct, g_extMon);
     g_applyWmi = false;
-    SetTimer(h, TIMER_APPLY, 60, nullptr);
+    ScheduleApply(h);
 }
 
 void ExternalBrightnessKey(HWND h, int dir) {
@@ -1061,7 +1151,7 @@ void SetLevelFromMouse(HWND h, int x, int y) {
         g_wmiPending = level;
         g_lastBrTick = GetTickCount64();
         g_applyWmi = true;
-        SetTimer(h, TIMER_APPLY, 60, nullptr);
+        ScheduleApply(h);
     } else {
         POINT pt;
         GetCursorPos(&pt);
@@ -1076,7 +1166,7 @@ void SetLevelFromMouse(HWND h, int x, int y) {
         g_extLast = GetTickCount64();
         g_level = level;
         g_applyWmi = false;
-        SetTimer(h, TIMER_APPLY, 60, nullptr);
+        ScheduleApply(h);
     }
     InvalidateRect(h, nullptr, FALSE);
 }
@@ -1118,7 +1208,7 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                     if (!g_cfg.nativeTrigger) {
                         if (changed) ShowBrightness(h, v);
                     } else if (IsWindowVisible(h) && g_mode == MODE_BRIGHTNESS) {
-                        g_level = v;                       // refresh a flyout already open
+                        g_level = v;                       //refresh a flyout already open
                         InvalidateRect(h, nullptr, FALSE);
                     }
                 }
@@ -1216,6 +1306,7 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             }
         } else if (w == TIMER_APPLY) {
             KillTimer(h, TIMER_APPLY);
+            g_applyPending = false;
             if (g_applyWmi) WmiApply();
             else            ExtApply();
         } else if (w == TIMER_VOLKEY) {
@@ -1385,6 +1476,7 @@ HWND CreateOsdWindow(WNDCLASSW* wc, int w, int h) {
 void RecreateOsd() {
     HWND old = g_osd.load();
     if (!old) return;
+    bool wasVisible = IsWindowVisible(old);
 
     HWND nw = CreateOsdWindow(&g_wc, S(BASE_W), S(BASE_H));
     if (!nw) {
@@ -1398,6 +1490,13 @@ void RecreateOsd() {
     if (g_pn1) { UnregisterPowerSettingNotification(g_pn1); g_pn1 = nullptr; }
     if (g_pn2) { UnregisterPowerSettingNotification(g_pn2); g_pn2 = nullptr; }
 
+    //the timers die with the old window send a coalesced brightness change
+    if (g_applyPending) {
+        g_applyPending = false;
+        if (g_applyWmi) WmiApply();
+        else            ExtApply();
+    }
+
     g_osd = nw;
     DestroyWindow(old);
 
@@ -1405,6 +1504,11 @@ void RecreateOsd() {
     g_brArmed = GetTickCount64() + 1500;
     g_pn1 = RegisterPowerSettingNotification(nw, &kBrGuid1, DEVICE_NOTIFY_WINDOW_HANDLE);
     g_pn2 = RegisterPowerSettingNotification(nw, &kBrGuid2, DEVICE_NOTIFY_WINDOW_HANDLE);
+
+    // The flyout was on screen (the band is usually learned while the native
+    // OSD, and with it our flyout, is showing): show it again in the new window.
+    if (wasVisible)
+        ShowOsd(nw, g_mode == MODE_BRIGHTNESS ? g_brTarget : nullptr);
 }
 
 DWORD WINAPI UiThread(LPVOID) {
