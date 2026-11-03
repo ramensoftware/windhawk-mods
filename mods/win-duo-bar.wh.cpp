@@ -3,7 +3,7 @@
 // @name            Win Duo Bar
 // @description     A compact ring widget for the Windows 11 taskbar clock: a battery gauge ring, a Wi-Fi symbol, the time and date, and a charging animation
 // @description:zh-CN 一个替换 Windows 11 任务栏时钟的圆环小组件：电量圆环、Wi-Fi 图标、时间日期，以及充电动画
-// @version         1.1.1
+// @version         1.1.2
 // @author          Felinyu
 // @github          https://github.com/Felinyu
 // @license         GPL-3.0
@@ -452,7 +452,9 @@ std::wstring Pad2(int value) {
 // is a 24-hour one. Quoted parts of the picture are literal text, not format
 // specifiers, e.g. French (Canada) uses "HH 'h' mm".
 bool SystemUses12HourClock() {
-    WCHAR format[32]{};
+    // LOCALE_SSHORTTIME can be up to 80 characters, a longer custom format
+    // makes GetLocaleInfoEx fail with ERROR_INSUFFICIENT_BUFFER.
+    WCHAR format[80]{};
     if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTTIME, format,
                          ARRAYSIZE(format))) {
         return false;
