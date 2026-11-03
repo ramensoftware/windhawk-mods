@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
-// @architecture    x86-64
+// @architecture    amd64
 // @include         explorer.exe
 // @compilerOptions -lwininet -lshell32 -lntdll
 // ==/WindhawkMod==
