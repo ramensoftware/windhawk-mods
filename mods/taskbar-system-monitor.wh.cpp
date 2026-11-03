@@ -957,6 +957,7 @@ struct Overlay {
 
 // (taskbar, overlay window) pairs, so event callbacks on any thread can notify the right window
 static std::mutex g_pairMutex;
+static void RemoveTaskbarHook();
 static std::vector<std::pair<HWND, HWND>> g_pairs;
 
 typedef void(WINAPI* RunProc_t)(PVOID);
@@ -1327,11 +1328,52 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 g_pairs.erase(std::remove_if(g_pairs.begin(), g_pairs.end(), [&](const auto& pr) { return pr.second == h; }), g_pairs.end());
             }
             SetWindowLongPtrW(h, GWLP_USERDATA, 0);
+            if (ov) RemoveTaskbarHook();
             delete ov;
             break;
         }
     }
     return DefWindowProcW(h, m, w, l);
+}
+
+// The auto-hide slide runs inside the taskbar's own thread and does not pump posted messages meanwhile, so the overlay
+// is moved from a hook that runs on that same thread right after each of the taskbar's own position changes.
+static std::mutex g_hookMutex;
+static std::map<DWORD, std::pair<HHOOK, int>> g_tbHooks;  // taskbar thread id -> hook, number of overlays using it
+
+static LRESULT CALLBACK TaskbarRetProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        const CWPRETSTRUCT* c = (const CWPRETSTRUCT*)lParam;
+        if (c->message == WM_WINDOWPOSCHANGED) {
+            HWND ovh = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(g_pairMutex);
+                for (const auto& pr : g_pairs) if (pr.first == c->hwnd) { ovh = pr.second; break; }
+            }
+            if (ovh) {
+                Overlay* ov = (Overlay*)GetWindowLongPtrW(ovh, GWLP_USERDATA);
+                if (ov) UpdatePosition(ov, false);
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+static void AddTaskbarHook() {
+    std::lock_guard<std::mutex> lock(g_hookMutex);
+    auto& e = g_tbHooks[GetCurrentThreadId()];
+    if (!e.first) e.first = SetWindowsHookExW(WH_CALLWNDPROCRET, TaskbarRetProc, nullptr, GetCurrentThreadId());
+    e.second++;
+}
+
+static void RemoveTaskbarHook() {
+    std::lock_guard<std::mutex> lock(g_hookMutex);
+    auto it = g_tbHooks.find(GetCurrentThreadId());
+    if (it == g_tbHooks.end()) return;
+    if (--it->second.second <= 0) {
+        if (it->second.first) UnhookWindowsHookEx(it->second.first);
+        g_tbHooks.erase(it);
+    }
 }
 
 // ---- create / destroy, run on the taskbar's thread ----
@@ -1369,6 +1411,7 @@ static void WINAPI CreateOverlayOnThread(PVOID p) {
         std::lock_guard<std::mutex> lock(g_pairMutex);
         g_pairs.push_back({cp->taskbar, hwnd});
     }
+    AddTaskbarHook();
     cp->result = hwnd;
 }
 
@@ -1811,6 +1854,37 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 bool moving = EaseDisp();
                 RenderAll();
                 if (!moving) KillTimer(h, 3);
+            } else if (w == 7) {
+                // Cheap watcher for the taskbar rectangle (GetWindowRect only, nothing is drawn). The auto-hide slide
+                // does not raise enough window events, so it polls slowly while idle and fast while the taskbar moves.
+                static std::map<HWND, RECT> last;
+                static ULONGLONG calmSince = 0;
+                static bool fast = false;
+                std::vector<std::pair<HWND, HWND>> pairs;
+                {
+                    std::lock_guard<std::mutex> lock(g_pairMutex);
+                    pairs = g_pairs;
+                }
+                bool changed = false;
+                for (const auto& pr : pairs) {
+                    RECT r;
+                    if (!GetWindowRect(pr.first, &r)) continue;
+                    auto it = last.find(pr.first);
+                    bool had = it != last.end();
+                    if (!had || !EqualRect(&it->second, &r)) {
+                        last[pr.first] = r;
+                        if (had) { changed = true; PostMessageW(pr.second, WM_UPDATEPOS, 0, 0); }
+                    }
+                }
+                ULONGLONG now = GetTickCount64();
+                if (changed) {
+                    calmSince = now;
+                    if (!fast) { fast = true; SetTimer(h, 7, 8, nullptr); }
+                } else if (fast && now - calmSince > 600) {
+                    fast = false;
+                    SetTimer(h, 7, 40, nullptr);
+                    SetEvent(g_uiaEvent);  // the taskbar settled: re-measure the first icon
+                }
             } else if (w == 4) {
                 SyncOverlays();
             } else if (w == 6) {  // overlays that have not got their first picture yet
@@ -1897,6 +1971,7 @@ static DWORD WINAPI Worker(LPVOID) {
         SetTimer(msgWnd, 1, g_s.refreshMs, nullptr);
         SetTimer(msgWnd, 4, 1000, nullptr);
         SetTimer(msgWnd, 6, 250, nullptr);
+        SetTimer(msgWnd, 7, 40, nullptr);
 
         MSG msg;
         while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -1907,7 +1982,7 @@ static DWORD WINAPI Worker(LPVOID) {
         g_stop = true;
         SetEvent(g_stopEvent);
         for (HWINEVENTHOOK hk : hooks) if (hk) UnhookWinEvent(hk);
-        KillTimer(msgWnd, 1); KillTimer(msgWnd, 3); KillTimer(msgWnd, 4); KillTimer(msgWnd, 6);
+        KillTimer(msgWnd, 1); KillTimer(msgWnd, 3); KillTimer(msgWnd, 4); KillTimer(msgWnd, 6); KillTimer(msgWnd, 7);
         // the overlay windows live on the taskbar's thread: destroy them there
         for (const OvRef& ref : g_refs) RunFromWindowThread(ref.taskbar, DestroyOverlayOnThread, ref.hwnd);
         g_refs.clear();
