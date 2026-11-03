@@ -7,7 +7,7 @@
 // @github          https://github.com/Anixx
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -luxtheme -lpsapi -ldbghelp
+// @compilerOptions -lcomctl32 -lgdi32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -107,6 +107,78 @@ UINT g_msgMenubarHackfix = 0;
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+bool IsExplorerFrameBaseNameW(LPCWSTR path)
+{
+    if (!path || !*path)
+        return false;
+
+    LPCWSTR base = path;
+    for (LPCWSTR p = path; *p; ++p)
+    {
+        if (*p == L'\\' || *p == L'/')
+            base = p + 1;
+    }
+
+    return (lstrcmpiW(base, L"explorerframe.dll") == 0 ||
+            lstrcmpiW(base, L"explorerframe") == 0);
+}
+
+// Lock-free tail check on UNICODE_STRING (may be non-null-terminated).
+// Used as cheap pre-filter inside LdrLoadDll hook to avoid waking
+// the worker for unrelated DLLs.
+bool IsExplorerFrameUnicodeName(PUNICODE_STRING s)
+{
+    if (!s || !s->Buffer || s->Length < 13 * (USHORT)sizeof(WCHAR))
+        return false;
+
+    USHORT cch = (USHORT)(s->Length / sizeof(WCHAR));
+    int lastSlash = -1;
+    for (int i = 0; i < cch; i++)
+    {
+        WCHAR c = s->Buffer[i];
+        if (c == L'\\' || c == L'/')
+            lastSlash = i;
+        if (c == L'\0')
+        {
+            cch = (USHORT)i;
+            break;
+        }
+    }
+
+    int start = lastSlash + 1;
+    int len = (int)cch - start;
+    if (len != 13 && len != 17)
+        return false;
+
+    LPCWSTR tail = s->Buffer + start;
+    if (len == 13)
+    {
+        static const WCHAR k[] = L"explorerframe";
+        for (int i = 0; i < 13; i++)
+        {
+            WCHAR a = tail[i];
+            if (a >= L'A' && a <= L'Z')
+                a += 32;
+            if (a != k[i])
+                return false;
+        }
+        return true;
+    }
+    else
+    {
+        static const WCHAR k[] = L"explorerframe.dll";
+        for (int i = 0; i < 17; i++)
+        {
+            WCHAR a = tail[i];
+            if (a >= L'A' && a <= L'Z')
+                a += 32;
+            if (a != k[i])
+                return false;
+        }
+        return true;
+    }
+}
 
 bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
 {
@@ -622,6 +694,8 @@ void HookAllLoadedExplorerFrameCopies()
 // Load trigger: only SetEvent, heavy work in worker (no loader-lock deadlock).
 // Single hook: every LoadLibrary in kernelbase ends up in LdrLoadDll,
 // and the redirector bypasses LoadLibrary hooks via LoadLibraryExW_Original.
+// Filtered: wake worker only for explorerframe, skip refcount bumps
+// of unrelated DLLs.
 // ---------------------------------------------------------------------------
 
 typedef LONG (WINAPI *LdrLoadDll_t)(PWSTR SearchPath, PULONG DllCharacteristics, PUNICODE_STRING DllName, PVOID* BaseAddress);
@@ -633,11 +707,20 @@ LONG WINAPI LdrLoadDll_Hook(PWSTR SearchPath, PULONG DllCharacteristics, PUNICOD
 
     if (st >= 0 && BaseAddress && *BaseAddress)
     {
-        // Signal on every successful load, no name checks here.
-        // Auto-reset event merges bursts into one rescan, worker
-        // finds explorerframe copies via Toolhelp by base name.
         if (g_hookEvent && !g_stopWorker.load())
-            SetEvent(g_hookEvent);
+        {
+            // Cheap pre-filter on the request name, no API calls.
+            if (IsExplorerFrameUnicodeName(DllName))
+            {
+                // Confirm against the loaded module. Redirector keeps
+                // base name explorerframe.dll (same assumption as the
+                // Toolhelp scan). Fail-open if query fails.
+                WCHAR modPath[MAX_PATH];
+                DWORD n = GetModuleFileNameW((HMODULE)*BaseAddress, modPath, ARRAYSIZE(modPath));
+                if (n == 0 || IsExplorerFrameBaseNameW(modPath))
+                    SetEvent(g_hookEvent);
+            }
+        }
     }
 
     return st;
