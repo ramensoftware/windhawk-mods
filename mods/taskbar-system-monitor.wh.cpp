@@ -17,51 +17,47 @@
 
 ![Screenshot](https://raw.githubusercontent.com/exefile04/taskbar-system-monitor/main/images/screenshot.png)
 
-Live CPU, GPU, RAM, disk and network stats drawn **inside the Windows 11 taskbar**, to the left of the first
-icon, with clean outline icons. Works with Taskbar Styler docks and on every monitor.
+Shows CPU, GPU, RAM, disk and network usage in the empty space on the left of your Windows 11 taskbar.
+I made it for a centered taskbar (it also works with Taskbar Styler docks).
 
-## Features
-- **Fully configurable layout** - choose what is shown and where (see below).
-- **Hover** a value for details: busiest apps, memory free, disk read/write, data used today.
-- **Click** opens Task Manager (configurable); **right-click** shows a small menu.
-- Smooth value animation, optional 60-second sparklines, optional warning colors (off by default).
-- RAM icon fills up with usage. KiB/MiB/GiB or KB/MB/GB, bytes or bits for network.
-- Follows the taskbar (auto-hide, Start menu, minimising), hides while a fullscreen window covers the screen.
-- Every monitor's taskbar gets its own monitor.
+## What it does
+- Shows CPU, GPU, RAM, disk, download and upload, with small outline icons. The RAM icon fills up as memory gets used.
+- Hover a value to see more: which apps use the most CPU or memory, disk read/write speed, how much data you used today.
+- Click it to open Task Manager (you can change that). Right-click for a small menu.
+- Works on every monitor that has a taskbar.
+- Hides when a fullscreen app is on top.
+- Almost everything can be changed in the settings: layout, font, colors, sizes, units (GiB or GB, bytes or bits), update speed.
 
-## How this differs from similar mods
-Other mods already show CPU/GPU/RAM in the taskbar (Taskbar System Info), a network speed (Taskbar Network Speed
-Indicator) or put values into the clock (Taskbar Clock Customization). This mod puts **CPU, GPU, RAM, disk and
-network in one compact widget** with per-item icons (the RAM icon fills with usage), a free-form layout string,
-hover tooltips (busiest apps, disk read/write, data used today), click actions and a daily data counter.
+## Other mods that look similar
+Taskbar System Info, Taskbar Network Speed Indicator and Taskbar Clock Customization can show some of this too.
+This one puts everything in a single small block with icons, lets you pick the layout yourself, and has the
+hover details and the daily data counter.
 
-## Layout string
-Columns are separated by `|`, rows inside a column by `,`. Items: `cpu`, `gpu`, `ram`, `disk`, `down`, `up`
-and `-` for an empty slot (up to 3 rows).
+## Layout
+You write the layout as text. Use `|` between columns and `,` between rows. The items are `cpu`, `gpu`, `ram`,
+`disk`, `down` and `up`. Use `-` for an empty spot. You can have up to 3 rows.
 
-| Layout | Result |
+| Layout | What you get |
 |---|---|
-| `cpu,gpu\|ram,disk\|down,up` | default, three columns, two rows |
-| `cpu\|ram\|down` | a single row |
-| `cpu,ram,disk\|down,up` | three rows |
+| `cpu,gpu\|ram,disk\|down,up` | the default: 3 columns, 2 rows |
+| `cpu\|ram\|down` | one row |
+| `cpu,ram,disk\|down,up` | 3 rows |
 
-## About temperatures
-Windows does not give normal programs real CPU temperatures.
-- **GPU temperature** comes from the graphics driver through the same Windows interface Task Manager uses
-  (works for NVIDIA and for most AMD/Intel drivers that report one).
-- For accurate **CPU** temperatures run
-  [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (as administrator,
-  it can stay minimised in the tray). The mod reads its WMI data automatically, even if it is started later.
-- Without it the CPU value comes from Windows' ACPI thermal zone, which is only approximate and missing on some
-  PCs. An integrated GPU without its own sensor can show the CPU/APU temperature (they share one die) - this can
-  be turned off.
+## Temperatures
+Windows doesn't let normal programs read the CPU temperature, so here is what you get:
+- **GPU:** read from the graphics driver, the same way Task Manager does it. Most NVIDIA, AMD and Intel drivers support it.
+- **CPU:** install [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) and run it
+  as administrator (it can sit in the tray). The mod picks it up on its own.
+- Without that, the CPU number comes from a Windows sensor that is only a rough guess, and some PCs don't have it.
+- If your GPU is built into the CPU and has no sensor of its own, the mod can show the CPU temperature for it. There is a setting to turn that off.
 
-## Notes
-- The monitor needs free space left of the first taskbar icon (a centered taskbar, or a Taskbar Styler dock).
-  Its position is found by measuring the first icon. With a dock, set *dock margin* to the dock's margin so the
-  monitor stays in place when icons are added; with 0 it sits right next to the first icon.
-- The mod runs only in `explorer.exe` and draws its own windows; it does not hook any functions.
-- "Data used today" is stored in the mod's local storage so it survives restarts.
+## Good to know
+- There has to be free space to the left of the first taskbar icon. The mod measures where that icon is.
+  If you use a Taskbar Styler dock, put the dock's margin in the "dock margin" setting so the monitor stays in place.
+- While a taskbar hover preview or a flyout (like the keyboard language menu) is open, Windows draws it over
+  the monitor, so the monitor disappears for a moment. I couldn't fix that without risky tricks.
+- The mod only runs inside explorer.exe and doesn't hook any functions.
+- "Data used today" is saved, so it keeps counting after a restart.
 */
 // ==/WindhawkModReadme==
 
@@ -988,8 +984,30 @@ static bool RunFromWindowThread(HWND hWnd, RunProc_t proc, PVOID procParam) {
     return true;
 }
 
+// full-screen host windows owned by Windows shell components are not apps covering the screen
+static bool IsShellSurface(HWND w) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    if (!pid) return false;
+    if (pid == GetCurrentProcessId()) return true;  // explorer.exe itself
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return false;
+    wchar_t path[MAX_PATH];
+    DWORD len = MAX_PATH;
+    bool shell = false;
+    if (QueryFullProcessImageNameW(h, 0, path, &len)) {
+        const wchar_t* name = wcsrchr(path, L'\\');
+        name = name ? name + 1 : path;
+        static const wchar_t* kShell[] = {L"TextInputHost.exe", L"ShellExperienceHost.exe", L"StartMenuExperienceHost.exe",
+                                          L"SearchHost.exe", L"SearchApp.exe", L"ShellHost.exe", L"LockApp.exe"};
+        for (const wchar_t* k : kShell) if (_wcsicmp(name, k) == 0) shell = true;
+    }
+    CloseHandle(h);
+    return shell;
+}
+
 // true when a window above the taskbar covers the whole monitor (fullscreen video, photo viewer, game ...)
-static bool CoveredByFullscreen(Overlay* ov) {
+static bool CoveredByFullscreen(Overlay* ov, HWND* culprit = nullptr) {
     HMONITOR mon = MonitorFromWindow(ov->taskbar, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = {sizeof(mi)};
     if (!GetMonitorInfoW(mon, &mi)) return false;
@@ -1005,8 +1023,11 @@ static bool CoveredByFullscreen(Overlay* ov) {
         if (cloaked) continue;
         RECT r;
         if (!GetWindowRect(w, &r)) continue;
-        if (r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top && r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom)
+        if (r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top && r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom) {
+            if (IsShellSurface(w)) continue;  // flyouts (keyboard layout, network, ...) use full-screen host windows
+            if (culprit) *culprit = w;
             return true;
+        }
     }
     return false;
 }
@@ -1425,6 +1446,10 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
             if (!isTaskbar) return;
         }
         SetEvent(g_uiaEvent);
+        return;
+    }
+    if (event == EVENT_OBJECT_SHOW) {  // one of Explorer's own windows appeared (hover preview, flyout): may cover us
+        if (idObject == OBJID_WINDOW) NotifyOverlays(nullptr);
         return;
     }
     NotifyOverlays(nullptr);  // foreground / minimise: z-order or covering may have changed
@@ -1913,11 +1938,12 @@ static DWORD WINAPI Worker(LPVOID) {
         SyncOverlays();
 
         // event hooks (worker thread's message loop delivers them): taskbar movement, focus and minimise changes
-        HWINEVENTHOOK hooks[3] = {
+        HWINEVENTHOOK hooks[4] = {
             SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, GetCurrentProcessId(), 0,
                             WINEVENT_OUTOFCONTEXT),
             SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT),
             SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT),
+            SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, WinEventProc, GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT),
         };
 
         SetTimer(msgWnd, 1, g_s.refreshMs, nullptr);
