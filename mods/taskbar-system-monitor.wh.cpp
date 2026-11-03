@@ -15,6 +15,8 @@
 /*
 # Taskbar System Monitor
 
+![Screenshot](https://raw.githubusercontent.com/exefile04/taskbar-system-monitor/main/images/screenshot.png)
+
 Live CPU, GPU, RAM, disk and network stats drawn **inside the Windows 11 taskbar**, to the left of the first
 icon, with clean outline icons. Works with Taskbar Styler docks and on every monitor.
 
