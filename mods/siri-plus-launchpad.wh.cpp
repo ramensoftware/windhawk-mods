@@ -2,7 +2,7 @@
 // @id              siri-plus-launchpad
 // @name            Siri Plus Launchpad
 // @description     Replaces the Start menu with a macOS 27 Siri-style launcher: search bar with categories, app tabs, files, clipboard, actions and live glass
-// @version         1.0.0
+// @version         1.1.0
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Siri-Plus-Launchpad
@@ -28,12 +28,13 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 
 - **Four modes**: Original Siri (default), Floating, Window and Fullscreen
 - **Live glass**: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus an experimental liquid glass with refraction in the Siri modes
-- **One search for everything**: Apps, Files, Clipboard and Actions
+- **Search everything at once**: type in the bar and apps, actions, folders and files show up together in one list, like Spotlight or Flow Launcher, or pick a category (Apps, Files, Actions, Clipboard) to search only there
+- **Calculator**: type a calculation and its result shows first; Enter copies it
 - **App tabs**: All, automatic categories and up to 6 tabs of your own
 - **Recent apps row**: recently opened or installed apps (or the most used ones) on top
-- **Power options**: type *shut down*, *restart*, *sleep*, *lock* or *sign out*, or use the floating power button
+- **Power options**: type *shut down*, *restart*, *sleep*, *lock* or *sign out*, or the floating power button (off by default; turn it on in *Siri bar*)
 - **Keyboard shortcuts**: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, and can also open the launcher from any program (optional)
-- **Custom icons**: give any app your own icon (PNG, JPG, ICO, WebP...), or pick one from an **icon gallery** (any folder of icons, such as a downloaded icon pack), with search and a color filter
+- **Custom icons**: give any app your own icon from a folder of your icons (such as a downloaded icon pack), with search and a color filter
 - **Themes**: Clear glass, Light, Dark, OLED (deep black), Siri (macOS 27 gradient) and a fully Custom theme, with an optional glass effect on Light, Dark and OLED
 - **Settings panel**: the **⋯** button at the end of the bar opens every setting in a macOS-style panel, applied live
 - **Move the bar**: hold the Siri bar and drag it anywhere, on any monitor
@@ -93,7 +94,9 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 A search bar in the macOS 27 style.
 
 - **Categories menu**: hover over the bar (or click it) and a menu drops down with **Applications**, **Files**, **Actions** and **Clipboard**, each with its icon and its keyboard shortcut (default **Ctrl+1 … Ctrl+4**, configurable).
-- Picking a category makes its icon and name glide from the menu into the bar, and the search then works inside that category. If you type straight away, you go to Applications.
+- **Search everything**: type straight away in "Search" and one list shows **Applications**, **Actions**, **Folders** and **Documents and files** together, each under its title (the best matches and the most used apps first). Apps show up at once; folders and files come in a moment later, below them, so nothing you are about to click moves. **Show all** next to a title opens that category with what you typed; **Enter** opens the first result. The clipboard is never part of it. Erasing the text brings back the plain "Search" bar. It can be turned off (*Siri bar → Typing in Search looks everywhere*): then typing goes to Applications.
+- **Calculator**: type a calculation such as *2+2*, *15% * 80* or *(3+4)^2* and its result shows first, in a list; **Enter** copies it. It can be turned off (*Search → Calculator*).
+- Picking a category makes its icon and name glide from the menu into the bar, and the search then works only inside that category.
 - **Going back**: hover the category icon in the bar and it turns into a back arrow. Click it, or press **Esc**, to return to "Search" with the magnifier and pick another category.
 - **App tabs**:
   - **All** comes first and shows every app.
@@ -103,7 +106,7 @@ A search bar in the macOS 27 style.
 - **Actions**: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin. Shut down works like Windows' own (fast startup when it is on) and warns before signing off other users who are still signed in.
 
 ### Floating
-The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble.
+The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble. Hover the category icon at the start of the bar and it turns into a back arrow, as in Original Siri: a click clears the search, goes back to Applications and closes the results panel.
 
 ### Window and Fullscreen
 The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.
@@ -139,17 +142,17 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 ## Apps and icons
 - **Search** apps by typing.
 - **Folders** (Window and Fullscreen): drag apps together, rename, undo. The Siri modes list the apps of every folder together.
-- **Multi-select** with jiggling icons, **pin to taskbar** (also by dragging an icon to the taskbar), **uninstall**.
-- **Custom icons**: right-click an app → **Change icon...** and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; **Reset icon** brings back the original. Works in every mode, including apps inside folders.
-- **Icon gallery**: choose a folder of icon images in the settings (*Apps and icons → Icon gallery folder*, typed or picked with **Choose…**), for example a downloaded icon pack. Then right-click an app → **Icon from gallery...** The folder's images (subfolders included) show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.
+- **Multi-select** with jiggling icons, **pin to taskbar** (also by dragging an icon to the taskbar), **create desktop shortcut** (right-click an app; also for several selected apps at once), **uninstall**.
+- **Custom icons**: put your icon images in a folder (for example a downloaded icon pack), then right-click an app → **Change icon...** The first time, the launcher asks for that folder (it can be changed later in *Apps and icons → Icon gallery folder*). The folder's images (PNG, JPG, JPEG, BMP, ICO, GIF or WebP, subfolders included) show in a grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time it opens. The new icon is remembered across restarts; **Reset icon** brings back the original. Works in every mode, including apps inside folders.
 - Icon size, number of columns and the scrolling direction are configurable.
 
 ## Settings panel
-- Click the **⋯** button at the end of the bar (every mode). The bar moves to the left and becomes a list of sections, and a panel with the settings comes out of the button. Every change applies at once.
+- Click the **⋯** button at the end of the bar (every mode). A window in the style of macOS System Settings grows out of the bar: the sections on the left, with a search field on top, and the settings of the chosen section on the right. Every change applies at once.
+- Sections: **General**, **Appearance**, **Custom theme**, **Search** (search everything, Files and Clipboard), **Siri bar**, **Results size**, **Window and Fullscreen**, **Animations**, **Keyboard shortcuts**, **Apps and icons**, **Performance** and **Backup and defaults**. Every setting has a short line saying what it does, and the ones the chosen mode doesn't use are dimmed with a note.
 - Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.
-- **Theme defaults** (Appearance) brings back the chosen theme's own look. **Restore all defaults** (General) puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.
+- **Theme defaults** (Appearance) brings back the chosen theme's own look. **Restore all defaults** puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.
 - **Back up** saves everything to a `.siribackup` file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. **Restore a backup** brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.
-- In Window and Fullscreen the window folds into its search field while the settings are open. With the bar low on the screen, the settings open upward.
+- **Done** (or **Esc**) closes it: the window switches off where it is, like an old TV (CRT), and the launcher closes; a new mode or bar size shows the next time it opens. In Light performance mode the window opens without its content coming in one piece at a time.
 
 ## Moving the bar (Floating and Original Siri)
 - Hold the bar for a moment and drag it anywhere, on any monitor. Its place is remembered. Low on the screen, the results and menus open above it.
@@ -166,10 +169,11 @@ All options are in the **⋯** settings panel (in six languages) and in the mod'
 | ① Mode | Original Siri (default), Floating, Window, Fullscreen |
 | ② Theme | Clear glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom |
 | Language | Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano |
+| Performance | **Light (faster)** turns off liquid glass, the blur behind menus and the shadows and keeps it to 60 frames per second, for laptops and slower PCs; a frame rate limit (automatic, 120, 60 or 30); and *Draw with*: the graphics card (default) or the processor (experimental, for laptops with two graphics cards) |
 | ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
 | ④ Custom theme | Color, opacity, dark-to-light gradient, border width, color and opacity |
 | ⑤ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
-| ⑥ Floating and Original Siri | Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
+| ⑥ Floating and Original Siri | Bar size (96 px tall by default), results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, search everything when typing, power options when typing, floating power button (off by default) and its side (left or right of the bar), first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
 | ⑦ Opening | Open with the Windows key and/or the Start button |
 | ⑧ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
 | ⑨ Files | On/off, search history, list or icons, indexer, maximum results |
@@ -182,7 +186,7 @@ All options are in the **⋯** settings panel (in six languages) and in the mod'
 | Key / action | What it does |
 |---|---|
 | **Win** / Start button | Open or close |
-| Type | Search (in Original Siri, typing right away searches Applications) |
+| Type | Search (in Original Siri, typing right away searches apps, actions, folders and files together) |
 | **Ctrl+1 / 2 / 3 / 4** | Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With *Also with the launcher closed* on (off by default) they open the launcher from any program, and other programs no longer get those keys |
 | **Tab / Shift+Tab** | Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions |
 | Arrows + **Enter** | Move through results / open |
@@ -201,7 +205,7 @@ All options are in the **⋯** settings panel (in six languages) and in the mod'
 
 ## Privacy and files
 - The mod never goes online.
-- Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose.
+- Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose. **Create desktop shortcut** adds a shortcut to your desktop only when you pick it, and never replaces a file already there.
 - The clipboard history lives in memory only and is never written to disk.
 
 ## Compatibility
@@ -281,6 +285,48 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - fr: Français
   - de: Deutsch
   - it: Italiano
+- calculator: true
+  $name: Calculator in the search
+  $name:pt-BR: Calculadora na pesquisa
+  $description: "Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it"
+  $description:pt-BR: "Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia"
+- performance: normal
+  $name: Performance
+  $name:pt-BR: Desempenho
+  $description: "Light: no liquid glass, no blur behind menus, no shadows, and at most 60 frames per second. For laptops and slower PCs"
+  $description:pt-BR: "Leve: sem vidro líquido, sem desfoque atrás dos menus, sem sombras e no máximo 60 quadros por segundo. Para notebooks e PCs mais lentos"
+  $options:
+  - normal: Normal
+  - light: Light (faster)
+  $options:pt-BR:
+  - normal: Normal
+  - light: Leve (mais rápido)
+- frameRate: auto
+  $name: Frame rate limit
+  $name:pt-BR: Limite de quadros por segundo
+  $description: "Automatic: as fast as the monitor. Fewer frames use less power"
+  $description:pt-BR: "Automático: tão rápido quanto o monitor. Menos quadros gastam menos energia"
+  $options:
+  - auto: Automatic (monitor)
+  - "120": "120"
+  - "60": "60"
+  - "30": "30"
+  $options:pt-BR:
+  - auto: Automático (monitor)
+  - "120": "120"
+  - "60": "60"
+  - "30": "30"
+- renderer: gpu
+  $name: Draw with
+  $name:pt-BR: Desenhar com
+  $description: "Processor: the launcher doesn't use the graphics card at all (it can help laptops with two graphics cards, but uses more of the processor). Experimental"
+  $description:pt-BR: "Processador: o menu não usa a placa de vídeo (pode ajudar notebooks com duas placas, mas usa mais o processador). Experimental"
+  $options:
+  - gpu: Graphics card
+  - cpu: Processor (experimental)
+  $options:pt-BR:
+  - gpu: Placa de vídeo
+  - cpu: Processador (experimental)
 - appearance:
   - transparency: 80
     $name: Glass transparency (%)
@@ -315,6 +361,24 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Desfoque atrás dos menus de contexto (%, 0 = nenhum)"
     $description: The icons and the window under a right-click menu are blurred. 100 = default, up to 200
     $description:pt-BR: "Os ícones e a janela sob um menu de clique direito ficam desfocados. 100 = padrão, até 200"
+  - menuSelection: glass
+    $name: "Clear glass theme: selection in menus"
+    $name:pt-BR: "Tema Vidro transparente: seleção nos menus"
+    $description: How the item under the mouse is highlighted in the menus. Colored and Frosted use the selection color
+    $description:pt-BR: "Como o item sob o mouse fica destacado nos menus. Colorida e Fosca usam a cor da seleção"
+    $options:
+    - glass: Glass
+    - color: Colored (like macOS)
+    - frosted: Frosted color
+    $options:pt-BR:
+    - glass: Vidro
+    - color: Colorida (como no macOS)
+    - frosted: Cor fosca
+  - menuSelectionColor: "#447FEF"
+    $name: "Clear glass theme: selection color"
+    $name:pt-BR: "Tema Vidro transparente: cor da seleção"
+    $description: "Starts with the macOS blue (#447FEF)"
+    $description:pt-BR: "Começa com o azul do macOS (#447FEF)"
   - glassStyle: frosted
     $name: "Clear glass and Siri themes: glass style"
     $name:pt-BR: "Temas Vidro transparente e Siri: estilo do vidro"
@@ -327,6 +391,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - refraction: 60
     $name: "Liquid glass: refraction at the edges (%)"
     $name:pt-BR: "Vidro líquido: refração nas bordas (%)"
+    $description: "How much the liquid glass bends what is behind it"
+    $description:pt-BR: "Quanto o vidro líquido curva o que está atrás dele"
   - glassEffect: true
     $name: "Light, Dark and OLED themes: glass effect"
     $name:pt-BR: "Temas Claro, Escuro e OLED: efeito vidro"
@@ -343,6 +409,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - color: "#1e1e1e"
     $name: Color
     $name:pt-BR: "Cor"
+    $description: "The color of the glass"
+    $description:pt-BR: "A cor do vidro"
   - opacity: 60
     $name: Opacity (%)
     $name:pt-BR: "Opacidade (%)"
@@ -352,6 +420,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - borderWidth: 1
     $name: Border width (px, 0 = none)
     $name:pt-BR: "Espessura da borda (px, 0 = nenhuma)"
+    $description: "0 = no border"
+    $description:pt-BR: "0 = sem borda"
   - borderColor: "#ffffff"
     $name: Border color
     $name:pt-BR: "Cor da borda"
@@ -382,6 +452,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - powerButtonPosition: left
     $name: Power button position
     $name:pt-BR: "Posição do botão de energia"
+    $description: "Window and Fullscreen modes only. For the Siri modes: Siri bar > Side of the floating power button"
+    $description:pt-BR: "Só nos modos Janela e Tela cheia. Nos modos Siri: Barra Siri > Lado do botão de energia flutuante"
     $options:
     - left: Left of the search bar
     - right: Right of the search bar
@@ -391,6 +463,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - openAnimation: zoom
     $name: Opening animation
     $name:pt-BR: "Animação de abertura"
+    $description: "Window and Fullscreen modes only (the Siri modes have their own)"
+    $description:pt-BR: "Só nos modos Janela e Tela cheia (os modos Siri têm o seu)"
     $options:
     - zoom: Pop in
     - fade: Fade
@@ -404,6 +478,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - closeAnimation: zoom
     $name: Closing animation
     $name:pt-BR: "Animação de fechamento"
+    $description: "Window and Fullscreen modes only (the Siri modes have their own)"
+    $description:pt-BR: "Só nos modos Janela e Tela cheia (os modos Siri têm o seu)"
     $options:
     - zoom: Pop out
     - fade: Fade
@@ -420,21 +496,31 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - folderBlur: 40
     $name: Blur behind an open folder (0-100)
     $name:pt-BR: "Desfoque atrás da pasta aberta (0–100)"
+    $description: "How blurred the apps behind an open folder look"
+    $description:pt-BR: "Quão embaçados ficam os apps atrás de uma pasta aberta"
   $name: "⑤ Window and Fullscreen modes"
   $name:pt-BR: "⑤ Modos Janela e Tela cheia"
 - siri:
   - pillWidth: 560
     $name: Bar width (px)
     $name:pt-BR: "Largura da barra (px)"
-  - pillHeight: 56
+    $description: "How long the search bar is"
+    $description:pt-BR: "O comprimento da barra de pesquisa"
+  - pillHeight: 96
     $name: Bar height (px)
     $name:pt-BR: "Altura da barra (px)"
+    $description: "How tall the search bar is"
+    $description:pt-BR: "A altura da barra de pesquisa"
   - panelWidth: 680
     $name: "Applications: results box width (px)"
     $name:pt-BR: "Aplicativos: largura da caixa de resultados (px)"
+    $description: "Also used by the general search"
+    $description:pt-BR: "Também usada pela pesquisa geral"
   - panelRows: 3
     $name: "Applications: results box rows"
     $name:pt-BR: "Aplicativos: linhas da caixa de resultados"
+    $description: "How many rows show before it scrolls"
+    $description:pt-BR: "Quantas linhas aparecem antes de rolar"
   - filesWidth: 0
     $name: "Files: results box width (px)"
     $name:pt-BR: "Arquivos: largura da caixa de resultados (px)"
@@ -443,6 +529,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - filesRows: 3
     $name: "Files: results box rows"
     $name:pt-BR: "Arquivos: linhas da caixa de resultados"
+    $description: "How many rows show before it scrolls"
+    $description:pt-BR: "Quantas linhas aparecem antes de rolar"
   - actionsWidth: 680
     $name: "Actions: results box width (px)"
     $name:pt-BR: "Ações: largura da caixa de resultados (px)"
@@ -451,6 +539,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - actionsRows: 3
     $name: "Actions: results box rows"
     $name:pt-BR: "Ações: linhas da caixa de resultados"
+    $description: "How many rows show before it scrolls"
+    $description:pt-BR: "Quantas linhas aparecem antes de rolar"
   - clipboardWidth: 0
     $name: "Clipboard: results box width (px)"
     $name:pt-BR: "Área de transferência: largura da caixa de resultados (px)"
@@ -459,6 +549,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - clipboardRows: 3
     $name: "Clipboard: results box rows"
     $name:pt-BR: "Área de transferência: linhas da caixa de resultados"
+    $description: "How many rows show before it scrolls"
+    $description:pt-BR: "Quantas linhas aparecem antes de rolar"
   - orbStyle: wave
     $name: Circle animation
     $name:pt-BR: "Animação do círculo"
@@ -482,18 +574,38 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - introMs: 520
     $name: Opening duration (ms, 0 = instant)
     $name:pt-BR: "Duração da abertura (ms, 0 = instantânea)"
+    $description: "0 = instant"
+    $description:pt-BR: "0 = instantânea"
   - outroMs: 420
     $name: Closing duration (ms, 0 = instant)
     $name:pt-BR: "Duração do fechamento (ms, 0 = instantâneo)"
+    $description: "0 = instant"
+    $description:pt-BR: "0 = instantâneo"
   - animationSpeed: 100
     $name: Animation speed (%, 25-400)
     $name:pt-BR: "Velocidade das animações (%, 25–400)"
+  - generalSearch: true
+    $name: "Original Siri: typing in Search looks everywhere"
+    $name:pt-BR: "Siri original: digitar em Pesquisar procura em tudo"
+    $description: "Apps, actions, folders and files together in one list, like Spotlight. Off: typing goes to Applications"
+    $description:pt-BR: "Apps, ações, pastas e arquivos juntos numa lista, como no Spotlight. Desligado: digitar vai para Aplicativos"
   - powerPill: true
     $name: Power options when typing shut down, restart...
     $name:pt-BR: "Opções de energia ao digitar desligar, reiniciar..."
-  - powerButton: true
+  - powerButton: false
     $name: Floating power button next to the bar
     $name:pt-BR: "Botão de energia flutuante ao lado da barra"
+  - powerButtonSide: right
+    $name: Side of the floating power button
+    $name:pt-BR: "Lado do botão de energia flutuante"
+    $description: Floating and Original Siri modes
+    $description:pt-BR: "Modos Flutuante e Siri original"
+    $options:
+    - left: Left of the bar
+    - right: Right of the bar
+    $options:pt-BR:
+    - left: À esquerda da barra
+    - right: À direita da barra
   - firstRow: recent
     $name: "Original Siri: first row of apps (separated by a line)"
     $name:pt-BR: "Siri original: primeira linha de aplicativos (separada por uma linha)"
@@ -530,9 +642,13 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - winKey: true
     $name: The Windows key opens the launcher
     $name:pt-BR: "Abrir com a tecla Windows"
+    $description: "Off: the Windows key opens the Windows Start menu"
+    $description:pt-BR: "Desligado: a tecla Windows abre o Iniciar do Windows"
   - startButton: true
     $name: The Start button opens the launcher
     $name:pt-BR: "Abrir com o botão Iniciar"
+    $description: "Off: the Start button on the taskbar opens the Windows Start menu"
+    $description:pt-BR: "Desligado: o botão Iniciar da barra de tarefas abre o Iniciar do Windows"
   $name: "⑦ Opening"
   $name:pt-BR: "⑦ Abertura"
 - grid:
@@ -542,6 +658,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - columns: 0
     $name: Columns (0 = automatic)
     $name:pt-BR: "Colunas (0 = automático)"
+    $description: "How many apps fit side by side. 0 = automatic"
+    $description:pt-BR: "Quantos apps cabem lado a lado. 0 = automático"
   - pageMode: vertical
     $name: Scrolling direction
     $name:pt-BR: "Direção da rolagem"
@@ -557,11 +675,13 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - dragToPin: true
     $name: Drag an icon to the taskbar to pin it
     $name:pt-BR: "Arrastar o ícone até a barra de tarefas fixa o app"
+    $description: "Drop an app on the taskbar and it stays pinned there"
+    $description:pt-BR: "Solte um app na barra de tarefas e ele fica fixado lá"
   - iconsFolder: ""
     $name: Icon gallery folder
     $name:pt-BR: "Pasta da galeria de ícones"
-    $description: "A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery..."
-    $description:pt-BR: "Uma pasta com imagens de ícones, por exemplo um pacote de ícones baixado. Depois, clique direito em um app > Ícone da galeria..."
+    $description: "A folder with your icon images, for example a downloaded icon pack. Right-click an app > Change icon... shows them"
+    $description:pt-BR: "Uma pasta com suas imagens de ícones, por exemplo um pacote de ícones baixado. Clique direito em um app > Alterar ícone... mostra elas"
   $name: "⑧ Apps and icons"
   $name:pt-BR: "⑧ Aplicativos e ícones"
 - files:
@@ -576,6 +696,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - view: list
     $name: Results view
     $name:pt-BR: "Exibição dos resultados"
+    $description: "Files results while you type. With an empty search, recent searches always show as a list"
+    $description:pt-BR: "Resultados de Arquivos enquanto você digita. Com a pesquisa vazia, as pesquisas recentes aparecem sempre em lista"
     $options:
     - list: List
     - icons: Icons (grid)
@@ -611,9 +733,13 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - size: 30
     $name: Items kept
     $name:pt-BR: "Itens guardados"
+    $description: "How many copies the history keeps"
+    $description:pt-BR: "Quantas cópias o histórico guarda"
   - keep: always
     $name: How long a copy stays
     $name:pt-BR: "Por quanto tempo uma cópia fica"
+    $description: "Older copies leave the history by themselves"
+    $description:pt-BR: "Cópias mais antigas saem do histórico sozinhas"
     $options:
     - always: Until Windows restarts
     - 15m: 15 minutes
@@ -734,6 +860,8 @@ const UiTranslation kUiTranslations[] = {
     {L"Clear selection", L"Limpar seleção", L"Borrar selección", L"Effacer la sélection", L"Auswahl aufheben", L"Annulla selezione"},
     {L"Rename", L"Renomear", L"Renombrar", L"Renommer", L"Umbenennen", L"Rinomina"},
     {L"Undo folder", L"Desfazer pasta", L"Deshacer carpeta", L"Annuler le dossier", L"Ordner rückgängig", L"Annulla cartella"},
+    {L"Create desktop shortcut", L"Criar atalho na área de trabalho", L"Crear acceso directo en el escritorio", L"Créer un raccourci sur le bureau", L"Verknüpfung auf dem Desktop erstellen", L"Crea collegamento sul desktop"},
+    {L"Could not create the shortcut.", L"Não foi possível criar o atalho.", L"No se pudo crear el acceso directo.", L"Impossible de créer le raccourci.", L"Die Verknüpfung konnte nicht erstellt werden.", L"Impossibile creare il collegamento."},
     {L"Pin to taskbar", L"Fixar na barra de tarefas", L"Anclar a la barra de tareas", L"Épingler à la barre des tâches", L"An Taskleiste anheften", L"Aggiungi alla barra delle applicazioni"},
     {L"Pin selected to taskbar", L"Fixar selecionados na barra de tarefas", L"Anclar selección a la barra de tareas", L"Épingler la sélection à la barre des tâches", L"Auswahl an Taskleiste anheften", L"Aggiungi selezionati alla barra delle applicazioni"},
     {L"Change icon...", L"Alterar ícone...", L"Cambiar icono...", L"Changer l’icône...", L"Symbol ändern...", L"Cambia icona..."},
@@ -744,9 +872,6 @@ const UiTranslation kUiTranslations[] = {
     {L"Clear clipboard", L"Limpar área de transferência", L"Borrar portapapeles", L"Vider le presse-papiers", L"Zwischenablage leeren", L"Svuota appunti"},
     {L"Clear search history", L"Limpar histórico de pesquisa", L"Borrar historial de búsqueda", L"Effacer l’historique de recherche", L"Suchverlauf löschen", L"Cancella cronologia ricerche"},
     {L"Could not load this image.", L"Não foi possível carregar esta imagem.", L"No se pudo cargar esta imagen.", L"Impossible de charger cette image.", L"Dieses Bild konnte nicht geladen werden.", L"Impossibile caricare questa immagine."},
-    {L"Choose icon image", L"Escolher imagem do ícone", L"Elegir imagen del icono", L"Choisir l’image de l’icône", L"Symbolbild auswählen", L"Scegli immagine icona"},
-    {L"Images", L"Imagens", L"Imágenes", L"Images", L"Bilder", L"Immagini"},
-    {L"All files", L"Todos os arquivos", L"Todos los archivos", L"Tous les fichiers", L"Alle Dateien", L"Tutti i file"},
     {L"Everything is not running", L"O Everything não está em execução", L"Everything no se está ejecutando", L"Everything n’est pas en cours d’exécution", L"Everything läuft nicht", L"Everything non è in esecuzione"},
     {L"Actions", L"Ações", L"Acciones", L"Actions", L"Aktionen", L"Azioni"},
     {L"Search", L"Pesquisar", L"Buscar", L"Rechercher", L"Suchen", L"Cerca"},
@@ -796,6 +921,7 @@ PCWSTR Tr(PCWSTR source);
 PCWSTR CfgT(PCWSTR en, PCWSTR pt);
 PCWSTR TabLabel(int id) {
     if (id == 4) return CfgT(L"Icon gallery", L"Galeria de ícones");
+    if (id == 5) return Tr(L"Search");
     return Tr(id == 0 ? L"Apps" : id == 1 ? L"Files" : id == 3 ? L"Actions" : L"Clipboard");
 }
 
@@ -833,7 +959,10 @@ constexpr UINT_PTR kTimerFrame = 1;
 constexpr UINT_PTR kTimerFirstLoad = 4;
 constexpr UINT_PTR kTimerFileSearch = 5;
 constexpr UINT_PTR kTimerLongPress = 6;
-constexpr UINT_PTR kTimerMenuLeave = 7;   // checks where the mouse went after leaving the launcher with the categories open
+constexpr UINT_PTR kTimerMenuLeave = 7;
+constexpr UINT_PTR kTimerCaret = 13;   // the text cursor blinks (on, off) while the launcher is open
+bool g_caretOn = true;
+void CaretRestart();   // (defined with the window, below)   // checks where the mouse went after leaving the launcher with the categories open
 constexpr UINT kFileSearchDelayMs = 220;
 constexpr UINT kLongPressDelayMs = 550;
 
@@ -849,8 +978,8 @@ constexpr int kFolderBase = 100000;
 constexpr int kFolderAppBase = 1000000;
 constexpr int kTabBase = 900000000;
 
-enum { kMenuRename = 1, kMenuUndoFolder, kMenuNewFolder, kMenuSelect, kMenuSelectAll, kMenuClearSelection, kMenuPin,
-       kMenuChangeIcon, kMenuResetIcon, kMenuUninstall,
+enum { kMenuRename = 1, kMenuUndoFolder, kMenuNewFolder, kMenuSelect, kMenuSelectAll, kMenuClearSelection, kMenuPin, kMenuDesktop,
+       kMenuResetIcon, kMenuUninstall,
        kMenuLock, kMenuSleep, kMenuRestart, kMenuShutdown, kMenuSignOut,
        kMenuHistRemove, kMenuHistClear, kMenuTabApps, kMenuTabFiles, kMenuTabClipboard, kMenuTabActions,
        kMenuNewTab, kMenuAddApps, kMenuRenameTab, kMenuDeleteTab, kMenuRemoveFromTab, kMenuRestoreTabs,
@@ -893,11 +1022,16 @@ struct Settings {
     int blurAmount = 60;
     int menuBlur = 100;            // blur behind context menus, % of the default
     int menuText = -1;             // text color: -1 automatic (clear glass: by the background), 0 white, 1 black
+    int menuSelection = 0;         // clear glass menus, item under the mouse: 0 glass, 1 solid color, 2 frosted color
+    D2D1_COLOR_F menuSelectionColor = D2D1::ColorF(0x447FEF);
     int glassTransparency = 80;   // Clear glass theme
     bool liveBackground = true;   // no snapshot: animated wallpapers and videos keep playing behind
     bool glassLiquid = false;      // Clear glass theme: refraction (liquid glass) instead of the live blur
     int refraction = 60;          // liquid glass: how far the edges bend the background (%)
     bool liveGlass = false;       // liquid glass: picture retaken while open (hides the launcher from captures)
+    bool light = false;           // light mode: no liquid glass, no blur behind menus, no shadows, at most 60 fps
+    int maxFps = 0;               // frame rate limit (0 = the monitor's)
+    bool cpuDraw = false;         // draw with the processor (no graphics card)
     bool glassEffect = true;      // Light, Dark and OLED themes: glass optics (sheen, edge thickness, beveled rim)
     float opacity = 0.6f;
     D2D1_COLOR_F tint{0.118f, 0.118f, 0.118f, 1.0f};
@@ -924,13 +1058,16 @@ struct Settings {
     bool siriOriginal = false;   // Original Siri: hover menu, Actions, app filters, recommendations
     int siriFirstRow = 1;   // 0 off, 1 recently opened/installed, 2 most used
     int siriPillW = 560;
-    int siriPillH = 56;
+    int siriPillH = 96;
     D2D1_COLOR_F siriPillColor{0.118f, 0.118f, 0.118f, 1.0f};
     float siriPillOpacity = 0.72f;
     int siriPillIntroMs = 520;
     int siriPillOutroMs = 420;
     int siriBounce = 50;
-    bool siriPowerButton = true;
+    bool siriPowerButton = false;
+    bool siriPowerLeft = false;   // the floating power button on the left of the bar
+    bool generalSearch = true;    // Original Siri: typing in "Search" looks for apps, actions, folders and files
+    bool calculator = true;       // a typed calculation shows its result
     int siriCircleZoom = 25;
     int siriOrbStyle = 0;   // 0 wave, 1 glow, 2 none
     int siriPanelBounce = 30;
@@ -1044,7 +1181,7 @@ Shortcut ParseShortcut(const std::wstring& text, std::wstring& label) {
 // Changes are kept in the mod's own storage, on top of the Windhawk settings. Each one remembers the
 // Windhawk value it replaced: when that value is changed in Windhawk later, Windhawk wins again.
 
-enum CfgType { kCfgToggle, kCfgSlider, kCfgChoice, kCfgColor, kCfgShortcut, kCfgButton, kCfgText };
+enum CfgType { kCfgToggle, kCfgSlider, kCfgChoice, kCfgColor, kCfgShortcut, kCfgButton, kCfgText, kCfgGroup };   // group: a title over the next cards
 struct CfgOpt { PCWSTR value, en, pt; };
 struct CfgItem {
     int section; CfgType type; PCWSTR key, en, pt, descEn, descPt;
@@ -1056,11 +1193,432 @@ struct CfgSection { PCWSTR en, pt, descEn, descPt, glyph; UINT32 color; };
 // Texts written with English and Portuguese side by side; Spanish, French, German and Italian come from this table
 struct CfgTranslation { PCWSTR en, es, fr, de, it; };
 const CfgTranslation kCfgTranslations[] = {
-    {L"A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery...",
-     L"Una carpeta con imágenes de iconos, por ejemplo un paquete de iconos descargado. Luego clic derecho en una aplicación > Icono de la galería...",
-     L"Un dossier d’images d’icônes, par exemple un pack d’icônes téléchargé. Puis clic droit sur une application > Icône de la galerie...",
-     L"Ein Ordner mit Symbolbildern, zum Beispiel ein heruntergeladenes Symbolpaket. Dann Rechtsklick auf eine App > Symbol aus der Galerie...",
-     L"Una cartella con immagini di icone, per esempio un pacchetto di icone scaricato. Poi clic destro su un’app > Icona dalla galleria..."},
+    {L"Calculator", L"Calculadora", L"Calculatrice", L"Rechner", L"Calcolatrice"},
+    {L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it",
+     L"Escribe una cuenta (2+2, 15% * 80, (3+4)^2) y su resultado aparece primero; Enter lo copia",
+     L"Tapez un calcul (2+2, 15% * 80, (3+4)^2) et son résultat s’affiche en premier ; Entrée le copie",
+     L"Tippe eine Rechnung (2+2, 15% * 80, (3+4)^2) und das Ergebnis erscheint zuerst; Enter kopiert es",
+     L"Scrivi un calcolo (2+2, 15% * 80, (3+4)^2) e il risultato compare per primo; Invio lo copia"},
+    {L"Enter copies the result", L"Enter copia el resultado", L"Entrée copie le résultat", L"Enter kopiert das Ergebnis", L"Invio copia il risultato"},
+    {L"How the launcher looks. Original Siri: a bar with a categories menu. Floating: a bar with a results box. Window and Fullscreen: a grid of apps, like Launchpad. Used the next time it opens",
+     L"Cómo se ve el lanzador. Siri original: una barra con un menú de categorías. Flotante: una barra con un cuadro de resultados. Ventana y Pantalla completa: una cuadrícula de aplicaciones, como Launchpad. Se usa la próxima vez que se abra",
+     L"L’apparence du lanceur. Siri original : une barre avec un menu de catégories. Flottant : une barre avec une boîte de résultats. Fenêtre et Plein écran : une grille d’applications, comme Launchpad. Appliqué à la prochaine ouverture",
+     L"So sieht der Starter aus. Original-Siri: eine Leiste mit Kategorienmenü. Schwebend: eine Leiste mit Ergebnisfeld. Fenster und Vollbild: ein App-Raster wie Launchpad. Gilt beim nächsten Öffnen",
+     L"Come appare il launcher. Siri originale: una barra con un menu di categorie. Fluttuante: una barra con un riquadro dei risultati. Finestra e Schermo intero: una griglia di app, come Launchpad. Vale alla prossima apertura"},
+    {L"The colors and the glass of everything: bar, menus, results and this window",
+     L"Los colores y el cristal de todo: barra, menús, resultados y esta ventana",
+     L"Les couleurs et le verre de tout : barre, menus, résultats et cette fenêtre",
+     L"Die Farben und das Glas von allem: Leiste, Menüs, Ergebnisse und dieses Fenster",
+     L"I colori e il vetro di tutto: barra, menu, risultati e questa finestra"},
+    {L"Opening the launcher",
+     L"Cómo se abre",
+     L"Ouverture du lanceur",
+     L"Starter öffnen",
+     L"Apertura del launcher"},
+    {L"Off: the Windows key opens the Windows Start menu",
+     L"Desactivado: la tecla Windows abre el menú Inicio de Windows",
+     L"Désactivé : la touche Windows ouvre le menu Démarrer de Windows",
+     L"Aus: Die Windows-Taste öffnet das Windows-Startmenü",
+     L"Disattivato: il tasto Windows apre il menu Start di Windows"},
+    {L"Off: the Start button on the taskbar opens the Windows Start menu",
+     L"Desactivado: el botón Inicio de la barra de tareas abre el menú Inicio de Windows",
+     L"Désactivé : le bouton Démarrer de la barre des tâches ouvre le menu Démarrer de Windows",
+     L"Aus: Die Start-Schaltfläche der Taskleiste öffnet das Windows-Startmenü",
+     L"Disattivato: il pulsante Start della barra delle applicazioni apre il menu Start di Windows"},
+    {L"How much of what is behind shows through. Each theme keeps its own; Light and OLED start solid. 100 = completely clear",
+     L"Cuánto se ve lo que hay detrás. Cada tema guarda la suya; Claro y OLED empiezan sólidos. 100 = totalmente transparente",
+     L"Ce qu’on voit de ce qui est derrière. Chaque thème garde la sienne ; Clair et OLED commencent opaques. 100 = totalement transparent",
+     L"Wie viel vom Hintergrund durchscheint. Jedes Design hat seinen eigenen Wert; Hell und OLED beginnen deckend. 100 = völlig klar",
+     L"Quanto si vede di ciò che sta dietro. Ogni tema ha la sua; Chiaro e OLED partono opachi. 100 = del tutto trasparente"},
+    {L"How round the corners of the window, the open folders and the results box are",
+     L"Qué tan redondeadas son las esquinas de la ventana, las carpetas abiertas y el cuadro de resultados",
+     L"L’arrondi des coins de la fenêtre, des dossiers ouverts et de la boîte de résultats",
+     L"Wie rund die Ecken des Fensters, der geöffneten Ordner und des Ergebnisfelds sind",
+     L"Quanto sono arrotondati gli angoli della finestra, delle cartelle aperte e del riquadro dei risultati"},
+    {L"How blurred what is behind the launcher looks. 0 = none. The live blur needs Windows' transparency effects",
+     L"Qué tan desenfocado se ve lo que hay detrás. 0 = nada. El desenfoque en vivo necesita los efectos de transparencia de Windows",
+     L"Le flou de ce qui est derrière le lanceur. 0 = aucun. Le flou en direct nécessite les effets de transparence de Windows",
+     L"Wie unscharf der Hintergrund wirkt. 0 = keine. Die Live-Unschärfe braucht die Transparenzeffekte von Windows",
+     L"Quanto appare sfocato ciò che sta dietro. 0 = nessuna. La sfocatura dal vivo richiede gli effetti di trasparenza di Windows"},
+    {L"Automatic: on clear glass, black over a light background and white over a dark one",
+     L"Automático: en el cristal transparente, negro sobre un fondo claro y blanco sobre uno oscuro",
+     L"Automatique : sur le verre transparent, noir sur un fond clair et blanc sur un fond sombre",
+     L"Automatisch: auf klarem Glas schwarz über hellem und weiß über dunklem Hintergrund",
+     L"Automatico: sul vetro trasparente, nero su sfondo chiaro e bianco su sfondo scuro"},
+    {L"Menus",
+     L"Menús",
+     L"Menus",
+     L"Menüs",
+     L"Menu"},
+    {L"How the item under the mouse is highlighted (Clear glass theme). Colored is like macOS; Frosted lets the glass show through",
+     L"Cómo se resalta el elemento bajo el ratón (tema Cristal transparente). Coloreada es como en macOS; Esmerilada deja ver el cristal",
+     L"Comment l’élément sous la souris est mis en évidence (thème Verre transparent). Colorée est comme sur macOS ; Givrée laisse voir le verre",
+     L"Wie das Element unter der Maus hervorgehoben wird (Design Klares Glas). Farbig wie bei macOS; Mattiert lässt das Glas durchscheinen",
+     L"Come viene evidenziato l’elemento sotto il mouse (tema Vetro trasparente). Colorata è come su macOS; Satinata lascia vedere il vetro"},
+    {L"How blurred the icons behind a right-click menu look, so its text is easy to read. 100 = default, 0 = none",
+     L"Qué tan desenfocados se ven los iconos detrás de un menú contextual, para que su texto se lea bien. 100 = predeterminado, 0 = nada",
+     L"Le flou des icônes derrière un menu contextuel, pour que son texte se lise bien. 100 = par défaut, 0 = aucun",
+     L"Wie unscharf die Symbole hinter einem Kontextmenü sind, damit sein Text gut lesbar ist. 100 = Standard, 0 = keine",
+     L"Quanto appaiono sfocate le icone dietro un menu contestuale, perché il testo si legga bene. 100 = predefinito, 0 = nessuna"},
+    {L"Frosted: a soft blur. Liquid: the background bends at the edges, like macOS 26 (heavier). Clear glass and Siri themes. Used the next time it opens",
+     L"Esmerilado: un desenfoque suave. Líquido: el fondo se curva en los bordes, como en macOS 26 (más pesado). Temas Cristal transparente y Siri. Se usa la próxima vez que se abra",
+     L"Givré : un flou doux. Liquide : le fond se courbe sur les bords, comme sur macOS 26 (plus lourd). Thèmes Verre transparent et Siri. Appliqué à la prochaine ouverture",
+     L"Mattiert: eine weiche Unschärfe. Flüssig: Der Hintergrund biegt sich an den Rändern, wie bei macOS 26 (aufwendiger). Designs Klares Glas und Siri. Gilt beim nächsten Öffnen",
+     L"Satinato: una sfocatura morbida. Liquido: lo sfondo si curva ai bordi, come su macOS 26 (più pesante). Temi Vetro trasparente e Siri. Vale alla prossima apertura"},
+    {L"How much the liquid glass bends what is behind it",
+     L"Cuánto curva el cristal líquido lo que hay detrás",
+     L"À quel point le verre liquide courbe ce qui est derrière",
+     L"Wie stark das Flüssigglas den Hintergrund biegt",
+     L"Quanto il vetro liquido curva ciò che sta dietro"},
+    {L"Videos move inside the glass, but the launcher no longer shows in screenshots and recordings. Used the next time it opens",
+     L"Los vídeos se mueven dentro del cristal, pero el lanzador deja de aparecer en capturas y grabaciones. Se usa la próxima vez que se abra",
+     L"Les vidéos bougent dans le verre, mais le lanceur n’apparaît plus dans les captures et enregistrements. Appliqué à la prochaine ouverture",
+     L"Videos bewegen sich im Glas, aber der Starter erscheint nicht mehr in Screenshots und Aufnahmen. Gilt beim nächsten Öffnen",
+     L"I video si muovono nel vetro, ma il launcher non compare più in screenshot e registrazioni. Vale alla prossima apertura"},
+    {L"The color of the glass",
+     L"El color del cristal",
+     L"La couleur du verre",
+     L"Die Farbe des Glases",
+     L"Il colore del vetro"},
+    {L"How solid that color is. 100 = no transparency",
+     L"Qué tan sólido es ese color. 100 = sin transparencia",
+     L"L’opacité de cette couleur. 100 = aucune transparence",
+     L"Wie deckend diese Farbe ist. 100 = keine Transparenz",
+     L"Quanto è pieno quel colore. 100 = nessuna trasparenza"},
+    {L"Darker at the top of the bar, lighter at the bottom of the results. 0 = off",
+     L"Más oscuro arriba de la barra, más claro abajo de los resultados. 0 = desactivado",
+     L"Plus sombre en haut de la barre, plus clair en bas des résultats. 0 = désactivé",
+     L"Oben an der Leiste dunkler, unten bei den Ergebnissen heller. 0 = aus",
+     L"Più scuro in cima alla barra, più chiaro in fondo ai risultati. 0 = disattivato"},
+    {L"Border",
+     L"Borde",
+     L"Bordure",
+     L"Rand",
+     L"Bordo"},
+    {L"Apps, actions, folders and files in one list, like Spotlight. Off: typing goes to Applications",
+     L"Aplicaciones, acciones, carpetas y archivos en una lista, como Spotlight. Desactivado: escribir va a Aplicaciones",
+     L"Applications, actions, dossiers et fichiers dans une liste, comme Spotlight. Désactivé : la saisie va dans Applications",
+     L"Apps, Aktionen, Ordner und Dateien in einer Liste, wie Spotlight. Aus: Tippen öffnet Anwendungen",
+     L"App, azioni, cartelle e file in un elenco, come Spotlight. Disattivato: scrivere va in Applicazioni"},
+    {L"Search for files and folders on this PC",
+     L"Buscar archivos y carpetas en este PC",
+     L"Rechercher des fichiers et dossiers sur ce PC",
+     L"Dateien und Ordner auf diesem PC suchen",
+     L"Cercare file e cartelle su questo PC"},
+    {L"Your last searches show when the Files search is empty",
+     L"Tus últimas búsquedas aparecen cuando la búsqueda de Archivos está vacía",
+     L"Vos dernières recherches s’affichent quand la recherche de Fichiers est vide",
+     L"Deine letzten Suchen erscheinen, wenn die Dateisuche leer ist",
+     L"Le tue ultime ricerche compaiono quando la ricerca dei File è vuota"},
+    {L"How files show while you type: a list with their folder, or big icons",
+     L"Cómo aparecen los archivos mientras escribes: una lista con su carpeta, o iconos grandes",
+     L"Comment les fichiers s’affichent pendant la saisie : une liste avec leur dossier, ou de grandes icônes",
+     L"Wie Dateien beim Tippen erscheinen: eine Liste mit ihrem Ordner oder große Symbole",
+     L"Come compaiono i file mentre scrivi: un elenco con la loro cartella, o icone grandi"},
+    {L"What finds the files. Everything is the fastest, but it must be running (not as administrator)",
+     L"Lo que encuentra los archivos. Everything es el más rápido, pero debe estar abierto (no como administrador)",
+     L"Ce qui trouve les fichiers. Everything est le plus rapide, mais il doit être ouvert (pas en administrateur)",
+     L"Was die Dateien findet. Everything ist am schnellsten, muss aber laufen (nicht als Administrator)",
+     L"Cosa trova i file. Everything è il più veloce, ma deve essere aperto (non come amministratore)"},
+    {L"How many files a search can bring",
+     L"Cuántos archivos puede traer una búsqueda",
+     L"Combien de fichiers une recherche peut renvoyer",
+     L"Wie viele Dateien eine Suche liefern kann",
+     L"Quanti file può portare una ricerca"},
+    {L"Keeps what you copy, to paste it again later. Off: nothing is kept and the history is cleared",
+     L"Guarda lo que copias, para pegarlo de nuevo después. Desactivado: no se guarda nada y se borra el historial",
+     L"Garde ce que vous copiez, pour le coller plus tard. Désactivé : rien n’est gardé et l’historique est effacé",
+     L"Behält, was du kopierst, um es später erneut einzufügen. Aus: Nichts wird behalten und der Verlauf wird gelöscht",
+     L"Conserva ciò che copi, per incollarlo di nuovo dopo. Disattivato: non si conserva nulla e la cronologia viene cancellata"},
+    {L"How many copies the history keeps",
+     L"Cuántas copias guarda el historial",
+     L"Combien de copies l’historique garde",
+     L"Wie viele Kopien der Verlauf behält",
+     L"Quante copie conserva la cronologia"},
+    {L"How long the search bar is",
+     L"Qué tan larga es la barra de búsqueda",
+     L"La longueur de la barre de recherche",
+     L"Wie lang die Suchleiste ist",
+     L"Quanto è lunga la barra di ricerca"},
+    {L"How tall the search bar is",
+     L"Qué tan alta es la barra de búsqueda",
+     L"La hauteur de la barre de recherche",
+     L"Wie hoch die Suchleiste ist",
+     L"Quanto è alta la barra di ricerca"},
+    {L"Apps shown on top, separated by a line: the ones you opened or installed lately, or the ones you use most",
+     L"Aplicaciones arriba, separadas por una línea: las que abriste o instalaste hace poco, o las que más usas",
+     L"Applications en haut, séparées par une ligne : celles ouvertes ou installées récemment, ou les plus utilisées",
+     L"Apps oben, durch eine Linie getrennt: die zuletzt geöffneten oder installierten oder die meistgenutzten",
+     L"App in alto, separate da una linea: quelle aperte o installate di recente, o le più usate"},
+    {L"Power",
+     L"Energía",
+     L"Alimentation",
+     L"Energie",
+     L"Alimentazione"},
+    {L"Typing one of these words shows the buttons to lock, sleep, restart or shut down",
+     L"Escribir una de estas palabras muestra los botones para bloquear, suspender, reiniciar o apagar",
+     L"Taper l’un de ces mots affiche les boutons pour verrouiller, mettre en veille, redémarrer ou arrêter",
+     L"Wenn du eines dieser Wörter tippst, erscheinen Tasten zum Sperren, Energiesparen, Neustarten oder Herunterfahren",
+     L"Scrivere una di queste parole mostra i pulsanti per bloccare, sospendere, riavviare o spegnere"},
+    {L"A round power button next to the bar",
+     L"Un botón de encendido redondo junto a la barra",
+     L"Un bouton d’alimentation rond à côté de la barre",
+     L"Eine runde Ein/Aus-Taste neben der Leiste",
+     L"Un pulsante di accensione rotondo accanto alla barra"},
+    {L"Left or right of the bar. Used the next time it opens",
+     L"A la izquierda o a la derecha de la barra. Se usa la próxima vez que se abra",
+     L"À gauche ou à droite de la barre. Appliqué à la prochaine ouverture",
+     L"Links oder rechts der Leiste. Gilt beim nächsten Öffnen",
+     L"A sinistra o a destra della barra. Vale alla prossima apertura"},
+    {L"Width",
+     L"Ancho",
+     L"Largeur",
+     L"Breite",
+     L"Larghezza"},
+    {L"Also used by the general search",
+     L"También la usa la búsqueda general",
+     L"Aussi utilisée par la recherche générale",
+     L"Wird auch von der allgemeinen Suche verwendet",
+     L"Usata anche dalla ricerca generale"},
+    {L"Rows",
+     L"Filas",
+     L"Lignes",
+     L"Zeilen",
+     L"Righe"},
+    {L"How many rows show before it scrolls",
+     L"Cuántas filas se ven antes de desplazarse",
+     L"Combien de lignes s’affichent avant le défilement",
+     L"Wie viele Zeilen erscheinen, bevor gescrollt wird",
+     L"Quante righe si vedono prima di scorrere"},
+    {L"Share of the screen the window takes (Window mode)",
+     L"Parte de la pantalla que ocupa la ventana (modo Ventana)",
+     L"Part de l’écran occupée par la fenêtre (mode Fenêtre)",
+     L"Anteil des Bildschirms, den das Fenster einnimmt (Fenstermodus)",
+     L"Parte dello schermo occupata dalla finestra (modalità Finestra)"},
+    {L"A search bar across the top, or a centered box as on macOS",
+     L"Una barra de búsqueda arriba, o un cuadro centrado como en macOS",
+     L"Une barre de recherche en haut, ou une boîte centrée comme sur macOS",
+     L"Eine Suchleiste oben oder ein zentriertes Feld wie bei macOS",
+     L"Una barra di ricerca in alto, o un riquadro centrato come su macOS"},
+    {L"How blurred the apps behind an open folder look",
+     L"Qué tan desenfocadas se ven las aplicaciones detrás de una carpeta abierta",
+     L"Le flou des applications derrière un dossier ouvert",
+     L"Wie unscharf die Apps hinter einem geöffneten Ordner wirken",
+     L"Quanto appaiono sfocate le app dietro una cartella aperta"},
+    {L"Power button",
+     L"Botón de encendido",
+     L"Bouton d’alimentation",
+     L"Ein/Aus-Taste",
+     L"Pulsante di accensione"},
+    {L"A power button next to the search",
+     L"Un botón de encendido junto a la búsqueda",
+     L"Un bouton d’alimentation à côté de la recherche",
+     L"Eine Ein/Aus-Taste neben der Suche",
+     L"Un pulsante di accensione accanto alla ricerca"},
+    {L"Left or right of the search",
+     L"A la izquierda o a la derecha de la búsqueda",
+     L"À gauche ou à droite de la recherche",
+     L"Links oder rechts der Suche",
+     L"A sinistra o a destra della ricerca"},
+    {L"Floating and Original Siri",
+     L"Flotante y Siri original",
+     L"Flottant et Siri original",
+     L"Schwebend und Original-Siri",
+     L"Fluttuante e Siri originale"},
+    {L"What plays inside the circle the bar grows out of",
+     L"Lo que se ve dentro del círculo del que nace la barra",
+     L"Ce qui s’anime dans le cercle d’où naît la barre",
+     L"Was im Kreis läuft, aus dem die Leiste wächst",
+     L"Cosa appare nel cerchio da cui nasce la barra"},
+    {L"How much the circle grows before it becomes the bar. 0 = none",
+     L"Cuánto crece el círculo antes de volverse la barra. 0 = nada",
+     L"À quel point le cercle grandit avant de devenir la barre. 0 = aucun",
+     L"Wie stark der Kreis wächst, bevor er zur Leiste wird. 0 = keiner",
+     L"Quanto cresce il cerchio prima di diventare la barra. 0 = nessuno"},
+    {L"How much the circle springs when it appears. 0 = none",
+     L"Cuánto rebota el círculo al aparecer. 0 = nada",
+     L"À quel point le cercle rebondit en apparaissant. 0 = aucun",
+     L"Wie stark der Kreis beim Erscheinen federt. 0 = keiner",
+     L"Quanto rimbalza il cerchio quando appare. 0 = nessuno"},
+    {L"How much the results box springs when it opens. 0 = none",
+     L"Cuánto rebota el cuadro de resultados al abrirse. 0 = nada",
+     L"À quel point la boîte de résultats rebondit à l’ouverture. 0 = aucun",
+     L"Wie stark das Ergebnisfeld beim Öffnen federt. 0 = keiner",
+     L"Quanto rimbalza il riquadro dei risultati quando si apre. 0 = nessuno"},
+    {L"100 = normal; more is faster",
+     L"100 = normal; más es más rápido",
+     L"100 = normal ; plus est plus rapide",
+     L"100 = normal; mehr ist schneller",
+     L"100 = normale; di più è più veloce"},
+    {L"How the window appears",
+     L"Cómo aparece la ventana",
+     L"Comment la fenêtre apparaît",
+     L"Wie das Fenster erscheint",
+     L"Come appare la finestra"},
+    {L"How the window goes away",
+     L"Cómo desaparece la ventana",
+     L"Comment la fenêtre disparaît",
+     L"Wie das Fenster verschwindet",
+     L"Come scompare la finestra"},
+    {L"How many apps fit side by side. 0 = automatic",
+     L"Cuántas aplicaciones caben una al lado de otra. 0 = automático",
+     L"Combien d’applications tiennent côte à côte. 0 = automatique",
+     L"Wie viele Apps nebeneinander passen. 0 = automatisch",
+     L"Quante app stanno una accanto all’altra. 0 = automatico"},
+    {L"Pages side by side, as on macOS, or one long list going down",
+     L"Páginas una al lado de otra, como en macOS, o una lista larga hacia abajo",
+     L"Des pages côte à côte, comme sur macOS, ou une longue liste vers le bas",
+     L"Seiten nebeneinander wie bei macOS oder eine lange Liste nach unten",
+     L"Pagine affiancate, come su macOS, o un lungo elenco verso il basso"},
+    {L"Selected apps shake, as on an iPhone",
+     L"Las aplicaciones seleccionadas tiemblan, como en un iPhone",
+     L"Les applications sélectionnées tremblent, comme sur un iPhone",
+     L"Ausgewählte Apps wackeln wie auf einem iPhone",
+     L"Le app selezionate tremano, come su un iPhone"},
+    {L"Drop an app on the taskbar and it stays pinned there",
+     L"Suelta una aplicación en la barra de tareas y se queda anclada allí",
+     L"Déposez une application sur la barre des tâches et elle y reste épinglée",
+     L"Lege eine App auf der Taskleiste ab und sie bleibt dort angeheftet",
+     L"Rilascia un’app sulla barra delle applicazioni e resta aggiunta lì"},
+    {L"Your icons",
+     L"Tus iconos",
+     L"Vos icônes",
+     L"Deine Symbole",
+     L"Le tue icone"},
+    {L"Mode, theme, language and how the launcher opens",
+     L"Modo, tema, idioma y cómo se abre el lanzador",
+     L"Mode, thème, langue et ouverture du lanceur",
+     L"Modus, Design, Sprache und wie der Starter öffnet",
+     L"Modalità, tema, lingua e come si apre il launcher"},
+    {L"Glass, corners, blur, text and menus",
+     L"Cristal, esquinas, desenfoque, texto y menús",
+     L"Verre, coins, flou, texte et menus",
+     L"Glas, Ecken, Unschärfe, Text und Menüs",
+     L"Vetro, angoli, sfocatura, testo e menu"},
+    {L"Your own colors, used when the theme is Custom",
+     L"Tus propios colores, usados cuando el tema es Personalizado",
+     L"Vos propres couleurs, utilisées quand le thème est Personnalisé",
+     L"Deine eigenen Farben, wenn das Design Benutzerdefiniert ist",
+     L"I tuoi colori, usati quando il tema è Personalizzato"},
+    {L"Search",
+     L"Buscar",
+     L"Rechercher",
+     L"Suchen",
+     L"Cerca"},
+    {L"What the bar finds: everything at once, files and your copies",
+     L"Lo que encuentra la barra: todo a la vez, archivos y tus copias",
+     L"Ce que trouve la barre : tout à la fois, les fichiers et vos copies",
+     L"Was die Leiste findet: alles auf einmal, Dateien und deine Kopien",
+     L"Cosa trova la barra: tutto insieme, i file e le tue copie"},
+    {L"The bar of the Floating and Original Siri modes and its buttons",
+     L"La barra de los modos Flotante y Siri original y sus botones",
+     L"La barre des modes Flottant et Siri original et ses boutons",
+     L"Die Leiste der Modi Schwebend und Original-Siri und ihre Tasten",
+     L"La barra delle modalità Fluttuante e Siri originale e i suoi pulsanti"},
+    {L"Results size",
+     L"Tamaño de los resultados",
+     L"Taille des résultats",
+     L"Größe der Ergebnisse",
+     L"Dimensione dei risultati"},
+    {L"How wide and tall the results box is in each category",
+     L"Qué tan ancho y alto es el cuadro de resultados en cada categoría",
+     L"La largeur et la hauteur de la boîte de résultats dans chaque catégorie",
+     L"Wie breit und hoch das Ergebnisfeld in jeder Kategorie ist",
+     L"Quanto è largo e alto il riquadro dei risultati in ogni categoria"},
+    {L"The Launchpad-style grid: size, search and power button",
+     L"La cuadrícula estilo Launchpad: tamaño, búsqueda y botón de encendido",
+     L"La grille façon Launchpad : taille, recherche et bouton d’alimentation",
+     L"Das Raster im Launchpad-Stil: Größe, Suche und Ein/Aus-Taste",
+     L"La griglia in stile Launchpad: dimensioni, ricerca e pulsante di accensione"},
+    {L"How the launcher opens and closes in each mode",
+     L"Cómo se abre y se cierra el lanzador en cada modo",
+     L"Comment le lanceur s’ouvre et se ferme dans chaque mode",
+     L"Wie der Starter in jedem Modus öffnet und schließt",
+     L"Come si apre e si chiude il launcher in ogni modalità"},
+    {L"Keyboard shortcuts",
+     L"Atajos de teclado",
+     L"Raccourcis clavier",
+     L"Tastenkürzel",
+     L"Scorciatoie da tastiera"},
+    {L"Ctrl shortcuts that jump to a category",
+     L"Atajos Ctrl que llevan directo a una categoría",
+     L"Raccourcis Ctrl qui mènent à une catégorie",
+     L"Strg-Kürzel, die direkt zu einer Kategorie springen",
+     L"Scorciatoie Ctrl che portano a una categoria"},
+    {L"Icon size, columns, scrolling and your own icons",
+     L"Tamaño de los iconos, columnas, desplazamiento y tus propios iconos",
+     L"Taille des icônes, colonnes, défilement et vos propres icônes",
+     L"Symbolgröße, Spalten, Scrollen und eigene Symbole",
+     L"Dimensione delle icone, colonne, scorrimento e le tue icone"},
+    {L"Lighter effects and fewer frames for laptops and slower PCs",
+     L"Efectos más ligeros y menos fotogramas para portátiles y PC más lentos",
+     L"Des effets plus légers et moins d’images pour les portables et les PC plus lents",
+     L"Leichtere Effekte und weniger Bilder für Laptops und langsamere PCs",
+     L"Effetti più leggeri e meno fotogrammi per portatili e PC più lenti"},
+    {L"Backup and defaults",
+     L"Copia de seguridad y valores predeterminados",
+     L"Sauvegarde et valeurs par défaut",
+     L"Sicherung und Standards",
+     L"Backup e valori predefiniti"},
+    {L"Save everything to a file, bring it back, or start over",
+     L"Guardar todo en un archivo, recuperarlo o empezar de nuevo",
+     L"Tout enregistrer dans un fichier, le restaurer ou repartir de zéro",
+     L"Alles in einer Datei sichern, zurückholen oder neu anfangen",
+     L"Salvare tutto in un file, ripristinarlo o ricominciare da capo"},
+    {L"Performance", L"Rendimiento", L"Performances", L"Leistung", L"Prestazioni"},
+    {L"Light: no liquid glass, no blur behind menus, no shadows, at most 60 frames per second",
+     L"Ligero: sin cristal líquido, sin desenfoque tras los menús, sin sombras, como máximo 60 fotogramas por segundo",
+     L"Léger : sans verre liquide, sans flou derrière les menus, sans ombres, 60 images par seconde au plus",
+     L"Leicht: kein Flüssigglas, keine Unschärfe hinter Menüs, keine Schatten, höchstens 60 Bilder pro Sekunde",
+     L"Leggero: niente vetro liquido, niente sfocatura dietro i menu, niente ombre, al massimo 60 fotogrammi al secondo"},
+    {L"Normal", L"Normal", L"Normal", L"Normal", L"Normale"},
+    {L"Light (faster)", L"Ligero (más rápido)", L"Léger (plus rapide)", L"Leicht (schneller)", L"Leggero (più veloce)"},
+    {L"Frame rate limit", L"Límite de fotogramas por segundo", L"Limite d’images par seconde", L"Bildratenbegrenzung", L"Limite di fotogrammi al secondo"},
+    {L"Fewer frames use less power", L"Menos fotogramas gastan menos energía", L"Moins d’images consomment moins d’énergie",
+     L"Weniger Bilder verbrauchen weniger Energie", L"Meno fotogrammi consumano meno energia"},
+    {L"Automatic (monitor)", L"Automático (monitor)", L"Automatique (écran)", L"Automatisch (Monitor)", L"Automatico (monitor)"},
+    {L"Draw with", L"Dibujar con", L"Dessiner avec", L"Zeichnen mit", L"Disegna con"},
+    {L"Processor: doesn't use the graphics card (can help laptops with two graphics cards)",
+     L"Procesador: no usa la tarjeta gráfica (puede ayudar a portátiles con dos tarjetas)",
+     L"Processeur : n’utilise pas la carte graphique (peut aider les portables à deux cartes)",
+     L"Prozessor: nutzt die Grafikkarte nicht (kann Laptops mit zwei Grafikkarten helfen)",
+     L"Processore: non usa la scheda grafica (può aiutare i portatili con due schede)"},
+    {L"Graphics card", L"Tarjeta gráfica", L"Carte graphique", L"Grafikkarte", L"Scheda grafica"},
+    {L"Processor (experimental)", L"Procesador (experimental)", L"Processeur (expérimental)", L"Prozessor (experimentell)", L"Processore (sperimentale)"},
+    {L"Typing in Search looks everywhere", L"Escribir en Buscar busca en todo", L"Taper dans Rechercher cherche partout",
+     L"Tippen in Suchen sucht überall", L"Scrivere in Cerca cerca ovunque"},
+    {L"Original Siri. Apps, actions, folders and files in one list, like Spotlight. Off: typing goes to Applications",
+     L"Siri original. Aplicaciones, acciones, carpetas y archivos en una lista, como Spotlight. Desactivado: escribir va a Aplicaciones",
+     L"Siri original. Applications, actions, dossiers et fichiers dans une liste, comme Spotlight. Désactivé : la saisie va dans Applications",
+     L"Original-Siri. Apps, Aktionen, Ordner und Dateien in einer Liste, wie Spotlight. Aus: Tippen öffnet Anwendungen",
+     L"Siri originale. App, azioni, cartelle e file in un elenco, come Spotlight. Disattivato: scrivere va in Applicazioni"},
+    {L"Folders", L"Carpetas", L"Dossiers", L"Ordner", L"Cartelle"},
+    {L"Documents and files", L"Documentos y archivos", L"Documents et fichiers", L"Dokumente und Dateien", L"Documenti e file"},
+    {L"Searching files...", L"Buscando archivos...", L"Recherche de fichiers...", L"Dateien werden gesucht...", L"Ricerca dei file..."},
+    {L"Show all", L"Mostrar todo", L"Tout afficher", L"Alle anzeigen", L"Mostra tutto"},
+    {L"Not used by the mode you chose (%ls)", L"No lo usa el modo elegido (%ls)", L"Non utilisé par le mode choisi (%ls)",
+     L"Vom gewählten Modus nicht verwendet (%ls)", L"Non usato dalla modalità scelta (%ls)"},
+    {L"Side of the power button", L"Lado del botón de encendido", L"Côté du bouton d’alimentation", L"Seite der Ein/Aus-Taste", L"Lato del pulsante di accensione"},
+    {L"Selection in menus", L"Selección en los menús", L"Sélection dans les menus", L"Auswahl in Menüs", L"Selezione nei menu"},
+    {L"Clear glass theme. Colored is like macOS; Frosted lets the glass show through",
+     L"Tema Cristal transparente. Coloreada es como en macOS; Esmerilada deja ver el cristal",
+     L"Thème Verre transparent. Colorée est comme sur macOS ; Givrée laisse voir le verre",
+     L"Design Klares Glas. Farbig wie bei macOS; Mattiert lässt das Glas durchscheinen",
+     L"Tema Vetro trasparente. Colorata è come su macOS; Satinata lascia vedere il vetro"},
+    {L"Glass", L"Cristal", L"Verre", L"Glas", L"Vetro"},
+    {L"Colored", L"Coloreada", L"Colorée", L"Farbig", L"Colorata"},
+    {L"Frosted color", L"Color esmerilado", L"Couleur givrée", L"Mattierte Farbe", L"Colore satinato"},
+    {L"Selection color", L"Color de selección", L"Couleur de sélection", L"Auswahlfarbe", L"Colore della selezione"},
+    {L"Colored and Frosted selection. Starts with the macOS blue",
+     L"Selección Coloreada y Esmerilada. Empieza con el azul de macOS",
+     L"Sélection Colorée et Givrée. Commence avec le bleu de macOS",
+     L"Farbige und mattierte Auswahl. Beginnt mit dem macOS-Blau",
+     L"Selezione Colorata e Satinata. Inizia con il blu di macOS"},
+    {L"A folder with your icon images, for example a downloaded icon pack. Right-click an app > Change icon... shows them",
+     L"Una carpeta con tus imágenes de iconos, por ejemplo un paquete de iconos descargado. Clic derecho en una aplicación > Cambiar icono... las muestra",
+     L"Un dossier avec vos images d’icônes, par exemple un pack d’icônes téléchargé. Clic droit sur une application > Changer l’icône... les affiche",
+     L"Ein Ordner mit deinen Symbolbildern, zum Beispiel ein heruntergeladenes Symbolpaket. Rechtsklick auf eine App > Symbol ändern... zeigt sie",
+     L"Una cartella con le tue immagini di icone, per esempio un pacchetto di icone scaricato. Clic destro su un’app > Cambia icona... le mostra"},
     {L"Backup saved.\n\nSettings, folders, tabs and %d custom icon(s) are in the file.",
      L"Copia de seguridad guardada.\n\nAjustes, carpetas, pestañas y %d icono(s) personalizado(s) están en el archivo.",
      L"Sauvegarde enregistrée.\n\nRéglages, dossiers, onglets et %d icône(s) personnalisée(s) sont dans le fichier.",
@@ -1071,11 +1629,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Choisir le dossier de la galerie",
      L"Galerieordner wählen",
      L"Scegli la cartella della galleria"},
-    {L"Choose the icon folder first: settings (⋯) > Apps and icons > Icon gallery folder",
-     L"Elige primero la carpeta de iconos: ajustes (⋯) > Aplicaciones e iconos > Carpeta de la galería de iconos",
-     L"Choisissez d’abord le dossier d’icônes : réglages (⋯) > Applications et icônes > Dossier de la galerie d’icônes",
-     L"Zuerst den Symbolordner wählen: Einstellungen (⋯) > Apps und Symbole > Ordner der Symbolgalerie",
-     L"Scegli prima la cartella delle icone: impostazioni (⋯) > App e icone > Cartella della galleria di icone"},
     {L"Choose…",
      L"Elegir…",
      L"Choisir…",
@@ -1096,11 +1649,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Chemin du dossier",
      L"Ordnerpfad",
      L"Percorso della cartella"},
-    {L"Icon from gallery...",
-     L"Icono de la galería...",
-     L"Icône de la galerie...",
-     L"Symbol aus der Galerie...",
-     L"Icona dalla galleria..."},
     {L"Icon gallery",
      L"Galería de iconos",
      L"Galerie d’icônes",
@@ -2141,17 +2689,18 @@ std::wstring CfgFormat(PCWSTR format, int n) {
 }
 
 const CfgSection kCfgSections[] = {
-    {L"General", L"Geral", L"Launcher mode and theme", L"Modo do menu e tema", L"", 0x8E8E93},
-    {L"Appearance", L"Aparência", L"Glass, corners and background blur", L"Vidro, cantos e desfoque do fundo", L"", 0x0A84FF},
-    {L"Custom theme", L"Tema personalizado", L"Used when the theme is Custom", L"Usado quando o tema é Personalizado", L"", 0xBF5AF2},
-    {L"Siri bar", L"Barra Siri", L"Size of the bar and of the results box", L"Tamanho da barra e da caixa de resultados", L"", 0xFF375F},
-    {L"Animations", L"Animações", L"How the bar opens and closes", L"Como a barra abre e fecha", L"", 0x30D158},
-    {L"Shortcuts", L"Atalhos", L"Ctrl shortcuts for the categories", L"Atalhos Ctrl para as categorias", L"", 0x64D2FF},
-    {L"Window and Fullscreen", L"Janela e Tela cheia", L"Only for the Window and Fullscreen modes", L"Só para os modos Janela e Tela cheia", L"", 0x5E5CE6},
-    {L"Opening", L"Abertura", L"What opens the launcher", L"O que abre o menu", L"", 0xFF9F0A},
-    {L"Apps and icons", L"Apps e ícones", L"Icons, columns and scrolling", L"Ícones, colunas e rolagem", L"", 0xFF453A},
-    {L"Files", L"Arquivos", L"File search and its history", L"Pesquisa de arquivos e histórico", L"", 0x0A84FF},
-    {L"Clipboard", L"Área de transferência", L"Clipboard history", L"Histórico da área de transferência", L"", 0xFFB300},
+    {L"General", L"Geral", L"Mode, theme, language and how the launcher opens", L"Modo, tema, idioma e como o menu abre", L"\uE713", 0x8E8E93},
+    {L"Appearance", L"Aparência", L"Glass, corners, blur, text and menus", L"Vidro, cantos, desfoque, texto e menus", L"\uE771", 0x0A84FF},
+    {L"Custom theme", L"Tema personalizado", L"Your own colors, used when the theme is Custom", L"Suas próprias cores, usadas quando o tema é Personalizado", L"\uE790", 0xBF5AF2},
+    {L"Search", L"Pesquisa", L"What the bar finds: everything at once, files and your copies", L"O que a barra encontra: tudo de uma vez, arquivos e suas cópias", L"\uE721", 0x0A84FF},
+    {L"Siri bar", L"Barra Siri", L"The bar of the Floating and Original Siri modes and its buttons", L"A barra dos modos Flutuante e Siri original e seus botões", L"\uE720", 0xFF375F},
+    {L"Results size", L"Tamanho dos resultados", L"How wide and tall the results box is in each category", L"Quão larga e alta é a caixa de resultados em cada categoria", L"\uE8A9", 0x30B0C7},
+    {L"Window and Fullscreen", L"Janela e Tela cheia", L"The Launchpad-style grid: size, search and power button", L"A grade estilo Launchpad: tamanho, pesquisa e botão de energia", L"\uE740", 0x5E5CE6},
+    {L"Animations", L"Animações", L"How the launcher opens and closes in each mode", L"Como o menu abre e fecha em cada modo", L"\uE768", 0x30D158},
+    {L"Keyboard shortcuts", L"Atalhos de teclado", L"Ctrl shortcuts that jump to a category", L"Atalhos Ctrl que levam direto a uma categoria", L"\uE765", 0x64D2FF},
+    {L"Apps and icons", L"Apps e ícones", L"Icon size, columns, scrolling and your own icons", L"Tamanho dos ícones, colunas, rolagem e seus próprios ícones", L"\uE71D", 0xFF453A},
+    {L"Performance", L"Desempenho", L"Lighter effects and fewer frames for laptops and slower PCs", L"Efeitos mais leves e menos quadros para notebooks e PCs mais lentos", L"\uEC4A", 0xFF9F0A},
+    {L"Backup and defaults", L"Backup e padrões", L"Save everything to a file, bring it back, or start over", L"Salvar tudo num arquivo, trazer de volta ou recomeçar", L"\uE777", 0x8E8E93},
 };
 constexpr int kCfgSectionCount = (int)ARRAYSIZE(kCfgSections);
 
@@ -2177,6 +2726,10 @@ const CfgOpt kOptView[] = {{L"list", L"List", L"Lista"}, {L"icons", L"Icons (gri
 const CfgOpt kOptIndexer[] = {{L"auto", L"Automatic", L"Automático"}, {L"everything", L"Everything", L"Everything"},
                               {L"windows", L"Windows Search", L"Pesquisa do Windows"}, {L"scan", L"Direct scan (slow)", L"Verificação direta (lenta)"}};
 
+const CfgOpt kOptMenuSelection[] = {{L"glass", L"Glass", L"Vidro"}, {L"color", L"Colored", L"Colorida"}, {L"frosted", L"Frosted color", L"Cor fosca"}};
+const CfgOpt kOptPerformance[] = {{L"normal", L"Normal", L"Normal"}, {L"light", L"Light (faster)", L"Leve (mais rápido)"}};
+const CfgOpt kOptFrameRate[] = {{L"auto", L"Automatic (monitor)", L"Automático (monitor)"}, {L"120", L"120", L"120"}, {L"60", L"60", L"60"}, {L"30", L"30", L"30"}};
+const CfgOpt kOptRenderer[] = {{L"gpu", L"Graphics card", L"Placa de vídeo"}, {L"cpu", L"Processor (experimental)", L"Processador (experimental)"}};
 const CfgOpt kOptMenuText[] = {{L"auto", L"Automatic", L"Automática"}, {L"white", L"White", L"Branco"}, {L"black", L"Black", L"Preto"}};
 const CfgOpt kOptLanguage[] = {{L"auto", L"Automatic (Windows)", L"Automático (Windows)"}, {L"pt", L"Português", L"Português"},
                                 {L"en", L"English", L"English"}, {L"es", L"Español", L"Español"}, {L"fr", L"Français", L"Français"},
@@ -2184,137 +2737,219 @@ const CfgOpt kOptLanguage[] = {{L"auto", L"Automatic (Windows)", L"Automático (
 #define CFG_OPTS(a) a, (int)ARRAYSIZE(a)
 const CfgItem kCfgItems[] = {
     // 0 General
-    {0, kCfgChoice, L"displayMode", L"Mode", L"Modo", L"The new mode is used the next time the launcher opens",
-     L"O novo modo vale na próxima vez que o menu abrir", 0, 0, 0, nullptr, CFG_OPTS(kOptMode)},
-    {0, kCfgChoice, L"theme", L"Theme", L"Tema", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptTheme)},
+    {0, kCfgChoice, L"displayMode", L"Mode", L"Modo",
+     L"How the launcher looks. Original Siri: a bar with a categories menu. Floating: a bar with a results box. Window and Fullscreen: a grid of apps, like Launchpad. Used the next time it opens",
+     L"Como o menu aparece. Siri original: uma barra com o menu de categorias. Flutuante: uma barra com uma caixa de resultados. Janela e Tela cheia: uma grade de apps, como o Launchpad. Vale na próxima vez que abrir",
+     0, 0, 0, nullptr, CFG_OPTS(kOptMode)},
+    {0, kCfgChoice, L"theme", L"Theme", L"Tema", L"The colors and the glass of everything: bar, menus, results and this window",
+     L"As cores e o vidro de tudo: barra, menus, resultados e esta janela", 0, 0, 0, nullptr, CFG_OPTS(kOptTheme)},
     {0, kCfgChoice, L"language", L"Language", L"Idioma", L"Automatic follows the language of Windows", L"Automático segue o idioma do Windows",
      0, 0, 0, nullptr, CFG_OPTS(kOptLanguage)},
-    {0, kCfgButton, L"#reset", L"Restore all defaults", L"Restaurar todos os padrões",
-     L"Every setting goes back to how the mod comes, and the bar to the center. Folders, tabs and custom icons stay",
-     L"Todos os ajustes voltam a como o mod vem, e a barra volta ao centro. Pastas, abas e ícones personalizados ficam", 0, 0, 0, nullptr, nullptr, 0},
-    {0, kCfgButton, L"#export", L"Back up", L"Fazer backup",
-     L"Saves every setting, folders, tabs and the custom icons (their pictures go inside the file)",
-     L"Salva todas as configurações, pastas, abas e os ícones personalizados (as imagens vão dentro do arquivo)",
-     0, 0, 0, nullptr, nullptr, 0},
-    {0, kCfgButton, L"#import", L"Restore a backup", L"Restaurar backup",
-     L"Brings everything back from a backup file, even after reinstalling the mod or on another PC",
-     L"Traz tudo de volta de um arquivo de backup, mesmo depois de reinstalar o mod ou em outro PC",
+    {0, kCfgGroup, L"#g.open", L"Opening the launcher", L"Como o menu abre", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {0, kCfgToggle, L"open.winKey", L"Open with the Windows key", L"Abrir com a tecla Windows",
+     L"Off: the Windows key opens the Windows Start menu", L"Desligado: a tecla Windows abre o Iniciar do Windows", 0, 0, 0, nullptr, nullptr, 0},
+    {0, kCfgToggle, L"open.startButton", L"Open with the Start button", L"Abrir com o botão Iniciar",
+     L"Off: the Start button on the taskbar opens the Windows Start menu", L"Desligado: o botão Iniciar da barra de tarefas abre o Iniciar do Windows",
      0, 0, 0, nullptr, nullptr, 0},
     // 1 Appearance
     {1, kCfgButton, L"#themeReset", L"Theme defaults", L"Padrão do tema",
      L"Brings back the chosen theme's own look: its transparency, corners, blur and glass",
      L"Volta ao visual próprio do tema escolhido: transparência, cantos, desfoque e vidro", 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgSlider, L"appearance.transparency", L"Glass transparency", L"Transparência do vidro",
-     L"Each theme keeps its own; Light and OLED start solid. 100 = completely clear",
-     L"Cada tema guarda a sua; Claro e OLED começam sólidos. 100 = totalmente transparente", 0, 100, 1, L"%", nullptr, 0},
-    {1, kCfgSlider, L"appearance.cornerRadius", L"Corner rounding", L"Arredondamento dos cantos", L"Window, open folders and the Siri panel",
-     L"Janela, pastas abertas e painel do Siri", 0, 60, 1, L"px", nullptr, 0},
-    {1, kCfgSlider, L"appearance.blur", L"Background blur", L"Desfoque do fundo", L"0 = none. The live blur needs Windows' transparency effects",
-     L"0 = nenhum. O desfoque ao vivo precisa dos efeitos de transparência do Windows", 0, 100, 1, nullptr, nullptr, 0},
+     L"How much of what is behind shows through. Each theme keeps its own; Light and OLED start solid. 100 = completely clear",
+     L"Quanto do que está atrás aparece. Cada tema guarda a sua; Claro e OLED começam sólidos. 100 = totalmente transparente", 0, 100, 1, L"%", nullptr, 0},
+    {1, kCfgSlider, L"appearance.cornerRadius", L"Corner rounding", L"Arredondamento dos cantos",
+     L"How round the corners of the window, the open folders and the results box are",
+     L"Quão arredondados ficam os cantos da janela, das pastas abertas e da caixa de resultados", 0, 60, 1, L"px", nullptr, 0},
+    {1, kCfgSlider, L"appearance.blur", L"Background blur", L"Desfoque do fundo",
+     L"How blurred what is behind the launcher looks. 0 = none. The live blur needs Windows' transparency effects",
+     L"Quão embaçado fica o que está atrás do menu. 0 = nenhum. O desfoque ao vivo precisa dos efeitos de transparência do Windows", 0, 100, 1, nullptr, nullptr, 0},
     {1, kCfgChoice, L"appearance.menuTextColor", L"Text color", L"Cor do texto",
-     L"Automatic: on clear glass, black over a light background", L"Automática: no vidro transparente, preto sobre um fundo claro",
-     0, 0, 0, nullptr, CFG_OPTS(kOptMenuText)},
-    {1, kCfgSlider, L"appearance.menuBlur", L"Blur behind menus", L"Desfoque atrás dos menus", L"Right-click menus. 100 = default, 0 = none",
-     L"Menus de clique direito. 100 = padrão, 0 = nenhum", 0, 200, 5, L"%", nullptr, 0},
+     L"Automatic: on clear glass, black over a light background and white over a dark one",
+     L"Automática: no vidro transparente, preto sobre um fundo claro e branco sobre um escuro", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuText)},
+    {1, kCfgGroup, L"#g.menus", L"Menus", L"Menus", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgChoice, L"appearance.menuSelection", L"Selection in menus", L"Seleção nos menus",
+     L"How the item under the mouse is highlighted (Clear glass theme). Colored is like macOS; Frosted lets the glass show through",
+     L"Como o item sob o mouse fica destacado (tema Vidro transparente). Colorida é como no macOS; Fosca deixa o vidro aparecer", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuSelection)},
+    {1, kCfgColor, L"appearance.menuSelectionColor", L"Selection color", L"Cor da seleção",
+     L"Colored and Frosted selection. Starts with the macOS blue", L"Seleção Colorida e Fosca. Começa com o azul do macOS",
+     0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"appearance.menuBlur", L"Blur behind menus", L"Desfoque atrás dos menus",
+     L"How blurred the icons behind a right-click menu look, so its text is easy to read. 100 = default, 0 = none",
+     L"Quão embaçados ficam os ícones atrás de um menu de clique direito, para o texto dele ficar fácil de ler. 100 = padrão, 0 = nenhum", 0, 200, 5, L"%", nullptr, 0},
+    {1, kCfgGroup, L"#g.glass", L"Glass", L"Vidro", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgChoice, L"appearance.glassStyle", L"Clear glass style", L"Estilo do vidro transparente",
-     L"Clear glass and Siri themes, in Floating and Original Siri. Liquid bends the background at the edges, like macOS 26. Shows the next time the launcher opens",
-     L"Temas Vidro transparente e Siri, nos modos Flutuante e Siri original. Líquido curva o fundo nas bordas, como no macOS 26. Vale na próxima vez que o menu abrir", 0, 0, 0, nullptr, CFG_OPTS(kOptGlass)},
-    {1, kCfgSlider, L"appearance.refraction", L"Refraction at the edges", L"Refração nas bordas", L"Liquid glass", L"Vidro líquido",
-     0, 100, 1, L"%", nullptr, 0},
+     L"Frosted: a soft blur. Liquid: the background bends at the edges, like macOS 26 (heavier). Clear glass and Siri themes. Used the next time it opens",
+     L"Fosco: um desfoque suave. Líquido: o fundo se curva nas bordas, como no macOS 26 (mais pesado). Temas Vidro transparente e Siri. Vale na próxima vez que abrir",
+     0, 0, 0, nullptr, CFG_OPTS(kOptGlass)},
+    {1, kCfgSlider, L"appearance.refraction", L"Refraction at the edges", L"Refração nas bordas",
+     L"How much the liquid glass bends what is behind it", L"Quanto o vidro líquido curva o que está atrás dele", 0, 100, 1, L"%", nullptr, 0},
+    {1, kCfgToggle, L"appearance.liveGlass", L"Liquid glass follows the background live", L"Vidro líquido acompanha o fundo ao vivo",
+     L"Videos move inside the glass, but the launcher no longer shows in screenshots and recordings. Used the next time it opens",
+     L"Vídeos se mexem dentro do vidro, mas o menu deixa de aparecer em prints e gravações. Vale na próxima vez que abrir",
+     0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgToggle, L"appearance.glassEffect", L"Glass effect on Light, Dark and OLED", L"Efeito vidro nos temas Claro, Escuro e OLED",
      L"Light on the top, the thickness of the glass at the edges and a beveled rim",
      L"Brilho no topo, a espessura do vidro nas bordas e uma borda chanfrada", 0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgToggle, L"appearance.liveGlass", L"Liquid glass follows the background live", L"Vidro líquido acompanha o fundo ao vivo",
-     L"Videos move inside the glass, but the launcher no longer shows in screenshots and recordings. Applies the next time it opens",
-     L"Vídeos se mexem dentro do vidro, mas o menu deixa de aparecer em prints e gravações. Vale na próxima vez que abrir",
-     0, 0, 0, nullptr, nullptr, 0},
     // 2 Custom theme
-    {2, kCfgColor, L"custom.color", L"Color", L"Cor", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {2, kCfgSlider, L"custom.opacity", L"Opacity", L"Opacidade", nullptr, nullptr, 0, 100, 1, L"%", nullptr, 0},
-    {2, kCfgSlider, L"custom.shading", L"Dark-to-light gradient", L"Degradê escuro → claro", L"Floating and Original Siri. 0 = off",
-     L"Flutuante e Siri original. 0 = desligado", 0, 100, 1, L"%", nullptr, 0},
+    {2, kCfgColor, L"custom.color", L"Color", L"Cor", L"The color of the glass", L"A cor do vidro", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgSlider, L"custom.opacity", L"Opacity", L"Opacidade", L"How solid that color is. 100 = no transparency",
+     L"Quão sólida é essa cor. 100 = sem transparência", 0, 100, 1, L"%", nullptr, 0},
+    {2, kCfgSlider, L"custom.shading", L"Dark-to-light gradient", L"Degradê escuro → claro",
+     L"Darker at the top of the bar, lighter at the bottom of the results. 0 = off",
+     L"Mais escuro no topo da barra, mais claro embaixo dos resultados. 0 = desligado", 0, 100, 1, L"%", nullptr, 0},
+    {2, kCfgGroup, L"#g.border", L"Border", L"Borda", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {2, kCfgSlider, L"custom.borderWidth", L"Border width", L"Espessura da borda", L"0 = no border", L"0 = sem borda", 0, 8, 1, L"px", nullptr, 0},
     {2, kCfgColor, L"custom.borderColor", L"Border color", L"Cor da borda", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {2, kCfgSlider, L"custom.borderOpacity", L"Border opacity", L"Opacidade da borda", nullptr, nullptr, 0, 100, 1, L"%", nullptr, 0},
-    // 3 Siri bar
-    {3, kCfgSlider, L"siri.pillWidth", L"Bar width", L"Largura da barra", nullptr, nullptr, 200, 1400, 10, L"px", nullptr, 0},
-    {3, kCfgSlider, L"siri.pillHeight", L"Bar height", L"Altura da barra", nullptr, nullptr, 36, 96, 1, L"px", nullptr, 0},
-    {3, kCfgSlider, L"siri.panelWidth", L"Applications: results width", L"Aplicativos: largura dos resultados", nullptr, nullptr, 300, 1400, 10, L"px", nullptr, 0},
-    {3, kCfgSlider, L"siri.panelRows", L"Applications: result rows", L"Aplicativos: linhas dos resultados", nullptr, nullptr, 1, 8, 1, nullptr, nullptr, 0},
-    {3, kCfgSlider, L"siri.filesWidth", L"Files: results width", L"Arquivos: largura dos resultados", L"0 = same width as the bar",
-     L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
-    {3, kCfgSlider, L"siri.filesRows", L"Files: result rows", L"Arquivos: linhas dos resultados", nullptr, nullptr, 1, 8, 1, nullptr, nullptr, 0},
-    {3, kCfgSlider, L"siri.actionsWidth", L"Actions: results width", L"Ações: largura dos resultados", L"0 = same width as the bar",
-     L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
-    {3, kCfgSlider, L"siri.actionsRows", L"Actions: result rows", L"Ações: linhas dos resultados", nullptr, nullptr, 1, 8, 1, nullptr, nullptr, 0},
-    {3, kCfgSlider, L"siri.clipboardWidth", L"Clipboard: results width", L"Área de transferência: largura dos resultados", L"0 = same width as the bar",
-     L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
-    {3, kCfgSlider, L"siri.clipboardRows", L"Clipboard: result rows", L"Área de transferência: linhas dos resultados", nullptr, nullptr, 1, 8, 1, nullptr, nullptr, 0},
-    {3, kCfgChoice, L"siri.firstRow", L"First row of apps", L"Primeira linha de apps", L"Original Siri, separated by a line",
-     L"Siri original, separada por uma linha", 0, 0, 0, nullptr, CFG_OPTS(kOptFirstRow)},
-    {3, kCfgToggle, L"siri.powerPill", L"Power options when typing shut down, restart…", L"Opções de energia ao digitar desligar, reiniciar…",
-     nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgToggle, L"siri.powerButton", L"Floating power button", L"Botão de energia flutuante", L"Next to the bar", L"Ao lado da barra",
+    // 3 Search
+    {3, kCfgToggle, L"siri.generalSearch", L"Typing in Search looks everywhere", L"Digitar em Pesquisar procura em tudo",
+     L"Apps, actions, folders and files in one list, like Spotlight. Off: typing goes to Applications",
+     L"Apps, ações, pastas e arquivos numa lista, como no Spotlight. Desligado: digitar vai para Aplicativos",
      0, 0, 0, nullptr, nullptr, 0},
-    // 4 Animations
-    {4, kCfgChoice, L"siri.orbStyle", L"Circle animation", L"Animação do círculo", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptOrb)},
-    {4, kCfgSlider, L"siri.circleZoom", L"Circle zoom when opening", L"Zoom do círculo ao abrir", L"0 = none", L"0 = nenhum", 0, 60, 1, L"%", nullptr, 0},
-    {4, kCfgSlider, L"siri.bounce", L"Circle bounce", L"Bounce do círculo", L"0 = none", L"0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
-    {4, kCfgSlider, L"siri.panelBounce", L"Results box bounce", L"Bounce da caixa de resultados", L"0 = none", L"0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
-    {4, kCfgSlider, L"siri.introMs", L"Opening duration", L"Duração da abertura", L"0 = instant", L"0 = instantânea", 0, 2000, 20, L"ms", nullptr, 0},
-    {4, kCfgSlider, L"siri.outroMs", L"Closing duration", L"Duração do fechamento", L"0 = instant", L"0 = instantâneo", 0, 2000, 20, L"ms", nullptr, 0},
-    {4, kCfgSlider, L"siri.animationSpeed", L"Animation speed", L"Velocidade das animações", nullptr, nullptr, 25, 400, 5, L"%", nullptr, 0},
-    // 5 Shortcuts
-    {5, kCfgShortcut, L"siri.shortcutApps", L"Applications", L"Aplicativos", L"Click and press the keys (Ctrl + …). Backspace clears it",
+    {3, kCfgToggle, L"calculator", L"Calculator", L"Calculadora",
+     L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it",
+     L"Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia", 0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgGroup, L"#g.files", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgToggle, L"files.enabled", L"Files category", L"Categoria Arquivos", L"Search for files and folders on this PC",
+     L"Procurar arquivos e pastas neste PC", 0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgToggle, L"files.history", L"Remember searches", L"Lembrar pesquisas", L"Your last searches show when the Files search is empty",
+     L"Suas últimas pesquisas aparecem quando a pesquisa de Arquivos está vazia", 0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgChoice, L"files.view", L"Results view", L"Exibição dos resultados",
+     L"How files show while you type: a list with their folder, or big icons", L"Como os arquivos aparecem enquanto você digita: uma lista com a pasta deles, ou ícones grandes",
+     0, 0, 0, nullptr, CFG_OPTS(kOptView)},
+    {3, kCfgChoice, L"files.indexer", L"File indexer", L"Indexador de arquivos",
+     L"What finds the files. Everything is the fastest, but it must be running (not as administrator)",
+     L"O que encontra os arquivos. O Everything é o mais rápido, mas precisa estar aberto (não como administrador)", 0, 0, 0, nullptr, CFG_OPTS(kOptIndexer)},
+    {3, kCfgSlider, L"files.maxResults", L"Maximum results", L"Máximo de resultados", L"How many files a search can bring",
+     L"Quantos arquivos uma pesquisa pode trazer", 10, 500, 10, nullptr, nullptr, 0},
+    {3, kCfgGroup, L"#g.clip", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgToggle, L"clipboard.enabled", L"Clipboard category", L"Categoria Área de transferência",
+     L"Keeps what you copy, to paste it again later. Off: nothing is kept and the history is cleared",
+     L"Guarda o que você copia, para colar de novo depois. Desligada: nada é guardado e o histórico é apagado", 0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgSlider, L"clipboard.size", L"Items kept", L"Itens guardados", L"How many copies the history keeps", L"Quantas cópias o histórico guarda",
+     5, 200, 1, nullptr, nullptr, 0},
+    {3, kCfgChoice, L"clipboard.keep", L"How long a copy stays", L"Por quanto tempo uma cópia fica",
+     L"Older copies leave the history by themselves", L"Cópias mais antigas saem do histórico sozinhas", 0, 0, 0, nullptr, CFG_OPTS(kOptClipKeep)},
+    // 4 Siri bar
+    {4, kCfgSlider, L"siri.pillWidth", L"Bar width", L"Largura da barra", L"How long the search bar is", L"O comprimento da barra de pesquisa",
+     200, 1400, 10, L"px", nullptr, 0},
+    {4, kCfgSlider, L"siri.pillHeight", L"Bar height", L"Altura da barra", L"How tall the search bar is", L"A altura da barra de pesquisa",
+     36, 96, 1, L"px", nullptr, 0},
+    {4, kCfgChoice, L"siri.firstRow", L"First row of apps", L"Primeira linha de apps",
+     L"Apps shown on top, separated by a line: the ones you opened or installed lately, or the ones you use most",
+     L"Apps mostrados no topo, separados por uma linha: os que você abriu ou instalou por último, ou os que mais usa",
+     0, 0, 0, nullptr, CFG_OPTS(kOptFirstRow)},
+    {4, kCfgGroup, L"#g.power", L"Power", L"Energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgToggle, L"siri.powerPill", L"Power options when typing shut down, restart…", L"Opções de energia ao digitar desligar, reiniciar…",
+     L"Typing one of these words shows the buttons to lock, sleep, restart or shut down",
+     L"Digitar uma dessas palavras mostra os botões de bloquear, suspender, reiniciar ou desligar", 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgToggle, L"siri.powerButton", L"Floating power button", L"Botão de energia flutuante", L"A round power button next to the bar",
+     L"Um botão de energia redondo ao lado da barra", 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgChoice, L"siri.powerButtonSide", L"Side of the power button", L"Lado do botão de energia",
+     L"Left or right of the bar. Used the next time it opens", L"À esquerda ou à direita da barra. Vale na próxima vez que abrir",
+     0, 0, 0, nullptr, CFG_OPTS(kOptSide)},
+    // 5 Results size
+    {5, kCfgGroup, L"#g.sizeApps", L"Applications", L"Aplicativos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {5, kCfgSlider, L"siri.panelWidth", L"Width", L"Largura", L"Also used by the general search", L"Também usada pela pesquisa geral",
+     300, 1400, 10, L"px", nullptr, 0},
+    {5, kCfgSlider, L"siri.panelRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+     1, 8, 1, nullptr, nullptr, 0},
+    {5, kCfgGroup, L"#g.sizeFiles", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {5, kCfgSlider, L"siri.filesWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
+    {5, kCfgSlider, L"siri.filesRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+     1, 8, 1, nullptr, nullptr, 0},
+    {5, kCfgGroup, L"#g.sizeActions", L"Actions", L"Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {5, kCfgSlider, L"siri.actionsWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
+    {5, kCfgSlider, L"siri.actionsRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+     1, 8, 1, nullptr, nullptr, 0},
+    {5, kCfgGroup, L"#g.sizeClip", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {5, kCfgSlider, L"siri.clipboardWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
+    {5, kCfgSlider, L"siri.clipboardRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+     1, 8, 1, nullptr, nullptr, 0},
+    // 6 Window and Fullscreen
+    {6, kCfgSlider, L"window.width", L"Window width", L"Largura da janela", L"Share of the screen the window takes (Window mode)",
+     L"Quanto da tela a janela ocupa (modo Janela)", 30, 100, 1, L"%", nullptr, 0},
+    {6, kCfgSlider, L"window.height", L"Window height", L"Altura da janela", L"Share of the screen the window takes (Window mode)",
+     L"Quanto da tela a janela ocupa (modo Janela)", 30, 100, 1, L"%", nullptr, 0},
+    {6, kCfgChoice, L"window.searchStyle", L"Search style", L"Estilo da pesquisa", L"A search bar across the top, or a centered box as on macOS",
+     L"Uma barra de pesquisa no topo, ou uma caixa centralizada como no macOS", 0, 0, 0, nullptr, CFG_OPTS(kOptSearch)},
+    {6, kCfgSlider, L"window.folderBlur", L"Blur behind an open folder", L"Desfoque atrás da pasta aberta",
+     L"How blurred the apps behind an open folder look", L"Quão embaçados ficam os apps atrás de uma pasta aberta", 0, 100, 1, nullptr, nullptr, 0},
+    {6, kCfgGroup, L"#g.wpower", L"Power button", L"Botão de energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {6, kCfgToggle, L"window.showPowerButton", L"Show power button", L"Mostrar botão de energia", L"A power button next to the search",
+     L"Um botão de energia ao lado da pesquisa", 0, 0, 0, nullptr, nullptr, 0},
+    {6, kCfgChoice, L"window.powerButtonPosition", L"Power button position", L"Posição do botão de energia", L"Left or right of the search",
+     L"À esquerda ou à direita da pesquisa", 0, 0, 0, nullptr, CFG_OPTS(kOptSide)},
+    // 7 Animations
+    {7, kCfgGroup, L"#g.animSiri", L"Floating and Original Siri", L"Flutuante e Siri original", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {7, kCfgChoice, L"siri.orbStyle", L"Circle animation", L"Animação do círculo", L"What plays inside the circle the bar grows out of",
+     L"O que aparece dentro do círculo de onde a barra nasce", 0, 0, 0, nullptr, CFG_OPTS(kOptOrb)},
+    {7, kCfgSlider, L"siri.circleZoom", L"Circle zoom when opening", L"Zoom do círculo ao abrir", L"How much the circle grows before it becomes the bar. 0 = none",
+     L"Quanto o círculo cresce antes de virar a barra. 0 = nenhum", 0, 60, 1, L"%", nullptr, 0},
+    {7, kCfgSlider, L"siri.bounce", L"Circle bounce", L"Bounce do círculo", L"How much the circle springs when it appears. 0 = none",
+     L"Quanto o círculo quica ao aparecer. 0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
+    {7, kCfgSlider, L"siri.panelBounce", L"Results box bounce", L"Bounce da caixa de resultados", L"How much the results box springs when it opens. 0 = none",
+     L"Quanto a caixa de resultados quica ao abrir. 0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
+    {7, kCfgSlider, L"siri.introMs", L"Opening duration", L"Duração da abertura", L"0 = instant", L"0 = instantânea", 0, 2000, 20, L"ms", nullptr, 0},
+    {7, kCfgSlider, L"siri.outroMs", L"Closing duration", L"Duração do fechamento", L"0 = instant", L"0 = instantâneo", 0, 2000, 20, L"ms", nullptr, 0},
+    {7, kCfgSlider, L"siri.animationSpeed", L"Animation speed", L"Velocidade das animações", L"100 = normal; more is faster",
+     L"100 = normal; mais é mais rápido", 25, 400, 5, L"%", nullptr, 0},
+    {7, kCfgGroup, L"#g.animWindow", L"Window and Fullscreen", L"Janela e Tela cheia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {7, kCfgChoice, L"window.openAnimation", L"Opening animation", L"Animação de abertura", L"How the window appears",
+     L"Como a janela aparece", 0, 0, 0, nullptr, CFG_OPTS(kOptOpenAnim)},
+    {7, kCfgChoice, L"window.closeAnimation", L"Closing animation", L"Animação de fechamento", L"How the window goes away",
+     L"Como a janela some", 0, 0, 0, nullptr, CFG_OPTS(kOptCloseAnim)},
+    {7, kCfgSlider, L"window.animationSpeed", L"Animation speed", L"Velocidade das animações", L"100 = normal; more is faster",
+     L"100 = normal; mais é mais rápido", 25, 400, 5, L"%", nullptr, 0},
+    // 8 Keyboard shortcuts
+    {8, kCfgShortcut, L"siri.shortcutApps", L"Applications", L"Aplicativos", L"Click and press the keys (Ctrl + …). Backspace clears it",
      L"Clique e pressione as teclas (Ctrl + …). Backspace apaga", 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgShortcut, L"siri.shortcutFiles", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgShortcut, L"siri.shortcutActions", L"Actions", L"Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgShortcut, L"siri.shortcutClipboard", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgToggle, L"siri.shortcutsAnywhere", L"Also with the launcher closed", L"Também com o menu fechado",
+    {8, kCfgShortcut, L"siri.shortcutFiles", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {8, kCfgShortcut, L"siri.shortcutActions", L"Actions", L"Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {8, kCfgShortcut, L"siri.shortcutClipboard", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {8, kCfgToggle, L"siri.shortcutsAnywhere", L"Also with the launcher closed", L"Também com o menu fechado",
      L"They open the launcher on that category from any program, and that program no longer gets those keys",
      L"Abrem o menu na categoria de qualquer programa, e esse programa deixa de receber essas teclas", 0, 0, 0, nullptr, nullptr, 0},
-    // 6 Window and Fullscreen
-    {6, kCfgSlider, L"window.width", L"Window width", L"Largura da janela", L"Window mode only", L"Só modo Janela", 30, 100, 1, L"%", nullptr, 0},
-    {6, kCfgSlider, L"window.height", L"Window height", L"Altura da janela", L"Window mode only", L"Só modo Janela", 30, 100, 1, L"%", nullptr, 0},
-    {6, kCfgChoice, L"window.searchStyle", L"Search style", L"Estilo da pesquisa", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptSearch)},
-    {6, kCfgToggle, L"window.showPowerButton", L"Show power button", L"Mostrar botão de energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {6, kCfgChoice, L"window.powerButtonPosition", L"Power button position", L"Posição do botão de energia", nullptr, nullptr,
-     0, 0, 0, nullptr, CFG_OPTS(kOptSide)},
-    {6, kCfgChoice, L"window.openAnimation", L"Opening animation", L"Animação de abertura", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptOpenAnim)},
-    {6, kCfgChoice, L"window.closeAnimation", L"Closing animation", L"Animação de fechamento", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptCloseAnim)},
-    {6, kCfgSlider, L"window.animationSpeed", L"Animation speed", L"Velocidade das animações", nullptr, nullptr, 25, 400, 5, L"%", nullptr, 0},
-    {6, kCfgSlider, L"window.folderBlur", L"Blur behind an open folder", L"Desfoque atrás da pasta aberta", nullptr, nullptr, 0, 100, 1, nullptr, nullptr, 0},
-    // 7 Opening
-    {7, kCfgToggle, L"open.winKey", L"Open with the Windows key", L"Abrir com a tecla Windows", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {7, kCfgToggle, L"open.startButton", L"Open with the Start button", L"Abrir com o botão Iniciar", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    // 8 Apps and icons
-    {8, kCfgSlider, L"grid.iconSize", L"Icon size", L"Tamanho dos ícones", L"Floating and Original Siri use up to 56 px",
+    // 9 Apps and icons
+    {9, kCfgSlider, L"grid.iconSize", L"Icon size", L"Tamanho dos ícones", L"Floating and Original Siri use up to 56 px",
      L"Os modos Flutuante e Siri original usam até 56 px", 24, 192, 1, L"px", nullptr, 0},
-    {8, kCfgSlider, L"grid.columns", L"Columns", L"Colunas", L"0 = automatic", L"0 = automático", 0, 30, 1, nullptr, nullptr, 0},
-    {8, kCfgChoice, L"grid.pageMode", L"Scrolling direction", L"Direção da rolagem", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptPage)},
-    {8, kCfgToggle, L"grid.jiggle", L"Jiggle selected icons", L"Ícones selecionados tremem", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgText, L"grid.iconsFolder", L"Icon gallery folder", L"Pasta da galeria de ícones",
-     L"A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery...",
-     L"Uma pasta com imagens de ícones, por exemplo um pacote de ícones baixado. Depois, clique direito em um app > Ícone da galeria...",
+    {9, kCfgSlider, L"grid.columns", L"Columns", L"Colunas", L"How many apps fit side by side. 0 = automatic", L"Quantos apps cabem lado a lado. 0 = automático",
+     0, 30, 1, nullptr, nullptr, 0},
+    {9, kCfgChoice, L"grid.pageMode", L"Scrolling direction", L"Direção da rolagem", L"Pages side by side, as on macOS, or one long list going down",
+     L"Páginas lado a lado, como no macOS, ou uma lista longa para baixo", 0, 0, 0, nullptr, CFG_OPTS(kOptPage)},
+    {9, kCfgToggle, L"grid.jiggle", L"Jiggle selected icons", L"Ícones selecionados tremem", L"Selected apps shake, as on an iPhone",
+     L"Os apps selecionados tremem, como no iPhone", 0, 0, 0, nullptr, nullptr, 0},
+    {9, kCfgToggle, L"grid.dragToPin", L"Drag an icon to the taskbar to pin it", L"Arrastar o ícone até a barra de tarefas fixa o app",
+     L"Drop an app on the taskbar and it stays pinned there", L"Solte um app na barra de tarefas e ele fica fixado lá", 0, 0, 0, nullptr, nullptr, 0},
+    {9, kCfgGroup, L"#g.gallery", L"Your icons", L"Seus ícones", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {9, kCfgText, L"grid.iconsFolder", L"Icon gallery folder", L"Pasta da galeria de ícones",
+     L"A folder with your icon images, for example a downloaded icon pack. Right-click an app > Change icon... shows them",
+     L"Uma pasta com suas imagens de ícones, por exemplo um pacote de ícones baixado. Clique direito em um app > Alterar ícone... mostra elas",
      0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgButton, L"#iconsFolderPick", L"Choose the gallery folder", L"Escolher a pasta da galeria", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgToggle, L"grid.dragToPin", L"Drag an icon to the taskbar to pin it", L"Arrastar o ícone até a barra de tarefas fixa o app",
-     nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    // 9 Files
-    {9, kCfgToggle, L"files.enabled", L"Files category", L"Categoria Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {9, kCfgToggle, L"files.history", L"Remember searches", L"Lembrar pesquisas", L"Shown when the Files search is empty",
-     L"Aparecem quando a pesquisa de Arquivos está vazia", 0, 0, 0, nullptr, nullptr, 0},
-    {9, kCfgChoice, L"files.view", L"Results view", L"Exibição dos resultados", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptView)},
-    {9, kCfgChoice, L"files.indexer", L"File indexer", L"Indexador de arquivos", L"Everything must be running (don't run it as admin)",
-     L"O Everything precisa estar aberto (não execute como administrador)", 0, 0, 0, nullptr, CFG_OPTS(kOptIndexer)},
-    {9, kCfgSlider, L"files.maxResults", L"Maximum results", L"Máximo de resultados", nullptr, nullptr, 10, 500, 10, nullptr, nullptr, 0},
-    // 10 Clipboard
-    {10, kCfgToggle, L"clipboard.enabled", L"Clipboard category", L"Categoria Área de transferência",
-     L"When off, the clipboard is not monitored and the history is cleared",
-     L"Desligada, a área de transferência não é monitorada e o histórico é apagado", 0, 0, 0, nullptr, nullptr, 0},
-    {10, kCfgSlider, L"clipboard.size", L"Items kept", L"Itens guardados", nullptr, nullptr, 5, 200, 1, nullptr, nullptr, 0},
-    {10, kCfgChoice, L"clipboard.keep", L"How long a copy stays", L"Por quanto tempo uma cópia fica",
-     L"Older copies leave the history by themselves", L"Cópias mais antigas saem do histórico sozinhas", 0, 0, 0, nullptr, CFG_OPTS(kOptClipKeep)},
+    {9, kCfgButton, L"#iconsFolderPick", L"Choose the gallery folder", L"Escolher a pasta da galeria", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    // 10 Performance
+    {10, kCfgChoice, L"performance", L"Performance", L"Desempenho",
+     L"Light: no liquid glass, no blur behind menus, no shadows, at most 60 frames per second",
+     L"Leve: sem vidro líquido, sem desfoque atrás dos menus, sem sombras, no máximo 60 quadros por segundo",
+     0, 0, 0, nullptr, CFG_OPTS(kOptPerformance)},
+    {10, kCfgChoice, L"frameRate", L"Frame rate limit", L"Limite de quadros por segundo",
+     L"Fewer frames use less power", L"Menos quadros gastam menos energia", 0, 0, 0, nullptr, CFG_OPTS(kOptFrameRate)},
+    {10, kCfgChoice, L"renderer", L"Draw with", L"Desenhar com",
+     L"Processor: doesn't use the graphics card (can help laptops with two graphics cards)",
+     L"Processador: não usa a placa de vídeo (pode ajudar notebooks com duas placas)", 0, 0, 0, nullptr, CFG_OPTS(kOptRenderer)},
+    // 11 Backup and defaults
+    {11, kCfgButton, L"#export", L"Back up", L"Fazer backup",
+     L"Saves every setting, folders, tabs and the custom icons (their pictures go inside the file)",
+     L"Salva todas as configurações, pastas, abas e os ícones personalizados (as imagens vão dentro do arquivo)",
+     0, 0, 0, nullptr, nullptr, 0},
+    {11, kCfgButton, L"#import", L"Restore a backup", L"Restaurar backup",
+     L"Brings everything back from a backup file, even after reinstalling the mod or on another PC",
+     L"Traz tudo de volta de um arquivo de backup, mesmo depois de reinstalar o mod ou em outro PC",
+     0, 0, 0, nullptr, nullptr, 0},
+    {11, kCfgButton, L"#reset", L"Restore all defaults", L"Restaurar todos os padrões",
+     L"Every setting goes back to how the mod comes, and the bar to the center. Folders, tabs and custom icons stay",
+     L"Todos os ajustes voltam a como o mod vem, e a barra volta ao centro. Pastas, abas e ícones personalizados ficam", 0, 0, 0, nullptr, nullptr, 0},
 };
 #undef CFG_OPTS
 constexpr int kCfgItemCount = (int)ARRAYSIZE(kCfgItems);
@@ -2349,8 +2984,12 @@ void LoadCfgOverrides() {
     }
 }
 
+// Bumped whenever a setting or an override changes: answers worked out from the settings are kept until then
+// (reading Windhawk's settings is too slow to repeat for every frame the panel draws)
+unsigned g_cfgVersion = 1;
 void SaveThemeTransparency();
 void SaveCfgOverrides() {
+    ++g_cfgVersion;
     SaveThemeTransparency();
     std::wstring text;
     for (auto& [key, o] : g_cfgOverrides) text += key + L"\t" + o.value + L"\t" + o.base + L"\n";
@@ -2380,11 +3019,14 @@ std::wstring CfgStr(PCWSTR key) { std::wstring v; return CfgOverrideFor(key, v) 
 struct CfgState {
     bool active = false, closing = false, pendingReload = false;
     bool powerButton = false;        // the floating power button as it was when the settings opened (kept until the next opening)
+    bool powerLeft = false;          // and its side
+    float sectionFade = 1;           // plain window: the right side fades in again after another section is picked
     float endT = 0;                          // Siri modes: after the bar is home, 0 -> 1 while it shrinks into its gear and is sucked in
     D2D1_RECT_F closeHome{};                 // Window / Fullscreen: where the bar is while the settings close (it stays put)
     float anim = 0;                  // 0 = the bar at home ... 1 = settings fully open
     int section = 0, hover = -1, sideHover = -1;
     bool doneHover = false, gearHover = false;
+    bool searchFocus = false;        // plain window: the search field was clicked or typed into (its cursor blinks)
     float scroll = 0, contentH = 0;
     int drag = -1;                   // slider being dragged (item index)
     int edit = -1;                   // color code being typed
@@ -2405,9 +3047,10 @@ GearState g_gear;
 std::map<std::wstring, std::wstring> g_cfgValues;   // what the panel shows
 
 void CfgRefreshValues() {
+    ++g_cfgVersion;
     g_cfgValues.clear();
     for (const CfgItem& it : kCfgItems) {
-        if (it.type == kCfgButton) continue;
+        if (it.type == kCfgButton || it.type == kCfgGroup) continue;
         g_cfgValues[it.key] = CfgIsInt(it) ? std::to_wstring(CfgInt(it.key)) : CfgStr(it.key);
     }
     g_cfgValues[L"appearance.transparency"] = std::to_wstring(g_settings.glassTransparency);   // the active theme's own
@@ -2419,6 +3062,7 @@ void CfgChoose(int code);
 void CfgApplyLayout();
 struct GlassPiece;
 void CfgCollectGlass(std::vector<GlassPiece>& out);
+bool CfgPlain();
 void DrawCfgBehind();
 void CfgEnter();
 bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& result);
@@ -2429,6 +3073,7 @@ void CfgAbort();
 D2D1_RECT_F GearRect();
 bool HitMore(float x, float y);
 extern bool g_moreHover;
+bool MoreFading();
 void DrawMoreButton();
 void TrackLeave(HWND hwnd);
 // Icon gallery (defined further down)
@@ -2468,11 +3113,16 @@ const CfgDefault kCfgDefaults[] = {
     {L"displayMode", L"siriOriginal"},
     {L"theme", L"glass"},
     {L"language", L"auto"},
+    {L"performance", L"normal"},
+    {L"frameRate", L"auto"},
+    {L"renderer", L"gpu"},
     {L"appearance.transparency", L"80"},
     {L"appearance.cornerRadius", L"26"},
     {L"appearance.blur", L"60"},
     {L"appearance.menuBlur", L"100"},
     {L"appearance.menuTextColor", L"auto"},
+    {L"appearance.menuSelection", L"glass"},
+    {L"appearance.menuSelectionColor", L"#447FEF"},
     {L"appearance.glassStyle", L"frosted"},
     {L"appearance.refraction", L"60"},
     {L"appearance.glassEffect", L"1"},
@@ -2484,7 +3134,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"custom.borderColor", L"#ffffff"},
     {L"custom.borderOpacity", L"18"},
     {L"siri.pillWidth", L"560"},
-    {L"siri.pillHeight", L"56"},
+    {L"siri.pillHeight", L"96"},
     {L"siri.panelWidth", L"680"},
     {L"siri.panelRows", L"3"},
     {L"siri.filesWidth", L"0"},
@@ -2495,7 +3145,10 @@ const CfgDefault kCfgDefaults[] = {
     {L"siri.clipboardRows", L"3"},
     {L"siri.firstRow", L"recent"},
     {L"siri.powerPill", L"1"},
-    {L"siri.powerButton", L"1"},
+    {L"siri.generalSearch", L"1"},
+    {L"calculator", L"1"},
+    {L"siri.powerButton", L"0"},
+    {L"siri.powerButtonSide", L"right"},
     {L"siri.orbStyle", L"wave"},
     {L"siri.circleZoom", L"25"},
     {L"siri.bounce", L"50"},
@@ -2560,6 +3213,7 @@ void LoadThemeTransparency() {
     }
 }
 void SaveThemeTransparency() {
+    ++g_cfgVersion;
     std::wstring text;
     for (auto& [theme, v] : g_themeTransparency) text += theme + L"\t" + std::to_wstring(v) + L"\n";
     Wh_SetStringValue(kThemeTransparencyKey, text.c_str());
@@ -2573,6 +3227,7 @@ int ThemeTransparency(Theme t, int fromWindhawk) {
 }
 
 void LoadSettings() {
+    ++g_cfgVersion;
     Settings s;
     auto I = [](PCWSTR k) { return CfgInt(k); };   // the settings panel can override Windhawk
     auto S = [](PCWSTR k) { return CfgStr(k); };
@@ -2606,11 +3261,18 @@ void LoadSettings() {
     {
         std::wstring c = S(L"appearance.menuTextColor");
         s.menuText = c == L"white" ? 0 : c == L"black" ? 1 : -1;
+        std::wstring sel = S(L"appearance.menuSelection");
+        s.menuSelection = sel == L"color" ? 1 : sel == L"frosted" ? 2 : 0;
+        s.menuSelectionColor = ParseColor(S(L"appearance.menuSelectionColor"), D2D1::ColorF(0x447FEF));
     }
     s.liveBackground = s.blurAmount == 0;
     s.glassLiquid = S(L"appearance.glassStyle") == L"liquid";
     s.refraction = std::clamp(I(L"appearance.refraction"), 0, 100);
     s.liveGlass = I(L"appearance.liveGlass") != 0;
+    s.light = S(L"performance") == L"light";
+    s.maxFps = std::clamp(_wtoi(S(L"frameRate").c_str()), 0, 240);
+    if (s.light) s.maxFps = s.maxFps > 0 ? std::min(s.maxFps, 60) : 60;
+    s.cpuDraw = S(L"renderer") == L"cpu";
     s.glassEffect = I(L"appearance.glassEffect") != 0;
     s.folderRadius = s.siriPanelRadius = s.cornerRadius;
 
@@ -2653,6 +3315,9 @@ void LoadSettings() {
     s.siriPillOutroMs = std::clamp(I(L"siri.outroMs"), 0, 2000);
     s.siriPower = I(L"siri.powerPill") != 0;
     s.siriPowerButton = I(L"siri.powerButton") != 0;
+    s.generalSearch = I(L"siri.generalSearch") != 0;
+    s.calculator = I(L"calculator") != 0;
+    s.siriPowerLeft = S(L"siri.powerButtonSide") == L"left";
     std::wstring firstRow = S(L"siri.firstRow");
     s.siriFirstRow = firstRow == L"off" ? 0 : firstRow == L"used" ? 2 : 1;
     s.animSpeed = std::clamp(I(s.siri ? L"siri.animationSpeed" : L"window.animationSpeed"), 25, 400) / 100.0f;
@@ -2710,7 +3375,11 @@ void LoadSettings() {
 // App list & Folders
 
 struct App {
-    int kind = 0;               // 0 app, 1 file, 2 clipboard text, 3 search history, 4 action
+    int kind = 0;               // 0 app, 1 file, 2 clipboard text, 3 search history, 4 action, 5 gallery image,
+                                // 6 group title in the general search (target: the category its "Show all" opens, or empty),
+                                // 7 calculator result (target: the number, copied when picked)
+    bool isDir = false;         // files: a folder
+    std::wstring detail;        // calculator (kind 7): the expression, under the result
     std::wstring name, target;  // shown name; what opens it (or the text / the query / the action)
     // Icon: square premultiplied BGRA pixels, and the D2D bitmap made from them for the current render target
     int iconSize = 0;
@@ -2740,6 +3409,11 @@ constexpr int kHistoryMax = 20;
 std::vector<int> g_layoutItems;
 
 std::atomic<HWND> g_wnd;               // the launcher window (also read by the hook and the worker threads)
+// Typing or clicking into a search field shows the cursor at once and starts its blink again
+void CaretRestart() {
+    g_caretOn = true;
+    if (HWND w = g_wnd) SetTimer(w, kTimerCaret, 530, nullptr);
+}
 // The app list is read on a worker thread
 HANDLE g_worker;
 std::atomic<bool> g_workerStop;
@@ -2947,7 +3621,8 @@ void DeleteQuerySelection() {
 int g_openFolderIndex = -1;
 
 // Category state (all modes)
-int g_siriTab;            // 0 Apps, 1 Files, 2 Clipboard
+int g_siriTab;            // 0 Apps, 1 Files, 2 Clipboard, 3 Actions, 4 icon gallery, 5 general search (kTabAll)
+constexpr int kTabAll = 5;  // Original Siri: typing in "Search" looks for apps, actions, folders and files together
 float g_tabSlide;         // animated tab indicator (visible slot)
 float g_tabNatural[4];
 std::unordered_map<std::wstring, float> g_chipWidths;   // measured filter labels (cleared when the scale changes)
@@ -3222,7 +3897,7 @@ void BuildMainItems(std::vector<int>& out) {
     std::wstring q = ToLower(g_query);
     if (g_siriTab == 4) { GhFilterItems(out, q); return; }   // icon gallery: name, color and order
     if (g_siriTab != 0) {
-        bool indexed = g_siriTab == 1 && !g_query.empty(); // already filtered by the indexer
+        bool indexed = (g_siriTab == 1 && !g_query.empty()) || g_siriTab == kTabAll; // already filtered
         for (int i = 0; i < (int)g_tabItems.size(); i++) {
             const App& a = *g_tabItems[i];
             if (indexed || ToLower(a.kind == 2 ? a.target : a.name).find(q) != std::wstring::npos) out.push_back(kTabBase + i);
@@ -3230,6 +3905,7 @@ void BuildMainItems(std::vector<int>& out) {
         return;
     }
     if (!g_query.empty() || g_settings.siri) {
+        if (!g_tabItems.empty() && g_tabItems[0]->kind == 7) out.push_back(kTabBase);   // the calculator's result
         bool picking = g_settings.siriOriginal && Picking();
         bool filter = g_settings.siriOriginal && g_appFilter >= 0 && !picking;
         auto keep = [&](const App& a) {
@@ -3502,6 +4178,8 @@ void ReconcileFolders(AppList& fresh) {
 
 std::unordered_map<std::wstring, std::wstring> g_customIcons;
 bool g_dialogOpen;
+void DialogBegin(bool hide);
+void DialogEnd();
 
 void SaveCustomIcons() {
     std::wstring data;
@@ -3555,23 +4233,6 @@ void ResetAppIcon(App& app) {
     ComPtr<IShellItem> item;
     if (SUCCEEDED(SHCreateItemFromParsingName(app.target.c_str(), nullptr, IID_PPV_ARGS(&item))))
         LoadAppIcon(item.Get(), CurrentIconPixels(), app);
-}
-
-bool PickImage(HWND owner, std::wstring& out) {
-    ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return false;
-    COMDLG_FILTERSPEC types[] = { {Tr(L"Images"), L"*.png;*.jpg;*.jpeg;*.bmp;*.ico;*.gif;*.webp"}, {Tr(L"All files"), L"*.*"} };
-    dlg->SetFileTypes(ARRAYSIZE(types), types);
-    dlg->SetTitle(Tr(L"Choose icon image"));
-    g_dialogOpen = true;
-    SetWindowPos(owner, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    HRESULT hr = dlg->Show(owner);
-    SetWindowPos(owner, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    g_dialogOpen = false;
-    ComPtr<IShellItem> res; PWSTR path = nullptr;
-    if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return false;
-    out = path; CoTaskMemFree(path);
-    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3905,6 +4566,8 @@ DWORD WINAPI FileSearchThread(void* param) {
         if (Stale(job->gen)) break;
         auto app = std::make_shared<App>();
         app->kind = 1; app->name = PathFindFileNameW(path.c_str()); app->target = path;
+        DWORD attr = GetFileAttributesW(path.c_str());
+        app->isDir = attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
         LoadFileIcon(path, job->iconPx, *app);
         if (Stale(job->gen)) break;
         res->list.push_back(std::move(app));
@@ -3945,8 +4608,189 @@ void CancelFileSearch() {
 // Categories: search history, indexed files & clipboard
 
 bool PruneClipHistory();
+
+// ---------- Calculator: a typed expression shows its result first (like Spotlight) ----------
+// + - * / (also x, × and ÷), ^ for powers, ( ), a % after a number = that many hundredths; "." or "," for decimals
+struct CalcParser {
+    const std::wstring& s; size_t i = 0; bool ok = true;
+    explicit CalcParser(const std::wstring& text) : s(text) {}
+    void Skip() { while (i < s.size() && iswspace(s[i])) i++; }
+    bool Eat(std::initializer_list<wchar_t> any) {
+        Skip();
+        if (i < s.size()) for (wchar_t c : any) if (s[i] == c) { i++; return true; }
+        return false;
+    }
+    double Number() {
+        Skip();
+        size_t start = i;
+        std::string digits;
+        while (i < s.size() && (iswdigit(s[i]) || s[i] == L'.' || s[i] == L',')) { digits += s[i] == L',' ? '.' : (char)s[i]; i++; }
+        if (i == start || std::count(digits.begin(), digits.end(), '.') > 1 || digits == ".") { ok = false; return 0; }
+        double v = strtod(digits.c_str(), nullptr);
+        if (Eat({L'%'})) v /= 100;
+        return v;
+    }
+    double Primary() {
+        if (Eat({L'('})) { double v = Sum(); if (!Eat({L')'})) ok = false; return Eat({L'%'}) ? v / 100 : v; }
+        return Number();
+    }
+    double Unary() {
+        if (Eat({L'-', L'\u2212'})) return -Unary();
+        if (Eat({L'+'})) return Unary();
+        return Primary();
+    }
+    double Power() {
+        double base = Unary();
+        if (Eat({L'^'})) return std::pow(base, Power());   // right to left: 2^3^2 = 2^9
+        return base;
+    }
+    double Product() {
+        double v = Power();
+        while (ok) {
+            if (Eat({L'*', L'x', L'X', L'\u00D7'})) v *= Power();
+            else if (Eat({L'/', L'\u00F7'})) { double d = Power(); if (d == 0) ok = false; else v /= d; }
+            else break;
+        }
+        return v;
+    }
+    double Sum() {
+        double v = Product();
+        while (ok) {
+            if (Eat({L'+'})) v += Product();
+            else if (Eat({L'-', L'\u2212'})) v -= Product();
+            else break;
+        }
+        return v;
+    }
+};
+// The result as text, or empty when the search isn't a calculation (at least one operation between numbers)
+std::wstring CalcResult(const std::wstring& text) {
+    bool digit = false, op = false;
+    for (size_t k = 0; k < text.size(); k++) {
+        wchar_t c = text[k];
+        if (iswdigit(c)) digit = true;
+        else if (wcschr(L"+*/^%xX\u00D7\u00F7\u2212", c) || (c == L'-' && k > 0)) op = true;
+        else if (!wcschr(L" .,()-", c)) return {};
+    }
+    if (!digit || !op) return {};
+    CalcParser p(text);
+    double v = p.Sum();
+    p.Skip();
+    if (!p.ok || p.i != text.size() || !std::isfinite(v)) return {};
+    if (std::fabs(v) < 1e-12) v = 0;
+    WCHAR buf[64];
+    if (std::fabs(v) < 1e18 && v == std::floor(v)) swprintf(buf, ARRAYSIZE(buf), L"%.0f", v);   // whole numbers in full
+    else swprintf(buf, ARRAYSIZE(buf), std::fabs(v) >= 1e15 ? L"%.10g" : L"%.10f", v);
+    std::wstring r = buf;
+    if (r.find(L'e') == std::wstring::npos && r.find(L'.') != std::wstring::npos) {   // no trailing zeros
+        while (r.back() == L'0') r.pop_back();
+        if (r.back() == L'.') r.pop_back();
+    }
+    // The decimal mark of Windows' region settings
+    WCHAR mark[4] = L".";
+    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, mark, ARRAYSIZE(mark)) > 0 && mark[0] && mark[0] != L'.')
+        std::replace(r.begin(), r.end(), L'.', mark[0]);
+    return r;
+}
+// The result row (empty when the calculator is off or the search isn't a calculation)
+std::shared_ptr<App> CalcItem() {
+    if (!g_settings.calculator) return nullptr;
+    std::wstring r = CalcResult(g_query);
+    if (r.empty()) return nullptr;
+    auto a = std::make_shared<App>();
+    a->kind = 7; a->name = L"= " + r; a->target = r; a->detail = g_query;
+    return a;
+}
+
+
+// ---------- General search (Original Siri: typing in "Search", like Spotlight or Flow Launcher) ----------
+const std::pair<PCWSTR, PCWSTR> kActions[] = {
+    {L"lock", L"Lock"}, {L"sleep", L"Sleep"}, {L"restart", L"Restart"}, {L"shutdown", L"Shut down"}, {L"signout", L"Sign out"},
+    {L"settings", L"Settings"}, {L"taskmgr", L"Task Manager"}, {L"explorer", L"File Explorer"}, {L"control", L"Control Panel"},
+    {L"screenshot", L"Screenshot"}, {L"recycle", L"Empty Recycle Bin"},
+};
+constexpr int kGeneralApps = 6, kGeneralActions = 3, kGeneralFolders = 5, kGeneralFiles = 8;
+
+// How well a name matches what was typed: 4 starts with it, 3 a word starts with it, 2 the initials, 1 anywhere, 0 no
+int MatchScore(const std::wstring& name, const std::wstring& q) {
+    if (q.empty()) return 0;
+    std::wstring n = ToLower(name);
+    size_t at = n.find(q);
+    if (at == 0) return 4;
+    auto wordStart = [&](size_t i) { return i == 0 || !iswalnum(n[i - 1]); };
+    for (size_t i = at; i != std::wstring::npos; i = n.find(q, i + 1)) if (wordStart(i)) return 3;
+    if (q.size() >= 2) {   // "vsc" finds Visual Studio Code
+        std::wstring initials;
+        for (size_t i = 0; i < n.size(); i++) if (iswalnum(n[i]) && wordStart(i)) initials += n[i];
+        if (initials.find(q) == 0) return 2;
+    }
+    return at != std::wstring::npos ? 1 : 0;
+}
+
+bool IsGroupTitle(const App* a) { return a && a->kind == 6; }
+
+void BuildGeneralResults(AppList& out) {
+    std::wstring q = ToLower(g_query);
+    if (q.empty()) return;
+    if (auto calc = CalcItem()) out.push_back(std::move(calc));   // a calculation's result comes first
+    auto title = [&](PCWSTR text, int showAll, int total, int shown) {
+        auto h = std::make_shared<App>();
+        h->kind = 6; h->name = text;
+        if (showAll >= 0 && total > shown) h->target = std::to_wstring(showAll);
+        out.push_back(std::move(h));
+    };
+    // Applications: the best matches first, the most used first among equals
+    std::vector<std::pair<int, std::shared_ptr<App>>> apps;
+    std::unordered_set<std::wstring> seen;
+    auto consider = [&](const std::shared_ptr<App>& a) {
+        int m = MatchScore(a->name, q);
+        if (m > 0 && seen.insert(ToLower(a->target)).second) apps.push_back({m * 100000 + std::min(UsageScore(*a), 99999), a});
+    };
+    for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++) consider(g_apps[i]);
+    for (const Folder& f : g_folders) for (const auto& a : f.apps) consider(a);
+    std::stable_sort(apps.begin(), apps.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+    if (!apps.empty() && TabEnabled(0)) {
+        title(CfgT(L"Applications", L"Aplicativos"), 0, (int)apps.size(), kGeneralApps);
+        for (int i = 0; i < (int)apps.size() && i < kGeneralApps; i++) out.push_back(apps[i].second);
+    }
+    // Actions (in the interface language or in English)
+    std::vector<std::pair<int, std::shared_ptr<App>>> actions;
+    for (const auto& [id, label] : kActions) {
+        int m = std::max(MatchScore(Tr(label), q), MatchScore(label, q));
+        if (m <= 0) continue;
+        auto a = std::make_shared<App>();
+        a->kind = 4; a->name = Tr(label); a->target = id;
+        actions.push_back({m, std::move(a)});
+    }
+    std::stable_sort(actions.begin(), actions.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+    if (!actions.empty() && TabEnabled(3)) {
+        title(CfgT(L"Actions", L"Ações"), 3, (int)actions.size(), kGeneralActions);
+        for (int i = 0; i < (int)actions.size() && i < kGeneralActions; i++) out.push_back(actions[i].second);
+    }
+    // Folders, then documents and files (they arrive a moment later, below everything else, so nothing above moves)
+    if (!g_settings.filesEnabled || !TabEnabled(1) || q.size() < 2) return;
+    if (g_fileSearching) { title(CfgT(L"Searching files...", L"Procurando arquivos..."), -1, 0, 0); return; }
+    std::vector<std::pair<int, std::shared_ptr<App>>> folders, files;
+    for (const auto& f : g_fileResults) (f->isDir ? folders : files).push_back({MatchScore(f->name, q), f});
+    auto byMatch = [](const auto& x, const auto& y) { return x.first > y.first; };
+    std::stable_sort(folders.begin(), folders.end(), byMatch);
+    std::stable_sort(files.begin(), files.end(), byMatch);
+    if (!folders.empty()) {
+        title(CfgT(L"Folders", L"Pastas"), 1, (int)folders.size(), kGeneralFolders);
+        for (int i = 0; i < (int)folders.size() && i < kGeneralFolders; i++) out.push_back(folders[i].second);
+    }
+    if (!files.empty()) {
+        title(CfgT(L"Documents and files", L"Documentos e arquivos"), 1, (int)files.size(), kGeneralFiles);
+        for (int i = 0; i < (int)files.size() && i < kGeneralFiles; i++) out.push_back(files[i].second);
+    }
+    if (folders.empty() && files.empty() && !g_fileStatus.empty() && g_fileStatus != Tr(L"No files found"))
+        title(g_fileStatus.c_str(), -1, 0, 0);   // e.g. "Everything is not running"
+}
+
 void LoadTabSource() {
     g_tabItems.clear();
+    if (g_siriTab == 0)
+        if (auto calc = CalcItem()) g_tabItems.push_back(std::move(calc));   // Applications: the result first (see BuildMainItems)
     if (g_siriTab == 1 && g_settings.filesEnabled) {
         if (g_query.empty()) {          // empty search: only the search history
             if (g_historyEnabled) {
@@ -3960,16 +4804,13 @@ void LoadTabSource() {
             g_tabItems = g_fileResults;
         }
     } else if (g_siriTab == 3) {
-        static const std::pair<PCWSTR, PCWSTR> kActions[] = {
-            {L"lock", L"Lock"}, {L"sleep", L"Sleep"}, {L"restart", L"Restart"}, {L"shutdown", L"Shut down"}, {L"signout", L"Sign out"},
-            {L"settings", L"Settings"}, {L"taskmgr", L"Task Manager"}, {L"explorer", L"File Explorer"}, {L"control", L"Control Panel"},
-            {L"screenshot", L"Screenshot"}, {L"recycle", L"Empty Recycle Bin"},
-        };
         for (const auto& [id, label] : kActions) {
             auto app = std::make_shared<App>();
             app->kind = 4; app->name = Tr(label); app->target = id;
             g_tabItems.push_back(std::move(app));
         }
+    } else if (g_siriTab == kTabAll) {
+        BuildGeneralResults(g_tabItems);
     } else if (g_siriTab == 4) {
         GhItems(g_tabItems);   // the icon gallery
     } else if (g_siriTab == 2 && g_settings.clipEnabled) {
@@ -4000,6 +4841,10 @@ void RebuildLayout() {
 [[clang::no_destroy]] ComPtr<ID2D1DCRenderTarget> g_target;
 [[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_brush;   // recolored for each fill
 UINT g_targetGeneration = 1;   // bumped when the target is recreated (bitmaps must be remade)
+// Kept between frames (see DrawThemeShadow and MakeGradient); emptied when the drawing objects are freed
+struct ShadowCut { D2D1_RECT_F r; float radius; ComPtr<ID2D1PathGeometry> geo; };
+[[clang::no_destroy]] std::vector<ShadowCut> g_shadowCuts;
+[[clang::no_destroy]] std::unordered_map<std::string, ComPtr<ID2D1GradientStopCollection>> g_gradientStops;
 [[clang::no_destroy]] ComPtr<ID2D1Bitmap1> g_layerBitmap;
 UINT g_layerGeneration;
 
@@ -4037,10 +4882,14 @@ bool EnsureSurface(Surface& s, int width, int height) {
     return true;
 }
 
+bool g_targetCpu;   // the render target draws with the processor
+void ResetTarget();
 bool EnsureTarget() {
+    if (g_target && g_targetCpu != g_settings.cpuDraw) ResetTarget();   // "Draw with" changed
     if (g_target) return true;
+    g_targetCpu = g_settings.cpuDraw;
     D2D1_RENDER_TARGET_PROPERTIES props{};
-    props.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+    props.type = g_targetCpu ? D2D1_RENDER_TARGET_TYPE_SOFTWARE : D2D1_RENDER_TARGET_TYPE_DEFAULT;
     props.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
     props.dpiX = props.dpiY = 96;   // 1 DIP = 1 pixel: the layout does its own scaling
     ComPtr<ID2D1DCRenderTarget> target;
@@ -4056,6 +4905,7 @@ constexpr int kOrbBlobs = 5;
 [[clang::no_destroy]] ComPtr<ID2D1RadialGradientBrush> g_orbBrush[kOrbBlobs];
 
 void ResetTarget() {
+    g_gradientStops.clear();   // they belong to the old target
     for (auto& brush : g_orbBrush) brush.Reset();
     g_layerBitmap.Reset();
     g_brush.Reset();
@@ -4577,7 +5427,8 @@ float SiriContentAlpha() { return std::clamp((g_siriAnim - 0.55f) / 0.45f, 0.0f,
 bool g_histClearHover;
 bool ListMode() {
     if (g_openFolderIndex >= 0) return false;
-    if (g_siriTab == 3 || g_siriTab == 2) return true;   // Actions and the clipboard are always a list
+    if (g_siriTab == 3 || g_siriTab == 2 || g_siriTab == kTabAll) return true;   // Actions, the clipboard and the general search are lists
+    if (g_siriTab == 0 && g_openFolderIndex < 0 && !g_tabItems.empty() && g_tabItems[0]->kind == 7) return true;   // a calculation
     return g_siriTab == 1 && g_settings.filesEnabled && (g_query.empty() || g_filesList);
 }
 bool HistoryHeader() { return ListMode() && g_siriTab == 1 && g_query.empty() && g_historyEnabled && !g_searchHistory.empty(); }
@@ -4596,7 +5447,7 @@ PCWSTR ActionGlyph(const std::wstring& id) {
     if (id == L"screenshot") return L"\uE722";
     return L"\uE74D";   // recycle bin
 }
-PCWSTR TabGlyph(int tab) { return tab == 0 ? L"\uE71D" : tab == 1 ? L"\uE8B7" : tab == 3 ? L"\uE945" : tab == 4 ? L"\uE753" : L"\uE77F"; }
+PCWSTR TabGlyph(int tab) { return tab == 0 ? L"\uE71D" : tab == 1 ? L"\uE8B7" : tab == 3 ? L"\uE945" : tab == 4 ? L"\uE753" : tab == 5 ? L"\uE721" : L"\uE77F"; }
 
 constexpr float kSiriGap = 10, kSiriPad = 14, kSiriTabs = 32;
 
@@ -4623,10 +5474,11 @@ float SiriButtonGap(float s) { return std::round(10 * s); }
 
 // The results box of each category (the icon gallery uses the Applications one)
 int SiriPanelSettingW(int tab) {
+    if (tab == 5) tab = 0;   // the general search uses the Applications box
     int w = tab == 1 ? g_settings.filesPanelW : tab == 2 ? g_settings.clipPanelW : tab == 3 ? g_settings.actionsPanelW : g_settings.siriPanelW;
     return w > 0 ? w : g_settings.siriPillW;   // 0 = as wide as the bar
 }
-int SiriRowsFor(int tab) { return tab == 1 ? g_settings.filesRows : tab == 2 ? g_settings.clipRows : tab == 3 ? g_settings.actionsRows : g_settings.siriRows; }
+int SiriRowsFor(int tab) { if (tab == 5) return std::max(g_settings.siriRows, g_settings.filesRows); return tab == 1 ? g_settings.filesRows : tab == 2 ? g_settings.clipRows : tab == 3 ? g_settings.actionsRows : g_settings.siriRows; }
 int SiriMaxPanelW() { int w = 0; for (int t = 0; t < 4; t++) w = std::max(w, SiriPanelSettingW(t)); return w; }
 int SiriMaxRows() { int r = 0; for (int t = 0; t < 4; t++) r = std::max(r, SiriRowsFor(t)); return r; }
 float g_siriPanelWShown = 0;   // the box width on screen: glides to the new category's width
@@ -4663,9 +5515,10 @@ void ComputeSiriLayout() {
     }
     L.btnPower = L.btnBack = L.panel = L.dots = D2D1::RectF(0, 0, 0, 0);
     if (g_settings.siriPowerButton && g_siriBtnAnim > 0.001f) {
-        // Slides out from behind the right end of the bar and floats next to it
-        float btn = SiriButtonSize(s), cy = SiriTopPad(s) + pillH / 2;
-        float start = W / 2 + g_siriShiftX + pillW / 2 - btn, end = W / 2 + g_siriShiftX + pillW / 2 + SiriButtonGap(s);
+        // Slides out from behind one end of the bar (right by default) and floats next to it
+        float btn = SiriButtonSize(s), cy = SiriTopPad(s) + pillH / 2, cx = W / 2 + g_siriShiftX;
+        float start = cx + pillW / 2 - btn, end = cx + pillW / 2 + SiriButtonGap(s);
+        if (g_settings.siriPowerLeft) { start = cx - pillW / 2; end = cx - pillW / 2 - SiriButtonGap(s) - btn; }
         float left = Lerp(start, end, BackOutK(g_siriBtnAnim, 1.2f));
         L.btnPower = D2D1::RectF(left, cy - btn / 2, left + btn, cy + btn / 2);
     }
@@ -4953,12 +5806,19 @@ bool HitHistClear(float x, float y) {
     return InRect(HistClearRect(L), x, y);
 }
 
-// Original Siri: the picked category's icon in the bar (a click goes back to "Search", like Esc)
+// Original Siri: the picked category's icon in the bar (a click goes back to "Search", like Esc).
+// Floating: the category's icon too, while there is somewhere to go back from (a search, another category, the open box)
 D2D1_RECT_F BackButtonRect(const Layout& L) {
     float s = L.scale, cx = L.search.left + 30 * s, cy = (L.search.top + L.search.bottom) / 2, r = 17 * s;
     return D2D1::RectF(cx - r, cy - r, cx + r, cy + r);
 }
+extern bool g_siriExpanded;
+bool FloatingCanGoBack() {
+    return g_settings.siri && !g_settings.siriOriginal && g_openFolderIndex < 0 && !Picking() &&
+           (g_siriExpanded || g_siriTab != 0 || !g_query.empty());
+}
 bool HitBack(float x, float y) {
+    if (g_settings.siri && !g_settings.siriOriginal) return FloatingCanGoBack() && InRect(BackButtonRect(g_layout), x, y);
     if (!g_settings.siriOriginal || !g_siriChosen || g_flyAnim < 1.0f || g_openFolderIndex >= 0) return false;
     return InRect(BackButtonRect(g_layout), x, y);
 }
@@ -5170,6 +6030,25 @@ int g_surfaceMaxTransparency = 100;
 void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow);
 void PushOpacity(float a);
 D2D1_COLOR_F Alpha(D2D1_COLOR_F c, float a);
+// Item under the mouse in the clear glass theme's menus: the theme's glass, a solid color (macOS) or a frosted color.
+// Returns true when the row is a solid color, so its text turns white
+bool DrawMenuSelection(const D2D1_RECT_F& row, float radius, bool danger) {
+    if (ActiveTheme() != Theme::Glass || g_settings.menuSelection == 0) return false;
+    float s = g_layout.scale;
+    D2D1_COLOR_F c = danger ? D2D1::ColorF(0.92f, 0.26f, 0.24f) : g_settings.menuSelectionColor;
+    if (g_settings.menuSelection == 1) { Fill(row, Alpha(c, 1.0f), radius); return true; }
+    Fill(row, Alpha(c, 0.40f), radius);
+    D2D1_GRADIENT_STOP veil[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.16f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.03f)}};
+    if (auto sheen = MakeGradient(veil, 2, D2D1::Point2F(0, row.top), D2D1::Point2F(0, row.bottom)))
+        g_target->FillRoundedRectangle(D2D1::RoundedRect(row, radius, radius), sheen.Get());
+    float bw = std::max(1.0f, 0.8f * s), half = bw / 2, rr = std::max(0.0f, radius - half);
+    D2D1_GRADIENT_STOP edge[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.30f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.08f)}};
+    if (auto rim = MakeGradient(edge, 2, D2D1::Point2F(0, row.top), D2D1::Point2F(0, row.bottom)))
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(row.left + half, row.top + half, row.right - half, row.bottom - half), rr, rr), rim.Get(), bw);
+    return false;
+}
+D2D1_COLOR_F MenuInk(bool onColor, float a) { return onColor ? D2D1::ColorF(1, 1, 1, std::min(1.0f, a + 0.05f)) : Fg(a); }
+
 void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
     const Layout& L = g_layout;
     float s = L.scale;
@@ -5185,9 +6064,15 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         float top = MenuItemTop(i);
         D2D1_RECT_F row = D2D1::RectF(r.left + 8 * s, top, r.right - 8 * s, top + g_menu.itemH);
         float cy = (row.top + row.bottom) / 2;
-        if (i == g_menu.hover) Fill(row, Fg(0.11f), std::max(4 * s, rad - 8 * s));   // concentric with the menu
+        bool onColor = false;
+        if (i == g_menu.hover) {
+            float rowRad = std::max(4 * s, rad - 8 * s);   // concentric with the menu
+            bool custom = ActiveTheme() == Theme::Glass && g_settings.menuSelection != 0;
+            if (custom) onColor = DrawMenuSelection(row, rowRad, false);
+            else Fill(row, Fg(0.11f), rowRad);
+        }
         if (it.glyph && g_glyphLargeFormat) {
-            g_brush->SetColor(Fg(0.88f));
+            g_brush->SetColor(MenuInk(onColor, 0.88f));
             g_target->DrawText(it.glyph, (UINT32)wcslen(it.glyph), g_glyphLargeFormat.Get(),
                                D2D1::RectF(row.left + 8 * s, row.top, row.left + 44 * s, row.bottom), g_brush.Get());
         }
@@ -5195,12 +6080,12 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         if (it.hint && g_keyFormat) {
             keyW = 58 * s;
             D2D1_RECT_F key = D2D1::RectF(row.right - 12 * s - keyW, cy - 12 * s, row.right - 12 * s, cy + 12 * s);
-            Fill(key, Fg(0.08f), 7 * s);
-            g_brush->SetColor(Fg(0.55f));
+            Fill(key, onColor ? D2D1::ColorF(1, 1, 1, 0.18f) : Fg(0.08f), 7 * s);
+            g_brush->SetColor(MenuInk(onColor, 0.55f));
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_keyFormat.Get(), key, g_brush.Get());
         }
         if (g_categoryFormat) {
-            g_brush->SetColor(Fg(0.95f));
+            g_brush->SetColor(MenuInk(onColor, 0.95f));
             g_target->DrawText(it.text.c_str(), (UINT32)it.text.size(), g_categoryFormat.Get(),
                                D2D1::RectF(row.left + 54 * s, row.top, row.right - keyW - 24 * s, row.bottom), g_brush.Get());
         }
@@ -5212,7 +6097,7 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
 // the desktop behind the window, not the launcher's own icons)
 void DrawMenuBackdropBlur(const D2D1_RECT_F& r, float rad, float alpha) {
     ComPtr<ID2D1DeviceContext> dc;
-    if (alpha <= 0.01f || FAILED(g_target.As(&dc))) return;
+    if (alpha <= 0.01f || g_settings.light || FAILED(g_target.As(&dc))) return;
     const Layout& L = g_layout;
     float s = L.scale, sigma = 9 * s * g_settings.menuBlur / 100.0f, margin = std::ceil(sigma * 3);   // 100 % = the default blur
     if (sigma < 0.3f) return;   // 0 = no blur
@@ -5293,23 +6178,27 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
             continue;
         }
         D2D1_RECT_F row = D2D1::RectF(r.left + 6 * s, top, r.right - 6 * s, top + g_menu.itemH);
+        bool onColor = false;
         if (i == g_menu.hover) {
-            if (it.danger) Fill(row, D2D1::ColorF(1, 0.3f, 0.3f, 0.20f), 8 * s);
-            DrawGlassButton(row, 8 * s, 1.0f, 1.2f, false);
+            if (ActiveTheme() == Theme::Glass && g_settings.menuSelection != 0) onColor = DrawMenuSelection(row, 8 * s, it.danger);
+            else {
+                if (it.danger) Fill(row, D2D1::ColorF(1, 0.3f, 0.3f, 0.20f), 8 * s);
+                DrawGlassButton(row, 8 * s, 1.0f, 1.2f, false);
+            }
         }
         float textLeft = row.left + 10 * s;
         if (it.glyph && g_glyphFormat) {
-            g_brush->SetColor(Fg(0.85f));
+            g_brush->SetColor(MenuInk(onColor, 0.85f));
             g_target->DrawText(it.glyph, (UINT32)wcslen(it.glyph), g_glyphFormat.Get(), D2D1::RectF(row.left + 6 * s, row.top, row.left + 32 * s, row.bottom), g_brush.Get());
             textLeft = row.left + 38 * s;
         }
         if (g_menuFormat) {
-            g_brush->SetColor(it.danger ? DangerInk() : Fg(0.92f));
+            g_brush->SetColor(onColor ? MenuInk(true, 0.95f) : it.danger ? DangerInk() : Fg(0.92f));
             g_target->DrawText(it.text.c_str(), (UINT32)it.text.size(), g_menuFormat.Get(),
                 D2D1::RectF(textLeft, row.top, row.right - 10 * s, row.bottom), g_brush.Get());
         }
         if (it.hint && g_hintFormat) {
-            g_brush->SetColor(Fg(0.45f));
+            g_brush->SetColor(MenuInk(onColor, 0.45f + (onColor ? 0.25f : 0.0f)));
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_hintFormat.Get(), D2D1::RectF(row.left, row.top, row.right - 12 * s, row.bottom), g_brush.Get());
         }
     }
@@ -5498,21 +6387,26 @@ void DrawSearchBar(const Layout& L, float a) {
 
     bool original = g_settings.siriOriginal;
     bool flying = original && g_flyAnim < 1.0f;
-    if (original) {
+    // Hovered: a soft round button with a back arrow (Original Siri and Floating)
+    auto backArrow = [&]() {
+        D2D1_RECT_F b = BackButtonRect(L);
+        float br = (b.right - b.left) / 2;
+        DrawSoftPill(D2D1::RectF(b.left + 2 * s, b.top + 2 * s, b.right - 2 * s, b.bottom - 2 * s), br, a, 0.12f);
+        g_brush->SetColor(Fg(0.9f * a));
+        D2D1_POINT_2F p1 = D2D1::Point2F(cx + 2.5f * s, cy - 6 * s), p2 = D2D1::Point2F(cx - 3.5f * s, cy), p3 = D2D1::Point2F(cx + 2.5f * s, cy + 6 * s);
+        g_target->DrawLine(p1, p2, g_brush.Get(), 1.9f * s);
+        g_target->DrawLine(p2, p3, g_brush.Get(), 1.9f * s);
+        g_target->FillEllipse(D2D1::Ellipse(p2, 0.95f * s, 0.95f * s), g_brush.Get());
+    };
+    if (siri && !original && g_backHover) {
+        backArrow();
+    } else if (original) {
         // Original Siri: a magnifier until a category is picked, then that category's icon (hidden while it flies in)
-        if (!g_siriChosen) {
+        if (!g_siriChosen || (g_siriTab == kTabAll && !g_backHover)) {
             g_target->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx - 1.5f * s, cy - 1.5f * s), 6.5f * s, 6.5f * s), g_brush.Get(), 1.6f * s);
             g_target->DrawLine(D2D1::Point2F(cx + 3.3f * s, cy + 3.3f * s), D2D1::Point2F(cx + 8 * s, cy + 8 * s), g_brush.Get(), 1.6f * s);
         } else if (!flying && g_backHover) {
-            // Hovered: a soft round button with a back arrow
-            D2D1_RECT_F b = BackButtonRect(L);
-            float br = (b.right - b.left) / 2;
-            DrawSoftPill(D2D1::RectF(b.left + 2 * s, b.top + 2 * s, b.right - 2 * s, b.bottom - 2 * s), br, a, 0.12f);
-            g_brush->SetColor(Fg(0.9f * a));
-            D2D1_POINT_2F p1 = D2D1::Point2F(cx + 2.5f * s, cy - 6 * s), p2 = D2D1::Point2F(cx - 3.5f * s, cy), p3 = D2D1::Point2F(cx + 2.5f * s, cy + 6 * s);
-            g_target->DrawLine(p1, p2, g_brush.Get(), 1.9f * s);
-            g_target->DrawLine(p2, p3, g_brush.Get(), 1.9f * s);
-            g_target->FillEllipse(D2D1::Ellipse(p2, 0.95f * s, 0.95f * s), g_brush.Get());
+            backArrow();
         } else if (!flying && g_glyphLargeFormat) {
             PCWSTR glyph = TabGlyph(g_siriTab);
             g_target->DrawText(glyph, 1, g_glyphLargeFormat.Get(), D2D1::RectF(cx - 14 * s, cy - 14 * s, cx + 14 * s, cy + 14 * s), g_brush.Get());
@@ -5621,7 +6515,7 @@ void DrawSearchBar(const Layout& L, float a) {
     g_target->DrawTextLayout(origin, layout.Get(), g_brush.Get());
 
     // Caret follows the insertion point, not always the end of the query.
-    if ((siri || g_searchActive) && !QueryHasSelection() && (!g_frameTimer || (int)(Now() * 2) % 2 == 0)) {
+    if ((siri || g_searchActive) && !QueryHasSelection() && g_caretOn) {
         DWRITE_HIT_TEST_METRICS hm{}; FLOAT caretX = 0, caretY = 0;
         layout->HitTestTextPosition((UINT32)std::min(g_queryCaret, g_query.size()), FALSE, &caretX, &caretY, &hm);
         caretX += origin.x;
@@ -5822,6 +6716,28 @@ IDWriteTextLayout* LabelLayout(App& app, const D2D1_RECT_F& r) {
     return app.labelLayout.Get();
 }
 
+// General search: a group title over its results, with "Show all" on the right when the group was cut short
+void DrawGroupTitle(const Cell& c, const App& title, float opacity, bool line, bool hover) {
+    float s = g_layout.scale;
+    D2D1_RECT_F r = D2D1::RectF(c.highlight.left + 10 * s, c.highlight.top + (c.highlight.bottom - c.highlight.top) * 0.42f,
+                                c.highlight.right - 10 * s, c.highlight.bottom - 2 * s);
+    if (line) {
+        float y = std::round(c.highlight.top + 6 * s) + 0.5f;
+        g_brush->SetColor(Fg(0.10f * opacity));
+        g_target->DrawLine(D2D1::Point2F(c.highlight.left + 8 * s, y), D2D1::Point2F(c.highlight.right - 8 * s, y), g_brush.Get(), 1.0f);
+    }
+    if (!title.target.empty() && g_hintFormat) {
+        PCWSTR more = CfgT(L"Show all", L"Mostrar todos");
+        g_brush->SetColor(Fg((hover ? 0.92f : 0.55f) * opacity));
+        g_target->DrawText(more, (UINT32)wcslen(more), g_hintFormat.Get(), r, g_brush.Get());
+        r.right -= 110 * s;
+    }
+    if (g_listSubFormat) {
+        g_brush->SetColor(Fg(0.50f * opacity));
+        g_target->DrawText(title.name.c_str(), (UINT32)title.name.size(), g_listSubFormat.Get(), r, g_brush.Get());
+    }
+}
+
 void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, float alpha, bool interactive, int hiddenFolderItem, float hiddenFade) {
     float s = L.scale;
     if (interactive) {
@@ -5837,6 +6753,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
             }
             if (g_siriTab == 2) msg = g_query.empty() ? Tr(L"Copy some text and it will show up here") : Tr(L"Nothing found");
             if (g_siriTab == 3) msg = Tr(L"No actions found");
+            if (g_siriTab == kTabAll) msg = Tr(L"Nothing found");
             if (g_siriTab == 4) msg = GhMessage();
             DrawMessage(msg);
             return;
@@ -5854,6 +6771,10 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         if (item < 0) continue;
         if (IsFolderItem(item) ? item - kFolderBase >= (int)g_folders.size() : !ResolveApp(item)) continue;
         Cell c = CellAtIn(L, scroll, i);
+        if (!IsFolderItem(item) && IsGroupTitle(ResolveApp(item))) {
+            DrawGroupTitle(c, *ResolveApp(item), alpha * PageFade(L, scroll, i), i > 0, interactive && i == g_hover);
+            continue;
+        }
 
         bool sel = interactive && IsSelected(i);
         if (sel) Fill(c.highlight, D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.22f), 12 * s);
@@ -5891,6 +6812,10 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                     g_brush->SetColor(Fg(0.8f * opacity));
                     g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_titleFormat.Get(), c.icon, g_brush.Get());
                 }
+                if (app.kind == 7 && g_glyphFormat) {   // calculator
+                    g_brush->SetColor(Fg(0.85f * opacity));
+                    g_target->DrawText(L"\uE8EF", 1, g_glyphFormat.Get(), c.icon, g_brush.Get());
+                }
                 if (app.kind == 4 && g_glyphFormat) {
                     PCWSTR glyph = ActionGlyph(app.target);
                     g_brush->SetColor(Fg(0.85f * opacity));
@@ -5904,7 +6829,8 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                 if (g_listFormat) {
                     // Files show their folder under the name so same-named items can be told apart
                     bool clip = app.kind == 2 && g_listSubFormat;
-                    bool twoLines = clip || (app.kind == 1 && g_listSubFormat && app.target.find(L'\\') != std::wstring::npos);
+                    bool twoLines = clip || (app.kind == 7 && g_listSubFormat) ||
+                                    (app.kind == 1 && g_listSubFormat && app.target.find(L'\\') != std::wstring::npos);
                     D2D1_RECT_F nameRect = c.label;
                     if (app.kind == 2 && interactive && ClipRows()) {
                         // X to remove this copy: faint, clearer on the hovered row, a glass circle under the mouse
@@ -5920,6 +6846,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                     if (twoLines) nameRect.bottom = c.label.top + (c.label.bottom - c.label.top) * 0.58f;
                     std::wstring name = app.name, folder;
                     if (clip) ClipRowText(app.target, name, folder);
+                    else if (app.kind == 7) folder = app.detail + L"   \u00B7   " + CfgT(L"Enter copies the result", L"Enter copia o resultado");
                     else if (twoLines) folder = app.target.substr(0, app.target.find_last_of(L'\\'));
                     g_brush->SetColor(Fg(0.95f * opacity));
                     g_target->DrawText(name.c_str(), (UINT32)name.size(), g_listFormat.Get(), nameRect, g_brush.Get());
@@ -6216,17 +7143,29 @@ void DrawSiriIntroOrb(const Layout& L) {
 // ---------- Themes ----------
 // Soft drop shadow drawn only outside the shape, so translucent glass stays clean
 void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float spread, float dy) {
-    ComPtr<ID2D1RectangleGeometry> area;
-    ComPtr<ID2D1RoundedRectangleGeometry> hole;
-    ComPtr<ID2D1PathGeometry> outside;
-    ComPtr<ID2D1GeometrySink> sink;
-    if (FAILED(g_d2d->CreateRectangleGeometry(D2D1::RectF(-10000, -10000, 10000, 10000), &area)) ||
-        FAILED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &hole)) ||
-        FAILED(g_d2d->CreatePathGeometry(&outside)) || FAILED(outside->Open(&sink)))
-        return;
-    area->CombineWithGeometry(hole.Get(), D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink.Get());
-    sink->Close();
-    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), outside.Get()), nullptr);
+    if (g_settings.light || !g_d2d) return;   // light mode: no shadows
+    // Everything but the shape itself (the shadow never darkens the glass). Building it is the slow part, so the last
+    // few are kept: shapes that don't move (most of the time) reuse theirs
+    auto& cuts = g_shadowCuts;
+    ID2D1PathGeometry* outside = nullptr;
+    for (const ShadowCut& c : cuts)
+        if (c.radius == radius && c.r.left == r.left && c.r.top == r.top && c.r.right == r.right && c.r.bottom == r.bottom) { outside = c.geo.Get(); break; }
+    if (!outside) {
+        ComPtr<ID2D1RectangleGeometry> area;
+        ComPtr<ID2D1RoundedRectangleGeometry> hole;
+        ComPtr<ID2D1PathGeometry> geo;
+        ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(g_d2d->CreateRectangleGeometry(D2D1::RectF(-10000, -10000, 10000, 10000), &area)) ||
+            FAILED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &hole)) ||
+            FAILED(g_d2d->CreatePathGeometry(&geo)) || FAILED(geo->Open(&sink)))
+            return;
+        area->CombineWithGeometry(hole.Get(), D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink.Get());
+        sink->Close();
+        if (cuts.size() >= 12) cuts.erase(cuts.begin());
+        cuts.push_back({r, radius, geo});
+        outside = geo.Get();
+    }
+    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), outside), nullptr);
     const int steps = 10;
     for (int i = steps; i >= 1; i--) {
         float g = spread * i / steps;
@@ -6236,10 +7175,16 @@ void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float s
 }
 
 ComPtr<ID2D1LinearGradientBrush> MakeGradient(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F from, D2D1_POINT_2F to) {
-    ComPtr<ID2D1GradientStopCollection> collection;
+    // The same few gradients are drawn every frame: their stop collections (made on the graphics card) are kept for
+    // the render target they belong to, so only the cheap brush is made each time
+    auto& kept = g_gradientStops;
+    static UINT keptFor = 0;
+    if (keptFor != g_targetGeneration || kept.size() > 256) { kept.clear(); keptFor = g_targetGeneration; }
+    std::string key((const char*)stops, count * sizeof(D2D1_GRADIENT_STOP));
+    ComPtr<ID2D1GradientStopCollection>& collection = kept[key];
+    if (!collection && FAILED(g_target->CreateGradientStopCollection(stops, count, &collection))) { kept.erase(key); return nullptr; }
     ComPtr<ID2D1LinearGradientBrush> brush;
-    if (SUCCEEDED(g_target->CreateGradientStopCollection(stops, count, &collection)))
-        g_target->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(from, to), collection.Get(), &brush);
+    g_target->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(from, to), collection.Get(), &brush);
     return brush;
 }
 
@@ -6276,7 +7221,7 @@ bool LiquidWanted() { return LiquidSetting() && !g_cfg.active; }
 bool LiquidSetting() {
     // Only in Floating and Original Siri: there the glass is a bar and a box. In Window and Fullscreen the glass is the
     // whole window, and bending all of it (and retaking it live) is far too heavy for every frame
-    if (!g_settings.siri) return false;
+    if (!g_settings.siri || g_settings.light) return false;
     Theme t = ActiveTheme();
     bool glassTheme = t == Theme::Glass || t == Theme::Siri ||
                       ((t == Theme::Light || t == Theme::Dark || t == Theme::Oled) && g_settings.glassEffect);
@@ -7087,6 +8032,7 @@ void CollectGlassPieces(const Layout& L, const D2D1::Matrix3x2F& m, std::vector<
     alpha = 1.0f;
     if (g_settings.siri) {
         float ia = PillIntroAlpha(), pa = std::min(1.0f, g_siriAnim * 4);
+        if (g_cfg.active && CfgPlain()) { CfgCollectGlass(out); alpha = 1.0f; return; }
         if (ia > 0.02f) out.push_back({L.search, (L.search.bottom - L.search.top) / 2});
         if (g_cfg.active) CfgCollectGlass(out);
         if (L.btnPower.right > L.btnPower.left && g_siriBtnAnim > 0.3f) out.push_back({L.btnPower, (L.btnPower.right - L.btnPower.left) / 2});
@@ -7100,6 +8046,7 @@ void CollectGlassPieces(const Layout& L, const D2D1::Matrix3x2F& m, std::vector<
         }
         alpha = std::max(ia, out.size() > 1 ? pa : 0.0f);
     } else if (g_cfg.active) {
+        if (CfgPlain()) { CfgCollectGlass(out); return; }
         if (CfgWindowT() < 1.0f) out.push_back({CfgWindowRect(), CfgWindowRadius()});
         out.push_back({L.search, (L.search.bottom - L.search.top) / 2});
         CfgCollectGlass(out);
@@ -7162,8 +8109,8 @@ void Render() {
     g_target->SetTransform(fx.m);
 
     if (g_settings.siri) {
-        if (g_cfg.active) DrawCfgBehind();   // the sections come out from under the bar
-        DrawSiriShapes(L);
+        if (g_cfg.active) DrawCfgBehind();   // the sections come out from under the bar (plain: the whole window)
+        if (!(g_cfg.active && CfgPlain())) DrawSiriShapes(L);
     }
     const bool windowBg = !g_settings.siri && !g_cfg.active;   // with the settings open the window is folded away
     const bool themed = windowBg && ActiveTheme() != Theme::Custom;
@@ -7317,7 +8264,9 @@ int FrameIntervalMs() {
     DEVMODEW mode{};
     mode.dmSize = sizeof(mode);
     int hz = EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode) ? (int)mode.dmDisplayFrequency : 60;
-    return std::clamp(hz > 1 ? 1000 / hz : 16, 4, 16);
+    int interval = std::clamp(hz > 1 ? 1000 / hz : 16, 4, 16);
+    if (g_settings.maxFps > 0) interval = std::max(interval, (1000 + g_settings.maxFps - 1) / g_settings.maxFps);   // the limit
+    return interval;
 }
 
 void StartFrames() {
@@ -7422,6 +8371,7 @@ void CloseFolder(bool animate = true) {
 
 void HideNow() {
     ShowWindow(g_wnd, SW_HIDE);
+    KillTimer(g_wnd, kTimerCaret);
     HideGlass();
     g_openFolderIndex = -1; g_folderAnim = 0.0f; g_folderClosing = false; g_renaming = false; g_mainItems.clear();
     g_shown = false; g_closing = false; g_appear = 0; g_backdropImage = {}; FreeSurface(g_surface); g_trackingMouse = false;
@@ -7577,7 +8527,7 @@ void OnFrame() {
         }
         // Files: the results box only comes out once something is typed (empty = just the bar);
         // Clipboard: only when something has been copied
-        bool panelOpen = g_siriExpanded && !(g_siriTab == 1 && g_query.empty()) && !(g_siriTab == 2 && g_clipHistory.empty());
+        bool panelOpen = g_siriExpanded && !((g_siriTab == 1 || g_siriTab == kTabAll) && g_query.empty()) && !(g_siriTab == 2 && g_clipHistory.empty());
         float expandTarget = panelOpen ? 1.0f : 0.0f;
         if (g_siriAnim != expandTarget) {
             float step = dt * g_settings.animSpeed / (panelOpen ? 0.34f : 0.24f);
@@ -7594,7 +8544,7 @@ void OnFrame() {
         }
         if (relayout) { ComputeLayout(); FitCategoryMenu(); }
     }
-    if (JiggleActive()) animating = true;
+    if (JiggleActive() || MoreFading()) animating = true;
     bool done = g_settings.siri ? (g_closing && g_siriClosingPill && g_pillIntro <= 0.0f)
                                 : (g_closing && g_appear <= 0);
     if (done) { HideNow(); animating = false; }
@@ -7718,6 +8668,7 @@ void UpdateAutoTextColor() {
 }
 
 void Open() {
+    CaretRestart();
     if (g_shown) {
         if (g_closing) {
             g_closing = false;
@@ -7831,6 +8782,7 @@ void RunAction(const std::wstring& id) {
     ShellExecuteW(nullptr, L"open", file, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+void SetSiriTab(int tab);
 void LaunchApp(int item) {
     if (item < 0) return;
     const App* ap = nullptr;
@@ -7842,12 +8794,13 @@ void LaunchApp(int item) {
         ap = ResolveApp(item);
     }
     if (!ap) return;
-    if (ap->kind == 2) { CopyText(ap->target); Close(); return; }
+    if (ap->kind == 6) { if (!ap->target.empty()) SetSiriTab(_wtoi(ap->target.c_str())); return; }   // "Show all"
+    if (ap->kind == 2 || ap->kind == 7) { CopyText(ap->target); Close(); return; }   // a copy, or the calculator's result
     if (ap->kind == 5) { GhApply(ap->target); return; }   // icon gallery: this picture becomes the app's icon
     if (ap->kind == 4) { RunAction(ap->target); return; }
     CountLaunch(*ap);
     if (ap->kind == 3) { SetQuery(ap->target); QueryChanged(); return; }
-    if (ap->kind == 1 && g_siriTab == 1 && !g_query.empty()) AddSearchHistory(g_query);
+    if (ap->kind == 1 && (g_siriTab == 1 || g_siriTab == kTabAll) && !g_query.empty()) AddSearchHistory(g_query);
 
     SHELLEXECUTEINFOW sei{sizeof(sei)}; sei.fMask = SEE_MASK_ASYNCOK; sei.lpFile = ap->target.c_str(); sei.nShow = SW_SHOWNORMAL;
     AllowSetForegroundWindow(ASFW_ANY); ShellExecuteExW(&sei); Close();
@@ -7883,7 +8836,7 @@ void ScrollRows(int rows) {
 }
 
 void UpdatePowerPill() {
-    int pick = g_settings.siri && g_settings.siriPower && g_siriTab == 0 ? PowerChoiceForQuery(g_query) : -1;
+    int pick = g_settings.siri && g_settings.siriPower && (g_siriTab == 0 || g_siriTab == kTabAll) ? PowerChoiceForQuery(g_query) : -1;
     if (!g_query.empty()) g_powerPillByButton = false;   // typing takes over
     g_powerPillWanted = pick >= 0 || (g_powerPillByButton && g_settings.siri && g_settings.siriPower);
     if (pick >= 0) g_powerPillPick = pick;
@@ -7896,25 +8849,42 @@ void ScheduleFileSearch() {
     KillTimer(g_wnd, kTimerFileSearch);
     CancelFileSearch();
     g_fileStatus.clear();
-    if (g_siriTab != 1 || g_query.size() < 2) return;
+    if ((g_siriTab != 1 && g_siriTab != kTabAll) || g_query.size() < 2 || !g_settings.filesEnabled) return;
     g_fileSearching = true; // shows "Searching..." while waiting
     UINT delay = g_settings.indexer == Indexer::Everything || g_settings.indexer == Indexer::Auto ? 60 : kFileSearchDelayMs;
     SetTimer(g_wnd, kTimerFileSearch, delay, nullptr);
 
 }
 
+bool IsTitleRow(int index) {
+    return index >= 0 && index < (int)g_layoutItems.size() && g_openFolderIndex < 0 && IsGroupTitle(ResolveApp(g_layoutItems[index]));
+}
+// The nearest row that can be picked, going in `step` (+1 / -1) from `from`; -1 if none
+int SelectableFrom(int from, int step) {
+    for (int i = from; i >= 0 && i < (int)g_layoutItems.size(); i += step) if (!IsTitleRow(i)) return i;
+    return -1;
+}
+
 void RefreshTabItems(bool resetScroll) {
+    int kept = g_selected;
     LoadTabSource();
     RebuildLayout();
     g_hover = -1; g_selected = g_query.empty() || g_layoutItems.empty() ? -1 : 0;
+    if (g_siriTab == kTabAll && g_selected >= 0)   // the general search keeps the picked row while files come in
+        g_selected = !resetScroll && kept >= 0 && kept < (int)g_layoutItems.size() && !IsTitleRow(kept) ? kept : SelectableFrom(0, 1);
     if (resetScroll) g_scroll = g_scrollTarget = 0;
     ComputeLayout(); Render();
     if (g_siriTab == 4) GhQueueVisible();
 }
 
 void QueryChanged() {
+    CaretRestart();
+    if (g_siriTab == kTabAll && g_query.empty()) {   // everything erased: back to the plain "Search" bar
+        g_siriTab = 0; g_siriChosen = false;
+        CollapseSiri();
+    }
     UpdatePowerPill();
-    if (g_settings.siri && g_siriTab == 1) StartFrames();   // Files: the box opens / closes with the text
+    if (g_settings.siri && (g_siriTab == 1 || g_siriTab == kTabAll)) StartFrames();   // Files: the box opens / closes with the text
     if (g_openFolderIndex >= 0) FinishFolderClose();
     if (!g_settings.siri && !g_query.empty() && !g_searchActive) { g_searchActive = true; StartFrames(); }
     ScheduleFileSearch();
@@ -7952,7 +8922,7 @@ void DeactivateSearch() {
 
 void OnFilesFound(FileResult* res) {
     std::unique_ptr<FileResult> owner(res);
-    if (res->gen != g_fileSearchGen || !g_shown || g_siriTab != 1 || g_query.empty()) return;
+    if (res->gen != g_fileSearchGen || !g_shown || (g_siriTab != 1 && g_siriTab != kTabAll) || g_query.empty()) return;
     g_fileResults = std::move(res->list);
     g_fileStatus = std::move(res->status); // e.g. "Everything is not running"
     g_fileSearching = false;
@@ -8092,7 +9062,12 @@ void OnChar(WCHAR ch) {
     }
     bool edits = ch == 8 || ch == 0x7F || ch == 0x16 || ch >= 32;
     ClampQueryCaret();
+    // Backspace with nothing to erase does nothing (it used to open Applications from the plain "Search" bar)
+    if ((ch == 8 || ch == 0x7F) && g_query.empty()) return;
     if (edits && g_openFolderIndex >= 0) { FinishFolderClose(); Render(); }
+    if (edits && ch != 8 && ch != 0x7F && g_settings.siriOriginal && g_settings.generalSearch && !g_siriChosen && !Picking() && g_openFolderIndex < 0) {
+        if (g_siriTab != kTabAll) { g_siriTab = kTabAll; g_selection.clear(); }
+    }
     if (edits && g_settings.siri) ExpandSiri();
     if (ch == 8) {
         if (QueryHasSelection()) DeleteQuerySelection();
@@ -8127,7 +9102,9 @@ void MoveSelection(int delta) {
     if (count == 0) return;
     int next = g_selected < 0 ? 0 : g_selected + delta;
     if (g_selected >= 0 && next >= count && delta == g_layout.columns) next = count - 1;   // down from the last, shorter row
+    if (IsTitleRow(next)) next = SelectableFrom(next, delta < 0 && g_selected >= 0 ? -1 : 1);   // group titles are skipped
     if (next >= 0 && next < count) g_selected = next;
+    if (IsTitleRow(g_selected - 1)) EnsureVisible(g_selected - 1);   // keep the group's title in view too
     EnsureVisible(g_selected);
     Render();
     StartFrames();
@@ -8265,7 +9242,10 @@ void OnKeyDown(WPARAM key) {
             OnChipClick(chips[((at + (back ? -1 : 1)) % n + n) % n]);
         } else if (!g_layoutItems.empty()) {
             int count = (int)g_layoutItems.size();
-            g_selected = g_selected < 0 ? (back ? count - 1 : 0) : ((g_selected + (back ? -1 : 1)) % count + count) % count;
+            for (int tries = 0; tries <= count; tries++) {
+                g_selected = g_selected < 0 ? (back ? count - 1 : 0) : ((g_selected + (back ? -1 : 1)) % count + count) % count;
+                if (!IsTitleRow(g_selected)) break;
+            }
             EnsureVisible(g_selected); Render(); StartFrames();
         }
         return;
@@ -8371,6 +9351,31 @@ bool InvokeShellVerb(const std::wstring& target, HWND owner, std::initializer_li
 
 bool PinToTaskbar(const std::wstring& target) {
     return InvokeShellVerb(target, g_wnd, {L"taskbarpin", L"pintotaskbar"}, L"taskbarpin");
+}
+
+// A shortcut to the app on the user's desktop (also for Microsoft Store apps: it points at the app itself)
+bool CreateDesktopShortcut(const App& app) {
+    ComPtr<IShellItem> item;
+    if (FAILED(SHCreateItemFromParsingName(app.target.c_str(), nullptr, IID_PPV_ARGS(&item)))) return false;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHGetIDListFromObject(item.Get(), &pidl))) return false;
+    ComPtr<IShellLinkW> link;
+    HRESULT hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link));
+    if (SUCCEEDED(hr)) hr = link->SetIDList(pidl);
+    CoTaskMemFree(pidl);
+    if (FAILED(hr)) return false;
+    PWSTR desktop = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktop))) return false;
+    std::wstring dir = desktop;
+    CoTaskMemFree(desktop);
+    std::wstring name = app.name;
+    for (WCHAR& ch : name) if (wcschr(L"\\/:*?\"<>|", ch) || ch < 32) ch = L'_';
+    if (name.empty()) name = L"App";
+    std::wstring path = dir + L"\\" + name + L".lnk";
+    for (int n = 2; GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES && n < 100; n++)   // never replace a file
+        path = dir + L"\\" + name + L" (" + std::to_wstring(n) + L").lnk";
+    ComPtr<IPersistFile> file;
+    return SUCCEEDED(link.As(&file)) && SUCCEEDED(file->Save(path.c_str(), TRUE));
 }
 
 void UninstallApp(const std::wstring& target) {
@@ -8863,6 +9868,19 @@ void ExecuteMenu(int id) {
         case kMenuNewFolder:
             if (app && !g_selection.count(app)) { g_selection.clear(); g_selection.insert(app); }
             CreateFolderFromSelection(); break;
+        case kMenuDesktop: {
+            bool ok = true;
+            if (app && g_selection.count(app) && g_selection.size() > 1) {
+                for (auto& a : g_apps) if (g_selection.count(a.get())) ok = CreateDesktopShortcut(*a) && ok;
+            } else if (app) ok = CreateDesktopShortcut(*app);
+            if (!ok) {
+                DialogBegin(false);
+                MessageBoxW(g_wnd, Tr(L"Could not create the shortcut."), L"Siri Plus Launchpad", MB_ICONWARNING);
+                DialogEnd();
+                if (g_shown) ForceForeground(g_wnd);
+            }
+            break;
+        }
         case kMenuPin:
             if (app && g_selection.count(app) && g_selection.size() > 1) { for (auto& a : g_apps) if (g_selection.count(a.get())) PinToTaskbar(a->target); }
             else if (app) PinToTaskbar(app->target);
@@ -8885,15 +9903,6 @@ void ExecuteMenu(int id) {
         case kMenuHistClear:
             g_searchHistory.clear(); SaveSearchHistory(); RefreshTabItems(true);
             break;
-        case kMenuChangeIcon: {
-            std::wstring path;
-            if (app && PickImage(g_wnd, path)) {
-                if (LoadImageFile(path, CurrentIconPixels(), *app)) { g_customIcons[app->target] = path; SaveCustomIcons(); }
-                else MessageBoxW(g_wnd, Tr(L"Could not load this image."), L"Siri Plus Launchpad", MB_ICONWARNING);
-            }
-            if (g_shown) { ForceForeground(g_wnd); Render(); }
-            break;
-        }
         case kMenuBarCenter: {
             g_barPosX = g_barPosY = -1;
             Wh_SetStringValue(L"barMonitor", L"");
@@ -9025,9 +10034,13 @@ float CfgTextHeight(const std::wstring& text, IDWriteTextFormat* format, float w
 }
 
 // Animation phases: the bar moves aside, the sections come out of the bar, the panel comes out of the gear
-float CfgBarT() { return EaseInOut(std::clamp(g_cfg.anim / 0.30f, 0.0f, 1.0f)); }
-float CfgSideT() { return std::clamp((g_cfg.anim - 0.30f) / 0.30f, 0.0f, 1.0f); }
-float CfgPanelT() { return std::clamp((g_cfg.anim - 0.55f) / 0.45f, 0.0f, 1.0f); }
+// The settings are one plain window, as System Settings on macOS 27: it fades in (and out) in a moment, with no
+// morphing of the bar. The older animated panel (the bar turning into the sections) is kept below for reference
+bool CfgPlain() { return true; }
+float CfgBarT() { return CfgPlain() ? 1.0f : EaseInOut(std::clamp(g_cfg.anim / 0.30f, 0.0f, 1.0f)); }
+float CfgSideT() { return CfgPlain() ? g_cfg.anim : std::clamp((g_cfg.anim - 0.30f) / 0.30f, 0.0f, 1.0f); }
+float CfgPanelT() { return CfgPlain() ? g_cfg.anim : std::clamp((g_cfg.anim - 0.55f) / 0.45f, 0.0f, 1.0f); }
+bool CfgGearHit(float x, float y);
 bool CfgSettled() { return g_cfg.active && !g_cfg.closing && g_cfg.anim >= 1.0f; }
 float CfgRadius() { return std::clamp(g_settings.siriPanelRadius * g_layout.scale, 6 * g_layout.scale, 30 * g_layout.scale); }
 
@@ -9052,7 +10065,7 @@ D2D1_RECT_F CfgHomeBar(const RECT& area, const RECT& work, float s) {
 
 // ---------- Rows ----------
 struct CfgRow { int item; D2D1_RECT_F r, ctl; float labelH, descH; };
-struct CfgCaption { int section; D2D1_RECT_F r; };
+struct CfgCaption { int section; D2D1_RECT_F r; int item = -1; };   // item: a group title inside a section
 struct CfgSideRow { int section; D2D1_RECT_F r; };
 std::vector<CfgRow> g_cfgRows;
 std::vector<D2D1_RECT_F> g_cfgCards;
@@ -9070,6 +10083,7 @@ std::wstring CfgFold(std::wstring s) {
 }
 bool CfgMatches(const CfgItem& it) {
     if (g_cfg.search.empty()) return it.section == g_cfg.section;
+    if (it.type == kCfgGroup) return false;   // group titles only show inside their section
     std::wstring q = CfgFold(g_cfg.search);
     auto has = [&](PCWSTR t) { return t && CfgFold(t).find(q) != std::wstring::npos; };
     const CfgSection& sec = kCfgSections[it.section];
@@ -9110,11 +10124,60 @@ PCWSTR CfgButtonText(const CfgItem& it) {
     if (!wcscmp(it.key, L"#iconsFolderPick")) return CfgT(L"Choose…", L"Escolher…");
     return CfgT(L"Restore…", L"Restaurar…");
 }
+// Which modes use a section or a setting (the mode chosen in General, even before the launcher reopens with it)
+enum CfgModes { kModesAll, kModesSiri, kModesOriginal, kModesWindow };
+int CfgSectionModes(int section) { return section == 4 || section == 5 ? kModesSiri : section == 6 ? kModesWindow : section == 8 ? kModesOriginal : kModesAll; }
+int CfgItemModes(const CfgItem& it) {
+    std::wstring k = it.key;
+    if (k == L"siri.generalSearch" || k == L"siri.firstRow" || k.rfind(L"siri.shortcut", 0) == 0) return kModesOriginal;
+    if (k.rfind(L"siri.", 0) == 0 || k == L"appearance.glassStyle" || k == L"appearance.refraction" || k == L"appearance.liveGlass" ||
+        k == L"custom.shading") return kModesSiri;
+    if (k.rfind(L"window.", 0) == 0) return kModesWindow;
+    return kModesAll;
+}
+// "Not used by the mode you chose (…)" when that mode doesn't use something with these modes; empty otherwise
+std::wstring CfgModeNote(int modes) {
+    if (modes == kModesAll) return {};
+    static const CfgItem* modeItem = CfgFind(L"displayMode");
+    std::wstring mode = modeItem && !CfgValue(*modeItem).empty() ? CfgValue(*modeItem) : CfgStr(L"displayMode");   // the panel's copy
+    bool window = mode == L"window" || mode == L"fullscreen", original = !window && mode != L"siri";
+    bool used = modes == kModesSiri ? !window : modes == kModesWindow ? window : original;
+    if (used) return {};
+    PCWSTR modeName = mode.c_str();
+    for (const CfgOpt& o : kOptMode) if (mode == o.value) modeName = CfgT(o.en, o.pt);
+    WCHAR note[200];
+    swprintf(note, ARRAYSIZE(note), CfgT(L"Not used by the mode you chose (%ls)", L"Não é usado pelo modo escolhido (%ls)"), modeName);
+    return note;
+}
+// A section's description, plus that note when the chosen mode doesn't use the section
+std::wstring CfgSectionDesc(int section) {
+    const CfgSection& sec = kCfgSections[section];
+    std::wstring desc = CfgT(sec.descEn, sec.descPt), note = CfgModeNote(CfgSectionModes(section));
+    return note.empty() ? desc : desc + L"\n" + note;
+}
+// A setting's own note (only when its section as a whole is used: otherwise the section already says so)
+std::wstring CfgItemNote(const CfgItem& it) {
+    if (it.type == kCfgGroup || !CfgModeNote(CfgSectionModes(it.section)).empty()) return {};
+    return CfgModeNote(CfgItemModes(it));
+}
+std::wstring CfgItemDesc(const CfgItem& it) {
+    PCWSTR d = CfgT(it.descEn, it.descPt);
+    std::wstring desc = d ? d : L"", note = CfgItemNote(it);
+    if (note.empty()) return desc;
+    return desc.empty() ? note : desc + L"\n" + note;
+}
+std::wstring CfgCaptionText(const CfgCaption& c) {
+    if (c.item >= 0) return CfgT(kCfgItems[c.item].en, kCfgItems[c.item].pt);
+    const CfgSection& sec = kCfgSections[c.section];
+    return CfgT(sec.en, sec.pt);
+}
+
 bool CfgThemeChanged();
 bool CfgButtonEnabled(const CfgItem& it) { return wcscmp(it.key, L"#themeReset") || CfgThemeChanged(); }
 
 float CfgControlWidth(const CfgItem& it, float s) {
     switch (it.type) {
+        case kCfgGroup: break;   // a title, never a row
         case kCfgToggle: return std::round(40 * s);
         case kCfgSlider: return std::round(214 * s);
         case kCfgChoice: return std::clamp(CfgTextWidth(CfgOptionLabel(it, CfgValue(it)), g_cfgBody.Get()) + 40 * s, 96 * s, 250 * s);
@@ -9142,7 +10205,7 @@ void CfgBuild() {
     if (g_cfg.search.empty()) {
         const CfgSection& sec = kCfgSections[g_cfg.section];
         float textW = cardR - cardL - in - std::round(56 * s) - in;
-        float dh = CfgTextHeight(CfgT(sec.descEn, sec.descPt), g_cfgHeadDesc.Get(), textW);
+        float dh = CfgTextHeight(CfgSectionDesc(g_cfg.section).c_str(), g_cfgHeadDesc.Get(), textW);
         float h = std::max(std::round(68 * s), std::round(16 * s) + std::round(20 * s) + dh + std::round(16 * s));
         g_cfgHeader = D2D1::RectF(cardL, y, cardR, y + h);
         y += h + std::round(14 * s);
@@ -9152,11 +10215,19 @@ void CfgBuild() {
         for (int i = 0; i < kCfgItemCount; i++) {
             const CfgItem& it = kCfgItems[i];
             if (it.section != section || !CfgMatches(it)) continue;
+            if (it.type == kCfgGroup) {   // a title: the card so far ends, the next ones start under it
+                if (y > top) { g_cfgCards.push_back(D2D1::RectF(cardL, top, cardR, y)); y += std::round(16 * s); }
+                g_cfgCaptions.push_back({section, D2D1::RectF(cardL + std::round(4 * s), y, cardR, y + std::round(24 * s)), i});
+                y += std::round(26 * s);
+                top = y;
+                continue;
+            }
             float cw = CfgControlWidth(it, s);
             float labelW = cardR - cardL - 2 * in - cw - std::round(16 * s);
-            PCWSTR desc = CfgT(it.descEn, it.descPt);
-            float labelH = std::round(19 * s), descH = desc ? CfgTextHeight(desc, g_cfgDesc.Get(), labelW) : 0;
-            float h = std::max(std::round(46 * s), std::round(12 * s) + labelH + (desc ? std::round(2 * s) + descH : 0) + std::round(12 * s));
+            std::wstring descText = CfgItemDesc(it);
+            bool hasDesc = !descText.empty();
+            float labelH = std::round(19 * s), descH = hasDesc ? CfgTextHeight(descText.c_str(), g_cfgDesc.Get(), labelW) : 0;
+            float h = std::max(std::round(46 * s), std::round(12 * s) + labelH + (hasDesc ? std::round(2 * s) + descH : 0) + std::round(12 * s));
             D2D1_RECT_F r = D2D1::RectF(cardL, y, cardR, y + h);
             float ch = it.type == kCfgToggle ? std::round(22 * s) : it.type == kCfgSlider ? std::round(24 * s)
                      : it.type == kCfgButton ? std::round(28 * s) : std::round(26 * s);
@@ -9182,7 +10253,8 @@ void CfgBuild() {
     g_cfg.contentH = y - startY + std::round(16 * s);
     // Sections (sidebar)
     const D2D1_RECT_F& S = g_cfg.side;
-    float rowH = std::round(36 * s), sy = S.top + std::round(10 * s);
+    float rowH = std::round(CfgPlain() ? 32 * s : 36 * s);
+    float sy = CfgPlain() ? g_cfg.bar.bottom + std::round(14 * s) : S.top + std::round(10 * s);
     for (int sec = 0; sec < kCfgSectionCount; sec++) {
         if (!g_cfg.search.empty() && !CfgSectionHasMatch(sec)) continue;
         g_cfgSideRows.push_back({sec, D2D1::RectF(S.left + std::round(8 * s), sy, S.right - std::round(8 * s), sy + rowH - std::round(2 * s))});
@@ -9197,7 +10269,7 @@ float CfgMaxScroll() { return std::max(0.0f, g_cfg.contentH - (g_cfgView.bottom 
 // (turning) and the gear is sucked into its own center. 0 at any other time
 // (Siri modes: the same, once the bar is back home)
 float CfgCloseU() {
-    if (!g_cfg.active || !g_cfg.closing) return 0.0f;
+    if (!g_cfg.active || !g_cfg.closing || CfgPlain()) return 0.0f;
     return g_cfg.siriMode ? g_cfg.endT : 1.0f - std::clamp(g_cfg.anim / 0.30f, 0.0f, 1.0f);
 }
 constexpr float kCfgShrinkEnd = 0.62f;   // share of it spent shrinking into the button; the rest is the suck
@@ -9217,6 +10289,33 @@ D2D1_RECT_F CfgClosingBar(const D2D1_RECT_F& bar) {
 void CfgApplyLayout() {
     Layout& L = g_layout;
     float s = L.scale, W = (float)L.width, H = (float)L.height;
+    if (CfgPlain()) {
+        // One window in the middle of the screen: the sections on the left (with the search field on top), the
+        // settings of the chosen section on the right
+        float m = std::round(24 * s), sideW = std::round(236 * s);
+        float panelW = std::max(std::round(320 * s), std::min(std::round(680 * s), W - sideW - 2 * m));
+        float winH = std::max(std::round(300 * s), std::min(std::round(620 * s), H - 2 * m));
+        float left0 = std::round((W - sideW - panelW) / 2), top0 = std::round((H - winH) / 2);
+        g_cfg.side = D2D1::RectF(left0, top0, left0 + sideW, top0 + winH);
+        g_cfg.panel = D2D1::RectF(left0 + sideW, top0, left0 + sideW + panelW, top0 + winH);
+        float fm = std::round(12 * s), fh = std::round(30 * s);
+        g_cfg.bar = D2D1::RectF(left0 + fm, top0 + std::round(16 * s), left0 + sideW - fm, top0 + std::round(16 * s) + fh);
+        L.search = g_cfg.bar;   // the settings search (typing goes there)
+        L.btnPower = L.btnBack = L.panel = L.dots = L.siriPanel = L.siriPower = L.siriTabs = D2D1::RectF(0, 0, 0, 0);
+        g_cfg.scroll = std::clamp(g_cfg.scroll, 0.0f, std::max(0.0f, g_cfg.contentH));
+        // The rows only move when something they depend on changes (not with every frame of the opening)
+        struct BuiltFor { float W, H, s, scroll; int section; std::wstring search; unsigned version; UiLanguage lang; };
+        static BuiltFor built{};
+        BuiltFor now{W, H, s, g_cfg.scroll, g_cfg.section, g_cfg.search, g_cfgVersion, g_uiLanguage};
+        bool same = g_cfg.anim > 0.0f && now.W == built.W && now.H == built.H && now.s == built.s && now.scroll == built.scroll &&
+                    now.section == built.section && now.search == built.search && now.version == built.version && now.lang == built.lang;
+        if (!same) {
+            CfgBuild();
+            built = now;
+        }
+        g_cfg.scroll = std::clamp(g_cfg.scroll, 0.0f, CfgMaxScroll());
+        return;
+    }
     float pillH = std::round(g_settings.siriPillH * s), m = std::round(24 * s), gap = std::round(18 * s);
     float sideW = std::round(272 * s);
     float panelW = std::max(std::round(320 * s), std::min(std::round(700 * s), W - sideW - gap - 2 * m));
@@ -9266,7 +10365,55 @@ D2D1_RECT_F CfgPanelRect(float& radius) {
 }
 
 struct GlassPiece;
+D2D1_RECT_F CfgWindowArea() { return D2D1::RectF(g_cfg.side.left, g_cfg.side.top, g_cfg.panel.right, g_cfg.panel.bottom); }
+// Plain window: it grows out of the search bar (0 -> 1 over the first part of the opening), then its content comes in
+// in turn (sections, title, cards), each rising a little. Light mode: the content just fades in, all at once
+constexpr float kCfgWinPart = 0.55f;
+float CfgPlainWinE() {
+    if (g_cfg.closing) return 1.0f;   // closing: it stays where it is and switches off there (CfgCrt)
+    float u = std::clamp(g_cfg.anim / kCfgWinPart, 0.0f, 1.0f);
+    return g_settings.light ? Ease(u) : BackOutK(u, 0.5f);   // a light settle when it opens
+}
+// Closing, like an old TV switched off, where the window is: it flattens into a bright line, the line shrinks to a
+// dot, the dot goes out. sx, sy = the window's scale; line = how bright that line is; alpha = the whole thing
+struct CfgCrtState { float sx = 1, sy = 1, line = 0, alpha = 1; };
+CfgCrtState CfgCrt() {
+    CfgCrtState c;
+    if (!g_cfg.closing) return c;
+    float u = 1.0f - g_cfg.anim;
+    float a = Ease(std::clamp(u / 0.50f, 0.0f, 1.0f)), b = EaseInOut(std::clamp((u - 0.50f) / 0.40f, 0.0f, 1.0f));
+    c.sy = Lerp(1.0f, 0.008f, a);
+    c.sx = Lerp(1.0f, 0.012f, b);
+    c.line = std::clamp((u - 0.30f) / 0.20f, 0.0f, 1.0f);
+    c.alpha = 1.0f - std::clamp((u - 0.85f) / 0.15f, 0.0f, 1.0f);
+    return c;
+}
+D2D1_RECT_F CfgCrtRect(const D2D1_RECT_F& r, const CfgCrtState& c) {
+    float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2, hw = (r.right - r.left) / 2 * c.sx, hh = (r.bottom - r.top) / 2 * c.sy;
+    return D2D1::RectF(cx - hw, cy - hh, cx + hw, cy + hh);
+}
+D2D1_RECT_F CfgPlainRect() { return LerpRect(g_cfg.home, CfgWindowArea(), CfgPlainWinE()); }
+float CfgPlainRadius() {
+    float h = g_cfg.home.bottom - g_cfg.home.top;
+    return Lerp(h / 2, CfgRadius(), std::clamp(CfgPlainWinE(), 0.0f, 1.0f));
+}
+// How far in a piece of the content is (0 hidden ... 1 in place); `start` is when it begins, on the opening's 0..1
+float CfgPhase(float start) {
+    if (g_cfg.closing) return 1.0f;   // the content goes off with the window, all at once
+    float a = g_settings.light ? (g_cfg.anim - 0.5f) / 0.5f : (g_cfg.anim - start) / 0.30f;
+    return Ease(std::clamp(a, 0.0f, 1.0f));
+}
 void CfgCollectGlass(std::vector<GlassPiece>& out) {
+    if (CfgPlain()) {
+        if (g_cfg.anim <= 0.02f) return;
+        if (g_cfg.closing) {
+            CfgCrtState c = CfgCrt();
+            if (c.alpha > 0.02f && c.sy > 0.02f) out.push_back({CfgCrtRect(CfgPlainRect(), c), CfgPlainRadius() * std::min(c.sx, c.sy)});
+            return;
+        }
+        out.push_back({CfgPlainRect(), CfgPlainRadius()});
+        return;
+    }
     if (CfgSideT() > 0.02f) out.push_back({CfgSideRect(), CfgRadius()});
     if (CfgPanelT() > 0.02f) { float r = 0; D2D1_RECT_F p = CfgPanelRect(r); out.push_back({p, r}); }
 }
@@ -9302,6 +10449,29 @@ void CfgIcon(int section, const D2D1_RECT_F& r, IDWriteTextFormat* glyph) {
     CfgText(sec.glyph, glyph, r, D2D1::ColorF(1, 1, 1, 1));
 }
 
+void DrawCfgSideRows(float rad) {
+    float s = g_layout.scale;
+    int n = 0;
+    for (const CfgSideRow& row : g_cfgSideRows) {
+        float ph = CfgPlain() ? CfgPhase(0.42f + std::min(n++, 12) * 0.02f) : 1.0f;
+        if (ph <= 0.001f) continue;
+        D2D1::Matrix3x2F base;
+        g_target->GetTransform(&base);
+        if (ph < 1.0f) { PushOpacity(ph); g_target->SetTransform(D2D1::Matrix3x2F::Translation(0, (1 - ph) * 8 * s) * base); }
+        bool selected = g_cfg.search.empty() && row.section == g_cfg.section;
+        float rowRad = CfgPlain() ? std::round(7 * s) : std::max(4 * s, rad - 8 * s);
+        if (selected) Fill(row.r, CfgAccent(), rowRad);
+        else if (row.section == g_cfg.sideHover) Fill(row.r, Fg(0.09f), rowRad);
+        float cy = (row.r.top + row.r.bottom) / 2, d = std::round(CfgPlain() ? 22 * s : 24 * s);
+        D2D1_RECT_F icon = D2D1::RectF(row.r.left + 8 * s, cy - d / 2, row.r.left + 8 * s + d, cy + d / 2);
+        CfgIcon(row.section, icon, g_cfgGlyphS.Get());
+        const CfgSection& sec = kCfgSections[row.section];
+        CfgText(CfgT(sec.en, sec.pt), g_cfgBody.Get(), D2D1::RectF(icon.right + 10 * s, row.r.top, row.r.right - 8 * s, row.r.bottom),
+                selected ? D2D1::ColorF(1, 1, 1, 1) : Fg(0.92f));
+        if (ph < 1.0f) { g_target->SetTransform(base); g_target->PopLayer(); }
+    }
+}
+
 void DrawCfgSide() {
     float t = CfgSideT();
     if (t <= 0.0f) return;
@@ -9314,19 +10484,8 @@ void DrawCfgSide() {
     g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(cur, rad, rad), &clip);
     if (!clip) return;
     g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), ca), nullptr);
-    for (const CfgSideRow& row : g_cfgSideRows) {
-        bool selected = g_cfg.search.empty() && row.section == g_cfg.section;
-        // Concentric with the sidebar's corners (its radius minus the 8 px margin)
-        float rowRad = std::max(4 * s, rad - 8 * s);
-        if (selected) Fill(row.r, CfgAccent(), rowRad);
-        else if (row.section == g_cfg.sideHover) Fill(row.r, Fg(0.09f), rowRad);
-        float cy = (row.r.top + row.r.bottom) / 2, d = std::round(24 * s);
-        D2D1_RECT_F icon = D2D1::RectF(row.r.left + 8 * s, cy - d / 2, row.r.left + 8 * s + d, cy + d / 2);
-        CfgIcon(row.section, icon, g_cfgGlyphS.Get());
-        const CfgSection& sec = kCfgSections[row.section];
-        CfgText(CfgT(sec.en, sec.pt), g_cfgBody.Get(), D2D1::RectF(icon.right + 10 * s, row.r.top, row.r.right - 8 * s, row.r.bottom),
-                selected ? D2D1::ColorF(1, 1, 1, 1) : Fg(0.92f));
-    }
+    (void)s;
+    DrawCfgSideRows(rad);
     g_target->PopLayer();
 }
 
@@ -9351,6 +10510,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
     float s = g_layout.scale;
     const std::wstring& v = CfgValue(it);
     switch (it.type) {
+        case kCfgGroup: break;   // a title, never a row
         case kCfgToggle: DrawCfgToggle(c, _wtoi(v.c_str()) != 0); break;
         case kCfgSlider: {
             int value = std::clamp(_wtoi(v.c_str()), it.min, it.max);
@@ -9442,52 +10602,91 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
     }
 }
 
+// Plain window: a piece of the right side comes in (opacity and a small rise).
+// 0: not shown yet; 1: in place (drawn as is); 2: coming in (a layer and a move were pushed, undone by the caller)
+int CfgPieceBegin(float start, float s) {
+    if (!CfgPlain()) return 1;
+    float ph = CfgPhase(start) * Ease(g_cfg.sectionFade);
+    if (ph <= 0.001f) return 0;
+    if (ph >= 0.999f) return 1;
+    D2D1::Matrix3x2F base;
+    g_target->GetTransform(&base);
+    PushOpacity(ph);
+    g_target->SetTransform(D2D1::Matrix3x2F::Translation(0, (1 - ph) * 10 * s) * base);
+    return 2;
+}
 void DrawCfgPanelContent() {
     float s = g_layout.scale;
     const D2D1_RECT_F& P = g_cfg.panel;
     float pad = std::round(22 * s);
+    D2D1::Matrix3x2F base;
+    g_target->GetTransform(&base);
+    int piece = 0;
+    auto pieceEnd = [&]() { if (piece == 2) { g_target->SetTransform(base); g_target->PopLayer(); } };
     // Title and Done
+    if ((piece = CfgPieceBegin(0.46f, s))) {
     std::wstring title = g_cfg.search.empty() ? CfgT(kCfgSections[g_cfg.section].en, kCfgSections[g_cfg.section].pt)
                                               : std::wstring(CfgT(L"Results", L"Resultados"));
     CfgText(title, g_cfgTitle.Get(), D2D1::RectF(P.left + pad, P.top + pad, g_cfg.done.left - 12 * s, P.top + pad + std::round(30 * s)), Fg(0.95f));
     DrawGlassButton(g_cfg.done, (g_cfg.done.bottom - g_cfg.done.top) / 2, 1.0f, g_cfg.doneHover ? 1.7f : 1.15f, false);
     CfgText(CfgT(L"Done", L"Concluído"), g_cfgButton.Get(), g_cfg.done, Fg(0.95f));
+    pieceEnd();
+    }
 
     g_target->PushAxisAlignedClip(g_cfgView, D2D1_ANTIALIAS_MODE_ALIASED);
-    if (g_cfgHeader.right > g_cfgHeader.left) {
+    if (g_cfgHeader.right > g_cfgHeader.left && (piece = CfgPieceBegin(0.50f, s))) {
         const CfgSection& sec = kCfgSections[g_cfg.section];
         Fill(g_cfgHeader, Fg(0.07f), 12 * s);
         float d = std::round(42 * s), cy = (g_cfgHeader.top + g_cfgHeader.bottom) / 2;
         D2D1_RECT_F icon = D2D1::RectF(g_cfgHeader.left + 14 * s, cy - d / 2, g_cfgHeader.left + 14 * s + d, cy + d / 2);
         CfgIcon(g_cfg.section, icon, g_cfgGlyphL.Get());
         float tx = icon.right + 14 * s, textW = g_cfgHeader.right - 14 * s - tx;
-        PCWSTR desc = CfgT(sec.descEn, sec.descPt);
+        std::wstring descText = CfgSectionDesc(g_cfg.section);
+        PCWSTR desc = descText.c_str();
         float dh = CfgTextHeight(desc, g_cfgHeadDesc.Get(), textW), block = std::round(20 * s) + dh, top = cy - block / 2;
         CfgText(CfgT(sec.en, sec.pt), g_cfgHead.Get(), D2D1::RectF(tx, top, g_cfgHeader.right - 14 * s, top + std::round(20 * s)), Fg(0.95f));
         CfgText(desc, g_cfgHeadDesc.Get(), D2D1::RectF(tx, top + std::round(20 * s), tx + textW, top + block + 4 * s), Fg(0.58f));
+        pieceEnd();
     }
+    // Each card (with the caption over it) comes in after the one above it
+    auto cardOf = [&](float y) {
+        for (int j = 0; j < (int)g_cfgCards.size(); j++) if (y <= g_cfgCards[j].bottom + 0.5f) return j;
+        return (int)g_cfgCards.size() - 1;
+    };
+    auto cardStart = [](int j) { return 0.55f + std::min(std::max(j, 0), 3) * 0.05f; };
     for (const CfgCaption& c : g_cfgCaptions) {
-        const CfgSection& sec = kCfgSections[c.section];
-        CfgText(CfgT(sec.en, sec.pt), g_cfgCaption.Get(), c.r, Fg(0.55f));
+        if (!(piece = CfgPieceBegin(cardStart(cardOf(c.r.bottom)), s))) continue;
+        CfgText(CfgCaptionText(c), g_cfgCaption.Get(), c.r, Fg(0.55f));
+        pieceEnd();
     }
-    for (const D2D1_RECT_F& card : g_cfgCards) Fill(card, Fg(0.07f), 12 * s);
+    for (int j = 0; j < (int)g_cfgCards.size(); j++) {
+        const D2D1_RECT_F& card = g_cfgCards[j];
+        if (card.bottom < g_cfgView.top || card.top > g_cfgView.bottom) continue;
+        if (!(piece = CfgPieceBegin(cardStart(j), s))) continue;
+        Fill(card, Fg(0.07f), 12 * s);
+        pieceEnd();
+    }
     for (size_t i = 0; i < g_cfgRows.size(); i++) {
         const CfgRow& row = g_cfgRows[i];
         if (row.r.bottom < g_cfgView.top || row.r.top > g_cfgView.bottom) continue;
+        if (!(piece = CfgPieceBegin(cardStart(cardOf(row.r.top + 1)), s))) continue;
         const CfgItem& it = kCfgItems[row.item];
         float in = std::round(14 * s);
         if (i > 0 && g_cfgRows[i - 1].r.bottom == row.r.top) {
             g_brush->SetColor(Fg(0.10f));
             g_target->DrawLine(D2D1::Point2F(row.r.left + in, row.r.top + 0.5f), D2D1::Point2F(row.r.right - in, row.r.top + 0.5f), g_brush.Get(), 1.0f);
         }
-        PCWSTR desc = CfgT(it.descEn, it.descPt);
+        std::wstring descText = CfgItemDesc(it);
+        PCWSTR desc = descText.empty() ? nullptr : descText.c_str();
+        bool unused = !CfgItemNote(it).empty() || !CfgModeNote(CfgSectionModes(it.section)).empty();   // dimmed: this mode doesn't use it
         float block = row.labelH + (desc ? std::round(2 * s) + row.descH : 0);
         float top = (row.r.top + row.r.bottom) / 2 - block / 2;
         float labelRight = row.ctl.left - std::round(16 * s);
-        CfgText(CfgT(it.en, it.pt), g_cfgBody.Get(), D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), Fg(0.94f));
+        CfgText(CfgT(it.en, it.pt), g_cfgBody.Get(), D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), Fg(unused ? 0.55f : 0.94f));
         if (desc)
-            CfgText(desc, g_cfgDesc.Get(), D2D1::RectF(row.r.left + in, top + row.labelH + std::round(2 * s), labelRight, top + block + 4 * s), Fg(0.55f));
+            CfgText(desc, g_cfgDesc.Get(), D2D1::RectF(row.r.left + in, top + row.labelH + std::round(2 * s), labelRight, top + block + 4 * s), Fg(unused ? 0.42f : 0.55f));
         DrawCfgControl(row, (int)i == g_cfg.hover);
+        pieceEnd();
     }
     if (g_cfgNothing)
         CfgText(CfgT(L"No setting found", L"Nenhum ajuste encontrado"), g_cfgBody.Get(),
@@ -9535,15 +10734,42 @@ bool MoreShown() {
     return g_appear >= 1.0f && L_SearchReady();   // Window / Fullscreen: once the window is open
 }
 bool HitMore(float x, float y) { return MoreShown() && InRect(GearRect(), x, y); }
+// Under the mouse the "..." melts into a soft gear (as on macOS): 0 = dots ... 1 = gear, over about 0.22 s
+double g_moreHoverAt = -1;
+void SetMoreHover(bool on) {
+    if (on == g_moreHover) return;
+    double now = Now(), was = g_moreHoverAt < 0 ? 1.0 : std::clamp((now - g_moreHoverAt) / 0.22, 0.0, 1.0);
+    g_moreHover = on;
+    g_moreHoverAt = now - (1.0 - was) * 0.22;   // a turn halfway through starts from where it was
+    StartFrames();
+}
+float MoreGearT() {
+    float u = g_moreHoverAt < 0 ? 1.0f : (float)std::clamp((Now() - g_moreHoverAt) / 0.22, 0.0, 1.0);
+    return g_moreHover ? u : 1.0f - u;
+}
+bool MoreFading() { return g_moreHoverAt >= 0 && Now() - g_moreHoverAt < 0.22; }
 void DrawMoreButton() {
     if (!MoreShown()) return;
     D2D1_RECT_F g = GearRect();
-    float s = g_layout.scale, r = (g.right - g.left) / 2;
+    float s = g_layout.scale, r = (g.right - g.left) / 2, e = Ease(MoreGearT());
     D2D1_POINT_2F c = D2D1::Point2F((g.left + g.right) / 2, (g.top + g.bottom) / 2);
-    if (g_moreHover) DrawGlassButton(g, r, 1.0f, 1.3f, false);
-    g_brush->SetColor(Fg(g_moreHover ? 0.92f : 0.45f));
-    float dr = std::max(1.2f, 1.7f * s), gap = 5.5f * s;
-    for (int i = -1; i <= 1; i++) g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(c.x + i * gap, c.y), dr, dr), g_brush.Get());
+    if (e > 0.001f) DrawGlassButton(g, r, e, 1.15f, false);   // a faint glass circle comes up under it
+    // The dots gather to the middle and fade
+    if (e < 0.999f) {
+        g_brush->SetColor(Fg(0.45f * (1 - e)));
+        float dr = std::max(1.2f, 1.7f * s), gap = 5.5f * s * (1 - 0.6f * e);
+        for (int i = -1; i <= 1; i++) g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(c.x + i * gap, c.y), dr, dr), g_brush.Get());
+    }
+    // The gear turns in from a little smaller, soft (not full white)
+    if (e > 0.001f && g_glyphFormat) {
+        D2D1::Matrix3x2F base;
+        g_target->GetTransform(&base);
+        float k = (0.72f + 0.28f * e) * (r * 2 / (30 * s)) * 0.82f;
+        g_target->SetTransform(D2D1::Matrix3x2F::Scale(k, k, c) * D2D1::Matrix3x2F::Rotation(-70.0f * (1 - e), c) * base);
+        g_brush->SetColor(Fg(0.70f * e));
+        g_target->DrawText(L"\uE713", 1, g_glyphFormat.Get(), D2D1::RectF(c.x - 15 * s, c.y - 15 * s, c.x + 15 * s, c.y + 15 * s), g_brush.Get());
+        g_target->SetTransform(base);
+    }
 }
 
 void DrawGear() {
@@ -9572,26 +10798,107 @@ void DrawCfgBar() {
     float s = g_layout.scale, h = b.bottom - b.top, cy = (b.top + b.bottom) / 2;
     D2D1_RECT_F glyph = D2D1::RectF(b.left + h * 0.22f, cy - 14 * s, b.left + h * 0.22f + 28 * s, cy + 14 * s);
     CfgText(L"", g_cfgGlyphM.Get(), glyph, Fg(0.70f));
-    D2D1_RECT_F text = D2D1::RectF(glyph.right + 8 * s, b.top, GearRect().left - 8 * s, b.bottom);
+    D2D1_RECT_F text = D2D1::RectF(glyph.right + 8 * s, b.top, CfgPlain() ? b.right - 10 * s : GearRect().left - 8 * s, b.bottom);
     if (g_cfg.search.empty())
         CfgText(CfgT(L"Search settings", L"Pesquisar ajustes"), g_cfgBar.Get(), text, Fg(0.50f));
-    else {
+    else
         CfgText(g_cfg.search, g_cfgBar.Get(), text, Fg(0.95f));
-        float x = std::min(text.right, text.left + CfgTextWidth(g_cfg.search, g_cfgBar.Get()) + 1 * s);
+    // The cursor: blinking while the field is in use (in the plain window, also before anything is typed once clicked)
+    bool inUse = !g_cfg.search.empty() || (CfgPlain() && g_cfg.searchFocus);
+    if (inUse && g_caretOn) {
+        float x = g_cfg.search.empty() ? text.left : std::min(text.right, text.left + CfgTextWidth(g_cfg.search, g_cfgBar.Get()) + 1 * s);
+        float half = std::min(10 * s, h * 0.32f);
         g_brush->SetColor(Fg(0.9f));
-        g_target->DrawLine(D2D1::Point2F(x, cy - 10 * s), D2D1::Point2F(x, cy + 10 * s), g_brush.Get(), 1.3f * s);
+        g_target->DrawLine(D2D1::Point2F(x, cy - half), D2D1::Point2F(x, cy + half), g_brush.Get(), 1.3f * s);
     }
+}
+
+// Plain window (as System Settings): it grows out of the bar, then the sections, the title and the cards come in
+void DrawCfgPlainWindow();
+void DrawCfgPlain() {
+    if (g_cfg.anim <= 0.001f) return;
+    if (!g_cfg.closing) { DrawCfgPlainWindow(); return; }
+    // Closing: the whole window squeezed as an old TV switching off, then its bright line
+    CfgCrtState c = CfgCrt();
+    if (c.alpha <= 0.001f) return;
+    D2D1_RECT_F win = CfgPlainRect();
+    D2D1_POINT_2F mid = D2D1::Point2F((win.left + win.right) / 2, (win.top + win.bottom) / 2);
+    D2D1::Matrix3x2F base;
+    g_target->GetTransform(&base);
+    PushOpacity(c.alpha);
+    if (c.sy > 0.02f) {
+        g_target->SetTransform(D2D1::Matrix3x2F::Scale(c.sx, c.sy, mid) * base);
+        DrawCfgPlainWindow();
+        g_target->SetTransform(base);
+    }
+    if (c.line > 0.001f) {
+        float s = g_layout.scale;
+        D2D1_RECT_F r = CfgCrtRect(win, c);
+        float h = std::max(2.0f * s, r.bottom - r.top), w = std::max(4.0f * s, r.right - r.left);
+        D2D1_RECT_F line = D2D1::RectF(mid.x - w / 2, mid.y - h / 2, mid.x + w / 2, mid.y + h / 2);
+        Fill(line, D2D1::ColorF(1, 1, 1, 0.85f * c.line), h / 2);
+        D2D1_RECT_F glow = D2D1::RectF(line.left - 3 * s, line.top - 3 * s, line.right + 3 * s, line.bottom + 3 * s);
+        Fill(glow, D2D1::ColorF(1, 1, 1, 0.18f * c.line), (h + 6 * s) / 2);
+    }
+    g_target->PopLayer();
+}
+void DrawCfgPlainWindow() {
+    CfgFormats(g_layout.scale);
+    float s = g_layout.scale;
+    D2D1_RECT_F win = CfgPlainRect();
+    float rad = CfgPlainRadius(), wa = std::clamp(g_cfg.anim / 0.10f, 0.0f, 1.0f);
+    CfgSurface(win, rad, wa, false);
+    ComPtr<ID2D1RoundedRectangleGeometry> clip;
+    g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(win, rad, rad), &clip);
+    if (!clip) return;
+    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE), nullptr);
+    // The right side is a shade apart from the sections, with a hairline between them
+    float pa = CfgPhase(0.40f);
+    if (pa > 0.001f) {
+        Fill(g_cfg.panel, g_settings.darkText ? D2D1::ColorF(1, 1, 1, 0.30f * pa) : D2D1::ColorF(0.05f, 0.05f, 0.07f, 0.26f * pa));
+        float x = std::round(g_cfg.side.right) + 0.5f;
+        g_brush->SetColor(Fg(0.10f * pa));
+        g_target->DrawLine(D2D1::Point2F(x, g_cfg.side.top), D2D1::Point2F(x, g_cfg.side.bottom), g_brush.Get(), 1.0f);
+    }
+    // The search field on top of the sections
+    float fa = CfgPhase(0.42f);
+    if (fa > 0.001f) {
+        PushOpacity(fa);
+        const D2D1_RECT_F& b = g_cfg.bar;
+        Fill(b, Fg(g_cfg.searchFocus ? 0.11f : 0.08f), std::round(8 * s));
+        if (g_cfg.searchFocus) {   // clicked: an accent ring, as on macOS
+            float bw = std::max(1.5f, 2.0f * s), half = bw / 2, rr = std::round(8 * s);
+            g_brush->SetColor(Alpha(CfgAccent(), 0.85f));
+            g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(b.left - half, b.top - half, b.right + half, b.bottom + half), rr + half, rr + half),
+                                           g_brush.Get(), bw);
+        }
+        DrawCfgBar();
+        g_target->PopLayer();
+    }
+    DrawCfgSideRows(rad);
+    DrawCfgPanelContent();
+    g_target->PopLayer();
 }
 
 // Window / Fullscreen: the window folds into the search field while the bar moves aside (and unfolds when closing)
 // (it stays folded while the settings close: the launcher then fades away from the search field, never reopening the window)
-float CfgWindowT() { return g_cfg.siriMode || g_cfg.closing ? 1.0f : Ease(std::clamp(g_cfg.anim / 0.30f, 0.0f, 1.0f)); }
+float CfgWindowT() { return CfgPlain() || g_cfg.siriMode || g_cfg.closing ? 1.0f : Ease(std::clamp(g_cfg.anim / 0.30f, 0.0f, 1.0f)); }
 D2D1_RECT_F CfgWindowRect() { return LerpRect(g_cfg.window, g_layout.search, CfgWindowT()); }
 float CfgWindowRadius() {
     const D2D1_RECT_F& b = g_layout.search;
     return Lerp(g_cfg.fullscreen ? 0.0f : g_settings.cornerRadius * g_layout.scale, (b.bottom - b.top) / 2, CfgWindowT());
 }
 void DrawCfgWindow() {
+    if (CfgPlain()) {   // Window / Fullscreen: the launcher's window fades away while the settings grow out of its search
+        float a = g_cfg.closing ? 0.0f : 1.0f - std::clamp(g_cfg.anim / 0.30f, 0.0f, 1.0f);
+        if (a <= 0.001f) return;
+        float rad = g_cfg.fullscreen ? 0.0f : g_settings.cornerRadius * g_layout.scale;
+        PushOpacity(a);
+        if (ActiveTheme() != Theme::Custom) DrawThemedShape(g_cfg.window, rad, nullptr, !g_cfg.fullscreen);
+        else { Fill(g_cfg.window, Alpha(g_settings.tint, g_settings.opacity), rad); DrawGlass(g_cfg.window, rad); }
+        g_target->PopLayer();
+        return;
+    }
     float t = CfgWindowT();
     if (t >= 1.0f) return;
     D2D1_RECT_F r = CfgWindowRect();
@@ -9607,6 +10914,7 @@ void DrawCfgWindow() {
 
 // Window / Fullscreen: the search field the window folded into, in the chosen theme (as the sections and the panel)
 void DrawCfgSearchField() {
+    if (CfgPlain()) return;
     const D2D1_RECT_F& b = g_layout.search;
     float rad = std::min(b.bottom - b.top, b.right - b.left) / 2, t = CfgWindowT();
     if (t <= 0.001f) return;
@@ -9628,8 +10936,9 @@ void DrawCfgClosing() {
     DrawGear();
 }
 
-void DrawCfgBehind() { DrawCfgSide(); }
+void DrawCfgBehind() { if (CfgPlain()) DrawCfgPlain(); else DrawCfgSide(); }
 void DrawCfg() {
+    if (CfgPlain()) return;   // all drawn by DrawCfgBehind
     CfgFormats(g_layout.scale);
     DrawCfgPanel();
     DrawCfgBar();
@@ -9643,8 +10952,8 @@ void CfgApplySettings() {
     bool modeChanged = g_settings.siri != g_cfg.siriMode || g_settings.siriOriginal != g_cfg.siriOriginal || g_settings.fullscreen != g_cfg.fullscreen;
     // What would add or remove pieces around the bar (the floating power button) also waits for the next opening:
     // the launcher closes the way it was opened
-    bool buttonChanged = g_settings.siriPowerButton != g_cfg.powerButton;
-    if (buttonChanged) g_settings.siriPowerButton = g_cfg.powerButton;
+    bool buttonChanged = g_settings.siriPowerButton != g_cfg.powerButton || g_settings.siriPowerLeft != g_cfg.powerLeft;
+    if (buttonChanged) { g_settings.siriPowerButton = g_cfg.powerButton; g_settings.siriPowerLeft = g_cfg.powerLeft; }
     g_cfg.pendingReload = modeChanged || buttonChanged;
     if (modeChanged) {
         g_settings.siri = g_cfg.siriMode; g_settings.siriOriginal = g_cfg.siriOriginal; g_settings.fullscreen = g_cfg.fullscreen;
@@ -9657,6 +10966,7 @@ void CfgApplySettings() {
 }
 
 void CfgSet(const CfgItem& it, const std::wstring& value, bool save = true) {
+    ++g_cfgVersion;
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     if (!wcscmp(it.key, L"appearance.transparency")) {   // kept for the active theme only
         if (!g_themeTransparencyLoaded) LoadThemeTransparency();
@@ -9677,6 +10987,7 @@ void CfgSet(const CfgItem& it, const std::wstring& value, bool save = true) {
 
 // One setting back to its default (as an override when Windhawk has another value)
 void CfgSetDefault(const CfgDefault& d) {
+    ++g_cfgVersion;
     const CfgItem* it = CfgFind(d.key);
     if (!it) return;
     std::wstring base = CfgWindhawkValue(*it);
@@ -9685,7 +10996,15 @@ void CfgSetDefault(const CfgDefault& d) {
 }
 
 // The look of the active theme differs from its defaults (Appearance; for Custom also its own section)
-bool CfgThemeChanged() {
+bool CfgThemeChangedNow();
+bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section: worked out once per change)
+    static unsigned version = 0;
+    static Theme theme = Theme::Custom;
+    static bool changed = false;
+    if (version != g_cfgVersion || theme != g_settings.theme) { version = g_cfgVersion; theme = g_settings.theme; changed = CfgThemeChangedNow(); }
+    return changed;
+}
+bool CfgThemeChangedNow() {
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     if (!g_themeTransparencyLoaded) LoadThemeTransparency();
     if (g_themeTransparency.count(ThemeName(g_settings.theme))) return true;
@@ -9700,25 +11019,62 @@ bool CfgThemeChanged() {
 }
 
 // A folder dialog for the icon gallery
-void CfgPickIconsFolder() {
+// A Windows dialog over the launcher. The launcher and its glass window are always on top, so they would cover the
+// dialog (the glass even with nothing in it): while it is open they step aside (hidden for file and folder pickers,
+// just not on top for a message), and come back as they were
+bool g_dialogHid;
+void DialogBegin(bool hide) {
+    g_dialogOpen = true;
+    if (g_glassWnd) ShowWindow(g_glassWnd, SW_HIDE);
+    g_dialogHid = hide && IsWindowVisible(g_wnd);
+    if (g_dialogHid) ShowWindow(g_wnd, SW_HIDE);
+    else SetWindowPos(g_wnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+void DialogEnd() {
+    if (g_dialogHid) { ShowWindow(g_wnd, SW_SHOWNA); g_dialogHid = false; }
+    SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    g_glassPlaced = RECT{};   // the glass window is put back under the launcher at the next frame
+    g_dialogOpen = false;
+    if (g_shown) { Render(); StartFrames(); }
+}
+
+std::wstring PickIconsFolder() {
     ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return {};
     DWORD options = 0;
     dlg->GetOptions(&options);
     dlg->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
     dlg->SetTitle(CfgT(L"Choose the gallery folder", L"Escolher a pasta da galeria"));
-    g_dialogOpen = true;
-    SetWindowPos(g_wnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    DialogBegin(true);
     HRESULT hr = dlg->Show(g_wnd);
-    SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    g_dialogOpen = false;
+    DialogEnd();
     if (g_shown) ForceForeground(g_wnd);
     ComPtr<IShellItem> res;
     PWSTR path = nullptr;
-    if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return;
+    if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return {};
     std::wstring folder = path;
     CoTaskMemFree(path);
-    if (const CfgItem* it = CfgFind(L"grid.iconsFolder")) CfgSet(*it, folder);
+    return folder;
+}
+void CfgPickIconsFolder() {
+    std::wstring folder = PickIconsFolder();
+    if (!folder.empty())
+        if (const CfgItem* it = CfgFind(L"grid.iconsFolder")) CfgSet(*it, folder);
+}
+// Picked from the app's menu (the settings panel is closed): only this value is stored, nothing else is reapplied
+bool PickIconsFolderFromMenu() {
+    std::wstring folder = PickIconsFolder();
+    if (folder.empty()) return false;
+    if (const CfgItem* it = CfgFind(L"grid.iconsFolder")) {
+        if (!g_cfgOverridesLoaded) LoadCfgOverrides();
+        std::wstring base = CfgWindhawkValue(*it);
+        if (folder == base) g_cfgOverrides.erase(it->key);
+        else g_cfgOverrides[it->key] = {folder, base};
+        SaveCfgOverrides();
+        g_cfgValues[it->key] = folder;
+    }
+    g_ghSetting = folder;
+    return true;
 }
 
 void CfgResetTheme() {
@@ -9841,11 +11197,9 @@ std::wstring StorageString(PCWSTR key) {
 
 // A message over the launcher (it stays open while the box is up)
 int BackupMessage(PCWSTR text, UINT flags) {
-    g_dialogOpen = true;
-    SetWindowPos(g_wnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    DialogBegin(false);
     int r = MessageBoxW(g_wnd, text, L"Siri Plus Launchpad", flags);
-    SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    g_dialogOpen = false;
+    DialogEnd();
     if (g_shown) ForceForeground(g_wnd);
     return r;
 }
@@ -9864,11 +11218,9 @@ bool PickBackupFile(bool save, std::wstring& out) {
         swprintf_s(name, L"SiriPlusLaunchpad %04d-%02d-%02d.siribackup", st.wYear, st.wMonth, st.wDay);
         dlg->SetFileName(name);
     }
-    g_dialogOpen = true;
-    SetWindowPos(g_wnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    DialogBegin(true);
     HRESULT hr = dlg->Show(g_wnd);
-    SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    g_dialogOpen = false;
+    DialogEnd();
     if (g_shown) ForceForeground(g_wnd);
     ComPtr<IShellItem> res; PWSTR path = nullptr;
     if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return false;
@@ -9883,7 +11235,7 @@ void BackupExport() {
     std::string text = std::string(kBackupHeader) + "\n";
     // Every setting as it is now (the icon gallery folder is one of them)
     for (const CfgItem& it : kCfgItems) {
-        if (it.type == kCfgButton) continue;
+        if (it.type == kCfgButton || it.type == kCfgGroup) continue;
         text += "S\t" + B64W(it.key) + "\t" + B64W(CfgIsInt(it) ? std::to_wstring(CfgInt(it.key)) : CfgStr(it.key)) + "\n";
     }
     for (PCWSTR key : kBackupStrings) text += "V\t" + B64W(key) + "\t" + B64W(StorageString(key)) + "\n";
@@ -9955,7 +11307,7 @@ void BackupImport() {
         std::wstring key, value;
         if (f.size() == 3 && f[0] == "S" && B64ToW(f[1], key) && B64ToW(f[2], value)) {
             const CfgItem* it = CfgFind(key.c_str());
-            if (!it || it->type == kCfgButton) continue;
+            if (!it || it->type == kCfgButton || it->type == kCfgGroup) continue;
             std::wstring base = CfgWindhawkValue(*it);
             if (value != base) g_cfgOverrides[it->key] = {value, base};
         } else if (f.size() == 3 && f[0] == "V" && B64ToW(f[1], key) && B64ToW(f[2], value)) {
@@ -10049,9 +11401,9 @@ bool CfgPickColor(int item) {
     cc.rgbResult = RGB((BYTE)std::lround(c.r * 255), (BYTE)std::lround(c.g * 255), (BYTE)std::lround(c.b * 255));
     cc.lpCustColors = custom;
     cc.Flags = CC_FULLOPEN | CC_RGBINIT;
-    g_dialogOpen = true;
+    DialogBegin(true);
     BOOL ok = ChooseColorW(&cc);
-    g_dialogOpen = false;
+    DialogEnd();
     ForceForeground(g_wnd);
     if (!ok) return false;
     wchar_t text[8];
@@ -10091,6 +11443,7 @@ void CfgEnter() {
     g_cfg.section = g_cfgLastSection;
     g_cfg.siriMode = g_settings.siri; g_cfg.siriOriginal = g_settings.siriOriginal; g_cfg.fullscreen = g_settings.fullscreen;
     g_cfg.powerButton = g_settings.siriPowerButton;
+    g_cfg.powerLeft = g_settings.siriPowerLeft;
     // The window grows to the whole work area; everything keeps its place on the screen
     float dx = (float)(L.area.left - mi.rcWork.left), dy = (float)(L.area.top - mi.rcWork.top);
     g_cfg.home = D2D1::RectF(L.search.left + dx, L.search.top + dy, L.search.right + dx, L.search.bottom + dy);
@@ -10152,6 +11505,24 @@ void CfgAbort() {
 
 bool CfgStep(float dt) {
     if (!g_cfg.active) return false;
+    if (CfgPlain()) {
+        bool moving = false;
+        if (g_cfg.sectionFade < 1.0f) { g_cfg.sectionFade = std::min(1.0f, g_cfg.sectionFade + dt * g_settings.animSpeed / 0.18f); moving = true; }
+        float target = g_cfg.closing ? 0.0f : 1.0f;
+        if (g_cfg.anim != target) {
+            // Opening about 0.7 s (the window, then its content in turn); closing about 0.4 s
+            float step = dt * g_settings.animSpeed / (g_cfg.closing ? 0.42f : 0.70f);
+            g_cfg.anim = g_cfg.closing ? std::max(0.0f, g_cfg.anim - step) : std::min(1.0f, g_cfg.anim + step);
+            return true;
+        }
+        if (g_cfg.closing) {   // switched off: the launcher hides (what changed shows the next time it opens)
+            if (g_cfgOverridesDirty) SaveCfgOverrides();
+            g_lastClosed = Now();
+            HideNow();
+            return true;
+        }
+        return moving;
+    }
     float target = g_cfg.closing ? 0.0f : 1.0f;
     if (g_cfg.anim != target) {
         float step = dt * g_settings.animSpeed / (g_cfg.closing ? 0.90f : 1.00f);
@@ -10203,6 +11574,7 @@ void CfgSelectSection(int section) {
     if (section < 0 || section >= kCfgSectionCount) return;
     CfgCommitEdit();
     if (g_cfg.capture >= 0) { g_cfg.capture = -1; UpdateCategoryHotkeys(); }
+    if (section != g_cfg.section || !g_cfg.search.empty()) { g_cfg.sectionFade = 0; StartFrames(); }
     g_cfg.section = section; g_cfg.search.clear(); g_cfg.scroll = 0;
     ComputeLayout(); Render();
 }
@@ -10213,6 +11585,7 @@ void CfgClickRow(int row, float x, float y) {
     const CfgItem& it = kCfgItems[item];
     float s = g_layout.scale;
     switch (it.type) {
+        case kCfgGroup: break;   // a title, never a row
         case kCfgToggle: CfgSet(it, _wtoi(CfgValue(it).c_str()) ? L"0" : L"1"); break;
         case kCfgSlider:
             g_cfg.drag = item;
@@ -10265,12 +11638,14 @@ void CfgShortcutKey(WPARAM key) {
     CfgSet(it, text);   // reloads the settings, which registers the hotkeys again
 }
 
+bool CfgGearHit(float x, float y) { return !CfgPlain() && InRect(GearRect(), x, y); }
+
 void CfgHover(float x, float y) {
     int side = CfgSideAt(x, y);
     int row = CfgSettled() ? CfgRowAt(x, y) : -1;
     if (row >= 0 && !CfgOnControl(row, x, y)) row = -1;
     bool done = CfgSettled() && InRect(g_cfg.done, x, y);
-    bool gear = InRect(GearRect(), x, y);
+    bool gear = CfgGearHit(x, y);
     if (side != g_cfg.sideHover || row != g_cfg.hover || done != g_cfg.doneHover || gear != g_cfg.gearHover) {
         g_cfg.sideHover = side; g_cfg.hover = row; g_cfg.doneHover = done; g_cfg.gearHover = gear;
         Render();
@@ -10288,7 +11663,7 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
             float px = (float)p.x, py = (float)p.y;
             int row = CfgSettled() ? CfgRowAt(px, py) : -1;
             bool hand = CfgSideAt(px, py) >= 0 || (row >= 0 && CfgOnControl(row, px, py)) || (CfgSettled() && InRect(g_cfg.done, px, py)) ||
-                        InRect(GearRect(), px, py);
+                        CfgGearHit(px, py);
             SetCursor(LoadCursorW(nullptr, hand ? IDC_HAND : IDC_ARROW));
             result = TRUE;
             return true;
@@ -10305,7 +11680,12 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
         case WM_LBUTTONDOWN: {
             if (g_cfg.closing) return true;
             g_ignoreUp = true;
-            if (InRect(GearRect(), x, y) || (CfgSettled() && InRect(g_cfg.done, x, y))) { CfgExit(); return true; }
+            {
+                bool focus = CfgPlain() && CfgSettled() && InRect(g_cfg.bar, x, y);
+                if (focus != g_cfg.searchFocus) { g_cfg.searchFocus = focus; Render(); }
+                if (focus) { CaretRestart(); Render(); return true; }
+            }
+            if (CfgGearHit(x, y) || (CfgSettled() && InRect(g_cfg.done, x, y))) { CfgExit(); return true; }
             int side = CfgSideAt(x, y);
             int row = CfgSettled() ? CfgRowAt(x, y) : -1;
             bool onControl = row >= 0 && CfgOnControl(row, x, y);
@@ -10374,6 +11754,7 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
             if (ch == 8) { if (g_cfg.search.empty()) return true; g_cfg.search.pop_back(); }
             else if (ch >= 32 && ch != 0x7F) { if (g_cfg.search.size() < 40) g_cfg.search += ch; }
             else return true;
+            g_cfg.searchFocus = true; CaretRestart();
             g_cfg.scroll = 0; g_cfg.hover = -1;
             ComputeLayout(); Render();
             return true;
@@ -10383,9 +11764,9 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Icon gallery: right-click an app > "Icon from gallery..." shows the images of a folder chosen in the settings (for
+// Icon gallery: right-click an app > "Change icon..." shows the images of a folder chosen in the settings (for
 // example a downloaded icon pack or a copy of an icon repository) in the grid, with the bar searching them. The chosen
-// one becomes the app's custom icon (like "Change icon..."). Nothing is downloaded; the images are only read.
+// one becomes the app's custom icon. Nothing is downloaded; the images are only read.
 
 std::string ToUtf8(const std::wstring& w) {
     if (w.empty()) return {};
@@ -10788,16 +12169,14 @@ void GhClose(bool render = true) {
     StartFrames();
 }
 
-// Right-click an app > "Icon from gallery..."
+// Right-click an app > "Change icon..." (asks for the folder the first time)
 void GhOpen(App* app) {
     if (!app) return;
     std::wstring folder = GhCleanFolder(g_ghSetting);
-    if (folder.empty()) {
-        MessageBoxW(g_wnd, CfgT(L"Choose the icon folder first: settings (⋯) > Apps and icons > Icon gallery folder",
-                                L"Escolha primeiro a pasta de ícones: ajustes (⋯) > Apps e ícones > Pasta da galeria de ícones"),
-                    L"Siri Plus Launchpad", MB_ICONINFORMATION);
-        if (g_shown) ForceForeground(g_wnd);
-        return;
+    if (folder.empty()) {   // no icon folder yet: ask for it now
+        if (!PickIconsFolderFromMenu()) return;
+        folder = GhCleanFolder(g_ghSetting);
+        if (folder.empty()) return;
     }
     if (folder != g_gh.key) {   // another folder: start over
         if (g_ghColorsNew) GhSaveColors();
@@ -10883,7 +12262,9 @@ void OnGhColorTimer() {
 void GhApply(const std::wstring& path) {
     std::wstring file;
     if (!GhEnsureFile(g_gh.key, path, file)) {
+        DialogBegin(false);
         MessageBoxW(g_wnd, CfgT(L"This image is no longer in the folder.", L"Esta imagem não está mais na pasta."), L"Siri Plus Launchpad", MB_ICONWARNING);
+        DialogEnd();
         if (g_shown) ForceForeground(g_wnd);
         return;
     }
@@ -10895,7 +12276,9 @@ void GhApply(const std::wstring& path) {
     for (auto& a : g_apps) apply(*a);
     for (auto& f : g_folders) for (auto& a : f.apps) apply(*a);
     if (!applied) {
+        DialogBegin(false);
         MessageBoxW(g_wnd, CfgT(L"Could not load this image.", L"Não foi possível carregar esta imagem."), L"Siri Plus Launchpad", MB_ICONWARNING);
+        DialogEnd();
         if (g_shown) ForceForeground(g_wnd);
         return;
     }
@@ -11131,9 +12514,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CLIPBOARDUPDATE: g_clipRetries = 0; OnClipboardUpdate(); return 0;
         case WM_TIMER:
             if (wParam == kTimerFrame) OnFrame();
+            else if (wParam == kTimerCaret) {
+                if (!g_shown) { KillTimer(hwnd, kTimerCaret); return 0; }
+                // Only when a cursor can be on screen: the settings search in use, or the bar (Window mode: once active)
+                bool caret = g_cfg.active ? g_cfg.searchFocus || !g_cfg.search.empty() : g_settings.siri || g_searchActive;
+                if (!caret || g_settings.light) { g_caretOn = true; return 0; }   // light mode: a steady cursor (no redraws)
+                g_caretOn = !g_caretOn;
+                if (!g_frameTimer) Render();   // while animating the next frame shows it anyway
+            }
             else if (wParam == kTimerFileSearch) {
                 KillTimer(hwnd, kTimerFileSearch);
-                if (g_shown && g_siriTab == 1) { StartFileSearch(g_query); Render(); }
+                if (g_shown && (g_siriTab == 1 || g_siriTab == kTabAll)) {
+                    StartFileSearch(g_query);
+                    if (g_siriTab == kTabAll) RefreshTabItems(false);   // "Searching files..." under the apps
+                    else Render();
+                }
             }
             else if (wParam == kTimerMenuLeave) {
                 if (!g_menu.open || !g_menu.category || g_menu.closing || g_menu.keyboard || g_trackingMouse) { KillTimer(hwnd, kTimerMenuLeave); return 0; }
@@ -11228,7 +12623,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     else return 0;   // opened by Esc: waits for the mouse or the keyboard
                 }
                 bool mh = HitMore(mx, my);
-                if (mh != g_moreHover) { g_moreHover = mh; Render(); }
+                if (mh != g_moreHover) { SetMoreHover(mh); Render(); }
                 int h = MenuHit(mx, my);
                 if (h != g_menu.hover) { g_menu.hover = h; Render(); }
                 return 0;
@@ -11273,7 +12668,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (gh != g_gear.hover) { g_gear.hover = gh; Render(); }
                 }
                 bool mh = HitMore((float)x, (float)y);
-                if (mh != g_moreHover) { g_moreHover = mh; Render(); }
+                if (mh != g_moreHover) { SetMoreHover(mh); Render(); }
                 if (g_settings.siriOriginal && !g_menu.open && !g_siriExpanded && !g_siriClosingPill && g_pillIntro >= kIntroCircle &&
                     !g_gear.shown && !g_moreHover && InRect(g_layout.search, (float)x, (float)y)) {
                     OpenCategoryMenu();
@@ -11298,7 +12693,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_MOUSELEAVE:
             g_trackingMouse = false; g_dotsHover = false; g_dotHover = -1; StartFrames();
-            if (g_gear.hover || g_moreHover) { g_gear.hover = g_moreHover = false; Render(); }
+            if (g_gear.hover || g_moreHover) { g_gear.hover = false; SetMoreHover(false); Render(); }
             if (g_powerHover) { g_powerHover = false; Render(); }
             if (g_clearHover) { g_clearHover = false; Render(); }
             if (g_backHover) { g_backHover = false; Render(); }
@@ -11343,10 +12738,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
             if (g_settings.siri && PowerButtonOn() && InRect(g_layout.btnPower, (float)x, (float)y)) {
-                // Siri without the power pill: the menu opens outside the results box, on its right
+                // Siri without the power pill: the menu opens outside the results box, on the button's side
                 g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
-                float s = g_layout.scale, boxRight = g_layout.width / 2.0f + SiriPanelWidthNow(s) / 2;
-                OpenMenu(std::max(boxRight, g_layout.btnPower.right) + 12 * s, g_layout.btnPower.top, PowerMenuItems());
+                float s = g_layout.scale;
+                if (g_settings.siriPowerLeft) {
+                    float boxLeft = g_layout.width / 2.0f - SiriPanelWidthNow(s) / 2;
+                    OpenMenu(std::min(boxLeft, g_layout.btnPower.left) - 12 * s, g_layout.btnPower.top, PowerMenuItems(), true);
+                } else {
+                    float boxRight = g_layout.width / 2.0f + SiriPanelWidthNow(s) / 2;
+                    OpenMenu(std::max(boxRight, g_layout.btnPower.right) + 12 * s, g_layout.btnPower.top, PowerMenuItems());
+                }
                 return 0;
             }
             if (g_openFolderIndex < 0 && PowerButtonOn() && InRect(g_layout.btnPower, (float)x, (float)y)) {
@@ -11394,7 +12795,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 CommitChipRename();
                 if (HitBack((float)x, (float)y)) {
                     g_backHover = false; g_ignoreUp = true;
-                    BackToCategoryMenu();
+                    if (g_settings.siriOriginal) BackToCategoryMenu();
+                    else {   // Floating: back to the plain bar (search cleared, Applications, the box closed)
+                        if (!g_query.empty()) { ClearQuery(); QueryChanged(); }
+                        if (g_siriTab != 0) SetSiriTab(0);
+                        CollapseSiri();
+                        Render();
+                    }
                     return 0;
                 }
                 if (g_settings.siriOriginal && !g_siriChosen && InRect(g_layout.search, (float)x, (float)y)) {
@@ -11592,9 +12999,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
                     separate();
                     items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
+                    items.push_back({Tr(L"Create desktop shortcut"), kMenuDesktop});
                     separate();
-                    items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
-                    items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
+                    items.push_back({Tr(L"Change icon..."), kMenuGhIcon});
                     if (g_customIcons.count(a->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                     separate();
                     items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
@@ -11634,9 +13041,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     } else {
                         items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
                     }
+                    items.push_back({Tr(L"Create desktop shortcut"), kMenuDesktop});
                     items.push_back({L"", 0, true});
-                    items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
-                    items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
+                    items.push_back({Tr(L"Change icon..."), kMenuGhIcon});
                     if (g_customIcons.count(a->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                     items.push_back({L"", 0, true});
                     items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
@@ -11655,8 +13062,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (idx >= 0) {
                         g_menu.folderApp = idx;
                         if (App* fa = MenuApp()) {
-                            items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
-                    items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
+                            items.push_back({Tr(L"Create desktop shortcut"), kMenuDesktop});
+                            items.push_back({L"", 0, true});
+                            items.push_back({Tr(L"Change icon..."), kMenuGhIcon});
                             if (g_customIcons.count(fa->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                             items.push_back({L"", 0, true});
                             items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
@@ -11784,7 +13192,7 @@ DWORD WINAPI StartThread(void*) {
     g_titleFormat.Reset(); g_menuFormat.Reset(); g_tabFormat.Reset(); g_listFormat.Reset();
     g_listSubFormat.Reset(); g_glyphFormat.Reset(); g_hintFormat.Reset();
     g_glyphLargeFormat.Reset(); g_categoryFormat.Reset(); g_keyFormat.Reset();
-    ResetTarget(); g_dwrite.Reset(); g_d2d.Reset();
+    ResetTarget(); g_shadowCuts.clear(); g_gradientStops.clear(); g_dwrite.Reset(); g_d2d.Reset();
     DestroyGlassWindow();
     if (g_glassClassOk) { UnregisterClassW(kGlassClass, instance); g_glassClassOk = false; }
     if (classOk) UnregisterClassW(kWindowClass, instance);
