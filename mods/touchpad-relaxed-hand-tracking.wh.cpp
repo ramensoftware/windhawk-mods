@@ -24,7 +24,7 @@ Move the pointer with more fingers resting on the precision touchpad, as if glid
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
 - **Movement:** each finger weighs as much as it moves, so resting fingers drop out and one which lags (usually the thumb) doesn't fight the others. With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
 - **Click:** you don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad. **Tap to click** option controls its sensitivity.
-- **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll while "inside" the more-fingers action. **Both will get activated if you start with 2 and rest more on the touchpad.**
+- **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll, while "inside" the more-fingers action (or with 2 fingers detection enabled). **Both will get activated if you start with 2 and rest more on the touchpad.**
 
 ## 4 and 3 fingers detection
 
@@ -44,10 +44,8 @@ Right after installing, before anything is learned, the glide uses a default spe
 
 - Requires a precision touchpad.
 - Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. **Disabling Windows three and four fingers swipes removes the conflict.**
-- Two-finger scroll is ignored while more-fingers gliding. Scrolling is only blocked in programs which receive it as mouse wheel input, not in those which scroll through the Windows precision touchpad path.
 - **Programs running as administrator need Windhawk 2.** On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.
 - Movements against the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.
-- The two-finger scroll reaches programs as mouse wheel input. Excel gets the native touchpad scroll through its own precision channel, which the mod can't use, and scrolls poorly with the wheel over its cells. **Keep Windows two-finger scroll if you work a lot in Excel and alike.**
 
 ## Credits
 
@@ -73,7 +71,7 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   $description: When fewer fingers move or are left gliding. 1.0 is native.
 - armFive: true
   $name: 5 fingers detection
-  $description: Tracking starts with five contacts. Stops only if all fingers lift the pad.
+  $description: The glide starts with five contacts, the thumb included. Off, it only starts with the counts enabled below.
 - armFour: false
   $name: 4 fingers detection
   $description: You have to disable the four-finger swipes in Windows touchpad settings, otherwise it also responds.
@@ -86,6 +84,12 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 - scrollReverse: false
   $name: Reverse scroll direction
   $description: For the two-finger scroll. Off, page follows the fingers, like Windows default.
+- scrollOutput: touch
+  $name: Scroll output
+  $description: Mouse wheel works everywhere, but some programs (Excel) scroll badly by notches. Touch scrolls smoothly in programs that support it, with their own inertia, but may bring the scrolling background window to front.
+  $options:
+  - wheel: Mouse wheel
+  - touch: Touch
 */
 // ==/WindhawkModSettings==
 
@@ -191,6 +195,8 @@ constexpr DWORD kHoldTapMaxMs = 400;
 // holds it (tap-tap-hold drags word by word, like Windows). If not, the click goes out when the wait ends.
 constexpr DWORD kDoubleWaitMs = 200;
 constexpr double kHoldTapMaxMm = 4.0;
+// A finger back after a click which hasn't moved by then is the hand resting again: it won't start a hold.
+constexpr DWORD kHoldStartMs = 600;
 
 // Two-finger tap: both fingers down together, up within kTwoTapMaxMs, moving at most kTwoTapMaxMm. A right click
 // follows unless the fingers come back within kTwoTapWaitMs, which starts a scroll instead.
@@ -209,6 +215,11 @@ constexpr double kInertiaMinSpeed = 600.0;
 constexpr double kInertiaStopSpeed = 120.0;
 constexpr double kInertiaTau = 1.0;
 constexpr UINT kInertiaStepMs = 16;
+// Touch output of the scroll: contact px per finger mm, px between the two contacts, and under how many px of
+// movement lifting them is canceled instead, since it would be a touch tap, a click.
+constexpr double kTouchPxPerMm = 10.0;
+constexpr int kTouchSpreadPx = 20;
+constexpr double kTouchTapPx = 10.0;
 
 constexpr TapProfile kTapProfiles[] = {
     {false, 0, 0, 0, 0, 0},          // off
@@ -248,6 +259,7 @@ std::atomic<DWORD> g_pinchTick;
 std::atomic<double> g_multOne{1.0};
 std::atomic<bool> g_armTwo;
 std::atomic<bool> g_scrollReverse;
+std::atomic<bool> g_touchScroll;
 std::atomic<bool> g_armThree;
 std::atomic<bool> g_armFour;
 std::atomic<bool> g_armFive{true};
@@ -334,6 +346,7 @@ struct {
     double looseTapX, looseTapY;
     bool holding;
     ULONG holdId;
+    std::vector<ULONG> confDropped;  // lost their Confidence with the tip still down
     bool pendingDouble;  // a click is owed, waiting for a possible hold
     DWORD restLiftTime;  // when a resting finger last lifted with the hand still on the pad
     int lastTouching;
@@ -375,6 +388,16 @@ struct {
     double inertiaTime;
 } g_two;
 
+// The two touch contacts of the scroll's touch output.
+struct {
+    bool tried;  // InitializeTouchInjection was called
+    bool ready;  // and succeeded
+    bool down;
+    POINT origin;  // the pointer where the scroll began
+    double x, y;   // contacts' offset from origin, px
+    double moved;  // px
+} g_touch;
+
 // Sample under way of native one-finger movement.
 struct {
     bool active;
@@ -407,6 +430,7 @@ void LoadSettings() {
     g_multOne = ReadMultiplier(L"multiplierOne", 1.0);
     g_armTwo = Wh_GetIntSetting(L"armTwo");
     g_scrollReverse = Wh_GetIntSetting(L"scrollReverse");
+    g_touchScroll = wcscmp(WindhawkUtils::StringSetting::make(L"scrollOutput"), L"touch") == 0;
     g_armThree = Wh_GetIntSetting(L"armThree");
     g_armFour = Wh_GetIntSetting(L"armFour");
     g_armFive = Wh_GetIntSetting(L"armFive");
@@ -601,6 +625,8 @@ void SendPrimary(bool down);
 
 void FirePendingDouble(DWORD now);
 
+void TouchEnd();
+
 void EndGlide() {
     FirePendingDouble(GetTickCount());
     if (g_state.holding) {
@@ -608,11 +634,13 @@ void EndGlide() {
         SendPrimary(false);
     }
     g_state.pairScroll = false;
+    TouchEnd();
     g_travelLog.clear();
     g_pointerLog.clear();
     g_state.restLiftTime = 0;
     g_state.refIds.clear();
     g_state.allLast.clear();
+    g_state.confDropped.clear();
     if (g_state.armed) {
         Wh_Log(L"Glide stopped");
         SetWheelBlock(false);
@@ -712,6 +740,98 @@ void FlushScroll() {
     }
 }
 
+// Touch output: the scroll as two touch contacts dragged together, which programs with touch support scroll
+// smoothly and with their own inertia, like the native touchpad scroll.
+
+bool InjectPan(POINTER_FLAGS flags) {
+    POINTER_TOUCH_INFO contacts[2]{};
+    for (int i = 0; i < 2; i++) {
+        POINTER_INFO& p = contacts[i].pointerInfo;
+        p.pointerType = PT_TOUCH;
+        p.pointerId = i;
+        p.pointerFlags = flags;
+        p.ptPixelLocation.x =
+            g_touch.origin.x + (LONG)std::lround(g_touch.x) + (i ? kTouchSpreadPx / 2 : -kTouchSpreadPx / 2);
+        p.ptPixelLocation.y = g_touch.origin.y + (LONG)std::lround(g_touch.y);
+    }
+    return InjectTouchInput(ARRAYSIZE(contacts), contacts);
+}
+
+// Both contacts stay on the monitor where the scroll began: off the screen the injection fails.
+bool TouchFits(double x, double y) {
+    MONITORINFO mi{.cbSize = sizeof(mi)};
+    if (!GetMonitorInfo(MonitorFromPoint(g_touch.origin, MONITOR_DEFAULTTONEAREST), &mi)) {
+        return false;
+    }
+    const RECT& r = mi.rcMonitor;
+    LONG px = g_touch.origin.x + (LONG)std::lround(x);
+    LONG py = g_touch.origin.y + (LONG)std::lround(y);
+    return px - kTouchSpreadPx / 2 - r.left > 2 && r.right - 1 - (px + kTouchSpreadPx / 2) > 2 && py - r.top > 2 &&
+           r.bottom - 1 - py > 2;
+}
+
+// at: where the contacts come down, nullptr for the pointer.
+bool TouchBegin(const POINT* at) {
+    if (!g_touch.tried) {
+        g_touch.tried = true;
+        g_touch.ready = InitializeTouchInjection(2, TOUCH_FEEDBACK_NONE);
+        if (!g_touch.ready) {
+            Wh_Log(L"InitializeTouchInjection error: %u", GetLastError());
+        }
+    }
+    if (!g_touch.ready) {
+        return false;
+    }
+    if (at) {
+        g_touch.origin = *at;
+    } else if (!GetCursorPos(&g_touch.origin)) {
+        return false;
+    }
+    g_touch.x = 0;
+    g_touch.y = 0;
+    g_touch.moved = 0;
+    if (!TouchFits(0, 0) || !InjectPan(POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT)) {
+        Wh_Log(L"Touch scroll can't start: %u", GetLastError());
+        return false;
+    }
+    g_touch.down = true;
+    return true;
+}
+
+// Touch takes the mouse pointer to the contacts and hides it until the mouse moves: a move back to where the
+// scroll began shows it there again.
+void TouchEnd() {
+    if (!g_touch.down) {
+        return;
+    }
+    g_touch.down = false;
+    InjectPan(g_touch.moved >= kTouchTapPx ? POINTER_FLAG_UP : POINTER_FLAG_UP | POINTER_FLAG_CANCELED);
+    SendCursorPos(g_touch.origin.x + 1, g_touch.origin.y);
+    SendCursorPos(g_touch.origin.x, g_touch.origin.y);
+}
+
+void TouchPan(double dxMm, double dyMm) {
+    double sign = g_scrollReverse ? -1 : 1;
+    double ddx = dxMm * kTouchPxPerMm * sign;
+    double ddy = dyMm * kTouchPxPerMm * sign;
+    // At the edge of the screen the contacts lift and come down again where the scroll began.
+    if (!TouchFits(g_touch.x + ddx, g_touch.y + ddy)) {
+        POINT origin = g_touch.origin;
+        TouchEnd();
+        if (!TouchBegin(&origin)) {
+            return;
+        }
+    }
+    g_touch.x += ddx;
+    g_touch.y += ddy;
+    g_touch.moved += std::hypot(ddx, ddy);
+    // Sent even without movement: contacts left without input are canceled by the system.
+    if (!InjectPan(POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT)) {
+        Wh_Log(L"InjectTouchInput error: %u", GetLastError());
+        g_touch.down = false;
+    }
+}
+
 // Wheel units follow the fingers, without acceleration. Off, the page follows the fingers: down scrolls up.
 void Scroll(double dxMm, double dyMm, double dt) {
     bool jitter = std::hypot(dxMm, dyMm) < kJitterMm;
@@ -724,6 +844,10 @@ void Scroll(double dxMm, double dyMm, double dt) {
         dxMm = 0;
     } else if (std::fabs(dxMm) > 2 * std::fabs(dyMm)) {
         dyMm = 0;
+    }
+    if (g_touchScroll && (g_touch.down || TouchBegin(nullptr))) {
+        TouchPan(dxMm, dyMm);
+        return;
     }
     double sign = g_scrollReverse ? -1 : 1;
     double ux = -dxMm * kScrollUnitsPerMm * kScrollHorizontalShare * sign;
@@ -766,7 +890,12 @@ void InertiaStep() {
     FlushScroll();
 }
 
+// With touch output, lifting the contacts leaves the inertia to the program.
 void StartInertia() {
+    if (g_touch.down) {
+        TouchEnd();
+        return;
+    }
     if (!g_two.inertia && std::hypot(g_two.velX, g_two.velY) >= kInertiaMinSpeed) {
         g_two.inertia = true;
         g_two.inertiaTime = Now();
@@ -1047,8 +1176,17 @@ void TwoFingerTap(DWORD now) {
 // Windows doesn't recognize taps with other fingers resting; here, while gliding, they work as on the touchpad
 // alone: one finger taps (any number of times) and taps and holds, two fingers right click and tap-hold to
 // scroll. The fingers which started the glide never tap, and nothing taps while the hand moves.
-void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int touching) {
+void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<const Contact*>& tips, DWORD now,
+                  int touching) {
     const TapProfile& tap = kTapProfiles[g_tapProfile];
+
+    g_state.confDropped.erase(
+        std::remove_if(g_state.confDropped.begin(), g_state.confDropped.end(),
+                       [&](ULONG id) {
+                           return std::none_of(tips.begin(), tips.end(),
+                                               [id](const Contact* c) { return c->id == id; });
+                       }),
+        g_state.confDropped.end());
 
     // Losses first, so that a contact which vanishes and comes back under a new id in the same frame is
     // seen as a flicker.
@@ -1060,6 +1198,9 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
         }
         Track t = it->second;
         it = g_state.tracks.erase(it);
+        if (g_state.armed) {
+            Wh_Log(L"Lift %u: maxDist %.2f mm, hand %.2f mm", id, t.maxDist, g_state.travel - t.travelLand);
+        }
         g_state.lastLossTime = now;
         if (g_state.pairScroll && (id == g_state.scrollA || id == g_state.scrollB)) {
             g_state.pairScroll = false;
@@ -1070,6 +1211,13 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
         // others keep dragging.
         if (g_state.holding && id == g_state.holdId) {
             g_state.holdId = kNoId;
+            continue;
+        }
+        // The touchpad dropped its Confidence (a resting thumb taken for a palm) with the tip still down: not a lift,
+        // and its return isn't a landing.
+        if (std::any_of(tips.begin(), tips.end(), [id](const Contact* c) { return c->id == id; })) {
+            g_state.confDropped.push_back(id);
+            Wh_Log(L"Confidence drop %u", id);
             continue;
         }
         bool isTap = IsTap(t, now, touching);
@@ -1108,7 +1256,7 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
                 g_state.restLiftTime = now;
             }
         }
-        if (!released && !t.pressed && touching > 0 && tap.on && g_state.armed &&
+        if (!released && !t.pressed && !t.noTap && touching > 0 && tap.on && g_state.armed &&
             (LONG)(t.born - g_state.armTime) >= (LONG)tap.settleMs && now - t.born >= tap.minMs &&
             now - t.born <= kHoldTapMaxMs && t.maxDist <= kHoldTapMaxMm && HandStill(t)) {
             g_state.looseTapTime = now;
@@ -1120,6 +1268,15 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
     for (const Contact* c : fingers) {
         auto it = g_state.tracks.find(c->id);
         if (it == g_state.tracks.end()) {
+            auto dropped = std::find(g_state.confDropped.begin(), g_state.confDropped.end(), c->id);
+            if (dropped != g_state.confDropped.end()) {
+                g_state.confDropped.erase(dropped);
+                Track t{now, c->x, c->y};
+                t.travelLand = g_state.travel;
+                t.noTap = true;
+                g_state.tracks[c->id] = t;
+                continue;
+            }
             StopInertia();
             Track t{now, c->x, c->y};
             t.travelLand = g_state.travel;
@@ -1165,7 +1322,8 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
             }
 
             // The tap finger coming back is no flicker nor hand settling: it's another tap, or a hold.
-            if (!paired && !g_state.holding && tap.on && g_state.armed && still) {
+            if (!paired && !g_state.holding && tap.on && g_state.armed && still &&
+                now - g_state.lastLossTime > tap.flickerMs) {
                 double fromTap = std::hypot(c->x - g_state.lastTapX, c->y - g_state.lastTapY);
                 if (g_state.pendingDouble && fromTap <= kHoldNearMm) {
                     // Back during an owed click: its press goes down now. Lifting completes it, staying holds it.
@@ -1195,11 +1353,16 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
         } else {
             Track& t = it->second;
             t.maxDist = std::max(t.maxDist, std::hypot(c->x - t.x0, c->y - t.y0));
-            // No longer a tap (it stayed, it moved, or the hand glided): the button goes down, or stays down if
-            // it already went, until another tap or the whole hand leaves.
-            if (t.holdCandidate && !g_state.holding &&
-                (now - t.born > tap.maxMs || t.maxDist > tap.maxMm || g_state.travel - t.travelLand > kTapHandMm)) {
+            // No longer a tap (it moved, or the hand glided; a pressed one also by staying): the button goes down,
+            // or stays down if it already went, until another tap or the whole hand leaves.
+            bool moved = t.maxDist > tap.maxMm || g_state.travel - t.travelLand > kTapHandMm;
+            if (t.holdCandidate && !t.pressed && !moved && now - t.born > kHoldStartMs) {
                 t.holdCandidate = false;
+            }
+            if (t.holdCandidate && !g_state.holding && (moved || (t.pressed && now - t.born > tap.maxMs))) {
+                t.holdCandidate = false;
+                Wh_Log(L"Hold: back %u ms after the click, moving after %u ms", t.born - g_state.lastClickTime,
+                       now - t.born);
                 g_state.holding = true;
                 g_state.holdId = c->id;
                 g_state.looseTapTime = 0;
@@ -1279,7 +1442,7 @@ void ProcessFrame() {
         g_state.lastTouching = touching;
         g_state.countChangeTime = now;
     }
-    UpdateTracks(fingers, now, touching);
+    UpdateTracks(fingers, tips, now, touching);
     Learn(fingers, touching, t);
     TrackTwoFingers(fingers, touching, now);
 
