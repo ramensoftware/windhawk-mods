@@ -10,7 +10,7 @@
 // @donateUrl       https://buymeacoffee.com/dpakb
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -loleaut32 -lwinmm -lpowrprof
+// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -168,10 +168,10 @@ give it, so it ignores this one. Turning `Details` off drops the status line, an
 ## Quiet Mode
 
 While a full-screen app, a game or presentation mode is running, Quiet mode skips the animation, the sound
-and the card. On a locked screen or during the screen saver, the sound still plays while the animation and
-the card are skipped, since there is nobody looking.
+and the card. On a locked screen or during the screen saver there is nobody to see the visuals, so the
+animation and the card are skipped then as well, whether Quiet mode is on or off, and only the sound plays.
 
-### Credits
+## Credits
 
 Wave Effect inspired by [Magic Pointer Mod](https://windhawk.net/mods/magic-pointer)
 
@@ -385,7 +385,6 @@ Power notification handling adapted from [Charging Sound](https://windhawk.net/m
 #include <windows.h>
 #include <mmsystem.h>
 #include <shellapi.h>
-#include <powrprof.h>
 
 #include <algorithm>
 #include <atomic>
@@ -864,6 +863,16 @@ void SetDwmAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size) 
         L"dwmapi.dll", "DwmSetWindowAttribute");
     if (setAttribute) {
         setAttribute(hwnd, attribute, value, size);
+    }
+}
+
+// A screen BitBlt returns the last frame DWM composed, so a window that was
+// just hidden can still be in the picture until the next frame is composed.
+void FlushCompositor() {
+    using DwmFlush_t = HRESULT(WINAPI*)();
+    static auto flush = GetProc<DwmFlush_t>(L"dwmapi.dll", "DwmFlush");
+    if (flush) {
+        flush();
     }
 }
 
@@ -4538,6 +4547,9 @@ public:
         if (UsesBackdrop() && anchorMoved) {
             if (wasVisible) {
                 window_.Hide();
+                // BitBlt hands back the last frame the compositor produced, so
+                // the card would still be in it until that frame is replaced.
+                FlushCompositor();
             }
             if (CaptureBackdrop()) {
                 Refresh();
@@ -5780,8 +5792,9 @@ bool g_highResolutionTimer = false;
 bool g_rippleTimerArmed = false;
 
 // The card is laid out and animated on the message thread, which owns the
-// overlay state. Power notifications arrive on the notification thread, so they
-// hand the request over instead of touching the overlay directly.
+// overlay state. The request is handed over instead of being acted on inside the
+// power broadcast handler, so the scene effect is prepared before the card is
+// laid out. The handler runs on that same thread.
 std::mutex g_statsRequestMtx;
 OverlayStyle g_statsRequest;
 POINT g_statsRequestOrigin{};
