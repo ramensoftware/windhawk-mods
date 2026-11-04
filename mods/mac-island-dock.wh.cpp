@@ -4,7 +4,7 @@
 // @name:pt-BR      Ilha e Dock estilo Mac
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
-// @version         2.1.0
+// @version         2.1.2
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -17538,6 +17538,36 @@ struct ReleaseNotes {
     PCWSTR text[kTextLanguages];
 };
 const ReleaseNotes kReleaseNotes[] = {
+    {L"2.1.2",
+     {
+         L"#Fixes\n"
+         L"External-monitor brightness no longer uses DDC/CI, avoiding a "
+         L"Windows graphics-driver crash. Built-in display brightness still "
+         L"works.",
+         L"#Correções\n"
+         L"O brilho de monitores externos não usa mais DDC/CI, evitando uma "
+         L"falha no driver gráfico do Windows. O brilho da tela integrada "
+         L"continua funcionando.",
+         L"#修复\n"
+         L"外接显示器亮度不再使用 DDC/CI，以避免 Windows 图形驱动程序崩溃。"
+         L"内置显示器亮度仍可使用。",
+         L"#Fehlerbehebungen\n"
+         L"Die Helligkeit externer Monitore verwendet kein DDC/CI mehr, um "
+         L"einen Absturz des Windows-Grafiktreibers zu vermeiden. Die "
+         L"Helligkeitssteuerung des integrierten Displays bleibt verfügbar.",
+         L"#Correcciones\n"
+         L"El brillo de los monitores externos ya no usa DDC/CI para evitar "
+         L"un fallo del controlador gráfico de Windows. El brillo de la "
+         L"pantalla integrada sigue funcionando.",
+         L"#Исправления\n"
+         L"Для яркости внешних мониторов больше не используется DDC/CI, "
+         L"чтобы избежать сбоя графического драйвера Windows. Регулировка "
+         L"яркости встроенного экрана сохранена.",
+         L"#修正\n"
+         L"Windows グラフィックス ドライバーのクラッシュを避けるため、"
+         L"外部モニターの輝度に DDC/CI を使用しないようにしました。"
+         L"内蔵ディスプレイの輝度調整は引き続き利用できます。",
+     }},
     {L"2.1.0",
      {
          L"#New\n"
@@ -18352,46 +18382,16 @@ bool SetNightLight(bool on) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// The monitors' brightness, over DDC/CI (documented, dxva2; a laptop's own
-// screen through WMI, see BuiltInScreen). Each call talks to the monitor and
-// takes tens of milliseconds, so they run on threads of their own (see
-// ControlPanel).
+// Built-in display brightness, through WMI (external-monitor DDC/CI is
+// intentionally not used; see issue 6966).
 
-// Collects the monitors (see ForEachPhysicalMonitor).
+// Collects display monitor handles (see BuiltInScreen).
 BOOL CALLBACK CollectMonitorProc(HMONITOR monitor,
                                  HDC,
                                  LPRECT,
                                  LPARAM parameter) {
     ((std::vector<HMONITOR>*)parameter)->push_back(monitor);
     return TRUE;
-}
-
-// Each physical monitor, with its place in this order (counted over all of
-// them), its display monitor, and its place among that one's.
-template <typename F>
-void ForEachPhysicalMonitor(F&& f) {
-    std::vector<HMONITOR> monitors;
-    EnumDisplayMonitors(
-        nullptr, nullptr,
-        CollectMonitorProc,
-        (LPARAM)&monitors);
-    int index = 0;
-    for (HMONITOR monitor : monitors) {
-        DWORD count = 0;
-        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(monitor, &count) ||
-            !count) {
-            continue;
-        }
-        std::vector<PHYSICAL_MONITOR> physical(count);
-        if (!GetPhysicalMonitorsFromHMONITOR(monitor, count,
-                                             physical.data())) {
-            continue;
-        }
-        for (DWORD within = 0; within < count; within++) {
-            f(physical[within], index++, monitor, (int)within);
-        }
-        DestroyPhysicalMonitors(count, physical.data());
-    }
 }
 
 // The displays in use (Windows' display configuration).
@@ -18588,26 +18588,6 @@ bool WriteBuiltInBrightness(int level) {
     return written;
 }
 
-// A physical monitor's brightness, 0 to 100, or -1: over DDC/CI, or, for
-// the first one on `builtIn` (BuiltInScreen) without it, through WMI
-// (`builtIn` is then cleared: one built-in screen).
-int PhysicalBrightness(const PHYSICAL_MONITOR& one,
-                       HMONITOR monitor,
-                       HMONITOR& builtIn) {
-    DWORD minimum, current, maximum;
-    if (GetMonitorBrightness(one.hPhysicalMonitor, &minimum, &current,
-                             &maximum) &&
-        maximum > minimum) {
-        return (int)std::lround(100.0 * (current - minimum) /
-                                (maximum - minimum));
-    }
-    if (builtIn && monitor == builtIn) {
-        builtIn = nullptr;
-        return ReadBuiltInBrightness();
-    }
-    return -1;
-}
-
 // The whole brightness steps a wheel turn makes, 5% a notch (WHEEL_DELTA).
 // Touchpads and smooth wheels send smaller turns: what's left of a step is
 // kept in `rest` for the next turn instead of being lost.
@@ -18620,7 +18600,7 @@ int BrightnessWheelSteps(float& rest, int delta) {
 
 // A monitor whose brightness can be changed.
 struct BrightnessMonitor {
-    // Its place in ForEachPhysicalMonitor's order (see BrightnessJob).
+    // Its place in BrightnessJob's target array.
     int index = 0;
     std::wstring name;
     // From 0 to 100.
@@ -18658,71 +18638,44 @@ void NameBrightnessMonitors(std::vector<BrightnessMonitor>& list) {
     }
 }
 
-// The monitors that tell their brightness, with their names.
+// The built-in screen's brightness, with its name. External monitors are
+// intentionally omitted to avoid DDC/CI calls.
 std::vector<BrightnessMonitor> ReadBrightnessMonitors() {
-    const auto names = MonitorFriendlyNames();
     std::vector<BrightnessMonitor> list;
     const HMONITOR builtInScreen = BuiltInScreen();
-    HMONITOR builtIn = builtInScreen;
-    ForEachPhysicalMonitor([&](const PHYSICAL_MONITOR& one, int index,
-                               HMONITOR monitor, int within) {
-        const bool wasBuiltIn = builtIn != nullptr;
-        const int level = PhysicalBrightness(one, monitor, builtIn);
-        if (level < 0) {
-            return;
-        }
+    const int level = builtInScreen ? ReadBuiltInBrightness() : -1;
+    if (level >= 0) {
         BrightnessMonitor entry;
-        entry.index = index;
-        entry.screen = monitor;
+        entry.index = 0;
+        entry.screen = builtInScreen;
         entry.level = level;
+
         MONITORINFOEX info{};
         info.cbSize = sizeof(info);
-        if (GetMonitorInfo(monitor, &info)) {
-            int k = 0;
-            for (const auto& [device, name] : names) {
-                if (_wcsicmp(device.c_str(), info.szDevice) == 0 &&
-                    k++ == within) {
+        if (GetMonitorInfo(builtInScreen, &info)) {
+            for (const auto& [device, name] : MonitorFriendlyNames()) {
+                if (_wcsicmp(device.c_str(), info.szDevice) == 0) {
                     entry.name = name;
                     break;
                 }
             }
         }
-        // (The built-in screen read through WMI says so; others get
-        // Windows' generic name, like "Generic PnP Monitor".)
         if (entry.name.empty()) {
-            entry.name = wasBuiltIn && !builtIn && monitor == builtInScreen
-                             ? Tr(L"Built-in display", L"Tela integrada")
-                             : one.szPhysicalMonitorDescription;
+            entry.name = Tr(L"Built-in display", L"Tela integrada");
         }
         list.push_back(std::move(entry));
-    });
+    }
     NameBrightnessMonitors(list);
     return list;
 }
 
-// From 0 to 100 (the screen's monitor's, or without a screen the first
-// one's), -1 if none answers. A screen that doesn't answer (no DDC/CI) has
-// none: not another monitor's, which WriteBrightness wouldn't change there.
-// Only the monitors asked about are asked over DDC/CI (slow, and some
-// flicker).
+// The built-in screen's brightness from WMI, or -1 if this screen has no
+// WMI brightness control.
 int ReadBrightness(HMONITOR screen) {
-    int level = -1;
-    HMONITOR builtIn = BuiltInScreen();
-    for (const bool any : {false, true}) {
-        if (any != !screen) {
-            continue;
-        }
-        ForEachPhysicalMonitor(
-            [&](const PHYSICAL_MONITOR& one, int, HMONITOR monitor, int) {
-                if (level < 0 && (any || monitor == screen)) {
-                    level = PhysicalBrightness(one, monitor, builtIn);
-                }
-            });
-        if (level >= 0) {
-            break;
-        }
-    }
-    return level;
+    const HMONITOR builtInScreen = BuiltInScreen();
+    return builtInScreen && (!screen || screen == builtInScreen)
+               ? ReadBuiltInBrightness()
+               : -1;
 }
 
 // Changes of the displays (WM_DISPLAYCHANGE), so a list of monitors read
@@ -18731,42 +18684,20 @@ std::atomic<int> g_displayChanges;
 
 constexpr int kMaxBrightnessMonitors = 8;
 
-// The levels asked for, by monitor (-1: left as it is), and for the
-// monitors of a screen. False if one asked didn't answer (turned off: still
-// a display for Windows, but its DDC/CI is gone).
+// Writes the built-in screen's WMI brightness, if asked.
 bool WriteBrightness(const int (&levels)[kMaxBrightnessMonitors],
                      HMONITOR screen,
                      int screenLevel) {
-    bool answered = true;
-    HMONITOR builtIn = BuiltInScreen();
-    ForEachPhysicalMonitor(
-        [&](const PHYSICAL_MONITOR& one, int index, HMONITOR monitor, int) {
-            const int level =
-                screenLevel >= 0 && monitor == screen ? screenLevel
-                : index < kMaxBrightnessMonitors      ? levels[index]
-                                                      : -1;
-            if (level < 0) {
-                return;
-            }
-            DWORD minimum, current, maximum;
-            if (!GetMonitorBrightness(one.hPhysicalMonitor, &minimum,
-                                      &current, &maximum) ||
-                maximum <= minimum) {
-                // The built-in screen through WMI (see BuiltInScreen).
-                if (builtIn && monitor == builtIn) {
-                    builtIn = nullptr;
-                    answered = WriteBuiltInBrightness(level) && answered;
-                } else {
-                    answered = false;
-                }
-                return;
-            }
-            SetMonitorBrightness(
-                one.hPhysicalMonitor,
-                minimum +
-                    (DWORD)std::lround((maximum - minimum) * level / 100.0));
-        });
-    return answered;
+    const HMONITOR builtInScreen = BuiltInScreen();
+    if (!builtInScreen) {
+        return true;
+    }
+
+    const int level =
+        screenLevel >= 0 && screen == builtInScreen
+            ? screenLevel
+            : levels[0];
+    return level < 0 || WriteBuiltInBrightness(level);
 }
 
 void OpenUri(PCWSTR uri) {
@@ -30115,23 +30046,20 @@ void JoinOwningThreads(std::vector<HANDLE>& threads, DWORD ms) {
     threads.clear();
 }
 
-// Brightness: reads it (BrightnessQueryProc, the first monitor's;
-// BrightnessListProc, each monitor's), or sets the latest levels asked for
-// until no newer ones come (BrightnessThreadProc), so dragging a slider
-// doesn't queue up slow calls. Each thread holds the job too (its parameter
-// is a new std::shared_ptr to it), so it can outlive its window; `notify` is
-// cleared when that window goes.
+// Brightness: reads it (BrightnessQueryProc or BrightnessListProc), or sets
+// the latest level asked for until no newer one comes (BrightnessThreadProc).
+// Each thread holds the job too (its parameter is a new std::shared_ptr to
+// it), so it can outlive its window; `notify` is cleared when that window goes.
 struct BrightnessJob {
     std::atomic<HWND> notify{nullptr};
-    // The level asked for each monitor (by its place in
-    // ForEachPhysicalMonitor's order), -1 once written (or none asked).
+    // The built-in screen's level (index 0), -1 once written or if not asked.
     std::atomic<int> targets[kMaxBrightnessMonitors];
-    // An island's screen (read for it, see BrightnessQueryProc), and the
-    // level asked for its monitors (-1 once written).
+    // An island's screen (read for it, see BrightnessQueryProc), and its
+    // level (-1 once written).
     std::atomic<HMONITOR> screen{nullptr};
     std::atomic<int> screenTarget{-1};
     std::atomic<bool> running{false};
-    // A monitor asked didn't answer: its list is read again (see OnOpen).
+    // A brightness write failed: the list is read again (see OnOpen).
     std::atomic<bool> missed{false};
 
     BrightnessJob() {
@@ -53446,22 +53374,15 @@ void ControlPanel::OnOpen() {
     }
     // The radios' and the brightness's state come a moment later.
     SwitchRadio(-1, false);
-    // The monitor is asked once, and again only after a while (asking over
-    // DDC/CI can make some monitors flicker), or once a monitor came or went
-    // (each slider knows its monitor by its place in the list).
-    // A monitor just plugged in answers only after a few seconds: fewer
-    // listed than there are (counted without asking them) is read again.
-    // One turned off (not answering a level set) is read again too.
+    // The built-in screen's brightness is read once, and again after a
+    // display change or if WMI did not report it on the first attempt.
     const ULONGLONG now = GetTickCount64();
-    int physical = 0;
-    ForEachPhysicalMonitor(
-        [&](const PHYSICAL_MONITOR&, int, HMONITOR, int) { physical++; });
     const bool missed =
         !m_brightnessJob->running && m_brightnessJob->missed.exchange(false);
     if (!m_brightnessJob->running &&
         (!m_brightnessReadAt || now - m_brightnessReadAt > 10 * 60 * 1000 ||
          m_brightnessDisplays != g_displayChanges || missed ||
-         ((int)m_brightnessMonitors.size() < physical &&
+         (m_brightnessMonitors.empty() &&
           now - m_brightnessReadAt > 2000))) {
         m_brightnessReadAt = now;
         // (Not changed meanwhile through places that may be old: after a
