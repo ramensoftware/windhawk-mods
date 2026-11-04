@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         1.0.2
+// @version         1.0.3
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -148,7 +148,7 @@ Enable **Enable logging** when reproducing a bug and include Windhawk's log in t
       $name: Touchpad scrolling and pinch gestures
     - touchpadSwipeNavigation: false
       $name: Swipe to go Back or Forward
-      $description: Swipe sideways and lift to navigate. Use two fingers on a touchpad or one on a touchscreen.
+      $description: Swipe sideways and lift to navigate. Use two fingers on a touchpad or touchscreen.
     - showScrollbar: true
       $name: Show scrollbars
     - instantScrollbarScrub: false
@@ -380,6 +380,15 @@ bool PidlBytesEqual(PCUIDLIST_RELATIVE first, PCUIDLIST_RELATIVE second) {
     if (!first || !second) return first == second;
     const UINT bytes = ILGetSize(first);
     return bytes == ILGetSize(second) && std::memcmp(first, second, bytes) == 0;
+}
+bool SameShellFolderIdentity(PCIDLIST_ABSOLUTE first, PCIDLIST_ABSOLUTE second) {
+    if (PidlBytesEqual(first,second)) return true;
+    if (!first || !second) return false;
+    ComPtr<IShellItem> a,b;
+    int order=1;
+    return SUCCEEDED(SHCreateItemFromIDList(first,IID_PPV_ARGS(&a))) &&
+        SUCCEEDED(SHCreateItemFromIDList(second,IID_PPV_ARGS(&b))) &&
+        a->Compare(b.Get(),SICHINT_CANONICAL,&order)==S_OK && order==0;
 }
 bool IsDriveRoot(const std::wstring& path) {
     return path.size() == 3 && path[1] == L':' &&
@@ -7954,18 +7963,7 @@ void NaturalSortIndices(std::vector<size_t>& order, Less&& less) {
     }
 }
 
-enum class EntrySortAlgorithm { Intro, Merge, Natural };
-// Compare stationary rows and sort only compact indices. Moving the full Entry
-// (strings, cells, shared identities) at every partition costs much more than
-// applying the resulting permutation once. The same Windows comparator is used.
-template<EntrySortAlgorithm Algorithm=EntrySortAlgorithm::Natural, class Less>
-void SortEntriesByIndex(std::vector<Entry>& entries, Less&& less) {
-    std::vector<size_t> order(entries.size());
-    for (size_t i=0;i<order.size();++i) order[i]=i;
-    const auto compare=[&](size_t a,size_t b) {return less(entries[a],entries[b]);};
-    if constexpr (Algorithm==EntrySortAlgorithm::Merge) std::stable_sort(order.begin(),order.end(),compare);
-    else if constexpr (Algorithm==EntrySortAlgorithm::Intro) std::sort(order.begin(),order.end(),compare);
-    else NaturalSortIndices(order,compare);
+void ApplyEntryOrder(std::vector<Entry>& entries, std::vector<size_t>& order) {
     for (size_t i=0;i<order.size();++i) {
         if (order[i]==i) continue;
         Entry saved=std::move(entries[i]);
@@ -7977,6 +7975,18 @@ void SortEntriesByIndex(std::vector<Entry>& entries, Less&& less) {
         }
         entries[row]=std::move(saved); order[row]=row;
     }
+}
+
+// Compare stationary rows and sort only compact indices. Moving the full Entry
+// (strings, cells, shared identities) at every partition costs much more than
+// applying the resulting permutation once. The same Windows comparator is used.
+template<class Less>
+void SortEntriesByIndex(std::vector<Entry>& entries, Less&& less) {
+    std::vector<size_t> order(entries.size());
+    for (size_t i=0;i<order.size();++i) order[i]=i;
+    const auto compare=[&](size_t a,size_t b) {return less(entries[a],entries[b]);};
+    NaturalSortIndices(order,compare);
+    ApplyEntryOrder(entries,order);
 }
 
 // Compute group identities before publishing a directory snapshot. This runs
@@ -9122,7 +9132,8 @@ void ResolveNativeRowsJob(TabBackground& work, NativeRowsJob& job, Resolver&& re
 // Resolve the provider on the tab's worker. A filesystem-shaped navigation
 // PIDL does not imply filesystem contents: Shell providers can delegate views.
 HRESULT BindDirectoryProvider(const std::wstring& path, ComPtr<IShellFolder>& folder,
-                              PCIDLIST_ABSOLUTE identity = nullptr) {
+                              PCIDLIST_ABSOLUTE identity = nullptr, IShellItem** boundItem = nullptr) {
+    if (boundItem) *boundItem=nullptr;
     ComPtr<IShellItem> item;
     // Reparsing a filesystem path can select a different provider (e.g. User
     // Files instead of Explorer's filesystem view of the same profile path).
@@ -9130,25 +9141,30 @@ HRESULT BindDirectoryProvider(const std::wstring& path, ComPtr<IShellFolder>& fo
     HRESULT hr = identity ? SHCreateItemFromIDList(identity, IID_PPV_ARGS(&item)) :
         SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item));
     if (SUCCEEDED(hr)) hr = item->BindToHandler(nullptr, BHID_SFObject, IID_PPV_ARGS(&folder));
+    if (SUCCEEDED(hr) && boundItem) *boundItem=item.Detach();
     return hr;
 }
 
-std::wstring DirectoryProviderPath(IShellFolder* folder, const std::wstring& fallback) {
-    STRRET name{};
+std::wstring DirectoryProviderPath(IShellItem* item, const std::wstring& fallback) {
+    // A folder shortcut displays its target's contents while its own
+    // FILESYSPATH still names the alias. Ask Shell for that target before
+    // choosing the filesystem watch path; ordinary folders have no handler.
+    ComPtr<IShellItem> target;
+    if (item && SUCCEEDED(item->BindToHandler(nullptr, BHID_LinkTargetItem, IID_PPV_ARGS(&target))) && target)
+        item=target.Get();
     PWSTR text = nullptr;
-    if (folder && SUCCEEDED(folder->GetDisplayNameOf(nullptr, SHGDN_FORPARSING, &name)))
-        StrRetToStrW(&name, nullptr, &text);
+    const HRESULT hr=item ? item->GetDisplayName(SIGDN_FILESYSPATH,&text) : E_POINTER;
     std::unique_ptr<wchar_t, TaskMemDeleter> storage(text);
     // A virtual provider's parsing name must never reach filesystem APIs.
-    return text && IsTargetPath(text) ? text : fallback;
+    return SUCCEEDED(hr) && text && IsTargetPath(text) ? text : fallback;
 }
 
-bool PlainFilesystemProvider(IShellFolder* folder, const std::wstring& path) {
+bool PlainFilesystemProvider(IShellFolder* folder, IShellItem* item, const std::wstring& path) {
     ComPtr<IPersist> persist;
     CLSID clsid{};
     return folder && SUCCEEDED(folder->QueryInterface(IID_PPV_ARGS(&persist))) &&
         SUCCEEDED(persist->GetClassID(&clsid)) && IsEqualCLSID(clsid, CLSID_ShellFSFolder) &&
-        _wcsicmp(DirectoryProviderPath(folder, {}).c_str(), path.c_str()) == 0;
+        _wcsicmp(DirectoryProviderPath(item, {}).c_str(), path.c_str()) == 0;
 }
 
 // An empty FindFirstFileEx listing is not proof of an empty folder. Virtual
@@ -9702,9 +9718,10 @@ DWORD WINAPI DirectoryWorkerProc(LPVOID context) {
             result.watch->stamp = std::make_shared<FolderChangeStamp>();
             const bool namespaceFolder = UsesNamespaceFolderIdentity(watch.path);
             ComPtr<IShellFolder> provider;
+            ComPtr<IShellItem> providerItem;
             result.watch->path = !namespaceFolder && SUCCEEDED(BindDirectoryProvider(watch.path, provider,
-                watch.folderIdentity.get())) ?
-                DirectoryProviderPath(provider.Get(), watch.path) : watch.path;
+                watch.folderIdentity.get(),&providerItem)) ?
+                DirectoryProviderPath(providerItem.Get(), watch.path) : watch.path;
             if (!namespaceFolder)
                 result.watch->change = FindFirstChangeNotificationW(result.watch->path.c_str(), FALSE,
                     FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
@@ -9790,8 +9807,9 @@ DWORD WINAPI DirectoryWorkerProc(LPVOID context) {
             ComPtr<IShellFolder> provider;
             if (!directory.enumerated && !directory.namespaceFolder && !IsThisPcLocation(directory.path)) {
                 PipelineScope timing(work, L"directory.bind", directory.token);
-                HRESULT hr = BindDirectoryProvider(directory.path, provider, directory.folderIdentity.get());
-                if (SUCCEEDED(hr) && !PlainFilesystemProvider(provider.Get(), directory.path)) {
+                ComPtr<IShellItem> providerItem;
+                HRESULT hr = BindDirectoryProvider(directory.path, provider, directory.folderIdentity.get(),&providerItem);
+                if (SUCCEEDED(hr) && !PlainFilesystemProvider(provider.Get(), providerItem.Get(), directory.path)) {
                     PIDLIST_ABSOLUTE root = nullptr;
                     hr = SHGetIDListFromObject(provider.Get(), &root);
                     directory.namespaceFolder = SharedPidl(root, TaskMemDeleter{});
@@ -15752,6 +15770,7 @@ void DropTarget(ViewState& state) {
         for (auto& [text, layout] : cache.layouts) {
             layout.rasters.clear();
             layout.rasterBytes = 0;
+            layout.painted = 0;
         }
         cache.rasterBytes = 0;
     }
@@ -21474,7 +21493,10 @@ void RestoreVerifiedSelection(ViewState& state) {
         state.selectedFlags=state.verifiedSelectionFlags;
         state.selected=state.verifiedSelectionRow; state.anchor=state.verifiedSelectionAnchor;
     } else { state.selectedFlags.Fill(0); state.selected=state.anchor=-1; }
-    state.nativeSelectionUnsafe=!retained;
+    // Preparation can already have cleared Explorer's old set. A retained
+    // GPU snapshot alone does not prove that native commands target that set.
+    state.nativeSelectionUnsafe=!retained || (state.nativeSelectionObservedCount==0 &&
+        state.selectedFlags.Count(0,state.selectedFlags.size())!=0);
     QueueNativeSelectionHint(state);
     Redraw(state);
 }
@@ -22354,7 +22376,11 @@ bool ClearNativeSelection(ViewState& state) {
     int before = -1;
     const HRESULT countHr=view->ItemCount(SVGIO_SELECTION, &before);
     if (!current()) return false;
-    if (SUCCEEDED(countHr) && before == 0) return true;
+    if (SUCCEEDED(countHr) && before == 0) {
+        state.nativeSelectionObservedCount=0;
+        state.nativeSelectionObservedPaths.clear();
+        return true;
+    }
 
     auto emptyNow = [&]() {
         int count = -1;
@@ -22507,6 +22533,12 @@ bool QueueNativeSelectionPreparation(ViewState& state, int importCount, bool rev
         CancelNativeSelectionPreparation(state);
         return false;
     }
+    // Explorer's command bar and other native consumers bypass our pending
+    // command gate. Remove the preceding selection before yielding to workers.
+    const auto view=state.folderView;
+    if (!ClearNativeSelection(state)) return false;
+    if (state.token!=job->viewToken || state.directoryToken!=job->directoryToken ||
+        state.nativeHwnd!=job->native || state.folderView.Get()!=view.Get()) return false;
     for (size_t i = 0; i < state.entries.size() && i < state.selectedFlags.size(); ++i) {
         if (!state.selectedFlags[i]) continue;
         if (static_cast<int>(i) == state.selected) job->focused = static_cast<int>(job->entries.size());
@@ -22518,8 +22550,6 @@ bool QueueNativeSelectionPreparation(ViewState& state, int importCount, bool rev
         job->entries.push_back(std::move(entry));
     }
     if (!StartTabWorker(state.background, work.selection, SelectionWorkerProc, THREAD_PRIORITY_NORMAL)) return false;
-    // Commands are gated by pendingNativeSelection. Keep the verified native
-    // set intact until the new identities have been prepared and validated.
     state.pendingNativeSelection = job->generation;
     work.selectionGeneration.store(job->generation, std::memory_order_release);
     {
@@ -22682,6 +22712,8 @@ bool SyncNativeSelection(ViewState& state, std::shared_ptr<PreparedNativeSelecti
             prepared = state.confirmedNativeSelection;
         else {
             if (QueueNativeSelectionPreparation(state)) return true;
+            if (State(owner)!=&state || state.token!=token || state.directoryToken!=directory ||
+                state.folderView.Get()!=view.Get()) return false;
             ReconcileFailedNativeSelection(state);
             return false;
         }
@@ -23417,7 +23449,9 @@ HRESULT InvokeNativeFileKey(ViewState& state, IShellView* native,
     NativeFileCommandScope commandScope(&state);
     const HWND owner=state.hwnd, frame=state.frameHwnd, target=state.nativeHwnd;
     const auto lifetime=state.lifetimeToken, viewToken=state.token;
-    const std::wstring directory=state.folderPath;
+    const auto activationView=state.folderView;
+    const auto activationDirectory=state.directoryToken;
+    const auto activationSelection=state.selectedFlags;
     HWND window=nullptr;
     if (FAILED(native->GetWindow(&window)) || window!=target)
         return HRESULT_FROM_WIN32(ERROR_CANCELLED);
@@ -23466,6 +23500,21 @@ HRESULT InvokeNativeFileKey(ViewState& state, IShellView* native,
             owner,tab,flags,static_cast<unsigned>(hr));
         return hr;
     }
+    if (key.key==VK_RETURN) {
+        const auto view=activationView;
+        auto* live=State(owner);
+        if (!view || live!=&state || live->lifetimeToken!=lifetime || live->token!=viewToken ||
+            live->nativeHwnd!=target || live->folderView.Get()!=view.Get() || !live->visible ||
+            live->directoryToken!=activationDirectory || !live->selectedFlags.SharesStorage(activationSelection) ||
+            live->pendingNativeSelection || live->nativeSelectionUnsafe || live->nativeSelectionImportPending ||
+            live->nativeSelectionAwaitingRefresh || !live->inScope ||
+            live->optimisticStartedAt || !TabOwnsActiveView(*live) || g_unloading.load(std::memory_order_acquire))
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        // Let Explorer own the invocation context and launch options instead
+        // of synthesizing IContextMenu parameters. NULL requests the view's
+        // default action without forcing a canonical verb.
+        return view->InvokeVerbOnSelection(nullptr);
+    }
     ComPtr<IContextMenu> command;
     HRESULT resolved;
     {
@@ -23485,25 +23534,6 @@ HRESULT InvokeNativeFileKey(ViewState& state, IShellView* native,
     invoke.lpVerb=key.key==VK_DELETE ? "delete" : key.key=='X' ? "cut" : key.key=='V' ? "paste" : "copy";
     invoke.lpVerbW=key.key==VK_DELETE ? L"delete" : key.key=='X' ? L"cut" : key.key=='V' ? L"paste" : L"copy";
     invoke.nShow=SW_SHOWNORMAL;
-    if (key.key == VK_RETURN) {
-        // Ask the selected Shell group for its default command: it may be
-        // Edit, Play, or an extension command rather than the "open" verb.
-        struct Popup { HMENU value=CreatePopupMenu(); ~Popup() {if (value) DestroyMenu(value);} } popup;
-        if (!popup.value) return E_OUTOFMEMORY;
-        const HRESULT queried=command->QueryContextMenu(popup.value,0,1,0x7FFF,CMF_DEFAULTONLY);
-        if (FAILED(queried)) return queried;
-        const UINT selected=GetMenuDefaultItem(popup.value,FALSE,GMDI_GOINTOPOPUPS);
-        if (selected==UINT(-1) || selected<1 || selected>0x7FFF) return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-        live=State(owner);
-        if (!live || live->lifetimeToken!=lifetime || live->token!=viewToken ||
-            live->nativeHwnd!=target || !live->visible || live->optimisticStartedAt ||
-            !TabOwnsActiveView(*live) || g_unloading.load(std::memory_order_acquire))
-            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
-        invoke.lpVerb=MAKEINTRESOURCEA(selected-1);
-        invoke.lpVerbW=MAKEINTRESOURCEW(selected-1);
-        invoke.lpDirectoryW=IsTargetPath(directory) && !live->namespaceIdentities ? directory.c_str() : nullptr;
-        return command->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke));
-    }
     TabTraceSlowScope trace(L"Shell file shortcut",owner);
     PipelineScope invocation(live->background,L"file.selection.invoke",key.key,viewToken);
     return command->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke));
@@ -24797,174 +24827,54 @@ void MaybeDisplayImmediateBack(HWND overlay, const wchar_t* reason);
 void RollbackOptimisticNavigation(HWND overlay, const std::wstring& destination);
 
 void Open(ViewState& state, int index, bool newTab = false) {
-    if (index < 0 || index >= state.total || state.optimisticStartedAt ||
-        (state.thisPcGpu && !ShellRowsInteractive(state) &&
-         !state.entries[static_cast<size_t>(index)].shellIdentity)) return;
+    WindowCallbackGuard callback;
+    if (index < 0 || index >= state.total || size_t(index)>=state.entries.size() ||
+        state.optimisticStartedAt || !state.visible || !state.inScope || !state.folderView ||
+        !IsWindow(state.nativeHwnd) || !TabOwnsActiveView(state) || g_unloading.load(std::memory_order_acquire)) return;
     if (newTab && (!g_middleClickNewTab.load(std::memory_order_relaxed) ||
-        !state.entries[static_cast<size_t>(index)].folder || IsRecycleBinLocation(state.folderPath) ||
-        !state.loaded || !ShellRowsInteractive(state) || !state.visible || !TabOwnsActiveView(state))) return;
-    const HWND ownerBeforeSelection = state.hwnd;
-    const auto lifetimeBeforeSelection = state.lifetimeToken, epochBeforeSelection = state.mouseFolderEpoch;
-    const std::wstring tabItem = newTab ? state.entries[static_cast<size_t>(index)].path : std::wstring{};
-    // The first click already synchronized Explorer's PIDL selection. Avoid
-    // doing those Shell COM calls a second time on double-click navigation.
-    if (newTab || state.selected != index ||
-        index >= static_cast<int>(state.selectedFlags.size()) ||
-        !state.selectedFlags[static_cast<size_t>(index)]) {
-        // Single-click selection has its own native synchronization; for a
-        // double-click on a *folder*, don't pay for that COM round-trip first.
-        if (!newTab && state.entries[static_cast<size_t>(index)].folder && !state.namespaceIdentities) {
-            state.selectedFlags.assign(state.entries.size(), 0);
-            state.selectedFlags[static_cast<size_t>(index)] = 1;
-            state.selected = state.anchor = index;
-            ClearPostDeletionCaret(state);
-            Redraw(state);
-        } else Select(state, index);
-    }
-    if (newTab && (State(ownerBeforeSelection)!=&state || state.lifetimeToken!=lifetimeBeforeSelection ||
-        state.mouseFolderEpoch!=epochBeforeSelection || size_t(index)>=state.entries.size() ||
-        state.entries[size_t(index)].path!=tabItem || !state.visible || !TabOwnsActiveView(state))) return;
-    const std::wstring path = state.entries[static_cast<size_t>(index)].path;
-    const bool folder = state.entries[static_cast<size_t>(index)].folder;
-    if (IsRecycleBinLocation(state.folderPath)) {
-        const auto identity = state.entries[static_cast<size_t>(index)].shellIdentity;
-        if (!identity) return;
-        // Recycle Bin defines its own default verb (normally Properties),
-        // including for deleted folders. Never open a backing $R file path.
-        SHELLEXECUTEINFOW invoke{sizeof(invoke)};
-        invoke.fMask = SEE_MASK_INVOKEIDLIST;
-        invoke.hwnd = state.frameHwnd;
-        invoke.lpIDList = const_cast<PIDLIST_ABSOLUTE>(identity.get());
-        invoke.nShow = SW_SHOWNORMAL;
-        ShellExecuteExW(&invoke);
-        return;
-    }
-    if (state.thisPcGpu && !newTab) {
-        if (!state.shellBrowser || !state.entries[static_cast<size_t>(index)].shellIdentity) return;
-        const auto identity = state.entries[static_cast<size_t>(index)].shellIdentity;
-        ResetMouseClickSequence(state);
-        ScheduleNavigationProbe(state);
-        const HRESULT hr = state.shellBrowser->BrowseObject(identity.get(), SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-        if (FAILED(hr)) ClearNavigationProbe(state);
-        return;
-    }
-    if (!folder || state.namespaceIdentities || newTab) {
-        // A provider row's FOLDER flag does not imply a disk directory:
-        // streams can also be containers and may require materialization.
-        // Let the live native view choose its own default action and site.
-        // Reuse native selection verification and its asynchronous PIDL lane.
-        // No path-based forced verb, wrong working directory, or per-file loop.
-        ViewState::DeferredSelectionKey key{VK_RETURN,0,newTab};
-        if (state.pendingNativeSelection) { state.deferredSelectionKeys.push_back(key); return; }
-        if (state.nativeSelectionUnsafe || state.nativeSelectionImportPending || state.nativeSelectionAwaitingRefresh) return;
-        if (!SyncNativeSelection(state)) {
-            if (state.pendingNativeSelection) state.deferredSelectionKeys.push_back(key);
-            return;
-        }
-        ComPtr<IShellView> native;
-        const HWND owner=state.hwnd;
-        const auto token=state.token,lifetime=state.lifetimeToken;
-        if (FAILED(state.folderView.As(&native)) && state.shellBrowser)
-            state.shellBrowser->QueryActiveShellView(&native);
+        !state.entries[size_t(index)].folder || IsRecycleBinLocation(state.folderPath) ||
+        !state.loaded || !ShellRowsInteractive(state))) return;
+    ViewState::DeferredSelectionKey key{VK_RETURN,0,newTab};
+    const HWND owner=state.hwnd, target=state.nativeHwnd;
+    const auto lifetime=state.lifetimeToken, token=state.token, directory=state.directoryToken;
+    const auto epoch=state.mouseFolderEpoch;
+    const auto view=state.folderView;
+    const std::wstring path=state.entries[size_t(index)].path;
+    const auto current=[&] {
         auto* live=State(owner);
-        if (!live || live->token!=token || live->lifetimeToken!=lifetime) return;
-        const HRESULT hr=InvokeNativeFileKey(*live,native.Get(),key);
-        if (FAILED(hr)) Wh_Log(L"[GPU selection] %s command failed hr=0x%08X",
-            newTab ? L"new-tab" : L"default",static_cast<unsigned>(hr));
-        return;
-    }
-
-    // ShellExecuteW on a *directory* can launch another Explorer frame. The
-    // host's IShellBrowser is the same-tab navigation API; never silently
-    // fall back to ShellExecuteW for folder opening.
-    if (!IsTargetPath(path) || !state.visible || !state.shellBrowser ||
-        !NativeViewAvailable(state.nativeHwnd)) return;
-    ComPtr<IShellBrowser> browser = state.shellBrowser;
-    ComPtr<IShellView> activeView;
-    HWND activeHwnd = nullptr;
-    if (FAILED(browser->QueryActiveShellView(activeView.GetAddressOf())) ||
-        !activeView || FAILED(activeView->GetWindow(&activeHwnd)) ||
-        activeHwnd != state.nativeHwnd) {
-        Wh_Log(L"[GPU overlay] folder navigation skipped: inactive Shell view");
-        return;
-    }
-    // Native HWND identity checked above; do not repeat GetFolder/GetCurFolder
-    // filesystem conversions on the click's latency-critical path. Use a
-    // child-relative PIDL rather than globally resolving an absolute path.
-    // SBSP_RELATIVE is explicitly relative to the CURRENT folder.
-    if (!state.folder) return;
-    const ULONGLONG navBegin = GetTickCount64();
-    std::wstring name = state.entries[static_cast<size_t>(index)].name;
-    const HWND overlayHwnd = state.hwnd;
-    const HWND sourceNativeHwnd = state.nativeHwnd;
-    const HWND sourceTabHost = state.activeTabHost;
-    const std::wstring sourceFolderPath = state.folderPath;
-    ComPtr<IShellFolder> sourceFolder = state.folder;
-    state.navigationStartedAt = navBegin;
+        return live==&state && live->lifetimeToken==lifetime && live->token==token &&
+            live->directoryToken==directory && live->mouseFolderEpoch==epoch && live->nativeHwnd==target &&
+            live->folderView.Get()==view.Get() && live->visible && live->inScope && !live->optimisticStartedAt &&
+            size_t(index)<live->entries.size() && live->entries[size_t(index)].path==path &&
+            size_t(index)<live->selectedFlags.size() && live->selectedFlags[size_t(index)] &&
+            TabOwnsActiveView(*live) && !g_unloading.load(std::memory_order_acquire);
+    };
+    if (newTab || state.selected!=index || size_t(index)>=state.selectedFlags.size() || !state.selectedFlags[size_t(index)])
+        Select(state,index);
+    if (!current()) return;
     ResetMouseClickSequence(state);
-    ScheduleNavigationProbe(state);
-    BeginOptimisticNavigation(state, path);
-    if (!IsWindow(overlayHwnd) || State(overlayHwnd) != &state) return;
-    ULONG eaten = 0;
-    PITEMID_CHILD child = nullptr;
-    const HRESULT parseHr = sourceFolder->ParseDisplayName(
-        sourceNativeHwnd, nullptr, name.data(), &eaten, &child, nullptr);
-    if (FAILED(parseHr) || !child) {
-        if (child) CoTaskMemFree(child);
-        RollbackOptimisticNavigation(overlayHwnd, path);
-        Wh_Log(L"[GPU overlay] relative folder PIDL parse failed hr=0x%08X (%s)",
-            static_cast<unsigned>(parseHr), path.c_str());
-        return;
+    if (state.pendingNativeSelection) {state.deferredSelectionKeys.push_back(key); return;}
+    if (state.nativeSelectionUnsafe || state.nativeSelectionImportPending || state.nativeSelectionAwaitingRefresh) return;
+    // Reuse a verified first-click selection, just as the native context menu
+    // does. Otherwise verify it through the same bounded selection lane.
+    const bool verified=state.verifiedSelectionToken==token && state.verifiedSelectionDirectory==directory &&
+        state.verifiedSelectionFlags.SharesStorage(state.selectedFlags);
+    if (!verified) {
+        const bool synced=SyncNativeSelection(state);
+        if (!current()) return;
+        if (state.pendingNativeSelection) {state.deferredSelectionKeys.push_back(key); return;}
+        if (!synced) return;
     }
-    const ULONGLONG parseMs = GetTickCount64() - navBegin;
-    const ULONGLONG browseBegin = GetTickCount64();
-    HRESULT hr = browser->BrowseObject(
-        child, SBSP_SAMEBROWSER | SBSP_RELATIVE);
-    const ULONGLONG browseMs = GetTickCount64() - browseBegin;
-    CoTaskMemFree(child);
-    if (g_perf.load(std::memory_order_relaxed))
-        Wh_Log(L"[GPU overlay] navigation click: PIDL=%llu ms BrowseObject=%llu ms hr=0x%08X to=%s",
-            static_cast<unsigned long long>(parseMs),
-            static_cast<unsigned long long>(browseMs),
-            static_cast<unsigned>(hr), path.c_str());
-    if (FAILED(hr)) {
-        // Some third-party namespace providers reject relative navigation.
-        // Preserve the previous, tested absolute-PIDL behavior as a fallback.
-        PIDLIST_ABSOLUTE absolute = nullptr;
-        const ULONGLONG fallbackBegin = GetTickCount64();
-        const HRESULT absoluteParse = SHParseDisplayName(
-            path.c_str(), nullptr, &absolute, 0, nullptr);
-        if (SUCCEEDED(absoluteParse) && absolute) {
-            hr = browser->BrowseObject(absolute, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-        }
-        if (absolute) CoTaskMemFree(absolute);
-        if (g_perf.load(std::memory_order_relaxed))
-            Wh_Log(L"[GPU overlay] navigation absolute PIDL fallback=%llu ms hr=0x%08X",
-                static_cast<unsigned long long>(GetTickCount64() - fallbackBegin),
-                static_cast<unsigned>(hr));
-        if (FAILED(hr))
-            Wh_Log(L"[GPU overlay] in-tab folder navigation failed hr=0x%08X (%s)",
-                   static_cast<unsigned>(hr), path.c_str());
-    }
-    if (FAILED(hr)) RollbackOptimisticNavigation(overlayHwnd, path);
-    // BrowseObject accepts navigation before Explorer creates the new native
-    // Shell view. Render the destination NOW rather than waiting ~200ms for
-    // that view, but only if the original overlay/view still owns this tab.
-    if (SUCCEEDED(hr) && IsWindow(overlayHwnd)) {
-        ViewState* live = State(overlayHwnd);
-        if (live && live->nativeHwnd == sourceNativeHwnd &&
-            !live->optimisticStartedAt && live->visible && live->inScope &&
-            _wcsicmp(live->folderPath.c_str(), sourceFolderPath.c_str()) == 0)
-            BeginOptimisticNavigation(*live, path);
-        // Remember one *confirmed request* for the immediate Back action.
-        // The navigation itself remains Explorer-owned.
-        if (live && live->activeTabHost == sourceTabHost &&
-            _wcsicmp(live->folderPath.c_str(), path.c_str()) == 0) {
-            live->immediateBackFrom = path;
-            live->immediateBackTo = sourceFolderPath;
-            live->immediateBackTab = sourceTabHost;
-        }
-    }
+    // Files, folders, drives and Recycle Bin items all delegate their selected
+    // group's default action to Shell. Navigation notifications own previews;
+    // activation never guesses a destination or forces a browser disposition.
+    ComPtr<IShellView> native;
+    if (FAILED(view.As(&native)) && state.shellBrowser)
+        state.shellBrowser->QueryActiveShellView(&native);
+    if (!current()) return;
+    const HRESULT hr=InvokeNativeFileKey(state,native.Get(),key);
+    if (FAILED(hr)) Wh_Log(L"[GPU selection] %s command failed hr=0x%08X",
+        newTab ? L"new-tab" : L"default",static_cast<unsigned>(hr));
 }
 
 // State() is forward declared near the overlay's rename editor.
@@ -30196,8 +30106,7 @@ void BeginTouchDrag(ViewState& state) {
     using Convert = BOOL(WINAPI*)();
     static const auto convert = [] {
         const auto user = GetModuleHandleW(L"user32.dll");
-        auto fn = GetProcAddress(user,"ConvertPrimaryPointerToMouseDrag");
-        if (!fn) fn = GetProcAddress(user,MAKEINTRESOURCEA(2811)); // Documented Windows 11 export.
+        const auto fn = user ? GetProcAddress(user,"ConvertPrimaryPointerToMouseDrag") : nullptr;
         return reinterpret_cast<Convert>(fn);
     }();
     if (g_perf.load(std::memory_order_relaxed))
@@ -34204,7 +34113,15 @@ void BeginOptimisticNavigation(ViewState& state, const std::wstring& path,
     if (!state.visible || !state.inScope || !IsTargetPath(path) || !IsWindow(state.hwnd)) return;
     if (state.optimisticStartedAt) {
         if (!destinationIdentity || _wcsicmp(state.optimisticDestination.c_str(),path.c_str())) return;
-        if (state.directoryFolderIdentity && PidlBytesEqual(state.directoryFolderIdentity.get(),destinationIdentity.get())) return;
+        if (state.directoryFolderIdentity) {
+            const HWND owner=state.hwnd;
+            const auto token=state.token, directory=state.directoryToken;
+            const auto identity=state.directoryFolderIdentity;
+            const bool same=SameShellFolderIdentity(identity.get(),destinationIdentity.get());
+            if (State(owner)!=&state || state.token!=token || state.directoryToken!=directory ||
+                state.directoryFolderIdentity!=identity || g_unloading.load(std::memory_order_acquire)) return;
+            if (same) return;
+        }
         if (state.directoryFolderIdentity) {
             // An actual Shell PIDL supersedes a prior binding hint, including
             // two providers exposing the same path. Retire the provisional
@@ -35440,11 +35357,19 @@ void AttachView(HWND native, ComPtr<IFolderView2>& view,
         const bool optimistic = s->optimisticStartedAt != 0;
         bool changedBinding = false;
         if ((changedView || optimistic) && !changedPath && s->directoryFolderIdentity) {
+            const auto bindingToken=s->token, bindingDirectory=s->directoryToken;
+            const auto expectedIdentity=s->directoryFolderIdentity;
+            const auto expectedView=s->folderView;
             PIDLIST_ABSOLUTE root = nullptr;
             const HRESULT hr = SHGetIDListFromObject(folder.Get(), &root);
             OwnedPidl identity(root);
+            // Native return PIDLs can carry different cached metadata for the
+            // same Shell folder. Bytes alone do not establish a new provider.
             changedBinding = FAILED(hr) || !identity ||
-                !PidlBytesEqual(identity.get(), s->directoryFolderIdentity.get());
+                !SameShellFolderIdentity(identity.get(),expectedIdentity.get());
+            if (State(overlay)!=s || s->token!=bindingToken || s->directoryToken!=bindingDirectory ||
+                s->folderView.Get()!=expectedView.Get() || s->directoryFolderIdentity!=expectedIdentity ||
+                g_unloading.load(std::memory_order_acquire)) return;
         }
         const std::wstring optimisticOrigin = optimistic ? s->optimisticFromPath : L"";
         const std::wstring navigationOrigin = optimistic ? optimisticOrigin : s->folderPath;
@@ -36821,7 +36746,7 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
                 // scope). A WM_SIZE storm must not repeatedly enumerate all
                 // IShellWindows just because this HWND is still unbound.
                 newShellView = msg->hwnd != lastUnboundView ||
-                    (!GetPropW(frame,kColdAttachResolvedProperty) && now - lastUnboundViewAt >= 250);
+                    (!GetPropW(selectedTab,kColdAttachResolvedProperty) && now - lastUnboundViewAt >= 250);
                 if (newShellView) {
                     lastUnboundView = msg->hwnd;
                     lastUnboundViewAt = now;
@@ -36848,7 +36773,7 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
     // A resolved unsupported tab stays native without periodic cross-thread
     // ShellWindows discovery. Navigation/CREATE/SHOW clears this property.
     const bool resolvedUnsupported = missingActiveTab && !tabSwitched && !newShellView &&
-        GetPropW(frame, kColdAttachResolvedProperty);
+        GetPropW(selectedTab, kColdAttachResolvedProperty);
     // The dispatch fallback used to bypass the timer's maintenance guard.
     // Keep actual navigation discovery immediate; a valid Recycle Bin binding
     // needs no periodic ShellWindows enumeration, including during a drag.
