@@ -676,6 +676,19 @@ static OpticalGlassCache g_menuSubOpticalCache;
 extern std::atomic<HWND> g_hActiveGearMenu;
 extern std::atomic<HWND> g_hActiveCustomSizeWnd;
 
+void ReleaseBackdropSnapshot() {
+    {
+        std::lock_guard<std::mutex> lock(g_desktopSnapMutex);
+        g_desktopSnap = {};
+    }
+    std::lock_guard<std::mutex> lock(g_opticalCacheMutex);
+    g_dlgMonitorBlurCache = {};
+    g_menuMonitorBlurCache = {};
+    g_dlgOpticalCache = {};
+    g_menuMainOpticalCache = {};
+    g_menuSubOpticalCache = {};
+}
+
 void CaptureCleanMonitorBackdrop(HWND hRefWnd, bool forceExcludeVisible = false) {
     HMONITOR hMon = hRefWnd && IsWindow(hRefWnd)
         ? MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST)
@@ -3749,6 +3762,12 @@ inline bool HasActiveCustomBackground(const RunDialogState* state) {
     return (state->pVideoReader && !state->videoFrameBuffer.empty()) || !state->bgFrames.empty();
 }
 
+bool NeedsBackdropSnapshot(const RunDialogState* state) {
+    return state &&
+           ResolveEffectiveSurface(state->settings) == SurfaceTheme::Glass &&
+           !HasActiveCustomBackground(state);
+}
+
 void UpdateCustomBackgroundLuminance(RunDialogState* state) {
     if (!state) return;
     const BYTE* bgPixels = nullptr;
@@ -4222,10 +4241,12 @@ void RestoreRunDialog(RunDialogState* state) {
     g_lastToggleTick.store(now);
 
     int dlgW = GetDlgWidth(state);
-    CaptureCleanMonitorBackdrop(state->hDlg, false);
-    state->backdropLightSample = SampleBackdropLuminanceFromSnap(
-        state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
-    state->lastTopologySig = GetBackdropWindowTopologySignature(state->hDlg);
+    if (NeedsBackdropSnapshot(state)) {
+        CaptureCleanMonitorBackdrop(state->hDlg, false);
+        state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+            state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
+        state->lastTopologySig = GetBackdropWindowTopologySignature(state->hDlg);
+    }
     state->pendingTopologyRecapture = false;
 
     g_internalActivation = true;
@@ -4830,6 +4851,9 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
     if (!hDlg || !state) return;
 
     state->effectiveSurface = ResolveEffectiveSurface(state->settings);
+    if (!NeedsBackdropSnapshot(state)) {
+        ReleaseBackdropSnapshot();
+    }
     state->isLightMode = ResolveDialogLightContrast(state);
     bool hasCustomBg = HasActiveCustomBackground(state);
 
@@ -8776,6 +8800,7 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
     g_hFallbackInterceptedDlg.compare_exchange_strong(expectedFallback, nullptr);
     g_isBrowsingFile.store(false);
     StopKeyHookThread();
+    ReleaseBackdropSnapshot();
     RemovePropW(hWnd, L"WindhawkModernRunApplied");
     RemovePropW(hWnd, L"WindhawkOrigShellDlgProc");
 
@@ -10126,10 +10151,12 @@ void TransformRunDialog(HWND hDlg) {
     state->normalX = newX;
     state->normalY = newY;
 
-    CaptureCleanMonitorBackdrop(hDlg, IsWindowVisible(hDlg) != FALSE);
-    state->backdropLightSample = SampleBackdropLuminanceFromSnap(
-        newX, newY, dlgW, state->totalHeight, false);
-    state->lastTopologySig = GetBackdropWindowTopologySignature(hDlg);
+    if (NeedsBackdropSnapshot(state)) {
+        CaptureCleanMonitorBackdrop(hDlg, IsWindowVisible(hDlg) != FALSE);
+        state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+            newX, newY, dlgW, state->totalHeight, false);
+        state->lastTopologySig = GetBackdropWindowTopologySignature(hDlg);
+    }
     state->pendingTopologyRecapture = false;
 
     ApplyWindowAppearance(hDlg, state);
@@ -10371,6 +10398,7 @@ BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
 }
 
 void ReleaseGlobalResources() {
+    ReleaseBackdropSnapshot();
     {
         std::lock_guard<std::mutex> lock(g_catalogMutex);
         for (auto& cand : g_appCatalog) {
