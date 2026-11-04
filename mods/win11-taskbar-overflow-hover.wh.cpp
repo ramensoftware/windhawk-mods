@@ -2,7 +2,7 @@
 // @id              win11-taskbar-overflow-hover
 // @name            Taskbar Overflow on Hover
 // @description     Opens the Windows 11 taskbar overflow menu on hover and closes it when you move away or click.
-// @version         1.0
+// @version         1.2
 // @author          Cougar16
 // @github         https://github.com/Cougar16
 // @include        windhawk.exe
@@ -14,32 +14,25 @@
 # Taskbar Overflow on Hover 🚀
 
 A zero-click QoL upgrade for Windows 11. Hover over the taskbar overflow button
-to open the hidden running Apps icons.
+to open the hidden Apps icons.
 
 ![Hover overflow menu](https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png)
 
 Features:
-- Opens the overflow menu after a configurable hover delay.
-- Closes the flyout after the cursor leaves it.
-- Dismisses the flyout after a click.
+- Opens the overflow menu shortly after you hover the overflow button.
+- Closes the flyout as soon as the cursor leaves the combined area of the
+  button and the menu (the gap between them counts as part of the area).
+- Dismisses the flyout after you click an icon inside it.
+- Keeps the flyout open while a tray icon's popup menu is showing.
 - UI Automation is queried only when the cursor is over a taskbar window.
+- The flyout is closed through the overflow button itself (UI Automation),
+  no keystrokes are sent to other applications.
 - No synthetic mouse-click fallback is used.
 - Runs as a dedicated Windhawk tool process, not inside Explorer.
 
 Developed by Cougar16.
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- hoverDelayMs: 100
-  $name: Hover Delay (ms)
-  $description: Time in milliseconds to wait while hovering before opening the menu.
-- closeDelayMs: 150
-  $name: Close Delay (ms)
-  $description: Time in milliseconds to wait after moving the cursor away before closing the menu.
-*/
-// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
@@ -49,13 +42,26 @@ Developed by Cougar16.
 
 #include <cwchar>
 
-struct {
-    int hoverDelayMs;
-    int closeDelayMs;
-} settings;
+// Time the cursor must rest on the overflow button before the menu opens.
+constexpr int kHoverDelayMs = 100;
 
-volatile bool g_modUnloading = false;
-HANDLE g_hThread = NULL;
+// Time the cursor must stay outside the button + menu area before the menu
+// closes (a tiny debounce so a brief overshoot does not make it flicker).
+constexpr int kCloseDelayMs = 150;
+
+// Signalled on unload to stop the monitor thread (also interrupts its sleep).
+HANDLE g_stopEvent = nullptr;
+HANDLE g_hThread = nullptr;
+
+// After invoking the chevron the flyout needs a moment to appear. During this
+// grace period a missing flyout window is not treated as "closed".
+constexpr ULONGLONG kOpenGraceMs = 600;
+
+// After a click inside the flyout, wait this long before deciding whether the
+// click opened a popup menu (keep the flyout) or not (dismiss the flyout).
+constexpr ULONGLONG kClickSettleMs = 100;
+
+constexpr wchar_t kOverflowFlyoutClass[] = L"TopLevelWindowForOverflowXamlIsland";
 
 // Return true only when the point belongs to a taskbar top-level window
 // owned by the same process as the primary taskbar.
@@ -99,6 +105,57 @@ bool IsTaskbarWindowAtPoint(POINT pt, DWORD* taskbarPidOut = nullptr) {
     }
 
     return true;
+}
+
+// Returns the real overflow flyout window if it is currently visible and owned
+// by the taskbar's process, otherwise nullptr.
+HWND GetVisibleFlyout(DWORD taskbarPid) {
+    HWND hWnd = nullptr;
+    while ((hWnd = FindWindowExW(nullptr, hWnd, kOverflowFlyoutClass, nullptr)) !=
+           nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid != taskbarPid || !IsWindowVisible(hWnd)) {
+            continue;
+        }
+
+        RECT rc = {};
+        if (GetWindowRect(hWnd, &rc) && !IsRectEmpty(&rc)) {
+            return hWnd;
+        }
+    }
+
+    return nullptr;
+}
+
+// True when the point lies inside the flyout window.
+bool IsPointInFlyout(HWND hFlyout, POINT pt) {
+    HWND hWnd = WindowFromPoint(pt);
+    if (hWnd && GetAncestor(hWnd, GA_ROOT) == hFlyout) {
+        return true;
+    }
+
+    RECT rc = {};
+    return GetWindowRect(hFlyout, &rc) && PtInRect(&rc, pt);
+}
+
+// True while a popup menu (for example a tray icon's context menu) is showing.
+bool IsPopupMenuOpen() {
+    GUITHREADINFO gti = {};
+    gti.cbSize = sizeof(gti);
+    if (GetGUIThreadInfo(0, &gti) &&
+        (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE))) {
+        return true;
+    }
+
+    HWND hMenu = nullptr;
+    while ((hMenu = FindWindowExW(nullptr, hMenu, L"#32768", nullptr)) != nullptr) {
+        if (IsWindowVisible(hMenu)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool IsOverflowAutomationId(IUIAutomationElement* element) {
@@ -206,14 +263,131 @@ bool FindTaskbarOverflowElement(
     return found;
 }
 
-void SendEscapeKey() {
-    INPUT input = {};
-    input.type = INPUT_KEYBOARD;
-    input.ki.wVk = VK_ESCAPE;
-    SendInput(1, &input, sizeof(input));
+// Looks the overflow button up again from the primary taskbar window. Used when
+// the cached element is gone or stale. Only elements owned by the taskbar's
+// process are accepted.
+bool FindChevronInTaskbar(
+    IUIAutomation* automation,
+    HWND hTaskbar,
+    DWORD taskbarPid,
+    IUIAutomationElement** elementOut) {
 
-    input.ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(1, &input, sizeof(input));
+    *elementOut = nullptr;
+
+    if (!hTaskbar) {
+        return false;
+    }
+
+    IUIAutomationElement* root = nullptr;
+    HRESULT hr = automation->ElementFromHandle(hTaskbar, &root);
+    if (FAILED(hr) || !root) {
+        return false;
+    }
+
+    VARIANT v1;
+    VARIANT v2;
+    VariantInit(&v1);
+    VariantInit(&v2);
+    v1.vt = VT_BSTR;
+    v1.bstrVal = SysAllocString(L"Chevron");
+    v2.vt = VT_BSTR;
+    v2.bstrVal = SysAllocString(L"OverflowButton");
+
+    IUIAutomationCondition* cond1 = nullptr;
+    IUIAutomationCondition* cond2 = nullptr;
+    IUIAutomationCondition* condOr = nullptr;
+    IUIAutomationElement* found = nullptr;
+
+    if (v1.bstrVal && v2.bstrVal &&
+        SUCCEEDED(automation->CreatePropertyCondition(
+            UIA_AutomationIdPropertyId, v1, &cond1)) &&
+        SUCCEEDED(automation->CreatePropertyCondition(
+            UIA_AutomationIdPropertyId, v2, &cond2)) &&
+        SUCCEEDED(automation->CreateOrCondition(cond1, cond2, &condOr)) &&
+        condOr) {
+        root->FindFirst(TreeScope_Descendants, condOr, &found);
+    }
+
+    if (condOr) condOr->Release();
+    if (cond2) cond2->Release();
+    if (cond1) cond1->Release();
+    VariantClear(&v1);
+    VariantClear(&v2);
+    root->Release();
+
+    if (!found) {
+        return false;
+    }
+
+    int elementPid = 0;
+    if (FAILED(found->get_CurrentProcessId(&elementPid)) ||
+        elementPid != static_cast<int>(taskbarPid)) {
+        found->Release();
+        return false;
+    }
+
+    *elementOut = found;
+    return true;
+}
+
+// Performs the "close" counterpart of the open action on the overflow button,
+// using the same pattern priority as opening:
+// Invoke (toggles) -> ExpandCollapse::Collapse -> Toggle.
+bool CloseOverflowElement(IUIAutomationElement* element) {
+    if (!element) {
+        return false;
+    }
+
+    IUIAutomationInvokePattern* invokePattern = nullptr;
+    IUIAutomationExpandCollapsePattern* expandPattern = nullptr;
+    IUIAutomationTogglePattern* togglePattern = nullptr;
+
+    element->GetCurrentPattern(
+        UIA_InvokePatternId, reinterpret_cast<IUnknown**>(&invokePattern));
+    element->GetCurrentPattern(
+        UIA_ExpandCollapsePatternId, reinterpret_cast<IUnknown**>(&expandPattern));
+    element->GetCurrentPattern(
+        UIA_TogglePatternId, reinterpret_cast<IUnknown**>(&togglePattern));
+
+    HRESULT hr = E_FAIL;
+    if (invokePattern) {
+        hr = invokePattern->Invoke();
+    } else if (expandPattern) {
+        hr = expandPattern->Collapse();
+    } else if (togglePattern) {
+        hr = togglePattern->Toggle();
+    }
+
+    if (invokePattern) invokePattern->Release();
+    if (expandPattern) expandPattern->Release();
+    if (togglePattern) togglePattern->Release();
+
+    return SUCCEEDED(hr);
+}
+
+// Closes the flyout through the overflow button. Tries the cached element first
+// and falls back to looking the button up again if the cached one went stale.
+bool CloseOverflowFlyout(
+    IUIAutomation* automation,
+    IUIAutomationElement** cachedChevron,
+    HWND hTaskbar,
+    DWORD taskbarPid) {
+
+    if (*cachedChevron && CloseOverflowElement(*cachedChevron)) {
+        return true;
+    }
+
+    if (*cachedChevron) {
+        (*cachedChevron)->Release();
+        *cachedChevron = nullptr;
+    }
+
+    if (FindChevronInTaskbar(automation, hTaskbar, taskbarPid, cachedChevron) &&
+        CloseOverflowElement(*cachedChevron)) {
+        return true;
+    }
+
+    return false;
 }
 
 DWORD WINAPI HoverMonitorThread(LPVOID) {
@@ -236,31 +410,80 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
 
     int currentHoverTime = 0;
     int currentCloseHoverTime = 0;
-    bool menuOpened = false;
+    bool menuOpened = false;      // True only while the mod owns an open flyout.
     bool wasMouseDown = false;
+    bool clickPending = false;    // A click inside the flyout is waiting to dismiss it.
+    ULONGLONG openedAt = 0;
+    ULONGLONG clickAt = 0;
+    IUIAutomationElement* chevron = nullptr; // Cached overflow button used to close.
+    RECT chevronRect = {};                   // Button bounds, captured when opened.
+    bool haveChevronRect = false;
 
-    while (!g_modUnloading) {
-        Sleep(50);
+    // Forget everything about the flyout the mod opened.
+    auto resetOwnership = [&]() {
+        menuOpened = false;
+        clickPending = false;
+        haveChevronRect = false;
+        currentHoverTime = 0;
+        currentCloseHoverTime = 0;
+        if (chevron) {
+            chevron->Release();
+            chevron = nullptr;
+        }
+    };
 
-        // Dismiss after a click while the mod believes the flyout is open.
+    // The 50 ms wait doubles as the poll interval and is interrupted by the
+    // stop event, so unloading never has to wait for a sleep to finish.
+    while (WaitForSingleObject(g_stopEvent, 50) == WAIT_TIMEOUT) {
+        const ULONGLONG now = GetTickCount64();
+
+        // Read the real flyout state instead of trusting a local guess.
+        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        DWORD flyoutOwnerPid = 0;
+        if (hTaskbar) {
+            GetWindowThreadProcessId(hTaskbar, &flyoutOwnerPid);
+        }
+        HWND hFlyout = flyoutOwnerPid ? GetVisibleFlyout(flyoutOwnerPid) : nullptr;
+
+        // The flyout was closed some other way (Win key, Alt+Tab, Escape typed
+        // by the user, click elsewhere...). Stop considering it ours.
+        if (menuOpened && !hFlyout && now - openedAt >= kOpenGraceMs) {
+            resetOwnership();
+        }
+
+        auto closeFlyout = [&]() {
+            if (!CloseOverflowFlyout(automation, &chevron, hTaskbar, flyoutOwnerPid)) {
+                Wh_Log(L"Failed to close the overflow flyout");
+            }
+            resetOwnership();
+        };
+
         bool isMouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
         bool mouseClicked = wasMouseDown && !isMouseDown;
         wasMouseDown = isMouseDown;
-
-        if (menuOpened && mouseClicked) {
-            // Allow the clicked tray app/button to process the click first.
-            Sleep(30);
-            SendEscapeKey();
-            menuOpened = false;
-            currentCloseHoverTime = 0;
-            currentHoverTime = 0;
-            continue;
-        }
 
         POINT pt = {};
         if (!GetCursorPos(&pt)) {
             currentHoverTime = 0;
             continue;
+        }
+
+        // Only a click inside the flyout counts as "clicked an icon".
+        if (menuOpened && hFlyout && mouseClicked && IsPointInFlyout(hFlyout, pt)) {
+            clickPending = true;
+            clickAt = now;
+        }
+
+        if (clickPending) {
+            if (!menuOpened || !hFlyout) {
+                clickPending = false;
+            } else if (now - clickAt >= kClickSettleMs && !IsPopupMenuOpen()) {
+                // The clicked icon did not open a popup menu: dismiss the flyout.
+                // (While a popup menu is showing, the flyout is kept open and
+                // is dismissed once the menu is gone.)
+                closeFlyout();
+                continue;
+            }
         }
 
         DWORD taskbarPid = 0;
@@ -277,10 +500,12 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
                 automation, pt, taskbarPid, &overflowElement,
                 &invokePattern, &expandPattern, &togglePattern);
 
-            if (isOverflow && !menuOpened) {
+            // Do not toggle a flyout that is already open (for example one the
+            // user opened with a click).
+            if (isOverflow && !menuOpened && !hFlyout) {
                 currentHoverTime += 50;
 
-                if (currentHoverTime >= settings.hoverDelayMs) {
+                if (currentHoverTime >= kHoverDelayMs) {
                     HRESULT actionHr = E_FAIL;
 
                     if (invokePattern) {
@@ -293,14 +518,33 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
 
                     if (SUCCEEDED(actionHr)) {
                         menuOpened = true;
+                        openedAt = now;
                         currentCloseHoverTime = 0;
+                        clickPending = false;
+
+                        // Keep the button so the flyout can be closed through it.
+                        if (chevron) {
+                            chevron->Release();
+                        }
+                        chevron = overflowElement;
+                        chevron->AddRef();
+
+                        // Remember where the button is, so the area between the
+                        // button and the menu counts as "still hovering".
+                        RECT rc = {};
+                        haveChevronRect =
+                            SUCCEEDED(chevron->get_CurrentBoundingRectangle(&rc)) &&
+                            !IsRectEmpty(&rc);
+                        if (haveChevronRect) {
+                            chevronRect = rc;
+                        }
                     } else {
                         Wh_Log(L"Overflow action failed: 0x%08X", actionHr);
                     }
 
                     currentHoverTime = 0;
                 }
-            } else if (!isOverflow) {
+            } else {
                 currentHoverTime = 0;
             }
 
@@ -312,50 +556,31 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
             currentHoverTime = 0;
         }
 
-        // Closing logic: while open, consider the taskbar and Explorer-owned
-        // popup windows to be safe cursor locations. Do not run UIA here.
+        // Closing logic: while the flyout is open, the safe cursor area is the
+        // overflow button, the flyout, and the space between them (their
+        // combined bounding box). Nothing is closed while a tray icon's popup
+        // menu is showing. Do not run UIA here.
         if (menuOpened) {
-            bool inFlyout = false;
+            if (hFlyout) {
+                bool inArea = isOverflow || IsPointInFlyout(hFlyout, pt);
 
-            HWND hWndPoint = WindowFromPoint(pt);
-            HWND hRootPoint = hWndPoint ? GetAncestor(hWndPoint, GA_ROOT) : nullptr;
-
-            if (hRootPoint) {
-                wchar_t rootClass[256] = {};
-                GetClassNameW(hRootPoint, rootClass, ARRAYSIZE(rootClass));
-
-                DWORD pointPid = 0;
-                GetWindowThreadProcessId(hRootPoint, &pointPid);
-
-                HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-                DWORD explorerPid = 0;
-                if (hTaskbar) {
-                    GetWindowThreadProcessId(hTaskbar, &explorerPid);
+                if (!inArea && haveChevronRect) {
+                    RECT flyoutRect = {};
+                    if (GetWindowRect(hFlyout, &flyoutRect)) {
+                        RECT area = {};
+                        UnionRect(&area, &chevronRect, &flyoutRect);
+                        inArea = PtInRect(&area, pt) != FALSE;
+                    }
                 }
 
-                bool isTaskbarRoot =
-                    wcscmp(rootClass, L"Shell_TrayWnd") == 0 ||
-                    wcscmp(rootClass, L"Shell_SecondaryTrayWnd") == 0;
-
-                bool isDesktopRoot =
-                    wcscmp(rootClass, L"WorkerW") == 0 ||
-                    wcscmp(rootClass, L"Progman") == 0;
-
-                if (pointPid == explorerPid && !isTaskbarRoot && !isDesktopRoot) {
-                    inFlyout = true;
-                }
-            }
-
-            if (isOverflow || inFlyout) {
-                currentCloseHoverTime = 0;
-            } else {
-                currentCloseHoverTime += 50;
-
-                if (currentCloseHoverTime >= settings.closeDelayMs) {
-                    SendEscapeKey();
-                    menuOpened = false;
+                if (inArea || IsPopupMenuOpen()) {
                     currentCloseHoverTime = 0;
-                    currentHoverTime = 0;
+                } else {
+                    currentCloseHoverTime += 50;
+
+                    if (currentCloseHoverTime >= kCloseDelayMs) {
+                        closeFlyout();
+                    }
                 }
             }
         } else {
@@ -363,43 +588,53 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
         }
     }
 
+    if (chevron) {
+        chevron->Release();
+        chevron = nullptr;
+    }
+
     automation->Release();
     CoUninitialize();
     return 0;
 }
 
-void LoadSettings() {
-    settings.hoverDelayMs = Wh_GetIntSetting(L"hoverDelayMs");
-    settings.closeDelayMs = Wh_GetIntSetting(L"closeDelayMs");
-
-    // Avoid zero/negative values causing immediate or confusing behavior.
-    if (settings.hoverDelayMs < 0) settings.hoverDelayMs = 0;
-    if (settings.closeDelayMs < 0) settings.closeDelayMs = 0;
-}
-
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Initializing Taskbar Overflow on Hover v1.1");
-    LoadSettings();
+    Wh_Log(L"Initializing Taskbar Overflow on Hover v1.2");
 
-    g_modUnloading = false;
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        return FALSE;
+    }
+
     g_hThread = CreateThread(nullptr, 0, HoverMonitorThread, nullptr, 0, nullptr);
-    return g_hThread != nullptr;
+    if (!g_hThread) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 void WhTool_ModUninit() {
     Wh_Log(L"Unloading Taskbar Overflow on Hover");
-    g_modUnloading = true;
 
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+
+    // Wait without a timeout: the thread must be fully finished before the
+    // process continues to tear down.
     if (g_hThread) {
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = nullptr;
     }
-}
 
-void WhTool_ModSettingsChanged() {
-    Wh_Log(L"Settings changed; reloading delays.");
-    LoadSettings();
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -548,14 +783,6 @@ void Wh_ModAfterInit() {
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
