@@ -7,7 +7,6 @@
 // @version 1.0.0
 // @author Feuer
 // @github https://github.com/feuerdraws
-// @twitter https://x.com/feuerdraws
 // @include explorer.exe
 // @include StartMenuExperienceHost.exe
 // @architecture x86-64
@@ -1297,8 +1296,21 @@ StartModState ProcessModState(DWORD pid) {
     wchar_t selfPath[MAX_PATH]{};
     if (!GetModuleFileNameW(ModuleInstance(), selfPath, ARRAYSIZE(selfPath))) return StartModState::Absent;
     const wchar_t* selfName = PathFindFileNameW(selfPath);
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-    if (snapshot == INVALID_HANDLE_VALUE) return StartModState::Absent;
+    // The snapshot can fail with ERROR_BAD_LENGTH while the process is loading or unloading modules; retry a few times.
+    HANDLE snapshot = INVALID_HANDLE_VALUE;
+    DWORD snapshotError = ERROR_SUCCESS;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+        if (snapshot != INVALID_HANDLE_VALUE) break;
+        snapshotError = GetLastError();
+        if (snapshotError != ERROR_BAD_LENGTH) break;
+        Sleep(10);
+    }
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Could not read the module list of Start (process %lu, error %lu); treating it as without this mod",
+               pid, snapshotError);
+        return StartModState::Absent;
+    }
     StartModState state = StartModState::Absent;
     bool sawStartMenuDll = false;
     MODULEENTRY32W entry{};
@@ -3328,7 +3340,7 @@ void SetCustomIdBoxVisible(bool visible) {
     ReflowXamlBars();
 }
 
-// Shows or hides the advanced button to match the setting (called when the setting changes, as on Win32).
+// Shows or hides the advanced button to match the setting (called when the setting changes).
 void UpdateXamlAdvancedButton() {
     if (!g_xamlBar) return;
     if (g_showOriginalButton && !g_xamlAdvanced) {
@@ -5629,8 +5641,10 @@ struct InjectedItem {
     winrt::event_token clickToken;
 };
 SRWLOCK g_injectedLock = SRWLOCK_INIT;
-[[clang::no_destroy]] std::vector<InjectedItem> g_injectedItems;
-[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher g_startDispatcher{nullptr};
+// Weak references and tokens only, which are safe to destroy on any thread.
+std::vector<InjectedItem> g_injectedItems;
+// The thread the items were created on (Start's UI thread), recorded by AppendInjectedItems.
+std::atomic<DWORD> g_startUiThreadId{0};
 
 // Runs on Start's UI thread, which owns the items.
 void ReleaseInjectedItems() {
@@ -5650,31 +5664,75 @@ void ReleaseInjectedItems() {
     }
 }
 
-// Called from Wh_ModUninit, which does not run on Start's UI thread.
+// Runs `proc` on the thread that owns `window` and returns only when it has finished, so no code of this mod is left
+// queued on that thread afterwards. A WH_CALLWNDPROC hook for that thread runs the procedure when a registered message
+// is sent to the window; sending the message blocks until the thread has handled it. This is the same pattern as
+// RunFromWindowThread in the Taskbar Labels mod.
+using RunOnWindowThreadProc_t = void (*)(void*);
+
+bool RunOnWindowThread(HWND window, RunOnWindowThreadProc_t proc, void* procParam) {
+    static const UINT runMessage = RegisterWindowMessageW(L"WindhawkStartCategoryManager.RunOnWindowThread");
+
+    struct Request {
+        RunOnWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    const DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (threadId == 0) return false;
+    if (threadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == runMessage) {
+                    auto* request = reinterpret_cast<Request*>(cwp->lParam);
+                    request->proc(request->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) return false;
+
+    Request request{proc, procParam};
+    SendMessageW(window, runMessage, 0, reinterpret_cast<LPARAM>(&request));
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+struct ThreadWindows {
+    HWND core = nullptr;  // Start's CoreWindow, preferred.
+    HWND any = nullptr;   // Any other window of the thread.
+};
+
+BOOL CALLBACK FindThreadWindowProc(HWND hwnd, LPARAM lParam) {
+    auto* windows = reinterpret_cast<ThreadWindows*>(lParam);
+    if (!windows->any) windows->any = hwnd;
+    wchar_t className[64]{};
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) && wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0) {
+        windows->core = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// Called from Wh_ModUninit, which does not run on Start's UI thread. Waits, with no timeout, until the cleanup has run
+// on that thread, so Start cannot call or release the Click handler (code in this mod) after the mod is unloaded.
 void ReleaseInjectedItemsOnUiThread() {
-    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
-    AcquireSRWLockExclusive(&g_injectedLock);
-    dispatcher = g_startDispatcher;
-    ReleaseSRWLockExclusive(&g_injectedLock);
-    if (!dispatcher) return;
-    try {
-        if (dispatcher.HasThreadAccess()) {
-            ReleaseInjectedItems();
-            return;
-        }
-        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!done) return;
-        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [done]() {
-            ReleaseInjectedItems();
-            SetEvent(done);
-        });
-        // If Start's UI thread is stuck the handle is left open: the queued call would still signal it later.
-        if (WaitForSingleObject(done, 5000) == WAIT_OBJECT_0) {
-            CloseHandle(done);
-            Sleep(50);  // Lets the dispatcher release the call above, which is code in this mod, before it unloads.
-        }
-    } catch (...) {
-        Wh_Log(L"[start] Could not release the injected menu items");
+    const DWORD threadId = g_startUiThreadId;
+    if (threadId == 0) return;  // No item was ever injected.
+
+    ThreadWindows windows;
+    EnumThreadWindows(threadId, FindThreadWindowProc, reinterpret_cast<LPARAM>(&windows));
+    const HWND window = windows.core ? windows.core : windows.any;
+    if (!window || !RunOnWindowThread(window, [](void*) { ReleaseInjectedItems(); }, nullptr)) {
+        Wh_Log(L"[start] Could not release the injected menu items on Start's UI thread");
     }
 }
 
@@ -5699,7 +5757,7 @@ void AppendInjectedItems(void* vectorThis) {
 
         {
             AcquireSRWLockExclusive(&g_injectedLock);
-            g_startDispatcher = item.Dispatcher();
+            g_startUiThreadId = GetCurrentThreadId();
             // Menus are rebuilt each time they open; forget the items Start has already let go of.
             g_injectedItems.erase(std::remove_if(g_injectedItems.begin(), g_injectedItems.end(),
                                                  [](const InjectedItem& injected) { return !injected.item.get(); }),
@@ -5863,7 +5921,9 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     g_shuttingDown = true;
     if (g_isStartHost) {
-        ReleaseInjectedItemsOnUiThread();  // Besides the hooks, only the menu items' Click handler lives in Start.
+        // Besides the hooks, only the menu items' Click handler lives in Start. It is removed on Start's UI thread,
+        // and this returns only after that has happened.
+        ReleaseInjectedItemsOnUiThread();
         return;
     }
 
