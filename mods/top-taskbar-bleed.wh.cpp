@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              top-taskbar-bleed
 // @name            Top Taskbar Bleed
-// @description     Bleeds the color of a maximized window's top edge into a top-docked taskbar behind the task buttons
-// @version         1.0.0
+// @description     Bleeds the color of a maximized window's title bar into a top-docked taskbar behind the task buttons
+// @version         1.1.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -16,15 +16,19 @@
 # Top Taskbar Bleed
 
 When a maximized window sits under a top-docked taskbar, the taskbar gets a
-full-width color panel behind its buttons that matches the window's top edge
-(optionally as a gradient, for Mica title bars), so the window's title bar
-appears to continue up into the bar.
+full-width color panel behind its buttons that matches the window's title bar
+(optionally as a gradient, for Mica title bars), so the title bar appears to
+continue up into the bar.
 
 ![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif)
 
 **Requires a taskbar docked at the top of the screen** (via the taskbar
 position setting on builds that have it, or a mod such as *Taskbar on top for
-Windows 11*). On other dock positions this mod stays idle.
+Windows 11*). On other dock positions this mod stays idle, unless the
+experimental **Any taskbar position** option is on: then a bottom, left or
+right taskbar (the latter two via a mod such as *Vertical Taskbar for Windows
+11*) is painted with the maximized window's title bar color too. Vertical
+taskbars always get the flat color, never the gradient.
 
 How it works:
 
@@ -32,10 +36,11 @@ How it works:
   maximized window (the first maximized window in z-order on that monitor -
   not necessarily the foreground window, so a small dialog on top of a
   maximized app doesn't cancel the bleed).
-- The window's top edge row is captured from the screen and reduced to its
-  dominant color (so a bit of text or an icon can't skew it); that color is
-  the panel and decides the taskbar theme. Pixels covered by another window -
-  a flyout, a thumbnail, a tooltip, a dialog near the top edge - are left out,
+- The first row of the window's title bar is captured from the screen and
+  reduced to its dominant color (so a bit of text or an icon can't skew it);
+  that color is the panel and decides the taskbar theme. Pixels covered by
+  another window - a flyout, a thumbnail, a tooltip, a dialog near the title
+  bar - are left out,
   so floating windows never tint the bleed. Hovering a taskbar thumbnail
   (Aero Peek) bleeds the peeked window if it is maximized on that monitor and
   hides the panel otherwise, since the desktop is what shows through.
@@ -45,31 +50,34 @@ How it works:
   horizontal gradient, so a Mica or gradient title bar continues into the bar
   (a flat one stays flat). A point that doesn't fit the rest (a toolbar
   reaching that far, a hovered control) is bridged from its neighbors. Off by
-  default: apps that put content along their very top edge can still show it.
+  default: apps that put content along the very top of their title bar can
+  still show it.
 - One panel per taskbar is inserted into the taskbar's XAML tree, above the
-  taskbar background and below the buttons. The panel mirrors the edge: window
-  changes (switching, maximizing, minimizing) are picked up from window events
-  and applied on the next composed frame, and the edge is re-sampled in
+  taskbar background and below the buttons. The panel mirrors the title bar:
+  window changes (switching, maximizing, minimizing) are picked up from window
+  events and applied on the next composed frame, and the title bar is
+  re-sampled in
   between - every **Poll interval** (250 ms by default) while it is static,
   every 25 ms while it is changing - so a title bar that recolors in place
   (focus fade, tab switch, app theme change) is followed frame by frame. With
   Windows animations on, a window being zoomed into place isn't committed
-  until its edge has actually landed, so the panel never flashes the background
+  until its title bar has actually landed, so the panel never flashes the background
   behind it; with animations off the first sample is applied as is.
 
 Supports multiple monitors (each taskbar follows its own monitor).
 
-Settings: **Poll interval** (how often a static edge is re-checked; window
+Settings: **Poll interval** (how often a static title bar is re-checked; window
 changes are event-driven regardless), **Excluded programs** (executables whose
-windows should never trigger the bleed) and the experimental **Gradient bleed**
-toggle described above.
+windows should never trigger the bleed), and the experimental **Gradient
+bleed** and **Any taskbar position** toggles described above.
 
 The panel is a regular XAML `Border` named `TaskbarBleedPanel`, so its shape can
 be styled with *Windows 11 Taskbar Styler* like any other taskbar element.
 Target `Border#TaskbarBleedPanel` and set, for example, `Margin=4,4,4,0` or
-`CornerRadius=8,8,0,0` (the panel's bottom edge meets the window, so the
-rounded corners are normally the top ones). Leave `Background` and `Opacity`
-alone - the mod drives those (the background is a gradient brush).
+`CornerRadius=8,8,0,0` (on a top taskbar the panel's bottom edge meets the
+window, so the rounded corners are normally the top ones; on a bottom taskbar
+it is the other way round). Leave `Background` and `Opacity` alone - the mod
+drives those (the background is a gradient brush).
 
 ## Notes
 
@@ -92,9 +100,10 @@ alone - the mod drives those (the background is a gradient brush).
   labels on a light panel (and vice versa). While a panel is showing, the mod
   switches that monitor's taskbar to the theme that matches the bled color
   (light panel -> light mode, dark panel -> dark mode) and restores the
-  previous theme when the panel hides. This is done per taskbar through XAML's
-  `RequestedTheme`, so only the affected monitor changes and the system theme
-  itself is untouched.
+  taskbar's own theme when the panel hides - the one matching the current
+  Windows mode, also when the mode was switched while the panel was showing.
+  This is done per taskbar through XAML's `RequestedTheme`, so only the
+  affected monitor changes and the system theme itself is untouched.
 
 ## Credits
 
@@ -109,14 +118,17 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
 /*
 - PollIntervalMs: 250
   $name: Poll interval (ms)
-  $description: How often the window edge is re-checked while nothing is happening. Window changes (switching, maximizing, minimizing) are picked up from events immediately regardless; this only decides how soon a title bar that recolors on its own (a tab switch, an app theme change) is followed. Lower is more responsive, higher costs less.
+  $description: How often the window's title bar is re-checked while nothing is happening. Window changes (switching, maximizing, minimizing) are picked up from events immediately regardless; this only decides how soon a title bar that recolors on its own (a tab switch, an app theme change) is followed. Lower is more responsive, higher costs less.
 - ExcludedProcesses: [""]
   $name: Excluded programs
   $description: Executable names (e.g. game.exe) whose windows never trigger the bleed.
 - Experimental:
   - Gradient: false
     $name: Gradient bleed
-    $description: Follow a title bar's horizontal gradient (Mica) instead of its single dominant color. Samples four points across the window's width; apps that place toolbar icons or other content along their very top edge may show it in the gradient.
+    $description: Follow a title bar's horizontal gradient (Mica) instead of its single dominant color. Samples four points across the window's width; apps that place toolbar icons or other content along the very top of their title bar may show it in the gradient.
+  - AnyDock: false
+    $name: Any taskbar position
+    $description: Also paint taskbars docked at the bottom, left or right. The color still comes from the maximized window's title bar, so a bottom taskbar takes the title bar's color without touching it. Vertical taskbars always get the flat color, not the gradient.
   $name: Experimental
 */
 // ==/WindhawkModSettings==
@@ -172,9 +184,10 @@ constexpr int kGradientPoints = 4;
 using Gradient = std::array<Rgb, kGradientPoints>;
 
 struct Settings {
-    int pollIntervalMs = 250;                     // steady-state re-check of a static edge
+    int pollIntervalMs = 250;                     // steady-state re-check of a static title bar
     std::vector<std::wstring> excludedProcesses;  // lowercase basenames
     bool gradient = false;                        // experimental: four-point gradient instead of one color
+    bool anyDock = false;                         // experimental: paint bottom/left/right taskbars too
 };
 
 std::mutex g_settingsMutex;
@@ -202,6 +215,7 @@ void LoadSettings() {
     }
     s.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"PollIntervalMs"), 50, 60000);
     s.gradient = Wh_GetIntSetting(L"Experimental.Gradient") != 0;
+    s.anyDock = Wh_GetIntSetting(L"Experimental.AnyDock") != 0;
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -473,8 +487,10 @@ struct Island {
     bool shown = false;
     bool strokeHidden = false;
     int forcedTheme = ThemeNone;
-    wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // RequestedTheme before we forced one
-    Rgb color{};         // dominant color of the edge (theme decision)
+    wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // the root's own RequestedTheme (restored on hide)
+    bool originalSystemLight = false;  // Windows mode when originalTheme was captured
+    int64_t themeCallbackToken = 0;  // RegisterPropertyChangedCallback on the root's RequestedTheme (0 = none)
+    Rgb color{};         // dominant color of the title bar (theme decision)
     Gradient gradient{};  // what the panel shows
 };
 
@@ -512,12 +528,12 @@ wu::Color ToColor(Rgb c) {
 // restoring RequestedTheme re-resolves the island's theme resources, and when
 // the Opacity change sits in the same pass the panel stays on screen until
 // that pass is done.
-enum class UpdateStep { Full, PanelOnly, StrokeAndTheme };
+enum class UpdateStep { Full, PanelOnly, StrokeAndTheme, ReassertTheme };
 
 struct IslandUpdate {
     HWND hwnd;
     bool active;
-    Rgb color;          // dominant edge color: theme decision and log
+    Rgb color;          // dominant title bar color: theme decision and log
     Gradient gradient;  // what to paint
     UpdateStep step;
 };
@@ -568,15 +584,15 @@ constexpr UINT WM_TRACKER_SETTINGS = WM_APP + 2;  // re-run the color pipeline o
 // that also covers events generated while the tracker was busy, which the
 // hook delivers only once the loop pumps messages again.
 //
-// While a maximized window is present the edge is re-sampled: every
+// While a maximized window is present the title bar is re-sampled: every
 // Poll interval (setting) when the strip is static, every kFastPollMs while it is changing
 // (a focus fade, a window landing after an animation), so the panel follows a
 // transition frame by frame instead of in coarse steps. The slow poll only has
-// to catch an edge that recolors on its own (a tab switch, an app theme
+// to catch a title bar that recolors on its own (a tab switch, an app theme
 // change) - every window change already gets the event tick - so it can be
 // leisurely; it is the steady-state cost of the mod, one EnumWindows pass and
 // one screen readback per poll. Fast polling is capped at kFastMaxMs per
-// transition so content that never settles (video at the top edge) can't keep
+// transition so content that never settles (video in the title bar) can't keep
 // it on; it re-arms once the strip has been still for kFastRearmTicks slow
 // polls.
 //
@@ -612,9 +628,35 @@ constexpr int kFastRearmTicks = 3;
 constexpr int kNewTargetStableSamples = 2;
 constexpr ULONGLONG kMaxHoldMs = 400;
 
+// ---- Discovery retry -------------------------------------------------------
+// At Explorer start the mod loads before the taskbar exists: Wh_ModAfterInit
+// finds no taskbar window, and the layout hooks fire while the taskbar is still
+// being built, when its band and XAML host aren't ready, so those attempts fail
+// and are throttled. Once the taskbar is up nothing fires the hooks again until
+// the user hovers a button, so the first bleed would wait for an interaction.
+// While any taskbar window of the process lacks an island - none attached yet,
+// a secondary taskbar that wasn't ready when the primary attached, a taskbar
+// rebuilt while another kept its island - the tracker therefore retries the
+// direct attach itself: every kDiscoveryRetryMs at first, every
+// kDiscoveryRetrySlowMs after kDiscoveryFastWindowMs (there may be no taskbar
+// at all, or none this mod understands).
+constexpr double kDiscoveryRetryMs = 1000;
+constexpr double kDiscoveryRetrySlowMs = 10000;
+constexpr ULONGLONG kDiscoveryFastWindowMs = 60000;
+void WINAPI AttachAllTaskbars(void*);          // painter section
+std::atomic<bool> g_taskbarMissingIsland{false};  // set by AttachAllTaskbars: a taskbar window it couldn't attach
+
 HANDLE g_trackerThread = nullptr;
 DWORD g_trackerThreadId = 0;
 HANDLE g_trackerReady = nullptr;
+ULONGLONG g_trackerStartTick = 0;
+
+// Set by the painter when something else rewrote a forced root theme (see
+// OnRootThemeChanged); the tracker re-asserts the forced theme at this NowMs
+// deadline (0 = none). Same clock as the tracker's timer, so the wait lands
+// exactly on it.
+std::atomic<ULONGLONG> g_themeReassertAt{0};
+constexpr ULONGLONG kThemeReassertMs = 500;
 
 // Tracker-thread-only state.
 HANDLE g_timer = nullptr;              // one waitable timer for both schedules below
@@ -773,7 +815,7 @@ bool HookLivePreview() {
     return true;
 }
 
-// Whether Peek of `peeked` fills `hmon` with that window's edge. A window that
+// Whether Peek of `peeked` fills `hmon` with that window's title bar. A window that
 // was minimized while maximized (Win+D, minimize) is shown by Peek at full
 // size, but IsZoomed is false for it and its rect is parked off screen; its
 // placement still says WPF_RESTORETOMAXIMIZED and where it lives.
@@ -800,6 +842,14 @@ bool CursorOverTaskbarPopup(HWND taskbar) {
     return _wcsicmp(cls, L"Shell_TrayWnd") != 0 && _wcsicmp(cls, L"Shell_SecondaryTrayWnd") != 0;
 }
 
+// A left/right taskbar (vertical-taskbar mods). The panel rotates with the
+// taskbar's frame there, so a horizontal gradient would run along the bar;
+// vertical taskbars always get the flat color.
+bool IsTaskbarVertical(HWND taskbar) {
+    RECT tb;
+    return taskbar && GetWindowRect(taskbar, &tb) && (tb.bottom - tb.top) > (tb.right - tb.left);
+}
+
 bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
     RECT tb;
     if (!taskbar || !GetWindowRect(taskbar, &tb)) return false;
@@ -807,25 +857,29 @@ bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
     return horizontal && std::abs(tb.top - mon.top) < std::abs(tb.bottom - mon.bottom);
 }
 
-// Rows sampled along the window's top edge, starting at the very first visible
-// row: a maximized window's 1px DWM border sits in the off-screen frame zone, so
-// there is nothing to skip. One row only: it is still thousands of pixels for
-// the histogram, and going deeper starts to include toolbar icons and caption
-// buttons that some apps place right at the top edge. (An app that paints a
-// 1px line of its own along the edge would be sampled as that line; none seen
-// so far, and 2 would be the fix.)
+// Rows sampled along the top of the window's title bar, starting at the very
+// first visible row: a maximized window's 1px DWM border sits in the off-screen
+// frame zone, so there is nothing to skip. One row only: it is still thousands
+// of pixels for the histogram, and going deeper starts to include toolbar icons
+// and caption buttons that some apps place right at the top of the title bar.
+// (An app that paints a 1px line of its own along it would be sampled as that
+// line; none seen so far, and 2 would be the fix.)
 constexpr LONG kSampleRows = 1;
 
 // The frame is clipped to the work area first (some hosts report a maximized
 // frame that extends under the taskbar by the invisible border width), and then
-// kept off the taskbar window itself, so taskbar pixels - including the panel's
-// own color - can never feed back into the sampler.
+// kept off the taskbar window itself when the two overlap (a top taskbar), so
+// taskbar pixels - including the panel's own color - can never feed back into
+// the sampler. The strip is always the top of the window's title bar, whatever
+// the taskbar's position: with the experimental any-position option a bottom
+// taskbar takes the title bar's color.
 RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar) {
     RECT wr;
     if (!IntersectRect(&wr, &frame, &work)) return RECT{0, 0, 0, 0};
     LONG top = wr.top;
     RECT tb;
-    if (taskbar && GetWindowRect(taskbar, &tb) && top < tb.bottom && wr.left < tb.right && wr.right > tb.left) {
+    if (taskbar && GetWindowRect(taskbar, &tb) && top < tb.bottom && top + kSampleRows > tb.top &&
+        wr.left < tb.right && wr.right > tb.left) {
         top = tb.bottom;
     }
     RECT r{wr.left, top, wr.right, top + kSampleRows};
@@ -910,7 +964,7 @@ uint64_t HashPixels(const std::vector<uint32_t>& px) {
 }
 
 // Columns of the strip covered by windows above the target in z-order (flyouts,
-// thumbnails, tooltips, a dialog near the top edge). Pixels in those columns
+// thumbnails, tooltips, a dialog near the title bar). Pixels in those columns
 // are left out of the dominant color, so a floating window never tints the
 // bleed. Click-through and fully transparent overlays don't cover anything,
 // and a window covering the whole strip is ignored (an overlay that slipped
@@ -1025,7 +1079,7 @@ int ColorDistance(Rgb a, Rgb b) {
     return std::max({std::abs(a.r - b.r), std::abs(a.g - b.g), std::abs(a.b - b.b)});
 }
 
-// Gradient along the edge: the dominant color of a window of kGradientWindow x
+// Gradient along the title bar: the dominant color of a window of kGradientWindow x
 // the width, centered at 20/40/60/80% of it. Those positions avoid the app
 // icon and menu on the left, the caption buttons on the right, and most of a
 // centered title; a Mica gradient is far smoother than four points need. A
@@ -1073,7 +1127,7 @@ Gradient SampleGradient(const std::vector<uint32_t>& px, int w, int h, const std
     return g;
 }
 
-// The panel mirrors the edge: no color thresholds or settle times. For the
+// The panel mirrors the title bar: no color thresholds or settle times. For the
 // current target, any difference between the sampled gradient (four equal
 // points when the gradient option is off) and the one showing is applied on
 // the spot. The only wait is the new-target hold described above, and it waits
@@ -1126,7 +1180,7 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         return;
     }
 
-    if (!IsTaskbarTopDocked(taskbar, mi.rcMonitor)) {
+    if (!ctx.settings->anyDock && !IsTaskbarTopDocked(taskbar, mi.rcMonitor)) {
         if (!st.notTopLogged) Wh_Log(L"taskbar %p: not docked at top, idle", taskbar);
         Deactivate(st, taskbar);
         st.notTopLogged = true;
@@ -1210,8 +1264,11 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
             for (int x = 0; x < w; x++)
                 if (!mask[x]) visible.push_back(px[(size_t)y * w + x]);
         sampled = DominantColor(visible.empty() ? px : visible);
-        if (ctx.settings->gradient) st.lastGradient = SampleGradient(px, w, h, mask, sampled);
-        else st.lastGradient.fill(sampled);  // flat: four equal stops
+        if (ctx.settings->gradient && !IsTaskbarVertical(taskbar)) {
+            st.lastGradient = SampleGradient(px, w, h, mask, sampled);
+        } else {
+            st.lastGradient.fill(sampled);  // flat: four equal stops
+        }
     }
     bool colorChanged = !st.haveLastSample || sampled != st.lastSample;
     st.changedThisTick = pixelsChanged;
@@ -1235,7 +1292,7 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
     }
 
     // Peek fallback without the hook: keep the panel while a taskbar flyout is
-    // hovered, and until the edge has settled again afterwards.
+    // hovered, and until the title bar has settled again afterwards.
     if (!g_peekHooked && !targetChanged && st.active) {
         if (CursorOverTaskbarPopup(taskbar)) {
             if (!st.peekFrozen) Wh_Log(L"taskbar %p: taskbar flyout hovered, holding the panel", taskbar);
@@ -1276,7 +1333,7 @@ void SetPollTimer(double intervalMs) {
 
 // Picks the poll rate for the next tick: fast while something is changing or
 // an event just happened, slow once still, off with nothing to follow.
-void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slowPollMs) {
+void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slowPollMs, bool haveIslands) {
     g_stillTicks = anyChanging ? 0 : g_stillTicks + 1;
     bool followUp = now < g_followUpUntil;
     bool busy = anyChanging || followUp;
@@ -1293,8 +1350,18 @@ void UpdatePollRate(bool anyTarget, bool anyChanging, ULONGLONG now, double slow
         g_fastBlockedUntilStill = false;
     }
 
+    double interval = 0;
     bool wantPoll = anyTarget || followUp;
-    SetPollTimer(!wantPoll ? 0 : g_fastSince ? kFastPollMs : slowPollMs);
+    if (wantPoll) interval = g_fastSince ? kFastPollMs : slowPollMs;
+    if (!haveIslands || g_taskbarMissingIsland) {  // a taskbar without an island: keep retrying discovery
+        double retry = now - g_trackerStartTick < kDiscoveryFastWindowMs ? kDiscoveryRetryMs : kDiscoveryRetrySlowMs;
+        interval = interval ? std::min(interval, retry) : retry;
+    }
+    if (ULONGLONG due = g_themeReassertAt) {  // the re-assert runs at its deadline, not at the next poll
+        double left = std::max(1.0, (double)due - NowMs());
+        interval = interval ? std::min(interval, left) : left;
+    }
+    SetPollTimer(interval);
 }
 
 void Tick() {
@@ -1305,6 +1372,16 @@ void Tick() {
     }
     Settings s = GetSettings();
     auto taskbars = SnapshotIslandWindows();
+    if (taskbars.empty() || g_taskbarMissingIsland) {
+        // Some taskbar has no island yet (Explorer just started, a secondary
+        // taskbar wasn't ready when the others attached, a taskbar was
+        // rebuilt): attach directly from the taskbar windows, as
+        // Wh_ModAfterInit does.
+        if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+            RunFromWindowThread(hTaskbarWnd, AttachAllTaskbars, nullptr);
+            taskbars = SnapshotIslandWindows();
+        }
+    }
 
     if (bool anim = WindowAnimationsEnabled(); anim != g_animationsOn || !g_animationsKnown) {
         Wh_Log(L"window animations %s", anim ? L"on" : L"off");
@@ -1327,6 +1404,17 @@ void Tick() {
     bool anyTarget = false;
     for (HWND tb : taskbars) ProcessTaskbar(tb, ctx, anyTarget);
 
+    if (ULONGLONG due = g_themeReassertAt;
+        due && (ULONGLONG)NowMs() >= due && g_themeReassertAt.compare_exchange_strong(due, 0)) {
+        for (HWND tb : taskbars) {
+            auto it = g_track.find(tb);
+            if (it != g_track.end() && it->second.active) {
+                SendIslandUpdate(tb, true, it->second.committed, it->second.committedGradient,
+                                 UpdateStep::ReassertTheme);
+            }
+        }
+    }
+
     // Drop state for taskbars that disappeared.
     bool anyChanging = false;
     for (auto it = g_track.begin(); it != g_track.end();) {
@@ -1341,7 +1429,7 @@ void Tick() {
         it = alive ? std::next(it) : g_track.erase(it);
     }
 
-    UpdatePollRate(anyTarget, anyChanging, GetTickCount64(), (double)s.pollIntervalMs);
+    UpdatePollRate(anyTarget, anyChanging, GetTickCount64(), (double)s.pollIntervalMs, !taskbars.empty());
 }
 
 // Window events arrive in bursts (a restore fires many over 100-300 ms). The
@@ -1390,6 +1478,7 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
 
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the queue
+    g_trackerStartTick = GetTickCount64();
     g_timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     if (!g_timer) g_timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);  // pre-1803 fallback
     SetEvent(g_trackerReady);
@@ -1541,9 +1630,10 @@ void SetPanelVisible(Island& isl, bool visible) {
 // ---- Adaptive theme ---------------------------------------------------------
 // RequestedTheme on the island's root content re-resolves every theme-resource
 // brush under it (labels, monochrome icons, hover highlights, the tray) for
-// this island only, i.e. for this monitor's taskbar. The root's previous
-// RequestedTheme is saved the first time a theme is forced and restored when
-// the panel hides, so a value set by another mod survives.
+// this island only, i.e. for this monitor's taskbar. The root's own value is
+// captured when a theme is first forced, kept current while forced (see
+// OnRootThemeChanged and RestoreThemeValue: the taskbar rewrites it whenever
+// the Windows mode changes), and restored when the panel hides.
 
 // Perceived brightness above which a bled color counts as light (black text
 // starts out-contrasting white around here), with an 8-level hysteresis band.
@@ -1556,6 +1646,65 @@ int PerceivedBrightness(Rgb c) {
     return (int)std::lround(0.299 * c.r + 0.587 * c.g + 0.114 * c.b);
 }
 
+// Windows mode (Settings > Personalization > Colors > "Choose your mode"); the
+// taskbar follows this one, not the apps mode.
+bool SystemLightTheme() {
+    DWORD value = 1, size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value != 0;
+}
+
+// What to put back when the panel hides. The taskbar mirrors the Windows mode
+// into the root's RequestedTheme, and its write can go unseen: if the window
+// recolored first and the panel already forced the new mode's value, the
+// taskbar's identical write changes nothing and fires no callback, leaving the
+// captured original stale. So an explicit original is trusted only while the
+// Windows mode is still the one it was captured under; otherwise the current
+// mode is restored. Default follows the system by itself and is left alone.
+wux::ElementTheme RestoreThemeValue(Island& isl) {
+    bool light = SystemLightTheme();
+    if (isl.originalTheme != wux::ElementTheme::Default && light != isl.originalSystemLight) {
+        isl.originalTheme = light ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
+        isl.originalSystemLight = light;
+    }
+    return isl.originalTheme;
+}
+
+wux::ElementTheme ForcedThemeValue(Island& isl) {
+    return isl.forcedTheme == ThemeLight ? wux::ElementTheme::Light
+           : isl.forcedTheme == ThemeDark ? wux::ElementTheme::Dark
+                                          : RestoreThemeValue(isl);
+}
+
+// The taskbar sets RequestedTheme on its root itself and rewrites it when the
+// system theme changes. A value saved once would go stale: forced Dark under a
+// dark system theme, then Windows switched to light and the panel hidden, would
+// restore the saved Dark. So the property is watched: while a theme is forced,
+// a value set by anyone else becomes the new original, and on hide that latest
+// original is restored.
+//
+// The forced value is NOT put back here. The taskbar's theme-change handling
+// (and a styler's) computes things that don't follow RequestedTheme - the bar
+// background above all - from the theme in effect while it runs; re-forcing
+// inside the callback made it compute a dark background that then stayed after
+// the panel hid and the theme was restored. The handling is let to finish
+// under the real theme (the panel covers the background meanwhile), and the
+// tracker re-asserts the forced theme kThemeReassertMs after the last write.
+void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
+    auto isl = FindIslandByHwnd(hwnd);
+    if (!isl || isl->forcedTheme == ThemeNone) return;
+    wux::ElementTheme now = root.RequestedTheme();
+    if (now == ForcedThemeValue(*isl)) return;  // our own set, or someone agreeing with it
+    isl->originalTheme = now;
+    isl->originalSystemLight = SystemLightTheme();
+    g_themeReassertAt = (ULONGLONG)NowMs() + kThemeReassertMs;
+    RequestTick();
+    Wh_Log(L"taskbar %p: root theme changed underneath to %d, re-asserting in %llu ms", hwnd, (int)now,
+           kThemeReassertMs);
+} catch (...) {
+}
+
 wux::FrameworkElement ThemeRootOf(Island& isl) {
     if (auto r = isl.themeRoot.get()) return r;
     try {
@@ -1563,6 +1712,12 @@ wux::FrameworkElement ThemeRootOf(Island& isl) {
             if (auto xr = isl.panel.XamlRoot()) {
                 if (auto root = xr.Content().try_as<wux::FrameworkElement>()) {
                     isl.themeRoot = root;
+                    HWND hwnd = isl.hwnd;
+                    isl.themeCallbackToken = root.RegisterPropertyChangedCallback(
+                        wux::FrameworkElement::RequestedThemeProperty(),
+                        [hwnd](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
+                            if (auto fe = sender.try_as<wux::FrameworkElement>()) OnRootThemeChanged(hwnd, fe);
+                        });
                     return root;
                 }
             }
@@ -1586,16 +1741,24 @@ void ApplyTheme(Island& isl, bool active, Rgb color) {
 
     auto root = ThemeRootOf(isl);
     if (!root) return;
-    if (isl.forcedTheme == ThemeNone) isl.originalTheme = root.RequestedTheme();
+    if (isl.forcedTheme == ThemeNone) {
+        isl.originalTheme = root.RequestedTheme();
+        isl.originalSystemLight = SystemLightTheme();
+        Wh_Log(L"taskbar %p: root RequestedTheme %d captured (Windows mode %s)", isl.hwnd, (int)isl.originalTheme,
+               isl.originalSystemLight ? L"light" : L"dark");
+    }
     // Forced unconditionally while the panel shows (identical to the original
-    // when it happens to match, and immune to the system theme changing
-    // underneath); the original value again when the panel hides.
-    root.RequestedTheme(want == ThemeLight  ? wux::ElementTheme::Light
-                        : want == ThemeDark ? wux::ElementTheme::Dark
-                                            : isl.originalTheme);
-    Wh_Log(L"taskbar %p: theme %s (brightness %d)", isl.hwnd,
-           want == ThemeLight ? L"light" : want == ThemeDark ? L"dark" : L"restored", lum);
+    // when it happens to match); the root's own value again when the panel
+    // hides. forcedTheme is set before the property so the change callback
+    // recognizes the write as ours.
     isl.forcedTheme = want;
+    root.RequestedTheme(ForcedThemeValue(isl));
+    if (want == ThemeNone) {
+        Wh_Log(L"taskbar %p: theme restored to %d (Windows mode %s)", isl.hwnd, (int)isl.originalTheme,
+               isl.originalSystemLight ? L"light" : L"dark");
+    } else {
+        Wh_Log(L"taskbar %p: theme %s (brightness %d)", isl.hwnd, want == ThemeLight ? L"light" : L"dark", lum);
+    }
 }
 
 void SetStrokeHidden(Island& isl, bool hide) {
@@ -1623,6 +1786,15 @@ void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
     auto isl = FindIslandByHwnd(upd.hwnd);
     if (!isl || !IsPanelParented(*isl)) return;
 
+    if (upd.step == UpdateStep::ReassertTheme) {
+        if (isl->shown && isl->forcedTheme != ThemeNone) {
+            if (auto root = ThemeRootOf(*isl)) {
+                root.RequestedTheme(ForcedThemeValue(*isl));
+                Wh_Log(L"taskbar %p: forced theme re-asserted", upd.hwnd);
+            }
+        }
+        return;
+    }
     bool panel = upd.step != UpdateStep::StrokeAndTheme;
     bool rest = upd.step != UpdateStep::PanelOnly;
     if (upd.active) {
@@ -1654,10 +1826,17 @@ void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
 }
 
 void TeardownIsland(Island& isl) try {
-    if (isl.forcedTheme != ThemeNone) {
-        if (auto root = ThemeRootOf(isl)) root.RequestedTheme(isl.originalTheme);
-        isl.forcedTheme = ThemeNone;
+    if (auto root = isl.themeRoot.get()) {
+        if (isl.themeCallbackToken) {
+            root.UnregisterPropertyChangedCallback(wux::FrameworkElement::RequestedThemeProperty(), isl.themeCallbackToken);
+            isl.themeCallbackToken = 0;
+        }
+        if (isl.forcedTheme != ThemeNone) {
+            isl.forcedTheme = ThemeNone;
+            root.RequestedTheme(RestoreThemeValue(isl));
+        }
     }
+    isl.forcedTheme = ThemeNone;
     SetStrokeHidden(isl, false);
     if (isl.panel) {
         if (auto parent = isl.panel.Parent().try_as<wuxc::Panel>()) {
@@ -1802,31 +1981,43 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
     return true;
 }
 
+bool IsTaskbarWindowClass(HWND hWnd) {
+    WCHAR cls[32];
+    return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
+           (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+}
+
 // Attach to every taskbar owned by this (the taskbar) thread, straight from the
-// taskbar windows. Used at enable time and after settings changes.
+// taskbar windows. Run at enable time, after settings changes, and by the
+// tracker's discovery retry while g_taskbarMissingIsland says a taskbar window
+// still has no island.
 void WINAPI AttachAllTaskbars(void*) try {
     if (g_unloading) return;
     PruneDeadIslands();
+    bool missing = false;
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM) -> BOOL {
+        [](HWND hWnd, LPARAM lp) -> BOOL {
+            bool& missing = *reinterpret_cast<bool*>(lp);
+            if (!IsTaskbarWindowClass(hWnd)) return TRUE;
+            bool attached = false;
             try {
                 auto xamlRoot = XamlRootOfTaskbarWindow(hWnd);
-                if (!xamlRoot) return TRUE;
-                auto rep = FindDescendantByName(xamlRoot.Content(), L"TaskbarFrameRepeater", 12);
-                if (!rep) {
-                    Wh_Log(L"taskbar %p: TaskbarFrameRepeater not found", hWnd);
-                    return TRUE;
+                if (xamlRoot) {
+                    auto rep = FindDescendantByName(xamlRoot.Content(), L"TaskbarFrameRepeater", 12);
+                    if (rep) attached = AttachIsland(rep, hWnd);
+                    else Wh_Log(L"taskbar %p: TaskbarFrameRepeater not found", hWnd);
                 }
-                AttachIsland(rep, hWnd);
             } catch (winrt::hresult_error const& e) {
                 Wh_Log(L"taskbar %p: attach failed: %08X", hWnd, e.code().value);
             } catch (...) {
                 Wh_Log(L"taskbar %p: attach failed", hWnd);
             }
+            if (!attached) missing = true;
             return TRUE;
         },
-        0);
+        reinterpret_cast<LPARAM>(&missing));
+    g_taskbarMissingIsland = missing;
 } catch (...) {
     Wh_Log(L"AttachAllTaskbars failed");
 }

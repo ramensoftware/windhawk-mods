@@ -2,7 +2,7 @@
 // @id              win-7-8-alt-tab-recreation
 // @name            Windows 7/8.1 Alt+Tab Recreation
 // @description     This mod recreates the Windows 7 and the Windows 8.1 Alt+Tab switchers on Windows 10 and 11 without modifying explorer.exe
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @license         GPL-2.0
@@ -33,6 +33,9 @@ process and does not modify `explorer.exe`.
   chosen in the settings.
 - Shows a live preview of every window, minimized windows included.
 - Shows the icon of the application in the corner of every preview.
+- Opens with Alt+Tab, or with Ctrl+Alt+Tab to stay on screen after the keys
+  are released, as in Windows 11.
+- Highlights the preview under the mouse; a click switches to it.
 - Draws the Windows 7 panel as Aero glass and the Windows 8.1 one as the solid
   band it was.
 - Does not page: the previews shrink until every window fits, as the originals
@@ -50,7 +53,12 @@ process and does not modify `explorer.exe`.
 
 1. Install the mod in Windhawk and enable it.
 2. Press Alt+Tab. The switcher appears in the style chosen in the settings.
-3. To remove it, disable or uninstall the mod.
+   Release Alt to switch to the selected window.
+3. Or press Ctrl+Alt+Tab and let go of the keys: the switcher stays on screen.
+   Move with the arrow keys, Tab or the mouse, press Enter or click a preview
+   to switch, or press Esc to close it. Switching to another window, for
+   example from the taskbar, also closes it.
+4. To remove it, disable or uninstall the mod.
 
 ## Keyboard shortcuts
 
@@ -62,9 +70,10 @@ process and does not modify `explorer.exe`.
 | `Enter` / `Space` / click | Activates the selected window |
 | `Alt+F4` while open | Closes the selected window |
 | `Esc` while open | Closes the switcher without switching |
+| `Ctrl+Alt+Tab` | Opens the switcher and keeps it open after the keys are released |
 | `Ctrl+Alt+F11` | Opens or closes the switcher manually (fallback) |
 | ``Alt+` `` | Optional, off by default: windows of the same app only |
-| `Ctrl+Alt+Tab`, `Win+Tab` | Left to Windows |
+| `Win+Tab` | Left to Windows |
 | `Ctrl+Shift+Esc` | Left to Windows, opens Task Manager |
 
 ## Styles
@@ -72,7 +81,9 @@ process and does not modify `explorer.exe`.
 - **Windows 7**: a glass panel with rounded corners and a light sheen, the name
   of the selected window above the row, the previews in a row with the
   application icon in the corner, and a thin double frame around the selected
-  preview. A minimized window shows its application icon.
+  preview, tinted light blue like the original. Minimized windows show their
+  preview, or their application icon as in Windows 7, depending on the
+  settings.
 - **Windows 8.1**: a solid colored band with square corners, a white title above
   the row, and the previews in a row with the application icon inside their
   bottom right corner. The selected preview has a white frame.
@@ -112,12 +123,25 @@ Switcher, but it works in a different way and its purpose is a narrower one.
   **Ctrl+Alt+F11**: the optional extras.
 - **Blurred glass behind the panel**: for the Windows 7 style.
 - **Fade the switcher in and out**: 250 ms, off by default.
+- **Preview size**: the size of the previews, as in the originals or larger.
+  The switcher still shrinks them when they don't fit on the screen.
+- **Minimized windows**: the preview, or the application icon as Windows 7
+  showed it. Windows 7 style only.
+- **Ctrl+Alt+Tab keeps the switcher open**: the Windows 11 behaviour. When it is
+  off, Ctrl+Alt+Tab is left to Windows.
 
 ## Notes
 
 - Use one Alt+Tab replacement at a time.
 - The previews are live, not screenshots: they show the window as it is now.
 - The desktop behind the switcher is a still image.
+- Print Screen works while the switcher is open. With Alt+Tab, Alt is still
+  held, so Windows captures only the active window. To capture the whole
+  screen with the switcher on it, open it with Ctrl+Alt+Tab, let go of the keys
+  and press Print Screen.
+- A minimized window shows the image Windows kept of it when it was minimized.
+  A window Windows has no image of shows its icon; the Windhawk log says which
+  window it is and why.
 - Windows 11 tabbed File Explorer windows appear as one item per window.
 - True fullscreen exclusive games may not show the switcher, like other overlay
   mods.
@@ -176,7 +200,7 @@ Switcher, but it works in a different way and its purpose is a narrower one.
   $description: This setting automatically advances the selection every 250 ms while Alt is held, in addition to Tab and Shift+Tab. Off by default.
 - pointerSelect: true
   $name: Mouse navigation
-  $description: This setting allows moving the selection with the mouse wheel and activating a window by clicking its preview.
+  $description: This setting allows moving the selection with the mouse wheel, highlights the preview under the mouse and activates a window by clicking its preview.
 - onlyThisAppHotkey: false
   $name: Alt+` switches between windows of the same app
   $description: This setting adds an extra shortcut that opens the switcher with only the windows of the application of the active window. Off by default.
@@ -196,6 +220,22 @@ Switcher, but it works in a different way and its purpose is a narrower one.
 - desktopTile: true
   $name: The Desktop card
   $description: This setting adds the Desktop at the end of the row, as Windows 7 and Windows 8.1 did. It shows the desktop itself as its preview, uses the icon the shell uses for the desktop, and selecting it shows the desktop, like the Show desktop button on the taskbar.
+- previewSize: original
+  $name: Preview size
+  $description: This setting makes the previews larger than in the original switchers, which makes them sharper. The switcher still shrinks them when there are too many windows to fit on the screen.
+  $options:
+  - original: As in the original (100%)
+  - larger: Larger (125%)
+  - largest: Largest (150%)
+- minimizedWindows: preview
+  $name: Minimized windows
+  $description: This setting chooses how minimized windows appear in the Windows 7 style. By default they show the image Windows kept of them when they were minimized; Windows 7 showed the application icon instead. The Windows 8.1 style always shows the preview.
+  $options:
+  - preview: Show the preview
+  - icon: Show the application icon (as Windows 7 did)
+- ctrlAltTabSticky: true
+  $name: Ctrl+Alt+Tab keeps the switcher open
+  $description: This setting makes Ctrl+Alt+Tab open the switcher and keep it on screen after the keys are released, as in Windows 11. Move with the arrow keys, Tab or the mouse, switch with Enter or a click, close with Esc. When it is off, Ctrl+Alt+Tab is left to Windows.
 */
 // ==/WindhawkModSettings==
 // -----------------------------------------------------------------------------
@@ -302,6 +342,13 @@ struct IVirtualDesktopManager : public IUnknown {
 // -----------------------------------------------------------------------------
 
 constexpr UINT kMsgSwitchShow = WM_APP + 1;    // wParam: 0 next, 1 previous
+// Added to the wParam of kMsgSwitchShow by Ctrl+Alt+Tab: the session stays open
+// after the keys are released.
+constexpr WPARAM kShowSticky = 2;
+// A Ctrl+Alt+Tab session left without a key for this long is closed: it guards
+// against a keyboard hook the system has dropped, which would leave a topmost
+// panel nobody can close.
+constexpr unsigned long long kStickyIdleLimitMs = 120000;
 constexpr UINT kMsgSwitchCommit = WM_APP + 2;  // Alt was released
 constexpr UINT kMsgSwitchCancel = WM_APP + 3;  // Esc
 constexpr UINT kMsgSwitchClose = WM_APP + 4;   // the Win key was pressed
@@ -317,6 +364,9 @@ constexpr UINT_PTR kAutoCycleTimerId = 1;
 constexpr UINT_PTR kSessionAgeTimerId = 2;
 constexpr UINT_PTR kRebuildTimerId = 3;
 constexpr UINT_PTR kFadeTimerId = 4;     // l'animazione di comparsa
+// A single new attempt for the previews DWM refused when the session opened.
+constexpr UINT_PTR kThumbnailRetryTimerId = 5;
+constexpr UINT kThumbnailRetryDelayMs = 150;
 constexpr UINT kRebuildDelayMs = 500;
 constexpr UINT kAutoCycleIntervalMs = 250;
 constexpr UINT kSessionAgeIntervalMs = 200;
@@ -356,6 +406,17 @@ struct SwitcherSettings {
     bool openFade = false;  // dissolvenza in entrata e in uscita
     // The Desktop card at the end of the row, as in both originals.
     bool desktopTile = true;
+    // The height of the previews, in percent of the measured one: 100, 125 or
+    // 150. The layout still shrinks them when they don't fit.
+    int previewScale = 100;
+    // Windows 7 style only: when false, minimized windows show the application
+    // icon, as in the original. The setting is a string with a key of its own
+    // ("minimizedWindows"): a boolean stored by an earlier build under another
+    // key can't turn the previews off without the user knowing.
+    bool minimizedPreviews = true;
+    // Ctrl+Alt+Tab opens a switcher that stays open after the keys are
+    // released, as in Windows 11.
+    bool ctrlAltTabSticky = true;
 };
 
 static SwitcherSettings g_settings;
@@ -420,6 +481,16 @@ static void LoadSettings() {
     settings.openFade = Wh_GetIntSetting(L"openFade") != 0;
     settings.desktopTile =
         Wh_GetIntSetting(L"desktopTile") != 0;
+    const std::wstring previewSize = PickOneOf(
+        GetStringSettingOr(L"previewSize", L"original"),
+        {L"original", L"larger", L"largest"}, L"original");
+    settings.previewScale = previewSize == L"largest" ? 150
+                          : previewSize == L"larger"  ? 125
+                                                      : 100;
+    settings.minimizedPreviews =
+        PickOneOf(GetStringSettingOr(L"minimizedWindows", L"preview"),
+                  {L"preview", L"icon"}, L"preview") == L"preview";
+    settings.ctrlAltTabSticky = Wh_GetIntSetting(L"ctrlAltTabSticky") != 0;
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(settings);
@@ -447,6 +518,10 @@ static std::atomic<unsigned long long> g_hookCallTick{0};
 static std::atomic<bool> g_hookReinstallRequested{false};
 static std::atomic<bool> g_onlyThisAppHotkeyEnabled{false};
 static std::atomic<bool> g_manualHotkeyEnabled{true};
+static std::atomic<bool> g_stickyHotkeyEnabled{true};
+// The open session was started with Ctrl+Alt+Tab: releasing Alt doesn't commit
+// it. Written by the UI thread, read by the keyboard hook.
+static std::atomic<bool> g_stickySession{false};
 
 static HHOOK g_keyboardHook = nullptr;  // the keyboard hook thread only
 static DWORD g_inputThreadId = 0;
@@ -1361,17 +1436,33 @@ constexpr int kWin7SelectionRadius  = 3;    // corners of the frame
 // line 225 (white at 70 %). The dark line is much fainter than the light one:
 // what defines the frame is the bright line, the dark one only keeps it from
 // bleeding into the glass.
-constexpr COLORREF kWin7SelectDarkColor  = RGB(0, 0, 0);
-constexpr int      kWin7SelectDarkAlpha  = 35;
-constexpr COLORREF kWin7SelectLightColor = RGB(255, 255, 255);
-constexpr int      kWin7SelectLightAlpha = 175;
+// The selection of the original is light blue, whatever the glass
+// color: it comes from a bitmap of the theme, not from the accent color.
+// Measured on a frame of the original over a grey glass of about
+// RGB(88, 88, 95): the outer line is slightly darker and bluish, the inner one
+// is about RGB(214, 235, 252), and the inside of the frame goes from about
+// RGB(166, 184, 205) at the top to RGB(106, 132, 157) at the bottom.
+constexpr COLORREF kWin7SelectDarkColor  = RGB(0, 80, 130);
+constexpr int      kWin7SelectDarkAlpha  = 40;
+constexpr COLORREF kWin7SelectLightColor = RGB(214, 235, 252);
+constexpr int      kWin7SelectLightAlpha = 235;
+// The blue inside the frame, from top to bottom, over the glass.
+constexpr COLORREF kWin7WellTopColor     = RGB(200, 228, 255);
+constexpr int      kWin7WellTopAlpha     = 165;
+constexpr COLORREF kWin7WellBottomColor  = RGB(124, 178, 228);
+constexpr int      kWin7WellBottomAlpha  = 128;
+// The preview under the mouse gets the same frame, fainter: these are the
+// percentages of the opacities above.
+constexpr int      kWin7HoverPercent     = 50;
+// Windows 8.1: the frame of the preview under the mouse.
+constexpr int      kW81HoverFrameAlpha   = 110;
+constexpr int      kW81HoverFillAlpha    = 10;
 // The two lines aren't enough on their own: on the frame the frame reads as a
 // recess, not as a line. Inside the frame the glass is lighter than outside of
 // it (174 against 142 on the reference, that is white at 28 %), and on the side
 // the shadow of the preview falls, which drops to 110 right at its edge and
 // climbs back to the line within six pixels. Without these two things the lines
 // stay two lines laid on the glass.
-constexpr int kWin7WellAlpha         = 70;   // lightening of the glass inside the frame
 constexpr int kWin7ThumbShadowAlpha  = 135;  // shadow of the preview on its edge
 constexpr int kWin7ThumbShadowRadius = 2;    // corners of the preview shadow
 constexpr int kWin7ThumbShadowTopPercent = 30;  // how much of it counts above
@@ -1618,6 +1709,24 @@ static int ScaleForDpi(int value, int dpi) {
 static double WindowAspect(HWND hwnd) {
     double aspect = 16.0 / 9.0;
 
+    // A minimized window has no client area to measure: its restored position
+    // (GetWindowPlacement, rcNormalPosition) gives the shape of the image DWM
+    // keeps for it.
+    if (hwnd && IsIconic(hwnd)) {
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(hwnd, &placement)) {
+            const int width = placement.rcNormalPosition.right -
+                              placement.rcNormalPosition.left;
+            const int height = placement.rcNormalPosition.bottom -
+                               placement.rcNormalPosition.top;
+            if (width > 0 && height > 0) {
+                aspect = static_cast<double>(width) / height;
+            }
+        }
+        return std::clamp(aspect, 0.5, 3.0);
+    }
+
     RECT client{};
     if (hwnd && GetClientRect(hwnd, &client)) {
         const int width = client.right - client.left;
@@ -1711,7 +1820,11 @@ static SwitcherLayout ComputeLayout(const SwitcherSettings& settings,
     int layoutColumns = columns;
     int rowsWanted = 1;
 
-    int rowHeight = std::max(1, metrics.startRowHeight);
+    // The "Preview size" setting starts the shrinking from a larger height; the
+    // loop below brings it down as usual when the row doesn't fit.
+    int rowHeight = std::max(
+        1, MulDiv(metrics.startRowHeight,
+                  std::clamp(settings.previewScale, 100, 150), 100));
 
     for (int attempt = 0; attempt < 64; ++attempt) {
         const int thumbH = std::max(1, rowHeight);
@@ -2356,6 +2469,17 @@ struct Session {
     SwitcherLayout layout;
     int selectedIndex = -1;
     int hoverIndex = -1;
+    // TrackMouseEvent(TME_LEAVE) has been requested for the panel: the system
+    // sends WM_MOUSELEAVE once, then it has to be asked again.
+    bool mouseLeaveTracked = false;
+    // The previews DWM refused once are retried a single time per session.
+    bool thumbnailRetryDone = false;
+    // The reasons why some cards show an icon are written to the log once per
+    // session (and once more after the retry), not at every refresh.
+    bool iconReasonsLogged = false;
+    // Ctrl+Alt+Tab: the window that was in the foreground when the session
+    // opened. If the user activates another one, the session closes.
+    HWND stickyForeground = nullptr;
     int page = 0;
     int dpi = 96;
     RECT monitorRect{};   // the monitor it is shown on, in screen coordinates
@@ -2749,6 +2873,23 @@ static bool EnsureShadowWindow(const RECT& panel, int spread, int radius,
 constexpr wchar_t kPreviewLayerClassName[] =
     L"WindhawkAltTabRecreationPreviews";
 
+// The preview layer is above the panel, so it was the window under the mouse
+// wherever there is a preview: the panel never saw the mouse there, and neither
+// the highlight nor the click worked on the previews. WS_EX_TRANSPARENT alone
+// doesn't make a window that isn't layered transparent to the mouse.
+// HTTRANSPARENT does: the hit test goes on to the windows below it in the same
+// thread (WM_NCHITTEST), and the panel is one of them.
+static LRESULT CALLBACK PreviewLayerWndProc(HWND hwnd, UINT message,
+                                            WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
 static void DestroyPreviewLayer() {
     if (g_switcher.previewLayer && IsWindow(g_switcher.previewLayer)) {
         DestroyWindow(g_switcher.previewLayer);
@@ -2767,7 +2908,7 @@ static bool EnsurePreviewLayer() {
     if (!classRegistered) {
         WNDCLASSEXW windowClass{};
         windowClass.cbSize = sizeof(windowClass);
-        windowClass.lpfnWndProc = DefWindowProcW;
+        windowClass.lpfnWndProc = PreviewLayerWndProc;
         windowClass.hInstance = instance;
         windowClass.lpszClassName = kPreviewLayerClassName;
         if (!RegisterClassExW(&windowClass) &&
@@ -3598,22 +3739,28 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
         }
 
         const bool selected = itemIndex == g_switcher.selectedIndex;
+        // The preview under the mouse (only with mouse navigation on, the only
+        // case in which hoverIndex is set) gets a fainter copy of the frame.
+        const bool hovered = !selected && itemIndex == g_switcher.hoverIndex;
         RECT thumb = layout.items[index].thumb;
         OffsetRect(&thumb, -origin.x, -origin.y);
 
         if (layout.style == SwitcherStyle::Windows81) {
-            if (!selected) {
+            if (!selected && !hovered) {
                 // No border on unselected previews, as in the original.
                 continue;
             }
             RECT frame = thumb;
             InflateRect(&frame, layout.framePad, layout.framePad);
             FillRoundedRect(surface, frame, 0, RGB(255, 255, 255),
-                            kW81FrameFillAlpha);
+                            selected ? kW81FrameFillAlpha : kW81HoverFillAlpha);
             StrokeRoundedRect(surface, frame, 0, layout.contour,
-                              kW81FrameColor, kW81FrameAlpha);
+                              kW81FrameColor,
+                              selected ? kW81FrameAlpha : kW81HoverFrameAlpha);
             continue;
         }
+
+        const int percent = selected ? 100 : kWin7HoverPercent;
 
         // Windows 7: no border around the previews. Around each one, though, the
         // shadow of the live thumbnail remains, which the frame shows even
@@ -3624,9 +3771,12 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
         // or it dirties it), and finally the two lines.
         RECT frame = thumb;
         InflateRect(&frame, layout.selectionGap, layout.selectionGap);
-        if (selected) {
-            FillRoundedRect(surface, frame, layout.selectionRadius,
-                            RGB(255, 255, 255), kWin7WellAlpha);
+        if (selected || hovered) {
+            FillRoundedRectGradient(surface, frame, layout.selectionRadius,
+                                    kWin7WellTopColor,
+                                    kWin7WellTopAlpha * percent / 100,
+                                    kWin7WellBottomColor,
+                                    kWin7WellBottomAlpha * percent / 100);
         }
 
         // The shadow stops short of the frame: on the original the band between
@@ -3637,20 +3787,21 @@ static void DrawItemDecorations(BitmapSurface& surface, const SwitcherLayout& la
             DrawSoftShadow(surface, thumb, kWin7ThumbShadowRadius, shadowSpread,
                            kWin7ThumbShadowAlpha, kWin7ThumbShadowTopPercent);
         }
-        if (!selected) {
+        if (!selected && !hovered) {
             continue;
         }
 
         const int thickness = std::max(1, layout.contour);
         StrokeRoundedRect(surface, frame, layout.selectionRadius, thickness,
-                          kWin7SelectDarkColor, kWin7SelectDarkAlpha);
+                          kWin7SelectDarkColor,
+                          kWin7SelectDarkAlpha * percent / 100);
 
         RECT innerFrame = frame;
         InflateRect(&innerFrame, -thickness, -thickness);
         StrokeRoundedRect(surface, innerFrame,
                           std::max(0, layout.selectionRadius - thickness),
                           thickness, kWin7SelectLightColor,
-                          kWin7SelectLightAlpha);
+                          kWin7SelectLightAlpha * percent / 100);
     }
 }
 
@@ -3843,8 +3994,19 @@ struct IconCacheEntry {
 constexpr size_t kIconCacheLimit = 64;
 static std::vector<IconCacheEntry> g_iconCache;
 
+// The sharper copies of the icons (see SharperIconPixels): one entry per window
+// icon and size, emptied with the other cache at the end of the session.
+struct SharpIconEntry {
+    HICON icon = nullptr;
+    int size = 0;
+    IconPixels pixels;  // empty: no sharper copy that matches the window icon
+};
+
+static std::vector<SharpIconEntry> g_sharpIconCache;
+
 static void ClearIconCache() {
     g_iconCache.clear();
+    g_sharpIconCache.clear();
 }
 
 // Decodes an HICON into BGRA pixels with a real alpha.
@@ -4018,6 +4180,54 @@ static const IconPixels* GetIconPixels(HICON icon) {
 // Draws an icon into the surface, scaled with a bilinear interpolation and
 // composed with the alpha the icon really has: it is what gets rid of the square
 // edges and the black boxes around the icons.
+// The average of the source pixels under one destination pixel, each weighted
+// by the part of it that is covered and by its alpha, so the transparent
+// pixels don't darken the edges. Used when the icon is drawn smaller than its
+// bitmap: the bilinear interpolation reads only four pixels and skips the
+// others, which makes a reduced icon grainy.
+static void SampleIconArea(const IconPixels& icon, double x0, double y0,
+                           double x1, double y1, double out[4]) {
+    out[0] = out[1] = out[2] = out[3] = 0.0;
+
+    const int firstX = std::clamp(static_cast<int>(std::floor(x0)), 0, icon.width - 1);
+    const int lastX = std::clamp(static_cast<int>(std::ceil(x1)) - 1, firstX, icon.width - 1);
+    const int firstY = std::clamp(static_cast<int>(std::floor(y0)), 0, icon.height - 1);
+    const int lastY = std::clamp(static_cast<int>(std::ceil(y1)) - 1, firstY, icon.height - 1);
+
+    double weightSum = 0.0;
+    double alphaSum = 0.0;
+    double colorSum[3] = {0.0, 0.0, 0.0};
+    for (int sy = firstY; sy <= lastY; ++sy) {
+        const double wy = std::min(y1, sy + 1.0) - std::max(y0, static_cast<double>(sy));
+        if (wy <= 0.0) {
+            continue;
+        }
+        for (int sx = firstX; sx <= lastX; ++sx) {
+            const double wx = std::min(x1, sx + 1.0) - std::max(x0, static_cast<double>(sx));
+            if (wx <= 0.0) {
+                continue;
+            }
+            const double weight = wx * wy;
+            const unsigned char* p = icon.pixels.data() +
+                (static_cast<size_t>(sy) * icon.width + sx) * 4;
+            const double a = p[3] * weight;
+            weightSum += weight;
+            alphaSum += a;
+            colorSum[0] += p[0] * a;
+            colorSum[1] += p[1] * a;
+            colorSum[2] += p[2] * a;
+        }
+    }
+
+    if (weightSum <= 0.0 || alphaSum <= 0.0) {
+        return;
+    }
+    out[0] = colorSum[0] / alphaSum;
+    out[1] = colorSum[1] / alphaSum;
+    out[2] = colorSum[2] / alphaSum;
+    out[3] = alphaSum / weightSum;
+}
+
 static void DrawIconIntoSurface(BitmapSurface& surface, const IconPixels& icon,
                                 int left, int top, int size, int alpha) {
     if (!icon.Valid() || size <= 0 || alpha <= 0) {
@@ -4030,6 +4240,28 @@ static void DrawIconIntoSurface(BitmapSurface& surface, const IconPixels& icon,
     const int startY = std::max(0, top);
     const double scaleX = static_cast<double>(icon.width) / size;
     const double scaleY = static_cast<double>(icon.height) / size;
+
+    if (scaleX > 1.0 || scaleY > 1.0) {
+        for (int y = startY; y < bottom; ++y) {
+            const double y0 = (y - top) * scaleY;
+            for (int x = startX; x < right; ++x) {
+                const double x0 = (x - left) * scaleX;
+                double channels[4];  // B, G, R, A
+                SampleIconArea(icon, x0, y0, x0 + scaleX, y0 + scaleY, channels);
+                const int pixelAlpha =
+                    static_cast<int>(channels[3] * (alpha / 255.0) + 0.5);
+                if (pixelAlpha <= 0) {
+                    continue;
+                }
+                BlendPixel(surface, x, y,
+                           PackPremultiplied(static_cast<int>(channels[2] + 0.5),
+                                             static_cast<int>(channels[1] + 0.5),
+                                             static_cast<int>(channels[0] + 0.5),
+                                             pixelAlpha));
+            }
+        }
+        return;
+    }
 
     for (int y = startY; y < bottom; ++y) {
         const double sourceY = (y - top + 0.5) * scaleY - 0.5;
@@ -4074,6 +4306,95 @@ static void DrawIconIntoSurface(BitmapSurface& surface, const IconPixels& icon,
                                          pixelAlpha));
         }
     }
+}
+
+// The icon a window hands over (WM_GETICON) is usually 32 pixels, and the large
+// icon in the middle of a card without a preview, or the corner icon at a high
+// DPI, is drawn larger than that, so it came out blurry. When that happens the
+// same icon is read again from the application file at the size needed
+// (SHDefExtractIconW, the documented way to extract an icon at a given size),
+// but it is used only if, brought back to the size of the window icon, it looks
+// like it: an application whose windows have icons of their own (web apps,
+// browser profiles, documents) keeps the icon of the window.
+static const IconPixels* SharperIconPixels(const SwitcherItem& item,
+                                           const IconPixels* base, int size) {
+    if (!base || !base->Valid() || !item.icon || item.isDesktop ||
+        item.appPath.empty() || size <= base->width) {
+        return base;
+    }
+
+    int wanted = 256;
+    for (int candidate : {48, 64, 96, 128, 256}) {
+        if (candidate >= size) {
+            wanted = candidate;
+            break;
+        }
+    }
+    if (wanted <= base->width) {
+        return base;
+    }
+
+    for (const SharpIconEntry& entry : g_sharpIconCache) {
+        if (entry.icon == item.icon && entry.size == wanted) {
+            return entry.pixels.Valid() ? &entry.pixels : base;
+        }
+    }
+
+    if (g_sharpIconCache.size() >= kIconCacheLimit) {
+        g_sharpIconCache.erase(g_sharpIconCache.begin());
+    }
+
+    SharpIconEntry entry;
+    entry.icon = item.icon;
+    entry.size = wanted;
+
+    HICON large = nullptr;
+    HICON small = nullptr;
+    const HRESULT result = SHDefExtractIconW(
+        item.appPath.c_str(), 0, 0, &large, &small,
+        MAKELONG(wanted, GetSystemMetrics(SM_CXSMICON)));
+    if (small) {
+        DestroyIcon(small);
+    }
+
+    IconPixels candidate;
+    const bool loaded = result == S_OK && large && LoadIconPixels(large, &candidate);
+    if (large) {
+        DestroyIcon(large);
+    }
+
+    if (loaded && candidate.width > base->width) {
+        // The comparison is done on premultiplied values, so the color of the
+        // transparent pixels doesn't count.
+        const double stepX = static_cast<double>(candidate.width) / base->width;
+        const double stepY = static_cast<double>(candidate.height) / base->height;
+        double difference = 0.0;
+        for (int y = 0; y < base->height; ++y) {
+            for (int x = 0; x < base->width; ++x) {
+                double sample[4];
+                SampleIconArea(candidate, x * stepX, y * stepY,
+                               (x + 1) * stepX, (y + 1) * stepY, sample);
+                const unsigned char* p = base->pixels.data() +
+                    (static_cast<size_t>(y) * base->width + x) * 4;
+                for (int channel = 0; channel < 3; ++channel) {
+                    difference += std::fabs(sample[channel] * sample[3] / 255.0 -
+                                            p[channel] * p[3] / 255.0);
+                }
+                difference += std::fabs(sample[3] - p[3]);
+            }
+        }
+        const double mean = difference /
+            (4.0 * static_cast<double>(base->width) * base->height);
+        // About a tenth of the range: the sizes of the same icon file, which
+        // are drawn one by one, stay well below it, a different icon doesn't.
+        if (mean <= 24.0) {
+            entry.pixels = std::move(candidate);
+        }
+    }
+
+    g_sharpIconCache.push_back(std::move(entry));
+    const SharpIconEntry& stored = g_sharpIconCache.back();
+    return stored.pixels.Valid() ? &stored.pixels : base;
 }
 
 // -----------------------------------------------------------------------------
@@ -4200,9 +4521,10 @@ static void UpdateIconOverlayBody() {
             // preview, above the selection frame.
             RECT icon = geometry.icon;
             OffsetRect(&icon, -origin.x, -origin.y);
-            DrawIconIntoSurface(g_iconOverlay.surface, *pixels, icon.left,
-                                icon.top, geometry.icon.right - geometry.icon.left,
-                                255);
+            const int iconSize = geometry.icon.right - geometry.icon.left;
+            DrawIconIntoSurface(g_iconOverlay.surface,
+                                *SharperIconPixels(item, pixels, iconSize),
+                                icon.left, icon.top, iconSize, 255);
             continue;
         }
 
@@ -4220,7 +4542,9 @@ static void UpdateIconOverlayBody() {
         const int size = std::max(16, std::min(thumbH * 2 / 5, thumbW));
         const int x = geometry.thumb.left + (thumbW - size) / 2 - origin.x;
         const int y = geometry.thumb.top + (thumbH - size) / 2 - origin.y;
-        DrawIconIntoSurface(g_iconOverlay.surface, *pixels, x, y, size, 255);
+        DrawIconIntoSurface(g_iconOverlay.surface,
+                            *SharperIconPixels(item, pixels, size), x, y, size,
+                            255);
     }
 
     SetWindowPos(g_iconOverlay.hwnd, HWND_TOPMOST, g_switcher.panelScreen.left,
@@ -5025,33 +5349,86 @@ static int IndexAtPoint(int x, int y) {
     return -1;
 }
 
+// Writes to the log why a window card shows the icon instead of the preview,
+// with the class of the window, so a report from a user says which application
+// and which step is involved.
+static void LogIconCard(const SwitcherItem& item, const wchar_t* reason,
+                        HRESULT result) {
+    if (g_switcher.iconReasonsLogged || item.isDesktop) {
+        return;
+    }
+    WCHAR className[128] = {};
+    if (item.hwnd) {
+        GetClassNameW(item.hwnd, className, ARRAYSIZE(className));
+    }
+    const std::wstring title = item.title.substr(0, 60);
+    Wh_Log(L"Icon instead of preview for \"%s\" (class %s, %s): %s (0x%08lX)",
+           title.c_str(), className, item.minimized ? L"minimized" : L"not minimized",
+           reason, static_cast<unsigned long>(result));
+}
+
 static void RefreshThumbnails() {
     unsigned int failures = 0;
     unsigned int registered = 0;
+    unsigned int refused = 0;
+    HRESULT lastError = S_OK;
 
     for (SwitcherItem& item : g_switcher.items) {
+        // Windows 7 showed the icon for minimized windows; the setting shows
+        // the image DWM keeps for them instead.
         const bool iconInsteadOfPreview =
-            g_switcherStyle == SwitcherStyle::Windows7 && item.minimized;
+            g_switcherStyle == SwitcherStyle::Windows7 && item.minimized &&
+            !g_switcher.settings.minimizedPreviews;
 
         const bool wantsThumbnail = !iconInsteadOfPreview &&
             item.card.right > item.card.left && item.hwnd &&
             IsWindow(item.hwnd) && item.thumb.right > item.thumb.left;
 
         if (!wantsThumbnail) {
+            if (iconInsteadOfPreview && item.card.right > item.card.left) {
+                LogIconCard(item, L"the Minimized windows setting is set to icon",
+                            S_OK);
+            }
             item.ReleaseThumbnail();
             continue;
         }
 
         if (!item.hasThumbnail) {
+            if (!g_switcher.previewLayer) {
+                LogIconCard(item, L"the preview layer is missing", E_HANDLE);
+                continue;
+            }
             HTHUMBNAIL thumbnail = nullptr;
-            if (!g_switcher.previewLayer ||
-                FAILED(DwmRegisterThumbnail(g_switcher.previewLayer,
-                                            item.hwnd, &thumbnail)) ||
-                !thumbnail) {
+            const HRESULT result = DwmRegisterThumbnail(
+                g_switcher.previewLayer, item.hwnd, &thumbnail);
+            if (FAILED(result) || !thumbnail) {
+                // Counted and logged, so a card that falls back to the icon
+                // leaves a trace.
+                ++failures;
+                ++refused;
+                lastError = FAILED(result) ? result : E_HANDLE;
+                LogIconCard(item, L"DwmRegisterThumbnail refused the window",
+                            lastError);
                 continue;
             }
             item.thumbnail = thumbnail;
             item.hasThumbnail = true;
+
+            // A minimized window shows the last image DWM kept of it. Only a
+            // window DWM reports no source for at all (the call fails, or the
+            // size is empty) keeps the icon instead of an empty preview.
+            if (item.minimized) {
+                SIZE sourceSize{};
+                const HRESULT sizeResult =
+                    DwmQueryThumbnailSourceSize(item.thumbnail, &sourceSize);
+                if (FAILED(sizeResult) || sourceSize.cx <= 0 ||
+                    sourceSize.cy <= 0) {
+                    LogIconCard(item, L"DWM has no image of the minimized window",
+                                FAILED(sizeResult) ? sizeResult : S_FALSE);
+                    item.ReleaseThumbnail();
+                    continue;
+                }
+            }
             ++registered;
         }
 
@@ -5069,19 +5446,31 @@ static void RefreshThumbnails() {
                    -g_switcher.layout.panel.top);
         properties.fSourceClientAreaOnly = FALSE;
 
-        if (FAILED(DwmUpdateThumbnailProperties(item.thumbnail,
-                                                &properties))) {
+        const HRESULT updateResult =
+            DwmUpdateThumbnailProperties(item.thumbnail, &properties);
+        if (FAILED(updateResult)) {
+            LogIconCard(item, L"DwmUpdateThumbnailProperties failed",
+                        updateResult);
             item.ReleaseThumbnail();
             ++failures;
         }
     }
+    g_switcher.iconReasonsLogged = true;
 
     if (failures) {
         static RateLimitedLog log{L"some previews couldn't be shown live; they are drawn as application icons instead", 2};
         if (log.ShouldLog()) {
-            Wh_Log(L"%u preview(s) couldn't be registered with DWM; they are drawn as application icons instead",
-                   failures);
+            Wh_Log(L"%u preview(s) couldn't be registered with DWM (last error 0x%08lX); they are drawn as application icons instead",
+                   failures, static_cast<unsigned long>(lastError));
         }
+    }
+
+    // A window that is still being created or restored can be refused for a
+    // moment: one more attempt shortly after, then the icon stays.
+    if (refused && !g_switcher.thumbnailRetryDone && g_switcher.hwnd) {
+        g_switcher.thumbnailRetryDone = true;
+        SetTimer(g_switcher.hwnd, kThumbnailRetryTimerId,
+                 kThumbnailRetryDelayMs, nullptr);
     }
 
     // The region of the preview layer is the union of the registered rectangles:
@@ -5089,7 +5478,9 @@ static void RefreshThumbnails() {
     // them, with the large icon in the middle.
     UpdatePreviewLayerRegion();
 
-    if (registered || failures) {
+    // The refused registrations change nothing on screen (the card already
+    // shows the icon), so they don't cause a repaint of their own.
+    if (registered || failures > refused) {
         PaintAndPresent();
     }
 }
@@ -5191,6 +5582,9 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
     g_switcher.dpi = std::min(monitorDpi, screenDpi);
     g_switcher.page = 0;
     g_switcher.hoverIndex = -1;
+    g_switcher.mouseLeaveTracked = false;
+    g_switcher.thumbnailRetryDone = false;
+    g_switcher.iconReasonsLogged = false;
     g_switcher.selectedIndex = -1;
 
     for (int i = 0; i < static_cast<int>(g_switcher.items.size()); ++i) {
@@ -5362,7 +5756,8 @@ static SessionResult BeginSession(const SwitcherSettings& settings,
     StartFade(true);
     ApplySessionTimers();
 
-    if (!g_altDown.load(std::memory_order_relaxed)) {
+    if (!g_altDown.load(std::memory_order_relaxed) &&
+        !g_stickySession.load(std::memory_order_acquire)) {
         PostMessageW(g_switcher.hwnd, kMsgSwitchCommit, 0, 0);
     }
 
@@ -5394,6 +5789,8 @@ static void ApplySessionTimers() {
 }
 
 static void EndSession() {
+    g_stickySession.store(false, std::memory_order_release);
+    g_switcher.stickyForeground = nullptr;
     StopFadeTimer();
     HideIconOverlay();
     // The capture is valid for the session that took it: on the next one the
@@ -5404,6 +5801,7 @@ static void EndSession() {
         KillTimer(g_switcher.hwnd, kAutoCycleTimerId);
         KillTimer(g_switcher.hwnd, kSessionAgeTimerId);
         KillTimer(g_switcher.hwnd, kRebuildTimerId);
+        KillTimer(g_switcher.hwnd, kThumbnailRetryTimerId);
         // The blur has to be removed before hiding the window, otherwise DWM would
         // keep composing the region behind a panel that is gone.
         ClearPanelBlur(g_switcher.hwnd);
@@ -5427,6 +5825,7 @@ static void EndSession() {
     g_switcher.visible = false;
     g_switcher.selectedIndex = -1;
     g_switcher.hoverIndex = -1;
+    g_switcher.mouseLeaveTracked = false;
     g_switcher.fadeState = 0;
     g_switcher.fadeLevel = 0;
     g_switcher.pendingClose = false;
@@ -5608,9 +6007,13 @@ static void RebuildSessionItems() {
 }
 
 
-static void OnShowRequest(bool previous) {
+static void OnShowRequest(bool previous, bool sticky = false) {
     if (!g_switcher.active) {
         const SwitcherSettings settings = GetSettingsCopy();
+        // Set before BeginSession, which commits at once a session opened
+        // without Alt held unless it is a sticky one.
+        g_stickySession.store(sticky, std::memory_order_release);
+        g_switcher.stickyForeground = sticky ? GetForegroundWindow() : nullptr;
         bool foregroundFound = false;
         const SessionResult result =
             BeginSession(settings, false, &foregroundFound);
@@ -5624,6 +6027,9 @@ static void OnShowRequest(bool previous) {
                 } else {
                     SelectIndex(0);
                 }
+            } else {
+                g_stickySession.store(false, std::memory_order_release);
+                g_switcher.stickyForeground = nullptr;
             }
             return;
         }
@@ -5673,6 +6079,27 @@ static void OnSessionHealthCheck() {
         return;
     }
 
+    if (g_stickySession.load(std::memory_order_acquire)) {
+        // Ctrl+Alt+Tab: Alt isn't held, and doesn't have to be. The session
+        // ends with Enter, a click or Esc, or when the user activates another
+        // window (the panel itself never takes the foreground).
+        const HWND foreground = GetForegroundWindow();
+        if (foreground && g_switcher.stickyForeground &&
+            foreground != g_switcher.stickyForeground &&
+            foreground != g_switcher.hwnd) {
+            Wh_Log(L"Another window was activated; the Ctrl+Alt+Tab switcher is closed");
+            EndSession();
+            return;
+        }
+        if (GetTickCount64() - g_hookCallTick.load() > kStickyIdleLimitMs) {
+            Wh_Log(L"The Ctrl+Alt+Tab switcher has had no key for %llu ms; it is closed and the keyboard hook is reinstalled",
+                   GetTickCount64() - g_hookCallTick.load());
+            g_hookReinstallRequested.store(true, std::memory_order_release);
+            EndSession();
+        }
+        return;
+    }
+
     if (!g_altDown.load(std::memory_order_relaxed)) {
         CommitSession();
         return;
@@ -5702,6 +6129,15 @@ static void OnSettingsChanged() {
 static void OnMouseMove(int x, int y) {
     if (!g_switcher.visible || !g_switcher.settings.pointerSelect) {
         return;
+    }
+
+    // WM_MOUSELEAVE clears the highlight when the mouse leaves the panel.
+    if (!g_switcher.mouseLeaveTracked && g_switcher.hwnd) {
+        TRACKMOUSEEVENT track{};
+        track.cbSize = sizeof(track);
+        track.dwFlags = TME_LEAVE;
+        track.hwndTrack = g_switcher.hwnd;
+        g_switcher.mouseLeaveTracked = TrackMouseEvent(&track) != FALSE;
     }
 
     // The coordinates of the message are relative to the window of the panel, the
@@ -5768,6 +6204,15 @@ static bool HandleOverlayMessage(HWND hwnd, UINT message, WPARAM wParam,
             *outResult = 0;
             return true;
 
+        case WM_MOUSELEAVE:
+            g_switcher.mouseLeaveTracked = false;
+            if (g_switcher.visible && g_switcher.hoverIndex >= 0) {
+                g_switcher.hoverIndex = -1;
+                PaintAndPresent();
+            }
+            *outResult = 0;
+            return true;
+
         case WM_LBUTTONDOWN:
             OnMouseClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             *outResult = 0;
@@ -5790,6 +6235,12 @@ static bool HandleOverlayMessage(HWND hwnd, UINT message, WPARAM wParam,
             } else if (wParam == kRebuildTimerId) {
                 KillTimer(hwnd, kRebuildTimerId);
                 RebuildSessionItems();
+            } else if (wParam == kThumbnailRetryTimerId) {
+                KillTimer(hwnd, kThumbnailRetryTimerId);
+                if (g_switcher.visible) {
+                    g_switcher.iconReasonsLogged = false;
+                    RefreshThumbnails();
+                }
             } else if (wParam == kFadeTimerId) {
                 if (StepFade() && g_switcher.pendingClose) {
                     g_switcher.pendingClose = false;
@@ -5800,7 +6251,7 @@ static bool HandleOverlayMessage(HWND hwnd, UINT message, WPARAM wParam,
             return true;
 
         case kMsgSwitchShow:
-            OnShowRequest(wParam != 0);
+            OnShowRequest((wParam & 1) != 0, (wParam & kShowSticky) != 0);
             *outResult = 0;
             return true;
 
@@ -5971,6 +6422,8 @@ static void UpdateHookFlags(const SwitcherSettings& settings) {
                                  std::memory_order_relaxed);
     g_manualHotkeyEnabled.store(settings.manualHotkey,
                                   std::memory_order_relaxed);
+    g_stickyHotkeyEnabled.store(settings.ctrlAltTabSticky,
+                                std::memory_order_relaxed);
 }
 
 static void SendAltTabToSystem() {
@@ -5997,7 +6450,9 @@ static bool HandleKeyEvent(DWORD vk, bool isDown, bool isUp) {
             g_altDown.store(true, std::memory_order_relaxed);
         } else {
             g_altDown.store(false, std::memory_order_relaxed);
-            if (g_switcherVisible.load(std::memory_order_acquire)) {
+            // A Ctrl+Alt+Tab session stays open when Alt is released.
+            if (g_switcherVisible.load(std::memory_order_acquire) &&
+                !g_stickySession.load(std::memory_order_acquire)) {
                 PostToOverlay(kMsgSwitchCommit, 0);
             }
         }
@@ -6045,6 +6500,14 @@ static bool HandleKeyEvent(DWORD vk, bool isDown, bool isUp) {
     const bool win = g_winDown.load(std::memory_order_relaxed);
 
     if (g_switcherVisible.load(std::memory_order_acquire)) {
+        // Print Screen is left to Windows: swallowing it, as every other key
+        // below is, made screenshots impossible while the switcher was open.
+        // The switcher stays open. Alt is still held, so Windows sees
+        // Alt+Print Screen.
+        if (vk == VK_SNAPSHOT) {
+            return false;
+        }
+
         if (ctrl && shift && vk == VK_ESCAPE) {
             g_forcePassthroughVk.store(vk, std::memory_order_relaxed);
             PostToOverlay(kMsgSwitchClose, 0);
@@ -6099,8 +6562,20 @@ static bool HandleKeyEvent(DWORD vk, bool isDown, bool isUp) {
     }
 
     if (vk == VK_TAB) {
-        if (ctrl || win) {
-            return false;  // Ctrl+Alt+Tab and Win+Tab belong to Windows
+        if (win) {
+            return false;  // Win+Tab belongs to Windows
+        }
+
+        if (ctrl) {
+            // Ctrl+Alt+Tab: the switcher that stays open, as in Windows 11.
+            // With the setting off it is left to Windows.
+            if (!alt || !g_stickyHotkeyEnabled.load(std::memory_order_relaxed)) {
+                return false;
+            }
+            if (isDown) {
+                PostToOverlay(kMsgSwitchShow, (shift ? 1 : 0) | kShowSticky);
+            }
+            return true;
         }
 
         if (alt && isDown) {
@@ -6316,8 +6791,52 @@ static bool InitializeVirtualDesktopManager() {
     return true;
 }
 
+// The process may already have an awareness of its own (from its manifest), and
+// then SetProcessDpiAwarenessContext fails and changes nothing. If that awareness
+// isn't per monitor, the system reports 96 DPI to the mod and stretches its
+// windows as a bitmap on a scaled monitor, which makes the panel and the
+// previews blurry. The awareness of the thread that creates the windows decides
+// how they are scaled (SetThreadDpiAwarenessContext, Windows 10 1607 and later),
+// so the UI thread asks for per monitor awareness for itself as well.
+static void MakeUiThreadDpiAware() {
+    using SetThreadDpiAwarenessContextFn = HANDLE(WINAPI*)(HANDLE);
+    using GetThreadDpiAwarenessContextFn = HANDLE(WINAPI*)();
+    using GetAwarenessFromDpiAwarenessContextFn = int(WINAPI*)(HANDLE);
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        return;
+    }
+
+    auto setThreadContext = reinterpret_cast<SetThreadDpiAwarenessContextFn>(
+        reinterpret_cast<void*>(
+            GetProcAddress(user32, "SetThreadDpiAwarenessContext")));
+    auto getThreadContext = reinterpret_cast<GetThreadDpiAwarenessContextFn>(
+        reinterpret_cast<void*>(
+            GetProcAddress(user32, "GetThreadDpiAwarenessContext")));
+    auto getAwareness = reinterpret_cast<GetAwarenessFromDpiAwarenessContextFn>(
+        reinterpret_cast<void*>(
+            GetProcAddress(user32, "GetAwarenessFromDpiAwarenessContext")));
+    if (!setThreadContext) {
+        return;  // before Windows 10 1607: the process awareness applies
+    }
+
+    // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, then
+    // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE where V2 isn't known.
+    if (!setThreadContext(reinterpret_cast<HANDLE>(-4))) {
+        setThreadContext(reinterpret_cast<HANDLE>(-3));
+    }
+
+    if (getThreadContext && getAwareness) {
+        // DPI_AWARENESS: 0 unaware, 1 system aware, 2 per monitor aware.
+        Wh_Log(L"DPI awareness of the switcher thread: %d",
+               getAwareness(getThreadContext()));
+    }
+}
+
 static DWORD WINAPI UiThreadProc(void* /*parameter*/) {
     MakeProcessDpiAware();
+    MakeUiThreadDpiAware();
 
     ScopedComApartment com(
         SUCCEEDED(CoInitializeEx(nullptr,

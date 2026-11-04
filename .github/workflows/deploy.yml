@@ -24,11 +24,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
           cache-dependency-path: '.github/requirements.txt'
@@ -50,7 +50,7 @@ jobs:
           git clone -c core.ignorecase=false --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
       - name: Cache Windhawk
         id: cache-windhawk
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/windhawk
           key: v1-${{ runner.os }}-1.7.3
@@ -67,7 +67,7 @@ jobs:
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Cache image tools
         id: cache-image-tools
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/image_tools
           key: v1-${{ runner.os }}-gifsicle-1.95-libwebp-1.5.0

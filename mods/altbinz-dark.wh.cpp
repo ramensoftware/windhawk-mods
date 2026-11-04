@@ -2,12 +2,12 @@
 // @id              altbinz-dark
 // @name            Alt.Binz Dark Mode
 // @description     Dark colors for the skinned user interface of Alt.Binz, with a custom surface color, gradients and colored progress bars
-// @version         1.0.0
+// @version         1.0.2
 // @author          MrSmith
 // @github          https://github.com/MrSmith2017
 // @include         altbinz.exe
 // @architecture    x86
-// @compilerOptions -lgdi32 -luser32 -luxtheme
+// @compilerOptions -lgdi32 -luser32 -luxtheme -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,17 +48,28 @@ default blue.
 
 ## Appearance
 
+These values are applied live:
+
+* **Text color**: an optional color for text and lines of the interface (toolbar, menus, dialogs). The text changes live; lines and icons that Alt.Binz has already created follow when it is restarted.
+* **List text color**: an optional color for text and lines in the download queue and the log. Without it the text color is used.
+* **Column text color**: an optional color for the text of the column headers. Without it the text color is used.
+* **Column header color**: an optional color for the header bars of the lists.
+* **Keep the tree in Setup dark gray**.
+
+The text colors may be dark, so make sure they contrast with the background.
+
 These values are applied when Alt.Binz is restarted:
 
 * **Background lightness**: how dark the lists and dark areas are (percent).
 * **Text lightness**: how bright text and lines are (percent). Ignored when a text color is set.
-* **Text color**: an optional color for text and lines.
 * **List background color**: an optional color for the large list areas.
 * **Saturation**: how colorful the blue skin is (percent).
 
-The **column header color** (the header bars of the lists) and everything else is
-applied live. If you disable the mod, restart Alt.Binz to get the original look
-back completely.
+The **title bar color** (default black) is applied live. It needs Windows 11; on
+Windows 10 the title bar keeps its normal color. Leave the value empty to keep the
+color of Windows.
+
+If you disable the mod, restart Alt.Binz to get the original look back completely.
 */
 // ==/WindhawkModReadme==
 
@@ -107,7 +118,13 @@ back completely.
     $description: In percent. Ignored when a text color is set. Restart Alt.Binz to apply.
   - textColor: ""
     $name: Text color
-    $description: Hex color for text and lines, for example E8EEF8. Leave empty for the neutral light gray. Restart Alt.Binz to apply.
+    $description: Hex color for text and lines of the interface (toolbar, menus, dialogs), for example E8EEF8. Leave empty for the neutral light gray. Make sure it contrasts with the background.
+  - listTextColor: ""
+    $name: List text color
+    $description: Hex color for text and lines in the download queue and log lists. Leave empty to use the text color.
+  - columnTextColor: ""
+    $name: Column text color
+    $description: Hex color for the text of the column headers (Subject, Size, Action, Description ...). Leave empty to use the text color.
   - listColor: ""
     $name: List background color
     $description: Hex color for the large list areas (download queue, log), for example 1E2430. Leave empty for dark gray. Restart Alt.Binz to apply.
@@ -120,6 +137,9 @@ back completely.
   - keepSetupTreeDark: false
     $name: Keep the tree in Setup dark gray
     $description: By default the tree on the left of the Setup window uses the color of the surface.
+  - titleBarColor: "000000"
+    $name: Title bar color
+    $description: Hex color of the window title bars, for example 000000. Leave empty for the color of Windows. Needs Windows 11.
   $name: Appearance
 */
 // ==/WindhawkModSettings==
@@ -127,10 +147,12 @@ back completely.
 #include <windhawk_api.h>
 #include <windows.h>
 #include <uxtheme.h>
+#include <dwmapi.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
 #include <algorithm>
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -158,9 +180,14 @@ struct Settings {
     float listL;
     bool headerOn;
     COLORREF headerColor;
+    COLORREF titleBarColor;  // CLR_INVALID = color of Windows
+    bool listTextTint;       // separate text color for the lists
+    float listTextHue, listTextSat, listTextLight;
+    COLORREF columnTextColor;  // CLR_INVALID = like the text color
+    float textLight;           // lightness of the text color, only used for text
 };
 static Settings g_cfg = {0.11f, 0.92f, 0.85f, false, RGB(0x2F, 0x5A, 0x96), RGB(0x15, 0x22, 0x38), 90, 0.5f, false, 0.0f, 0.0f, false, 0.0f, 0.0f,
-                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0};
+                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0, CLR_INVALID, false, 0.0f, 0.0f, 0.0f, CLR_INVALID, 0.0f};
 
 // ---- color mapping ----------------------------------------------------------
 
@@ -202,7 +229,14 @@ static void HslToRgb8(float h, float s, float l, uint8_t* r8, uint8_t* g8, uint8
     *b8 = (uint8_t)fminf(255.0f, fmaxf(0.0f, (bb + m) * 255.0f + 0.5f));
 }
 
-static void MapRGB(uint8_t& r8, uint8_t& g8, uint8_t& b8) {
+// The window of a list (download queue, log) that is being painted on this thread: its text takes
+// the list text color.
+static thread_local HWND g_listPaintWnd;
+// The DC a column header bar was just filled on: text drawn on it before its next fill is header text.
+static thread_local HDC g_headerDc;
+
+// text is true for the color of text (SetTextColor): only that may take the list text color
+static void MapRGB(uint8_t& r8, uint8_t& g8, uint8_t& b8, bool text = false) {
     if (r8 == 255 && g8 == 0 && b8 == 255) {  // transparency key (clFuchsia)
         return;
     }
@@ -213,19 +247,26 @@ static void MapRGB(uint8_t& r8, uint8_t& g8, uint8_t& b8) {
         HslToRgb8(g_cfg.listHue, g_cfg.listSat, fminf(0.5f, fmaxf(0.0f, l2 + g_cfg.listL - g_cfg.darkOut)), &r8, &g8, &b8);
         return;
     }
-    if (g_cfg.textTint && s < 0.12f && l < 0.5f) {  // gray and black/white text takes the color of the text setting
-        HslToRgb8(g_cfg.textHue, g_cfg.textSat, l2, &r8, &g8, &b8);
+    // gray and black/white text takes the color of the text setting. The lightness of the text colors is only
+    // used here: the rest of the mapping keeps the range of the text lightness setting, so a dark text color
+    // does not darken the surface, the icons and the borders.
+    if (text && g_cfg.listTextTint && g_listPaintWnd && s < 0.12f && l < 0.5f) {  // text in the lists
+        HslToRgb8(g_cfg.listTextHue, g_cfg.listTextSat, g_cfg.listTextLight - (g_cfg.listTextLight - g_cfg.darkOut) * l, &r8, &g8, &b8);
+        return;
+    }
+    if (g_cfg.textTint && s < 0.12f && l < 0.5f) {
+        HslToRgb8(g_cfg.textHue, g_cfg.textSat, g_cfg.textLight - (g_cfg.textLight - g_cfg.darkOut) * l, &r8, &g8, &b8);
         return;
     }
     HslToRgb8(h, s * g_cfg.satScale, l2, &r8, &g8, &b8);
 }
 
-static COLORREF MapColor(COLORREF c) {
+static COLORREF MapColor(COLORREF c, bool text = false) {
     if (c & 0xFF000000) {  // palette index / palette relative, leave alone
         return c;
     }
     uint8_t r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
-    MapRGB(r, g, b);
+    MapRGB(r, g, b, text);
     return RGB(r, g, b);
 }
 
@@ -259,7 +300,26 @@ static HBRUSH g_sysBrushes[32];
 static HMODULE g_exeModule;
 static std::unordered_map<HMODULE, int>* g_callerKind;  // 1 = the app, 2 = system drawing library, 0 = other
 
+// The answer only depends on the call site, and the same few call sites draw all the time: a small
+// table (address and kind in one word, so a read is never torn) avoids the module look-up
+// (which takes the loader lock) for each call.
+static std::atomic<uint32_t> g_callerCache[1024];
+
+static int CallerKindUncached(void* ret);
+
 static int CallerKind(void* ret) {
+    const uint32_t a = (uint32_t)(uintptr_t)ret;
+    const size_t slot = ((a >> 2) ^ (a >> 12)) & 1023;
+    const uint32_t v = g_callerCache[slot].load(std::memory_order_relaxed);
+    if (v != 0 && (v & ~3u) == (a & ~3u)) {
+        return (int)(v & 3u);
+    }
+    const int kind = CallerKindUncached(ret);
+    g_callerCache[slot].store((a & ~3u) | (uint32_t)kind, std::memory_order_relaxed);
+    return kind;
+}
+
+static int CallerKindUncached(void* ret) {
     HMODULE m = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCWSTR)ret, &m) || !m) {
@@ -349,12 +409,49 @@ static COLORREF MapShapeColor(COLORREF c, bool pen = false) {
 
 // ---- bitmap helpers -------------------------------------------------------------
 
+// Re-colors a bitmap in place. A bitmap has few distinct colors, so a small lookup table (colors
+// seen before are looked up instead of converted again) makes this several times faster.
 static void MapPixels(uint8_t* base, int width, int height, int stride, int bpp) {
+    const int step = bpp / 8;
+    const size_t pixels = (size_t)width * height;
+    if (pixels < 4096) {
+        for (int y = 0; y < height; y++) {
+            uint8_t* row = base + (size_t)y * stride;
+            for (int x = 0; x < width; x++) {
+                uint8_t* p = row + x * step;
+                MapRGB(p[2], p[1], p[0]);
+            }
+        }
+        return;
+    }
+    const int kBits = 13;
+    std::vector<uint32_t> cache((size_t)2 << kBits, 0xFFFFFFFFu);  // key, value pairs
+    uint32_t lastIn = 0xFFFFFFFFu, lastOut = 0;
     for (int y = 0; y < height; y++) {
         uint8_t* row = base + (size_t)y * stride;
         for (int x = 0; x < width; x++) {
-            uint8_t* p = row + x * (bpp / 8);
-            MapRGB(p[2], p[1], p[0]);
+            uint8_t* p = row + x * step;
+            const uint32_t in = ((uint32_t)p[2] << 16) | ((uint32_t)p[1] << 8) | p[0];
+            uint32_t out;
+            if (in == lastIn) {
+                out = lastOut;
+            } else {
+                const size_t slot = (size_t)((in * 2654435761u) >> (32 - kBits)) * 2;
+                if (cache[slot] == in) {
+                    out = cache[slot + 1];
+                } else {
+                    uint8_t r = p[2], g = p[1], b = p[0];
+                    MapRGB(r, g, b);
+                    out = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+                    cache[slot] = in;
+                    cache[slot + 1] = out;
+                }
+                lastIn = in;
+                lastOut = out;
+            }
+            p[2] = (uint8_t)(out >> 16);
+            p[1] = (uint8_t)(out >> 8);
+            p[0] = (uint8_t)out;
         }
     }
 }
@@ -465,6 +562,12 @@ static float Smooth(float edge0, float edge1, float x) {
 // Pixels of the skin color family are re-colored, anti-aliased text edges (lighter or less
 // saturated mixes of skin and text color) are only tinted a little, so text stays sharp.
 static void TintSkin(uint8_t* base, int width, int height, int stride, int bytesPerPixel, float t0, float dtx, float dty) {
+    // The result for a pixel depends on its color and on the gradient step only. For the current skin
+    // color there is a table with one entry per step; flat areas repeat the same few colors, so the
+    // per-pixel work is a look-up.
+    uint32_t tabKey = 0xFFFFFFFFu;
+    float tabW = 0.0f, tabL0 = 0.0f;
+    uint32_t tab[256];
     for (int y = 0; y < height; y++) {
         uint8_t* row = base + (size_t)y * stride;
         float t = t0 + y * dty;
@@ -476,22 +579,36 @@ static void TintSkin(uint8_t* base, int width, int height, int stride, int bytes
             if (b != mx || mx - mn < 12 || mx > 200) {
                 continue;  // not blue and dark enough
             }
-            float h0, s0, l0;
-            RgbToHsl(r / 255.0f, g / 255.0f, b / 255.0f, &h0, &s0, &l0);
-            float hueDeg = h0 * 60.0f;
-            float w = (1.0f - Smooth(0.34f, 0.55f, l0)) * Smooth(0.05f, 0.10f, l0) *
-                      Smooth(0.10f, 0.28f, s0) * Smooth(200.0f, 208.0f, hueDeg) *
-                      (1.0f - Smooth(224.0f, 236.0f, hueDeg));
-            if (w <= 0.01f) {
+            const uint32_t key = ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+            if (key != tabKey) {
+                float h0, s0, l0;
+                RgbToHsl(r / 255.0f, g / 255.0f, b / 255.0f, &h0, &s0, &l0);
+                float hueDeg = h0 * 60.0f;
+                tabW = (1.0f - Smooth(0.34f, 0.55f, l0)) * Smooth(0.05f, 0.10f, l0) *
+                       Smooth(0.10f, 0.28f, s0) * Smooth(200.0f, 208.0f, hueDeg) *
+                       (1.0f - Smooth(224.0f, 236.0f, hueDeg));
+                tabL0 = l0;
+                tabKey = key;
+                memset(tab, 0xFF, sizeof(tab));
+            }
+            if (tabW <= 0.01f) {
                 continue;
             }
             int idx = (int)(fminf(1.0f, fmaxf(0.0f, t)) * 255.0f + 0.5f);
-            float l1 = fminf(0.6f, g_gradient.l[idx] * (l0 / kSkinLightness));
-            uint8_t nr, ng, nb;
-            HslToRgb8(g_gradient.h[idx], g_gradient.s[idx], l1, &nr, &ng, &nb);
-            p[2] = (uint8_t)(r + (nr - r) * w + 0.5f);
-            p[1] = (uint8_t)(g + (ng - g) * w + 0.5f);
-            p[0] = (uint8_t)(b + (nb - b) * w + 0.5f);
+            uint32_t v = tab[idx];
+            if (v == 0xFFFFFFFFu) {
+                float l1 = fminf(0.6f, g_gradient.l[idx] * (tabL0 / kSkinLightness));
+                uint8_t nr, ng, nb;
+                HslToRgb8(g_gradient.h[idx], g_gradient.s[idx], l1, &nr, &ng, &nb);
+                const uint32_t fr = (uint32_t)(r + (nr - r) * tabW + 0.5f);
+                const uint32_t fg = (uint32_t)(g + (ng - g) * tabW + 0.5f);
+                const uint32_t fb = (uint32_t)(b + (nb - b) * tabW + 0.5f);
+                v = (fr << 16) | (fg << 8) | fb;
+                tab[idx] = v;
+            }
+            p[2] = (uint8_t)(v >> 16);
+            p[1] = (uint8_t)(v >> 8);
+            p[0] = (uint8_t)v;
         }
     }
 }
@@ -642,18 +759,25 @@ typedef int(WINAPI* FillRect_t)(HDC, const RECT*, HBRUSH);
 static FillRect_t FillRect_orig;
 static int WINAPI FillRect_hook(HDC hdc, const RECT* rc, HBRUSH br) {
     MarkDirty(hdc);
+    if (g_headerDc == hdc) {
+        g_headerDc = nullptr;  // set again below when this fill is a header bar
+    }
     if ((ULONG_PTR)br > 0 && (ULONG_PTR)br <= 32) {
         int index = (int)(ULONG_PTR)br - 1;
         if (!IsSelectionColorIndex(index) && ShouldMap(__builtin_return_address(0), hdc)) {
             br = MappedSysBrush(index);
         }
-    } else if (g_cfg.headerOn && rc && rc->right - rc->left >= 4 && rc->top == 0 && rc->bottom - rc->top >= 15 && rc->bottom - rc->top <= 22 &&
-               ShouldMap(__builtin_return_address(0), hdc) && IsSkinColorBrush(br)) {
+    } else if ((g_cfg.headerOn || g_cfg.columnTextColor != CLR_INVALID) && rc && rc->right - rc->left >= 4 && rc->top == 0 &&
+               rc->bottom - rc->top >= 15 && rc->bottom - rc->top <= 22 && ShouldMap(__builtin_return_address(0), hdc) &&
+               IsSkinColorBrush(br)) {
         // the header bars of the lists are filled with the color of the skin
-        HBRUSH tmp = CreateSolidBrush_orig(g_cfg.headerColor);
-        int res = FillRect_orig(hdc, rc, tmp);
-        DeleteObject(tmp);
-        return res;
+        g_headerDc = hdc;
+        if (g_cfg.headerOn) {
+            HBRUSH tmp = CreateSolidBrush_orig(g_cfg.headerColor);
+            int res = FillRect_orig(hdc, rc, tmp);
+            DeleteObject(tmp);
+            return res;
+        }
     } else if (g_cfg.progressOn && rc && rc->right - rc->left >= 1 && rc->bottom - rc->top >= 8 && rc->bottom - rc->top <= 24 &&
                ShouldMap(__builtin_return_address(0), hdc)) {
         // the small bars of the connection list: a gray background piece, then the fill in narrow strips
@@ -790,7 +914,7 @@ static COLORREF SetMappedColor(std::unordered_map<HDC, COLORREF>* store, SetColo
             keep = false;
         }
     }
-    COLORREF prev = orig(hdc, keep ? c : MapColor(c));
+    COLORREF prev = orig(hdc, keep ? c : MapColor(c, orig == SetTextColor_orig));
     EnterCriticalSection(&g_cs);
     auto it = store->find(hdc);
     if (it != store->end()) {
@@ -944,6 +1068,67 @@ static StretchBlt_t StretchBlt_orig;
 // Copies the source into a temporary bitmap, re-colors the copy, and draws that:
 //  * TImage32 (Graphics32) buffers: all pixels are re-colored on every blit
 //  * with the gradient enabled: the skin colored pixels get the gradient color
+// One temporary bitmap with its memory DC is reused for the blits that are processed (creating and
+// deleting both for each of the thousands of blits of a repaint was a large part of the cost). If another
+// thread holds it, the blit uses a bitmap of its own.
+static CRITICAL_SECTION g_tempCs;
+static HDC g_tempDc;
+static HBITMAP g_tempBmp;
+static HGDIOBJ g_tempOld;
+static void* g_tempBits;
+static int g_tempW, g_tempH;
+
+static bool EnsureTempBitmap(HDC like, int w, int h) {
+    if (g_tempDc && g_tempW >= w && g_tempH >= h) {
+        return true;
+    }
+    const int nw = std::max(g_tempW, (w + 63) & ~63), nh = std::max(g_tempH, (h + 63) & ~63);
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = nw;
+    bi.bmiHeader.biHeight = -nh;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(like, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp || !bits) {
+        if (bmp) {
+            DeleteObject(bmp);
+        }
+        return false;
+    }
+    HDC dc = g_tempDc ? g_tempDc : CreateCompatibleDC(like);
+    if (!dc) {
+        DeleteObject(bmp);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(dc, bmp);
+    if (g_tempDc) {
+        DeleteObject(g_tempBmp);  // the previous bitmap was selected into the same DC: now free
+    } else {
+        g_tempOld = old;
+    }
+    g_tempDc = dc;
+    g_tempBmp = bmp;
+    g_tempBits = bits;
+    g_tempW = nw;
+    g_tempH = nh;
+    return true;
+}
+
+static void FreeTempBitmap() {
+    if (g_tempDc) {
+        SelectObject(g_tempDc, g_tempOld);
+        DeleteObject(g_tempBmp);
+        DeleteDC(g_tempDc);
+        g_tempDc = nullptr;
+        g_tempBmp = nullptr;
+        g_tempBits = nullptr;
+        g_tempW = g_tempH = 0;
+    }
+}
+
 static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int sy, int sw, int sh, DWORD rop,
                           bool stretch) {
     if (!s || w <= 0 || h <= 0 || w > 4096 || h > 4096) {
@@ -958,20 +1143,36 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
         return false;
     }
 
-    BITMAPINFO bi = {};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = -h;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
+    // only small blits use the shared bitmap, the few large ones allocate their own (keeps the pool small)
+    const bool pooled = w <= 1024 && h <= 1024 && TryEnterCriticalSection(&g_tempCs) != FALSE;
+    HDC mem = nullptr;
+    HBITMAP tmp = nullptr;
+    HGDIOBJ old = nullptr;
     void* bits = nullptr;
-    HBITMAP tmp = CreateDIBSection(d, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!tmp || !bits) {
-        return false;
+    int bstride = w * 4;
+    if (pooled && EnsureTempBitmap(d, w, h)) {
+        mem = g_tempDc;
+        bits = g_tempBits;
+        bstride = g_tempW * 4;
+    } else {
+        if (pooled) {
+            LeaveCriticalSection(&g_tempCs);
+        }
+        BITMAPINFO bi = {};
+        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h;
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        tmp = CreateDIBSection(d, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!tmp || !bits) {
+            return false;
+        }
+        mem = CreateCompatibleDC(d);
+        old = SelectObject(mem, tmp);
     }
-    HDC mem = CreateCompatibleDC(d);
-    HGDIOBJ old = SelectObject(mem, tmp);
+    const bool usingPool = tmp == nullptr;
     if (stretch) {
         StretchBlt_orig(mem, 0, 0, w, h, s, sx, sy, sw, sh, SRCCOPY);
     } else {
@@ -981,9 +1182,9 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
     if (surfaceTree) {
         uint8_t sr, sg, sb;
         SurfaceColorAt(WindowFromDC(d), &sr, &sg, &sb);
-        SurfaceTree((uint8_t*)bits, w, h, w * 4, sr, sg, sb);
+        SurfaceTree((uint8_t*)bits, w, h, bstride, sr, sg, sb);
     } else if (image32) {
-        MapPixels((uint8_t*)bits, w, h, w * 4, 32);
+        MapPixels((uint8_t*)bits, w, h, bstride, 32);
     } else {
         HWND wnd = WindowFromDC(d);
         HWND root = GetAncestor(wnd, GA_ROOT);
@@ -999,13 +1200,17 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
             extent = 1.0f;
         }
         float t0 = ((origin.x - W * 0.5f) * dx + (origin.y - H * 0.5f) * dy) / extent + 0.5f;
-        TintSkin((uint8_t*)bits, w, h, w * 4, 4, t0, dx / extent, dy / extent);
+        TintSkin((uint8_t*)bits, w, h, bstride, 4, t0, dx / extent, dy / extent);
     }
 
     BOOL ok = BitBlt_orig(d, x, y, w, h, mem, 0, 0, rop);
-    SelectObject(mem, old);
-    DeleteDC(mem);
-    DeleteObject(tmp);
+    if (usingPool) {
+        LeaveCriticalSection(&g_tempCs);
+    } else {
+        SelectObject(mem, old);
+        DeleteDC(mem);
+        DeleteObject(tmp);
+    }
     return ok != FALSE;
 }
 
@@ -1150,13 +1355,29 @@ static HBITMAP WINAPI CreateDIBitmap_hook(HDC hdc, const BITMAPINFOHEADER* hdr, 
 typedef BOOL(WINAPI* EndPaint_t)(HWND, const PAINTSTRUCT*);
 static EndPaint_t EndPaint_orig;
 static void ForgetDcColors(HDC dc) {
+    if (g_headerDc == dc) {
+        g_headerDc = nullptr;
+    }
     EnterCriticalSection(&g_cs);
     g_textColors->erase(dc);
     g_bkColors->erase(dc);
     LeaveCriticalSection(&g_cs);
 }
 
+typedef HDC(WINAPI* BeginPaint_t)(HWND, LPPAINTSTRUCT);
+static BeginPaint_t BeginPaint_orig;
+static HDC WINAPI BeginPaint_hook(HWND wnd, LPPAINTSTRUCT ps) {
+    if (g_cfg.listTextTint && !g_listPaintWnd && WindowClassIs(wnd, L"TVirtualStringTree") &&
+        !WindowClassIs(GetAncestor(wnd, GA_ROOT), L"TSetupForm")) {
+        g_listPaintWnd = wnd;
+    }
+    return BeginPaint_orig(wnd, ps);
+}
+
 static BOOL WINAPI EndPaint_hook(HWND wnd, const PAINTSTRUCT* ps) {
+    if (wnd && wnd == g_listPaintWnd) {
+        g_listPaintWnd = nullptr;
+    }
     if (ps && ps->hdc && WindowClassIs(wnd, L"TbsSkinStatusBar")) {
         FixStatusGlyph(ps->hdc);
     }
@@ -1214,6 +1435,13 @@ typedef BOOL(WINAPI* ExtTextOutW_t)(HDC, int, int, UINT, const RECT*, LPCWSTR, U
 static ExtTextOutW_t ExtTextOutW_orig;
 static BOOL WINAPI ExtTextOutW_hook(HDC hdc, int x, int y, UINT o, const RECT* rc, LPCWSTR s, UINT n, const INT* dx) {
     MarkDirty(hdc);
+    if (g_cfg.columnTextColor != CLR_INVALID && g_headerDc == hdc) {
+        // the text drawn on the DC after a header bar was filled
+        COLORREF prev = SetTextColor_orig(hdc, g_cfg.columnTextColor);
+        BOOL res = ExtTextOutW_orig(hdc, x, y, o, rc, s, n, dx);
+        SetTextColor_orig(hdc, prev);
+        return res;
+    }
     return ExtTextOutW_orig(hdc, x, y, o, rc, s, n, dx);
 }
 typedef BOOL(WINAPI* PatBlt_t)(HDC, int, int, int, int, DWORD);
@@ -1250,6 +1478,9 @@ static BOOL WINAPI DeleteObject_hook(HGDIOBJ obj) {
 typedef BOOL(WINAPI* DeleteDC_t)(HDC);
 static DeleteDC_t DeleteDC_orig;
 static BOOL WINAPI DeleteDC_hook(HDC hdc) {
+    if (g_headerDc == hdc) {
+        g_headerDc = nullptr;
+    }
     if (g_csReady && hdc) {
         EnterCriticalSection(&g_cs);
         g_textColors->erase(hdc);
@@ -1284,7 +1515,21 @@ static bool IsAppWindow(HWND hWnd) {
     return IsAppRoot(hWnd);
 }
 
+// Colors the title bar of a top-level window of the app (Windows 11 build 22000 or newer, older
+// versions ignore the attribute). color is CLR_INVALID to put the color of Windows back.
+static void ApplyTitleBar(HWND hWnd, COLORREF color) {
+    if (!hWnd || GetAncestor(hWnd, GA_ROOT) != hWnd || (GetWindowLongW(hWnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) {
+        return;
+    }
+    if (!IsAppWindow(hWnd)) {
+        return;
+    }
+    DWORD value = color == CLR_INVALID ? DWMWA_COLOR_DEFAULT : (DWORD)color;
+    DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &value, sizeof(value));
+}
+
 static void ApplyDarkTheme(HWND hWnd) {
+    ApplyTitleBar(hWnd, g_cfg.titleBarColor);
     wchar_t cls[64];
     if (hWnd && IsAppWindow(hWnd) && GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
         (NeedsDarkTheme(cls) || (GetWindowLongW(hWnd, GWL_STYLE) & (WS_HSCROLL | WS_VSCROLL)))) {
@@ -1311,6 +1556,7 @@ static HWND WINAPI CreateWindowExA_hook(DWORD ex, LPCSTR cls, LPCSTR name, DWORD
 }
 
 static void ResetDarkTheme(HWND hWnd) {
+    ApplyTitleBar(hWnd, CLR_INVALID);
     wchar_t cls[64];
     if (hWnd && IsAppWindow(hWnd) && GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
         (NeedsDarkTheme(cls) || (GetWindowLongW(hWnd, GWL_STYLE) & (WS_HSCROLL | WS_VSCROLL)))) {
@@ -1329,6 +1575,15 @@ static BOOL CALLBACK ResetDarkThemeTopLevel(HWND hWnd, LPARAM) {
     if (pid == GetCurrentProcessId()) {
         ResetDarkTheme(hWnd);
         EnumChildWindows(hWnd, ResetDarkThemeEnum, 0);
+    }
+    return TRUE;
+}
+
+static BOOL CALLBACK ApplyTitleBarTopLevel(HWND hWnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        ApplyTitleBar(hWnd, g_cfg.titleBarColor);
     }
     return TRUE;
 }
@@ -1418,15 +1673,22 @@ static int GetAngleSetting() {
 static void LoadSettings() {
     g_cfg.darkOut = GetPercentSetting(L"appearance.backgroundLightness", 11, 1, 40) / 100.0f;
     g_cfg.lightOut = GetPercentSetting(L"appearance.textLightness", 92, 50, 100) / 100.0f;
-    PCWSTR tc = Wh_GetStringSetting(L"appearance.textColor");
-    COLORREF tcc = tc && *tc ? ParseColor(tc, CLR_INVALID) : CLR_INVALID;
-    Wh_FreeStringSetting(tc);
+    COLORREF tcc = GetColorSetting(L"appearance.textColor", CLR_INVALID);
     g_cfg.textTint = tcc != CLR_INVALID;
     if (g_cfg.textTint) {
         float tl;
         RgbToHsl(GetRValue(tcc) / 255.0f, GetGValue(tcc) / 255.0f, GetBValue(tcc) / 255.0f, &g_cfg.textHue, &g_cfg.textSat, &tl);
-        g_cfg.lightOut = fmaxf(0.5f, tl);
+        g_cfg.textLight = tl;
+        g_cfg.lightOut = fmaxf(0.5f, tl);  // the range of everything that is not text stays as bright as before
     }
+    COLORREF ltcc = GetColorSetting(L"appearance.listTextColor", CLR_INVALID);
+    g_cfg.listTextTint = ltcc != CLR_INVALID;
+    if (g_cfg.listTextTint) {
+        float tl;
+        RgbToHsl(GetRValue(ltcc) / 255.0f, GetGValue(ltcc) / 255.0f, GetBValue(ltcc) / 255.0f, &g_cfg.listTextHue, &g_cfg.listTextSat, &tl);
+        g_cfg.listTextLight = tl;
+    }
+    g_cfg.columnTextColor = GetColorSetting(L"appearance.columnTextColor", CLR_INVALID);
     PCWSTR lc = Wh_GetStringSetting(L"appearance.listColor");
     COLORREF lcc = lc && *lc ? ParseColor(lc, CLR_INVALID) : CLR_INVALID;
     Wh_FreeStringSetting(lc);
@@ -1462,6 +1724,7 @@ static void LoadSettings() {
     }
 
     g_cfg.keepSetupTreeDark = Wh_GetIntSetting(L"appearance.keepSetupTreeDark") != 0;
+    g_cfg.titleBarColor = GetColorSetting(L"appearance.titleBarColor", CLR_INVALID);
     PCWSTR prog = Wh_GetStringSetting(L"progress.colorTop");
     COLORREF pc = prog && *prog ? ParseColor(prog, CLR_INVALID) : CLR_INVALID;
     Wh_FreeStringSetting(prog);
@@ -1542,6 +1805,7 @@ static void StartLateRepaint() {
 
 BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_cs);
+    InitializeCriticalSection(&g_tempCs);
     g_bmps = new std::unordered_map<HBITMAP, BmpEntry>();
     g_textColors = new std::unordered_map<HDC, COLORREF>();
     g_bkColors = new std::unordered_map<HDC, COLORREF>();
@@ -1559,6 +1823,7 @@ BOOL Wh_ModInit() {
     HOOK(user32, GetSysColor);
     HOOK(user32, GetSysColorBrush);
     HOOK(user32, FillRect);
+    HOOK(user32, BeginPaint);
     HOOK(user32, EndPaint);
     HOOK(user32, ReleaseDC);
 
@@ -1607,6 +1872,7 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     RestoreBitmaps();  // the skin bitmaps are re-colored again with the new values on their next use
+    EnumWindows(ApplyTitleBarTopLevel, 0);
     for (int i = 0; i < 32; i++) {
         g_sysBrushes[i] = nullptr;  // rebuilt on demand (the old brushes stay alive: they may still be selected)
     }
@@ -1625,4 +1891,7 @@ void Wh_ModUninit() {
     EnumWindows(ResetDarkThemeTopLevel, 0);
     RestoreBitmaps();
     EnumWindows(RepaintWindow, 0);
+    EnterCriticalSection(&g_tempCs);
+    FreeTempBitmap();
+    LeaveCriticalSection(&g_tempCs);
 }
