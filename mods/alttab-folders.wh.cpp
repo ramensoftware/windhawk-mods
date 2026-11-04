@@ -4,6 +4,7 @@
 // @description     Group windows into named folders; Alt+Tab cycles only the windows of the active folder
 // @version         1.0.0
 // @author          a160k
+// @github         https://github.com/a160k
 // @include         explorer.exe
 // @compilerOptions -ldwmapi -lgdi32 -luser32 -ladvapi32
 // ==/WindhawkMod==
