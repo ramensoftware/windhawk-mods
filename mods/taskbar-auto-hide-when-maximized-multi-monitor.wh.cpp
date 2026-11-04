@@ -1243,10 +1243,9 @@ bool TryHookTaskbarViewDll(bool forceAttempt = false) {
 // creates itself are topmost, so restore it here unless a true (non-maximized)
 // fullscreen window currently owns that monitor.
 void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
-    if (!g_taskbarsPendingTopmostCheck.contains(hTaskbarWnd)) {
+    if (GetWindowLongPtr(hTaskbarWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
         return;
     }
-    g_taskbarsPendingTopmostCheck.erase(hTaskbarWnd);
 
     HMONITOR monitor = MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{
@@ -1261,12 +1260,16 @@ void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
         return;
     }
 
-    if (!(GetWindowLongPtr(hTaskbarWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
-        SetWindowPos(hTaskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        Wh_Log(L"Restored topmost for taskbar %08X",
-               (DWORD)(ULONG_PTR)hTaskbarWnd);
+    int cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(hTaskbarWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
+        BOOL cloak = FALSE;
+        DwmSetWindowAttribute(hTaskbarWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
     }
+
+    SetWindowPos(hTaskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    Wh_Log(L"Restored topmost for taskbar %08X",
+           (DWORD)(ULONG_PTR)hTaskbarWnd);
 }
 
 void AdjustAllTaskbars() {
@@ -1545,9 +1548,9 @@ void WINAPI TrayUI__Hide_Hook(void* pThis) {
     // Whichever code path hid the taskbar - the shell's own timers included -
     // the shell's unhide timer (the one that watches the screen edge) is not
     // necessarily armed, so touching the edge would do nothing. Arm it here.
-    if (auto wndIt = g_taskbarWndByObject.find(pThis);
-        wndIt != g_taskbarWndByObject.end()) {
-        SetTimer(wndIt->second, kTrayUITimerUnhide, 100, nullptr);
+    HWND hPrimary = FindCurrentProcessTaskbarWnd();
+    if (hPrimary) {
+        SetTimer(hPrimary, kTrayUITimerUnhide, 100, nullptr);
     }
 }
 
@@ -1647,16 +1650,8 @@ void WINAPI TrayUI__ResetZorder_Hook(void* pThis, int flags) {
     TrayUI__ResetZorder_Original(pThis, flags);
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (hTaskbarWnd && g_taskbarsPendingTopmostCheck.contains(hTaskbarWnd)) {
-        HMONITOR primaryMonitor =
-            MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        HWND hCoveringWnd = FindTopMonitorCoveringWindow(primaryMonitor, &monitorInfo);
-        if (!hCoveringWnd || IsMaximizedOrCoveringApp(hCoveringWnd, monitorInfo.rcMonitor)) {
-            EnsureTaskbarTopmost(hTaskbarWnd);
-        }
+    if (hTaskbarWnd) {
+        EnsureTaskbarTopmost(hTaskbarWnd);
     }
 }
 
@@ -1666,17 +1661,8 @@ void WINAPI CSecondaryTray__ResetZorder_Hook(void* pThis, int flags) {
     CSecondaryTray__ResetZorder_Original(pThis, flags);
 
     auto wndIt = g_taskbarWndByObject.find(pThis);
-    if (wndIt != g_taskbarWndByObject.end() &&
-        g_taskbarsPendingTopmostCheck.contains(wndIt->second)) {
-        HWND hWnd = wndIt->second;
-        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        HWND hCoveringWnd = FindTopMonitorCoveringWindow(monitor, &monitorInfo);
-        if (!hCoveringWnd || IsMaximizedOrCoveringApp(hCoveringWnd, monitorInfo.rcMonitor)) {
-            EnsureTaskbarTopmost(hWnd);
-        }
+    if (wndIt != g_taskbarWndByObject.end()) {
+        EnsureTaskbarTopmost(wndIt->second);
     }
 }
 
@@ -1789,18 +1775,34 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
 
         if (currentTick - leftTick >= 400) {
             RemoveProp(hWnd, kModRetractLeftTickProp);
+            RemoveProp(hWnd, L"Windhawk_WasFullyShown");
             KillTimer(hWnd, kModRetractTimer);
 
-            Wh_Log(L"Retract timeout expired, requesting shell hide for %08X",
+            Wh_Log(L"Retract timeout expired, collapsing taskbar %08X",
                    (DWORD)(ULONG_PTR)hWnd);
 
-            if (EnsureAutoHideEnabled()) {
-                PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
-            } else if (g_autoHideEnableFailed) {
-                CollapseWin11Taskbar(hWnd);
-                TrayUI__Hide_Original(pThis);
-                SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
+            void* pVC = nullptr;
+            auto it = g_taskbarToViewCoordinator.find(hWnd);
+            if (it != g_taskbarToViewCoordinator.end() && it->second) {
+                pVC = it->second;
             }
+
+            if (pVC) {
+                try {
+                    if (ViewCoordinator_ForceCompleteEdgeGesture_Original) {
+                        ViewCoordinator_ForceCompleteEdgeGesture_Original(pVC, hWnd);
+                    }
+                    if (ViewCoordinator_CollapseTaskbar_Original) {
+                        ViewCoordinator_CollapseTaskbar_Original(pVC, hWnd);
+                    }
+                } catch (...) {
+                }
+            }
+
+            EnsureAutoHideEnabled();
+            TrayUI__Hide_Original(pThis);
+            UpdateViewCoordinatorIsExpanded(hWnd);
+            SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
             return 0;
         }
 
