@@ -6,7 +6,7 @@
 // @author          Dszae
 // @github          https://github.com/Dszae
 // @homepage        https://github.com/Dszae/AltTabs
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi
 // ==/WindhawkMod==
 
@@ -19,21 +19,24 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 (e.g., stacking all GitHub tabs into a single Alt-Tab thumbnail card) to prevent visual clutter.
 
 ### Key Architectural Features:
-1. **Zero-Lag UI Automation (UIA) Batch Caching Engine**:
+1. **Dedicated Tool Process Isolation**:
+   Runs as an isolated Windhawk Tool Mod in its own background process, keeping File Explorer
+   100% stable and protected against crashes.
+2. **Zero-Lag UI Automation (UIA) Batch Caching Engine**:
    Uses `IUIAutomationCacheRequest` with `TreeScope_Element` to fetch all tab titles,
    selection states, patterns, and coordinates in a single out-of-process LRPC batch call (< 12ms).
-2. **Native Tab-Strip Scoping**:
+3. **Native Tab-Strip Scoping**:
    Locates the browser's native `TabStrip` container first before enumerating, preventing
    in-page web ARIA `role='tab'` controls from creating bogus Alt-Tab items.
-3. **Domain Clustering Parser**:
+4. **Domain Clustering Parser**:
    Extracts root domains from Omnibox URLs and title heuristics. Unresolved tabs remain
    individual cards to prevent false groupings.
-4. **Resilient Shell Message Loop**:
-   Runs a Win32 message-pumping loop using `MsgWaitForMultipleObjectsEx`, ensuring Alt-Tab
-   cards process Windows Shell messages cleanly without thread hangs.
-5. **Non-Blocking UI Inspection**:
+5. **No Taskbar Clutter**:
+   Uses `ITaskbarList::DeleteTab` so virtual proxy cards appear exclusively in Alt-Tab
+   without producing unwanted taskbar buttons.
+6. **Non-Blocking UI Inspection**:
    Uses `SendMessageTimeoutW` to query window icons safely without stalling if a browser freezes.
-6. **Reliable Activation Routing**:
+7. **Reliable Activation Routing**:
    Bypasses Windows ASFW (AllowSetForegroundWindow) lockouts and switches directly to the target tab
    via `IUIAutomationSelectionItemPattern` with coordinate fallback.
 */
@@ -69,11 +72,8 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 #include <dwmapi.h>
 #include <psapi.h>
 #include <shlwapi.h>
+#include <shobjidl.h>
 #include <memory>
-
-#ifndef CLSID_CUIAutomation8
-static const CLSID CLSID_CUIAutomation8 = { 0xe22ad333, 0xb25f, 0x460c, { 0x83, 0xd0, 0x05, 0x81, 0x10, 0x73, 0x95, 0xc9 } };
-#endif
 
 #include <string>
 #include <vector>
@@ -85,7 +85,6 @@ static const CLSID CLSID_CUIAutomation8 = { 0xe22ad333, 0xb25f, 0x460c, { 0x83, 
 #include <sstream>
 #include <algorithm>
 
-// Windhawk API header (available when building within Windhawk)
 #if __has_include(<windhawk_api.h>)
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -236,8 +235,8 @@ struct DomainCluster {
     size_t activeTabIndex = 0;
 };
 
-// Global thread-safe map associating proxy HWND with its DomainCluster
-static std::mutex g_proxyMapMutex;
+// Recursive mutex to prevent self-deadlock when ReconcileProxyWindows triggers synchronous WM_ACTIVATE
+static std::recursive_mutex g_proxyMapMutex;
 static std::unordered_map<HWND, std::shared_ptr<DomainCluster>> g_proxyMap;
 
 // --- DOMAIN PARSER ---
@@ -282,7 +281,6 @@ public:
         if (lower.find(L"twitter") != std::wstring::npos || lower.find(L"x.com") != std::wstring::npos) return L"x.com";
 
         // Never merge unrelated unknown tabs into a shared key.
-        // Returning empty or a unique per-tab key keeps unknown tabs individual!
         return L"";
     }
 
@@ -411,7 +409,7 @@ public:
         if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) {
             std::shared_ptr<DomainCluster> cluster;
             {
-                std::lock_guard<std::mutex> lock(g_proxyMapMutex);
+                std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
                 auto it = g_proxyMap.find(hwnd);
                 if (it != g_proxyMap.end()) {
                     cluster = it->second;
@@ -463,7 +461,7 @@ private:
         SafeComPtr<IUIAutomationCondition> pTabCond;
         pUIA->CreatePropertyCondition(UIA_ControlTypePropertyId, varProp, &pTabCond);
 
-        // Crucial fix: Use TreeScope_Element for cache request so tab item's own properties are cached!
+        // Cache tab item's own properties
         SafeComPtr<IUIAutomationCacheRequest> pCache;
         pUIA->CreateCacheRequest(&pCache);
         pCache->AddProperty(UIA_NamePropertyId);
@@ -473,26 +471,33 @@ private:
         pCache->AddPattern(UIA_InvokePatternId);
         pCache->put_TreeScope(TreeScope_Element);
 
+        ULONGLONG nextScan = 0;
+
         while (m_running.load()) {
+            ULONGLONG now = GetTickCount64();
+            DWORD timeout = (now >= nextScan) ? 0 : (DWORD)(nextScan - now);
+
+            DWORD res = MsgWaitForMultipleObjectsEx(1, &m_hWakeEvent, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            if (!m_running.load()) break;
+
+            if (res == WAIT_OBJECT_0 + 1) {
+                // Pump messages only, do not scan
+                MSG msg;
+                while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                continue;
+            }
+
+            PerformTabScan(pUIA, pTabCond, pCache);
+
             int intervalMs = 1500;
             {
                 std::lock_guard<std::mutex> lock(g_settingsMutex);
                 intervalMs = g_settings.scanIntervalMs;
             }
-
-            // Message-aware wait: pumps messages for proxy HWNDs while waiting for next scan
-            DWORD waitRes = MsgWaitForMultipleObjectsEx(1, &m_hWakeEvent, intervalMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-
-            if (!m_running.load()) break;
-
-            // Process any pending Win32 messages on this thread
-            MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-
-            PerformTabScan(pUIA, pTabCond, pCache);
+            nextScan = GetTickCount64() + intervalMs;
         }
 
         pCache.Release();
@@ -501,45 +506,48 @@ private:
         CoUninitialize();
     }
 
+    static BOOL CALLBACK EnumBrowserWindowsProc(HWND hwnd, LPARAM lp) {
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[64] = { 0 };
+        GetClassNameW(hwnd, cls, 64);
+        if (wcscmp(cls, L"Chrome_WidgetWin_1") != 0) return TRUE;
+
+        RECT rc;
+        if (!GetWindowRect(hwnd, &rc) || (rc.right - rc.left < 200)) return TRUE;
+
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!hProc) return TRUE;
+
+        wchar_t path[MAX_PATH] = { 0 };
+        DWORD sz = MAX_PATH;
+        QueryFullProcessImageNameW(hProc, 0, path, &sz);
+        CloseHandle(hProc);
+
+        std::wstring sPath(path);
+        std::transform(sPath.begin(), sPath.end(), sPath.begin(), ::towlower);
+
+        bool matches = false;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            if (g_settings.enableChrome && sPath.find(L"chrome.exe") != std::wstring::npos) matches = true;
+            if (g_settings.enableBrave && sPath.find(L"brave.exe") != std::wstring::npos) matches = true;
+            if (g_settings.enableEdge && sPath.find(L"msedge.exe") != std::wstring::npos) matches = true;
+            if (g_settings.enableOpera && sPath.find(L"opera.exe") != std::wstring::npos) matches = true;
+            if (g_settings.enableVivaldi && sPath.find(L"vivaldi.exe") != std::wstring::npos) matches = true;
+        }
+
+        if (matches) {
+            auto* pList = reinterpret_cast<std::vector<HWND>*>(lp);
+            if (pList) pList->push_back(hwnd);
+        }
+        return TRUE;
+    }
+
     void PerformTabScan(IUIAutomation* pUIA, IUIAutomationCondition* pCond, IUIAutomationCacheRequest* pCache) {
         std::vector<HWND> browserWindows;
-        EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-            if (!IsWindowVisible(hwnd)) return TRUE;
-            wchar_t cls[64] = { 0 };
-            GetClassNameW(hwnd, cls, 64);
-            if (wcscmp(cls, L"Chrome_WidgetWin_1") != 0) return TRUE;
-
-            RECT rc;
-            if (!GetWindowRect(hwnd, &rc) || (rc.right - rc.left < 200)) return TRUE;
-
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-            if (!hProc) return TRUE;
-
-            wchar_t path[MAX_PATH] = { 0 };
-            DWORD sz = MAX_PATH;
-            QueryFullProcessImageNameW(hProc, 0, path, &sz);
-            CloseHandle(hProc);
-
-            std::wstring sPath(path);
-            std::transform(sPath.begin(), sPath.end(), sPath.begin(), ::towlower);
-
-            bool matches = false;
-            {
-                std::lock_guard<std::mutex> lock(g_settingsMutex);
-                if (g_settings.enableChrome && sPath.find(L"chrome.exe") != std::wstring::npos) matches = true;
-                if (g_settings.enableBrave && sPath.find(L"brave.exe") != std::wstring::npos) matches = true;
-                if (g_settings.enableEdge && sPath.find(L"msedge.exe") != std::wstring::npos) matches = true;
-                if (g_settings.enableOpera && sPath.find(L"opera.exe") != std::wstring::npos) matches = true;
-                if (g_settings.enableVivaldi && sPath.find(L"vivaldi.exe") != std::wstring::npos) matches = true;
-            }
-
-            if (matches) {
-                ((std::vector<HWND>*)lp)->push_back(hwnd);
-            }
-            return TRUE;
-        }, (LPARAM)&browserWindows);
+        EnumWindows(EnumBrowserWindowsProc, reinterpret_cast<LPARAM>(&browserWindows));
 
         std::vector<std::shared_ptr<TabItem>> extractedTabs;
         size_t tabCounter = 0;
@@ -643,7 +651,6 @@ private:
                 }
                 newClusters[domain] = cluster;
             } else {
-                // Keep tabs individual if below threshold or grouping disabled
                 for (auto& t : tabList) {
                     unclusteredTabs.push_back(t);
                 }
@@ -665,16 +672,16 @@ private:
         ReconcileProxyWindows(std::move(newClusters));
     }
 
-    // Stable reconciliation: preserves existing HWNDs and cleans up obsolete ones safely
+    // Stable reconciliation: preserves existing HWNDs and deletes taskbar buttons via ITaskbarList
     void ReconcileProxyWindows(std::unordered_map<std::wstring, std::shared_ptr<DomainCluster>> updatedClusters) {
-        std::lock_guard<std::mutex> lock(g_proxyMapMutex);
+        std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
 
         // 1. Transfer existing HWNDs from old clusters to updated clusters
         for (auto& [key, newCluster] : updatedClusters) {
             auto it = m_clusters.find(key);
             if (it != m_clusters.end() && it->second->proxyHwnd && IsWindow(it->second->proxyHwnd)) {
                 newCluster->proxyHwnd = it->second->proxyHwnd;
-                it->second->proxyHwnd = nullptr; // Clear to prevent accidental destruction
+                it->second->proxyHwnd = nullptr;
             }
         }
 
@@ -686,6 +693,10 @@ private:
                 oldCluster->proxyHwnd = nullptr;
             }
         }
+
+        SafeComPtr<ITaskbarList> pTaskbarList;
+        CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskbarList, (void**)&pTaskbarList);
+        if (pTaskbarList) pTaskbarList->HrInit();
 
         // 3. Create or update windows for active clusters
         for (auto& [key, cluster] : updatedClusters) {
@@ -710,6 +721,10 @@ private:
                     nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
                 );
                 if (hwnd) {
+                    // Remove from taskbar so it appears strictly in Alt-Tab
+                    if (pTaskbarList) {
+                        pTaskbarList->DeleteTab(hwnd);
+                    }
                     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                     cluster->proxyHwnd = hwnd;
                 }
@@ -731,7 +746,7 @@ private:
     }
 
     void DestroyProxyWindows() {
-        std::lock_guard<std::mutex> lock(g_proxyMapMutex);
+        std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
         for (auto& [key, cluster] : m_clusters) {
             if (cluster->proxyHwnd && IsWindow(cluster->proxyHwnd)) {
                 DestroyWindow(cluster->proxyHwnd);
@@ -799,10 +814,10 @@ void StopKeyboardHookThread() {
 
 } // namespace ChromiumAltTabMod
 
-// --- WINDHAWK ENTRY POINTS ---
-BOOL Wh_ModInit() {
+// --- WINDHAWK TOOL MOD ENTRY POINTS ---
+BOOL WhTool_ModInit() {
 #if HAS_WINDHAWK_API
-    Wh_Log(L"Initializing Chromium Tabs in Alt-Tab Windhawk Mod v1.0.1...");
+    Wh_Log(L"Initializing Chromium Tabs in Alt-Tab Tool Mod v1.0.1...");
 #endif
 
     ChromiumAltTabMod::LoadSettings();
@@ -815,7 +830,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
 #if HAS_WINDHAWK_API
     Wh_Log(L"Unloading Chromium Tabs in Alt-Tab Mod...");
 #endif
@@ -828,10 +843,191 @@ void Wh_ModUninit() {
 #endif
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
 #if HAS_WINDHAWK_API
     Wh_Log(L"Settings updated for Chromium Tabs in Alt-Tab Mod.");
 #endif
     ChromiumAltTabMod::LoadSettings();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().TriggerImmediateScan();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+
+#if HAS_WINDHAWK_API
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+
+#else
+
+// Standalone compilation entry points for non-Windhawk environments
+BOOL Wh_ModInit() { return WhTool_ModInit(); }
+void Wh_ModUninit() { WhTool_ModUninit(); }
+void Wh_ModSettingsChanged() { WhTool_ModSettingsChanged(); }
+
+#endif
