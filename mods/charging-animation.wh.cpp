@@ -54,10 +54,11 @@ picture slides inward instead of the edges being covered. Nothing on the picture
 by the same amount both ways, so the frame comes out a little thinner across the top and bottom. The
 picture sinks into the frame's shadow and creeps a little deeper as it settles, then holds and lets go.
 Because the shrunk picture is a still image, the effect gives up after about two seconds whatever `Duration`
-says. The frame is plain black and grey throughout, with no tint on it. `Strength` sets how far in it comes,
-about 16 pixels on the long edge at the default. It presses all four edges by the same amount, so it has no
-starting point and no direction of travel: `Origin` and `Unplug direction` are hidden while Bezel is
-chosen.
+says. While it runs, the monitor keeps showing that still picture, so anything moving on screen looks
+frozen for those two seconds, even though clicks still reach the windows underneath. The frame is plain
+black and grey throughout, with no tint on it. `Strength` sets how far in it comes, about 16 pixels on the
+long edge at the default. It presses all four edges by the same amount, so it has no starting point and no
+direction of travel: `Origin` and `Unplug direction` are hidden while Bezel is chosen.
 
 **Circuit Trace** is the quiet one. A circuit board wakes along the bottom of the screen, above the
 taskbar: a power rail steps across the width of the monitor at forty-five degrees, a bundle of thin signal
@@ -117,7 +118,8 @@ it has nowhere to travel.
 
 Both fields take a path to a .wav file, or a system sound alias such as `Notification.IM` or
 `WindowsBackground`. Leave a field empty for no sound. If you want the sound on its own, turn off the
-animation and the card for that event.
+animation and the card for that event. If the Charging Sound mod is also set to play on the same event,
+both sounds will play.
 
 ## Stats Panel
 
@@ -166,11 +168,14 @@ give it, so it ignores this one. Turning `Details` off drops the status line, an
 ## Quiet Mode
 
 While a full-screen app, a game or presentation mode is running, Quiet mode skips the animation, the sound
-and the card.
+and the card. On a locked screen or during the screen saver, the sound still plays while the animation and
+the card are skipped, since there is nobody looking.
 
 ### Credits
 
 Wave Effect inspired by [Magic Pointer Mod](https://windhawk.net/mods/magic-pointer)
+
+Power notification handling adapted from [Charging Sound](https://windhawk.net/mods/charging-sound)
 */
 // ==/WindhawkModReadme==
 
@@ -430,11 +435,6 @@ constexpr wchar_t kMatrixLastChar = L'~';
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 
-// winuser.h only declares this for Windows 7 and later.
-#ifndef WM_DPICHANGED
-#define WM_DPICHANGED 0x02E0
-#endif
-
 struct Settings {
     std::wstring pluggedInSoundPath;
     std::wstring unpluggedSoundPath;
@@ -560,7 +560,7 @@ GlowPalette ParseGlowColor(std::wstring text, Color fallback = kGlowBlue) {
     if (text.empty()) {
         return MakeGlowPalette(fallback);
     }
-    if (text == L"accent" || text == L"system" || text == L"windows") {
+    if (text == L"accent") {
         DWORD value = 0;
         DWORD size = sizeof(value);
         if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM",
@@ -885,7 +885,11 @@ LRESULT CALLBACK RippleWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
     // The overlays are sized to a monitor rectangle taken when they start, so a
     // display that changes under one would leave it covering the wrong place.
     // Closing the effect is cheaper than reworking it mid-flight.
-    if (message == WM_DISPLAYCHANGE || message == WM_DPICHANGED) {
+    //
+    // WM_DPICHANGED is deliberately not handled. A window moved to a monitor
+    // with a different scale receives one, which is every event on a mixed-DPI
+    // setup, and stopping there would cancel the effect on its first frame.
+    if (message == WM_DISPLAYCHANGE) {
         if (g_messageWindow) {
             PostMessageW(g_messageWindow, WM_APP_DISPLAY, 0, 0);
         }
@@ -1096,6 +1100,16 @@ bool ShouldSuppressEffects() {
         return true;
     }
     return false;
+}
+
+// A locked workstation and a running screen saver both report QUNS_NOT_PRESENT,
+// which quiet mode lets through so the sound still plays. Anything drawn in
+// that state goes to a desktop nobody is looking at, and the capture taken for
+// the wave comes back empty, so the visuals are skipped instead.
+bool SessionIsLocked() {
+    QUERY_USER_NOTIFICATION_STATE quns;
+    return SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+           quns == QUNS_NOT_PRESENT;
 }
 
 void PlayChargingSound(bool pluggedIn) {
@@ -4493,10 +4507,16 @@ public:
         // refresh would let a pointer that has moved to another monitor drag
         // the card over there, still carrying this monitor's scale and the
         // blurred backdrop taken from its old spot.
+        const POINT previousAnchor = anchor_;
         anchor_ = KeyIs(style_.position, L"ripple")
                       ? rippleOrigin
                       : ResolveRippleOrigin(style_.position);
         const bool wasVisible = visible_;
+        // A second event can land while the card is still up. If the card moved,
+        // the backdrop taken for the old spot no longer matches the desktop
+        // behind the new one.
+        const bool anchorMoved = !wasVisible || anchor_.x != previousAnchor.x ||
+                                 anchor_.y != previousAnchor.y;
         if (!window_.Hwnd() && !window_.Create()) {
             Wh_Log(L"Could not create the stats overlay window.");
             return false;
@@ -4512,9 +4532,16 @@ public:
         }
         // The frosted backdrop is grabbed while the card is still hidden, or the
         // capture would contain the previous card and smear it into the blur.
-        // The plain PineApple card never needs it.
-        if (!wasVisible && UsesBackdrop() && CaptureBackdrop()) {
-            Refresh();
+        // The plain PineApple card never needs it. A card that is already up and
+        // has to move steps out of the way for a fresh capture, then comes back
+        // when it is shown again below.
+        if (UsesBackdrop() && anchorMoved) {
+            if (wasVisible) {
+                window_.Hide();
+            }
+            if (CaptureBackdrop()) {
+                Refresh();
+            }
         }
         Push(0.0f, (springy_ || hud_) ? 0.0f : IntroOffset(),
              springy_ ? kSpringFrom : (hud_ ? kHudFrom : 1.0f));
@@ -5782,7 +5809,9 @@ void OnRippleTimer() {
         const double finished = NowMs();
         ArmRippleTimer(std::max(next - (finished - now), 0.0));
     } else {
-        // The timer is manual-reset, so clear it or the loop would spin.
+        // Nothing arms the timer again until the next effect, and it was made
+        // auto-reset, so the wait that just fired already disarmed it. The
+        // cancel is kept for a due time that has not been reached yet.
         CancelWaitableTimer(g_rippleTimer);
     }
 }
@@ -5843,10 +5872,8 @@ void RunChargingEffect(bool pluggedIn) {
     }
 
     // Only the unplug event offers the reverse wave, which collapses toward the
-    // origin. The old inward/outward keys are still honoured so a saved choice
-    // survives the rename.
-    style.reverse = !pluggedIn &&
-                    (KeyIs(direction, L"reverse") || KeyIs(direction, L"inward"));
+    // origin.
+    style.reverse = !pluggedIn && KeyIs(direction, L"reverse");
 
     g_glow = ResolveRippleColor(preset, custom,
                                 pluggedIn ? kGlowBlue : kGlowRed);
@@ -5860,11 +5887,14 @@ void RunChargingEffect(bool pluggedIn) {
     PlayChargingSound(pluggedIn);
 
     const POINT pt = ResolveRippleOrigin(origin);
+    const bool locked = SessionIsLocked();
 
     // Start the scene effect first, so the card is mostly absent from the ripple's
     // snapshot and the edge glow is already lit when the card grabs its backdrop.
     if (!showRipple) {
         Wh_Log(L"Scene effect disabled for this power event, skipping the animation.");
+    } else if (locked) {
+        Wh_Log(L"The workstation is locked, skipping the animation.");
     } else if (!g_rippleTimer) {
         // Without the timer the effect could never advance, leaving it on screen.
         Wh_Log(L"No waitable timer, skipping the scene effect.");
@@ -5879,7 +5909,7 @@ void RunChargingEffect(bool pluggedIn) {
         }
     }
 
-    if (showStats && g_messageWindow) {
+    if (showStats && g_messageWindow && !locked) {
         {
             std::lock_guard<std::mutex> lock(g_statsRequestMtx);
             g_statsRequest = overlay;
@@ -6174,91 +6204,180 @@ void WhTool_ModSettingsChanged() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Tool Mod Launcher Boilerplate
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) return FALSE;
-
     bool isExcluded = false;
     bool isToolModProcess = false;
-    bool isCurrentToolMod = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) isExcluded = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolMod = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
         }
     }
+
     LocalFree(argv);
 
-    if (isExcluded) return FALSE;
+    if (isExcluded) {
+        return FALSE;
+    }
 
-    if (isCurrentToolMod) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
-        if (!WhTool_ModInit()) ExitProcess(1);
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
 
-        IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)((BYTE*)dos + dos->e_lfanew);
-        Wh_SetFunctionHook((BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint, (void*)EntryPoint_Hook, nullptr);
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess) return FALSE;
+    if (isToolModProcess) {
+        return FALSE;
+    }
 
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
-
-    WCHAR path[MAX_PATH];
-    if (!GetModuleFileName(nullptr, path, ARRAYSIZE(path))) return;
-
-    WCHAR cmd[MAX_PATH + 64];
-    swprintf_s(cmd, L"\"%s\" -tool-mod \"%s\"", path, WH_MOD_ID);
-
-    HMODULE kernel = GetModuleHandle(L"kernelbase.dll");
-    if (!kernel) kernel = GetModuleHandle(L"kernel32.dll");
-    if (!kernel) return;
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernel, "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) return;
-
-    STARTUPINFO si{.cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK};
-    PROCESS_INFORMATION pi;
-    if (pCreateProcessInternalW(nullptr, path, cmd, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+    if (!g_isToolModProcessLauncher) {
+        return;
     }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModUninit();
-        ExitProcess(0);
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
