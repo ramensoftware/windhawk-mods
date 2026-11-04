@@ -17,46 +17,29 @@
 
 ![Screenshot](https://raw.githubusercontent.com/exefile04/taskbar-system-monitor/main/images/screenshot.png)
 
-Shows CPU, GPU, RAM, disk and network usage in the empty space on the left of your Windows 11 taskbar.
-It sticks to the taskbar you actually see, including Taskbar Styler docks and resized taskbars.
+Shows CPU, GPU, RAM, disk and network on your taskbar, left of the icons. Works with Taskbar Styler docks too.
 
-## What it does
-- Shows CPU, GPU, RAM, disk, download and upload, with small outline icons. The RAM icon fills up as memory gets used.
-- Hover a value to see more: which apps use the most CPU or memory, disk read/write speed, how much data you used today.
-- Click it to open Task Manager (you can change that). Right-click for a small menu.
-- Works on every monitor that has a taskbar.
-- Hides when a fullscreen app is on top.
-- Almost everything can be changed in the settings: layout, font, colors, sizes, units (GiB or GB, bytes or bits), update speed.
-
-## Other mods that look similar
-Taskbar System Info, Taskbar Network Speed Indicator and Taskbar Clock Customization can show some of this too.
-This one puts everything in a single small block with icons, lets you pick the layout yourself, and has the
-hover details and the daily data counter.
+Hover a number for more info. Click to open Task Manager, right-click for a menu. Pretty much everything can be changed in the settings.
 
 ## Layout
-You write the layout as text. Use `|` between columns and `,` between rows. The items are `cpu`, `gpu`, `ram`,
-`disk`, `down` and `up`. Use `-` for an empty spot. You can have up to 3 rows.
+Write it as text: `|` between columns, `,` between rows. Items are `cpu`, `gpu`, `ram`, `disk`, `down`, `up`, and `-` for an empty spot.
 
-| Layout | What you get |
+| Layout | Result |
 |---|---|
-| `cpu,gpu\|ram,disk\|down,up` | the default: 3 columns, 2 rows |
+| `cpu,gpu\|ram,disk\|down,up` | default, 3 columns and 2 rows |
 | `cpu\|ram\|down` | one row |
 | `cpu,ram,disk\|down,up` | 3 rows |
 
 ## Temperatures
-Windows doesn't let normal programs read the CPU temperature, so here is what you get:
-- **GPU:** read from the graphics driver, the same way Task Manager does it. Most NVIDIA, AMD and Intel drivers support it.
-- **CPU:** install [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) and run it
-  as administrator (it can sit in the tray). The mod picks it up on its own.
-- Without that, the CPU number comes from a Windows sensor that is only a rough guess, and some PCs don't have it.
-- If your GPU is built into the CPU and has no sensor of its own, the mod can show the CPU temperature for it. There is a setting to turn that off.
+GPU temp comes from the driver. For CPU temp, run [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) as admin. Without it you get a rough number from Windows, and some PCs don't have that.
 
-## Good to know
-- It measures the visible taskbar and sticks to it, so a Taskbar Styler dock or a different taskbar size needs no setup.
-- It sits left of the icons. If there's no space there (a left-aligned taskbar, for example), it moves to the gap
-  before the tray. If there's no space at all, it hides.
-- The mod only runs inside explorer.exe and doesn't hook any functions.
-- "Data used today" is saved, so it keeps counting after a restart.
+If your GPU is built into the CPU and has no sensor, it shows the CPU temp instead. You can turn that off.
+
+## Similar mods
+Taskbar System Info and Taskbar Network Speed Indicator show some of this too. I wanted everything in one small block, with icons, hover details and my own layout.
+
+## Notes
+If there's no room left of the icons, it moves next to the tray. If there's no room there either, it hides.
 */
 // ==/WindhawkModReadme==
 
