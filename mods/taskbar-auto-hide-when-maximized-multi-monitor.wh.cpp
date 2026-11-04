@@ -78,7 +78,9 @@ with robust startup, display power-cycle recovery, and shell timer integration o
 **Survives a Monitor Power Cycle (Displays off/on, sleep, dock/undock)**
 
 - Re-evaluates state immediately on display re-enumeration (`WM_DISPLAYCHANGE`),
-  deduplicated exclusively on the primary tray to eliminate redundant message storms.
+  deduplicated exclusively on the primary tray to eliminate redundant message storms,
+  followed by a debounced 750ms settling timer to gracefully absorb asynchronous
+  multi-monitor wake-up and window restoration.
 - If the shell loses auto-hide during an AppBar registration collision, the mod
   restores it using a persistent session-wide flag.
 - Validates monitor handles after display changes, falling back to the monitor the
@@ -907,7 +909,7 @@ bool IsMaximizedOrCoveringApp(HWND hWnd, const RECT& rcMonitor) {
     LONG_PTR style = GetWindowLongPtr(hWnd, GWL_STYLE);
     // If the window has no caption (WS_CAPTION = WS_BORDER | WS_DLGFRAME),
     // it is a true fullscreen window (e.g. game, media player, F11 browser),
-    // NOT a normal maximized window. Do NOT exempt it as NonRude!
+    // NOT a normal maximized window. Do NOT exempt it from rudeness!
     if ((style & WS_CAPTION) != WS_CAPTION) {
         return false;
     }
@@ -1326,6 +1328,7 @@ bool AdjustAllTaskbarsIfNotPending() {
 }
 
 constexpr UINT_PTR kModRetractTimer = 0x54424D4D; // 'TBMM'
+constexpr UINT_PTR kModDisplayChangeSettlingTimer = 0x54424D44; // 'TBMD'
 constexpr PCWSTR kModRetractLeftTickProp = L"Windhawk_TBMM_LeftTick";
 
 bool IsTaskbarOrChildForeground(HWND hTaskbarWnd) {
@@ -1698,6 +1701,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     } else if (Msg == WM_NCDESTROY) {
         Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
         KillTimer(hWnd, kModRetractTimer);
+        KillTimer(hWnd, kModDisplayChangeSettlingTimer);
         RemoveProp(hWnd, kModRetractLeftTickProp);
         RemoveProp(hWnd, L"Windhawk_WasFullyShown");
         g_taskbarsKeptShown.erase(
@@ -1713,8 +1717,23 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     } else if (Msg == WM_DISPLAYCHANGE) {
         Wh_Log(L"WM_DISPLAYCHANGE: %08X", (DWORD)(ULONG_PTR)hWnd);
         // Monitors came or went. Explorer rebuilds the taskbars and can lose
-        // the auto-hide setting while doing it, so re-check everything.
+        // the auto-hide setting while doing it, so re-check everything immediately...
         AdjustAllTaskbars();
+        // ...and arm a debounced settling timer so that after asynchronous
+        // display re-enumeration and window restore completes, the layout is re-evaluated.
+        SetTimer(hWnd, kModDisplayChangeSettlingTimer, 750, nullptr);
+    } else if (Msg == WM_TIMER && wParam == kModDisplayChangeSettlingTimer) {
+        KillTimer(hWnd, kModDisplayChangeSettlingTimer);
+        Wh_Log(L"kModDisplayChangeSettlingTimer expired: re-evaluating all taskbars");
+        std::unordered_set<HWND> secondaryTaskbars;
+        FindTaskbarWindows(&secondaryTaskbars);
+        g_taskbarsPendingTopmostCheck.insert(hWnd);
+        for (HWND hSec : secondaryTaskbars) {
+            g_taskbarsPendingTopmostCheck.insert(hSec);
+        }
+        EnsureAutoHideEnabled();
+        AdjustAllTaskbars();
+        return 0;
     } else if (Msg == WM_WINDOWPOSCHANGED) {
         HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
         bool fullyShown = IsTaskbarFullyShown(hWnd, mon);
@@ -2747,6 +2766,7 @@ void Wh_ModUninit() {
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
         KillTimer(hTaskbarWnd, kModRetractTimer);
+        KillTimer(hTaskbarWnd, kModDisplayChangeSettlingTimer);
         RemoveProp(hTaskbarWnd, kModRetractLeftTickProp);
         RemoveProp(hTaskbarWnd, L"Windhawk_WasFullyShown");
     }
