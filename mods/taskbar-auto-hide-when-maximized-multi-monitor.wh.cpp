@@ -900,6 +900,10 @@ bool IsMaximizedOrCoveringApp(HWND hWnd, const RECT& rcMonitor) {
     if (!hWnd || !IsWindow(hWnd)) {
         return false;
     }
+    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+    if (hRoot) {
+        hWnd = hRoot;
+    }
     if (!DoesWindowClientCoverMonitor(hWnd, rcMonitor)) {
         return false;
     }
@@ -978,13 +982,6 @@ HWND FindTopMonitorCoveringWindow(HMONITOR monitor,
 
         if (DoesWindowClientCoverMonitor(hWnd, monitorInfo.rcMonitor)) {
             hTopCoveringWnd = hWnd;
-            return FALSE;
-        }
-
-        // Ignore small always-on-top utility/PiP windows, but stop if a normal
-        // non-covering window sits above any full-monitor window on this
-        // display.
-        if (!(GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
             return FALSE;
         }
 
@@ -1266,8 +1263,10 @@ void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
         DwmSetWindowAttribute(hTaskbarWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
     }
 
+    LONG_PTR exStyle = GetWindowLongPtr(hTaskbarWnd, GWL_EXSTYLE);
+    SetWindowLongPtr(hTaskbarWnd, GWL_EXSTYLE, exStyle | WS_EX_TOPMOST);
     SetWindowPos(hTaskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     Wh_Log(L"Restored topmost for taskbar %08X",
            (DWORD)(ULONG_PTR)hTaskbarWnd);
 }
@@ -1554,6 +1553,31 @@ void WINAPI TrayUI__Hide_Hook(void* pThis) {
     }
 }
 
+HWND GetSecondaryTrayHwnd(void* pThis) {
+    auto wndIt = g_taskbarWndByObject.find(pThis);
+    if (wndIt != g_taskbarWndByObject.end()) {
+        return wndIt->second;
+    }
+    if (CSecondaryTray_vftable_ISecondaryTray && CSecondaryTray_GetMonitor_Original) {
+        try {
+            void* pISecondaryTray = QueryViaVtable(pThis, CSecondaryTray_vftable_ISecondaryTray);
+            if (pISecondaryTray) {
+                HMONITOR hMon = CSecondaryTray_GetMonitor_Original(pISecondaryTray);
+                std::unordered_set<HWND> secWnds;
+                FindTaskbarWindows(&secWnds);
+                for (HWND hSec : secWnds) {
+                    if (MonitorFromWindow(hSec, MONITOR_DEFAULTTONEAREST) == hMon) {
+                        g_taskbarWndByObject[pThis] = hSec;
+                        return hSec;
+                    }
+                }
+            }
+        } catch (...) {
+        }
+    }
+    return nullptr;
+}
+
 using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
 CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
@@ -1570,11 +1594,9 @@ void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
 
     CSecondaryTray__AutoHide_Original(pThis, param1);
 
-    if (param1) {
-        if (auto wndIt = g_taskbarWndByObject.find(pThis);
-            wndIt != g_taskbarWndByObject.end()) {
-            SetTimer(wndIt->second, kTrayUITimerUnhide, 100, nullptr);
-        }
+    HWND hWnd = GetSecondaryTrayHwnd(pThis);
+    if (hWnd) {
+        SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
     }
 }
 
@@ -1660,9 +1682,9 @@ CSecondaryTray__ResetZorder_t CSecondaryTray__ResetZorder_Original;
 void WINAPI CSecondaryTray__ResetZorder_Hook(void* pThis, int flags) {
     CSecondaryTray__ResetZorder_Original(pThis, flags);
 
-    auto wndIt = g_taskbarWndByObject.find(pThis);
-    if (wndIt != g_taskbarWndByObject.end()) {
-        EnsureTaskbarTopmost(wndIt->second);
+    HWND hWnd = GetSecondaryTrayHwnd(pThis);
+    if (hWnd) {
+        EnsureTaskbarTopmost(hWnd);
     }
 }
 
@@ -1884,16 +1906,16 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         // flyouts before retracting. If auto-hide permanently failed, fall back
         // to direct hide.
         if (!keepShown && IsTaskbarFullyShown(hWnd, monitor)) {
-            if (EnsureAutoHideEnabled()) {
-                PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
-            } else if (g_autoHideEnableFailed) {
-                if (!IsCursorOverTaskbar(hWnd) && !IsTaskbarOrChildForeground(hWnd)) {
+            if (!IsCursorOverTaskbar(hWnd) && !IsTaskbarOrChildForeground(hWnd)) {
+                if (EnsureAutoHideEnabled()) {
+                    PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
+                } else if (g_autoHideEnableFailed) {
                     CollapseWin11Taskbar(hWnd);
                     TrayUI__Hide_Original(pThis);
                     SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
-                } else {
-                    SetTimer(hWnd, kModRetractTimer, 100, nullptr);
                 }
+            } else {
+                SetTimer(hWnd, kModRetractTimer, 100, nullptr);
             }
         }
 
@@ -1986,10 +2008,10 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         // flyouts before retracting. If auto-hide permanently failed, fall back
         // to direct hide.
         if (!keepShown && IsTaskbarFullyShown(hWnd, monitor)) {
-            if (EnsureAutoHideEnabled()) {
-                PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
-            } else if (g_autoHideEnableFailed) {
-                if (!IsCursorOverTaskbar(hWnd) && !IsTaskbarOrChildForeground(hWnd)) {
+            if (!IsCursorOverTaskbar(hWnd) && !IsTaskbarOrChildForeground(hWnd)) {
+                if (EnsureAutoHideEnabled()) {
+                    PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
+                } else if (g_autoHideEnableFailed) {
                     CSecondaryTray__AutoHide_Original(pThis, true);
                     SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
                 }
