@@ -108,7 +108,7 @@ If there's no room left of the icons, it moves next to the tray. If there's no r
 - tooltipLive: false
   $name: Tooltips keep updating while hovered (off = text stays still so it is easy to read)
 - binaryUnits: true
-  $name: Use binary unit names (KiB / MiB / GiB instead of KB / MB / GB)
+  $name: Use KiB / MiB / GiB (1024-based) instead of KB / MB / GB (1000-based)
 - interactive: true
   $name: Mouse interaction (turn off to make the monitor fully click-through)
 - clickAction: taskmgr
@@ -349,7 +349,6 @@ static Disp g_disp;  // worker thread only
 
 static std::atomic<bool> g_stop{false};
 static std::atomic<HWND> g_msgWnd{nullptr};
-static std::atomic<bool> g_fullscreen{false};
 static std::atomic<bool> g_lightTheme{false};
 static HANDLE g_thread = nullptr;
 static HANDLE g_stopEvent = nullptr;  // manual reset, set on unload
@@ -362,6 +361,7 @@ static const UINT WM_FRAME = WM_APP + 10;
 static const UINT WM_UPDATEPOS = WM_APP + 11;
 static const UINT WM_APPLYSTYLE = WM_APP + 12;
 static const UINT WM_RUNACTION = WM_APP + 13;
+static const UINT WM_MEASURED = WM_APP + 14;
 
 static HINSTANCE GetModuleInstance() {
     HINSTANCE h = nullptr;
@@ -829,10 +829,10 @@ static DWORD WINAPI SamplerWorker(LPVOID) {
 // All relative to the taskbar window's top-left.
 struct BtnInfo {
     bool ok = false;
-    LONG relLeft = 0, h = 0;                      // first icon: left edge, height
+    LONG relLeft = 0, relTop = 0, h = 0;          // first icon: left edge, top edge, height
     LONG lastAppRight = 0, trayLeft = 0;          // the free gap between the last app icon and the tray
-    LONG frameT = 0, frameB = 0;                  // top and bottom of the visible taskbar (Taskbar Styler can change them)
     LONG leftLimit = 0;                           // left end of the free space (frame edge, or the Widgets button)
+    bool operator==(const BtnInfo&) const = default;
 };
 static std::unordered_map<HWND, BtnInfo> g_btns;
 static std::vector<HWND> g_tbList;
@@ -849,9 +849,10 @@ static BtnInfo GetBtn(HWND tb) {
     return b;
 }
 
-static void MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* cache, IUIAutomationCondition* cond, HWND tbWnd) {
+// Returns false when nothing usable could be read.
+static bool MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* cache, IUIAutomationCondition* cond, HWND tbWnd, BtnInfo* out) {
     IUIAutomationElement* root = nullptr;
-    if (FAILED(uia->ElementFromHandle(tbWnd, &root)) || !root) return;
+    if (FAILED(uia->ElementFromHandle(tbWnd, &root)) || !root) return false;
     RECT tb = {}, tbAfter = {};
     GetWindowRect(tbWnd, &tb);
     IUIAutomationElementArray* arr = nullptr;
@@ -893,24 +894,21 @@ static void MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* 
     }
     root->Release();
 
-    if (have && !moved) {
-        if (!haveFrame) frame = tb;  // not reported on this Windows build: use the whole window
-        AcquireSRWLockExclusive(&g_btnLock);
-        BtnInfo& b = g_btns[tbWnd];
-        b.ok = true;
-        b.relLeft = first.left - tb.left;
-        b.h = first.bottom - first.top;
-        b.lastAppRight = lastAppRight - tb.left;
-        b.trayLeft = haveTray ? trayLeft - tb.left : frame.right - tb.left;
-        b.frameT = frame.top - tb.top;
-        b.frameB = frame.bottom - tb.top;
-        b.leftLimit = std::max(frame.left, widgetsRight) - tb.left;
-        ReleaseSRWLockExclusive(&g_btnLock);
-    }
+    if (!have || moved) return false;
+    if (!haveFrame) frame = tb;  // not reported on this Windows build: use the whole window
+    out->ok = true;
+    out->relLeft = first.left - tb.left;
+    out->relTop = first.top - tb.top;
+    out->h = first.bottom - first.top;
+    out->lastAppRight = lastAppRight - tb.left;
+    out->trayLeft = haveTray ? trayLeft - tb.left : frame.right - tb.left;
+    out->leftLimit = std::max(frame.left, widgetsRight) - tb.left;
+    return true;
 }
 
 // Measures the first icon when g_uiaEvent says something may have moved it (taskbar moved, app focus / minimise
-// changes, settings), debounced, plus a slow safety net. Quick retries only until the first measurement works.
+// changes, settings), debounced, plus a slow safety net. Icons animate when apps open and close, and the numbers are
+// wrong meanwhile, so a measurement only counts once the next one agrees. Quick retries only until then.
 static DWORD WINAPI UiaWorker(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IUIAutomation* uia = nullptr;
@@ -936,20 +934,43 @@ static DWORD WINAPI UiaWorker(LPVOID) {
         if (isButton) isButton->Release();
     }
     HANDLE handles[2] = {g_stopEvent, g_uiaEvent};
+    std::unordered_map<HWND, BtnInfo> lastRead;
+    int followUps = 0;
     while (!g_stop) {
         std::vector<HWND> list;
         AcquireSRWLockShared(&g_btnLock);
         list = g_tbList;
         ReleaseSRWLockShared(&g_btnLock);
-        bool allOk = !list.empty();
+        bool settled = !list.empty();
         for (HWND tb : list) {
             if (g_stop) break;
-            if (uia && cache && cond) MeasureTaskbarButton(uia, cache, cond, tb);
-            if (!GetBtn(tb).ok) allOk = false;
+            BtnInfo now;
+            if (!uia || !cache || !cond || !MeasureTaskbarButton(uia, cache, cond, tb, &now)) {
+                settled = false;
+                continue;
+            }
+            auto it = lastRead.find(tb);
+            if (it != lastRead.end() && it->second == now) {
+                AcquireSRWLockExclusive(&g_btnLock);
+                BtnInfo& stored = g_btns[tb];
+                bool changed = !(stored == now);
+                stored = now;
+                ReleaseSRWLockExclusive(&g_btnLock);
+                if (changed)
+                    if (HWND wnd = g_msgWnd.load()) PostMessageW(wnd, WM_MEASURED, 0, 0);
+            } else {
+                settled = false;
+            }
+            lastRead[tb] = now;
         }
-        DWORD r = WaitForMultipleObjects(2, handles, FALSE, allOk ? 3000 : 400);
+        // the icons start moving a moment after an app opens: keep looking for about a second after every event
+        DWORD r = WaitForMultipleObjects(2, handles, FALSE, (settled && !followUps) ? 3000 : 120);
+        if (followUps > 0) followUps--;
         if (r == WAIT_OBJECT_0) break;
-        if (r == WAIT_OBJECT_0 + 1 && WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;  // debounce
+        if (r == WAIT_OBJECT_0 + 1) {
+            followUps = 8;
+            if (WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;  // debounce
+        }
     }
     if (cond) cond->Release();
     if (cache) cache->Release();
@@ -963,10 +984,13 @@ static DWORD WINAPI UiaWorker(LPVOID) {
 struct Cell { RECT r; int item; };
 
 // A finished picture prepared by the worker thread; the taskbar thread only applies it.
+enum Placement { PLACE_LEFT = 0, PLACE_TRAY_GAP, PLACE_NONE };  // left of the icons, before the tray, no room anywhere
+
 struct Frame {
     HBITMAP dib = nullptr;
     int W = 0, H = 0;
     bool useAuto = false;
+    int placement = PLACE_LEFT;
     std::vector<Cell> cells;
 };
 
@@ -988,10 +1012,9 @@ struct Overlay {
     HWND taskbar = nullptr, hwnd = nullptr, tip = nullptr;
     int lastW = 0, lastH = 0;
     bool lastAuto = false, shown = false, noRoomLogged = false;
+    int placement = PLACE_LEFT;
     LONG px = 0, py = 0;
     ULONGLONG hideSince = 0;
-    ULONGLONG lastCoverCheck = 0;
-    bool fsCovered = false;
     std::vector<Cell> cells;
     int hoverItem = -1;
     bool tracking = false;
@@ -1033,53 +1056,6 @@ static bool RunFromWindowThread(HWND hWnd, RunProc_t proc, PVOID procParam) {
     return true;
 }
 
-// full-screen host windows owned by Windows shell components are not apps covering the screen
-static bool IsShellSurface(HWND w) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(w, &pid);
-    if (!pid) return false;
-    if (pid == GetCurrentProcessId()) return true;  // explorer.exe itself
-    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!h) return false;
-    wchar_t path[MAX_PATH];
-    DWORD len = MAX_PATH;
-    bool shell = false;
-    if (QueryFullProcessImageNameW(h, 0, path, &len)) {
-        const wchar_t* name = wcsrchr(path, L'\\');
-        name = name ? name + 1 : path;
-        static const wchar_t* kShell[] = {L"TextInputHost.exe", L"ShellExperienceHost.exe", L"StartMenuExperienceHost.exe",
-                                          L"SearchHost.exe", L"SearchApp.exe", L"ShellHost.exe", L"LockApp.exe"};
-        for (const wchar_t* k : kShell) if (_wcsicmp(name, k) == 0) shell = true;
-    }
-    CloseHandle(h);
-    return shell;
-}
-
-// true when a window above the taskbar covers the whole monitor (fullscreen video, photo viewer, game ...)
-static bool CoveredByFullscreen(Overlay* ov) {
-    HMONITOR mon = MonitorFromWindow(ov->taskbar, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = {sizeof(mi)};
-    if (!GetMonitorInfoW(mon, &mi)) return false;
-    int guard = 0;
-    for (HWND w = GetTopWindow(nullptr); w && guard < 400; w = GetWindow(w, GW_HWNDNEXT), guard++) {
-        if (w == ov->taskbar) return false;  // reached the taskbar: nothing above it covers the screen
-        if (w == ov->hwnd || w == ov->tip) continue;
-        if (!IsWindowVisible(w) || IsIconic(w)) continue;
-        LONG_PTR ex = GetWindowLongPtrW(w, GWL_EXSTYLE);
-        if (ex & WS_EX_TRANSPARENT) continue;  // click-through overlays (wallpaper tools etc.) do not count
-        DWORD cloaked = 0;
-        DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-        if (cloaked) continue;
-        RECT r;
-        if (!GetWindowRect(w, &r)) continue;
-        if (r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top && r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom) {
-            if (IsShellSurface(w)) continue;  // flyouts (keyboard layout, network, ...) use full-screen host windows
-            return true;
-        }
-    }
-    return false;
-}
-
 static void HideTip(Overlay* ov);
 
 static void UpdatePosition(Overlay* ov, bool force) {
@@ -1089,8 +1065,6 @@ static void UpdatePosition(Overlay* ov, bool force) {
     const Settings& s = g_s;
 
     ULONGLONG now = GetTickCount64();
-    if (now - ov->lastCoverCheck >= 100) { ov->fsCovered = CoveredByFullscreen(ov); ov->lastCoverCheck = now; }
-
     float sc = GetDpiForWindow(ov->taskbar) / 96.0f;
     BtnInfo b = GetBtn(ov->taskbar);
     LONG x, y;
@@ -1099,21 +1073,21 @@ static void UpdatePosition(Overlay* ov, bool force) {
     if (ov->lastAuto && b.ok) {
         // everything is measured from the visible taskbar, so it follows Taskbar Styler's size and shape
         LONG gap = (LONG)(s.gapIcons * sc);
-        LONG minX = trc.left + b.leftLimit;
-        LONG maxX = trc.left + b.relLeft - gap - ov->lastW;  // never overlap the first icon
-        if (maxX >= minX) {
-            x = (s.atIcons ? maxX : minX + pad) + nudgeX;
-        } else {
-            // no space left of the icons (left-aligned taskbar, many icons): use the gap before the tray
+        LONG minX, maxX;
+        if (ov->placement == PLACE_TRAY_GAP) {
             minX = trc.left + b.lastAppRight + gap;
             maxX = trc.left + b.trayLeft - gap - ov->lastW;
-            if (maxX < minX) noRoom = true;
             x = maxX + nudgeX;
+        } else {
+            minX = trc.left + b.leftLimit;
+            maxX = trc.left + b.relLeft - gap - ov->lastW;  // never overlap the first icon
+            x = (s.atIcons ? maxX : minX + pad) + nudgeX;
+            noRoom = ov->placement == PLACE_NONE;
         }
+        // minX wins: while icons are still shifting the next picture, with tighter gaps, is on its way
         x = std::max(minX, std::min(x, maxX));
-        LONG top = trc.top + b.frameT, bottom = trc.top + b.frameB;
-        y = top + (bottom - top - ov->lastH) / 2 + nudgeY;
-        y = std::max(top, std::min<LONG>(y, std::max<LONG>(top, bottom - ov->lastH)));
+        y = trc.top + b.relTop + nudgeY;  // same line as the icons
+        y = std::max<LONG>(trc.top, std::min<LONG>(y, std::max<LONG>(trc.top, trc.bottom - ov->lastH)));
     } else {  // the first icon could not be measured yet: stay inside the taskbar window
         x = trc.left + pad + nudgeX;
         x = std::max<LONG>(trc.left, std::min<LONG>(x, std::max<LONG>(trc.left, trc.right - ov->lastW)));
@@ -1122,9 +1096,8 @@ static void UpdatePosition(Overlay* ov, bool force) {
     if (noRoom && !ov->noRoomLogged) { Wh_Log(L"No free space on the taskbar, monitor hidden"); ov->noRoomLogged = true; }
     if (!noRoom) ov->noRoomLogged = false;
 
-    // hide while the taskbar is hidden, a fullscreen window covers the screen, or there is no room; debounced a
-    // little so short flickers (apps minimising) do not make the monitor blink
-    bool wantHide = noRoom || !IsWindowVisible(ov->taskbar) || g_fullscreen.load() || ov->fsCovered;
+    // hide while the taskbar is hidden or there is no room; debounced a little so short flickers do not make it blink
+    bool wantHide = noRoom || !IsWindowVisible(ov->taskbar);
     if (wantHide) {
         if (!ov->hideSince) { ov->hideSince = now; SetTimer(ov->hwnd, 2, 90, nullptr); }
         if (now - ov->hideSince >= 80) {
@@ -1140,30 +1113,38 @@ static void UpdatePosition(Overlay* ov, bool force) {
     }
     ov->hideSince = 0;
 
-    // the taskbar re-raises itself above us when apps minimise / activate
-    bool covered = false;
-    for (HWND w = GetWindow(ov->hwnd, GW_HWNDPREV); w; w = GetWindow(w, GW_HWNDPREV))
-        if (w == ov->taskbar) { covered = true; break; }
+    // Stay directly above the taskbar in the window stack and nowhere else. Explorer takes the taskbar's topmost flag
+    // away under fullscreen apps (videos, photo viewers, games), and the monitor has to go down with it instead of
+    // covering them. A topmost window can't be placed below others, so the flag has to match first.
+    bool tbTopmost = (GetWindowLongPtrW(ov->taskbar, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    bool ovTopmost = (GetWindowLongPtrW(ov->hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    if (tbTopmost != ovTopmost)
+        SetWindowPos(ov->hwnd, tbTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    // hidden windows in between (IME helpers come and go) don't matter
+    HWND above = GetWindow(ov->taskbar, GW_HWNDPREV);
+    while (above && above != ov->hwnd && !IsWindowVisible(above)) above = GetWindow(above, GW_HWNDPREV);
+    bool misplaced = above != ov->hwnd;
 
-    if (force || !ov->shown || x != ov->px || y != ov->py || covered) {
-        UINT f = SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW;
-        if (!covered) f |= SWP_NOZORDER;
-        SetWindowPos(ov->hwnd, HWND_TOPMOST, x, y, 0, 0, f);
+    if (force || !ov->shown || x != ov->px || y != ov->py || misplaced) {
+        // SWP_NOOWNERZORDER: without it every move here would also raise the taskbar, which owns this window
+        UINT f = SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
+        if (!misplaced) f |= SWP_NOZORDER;
+        SetWindowPos(ov->hwnd, above ? above : tbTopmost ? HWND_TOPMOST : HWND_TOP, x, y, 0, 0, f);
         ov->px = x; ov->py = y; ov->shown = true;
     }
 }
 
 static void ApplyFrame(Overlay* ov, Frame* f) {
-    bool moved = f->W != ov->lastW || f->H != ov->lastH || f->useAuto != ov->lastAuto;
+    bool moved = f->W != ov->lastW || f->H != ov->lastH || f->useAuto != ov->lastAuto || f->placement != ov->placement;
     HDC screen = GetDC(nullptr);
     HDC mem = CreateCompatibleDC(screen);
     HGDIOBJ old = SelectObject(mem, f->dib);
     SIZE size = {f->W, f->H};
     POINT src = {0, 0};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    ov->lastW = f->W; ov->lastH = f->H; ov->lastAuto = f->useAuto;
+    ov->lastW = f->W; ov->lastH = f->H; ov->lastAuto = f->useAuto; ov->placement = f->placement;
     ov->cells = std::move(f->cells);
-    if (moved) SetWindowPos(ov->hwnd, nullptr, 0, 0, f->W, f->H, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+    if (moved) SetWindowPos(ov->hwnd, nullptr, 0, 0, f->W, f->H, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER);
     UpdateLayeredWindow(ov->hwnd, screen, nullptr, &size, mem, &src, 0, &bf, ULW_ALPHA);
     SelectObject(mem, old);
     DeleteDC(mem);
@@ -1184,6 +1165,8 @@ static std::wstring Fmt(const wchar_t* f, ...) {
 static const wchar_t* UK() { return g_s.binary ? L"KiB" : L"KB"; }
 static const wchar_t* UM() { return g_s.binary ? L"MiB" : L"MB"; }
 static const wchar_t* UG() { return g_s.binary ? L"GiB" : L"GB"; }
+static double UnitBase() { return g_s.binary ? 1024.0 : 1000.0; }
+static double RamUnits(double gib) { return g_s.binary ? gib : gib * 1.073741824; }  // stats are kept in GiB
 
 static std::wstring FmtPct(double v) { return v < 0 ? L"--%" : Fmt(L"%.0f%%", v); }
 
@@ -1200,17 +1183,17 @@ static std::wstring FmtSpeed(double bps) {
         if (mb < 1000) return Fmt(L"%.1f Mbps", mb);
         return Fmt(L"%.2f Gbps", mb / 1000.0);
     }
-    double kb = bps / 1024.0;
+    double kb = bps / UnitBase();
     if (kb < 1000) return Fmt(L"%.0f %s/s", kb, UK());
-    double mb = kb / 1024.0;
+    double mb = kb / UnitBase();
     if (mb < 1000) return Fmt(L"%.1f %s/s", mb, UM());
-    return Fmt(L"%.2f %s/s", mb / 1024.0, UG());
+    return Fmt(L"%.2f %s/s", mb / UnitBase(), UG());
 }
 
 static std::wstring FmtBytes(double b) {
-    double mb = b / 1048576.0;
+    double mb = b / (UnitBase() * UnitBase());
     if (mb < 1000) return Fmt(L"%.0f %s", mb, UM());
-    return Fmt(L"%.1f %s", mb / 1024.0, UG());
+    return Fmt(L"%.1f %s", mb / UnitBase(), UG());
 }
 
 // -------------------------------------------------------------- tooltips ----
@@ -1246,8 +1229,8 @@ static std::wstring BuildTip(int item) {
             return s;
         }
         case IT_RAM: {
-            std::wstring s = Fmt(L"Memory  %.1f of %.1f %s used  (%.0f%%)\r\nFree  %.1f %s", st.ramUsedGB, st.ramTotalGB, UG(), st.ram,
-                                 st.ramTotalGB - st.ramUsedGB, UG());
+            std::wstring s = Fmt(L"Memory  %.1f of %.1f %s used  (%.0f%%)\r\nFree  %.1f %s", RamUnits(st.ramUsedGB), RamUnits(st.ramTotalGB), UG(), st.ram,
+                                 RamUnits(st.ramTotalGB - st.ramUsedGB), UG());
             std::wstring p = ProcLines(false);
             if (!p.empty()) s += L"\r\nBiggest apps:" + p;
             return s;
@@ -1451,7 +1434,8 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, 
         HWND ovh = (HWND)ovHwnd;
         if (IsWindow(ovh)) {
             if (Overlay* ov = (Overlay*)GetWindowLongPtrW(ovh, GWLP_USERDATA)) UpdatePosition(ov, false);
-            SetTimer(ovh, 3, 600, nullptr);
+            const WINDOWPOS* wp = (const WINDOWPOS*)lParam;
+            if ((wp->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE)) SetTimer(ovh, 3, 600, nullptr);  // not for z-order changes
         }
         return r;
     }
@@ -1464,7 +1448,7 @@ struct CreateParam { HWND taskbar; HWND result; std::shared_ptr<FrameSlot> slot;
 static void WINAPI CreateOverlayOnThread(PVOID p) {
     CreateParam* cp = (CreateParam*)p;
     cp->result = nullptr;
-    DWORD ex = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+    DWORD ex = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
     if (!g_s.interactive) ex |= WS_EX_TRANSPARENT;
     // Owned by the taskbar window on the SAME thread: the overlay then always stays above the taskbar, in every
     // z-band (e.g. while the Start menu is open), without linking two threads' input queues.
@@ -1509,14 +1493,14 @@ static void WINAPI DestroyOverlayOnThread(PVOID p) {
 
 // W-side bookkeeping for each overlay; the Overlay object itself belongs to the taskbar thread
 struct OvRef { HWND taskbar; HWND hwnd; ULONGLONG startTick; std::shared_ptr<FrameSlot> slot; std::wstring lastKey; };
-[[clang::no_destroy]] static std::vector<OvRef> g_refs;  // worker thread only; emptied by the worker on unload
+static std::vector<OvRef> g_refs;  // worker thread only
 
 static void NotifyOverlays() {
     std::lock_guard<std::mutex> lock(g_pairMutex);
     for (const auto& pr : g_pairs) PostMessageW(pr.second, WM_UPDATEPOS, 0, 0);
 }
 
-// focus / minimise changes: z-order or covering may have changed, and the taskbar icons may have moved
+// focus / minimise changes: the z-order may have changed, and the taskbar icons may have moved
 static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
     NotifyOverlays();
     SetEvent(g_uiaEvent);
@@ -1631,9 +1615,9 @@ static void BuildSegs(int item, const Stats& st, std::vector<Seg>& out) {
             break;
         }
         case IT_RAM: {
-            const wchar_t* d = st.ramTotalGB >= 100 ? L"999.9" : L"99.9";  // 2 or 3 digit machines
+            const wchar_t* d = RamUnits(st.ramTotalGB) >= 100 ? L"999.9" : L"99.9";  // 2 or 3 digit machines
             std::wstring ramTmpl = s.ramTotal ? Fmt(L"%s/%s %s", d, d, UG()) : Fmt(L"%s %s", d, UG());
-            out.push_back(Seg{s.ramTotal ? Fmt(L"%.1f/%.1f %s", st.ramUsedGB, st.ramTotalGB, UG()) : Fmt(L"%.1f %s", st.ramUsedGB, UG()),
+            out.push_back(Seg{s.ramTotal ? Fmt(L"%.1f/%.1f %s", RamUnits(st.ramUsedGB), RamUnits(st.ramTotalGB), UG()) : Fmt(L"%.1f %s", RamUnits(st.ramUsedGB), UG()),
                               ramTmpl, st.ram >= s.warnUsage});
             if (s.ramPct) out.push_back(usageSeg(st.ram));
             break;
@@ -1736,12 +1720,52 @@ static void RenderOverlay(OvRef& ref) {
     }
     float totalW = pad * 2;
     for (size_t i = 0; i < cols.size(); i++) totalW += cols[i].w + (i ? colGap : 0);
+    // Opening a window can shift the icons and take away some space. Tighten the column gaps and stay on screen;
+    // only if that isn't enough, go to the gap before the tray, and only then hide.
+    int placement = PLACE_LEFT;
+    if (useAuto) {
+        float iconGap = s.gapIcons * sc;
+        float space = (float)(binfo.relLeft - binfo.leftLimit) - iconGap;
+        float wanted = s.atIcons ? space : space - s.edgePad * sc;  // keep the distance from the edge as long as possible
+        // First give up what nobody sees: the last column is wide enough for its biggest value (999.9 MiB/s), which
+        // usually leaves empty space at its right. Only then move the columns closer together.
+        if (totalW > wanted && !cols.empty()) {
+            ColLayout& last = cols.back();
+            float used = 0;
+            for (const auto& segs : last.segs) {
+                float w = s.icons ? icon + gap : 0;
+                for (size_t i = 0; i < segs.size(); i++) {
+                    if (i + 1 < segs.size()) {
+                        w += tw(segs[i].tmpl) + gap;
+                    } else {
+                        RectF r;  // not through tw(): changing values would fill its cache
+                        rc.mg->MeasureString(segs[i].text.c_str(), -1, rc.font.get(), PointF(0, 0), rc.sf.get(), &r);
+                        w += r.Width + 2 * sc;
+                    }
+                }
+                used = std::max(used, w);
+            }
+            float trim = std::clamp(totalW - wanted, 0.0f, std::max(0.0f, last.w - used));
+            last.w -= trim;
+            totalW -= trim;
+        }
+        int gaps = (int)cols.size() - 1;
+        if (totalW > wanted && gaps > 0) {
+            float cut = std::min(totalW - wanted, std::max(0.0f, colGap - 4 * sc) * gaps);
+            colGap -= cut / gaps;
+            totalW -= cut;
+        }
+        if (totalW > space) {
+            float trayGap = (float)(binfo.trayLeft - binfo.lastAppRight) - 2 * iconGap;
+            placement = totalW <= trayGap ? PLACE_TRAY_GAP : PLACE_NONE;
+        }
+    }
     int W = std::max(1, (int)std::ceil(totalW));
     float rowH = (float)H / rows;
 
     // nothing visible changed since the last picture of this overlay: do not draw or post anything
     {
-        std::wstring key = Fmt(L"%p|%d|%d|%d|%d|%d|", (const void*)&s, W, H, (int)useAuto, (int)(g_disp.ram * icon / 100.0), (int)g_lightTheme.load());
+        std::wstring key = Fmt(L"%p|%d|%d|%d|%d|%d|%d|", (const void*)&s, W, H, (int)useAuto, (int)(g_disp.ram * icon / 100.0), (int)g_lightTheme.load(), placement);
         for (auto& cl : cols)
             for (auto& sv : cl.segs)
                 for (auto& sg : sv) key += sg.text + (sg.warn ? L"!" : L"") + L"\x1f";
@@ -1827,6 +1851,7 @@ static void RenderOverlay(OvRef& ref) {
     frame->W = W;
     frame->H = H;
     frame->useAuto = useAuto;
+    frame->placement = placement;
     // one pending frame per overlay: a newer one replaces an older one that was not applied yet
     Frame* raw = frame.release();
     if (Frame* old = ref.slot->pending.exchange(raw)) FreeFrame(old);  // a WM_FRAME is already queued
@@ -1888,14 +1913,6 @@ static void SyncOverlays() {
             g_refs.push_back({tb, cp.result, GetTickCount64(), cp.slot, L""});
     }
 
-    // exclusive full-screen games and presentation mode, but only if that state lasts a few seconds. Borderless
-    // full-screen windows are checked per monitor in CoveredByFullscreen, because QUNS_BUSY would hide every monitor.
-    static int fsCount = 0;
-    QUERY_USER_NOTIFICATION_STATE qs = QUNS_ACCEPTS_NOTIFICATIONS;
-    SHQueryUserNotificationState(&qs);
-    bool fsRaw = (qs == QUNS_RUNNING_D3D_FULL_SCREEN || qs == QUNS_PRESENTATION_MODE);
-    fsCount = fsRaw ? fsCount + 1 : 0;
-    g_fullscreen = fsCount >= 3;
     g_lightTheme = LightTheme();
 }
 
@@ -1946,6 +1963,10 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             return 0;
         case WM_RUNACTION:
             RunAction((int)w);
+            return 0;
+        case WM_MEASURED:  // the icons or the taskbar moved
+            RenderAll();
+            NotifyOverlays();
             return 0;
         case WM_SETTINGS: {
             SetTimer(h, 1, g_s.refreshMs, nullptr);
