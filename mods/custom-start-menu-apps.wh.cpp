@@ -7,7 +7,7 @@
 // @github          https://github.com/Nightmarehelltime
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -lmsimg32 -ladvapi32 -luuid -loleaut32
+// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -lmsimg32 -ladvapi32 -luuid -loleaut32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -223,6 +223,8 @@ Turn on "Diagnostic log" and open Start. Lines beginning with [region], [start],
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <dwmapi.h>
+#include <commctrl.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -2241,9 +2243,10 @@ static void PickerKey(WCHAR ch) {
 // While the picker is open the desktop's icon list view is subclassed: a left press does not
 // activate the desktop, so Start stays open and the drag can reach the card. A press that ends
 // without moving (a plain click) activates the desktop afterwards, so clicking off still closes
-// Start. The subclass procedure runs on the desktop's thread, inside this module.
+// Start. The subclass procedure runs on the desktop's thread, inside this module. The list view
+// belongs to another thread than the one that opens and closes the picker, so the subclass is set
+// and removed with WindhawkUtils::{Set,Remove}WindowSubclassFromAnyThread.
 static HWND g_deskLv = nullptr;            // window thread
-static WNDPROC g_deskOrig = nullptr;
 static std::atomic<bool> g_deskHold{false};
 static std::atomic<int> g_deskInProc{0};   // DeskProc frames on the desktop thread's stack
 static POINT g_deskDownPt{};               // desktop thread only
@@ -2265,26 +2268,25 @@ static void DeskPressEnded() {  // desktop thread: decide between a click and a 
     if (!moved && h) PostMessageW(h, WM_APP_DESKCLICK, 0, 0);
 }
 
-static LRESULT CALLBACK DeskProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+static LRESULT CALLBACK DeskProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR /*dwRefData*/) {
     g_deskInProc++;
-    WNDPROC orig = g_deskOrig;
     LRESULT r;
     if (g_deskHold && m == WM_MOUSEACTIVATE && HIWORD(l) == WM_LBUTTONDOWN) {
         r = MA_NOACTIVATE;  // the click still reaches the list view
     } else if (g_deskHold && m == WM_LBUTTONDOWN) {
         GetCursorPos(&g_deskDownPt);
         g_deskPressed = true;
-        r = CallWindowProcW(orig, h, m, w, l);  // may run the whole drag and drop before returning
+        r = DefSubclassProc(h, m, w, l);  // may run the whole drag and drop before returning
         if (g_deskPressed && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
             g_deskPressed = false;  // the button-up was consumed inside (drag detection or the drag itself)
             DeskPressEnded();
         }
     } else if (m == WM_LBUTTONUP && g_deskPressed) {
         g_deskPressed = false;
-        r = CallWindowProcW(orig, h, m, w, l);
+        r = DefSubclassProc(h, m, w, l);
         if (g_deskHold) DeskPressEnded();
     } else {
-        r = CallWindowProcW(orig, h, m, w, l);
+        r = DefSubclassProc(h, m, w, l);
     }
     g_deskInProc--;
     return r;
@@ -2299,10 +2301,8 @@ static void StartDeskHold() {
     EnumWindows(FindDeskDefView, reinterpret_cast<LPARAM>(&lv));
     DWORD pid = 0;
     if (!lv || !GetWindowThreadProcessId(lv, &pid) || pid != GetCurrentProcessId()) return;
-    g_deskOrig = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(lv, GWLP_WNDPROC));
-    if (!g_deskOrig) return;
     g_deskHold = true;
-    if (!SetWindowLongPtrW(lv, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&DeskProc))) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(lv, DeskProc, 0)) {
         g_deskHold = false;
         return;
     }
@@ -2313,13 +2313,8 @@ static void StopDeskHold() {
     g_deskHold = false;
     if (!g_deskLv) return;
     if (IsWindow(g_deskLv)) {
-        if (GetWindowLongPtrW(g_deskLv, GWLP_WNDPROC) == reinterpret_cast<LONG_PTR>(&DeskProc)) {
-            SetWindowLongPtrW(g_deskLv, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(g_deskOrig));
-        } else {
-            // someone subclassed the list view after us: our procedure stays in their chain (as a
-            // pass-through now), so this module must stay loaded
-            PinModule(L"the desktop list view was subclassed after this mod");
-        }
+        // takes only this subclass out of the chain, other subclasses (also ones added after ours) stay
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_deskLv, DeskProc);
     }
     if (g_deskInProc.load() > 0) PinModule(L"a desktop drag was still running");
     g_deskLv = nullptr;
