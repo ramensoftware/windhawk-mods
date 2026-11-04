@@ -106,6 +106,10 @@ size set in the settings, 256 MB by default, the mod asks first, and says how ma
 files and how much data are involved, counting the whole selection rather than one
 file at a time. Answer no and nothing happens. The setting can be raised to where
 hashing a whole disk in one go is on you, or set to 0 to be asked every time.
+If no selected file can be hashed, a message warns that no hash was copied and
+the clipboard may contain earlier data. If some files fail, successful hashes
+are copied without a dialog, with file names when more than one file (not a folder)
+was selected.
 
 ## Known limits
 
@@ -114,12 +118,11 @@ hashing a whole disk in one go is on you, or set to 0 to be asked every time.
   programs and nothing on the desktop.
 * The contents are put on the clipboard as text. Nothing is written to disk, and
   no temporary file is created.
-* If the mod is turned off while its own prompt is open, the prompt is answered
-  No for you and the copy stops, because the mod cannot be unloaded with its code
-  still waiting on that dialog. Unloading waits about two seconds for work to
-  finish. The wait between separate clipboard items ends as soon as unloading
-  starts, but a single read from a share that has stopped answering cannot be
-  interrupted, only waited out.
+* When the mod is turned off, it asks its prompts to close and cancels further
+  copying. A customized dialog may not respond, in which case close it yourself.
+  Windhawk can remain uninitializing while a prompt or file read is still active.
+  The wait between separate clipboard items ends as soon as unloading starts, but
+  a single read from a share that has stopped answering cannot be interrupted.
 * With separate clipboard items turned on, Ctrl+V pastes only the last file. The
   earlier ones are reachable through Windows clipboard history (Win+V), and only
   there, and clipboard history has to be turned on for them to be kept.
@@ -157,7 +160,7 @@ hashing a whole disk in one go is on you, or set to 0 to be asked every time.
   $description: Adds the entry that puts the file's SHA-256 hash on the clipboard.
 - offerEditor: true
   $name: Offer to open a file that cannot be copied
-  $description: When nothing was copied, report the reason. Offer Notepad only for an oversized local file up to 32 MB whose prefix looks like text.
+  $description: When no contents were copied, report the reason. Offer Notepad only for an oversized local file up to 32 MB whose prefix looks like text. Hash failures that produce no result are always reported separately.
 - hideWhenUncopyable: true
   $name: Hide "Copy contents" when nothing can be copied
   $description: When every selected file is binary or over the size limit, the entry is left out of the menu instead of being offered and then refusing. The first few KiB of each file are read to decide, except files that are offline, stored online only, or on a network share or a mapped network drive, which are not read.
@@ -372,7 +375,7 @@ struct BusyGuard {
             HWND expected = nullptr;
             if (g_ownerSlots[i].compare_exchange_strong(expected, owner)) {
                 slot = i;
-                g_ownerThreads[i] = GetWindowThreadProcessId(owner, nullptr);
+                g_ownerThreads[i] = GetCurrentThreadId();
                 break;
             }
         }
@@ -1069,8 +1072,8 @@ void ReportRefusal(HWND owner, const std::wstring& path, const wchar_t* reason,
     }
     const UINT flags = canOpen ? (MB_YESNO | MB_ICONINFORMATION)
                                : (MB_OK | MB_ICONINFORMATION);
-    if (MessageBoxW(owner, text.c_str(), kContentsTitle, flags) != IDYES ||
-        !canOpen) {
+    const int answer = MessageBoxW(owner, text.c_str(), kContentsTitle, flags);
+    if (g_unloading || answer != IDYES || !canOpen) {
         return;
     }
     // Quoted, because Notepad takes its file name as a command line, and a path
@@ -1275,8 +1278,9 @@ bool ConfirmLargeHash(HWND owner, const std::vector<std::wstring>& paths) {
                L"%d file%s, about %s in all. Hashing reads every byte, and this "
                L"window will not respond until it is done.\n\nHash anyway?",
                files, files == 1 ? L"" : L"s", sizeText);
-    return MessageBoxW(owner, text, kHashTitle,
-                       MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES;
+    const int answer = MessageBoxW(owner, text, kHashTitle,
+                                   MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+    return !g_unloading && answer == IDYES;
 }
 
 void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
@@ -1289,6 +1293,7 @@ void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
             std::wstring name;
         };
         std::vector<Hashed> hashed;
+        size_t files = 0;
         for (const std::wstring& path : paths) {
             if (g_unloading) {
                 return;
@@ -1296,6 +1301,7 @@ void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
             if (IsDirectory(path)) {
                 continue;
             }
+            files++;
             bool ok = false;
             const std::wstring hex = Sha256OfFile(path, &ok);
             if (!ok) {
@@ -1306,28 +1312,49 @@ void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
             line.name = FileNameOf(path);
             hashed.push_back(std::move(line));
         }
-        if (hashed.empty()) {
+        if (g_unloading) {
             return;
         }
-        // The name goes next to a hash only when there is more than one, and
-        // that is counted from what was hashed, not from what was selected: a
-        // folder in the selection was skipped and does not count.
+        if (hashed.empty()) {
+            if (files > 0) {
+                MessageBoxW(owner,
+                            L"The selected file or files could not be hashed. "
+                            L"No hash was copied; the clipboard may contain "
+                            L"earlier data.",
+                            kHashTitle, MB_OK | MB_ICONINFORMATION);
+            }
+            return;
+        }
+        // Count selected files, not just successful hashes, so a partial result
+        // still identifies its file. Folders do not count.
         std::wstring combined;
         for (const Hashed& line : hashed) {
             if (!combined.empty()) {
                 combined += L"\r\n";
             }
             combined += line.hex;
-            if (hashed.size() > 1) {
+            if (files > 1) {
                 combined += L"  ";
                 combined += line.name;
             }
         }
         if (!SetClipboardText(owner, combined)) {
             Wh_Log(L"the clipboard was busy, nothing was copied");
+            if (!g_unloading) {
+                MessageBoxW(owner,
+                            L"The hash could not be copied. Check the "
+                            L"clipboard and try again.",
+                            kHashTitle, MB_OK | MB_ICONINFORMATION);
+            }
         }
     } catch (...) {
         Wh_Log(L"ran out of memory while hashing, nothing was copied");
+        if (!g_unloading) {
+            MessageBoxW(owner,
+                        L"The hash operation could not finish. No new hash "
+                        L"was copied; check the clipboard before using it.",
+                        kHashTitle, MB_OK | MB_ICONINFORMATION);
+        }
     }
 }
 
@@ -1642,7 +1669,7 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Copy File Contents 1.3");
+    Wh_Log(L"Copy File Contents %s", WH_MOD_VERSION);
     // Signalled on unload, to cut the wait between separate clipboard items
     // short. A missing event only costs that: the code falls back to sleeping.
     g_unloadEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1689,11 +1716,11 @@ void Wh_ModSettingsChanged() {
            SizeLimitBytes());
 }
 
-// A prompt of this mod is a dialog with one of two captions, on the thread that
-// owns the window it was opened from. WM_CANCELMODE closes a menu but not a
-// message box, so unloading has to answer the box itself: it gets IDNO, which
-// is the answer that changes nothing. WM_COMMAND is posted rather than sent,
-// because sending would block until the box closes.
+// A prompt of this mod is a dialog with one of two captions, on the thread
+// doing the copy. WM_CANCELMODE closes a menu but not a
+// message box. Unloading answers No on yes/no prompts and OK on notices.
+// Some custom dialogs have no standard button handles; request closure instead.
+// Posting rather than sending avoids blocking the unload thread.
 BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
     if (!HasClass(hWnd, L"#32770")) {
         return TRUE;
@@ -1703,7 +1730,13 @@ BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
         return TRUE;
     }
     if (wcscmp(title, kContentsTitle) == 0 || wcscmp(title, kHashTitle) == 0) {
-        PostMessageW(hWnd, WM_COMMAND, IDNO, 0);
+        if (GetDlgItem(hWnd, IDNO)) {
+            PostMessageW(hWnd, WM_COMMAND, IDNO, 0);
+        } else if (GetDlgItem(hWnd, IDOK)) {
+            PostMessageW(hWnd, WM_COMMAND, IDOK, 0);
+        } else {
+            PostMessageW(hWnd, WM_CLOSE, 0, 0);
+        }
     }
     return TRUE;
 }
