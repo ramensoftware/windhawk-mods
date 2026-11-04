@@ -2,12 +2,344 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-04T00:03:08.000Z</updated>
+    <updated>2026-11-04T01:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.2.1]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#468eb61fae183f46914dba7a37528cded99d146b</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-04T01:04:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wintipsosd">WinTips OSD</h1>
+<p>A Windows 11 style floating overlay for the lock keys, Insert and clipboard
+actions. Nothing is injected into other programs and no system functions are
+hooked: it runs as a Windhawk tool mod in its own process.</p>
+<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-demo-dark-en.gif" alt="Caps Lock tip sliding in over the desktop" /></p>
+<p>Toggle <strong>Caps Lock</strong>, <strong>Num Lock</strong>, <strong>Scroll Lock</strong> or press <strong>Insert</strong> and a small
+card slides in from the screen edge it sits closest to: a padlock icon that
+rotates and bounces, the state in words, and an accent bar along the bottom.
+<strong>Ctrl+C / Ctrl+V / Ctrl+X</strong> show a check mark or scissors with a <code>×N</code> badge that
+counts consecutive actions.</p>
+<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-acrylic-light-en.png" alt="Light theme, frosted card over a wallpaper" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Real blurred backdrop.</strong> The card blurs whatever is behind it, the way the
+Windows 11 OSD does, while keeping a per-pixel-alpha window so the whole card
+can still fade and slide. Switch <em>Card material</em> to Solid for an opaque card.</li>
+<li><strong>Slides in from the nearest edge.</strong> A card within 15% of the left or right
+edge comes in horizontally (this wins over top/bottom), otherwise vertically
+from whichever half of the screen it sits in.</li>
+<li><strong>Clipboard aware.</strong> Copy tips only appear after the clipboard actually
+changes, so <code>Ctrl+C</code> used to interrupt a console app doesn't pop a false
+"Copied". Non-keyboard copies (context menu, in-app buttons) can be reported
+too.</li>
+<li><strong>Elevated apps.</strong> A 250 ms poll catches lock-key toggles made while an
+administrator window has focus, which a low-level keyboard hook can't see.</li>
+<li><strong>Follows Windows.</strong> Per-monitor DPI, light/dark theme and the system accent
+color.</li>
+<li><strong>Doesn't get in the way.</strong> Click-through, no focus stealing, not in the
+taskbar or Alt+Tab, fades out on its own.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-paste-en.png" alt="Paste tip with an ×3 badge" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Caps Lock / Num Lock / Scroll Lock / Insert / Copy / Paste / Cut</strong> — turn
+each tip on or off.</li>
+<li><strong>Also notify non-keyboard copies</strong> — context menu copies, in-app "Copy"
+buttons and any other clipboard change that wasn't made with <code>Ctrl+C</code>.</li>
+<li><strong>Display duration</strong> — how long the card stays, 500 to 10000 ms.</li>
+<li><strong>Animation speed</strong> — 100 is normal (300 ms), 50 is twice as fast, 0 disables
+the animation.</li>
+<li><strong>Vertical / horizontal position</strong> — above the taskbar or below the top edge;
+left, center or right.</li>
+<li><strong>Show on</strong> — the monitor that holds the mouse cursor, or always the primary
+display.</li>
+<li><strong>Horizontal / vertical offset</strong> — pixel-level fine tuning.</li>
+<li><strong>Theme</strong> — follow Windows, dark or light.</li>
+<li><strong>Card material</strong> — acrylic (blurred backdrop) or solid.</li>
+<li><strong>Blur radius</strong> — 0 to 40 pixels, acrylic material only.</li>
+<li><strong>Accent color</strong> — <code>#RRGGBB</code> for the status bar and the <code>×N</code> badge; leave
+empty to follow the system accent color.</li>
+<li><strong>Detect toggles under elevated apps</strong> — the 250 ms poll described above
+(lock keys only).</li>
+<li><strong>Skip while a fullscreen app is in front</strong> — games, fullscreen video and
+presentation mode.</li>
+</ul>
+<h2 id="thingstoknow">Things to know</h2>
+<ul>
+<li>Runs as a <strong>tool mod</strong>: it keeps working when Explorer restarts, and it never
+loads into other processes.</li>
+<li>The standalone <strong>WinTips.exe</strong> does the same job. If it is already running,
+this mod stays quiet automatically, so both can be installed — but disable one
+of the two startup entries.</li>
+<li>Insert is event-based: Windows doesn't keep a global Insert state.</li>
+<li>The acrylic backdrop is a screen copy taken the moment the card appears. Behind
+an elevated window that copy can come back black, and the card falls back to
+solid for that tip instead of showing a black box.</li>
+<li>Placement is preset based; fine positioning uses the offset settings.</li>
+</ul>
+<h2 id="comparedtolockkeysnotifier">Compared to Lock Keys Notifier</h2>
+<p><a href="https://windhawk.net/mods/lock-keys-notifier">Lock Keys Notifier</a> reports the
+same lock keys, so the overlap is worth spelling out. The two aim at different
+things:</p>
+<ul>
+<li><strong>Look.</strong> This mod reproduces the Windows 11 OSD: the card blurs the desktop
+behind it, slides in from the nearest edge and animates a padlock. Lock Keys
+Notifier draws a configurable toast on a solid background.</li>
+<li><strong>Scope.</strong> Clipboard tips have no equivalent there.</li>
+<li><strong>Configuration.</strong> Here the size, theme and material follow Windows on
+purpose. Lock Keys Notifier is built around being configurable — layouts,
+fonts, shadows, sounds, per-key accents — so it isn't trying to match the
+native OSD.</li>
+</ul>
+<p>If you want lock keys only, and want to tune every pixel of the card,
+Lock Keys Notifier is the better fit. If you want the native Windows 11 look, or
+clipboard tips, this mod is.</p>
+<h2 id="links">Links</h2>
+<ul>
+<li>Standalone version, source and issue tracker:
+<a href="https://github.com/DoYouNatureQ/WinTips">WinTips</a></li>
+</ul>]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Copy File Contents 1.4]]></title>
+        <id>https://windhawk.net/mods/copy-file-contents#0cb1e6720db42338d92199f507ca84c4b23c7fcc</id>
+        <link href="https://windhawk.net/mods/copy-file-contents"/>
+        <updated>2026-11-04T01:04:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="copyfilecontents">Copy File Contents</h1>
+<p>Adds two actions to File Explorer, so a file can be read without opening it:</p>
+<ul>
+<li><strong>Copy contents</strong> puts the text of the selected file on the clipboard.</li>
+<li><strong>Copy SHA-256</strong> puts the hash of the selected file on the clipboard.</li>
+</ul>
+<p>Several files can be selected at once. Contents are copied one after another with
+the file name above each, and hashes are copied one per line. A setting can put
+each file on the clipboard as its own item instead, which keeps them apart in
+Windows clipboard history, so Win+V offers each file on its own.</p>
+<h2 id="twowaystoreachit">Two ways to reach it</h2>
+<p><strong>Keyboard.</strong> Select files, then press Ctrl+Shift+T for the contents or
+Ctrl+Shift+H for the hash. This works with the new Windows 11 menu, because it
+does not go through the menu at all. The shortcut is only live while a File
+Explorer window has the focus and the file view is the one being pointed at, and
+it is ignored while the rename box, the address bar or the search box has the
+focus, so it never eats a letter you are typing. Every key combination here can
+be changed in the settings. Do not reuse Ctrl+Shift+C or Ctrl+Shift+N, which are
+File Explorer's own Copy as path and New folder, because the mod would take the
+key from Explorer.</p>
+<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/copy-file-contents-shots/screenshots/copy-file-contents-menu.png" alt="Classic File Explorer menu with both entries" /></p>
+<p><strong>Right-click.</strong> The two entries are also added to the classic menu, reached
+with <strong>Show more options</strong> or Shift+F10. They are added at the bottom of that
+menu, below Properties, and removed again once the menu closes, so the menu is
+never left modified. The new Windows 11 menu belongs to a different component and
+cannot be extended by injected code without registering a handler in the
+registry, which a mod must not do. To get the entries on a plain right-click, use
+the separate mod <strong>Classic context menu on Windows 11</strong>. If the classic menu
+cannot be reached on your build, the keyboard shortcuts are the whole of the mod
+and they do not need the menu at all.</p>
+<h2 id="whatitwillandwillnotcopy">What it will and will not copy</h2>
+<p>A file is copied only if it looks like text. Files that look binary are refused
+rather than pasted as garbage, and files larger than the size limit are refused
+the same way. When nothing at all could be copied, an optional prompt shows the
+reason. For an oversized local file up to 32 MB whose prefix looks like text, it offers
+to open it in Notepad instead. This prefix check is only a heuristic. Network and
+offline files are not opened for the offer. The path is passed quoted so a path
+with a space in it still opens.</p>
+<p>The size limit is 8 MB by default, with the unit chosen next to it, megabytes or
+kilobytes. A large selection is copied file by file, so one file over the limit is
+skipped and the rest are still copied. That partial copy is silent, because a
+dialog in the middle of copying five files is worse than a missing one. When
+nothing at all can be copied, the optional prompt explains why instead.</p>
+<p>The whole selection is also held to a 32 MB budget, so selecting a whole folder of
+logs cannot make File Explorer allocate without bound. A file bigger than what is
+left of that budget cannot fit in any encoding, so it is skipped without being
+opened, and once the budget is used up the rest of the selection is not read at
+all, which keeps a large Ctrl+A quick instead of slow. A file smaller than that is
+read and measured: its text is the same size on disk for UTF-16, and up to twice
+that for ASCII, so only the read itself can say.</p>
+<p>The ceilings are 64 MB per file and 32 MB per selection whatever the settings
+say. In practice the per selection budget is the one that binds: no single file is
+copied beyond 32 MB of text, which is the same as saying that a 20 MB UTF-16 file
+is copied and a 20 MB ASCII file is not. A text file that big is already beyond
+what a clipboard is good for, and the mod refuses rather than trying.</p>
+<p>When nothing in the selection can be copied, <strong>Copy contents</strong> is left out of the
+menu instead of being offered and then refusing. To decide that, the first 4 KiB
+of each file are read when the menu opens, stopping at the first file that
+passes, and looking at no more than 16 files. Files that are offline or stored
+online only are not read at all, because reading one would start a download; such
+a file is assumed copyable and the copy itself decides. Files on a network share
+are treated the same way, whether they are reached by a <code>\\server\share</code> path or
+through a drive letter mapped to one, because reading from a share that has
+stopped answering would hang the menu. A mixed selection still shows the entry
+and copies the files that can be copied.</p>
+<p>Encoding is detected rather than assumed: a byte order mark is honored, then the
+file is checked for UTF-16 without a mark, then for strict UTF-8, and finally read
+as the system code page. UTF-16 is checked before UTF-8 on purpose: the zero bytes
+of a UTF-16 file are valid UTF-8, so the other order would decode such a file as
+text with invisible gaps. Line endings are copied as they are.</p>
+<h2 id="largehashes">Large hashes</h2>
+<p>Hashing reads every byte, and the work runs on the same thread that owns the File
+Explorer window, so that window does not repaint until it is done. For a normal
+file that is instant; a gigabyte on a hard disk is about ten seconds. Above the
+size set in the settings, 256 MB by default, the mod asks first, and says how many
+files and how much data are involved, counting the whole selection rather than one
+file at a time. Answer no and nothing happens. The setting can be raised to where
+hashing a whole disk in one go is on you, or set to 0 to be asked every time.</p>
+<h2 id="knownlimits">Known limits</h2>
+<ul>
+<li>Only files. A selection of folders, or the desktop, does nothing.</li>
+<li>The shortcuts act in File Explorer windows only. They do nothing in other
+programs and nothing on the desktop.</li>
+<li>The contents are put on the clipboard as text. Nothing is written to disk, and
+no temporary file is created.</li>
+<li>If the mod is turned off while its own prompt is open, the prompt is answered
+No for you and the copy stops, because the mod cannot be unloaded with its code
+still waiting on that dialog. Unloading waits about two seconds for work to
+finish. The wait between separate clipboard items ends as soon as unloading
+starts, but a single read from a share that has stopped answering cannot be
+interrupted, only waited out.</li>
+<li>With separate clipboard items turned on, Ctrl+V pastes only the last file. The
+earlier ones are reachable through Windows clipboard history (Win+V), and only
+there, and clipboard history has to be turned on for them to be kept.</li>
+<li>Clipboard history keeps 25 entries and about 4 MB per entry, which for text is
+roughly two million characters. A file bigger than that cannot be a history
+entry however it is copied; Windows drops it and tells no one. So in separate
+items mode those files are written last: the history keeps the files it can
+hold, and Ctrl+V gives the big one.</li>
+<li>Windows clipboard history is a separate service and it needs a moment between
+copies, so the files are written with a short wait, 250 ms by default and
+adjustable. The wait runs on File Explorer's thread, so a large selection takes
+that much longer to finish copying, and the window is briefly unresponsive
+while it does.</li>
+<li>A file being written by another program while it is read may be copied partially.
+That is a race no reader can win, and it is not worth a lock for this.</li>
+</ul>]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MMC Dark Mode 1.0]]></title>
+        <id>https://windhawk.net/mods/mmc-dark-mode#8bd77f398d1d27555aba6471b90a5034c0fd69e9</id>
+        <link href="https://windhawk.net/mods/mmc-dark-mode"/>
+        <updated>2026-11-04T01:04:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mmcdarkmode">MMC Dark Mode</h1>
+<p>A dark theme for the Microsoft Management Console: Device Manager, Services,
+Event Viewer, Task Scheduler, Disk Management and anything else hosted by
+<code>mmc.exe</code>.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>Device Manager with the mod off:</p>
+<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-before.png" alt="Device Manager with the mod off" /></p>
+<p>Device Manager with the mod on:</p>
+<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-after.png" alt="Device Manager with the mod on" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<p>The mod themes MMC windows in the <code>mmc.exe</code> process, including common trees,
+list views, property sheets and chrome. It also contains targeted handling for
+Services, Event Viewer, Task Scheduler and Disk Management. Existing menus and
+toolbars remain available. Some embedded content draws itself and is not themed.</p>
+<p>Switching the mod off requests restoration of native styles, colours and
+painting. The system-wide colour table is not changed.</p>
+<h2 id="knownlimits">Known limits</h2>
+<ul>
+<li>MMC hosts many snap-ins and not every control or embedded page is covered.
+Layouts, visual styles and Windows builds may differ from those tested.</li>
+<li>The Actions pane caption adjustment is x64-only and uses private DirectUI
+interfaces. If the required interfaces or hooks are unavailable, the native
+appearance is retained. Other custom-drawn content may remain light.</li>
+<li>Disk Management's selected partition frame adjustment is x64-only and checks
+an exact native drawing-code signature. On an unknown or changed build it
+leaves that frame unchanged rather than guessing. The blue partition colour
+is adjusted only when the native renderer requests the observed stock navy.
+Any region or legend configured to that same navy will also be recoloured;
+other brush colours and native patterns are left unchanged.</li>
+<li>The mod checks high contrast at load and does not activate when it is already
+enabled. Switching high contrast while MMC is running is not guaranteed to
+update every themed control; restart the console or disable the mod.</li>
+<li>Some GDI brushes are deliberately retained until the MMC process exits because
+native controls may cache them. Repeatedly reloading the mod in the same
+process can increase GDI handle use.</li>
+<li>The property-sheet tab strip is custom-painted; other tab layouts keep their
+native drawing. Push buttons generally keep native visuals, with a scoped
+dark face for the Task Scheduler summary Refresh button.</li>
+<li>The maximized child window's menu-row buttons use scoped custom drawing.
+Other layouts may keep the native appearance. Restored child-window captions
+and their buttons can remain light.</li>
+</ul>]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[StartPad 1.0]]></title>
+        <id>https://windhawk.net/mods/startpad#76edbcc836b994efec92065992b9a02be87d82a1</id>
+        <link href="https://windhawk.net/mods/startpad"/>
+        <updated>2026-11-04T01:04:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startpad">StartPad</h1>
+<p><img src="https://raw.githubusercontent.com/frankh93/StartPad/main/preview.png" alt="StartPad Preview" /></p>
+<p>A macOS Launchpad-style fullscreen app launcher that replaces the Windows 11 Start menu, featuring horizontal paginated grids, interactive app folders, drag-and-drop reordering, and customizable visual themes.</p>
+<h2 id="featureshowtouse">Features &amp; How to Use</h2>
+<h3 id="pagesnavigation">Pages &amp; Navigation</h3>
+<ul>
+<li><strong>Horizontal Pages</strong>: Apps are organized into pages rather than a vertical scrolling list.</li>
+<li><strong>Switching Pages</strong>: Click and drag horizontally with the mouse, scroll the mouse wheel (vertical or horizontal), click the pagination dots at the bottom, or use <strong>Page Up / Page Down</strong>.</li>
+<li><strong>2D Arrow Key Navigation</strong>: Use the <strong>Arrow keys</strong> or <strong>Tab</strong> to move selection across icons. Moving past the left or right edge of the grid automatically flips to the previous or next page.</li>
+</ul>
+<h3 id="draganddropfolders">Drag-and-Drop &amp; Folders</h3>
+<ul>
+<li><strong>Reorder Apps</strong>: <strong>Click and hold</strong> (~320 ms) on any app or folder icon to pick it up, then drag it to a new position on the grid or across pages (hold near the screen edge to flip pages).</li>
+<li><strong>Create Folders</strong>:</li>
+<li><strong>Drag & Drop</strong>: Drag one app icon directly onto another app icon (or into an existing folder).</li>
+<li><strong>Selection Mode</strong>: Click the <strong>More (<code>...</code>)</strong> button on the right side of the search bar and choose <strong>Create folder</strong>, click the apps you want to bundle (marked with a blue checkmark), and click the <strong>Done (<code>✓</code>)</strong> button in the search bar (or press <strong>Enter</strong>).</li>
+<li><strong>Rename Folders</strong>: When a folder is open, <strong>click its title</strong> at the top or press <strong>F2</strong> (also works when a folder is selected on the main grid), type the new name, and press <strong>Enter</strong>.</li>
+<li><strong>Remove or Ungroup</strong>: Drag an icon outside the open folder panel to move it back to the main grid, or right-click a folder and select <strong>Ungroup folder</strong>.</li>
+<li><strong>Persistent Layout</strong>: Your custom icon order, folders, and hidden apps are automatically saved to Windhawk's mod storage per user.</li>
+</ul>
+<h3 id="searchlaunching">Search &amp; Launching</h3>
+<ul>
+<li><strong>Instant Search</strong>: Start typing anywhere to filter apps immediately. Press <strong>Esc</strong> or click the clear (<code>×</code>) button to reset the search.</li>
+<li><strong>Launch App</strong>: Click an icon or press <strong>Enter</strong> on the selected app.</li>
+<li><strong>Run as Administrator</strong>: Hold <strong>Ctrl + Shift + Enter</strong> on a selected app, or right-click the app and choose <strong>Run as administrator</strong>.</li>
+<li><strong>Context Menu</strong>: Right-click any app to <strong>Open</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Remove from folder</strong>, or <strong>Hide</strong>.</li>
+</ul>
+<h3 id="moreoptionshidingapps">More Options (<code>...</code>) &amp; Hiding Apps</h3>
+<p>Click the <strong><code>...</code></strong> button inside the right side of the search bar to access:</p>
+<ul>
+<li><strong>Create folder</strong>: Interactively select multiple apps to group into a new folder.</li>
+<li><strong>Edit hidden apps</strong>: Toggle visibility badges on all apps to hide or unhide multiple items at once, then click the <strong>Done (<code>✓</code>)</strong> button in the search bar to save.</li>
+<li><strong>Search in hidden apps</strong>: When checked, typing a search query will also return matching apps that you have hidden.</li>
+<li><strong>Reset layout</strong>: Restores the default alphabetical layout and removes all custom folders and hidden-app rules.</li>
+</ul>
+<h3 id="powermenuvisuals">Power Menu &amp; Visuals</h3>
+<ul>
+<li><strong>Power Button</strong>: Located at the bottom right (aligned with the page dots and last column), providing quick access to <strong>Lock</strong>, <strong>Sign out</strong>, <strong>Sleep</strong>, <strong>Shut down</strong>, and <strong>Restart</strong>.</li>
+<li><strong>Visual Styles</strong>: Choose between <strong>MacOS Style</strong> (pill search bar &amp; squircle folders) and <strong>Windows 11 Fluent</strong> (Acrylic-inspired search box with system accent bar), automatically adapting to Windows Light and Dark modes.</li>
+<li><strong>Legacy Icon Cleanup</strong>: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.</li>
+<li><strong>Localized UI</strong>: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.</li>
+</ul>
+<h2 id="howstartpaddiffersfromfullscreenstartmod">How StartPad differs from "fullscreen-start" mod</h2>
+<p>Both mods replace the Start menu with a fullscreen app launcher, and <strong>they cannot be enabled at the same time</strong> because both intercept <code>XamlLauncher::ShowStartView</code>.</p>
+<ul>
+<li><strong>StartPad</strong> focuses on a <strong>paginated macOS Launchpad workflow</strong>: horizontal pages with spring physics, <strong>folders</strong> (creation, renaming, ungrouping), <strong>drag-and-drop icon reordering</strong> with persistent layout storage, <strong>hiding apps</strong>, a <strong>right-click context menu</strong> (Run as administrator, Open file location), an integrated <strong>Power menu</strong>, a <strong>Windows 11 Fluent visual style</strong>, and <strong>multilingual UI strings</strong>.</li>
+<li><strong>Fullscreen Start (<code>fullscreen-start</code>)</strong> by Rafael Mendes focuses on a single <strong>vertically scrolled grid</strong> with Direct2D rendering, live DWM Acrylic/Blur backdrops, <code>Ctrl+V</code> clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.</li>
+</ul>
+<h2 id="creditslicense">Credits &amp; License</h2>
+<ul>
+<li>Hooking <code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code> (<code>kShowMethodKeyboard</code> / <code>kShowFlagKeyboard</code>), secondary folder-process detection (<code>IsFolderWindowsProcess</code>), and thread initialization/uninitialization structure are adapted from <a href="https://github.com/RafaelMendes1407"><strong>Fullscreen Start (Launchpad style)</strong> (<code>fullscreen-start</code>)</a> by <strong>Rafael Mendes</strong>, licensed under the MIT License (Copyright (c) Rafael Mendes).</li>
+<li>Licensed under the <strong>MIT License</strong>.</li>
+</ul>]]></content>
+        <author>
+            <name>Frankh93</name>
+            <uri>https://github.com/frankh93</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hourly Peek Buddy 1.0]]></title>
         <id>https://windhawk.net/mods/hourly-peek-buddy#660bc1995e97a6f66040c56cb782989087a68073</id>
@@ -1179,96 +1511,6 @@ the mod is removed.</li>
         <author>
             <name>RobotsNeverDie</name>
             <uri>https://github.com/RBND</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar RDP Launcher 1.4.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-rdp-launcher#e195076df9a08f7c7c54fb458767393ec676fdba</id>
-        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
-        <updated>2026-11-02T23:02:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Change icons…</strong> in the right-click menu gives the widget's icons other glyphs from the Windows icon font: the computer and the display buttons. Choose an icon, then a glyph, or type its code; <strong>Default</strong> puts its own back.</li>
-<li>The same picker shows the icons of Taskbar Snipper and Taskbar Audio Flipper when they're running, and changes theirs too.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Audio Flipper 1.4.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-flipper#44ac102d6a6a5925e36c52f488b4e5173920f41a</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
-        <updated>2026-11-02T23:02:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Change icons…</strong> in the right-click menu gives the widget's icons other glyphs from the Windows icon font: each kind of device (speakers, headphones, headset, display, microphone), muted output and input, and the webcam. Choose an icon, then a glyph, or type its code; <strong>Default</strong> puts its own back.</li>
-<li>The same picker shows the icons of Taskbar Snipper and Taskbar RDP Launcher when they're running, and changes theirs too.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Snipper 1.3.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-snipper#38463a071b68590c96a5416dcb0ce84eb0ef3e2e</id>
-        <link href="https://windhawk.net/mods/taskbar-snipper"/>
-        <updated>2026-11-02T23:02:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The buttons' right-click menu has <strong>Screenshot button</strong> and <strong>Record button</strong>, to show or hide each one (one of them stays), and <strong>Swap the buttons</strong>, to put the record button first.</li>
-<li><strong>Which buttons</strong> in the mod's settings has a new <strong>Record and screenshot</strong> option. A choice made in the menu is used until the setting is changed, as with the save folders.</li>
-<li><strong>Change icons…</strong> in the menu gives the buttons other glyphs from the Windows icon font (screenshot, record and stop recording). Choose an icon, then a glyph, or type its code; <strong>Default</strong> puts its own back. The same picker shows the icons of Taskbar Audio Flipper and Taskbar RDP Launcher when they're running.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinRAR Tweaks 1.0.0]]></title>
-        <id>https://windhawk.net/mods/winrar-tweaks#b7d208bbef124a2d7be33f9cb2099cd6faf6e33a</id>
-        <link href="https://windhawk.net/mods/winrar-tweaks"/>
-        <updated>2026-11-02T23:02:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winrartweaks">WinRAR Tweaks</h1>
-<p>All-in-one quality-of-life enhancements for <strong>WinRAR</strong> that modernize navigation and file size readability without altering archive behavior.</p>
-<hr />
-<h2 id="features">✨ Features</h2>
-<ul>
-<li>⌨️ <strong>Smart Close on <code>Esc</code>:</strong> Quickly close WinRAR with the <code>Escape</code> key—just like modern utilities and viewers. Intelligently respects active context menus, menu bars, dropdowns, inline file renaming, and child dialogs (closing open popups first before closing the main window).</li>
-<li>📊 <strong>Human-Readable File Sizes:</strong> Automatically converts hard-to-read raw byte counts (e.g., <code>121815</code>) in the <strong>Size</strong> and <strong>Packed</strong> columns into clean, readable units (<code>B</code>, <code>KB</code>, <code>MB</code>, <code>GB</code>, <code>TB</code>).</li>
-<li>⚙️ <strong>Modular Settings:</strong> Toggle either tweak independently at any time in the mod's Settings tab.</li>
-</ul>
-<h2 id="previews">🖼️ Previews</h2>
-<h3 id="humanreadablefilesizes">Human-Readable File Sizes</h3>
-<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_1.png" alt="WinRAR File Size Before and After Preview" /></p>
-<h3 id="smartcloseonesc">Smart Close on Esc</h3>
-<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_2.webp" alt="WinRAR Close on Esc Demo Webp" /></p>
-<hr />
-<h2 id="howitworks">🛠️ How It Works</h2>
-<ul>
-<li><strong>Modal & Input Guarding:</strong> Queries live Win32 thread GUI state (<code>GetGUIThreadInfo</code>) so <code>Esc</code> never interrupts active menu loops, drag/capture operations, dropdowns, or inline <code>Edit</code> rename boxes before sending <code>WM_CLOSE</code>.</li>
-<li><strong>In-Place ListView Formatting:</strong> Subclasses WinRAR's <code>SysListView32</code> file list (both newly created and already-open windows) and formats raw byte counts on the fly as items are populated or refreshed.</li>
-</ul>
-<hr />
-<h2 id="compatibilitynotes">⚠️ Compatibility &amp; Notes</h2>
-<ul>
-<li><strong>Refreshing After Changing Settings or Disabling:</strong> If you toggle the <em>Human-Readable File Sizes</em> setting on or off, or disable/remove the mod while WinRAR is open, please press <strong><code>F5</code></strong> or navigate to another folder and back to refresh the file list with the updated size format.</li>
-<li><strong>Supported Column Languages:</strong> Out-of-the-box header detection supports English (<code>Size</code>, <code>Packed</code>) as well as common localized headers (<code>Размер</code>, <code>Сжатый</code>, <code>Größe</code>, <code>Gepackt</code>, <code>Taille</code>, <code>Compressé</code>, <code>Tamaño</code>, <code>Comprimido</code>).</li>
-<li><strong>Sorting Behavior:</strong> Because WinRAR sorts internal archive records prior to display formatting, sorting by Size or Packed continues to sort accurately by exact byte count.</li>
-</ul>
-<hr />
-<h3 id="morefromthisauthor">🧩 More from this author</h3>
-<ul>
-<li><strong><a href="https://windhawk.net/mods/drag-to-scroll">Drag to Scroll</a></strong> – Hold <code>Ctrl + Right-Click</code> and drag to scroll smoothly across desktop applications.</li>
-<li><strong><a href="https://windhawk.net/mods/explorer-custom-shortcuts">Explorer Custom Shortcuts</a></strong> – Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.</li>
-</ul>
-<h3 id="authorattribution">Author &amp; Attribution</h3>
-<ul>
-<li><strong>Created and maintained by ArvindSaini978 (<a href="https://github.com/ArvindSaini978">GitHub</a>).</strong></li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
         </author>
     </entry>
 </feed>

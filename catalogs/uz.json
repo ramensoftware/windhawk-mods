@@ -3496,6 +3496,31 @@
         "version": "1.0.0"
       }
     },
+    "copy-file-contents": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793754288000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793754288000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "metanoid18",
+        "compilerOptions": "-lole32 -luuid -lshell32 -lbcrypt",
+        "description": "Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.",
+        "github": "https://github.com/Metanoid18",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Copy File Contents",
+        "version": "1.4"
+      }
+    },
     "copy-queue": {
       "details": {
         "defaultSorting": 3180,
@@ -10504,6 +10529,31 @@
         "version": "1.5"
       }
     },
+    "mmc-dark-mode": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793754283000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793754283000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "metanoid18",
+        "compilerOptions": "-lgdi32 -lcomctl32 -ldwmapi",
+        "description": "Dark theme for the console snap-ins: Device Manager, Event Viewer, Services, Task Scheduler and Disk Management.",
+        "github": "https://github.com/Metanoid18",
+        "include": [
+          "mmc.exe"
+        ],
+        "license": "MIT",
+        "name": "MMC Dark Mode",
+        "version": "1.0"
+      }
+    },
     "mobile-open-animation": {
       "details": {
         "defaultSorting": 9747,
@@ -15160,6 +15210,34 @@
         "license": "MIT",
         "name": "StartAllBack Jump List Width",
         "version": "1.2"
+      }
+    },
+    "startpad": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793754277000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793754277000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Frankh93",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32",
+        "description": "macOS-style fullscreen app launcher with pages, folders, and drag-and-drop organization",
+        "github": "https://github.com/frankh93",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "StartPad",
+        "version": "1.0"
       }
     },
     "startup-app-delay-fix": {
@@ -22110,6 +22188,32 @@
         ],
         "name": "Winstant",
         "version": "1.5"
+      }
+    },
+    "wintips-osd": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793754293000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793754293000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DoYouNatureQ",
+        "compilerOptions": "-lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi",
+        "description": "Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut",
+        "github": "https://github.com/DoYouNatureQ",
+        "homepage": "https://github.com/DoYouNatureQ/WinTips",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "WinTips OSD",
+        "version": "1.2.1"
       }
     },
     "winui-context-menu-animation": {
