@@ -105,10 +105,11 @@ inclusion list** in Windhawk's advanced settings. The frame, the monitor
 corners and the work area don't depend on it and work right away. `udwm.dll`
 symbols are downloaded by Windhawk on first use.
 
-This does the same job as the *Round snapped and maximized windows* option of
-the **Custom Window Corner Radius** mod, through the same hook; use one or
-the other, not both. The mechanism is shared with the **Maximized Window
-Corners** mod.
+This does the same job as the *Rounded corners for maximized and snapped
+windows* option of the
+[Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
+mod, through the same hook - the mechanism is the one Alexey Lavrinenko
+contributed there; use one mod or the other for window corners, not both.
 
 ## Notes
 
@@ -3496,7 +3497,7 @@ void NudgeRender(HWND taskbar) {
 // background and shows the ears (part of the frame this tick builds), then
 // presents the frame window registered for it and tells the UI thread.
 void ApplyRecolorsInRenderingTick() {
-    if (g_recolorsWaiting.empty()) {
+    if (g_recolorsWaiting.empty() || g_unloading || !g_wants) {
         return;
     }
     auto waiting = std::move(g_recolorsWaiting);
@@ -3504,7 +3505,7 @@ void ApplyRecolorsInRenderingTick() {
     HWND ctrl = g_ctrlWnd.load();
     for (const PendingRecolor& recolor : waiting) {
         auto it = g_wants->find(recolor.taskbar);
-        if (it != g_wants->end() && !g_unloading) {
+        if (it != g_wants->end()) {
             TaskbarWants& wants = it->second;
             wants.fillSuspended = false;
             if (wants.fill) {
@@ -3518,9 +3519,13 @@ void ApplyRecolorsInRenderingTick() {
             std::lock_guard<std::mutex> lock(g_revealMutex);
             auto reveal = g_reveals.find(recolor.taskbar);
             if (reveal != g_reveals.end() && reveal->second.serial <= recolor.serial) {
+                // Left registered when the present fails (the window was
+                // resized under us, say): the UI thread then presents it
+                // itself instead of counting it as revealed.
                 const Reveal& r = reveal->second;
-                PresentFrame(r.frame, r.memDc, r.width, r.height, nullptr, 255);
-                g_reveals.erase(reveal);
+                if (PresentFrame(r.frame, r.memDc, r.width, r.height, nullptr, 255)) {
+                    g_reveals.erase(reveal);
+                }
             }
         }
         if (ctrl) {
@@ -3547,8 +3552,11 @@ void RequestTaskbarRecolor(HWND taskbar, UINT serial) {
 
 void WINAPI TransparentOnTaskbarThread(void* param) try {
     HWND taskbar = static_cast<HWND>(param);
+    if (g_unloading || !g_wants) {
+        return;
+    }
     auto it = g_wants->find(taskbar);
-    if (it == g_wants->end() || g_unloading) {
+    if (it == g_wants->end()) {
         return;
     }
     TaskbarWants& wants = it->second;
@@ -3791,33 +3799,58 @@ void WatchTaskbarRoot(HWND taskbar) try {
 // Takes every LayoutUpdated handler off again (unload). Must complete before
 // the mod's code goes away: a handler left behind would be called into
 // unloaded code.
-void WINAPI UnwatchTaskbarsOnTaskbarThread(void*) try {
-    UnsubscribeRendering();
-    if (g_readyRenderToken) {
-        wuxm::CompositionTarget::Rendered(g_readyRenderToken);
-        g_readyRenderToken = {};
+// Every removal is guarded on its own: a handler left behind would be
+// called into unloaded code, so one XAML call throwing (a tree in the middle
+// of a rebuild) must not skip the others. The handlers come off first; only
+// then is the content, which may be in that state, touched.
+void WINAPI UnwatchTaskbarsOnTaskbarThread(void*) {
+    try {
+        UnsubscribeRendering();
+    } catch (...) {
+        Wh_Log(L"UnwatchTaskbars: Rendering unsubscribe threw %08X", winrt::to_hresult().value);
+    }
+    try {
+        if (g_readyRenderToken) {
+            wuxm::CompositionTarget::Rendered(g_readyRenderToken);
+            g_readyRenderToken = {};
+        }
+    } catch (...) {
+        Wh_Log(L"UnwatchTaskbars: Rendered unsubscribe threw %08X", winrt::to_hresult().value);
     }
     g_readyPending.clear();
     g_recolorsWaiting.clear();
-    for (auto& entry : *g_wants) {
-        TaskbarWants& wants = entry.second;
-        if (wants.hidden && IsWindow(entry.first)) {
-            SetContentHidden(entry.first, wants, false);
+    for (auto& [taskbar, wants] : *g_wants) {
+        try {
+            if (auto watched = wants.watched.get(); watched && wants.layoutToken) {
+                watched.LayoutUpdated(wants.layoutToken);
+            }
+        } catch (...) {
+            Wh_Log(L"taskbar %p: LayoutUpdated unsubscribe threw %08X", taskbar,
+                   winrt::to_hresult().value);
         }
-        if (auto watched = wants.watched.get(); watched && wants.layoutToken) {
-            watched.LayoutUpdated(wants.layoutToken);
+        try {
+            if (auto root = wants.rootWatched.get(); root && wants.rootToken) {
+                root.Changed(wants.rootToken);
+            }
+        } catch (...) {
+            Wh_Log(L"taskbar %p: XamlRoot.Changed unsubscribe threw %08X", taskbar,
+                   winrt::to_hresult().value);
         }
         wants.watched = nullptr;
         wants.layoutToken = {};
-        if (auto root = wants.rootWatched.get(); root && wants.rootToken) {
-            root.Changed(wants.rootToken);
-        }
         wants.rootWatched = nullptr;
         wants.rootToken = {};
     }
+    for (auto& [taskbar, wants] : *g_wants) {
+        try {
+            if (wants.hidden && IsWindow(taskbar)) {
+                SetContentHidden(taskbar, wants, false);
+            }
+        } catch (...) {
+            Wh_Log(L"taskbar %p: content restore threw %08X", taskbar, winrt::to_hresult().value);
+        }
+    }
     g_wants->clear();
-} catch (...) {
-    Wh_Log(L"UnwatchTaskbarsOnTaskbarThread: exception %08X", winrt::to_hresult().value);
 }
 
 // Unload: one trip to the taskbar thread hands everything back at once -
@@ -4114,7 +4147,11 @@ void Tick(bool forceRebuild) {
     // frame of the taskbar being uncloaked), at the regular rate otherwise.
     bool anyWaiting = false;
     for (const Overlay& overlay : g_overlays) {
-        anyWaiting = anyWaiting || overlay.waiting;
+        // A frame hidden for full-screen or Task View can't show until that
+        // ends, and the event that ends it ticks right away - no need to
+        // spin at 60 Hz for as long as a game runs.
+        anyWaiting = anyWaiting ||
+                     (overlay.waiting && !overlay.fullscreen && !overlay.taskViewHidden);
     }
     if (anyWaiting != g_fastTick) {
         if (HWND ctrl = g_ctrlWnd.load()) {
@@ -4577,7 +4614,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 
 // ---------------------------------------------------------------------------
 // dwm.exe side: one corner radius for normal, snapped and maximized windows
-// (the mechanism is shared with the Maximized Window Corners mod)
+// (the mechanism Alexey Lavrinenko contributed to Custom Window Corner Radius)
 // ---------------------------------------------------------------------------
 
 namespace dwm {
