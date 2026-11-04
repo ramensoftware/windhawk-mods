@@ -2,7 +2,7 @@
 // @id              gradual-night-light
 // @name            Gradual Night Light
 // @description     Gradually adjust Windows Night light strength using a daily schedule.
-// @version         0.3.0
+// @version         0.3.1
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
@@ -40,7 +40,9 @@ an editable daily schedule and optional gradual transitions.
 Times use the local 24-hour `HH:MM` format. Stages are sorted automatically and
 the schedule repeats daily, including across midnight. All stage times must be
 unique and different from Off time. Invalid settings are reported in the mod
-log; an invalid edit keeps the last valid configuration.
+log; an invalid edit keeps the last valid configuration. If saved settings are
+invalid at startup, the tool stays running without applying a schedule until
+valid settings are saved. Disabling it can still restore a recovered backup.
 
 Night light switches off at Off time and stays off until the next stage. The
 last stage holds its strength until Off time. To fade in from almost no warmth,
@@ -85,9 +87,18 @@ The next start recovers the SID-specific backup and any owned preview. To
 restore, enable and then disable the mod while Windows is running, or set Night
 light manually in Windows Settings. Do not delete the saved backup first.
 
-When upgrading from 0.2.1, disable that version in the account that originally
-enabled it before updating. Its old machine-wide backup has no reliable owner
-information, so this version never imports or deletes those legacy values.
+Legacy machine-wide backups without a user SID are never imported or deleted
+because their owner cannot be determined.
+
+### Why this implementation retains registry writes
+
+A read hook can substitute a value only when Windows reads it. Scheduled Night
+light changes also require the display consumer to invalidate its cached state
+and reapply it at each stage. No reliable read-only invalidation path has been
+established for this implementation. A read hook in Explorer has not been
+prototyped, so this is not a claim that such an implementation is impossible.
+The current write-based approach, including its persistence limits above,
+requires an explicit acceptance decision by the maintainer.
 
 ## Requirements and limitations
 
@@ -141,6 +152,7 @@ research below. No external helper, script, or runtime download is required.
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -448,6 +460,10 @@ struct Entry {
     int minute;
     int strength;
 };
+struct Config {
+    std::vector<Entry> schedule;
+    bool gradual;
+};
 int ParseTime(const std::wstring& value) {
     Require(value.size() == 5 && value[2] == L':' && value[0] >= L'0' &&
                 value[0] <= L'9' && value[1] >= L'0' && value[1] <= L'9' &&
@@ -660,7 +676,7 @@ struct Controller {
                 savePreview(true);
             ownsPreview = true;
             Update(true, [](Fields& f) { Set(f, 70, kBool, {1}); });
-            Sleep(50);  // Runs on our worker, never Explorer's UI thread.
+            Sleep(50);  // Runs on the tool's worker thread.
             EndPreview();
         }
         return true;
@@ -714,12 +730,9 @@ struct Controller {
 
 namespace {
 using namespace nightlight;
-struct Config {
-    std::vector<Entry> schedule;
-    bool gradual;
-};
 std::mutex configMutex;
-Config config;
+std::optional<Config>
+    config;  // Empty until a valid saved schedule is available.
 HANDLE stopEvent = nullptr, changedEvent = nullptr, worker = nullptr;
 StorageNames storageNames;  // Initialized with the token SID before any I/O.
 UINT taskbarCreatedMessage = 0;
@@ -859,7 +872,7 @@ DWORD WINAPI Run(void*) {
                         Wh_SetIntValue(storageNames.baselineSaved.c_str(), 1),
                     "Cannot save Night light baseline; no changes made");
                 saved = true;
-                // Keep our high-water marks across Explorer crashes and mod
+                // Keep our high-water marks across tool crashes and mod
                 // reloads.
                 for (int i = 0; i < 2; ++i) {
                     uint64_t highest = 0;
@@ -873,7 +886,7 @@ DWORD WINAPI Run(void*) {
                 controller.ownsPreview =
                     Wh_GetIntValue(storageNames.previewOwned.c_str(), 0) != 0;
             }
-            Config current;
+            std::optional<Config> current;
             {
                 std::lock_guard lock(configMutex);
                 current = config;
@@ -881,8 +894,9 @@ DWORD WINAPI Run(void*) {
             SYSTEMTIME now;
             GetLocalTime(&now);
             double minute = now.wHour * 60 + now.wMinute + now.wSecond / 60.0;
-            if (controller.Apply(
-                    StrengthAt(current.schedule, minute, current.gradual),
+            if (current &&
+                controller.Apply(
+                    StrengthAt(current->schedule, minute, current->gradual),
                     refreshRequested)) {
                 refreshRequested = false;
             }
@@ -916,11 +930,16 @@ DWORD WINAPI Run(void*) {
 
 BOOL WhTool_ModInit() {
     try {
-        config = LoadConfig();
         storageNames = StorageNames(CurrentUserSid());
     } catch (const std::exception& e) {
         Wh_Log(L"Cannot initialize Night light: %S", e.what());
         return FALSE;
+    }
+    config.reset();
+    try {
+        config = LoadConfig();
+    } catch (const std::exception& e) {
+        Wh_Log(L"Invalid schedule; waiting for valid settings: %S", e.what());
     }
     stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     changedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
