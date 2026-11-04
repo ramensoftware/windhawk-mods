@@ -4,7 +4,7 @@
 // @name:ja-JP      FluentFlyout用タスクバー予約領域
 // @description     Reserves space on the Windows 11 taskbar for the FluentFlyout taskbar widget, on the primary monitor only by default
 // @description:ja-JP FluentFlyoutのタスクバーウィジェット用に、Windows 11タスクバーへ空き領域を確保する。既定ではプライマリーモニターのみ
-// @version         0.8
+// @version         0.8.1
 // @author          Ren9618
 // @github          https://github.com/Ren9618
 // @twitter         https://x.com/Ray_9618_2
@@ -34,10 +34,10 @@
 //   - ForEachTaskbarWindow() (thread-deduplicated enumeration)
 //   - the per-thread DispatcherQueueTimer retry
 //     (StartRetryTimer / StopRetryTimer / RetryTimerTick)
-// The timer placement follows taskbar-margin (thread_local, one
-// timer per taskbar thread, stopped on that thread during
-// unload); see the "Global objects and process shutdown" wiki
-// page, section 4, for the teardown rules this follows.
+// The timer placement follows taskbar-margin: thread_local,
+// one timer per taskbar thread, created, used and stopped on
+// that thread (stopped from Wh_ModBeforeUninit via a dispatch
+// to the taskbar thread), so it never outlives the unload.
 // The taskbar-multirow source states: "Source code is published under
 // The GNU General Public License v3.0." Because this file is a
 // derivative of that GPL code, it is NOT MIT-licensed (unlike the
@@ -70,28 +70,24 @@
 //      user32 window-creation hooks adapted from taskbar-margin -
 //      still no taskbar.dll function hooks.)
 //
-// STATUS: v0.8, a lifecycle rework driven by the AI review of
-// PR #6983 (items 1 and 2). The v0.7 worker-thread retry loop
-// is gone: the mod now hooks taskbar window creation
+// STATUS: v0.8.1. The mod hooks taskbar window creation
 // (CreateWindowExW / CreateWindowInBand / CreateWindowInBandEx,
 // adapted from taskbar-margin) and retries on a per-thread
 // DispatcherQueueTimer on the taskbar thread itself until the
-// XAML tree is ready. That covers taskbars created after the
-// mod loads (Explorer restart, monitor reconnect / dock) and
-// removes the detached thread that could outlive the DLL at
-// unload. The XamlRoot acquisition path is the one verified on
-// a real machine with v0.4.1, and the margin writing /
-// restoring logic, including the `specific` monitor matching,
-// is the one confirmed working with v0.5-v0.7. The v0.8
-// lifecycle was confirmed working on the author's real machine
-// (Windows 11 Pro 26H2, build 26300.9818, three monitors):
-// taskbars were picked up at creation by the hooks and the
-// reservation came back on its own after an Explorer restart.
-// The ARM64
-// prologue branch (restored post-v0.7, with the same fail-safe
-// bail) is kept so the file compiles for ARM64 in the catalog
-// compatibility check; ARM64 runtime behavior is untested on
-// real ARM64 hardware.
+// XAML tree is ready, so taskbars created after the mod loads
+// (Explorer restart, monitor reconnect / dock) are covered and
+// no worker thread can outlive the DLL at unload. The XamlRoot
+// acquisition path, the margin writing / restoring logic and
+// the `specific` monitor matching were confirmed working on
+// the author's real machine (Windows 11 Pro 26H2, build
+// 26300.9818, three monitors), including the v0.8.1 checks:
+// an empty specificMonitorDevice matches nothing (and logs
+// so), and the reservation is restored after an Explorer
+// restart. The ARM64
+// prologue branch (with the same fail-safe bail) is kept so
+// the file compiles for ARM64 in the catalog compatibility
+// check; ARM64 runtime behavior is untested on real ARM64
+// hardware.
 // ---------------------------------------------------------------------------
 
 // ==WindhawkModReadme==
@@ -115,10 +111,8 @@ its original `Margin`:
   accumulates (350 -> 700 -> 1050 cannot happen).
 - If the current margin already equals the target, the write is
   skipped.
-- After every write, the margin is read back and logged, so the
-  Windhawk log shows before / after values for verification.
 - When the mod is disabled / unloaded, the saved original margins
-  are restored (and the restore is also read back and logged).
+  are restored.
 
 Writes happen when the mod loads, when its settings change,
 and when a taskbar window is created, always on the taskbar's
@@ -172,7 +166,10 @@ left-side space; use this mod for the right side.
     the primary setting.
 - `specificMonitorDevice` (default `\\.\DISPLAY2`): the monitor
   device name to pin to when `monitorScope` is `specific`. The
-  comparison is case-insensitive. **How to find your monitor's
+  comparison is case-insensitive. If the field is cleared, the
+  `specific` scope matches no monitor (a line is logged about
+  it), so nothing is reserved until a name is set. **How to
+  find your monitor's
   name:** enable this mod (any scope) and look at the Windhawk
   log - every taskbar is logged with a line like
   `device=\\.\DISPLAY2`, one per taskbar/monitor. Copy the device
@@ -220,20 +217,6 @@ nothing is written to disk or to the registry.
   (e.g. Task Manager -> Windows Explorer -> Restart). All runtime
   XAML changes disappear with the process, so this always returns
   the taskbar to its stock layout.
-
-## Status
-
-v0.8 replaces the v0.7 worker-thread retry loop with
-taskbar-window creation hooks plus a retry timer on the
-taskbar thread, following the AI review of the initial
-catalog submission (PR #6983). Taskbars created after the mod
-loads are now covered as well. Margin writing, restore on
-unload, the `specific` monitor scope (device-name matching),
-and the v0.8 lifecycle - the reservation being applied at
-load and restored automatically after an Explorer restart
-through the creation hooks and the timer retry - were all
-confirmed working on the author's real machine (Windows 11
-Pro 26H2, build 26300.9818, three monitors).
 ---
 
 # （日本語）FluentFlyout用タスクバー予約領域
@@ -252,10 +235,7 @@ Windows 11 のタスクバーにあるアプリ一覧の右側に空き領域を
   たびに保存した元の値から目標値を計算し直すため、予約幅が累積する
   （350 → 700 → 1050 のようになる）ことはありません。
 - 現在の Margin が目標値と一致していれば、書き込みを省略します。
-- 書き込みのたびに Margin を読み戻してログに残すため、Windhawk の
-  ログで変更前／変更後の値を確認できます。
-- Mod を無効化／アンロードすると、保存した元の Margin に復元します
-  （復元結果も読み戻してログに残します）。
+- Mod を無効化／アンロードすると、保存した元の Margin に復元します。
 
 書き込みは、Mod の読み込み時、設定変更時、そしてタスクバーの
 ウィンドウが生成されたときに行い、常にタスクバーの UI スレッドで
@@ -300,7 +280,9 @@ Margin を、この Mod は右側用です。
     維持できます。
 - `specificMonitorDevice`（既定値 `\\.\DISPLAY2`）:
   `monitorScope` が `specific` のときに固定するモニターのデバイス名。
-  大文字小文字は区別しません。**自分のモニターのデバイス名の調べ方:**
+  大文字小文字は区別しません。欄を空にすると、`specific` はどの
+  モニターにも一致せず（その旨がログに残ります）、名前を設定する
+  まで予約は付きません。**自分のモニターのデバイス名の調べ方:**
   この Mod を有効化する（スコープはどれでも可）と、Windhawk のログに
   タスクバーごとに `device=\\.\DISPLAY2` のような行が出力されます。
   対象にしたいモニターの行に表示されたデバイス名を、この設定に
@@ -341,14 +323,6 @@ Margin を、この Mod は右側用です。
   再起動してください（タスクマネージャー → Windows エクスプローラー
   → 再起動）。実行時の XAML 変更はプロセスと一緒に消えるため、
   必ず標準のレイアウトに戻ります。
-
-## 状態
-
-Margin の書き込み、アンロード時の復元、`specific` スコープの
-照合に加え、v0.8 のウィンドウ生成フックとタスクバースレッド上の
-タイマー再試行（Explorer 再起動後の自動復旧を含む）は、作者の
-実機（Windows 11 Pro 26H2 / build 26300.9818、モニター3台）で
-動作を確認しています。
 */
 // ==/WindhawkModReadme==
 
@@ -444,24 +418,26 @@ void LoadSettings() {
         g_settings.reservedWidth = 2000;
     }
 
-    PCWSTR scope = Wh_GetStringSetting(L"monitorScope");
-    if (scope && wcscmp(scope, L"all") == 0) {
+    WindhawkUtils::StringSetting scope =
+        WindhawkUtils::StringSetting::make(L"monitorScope");
+    if (wcscmp(scope, L"all") == 0) {
         g_settings.monitorScope = MonitorScope::All;
-    } else if (scope && wcscmp(scope, L"specific") == 0) {
+    } else if (wcscmp(scope, L"specific") == 0) {
         g_settings.monitorScope = MonitorScope::Specific;
     } else {
         g_settings.monitorScope = MonitorScope::Primary;
     }
-    Wh_FreeStringSetting(scope);
 
-    PCWSTR device = Wh_GetStringSetting(L"specificMonitorDevice");
-    if (device && device[0]) {
-        wcsncpy_s(g_settings.specificMonitorDevice, device,
-                  _TRUNCATE);
-    } else {
-        wcscpy_s(g_settings.specificMonitorDevice, L"\\\\.\\DISPLAY2");
+    WindhawkUtils::StringSetting device =
+        WindhawkUtils::StringSetting::make(L"specificMonitorDevice");
+    wcsncpy_s(g_settings.specificMonitorDevice, device, _TRUNCATE);
+    if (g_settings.monitorScope == MonitorScope::Specific &&
+        g_settings.specificMonitorDevice[0] == L'\0') {
+        // An empty name is not a typo for the default device:
+        // it simply matches no monitor, so nothing is reserved.
+        Wh_Log(L"specificMonitorDevice is empty: the 'specific' "
+               L"scope matches no monitor, nothing is reserved");
     }
-    Wh_FreeStringSetting(device);
 }
 
 // ---------------------------------------------------------------------------
@@ -1197,18 +1173,17 @@ ApplyStats ApplyFromTaskbarThread() {
 }
 
 // ---------------------------------------------------------------------------
-// Window-creation hooks and timer retry (new in v0.8, replacing
-// the v0.7 worker-thread retry loop).
+// Window-creation hooks and timer retry.
 //
-// Why: the AI review of PR #6983 pointed out that (1) the v0.7
-// retry thread was detached and never joined, so it could still
-// be running mod code when Windhawk unloaded the DLL after
-// Wh_ModUninit returned - a crash risk, plus races between the
-// retry passes, the restore, and LoadSettings; and (2) taskbars
-// created after the first pass (monitor reconnect, docking,
-// sleep resume) never got the reservation.
+// Why not a worker thread that retries until the taskbar is
+// ready: a detached thread can still be running mod code when
+// Windhawk unloads the DLL after Wh_ModUninit returns - a
+// crash risk, plus races between the retry passes, the
+// restore, and LoadSettings. And a load-time-only pass misses
+// taskbars created later (monitor reconnect, docking, sleep
+// resume).
 //
-// The fix follows Taskbar Margin (taskbar-margin v1.0, GPL
+// The design follows Taskbar Margin (taskbar-margin v1.0, GPL
 // v3.0, see the license note at the top of this file): hook
 // taskbar window creation, and retry on a DispatcherQueueTimer
 // that lives on the taskbar thread itself. No worker thread
@@ -1218,9 +1193,7 @@ ApplyStats ApplyFromTaskbarThread() {
 // The timer is thread_local (one per taskbar thread, as in
 // taskbar-margin), is only ever touched on that thread, and is
 // stopped on that thread from Wh_ModBeforeUninit via
-// RemoveSettings - the teardown shape the "Global objects and
-// process shutdown" wiki page (section 4) prescribes for
-// UI-thread objects.
+// RemoveSettings, so no timer outlives the unload.
 // ---------------------------------------------------------------------------
 
 std::atomic<bool> g_unloading{false};
@@ -1275,6 +1248,11 @@ void RetryTimerTick(
 
 void StartRetryTimer() {
     if (g_retryTimer) {
+        // Already retrying on this thread. A new trigger (for
+        // example, another taskbar was just created) gets the
+        // full retry budget instead of whatever is left of the
+        // current window.
+        g_retryAttempts = 0;
         return;
     }
 
@@ -1304,6 +1282,13 @@ void StartRetryTimer() {
 // and if the taskbar UI is not fully up yet, the retry timer
 // keeps trying from this thread.
 void ApplySettingsOnTaskbarThread() {
+    // The creation hooks stay active until Wh_ModBeforeUninit
+    // returns; a taskbar created in that window must not
+    // re-apply the margin after the unload restore.
+    if (g_unloading) {
+        return;
+    }
+
     ApplyStats stats = ApplyFromTaskbarThread();
     if (!IsReady(stats) && !g_unloading) {
         Wh_Log(L"apply: taskbar UI not ready yet (taskbars=%d, "
@@ -1625,7 +1610,7 @@ bool HookTaskbarDllSymbols() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    Wh_Log(L"Taskbar Reserve Space for FluentFlyout v0.8 "
+    Wh_Log(L"Taskbar Reserve Space for FluentFlyout v0.8.1 "
            L"(window-creation hooks + timer retry on the taskbar "
            L"thread)");
     Wh_Log(L"reservedWidth=%d, monitorScope=%s, "
