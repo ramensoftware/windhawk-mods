@@ -2,11 +2,12 @@
 // @id              hyprland-windows
 // @name            Hyprland Windows
 // @description     Hyprland-style window handling: move, resize, maximize and close windows with Win + mouse from anywhere on them, hide title bars, color window borders, and go round the virtual desktops with Win+Tab
-// @version         1.1.2
+// @version         1.2.1
 // @author          hiword9
 // @github          https://github.com/HiWord9
+// @homepage        https://github.com/HiWord9/hyprland-windows
 // @include         *
-// @compilerOptions -lcomctl32 -ldwmapi -lole32 -luuid
+// @compilerOptions -lcomctl32 -ldwmapi -lgdi32 -lole32 -luuid
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -16,12 +17,16 @@
 
 Window handling the way Hyprland does it, on Windows.
 
-![Hyprland Windows in action](https://raw.githubusercontent.com/HiWord9/hyprland-windows/extra/demo/1.1.0.gif)
+![Hyprland Windows in action](https://raw.githubusercontent.com/HiWord9/hyprland-windows/extra/demo/1.2.0.gif)
 
 * **Win + left mouse button** - drag a window from anywhere on it, not just by
   its title bar.
 * **Win + right mouse button** - resize a window from anywhere on it, from
-  whichever corner is closest to the cursor.
+  whichever corner is closest to the cursor. With a setting turned on,
+  **Win + Alt + left mouse button** does the same, which a touchpad can hold
+  through a drag.
+* **Win + mouse wheel** - make a window larger or smaller, around its center or
+  the cursor; two fingers on a touchpad do it too.
 * **Win + double click** - maximize a window, or restore it. The title bar is
   gone, so the double click that used to be on it now works anywhere on the
   window; the settings offer other things for it to do.
@@ -31,7 +36,9 @@ Window handling the way Hyprland does it, on Windows.
 * **Ctrl+Alt+H** - hide the focused window's title bar; press it again to bring
   the title bar back.
 * **Win+Tab** - go to the next virtual desktop that has windows on it, at once;
-  Win+Shift+Tab goes back. Task View moves to Win+Ctrl+Tab.
+  Win+Shift+Tab goes back. With no other one that has windows, it goes to an
+  empty desktop - a new one, if there is no other desktop at all, which stays
+  like one made with Win+Ctrl+D. Task View moves to Win+Ctrl+Tab.
 
 Moving and resizing feel like the real thing: windows still snap to the screen
 edges, dragging one to the top still offers the Windows 11 snap layouts, and
@@ -60,15 +67,15 @@ the title bar.
   Electron apps, VS Code, Office) are not affected by the hotkey.
 * A window with a classic menu bar (File, Edit, ...) can't keep that menu where it
   is once the title bar is gone, so by default it is hidden along with it and
-  stays reachable from the keyboard with `Alt` or `F10`. The settings offer the
-  other choices.
-* `Win` + mouse doesn't work over content drawn with WinUI or XAML - Paint,
-  Windows Terminal, the tabs and address bar of File Explorer: Windows hands
-  those clicks to the app past the point where the mod sees them.
+  stays reachable from the keyboard: letting go of `Alt`, or `F10`, brings it
+  up over the window until you are done with it. The settings offer the other
+  choices.
 * Win+Tab switches desktops through a part of Windows that Microsoft doesn't
   publish. It is known for Windows 10 and for Windows 11 from 22H2 on; on a
-  build the mod doesn't recognize, and with only the one desktop, Win+Tab stays
-  Task View.
+  build the mod doesn't recognize, Win+Tab stays Task View.
+* File Explorer scrolls with two fingers on a touchpad its own way, which the
+  mod has no say in: there, Win + two fingers scroll as they always do, and
+  the mouse wheel is what scales the window.
 * The hotkey, and a window shortcut that is a key, are taken everywhere: a
   program that uses the same keys for something of its own doesn't get them
   while the mod is on. Pick other keys in the settings if one does.
@@ -81,6 +88,11 @@ the title bar.
   snaps windows while they are dragged. Running either of them alongside this
   mod, two mods act on the same drag: use one of them at a time - or, with
   Slick Window Arrangement, turn this mod's magnetic edges off.
+
+## Source and feedback
+
+The source is on [GitHub](https://github.com/HiWord9/hyprland-windows) -
+feedback is welcome.
 */
 // ==/WindhawkModReadme==
 
@@ -122,6 +134,35 @@ the title bar.
   - fadeOut: 60
     $name: Fade-out time
     $description: How long it takes to come back once the drag ends, in milliseconds
+  - click: auto
+    $name: Modifier + click without moving
+    $options:
+    - auto: Goes to the app with Alt, grabs the window with Win
+    - app: Goes to the app
+    - window: Grabs the window
+  - wheel: true
+    $name: Modifier + mouse wheel
+    $description: >-
+      Turning the wheel over a window with the modifier key held makes it
+      larger or smaller
+  - wheelStep: 10
+    $name: Mouse wheel step
+    $description: How much larger or smaller each notch makes the window, in percent
+  - wheelAround: center
+    $name: What the mouse wheel scales around
+    $options:
+    - center: >-
+        The window's center - and while it is dragged, the point the cursor
+        holds it by
+    - cursor: The cursor
+    - centerAlways: The window's center, even while it is dragged
+  - leftResize: false
+    $name: Resize with the left button too
+    $description: >-
+      With the other one of Win and Alt held as well, dragging with the left
+      button resizes the window instead of moving it - for a touchpad, where
+      the right button can't be held down through a drag. Not while Alt is
+      also the key for keeping the shape or for the magnet.
   $name: Moving and resizing
 - snap:
   - mode: both
@@ -255,8 +296,13 @@ the title bar.
       Win+Tab goes to the next virtual desktop that has windows on it, at once,
       and Win+Shift+Tab to the previous one - round and round, the way Alt+Tab
       goes round windows. Task View, which Win+Tab opens in Windows, is on
-      Win+Ctrl+Tab then - and on Win+Tab still while no other desktop has
-      windows. Off, Win+Tab is left alone.
+      Win+Ctrl+Tab then. Off, Win+Tab is left alone.
+  - toEmpty: true
+    $name: With nowhere to go, an empty desktop
+    $description: >-
+      While no other desktop has windows, Win+Tab goes to an empty one - a new
+      one, if there is no other desktop at all, which stays like one made with
+      Win+Ctrl+D. Off, Win+Tab opens Task View then.
   $name: Virtual desktops
 */
 // ==/WindhawkModSettings==
@@ -287,12 +333,14 @@ the title bar.
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <cwctype>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -348,6 +396,12 @@ enum class MenuBarMode { Hide, KeepMenu, Skip };
 enum class WindowAction { None, ToggleMaximize, ToggleTitleBar, Close };
 // Which drags fade the window they are dragging.
 enum class DragTranslucency { Both, MoveOnly, Off };
+// What the mouse wheel grows and shrinks a window around: its center - or
+// the point the cursor holds it by while it is moved - the cursor, or its
+// center even while it is moved.
+enum class WheelAnchor { CenterOrHold, Cursor, Center };
+// Where a click with the modifier held goes when the mouse doesn't move.
+enum class ModifierClick { Auto, App, Window };
 // What a dragged window's edges are magnetic to.
 enum class SnapMode { Both, Monitor, Windows, Off };
 
@@ -364,6 +418,7 @@ constexpr COLORREF kColorAccent = 0xFFFFFFFC;
 constexpr int kDefaultDragOpacity = 85;
 constexpr int kDefaultDragFadeIn = 120;
 constexpr int kDefaultDragFadeOut = 60;
+constexpr int kDefaultWheelStep = 10;  // percent per notch
 
 // How long the border color takes to cross from one setting to the other when
 // focus moves.
@@ -392,6 +447,9 @@ struct Settings {
     std::atomic<Hotkey> windowShortcut{};
     std::atomic<WindowAction> windowShortcutAction{WindowAction::Close};
     std::atomic<DragModifier> dragModifier{DragModifier::Win};
+    std::atomic<ModifierClick> modifierClick{ModifierClick::Auto};
+    // The other one of Win and Alt held as well: the left button resizes.
+    std::atomic<bool> leftResize{false};
     std::atomic<bool> topEdgeResize{false};
     std::atomic<WindowAction> doubleClickAction{WindowAction::ToggleMaximize};
     std::atomic<int> doubleClickTime{0};  // 0: the Windows double-click speed
@@ -399,6 +457,9 @@ struct Settings {
     std::atomic<int> dragOpacity{kDefaultDragOpacity};
     std::atomic<int> dragFadeIn{kDefaultDragFadeIn};
     std::atomic<int> dragFadeOut{kDefaultDragFadeOut};
+    std::atomic<bool> wheelScale{true};
+    std::atomic<int> wheelStep{kDefaultWheelStep};
+    std::atomic<WheelAnchor> wheelAnchor{WheelAnchor::CenterOrHold};
     std::atomic<MenuBarMode> menuBarMode{MenuBarMode::Hide};
     std::atomic<bool> hideByDefault{false};
     std::atomic<COLORREF> borderActive{kColorUntouched};
@@ -408,6 +469,7 @@ struct Settings {
     std::atomic<bool> borderFramelessOnly{false};
     std::atomic<int> borderFadeDuration{kDefaultBorderFade};
     std::atomic<bool> desktopWinTab{true};
+    std::atomic<bool> desktopToEmpty{true};  // with nowhere to go
     std::atomic<int> corners{DWMWCP_DEFAULT};
     std::atomic<SnapMode> snap{SnapMode::Both};
     std::atomic<int> snapDistance{kDefaultSnapDistance};
@@ -432,6 +494,8 @@ COLORREF ParseBorderColor(PCWSTR raw);
 MenuBarMode ParseMenuBarMode(PCWSTR raw);
 int ParseCorners(PCWSTR raw);
 DragTranslucency ParseDragTranslucency(PCWSTR raw);
+WheelAnchor ParseWheelAnchor(PCWSTR raw);
+ModifierClick ParseModifierClick(PCWSTR raw);
 SnapMode ParseSnapMode(PCWSTR raw);
 bool ParseSnapModifierHold(PCWSTR raw);
 // A single modifier key, as a virtual key; 0 when the setting turns it off.
@@ -534,10 +598,14 @@ constexpr WORD kMaskVk = 0xE8;  // unassigned VK, only used as "a key was hit"
 // Marks the keystrokes the mod injects to keep the Start menu shut, so its
 // own low-level hook lets them through.
 constexpr ULONG_PTR kInjectedMarker = 0x48797072;  // 'Hypr'
+// And a press the shell's mouse hook took, pressed again by the window it was
+// for - see mouse.cpp. An ordinary press for everything but that hook.
+constexpr ULONG_PTR kReplayMarker = 0x48797073;  // 'Hyps'
 
-void ArmWinMask(bool usingWin);
+void ArmWinMask(bool usingWin, bool usingAlt = false);
 void MaskModifierTap();
 bool WinKeyDown();
+bool AltKeyDown();
 bool IsShellProcess();
 bool IsElevatedProcess();
 void StartKeyboardServer();
@@ -568,6 +636,22 @@ enum DragKind : WPARAM {
     // Sent, not posted, and answered by the drag subclass rather than by the
     // message hook: the teardown taking that subclass off - see snap.cpp.
     kDragUnsnap = 4,
+    // From the shell's mouse hook: a press it took over content that gets its
+    // input past the message queue, to be pressed again where the window sees
+    // it, with the MOUSEEVENTF_ flag of the left or right button going down
+    // in lParam - see mouse.cpp.
+    kDragUncover = 5,
+    // And once that press has gone through: the window covers up again.
+    kDragCover = 6,
+    // From the shell's mouse hook as well: the modifier held and the wheel
+    // turned over the window, by the wheel delta in lParam - see actions.cpp.
+    kDragScale = 7,
+    // Sent by the teardown: a subclass waiting for a touchpad's question,
+    // taken off - see mouse.cpp.
+    kDragUntouch = 8,
+    // A resize, with the left button held rather than the right - see
+    // drag.cpp.
+    kDragResizeLeft = 9,
 };
 
 // How long the thread that ends a resize waits for its loop to start. The
@@ -576,6 +660,17 @@ enum DragKind : WPARAM {
 constexpr int kMoveSizeStartWaitMs = 500;
 
 bool IsDragModifierDown();
+bool IsLeftResizeDown();
+LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam);
+bool HasCompositionContentWindow();
+void EndWheelTurn();
+bool TouchpadGoesToWheel(WPARAM pointerHitTest);
+void KeepTouchpadFromApp(HWND hwnd, WPARAM pointerHitTest);
+std::vector<HWND> SnapshotTouchpadWindows();
+void UncoverAndPress(HWND root, const MSG* msg);
+void RestoreUncoveredAfterReplay();
+void RestoreUncovered(bool allThreads = false);
+void RestoreAllUncovered();
 bool IsThreadInMoveSizeLoop(DWORD threadId);
 bool IsInMoveSizeLoop();
 int PhysicalButtonVk(bool right);
@@ -590,9 +685,15 @@ void RequestDrag(HWND root, WPARAM kind, POINT pt);
 // Per-thread: a button-up to swallow because we swallowed its button-down.
 extern thread_local bool g_swallowButtonUp[2];  // [0] = left, [1] = right
 bool HandleDragRequest(MSG* msg);
+bool HandleScaleTimer(const MSG* msg);
 // After a drag: the left button the loop needed held, let go again.
 void ReleaseForcedLeftButton();
+// Alt, kept from a move loop that would take it for a snap modifier.
+void TrackAltInMove(const MSG* msg);
+void RestoreHiddenAlt();
 bool HandleModifierButtonDown(const MSG* msg, bool right);
+// A held press that turned out to be a click, handed to the application.
+bool ReplayHeldPress(MSG* msg, bool right);
 bool HandleButtonUp(bool right);
 bool HandleLeftButtonUp();
 
@@ -612,16 +713,24 @@ int DoubleClickTimeMs();
 // Takes the tick instead of reading the clock, so the rules are testable.
 bool IsDoubleClickAt(HWND root, POINT pt, DWORD tick);
 bool TakeWindowAction(MSG* msg, WindowAction action);
+bool CanTakeAction(HWND root, WindowAction action);
+bool CanTakeActionUnderCursor(HWND root, WindowAction action);
+bool CanScale(HWND root);
+void ScaleWindow(HWND root, int wheelDelta);
 void RequestWindowAction(HWND root, WindowAction action);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Magnetic edges, and the aspect ratio while resizing
 
 RECT VisibleFrameOf(HWND hwnd);
+RECT FrameInsetOf(HWND hwnd);
+RECT WindowToFrame(const RECT& rc, const RECT& inset);
+RECT FrameToWindow(const RECT& rc, const RECT& inset);
 bool SnapAllowedWith(bool modifierDown);
 bool SnapAllowed();
 void BeginDragSnap(HWND root, WPARAM kind, POINT pt);
 void EndDragSnap(HWND hwnd);
+bool ScaleDraggedWindow(HWND hwnd, double factor);
 std::vector<HWND> SnapshotSnappedWindows();
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -860,6 +969,29 @@ DragTranslucency ParseDragTranslucency(PCWSTR raw) {
     return DragTranslucency::Both;
 }
 
+// Anything unrecognized is the default, the center or the hold.
+WheelAnchor ParseWheelAnchor(PCWSTR raw) {
+    std::wstring s = NormalizeSettingString(raw);
+    if (s == L"CURSOR") {
+        return WheelAnchor::Cursor;
+    }
+    if (s == L"CENTERALWAYS") {
+        return WheelAnchor::Center;
+    }
+    return WheelAnchor::CenterOrHold;
+}
+
+ModifierClick ParseModifierClick(PCWSTR raw) {
+    std::wstring s = NormalizeSettingString(raw);
+    if (s == L"APP") {
+        return ModifierClick::App;
+    }
+    if (s == L"WINDOW") {
+        return ModifierClick::Window;
+    }
+    return ModifierClick::Auto;
+}
+
 SnapMode ParseSnapMode(PCWSTR raw) {
     std::wstring s = NormalizeSettingString(raw);
     if (s == L"OFF" || s == L"NONE") {
@@ -971,6 +1103,9 @@ void LoadSettings() {
     g_settings.dragModifier = NormalizeSettingString(modifier) == L"ALT"
                                   ? DragModifier::Alt
                                   : DragModifier::Win;
+    WindhawkUtils::StringSetting click(Wh_GetStringSetting(L"drag.click"));
+    g_settings.modifierClick = ParseModifierClick(click);
+    g_settings.leftResize = Wh_GetIntSetting(L"drag.leftResize") != 0;
 
     g_settings.topEdgeResize = Wh_GetIntSetting(L"titleBar.topEdgeResize") != 0;
 
@@ -992,6 +1127,12 @@ void LoadSettings() {
                                            kDefaultDragFadeIn, 1, 2000);
     g_settings.dragFadeOut = ClampedSetting(Wh_GetIntSetting(L"drag.fadeOut"),
                                             kDefaultDragFadeOut, 1, 2000);
+    g_settings.wheelScale = Wh_GetIntSetting(L"drag.wheel") != 0;
+    g_settings.wheelStep = ClampedSetting(Wh_GetIntSetting(L"drag.wheelStep"),
+                                          kDefaultWheelStep, 1, 100);
+    WindhawkUtils::StringSetting wheelAnchor(
+        Wh_GetStringSetting(L"drag.wheelAround"));
+    g_settings.wheelAnchor = ParseWheelAnchor(wheelAnchor);
 
     WindhawkUtils::StringSetting menuBar(Wh_GetStringSetting(L"titleBar.menuBar"));
     g_settings.menuBarMode = ParseMenuBarMode(menuBar);
@@ -1014,6 +1155,7 @@ void LoadSettings() {
         std::clamp(Wh_GetIntSetting(L"border.fadeDuration"), 0, 2000);
 
     g_settings.desktopWinTab = Wh_GetIntSetting(L"desktops.winTab") != 0;
+    g_settings.desktopToEmpty = Wh_GetIntSetting(L"desktops.toEmpty") != 0;
 
     WindhawkUtils::StringSetting corners(Wh_GetStringSetting(L"titleBar.corners"));
     g_settings.corners = ParseCorners(corners);
@@ -1040,10 +1182,11 @@ void LoadSettings() {
     Hotkey key = g_settings.hotkey;
     Hotkey shortcutKey = g_settings.windowShortcut;
     Wh_Log(L"Settings: hotkey vk=0x%02X ctrl=%d alt=%d shift=%d win=%d, "
-           L"dragModifier=%s, topEdgeResize=%d, menuBar=%d, hideByDefault=%d, "
+           L"dragModifier=%s, modifierClick=%d, topEdgeResize=%d, menuBar=%d, hideByDefault=%d, "
            L"dragTranslucency=%d, dragOpacity=%d",
            key.vk, (int)key.ctrl, (int)key.alt, (int)key.shift, (int)key.win,
            g_settings.dragModifier == DragModifier::Alt ? L"alt" : L"win",
+           (int)g_settings.modifierClick.load(),
            (int)g_settings.topEdgeResize, (int)g_settings.menuBarMode.load(),
            (int)g_settings.hideByDefault,
            (int)g_settings.dragTranslucency.load(),
@@ -1598,6 +1741,8 @@ struct FramelessState {
     bool autoHidden = false;
     // Style bits removed from the window (KeepMenu mode), restored later.
     DWORD removedStyle = 0;
+    // Hide mode: the menu bar is drawn for now, while the keyboard is in it.
+    bool menuBarShown = false;
 };
 std::mutex g_windowsMutex;
 std::unordered_map<HWND, FramelessState> g_windows;
@@ -1650,6 +1795,94 @@ void RefreshFrame(HWND hwnd) {
 
 void HandleFramelessRequest(HWND hwnd, WPARAM action);
 
+// A classic menu bar stays where the system lays it out, below where the
+// caption was, which is now the client area. The system draws it whenever it
+// sees fit - the frame painted on a resize or a focus change, Alt showing its
+// underlines - over whatever the window has there. So it is drawn only while
+// the keyboard is in it (Alt let go of, F10, Alt and a letter), and the window
+// paints over it again once it is done. Of the frame, nothing else is lost:
+// DWM draws what is left of it.
+
+// Undocumented: what a themed window is sent to draw its menu bar - before
+// the frame is painted, with the device context it is painted into; the bar
+// itself; each item on it. Answering TRUE to the latter two says it was drawn.
+constexpr UINT WM_UAHDRAWMENU = 0x0091;
+constexpr UINT WM_UAHDRAWMENUITEM = 0x0092;
+constexpr UINT WM_UAHINITMENU = 0x0093;
+struct UAHMENU {
+    HMENU menu;
+    HDC dc;
+    DWORD flags;
+};
+
+bool IsMenuBarShown(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_windowsMutex);
+    auto it = g_windows.find(hwnd);
+    return it != g_windows.end() && it->second.menuBarShown;
+}
+
+// Where the bar is drawn, in screen pixels; with a little room around it for
+// the lines drawn along its edges, for keeping drawing off it.
+bool MenuBarRect(HWND hwnd, RECT* rect, bool withEdges) {
+    MENUBARINFO info{sizeof(info)};
+    if (!GetMenuBarInfo(hwnd, OBJID_MENU, 0, &info) ||
+        IsRectEmpty(&info.rcBar)) {
+        return false;
+    }
+    *rect = info.rcBar;
+    if (withEdges) {
+        InflateRect(rect, 0,
+                    MulDiv(3, GetDpiForWindow(hwnd), USER_DEFAULT_SCREEN_DPI));
+    }
+    return true;
+}
+
+// The bar is cut out of the device context the frame is about to be painted
+// into. That is how the background of a bar the app draws itself is kept out
+// as well: the system fills that in, unasked.
+void KeepFramePaintingOffMenuBar(HWND hwnd, HDC dc) {
+    RECT strip, window;
+    if (!dc || WindowFromDC(dc) != hwnd || !MenuBarRect(hwnd, &strip, true) ||
+        !GetWindowRect(hwnd, &window)) {
+        return;  // one that is only measured with, say
+    }
+    OffsetRect(&strip, -window.left, -window.top);
+    ExcludeClipRect(dc, strip.left, strip.top, strip.right, strip.bottom);
+}
+
+void ShowHiddenMenuBar(HWND hwnd, bool show) {
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        auto it = g_windows.find(hwnd);
+        if (it == g_windows.end() || it->second.menuBarShown == show) {
+            return;
+        }
+        it->second.menuBarShown = show;
+    }
+    RECT bar;
+    if (!MenuBarRect(hwnd, &bar, !show)) {
+        return;
+    }
+    if (show) {
+        // Painting the frame would not reach it: what is painted of the frame
+        // is what is outside the client area. So the frame is printed into
+        // the window instead, onto just the bar.
+        RECT window;
+        GetWindowRect(hwnd, &window);
+        OffsetRect(&bar, -window.left, -window.top);
+        if (HDC dc = GetWindowDC(hwnd)) {
+            IntersectClipRect(dc, bar.left, bar.top, bar.right, bar.bottom);
+            DefWindowProcW(hwnd, WM_PRINT, reinterpret_cast<WPARAM>(dc),
+                           PRF_NONCLIENT);
+            ReleaseDC(hwnd, dc);
+        }
+        return;
+    }
+    MapWindowPoints(nullptr, hwnd, reinterpret_cast<POINT*>(&bar), 2);
+    RedrawWindow(hwnd, &bar, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+}
+
 LRESULT CALLBACK FramelessSubclassProc(HWND hwnd,
                                        UINT uMsg,
                                        WPARAM wParam,
@@ -1666,6 +1899,59 @@ LRESULT CALLBACK FramelessSubclassProc(HWND hwnd,
                 break;  // WS_CAPTION was removed instead; default layout
             }
             return OnNcCalcSize(hwnd, wParam, lParam);
+
+        case WM_UAHINITMENU:
+            if (!keepMenu && !IsMenuBarShown(hwnd) && lParam) {
+                KeepFramePaintingOffMenuBar(
+                    hwnd, reinterpret_cast<UAHMENU*>(lParam)->dc);
+            }
+            break;
+
+        case WM_NCPAINT:
+        case WM_NCACTIVATE:
+            // Past the app: what an app paints of its frame itself is what it
+            // adds to its bar (a dark one's edges, for one), and nothing else
+            // of the frame is left to paint. DefWindowProc still has to: DWM
+            // only draws the frame of a window it sees painted the usual way.
+            if (!keepMenu && GetMenu(hwnd) && !IsMenuBarShown(hwnd)) {
+                return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+            }
+            break;
+
+        case WM_UAHDRAWMENU:
+        case WM_UAHDRAWMENUITEM:
+            if (!keepMenu && !IsMenuBarShown(hwnd)) {
+                return TRUE;
+            }
+            break;
+
+        case WM_DRAWITEM:
+            // Items of an owner-drawn bar, which the app draws itself.
+            if (!keepMenu && !IsMenuBarShown(hwnd)) {
+                auto* item = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+                if (item->CtlType == ODT_MENU &&
+                    reinterpret_cast<HMENU>(item->hwndItem) == GetMenu(hwnd)) {
+                    return TRUE;
+                }
+            }
+            break;
+
+        case WM_MENUSELECT:
+            // One of the bar's own items, not the window menu Alt+Space opens
+            // (which leaves the keyboard on the bar's window menu icon on its
+            // way out) or a context menu.
+            if (!keepMenu && lParam &&
+                reinterpret_cast<HMENU>(lParam) == GetMenu(hwnd) &&
+                HIWORD(wParam) != 0xFFFF && !(HIWORD(wParam) & MF_SYSMENU)) {
+                ShowHiddenMenuBar(hwnd, true);
+            }
+            break;
+
+        case WM_EXITMENULOOP:
+            if (!keepMenu) {
+                ShowHiddenMenuBar(hwnd, false);
+            }
+            break;
 
         case WM_NCHITTEST: {
             LRESULT hit = DefSubclassProc(hwnd, uMsg, wParam, lParam);
@@ -1861,7 +2147,7 @@ bool HandleHotkey(const MSG* msg) {
     WindowAction action = g_settings.windowShortcutAction;
     if (!g_uninitializing && action != WindowAction::None &&
         !IsMouseButtonVk(shortcut.vk) && MatchesShortcut(shortcut, vk) &&
-        IsFrameWindow(target)) {
+        CanTakeAction(target, action)) {
         Wh_Log(L"Shortcut key on %p", target);
         RequestWindowAction(target, action);
         return true;
@@ -1920,7 +2206,7 @@ bool HandleBindingKey(UINT vk, bool down) {
     if (toggle) {
         Wh_Log(L"Hotkey: toggling %p (keyboard hook)", target);
         RequestFrameless(target, kActionToggle);
-    } else if (IsFrameWindow(target)) {
+    } else if (CanTakeAction(target, action)) {
         Wh_Log(L"Shortcut key on %p (keyboard hook)", target);
         RequestWindowAction(target, action);
     }
@@ -1966,6 +2252,9 @@ bool HandleBindingKey(UINT vk, bool down) {
 // the thread watches the Win key itself: a mask whose press is over comes
 // down, whether or not the release ever reached the hook.
 //
+// Wherever its keyboard hook stays, the thread runs a low-level mouse hook as
+// well, for the presses no message hook gets to see (mouse.cpp).
+//
 // The same hook also sees the key bindings before Windows does, so that one
 // can take over a shortcut of Windows' own, such as Win+W (hotkey.cpp). For
 // that it stays in place for good in the shell. Keys typed into an elevated
@@ -1978,6 +2267,8 @@ std::atomic<bool> g_winMaskArmed{false};
 
 constexpr WCHAR kKeyboardServerClass[] = L"HyprlandWindowsKeyboard_" WH_MOD_ID;
 constexpr UINT kMaskArm = WM_APP + 1;  // posted to the server: arm for this press
+// Posted to the server: a mask in an elevated process has had the release.
+constexpr UINT kMaskStandDown = WM_APP + 2;
 constexpr UINT kMaskPollMs = 30;
 constexpr UINT_PTR kMaskTimerId = 1;
 constexpr DWORD kServerStartWaitMs = 2000;
@@ -1989,6 +2280,7 @@ DWORD g_serverThreadId;
 
 // Only ever touched on the server thread.
 HHOOK g_keyboardHook;
+HHOOK g_mouseHook;
 // The hook stays even with no mask armed: in the shell, and in an elevated
 // process while one of its windows is in front.
 bool g_keepKeyboardHook;
@@ -1997,6 +2289,101 @@ HWINEVENTHOOK g_foregroundHook;
 bool WinKeyDown() {
     return ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) !=
            0;
+}
+
+// Which keys the armed mask is for. Alt has a lone tap of its own to keep
+// from happening, when it is the modifier: the window's menu, or the access
+// keys of a XAML app. Only ever touched on the server thread.
+bool g_maskWin, g_maskAlt;
+constexpr WPARAM kMaskForWin = 1, kMaskForAlt = 2;
+
+HWND FindKeyboardServer();
+
+// A key pressed while an elevated window is in front is never seen down by
+// the processes below it, not even once that window is gone: an elevated
+// process arming the shell's mask says the keys are down (kMaskOnWord), and
+// the mask takes its word for it - until a release has been masked, here or
+// there, or for no longer than a press is ever held.
+constexpr WPARAM kMaskOnWord = 4;
+constexpr DWORD kMaskOnWordMaxMs = 10000;
+bool g_maskOnWord;
+DWORD g_maskOnWordSince;
+
+bool AltKeyDown() {
+    return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+}
+
+// A modifier held through a drag repeats, and every repeat in the window's
+// queue keeps the mouse moves on either side of it from merging into one: a
+// window slow to resize then takes a step for every move the mouse made, and
+// catches up long after it has stopped. Nothing does anything with a repeated
+// modifier, so the repeats of the ones a drag is done with go while a move or
+// size loop runs in the window in front. A repeat is a press of a key that is
+// down already - this hook is called before Windows has taken the press in.
+bool IsDragKey(DWORD vk) {
+    UINT keepAspect = g_settings.keepAspectVk;
+    UINT snap = g_settings.snapModifierVk;
+    switch (vk) {
+        case VK_LWIN:
+        case VK_RWIN:
+            return g_settings.dragModifier == DragModifier::Win ||
+                   g_settings.leftResize;
+        case VK_LMENU:
+        case VK_RMENU:
+            return g_settings.dragModifier == DragModifier::Alt ||
+                   g_settings.leftResize || keepAspect == VK_MENU ||
+                   snap == VK_MENU;
+        case VK_LCONTROL:
+        case VK_RCONTROL:
+            return keepAspect == VK_CONTROL || snap == VK_CONTROL;
+        case VK_LSHIFT:
+        case VK_RSHIFT:
+            return keepAspect == VK_SHIFT || snap == VK_SHIFT;
+    }
+    return false;
+}
+
+// The window of the move or size loop running in the window in front, if one
+// is.
+HWND ForegroundMoveSizeWindow() {
+    GUITHREADINFO gui{sizeof(gui)};
+    HWND front = GetForegroundWindow();
+    if (!front ||
+        !GetGUIThreadInfo(GetWindowThreadProcessId(front, nullptr), &gui) ||
+        !(gui.flags & GUI_INMOVESIZE)) {
+        return nullptr;
+    }
+    return gui.hwndMoveSize;
+}
+
+bool IsModifierRepeatDuringDrag(DWORD vk) {
+    return IsDragKey(vk) && (GetAsyncKeyState(vk) & 0x8000) &&
+           ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) &
+            0x8000) &&
+           ForegroundMoveSizeWindow();
+}
+
+// Esc with Alt held is Alt+Esc to Windows - the window sent to the back and
+// the next one brought forward - well before a drag gets to see it as the Esc
+// that cancels it. A drag with Alt as the modifier holds Alt, and so does a
+// resize with Win + Alt. So while a move or size loop runs in the window in
+// front with Alt held, the Esc goes to the loop itself, as a plain one, and
+// its release goes nowhere. Only ever touched on the server thread.
+bool g_escForLoop;
+
+bool HandleEscInAltDrag(bool keyUp) {
+    if (keyUp) {
+        return std::exchange(g_escForLoop, false);
+    }
+    if (!AltKeyDown()) {
+        return false;
+    }
+    HWND loop = ForegroundMoveSizeWindow();
+    if (!loop || !PostMessageW(loop, WM_KEYDOWN, VK_ESCAPE, 1)) {
+        return false;
+    }
+    g_escForLoop = true;
+    return true;
 }
 
 LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
@@ -2008,22 +2395,36 @@ LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     auto* info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
     bool keyUp = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
     bool ours = info->dwExtraInfo == kInjectedMarker;
+    if (!ours && !keyUp && IsModifierRepeatDuringDrag(info->vkCode)) {
+        return 1;
+    }
+    if (!ours && info->vkCode == VK_ESCAPE && HandleEscInAltDrag(keyUp)) {
+        return 1;
+    }
     if (!ours && !keyUp) {
         BringDesktopForwardForKey(info->vkCode);
     }
     if (!ours && HandleBindingKey(info->vkCode, !keyUp)) {
         return 1;
     }
-    if (g_winMaskArmed) {
-        bool isWin = info->vkCode == VK_LWIN || info->vkCode == VK_RWIN;
-        if (keyUp && isWin && ours) {
-            // Another mask - armed in some other process for the same press -
-            // got to this release first. Standing down with it, rather than
-            // staying armed, keeps this one from eating the next Win tap.
-            g_winMaskArmed = false;
-        } else if (keyUp && isWin && !ours) {
-            g_winMaskArmed = false;
-
+    bool isWin = info->vkCode == VK_LWIN || info->vkCode == VK_RWIN;
+    bool isModifier = g_settings.dragModifier == DragModifier::Win
+                          ? isWin
+                          : info->vkCode == VK_LMENU || info->vkCode == VK_RMENU;
+    if (keyUp && isModifier) {
+        EndWheelTurn();  // the next turn is for the window it starts over
+    }
+    bool isAlt = info->vkCode == VK_LMENU || info->vkCode == VK_RMENU ||
+                 info->vkCode == VK_MENU;
+    if (g_winMaskArmed && keyUp &&
+        ((isWin && g_maskWin) || (isAlt && g_maskAlt))) {
+        // An injected release is another mask's - armed in some other
+        // process for the same press - that got to it first. Standing down
+        // with it, rather than staying armed, keeps this one from eating the
+        // next tap.
+        (isWin ? g_maskWin : g_maskAlt) = false;
+        g_winMaskArmed = g_maskWin || g_maskAlt;
+        if (!ours) {
             INPUT input[3]{};
             input[0].type = INPUT_KEYBOARD;
             input[0].ki.wVk = kMaskVk;
@@ -2035,7 +2436,16 @@ LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
             input[2].ki.dwFlags = KEYEVENTF_KEYUP;
             input[2].ki.dwExtraInfo = kInjectedMarker;
             SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
-            return 1;  // swallow the physical Win key-up
+            // The shell's mask, armed on this process's word, never sees
+            // this release go by: it is told.
+            if (IsElevatedProcess()) {
+                HWND shell = FindKeyboardServer();
+                if (shell && shell != g_keyboardServer) {
+                    PostMessageW(shell, kMaskStandDown,
+                                 isWin ? kMaskForWin : kMaskForAlt, 0);
+                }
+            }
+            return 1;  // swallow the physical key-up
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -2060,19 +2470,50 @@ void UpdateKeyboardHook() {
         UnhookWindowsHookEx(g_keyboardHook);
         g_keyboardHook = nullptr;
     }
+
+    // And the mouse hook (mouse.cpp) where the keyboard one stays for good:
+    // the shell, and an elevated process while a window of its own is in
+    // front - the presses on its windows are kept from the shell's hook. One
+    // with content the message hook cannot see keeps it in the background
+    // too, so that a press there finds it. Not every elevated process at all
+    // times: each low-level hook is a stop every move of the mouse makes.
+    bool mouseWanted =
+        !g_uninitializing &&
+        (g_keepKeyboardHook ||
+         (IsElevatedProcess() && HasCompositionContentWindow()));
+    if (mouseWanted && !g_mouseHook) {
+        g_mouseHook =
+            SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+        if (!g_mouseHook) {
+            Wh_Log(L"WH_MOUSE_LL hook failed (%u)", GetLastError());
+        }
+    } else if (!mouseWanted && g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
 }
 
 void DisarmMask(HWND hwnd) {
     g_winMaskArmed = false;
+    g_maskWin = g_maskAlt = false;
+    g_maskOnWord = false;
     KillTimer(hwnd, kMaskTimerId);
     UpdateKeyboardHook();
 }
 
-void ArmMask(HWND hwnd) {
-    if (g_uninitializing || !WinKeyDown()) {
-        // The press is already over, and a mask armed for it now would be
-        // left for the next one.
+void ArmMask(HWND hwnd, WPARAM keys) {
+    // A press that is already over gets none: a mask armed for it now would
+    // be left for the next one.
+    bool onWord = (keys & kMaskOnWord) != 0;
+    g_maskWin |= (keys & kMaskForWin) && (onWord || WinKeyDown());
+    g_maskAlt |= (keys & kMaskForAlt) && (onWord || AltKeyDown());
+    if (g_uninitializing || !(g_maskWin || g_maskAlt)) {
+        g_maskWin = g_maskAlt = false;
         return;
+    }
+    if (onWord) {
+        g_maskOnWord = true;
+        g_maskOnWordSince = GetTickCount();
     }
     g_winMaskArmed = true;
     UpdateKeyboardHook();
@@ -2113,15 +2554,31 @@ LRESULT CALLBACK KeyboardServerProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam) {
     switch (msg) {
         case kMaskArm:
-            ArmMask(hwnd);
+            ArmMask(hwnd, wParam);
             return 0;
         case WM_TIMER:
             // The hook takes the mask down when it masks a release. A release
             // can also go by without reaching it at all, and a mask that
             // outlived its press would swallow the next one - so the key being
-            // up is what ends it.
-            if (!g_winMaskArmed || !WinKeyDown()) {
+            // up is what ends it - or, armed on an elevated process's word, a
+            // release masked there, or the longest a press is ever held.
+            if (g_maskOnWord &&
+                GetTickCount() - g_maskOnWordSince > kMaskOnWordMaxMs) {
+                g_maskOnWord = false;
+            }
+            g_maskWin = g_maskWin && (g_maskOnWord || WinKeyDown());
+            g_maskAlt = g_maskAlt && (g_maskOnWord || AltKeyDown());
+            if (!g_winMaskArmed || !(g_maskWin || g_maskAlt)) {
                 DisarmMask(hwnd);
+            }
+            return 0;
+        case kMaskStandDown:
+            if (g_maskOnWord) {
+                g_maskWin = g_maskWin && !(wParam & kMaskForWin);
+                g_maskAlt = g_maskAlt && !(wParam & kMaskForAlt);
+                if (!(g_maskWin || g_maskAlt)) {
+                    DisarmMask(hwnd);
+                }
             }
             return 0;
     }
@@ -2159,6 +2616,8 @@ DWORD WINAPI KeyboardServerThread(LPVOID param) {
     if (hwnd) {
         // Gestures in processes of any integrity level ask for a mask here.
         ChangeWindowMessageFilterEx(hwnd, kMaskArm, MSGFLT_ALLOW, nullptr);
+        ChangeWindowMessageFilterEx(hwnd, kMaskStandDown, MSGFLT_ALLOW,
+                                    nullptr);
     }
     {
         std::lock_guard<std::mutex> lock(g_serverMutex);
@@ -2319,31 +2778,33 @@ bool IsElevatedProcess() {
     return elevated;
 }
 
-// Called by whatever just consumed a Win + mouse gesture; `usingWin` is that
-// gesture's own answer to whether the Win key is part of it, because the
-// modifier is not the same setting for every one of them.
-void ArmWinMask(bool usingWin) {
-    if (!usingWin || g_uninitializing || !WinKeyDown()) {
+// Called by whatever just consumed a Win + mouse gesture; `usingWin` and
+// `usingAlt` are that gesture's own answer to which of the keys are part of
+// it, because the modifier is not the same setting for every one of them.
+void ArmWinMask(bool usingWin, bool usingAlt) {
+    WPARAM keys = (usingWin && WinKeyDown() ? kMaskForWin : 0) |
+                  (usingAlt && AltKeyDown() ? kMaskForAlt : 0);
+    if (!keys || g_uninitializing) {
         return;
     }
     HWND server = FindKeyboardServer();
     if (!server) {
         server = StartServer();
     }
-    if (!server || !PostMessageW(server, kMaskArm, 0, 0)) {
-        Wh_Log(L"No Start menu mask to arm (%u)", GetLastError());
-    }
     // Windows keeps the keys typed into an elevated window - Task Manager,
     // anything run as administrator - from the low-level hooks of the
     // processes below it, the shell's included. Such a process arms a mask
-    // of its own as well, which sees them. The shell's stays armed too: if
-    // the gesture closed the process's last window, the release goes to
-    // whatever window comes forward next.
-    if (IsElevatedProcess()) {
-        HWND own = StartServer();
-        if (own && own != server) {
-            PostMessageW(own, kMaskArm, 0, 0);
-        }
+    // of its own as well, which sees them. The shell's is armed too, on this
+    // process's word that the keys are down, since it cannot tell: if the
+    // gesture closed the process's last window, the release goes to whatever
+    // window comes forward next.
+    HWND own = IsElevatedProcess() ? StartServer() : nullptr;
+    WPARAM word = own && own != server ? kMaskOnWord : 0;
+    if (!server || !PostMessageW(server, kMaskArm, keys | word, 0)) {
+        Wh_Log(L"No Start menu mask to arm (%u)", GetLastError());
+    }
+    if (own && own != server) {
+        PostMessageW(own, kMaskArm, keys, 0);
     }
 }
 
@@ -2393,7 +2854,9 @@ void ShutdownKeyboardServer() {
 //
 // Task View and the Alt+Tab switcher are left alone while they are up: a
 // Win+Tab then goes to Windows, which closes Task View for it. With no other
-// desktop to go to, Win+Tab opens Task View, as in Windows.
+// desktop that has windows, Win+Tab goes to an empty one - made first, when
+// there is only the one - the way Hyprland makes a workspace by going to it;
+// or, as the settings may have it, opens Task View, as in Windows.
 
 // Set by the desktop thread once the shell has said it has no desktop manager
 // the mod knows.
@@ -2408,23 +2871,28 @@ const CLSID CLSID_VirtualDesktopManagerInternal = {
     0xC5E0CDCA, 0x7B6E, 0x41B2, {0x9F, 0xC4, 0xD9, 0x39, 0x75, 0xCC, 0x46, 0x7B}};
 
 // The builds whose desktop manager has GetCurrentDesktop, GetDesktops and
-// SwitchDesktop in slots 6, 7 and 9, and a desktop with GetId in slot 4. The
-// Windows 11 21H2 and Server 2022 ones take a monitor as well, and are left
-// to Windows.
+// SwitchDesktop in slots 6, 7 and 9, and a desktop with GetId in slot 4.
+// CreateDesktop comes after SwitchDesktop, one further on where 24H2 has put
+// SwitchDesktopAndMoveForegroundView in between. The Windows 11 21H2 and
+// Server 2022 ones take a monitor as well, and are left to Windows.
 struct DesktopManagerLayout {
     IID manager;
     IID desktop;
+    int createSlot;
 };
 const DesktopManagerLayout kLayouts[] = {
     // Windows 11 24H2 and later
     {{0x53F5CA0B, 0x158F, 0x4124, {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}},
-     {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}}},
+     {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}},
+     11},
     // Windows 11 22H2 and 23H2
     {{0xA3175F2D, 0x239C, 0x4BD2, {0x8A, 0xA0, 0xEE, 0xBA, 0x8B, 0x0B, 0x13, 0x8E}},
-     {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}}},
+     {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}},
+     10},
     // Windows 10
     {{0xF31574D6, 0xB682, 0x4CDC, {0xBD, 0x56, 0x18, 0x27, 0x86, 0x0A, 0xBE, 0xC6}},
-     {0xFF72FFDD, 0xBE7E, 0x43FC, {0x9C, 0x03, 0xAD, 0x81, 0x68, 0x1E, 0x88, 0xE4}}},
+     {0xFF72FFDD, 0xBE7E, 0x43FC, {0x9C, 0x03, 0xAD, 0x81, 0x68, 0x1E, 0x88, 0xE4}},
+     10},
 };
 constexpr int kGetIdSlot = 4;
 constexpr int kGetCurrentDesktopSlot = 6;
@@ -2560,17 +3028,34 @@ BOOL CALLBACK CollectDesktopProc(HWND hwnd, LPARAM lParam) {
 // as well; while it opens, the window is in front a moment before it is shown.
 // The little one that shows a desktop's name after every switch is a view
 // too, but one that never takes the focus, and it is not what this is about.
-// They are looked for by class: EnumWindows passes over them altogether.
-// Windows 10's are of a class of their own.
+// They are looked for by class. EnumWindows passes over them altogether, and
+// FindWindowEx over Task View once it is up, in front - so the window in front
+// is asked first. Windows 10's are of a class of their own.
+constexpr PCWSTR kShellViewClasses[] = {L"XamlExplorerHostIslandWindow",
+                                        L"MultitaskingViewFrame"};
+
+bool IsShellViewClass(HWND hwnd) {
+    WCHAR cls[64];
+    if (!hwnd || !GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
+        return false;
+    }
+    for (PCWSTR viewClass : kShellViewClasses) {
+        if (_wcsicmp(cls, viewClass) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ShellViewUp() {
-    HWND foreground = GetForegroundWindow();
-    for (PCWSTR viewClass :
-         {L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame"}) {
+    if (IsShellViewClass(GetForegroundWindow())) {
+        return true;
+    }
+    for (PCWSTR viewClass : kShellViewClasses) {
         HWND view = nullptr;
         while ((view = FindWindowExW(nullptr, view, viewClass, nullptr))) {
-            if (view == foreground ||
-                (IsWindowVisible(view) &&
-                 !(GetWindowLongPtrW(view, GWL_EXSTYLE) & WS_EX_NOACTIVATE))) {
+            if (IsWindowVisible(view) &&
+                !(GetWindowLongPtrW(view, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
                 return true;
             }
         }
@@ -2775,6 +3260,31 @@ Target FindTarget(int steps, Desktops* desktops, int* target) {
     return *target != stops[here] ? Target::kFound : Target::kNone;
 }
 
+// With nowhere to go: the desktop next to this one, `steps` stops round,
+// windows or not - or, with only the one there is, a new one, at the end.
+bool FindEmptyTarget(int steps, Desktops* desktops, int* target) {
+    int count = (int)desktops->ids.size();
+    if (count > 1) {
+        int here = (int)(std::find(desktops->ids.begin(), desktops->ids.end(),
+                                   desktops->current) -
+                         desktops->ids.begin());
+        *target = ((here + steps) % count + count) % count;
+        return true;
+    }
+    using Create = HRESULT(STDMETHODCALLTYPE*)(void*, IUnknown**);
+    IUnknown* made = nullptr;
+    HRESULT hr = Slot<Create>(g_internalManager, g_layout->createSlot)(
+        g_internalManager, &made);
+    if (FAILED(hr) || !made) {
+        Wh_Log(L"CreateDesktop failed (0x%08X)", hr);
+        return false;
+    }
+    desktops->ids.push_back(DesktopIdOf(made));
+    desktops->objects.push_back(made);
+    *target = count;
+    return true;
+}
+
 // Task View, opened - or closed, when it is up - the way its shortcut does it.
 void ToggleTaskView() {
     ShellExecuteW(nullptr, L"open",
@@ -2790,11 +3300,16 @@ void StepDesktop(int steps) {
     int target = -1;
     Target found = FindTarget(steps, &desktops, &target);
     if (found == Target::kNowhere) {
-        // No other desktop has windows: Win+Tab is what it is in Windows.
-        ToggleTaskView();
-        return;
-    }
-    if (found != Target::kFound) {
+        // No other desktop has windows: an empty one, or Win+Tab is what it
+        // is in Windows.
+        if (!g_settings.desktopToEmpty) {
+            ToggleTaskView();
+            return;
+        }
+        if (!FindEmptyTarget(steps, &desktops, &target)) {
+            return;
+        }
+    } else if (found != Target::kFound) {
         return;
     }
     if (!HoldFront()) {
@@ -2935,13 +3450,15 @@ bool SeveralDesktops() {
 
 // Called for every WM_HOTKEY a thread of this process retrieves: the shell's
 // Win+Tab, posted to one of its own, goes to the desktop thread instead - but
-// with only the one desktop it is left to the shell, as Task View.
+// with only the one desktop, and none to be made, it is left to the shell, as
+// Task View.
 // Returns true if it was taken.
 bool HandleDesktopHotkey(const MSG* msg) {
     DWORD threadId = g_desktopThreadId;
     if (!threadId || LOWORD(msg->lParam) != MOD_WIN ||
         HIWORD(msg->lParam) != VK_TAB || !g_settings.desktopWinTab ||
-        g_desktopSwitchUnsupported || ShellViewUp() || !SeveralDesktops()) {
+        g_desktopSwitchUnsupported || ShellViewUp() ||
+        !(g_settings.desktopToEmpty || SeveralDesktops())) {
         return false;
     }
     return PostThreadMessageW(threadId, kDesktopStepMessage, 1, 0) != FALSE;
@@ -3009,11 +3526,23 @@ void BringDesktopForwardForKey(UINT vk) {
 UINT g_msgDrag;  // RegisterWindowMessage, set in Wh_ModInit
 
 bool IsDragModifierDown() {
-    if (g_settings.dragModifier == DragModifier::Alt) {
-        return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    return g_settings.dragModifier == DragModifier::Alt ? AltKeyDown()
+                                                        : WinKeyDown();
+}
+
+// The other one of Win and Alt, held along with the modifier: the left button
+// then resizes, for a touchpad, whose right button can be clicked but not held
+// down through a drag. Not while Alt is a key of the drag's own already, for
+// the shape or the magnet.
+bool IsLeftResizeDown() {
+    if (!g_settings.leftResize || !IsDragModifierDown()) {
+        return false;
     }
-    return ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) !=
-           0;
+    if (g_settings.dragModifier == DragModifier::Alt) {
+        return WinKeyDown();
+    }
+    return g_settings.keepAspectVk != VK_MENU &&
+           g_settings.snapModifierVk != VK_MENU && AltKeyDown();
 }
 
 // Whether a system move/resize loop is running on a thread.
@@ -3073,6 +3602,64 @@ void ReleaseForcedLeftButton() {
     }
 }
 
+// A move with Alt held is Aero Snap's cue for the other layouts, the ones
+// without maximizing at the top edge. With Alt as the modifier it is held
+// through every move, so the loop is kept from seeing it: it goes from this
+// thread's key state as the move starts, and again after each repeat of the
+// key, and comes back as the keyboard has it once the loop is over. Let go of
+// and pressed again during the move, it is meant for Aero Snap and stays.
+thread_local bool g_altHidden;
+// The first messages of a loop come before the thread is marked as in one, so
+// "not in a loop" only means "over" once it has been seen running.
+thread_local bool g_altLoopSeen;
+
+void SetAltState(bool left, bool right) {
+    BYTE keyState[256];
+    if (!GetKeyboardState(keyState)) {
+        return;
+    }
+    auto set = [&](int vk, bool down) {
+        keyState[vk] = (keyState[vk] & ~0x80) | (down ? 0x80 : 0);
+    };
+    set(VK_LMENU, left);
+    set(VK_RMENU, right);
+    set(VK_MENU, left || right);
+    SetKeyboardState(keyState);
+}
+
+void HideAlt() {
+    SetAltState(false, false);
+    g_altHidden = true;
+    g_altLoopSeen = false;
+}
+
+void TrackAltInMove(const MSG* msg) {
+    if (!g_altHidden || msg->wParam != VK_MENU) {
+        return;
+    }
+    if (msg->message == WM_KEYUP || msg->message == WM_SYSKEYUP) {
+        g_altHidden = false;
+    } else if (IsInMoveSizeLoop()) {
+        SetAltState(false, false);
+    }
+}
+
+void RestoreHiddenAlt() {
+    if (!g_altHidden) {
+        return;
+    }
+    if (IsInMoveSizeLoop()) {
+        g_altLoopSeen = true;
+        return;
+    }
+    if (!g_altLoopSeen) {
+        return;
+    }
+    g_altHidden = g_altLoopSeen = false;
+    SetAltState(GetAsyncKeyState(VK_LMENU) & 0x8000,
+                GetAsyncKeyState(VK_RMENU) & 0x8000);
+}
+
 // Nearest corner to the cursor, as the WMSZ_* code SC_SIZE expects (Hyprland
 // resizes from the nearest corner).
 UINT ResizeEdgeForPoint(const RECT& rc, POINT pt) {
@@ -3105,6 +3692,9 @@ bool StartMove(HWND root, POINT pt, MSG* msg) {
         return false;  // released already; the loop would stick to the cursor
     }
     ForceLeftButtonDown();
+    if (g_settings.dragModifier == DragModifier::Alt) {
+        HideAlt();
+    }
 
     // The system's own caption-drag loop, so the drag gives everything a
     // title-bar drag would: Aero Snap at the screen edges, the Windows 11
@@ -3136,6 +3726,7 @@ bool StartMove(HWND root, POINT pt, MSG* msg) {
 thread_local bool g_pendingRelease;
 
 constexpr int kResizePollMs = 8;
+constexpr int kResizeLoopPollEvery = 12;  // about a tenth of a second
 // A second release 60 ms later is not something anyone can see; a resize that
 // stays glued to the cursor is.
 constexpr int kReleaseAttempts = 10;
@@ -3174,10 +3765,16 @@ DWORD WINAPI ResizeReleaseThread(LPVOID param) {
         // Then the button, and the loop, whichever ends first: one cancelled
         // with Esc has already put the window back and wants no release. The
         // mod being on its way out counts as the button being let go of - a
-        // loop nobody is left to post to would never end.
-        while (IsThreadInMoveSizeLoop(release->threadId) &&
-               (GetAsyncKeyState(release->rightVk) & 0x8000) &&
-               !g_uninitializing) {
+        // loop nobody is left to post to would never end. The loop is asked
+        // after less often than the button: asking takes a lock the loop
+        // itself needs at every step, and a heavy window feels it.
+        for (int poll = 1; (GetAsyncKeyState(release->rightVk) & 0x8000) &&
+                           !g_uninitializing;
+             poll++) {
+            if (poll % kResizeLoopPollEvery == 0 &&
+                !IsThreadInMoveSizeLoop(release->threadId)) {
+                break;
+            }
             Sleep(kResizePollMs);
         }
 
@@ -3213,7 +3810,9 @@ bool StartResizeRelease(HWND root) {
     return true;
 }
 
-bool StartResize(HWND root, POINT pt, MSG* msg) {
+// With the left button held for it instead, the loop has the button it wants
+// and ends on its release, the way a move does: nothing to wait for or post.
+bool StartResize(HWND root, POINT pt, MSG* msg, bool byLeft) {
     if (IsIconic(root) || IsZoomed(root)) {
         return false;
     }
@@ -3224,14 +3823,16 @@ bool StartResize(HWND root, POINT pt, MSG* msg) {
     if (!GetWindowRect(root, &rc)) {
         return false;
     }
-    if (!(GetAsyncKeyState(PhysicalButtonVk(true)) & 0x8000)) {
+    if (!(GetAsyncKeyState(PhysicalButtonVk(!byLeft)) & 0x8000)) {
         return false;  // released already; the loop would stick to the cursor
     }
-    if (!StartResizeRelease(root)) {
-        return false;  // nothing would end the loop
+    if (!byLeft) {
+        if (!StartResizeRelease(root)) {
+            return false;  // nothing would end the loop
+        }
+        g_pendingRelease = true;
     }
 
-    g_pendingRelease = true;
     ForceLeftButtonDown();
     msg->message = WM_SYSCOMMAND;
     msg->wParam = SC_SIZE | ResizeEdgeForPoint(rc, pt);
@@ -3240,7 +3841,163 @@ bool StartResize(HWND root, POINT pt, MSG* msg) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// A click that may yet go to the application
+//
+// Alt + click means something in plenty of applications, so with Alt the
+// press is held on to instead of starting a drag at once: the drag starts once
+// the mouse moves, and a release before that hands the application the click
+// after all. Win + click means nothing anywhere, so with Win the window is
+// grabbed at once - unless the settings say otherwise.
+
+bool ClickGoesToApp() {
+    switch (g_settings.modifierClick) {
+        case ModifierClick::App:
+            return true;
+        case ModifierClick::Window:
+            return false;
+        default:
+            return g_settings.dragModifier == DragModifier::Alt;
+    }
+}
+
+struct HeldPress {
+    bool active;
+    bool replayed;  // pressed again by the window for the shell's mouse hook
+    HWND hwnd;
+    UINT message;
+    WPARAM wParam;
+    LPARAM lParam;
+};
+thread_local HeldPress g_heldPress[2];  // [0] = left, [1] = right
+
+struct PressWatch {
+    HWND root;
+    POINT pt;
+    WPARAM kind;
+    int buttonVk;
+};
+
+// Waits for the mouse to move past the drag threshold, and asks for the drag
+// then. A release first leaves the press to ReplayHeldPress.
+DWORD WINAPI PressWatchThread(LPVOID param) {
+    {
+        std::unique_ptr<PressWatch> watch(static_cast<PressWatch*>(param));
+        int cx = GetSystemMetrics(SM_CXDRAG);
+        int cy = GetSystemMetrics(SM_CYDRAG);
+        while (!g_uninitializing &&
+               (GetAsyncKeyState(watch->buttonVk) & 0x8000)) {
+            POINT pt;
+            GetCursorPos(&pt);
+            if (abs(pt.x - watch->pt.x) > cx || abs(pt.y - watch->pt.y) > cy) {
+                RequestDrag(watch->root, watch->kind, watch->pt);
+                break;
+            }
+            Sleep(kResizePollMs);
+        }
+    }
+    g_modRefCount--;  // the last thing this thread does in the mod's image
+    return 0;
+}
+
+bool HoldPress(HWND root, const MSG* msg, bool right, WPARAM kind) {
+    auto* watch = new PressWatch{root, msg->pt, kind, PhysicalButtonVk(right)};
+    if (!StartModThread(PressWatchThread, watch)) {
+        delete watch;
+        return false;
+    }
+    g_heldPress[right] = {true,
+                          GetMessageExtraInfo() == (LPARAM)kReplayMarker,
+                          msg->hwnd, msg->message, msg->wParam, msg->lParam};
+    return true;
+}
+
+// The release comes before any drag did: the press goes to the application
+// in its place, and the release is posted to follow it.
+bool ReplayHeldPress(MSG* msg, bool right) {
+    HeldPress press = g_heldPress[right];
+    if (!press.active) {
+        return false;
+    }
+    g_heldPress[right].active = false;
+
+    if (press.replayed) {
+        // It went through a hole in content that takes its input past the
+        // queue (mouse.cpp), so posting it would miss the content. As input,
+        // with the hole closed, it goes where the click was meant to.
+        INPUT input[2]{};
+        input[0].type = INPUT_MOUSE;
+        input[0].mi.dwFlags =
+            right ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
+        input[0].mi.dwExtraInfo = kInjectedMarker;
+        input[1] = input[0];
+        input[1].mi.dwFlags = right ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP;
+        SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
+        msg->message = WM_NULL;
+        return true;
+    }
+
+    bool nonClient = press.message == WM_NCLBUTTONDOWN ||
+                     press.message == WM_NCLBUTTONDBLCLK ||
+                     press.message == WM_NCRBUTTONDOWN ||
+                     press.message == WM_NCRBUTTONDBLCLK;
+    UINT up = nonClient ? (right ? WM_NCRBUTTONUP : WM_NCLBUTTONUP)
+                        : (right ? WM_RBUTTONUP : WM_LBUTTONUP);
+    WPARAM upParam = nonClient ? press.wParam
+                               : press.wParam & ~(MK_LBUTTON | MK_RBUTTON);
+    PostMessageW(press.hwnd, up, upParam, press.lParam);
+
+    msg->hwnd = press.hwnd;
+    msg->message = press.message;
+    msg->wParam = press.wParam;
+    msg->lParam = press.lParam;
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // The requests, and the presses that make them
+
+// Set while the requests to scale that are still waiting are taken out of
+// the queue: the message hook sees them go, and leaves them be.
+thread_local bool g_takingScaleSteps;
+
+// A window draws itself somewhere else than on the thread that takes these -
+// a browser in its own processes, a XAML app on its own thread - so taking
+// one step after another keeps up while the drawing does not: a touchpad's
+// stream of small turns would have the window lay itself out anew for every
+// one, and its picture fall further and further behind the fingers. So the
+// steps come no closer together than this, with what came in between added
+// to the next one; the first of a turn goes at once.
+constexpr DWORD kScaleStepMs = 40;
+struct PendingScale {
+    HWND root;
+    int delta;
+    UINT_PTR timer;  // a timer of the thread's, for the next step
+};
+thread_local PendingScale g_pendingScale;
+thread_local DWORD g_lastScaleStep;
+
+void TakeScaleStep() {
+    PendingScale step = g_pendingScale;
+    if (step.timer) {
+        KillTimer(nullptr, step.timer);
+    }
+    g_pendingScale = {};
+    g_lastScaleStep = GetTickCount();
+    if (step.root && step.delta && !g_uninitializing) {
+        ScaleWindow(step.root, step.delta);
+    }
+}
+
+// The timer has nothing of the mod's to call: its message is taken here,
+// before the application gets it.
+bool HandleScaleTimer(const MSG* msg) {
+    if (msg->hwnd || !g_pendingScale.timer ||
+        msg->wParam != g_pendingScale.timer) {
+        return false;
+    }
+    TakeScaleStep();
+    return true;
+}
 
 bool HandleDragRequest(MSG* msg) {
     HWND root = msg->hwnd;
@@ -3251,11 +4008,58 @@ bool HandleDragRequest(MSG* msg) {
         return false;  // ours, and there is nothing to dispatch
     }
 
-    if (msg->wParam == kDragAction) {
-        if (g_uninitializing || !IsFrameWindow(root)) {
+    if (msg->wParam == kDragCover) {
+        RestoreUncovered();
+        return false;
+    }
+    if (msg->wParam == kDragUncover) {
+        UncoverAndPress(root, msg);
+        return false;
+    }
+
+    if (msg->wParam == kDragScale) {
+        if (g_takingScaleSteps) {
+            return true;  // left as it is, for the loop below to add up
+        }
+        // The wheel turns notch by notch, and a window slow to resize would
+        // take them one at a time, long after the wheel has stopped: the
+        // notches already waiting go into the same step.
+        int delta = (int)msg->lParam;
+        MSG next;
+        g_takingScaleSteps = true;
+        while (PeekMessageW(&next, root, g_msgDrag, g_msgDrag,
+                            PM_NOREMOVE | PM_NOYIELD) &&
+               next.wParam == kDragScale &&
+               PeekMessageW(&next, root, g_msgDrag, g_msgDrag,
+                            PM_REMOVE | PM_NOYIELD)) {
+            delta += (int)next.lParam;
+        }
+        g_takingScaleSteps = false;
+        if (g_pendingScale.root && g_pendingScale.root != root) {
+            TakeScaleStep();  // another window's, which is not to wait
+        }
+        g_pendingScale.root = root;
+        g_pendingScale.delta += delta;
+        if (g_pendingScale.timer || g_uninitializing) {
             return false;
         }
-        return TakeWindowAction(msg, (WindowAction)msg->lParam);
+        DWORD since = GetTickCount() - g_lastScaleStep;
+        if (since < kScaleStepMs) {
+            g_pendingScale.timer =
+                SetTimer(nullptr, 0, kScaleStepMs - since, nullptr);
+        }
+        if (!g_pendingScale.timer) {
+            TakeScaleStep();
+        }
+        return false;
+    }
+
+    if (msg->wParam == kDragAction) {
+        auto action = (WindowAction)msg->lParam;
+        if (g_uninitializing || !CanTakeAction(root, action)) {
+            return false;
+        }
+        return TakeWindowAction(msg, action);
     }
 
     // Checked again here: the request came from another thread, possibly in
@@ -3266,10 +4070,17 @@ bool HandleDragRequest(MSG* msg) {
     // Kept, because starting the drag is what overwrites it with the system
     // command the loop needs.
     WPARAM kind = msg->wParam;
-    bool started = kind == kDragResize ? StartResize(root, pt, msg)
-                                       : StartMove(root, pt, msg);
+    bool resize = kind == kDragResize || kind == kDragResizeLeft;
+    bool started = resize ? StartResize(root, pt, msg, kind == kDragResizeLeft)
+                          : StartMove(root, pt, msg);
     if (started) {
-        BeginDragSnap(root, kind, pt);
+        // A held press is a drag after all, and the release is the loop's -
+        // or, for a resize with the right button, the mod's to swallow.
+        g_heldPress[kind == kDragResize].active = false;
+        if (kind == kDragResize) {
+            g_swallowButtonUp[1] = true;
+        }
+        BeginDragSnap(root, resize ? kDragResize : kDragMove, pt);
         BeginDragFade(root, kind);
     }
     return started;
@@ -3279,6 +4090,9 @@ bool HandleDragRequest(MSG* msg) {
 thread_local bool g_swallowButtonUp[2];  // [0] = left, [1] = right
 
 bool HandleModifierButtonDown(const MSG* msg, bool right) {
+    if (GetMessageExtraInfo() == (LPARAM)kInjectedMarker) {
+        return false;  // a held click, handed back to the application
+    }
     // A fresh press means a release we were still waiting to swallow is not
     // coming: a drag cancelled with Esc can leave the cursor outside the
     // window it started on, and the release then goes somewhere else. Same
@@ -3286,6 +4100,7 @@ bool HandleModifierButtonDown(const MSG* msg, bool right) {
     // the release the flag below is waiting for.
     g_swallowButtonUp[right] = false;
     g_pendingRelease = false;
+    g_heldPress[right].active = false;
 
     // A drag is already running on this thread: its loop pumps messages, so
     // presses during one arrive here too.
@@ -3301,31 +4116,42 @@ bool HandleModifierButtonDown(const MSG* msg, bool right) {
         return false;  // desktop, taskbar, menus... - normal click
     }
 
+    bool byLeft = !right && IsLeftResizeDown();
+    // Both keys are part of a resize with the left button, and either let go
+    // of alone would be a tap of its own.
+    bool usingWin = byLeft || g_settings.dragModifier == DragModifier::Win;
+    bool usingAlt = byLeft || g_settings.dragModifier == DragModifier::Alt;
+
     // The second press of a double click is a gesture of its own rather than
     // another drag. The first one has already started a drag by then, which
     // is what a double click on a title bar does in Windows as well.
     WindowAction action = g_settings.doubleClickAction;
-    if (!right && action != WindowAction::None &&
+    if (!right && !byLeft && action != WindowAction::None &&
         IsDoubleClickAt(root, msg->pt, GetTickCount())) {
         Wh_Log(L"Double click on %p", root);
-        ArmWinMask(g_settings.dragModifier == DragModifier::Win);
+        ArmWinMask(usingWin, usingAlt);
         g_swallowButtonUp[0] = true;  // we took the press, so its release too
         RequestWindowAction(root, action);
         return true;
     }
 
-    Wh_Log(L"%s %p", right ? L"Resize" : L"Move", root);
-    ArmWinMask(g_settings.dragModifier == DragModifier::Win);
+    WPARAM kind = right ? kDragResize : byLeft ? kDragResizeLeft : kDragMove;
+    Wh_Log(L"%s %p", kind == kDragMove ? L"Move" : L"Resize", root);
+    ArmWinMask(usingWin, usingAlt);
 
+    if (ClickGoesToApp()) {
+        // Swallowed for now, and handed back if the mouse doesn't move.
+        return HoldPress(root, msg, right, kind);
+    }
     if (right) {
         // We consumed the right button-down, so swallow its matching up too:
         // the resize loop ends on the release the mod posts, not on the
         // physical right-up, which would otherwise reach the app.
         g_swallowButtonUp[1] = true;
     }
-    // The move loop consumes the physical left-up itself, so a move leaves
-    // nothing to swallow.
-    RequestDrag(root, right ? kDragResize : kDragMove, msg->pt);
+    // The loop consumes the physical left-up itself, so a drag with the left
+    // button leaves nothing to swallow.
+    RequestDrag(root, kind, msg->pt);
     return true;
 }
 
@@ -3527,7 +4353,7 @@ void BeginDragFade(HWND root, WPARAM kind) {
     }
     // A resize is the one drag you may want to watch reflow as it happens,
     // rather than through the window.
-    if (mode == DragTranslucency::MoveOnly && kind == kDragResize) {
+    if (mode == DragTranslucency::MoveOnly && kind != kDragMove) {
         return;
     }
 
@@ -3682,6 +4508,37 @@ bool TakeWindowAction(MSG* msg, WindowAction action) {
     return false;
 }
 
+// Closing is Alt+F4 pointed at the window under the cursor rather than at
+// the focused one. DefWindowProc answers Alt+F4 with SC_CLOSE to the top-level
+// window the focus is in unless its class says CS_NOCLOSE, whatever its
+// styles - so any window that could have the focus closes, frame or not. The
+// rest of the actions want a real frame, as a drag does.
+bool CanTakeAction(HWND root, WindowAction action) {
+    if (action != WindowAction::Close) {
+        return IsFrameWindow(root);
+    }
+    if (!root || !IsWindow(root) || IsExcludedClass(root)) {
+        return false;
+    }
+    LONG_PTR style = GetWindowLongPtrW(root, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(root, GWL_EXSTYLE);
+    return !(style & (WS_CHILD | WS_DISABLED)) &&
+           !(exStyle & WS_EX_NOACTIVATE) &&
+           !(GetClassLongPtrW(root, GCL_STYLE) & CS_NOCLOSE);
+}
+
+// With the mouse, the window is the one under the cursor rather than the
+// focused one - and that can be one that never takes the focus at all, a
+// flyout or a thumbnail of the shell, which closed breaks that part of the
+// shell until it restarts. So a window closed this way is a visible one that
+// is not a tool window, too.
+bool CanTakeActionUnderCursor(HWND root, WindowAction action) {
+    return CanTakeAction(root, action) &&
+           (action != WindowAction::Close ||
+            (IsWindowVisible(root) &&
+             !(GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)));
+}
+
 void RequestWindowAction(HWND root, WindowAction action) {
     if (!PostMessageW(root, g_msgDrag, kDragAction, (LPARAM)action)) {
         Wh_Log(L"Action request for %p failed (%u)", root, GetLastError());
@@ -3752,8 +4609,7 @@ bool MatchesShortcut(const Hotkey& binding, UINT vk, bool now) {
     bool ctrl = held(VK_CONTROL);
     bool alt = held(VK_MENU);
     bool shift = held(VK_SHIFT);
-    bool win =
-        ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+    bool win = WinKeyDown();
     return ctrl == binding.ctrl && alt == binding.alt &&
            shift == binding.shift && win == binding.win;
 }
@@ -3782,12 +4638,12 @@ bool HandleShortcutButton(const MSG* msg) {
     if (!root) {
         root = msg->hwnd;
     }
-    if (!IsFrameWindow(root)) {
+    if (!CanTakeActionUnderCursor(root, action)) {
         return false;  // desktop, taskbar, menus... - normal click
     }
 
     Wh_Log(L"Shortcut on %p", root);
-    ArmWinMask(binding.win);
+    ArmWinMask(binding.win, binding.alt);
     g_swallowShortcutButton = vk;
     RequestWindowAction(root, action);
     return true;
@@ -3834,12 +4690,793 @@ bool IsDoubleClickAt(HWND root, POINT pt, DWORD tick) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// The modifier and the wheel: the window grows or shrinks around its center
+
+bool CanScale(HWND root) {
+    return IsFrameWindow(root) && !IsZoomed(root) && !IsIconic(root);
+}
+
+// Where the steps so far have taken the window, unrounded. The window itself
+// only ever has whole pixels, and a step started from them would let the
+// rounding creep: off its place, and to a size a notch back does not undo.
+// Good for as long as the window is where the last step put it.
+struct ScaleState {
+    HWND hwnd;
+    RECT applied;  // the frame that step left
+    double left, top, width, height;
+};
+thread_local ScaleState g_scale;
+
+// On the window's own thread. By the step for every notch, either way the
+// same, so that a notch up and one down come back to where they began - and
+// as far as the window lets itself be sized, and no larger than its monitor's
+// work area, which a window keeps its shape by stopping at. Around its center,
+// or the cursor, as the settings have it.
+void ScaleWindow(HWND root, int wheelDelta) {
+    if (!wheelDelta || !CanScale(root)) {
+        return;
+    }
+    // The visible frame is what gets scaled and fitted: the invisible borders
+    // around it are the window's, whatever its size.
+    RECT window;
+    GetWindowRect(root, &window);
+    RECT inset = FrameInsetOf(root);
+    RECT frame = WindowToFrame(window, inset);
+    int extraW = inset.left - inset.right, extraH = inset.top - inset.bottom;
+    if (frame.right <= frame.left || frame.bottom <= frame.top) {
+        return;
+    }
+    if (g_scale.hwnd != root || !EqualRect(&g_scale.applied, &frame)) {
+        g_scale = {root,
+                   frame,
+                   (double)frame.left,
+                   (double)frame.top,
+                   (double)(frame.right - frame.left),
+                   (double)(frame.bottom - frame.top)};
+    }
+
+    MINMAXINFO limits{};
+    limits.ptMinTrackSize = {GetSystemMetrics(SM_CXMINTRACK),
+                             GetSystemMetrics(SM_CYMINTRACK)};
+    limits.ptMaxTrackSize = {GetSystemMetrics(SM_CXMAXTRACK),
+                             GetSystemMetrics(SM_CYMAXTRACK)};
+    SendMessageW(root, WM_GETMINMAXINFO, 0, (LPARAM)&limits);
+    MONITORINFO monitor{sizeof(monitor)};
+    GetMonitorInfoW(MonitorFromWindow(root, MONITOR_DEFAULTTONEAREST), &monitor);
+    const RECT& work = monitor.rcWork;
+
+    double factor = pow(1 + g_settings.wheelStep / 100.0,
+                        (double)wheelDelta / WHEEL_DELTA);
+    double most = std::min(
+        {(work.right - work.left) / g_scale.width,
+         (work.bottom - work.top) / g_scale.height,
+         (limits.ptMaxTrackSize.x - extraW) / g_scale.width,
+         (limits.ptMaxTrackSize.y - extraH) / g_scale.height});
+    double least = std::max((limits.ptMinTrackSize.x - extraW) / g_scale.width,
+                            (limits.ptMinTrackSize.y - extraH) / g_scale.height);
+    // Only ever towards a limit: a window already past one is not made to
+    // jump to it, the other way.
+    if (factor > 1) {
+        factor = std::min(factor, std::max(most, 1.0));
+    } else {
+        factor = std::max(factor, std::min(least, 1.0));
+    }
+    if (factor == 1) {
+        return;
+    }
+    if (IsInMoveSizeLoop()) {
+        // Mid-move, the loop would put the window back to the size it
+        // started with at the next move of the mouse: the size goes to the
+        // drag's subclass, which keeps it up (snap.cpp). Mid-resize, the size
+        // is the cursor's.
+        ScaleDraggedWindow(root, factor);
+        return;
+    }
+
+    // The point that stays where it is.
+    double anchorX = g_scale.left + g_scale.width / 2;
+    double anchorY = g_scale.top + g_scale.height / 2;
+    POINT cursor;
+    if (g_settings.wheelAnchor == WheelAnchor::Cursor && GetCursorPos(&cursor)) {
+        anchorX = cursor.x;
+        anchorY = cursor.y;
+    }
+    g_scale.left = anchorX - (anchorX - g_scale.left) * factor;
+    g_scale.top = anchorY - (anchorY - g_scale.top) * factor;
+    g_scale.width *= factor;
+    g_scale.height *= factor;
+    int left = (int)lround(g_scale.left), top = (int)lround(g_scale.top);
+    RECT target = FrameToWindow(
+        RECT{left, top, left + (int)lround(g_scale.width),
+             top + (int)lround(g_scale.height)},
+        inset);
+    SetWindowPos(root, nullptr, target.left, target.top,
+                 target.right - target.left, target.bottom - target.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                     SWP_NOCOPYBITS);
+    GetWindowRect(root, &window);
+    g_scale.applied = WindowToFrame(window, inset);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// src/mouse.cpp
+////////////////////////////////////////////////////////////////////////////////
+// The presses no message hook gets to see.
+//
+// Everything in the mod meets a press in the message hook of the thread it is
+// for. Content drawn by composition alone - WinUI and XAML: Paint, Windows
+// Terminal, WhatsApp, the tabs of File Explorer - is not delivered that way:
+// Windows hands the input over such a window to the app's own input stack,
+// past every message queue, and goes by the window's region to decide.
+//
+// So the shell runs a low-level mouse hook as well, next to the keyboard one
+// on the same never-busy thread (keyboard.cpp). A press the mod would want
+// that lands on such content is taken there and handed to the window, whose
+// own thread opens a hole of a few pixels in the content's region under the
+// cursor and presses again: the press goes through the hole to the window
+// underneath, as a message, and the region closes again the moment it has
+// arrived. From there on it is an ordinary press - Windows keeps the button
+// state for it and holds the mouse for the window it went to - and the
+// message hook does the rest the way it always does, natively.
+//
+// The window shortcut is simpler: it wants nothing of the press but which
+// window it was over, so that hook takes it as it comes, for any window.
+
+constexpr int kHoleHalf = 1;      // around the cursor's pixel
+constexpr DWORD kHoldCursorMaxMs = 200;  // see LowLevelMouseProc
+constexpr DWORD kUncoverMaxWaitMs = 500;
+
+// Composition draws all of it: a child window without a redirection bitmap.
+bool IsCompositionContent(HWND hwnd) {
+    return hwnd && (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD) &&
+           (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP);
+}
+
+BOOL CALLBACK FindCompositionChildProc(HWND child, LPARAM lParam) {
+    if (IsCompositionContent(child)) {
+        *reinterpret_cast<bool*>(lParam) = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL CALLBACK FindCompositionWindowProc(HWND hwnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == GetCurrentProcessId() && IsWindowVisible(hwnd) &&
+        IsFrameWindow(hwnd)) {
+        EnumChildWindows(hwnd, FindCompositionChildProc, lParam);
+    }
+    return !*reinterpret_cast<bool*>(lParam);
+}
+
+// A visible window of this process with such content in it.
+bool HasCompositionContentWindow() {
+    bool found = false;
+    EnumWindows(FindCompositionWindowProc, (LPARAM)&found);
+    return found;
+}
+
+// The content under the point: the window a hit test finds, or a child of
+// it that the hit test went past - XAML Islands content is not found by one,
+// and gets the input all the same.
+HWND CompositionContentAt(HWND hwnd, POINT pt) {
+    if (IsCompositionContent(hwnd)) {
+        return hwnd;
+    }
+    POINT client = pt;
+    ScreenToClient(hwnd, &client);
+    HWND child = ChildWindowFromPointEx(hwnd, client, CWP_SKIPINVISIBLE);
+    return child != hwnd && IsCompositionContent(child) ? child : nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// On the window's thread: the hole, and the press through it
+
+struct Uncovered {
+    HWND hwnd;
+    HRGN region;  // what it had, or null for none
+    DWORD threadId;
+};
+// In one place for every thread, so that the teardown can close what is open.
+std::mutex g_uncoveredMutex;
+std::vector<Uncovered> g_uncovered;
+
+// What shows through the hole is the window underneath, which draws nothing
+// there: a speck, for a frame. So the pixels under the cursor are taken from
+// the screen first, and shown over the hole until it has closed again - in a
+// window of the system's own class, layered and passed through by the mouse,
+// so that nothing of the mod's runs in it.
+struct Patch {
+    HWND hwnd;
+    DWORD threadId;
+};
+std::vector<Patch> g_patches;  // guarded by g_uncoveredMutex
+constexpr int kHoleSize = 2 * kHoleHalf + 1;
+
+// With the screen magnified, a picture of it is the magnified one: the
+// pixels under the cursor are found where the magnifier shows them, and
+// shrunk back to size. Asked only while Windows' Magnifier is up.
+struct Magnification {
+    float level;
+    POINT offset;
+};
+
+Magnification ScreenMagnification() {
+    Magnification none{1, {0, 0}};
+    if (!FindWindowW(L"MagUIClass", nullptr)) {
+        return none;
+    }
+    // From System32 only: in a program run from a folder anyone can write
+    // to, a DLL of that name next to it would be loaded instead.
+    HMODULE lib = LoadLibraryExW(L"magnification.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!lib) {
+        return none;
+    }
+    using Init = BOOL(WINAPI*)();
+    using Get = BOOL(WINAPI*)(float*, int*, int*);
+    auto init = (Init)GetProcAddress(lib, "MagInitialize");
+    auto uninit = (Init)GetProcAddress(lib, "MagUninitialize");
+    auto get = (Get)GetProcAddress(lib, "MagGetFullscreenTransform");
+    Magnification found = none;
+    if (init && uninit && get && init()) {
+        float level;
+        int x, y;
+        if (get(&level, &x, &y) && level > 1) {
+            found = {level, {x, y}};
+        }
+        uninit();
+    }
+    FreeLibrary(lib);
+    return found;
+}
+
+HWND ShowPatch(POINT pt) {
+    POINT pos{pt.x - kHoleHalf, pt.y - kHoleHalf};
+    HDC screen = GetDC(nullptr);
+    HDC memory = CreateCompatibleDC(screen);
+    HBITMAP bitmap = CreateCompatibleBitmap(screen, kHoleSize, kHoleSize);
+    HGDIOBJ old = SelectObject(memory, bitmap);
+    Magnification mag = ScreenMagnification();
+    if (mag.level > 1) {
+        int side = (int)(kHoleSize * mag.level + 0.5f);
+        StretchBlt(memory, 0, 0, kHoleSize, kHoleSize, screen,
+                   (int)((pos.x - mag.offset.x) * mag.level + 0.5f),
+                   (int)((pos.y - mag.offset.y) * mag.level + 0.5f), side, side,
+                   SRCCOPY);
+    } else {
+        BitBlt(memory, 0, 0, kHoleSize, kHoleSize, screen, pos.x, pos.y,
+               SRCCOPY);
+    }
+    HWND patch = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+            WS_EX_NOACTIVATE,
+        L"Static", nullptr, WS_POPUP, pos.x, pos.y, kHoleSize, kHoleSize,
+        nullptr, nullptr, nullptr, nullptr);
+    if (patch) {
+        POINT source{0, 0};
+        SIZE size{kHoleSize, kHoleSize};
+        BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, 0};
+        UpdateLayeredWindow(patch, screen, &pos, &size, memory, &source, 0,
+                            &blend, ULW_OPAQUE);
+        ShowWindow(patch, SW_SHOWNOACTIVATE);
+    }
+    SelectObject(memory, old);
+    DeleteObject(bitmap);
+    DeleteDC(memory);
+    ReleaseDC(nullptr, screen);
+    return patch;
+}
+
+void RestoreUncovered(bool allThreads) {
+    DWORD threadId = GetCurrentThreadId();
+    std::vector<Uncovered> closing;
+    std::vector<HWND> patches;
+    {
+        std::lock_guard<std::mutex> lock(g_uncoveredMutex);
+        for (auto it = g_uncovered.begin(); it != g_uncovered.end();) {
+            if (allThreads || it->threadId == threadId) {
+                closing.push_back(*it);
+                it = g_uncovered.erase(it);
+            } else {
+                it++;
+            }
+        }
+        for (auto it = g_patches.begin(); it != g_patches.end();) {
+            if (it->threadId == threadId) {
+                patches.push_back(it->hwnd);
+                it = g_patches.erase(it);
+            } else if (allThreads) {
+                PostMessageW(it->hwnd, WM_CLOSE, 0, 0);
+                it = g_patches.erase(it);
+            } else {
+                it++;
+            }
+        }
+    }
+    // Outside the lock: the teardown, closing a window of another thread,
+    // waits for that thread, which may be about to take the lock itself. The
+    // window keeps the region it is given, so the saved one is handed back
+    // rather than freed here.
+    for (const Uncovered& u : closing) {
+        SetWindowRgn(u.hwnd, u.region, FALSE);
+    }
+    // The patch goes once the closed hole is on the screen, and no later: a
+    // drag about to start takes the window away from under it, and a patch
+    // left behind would show where the window was.
+    if (!patches.empty()) {
+        DwmFlush();
+        for (HWND patch : patches) {
+            DestroyWindow(patch);
+        }
+    }
+}
+
+void RestoreAllUncovered() {
+    RestoreUncovered(true);
+}
+
+// The press has come through, so the content can have its region back.
+// Should it have gone somewhere else after all, the shell's hook, which saw
+// it go, says so too (kDragCover).
+void RestoreUncoveredAfterReplay() {
+    if (GetMessageExtraInfo() == (LPARAM)kReplayMarker) {
+        RestoreUncovered();
+    }
+}
+
+struct LayerSearch {
+    POINT pt;
+    std::vector<HWND> layers;
+};
+
+BOOL CALLBACK FindLayerProc(HWND child, LPARAM lParam) {
+    auto* search = reinterpret_cast<LayerSearch*>(lParam);
+    RECT rc;
+    if (IsWindowVisible(child) && IsCompositionContent(child) &&
+        GetWindowRect(child, &rc) && PtInRect(&rc, search->pt)) {
+        search->layers.push_back(child);
+    }
+    return TRUE;
+}
+
+// Not under g_uncoveredMutex: the content can be another thread's, and
+// SetWindowRgn on its window waits for that thread. The hole is added to
+// `holes`, for the caller to record.
+bool OpenHole(HWND content, POINT pt, std::vector<Uncovered>* holes) {
+    RECT rc;
+    GetWindowRect(content, &rc);
+    HRGN saved = CreateRectRgn(0, 0, 0, 0);
+    if (GetWindowRgn(content, saved) == ERROR) {
+        DeleteObject(saved);
+        saved = nullptr;
+    }
+    HRGN region = CreateRectRgn(0, 0, rc.right - rc.left, rc.bottom - rc.top);
+    if (saved) {
+        CombineRgn(region, saved, nullptr, RGN_COPY);
+    }
+    int x = pt.x - rc.left, y = pt.y - rc.top;
+    HRGN hole = CreateRectRgn(x - kHoleHalf, y - kHoleHalf, x + kHoleHalf + 1,
+                              y + kHoleHalf + 1);
+    CombineRgn(region, region, hole, RGN_DIFF);
+    DeleteObject(hole);
+    if (!SetWindowRgn(content, region, FALSE)) {
+        DeleteObject(region);
+        if (saved) {
+            DeleteObject(saved);
+        }
+        return false;
+    }
+    holes->push_back({content, saved, GetCurrentThreadId()});
+    return true;
+}
+
+// The holes under the cursor, in the content of `root` there. Returns whether
+// one opened.
+bool UncoverUnderCursor(HWND root) {
+    // In pixels, whatever the application is aware of: the region, the
+    // cursor and the window under it all have to agree.
+    DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    POINT pt;
+    GetCursorPos(&pt);
+    bool opened = false;
+    HWND content = CompositionContentAt(WindowFromPoint(pt), pt);
+    if (content && GetAncestor(content, GA_ROOT) == root) {
+        // Such content can lie on more of it - File Explorer's title bar on
+        // its tabs: the hole goes through every layer at the point, or the
+        // press would only find the next one down.
+        LayerSearch search{pt, {}};
+        EnumChildWindows(root, FindLayerProc, (LPARAM)&search);
+
+        // The patch on the screen first, then the holes under it.
+        HWND patch = ShowPatch(pt);
+        if (patch) {
+            DwmFlush();
+        }
+        std::vector<Uncovered> holes;
+        for (HWND layer : search.layers) {
+            if (!g_uninitializing) {
+                OpenHole(layer, pt, &holes);
+            }
+        }
+        // Recorded under the lock - unless the teardown has closed everything
+        // there was meanwhile, and would miss these: they close again here.
+        {
+            std::lock_guard<std::mutex> lock(g_uncoveredMutex);
+            opened = !g_uninitializing && !holes.empty();
+            if (opened) {
+                g_uncovered.insert(g_uncovered.end(), holes.begin(),
+                                   holes.end());
+                if (patch) {
+                    g_patches.push_back({patch, GetCurrentThreadId()});
+                }
+            }
+        }
+        if (!opened) {
+            for (const Uncovered& u : holes) {
+                SetWindowRgn(u.hwnd, u.region, FALSE);
+            }
+            if (patch) {
+                DestroyWindow(patch);
+            }
+        }
+    }
+    SetThreadDpiAwarenessContext(previous);
+    return opened;
+}
+
+// What the shell's hook takes for a drag: the left or the right button going
+// down, nothing else.
+bool IsTakenPress(LPARAM lParam) {
+    return HIWORD(lParam) == 0 && (LOWORD(lParam) == MOUSEEVENTF_LEFTDOWN ||
+                                   LOWORD(lParam) == MOUSEEVENTF_RIGHTDOWN);
+}
+
+// The request is a message let through UIPI, so that the shell's hook can
+// reach elevated windows - which lets any process send it. So the press goes
+// in again only as the hook asks for it: a drag's button, with the modifier
+// held this moment, through a hole that opened. Anything else presses
+// nothing.
+void UncoverAndPress(HWND root, const MSG* msg) {
+    RestoreUncovered();
+    // A window too busy to get to it in time doesn't press long after the
+    // fact: the press is lost, the way it would be to a window that hangs.
+    if (g_uninitializing || GetTickCount() - msg->time > kUncoverMaxWaitMs ||
+        !IsTakenPress(msg->lParam) || !IsDragModifierDown() ||
+        !UncoverUnderCursor(root)) {
+        return;
+    }
+
+    // On the hole, where the cursor is: the shell's hook keeps it there for
+    // as long as the press is waiting to go in again.
+    INPUT input{};
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = LOWORD(msg->lParam);
+    input.mi.dwExtraInfo = kReplayMarker;
+    if (!SendInput(1, &input, sizeof(input))) {
+        RestoreUncovered();  // no press is coming to close it
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// In the shell: the hook
+
+constexpr UINT kButtonVk[5] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1,
+                               VK_XBUTTON2};
+constexpr DWORD kDownFlag[5] = {MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_RIGHTDOWN,
+                                MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_XDOWN,
+                                MOUSEEVENTF_XDOWN};
+constexpr DWORD kUpFlag[5] = {MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTUP,
+                              MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XUP,
+                              MOUSEEVENTF_XUP};
+constexpr DWORD kXButton[5] = {0, 0, 0, XBUTTON1, XBUTTON2};
+
+int ButtonIndex(WPARAM wParam, DWORD mouseData) {
+    switch (wParam) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+            return 0;
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+            return 1;
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+            return 2;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+            return HIWORD(mouseData) == XBUTTON2 ? 4 : 3;
+    }
+    return -1;
+}
+
+// Would the message hook take a press of this button for a drag, over a
+// window it can drag? Asked first, before anything about where the press is:
+// every click on the system comes by here.
+bool WantsButton(int button) {
+    return button < 2 && IsDragModifierDown();
+}
+
+// Only ever touched on the server thread: the button of a shortcut press
+// taken here, whose release goes with it; -1 for none.
+int g_shortcutButton = -1;
+
+// The window shortcut needs nothing of the press but where it was, so it is
+// asked of the window under the cursor right from here, for whatever window
+// that is. A press only reaches the message hook once the window takes it as
+// a message, and not every one does: Task Manager's title bar takes its
+// presses past every queue, and a window busy enough to open a hole late
+// loses them to the Start menu, the Win key let go of by then.
+bool TakeShortcutPress(int button, POINT pt) {
+    Hotkey shortcut = g_settings.windowShortcut;
+    WindowAction action = g_settings.windowShortcutAction;
+    if (action == WindowAction::None ||
+        !MatchesShortcut(shortcut, kButtonVk[button], true)) {
+        return false;
+    }
+    HWND root = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+    if (!CanTakeActionUnderCursor(root, action)) {
+        return false;  // desktop, taskbar, menus... - a normal click
+    }
+    ArmWinMask(shortcut.win, shortcut.alt);
+    RequestWindowAction(root, action);
+    g_shortcutButton = button;
+    return true;
+}
+
+// Only ever touched on the server thread: a press taken and not pressed again
+// yet, per button, and whether its button has come up meanwhile.
+struct TakenPress {
+    bool active;
+    bool released;
+    DWORD time;
+    HWND root;
+};
+TakenPress g_taken[5];
+
+// The release of a press that came up before the press went in again: sent
+// once it has, from a timer, outside the hook.
+int g_lateRelease = -1;
+
+void CALLBACK LateReleaseTimer(HWND, UINT, UINT_PTR id, DWORD) {
+    KillTimer(nullptr, id);
+    int button = g_lateRelease;
+    g_lateRelease = -1;
+    if (button < 0) {
+        return;
+    }
+    INPUT input{};
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = kUpFlag[button];
+    input.mi.mouseData = kXButton[button];
+    input.mi.dwExtraInfo = kReplayMarker;
+    SendInput(1, &input, sizeof(input));
+}
+
+// Two fingers on a touchpad, over a program that scrolls with them itself -
+// Chrome, Discord, Spotify: Windows asks the program first, with
+// DM_POINTERHITTEST, whether it takes the contact. With the modifier held,
+// and the wheel scaling windows, the program is not to hear the question, and
+// is left the wheel Windows makes of the gesture for a program that does not
+// take it - which the shell's mouse hook takes in turn (TakeWheel).
+//
+// The question is sent, not posted, so the message hook never sees it. What
+// does is the hook on sent messages, a moment before the window's procedure
+// is called: it puts a subclass of ours on the window for just that one
+// message, which answers it the way a window that does not take touchpads
+// does, and takes itself off again. File Explorer asks nothing of the kind:
+// it scrolls its touchpad gestures some other way, and goes on doing so.
+bool TouchpadGoesToWheel(WPARAM pointerHitTest) {
+    POINTER_INPUT_TYPE type;
+    return g_settings.wheelScale && IsDragModifierDown() &&
+           GetPointerType(GET_POINTERID_WPARAM(pointerHitTest), &type) &&
+           type == PT_TOUCHPAD;
+}
+
+constexpr UINT_PTR kTouchpadSubclassId = 0x48597074;  // 'Hypt'
+// The windows with that subclass on, for the teardown to take it off should
+// the message it waits for not have come.
+std::mutex g_touchpadMutex;
+std::vector<HWND> g_touchpadAsked;
+
+void EndKeepingTouchpad(HWND hwnd);
+
+LRESULT CALLBACK TouchpadSubclassProc(HWND hwnd,
+                                      UINT uMsg,
+                                      WPARAM wParam,
+                                      LPARAM lParam,
+                                      UINT_PTR,
+                                      DWORD_PTR) {
+    ModRef ref;  // the image must not go away under this procedure
+
+    if (uMsg == DM_POINTERHITTEST) {
+        EndKeepingTouchpad(hwnd);
+        if (TouchpadGoesToWheel(wParam)) {
+            return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+        }
+    } else if (uMsg == WM_NCDESTROY) {
+        EndKeepingTouchpad(hwnd);
+    } else if (uMsg == g_msgDrag && wParam == kDragUntouch) {
+        EndKeepingTouchpad(hwnd);
+        return 0;
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void EndKeepingTouchpad(HWND hwnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_touchpadMutex);
+        auto it = std::find(g_touchpadAsked.begin(), g_touchpadAsked.end(), hwnd);
+        if (it == g_touchpadAsked.end()) {
+            return;
+        }
+        g_touchpadAsked.erase(it);
+    }
+    RemoveWindowSubclass(hwnd, TouchpadSubclassProc, kTouchpadSubclassId);
+}
+
+// From the hook on sent messages, on the window's own thread.
+void KeepTouchpadFromApp(HWND hwnd, WPARAM pointerHitTest) {
+    if (g_uninitializing || !TouchpadGoesToWheel(pointerHitTest)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_touchpadMutex);
+    if (std::find(g_touchpadAsked.begin(), g_touchpadAsked.end(), hwnd) !=
+            g_touchpadAsked.end() ||
+        g_uninitializing) {
+        return;
+    }
+    if (SetWindowSubclass(hwnd, TouchpadSubclassProc, kTouchpadSubclassId, 0)) {
+        g_touchpadAsked.push_back(hwnd);
+    }
+}
+
+std::vector<HWND> SnapshotTouchpadWindows() {
+    std::lock_guard<std::mutex> lock(g_touchpadMutex);
+    return g_touchpadAsked;
+}
+
+// Only touched on the server thread: the window the wheel last went to, and
+// when. A turn of the wheel stays with its window for as long as it goes on:
+// a window grown or shrunk out from under the cursor is still the one the
+// next notch is for, not whatever the cursor is over now. It ends when the
+// modifier comes up, or when the wheel has rested this long.
+HWND g_wheelRoot;
+DWORD g_wheelAt;
+constexpr DWORD kWheelTurnMs = 500;
+
+void EndWheelTurn() {
+    g_wheelRoot = nullptr;
+}
+
+// The window the wheel is for: the one the turn is going to, or one being
+// moved, wherever the cursor has got to by now - or else the one under the
+// cursor.
+HWND WheelTarget(POINT pt, DWORD time) {
+    if (g_wheelRoot && time - g_wheelAt < kWheelTurnMs &&
+        IsWindow(g_wheelRoot) && CanScale(g_wheelRoot)) {
+        return g_wheelRoot;
+    }
+    HWND under = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+    for (HWND candidate : {under, g_wheelRoot}) {
+        GUITHREADINFO info{sizeof(info)};
+        if (candidate && IsWindow(candidate) &&
+            GetGUIThreadInfo(GetWindowThreadProcessId(candidate, nullptr),
+                             &info) &&
+            (info.flags & GUI_INMOVESIZE) && info.hwndMoveSize &&
+            (candidate == under ||
+             GetAncestor(info.hwndMoveSize, GA_ROOT) == candidate)) {
+            return GetAncestor(info.hwndMoveSize, GA_ROOT);
+        }
+    }
+    return under;
+}
+
+// The wheel turned with the modifier held, over a window: it is the window's
+// to grow or shrink by (actions.cpp), rather than the app's to scroll. Taken
+// here for every window alike, so it needs no hole: the window is asked, and
+// not pressed again.
+bool TakeWheel(const MSLLHOOKSTRUCT* info) {
+    if (!g_settings.wheelScale || info->dwExtraInfo == kInjectedMarker ||
+        !IsDragModifierDown()) {
+        return false;
+    }
+    // Any window's, here as in the shell: with an elevated window in front,
+    // the shell's hook is not called at all, and this one - in front of it in
+    // the chain - is the only one to see the wheel.
+    HWND root = WheelTarget(info->pt, info->time);
+    if (!CanScale(root)) {
+        return false;
+    }
+    g_wheelRoot = root;
+    g_wheelAt = info->time;
+    PostMessageW(root, g_msgDrag, kDragScale, (short)HIWORD(info->mouseData));
+    ArmWinMask(g_settings.dragModifier == DragModifier::Win,
+               g_settings.dragModifier == DragModifier::Alt);
+    return true;
+}
+
+LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
+    ModRef ref;  // the image must not go away under this procedure
+
+    auto* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+    if (code != HC_ACTION || g_uninitializing) {
+        return CallNextHookEx(nullptr, code, wParam, lParam);
+    }
+    // The cursor stays put between a press taken and the press again: moved
+    // on, it would take the press past the hole and onto the content. A few
+    // milliseconds, and never long, should the window not answer.
+    if (wParam == WM_MOUSEMOVE && info->dwExtraInfo != kReplayMarker) {
+        for (TakenPress& taken : g_taken) {
+            if (taken.active && info->time - taken.time < kHoldCursorMaxMs) {
+                return 1;
+            }
+        }
+    }
+    if (wParam == WM_MOUSEWHEEL && TakeWheel(info)) {
+        return 1;
+    }
+    int button = ButtonIndex(wParam, info->mouseData);
+    if (button < 0) {
+        return CallNextHookEx(nullptr, code, wParam, lParam);
+    }
+    bool down = wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+                wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN;
+    TakenPress& taken = g_taken[button];
+
+    if (info->dwExtraInfo == kReplayMarker) {
+        // The press again, through the hole: what it does is up to the
+        // window now. One whose button is up already gets its release.
+        if (down && taken.active) {
+            taken.active = false;
+            PostMessageW(taken.root, g_msgDrag, kDragCover, 0);
+            if (taken.released) {
+                g_lateRelease = button;
+                SetTimer(nullptr, 0, 0, LateReleaseTimer);
+            }
+        }
+    } else if (info->dwExtraInfo != kInjectedMarker) {
+        if (down && TakeShortcutPress(button, info->pt)) {
+            return 1;
+        }
+        if (!down && button == g_shortcutButton) {
+            g_shortcutButton = -1;
+            return 1;
+        }
+        if (down && WantsButton(button)) {
+            HWND hwnd = WindowFromPoint(info->pt);
+            HWND root = GetAncestor(hwnd, GA_ROOT);
+            // An elevated process takes the presses on its own windows, the
+            // ones kept from the shell's hook, and leaves the rest to it.
+            DWORD pid = 0;
+            GetWindowThreadProcessId(root, &pid);
+            if ((IsShellProcess() || pid == GetCurrentProcessId()) &&
+                IsFrameWindow(root) && CompositionContentAt(hwnd, info->pt)) {
+                taken = {true, false, info->time, root};
+                PostMessageW(root, g_msgDrag, kDragUncover,
+                             MAKELPARAM(kDownFlag[button], kXButton[button]));
+                return 1;
+            }
+            taken.active = false;
+        } else if (down) {
+            taken.active = false;
+        } else if (taken.active) {
+            taken.released = true;
+            return 1;  // let go of before it went in again: it comes after
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // src/snap.cpp
 ////////////////////////////////////////////////////////////////////////////////
-// Magnetic edges while a window is being dragged, and the aspect ratio held
-// while it is being resized.
+// Magnetic edges while a window is being dragged, the aspect ratio held
+// while it is being resized, and the size the mouse wheel gives a window
+// while it is being moved.
 //
-// Both live in the same place: a subclass put on the window for the length of
+// All three live in the same place: a subclass put on the window for the length of
 // the drag, which edits the rectangle the system's loop is about to apply.
 // The loop hands it over as WM_MOVING / WM_SIZING - sent messages, which the
 // message hook never sees, so a subclass is the only way to them. It goes on
@@ -3872,6 +5509,11 @@ struct SnapState {
     RECT inset{};        // the visible frame minus the window rectangle
     std::vector<RECT> windows;   // the frames of the other windows
     std::vector<RECT> monitors;  // the work areas to snap to
+    // The frame size the wheel has given the window mid-move, unrounded - or
+    // none. The loop goes on with the size it started with otherwise.
+    double scaledWidth = 0, scaledHeight = 0;
+    // Where on that frame the cursor holds it, unrounded.
+    double holdX = 0, holdY = 0;
 };
 
 std::mutex g_snapMutex;
@@ -4145,7 +5787,9 @@ bool SnapAllowed() {
 }
 
 void AdjustMove(HWND hwnd, const SnapState& state, RECT* rc) {
-    if (!SnapAllowed()) {
+    bool snapping = g_settings.snap != SnapMode::Off && SnapAllowed();
+    bool scaled = state.scaledWidth > 0;
+    if (!snapping && !scaled) {
         return;  // nothing to add to the loop's own rectangle
     }
     // The loop's own proposal is thrown away: it works the position out from
@@ -4157,6 +5801,13 @@ void AdjustMove(HWND hwnd, const SnapState& state, RECT* rc) {
     }
     int width = rc->right - rc->left;
     int height = rc->bottom - rc->top;
+    if (scaled) {
+        // The frame's size plus the invisible border's.
+        width = (int)lround(state.scaledWidth) + state.inset.left -
+                state.inset.right;
+        height = (int)lround(state.scaledHeight) + state.inset.top -
+                 state.inset.bottom;
+    }
 
     POINT offset = state.grabOffset;
     if (state.grabSize.cx > 0 && state.grabSize.cy > 0 &&
@@ -4174,8 +5825,80 @@ void AdjustMove(HWND hwnd, const SnapState& state, RECT* rc) {
     window.bottom = window.top + height;
 
     RECT frame = WindowToFrame(window, state.inset);
-    SnapMovedFrame(state, SnapDistancePx(hwnd), &frame);
+    if (snapping) {
+        SnapMovedFrame(state, SnapDistancePx(hwnd), &frame);
+    }
     *rc = FrameToWindow(frame, state.inset);
+}
+
+// The wheel turned while the window is being moved: the window takes the new
+// size at once, and the loop with every step from now on. Around the point
+// the cursor holds it by, which stays under the cursor - or, as the settings
+// may have it, around its center.
+//
+// Where the cursor holds it is the drag's own grab offset, not where the
+// window is on the screen: the window is always a step of the loop behind
+// the cursor, and a hold worked out from it would take that lag in with
+// every notch, until the window had crept out from under the cursor.
+// Returns false if this is not a move of the mod's, which then has no size to
+// keep up.
+bool ScaleDraggedWindow(HWND hwnd, double factor) {
+    POINT cursor;
+    RECT window;
+    if (!GetCursorPos(&cursor) || !GetWindowRect(hwnd, &window)) {
+        return false;
+    }
+    RECT target;
+    {
+        std::lock_guard<std::mutex> lock(g_snapMutex);
+        auto it = g_snaps.find(hwnd);
+        if (it == g_snaps.end() || it->second.kind != kDragMove) {
+            return false;
+        }
+        SnapState& state = it->second;
+        const RECT& inset = state.inset;
+        if (state.scaledWidth <= 0) {
+            // The size the loop has given the window, and the offset at it -
+            // which the loop keeps in proportion when it changes the size, a
+            // maximized window being restored.
+            int width = window.right - window.left;
+            int height = window.bottom - window.top;
+            POINT offset = state.grabOffset;
+            if (state.grabSize.cx > 0 && state.grabSize.cy > 0) {
+                offset.x = MulDiv(offset.x, width, state.grabSize.cx);
+                offset.y = MulDiv(offset.y, height, state.grabSize.cy);
+            }
+            state.scaledWidth = width - inset.left + inset.right;
+            state.scaledHeight = height - inset.top + inset.bottom;
+            state.holdX = offset.x - inset.left;
+            state.holdY = offset.y - inset.top;
+        }
+        double width = state.scaledWidth * factor;
+        double height = state.scaledHeight * factor;
+        if (g_settings.wheelAnchor == WheelAnchor::Center) {
+            state.holdX += (width - state.scaledWidth) / 2;
+            state.holdY += (height - state.scaledHeight) / 2;
+        } else {
+            state.holdX *= factor;
+            state.holdY *= factor;
+        }
+        state.scaledWidth = width;
+        state.scaledHeight = height;
+
+        int left = cursor.x - (int)lround(state.holdX);
+        int top = cursor.y - (int)lround(state.holdY);
+        RECT frame{left, top, left + (int)lround(width),
+                   top + (int)lround(height)};
+        target = FrameToWindow(frame, inset);
+        state.grabOffset = POINT{cursor.x - target.left, cursor.y - target.top};
+        state.grabSize = SIZE{target.right - target.left,
+                              target.bottom - target.top};
+    }
+    SetWindowPos(hwnd, nullptr, target.left, target.top,
+                 target.right - target.left, target.bottom - target.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                     SWP_NOCOPYBITS);
+    return true;
 }
 
 void AdjustSize(HWND hwnd, const SnapState& state, UINT edge, RECT* rc) {
@@ -4271,6 +5994,33 @@ LRESULT CALLBACK SnapSubclassProc(HWND hwnd,
             break;
         }
 
+        case WM_WINDOWPOSCHANGING: {
+            // The loop's last word, as the button comes up: its own
+            // rectangle, put in place without a WM_MOVING - at the size it
+            // started with, after a turn of the wheel with the mouse held
+            // still. It gets the one the moves would have had.
+            auto* pos = reinterpret_cast<WINDOWPOS*>(lParam);
+            if (pos->flags & SWP_NOSIZE) {
+                break;
+            }
+            std::lock_guard<std::mutex> lock(g_snapMutex);
+            auto it = g_snaps.find(hwnd);
+            if (it == g_snaps.end() || it->second.kind != kDragMove ||
+                it->second.scaledWidth <= 0 ||
+                (pos->cx == it->second.grabSize.cx &&
+                 pos->cy == it->second.grabSize.cy)) {
+                break;
+            }
+            RECT rc{pos->x, pos->y, pos->x + pos->cx, pos->y + pos->cy};
+            AdjustMove(hwnd, it->second, &rc);
+            pos->x = rc.left;
+            pos->y = rc.top;
+            pos->cx = rc.right - rc.left;
+            pos->cy = rc.bottom - rc.top;
+            pos->flags &= ~SWP_NOMOVE;
+            break;
+        }
+
         case WM_DPICHANGED: {
             // The invisible border is measured in pixels, and the window has
             // just changed how big a pixel is.
@@ -4278,6 +6028,9 @@ LRESULT CALLBACK SnapSubclassProc(HWND hwnd,
             auto it = g_snaps.find(hwnd);
             if (it != g_snaps.end()) {
                 it->second.inset = FrameInsetOf(hwnd);
+                // And the loop's own size for the new scale is the one to go
+                // on with.
+                it->second.scaledWidth = it->second.scaledHeight = 0;
             }
             break;
         }
@@ -4313,9 +6066,12 @@ std::vector<HWND> SnapshotSnappedWindows() {
 // Called from the drag request, on the window's own thread, once a move or
 // size loop is about to start.
 void BeginDragSnap(HWND root, WPARAM kind, POINT pt) {
+    // Every move gets the subclass, magnet or none: the wheel may yet give
+    // it a size to keep.
     bool wantSnap = g_settings.snap != SnapMode::Off;
     bool wantRatio = kind == kDragResize && g_settings.keepAspectVk != 0;
-    if (g_uninitializing || (!wantSnap && !wantRatio)) {
+    bool wantScale = kind == kDragMove && g_settings.wheelScale;
+    if (g_uninitializing || (!wantSnap && !wantRatio && !wantScale)) {
         return;
     }
 
@@ -4382,17 +6138,29 @@ void EndDragSnap(HWND hwnd) {
 // with the message replaced by WM_NULL if it was consumed by the mod.
 void ProcessRetrievedMessage(MSG* msg) {
     ReleaseForcedLeftButton();
+    RestoreHiddenAlt();
+    RestoreUncoveredAfterReplay();
 
     bool consumed = false;
 
     switch (msg->message) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            TrackAltInMove(msg);
             consumed = HandleHotkey(msg);
+            break;
+
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            TrackAltInMove(msg);
             break;
 
         case WM_HOTKEY:
             consumed = HandleDesktopHotkey(msg);
+            break;
+
+        case WM_TIMER:
+            consumed = HandleScaleTimer(msg);
             break;
 
         // The shortcut gets first refusal on every button: it can be bound
@@ -4427,11 +6195,17 @@ void ProcessRetrievedMessage(MSG* msg) {
 
         case WM_LBUTTONUP:
         case WM_NCLBUTTONUP:
+            if (ReplayHeldPress(msg, false)) {
+                break;
+            }
             consumed = HandleShortcutButtonUp(msg) || HandleLeftButtonUp();
             break;
 
         case WM_RBUTTONUP:
         case WM_NCRBUTTONUP:
+            if (ReplayHeldPress(msg, true)) {
+                break;
+            }
             consumed = HandleShortcutButtonUp(msg) || HandleButtonUp(true);
             break;
 
@@ -4469,8 +6243,10 @@ void ProcessRetrievedMessage(MSG* msg) {
 // retrieves; the second is for the ones sent to its windows, which never go
 // near a queue - a window says that it has gained or lost focus by being sent
 // WM_NCACTIVATE, and that is the only word the mod gets about a window it has
-// not otherwise touched. The second one is only installed when there is a
-// border color to paint with, because until then it listens for nothing.
+// not otherwise touched - and a touchpad's two fingers are about to go to
+// the app by DM_POINTERHITTEST, sent too (mouse.cpp). So the second one is
+// installed for either: a border color to paint with, or the mouse wheel
+// scaling windows; with neither, it listens for nothing.
 struct ThreadHooks {
     HHOOK getMessage = nullptr;
     HHOOK callWndProc = nullptr;
@@ -4505,6 +6281,10 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+bool CallWndProcHookWanted() {
+    return BorderColorsWanted() || g_settings.wheelScale;
+}
+
 LRESULT CALLBACK CallWndProc(int code, WPARAM wParam, LPARAM lParam) {
     ModRef ref;  // the image must not go away under this procedure
 
@@ -4524,6 +6304,10 @@ LRESULT CALLBACK CallWndProc(int code, WPARAM wParam, LPARAM lParam) {
                 break;
             case WM_NCDESTROY:
                 ForgetBorderColor(sent->hwnd);
+                break;
+            case DM_POINTERHITTEST:
+                // Two fingers on a touchpad, about to go to the app.
+                KeepTouchpadFromApp(sent->hwnd, sent->wParam);
                 break;
         }
     }
@@ -4546,7 +6330,7 @@ void InstallMessageHookLocked(DWORD threadId) {
                    GetLastError());
         }
     }
-    if (!hooks.callWndProc && BorderColorsWanted()) {
+    if (!hooks.callWndProc && CallWndProcHookWanted()) {
         hooks.callWndProc =
             SetWindowsHookExW(WH_CALLWNDPROC, CallWndProc, nullptr, threadId);
         if (!hooks.callWndProc) {
@@ -4615,10 +6399,10 @@ void RemoveMessageHooks() {
     g_messageHooks.clear();
 }
 
-// The settings can take the border colors away again, and then there is
-// nothing left for the hook on sent messages to listen for.
+// The settings can take the border colors and the wheel away again, and then
+// there is nothing left for the hook on sent messages to listen for.
 void RefreshCallWndProcHooks() {
-    if (BorderColorsWanted()) {
+    if (CallWndProcHookWanted()) {
         InstallMessageHooks();
         return;
     }
@@ -4827,8 +6611,10 @@ void Wh_ModBeforeUninit() {
     // still there.
     UnfadeDraggedWindows();
 
-    // Take our hook procedures out before the DLL goes away.
+    // Take our hook procedures out before the DLL goes away, and give content
+    // a press was going through its region back.
     RemoveMessageHooks();
+    RestoreAllUncovered();
     ShutdownKeyboardServer();
     ShutdownDesktopThread();
 
@@ -4842,6 +6628,9 @@ void Wh_ModBeforeUninit() {
     // own thread.
     for (HWND hwnd : SnapshotSnappedWindows()) {
         SendTeardown(hwnd, g_msgDrag, kDragUnsnap);
+    }
+    for (HWND hwnd : SnapshotTouchpadWindows()) {
+        SendTeardown(hwnd, g_msgDrag, kDragUntouch);
     }
     for (HWND hwnd : SnapshotFramelessWindows()) {
         SendTeardown(hwnd, g_msgFrameless, kActionShow);
