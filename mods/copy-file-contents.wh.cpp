@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              copy-file-contents
 // @name            Copy File Contents
-// @description     Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.
+// @description     Copies a selected file's text or its SHA-256 hash without opening it in an app, from a keyboard shortcut or the right-click menu.
 // @version         1.4.1
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
@@ -16,7 +16,7 @@
 /*
 # Copy File Contents
 
-Adds two actions to File Explorer, so a file can be read without opening it:
+Adds two actions to File Explorer, so a file can be read without opening it in an app:
 
 * **Copy contents** puts the text of the selected file on the clipboard.
 * **Copy SHA-256** puts the hash of the selected file on the clipboard.
@@ -43,9 +43,8 @@ key from Explorer.
 **Right-click.** The two entries are also added to the classic menu, reached
 with **Show more options** or Shift+F10. They are added at the bottom of that
 menu, below Properties, and removed again once the menu closes, so the menu is
-never left modified. The new Windows 11 menu belongs to a different component and
-cannot be extended by injected code without registering a handler in the
-registry, which a mod must not do. To get the entries on a plain right-click, use
+never left modified. The mod does not add entries to the new Windows 11 menu.
+To get the entries on a plain right-click, use
 the separate mod **Classic context menu on Windows 11**. If the classic menu
 cannot be reached on your build, the keyboard shortcuts are the whole of the mod
 and they do not need the menu at all.
@@ -54,8 +53,10 @@ and they do not need the menu at all.
 
 A file is copied only if it looks like text. Files that look binary are refused
 rather than pasted as garbage, and files larger than the size limit are refused
-the same way. When nothing at all could be copied, an optional prompt shows the
-reason. For an oversized local file up to 32 MB whose prefix looks like text, it offers
+the same way. When no file contents can be read, an optional prompt shows the
+reason. A clipboard write failure with no successful item is reported separately.
+For an oversized local
+file up to 32 MB whose prefix looks like text, the optional prompt offers
 to open it in Notepad instead. This prefix check is only a heuristic. Network and
 offline files are not opened for the offer. The path is passed quoted so a path
 with a space in it still opens.
@@ -63,16 +64,17 @@ with a space in it still opens.
 The size limit is 8 MB by default, with the unit chosen next to it, megabytes or
 kilobytes. A large selection is copied file by file, so one file over the limit is
 skipped and the rest are still copied. That partial copy is silent, because a
-dialog in the middle of copying five files is worse than a missing one. When
-nothing at all can be copied, the optional prompt explains why instead.
+dialog in the middle of copying five files is worse than a missing one. In joined
+mode, a multi-file selection identifies each result even if only one file succeeds.
+When nothing at all can be read, the optional prompt explains why instead.
 
-The whole selection is also held to a 32 MB budget, so selecting a whole folder of
-logs cannot make File Explorer allocate without bound. A file bigger than what is
-left of that budget cannot fit in any encoding, so it is skipped without being
-opened, and once the budget is used up the rest of the selection is not read at
-all, which keeps a large Ctrl+A quick instead of slow. A file smaller than that is
-read and measured: its text is the same size on disk for UTF-16, and up to twice
-that for ASCII, so only the read itself can say.
+The decoded text in one selection is held to a 32 MB budget. A file bigger on
+disk than what is left of that budget is skipped without being opened, even if
+its decoded text might have fit. Once the remaining budget is very small, the rest of the
+selection is not read at all. Smaller files are read and their decoded text is
+measured: depending on the encoding it may be smaller or larger than the bytes on
+disk. File names and temporary buffers are outside the budget, so total memory use
+can be higher.
 
 The ceilings are 64 MB per file and 32 MB per selection whatever the settings
 say. In practice the per selection budget is the one that binds: no single file is
@@ -80,8 +82,8 @@ copied beyond 32 MB of text, which is the same as saying that a 20 MB UTF-16 fil
 is copied and a 20 MB ASCII file is not. A text file that big is already beyond
 what a clipboard is good for, and the mod refuses rather than trying.
 
-When nothing in the selection can be copied, **Copy contents** is left out of the
-menu instead of being offered and then refusing. To decide that, the first 4 KiB
+When the selection appears uncopyable, **Copy contents** is usually left out of
+the menu instead of being offered and then refusing. To decide that, the first 4 KiB
 of each file are read when the menu opens, stopping at the first file that
 passes, and looking at no more than 16 files. Files that are offline or stored
 online only are not read at all, because reading one would start a download; such
@@ -100,12 +102,13 @@ text with invisible gaps. Line endings are copied as they are.
 ## Large hashes
 
 Hashing reads every byte, and the work runs on the same thread that owns the File
-Explorer window, so that window does not repaint until it is done. For a normal
-file that is instant; a gigabyte on a hard disk is about ten seconds. Above the
-size set in the settings, 256 MB by default, the mod asks first, and says how many
-files and how much data are involved, counting the whole selection rather than one
-file at a time. Answer no and nothing happens. The setting can be raised to where
-hashing a whole disk in one go is on you, or set to 0 to be asked every time.
+Explorer window, so that window does not repaint until it is done. Large files
+and slow drives or shares can take a long time. Above the size set in the
+settings, 256 MB by default, the mod asks first, and says how many
+files and how much data are involved, using the sizes it could read across the
+selection rather than one file at a time. Answer no and nothing happens. The
+setting can be raised to where hashing a whole disk in one go is on you, or set
+to 0 to be asked every time.
 If no selected file can be hashed, a message warns that no hash was copied and
 the clipboard may contain earlier data. If some files fail, successful hashes
 are copied without a dialog, with file names when more than one file (not a folder)
@@ -118,11 +121,13 @@ was selected.
   programs and nothing on the desktop.
 * The contents are put on the clipboard as text. Nothing is written to disk, and
   no temporary file is created.
-* When the mod is turned off, it asks its prompts to close and cancels further
-  copying. A customized dialog may not respond, in which case close it yourself.
-  Windhawk can remain uninitializing while a prompt or file read is still active.
-  The wait between separate clipboard items ends as soon as unloading starts, but
-  a single read from a share that has stopped answering cannot be interrupted.
+* When the mod is turned off, it asks its menus and prompts to close and waits
+  for tracked hook calls to finish. An unresponsive prompt may need to be closed
+  manually. A stalled file read cannot be interrupted and may leave Windhawk
+  uninitializing indefinitely; the Explorer window can remain unresponsive.
+  A different menu or another mod's hook may also delay uninitialization until
+  it closes or returns. Other mod updates in the process may have to wait.
+  The delay between separate clipboard items ends early when unloading starts.
 * With separate clipboard items turned on, Ctrl+V pastes only the last file. The
   earlier ones are reachable through Windows clipboard history (Win+V), and only
   there, and clipboard history has to be turned on for them to be kept.
@@ -160,7 +165,7 @@ was selected.
   $description: Adds the entry that puts the file's SHA-256 hash on the clipboard.
 - offerEditor: true
   $name: Offer to open a file that cannot be copied
-  $description: When no contents were copied, report the reason. Offer Notepad only for an oversized local file up to 32 MB whose prefix looks like text. Hash failures that produce no result are always reported separately.
+  $description: When no file contents can be read, report the reason. Offer Notepad only for an oversized local file up to 32 MB whose prefix looks like text. This does not control warnings for a failed clipboard write or a hash operation with no result.
 - hideWhenUncopyable: true
   $name: Hide "Copy contents" when nothing can be copied
   $description: When every selected file is binary or over the size limit, the entry is left out of the menu instead of being offered and then refusing. The first few KiB of each file are read to decide, except files that are offline, stored online only, or on a network share or a mapped network drive, which are not read.
@@ -172,7 +177,7 @@ was selected.
   $description: Windows clipboard history ignores copies that arrive too close together, so the files are written with a short wait between them. Raise this if some files still go missing from the history, lower it if the copy feels slow. 0 turns the wait off.
 - askHashMB: 256
   $name: Ask before hashing files bigger than this in all, in MB
-  $description: Hashing reads every byte and the File Explorer window waits until it is done, about ten seconds for each gigabyte on a hard disk. Above this much in total the mod asks first. 0 asks for every file.
+  $description: Hashing reads every byte and the File Explorer window waits until it is done. Above this much in total the mod asks first, using the file sizes it could read. 0 asks for every file whose size can be read.
 - hotkeys: true
   $name: Keyboard shortcuts
   $description: Turn the two shortcuts on. They only act in a File Explorer window with files selected, and never while you type in a rename box, the address bar or the search box.
@@ -204,6 +209,7 @@ was selected.
 #include <bcrypt.h>
 
 #include <atomic>
+#include <climits>
 #include <cstring>
 #include <cwchar>
 #include <string>
@@ -213,40 +219,27 @@ was selected.
 // Settings
 // ---------------------------------------------------------------------------
 
+// Settings are updated on Windhawk's engine thread and read by Explorer hooks.
+// Atomic fields avoid data races; one operation may still see a mix of old and
+// new settings while an update is in progress.
 struct Settings {
-    int maxSize;
-    bool maxSizeInMb;
-    bool copyContents;
-    bool copyHash;
-    bool offerEditor;
-    bool hideWhenUncopyable;
-    bool separateEntries;
-    int separateGapMs;
-    int askHashMB;
-    bool hotkeys;
-    UINT contentsModifiers;
-    UINT contentsKey;
-    UINT hashModifiers;
-    UINT hashKey;
+    std::atomic<int> maxSize{8};
+    std::atomic<bool> maxSizeInMb{true};
+    std::atomic<bool> copyContents{true};
+    std::atomic<bool> copyHash{true};
+    std::atomic<bool> offerEditor{true};
+    std::atomic<bool> hideWhenUncopyable{true};
+    std::atomic<bool> separateEntries{false};
+    std::atomic<int> separateGapMs{250};
+    std::atomic<int> askHashMB{256};
+    std::atomic<bool> hotkeys{true};
+    std::atomic<UINT> contentsModifiers{MOD_CONTROL | MOD_SHIFT};
+    std::atomic<UINT> contentsKey{'T'};
+    std::atomic<UINT> hashModifiers{MOD_CONTROL | MOD_SHIFT};
+    std::atomic<UINT> hashKey{'H'};
 };
 
-// Written one per line so that adding a field cannot silently shift the rest.
-Settings g_settings = {
-    8,                        // maxSize
-    true,                     // maxSizeInMb
-    true,                     // copyContents
-    true,                     // copyHash
-    true,                     // offerEditor
-    true,                     // hideWhenUncopyable
-    false,                    // separateEntries
-    250,                      // separateGapMs
-    256,                      // askHashMB
-    true,                     // hotkeys
-    MOD_CONTROL | MOD_SHIFT,  // contentsModifiers
-    'T',                      // contentsKey
-    MOD_CONTROL | MOD_SHIFT,  // hashModifiers
-    'H',                      // hashKey
-};
+Settings g_settings;
 
 UINT ParseModifiers(const wchar_t* text, UINT fallback) {
     if (wcscmp(text, L"ctrl_shift") == 0) return MOD_CONTROL | MOD_SHIFT;
@@ -289,15 +282,15 @@ UINT ParseKey(const wchar_t* text, UINT fallback) {
 }
 
 void LoadSettings() {
-    g_settings.maxSize = Wh_GetIntSetting(L"maxSize");
-    if (g_settings.maxSize <= 0) {
-        g_settings.maxSize = 8;
+    int maxSize = Wh_GetIntSetting(L"maxSize");
+    if (maxSize <= 0) {
+        maxSize = 8;
     }
-    // Two levels of cap: this one keeps the number sane, and SizeLimitBytes
-    // holds the bytes at 64 MB whatever is entered here.
-    if (g_settings.maxSize > 65536) {
-        g_settings.maxSize = 65536;
+    // Clamp before publishing so a concurrent hook cannot see an invalid size.
+    if (maxSize > 65536) {
+        maxSize = 65536;
     }
+    g_settings.maxSize = maxSize;
     // Only the two units are offered, and anything unreadable means megabytes,
     // which is the default.
     WindhawkUtils::StringSetting unit =
@@ -309,17 +302,19 @@ void LoadSettings() {
     g_settings.hideWhenUncopyable =
         Wh_GetIntSetting(L"hideWhenUncopyable") != 0;
     g_settings.separateEntries = Wh_GetIntSetting(L"separateEntries") != 0;
-    g_settings.separateGapMs = Wh_GetIntSetting(L"separateGapMs");
-    if (g_settings.separateGapMs < 0) {
-        g_settings.separateGapMs = 0;
+    int gapMs = Wh_GetIntSetting(L"separateGapMs");
+    if (gapMs < 0) {
+        gapMs = 0;
     }
-    if (g_settings.separateGapMs > 2000) {
-        g_settings.separateGapMs = 2000;
+    if (gapMs > 2000) {
+        gapMs = 2000;
     }
-    g_settings.askHashMB = Wh_GetIntSetting(L"askHashMB");
-    if (g_settings.askHashMB < 0) {
-        g_settings.askHashMB = 0;
+    g_settings.separateGapMs = gapMs;
+    int askHashMB = Wh_GetIntSetting(L"askHashMB");
+    if (askHashMB < 0) {
+        askHashMB = 0;
     }
+    g_settings.askHashMB = askHashMB;
     g_settings.hotkeys = Wh_GetIntSetting(L"hotkeys") != 0;
     WindhawkUtils::StringSetting contentsMods =
         WindhawkUtils::StringSetting::make(L"contentsModifiers");
@@ -342,8 +337,8 @@ void LoadSettings() {
 // Reading, hashing and the prompts all run on File Explorer's own thread, and
 // the mod's code is on that thread's stack the whole time. If the mod is
 // disabled or updated in the middle, it must not be unloaded while that stack
-// is still in the mod. So every such stretch is counted, and
-// Wh_ModBeforeUninit closes any open menu and waits for the count to reach zero.
+// is still in the mod. Such stretches are counted, and Wh_ModBeforeUninit tries
+// to close open menus and prompts and waits briefly for the count to reach zero.
 // ---------------------------------------------------------------------------
 
 std::atomic<bool> g_unloading{false};
@@ -351,8 +346,13 @@ std::atomic<bool> g_unloading{false};
 // waits on this instead of sleeping, so a 2000 ms gap does not hold up an
 // unload for two seconds.
 HANDLE g_unloadEvent = nullptr;
-// Open menus carrying the entries, and copies in progress.
+// Popup calls and copies in progress, and active hook calls of all three kinds.
 std::atomic<int> g_busy{0};
+std::atomic<int> g_activeHooks{0};
+struct HookGuard {
+    HookGuard() { g_activeHooks++; }
+    ~HookGuard() { g_activeHooks--; }
+};
 // Only the outer popup call adds entries, and only one copy runs at a time per
 // window thread.
 thread_local bool t_inMenuHook = false;
@@ -363,28 +363,43 @@ thread_local bool t_copying = false;
 constexpr int kMaxOwners = 8;
 std::atomic<HWND> g_ownerSlots[kMaxOwners];
 std::atomic<DWORD> g_ownerThreads[kMaxOwners];
+SRWLOCK g_ownerLock = SRWLOCK_INIT;
 
 // Which prompts belong to this mod, so unloading can close them.
 const wchar_t kContentsTitle[] = L"Copy File Contents";
 const wchar_t kHashTitle[] = L"Copy SHA-256";
 
 struct BusyGuard {
-    explicit BusyGuard(HWND owner) {
-        slot = -1;
+    explicit BusyGuard(HWND owner) : slot(-1) {
+        g_busy++;
+        RegisterOwner(owner);
+    }
+    void RegisterOwner(HWND owner) {
+        if (!owner || slot >= 0) {
+            return;
+        }
+        AcquireSRWLockExclusive(&g_ownerLock);
         for (int i = 0; i < kMaxOwners; i++) {
-            HWND expected = nullptr;
-            if (g_ownerSlots[i].compare_exchange_strong(expected, owner)) {
+            if (!g_ownerSlots[i]) {
                 slot = i;
                 g_ownerThreads[i] = GetCurrentThreadId();
+                g_ownerSlots[i] = owner;
                 break;
             }
         }
-        g_busy++;
+        ReleaseSRWLockExclusive(&g_ownerLock);
+    }
+    void UnregisterOwner() {
+        if (slot >= 0) {
+            AcquireSRWLockExclusive(&g_ownerLock);
+            g_ownerSlots[slot] = nullptr;
+            g_ownerThreads[slot] = 0;
+            ReleaseSRWLockExclusive(&g_ownerLock);
+            slot = -1;
+        }
     }
     ~BusyGuard() {
-        if (slot >= 0) {
-            g_ownerSlots[slot] = nullptr;
-        }
+        UnregisterOwner();
         g_busy--;
     }
     int slot;
@@ -402,7 +417,8 @@ constexpr size_t kHistoryMaxChars = (4 * 1024 * 1024) / sizeof(wchar_t);
 
 long long SizeLimitBytes() {
     const long long unit = g_settings.maxSizeInMb ? 1024LL * 1024LL : 1024LL;
-    const long long value = g_settings.maxSize > 0 ? g_settings.maxSize : 8;
+    const int maxSize = g_settings.maxSize.load();
+    const long long value = maxSize > 0 ? maxSize : 8;
     const long long bytes = value * unit;
     if (bytes <= 0) {
         return 8LL * 1024LL * 1024LL;
@@ -665,14 +681,24 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
     if (file == INVALID_HANDLE_VALUE) {
         return ReadResult::Unreadable;
     }
+    struct FileGuard {
+        HANDLE file;
+        void Close() {
+            if (file != INVALID_HANDLE_VALUE) {
+                CloseHandle(file);
+                file = INVALID_HANDLE_VALUE;
+            }
+        }
+        ~FileGuard() { Close(); }
+    } guard{file};
 
     LARGE_INTEGER size = {};
     if (!GetFileSizeEx(file, &size) || size.QuadPart < 0) {
-        CloseHandle(file);
+        guard.Close();
         return ReadResult::Unreadable;
     }
     if (size.QuadPart > SizeLimitBytes()) {
-        CloseHandle(file);
+        guard.Close();
         return ReadResult::TooBig;
     }
 
@@ -680,7 +706,7 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
     size_t read = 0;
     while (read < static_cast<size_t>(size.QuadPart)) {
         if (g_unloading) {
-            CloseHandle(file);
+            guard.Close();
             return ReadResult::Unreadable;
         }
         DWORD chunk = 0;
@@ -694,7 +720,7 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
         }
         read += chunk;
     }
-    CloseHandle(file);
+    guard.Close();
     if (read != static_cast<size_t>(size.QuadPart)) {
         return ReadResult::Unreadable;
     }
@@ -914,37 +940,47 @@ bool AnyCopyableText(const std::vector<std::wstring>& paths) {
 // window, because the documented behaviour of SetClipboardData after
 // OpenClipboard(NULL) is that it fails.
 bool SetClipboardText(HWND owner, const std::wstring& text) {
-    bool opened = false;
-    for (int attempt = 0; attempt < 20; attempt++) {
-        if (OpenClipboard(owner)) {
-            opened = true;
-            break;
-        }
-        if (g_unloading) {
-            return false;
-        }
-        Sleep(25);
-    }
-    if (!opened) {
+    if (g_unloading) {
         return false;
     }
-    EmptyClipboard();
+
+    // Prepare the new item before emptying the clipboard, so allocation and
+    // lock failures cannot discard its previous contents.
     const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
     HGLOBAL block = GlobalAlloc(GMEM_MOVEABLE, bytes);
     if (!block) {
-        CloseClipboard();
         return false;
     }
     void* target = GlobalLock(block);
     if (!target) {
         GlobalFree(block);
-        CloseClipboard();
         return false;
     }
     memcpy(target, text.c_str(), bytes);
     GlobalUnlock(block);
-    // The clipboard owns the block from here. Freeing it on failure is the only
-    // case where the handle stays ours.
+
+    bool opened = false;
+    for (int attempt = 0; attempt < 20; attempt++) {
+        if (g_unloading) {
+            break;
+        }
+        if (OpenClipboard(owner)) {
+            opened = true;
+            break;
+        }
+        Sleep(25);
+    }
+    if (!opened) {
+        GlobalFree(block);
+        return false;
+    }
+    if (g_unloading || !EmptyClipboard()) {
+        CloseClipboard();
+        GlobalFree(block);
+        return false;
+    }
+    // After EmptyClipboard succeeds, a SetClipboardData failure can still leave
+    // the clipboard empty. Ownership transfers only when SetClipboardData works.
     if (!SetClipboardData(CF_UNICODETEXT, block)) {
         GlobalFree(block);
         CloseClipboard();
@@ -960,6 +996,10 @@ bool SetClipboardText(HWND owner, const std::wstring& text) {
 
 std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
     *ok = false;
+    // The hash object can reference this buffer until it is destroyed, so the
+    // cleanup guard below must run before the vectors are destroyed.
+    std::vector<unsigned char> object;
+    std::vector<unsigned char> digest;
     const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
                                     FILE_SHARE_READ | FILE_SHARE_WRITE |
                                         FILE_SHARE_DELETE,
@@ -971,8 +1011,17 @@ std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
 
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
-    std::vector<unsigned char> object;
-    std::vector<unsigned char> digest(32);
+    struct Cleanup {
+        HANDLE file;
+        BCRYPT_ALG_HANDLE& algorithm;
+        BCRYPT_HASH_HANDLE& hash;
+        ~Cleanup() {
+            if (hash) BCryptDestroyHash(hash);
+            if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
+            CloseHandle(file);
+        }
+    } cleanup{file, algorithm, hash};
+    digest.resize(32);
     ULONG objectSize = 0;
     ULONG produced = 0;
     bool success = false;
@@ -1014,13 +1063,8 @@ std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
                                  static_cast<ULONG>(digest.size()), 0) != 0) {
                 success = false;
             }
-            BCryptDestroyHash(hash);
         }
     }
-    if (algorithm) {
-        BCryptCloseAlgorithmProvider(algorithm, 0);
-    }
-    CloseHandle(file);
     if (!success) {
         return std::wstring();
     }
@@ -1072,6 +1116,9 @@ void ReportRefusal(HWND owner, const std::wstring& path, const wchar_t* reason,
     }
     const UINT flags = canOpen ? (MB_YESNO | MB_ICONINFORMATION)
                                : (MB_OK | MB_ICONINFORMATION);
+    if (g_unloading) {
+        return;
+    }
     const int answer = MessageBoxW(owner, text.c_str(), kContentsTitle, flags);
     if (g_unloading || answer != IDYES || !canOpen) {
         return;
@@ -1096,6 +1143,7 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
     // Whether a size refusal is eligible for the Notepad prefix check.
     bool lastMayOpen = false;
     size_t budget = kTotalTextBytes;
+    size_t files = 0;
 
     try {
         for (const std::wstring& path : paths) {
@@ -1105,6 +1153,7 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
             if (IsDirectory(path)) {
                 continue;
             }
+            files++;
             if (budget < 2 * sizeof(wchar_t)) {
                 // The budget is gone. Reading more files would only throw the
                 // text away again, so the loop stops instead.
@@ -1126,10 +1175,9 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
                 lastMayOpen = true;
                 continue;
             }
-            // A file bigger than what is left of the budget cannot fit in any
-            // encoding, so it is skipped without being opened. A smaller file
-            // is read and measured, because its text can be anything from its
-            // size on disk, for UTF-16, to twice that, for ASCII.
+            // Skip files larger than the remaining budget without opening them.
+            // This conservative check can also skip text that would decode to
+            // fewer bytes than its on-disk encoding.
             if (static_cast<size_t>(onDisk) > budget) {
                 lastRefused = path;
                 lastReason = L"That selection contains more text than the mod "
@@ -1211,6 +1259,12 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
             if (written != static_cast<int>(parts.size())) {
                 Wh_Log(L"only %d of %d items reached the clipboard", written,
                        static_cast<int>(parts.size()));
+                if (written == 0 && !g_unloading) {
+                    MessageBoxW(owner,
+                                L"The contents could not be copied. Check the "
+                                L"clipboard before pasting.",
+                                kContentsTitle, MB_OK | MB_ICONINFORMATION);
+                }
             }
             return;
         }
@@ -1223,10 +1277,9 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
             if (!combined.empty()) {
                 combined += L"\r\n";
             }
-            // Several files are marked with their names, so a paste into an
-            // editor says where each part came from. One file is copied bare,
-            // because that is what "copy the contents" means.
-            if (parts.size() > 1) {
+            // Joined multi-file selections keep names even if only one file
+            // could be read. Folders do not count; separate items stay bare.
+            if (files > 1 && !separate) {
                 combined += L"=== ";
                 combined += part.name;
                 combined += L" ======\r\n";
@@ -1234,11 +1287,17 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
             combined += part.text;
         }
         if (!SetClipboardText(owner, combined)) {
-            Wh_Log(L"the clipboard was busy, nothing was copied");
+            Wh_Log(L"the clipboard write failed, nothing was copied");
+            if (!g_unloading) {
+                MessageBoxW(owner,
+                            L"The contents could not be copied. Check the "
+                            L"clipboard before pasting.",
+                            kContentsTitle, MB_OK | MB_ICONINFORMATION);
+            }
         }
     } catch (...) {
         // An allocation failure inside a hook would otherwise end Explorer.
-        Wh_Log(L"ran out of memory while copying, nothing was copied");
+        Wh_Log(L"the copy operation could not finish");
     }
 }
 
@@ -1249,12 +1308,22 @@ bool ConfirmLargeHash(HWND owner, const std::vector<std::wstring>& paths) {
     long long total = 0;
     int files = 0;
     for (const std::wstring& path : paths) {
+        if (g_unloading) {
+            return false;
+        }
         if (IsDirectory(path)) {
             continue;
         }
         const long long size = FileSizeBytes(path);
+        if (g_unloading) {
+            return false;
+        }
         if (size >= 0) {
-            total += size;
+            if (size > LLONG_MAX - total) {
+                total = LLONG_MAX;
+            } else {
+                total += size;
+            }
             files++;
         }
     }
@@ -1278,6 +1347,9 @@ bool ConfirmLargeHash(HWND owner, const std::vector<std::wstring>& paths) {
                L"%d file%s, about %s in all. Hashing reads every byte, and this "
                L"window will not respond until it is done.\n\nHash anyway?",
                files, files == 1 ? L"" : L"s", sizeText);
+    if (g_unloading) {
+        return false;
+    }
     const int answer = MessageBoxW(owner, text, kHashTitle,
                                    MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
     return !g_unloading && answer == IDYES;
@@ -1339,7 +1411,7 @@ void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
             }
         }
         if (!SetClipboardText(owner, combined)) {
-            Wh_Log(L"the clipboard was busy, nothing was copied");
+            Wh_Log(L"the clipboard write failed, nothing was copied");
             if (!g_unloading) {
                 MessageBoxW(owner,
                             L"The hash could not be copied. Check the "
@@ -1420,6 +1492,7 @@ TranslateAcceleratorW_t TranslateAcceleratorW_Original;
 
 int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable,
                                       LPMSG msg) {
+    HookGuard hookGuard;
     if (!g_unloading && !t_copying && msg &&
         (msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN) &&
         // Bit 30 marks an auto repeat. One press is one copy.
@@ -1603,12 +1676,9 @@ BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, int x, int y,
         return track();
     }
 
-    // Counted from here to the end of the scope, so unloading waits for the
-    // selection read, the open menu and the copy that may follow it, and so
-    // nothing is left behind if any of it throws. The unload flag is checked
-    // again with the count already raised: an unload that starts in between
-    // either sees this work or is seen here.
-    BusyGuard busy(owner);
+    // Count the selection read, popup and any copy that follows, and check the
+    // unload flag again after entering. HookGuard also tracks the outer hook.
+    BusyGuard busy(nullptr);
     if (g_unloading) {
         return track();
     }
@@ -1616,6 +1686,13 @@ BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, int x, int y,
     std::vector<std::wstring> paths;
     const UINT base = AddEntries(menu, uFlags, owner, x, y, &paths);
     if (!base) {
+        return track();
+    }
+    // Register only popups to which we added entries.
+    busy.RegisterOwner(owner);
+    if (g_unloading) {
+        RemoveEntries(menu, base);
+        busy.UnregisterOwner();
         return track();
     }
 
@@ -1649,6 +1726,7 @@ TrackPopupMenuEx_t TrackPopupMenuEx_Original;
 
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                   HWND hWnd, LPTPMPARAMS params) {
+    HookGuard hookGuard;
     return TrackWithEntries(hMenu, uFlags, hWnd, x, y, [&] {
         return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, params);
     });
@@ -1659,6 +1737,7 @@ TrackPopupMenu_t TrackPopupMenu_Original;
 
 BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                 int reserved, HWND hWnd, const RECT* rect) {
+    HookGuard hookGuard;
     return TrackWithEntries(hMenu, uFlags, hWnd, x, y, [&] {
         return TrackPopupMenu_Original(hMenu, uFlags, x, y, reserved, hWnd, rect);
     });
@@ -1675,8 +1754,8 @@ BOOL Wh_ModInit() {
     g_unloadEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
     Wh_Log(L"settings: max %d %s (%lld bytes), contents=%d hash=%d",
-           g_settings.maxSize, g_settings.maxSizeInMb ? L"MB" : L"KB",
-           SizeLimitBytes(), g_settings.copyContents, g_settings.copyHash);
+           g_settings.maxSize.load(), g_settings.maxSizeInMb ? L"MB" : L"KB",
+           SizeLimitBytes(), g_settings.copyContents.load(), g_settings.copyHash.load());
 
     // The paths are independent. Either one working leaves the mod useful, so a
     // failure on one is logged and the others are still installed.
@@ -1703,6 +1782,10 @@ BOOL Wh_ModInit() {
 
     if (!hooked) {
         Wh_Log(L"nothing was hooked, giving up");
+        if (g_unloadEvent) {
+            CloseHandle(g_unloadEvent);
+            g_unloadEvent = nullptr;
+        }
         return FALSE;
     }
     Wh_Log(L"ready, %d of 3 hooks installed", hooked);
@@ -1712,7 +1795,7 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     Wh_Log(L"settings changed: max %d %s (%lld bytes)",
-           g_settings.maxSize, g_settings.maxSizeInMb ? L"MB" : L"KB",
+           g_settings.maxSize.load(), g_settings.maxSizeInMb ? L"MB" : L"KB",
            SizeLimitBytes());
 }
 
@@ -1725,8 +1808,12 @@ BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
     if (!HasClass(hWnd, L"#32770")) {
         return TRUE;
     }
-    wchar_t title[128];
-    if (!GetWindowTextW(hWnd, title, ARRAYSIZE(title))) {
+    wchar_t title[128] = {};
+    DWORD_PTR length = 0;
+    if (!SendMessageTimeoutW(hWnd, WM_GETTEXT, ARRAYSIZE(title),
+                             reinterpret_cast<LPARAM>(title),
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &length) ||
+        !length) {
         return TRUE;
     }
     if (wcscmp(title, kContentsTitle) == 0 || wcscmp(title, kHashTitle) == 0) {
@@ -1741,40 +1828,52 @@ BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
     return TRUE;
 }
 
+void CancelActiveWork() {
+    HWND owners[kMaxOwners];
+    DWORD threads[kMaxOwners];
+    // Take a paired snapshot; do not hold the lock while calling window APIs.
+    AcquireSRWLockShared(&g_ownerLock);
+    for (int slot = 0; slot < kMaxOwners; slot++) {
+        owners[slot] = g_ownerSlots[slot];
+        threads[slot] = g_ownerThreads[slot];
+    }
+    ReleaseSRWLockShared(&g_ownerLock);
+    for (int slot = 0; slot < kMaxOwners; slot++) {
+        if (!owners[slot]) {
+            continue;
+        }
+        PostMessageW(owners[slot], WM_CANCELMODE, 0, 0);
+        if (threads[slot]) {
+            EnumThreadWindows(threads[slot], CancelPromptProc, 0);
+        }
+    }
+}
+
 void Wh_ModBeforeUninit() {
-    // No new work from here on: the hooks pass everything straight through.
     g_unloading = true;
-    // Wakes the wait between separate clipboard items, which would otherwise
-    // spend up to two seconds of the time below doing nothing useful.
     if (g_unloadEvent) {
         SetEvent(g_unloadEvent);
     }
 
-    // An open menu, a prompt or a copy may still be running with this mod's
-    // code on some thread's stack. Close what can be closed and wait for the
-    // rest, so nothing of this mod is on any thread when it is unloaded.
-    // Around two seconds. Every step that can be cut short has been; what is
-    // left is a single CreateFileW or ReadFile on a share that has stopped
-    // answering, and that cannot be interrupted, only waited out or abandoned.
-    for (int i = 0; i < 100 && g_busy > 0; i++) {
-        for (int slot = 0; slot < kMaxOwners; slot++) {
-            HWND owner = g_ownerSlots[slot];
-            if (!owner) {
-                continue;
-            }
-            PostMessageW(owner, WM_CANCELMODE, 0, 0);
-            const DWORD thread = g_ownerThreads[slot];
-            if (thread) {
-                EnumThreadWindows(thread, CancelPromptProc, 0);
-            }
+    // Give the hooks time to cancel their menus and prompts before Windhawk
+    // removes them. Wh_ModUninit finishes draining after hooks are removed.
+    DWORD start = GetTickCount();
+    while (g_busy > 0 || g_activeHooks > 0) {
+        CancelActiveWork();
+        if (GetTickCount() - start >= 2000) {
+            break;
         }
-        // The event remains signalled; sleep here to avoid a busy loop.
         Sleep(20);
     }
 }
 
 void Wh_ModUninit() {
-    // The bounded wait above may time out if an I/O call is stuck.
+    // Windhawk has removed the hooks. Keep the module and its event alive until
+    // tracked calls leave, even if an unresponsive prompt or read takes longer.
+    while (g_busy > 0 || g_activeHooks > 0) {
+        CancelActiveWork();
+        Sleep(250);
+    }
     if (g_unloadEvent) {
         CloseHandle(g_unloadEvent);
         g_unloadEvent = nullptr;
