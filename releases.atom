@@ -13,29 +13,46 @@
         <id>https://windhawk.net/mods/windhawk-ui-translator#680d719e41d0ce0736a4cb64b09e4d091977c261</id>
         <link href="https://windhawk.net/mods/windhawk-ui-translator"/>
         <updated>2026-11-04T04:03:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windhawkuitranslator">Windhawk UI Translator</h1>
+        <content type="html"><![CDATA[<h1>Windhawk UI Translator</h1>
 <p>Windhawk localizes its own interface, but not the content mods write. This mod
 translates it in place, inside the Windhawk 2.0 window.</p>
-<p><img src="https://raw.githubusercontent.com/Zhanyuanium/windhawk-ui-translator/main/docs/images/details.png" alt="" /></p>
-<h2 id="whatittranslates">What it translates</h2>
-<p>| Where | What |
-| --- | --- |
-| Details page | mod name, summary, README, changelog |
-| Settings page | titles, descriptions, tooltips, dropdown values and options, reset labels |
-| Explore and installed lists | mod names and one-line summaries |</p>
+<p><img src="https://raw.githubusercontent.com/Zhanyuanium/windhawk-ui-translator/main/docs/images/details.png" alt=""></p>
+<h2>What it translates</h2>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Details page</td>
+<td>mod name, summary, README, changelog</td>
+</tr>
+<tr>
+<td>Settings page</td>
+<td>titles, descriptions, tooltips, dropdown values and options, reset labels</td>
+</tr>
+<tr>
+<td>Explore and installed lists</td>
+<td>mod names and one-line summaries</td>
+</tr>
+</tbody>
+</table>
 <p>The Source tab and Windhawk's own interface strings are not translated.</p>
-<h2 id="usage">Usage</h2>
+<h2>Usage</h2>
 <p>Hover a translated block to see the original; on a touch screen, tap once for
 the original and again for the translation. <code>Alt+Q</code> (configurable) or a
 two-finger double-tap toggles translation.</p>
-<h2 id="providers">Providers</h2>
+<h2>Providers</h2>
 <p>Any OpenAI-compatible <code>/chat/completions</code> endpoint is recommended; a glossary
 and batching are built in. Store its API key in Windows Credential Manager:</p>
 <pre><code>cmdkey /generic:windhawk-ui-translator /user:translator /pass:&lt;your key&gt;
 </code></pre>
 <p>The free Microsoft Edge endpoint needs no key and is the fallback; <code>auto</code> picks
 the LLM once a base URL and a key are configured. Google is not offered.</p>
-<h2 id="notes">Notes</h2>
+<h2>Notes</h2>
 <ul>
 <li>Enabled while the UI is already running, the mod does nothing until the UI
 process restarts: close and reopen Windhawk (<code>windhawk-ui.exe</code>), not just the
@@ -46,11 +63,12 @@ on the next page load or settings change.</li>
 <li>If the UI fails to start: <code>windhawk.exe -safe-mode</code>, or
 <code>windhawk-cli.exe mod disable windhawk-ui-translator</code>.</li>
 </ul>
-<h2 id="privacy">Privacy</h2>
+<h2>Privacy</h2>
 <p>Page text goes to Microsoft's translation service by default, or to the
 configured LLM endpoint. No telemetry, no other network access. The API key is
 read from Windows Credential Manager and never reaches the page; the optional
-plaintext setting is the fallback, stored in Windhawk's own settings.</p>]]></content>
+plaintext setting is the fallback, stored in Windhawk's own settings.</p>
+]]></content>
         <author>
             <name>Zhanyuanium</name>
             <uri>https://github.com/Zhanyuanium</uri>
@@ -61,18 +79,18 @@ plaintext setting is the fallback, stored in Windhawk's own settings.</p>]]></co
         <id>https://windhawk.net/mods/wintips-osd#468eb61fae183f46914dba7a37528cded99d146b</id>
         <link href="https://windhawk.net/mods/wintips-osd"/>
         <updated>2026-11-04T01:04:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="wintipsosd">WinTips OSD</h1>
+        <content type="html"><![CDATA[<h1>WinTips OSD</h1>
 <p>A Windows 11 style floating overlay for the lock keys, Insert and clipboard
 actions. Nothing is injected into other programs and no system functions are
 hooked: it runs as a Windhawk tool mod in its own process.</p>
-<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-demo-dark-en.gif" alt="Caps Lock tip sliding in over the desktop" /></p>
+<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-demo-dark-en.gif" alt="Caps Lock tip sliding in over the desktop"></p>
 <p>Toggle <strong>Caps Lock</strong>, <strong>Num Lock</strong>, <strong>Scroll Lock</strong> or press <strong>Insert</strong> and a small
 card slides in from the screen edge it sits closest to: a padlock icon that
 rotates and bounces, the state in words, and an accent bar along the bottom.
 <strong>Ctrl+C / Ctrl+V / Ctrl+X</strong> show a check mark or scissors with a <code>×N</code> badge that
 counts consecutive actions.</p>
-<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-acrylic-light-en.png" alt="Light theme, frosted card over a wallpaper" /></p>
-<h2 id="features">Features</h2>
+<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-acrylic-light-en.png" alt="Light theme, frosted card over a wallpaper"></p>
+<h2>Features</h2>
 <ul>
 <li><strong>Real blurred backdrop.</strong> The card blurs whatever is behind it, the way the
 Windows 11 OSD does, while keeping a per-pixel-alpha window so the whole card
@@ -82,7 +100,7 @@ edge comes in horizontally (this wins over top/bottom), otherwise vertically
 from whichever half of the screen it sits in.</li>
 <li><strong>Clipboard aware.</strong> Copy tips only appear after the clipboard actually
 changes, so <code>Ctrl+C</code> used to interrupt a console app doesn't pop a false
-"Copied". Non-keyboard copies (context menu, in-app buttons) can be reported
+&quot;Copied&quot;. Non-keyboard copies (context menu, in-app buttons) can be reported
 too.</li>
 <li><strong>Elevated apps.</strong> A 250 ms poll catches lock-key toggles made while an
 administrator window has focus, which a low-level keyboard hook can't see.</li>
@@ -91,12 +109,12 @@ color.</li>
 <li><strong>Doesn't get in the way.</strong> Click-through, no focus stealing, not in the
 taskbar or Alt+Tab, fades out on its own.</li>
 </ul>
-<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-paste-en.png" alt="Paste tip with an ×3 badge" /></p>
-<h2 id="settings">Settings</h2>
+<p><img src="https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-paste-en.png" alt="Paste tip with an ×3 badge"></p>
+<h2>Settings</h2>
 <ul>
 <li><strong>Caps Lock / Num Lock / Scroll Lock / Insert / Copy / Paste / Cut</strong> — turn
 each tip on or off.</li>
-<li><strong>Also notify non-keyboard copies</strong> — context menu copies, in-app "Copy"
+<li><strong>Also notify non-keyboard copies</strong> — context menu copies, in-app &quot;Copy&quot;
 buttons and any other clipboard change that wasn't made with <code>Ctrl+C</code>.</li>
 <li><strong>Display duration</strong> — how long the card stays, 500 to 10000 ms.</li>
 <li><strong>Animation speed</strong> — 100 is normal (300 ms), 50 is twice as fast, 0 disables
@@ -116,7 +134,7 @@ empty to follow the system accent color.</li>
 <li><strong>Skip while a fullscreen app is in front</strong> — games, fullscreen video and
 presentation mode.</li>
 </ul>
-<h2 id="thingstoknow">Things to know</h2>
+<h2>Things to know</h2>
 <ul>
 <li>Runs as a <strong>tool mod</strong>: it keeps working when Explorer restarts, and it never
 loads into other processes.</li>
@@ -129,7 +147,7 @@ an elevated window that copy can come back black, and the card falls back to
 solid for that tip instead of showing a black box.</li>
 <li>Placement is preset based; fine positioning uses the offset settings.</li>
 </ul>
-<h2 id="comparedtolockkeysnotifier">Compared to Lock Keys Notifier</h2>
+<h2>Compared to Lock Keys Notifier</h2>
 <p><a href="https://windhawk.net/mods/lock-keys-notifier">Lock Keys Notifier</a> reports the
 same lock keys, so the overlap is worth spelling out. The two aim at different
 things:</p>
@@ -146,11 +164,12 @@ native OSD.</li>
 <p>If you want lock keys only, and want to tune every pixel of the card,
 Lock Keys Notifier is the better fit. If you want the native Windows 11 look, or
 clipboard tips, this mod is.</p>
-<h2 id="links">Links</h2>
+<h2>Links</h2>
 <ul>
 <li>Standalone version, source and issue tracker:
 <a href="https://github.com/DoYouNatureQ/WinTips">WinTips</a></li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
@@ -161,7 +180,7 @@ clipboard tips, this mod is.</p>
         <id>https://windhawk.net/mods/copy-file-contents#0cb1e6720db42338d92199f507ca84c4b23c7fcc</id>
         <link href="https://windhawk.net/mods/copy-file-contents"/>
         <updated>2026-11-04T01:04:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="copyfilecontents">Copy File Contents</h1>
+        <content type="html"><![CDATA[<h1>Copy File Contents</h1>
 <p>Adds two actions to File Explorer, so a file can be read without opening it:</p>
 <ul>
 <li><strong>Copy contents</strong> puts the text of the selected file on the clipboard.</li>
@@ -171,7 +190,7 @@ clipboard tips, this mod is.</p>
 the file name above each, and hashes are copied one per line. A setting can put
 each file on the clipboard as its own item instead, which keeps them apart in
 Windows clipboard history, so Win+V offers each file on its own.</p>
-<h2 id="twowaystoreachit">Two ways to reach it</h2>
+<h2>Two ways to reach it</h2>
 <p><strong>Keyboard.</strong> Select files, then press Ctrl+Shift+T for the contents or
 Ctrl+Shift+H for the hash. This works with the new Windows 11 menu, because it
 does not go through the menu at all. The shortcut is only live while a File
@@ -181,7 +200,7 @@ focus, so it never eats a letter you are typing. Every key combination here can
 be changed in the settings. Do not reuse Ctrl+Shift+C or Ctrl+Shift+N, which are
 File Explorer's own Copy as path and New folder, because the mod would take the
 key from Explorer.</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/copy-file-contents-shots/screenshots/copy-file-contents-menu.png" alt="Classic File Explorer menu with both entries" /></p>
+<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/copy-file-contents-shots/screenshots/copy-file-contents-menu.png" alt="Classic File Explorer menu with both entries"></p>
 <p><strong>Right-click.</strong> The two entries are also added to the classic menu, reached
 with <strong>Show more options</strong> or Shift+F10. They are added at the bottom of that
 menu, below Properties, and removed again once the menu closes, so the menu is
@@ -191,7 +210,7 @@ registry, which a mod must not do. To get the entries on a plain right-click, us
 the separate mod <strong>Classic context menu on Windows 11</strong>. If the classic menu
 cannot be reached on your build, the keyboard shortcuts are the whole of the mod
 and they do not need the menu at all.</p>
-<h2 id="whatitwillandwillnotcopy">What it will and will not copy</h2>
+<h2>What it will and will not copy</h2>
 <p>A file is copied only if it looks like text. Files that look binary are refused
 rather than pasted as garbage, and files larger than the size limit are refused
 the same way. When nothing at all could be copied, an optional prompt shows the
@@ -231,7 +250,7 @@ file is checked for UTF-16 without a mark, then for strict UTF-8, and finally re
 as the system code page. UTF-16 is checked before UTF-8 on purpose: the zero bytes
 of a UTF-16 file are valid UTF-8, so the other order would decode such a file as
 text with invisible gaps. Line endings are copied as they are.</p>
-<h2 id="largehashes">Large hashes</h2>
+<h2>Large hashes</h2>
 <p>Hashing reads every byte, and the work runs on the same thread that owns the File
 Explorer window, so that window does not repaint until it is done. For a normal
 file that is instant; a gigabyte on a hard disk is about ten seconds. Above the
@@ -239,7 +258,7 @@ size set in the settings, 256 MB by default, the mod asks first, and says how ma
 files and how much data are involved, counting the whole selection rather than one
 file at a time. Answer no and nothing happens. The setting can be raised to where
 hashing a whole disk in one go is on you, or set to 0 to be asked every time.</p>
-<h2 id="knownlimits">Known limits</h2>
+<h2>Known limits</h2>
 <ul>
 <li>Only files. A selection of folders, or the desktop, does nothing.</li>
 <li>The shortcuts act in File Explorer windows only. They do nothing in other
@@ -267,7 +286,8 @@ that much longer to finish copying, and the window is briefly unresponsive
 while it does.</li>
 <li>A file being written by another program while it is read may be copied partially.
 That is a race no reader can win, and it is not worth a lock for this.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
@@ -278,23 +298,23 @@ That is a race no reader can win, and it is not worth a lock for this.</li>
         <id>https://windhawk.net/mods/mmc-dark-mode#8bd77f398d1d27555aba6471b90a5034c0fd69e9</id>
         <link href="https://windhawk.net/mods/mmc-dark-mode"/>
         <updated>2026-11-04T01:04:43.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mmcdarkmode">MMC Dark Mode</h1>
+        <content type="html"><![CDATA[<h1>MMC Dark Mode</h1>
 <p>A dark theme for the Microsoft Management Console: Device Manager, Services,
 Event Viewer, Task Scheduler, Disk Management and anything else hosted by
 <code>mmc.exe</code>.</p>
-<h2 id="screenshots">Screenshots</h2>
+<h2>Screenshots</h2>
 <p>Device Manager with the mod off:</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-before.png" alt="Device Manager with the mod off" /></p>
+<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-before.png" alt="Device Manager with the mod off"></p>
 <p>Device Manager with the mod on:</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-after.png" alt="Device Manager with the mod on" /></p>
-<h2 id="whatitdoes">What it does</h2>
+<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-after.png" alt="Device Manager with the mod on"></p>
+<h2>What it does</h2>
 <p>The mod themes MMC windows in the <code>mmc.exe</code> process, including common trees,
 list views, property sheets and chrome. It also contains targeted handling for
 Services, Event Viewer, Task Scheduler and Disk Management. Existing menus and
 toolbars remain available. Some embedded content draws itself and is not themed.</p>
 <p>Switching the mod off requests restoration of native styles, colours and
 painting. The system-wide colour table is not changed.</p>
-<h2 id="knownlimits">Known limits</h2>
+<h2>Known limits</h2>
 <ul>
 <li>MMC hosts many snap-ins and not every control or embedded page is covered.
 Layouts, visual styles and Windows builds may differ from those tested.</li>
@@ -319,7 +339,8 @@ dark face for the Task Scheduler summary Refresh button.</li>
 <li>The maximized child window's menu-row buttons use scoped custom drawing.
 Other layouts may keep the native appearance. Restored child-window captions
 and their buttons can remain light.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
@@ -330,34 +351,37 @@ and their buttons can remain light.</li>
         <id>https://windhawk.net/mods/startpad#76edbcc836b994efec92065992b9a02be87d82a1</id>
         <link href="https://windhawk.net/mods/startpad"/>
         <updated>2026-11-04T01:04:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startpad">StartPad</h1>
-<p><img src="https://raw.githubusercontent.com/frankh93/StartPad/main/preview.png" alt="StartPad Preview" /></p>
+        <content type="html"><![CDATA[<h1>StartPad</h1>
+<p><img src="https://raw.githubusercontent.com/frankh93/StartPad/main/preview.png" alt="StartPad Preview"></p>
 <p>A macOS Launchpad-style fullscreen app launcher that replaces the Windows 11 Start menu, featuring horizontal paginated grids, interactive app folders, drag-and-drop reordering, and customizable visual themes.</p>
-<h2 id="featureshowtouse">Features &amp; How to Use</h2>
-<h3 id="pagesnavigation">Pages &amp; Navigation</h3>
+<h2>Features &amp; How to Use</h2>
+<h3>Pages &amp; Navigation</h3>
 <ul>
 <li><strong>Horizontal Pages</strong>: Apps are organized into pages rather than a vertical scrolling list.</li>
 <li><strong>Switching Pages</strong>: Click and drag horizontally with the mouse, scroll the mouse wheel (vertical or horizontal), click the pagination dots at the bottom, or use <strong>Page Up / Page Down</strong>.</li>
 <li><strong>2D Arrow Key Navigation</strong>: Use the <strong>Arrow keys</strong> or <strong>Tab</strong> to move selection across icons. Moving past the left or right edge of the grid automatically flips to the previous or next page.</li>
 </ul>
-<h3 id="draganddropfolders">Drag-and-Drop &amp; Folders</h3>
+<h3>Drag-and-Drop &amp; Folders</h3>
 <ul>
 <li><strong>Reorder Apps</strong>: <strong>Click and hold</strong> (~320 ms) on any app or folder icon to pick it up, then drag it to a new position on the grid or across pages (hold near the screen edge to flip pages).</li>
-<li><strong>Create Folders</strong>:</li>
-<li><strong>Drag & Drop</strong>: Drag one app icon directly onto another app icon (or into an existing folder).</li>
+<li><strong>Create Folders</strong>:
+<ul>
+<li><strong>Drag &amp; Drop</strong>: Drag one app icon directly onto another app icon (or into an existing folder).</li>
 <li><strong>Selection Mode</strong>: Click the <strong>More (<code>...</code>)</strong> button on the right side of the search bar and choose <strong>Create folder</strong>, click the apps you want to bundle (marked with a blue checkmark), and click the <strong>Done (<code>✓</code>)</strong> button in the search bar (or press <strong>Enter</strong>).</li>
+</ul>
+</li>
 <li><strong>Rename Folders</strong>: When a folder is open, <strong>click its title</strong> at the top or press <strong>F2</strong> (also works when a folder is selected on the main grid), type the new name, and press <strong>Enter</strong>.</li>
 <li><strong>Remove or Ungroup</strong>: Drag an icon outside the open folder panel to move it back to the main grid, or right-click a folder and select <strong>Ungroup folder</strong>.</li>
 <li><strong>Persistent Layout</strong>: Your custom icon order, folders, and hidden apps are automatically saved to Windhawk's mod storage per user.</li>
 </ul>
-<h3 id="searchlaunching">Search &amp; Launching</h3>
+<h3>Search &amp; Launching</h3>
 <ul>
 <li><strong>Instant Search</strong>: Start typing anywhere to filter apps immediately. Press <strong>Esc</strong> or click the clear (<code>×</code>) button to reset the search.</li>
 <li><strong>Launch App</strong>: Click an icon or press <strong>Enter</strong> on the selected app.</li>
 <li><strong>Run as Administrator</strong>: Hold <strong>Ctrl + Shift + Enter</strong> on a selected app, or right-click the app and choose <strong>Run as administrator</strong>.</li>
 <li><strong>Context Menu</strong>: Right-click any app to <strong>Open</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Remove from folder</strong>, or <strong>Hide</strong>.</li>
 </ul>
-<h3 id="moreoptionshidingapps">More Options (<code>...</code>) &amp; Hiding Apps</h3>
+<h3>More Options (<code>...</code>) &amp; Hiding Apps</h3>
 <p>Click the <strong><code>...</code></strong> button inside the right side of the search bar to access:</p>
 <ul>
 <li><strong>Create folder</strong>: Interactively select multiple apps to group into a new folder.</li>
@@ -365,24 +389,25 @@ and their buttons can remain light.</li>
 <li><strong>Search in hidden apps</strong>: When checked, typing a search query will also return matching apps that you have hidden.</li>
 <li><strong>Reset layout</strong>: Restores the default alphabetical layout and removes all custom folders and hidden-app rules.</li>
 </ul>
-<h3 id="powermenuvisuals">Power Menu &amp; Visuals</h3>
+<h3>Power Menu &amp; Visuals</h3>
 <ul>
 <li><strong>Power Button</strong>: Located at the bottom right (aligned with the page dots and last column), providing quick access to <strong>Lock</strong>, <strong>Sign out</strong>, <strong>Sleep</strong>, <strong>Shut down</strong>, and <strong>Restart</strong>.</li>
 <li><strong>Visual Styles</strong>: Choose between <strong>MacOS Style</strong> (pill search bar &amp; squircle folders) and <strong>Windows 11 Fluent</strong> (Acrylic-inspired search box with system accent bar), automatically adapting to Windows Light and Dark modes.</li>
 <li><strong>Legacy Icon Cleanup</strong>: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.</li>
 <li><strong>Localized UI</strong>: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.</li>
 </ul>
-<h2 id="howstartpaddiffersfromfullscreenstartmod">How StartPad differs from "fullscreen-start" mod</h2>
+<h2>How StartPad differs from &quot;fullscreen-start&quot; mod</h2>
 <p>Both mods replace the Start menu with a fullscreen app launcher, and <strong>they cannot be enabled at the same time</strong> because both intercept <code>XamlLauncher::ShowStartView</code>.</p>
 <ul>
 <li><strong>StartPad</strong> focuses on a <strong>paginated macOS Launchpad workflow</strong>: horizontal pages with spring physics, <strong>folders</strong> (creation, renaming, ungrouping), <strong>drag-and-drop icon reordering</strong> with persistent layout storage, <strong>hiding apps</strong>, a <strong>right-click context menu</strong> (Run as administrator, Open file location), an integrated <strong>Power menu</strong>, a <strong>Windows 11 Fluent visual style</strong>, and <strong>multilingual UI strings</strong>.</li>
 <li><strong>Fullscreen Start (<code>fullscreen-start</code>)</strong> by Rafael Mendes focuses on a single <strong>vertically scrolled grid</strong> with Direct2D rendering, live DWM Acrylic/Blur backdrops, <code>Ctrl+V</code> clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.</li>
 </ul>
-<h2 id="creditslicense">Credits &amp; License</h2>
+<h2>Credits &amp; License</h2>
 <ul>
 <li>Hooking <code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code> (<code>kShowMethodKeyboard</code> / <code>kShowFlagKeyboard</code>), secondary folder-process detection (<code>IsFolderWindowsProcess</code>), and thread initialization/uninitialization structure are adapted from <a href="https://github.com/RafaelMendes1407"><strong>Fullscreen Start (Launchpad style)</strong> (<code>fullscreen-start</code>)</a> by <strong>Rafael Mendes</strong>, licensed under the MIT License (Copyright (c) Rafael Mendes).</li>
 <li>Licensed under the <strong>MIT License</strong>.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>Frankh93</name>
             <uri>https://github.com/frankh93</uri>
@@ -393,8 +418,8 @@ and their buttons can remain light.</li>
         <id>https://windhawk.net/mods/hourly-peek-buddy#660bc1995e97a6f66040c56cb782989087a68073</id>
         <link href="https://windhawk.net/mods/hourly-peek-buddy"/>
         <updated>2026-11-04T00:03:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hourlypeekbuddy">Hourly Peek Buddy</h1>
-<p><img src="https://i.imgur.com/pSUzh1o.gif" alt="Screenshot" /></p>
+        <content type="html"><![CDATA[<h1>Hourly Peek Buddy</h1>
+<p><img src="https://i.imgur.com/pSUzh1o.gif" alt="Screenshot"></p>
 <p>A fun reminder for the top of every hour or at the times you choose.</p>
 <p>A funny little character pops up from the bottom corner of your screen, waves
 at you with a speech bubble, and goes away again. It shows up at the top of every
@@ -403,7 +428,7 @@ apps. There are 14 characters and 6 ways of showing up, and you can see the
 result right away with the built-in preview, so you never have to wait for the
 next hour.</p>
 <p>All characters are drawn by the mod itself, so there are no images to download.</p>
-<h2 id="preview">Preview</h2>
+<h2>Preview</h2>
 <p>Windhawk settings cannot have a button, so the preview works like this:</p>
 <ul>
 <li><strong>Preview when settings are saved</strong> (on by default): every time you press
@@ -412,11 +437,11 @@ next hour.</p>
 even if nothing else has changed.</li>
 </ul>
 <p>Tip: pick a character or a movement, save, and watch. Repeat until you find your favorite.</p>
-<h2 id="characters">Characters</h2>
+<h2>Characters</h2>
 <p>Ghost, Cat, Alien, Robot, Penguin (with a party hat), Duck, Slime, Grumpy bomb,
 Cactus, Pumpkin, Teddy bear, Mushroom, Donut and Pizza slice. Or choose
 <strong>Random</strong> to be surprised every time.</p>
-<h2 id="waysofshowingup">Ways of showing up</h2>
+<h2>Ways of showing up</h2>
 <ul>
 <li><strong>Peek</strong>: Rises from the bottom edge and wiggles.</li>
 <li><strong>Springy</strong>: Pops up like a jack-in-the-box and bounces.</li>
@@ -425,7 +450,7 @@ Cactus, Pumpkin, Teddy bear, Mushroom, Donut and Pizza slice. Or choose
 <li><strong>Spin</strong>: Flies in from the corner while spinning.</li>
 <li><strong>Pop</strong>: Grows out of the corner with a bounce.</li>
 </ul>
-<h2 id="whendoesitshowup">When does it show up?</h2>
+<h2>When does it show up?</h2>
 <ul>
 <li>At the top of every hour (can be turned off).</li>
 <li>Every N minutes, counted from midnight (for example 15 means :00, :15, :30
@@ -435,7 +460,7 @@ and :45; 0 turns this off).</li>
 23 to 8). Using the same value for both turns quiet hours off.</li>
 <li>Optional: skip it while a full-screen game, video or presentation is active.</li>
 </ul>
-<h2 id="settings">Settings</h2>
+<h2>Settings</h2>
 <ul>
 <li>Preview when settings are saved / Preview now</li>
 <li>Character, Movement, Corner (bottom right or bottom left), Monitor (primary
@@ -447,7 +472,7 @@ or the one with the mouse)</li>
 <li>Message language: automatic (follows Windows), Turkish or English</li>
 <li>Click to dismiss, Play a sound, Skip full-screen apps</li>
 </ul>
-<h2 id="notes">Notes</h2>
+<h2>Notes</h2>
 <ul>
 <li>The mod runs in its own <code>windhawk.exe</code> process and does not inject into
 other programs. It does not change any system or registry setting.</li>
@@ -460,15 +485,15 @@ behind it.</li>
 <li>If you start a new show (for example with the preview) while one is on the
 screen, the old one is replaced.</li>
 </ul>
-<hr />
-<h1 id="saatbasrprizdostu">Saat Başı Sürpriz Dostu</h1>
+<hr>
+<h1>Saat Başı Sürpriz Dostu</h1>
 <p>Ekranın alt köşesinden komik, küçük bir karakter çıkar, konuşma balonuyla size
 göz kırpar ve tekrar gider. Her saat başı ve seçtiğiniz diğer zamanlarda ortaya
 çıkar, üstelik tüm uygulamaların üzerinde görünür. 14 karakter ve 6 farklı
 çıkış şekli vardır; yerleşik ön izleme sayesinde sonucu hemen görürsünüz, bir
 sonraki saat başını beklemenize gerek kalmaz.</p>
 <p>Tüm karakterleri modun kendisi çizer, bu yüzden indirilecek görsel yoktur.</p>
-<h2 id="nizleme">Ön izleme</h2>
+<h2>Ön izleme</h2>
 <p>Windhawk ayarlarında düğme olamadığı için ön izleme şöyle çalışır:</p>
 <ul>
 <li><strong>Ayarlar kaydedilince ön izle</strong> (varsayılan olarak açık): <em>Kaydet</em>'e her
@@ -478,11 +503,11 @@ değişmemiş olsa bile karakter yeniden çıkar.</li>
 </ul>
 <p>İpucu: Bir karakter veya hareket seçin, kaydedin ve izleyin. Favorinizi bulana
 kadar tekrarlayın.</p>
-<h2 id="karakterler">Karakterler</h2>
+<h2>Karakterler</h2>
 <p>Hayalet, Kedi, Uzaylı, Robot, Penguen (parti şapkalı), Ördek, Jöle, Huysuz
 bomba, Kaktüs, Balkabağı, Oyuncak ayı, Mantar, Donut ve Pizza dilimi. Her
 seferinde sürpriz için <strong>Rastgele</strong>'yi seçebilirsiniz.</p>
-<h2 id="kekilleri">Çıkış şekilleri</h2>
+<h2>Çıkış şekilleri</h2>
 <ul>
 <li><strong>Dikizleme</strong>: Alt kenardan yükselir ve sallanır.</li>
 <li><strong>Yaylı</strong>: Kutudan fırlayan oyuncak gibi çıkar ve zıplar.</li>
@@ -491,7 +516,7 @@ seferinde sürpriz için <strong>Rastgele</strong>'yi seçebilirsiniz.</p>
 <li><strong>Dönme</strong>: Köşeden dönerek uçarak gelir.</li>
 <li><strong>Patlama</strong>: Köşeden zıplayarak büyür.</li>
 </ul>
-<h2 id="nezamankar">Ne zaman çıkar?</h2>
+<h2>Ne zaman çıkar?</h2>
 <ul>
 <li>Her saat başı (kapatılabilir).</li>
 <li>Her N dakikada bir, geceyarısından itibaren sayılır (örneğin 15 için :00,
@@ -501,7 +526,7 @@ seferinde sürpriz için <strong>Rastgele</strong>'yi seçebilirsiniz.</p>
 arası). İkisine de aynı değeri vermek sessiz saatleri kapatır.</li>
 <li>İsteğe bağlı: Tam ekran oyun, video veya sunum varken atlanır.</li>
 </ul>
-<h2 id="ayarlar">Ayarlar</h2>
+<h2>Ayarlar</h2>
 <ul>
 <li>Ayarlar kaydedilince ön izle / Şimdi ön izle</li>
 <li>Karakter, Hareket, Köşe (sağ alt veya sol alt), Monitör (ana monitör veya
@@ -513,7 +538,7 @@ fare imlecinin olduğu monitör)</li>
 <li>Mesaj dili: otomatik (Windows'u izler), Türkçe veya İngilizce</li>
 <li>Tıklayınca kapat, Ses çal, Tam ekran uygulamaları atla</li>
 </ul>
-<h2 id="notlar">Notlar</h2>
+<h2>Notlar</h2>
 <ul>
 <li>Mod kendi <code>windhawk.exe</code> sürecinde çalışır ve başka programlara kod
 enjekte etmez. Hiçbir sistem veya kayıt defteri ayarını değiştirmez.</li>
@@ -524,7 +549,8 @@ karakter tıklamayı geçirir; fare doğrudan alttaki uygulamaya gider.</li>
 arkasından dikiliyormuş gibi görünür.</li>
 <li>Ekranda bir karakter varken yenisi başlatılırsa (örneğin ön izleme ile)
 eskisinin yerini alır.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>DahaSakinOlamazdim</name>
             <uri>https://github.com/DahaSakinOlamazdim</uri>
@@ -535,7 +561,7 @@ eskisinin yerini alır.</li>
         <id>https://windhawk.net/mods/mouse-cursor-themes#558d15d24060a8952809d06abbbbe8424d8205c3</id>
         <link href="https://windhawk.net/mods/mouse-cursor-themes"/>
         <updated>2026-11-04T00:03:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mousecursorthemes">Mouse Cursor Themes</h1>
+        <content type="html"><![CDATA[<h1>Mouse Cursor Themes</h1>
 <p>Replaces the Windows mouse cursors with a theme of your choice. All cursors are
 drawn by the mod itself, so every theme is available right after you enable the
 mod and you can switch themes from the settings at any time.</p>
@@ -543,11 +569,11 @@ mod and you can switch themes from the settings at any time.</p>
 your current Windows session with them. It does not change your saved pointer
 scheme or any registry settings. Because of this, the theme works in every
 program that uses the standard Windows cursors.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/YBKMSqy.gif" alt="Preview 1" /></p>
-<p><img src="https://i.imgur.com/oIhV764.gif" alt="Preview 2" /></p>
-<p><img src="https://i.imgur.com/lO9i7j0.gif" alt="Preview 3" /></p>
-<h2 id="themes">Themes</h2>
+<h2>Preview</h2>
+<p><img src="https://i.imgur.com/YBKMSqy.gif" alt="Preview 1"></p>
+<p><img src="https://i.imgur.com/oIhV764.gif" alt="Preview 2"></p>
+<p><img src="https://i.imgur.com/lO9i7j0.gif" alt="Preview 3"></p>
+<h2>Themes</h2>
 <ul>
 <li><strong>Classic White</strong>: White arrow with a black outline.</li>
 <li><strong>Classic Black</strong>: Black arrow with a white outline.</li>
@@ -568,10 +594,10 @@ program that uses the standard Windows cursors.</p>
 <li><strong>Ghost</strong>: Only an outline, the inside is transparent.</li>
 <li><strong>Custom</strong>: Pick your own fill, outline and glow colors.</li>
 </ul>
-<h2 id="pointershapes">Pointer shapes</h2>
+<h2>Pointer shapes</h2>
 <p>The shape of the main pointer can be changed independently from the theme. The
 same shape is also used by the busy (working in background) and help cursors.
-Shapes marked "tip" click with their tip, the others click at their center.</p>
+Shapes marked &quot;tip&quot; click with their tip, the others click at their center.</p>
 <ul>
 <li><strong>Classic arrow</strong>: The standard Windows arrow (tip).</li>
 <li><strong>Arrowhead</strong>: The classic arrow without its stem (tip).</li>
@@ -583,11 +609,11 @@ Shapes marked "tip" click with their tip, the others click at their center.</p>
 <li><strong>Diamond / Square / Dot / Ring / Target</strong>: Simple geometric shapes.</li>
 <li><strong>Star / Sparkle / Heart</strong>: Decorative shapes.</li>
 </ul>
-<h2 id="cursorsthatarereplaced">Cursors that are replaced</h2>
+<h2>Cursors that are replaced</h2>
 <p>Normal arrow, text (I-beam), link (hand), busy (animated), working in
 background (animated), precision cross, up arrow, all resize cursors, move,
 unavailable (forbidden) and help.</p>
-<h2 id="settings">Settings</h2>
+<h2>Settings</h2>
 <ul>
 <li>Theme</li>
 <li>Pointer shape: Shape of the main pointer (see above).</li>
@@ -597,9 +623,9 @@ unavailable (forbidden) and help.</p>
 <li>Crisp edges: Draws sharper, less blurry cursor edges.</li>
 <li>Contrast edge: Adds a thin dark or light line around the outline, so the cursor stays clearly visible on any background.</li>
 <li>Animated busy cursors: Turns the spinning busy cursors on or off.</li>
-<li>Custom colors: Used only when the "Custom" theme is selected (format: #RRGGBB).</li>
+<li>Custom colors: Used only when the &quot;Custom&quot; theme is selected (format: #RRGGBB).</li>
 </ul>
-<h2 id="notes">Notes</h2>
+<h2>Notes</h2>
 <ul>
 <li>The cursor size follows the Windows pointer size setting (Settings &gt;
 Accessibility &gt; Mouse pointer and touch). The cursors are drawn in several sizes, so they stay sharp.</li>
@@ -614,8 +640,8 @@ running, the mod notices it and applies the theme again.</li>
 <li>The generated cursor files are kept in Windhawk's storage folder for this mod
 and are removed when the mod is disabled.</li>
 </ul>
-<hr />
-<h1 id="faremlecitemalar">Fare İmleci Temaları</h1>
+<hr>
+<h1>Fare İmleci Temaları</h1>
 <p>Windows fare imleçlerini seçtiğiniz bir temayla değiştirir. Tüm imleçler modun
 kendisi tarafından çizilir; bu yüzden modu açtığınız anda bütün temalar hazırdır
 ve ayarlardan istediğiniz zaman tema değiştirebilirsiniz.</p>
@@ -623,7 +649,7 @@ ve ayarlardan istediğiniz zaman tema değiştirebilirsiniz.</p>
 imleçlerini bu dosyalarla değiştirir. Kayıtlı işaretçi şemanızı veya kayıt defteri
 ayarlarını değiştirmez. Bu sayede tema, standart Windows imleçlerini kullanan her
 programda çalışır.</p>
-<h2 id="temalar">Temalar</h2>
+<h2>Temalar</h2>
 <ul>
 <li><strong>Klasik Beyaz</strong>: Siyah çerçeveli beyaz ok.</li>
 <li><strong>Klasik Siyah</strong>: Beyaz çerçeveli siyah ok.</li>
@@ -644,10 +670,10 @@ programda çalışır.</p>
 <li><strong>Hayalet</strong>: Sadece çerçeve, içi şeffaf.</li>
 <li><strong>Özel</strong>: Dolgu, çerçeve ve parıltı renklerini kendiniz seçersiniz.</li>
 </ul>
-<h2 id="aretiekilleri">İşaretçi şekilleri</h2>
+<h2>İşaretçi şekilleri</h2>
 <p>Ana işaretçinin şekli temadan bağımsız olarak değiştirilebilir. Aynı şekil,
 meşgul (arka planda çalışıyor) ve yardım imleçlerinde de kullanılır.
-"uç" yazan şekiller uç noktalarıyla, diğerleri merkezleriyle tıklar.</p>
+&quot;uç&quot; yazan şekiller uç noktalarıyla, diğerleri merkezleriyle tıklar.</p>
 <ul>
 <li><strong>Klasik ok</strong>: Standart Windows oku (uç).</li>
 <li><strong>Ok başı</strong>: Klasik okun çubuksuz hâli (uç).</li>
@@ -659,11 +685,11 @@ meşgul (arka planda çalışıyor) ve yardım imleçlerinde de kullanılır.
 <li><strong>Elmas / Kare / Nokta / Halka / Hedef</strong>: Sade geometrik şekiller.</li>
 <li><strong>Yıldız / Parıltı / Kalp</strong>: Süslü şekiller.</li>
 </ul>
-<h2 id="deitirilenimleler">Değiştirilen imleçler</h2>
+<h2>Değiştirilen imleçler</h2>
 <p>Normal ok, metin (I imleci), bağlantı (el), meşgul (animasyonlu), arka planda
 çalışıyor (animasyonlu), hassas artı, yukarı ok, tüm boyutlandırma imleçleri,
 taşıma, kullanılamaz (yasak) ve yardım.</p>
-<h2 id="ayarlar">Ayarlar</h2>
+<h2>Ayarlar</h2>
 <ul>
 <li>Tema</li>
 <li>İşaretçi şekli: Ana işaretçinin şekli (yukarıya bakın).</li>
@@ -673,9 +699,9 @@ taşıma, kullanılamaz (yasak) ve yardım.</p>
 <li>Keskin kenarlar: İmleç kenarlarını daha keskin, daha az bulanık çizer.</li>
 <li>Kontrast kenarı: Çerçevenin etrafına ince bir koyu veya açık çizgi ekler; böylece imleç her arka planda net görünür.</li>
 <li>Animasyonlu meşgul imleçleri: Dönen meşgul imleçlerini açar veya kapatır.</li>
-<li>Özel renkler: Sadece "Özel" tema seçiliyse kullanılır (biçim: #RRGGBB).</li>
+<li>Özel renkler: Sadece &quot;Özel&quot; tema seçiliyse kullanılır (biçim: #RRGGBB).</li>
 </ul>
-<h2 id="notlar">Notlar</h2>
+<h2>Notlar</h2>
 <ul>
 <li>İmleç boyutu Windows'un işaretçi boyutu ayarını izler (Ayarlar &gt; Erişilebilirlik &gt;
 Fare işaretçisi ve dokunma). İmleçler birkaç boyutta çizildiği için net kalır.</li>
@@ -688,7 +714,8 @@ kendi imleçlerini korur.</li>
 fark eder ve temayı yeniden uygular.</li>
 <li>Oluşturulan imleç dosyaları, Windhawk'ın bu mod için ayırdığı depolama klasöründe
 tutulur ve mod kapatılınca silinir.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>DahaSakinOlamazdim</name>
             <uri>https://github.com/DahaSakinOlamazdim</uri>
@@ -699,20 +726,20 @@ tutulur ve mod kapatılınca silinir.</li>
         <id>https://windhawk.net/mods/ai-voice-typing#245488f83190691fbd1edc64d149ac240debf2b0</id>
         <link href="https://windhawk.net/mods/ai-voice-typing"/>
         <updated>2026-11-03T23:01:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="aivoicetyping">AI Voice Typing</h1>
-<p><strong>English</strong> | <a href="#português">Português</a> | <a href="#español">Español</a></p>
+        <content type="html"><![CDATA[<h1>AI Voice Typing</h1>
+<p><strong>English</strong> | <a href="#portugu%C3%AAs">Português</a> | <a href="#espa%C3%B1ol">Español</a></p>
 <p>Press a shortcut, speak, press it again, and your words are typed where the
 cursor is, in any app. An AI transcribes what you said and cleans it up in the
 style you choose, or translates it. It uses a cloud provider you set up with
 your own key: <strong>Groq</strong> is recommended (very fast, and its key is free).</p>
-<p><img src="https://i.imgur.com/c9LNTHL.gif" alt="Dictating into a text field: the live text, the AI rewrite and the result" /></p>
-<h2 id="whatitdoes">What it does</h2>
+<p><img src="https://i.imgur.com/c9LNTHL.gif" alt="Dictating into a text field: the live text, the AI rewrite and the result"></p>
+<h2>What it does</h2>
 <ul>
 <li><strong>Dictation in any app.</strong> A small bar at the bottom of the screen shows what
 you're saying while you speak. When you stop, the text is pasted where you
 were typing and also left on the clipboard. Dictating again right after, in
 the same field, adds the space between the two.</li>
-<li><strong>Cleaned up in your style.</strong> The AI removes the "ums", repetitions and false
+<li><strong>Cleaned up in your style.</strong> The AI removes the &quot;ums&quot;, repetitions and false
 starts, and fixes punctuation, without changing what you said. Styles:
 Natural, Professional, Prompt (for writing to an AI), Raw and Transcript
 only, plus your own. Each app can have its own style (Outlook always
@@ -723,7 +750,7 @@ languages.</li>
 redo it in another style or translate it, and <strong>Replace</strong> swaps the pasted
 text for the new version.</li>
 <li><strong>Command.</strong> Select text in any app, press Ctrl+Alt+K and say what to do
-with it ("more formal", "translate to Spanish", "summarize as bullets"). The
+with it (&quot;more formal&quot;, &quot;translate to Spanish&quot;, &quot;summarize as bullets&quot;). The
 result replaces the selection.</li>
 <li><strong>About 100 languages</strong> to speak in, detected by itself or chosen. The
 settings and the bar are in English, Spanish, Portuguese, French, German,
@@ -733,8 +760,8 @@ an OpenAI-compatible server. With more than one set up, the next one is
 tried when one fails. If the transcription still fails, the recording is
 kept so you can <strong>try again</strong> without speaking it all again.</li>
 </ul>
-<p><img src="https://i.imgur.com/teLIabS.gif" alt="Command: the selected text rewritten from a spoken instruction" /></p>
-<h2 id="gettingstarted">Getting started</h2>
+<p><img src="https://i.imgur.com/teLIabS.gif" alt="Command: the selected text rewritten from a spoken instruction"></p>
+<h2>Getting started</h2>
 <ol>
 <li>Create a free key at <a href="https://console.groq.com/keys">console.groq.com/keys</a>
 (or at another provider: the settings show how, step by step).</li>
@@ -744,27 +771,47 @@ dictation. It can be done again from General.</li>
 <li>Click any text field, press <strong>Ctrl+Shift+Space</strong>, speak, and press it again
 (or click the bar's stop button).</li>
 </ol>
-<p>| Shortcut | What it does |
-|---|---|
-| <strong>Ctrl+Shift+Space</strong> | Dictate (press again to stop; in hold mode, hold it while you speak) |
-| <strong>Ctrl+Shift+Y</strong> | Dictate and translate |
-| <strong>Ctrl+Alt+K</strong> | Command on the selected text (while you speak, the card also offers the styles, to apply one without speaking) |
-| <strong>Esc</strong> | Cancel while recording (while it's being processed, the bar's ✕ cancels) |</p>
-<p>Every shortcut can be changed in the settings. "Paste again" (the last
-dictation into the app in front) and "Dictate now" are in the icon's menu;
-"Paste again" has no shortcut by default, because Ctrl+Alt+V is Office's
+<table>
+<thead>
+<tr>
+<th>Shortcut</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Ctrl+Shift+Space</strong></td>
+<td>Dictate (press again to stop; in hold mode, hold it while you speak)</td>
+</tr>
+<tr>
+<td><strong>Ctrl+Shift+Y</strong></td>
+<td>Dictate and translate</td>
+</tr>
+<tr>
+<td><strong>Ctrl+Alt+K</strong></td>
+<td>Command on the selected text (while you speak, the card also offers the styles, to apply one without speaking)</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Cancel while recording (while it's being processed, the bar's ✕ cancels)</td>
+</tr>
+</tbody>
+</table>
+<p>Every shortcut can be changed in the settings. &quot;Paste again&quot; (the last
+dictation into the app in front) and &quot;Dictate now&quot; are in the icon's menu;
+&quot;Paste again&quot; has no shortcut by default, because Ctrl+Alt+V is Office's
 Paste Special.</p>
-<p><img src="https://i.imgur.com/1YTQOiV.png" alt="The result card, translated to Spanish" /></p>
-<h2 id="settings">Settings</h2>
+<p><img src="https://i.imgur.com/1YTQOiV.png" alt="The result card, translated to Spanish"></p>
+<h2>Settings</h2>
 <p>Click the mod's icon in the notification area to open them (right-click it
-for a quick menu): this session's history (with "Redo" in another style or
+for a quick menu): this session's history (with &quot;Redo&quot; in another style or
 language), the styles and your own ones, a style per app, the providers (keys,
 models and the order they're tried in), the shortcuts, the spoken language,
 microphone and dictionary, and the look: theme, accent color, the card's width
 and a glass look for the bar. Start and stop sounds are on by default and can
 be turned off.</p>
-<p><img src="https://i.imgur.com/GKBPArQ.png" alt="The settings window" /></p>
-<h2 id="privacy">Privacy</h2>
+<p><img src="https://i.imgur.com/GKBPArQ.png" alt="The settings window"></p>
+<h2>Privacy</h2>
 <ul>
 <li>The audio goes only to the speech provider you set up (for example Groq,
 <code>api.groq.com</code>), and only with a key saved: while you speak (the live
@@ -776,7 +823,7 @@ own privacy policy applies (on Gemini's free tier, Google may use what's
 sent to improve its products).</li>
 <li>If Groq answers that the chosen model no longer exists, the mod asks Groq
 for its current list of models, tries up to 4 of them with a short test
-(a second of near-silence, or "OK"), and keeps the one that works.</li>
+(a second of near-silence, or &quot;OK&quot;), and keeps the one that works.</li>
 <li>Servers contacted, only those of the providers you set up:
 <code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
 <code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, or the address you
@@ -790,7 +837,7 @@ was.</li>
 <li>Your keys are stored encrypted for your Windows account (DPAPI), in the
 mod's own storage, and are removed with the mod.</li>
 </ul>
-<h2 id="knownlimitations">Known limitations</h2>
+<h2>Known limitations</h2>
 <ul>
 <li>Windows doesn't let a normal app type into apps running as administrator:
 there, the text is only copied (paste it with Ctrl+V), and Command can't
@@ -809,26 +856,26 @@ providers take files of about 13 minutes at most).</li>
 </ul>
 <p>Prefer a standalone app with more options? The same author makes
 <a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
-<h2 id="contactandsupport">Contact and support</h2>
+<h2>Contact and support</h2>
 <p>Made in Brazil by <strong>caliberda</strong>. Bugs: please open
-<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on GitHub</a>
+<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&amp;body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on GitHub</a>
 (that's where they're tracked). If the mod helps you, you can support it on
 <a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a>. Instagram:
 <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
 <a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<h2 id="portugus">Português</h2>
+<h2>Português</h2>
 <p>Aperte um atalho, fale, aperte de novo, e suas palavras são digitadas onde
 está o cursor, em qualquer app. Uma IA transcreve o que você disse e limpa no
 estilo que você escolher, ou traduz. Ela usa um provedor na nuvem que você
 configura com a sua própria chave: a <strong>Groq</strong> é a recomendada (muito rápida,
 e a chave é grátis).</p>
-<h3 id="oquefaz">O que faz</h3>
+<h3>O que faz</h3>
 <ul>
 <li><strong>Ditado em qualquer app.</strong> Uma barrinha embaixo da tela mostra o que você
 está falando enquanto fala. Quando você para, o texto é colado onde você
 estava digitando e também fica na área de transferência. Ditando de novo
 logo em seguida, no mesmo campo, o espaço entre os dois entra sozinho.</li>
-<li><strong>Limpo no seu estilo.</strong> A IA tira os "hã", "né", repetições e frases
+<li><strong>Limpo no seu estilo.</strong> A IA tira os &quot;hã&quot;, &quot;né&quot;, repetições e frases
 começadas de novo, e acerta a pontuação, sem mudar o que você disse.
 Estilos: Natural, Profissional, Prompt (para escrever para uma IA), Cru e Só
 transcrição, e os seus. Cada app pode ter o seu estilo (Outlook sempre
@@ -838,7 +885,7 @@ Profissional, VS Code sempre Prompt).</li>
 chips refazem em outro estilo ou traduzem, e <strong>Substituir</strong> troca o texto
 colado pela versão nova.</li>
 <li><strong>Comando.</strong> Selecione um texto em qualquer app, aperte Ctrl+Alt+K e diga o
-que fazer ("mais formal", "traduz pro inglês", "resume em tópicos"). O
+que fazer (&quot;mais formal&quot;, &quot;traduz pro inglês&quot;, &quot;resume em tópicos&quot;). O
 resultado substitui a seleção.</li>
 <li><strong>Cerca de 100 idiomas</strong> para falar, detectados sozinhos ou escolhidos. As
 configurações e a barra estão em português, inglês, espanhol, francês,
@@ -848,7 +895,7 @@ um servidor compatível com a OpenAI. Com mais de um, o próximo é tentado
 quando um falha. Se a transcrição ainda assim falhar, a gravação fica
 guardada para <strong>tentar de novo</strong> sem falar tudo outra vez.</li>
 </ul>
-<h3 id="comocomear">Como começar</h3>
+<h3>Como começar</h3>
 <ol>
 <li>Crie uma chave grátis em
 <a href="https://console.groq.com/keys">console.groq.com/keys</a> (ou em outro
@@ -859,25 +906,45 @@ teste. Dá para refazer em Geral.</li>
 <li>Clique em qualquer campo de texto, aperte <strong>Ctrl+Shift+Espaço</strong>, fale e
 aperte de novo (ou clique no botão de parar da barra).</li>
 </ol>
-<p>| Atalho | O que faz |
-|---|---|
-| <strong>Ctrl+Shift+Espaço</strong> | Ditar (aperte de novo para parar; no modo segurar, segure enquanto fala) |
-| <strong>Ctrl+Shift+Y</strong> | Ditar e traduzir |
-| <strong>Ctrl+Alt+K</strong> | Comando no texto selecionado (enquanto você fala, o card também oferece os estilos, para aplicar um sem falar) |
-| <strong>Esc</strong> | Cancela durante a gravação (enquanto processa, o ✕ da barra cancela) |</p>
-<p>Todos os atalhos podem ser trocados nas configurações. "Colar de novo" (o
-último ditado no app da frente) e "Ditar agora" ficam no menu do ícone;
-"Colar de novo" não tem atalho por padrão, porque Ctrl+Alt+V é o Colar
+<table>
+<thead>
+<tr>
+<th>Atalho</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Ctrl+Shift+Espaço</strong></td>
+<td>Ditar (aperte de novo para parar; no modo segurar, segure enquanto fala)</td>
+</tr>
+<tr>
+<td><strong>Ctrl+Shift+Y</strong></td>
+<td>Ditar e traduzir</td>
+</tr>
+<tr>
+<td><strong>Ctrl+Alt+K</strong></td>
+<td>Comando no texto selecionado (enquanto você fala, o card também oferece os estilos, para aplicar um sem falar)</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Cancela durante a gravação (enquanto processa, o ✕ da barra cancela)</td>
+</tr>
+</tbody>
+</table>
+<p>Todos os atalhos podem ser trocados nas configurações. &quot;Colar de novo&quot; (o
+último ditado no app da frente) e &quot;Ditar agora&quot; ficam no menu do ícone;
+&quot;Colar de novo&quot; não tem atalho por padrão, porque Ctrl+Alt+V é o Colar
 especial do Office.</p>
-<h3 id="configuraes">Configurações</h3>
+<h3>Configurações</h3>
 <p>Clique no ícone do mod na área de notificação para abri-las (com o botão
-direito, um menu rápido): o histórico desta sessão (com "Refazer" em outro
+direito, um menu rápido): o histórico desta sessão (com &quot;Refazer&quot; em outro
 estilo ou idioma), os estilos e os seus, um estilo por app, os provedores
 (chaves, modelos e a ordem de tentativa), os atalhos, o idioma falado, o
 microfone e o dicionário, e a aparência: tema, cor de destaque, largura do
 card e o visual de vidro da barra. Os sons de início e fim vêm ligados e dá
 para desligar.</p>
-<h3 id="privacidade">Privacidade</h3>
+<h3>Privacidade</h3>
 <ul>
 <li>O áudio vai só para o provedor de voz que você configurou (por exemplo a
 Groq, <code>api.groq.com</code>) e só com uma chave salva: enquanto você fala (a
@@ -889,7 +956,7 @@ Vale a política de privacidade de cada provedor (no plano grátis do
 Gemini, o Google pode usar o que é enviado para melhorar os produtos dele).</li>
 <li>Se a Groq responder que o modelo escolhido não existe mais, o mod pede à
 Groq a lista atual de modelos, testa até 4 deles com um teste curto (um
-segundo de quase silêncio, ou "OK") e fica com o que funcionar.</li>
+segundo de quase silêncio, ou &quot;OK&quot;) e fica com o que funcionar.</li>
 <li>Servidores contatados, só os dos provedores que você configurou:
 <code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
 <code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, ou o endereço que
@@ -903,7 +970,7 @@ transferência como estava.</li>
 <li>As chaves são guardadas criptografadas para a sua conta do Windows
 (DPAPI), no armazenamento do próprio mod, e são apagadas junto com ele.</li>
 </ul>
-<h3 id="limitaesconhecidas">Limitações conhecidas</h3>
+<h3>Limitações conhecidas</h3>
 <ul>
 <li>O Windows não deixa um app comum digitar em apps abertos como
 administrador: neles, o texto só é copiado (cole com Ctrl+V), e o Comando
@@ -922,15 +989,15 @@ provedores aceitam arquivos de uns 13 minutos no máximo).</li>
 </ul>
 <p>Prefere um app separado com mais opções? O mesmo autor faz o
 <a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
-<h3 id="contatoeapoio">Contato e apoio</h3>
+<h3>Contato e apoio</h3>
 <p>Feito no Brasil por <strong>caliberda</strong>. Bugs: abra
-<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no GitHub</a>
+<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&amp;body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no GitHub</a>
 (é lá que eles são acompanhados). Se o mod te ajuda, dá para apoiar pelo
 <a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a> ou por Pix no
 <a href="https://livepix.gg/caliberda">LivePix</a>. Instagram:
 <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
 <a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<h2 id="espaol">Español</h2>
+<h2>Español</h2>
 <p>Pulsa un atajo, habla, vuelve a pulsarlo y tus palabras se escriben donde
 está el cursor, en cualquier app. Una IA transcribe lo que dijiste y lo
 limpia en el estilo que elijas, o lo traduce. Usa un proveedor en la nube que
@@ -957,8 +1024,8 @@ hablar.</li>
 <p>Para empezar: crea una clave gratis en
 <a href="https://console.groq.com/keys">console.groq.com/keys</a>; la primera vez se
 abre un asistente rápido. Luego haz clic en un campo de texto, pulsa
-<strong>Ctrl+Shift+Espacio</strong>, habla y vuelve a pulsarlo. <strong>Esc</strong> cancela. "Pegar de
-nuevo" y "Dictar ahora" están en el menú del icono del área de notificación.</p>
+<strong>Ctrl+Shift+Espacio</strong>, habla y vuelve a pulsarlo. <strong>Esc</strong> cancela. &quot;Pegar de
+nuevo&quot; y &quot;Dictar ahora&quot; están en el menú del icono del área de notificación.</p>
 <p>Privacidad: el audio va solo al proveedor de voz que configuraste, solo con
 una clave guardada (mientras hablas, para la vista previa en vivo, y al
 parar); el texto va al proveedor de texto, con el nombre de la app en la que
@@ -971,7 +1038,8 @@ memoria (las 3 últimas). Las claves se guardan cifradas para tu cuenta de
 Windows. Limitaciones: no escribe en apps abiertas como administrador (el
 texto queda copiado), el Comando no funciona en terminales, solo usa
 proveedores en la nube y necesita internet, y una grabación se detiene sola a
-los 12 minutos.</p>]]></content>
+los 12 minutos.</p>
+]]></content>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
@@ -982,13 +1050,13 @@ los 12 minutos.</p>]]></content>
         <id>https://windhawk.net/mods/taskbar-ai-usage#f4350f743d2adcf3fa2efe4c869ad6d9feaf0126</id>
         <link href="https://windhawk.net/mods/taskbar-ai-usage"/>
         <updated>2026-11-03T23:01:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaraiusage">Taskbar AI Usage</h1>
+        <content type="html"><![CDATA[<h1>Taskbar AI Usage</h1>
 <p>See how much of your AI subscription you have left in one place. Get a glimpse
 of all your accounts on the taskbar: Dynamic rings fill as you use your quota.
 A Fluent flyout shows the details of every limit, time for the next reset and
 whether you are burning through it faster than the clock.</p>
-<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/hero.png" alt="Claude flyout above the taskbar tiles" /></p>
-<h3 id="supportedservices">Supported services</h3>
+<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/hero.png" alt="Claude flyout above the taskbar tiles"></p>
+<h3>Supported services</h3>
 <ul>
 <li><strong>Claude.</strong> 5-hour session, weekly, Fable weekly, model and surface limits,
 and monthly extra usage.</li>
@@ -998,7 +1066,7 @@ Codex Spark, and prepaid credits.</li>
 quotas.</li>
 <li><strong>GitHub Copilot.</strong> Monthly AI credits.</li>
 </ul>
-<h3 id="features">Features</h3>
+<h3>Features</h3>
 <ul>
 <li><strong>Multiple tiles and accounts.</strong> Pick up to three quotas to show on the tiles.
 The color moves from green to yellow, orange and red as you pass your
@@ -1020,11 +1088,24 @@ them off in Settings &gt; Behavior.</li>
 <li><strong>Languages.</strong> English, Spanish and Simplified Chinese, following your Windows
 display language.</li>
 </ul>
-<p>| Codex | Antigravity | Copilot |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-codex.png" alt="Codex flyout" /> | <img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-antigravity.png" alt="Antigravity flyout" /> | <img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-copilot.png" alt="Copilot flyout" /> |</p>
-<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/settings-display.png" alt="Settings window, Display page" /></p>
-<h3 id="gettingstarted">Getting started</h3>
+<table>
+<thead>
+<tr>
+<th>Codex</th>
+<th>Antigravity</th>
+<th>Copilot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-codex.png" alt="Codex flyout"></td>
+<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-antigravity.png" alt="Antigravity flyout"></td>
+<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-copilot.png" alt="Copilot flyout"></td>
+</tr>
+</tbody>
+</table>
+<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/settings-display.png" alt="Settings window, Display page"></p>
+<h3>Getting started</h3>
 <ol>
 <li>Enable the mod. Settings opens and asks whether the mod may look for AI
 providers already signed in on this PC. Choose <strong>Find accounts</strong> to add them,
@@ -1036,7 +1117,7 @@ dashboard, hide accounts or open settings.</li>
 </ol>
 <p>If you use <strong>Taskbar AI Quota Bars</strong>, disable it first. Both mods would poll the
 same accounts, and they don't share accounts or sign-ins.</p>
-<h3 id="privacyanddisclaimers">Privacy and disclaimers</h3>
+<h3>Privacy and disclaimers</h3>
 <ul>
 <li>Sign-ins are stored only on this PC, encrypted with Windows DPAPI for your
 user account. Each token is sent only to the provider that issued it, and the
@@ -1051,59 +1132,72 @@ hooks, plugins or MCP servers, with its telemetry and update checks off, and
 receives no prompt. The mod only runs <code>claude.exe</code> from
 <code>%LOCALAPPDATA%\Microsoft\WinGet\Links</code> or <code>%USERPROFILE%\.local\bin</code>, at most
 every 10 minutes, and stops after three failed attempts. With it off, an
-expired sign-in shows "run claude".</li>
+expired sign-in shows &quot;run claude&quot;.</li>
 <li>Usage comes from undocumented endpoints that can change and stop working
 without notice. The author is not responsible for its accuracy.</li>
 <li>Neither this mod nor its author is affiliated with Anthropic, OpenAI, Google,
 GitHub, Microsoft or any other usage provider.</li>
 </ul>
-<h3 id="networkandcredentials">Network and credentials</h3>
+<h3>Network and credentials</h3>
 <ul>
-<li><p><strong>Hosts contacted.</strong> Each sign-in only goes to its own provider:</p></li>
-<li><p>Claude: <code>console.anthropic.com</code> (sign-in, token refresh) and
-<code>api.anthropic.com</code> (usage, profile).</p></li>
-<li><p>ChatGPT / Codex: <code>auth.openai.com</code> (sign-in, token refresh) and
-<code>chatgpt.com</code> (usage, credits).</p></li>
-<li><p>Antigravity: <code>oauth2.googleapis.com</code> (sign-in, token refresh, revocation)
+<li>
+<p><strong>Hosts contacted.</strong> Each sign-in only goes to its own provider:</p>
+<ul>
+<li>Claude: <code>console.anthropic.com</code> (sign-in, token refresh) and
+<code>api.anthropic.com</code> (usage, profile).</li>
+<li>ChatGPT / Codex: <code>auth.openai.com</code> (sign-in, token refresh) and
+<code>chatgpt.com</code> (usage, credits).</li>
+<li>Antigravity: <code>oauth2.googleapis.com</code> (sign-in, token refresh, revocation)
 and <code>cloudcode-pa.googleapis.com</code> / <code>daily-cloudcode-pa.googleapis.com</code>
 (quota, polled at your poll interval). Without its own sign-in, it asks the
 running Antigravity app's local server on <code>127.0.0.1</code> every minute. Signing
 out, or removing the account together with its sign-in, also revokes that
-sign-in at Google.</p></li>
-<li><p>GitHub Copilot: <code>github.com</code> (device sign-in) and <code>api.github.com</code> (user,
-Copilot quota).</p></li>
-<li><p><strong>Client identities.</strong> Sign-in uses the public OAuth clients of Claude Code,
+sign-in at Google.</li>
+<li>GitHub Copilot: <code>github.com</code> (device sign-in) and <code>api.github.com</code> (user,
+Copilot quota).</li>
+</ul>
+</li>
+<li>
+<p><strong>Client identities.</strong> Sign-in uses the public OAuth clients of Claude Code,
 Codex, Antigravity and GitHub Copilot (copilot.vim). The Claude usage request
 identifies itself as the Claude Code CLI, because the server only returns the
 free-resets data to it. Antigravity requests use the Antigravity app's user
-agent.</p></li>
-<li><p><strong>Scopes requested.</strong></p></li>
-<li><p>Claude: <code>org:create_api_key user:profile user:inference</code>.</p></li>
-<li><p>OpenAI: <code>openid profile email offline_access api.connectors.read
-api.connectors.invoke</code>.</p></li>
-<li><p>Google: <code>cloud-platform userinfo.email userinfo.profile</code>, the same set
+agent.</p>
+</li>
+<li>
+<p><strong>Scopes requested.</strong></p>
+<ul>
+<li>Claude: <code>org:create_api_key user:profile user:inference</code>.</li>
+<li>OpenAI: <code>openid profile email offline_access api.connectors.read api.connectors.invoke</code>.</li>
+<li>Google: <code>cloud-platform userinfo.email userinfo.profile</code>, the same set
 Google's Gemini CLI requests for these Cloud Code endpoints, which publish
 no narrower scope. A scope never grants more than your Google account
-already has.</p></li>
-<li><p>GitHub: <code>read:user</code>.</p>
-<p>A borrowed sign-in keeps whatever scopes its own app requested.</p></li>
-<li><p><strong>On this PC.</strong></p></li>
-<li><p>During a sign-in only (up to 3 minutes), a listener on <code>127.0.0.1</code> receives
-the browser redirect: ports 1455/1457 for OpenAI, 51121 for Google.</p></li>
-<li><p>To find a running Antigravity session, the mod reads the command line of
-the Antigravity language server process in your session.</p></li>
-<li><p>Read-only files: the Claude Code and Codex credential files (for borrowed
+already has.</li>
+<li>GitHub: <code>read:user</code>.</li>
+</ul>
+<p>A borrowed sign-in keeps whatever scopes its own app requested.</p>
+</li>
+<li>
+<p><strong>On this PC.</strong></p>
+<ul>
+<li>During a sign-in only (up to 3 minutes), a listener on <code>127.0.0.1</code> receives
+the browser redirect: ports 1455/1457 for OpenAI, 51121 for Google.</li>
+<li>To find a running Antigravity session, the mod reads the command line of
+the Antigravity language server process in your session.</li>
+<li>Read-only files: the Claude Code and Codex credential files (for borrowed
 sign-ins) and Claude Code's usage cache (<code>.claude.json</code>). Credential
 Manager: the GitHub CLI and Visual Studio GitHub entries. None of these is
-read to find accounts until you allow it.</p></li>
-<li><p>Notifications register
+read to find accounts until you allow it.</li>
+<li>Notifications register
 <code>HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAiUsage</code> while they
 are on. The mod deletes it when it unloads, when you turn notifications off,
 and at start if notifications are off. After the first notification Windows
 keeps its own entry in Settings &gt; System &gt; Notifications, which may remain
-after the mod is removed.</p></li>
+after the mod is removed.</li>
 </ul>
-<h3 id="credits">Credits</h3>
+</li>
+</ul>
+<h3>Credits</h3>
 <ul>
 <li>Based on a fork of
 <a href="https://github.com/Cleroth/windhawk-taskbar-ai-quota">Taskbar AI Quota Bars</a>
@@ -1118,9 +1212,10 @@ by Salyts.</li>
 trademarks of their owners. Their names and logos appear only to identify
 which account a tile belongs to.</li>
 </ul>
-<h3 id="reportabug">Report a bug</h3>
+<h3>Report a bug</h3>
 <p>Found a problem or have an idea?
-<a href="https://github.com/Sof2245/taskbar-ai-usage/issues">Open an issue on GitHub</a>.</p>]]></content>
+<a href="https://github.com/Sof2245/taskbar-ai-usage/issues">Open an issue on GitHub</a>.</p>
+]]></content>
         <author>
             <name>Sof2245</name>
             <uri>https://github.com/Sof2245</uri>
@@ -1131,15 +1226,15 @@ which account a tile belongs to.</li>
         <id>https://windhawk.net/mods/desktop-icon-dock#ec6dbe374c301e756a29f4c47f32371c903009a7</id>
         <link href="https://windhawk.net/mods/desktop-icon-dock"/>
         <updated>2026-11-03T03:03:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopicondock">Desktop Icon Dock</h1>
+        <content type="html"><![CDATA[<h1>Desktop Icon Dock</h1>
 <p>Turns shortcuts, files and folders that you drag onto it into a centered
 macOS-style dock. The dock is an independent list, not a mirror of the
 desktop. A fully transparent background is used by default, showing only the
 icons; an optional Liquid Glass panel is available.</p>
-<p><img src="https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg" alt="Desktop Icon Dock preview" /></p>
+<p><img src="https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg" alt="Desktop Icon Dock preview"></p>
 <p><em>Example: icons arranged as a centered macOS-style dock; the hovered icon is
 magnified with its label shown.</em></p>
-<h2 id="features">Features</h2>
+<h2>Features</h2>
 <ul>
 <li><strong>Drag to add</strong>: drag a shortcut, file or folder from the desktop, File
 Explorer or a <code>shell:Desktop</code> window onto the dock. It is inserted at the
@@ -1169,8 +1264,8 @@ approaches, with cosine falloff and neighboring icons spreading aside.</li>
 are drawn, so the dock blends into the wallpaper; transparent areas of the
 dock window are click-through, so desktop right-click and clicks keep
 working.</li>
-<li><strong>Optional Liquid Glass panel</strong>: enabled by turning off "Transparent
-background". Blurred wallpaper backdrop, milky glass tint, specular rim and
+<li><strong>Optional Liquid Glass panel</strong>: enabled by turning off &quot;Transparent
+background&quot;. Blurred wallpaper backdrop, milky glass tint, specular rim and
 a hover glow. The backdrop is sampled from the screen above the dock and
 works with Wallpaper Engine and other animated wallpapers.</li>
 <li><strong>Name labels</strong>: hovering an icon shows a name pill above it; in transparent
@@ -1178,7 +1273,7 @@ mode the pill stays at a fixed position instead of jumping while icons
 scale.</li>
 <li><strong>Native interaction</strong>: left click opens an item; right click opens that
 item's native Explorer context menu (open, send to, create shortcut,
-properties, delete, …).</li>
+properties, delete, ...).</li>
 <li><strong>Independent from the desktop</strong>: adding, removing, renaming or moving
 desktop icons does not change the dock. Shortcuts added to the dock are
 copied into its own folder, so even deleting them from the desktop does not
@@ -1192,7 +1287,7 @@ unloaded. Off by default, so the desktop remains available as a drag source.</li
 <li><strong>Icon cache with cleanup</strong>: icons are cached per item path and reused;
 virtual items such as the Recycle Bin refresh their icons periodically.</li>
 </ul>
-<h2 id="howitworks">How it works</h2>
+<h2>How it works</h2>
 <p>The dock keeps its own ordered list. It does not read or rearrange the system
 desktop icons.</p>
 <ul>
@@ -1221,7 +1316,7 @@ used. Any other file or folder gets a uniquely named <code>.lnk</code> shortcut 
 user desktop (a source <code>.lnk</code> or <code>.url</code> is copied, other items get a new
 shortcut). The original file is never moved or deleted, and a dock-owned
 shortcut copy is removed after it has been placed back. Positioning follows
-the system "align icons to grid" setting.</li>
+the system &quot;align icons to grid&quot; setting.</li>
 <li><strong>Empty state</strong>: the centered hint pill is drawn with a non-transparent
 background and is registered as part of the same drop target.</li>
 <li><strong>Layout</strong>: centered horizontally at the bottom of the primary monitor,
@@ -1234,23 +1329,84 @@ cannot be resolved are skipped on screen but kept in storage.</li>
 50 ms so hover magnification also works in the gaps between icons; idle CPU
 usage is negligible.</li>
 </ul>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Default | Description |
-| --- | --- | --- |
-| Icon size | 48 | Base size in pixels at 100% DPI, scaled with system DPI (about 72 px at 150%) |
-| Icon spacing | 10 | Pixel gap between icons at rest |
-| Maximum scale (%) | 175 | Largest magnification of the hovered icon |
-| Effect radius | 160 | Distance in pixels over which magnification fades out from the cursor |
-| Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
-| Smoothing speed | 16 | Higher is snappier, lower is softer |
-| Bottom offset | 10 | Gap between the dock and the taskbar, in pixels at 100% DPI |
-| Transparent background | On | Show only the icons; turn off to use the Liquid Glass panel |
-| Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
-| Glass blur | 20 | Glass mode only: backdrop blur strength |
-| Show labels | On | Show a name pill for the hovered item |
-| Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
-| Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |</p>
-<h2 id="howitdiffersfromexistingmods">How it differs from existing mods</h2>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Icon size</td>
+<td>48</td>
+<td>Base size in pixels at 100% DPI, scaled with system DPI (about 72 px at 150%)</td>
+</tr>
+<tr>
+<td>Icon spacing</td>
+<td>10</td>
+<td>Pixel gap between icons at rest</td>
+</tr>
+<tr>
+<td>Maximum scale (%)</td>
+<td>175</td>
+<td>Largest magnification of the hovered icon</td>
+</tr>
+<tr>
+<td>Effect radius</td>
+<td>160</td>
+<td>Distance in pixels over which magnification fades out from the cursor</td>
+</tr>
+<tr>
+<td>Neighbor spread (%)</td>
+<td>60</td>
+<td>How much neighboring icons move aside while magnifying</td>
+</tr>
+<tr>
+<td>Smoothing speed</td>
+<td>16</td>
+<td>Higher is snappier, lower is softer</td>
+</tr>
+<tr>
+<td>Bottom offset</td>
+<td>10</td>
+<td>Gap between the dock and the taskbar, in pixels at 100% DPI</td>
+</tr>
+<tr>
+<td>Transparent background</td>
+<td>On</td>
+<td>Show only the icons; turn off to use the Liquid Glass panel</td>
+</tr>
+<tr>
+<td>Glass opacity (%)</td>
+<td>24</td>
+<td>Glass mode only: strength of the milky tint</td>
+</tr>
+<tr>
+<td>Glass blur</td>
+<td>20</td>
+<td>Glass mode only: backdrop blur strength</td>
+</tr>
+<tr>
+<td>Show labels</td>
+<td>On</td>
+<td>Show a name pill for the hovered item</td>
+</tr>
+<tr>
+<td>Hide original desktop icons</td>
+<td>Off</td>
+<td>Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded</td>
+</tr>
+<tr>
+<td>Backdrop refresh interval (s)</td>
+<td>20</td>
+<td>How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh</td>
+</tr>
+</tbody>
+</table>
+<h2>How it differs from existing mods</h2>
 <p>This mod overlaps with Quick Launch Dock in the basic launcher behavior:
 drag in, reorder, click to launch, a persistent list. It exists separately
 because it targets a different use case: a dock that is part of the desktop,
@@ -1268,7 +1424,7 @@ view from the mod's own process, without injecting into the running shell.</li>
 <li><strong>Screen-sampled glass</strong>: the backdrop and the name pills sample the screen
 area behind the dock, which requires a desktop-level window.</li>
 </ul>
-<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
+<h2>Compatibility and limitations</h2>
 <ul>
 <li>Windows 10 / 11 on x86-64 only. The mod runs as a Windhawk tool mod in a
 dedicated explorer.exe process, separate from the shell's own explorer.exe;
@@ -1282,7 +1438,7 @@ and other windows cover it, which is expected.</li>
 <li>In transparent mode, fully transparent pixels are click-through; the icons
 themselves remain clickable.</li>
 </ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
+<h2>Troubleshooting</h2>
 <ul>
 <li><strong>After an Explorer restart</strong>: the dock runs in its own dedicated
 explorer.exe process, so a shell restart does not unload it; it reconnects to
@@ -1305,7 +1461,7 @@ desktop folder and drag from there.</li>
 deletes the mod's storage, including the list and the shortcut copies, when
 the mod is removed.</li>
 </ul>
-<h2 id="">中文说明</h2>
+<h2>中文说明</h2>
 <p>本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。</p>
 <ul>
 <li>从桌面、资源管理器或 <code>shell:Desktop</code> 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（<code>.lnk</code> / <code>.url</code>）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。</li>
@@ -1317,7 +1473,8 @@ the mod is removed.</li>
 <li>与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。</li>
 <li>仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。</li>
 </ul>
-<p>各设置项的说明见上方英文表格。</p>]]></content>
+<p>各设置项的说明见上方英文表格。</p>
+]]></content>
         <author>
             <name>yizqq0721</name>
             <uri>https://github.com/yizqq0721</uri>
@@ -1328,16 +1485,16 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/background-dimmer#a7de0d897193602ab4c4fa4a8c35bf549f1e9999</id>
         <link href="https://windhawk.net/mods/background-dimmer"/>
         <updated>2026-11-03T03:03:52.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/HvfnpFn.png" alt="Background Dimmer" /></p>
-<h1 id="backgrounddimmer">Background Dimmer</h1>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/HvfnpFn.png" alt="Background Dimmer"></p>
+<h1>Background Dimmer</h1>
 <p>Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.</p>
 <p>The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.</p>
 <p>Windows that run as administrator need Windhawk 2 (currently in alpha). On Windhawk 1.x the layer can't move behind them, so when one of them gets focus, the previously active window stays undimmed.</p>
-<h2 id="liveconfiguration">Live configuration</h2>
+<h2>Live configuration</h2>
 <p>The look is tuned in the mod's own <strong>configuration window</strong>, where every change shows up immediately on screen. Open it with the <strong>configuration hotkey</strong> (<strong>Win+Ctrl+Alt+D</strong> by default, changeable in the mod settings).</p>
 <p>The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.</p>
 <p>Changes made in the configuration window are saved automatically. Dimming can be turned off with the <strong>Active</strong> checkbox in the window, or with an optional on/off hotkey.</p>
-<h2 id="howthecontrolswork">How the controls work</h2>
+<h2>How the controls work</h2>
 <ul>
 <li><strong>Opacity</strong>: how strongly the layer covers the background.</li>
 <li><strong>Brightness</strong>: the overall lightness of the layer.</li>
@@ -1346,7 +1503,7 @@ the mod is removed.</li>
 <li><strong>Base color</strong>: tints the layer. White gives neutral gray tones.</li>
 </ul>
 <p>Brightness and contrast set the two pattern tones as <em>brightness ± contrast / 2</em>, so one controls how dark the layer is and the other how visible the pattern is. Near the ends of the range a tone is clipped to black or white, which keeps the pattern visible over a black base, as in the default look.</p>
-<h2 id="behavior">Behavior</h2>
+<h2>Behavior</h2>
 <ul>
 <li>Dialogs stay lit together with the window that owns them.</li>
 <li>The taskbar, Start, Alt+Tab and menus never move the layer.</li>
@@ -1354,7 +1511,8 @@ the mod is removed.</li>
 <li>The mod runs in its own Windhawk process and does not inject into Explorer or any other program.</li>
 <li>Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).</li>
 <li>The appearance is stored per computer, so all Windows users of the same PC share it.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>3DDinosaur</name>
             <uri>https://github.com/3DDinosaur</uri>
@@ -1365,11 +1523,11 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/explorer-tab-router#62118eece92a009ea27315a1ba22c68555709bd9</id>
         <link href="https://windhawk.net/mods/explorer-tab-router"/>
         <updated>2026-11-03T00:04:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertabrouter">Explorer Tab Router / 资源管理器页签路由</h1>
-<p><img src="https://raw.githubusercontent.com/afate123/windhawk-mods/d3c374a386345b893a2318a483ff1adb0690dd2f/assets/explorer-tab-router.gif" alt="External folder requests become tabs; reopening reuses a tab / 外部打开转为页签，重复请求复用页签" /></p>
-<h2 id="english">English</h2>
+        <content type="html"><![CDATA[<h1>Explorer Tab Router / 资源管理器页签路由</h1>
+<p><img src="https://raw.githubusercontent.com/afate123/windhawk-mods/d3c374a386345b893a2318a483ff1adb0690dd2f/assets/explorer-tab-router.gif" alt="External folder requests become tabs; reopening reuses a tab / 外部打开转为页签，重复请求复用页签"></p>
+<h2>English</h2>
 <p>Explorer Tab Router keeps ordinary folder-opening requests together in Windows 11 File Explorer while preserving explicit requests for a separate window.</p>
-<h3 id="behavior">Behavior</h3>
+<h3>Behavior</h3>
 <ul>
 <li><strong>Open a folder externally:</strong> reuse and activate an existing tab for that folder. If the folder is not open, route the new folder window into a tab in an existing Explorer window.</li>
 <li><strong>Show a file in its folder:</strong> activate the matching folder tab and preserve the requested file selection.</li>
@@ -1378,22 +1536,22 @@ the mod is removed.</li>
 <li><strong>Hold Shift while opening a folder:</strong> bypass ordinary window-to-tab routing and keep a separate window.</li>
 </ul>
 <p>Enable the mod in Windhawk, then use File Explorer and other applications normally. Folder routing and tab activation do not require a separate application list. Control Panel and unsupported shell locations are allowed to remain in their own windows.</p>
-<h3 id="settings">Settings</h3>
+<h3>Settings</h3>
 <p>Window routing, matching-tab reuse during routing, folder-menu new-tab activation, and ShellWindows lookup activation can be enabled independently. All four are enabled by default.</p>
 <p>The lookup compatibility option is needed by some external folder-opening and file-reveal requests. The ShellWindows query interface does not say whether a caller intends to open a folder or only inspect it. With this option enabled, a successful read-only query can also switch tabs. Disable it if query-triggered activation is undesirable; some external requests will then no longer switch an existing tab. Delayed lookup activation is canceled if the user switches to another foreground window or selects a different tab before it runs.</p>
-<h3 id="sourceandconflictingmods">Source and conflicting mods</h3>
+<h3>Source and conflicting mods</h3>
 <p>This mod builds on the routing approach introduced by <a href="https://windhawk.net/mods/explorer-single-window-tabs">Explorer Single Window Tabs</a> by <a href="https://github.com/almas-cp">ALMAS CP</a>. It adds existing-tab reuse and activation, file-selection preservation, explicit-window handling, automatic new-tab activation, and managed presentation recovery.</p>
 <p><strong>Do not enable Explorer Single Window Tabs and Explorer Tab Router together. Disable the other routing mod first.</strong></p>
-<h3 id="compatibilityandlimitations">Compatibility and limitations</h3>
+<h3>Compatibility and limitations</h3>
 <p>Windows 11 x64 with native File Explorer tabs is required. This mod uses internal shell symbols, which are checked when it loads. A future Windows update can require a compatibility update.</p>
 <p>For routing between Explorer processes, use windows on the same desktop and at the same privilege level. Mixing ordinary and elevated Explorer windows is outside the supported configuration.</p>
 <p>Ctrl+N and dragging a tab into a separate window can create frames without the explicit folder-menu intent this mod recognizes. Those frames may be routed back into tabs. Disable window routing when you need to retain them as separate windows.</p>
 <p>Some requests are handled through a temporary transparent Explorer window before routing completes. This is not a guarantee of entirely window-free navigation. If a request cannot be completed safely, the temporary window is restored instead of discarding the request. Window presentation state, including existing layered transparency, is restored on recovery.</p>
 <p>Tab activation uses verified position hints where available. A first activation or a tab reorder can still require intermediate tab switches. Activation has an overall time limit; a routing failure restores the original window. Navigation completion uses browser events with bounded direct-view checks for providers that omit events.</p>
 <p>The mod is distributed under the MIT license.</p>
-<h2 id="">简体中文</h2>
+<h2>简体中文</h2>
 <p>资源管理器页签路由将普通的文件夹打开请求集中到 Windows 11 资源管理器页签中，同时保留明确要求打开独立窗口的操作。</p>
-<h3 id="-1">使用行为</h3>
+<h3>使用行为</h3>
 <ul>
 <li><strong>从外部应用打开文件夹：</strong> 已有相同目录页签时，复用并切换过去；尚未打开时，将新目录窗口转入现有资源管理器的页签。</li>
 <li><strong>在文件夹中显示文件：</strong> 切换到对应目录页签，并保留目标文件的选中状态。</li>
@@ -1402,19 +1560,20 @@ the mod is removed.</li>
 <li><strong>按住 Shift 打开文件夹：</strong> 绕过普通窗口转页签行为，保留独立窗口。</li>
 </ul>
 <p>在 Windhawk 中启用后即可正常使用，不需要逐个添加应用名单。控制面板及不支持的 Shell 位置可以保持独立窗口。</p>
-<h3 id="-2">设置</h3>
+<h3>设置</h3>
 <p>窗口转页签、路由时复用相同目录、文件夹菜单新页签自动激活、ShellWindows 查询命中后激活，可分别开关；默认全部启用。</p>
 <p>查询兼容开关用于部分外部打开目录和文件定位请求。ShellWindows 查询接口不区分“打开文件夹”和“只检查是否已打开”，因此启用后，成功的纯查询也可能切换页签。若不希望查询触发切换，可关闭此项；部分外部请求也会因此不再自动切换已有页签。延迟执行查询激活前，若用户已转到其他前台窗口或切换了不同页签，会取消这次延迟激活。</p>
-<h3 id="-3">来源与冲突提示</h3>
+<h3>来源与冲突提示</h3>
 <p>本 mod 基于 <a href="https://github.com/almas-cp">ALMAS CP</a> 的 <a href="https://windhawk.net/mods/explorer-single-window-tabs">Explorer Single Window Tabs</a> 路由思路扩展，增加已有页签复用与切换、文件选中保留、明确的新窗口请求识别、新页签自动激活，以及窗口状态恢复管理。</p>
 <p><strong>请勿同时启用 Explorer Single Window Tabs 与 Explorer Tab Router；启用前先停用另一个路由 mod。</strong></p>
-<h3 id="-4">兼容性与限制</h3>
+<h3>兼容性与限制</h3>
 <p>需要 Windows 11 x64 以及支持原生页签的资源管理器。加载时会检查所需的系统内部符号，未来 Windows 更新可能需要同步更新兼容实现。</p>
 <p>在资源管理器进程之间路由时，请使用同一桌面、相同权限级别的窗口；混用普通权限和管理员权限的资源管理器窗口不属于支持范围。</p>
 <p>Ctrl+N 和将页签拖出为独立窗口，可能不携带本 mod 能识别的文件夹菜单意图，因此产生的窗口仍可能被合并回页签；需要保留这些独立窗口时，可关闭窗口转页签设置。</p>
 <p>部分请求会先经过临时透明窗口，再完成页签路由，因此不保证整个过程完全不创建窗口。无法安全完成时会恢复临时窗口，避免丢弃打开请求；恢复时会还原原有窗口显示状态，包括已有的分层透明属性。</p>
 <p>页签切换会复用经过验证的位置记录；首次切换或重新排序后仍可能短暂经过其他页签。激活设有总超时限制，路由失败时恢复原窗口。导航完成优先使用浏览器事件；缺少事件时只进行有限次直接视图检查。</p>
-<p>本 mod 使用 MIT 许可。</p>]]></content>
+<p>本 mod 使用 MIT 许可。</p>
+]]></content>
         <author>
             <name>afate123</name>
             <uri>https://github.com/afate123</uri>
@@ -1425,17 +1584,18 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/explorer-home-button#44e80ae3fab4de2e576ed6265eaac56a09caf378</id>
         <link href="https://windhawk.net/mods/explorer-home-button"/>
         <updated>2026-11-03T00:04:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexploreraddressbarhomebutton">File Explorer Address Bar Home Button</h1>
-<p>Adds a native WinUI 3 <strong>Home ("This PC")</strong> button directly adjacent to the <strong>Refresh</strong> button in the Windows 11 File Explorer address bar.</p>
-<p><img src="https://raw.githubusercontent.com/RBND/HomeExplorer/main/screenshot.png" alt="File Explorer Address Bar Home Button" /></p>
-<h2 id="features">Features</h2>
+        <content type="html"><![CDATA[<h1>File Explorer Address Bar Home Button</h1>
+<p>Adds a native WinUI 3 <strong>Home (&quot;This PC&quot;)</strong> button directly adjacent to the <strong>Refresh</strong> button in the Windows 11 File Explorer address bar.</p>
+<p><img src="https://raw.githubusercontent.com/RBND/HomeExplorer/main/screenshot.png" alt="File Explorer Address Bar Home Button"></p>
+<h2>Features</h2>
 <ul>
 <li><strong>Native WinUI 3 Integration</strong>: Injects an <code>AppBarButton</code> directly into File Explorer's address bar command bar (<code>CommandBar#NavigationCommands</code>) next to <code>refreshButton</code>.</li>
-<li><strong>Exact Visual & Theme Match</strong>: Inherits the native <code>refreshButton</code>'s style, dimensions, margins, corner radius, and hover/pressed/focus visual states, dynamically matching Windows 11 Light, Dark, and High Contrast themes.</li>
+<li><strong>Exact Visual &amp; Theme Match</strong>: Inherits the native <code>refreshButton</code>'s style, dimensions, margins, corner radius, and hover/pressed/focus visual states, dynamically matching Windows 11 Light, Dark, and High Contrast themes.</li>
 <li><strong>Active-Tab-Only Navigation</strong>: Uses COM Shell APIs (<code>IShellWindows</code>, <code>IServiceProvider</code>, <code>IShellBrowser::BrowseObject</code>, and <code>IWebBrowser2::Navigate2</code>) matched against the active <code>ShellTabWindowClass</code> child window so only the currently active tab navigates to <strong>This PC</strong> (<code>shell:MyComputerFolder</code> / <code>::{20D04FE0-3AEA-1069-A2D8-08002B30309D}</code>).</li>
 <li><strong>Configurable Settings</strong>: Customize the target shell location, button placement (before or after the Refresh button), icon glyph (<code>Home \uE80F</code> or <code>Computer \uE770</code>), and tooltip text (<code>This PC</code>).</li>
 <li><strong>Clean Lifecycle</strong>: Supports live injection into open File Explorer windows (appearing immediately or on window focus), live settings updates, and clean removal on mod unload without leaking XAML elements or conflicting with other XAML mods.</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>RobotsNeverDie</name>
             <uri>https://github.com/RBND</uri>
@@ -1446,43 +1606,44 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/winrar-tweaks#b7d208bbef124a2d7be33f9cb2099cd6faf6e33a</id>
         <link href="https://windhawk.net/mods/winrar-tweaks"/>
         <updated>2026-11-02T23:02:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winrartweaks">WinRAR Tweaks</h1>
+        <content type="html"><![CDATA[<h1>WinRAR Tweaks</h1>
 <p>All-in-one quality-of-life enhancements for <strong>WinRAR</strong> that modernize navigation and file size readability without altering archive behavior.</p>
-<hr />
-<h2 id="features">✨ Features</h2>
+<hr>
+<h2>✨ Features</h2>
 <ul>
 <li>⌨️ <strong>Smart Close on <code>Esc</code>:</strong> Quickly close WinRAR with the <code>Escape</code> key—just like modern utilities and viewers. Intelligently respects active context menus, menu bars, dropdowns, inline file renaming, and child dialogs (closing open popups first before closing the main window).</li>
 <li>📊 <strong>Human-Readable File Sizes:</strong> Automatically converts hard-to-read raw byte counts (e.g., <code>121815</code>) in the <strong>Size</strong> and <strong>Packed</strong> columns into clean, readable units (<code>B</code>, <code>KB</code>, <code>MB</code>, <code>GB</code>, <code>TB</code>).</li>
 <li>⚙️ <strong>Modular Settings:</strong> Toggle either tweak independently at any time in the mod's Settings tab.</li>
 </ul>
-<h2 id="previews">🖼️ Previews</h2>
-<h3 id="humanreadablefilesizes">Human-Readable File Sizes</h3>
-<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_1.png" alt="WinRAR File Size Before and After Preview" /></p>
-<h3 id="smartcloseonesc">Smart Close on Esc</h3>
-<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_2.webp" alt="WinRAR Close on Esc Demo Webp" /></p>
-<hr />
-<h2 id="howitworks">🛠️ How It Works</h2>
+<h2>🖼️ Previews</h2>
+<h3>Human-Readable File Sizes</h3>
+<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_1.png" alt="WinRAR File Size Before and After Preview"></p>
+<h3>Smart Close on Esc</h3>
+<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_2.webp" alt="WinRAR Close on Esc Demo Webp"></p>
+<hr>
+<h2>🛠️ How It Works</h2>
 <ul>
-<li><strong>Modal & Input Guarding:</strong> Queries live Win32 thread GUI state (<code>GetGUIThreadInfo</code>) so <code>Esc</code> never interrupts active menu loops, drag/capture operations, dropdowns, or inline <code>Edit</code> rename boxes before sending <code>WM_CLOSE</code>.</li>
+<li><strong>Modal &amp; Input Guarding:</strong> Queries live Win32 thread GUI state (<code>GetGUIThreadInfo</code>) so <code>Esc</code> never interrupts active menu loops, drag/capture operations, dropdowns, or inline <code>Edit</code> rename boxes before sending <code>WM_CLOSE</code>.</li>
 <li><strong>In-Place ListView Formatting:</strong> Subclasses WinRAR's <code>SysListView32</code> file list (both newly created and already-open windows) and formats raw byte counts on the fly as items are populated or refreshed.</li>
 </ul>
-<hr />
-<h2 id="compatibilitynotes">⚠️ Compatibility &amp; Notes</h2>
+<hr>
+<h2>⚠️ Compatibility &amp; Notes</h2>
 <ul>
 <li><strong>Refreshing After Changing Settings or Disabling:</strong> If you toggle the <em>Human-Readable File Sizes</em> setting on or off, or disable/remove the mod while WinRAR is open, please press <strong><code>F5</code></strong> or navigate to another folder and back to refresh the file list with the updated size format.</li>
 <li><strong>Supported Column Languages:</strong> Out-of-the-box header detection supports English (<code>Size</code>, <code>Packed</code>) as well as common localized headers (<code>Размер</code>, <code>Сжатый</code>, <code>Größe</code>, <code>Gepackt</code>, <code>Taille</code>, <code>Compressé</code>, <code>Tamaño</code>, <code>Comprimido</code>).</li>
 <li><strong>Sorting Behavior:</strong> Because WinRAR sorts internal archive records prior to display formatting, sorting by Size or Packed continues to sort accurately by exact byte count.</li>
 </ul>
-<hr />
-<h3 id="morefromthisauthor">🧩 More from this author</h3>
+<hr>
+<h3>🧩 More from this author</h3>
 <ul>
 <li><strong><a href="https://windhawk.net/mods/drag-to-scroll">Drag to Scroll</a></strong> – Hold <code>Ctrl + Right-Click</code> and drag to scroll smoothly across desktop applications.</li>
 <li><strong><a href="https://windhawk.net/mods/explorer-custom-shortcuts">Explorer Custom Shortcuts</a></strong> – Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.</li>
 </ul>
-<h3 id="authorattribution">Author &amp; Attribution</h3>
+<h3>Author &amp; Attribution</h3>
 <ul>
 <li><strong>Created and maintained by ArvindSaini978 (<a href="https://github.com/ArvindSaini978">GitHub</a>).</strong></li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
@@ -1493,11 +1654,11 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/bluetooth-auto-toggle#825ac6bf19f87740412dc3afba8254259886932a</id>
         <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
         <updated>2026-11-02T23:02:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bluetoothautotoggle">Bluetooth Auto Toggle</h1>
+        <content type="html"><![CDATA[<h1>Bluetooth Auto Toggle</h1>
 <p>A Windhawk tool mod that automatically cycles Windows Bluetooth off and back on (in milliseconds) whenever Windhawk boots with your system and a connected Bluetooth device is detected.</p>
-<h3 id="whythismod">Why this mod?</h3>
-<p>Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or degraded state on fresh system boots—even when Windows displays them as "connected"—causing audio silence, latency, or connection drops unless Bluetooth is power-cycled. This mod automates that process by waiting until a device is connected, pausing a configurable few seconds for the driver stack to settle, and cleanly cycling the Bluetooth radio off and then back on in the background.</p>
-<h3 id="keyfeatures">Key Features</h3>
+<h3>Why this mod?</h3>
+<p>Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or degraded state on fresh system boots—even when Windows displays them as &quot;connected&quot;—causing audio silence, latency, or connection drops unless Bluetooth is power-cycled. This mod automates that process by waiting until a device is connected, pausing a configurable few seconds for the driver stack to settle, and cleanly cycling the Bluetooth radio off and then back on in the background.</p>
+<h3>Key Features</h3>
 <ul>
 <li><strong>Device-Aware Activation:</strong> By default, only cycles Bluetooth when a connected Bluetooth device (headset, mouse, keyboard, etc.) is found.</li>
 <li><strong>Precise Millisecond Timing:</strong> Configurable startup delay, post-connection delay, and off-to-on toggle duration in milliseconds.</li>
@@ -1506,8 +1667,9 @@ the mod is removed.</li>
 <li><strong>State-Safe Cycling:</strong> Only toggles radios that are already powered ON (leaving radios in Airplane mode or turned off alone).</li>
 <li><strong>Safe Power Restoration:</strong> Minimizes the off window and ensures radios are commanded back on with retries even if the mod is unloaded mid-cycle.</li>
 <li><strong>Session-Safe:</strong> Remembers the current Windows logon session across tool process restarts using Windows Terminal Services (WTS) logon timestamps.</li>
-<li><strong>Graceful Lifecycle & Live Testing:</strong> Responsive to settings updates, mod reload, and instant cancellation on shutdown.</li>
-</ul>]]></content>
+<li><strong>Graceful Lifecycle &amp; Live Testing:</strong> Responsive to settings updates, mod reload, and instant cancellation on shutdown.</li>
+</ul>
+]]></content>
         <author>
             <name>Dev-StudioCode</name>
             <uri>https://github.com/Dev-StudioCode</uri>
@@ -1519,7 +1681,7 @@ the mod is removed.</li>
         <link href="https://windhawk.net/mods/force-desktop-icon-spacing"/>
         <updated>2026-11-02T23:02:24.000Z</updated>
         <content type="html"><![CDATA[<p>Precisely control the desktop icon spacing: set the horizontal/vertical icon grid spacing and reserve a blank margin at the bottom of the icon area (above the taskbar).</p>
-<h2 id="howitworks">How it works</h2>
+<h2>How it works</h2>
 <ul>
 <li>The desktop list view (<code>SysListView32</code>) is subclassed (event-driven; the only polling is a one-time boot check that polls the icon count once a second for up to a minute after Explorer starts): every spacing request Explorer makes is transparently replaced with the configured values, and the icon area height is capped so it never enters the reserved bottom strip.</li>
 <li>Values are absolute and applied in one pass: the same settings always produce the same layout, never cumulative drift.</li>
@@ -1527,23 +1689,23 @@ the mod is removed.</li>
 <li>The bottom margin caps the icon area height only (the top edge stays fixed), so icon columns wrap earlier and never enter the reserved bottom strip.</li>
 <li>All pixel values are scaled by the list view's DPI: the configured numbers apply at 100% scaling and scale up automatically on higher DPI.</li>
 </ul>
-<h2 id="settings">Settings</h2>
+<h2>Settings</h2>
 <ul>
 <li><strong>Horizontal spacing (pixels)</strong>: width of each icon grid cell, at 100% scaling. Larger = more horizontal gap between icons.</li>
 <li><strong>Vertical spacing (pixels)</strong>: height of each icon grid cell, at 100% scaling. Larger = taller rows; the grid grows downward and the extra space is absorbed by the bottom region.</li>
 <li><strong>Bottom margin (pixels)</strong>: blank strip reserved at the bottom of the icon area, above the taskbar, at 100% scaling. The icon grid never enters it. 0 = no reservation.</li>
 <li><strong>Rearrange icons on startup</strong>: arrange icons once when the mod loads and every time Explorer starts (sign-in, reboot, Explorer restart), so the spacing/margin take effect. Turn this off to keep icons where you place them by hand. Changes made in the settings always rearrange.</li>
 </ul>
-<h2 id="notes">Notes</h2>
+<h2>Notes</h2>
 <ul>
 <li>The grid cell size stays fixed when you change the icon size (Large/Medium/Small icons or Ctrl+wheel); adjust the spacing settings when you switch to Large icons, otherwise large icons may overlap their labels.</li>
-<li>This mod doesn't write any registry values. If you want free icon placement, turn off "Auto arrange icons" and "Align icons to grid" in the desktop right-click menu yourself.</li>
-<li>Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual "Arrange icons").</li>
+<li>This mod doesn't write any registry values. If you want free icon placement, turn off &quot;Auto arrange icons&quot; and &quot;Align icons to grid&quot; in the desktop right-click menu yourself.</li>
+<li>Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual &quot;Arrange icons&quot;).</li>
 <li>The bottom margin applies to the whole icon area (the list view spans all monitors); on multi-monitor setups it lands above the taskbar of the bottom-most monitor.</li>
 </ul>
-<h2 id="">简体中文说明</h2>
+<h2>简体中文说明</h2>
 <p>精确控制桌面图标间距：自由调节图标网格的水平/垂直间距，并在图标区域底部（任务栏上方）预留空白边距。</p>
-<h3 id="-1">工作原理</h3>
+<h3>工作原理</h3>
 <ul>
 <li>通过子类化（事件驱动；唯一的轮询是资源管理器启动后长达一分钟、每秒一次的图标数量一次性开机检查）挂钩桌面列表视图（<code>SysListView32</code>）：资源管理器发出的每个间距设置请求都会被透明替换为配置值，图标区域高度被限制在预留边距之上。</li>
 <li>所有数值均为绝对值、一次性应用——同一配置永远得到同一布局，不存在多次叠加漂移。</li>
@@ -1551,20 +1713,21 @@ the mod is removed.</li>
 <li>底部边距只限制图标区域高度（顶边固定），图标换列提前，永不进入底部预留区。</li>
 <li>所有像素值按列表视图的 DPI 自动缩放：配置数值对应 100% 缩放，高 DPI 下自动放大。</li>
 </ul>
-<h3 id="-2">设置项</h3>
+<h3>设置项</h3>
 <ul>
 <li><strong>水平间距（像素）</strong>：图标网格单元宽度（100% 缩放下），数值越大图标水平间距越大。</li>
 <li><strong>垂直间距（像素）</strong>：图标网格单元高度（100% 缩放下），数值越大行距越大，网格向下延伸，多余空间挤占底部区域。</li>
 <li><strong>底部边距（像素）</strong>：图标区域底部（任务栏上方）预留的空白高度（100% 缩放下），图标网格不会进入该区域。0 = 不预留。</li>
-<li><strong>启动时重排图标</strong>：模组加载时以及资源管理器每次启动时（登录、重启、重启资源管理器）各执行一次"排列图标"，使间距/边距生效。若希望保留手动拖放的图标布局，可关闭此项。在设置面板修改参数时始终会重排。</li>
+<li><strong>启动时重排图标</strong>：模组加载时以及资源管理器每次启动时（登录、重启、重启资源管理器）各执行一次&quot;排列图标&quot;，使间距/边距生效。若希望保留手动拖放的图标布局，可关闭此项。在设置面板修改参数时始终会重排。</li>
 </ul>
-<h3 id="-3">注意</h3>
+<h3>注意</h3>
 <ul>
 <li>切换图标大小（大/中/小图标或 Ctrl+滚轮）时网格单元尺寸保持不变；切换到大图标时请相应调大间距设置，否则大图标可能与文字标签重叠。</li>
-<li>本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭"自动排列图标"和"将图标与网格对齐"。</li>
-<li>停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动"排列图标"一致）。</li>
+<li>本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭&quot;自动排列图标&quot;和&quot;将图标与网格对齐&quot;。</li>
+<li>停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动&quot;排列图标&quot;一致）。</li>
 <li>底部边距作用于整个图标区域（列表视图横跨所有显示器）；多显示器下预留空白位于最底部显示器的任务栏上方。</li>
-</ul>]]></content>
+</ul>
+]]></content>
         <author>
             <name>Koewen</name>
             <uri>https://github.com/Koewen</uri>
@@ -1575,10 +1738,10 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/language-switcher-position#45b36d8bf133e4b61001eedfac9d5ac0a07909f0</id>
         <link href="https://windhawk.net/mods/language-switcher-position"/>
         <updated>2026-11-02T23:02:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="languageswitcherposition">Language Switcher Position</h1>
-<h2 id="english">English</h2>
+        <content type="html"><![CDATA[<h1>Language Switcher Position</h1>
+<h2>English</h2>
 <p>This mod allows you to customize the position of the modern Windows 11 26H2 input language switcher, which appears when clicking the language indicator (РУС / ENG) in the system tray.</p>
-<h3 id="features">Features</h3>
+<h3>Features</h3>
 <ul>
 <li><strong>Left</strong> — positions the switcher at the left edge of the screen.</li>
 <li><strong>Center</strong> — positions the switcher in the center of the screen.</li>
@@ -1586,29 +1749,29 @@ the mod is removed.</li>
 <li><strong>Custom X/Y</strong> — manually sets the window coordinates.</li>
 <li><strong>Vertical offset</strong> — provides additional vertical positioning control.</li>
 </ul>
-<h3 id="screenshots">Screenshots</h3>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/left.png" alt="Left position" /></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/center.png" alt="Center position" /></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/right.png" alt="Right position" /></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/default.png" alt="Default position" /></p>
-<h3 id="settings">Settings</h3>
+<h3>Screenshots</h3>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/left.png" alt="Left position"></p>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/center.png" alt="Center position"></p>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/right.png" alt="Right position"></p>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/default.png" alt="Default position"></p>
+<h3>Settings</h3>
 <p><strong>Horizontal position</strong> — selects the horizontal alignment: Left, Center, Right, or Custom X/Y.</p>
 <p><strong>Custom X coordinate</strong> — the horizontal window coordinate in pixels.</p>
 <p><strong>Custom Y coordinate</strong> — the vertical window coordinate in pixels.</p>
 <p><strong>Vertical offset</strong> — additional vertical displacement relative to the original Windows position. Used with Left, Center, and Right modes.</p>
-<h3 id="compatibility">Compatibility</h3>
+<h3>Compatibility</h3>
 <ul>
 <li>Windows 11 26H2</li>
 <li>Windows Explorer (explorer.exe)</li>
 <li>Modern XAML input language switcher.</li>
 </ul>
-<h3 id="note">Note</h3>
+<h3>Note</h3>
 <p>Positioning is calculated relative to the full monitor dimensions, including the taskbar area. Custom coordinates are specified in screen pixels.</p>
 <p>The mod only changes the position of the switcher window and does not modify Windows input language settings.</p>
-<hr />
-<h2 id="">Українська</h2>
+<hr>
+<h2>Українська</h2>
 <p>Мод дозволяє змінювати положення сучасного перемикача мов введення Windows 11 26H2, який з'являється після натискання на індикатор мови (РУС / ENG) у системному треї.</p>
-<h3 id="-1">Можливості</h3>
+<h3>Можливості</h3>
 <ul>
 <li><strong>Left</strong> — розміщення перемикача біля лівого краю екрана.</li>
 <li><strong>Center</strong> — розміщення по центру екрана.</li>
@@ -1616,20 +1779,21 @@ the mod is removed.</li>
 <li><strong>Custom X/Y</strong> — ручне налаштування координат вікна.</li>
 <li><strong>Vertical offset</strong> — додаткове вертикальне зміщення.</li>
 </ul>
-<h3 id="-2">Налаштування</h3>
+<h3>Налаштування</h3>
 <p><strong>Horizontal position</strong> — вибір горизонтального розташування перемикача: Left, Center, Right або Custom X/Y.</p>
 <p><strong>Custom X coordinate</strong> — горизонтальна координата вікна в пікселях.</p>
 <p><strong>Custom Y coordinate</strong> — вертикальна координата вікна в пікселях.</p>
 <p><strong>Vertical offset</strong> — додаткове вертикальне зміщення відносно початкової позиції Windows. Використовується в режимах Left, Center та Right.</p>
-<h3 id="-3">Сумісність</h3>
+<h3>Сумісність</h3>
 <ul>
 <li>Windows 11 26H2</li>
 <li>Windows Explorer (explorer.exe)</li>
 <li>Сучасний XAML-перемикач мов введення.</li>
 </ul>
-<h3 id="-4">Примітка</h3>
+<h3>Примітка</h3>
 <p>Позиціонування виконується відносно повного розміру монітора, включно з областю панелі завдань. Користувацькі координати задаються в екранних пікселях.</p>
-<p>Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.</p>]]></content>
+<p>Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.</p>
+]]></content>
         <author>
             <name>MaestroSky</name>
             <uri>https://github.com/MaestroSky</uri>
@@ -1640,12 +1804,12 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/siri-plus-launchpad#91b08e11456122862911513f39e4ca8f79542c49</id>
         <link href="https://windhawk.net/mods/siri-plus-launchpad"/>
         <updated>2026-11-01T16:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="siripluslaunchpad">Siri Plus Launchpad</h1>
+        <content type="html"><![CDATA[<h1>Siri Plus Launchpad</h1>
 <p>A <a href="https://windhawk.net">Windhawk</a> mod that replaces the Windows 11 Start menu with a macOS-inspired launcher: a Siri-style search bar with a categories menu, app tabs, file search, clipboard history, quick actions and live glass effects.</p>
 <p>Press the <strong>Windows key</strong> (or click <strong>Start</strong>) and type, or pick what you want to search from the menu that drops down from the bar.</p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri.gif" alt="Original Siri mode" /></p>
-<hr />
-<h2 id="highlights">Highlights</h2>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri.gif" alt="Original Siri mode"></p>
+<hr>
+<h2>Highlights</h2>
 <ul>
 <li><strong>Four modes</strong>: Original Siri (default), Floating, Window and Fullscreen</li>
 <li><strong>Live glass</strong>: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus an experimental liquid glass with refraction in the Siri modes</li>
@@ -1654,85 +1818,221 @@ the mod is removed.</li>
 <li><strong>Recent apps row</strong>: recently opened or installed apps (or the most used ones) on top</li>
 <li><strong>Power options</strong>: type <em>shut down</em>, <em>restart</em>, <em>sleep</em>, <em>lock</em> or <em>sign out</em>, or use the floating power button</li>
 <li><strong>Keyboard shortcuts</strong>: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, and can also open the launcher from any program (optional)</li>
-<li><strong>Custom icons</strong>: give any app your own icon (PNG, JPG, ICO, WebP…), or pick one from an <strong>icon gallery</strong> (any folder of icons, such as a downloaded icon pack), with search and a color filter</li>
+<li><strong>Custom icons</strong>: give any app your own icon (PNG, JPG, ICO, WebP...), or pick one from an <strong>icon gallery</strong> (any folder of icons, such as a downloaded icon pack), with search and a color filter</li>
 <li><strong>Themes</strong>: Clear glass, Light, Dark, OLED (deep black), Siri (macOS 27 gradient) and a fully Custom theme, with an optional glass effect on Light, Dark and OLED</li>
 <li><strong>Settings panel</strong>: the <strong>⋯</strong> button at the end of the bar opens every setting in a macOS-style panel, applied live</li>
 <li><strong>Move the bar</strong>: hold the Siri bar and drag it anywhere, on any monitor</li>
 <li><strong>Backup</strong>: save settings, folders, tabs and custom icons to one file and restore them, even after reinstalling</li>
 <li><strong>Your language</strong>: follows the Windows display language, or pick one (English, Portuguese, Spanish, French, German and Italian)</li>
 </ul>
-<hr />
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="originalsiridefault">Original Siri (default)</h3>
-<p>| Clear glass | Dark | OLED |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png" alt="Original Siri, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png" alt="Original Siri, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png" alt="Original Siri, OLED theme" /> |</p>
-<h3 id="floating">Floating</h3>
-<p>| Clear glass | Light | Siri gradient |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-glass.png" alt="Floating, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-light.png" alt="Floating, Light theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-siri.png" alt="Floating, Siri theme" /> |</p>
-<p>| Dark | OLED |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-dark.png" alt="Floating, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-oled.png" alt="Floating, OLED theme" /> |</p>
-<h3 id="window">Window</h3>
-<p>| Clear glass | Light | Siri gradient |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-glass.png" alt="Window, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-light.png" alt="Window, Light theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-siri.png" alt="Window, Siri theme" /> |</p>
-<p>| Dark | OLED |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-dark.png" alt="Window, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-oled.png" alt="Window, OLED theme" /> |</p>
-<h3 id="fullscreen">Fullscreen</h3>
-<p>| Clear glass | Light | Siri gradient |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-glass.png" alt="Fullscreen, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-light.png" alt="Fullscreen, Light theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-siri.png" alt="Fullscreen, Siri theme" /> |</p>
-<p>| Dark | OLED |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-dark.png" alt="Fullscreen, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-oled.png" alt="Fullscreen, OLED theme" /> |</p>
-<h3 id="inaction">In action</h3>
-<p>| Settings panel | Moving the bar |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/settings-panel.gif" alt="The settings panel" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/drag-the-bar.gif" alt="Dragging the Siri bar" /> |</p>
-<p>| Right-click menus and tabs | Power options |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/menus-and-tabs.gif" alt="Right-click menus and app tabs" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/power-options.gif" alt="Typing to shut down" /> |</p>
-<hr />
-<h2 id="modes">Modes</h2>
-<h3 id="originalsiridefault-1">Original Siri (default)</h3>
+<hr>
+<h2>Screenshots</h2>
+<h3>Original Siri (default)</h3>
+<table>
+<thead>
+<tr>
+<th>Clear glass</th>
+<th>Dark</th>
+<th>OLED</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png" alt="Original Siri, Clear glass theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png" alt="Original Siri, Dark theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png" alt="Original Siri, OLED theme"></td>
+</tr>
+</tbody>
+</table>
+<h3>Floating</h3>
+<table>
+<thead>
+<tr>
+<th>Clear glass</th>
+<th>Light</th>
+<th>Siri gradient</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-glass.png" alt="Floating, Clear glass theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-light.png" alt="Floating, Light theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-siri.png" alt="Floating, Siri theme"></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Dark</th>
+<th>OLED</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-dark.png" alt="Floating, Dark theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-oled.png" alt="Floating, OLED theme"></td>
+</tr>
+</tbody>
+</table>
+<h3>Window</h3>
+<table>
+<thead>
+<tr>
+<th>Clear glass</th>
+<th>Light</th>
+<th>Siri gradient</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-glass.png" alt="Window, Clear glass theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-light.png" alt="Window, Light theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-siri.png" alt="Window, Siri theme"></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Dark</th>
+<th>OLED</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-dark.png" alt="Window, Dark theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-oled.png" alt="Window, OLED theme"></td>
+</tr>
+</tbody>
+</table>
+<h3>Fullscreen</h3>
+<table>
+<thead>
+<tr>
+<th>Clear glass</th>
+<th>Light</th>
+<th>Siri gradient</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-glass.png" alt="Fullscreen, Clear glass theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-light.png" alt="Fullscreen, Light theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-siri.png" alt="Fullscreen, Siri theme"></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Dark</th>
+<th>OLED</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-dark.png" alt="Fullscreen, Dark theme"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-oled.png" alt="Fullscreen, OLED theme"></td>
+</tr>
+</tbody>
+</table>
+<h3>In action</h3>
+<table>
+<thead>
+<tr>
+<th>Settings panel</th>
+<th>Moving the bar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/settings-panel.gif" alt="The settings panel"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/drag-the-bar.gif" alt="Dragging the Siri bar"></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Right-click menus and tabs</th>
+<th>Power options</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/menus-and-tabs.gif" alt="Right-click menus and app tabs"></td>
+<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/power-options.gif" alt="Typing to shut down"></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Modes</h2>
+<h3>Original Siri (default)</h3>
 <p>A search bar in the macOS 27 style.</p>
 <ul>
 <li><strong>Categories menu</strong>: hover over the bar (or click it) and a menu drops down with <strong>Applications</strong>, <strong>Files</strong>, <strong>Actions</strong> and <strong>Clipboard</strong>, each with its icon and its keyboard shortcut (default <strong>Ctrl+1 … Ctrl+4</strong>, configurable).</li>
 <li>Picking a category makes its icon and name glide from the menu into the bar, and the search then works inside that category. If you type straight away, you go to Applications.</li>
-<li><strong>Going back</strong>: hover the category icon in the bar and it turns into a back arrow. Click it, or press <strong>Esc</strong>, to return to "Search" with the magnifier and pick another category.</li>
-<li><strong>App tabs</strong>:</li>
+<li><strong>Going back</strong>: hover the category icon in the bar and it turns into a back arrow. Click it, or press <strong>Esc</strong>, to return to &quot;Search&quot; with the magnifier and pick another category.</li>
+<li><strong>App tabs</strong>:
+<ul>
 <li><strong>All</strong> comes first and shows every app.</li>
 <li>Then the automatic categories: Utilities, Productivity, Entertainment, Social, Creativity, Reading and Other.</li>
-<li>Then up to <strong>6 tabs of your own</strong>, for example "Games".</li>
+<li>Then up to <strong>6 tabs of your own</strong>, for example &quot;Games&quot;.</li>
+</ul>
+</li>
 <li><strong>First row</strong>: recently opened or installed apps, or the most used ones (configurable), separated from the rest by a thin line.</li>
 <li><strong>Actions</strong>: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin. Shut down works like Windows' own (fast startup when it is on) and warns before signing off other users who are still signed in.</li>
 </ul>
-<h3 id="floating-1">Floating</h3>
-<p>The bar appears out of an animated circle, the <strong>Siri wave</strong> or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble.</p>
-<h3 id="windowandfullscreen">Window and Fullscreen</h3>
+<h3>Floating</h3>
+<p>The bar appears out of an animated circle, the <strong>Siri wave</strong> or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is &quot;sucked&quot; back into the bubble.</p>
+<h3>Window and Fullscreen</h3>
 <p>The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.</p>
-<hr />
-<h2 id="managingapptabsoriginalsiri">Managing app tabs (Original Siri)</h2>
-<p>| What | How |
-|---|---|
-| Create a tab | Right-click an app → <strong>New tab with this app</strong>, or right-click the tab strip / an empty area → <strong>New tab</strong>. Type the name and press <strong>Enter</strong> |
-| Add apps | Inside a tab, right-click → <strong>Add app</strong>. A picker shows every app: <strong>long-press</strong> the first one, then a simple click selects or deselects the others (selected apps jiggle); <strong>Done</strong> saves |
-| Remove an app | Inside a tab, right-click the app → <strong>Remove from tab</strong> |
-| Rename or delete | Right-click the tab → <strong>Rename tab</strong> / <strong>Delete tab</strong> |
-| Built-in tabs | They can also be edited (add or remove apps) and deleted. <strong>Restore default tabs</strong> brings them back |
-| Move through tabs | <strong>Tab / Shift+Tab</strong>, or click and drag the strip sideways (the mouse wheel works too) |</p>
-<hr />
-<h2 id="files">Files</h2>
+<hr>
+<h2>Managing app tabs (Original Siri)</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Create a tab</td>
+<td>Right-click an app → <strong>New tab with this app</strong>, or right-click the tab strip / an empty area → <strong>New tab</strong>. Type the name and press <strong>Enter</strong></td>
+</tr>
+<tr>
+<td>Add apps</td>
+<td>Inside a tab, right-click → <strong>Add app</strong>. A picker shows every app: <strong>long-press</strong> the first one, then a simple click selects or deselects the others (selected apps jiggle); <strong>Done</strong> saves</td>
+</tr>
+<tr>
+<td>Remove an app</td>
+<td>Inside a tab, right-click the app → <strong>Remove from tab</strong></td>
+</tr>
+<tr>
+<td>Rename or delete</td>
+<td>Right-click the tab → <strong>Rename tab</strong> / <strong>Delete tab</strong></td>
+</tr>
+<tr>
+<td>Built-in tabs</td>
+<td>They can also be edited (add or remove apps) and deleted. <strong>Restore default tabs</strong> brings them back</td>
+</tr>
+<tr>
+<td>Move through tabs</td>
+<td><strong>Tab / Shift+Tab</strong>, or click and drag the strip sideways (the mouse wheel works too)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Files</h2>
 <ul>
 <li><strong>Indexer</strong>: Everything (through IPC, no DLL needed), Windows Search or a direct scan. The default, Automatic, uses the first one that is available.</li>
 <li>When the search is empty, your <strong>recent searches</strong> are shown, with a button to clear them. History can be turned off.</li>
 <li>Results show the <strong>folder</strong> of each file under its name, in a list or as icons.</li>
 <li>The maximum number of results is configurable.</li>
 </ul>
-<h2 id="clipboard">Clipboard</h2>
+<h2>Clipboard</h2>
 <ul>
 <li>Keeps the texts you copy while the mod runs (in memory only, never saved). The number of items and how long a copy stays (15 minutes to 7 days, or until Windows restarts) are configurable.</li>
 <li>The category only shows up when there is something in it. Each item has an <strong>×</strong> to remove it, and right-clicking gives <strong>Clear clipboard</strong>, which empties the history and the Windows clipboard.</li>
@@ -1740,16 +2040,16 @@ the mod is removed.</li>
 <li>Shown as a <strong>list</strong>: the first line of each text, with a preview of the rest (or its size) underneath.</li>
 <li>Click an item to copy it again. Turning the category off also stops monitoring and clears the history.</li>
 </ul>
-<h2 id="appsandicons">Apps and icons</h2>
+<h2>Apps and icons</h2>
 <ul>
 <li><strong>Search</strong> apps by typing.</li>
 <li><strong>Folders</strong> (Window and Fullscreen): drag apps together, rename, undo. The Siri modes list the apps of every folder together.</li>
 <li><strong>Multi-select</strong> with jiggling icons, <strong>pin to taskbar</strong> (also by dragging an icon to the taskbar), <strong>uninstall</strong>.</li>
-<li><strong>Custom icons</strong>: right-click an app → <strong>Change icon…</strong> and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; <strong>Reset icon</strong> brings back the original. Works in every mode, including apps inside folders.</li>
-<li><strong>Icon gallery</strong>: choose a folder of icon images in the settings (<em>Apps and icons → Icon gallery folder</em>, typed or picked with <strong>Choose…</strong>), for example a downloaded icon pack. Then right-click an app → <strong>Icon from gallery…</strong> The folder's images (subfolders included) show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.</li>
+<li><strong>Custom icons</strong>: right-click an app → <strong>Change icon...</strong> and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; <strong>Reset icon</strong> brings back the original. Works in every mode, including apps inside folders.</li>
+<li><strong>Icon gallery</strong>: choose a folder of icon images in the settings (<em>Apps and icons → Icon gallery folder</em>, typed or picked with <strong>Choose…</strong>), for example a downloaded icon pack. Then right-click an app → <strong>Icon from gallery...</strong> The folder's images (subfolders included) show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.</li>
 <li>Icon size, number of columns and the scrolling direction are configurable.</li>
 </ul>
-<h2 id="settingspanel">Settings panel</h2>
+<h2>Settings panel</h2>
 <ul>
 <li>Click the <strong>⋯</strong> button at the end of the bar (every mode). The bar moves to the left and becomes a list of sections, and a panel with the settings comes out of the button. Every change applies at once.</li>
 <li>Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.</li>
@@ -1757,69 +2057,146 @@ the mod is removed.</li>
 <li><strong>Back up</strong> saves everything to a <code>.siribackup</code> file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. <strong>Restore a backup</strong> brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.</li>
 <li>In Window and Fullscreen the window folds into its search field while the settings are open. With the bar low on the screen, the settings open upward.</li>
 </ul>
-<h2 id="movingthebarfloatingandoriginalsiri">Moving the bar (Floating and Original Siri)</h2>
+<h2>Moving the bar (Floating and Original Siri)</h2>
 <ul>
 <li>Hold the bar for a moment and drag it anywhere, on any monitor. Its place is remembered. Low on the screen, the results and menus open above it.</li>
 <li>Right-click the bar → <strong>Put the bar back in the center</strong> (shown once it has been moved).</li>
 </ul>
-<hr />
-<h2 id="customization">Customization</h2>
+<hr>
+<h2>Customization</h2>
 <p>All options are in the <strong>⋯</strong> settings panel (in six languages) and in the mod's <strong>Settings</strong> tab in Windhawk (English and Portuguese).</p>
-<p>| Block | Options |
-|---|---|
-| ① Mode | Original Siri (default), Floating, Window, Fullscreen |
-| ② Theme | Clear glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom |
-| Language | Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano |
-| ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
-| ④ Custom theme | Color, opacity, dark-to-light gradient, border width, color and opacity |
-| ⑤ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
-| ⑥ Floating and Original Siri | Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults <strong>Ctrl+1</strong>, <strong>Ctrl+2</strong>, <strong>Ctrl+3</strong>, <strong>Ctrl+4</strong>; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
-| ⑦ Opening | Open with the Windows key and/or the Start button |
-| ⑧ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
-| ⑨ Files | On/off, search history, list or icons, indexer, maximum results |
-| ⑩ Clipboard | On/off, number of items kept, how long a copy stays |</p>
-<hr />
-<h2 id="keyboardandmouse">Keyboard and mouse</h2>
-<p>| Key / action | What it does |
-|---|---|
-| <strong>Win</strong> / Start button | Open or close |
-| Type | Search (in Original Siri, typing right away searches Applications) |
-| <strong>Ctrl+1 / 2 / 3 / 4</strong> | Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With <em>Also with the launcher closed</em> on (off by default) they open the launcher from any program, and other programs no longer get those keys |
-| <strong>Tab / Shift+Tab</strong> | Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions |
-| Arrows + <strong>Enter</strong> | Move through results / open |
-| Other <strong>Ctrl+digits</strong> | Launch the matching result (never an action such as Shut down) |
-| <strong>Esc</strong> | Closes menus, then clears the search, goes back to the categories and finally closes |
-| Right-click on the search bar | Cut, Copy, Paste, Select all, Delete all |
-| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → <strong>New folder with N items</strong> puts them in a folder; Original Siri: inside the app picker) |</p>
-<hr />
-<h2 id="requirements">Requirements</h2>
+<table>
+<thead>
+<tr>
+<th>Block</th>
+<th>Options</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① Mode</td>
+<td>Original Siri (default), Floating, Window, Fullscreen</td>
+</tr>
+<tr>
+<td>② Theme</td>
+<td>Clear glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano</td>
+</tr>
+<tr>
+<td>③ Appearance</td>
+<td>Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED</td>
+</tr>
+<tr>
+<td>④ Custom theme</td>
+<td>Color, opacity, dark-to-light gradient, border width, color and opacity</td>
+</tr>
+<tr>
+<td>⑤ Window and Fullscreen</td>
+<td>Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders</td>
+</tr>
+<tr>
+<td>⑥ Floating and Original Siri</td>
+<td>Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults <strong>Ctrl+1</strong>, <strong>Ctrl+2</strong>, <strong>Ctrl+3</strong>, <strong>Ctrl+4</strong>; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default)</td>
+</tr>
+<tr>
+<td>⑦ Opening</td>
+<td>Open with the Windows key and/or the Start button</td>
+</tr>
+<tr>
+<td>⑧ Apps and icons</td>
+<td>Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder</td>
+</tr>
+<tr>
+<td>⑨ Files</td>
+<td>On/off, search history, list or icons, indexer, maximum results</td>
+</tr>
+<tr>
+<td>⑩ Clipboard</td>
+<td>On/off, number of items kept, how long a copy stays</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Keyboard and mouse</h2>
+<table>
+<thead>
+<tr>
+<th>Key / action</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Win</strong> / Start button</td>
+<td>Open or close</td>
+</tr>
+<tr>
+<td>Type</td>
+<td>Search (in Original Siri, typing right away searches Applications)</td>
+</tr>
+<tr>
+<td><strong>Ctrl+1 / 2 / 3 / 4</strong></td>
+<td>Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With <em>Also with the launcher closed</em> on (off by default) they open the launcher from any program, and other programs no longer get those keys</td>
+</tr>
+<tr>
+<td><strong>Tab / Shift+Tab</strong></td>
+<td>Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions</td>
+</tr>
+<tr>
+<td>Arrows + <strong>Enter</strong></td>
+<td>Move through results / open</td>
+</tr>
+<tr>
+<td>Other <strong>Ctrl+digits</strong></td>
+<td>Launch the matching result (never an action such as Shut down)</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Closes menus, then clears the search, goes back to the categories and finally closes</td>
+</tr>
+<tr>
+<td>Right-click on the search bar</td>
+<td>Cut, Copy, Paste, Select all, Delete all</td>
+</tr>
+<tr>
+<td>Long-press an app</td>
+<td>Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → <strong>New folder with N items</strong> puts them in a folder; Original Siri: inside the app picker)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Requirements</h2>
 <ul>
 <li>Windows 11 (x64)</li>
 <li><a href="https://windhawk.net">Windhawk</a></li>
 <li>Live blur needs <strong>Transparency effects</strong> turned on in Windows (<em>Settings → Personalization → Colors</em>). Without it, a blurred still image is used.</li>
 <li>Optional: <a href="https://www.voidtools.com">Everything</a> for instant file search (run it normally, not as administrator)</li>
 </ul>
-<h2 id="privacyandfiles">Privacy and files</h2>
+<h2>Privacy and files</h2>
 <ul>
 <li>The mod never goes online.</li>
 <li>Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose.</li>
 <li>The clipboard history lives in memory only and is never written to disk.</li>
 </ul>
-<h2 id="compatibility">Compatibility</h2>
+<h2>Compatibility</h2>
 <ul>
 <li><strong>Category shortcuts from any program</strong> (off by default): when <em>Shortcuts → Also with the launcher closed</em> is on, Ctrl+1 … Ctrl+4 are registered as system hotkeys, so other programs no longer get them (for example, the browser's Ctrl+1 for the first tab). Leave it off, or pick other combinations, if you need those keys elsewhere.</li>
 <li><strong>Fullscreen Start</strong> (<code>fullscreen-start</code>): don't enable both. Each one replaces the Start menu through the same hook without calling the original, so only one of them would get the Windows key.</li>
 <li><strong>Spotlight Launcher</strong>: it adds a separate search bar on Alt+Space and leaves the Start menu alone. This mod replaces the Start menu itself (Windows key and Start button) and adds app tabs, folders, files, clipboard history and actions. Both can be used together.</li>
 </ul>
-<hr />
-<h2 id="supporttheproject">Support the project</h2>
+<hr>
+<h2>Support the project</h2>
 <p>If you enjoy Siri Plus Launchpad, you can support its development with a Pix donation:</p>
 <p><strong><a href="https://livepix.gg/kurokobr">Donate with LivePix (Pix)</a></strong></p>
-<hr />
-<h2 id="author">Author</h2>
+<hr>
+<h2>Author</h2>
 <p>Developed and maintained by <strong>Thiago Silva</strong> (<a href="https://github.com/brideinflame-rgb">github.com/brideinflame-rgb</a>).</p>
-<h2 id="license">License</h2>
-<p>Copyright (c) 2026 Thiago Silva. Licensed under the <strong>GNU General Public License v3.0</strong>.</p>]]></content>
+<h2>License</h2>
+<p>Copyright (c) 2026 Thiago Silva. Licensed under the <strong>GNU General Public License v3.0</strong>.</p>
+]]></content>
         <author>
             <name>Thiago Silva</name>
             <uri>https://github.com/brideinflame-rgb</uri>
@@ -1830,21 +2207,22 @@ the mod is removed.</li>
         <id>https://windhawk.net/mods/win7-desktop-widgets#e30d1f91b4bf2553646a6f156c4abd8cd7769e6e</id>
         <link href="https://windhawk.net/mods/win7-desktop-widgets"/>
         <updated>2026-11-01T05:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/u7F6iG9.png" alt="Screenshot" /> 
-<img src="https://i.imgur.com/cQDjOws.png" alt="Screenshot" />
-<img src="https://i.imgur.com/IdDURoO.png" alt="Screenshot" /> </p>
-<h1 id="windows7desktopwidgets">Windows 7 Desktop Widgets</h1>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/u7F6iG9.png" alt="Screenshot">
+<img src="https://i.imgur.com/cQDjOws.png" alt="Screenshot">
+<img src="https://i.imgur.com/IdDURoO.png" alt="Screenshot"></p>
+<h1>Windows 7 Desktop Widgets</h1>
 <p>I really missed the classic Windows 7 desktop widgets and couldn't find a proper, lightweight version anywhere without bloat, broken scaling, or missing multi-monitor support. I love how simple and handy they were, so I made this accurate recreation. Enjoy!</p>
-<h3 id="whatsincluded">What's included:</h3>
+<h3>What's included:</h3>
 <ul>
-<li><strong>Classic Windows 7 Clock</strong>: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -&gt; <strong>Options…</strong>).</li>
+<li><strong>Classic Windows 7 Clock</strong>: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -&gt; <strong>Options...</strong>).</li>
 <li><strong>Classic Windows 7 Calendar</strong>: Spiral-bound notebook with an expandable monthly grid (click the expand icon on the hover bar or double-click the calendar), date picking, and smooth navigation.</li>
-<li><strong>Clean & Fast</strong>: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.</li>
+<li><strong>Clean &amp; Fast</strong>: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.</li>
 </ul>
-<hr />
+<hr>
 <p>☕ <strong>Support / Donations:</strong>
 If you enjoy this mod and want to support its author:
-<a href="https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link">Support on Boosty</a></p>]]></content>
+<a href="https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link">Support on Boosty</a></p>
+]]></content>
         <author>
             <name>dekvas</name>
             <uri>https://github.com/dekvas</uri>
@@ -1855,8 +2233,8 @@ If you enjoy this mod and want to support its author:
         <id>https://windhawk.net/mods/rounded-selection-rectangle#aca316a66c25f7e2a896ccebf684d9ed9ddc7134</id>
         <link href="https://windhawk.net/mods/rounded-selection-rectangle"/>
         <updated>2026-11-01T04:01:47.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/rounded-selection-rectangle.gif" alt="Rounded Selection Rectangle / Retângulo de Seleção Arredondado" /></p>
-<h2 id="english">English</h2>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/rounded-selection-rectangle.gif" alt="Rounded Selection Rectangle / Retângulo de Seleção Arredondado"></p>
+<h2>English</h2>
 <p>Gives the rectangle you draw to select files rounded corners and a gentle fade
 when you release the mouse. Works on the desktop, in File Explorer and in apps
 that use standard Windows list controls.</p>
@@ -1877,23 +2255,23 @@ colors. Disable overlapping features if you use them together.</p>
 <p>This mod depends on symbols published by Microsoft. If a Windows update has no
 published symbols, or changes the symbols the mod uses, the mod will stop working
 until compatible symbols or an updated mod are available.</p>
-<h3 id="roundedselectioninhomewinui">Rounded selection in Home (WinUI)</h3>
+<h3>Rounded selection in Home (WinUI)</h3>
 <p>File Explorer's <strong>Home</strong> page uses WinUI. To round its selection rectangle,
 install and enable <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a> in Windhawk.
 In that mod's settings, add an entry under <strong>Control styles</strong> and set <strong>Target</strong>
 to:</p>
-<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
+<pre><code class="language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
 </code></pre>
 <p>Under <strong>Styles</strong>, add each of these four lines as a separate style:</p>
-<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
-Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
+<pre><code class="language-text">Fill:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; Opacity=&quot;0.25&quot; /&gt;
+Stroke:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; /&gt;
 RadiusX:=8
 RadiusY:=8
 </code></pre>
 <p>Save the settings. This uses the Windows accent color, a 25% opacity fill and
 8-unit corner radii. To change the roundness, adjust both <code>RadiusX</code> and <code>RadiusY</code>.
 These styles are configured separately from this mod's settings.</p>
-<h2 id="portugus">Português</h2>
+<h2>Português</h2>
 <p>Deixa o retângulo que você arrasta para selecionar arquivos com cantos
 arredondados e um desaparecimento suave ao soltar o mouse. Funciona na área de
 trabalho, no Explorador de Arquivos e em aplicativos com listas padrão do Windows.</p>
@@ -1915,23 +2293,23 @@ Desative as funções equivalentes se usar esses mods juntos.</p>
 Windows não tiver símbolos publicados, ou alterar os símbolos usados pelo mod,
 ele deixará de funcionar até que símbolos compatíveis ou uma atualização do mod
 estejam disponíveis.</p>
-<h3 id="seleoarredondadanapastainciowinui">Seleção arredondada na pasta Início (WinUI)</h3>
+<h3>Seleção arredondada na pasta Início (WinUI)</h3>
 <p>A pasta <strong>Início</strong> do Explorador de Arquivos usa WinUI. Para arredondar seu
 retângulo de seleção, instale e ative o <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
 no Windhawk. Nas configurações desse mod, adicione uma entrada em <strong>Control styles</strong>
 (estilos dos controles) e preencha <strong>Target</strong> (alvo) com:</p>
-<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
+<pre><code class="language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
 </code></pre>
 <p>Em <strong>Styles</strong> (estilos), adicione cada uma destas quatro linhas como um estilo separado:</p>
-<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
-Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
+<pre><code class="language-text">Fill:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; Opacity=&quot;0.25&quot; /&gt;
+Stroke:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; /&gt;
 RadiusX:=8
 RadiusY:=8
 </code></pre>
 <p>Salve as configurações. Isso usa a cor de destaque do Windows, fundo com 25% de
 opacidade e cantos de 8 unidades. Para mudar o arredondamento, ajuste <code>RadiusX</code>
 e <code>RadiusY</code>. Esses estilos são configurados separadamente das opções deste mod.</p>
-<h2 id="espaol">Español</h2>
+<h2>Español</h2>
 <p>Da esquinas redondeadas y un desvanecimiento suave al rectángulo que arrastras
 para seleccionar archivos. Funciona en el escritorio, en el Explorador de archivos
 y en aplicaciones con listas estándar de Windows.</p>
@@ -1954,22 +2332,23 @@ Desactiva las funciones equivalentes si usas esos mods juntos.</p>
 de Windows no tiene símbolos publicados, o cambia los símbolos que usa el mod,
 dejará de funcionar hasta que haya símbolos compatibles o una actualización
 del mod.</p>
-<h3 id="seleccinredondeadaeniniciowinui">Selección redondeada en Inicio (WinUI)</h3>
+<h3>Selección redondeada en Inicio (WinUI)</h3>
 <p>La página <strong>Inicio</strong> del Explorador de archivos usa WinUI. Para redondear su
 rectángulo de selección, instala y activa <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
 en Windhawk. En los ajustes de ese mod, añade una entrada en <strong>Control styles</strong>
 (estilos de controles) e introduce lo siguiente en <strong>Target</strong> (destino):</p>
-<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
+<pre><code class="language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
 </code></pre>
 <p>En <strong>Styles</strong> (estilos), añade cada una de estas cuatro líneas como un estilo separado:</p>
-<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
-Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
+<pre><code class="language-text">Fill:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; Opacity=&quot;0.25&quot; /&gt;
+Stroke:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; /&gt;
 RadiusX:=8
 RadiusY:=8
 </code></pre>
 <p>Guarda los ajustes. Esto usa el color de énfasis de Windows, un fondo con un 25%
 de opacidad y esquinas de 8 unidades. Para cambiar el redondeado, ajusta <code>RadiusX</code>
-y <code>RadiusY</code>. Estos estilos se configuran por separado de las opciones de este mod.</p>]]></content>
+y <code>RadiusY</code>. Estos estilos se configuran por separado de las opciones de este mod.</p>
+]]></content>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
