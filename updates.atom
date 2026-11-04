@@ -2,12 +2,318 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T23:49:39.000Z</updated>
+    <updated>2026-11-04T00:03:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hourly Peek Buddy 1.0]]></title>
+        <id>https://windhawk.net/mods/hourly-peek-buddy#660bc1995e97a6f66040c56cb782989087a68073</id>
+        <link href="https://windhawk.net/mods/hourly-peek-buddy"/>
+        <updated>2026-11-04T00:03:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hourlypeekbuddy">Hourly Peek Buddy</h1>
+<p><img src="https://i.imgur.com/pSUzh1o.gif" alt="Screenshot" /></p>
+<p>A fun reminder for the top of every hour or at the times you choose.</p>
+<p>A funny little character pops up from the bottom corner of your screen, waves
+at you with a speech bubble, and goes away again. It shows up at the top of every
+hour and at any other times you choose, and it appears on top of all your
+apps. There are 14 characters and 6 ways of showing up, and you can see the
+result right away with the built-in preview, so you never have to wait for the
+next hour.</p>
+<p>All characters are drawn by the mod itself, so there are no images to download.</p>
+<h2 id="preview">Preview</h2>
+<p>Windhawk settings cannot have a button, so the preview works like this:</p>
+<ul>
+<li><strong>Preview when settings are saved</strong> (on by default): every time you press
+<em>Save</em>, the character shows up once with your new settings.</li>
+<li><strong>Preview now</strong>: flip this switch and save, and the character shows up again
+even if nothing else has changed.</li>
+</ul>
+<p>Tip: pick a character or a movement, save, and watch. Repeat until you find your favorite.</p>
+<h2 id="characters">Characters</h2>
+<p>Ghost, Cat, Alien, Robot, Penguin (with a party hat), Duck, Slime, Grumpy bomb,
+Cactus, Pumpkin, Teddy bear, Mushroom, Donut and Pizza slice. Or choose
+<strong>Random</strong> to be surprised every time.</p>
+<h2 id="waysofshowingup">Ways of showing up</h2>
+<ul>
+<li><strong>Peek</strong>: Rises from the bottom edge and wiggles.</li>
+<li><strong>Springy</strong>: Pops up like a jack-in-the-box and bounces.</li>
+<li><strong>Slide</strong>: Slides in from the side of the screen with a little overshoot.</li>
+<li><strong>Hop</strong>: Hops in from the side of the screen.</li>
+<li><strong>Spin</strong>: Flies in from the corner while spinning.</li>
+<li><strong>Pop</strong>: Grows out of the corner with a bounce.</li>
+</ul>
+<h2 id="whendoesitshowup">When does it show up?</h2>
+<ul>
+<li>At the top of every hour (can be turned off).</li>
+<li>Every N minutes, counted from midnight (for example 15 means :00, :15, :30
+and :45; 0 turns this off).</li>
+<li>At exact times of your choice, for example <code>09:30, 13:15, 17:45</code>.</li>
+<li>Quiet hours: it stays away between the two hours you choose (for example from
+23 to 8). Using the same value for both turns quiet hours off.</li>
+<li>Optional: skip it while a full-screen game, video or presentation is active.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Preview when settings are saved / Preview now</li>
+<li>Character, Movement, Corner (bottom right or bottom left), Monitor (primary
+or the one with the mouse)</li>
+<li>Schedule: top of every hour, every N minutes, exact times, quiet hours</li>
+<li>Stay time (seconds), Size (%), Opacity (%)</li>
+<li>Speech bubble: time with a funny message, time only, your own message
+(<code>{time}</code> is replaced with the current time), or no bubble</li>
+<li>Message language: automatic (follows Windows), Turkish or English</li>
+<li>Click to dismiss, Play a sound, Skip full-screen apps</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod runs in its own <code>windhawk.exe</code> process and does not inject into
+other programs. It does not change any system or registry setting.</li>
+<li>The character window never takes the keyboard focus. If <strong>Click to dismiss</strong>
+is off, the character is click-through and the mouse goes straight to the
+app below.</li>
+<li>The size follows the DPI of the monitor.</li>
+<li>It appears above the taskbar edge (the work area), as if it peeks out from
+behind it.</li>
+<li>If you start a new show (for example with the preview) while one is on the
+screen, the old one is replaced.</li>
+</ul>
+<hr />
+<h1 id="saatbasrprizdostu">Saat Başı Sürpriz Dostu</h1>
+<p>Ekranın alt köşesinden komik, küçük bir karakter çıkar, konuşma balonuyla size
+göz kırpar ve tekrar gider. Her saat başı ve seçtiğiniz diğer zamanlarda ortaya
+çıkar, üstelik tüm uygulamaların üzerinde görünür. 14 karakter ve 6 farklı
+çıkış şekli vardır; yerleşik ön izleme sayesinde sonucu hemen görürsünüz, bir
+sonraki saat başını beklemenize gerek kalmaz.</p>
+<p>Tüm karakterleri modun kendisi çizer, bu yüzden indirilecek görsel yoktur.</p>
+<h2 id="nizleme">Ön izleme</h2>
+<p>Windhawk ayarlarında düğme olamadığı için ön izleme şöyle çalışır:</p>
+<ul>
+<li><strong>Ayarlar kaydedilince ön izle</strong> (varsayılan olarak açık): <em>Kaydet</em>'e her
+bastığınızda karakter, yeni ayarlarınızla bir kez ortaya çıkar.</li>
+<li><strong>Şimdi ön izle</strong>: Bu anahtarı çevirip kaydederseniz, başka hiçbir şey
+değişmemiş olsa bile karakter yeniden çıkar.</li>
+</ul>
+<p>İpucu: Bir karakter veya hareket seçin, kaydedin ve izleyin. Favorinizi bulana
+kadar tekrarlayın.</p>
+<h2 id="karakterler">Karakterler</h2>
+<p>Hayalet, Kedi, Uzaylı, Robot, Penguen (parti şapkalı), Ördek, Jöle, Huysuz
+bomba, Kaktüs, Balkabağı, Oyuncak ayı, Mantar, Donut ve Pizza dilimi. Her
+seferinde sürpriz için <strong>Rastgele</strong>'yi seçebilirsiniz.</p>
+<h2 id="kekilleri">Çıkış şekilleri</h2>
+<ul>
+<li><strong>Dikizleme</strong>: Alt kenardan yükselir ve sallanır.</li>
+<li><strong>Yaylı</strong>: Kutudan fırlayan oyuncak gibi çıkar ve zıplar.</li>
+<li><strong>Kayma</strong>: Ekranın kenarından hafif taşarak kayarak gelir.</li>
+<li><strong>Hoplama</strong>: Ekranın kenarından hoplaya hoplaya gelir.</li>
+<li><strong>Dönme</strong>: Köşeden dönerek uçarak gelir.</li>
+<li><strong>Patlama</strong>: Köşeden zıplayarak büyür.</li>
+</ul>
+<h2 id="nezamankar">Ne zaman çıkar?</h2>
+<ul>
+<li>Her saat başı (kapatılabilir).</li>
+<li>Her N dakikada bir, geceyarısından itibaren sayılır (örneğin 15 için :00,
+:15, :30 ve :45; 0 bunu kapatır).</li>
+<li>Seçtiğiniz tam saatlerde, örneğin <code>09:30, 13:15, 17:45</code>.</li>
+<li>Sessiz saatler: Seçtiğiniz iki saat arasında çıkmaz (örneğin 23 ile 8
+arası). İkisine de aynı değeri vermek sessiz saatleri kapatır.</li>
+<li>İsteğe bağlı: Tam ekran oyun, video veya sunum varken atlanır.</li>
+</ul>
+<h2 id="ayarlar">Ayarlar</h2>
+<ul>
+<li>Ayarlar kaydedilince ön izle / Şimdi ön izle</li>
+<li>Karakter, Hareket, Köşe (sağ alt veya sol alt), Monitör (ana monitör veya
+fare imlecinin olduğu monitör)</li>
+<li>Zamanlama: her saat başı, her N dakikada bir, tam saatler, sessiz saatler</li>
+<li>Kalma süresi (saniye), Boyut (%), Opaklık (%)</li>
+<li>Konuşma balonu: saat ve komik mesaj, sadece saat, kendi mesajınız
+(<code>{time}</code> yerine o anki saat yazılır) veya balonsuz</li>
+<li>Mesaj dili: otomatik (Windows'u izler), Türkçe veya İngilizce</li>
+<li>Tıklayınca kapat, Ses çal, Tam ekran uygulamaları atla</li>
+</ul>
+<h2 id="notlar">Notlar</h2>
+<ul>
+<li>Mod kendi <code>windhawk.exe</code> sürecinde çalışır ve başka programlara kod
+enjekte etmez. Hiçbir sistem veya kayıt defteri ayarını değiştirmez.</li>
+<li>Karakter penceresi klavye odağını almaz. <strong>Tıklayınca kapat</strong> kapalıysa
+karakter tıklamayı geçirir; fare doğrudan alttaki uygulamaya gider.</li>
+<li>Boyut, monitörün DPI değerini izler.</li>
+<li>Karakter görev çubuğunun kenarının (çalışma alanının) üstünde, sanki
+arkasından dikiliyormuş gibi görünür.</li>
+<li>Ekranda bir karakter varken yenisi başlatılırsa (örneğin ön izleme ile)
+eskisinin yerini alır.</li>
+</ul>]]></content>
+        <author>
+            <name>DahaSakinOlamazdim</name>
+            <uri>https://github.com/DahaSakinOlamazdim</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mouse Cursor Themes 1.0]]></title>
+        <id>https://windhawk.net/mods/mouse-cursor-themes#558d15d24060a8952809d06abbbbe8424d8205c3</id>
+        <link href="https://windhawk.net/mods/mouse-cursor-themes"/>
+        <updated>2026-11-04T00:03:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mousecursorthemes">Mouse Cursor Themes</h1>
+<p>Replaces the Windows mouse cursors with a theme of your choice. All cursors are
+drawn by the mod itself, so every theme is available right after you enable the
+mod and you can switch themes from the settings at any time.</p>
+<p>The mod draws cursor files for the theme and replaces the system cursors of
+your current Windows session with them. It does not change your saved pointer
+scheme or any registry settings. Because of this, the theme works in every
+program that uses the standard Windows cursors.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/YBKMSqy.gif" alt="Preview 1" /></p>
+<p><img src="https://i.imgur.com/oIhV764.gif" alt="Preview 2" /></p>
+<p><img src="https://i.imgur.com/lO9i7j0.gif" alt="Preview 3" /></p>
+<h2 id="themes">Themes</h2>
+<ul>
+<li><strong>Classic White</strong>: White arrow with a black outline.</li>
+<li><strong>Classic Black</strong>: Black arrow with a white outline.</li>
+<li><strong>Neon Blue / Neon Pink / Neon Green</strong>: Bright outline with a glowing halo.</li>
+<li><strong>Sunset</strong>: Orange to pink gradient with a soft warm glow.</li>
+<li><strong>Ocean</strong>: Aqua to deep blue gradient.</li>
+<li><strong>Gold</strong>: Golden gradient with a dark brown outline.</li>
+<li><strong>Rainbow</strong>: A rainbow-colored cursor.</li>
+<li><strong>Crimson</strong>: Red cursor with a white outline and a red glow.</li>
+<li><strong>Silver</strong>: Metallic silver gradient with a dark outline.</li>
+<li><strong>Forest</strong>: Light green to deep green gradient with a dark green outline.</li>
+<li><strong>Lava</strong>: Yellow to red-orange gradient with a hot orange glow.</li>
+<li><strong>Lavender</strong>: Soft lilac to purple gradient.</li>
+<li><strong>Aurora</strong>: Mint to violet gradient with a cool glow.</li>
+<li><strong>Ice</strong>: White to icy blue gradient with a blue outline.</li>
+<li><strong>Candy</strong>: Pink to sky blue gradient with a white outline.</li>
+<li><strong>Midnight</strong>: Dark navy cursor with a golden outline and glow.</li>
+<li><strong>Ghost</strong>: Only an outline, the inside is transparent.</li>
+<li><strong>Custom</strong>: Pick your own fill, outline and glow colors.</li>
+</ul>
+<h2 id="pointershapes">Pointer shapes</h2>
+<p>The shape of the main pointer can be changed independently from the theme. The
+same shape is also used by the busy (working in background) and help cursors.
+Shapes marked "tip" click with their tip, the others click at their center.</p>
+<ul>
+<li><strong>Classic arrow</strong>: The standard Windows arrow (tip).</li>
+<li><strong>Arrowhead</strong>: The classic arrow without its stem (tip).</li>
+<li><strong>Triangle</strong>: A plain triangle (tip).</li>
+<li><strong>Wedge</strong>: A slim triangle with a straight left edge (tip).</li>
+<li><strong>Kite</strong>: A kite shape (tip).</li>
+<li><strong>Navigator</strong>: A sharp navigation-style arrowhead (tip).</li>
+<li><strong>Chevron</strong>: Two strokes forming an open corner (tip).</li>
+<li><strong>Diamond / Square / Dot / Ring / Target</strong>: Simple geometric shapes.</li>
+<li><strong>Star / Sparkle / Heart</strong>: Decorative shapes.</li>
+</ul>
+<h2 id="cursorsthatarereplaced">Cursors that are replaced</h2>
+<p>Normal arrow, text (I-beam), link (hand), busy (animated), working in
+background (animated), precision cross, up arrow, all resize cursors, move,
+unavailable (forbidden) and help.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Theme</li>
+<li>Pointer shape: Shape of the main pointer (see above).</li>
+<li>Cursor size (%): 100 matches the original Windows cursor size.</li>
+<li>Glow (%): Makes the glow of the themes weaker or stronger (0 turns it off).</li>
+<li>Outline thickness (%): Makes the outline of the cursor thinner or thicker. A thicker outline is easier to see.</li>
+<li>Crisp edges: Draws sharper, less blurry cursor edges.</li>
+<li>Contrast edge: Adds a thin dark or light line around the outline, so the cursor stays clearly visible on any background.</li>
+<li>Animated busy cursors: Turns the spinning busy cursors on or off.</li>
+<li>Custom colors: Used only when the "Custom" theme is selected (format: #RRGGBB).</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The cursor size follows the Windows pointer size setting (Settings &gt;
+Accessibility &gt; Mouse pointer and touch). The cursors are drawn in several sizes, so they stay sharp.</li>
+<li>The mod never changes your saved pointer scheme. When you disable the mod,
+Windows reloads your own pointer scheme. The replaced cursors only live in
+memory, so after you sign out they return to your pointer scheme until the
+mod is started again.</li>
+<li>Programs that use their own cursors (for example some games and drawing
+programs) keep their own cursors.</li>
+<li>If you change the pointer scheme from the Windows settings while the mod is
+running, the mod notices it and applies the theme again.</li>
+<li>The generated cursor files are kept in Windhawk's storage folder for this mod
+and are removed when the mod is disabled.</li>
+</ul>
+<hr />
+<h1 id="faremlecitemalar">Fare İmleci Temaları</h1>
+<p>Windows fare imleçlerini seçtiğiniz bir temayla değiştirir. Tüm imleçler modun
+kendisi tarafından çizilir; bu yüzden modu açtığınız anda bütün temalar hazırdır
+ve ayarlardan istediğiniz zaman tema değiştirebilirsiniz.</p>
+<p>Mod, tema için imleç dosyaları çizer ve geçerli Windows oturumunuzun sistem
+imleçlerini bu dosyalarla değiştirir. Kayıtlı işaretçi şemanızı veya kayıt defteri
+ayarlarını değiştirmez. Bu sayede tema, standart Windows imleçlerini kullanan her
+programda çalışır.</p>
+<h2 id="temalar">Temalar</h2>
+<ul>
+<li><strong>Klasik Beyaz</strong>: Siyah çerçeveli beyaz ok.</li>
+<li><strong>Klasik Siyah</strong>: Beyaz çerçeveli siyah ok.</li>
+<li><strong>Neon Mavi / Neon Pembe / Neon Yeşil</strong>: Parlak çerçeve ve ışıldayan halo.</li>
+<li><strong>Gün Batımı</strong>: Turuncudan pembeye geçişli, yumuşak sıcak parıltılı.</li>
+<li><strong>Okyanus</strong>: Açık turkuazdan koyu maviye geçişli.</li>
+<li><strong>Altın</strong>: Koyu kahverengi çerçeveli altın renkli geçiş.</li>
+<li><strong>Gökkuşağı</strong>: Gökkuşağı renklerinde imleç.</li>
+<li><strong>Kızıl</strong>: Beyaz çerçeveli, kırmızı parıltılı kırmızı imleç.</li>
+<li><strong>Gümüş</strong>: Koyu çerçeveli, metalik gümüş geçişli.</li>
+<li><strong>Orman</strong>: Açık yeşilden koyu yeşile geçişli, koyu yeşil çerçeveli.</li>
+<li><strong>Lav</strong>: Sarıdan kırmızı-turuncuya geçişli, sıcak turuncu parıltılı.</li>
+<li><strong>Lavanta</strong>: Yumuşak leylaktan mora geçişli.</li>
+<li><strong>Aurora</strong>: Naneden menekşeye geçişli, serin parıltılı.</li>
+<li><strong>Buz</strong>: Beyazdan buz mavisine geçişli, mavi çerçeveli.</li>
+<li><strong>Şeker</strong>: Pembeden gök mavisine geçişli, beyaz çerçeveli.</li>
+<li><strong>Gece Yarısı</strong>: Koyu lacivert, altın sarısı çerçeveli ve parıltılı.</li>
+<li><strong>Hayalet</strong>: Sadece çerçeve, içi şeffaf.</li>
+<li><strong>Özel</strong>: Dolgu, çerçeve ve parıltı renklerini kendiniz seçersiniz.</li>
+</ul>
+<h2 id="aretiekilleri">İşaretçi şekilleri</h2>
+<p>Ana işaretçinin şekli temadan bağımsız olarak değiştirilebilir. Aynı şekil,
+meşgul (arka planda çalışıyor) ve yardım imleçlerinde de kullanılır.
+"uç" yazan şekiller uç noktalarıyla, diğerleri merkezleriyle tıklar.</p>
+<ul>
+<li><strong>Klasik ok</strong>: Standart Windows oku (uç).</li>
+<li><strong>Ok başı</strong>: Klasik okun çubuksuz hâli (uç).</li>
+<li><strong>Üçgen</strong>: Sade bir üçgen (uç).</li>
+<li><strong>Kama</strong>: Sol kenarı düz, ince bir üçgen (uç).</li>
+<li><strong>Uçurtma</strong>: Uçurtma biçimi (uç).</li>
+<li><strong>Pusula oku</strong>: Keskin, navigasyon tarzı ok başı (uç).</li>
+<li><strong>Köşe</strong>: Açık bir köşe oluşturan iki çizgi (uç).</li>
+<li><strong>Elmas / Kare / Nokta / Halka / Hedef</strong>: Sade geometrik şekiller.</li>
+<li><strong>Yıldız / Parıltı / Kalp</strong>: Süslü şekiller.</li>
+</ul>
+<h2 id="deitirilenimleler">Değiştirilen imleçler</h2>
+<p>Normal ok, metin (I imleci), bağlantı (el), meşgul (animasyonlu), arka planda
+çalışıyor (animasyonlu), hassas artı, yukarı ok, tüm boyutlandırma imleçleri,
+taşıma, kullanılamaz (yasak) ve yardım.</p>
+<h2 id="ayarlar">Ayarlar</h2>
+<ul>
+<li>Tema</li>
+<li>İşaretçi şekli: Ana işaretçinin şekli (yukarıya bakın).</li>
+<li>İmleç boyutu (%): 100, orijinal Windows imleç boyutuna denk gelir.</li>
+<li>Parıltı (%): Temaların parıltısını azaltır veya artırır (0 kapatır).</li>
+<li>Çerçeve kalınlığı (%): İmlecin çerçevesini inceltir veya kalınlaştırır. Kalın çerçeve imleci daha kolay görünür yapar.</li>
+<li>Keskin kenarlar: İmleç kenarlarını daha keskin, daha az bulanık çizer.</li>
+<li>Kontrast kenarı: Çerçevenin etrafına ince bir koyu veya açık çizgi ekler; böylece imleç her arka planda net görünür.</li>
+<li>Animasyonlu meşgul imleçleri: Dönen meşgul imleçlerini açar veya kapatır.</li>
+<li>Özel renkler: Sadece "Özel" tema seçiliyse kullanılır (biçim: #RRGGBB).</li>
+</ul>
+<h2 id="notlar">Notlar</h2>
+<ul>
+<li>İmleç boyutu Windows'un işaretçi boyutu ayarını izler (Ayarlar &gt; Erişilebilirlik &gt;
+Fare işaretçisi ve dokunma). İmleçler birkaç boyutta çizildiği için net kalır.</li>
+<li>Mod kayıtlı işaretçi şemanızı hiçbir zaman değiştirmez. Modu kapattığınızda Windows
+kendi işaretçi şemanızı yeniden yükler. Değiştirilen imleçler yalnızca bellekte
+bulunur; oturumu kapattığınızda mod yeniden başlayana kadar işaretçi şemanıza döner.</li>
+<li>Kendi imleçlerini kullanan programlar (örneğin bazı oyunlar ve çizim programları)
+kendi imleçlerini korur.</li>
+<li>Mod çalışırken Windows ayarlarından işaretçi şemasını değiştirirseniz mod bunu
+fark eder ve temayı yeniden uygular.</li>
+<li>Oluşturulan imleç dosyaları, Windhawk'ın bu mod için ayırdığı depolama klasöründe
+tutulur ve mod kapatılınca silinir.</li>
+</ul>]]></content>
+        <author>
+            <name>DahaSakinOlamazdim</name>
+            <uri>https://github.com/DahaSakinOlamazdim</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#a59167ace74a357b5c27f8755145a407bf5baf9a</id>
@@ -963,54 +1269,6 @@ the mod is removed.</li>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Split Tray 1.4.8]]></title>
-        <id>https://windhawk.net/mods/split-tray#4f5fa67cfa26842d4c144e4dcda0873310657043</id>
-        <link href="https://windhawk.net/mods/split-tray"/>
-        <updated>2026-11-02T23:02:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Drag application icons directly between Windows' primary notification area and Split Tray's embedded or floating trays.</p></li>
-<li><p>Show the dragged icon, allowed cursor feedback, insertion lines and dimmed source ghosts. Reordering commits on release and cancels cleanly.</p></li>
-<li><p>Coalesce icon refresh bursts and reuse maintained display geometry to avoid redundant taskbar work.</p></li>
-<li><p>Improve Arrange with search, explicit order controls, per-icon rule reset, resizing, scrolling and DPI updates.</p></li>
-<li><p>Share saved order and hidden choices across embedded and floating trays; refresh open overflow cells in place and protect taskbar space.</p></li>
-<li><p>Improve screen-reader controls and touch/pen hold menus; make global shortcuts opt-in and off by default with Ctrl+Shift+F11/F12.</p></li>
-<li><p>Integrate secondary overflow dragging, Show promotion for capacity overflow, and missed-release refresh recovery.</p></li>
-<li><p>Respect swapped mouse buttons and preserve captured floating clicks through release.</p></li>
-<li><p>Make private drag hooks optional so unavailable symbols do not disable the existing IconView constructor hook.</p></li>
-<li><p>Preserve remembered order across tray transfers; promote only explicit Show and overflow-to-bar drags.</p></li>
-<li><p>Improve overflow popup hit testing and unload cleanup; reuse the owned Arrange window handle.</p></li>
-</ul>]]></content>
-        <author>
-            <name>Brandon Stonebridge</name>
-            <uri>https://github.com/st0nebridge</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.1.0]]></title>
-        <id>https://windhawk.net/mods/bluetooth-auto-toggle#825ac6bf19f87740412dc3afba8254259886932a</id>
-        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
-        <updated>2026-11-02T23:02:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bluetoothautotoggle">Bluetooth Auto Toggle</h1>
-<p>A Windhawk tool mod that automatically cycles Windows Bluetooth off and back on (in milliseconds) whenever Windhawk boots with your system and a connected Bluetooth device is detected.</p>
-<h3 id="whythismod">Why this mod?</h3>
-<p>Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or degraded state on fresh system boots—even when Windows displays them as "connected"—causing audio silence, latency, or connection drops unless Bluetooth is power-cycled. This mod automates that process by waiting until a device is connected, pausing a configurable few seconds for the driver stack to settle, and cleanly cycling the Bluetooth radio off and then back on in the background.</p>
-<h3 id="keyfeatures">Key Features</h3>
-<ul>
-<li><strong>Device-Aware Activation:</strong> By default, only cycles Bluetooth when a connected Bluetooth device (headset, mouse, keyboard, etc.) is found.</li>
-<li><strong>Precise Millisecond Timing:</strong> Configurable startup delay, post-connection delay, and off-to-on toggle duration in milliseconds.</li>
-<li><strong>Dedicated Tool Mod Architecture:</strong> Runs in an isolated <code>windhawk.exe</code> background tool process without injecting into or hooking <code>explorer.exe</code> or any other critical system process.</li>
-<li><strong>Cold Boot Hardware Retry:</strong> Automatically retries radio enumeration if the Bluetooth service (<code>bthserv</code>) or adapter driver is still initializing during Windows boot.</li>
-<li><strong>State-Safe Cycling:</strong> Only toggles radios that are already powered ON (leaving radios in Airplane mode or turned off alone).</li>
-<li><strong>Safe Power Restoration:</strong> Minimizes the off window and ensures radios are commanded back on with retries even if the mod is unloaded mid-cycle.</li>
-<li><strong>Session-Safe:</strong> Remembers the current Windows logon session across tool process restarts using Windows Terminal Services (WTS) logon timestamps.</li>
-<li><strong>Graceful Lifecycle & Live Testing:</strong> Responsive to settings updates, mod reload, and instant cancellation on shutdown.</li>
-</ul>]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
         </author>
     </entry>
 </feed>
