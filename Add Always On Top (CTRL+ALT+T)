@@ -7,8 +7,8 @@
 // @description:tr-TR Ctrl+Alt+T ile aktif pencereyi her şeyin üstünde tutun; temalı rozet ve isteğe bağlı sesli ikaz içerir
 // @description:fr-FR Appuyez sur Ctrl+Alt+T pour garder la fenêtre active au premier plan, avec un badge à thème et des alertes sonores facultatives
 // @version         1.0
-// @author          Your Name
-// @github          https://github.com/your-github-username
+// @author          DahaSakinOlamazdim
+// @github          https://github.com/DahaSakinOlamazdim
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
