@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.94
+// @version         0.3.99
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -64,6 +64,12 @@ outline. Liquid keeps the native fill transparent while capture or GPU setup
 is unavailable, and transient GPU failures are retried automatically. High
 contrast retains the Windows material. **Save & apply** updates the taskbar.
 
+**Dock border line** draws a solid outline just inside the dock edge. Choose
+Black, Grey, White, or a custom `#RRGGBB` color. Thickness runs from 0.5 to 10
+DIP in half-DIP steps, and **Border opacity** fades the line. It is off by
+default and applies to every dock theme. High contrast keeps the Windows
+material without it.
+
 **Text color** can retain Windows' color, force light or dark text, or
 adapt each text element from its local composed background. Adaptive color uses
 a rolling, time-weighted brightness average to reduce switching on animated
@@ -103,27 +109,41 @@ icon resources; transparent padding within an icon and Windows materials can
 vary. The preview stays centered regardless of taskbar position or screen-edge
 distance. **Save & apply** (Ctrl+S) saves to:
 `%LOCALAPPDATA%\Windhawk\windows-11-better-ultrawide-taskbar\settings.toml`.
-The **Settings UI** page independently controls the window's main-body material
-(Native, Mica, Acrylic, or Liquid glass), body blur, and floating panels' blur,
-refraction, depth, and highlights. Panels sample the body beneath them. These values live
-in `[settings.ui]`; saving only UI appearance does not rebuild the taskbar.
-The full-height sidebar contains the app header. Native follows the Windows theme.
-Mica uses Windows' blurred wallpaper backdrop, Acrylic uses the native Acrylic brush,
-and Liquid glass refracts the desktop backdrop. The renderer applies the continuous
+The window body is Acrylic over the desktop, using the native Acrylic brush. The
+floating panels and the controls on them are liquid glass, drawn by the same
+shader as the taskbar. The glass controls are the buttons, the toggles, the
+slider knobs, the choice lists and number fields, and the sidebar pages. Each
+is a single glass plate that shows its own hover and press. An open choice list
+is a rounded frosted card. A pressed control grows,
+and toggle and slider knobs turn from solid to clear glass and grow past their
+track while held.
+Toggle knobs slide to their new side and the page card slides to the selected
+page, following Windows animation settings. The settings on the
+**Settings UI** page tune that glass. Panel blur, refraction, depth, and
+highlights apply to the panels and the glass controls. These values live in
+`[settings.ui]`. Saving only UI appearance does not rebuild the taskbar.
+Settings UI changes apply when you save, like the taskbar. The editor no longer
+offers body material or body blur settings. Older settings files may still
+contain `ui.bodyMaterial` and `ui.bodyBlur` keys. The mod ignores them, and the
+next save drops them.
+The full-height sidebar contains the app header. The renderer applies the continuous
 window mask to the material so its corners remain smooth.
-The body-blur control applies to Liquid glass. Glass refraction,
-depth, and highlights apply to the panels and a Liquid glass body.
 Floating panels sample the rendered body layer underneath them, with no panel
 shadows. The body is isolated from the panels and controls to prevent feedback.
-Decorative outlines are removed; keyboard focus remains visible.
-Panel controls have clear fills, and the window and glass panels use continuous
-superellipse corners (44 DIP for the window, 32 DIP for panels), with antialiased
-coverage. The XAML host blends edge coverage against the raw desktop backdrop;
-the opaque body stays custom-rendered. Maximized windows keep square corners.
+**Body border line** outlines the window body, and the floating panels share it.
+It is on by default in Grey at 1 DIP and offers the same color, thickness, and
+opacity choices. Other decorative outlines
+are removed, and keyboard focus remains visible. Hover and press feedback stays
+inside each control's rounded shape. In high contrast, or when the glass
+renderer cannot start, the controls keep solid Windows fills. The window and
+glass panels use continuous superellipse corners (44 DIP for the window, 32 DIP
+for panels), with antialiased coverage. The XAML host blends edge coverage
+against the raw desktop backdrop, and the opaque body stays custom-rendered.
+Maximized windows keep square corners.
 Settings UI glass also exposes refraction models, surface profiles, Snell thickness
 and refractive index, magnification, distortion, chromatic aberration, lighting,
 Fresnel reflection, brightness, saturation, and panel opacity. These controls affect
-the floating panels and, when selected, the Liquid glass body independently of the taskbar.
+the floating panels and the glass controls independently of the taskbar.
 This is the mod's only settings file; Windhawk has no separate customization
 values. The first click creates a missing file from built-in defaults.
 The `[settings]`, `[settings.button]`, `[settings.liquid]`, `[settings.tray]`,
@@ -208,7 +228,7 @@ Snell's neutral index also removes color fringing. **Tint color** accepts a
 glints** can animate along the edge or follow the pointer. Both default off,
 respect Windows' animation preference, and leave controls and click targets in
 place. These controls are also available independently under **Settings UI**,
-where they apply to the floating panels and to a Liquid glass body.
+where they apply to the floating panels and the glass controls.
 
 The **Taskbar height and icon size** mod is detected automatically. When using
 it, set that mod's taskbar height to:
@@ -217,7 +237,7 @@ Native task and tray hover plates fit the dock without changing button
 layout.
 
 If native controls do not fit, the visual tree is unsupported, taskbar
-ownership changes, or more than 64 children are realized, that taskbar stays
+ownership changes, or more than 64 task buttons are realized, that taskbar stays
 in its native XAML layout. Layout and capacity fallbacks recover on a later
 layout pass; a taskbar whose translation, clip or tree ownership was taken over
 stays native until the mod is re-enabled. The configured frame height remains
@@ -388,6 +408,8 @@ std::set<HWND> g_pendingDiscovery; // Taskbar UI thread only.
 enum class DockTheme { Native, Glass, Frosted, Liquid };
 enum class FontColorMode { Default, Light, Dark, Adaptive };
 DockTheme g_theme{};
+struct DockBorder { winrt::Windows::UI::Color color{}; float width{}; }; // width in DIP; 0 = no border
+DockBorder g_dockBorder{};
 FontColorMode g_fontColorMode{};
 ULONGLONG g_adaptiveWindowMs{2000};
 double g_dockCornerRadius{12};
@@ -568,9 +590,7 @@ struct SettingChoice { PCWSTR value; PCWSTR label; };
 constexpr SettingChoice kThemeChoices[]{
     {L"native", L"Windows"}, {L"glass", L"Glass"},
     {L"frosted", L"Frosted glass"}, {L"liquid", L"Liquid glass"}};
-constexpr SettingChoice kUiBodyChoices[]{
-    {L"native", L"Native"}, {L"mica", L"Mica"},
-    {L"acrylic", L"Acrylic"}, {L"liquid", L"Liquid glass"}};
+constexpr SettingChoice kBorderColorChoices[]{{L"black", L"Black"}, {L"grey", L"Grey"}, {L"white", L"White"}, {L"custom", L"Custom"}};
 constexpr SettingChoice kFontChoices[]{
     {L"default", L"Windows"}, {L"light", L"Light"},
     {L"dark", L"Dark"}, {L"adaptive", L"Adaptive"}};
@@ -638,12 +658,10 @@ constexpr SettingField kSettingFields[]{
     {L"liquid.shadowBlur", L"Shadow softness (DIP)", SettingKind::Number, 1, 12, 0, 72},
     {L"liquid.shadowOffset", L"Shadow vertical offset (DIP)", SettingKind::Number, 1, 4, -40, 40},
     {L"adaptive.windowSeconds", L"Adaptive averaging (seconds)", SettingKind::Number, 0, 200, 0, 1000, {}, 100},
-    {L"ui.bodyBlur", L"Body blur (%)", SettingKind::Number, 3, 40, 0, 100},
     {L"ui.panelBlur", L"Panel blur (%)", SettingKind::Number, 3, 25, 0, 100},
     {L"ui.panelRefraction", L"Glass refraction (%)", SettingKind::Number, 3, 100, 0, 200},
     {L"ui.panelDepth", L"Glass depth (DIP)", SettingKind::Number, 3, 40, 1, 100},
     {L"ui.panelHighlights", L"Glass highlights (%)", SettingKind::Number, 3, 5, 0, 100},
-    {L"ui.bodyMaterial", L"Main body", SettingKind::Choice, 3, 2, 0, 0, kUiBodyChoices},
     {L"ui.glassModel", L"Refraction model", SettingKind::Choice, 3, 0, 0, 0, kRefractionChoices},
     {L"ui.glassSurface", L"Surface profile", SettingKind::Choice, 3, 0, 0, 0, kSurfaceChoices},
     {L"ui.glassBezelWidth", L"Bezel width (DIP)", SettingKind::Number, 3, 12, 1, 100},
@@ -703,6 +721,16 @@ constexpr SettingField kSettingFields[]{
     {L"ui.glassBoundaryFade", L"Capture edge softness (DIP)", SettingKind::Number, 3, 2, 0, 20},
     {L"tray.highlightPadding", L"Highlight vertical padding (DIP)", SettingKind::Number, 2, 8, 0, 100},
     {L"tray.highlightRadius", L"Highlight corner radius (DIP)", SettingKind::Number, 2, 12, 0, 100},
+    {L"dockBorder", L"Dock border line", SettingKind::Toggle, 0, 0},
+    {L"dockBorderColor", L"Border color", SettingKind::Choice, 0, 1, 0, 0, kBorderColorChoices},
+    {L"dockBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 0, 0, 0, 0},
+    {L"dockBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 0, 2, 1, 20, {}, 2},
+    {L"dockBorderOpacity", L"Border opacity (%)", SettingKind::Number, 0, 100, 0, 100},
+    {L"ui.bodyBorder", L"Body border line", SettingKind::Toggle, 3, 1},
+    {L"ui.bodyBorderColor", L"Border color", SettingKind::Choice, 3, 1, 0, 0, kBorderColorChoices},
+    {L"ui.bodyBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0},
+    {L"ui.bodyBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 3, 2, 1, 20, {}, 2},
+    {L"ui.bodyBorderOpacity", L"Border opacity (%)", SettingKind::Number, 3, 100, 0, 100},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -754,6 +782,14 @@ std::wstring LocalString(settingsjson::JsonObject const& settings, PCWSTR key) {
         }
     }
     return field.kind == SettingKind::Color ? L"#FFFFFF" : field.choices[field.defaultValue].value;
+}
+
+int LocalChoice(settingsjson::JsonObject const& settings, PCWSTR key) {
+    auto const& field = SettingDefinition(key);
+    auto value = LocalString(settings, key);
+    for (size_t i = 0; i < field.choices.size(); ++i)
+        if (value == field.choices[i].value) return static_cast<int>(i);
+    return field.defaultValue;
 }
 
 std::wstring CanonicalTrayId(std::wstring const& text) {
@@ -1515,6 +1551,23 @@ HANDLE g_editorThread{};
 std::atomic<HWND> g_editorWindow{};
 std::atomic<bool> g_editorCancel{};
 
+// Linear progress toward target; drawing eases it.
+struct GlassMotion {
+    float value{}, target{};
+    bool Step(float milliseconds, float duration) {
+        if (value == target) return false;
+        float step = milliseconds / duration;
+        value = target > value ? std::min(target, value + step) : std::max(target, value - step);
+        return true;
+    }
+    // Ease-out cubic, close to WinUI's fast-out control curve.
+    float Eased() const { float rest = 1 - value; return 1 - rest * rest * rest; }
+};
+constexpr float kPressInMs = 100, kPressOutMs = 200, kKnobSlideMs = 200, kNavSlideMs = 280;
+struct GlassPress {
+    FrameworkElement element{nullptr};
+    GlassMotion motion;
+};
 struct EditorControl {
     Controls::Control input{nullptr};
     Controls::Slider slider{nullptr};
@@ -1522,6 +1575,10 @@ struct EditorControl {
     Controls::Border card{nullptr};
     Controls::TextBlock error{nullptr};
     Controls::Primitives::ToggleButton disclosure{nullptr};
+    // Template parts under the glass lens: a toggle's on/off pills and knob, a slider's thumb.
+    FrameworkElement lensPart{nullptr}, offPill{nullptr}, knobPart{nullptr};
+    Controls::Primitives::Popup dropDown{nullptr}; // A choice's dropdown.
+    GlassMotion knob; // 0 off, 1 on.
     std::wstring help, lastValidColor;
     Controls::ComboBox::SelectionChanged_revoker selection;
     Controls::ToggleSwitch::Toggled_revoker toggled;
@@ -1609,6 +1666,7 @@ struct SettingsEditor {
     Controls::UserControl content{nullptr};
     Controls::ListBox navigation{nullptr};
     Controls::ScrollViewer scroll{nullptr};
+    Controls::Grid contentLayer{nullptr}; // Spans the scrolled content and hosts its plates' visual.
     std::array<Controls::StackPanel, 4> pages{nullptr, nullptr, nullptr, nullptr};
     Controls::TextBlock status{nullptr};
     Controls::Button save{nullptr}, reload{nullptr}, openFile{nullptr};
@@ -1618,6 +1676,7 @@ struct SettingsEditor {
     std::vector<EditorSection> sections;
     Controls::ListBox::SelectionChanged_revoker navigationChanged;
     Controls::ScrollViewer::ViewChanged_revoker surfaceScrolled;
+    FrameworkElement::LayoutUpdated_revoker layoutUpdated;
     Controls::Button::Click_revoker saveClick, reloadClick, openFileClick;
     Hosting::DesktopWindowXamlSource::TakeFocusRequested_revoker takeFocus;
     std::array<EditorControl, std::size(kSettingFields)> controls{};
@@ -1644,7 +1703,15 @@ struct SettingsEditor {
     SIZE windowShapeSize{};
     float windowShapeRadius = -1;
     int surfaceAppearance = -1;
-    bool updatingSurface{};
+    bool updatingSurface{}, glassFailed{};
+    std::vector<GlassPress> presses;
+    FrameworkElement hovered{nullptr}; // The glass control under the pointer.
+    std::vector<std::pair<RoutedEvent, winrt::Windows::Foundation::IInspectable>> pressEvents;
+    GlassMotion navSlide{1, 1};
+    winrt::Windows::Foundation::Rect navFrom{}, navCard{}; // navCard: the page card drawn last.
+    winrt::event_token motionToken{};
+    bool motionSubscribed{};
+    std::chrono::steady_clock::time_point motionAt{};
     winrt::Windows::UI::ViewManagement::UISettings systemColors;
     winrt::Windows::UI::ViewManagement::UISettings::ColorValuesChanged_revoker colorsChanged;
     winrt::Windows::UI::ViewManagement::UISettings::TextScaleFactorChanged_revoker textScaleChanged;
@@ -1660,6 +1727,7 @@ struct SettingsEditor {
     CatalogIconPicker iconPicker;
     std::optional<std::string> originalText;
     std::string originalDocument;
+    settingsjson::JsonObject savedValues{nullptr};
 };
 void CreateEditorPreview(SettingsEditor& editor);
 void UpdateEditorPreview(SettingsEditor& editor) noexcept;
@@ -1680,6 +1748,60 @@ void QueryTrayCatalog(HWND editor);
 void OpenCatalogPicker(SettingsEditor& editor, std::wstring const& key);
 void CloseCatalogPicker(SettingsEditor& editor);
 void CatalogIconResult(SettingsEditor& editor, UINT_PTR generation);
+FrameworkElement Child(FrameworkElement parent, const wchar_t* name, bool byClass);
+
+void StopEditorMotion(SettingsEditor& editor) noexcept {
+    if (!std::exchange(editor.motionSubscribed, false)) return;
+    try { Media::CompositionTarget::Rendering(editor.motionToken); } catch (...) {}
+}
+
+// Steps the glass control motion once per XAML frame and stops when it settles.
+void StartEditorMotion(SettingsEditor& editor) noexcept {
+    if (editor.motionSubscribed) return;
+    try {
+        editor.motionAt = std::chrono::steady_clock::now();
+        editor.motionToken = Media::CompositionTarget::Rendering([&editor](auto const&, auto const&) {
+            try {
+                auto now = std::chrono::steady_clock::now();
+                BOOL animate = FALSE;
+                SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0);
+                float dt = animate ? std::clamp(std::chrono::duration<float, std::milli>(now - editor.motionAt).count(),
+                                                0.0f, 50.0f) : INFINITY;
+                editor.motionAt = now;
+                bool moving = editor.navSlide.Step(dt, kNavSlideMs);
+                for (auto& control : editor.controls) moving |= control.knob.Step(dt, kKnobSlideMs);
+                for (auto& press : editor.presses)
+                    moving |= press.motion.Step(dt, press.motion.target > press.motion.value ? kPressInMs : kPressOutMs);
+                std::erase_if(editor.presses, [](auto const& press) {
+                    if (press.motion.target || press.motion.value) return false;
+                    // The surface scales the pressed controls it draws; one it skipped must not stay grown.
+                    press.element.ClearValue(UIElement::RenderTransformProperty());
+                    press.element.ClearValue(UIElement::RenderTransformOriginProperty());
+                    return true;
+                });
+                if (moving) UpdateEditorSurface(editor, false);
+                else StopEditorMotion(editor);
+            } catch (...) {
+                Wh_Log(L"[UWSET] glass motion failed hr=%08X", winrt::to_hresult().value);
+                StopEditorMotion(editor);
+            }
+        });
+        editor.motionSubscribed = true;
+    } catch (...) {
+        Wh_Log(L"[UWSET] glass motion unavailable hr=%08X", winrt::to_hresult().value);
+    }
+}
+
+void SetEditorPress(SettingsEditor& editor, FrameworkElement const& element, bool pressed) {
+    auto press = std::find_if(editor.presses.begin(), editor.presses.end(),
+                              [&](auto const& entry) { return entry.element == element; });
+    if (press == editor.presses.end()) {
+        if (!pressed) return;
+        press = editor.presses.insert(press, GlassPress{element, {}});
+    }
+    press->motion.target = pressed;
+    StartEditorMotion(editor);
+}
 
 void RequestPreviewMetrics(SettingsEditor& editor) {
     auto dispatcher = g_dispatch.load();
@@ -1767,9 +1889,9 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
     int model = editor.controls[20].input.as<Controls::ComboBox>().SelectedIndex();
     bool snell = model == 1;
     bool rim = editor.controls[29].input.as<Controls::ComboBox>().SelectedIndex() == 2;
-    int uiModel = editor.controls[43].input.as<Controls::ComboBox>().SelectedIndex();
+    int uiModel = editor.controls[41].input.as<Controls::ComboBox>().SelectedIndex();
     bool uiSnell = uiModel == 1;
-    bool uiRim = editor.controls[54].input.as<Controls::ComboBox>().SelectedIndex() == 2;
+    bool uiRim = editor.controls[52].input.as<Controls::ComboBox>().SelectedIndex() == 2;
     for (size_t i = 0; i < editor.controls.size(); ++i) {
         bool enabled = true;
         if (i == 8 || i == 9) enabled &= liquid;
@@ -1777,38 +1899,39 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
         if (i == 2) enabled &= editor.trayEnabled.IsOn();
         if (i == 10) enabled &= !snell && model < 3;
         if (i == 22) enabled &= snell || model >= 3 ||
-            editor.controls[63].slider.Value()>0 || editor.controls[64].slider.Value()>0;
+            editor.controls[61].slider.Value()>0 || editor.controls[62].slider.Value()>0;
         if (i >= 23 && i <= 24) enabled &= snell;
         if (i == 14) enabled &= !rim;
         if (i >= 30 && i <= 32) enabled &= rim;
         if (i == 34 || i == 35) enabled &= editor.controls[33].slider.Value() > 0;
         if (i == 36) enabled &= editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex() == 3;
-        if (i == 37) enabled &= editor.controls[42].input.as<Controls::ComboBox>().SelectedIndex() == 3;
-        if (i == 40) enabled &= !uiSnell && uiModel < 3;
-        if (i == 45) enabled &= uiSnell || uiModel >= 3 ||
-            editor.controls[83].slider.Value()>0 || editor.controls[84].slider.Value()>0;
-        if (i >= 46 && i <= 47) enabled &= uiSnell;
-        if (i == 41) enabled &= !uiRim;
-        if (i >= 55 && i <= 57) enabled &= uiRim;
-        if (i >= 60 && i < 100) {
-            size_t base = i < 80 ? 60 : 80, option = i - base;
-            int selectedModel = i < 80 ? model : uiModel;
+        if ((i >= 101 && i <= 104) || (i >= 106 && i <= 109)) {
+            size_t toggle = i < 105 ? 100 : 105;
+            enabled &= editor.controls[toggle].input.as<Controls::ToggleSwitch>().IsOn();
+            if (i == toggle + 2) enabled &= editor.controls[toggle+1].input.as<Controls::ComboBox>().SelectedIndex() == 3;
+        }
+        if (i == 39) enabled &= !uiSnell && uiModel < 3;
+        if (i == 43) enabled &= uiSnell || uiModel >= 3 ||
+            editor.controls[81].slider.Value()>0 || editor.controls[82].slider.Value()>0;
+        if (i >= 44 && i <= 45) enabled &= uiSnell;
+        if (i == 40) enabled &= !uiRim;
+        if (i >= 53 && i <= 55) enabled &= uiRim;
+        if (i >= 58 && i < 98) {
+            size_t base = i < 78 ? 58 : 78, option = i - base;
+            int selectedModel = i < 78 ? model : uiModel;
             int glints = editor.controls[base+15].input.as<Controls::ComboBox>().SelectedIndex();
             if (option == 0) enabled &= selectedModel >= 3;
             if (option == 1) enabled &= selectedModel == 3;
             if (option == 2) enabled &= selectedModel == 4;
             if (option == 5) enabled &= editor.controls[base+4].slider.Value() > 0;
-            if (option == 8) enabled &= i<80 ? editor.controls[18].slider.Value()>0 :
-                editor.controls[38].slider.Value()>0 ||
-                (editor.controls[42].input.as<Controls::ComboBox>().SelectedIndex()==3 &&
-                 editor.controls[37].slider.Value()>0);
+            if (option == 8) enabled &= editor.controls[i<78 ? 18 : 37].slider.Value()>0;
             if (option == 10) enabled &= editor.controls[base+11].slider.Value() > 0;
             if (option == 13 || option == 14) enabled &= editor.controls[base+12].slider.Value() > 0;
             if (option == 16 || option == 18) enabled &= glints > 0;
             if (option == 17) enabled &= glints == 1;
         }
         bool expert = (kSettingFields[i].page==1 && i!=9) ||
-            (kSettingFields[i].page==3 && i!=42 && i!=58 && i!=59);
+            (kSettingFields[i].page==3 && i!=56 && i!=57);
         editor.controls[i].card.Visibility((i==9 ? liquid : !expert || enabled)
             ?Visibility::Visible:Visibility::Collapsed);
         editor.controls[i].input.IsEnabled(editor.valid && enabled);
@@ -2370,11 +2493,7 @@ void ReloadEditor(SettingsEditor& editor) {
             if (field.kind == SettingKind::Toggle) {
                 control.input.as<Controls::ToggleSwitch>().IsOn(values.GetNamedBoolean(field.key));
             } else if (field.kind == SettingKind::Choice) {
-                auto value = values.GetNamedString(field.key);
-                int index = 0;
-                for (size_t j = 0; j < field.choices.size(); ++j)
-                    if (value == field.choices[j].value) index = static_cast<int>(j);
-                control.input.as<Controls::ComboBox>().SelectedIndex(index);
+                control.input.as<Controls::ComboBox>().SelectedIndex(LocalChoice(values, field.key));
             } else if (field.kind == SettingKind::Color) {
                 control.input.as<Controls::TextBox>().Text(LocalString(values, field.key));
             } else {
@@ -2385,6 +2504,7 @@ void ReloadEditor(SettingsEditor& editor) {
         }
         editor.originalText = std::move(text);
         editor.originalDocument = SettingsDocument(values);
+        editor.savedValues = values;
         editor.valid = true;
         editor.dirty = false;
         EditorStatus(editor, L"Changes apply when you save.");
@@ -2417,6 +2537,9 @@ settingsjson::JsonObject EditorPageValues(SettingsEditor const& editor, int page
         } else if (field.kind == SettingKind::Color) {
             values.Insert(field.key, settingsjson::JsonValue::CreateStringValue(
                 control.lastValidColor));
+        } else {
+            values.Insert(field.key, settingsjson::JsonValue::CreateBooleanValue(
+                control.input.as<Controls::ToggleSwitch>().IsOn()));
         }
     }
     return values;
@@ -2480,6 +2603,8 @@ bool SaveEditor(SettingsEditor& editor) {
         editor.originalText = document;
         editor.originalDocument = document;
     }
+    editor.savedValues = values;
+    UpdateEditorSurface(editor);
     editor.dirty = false;
     UpdateEditorEnabled(editor);
     if (auto dispatcher = g_dispatch.load(); dispatcher &&
@@ -2701,6 +2826,10 @@ bool RouteEditorFrameInput(SettingsEditor& editor, MSG const& message) {
     LPARAM position = MAKELPARAM(point.x, point.y);
     int hit = int(SendMessageW(editor.window, WM_NCHITTEST, 0, position));
     bool captured = GetCapture() == editor.window;
+    // A XAML control holding the pointer has its InputSite capture it. The press that
+    // started on it owns every message until the release, wherever that lands; routing
+    // its caption-area messages to the frame leaves XAML waiting and eats the next press.
+    if (!captured && GetCapture()) return false;
     if (!captured && (hit == HTCLIENT || hit == HTNOWHERE)) {
         if (editor.framePointerOver)
             SendMessageW(editor.window, WM_NCMOUSELEAVE, 0, 0);
@@ -2838,28 +2967,64 @@ void CreateEditorContent(SettingsEditor& editor) {
       </StackPanel>
       <ListBox x:Name="Navigation" Grid.Row="1" Background="Transparent" BorderThickness="0"
                SelectedIndex="0" AutomationProperties.Name="Settings pages">
-        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="8" Margin="0,0,0,5" AutomationProperties.Name="Taskbar">
+        <ListBox.Resources>
+          <!-- Glass mode only: the lens draws every state, and the inbox ListBoxItem template
+               would fill a square over it. -->
+          <Style x:Key="GlassNavItem" TargetType="ListBoxItem">
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+              <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                  <Grid Background="Transparent">
+                    <VisualStateManager.VisualStateGroups>
+                      <VisualStateGroup x:Name="CommonStates">
+                        <VisualState x:Name="Normal"/>
+                        <VisualState x:Name="Selected"/>
+                        <VisualState x:Name="SelectedUnfocused"/>
+                        <VisualState x:Name="PointerOver"/>
+                        <VisualState x:Name="SelectedPointerOver"/>
+                        <VisualState x:Name="Pressed"/>
+                        <VisualState x:Name="SelectedPressed"/>
+                        <VisualState x:Name="Disabled">
+                          <VisualState.Setters><Setter Target="Presenter.Opacity" Value="0.4"/></VisualState.Setters>
+                        </VisualState>
+                      </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}"
+                        Margin="{TemplateBinding Padding}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                  </Grid>
+                </ControlTemplate>
+              </Setter.Value>
+            </Setter>
+          </Style>
+        </ListBox.Resources>
+        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="10" Margin="0,0,0,5" AutomationProperties.Name="Taskbar">
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE790;" FontSize="15" Margin="0,0,10,0"/>
             <TextBlock Grid.Column="1" Text="Taskbar" FontSize="13" TextWrapping="Wrap"/>
           </Grid>
         </ListBoxItem>
-        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="8" Margin="0,0,0,5" AutomationProperties.Name="Liquid glass">
+        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="10" Margin="0,0,0,5" AutomationProperties.Name="Liquid glass">
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE81E;" FontSize="15" Margin="0,0,10,0"/>
             <TextBlock Grid.Column="1" Text="Liquid glass" FontSize="13" TextWrapping="Wrap"/>
           </Grid>
         </ListBoxItem>
-        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="8" AutomationProperties.Name="Tray icons">
+        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="10" AutomationProperties.Name="Tray icons">
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE91B;" FontSize="15" Margin="0,0,10,0"/>
             <TextBlock Grid.Column="1" Text="Tray icons" FontSize="13" TextWrapping="Wrap"/>
           </Grid>
         </ListBoxItem>
-        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="8" AutomationProperties.Name="Settings UI">
+        <ListBoxItem Padding="10" MinHeight="44" CornerRadius="10" AutomationProperties.Name="Settings UI">
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE713;" FontSize="15" Margin="0,0,10,0"/>
@@ -2904,6 +3069,7 @@ void CreateEditorContent(SettingsEditor& editor) {
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                   HorizontalContentAlignment="Stretch" IsTabStop="False">
       <Grid>
+        <Grid x:Name="SettingsGlass" IsHitTestVisible="False"/>
         <StackPanel x:Name="AppearancePage">
           <TextBlock Text="Taskbar appearance" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"/>
           <TextBlock Text="Shape your dock and choose how its content looks." FontSize="12" TextWrapping="Wrap"/>
@@ -2932,7 +3098,7 @@ void CreateEditorContent(SettingsEditor& editor) {
         </StackPanel>
         <StackPanel x:Name="UiPage" Visibility="Collapsed">
           <TextBlock Text="Settings UI" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"/>
-          <TextBlock Text="Choose the window material and customize its glass surfaces."
+          <TextBlock Text="Customize the window's glass surfaces."
                      FontSize="12" TextWrapping="Wrap"/>
           <StackPanel x:Name="UiFields"/>
         </StackPanel>
@@ -2992,6 +3158,7 @@ void CreateEditorContent(SettingsEditor& editor) {
             });
     editor.navigation = find(L"Navigation").as<Controls::ListBox>();
     editor.scroll = find(L"SettingsScroll").as<Controls::ScrollViewer>();
+    editor.contentLayer = find(L"SettingsGlass").as<Controls::Grid>();
     editor.pages = {find(L"AppearancePage").as<Controls::StackPanel>(),
                     find(L"LiquidPage").as<Controls::StackPanel>(),
                     find(L"TrayPage").as<Controls::StackPanel>(),
@@ -3011,15 +3178,15 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.refreshTray = find(L"RefreshTray").as<Controls::Button>();
     editor.syncing = true;
     constexpr size_t displayOrder[]{
-        0, 1, 36, 3, 4, 5, 6, 7, 8, 100, 101, 19, 2,
+        0, 1, 36, 100, 101, 102, 103, 104, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
         9, 20, 21, 10, 22, 23, 24, 11, 25, 12, 26,
         29, 14, 13, 15, 30, 31, 32, 16, 17, 18, 27, 28, 33, 34, 35,
-        60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-        42, 58, 59, 37,
-        43, 44, 39, 40, 45, 46, 47, 48, 49, 50,
-        54, 41, 53, 55, 56, 57,
-        38, 51, 52,
-        80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99};
+        58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+        105, 106, 107, 108, 109, 56, 57,
+        41, 42, 38, 39, 43, 44, 45, 46, 47, 48,
+        52, 40, 51, 53, 54, 55,
+        37, 49, 50,
+        78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97};
     static_assert(std::size(displayOrder) == std::size(kSettingFields));
     std::array<Controls::StackPanel,4> containers{appearance,liquid,tray,ui};
     auto targets=containers;
@@ -3028,19 +3195,19 @@ void CreateEditorContent(SettingsEditor& editor) {
         auto const& field = kSettingFields[i];
         auto& control = editor.controls[i];
         auto fields = targets[field.page];
-        PCWSTR section = i == 100 ? L"Tray highlights" : i == 0 ? L"Style & color" : i == 3 ? L"Geometry" :
+        PCWSTR section = i == 98 ? L"Tray highlights" : i == 0 ? L"Style & color" : i == 3 ? L"Geometry" :
             i == 7 ? L"Buttons" : i == 9 ? L"Material" : i == 21 ? L"Surface" :
             i == 11 ? L"Refraction" : i == 29 ? L"Lighting" :
             i == 16 ? L"Finish" : i == 33 ? L"Shadow" :
-            i == 42 ? L"Window appearance" : i == 43 ? L"Glass shape" :
-            i == 54 ? L"Lighting" : i == 38 ? L"Finish" :
-            i == 60 || i == 80 ? L"Edge shaping" :
-            i == 68 || i == 88 ? L"Frost & color" :
-            i == 72 || i == 92 ? L"Interaction & glints" : nullptr;
+            i == 105 ? L"Window appearance" : i == 41 ? L"Glass shape" :
+            i == 52 ? L"Lighting" : i == 37 ? L"Finish" :
+            i == 58 || i == 78 ? L"Edge shaping" :
+            i == 66 || i == 86 ? L"Frost & color" :
+            i == 70 || i == 90 ? L"Interaction & glints" : nullptr;
         if (section) {
             fields=containers[field.page];
             disclosures[field.page]=nullptr;
-            if((field.page==1 && i!=9) || (field.page==3 && i!=42)) {
+            if((field.page==1 && i!=9) || (field.page==3 && i!=105)) {
                 EditorSection group;
                 group.page=field.page;group.title=section;
                 group.header=Controls::Primitives::ToggleButton();
@@ -3104,6 +3271,11 @@ void CreateEditorContent(SettingsEditor& editor) {
             control.input = toggle;
             control.toggled = toggle.Toggled(winrt::auto_revoke,
                 [&editor, i](auto const&, auto const&) {
+                    auto& knob = editor.controls[i].knob;
+                    knob.target = editor.controls[i].input.as<Controls::ToggleSwitch>().IsOn();
+                    // A reload places the knob; a change while editing slides it.
+                    if (editor.syncing) knob.value = knob.target;
+                    else StartEditorMotion(editor);
                     EditorChanged(editor);
                     if (kSettingFields[i].page == 2 && !editor.syncing) RebuildTrayRows(editor);
                 });
@@ -3157,23 +3329,21 @@ void CreateEditorContent(SettingsEditor& editor) {
         control.input.VerticalAlignment(VerticalAlignment::Center);
         Automation::AutomationProperties::SetName(control.input, field.label);
         Automation::AutomationProperties::SetAutomationId(control.input, field.key);
-        PCWSTR help = i == 42 ? L"Native follows Windows. Mica uses the wallpaper backdrop, Acrylic uses Windows' Acrylic brush, and Liquid glass refracts the desktop. Panels sample the finished body." :
-            i == 3 || i == 4 ? L"Rounded corners are limited to half the visible shape's width or height." :
+        PCWSTR help = i == 3 || i == 4 ? L"Rounded corners are limited to half the visible shape's width or height." :
             i == 5 ? L"Space above and below each button background. Icons and click targets keep their native size." :
-            i == 37 ? L"Blur strength for a Liquid glass body." :
-            i == 20 || i == 43 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
-            i == 21 || i == 44 ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
-            i == 22 || i == 45 ? L"Width of the curved edge, independent of the glass base thickness." :
-            i == 24 || i == 47 ? L"1.00 does not bend light; ordinary glass is approximately 1.50." :
-            i == 29 || i == 54 ? L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent." :
-            i == 58 ? L"Transparency of the floating panels. The main body remains opaque." :
-            i == 59 ? L"Edge glow on floating panels and a Liquid glass body. 0% disables it." :
-            i == 66 || i == 86 ? L"Width of the highlight, independent of refraction. 0 keeps automatic sizing." :
-            i == 68 || i == 88 ? L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface." :
-            i == 69 || i == 89 ? L"With refraction links color fringing to the actual displacement of light." :
-            i == 72 || i == 92 ? L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply." :
-            i == 75 || i == 95 ? L"Optional glints along the glass edge. Windows animation settings apply." :
-            field.page == 3 && i != 38 ? L"Applies to floating panels and to the body when Liquid glass is selected." :
+            i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
+            i == 21 || i == 42 ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
+            i == 22 || i == 43 ? L"Width of the curved edge, independent of the glass base thickness." :
+            i == 24 || i == 45 ? L"1.00 does not bend light; ordinary glass is approximately 1.50." :
+            i == 29 || i == 52 ? L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent." :
+            i == 56 ? L"Transparency of the floating panels. The main body remains opaque." :
+            i == 57 ? L"Edge glow on the floating panels and glass controls. 0% disables it." :
+            i == 64 || i == 84 ? L"Width of the highlight, independent of refraction. 0 keeps automatic sizing." :
+            i == 66 || i == 86 ? L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface." :
+            i == 67 || i == 87 ? L"With refraction links color fringing to the actual displacement of light." :
+            i == 70 || i == 90 ? L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply." :
+            i == 73 || i == 93 ? L"Optional glints along the glass edge. Windows animation settings apply." :
+            field.page == 3 && i != 37 && i < 98 ? L"Applies to the floating panels and the glass controls." :
             i == 33 ? L"Shadows follow the dock and are limited to the taskbar's window area." :
             i == 36 ? L"Average background brightness over this many seconds. Longer windows reduce color changes on animated wallpapers. 0 reacts to each sample." : nullptr;
         if (help) {
@@ -3197,6 +3367,12 @@ void CreateEditorContent(SettingsEditor& editor) {
     }
     editor.navigationChanged = editor.navigation.SelectionChanged(winrt::auto_revoke,
         [&editor](auto const&, auto const&) {
+            // Before anything redraws: the page card slides on from where it was drawn.
+            if (editor.navCard.Width > 0) {
+                editor.navFrom = editor.navCard;
+                editor.navSlide = {0, 1};
+                StartEditorMotion(editor);
+            }
             int page = editor.navigation.SelectedIndex();
             for (int i = 0; i < static_cast<int>(editor.pages.size()); ++i)
                 editor.pages[i].Visibility(page == i ? Visibility::Visible : Visibility::Collapsed);
@@ -3206,7 +3382,44 @@ void CreateEditorContent(SettingsEditor& editor) {
         });
     editor.surfaceScrolled = editor.scroll.ViewChanged(winrt::auto_revoke,
         [&editor](auto const&, auto const&) { UpdateEditorSurface(editor, false); });
-    auto command = [window = editor.window](int id) {
+    // Glass lenses follow dragged thumbs, expanding sections and resizes.
+    editor.layoutUpdated = editor.content.LayoutUpdated(winrt::auto_revoke,
+        [&editor](auto const&, auto const&) { UpdateEditorSurface(editor, false); });
+    // A TextBox owns the clear button in its template.
+    auto glassControl = [&editor](Input::PointerRoutedEventArgs const& args) {
+        FrameworkElement found{nullptr};
+        for (auto node = args.OriginalSource().try_as<DependencyObject>(); node && node != editor.content;
+             node = Media::VisualTreeHelper::GetParent(node)) {
+            if (node.try_as<Controls::TextBox>()) return node.as<FrameworkElement>();
+            if (!found && (node.try_as<Controls::Primitives::ButtonBase>() || node.try_as<Controls::ListBoxItem>() ||
+                           node.try_as<Controls::ToggleSwitch>() || node.try_as<Controls::Slider>() ||
+                           node.try_as<Controls::ComboBox>()))
+                found = node.as<FrameworkElement>();
+        }
+        return found;
+    };
+    // Controls handle their own presses, so the glass listens to handled events too.
+    auto onPointer = [&editor](RoutedEvent const& event, auto handle) {
+        auto handler = winrt::box_value(Input::PointerEventHandler(
+            [handle](auto const&, Input::PointerRoutedEventArgs const& args) { try { handle(args); } catch (...) {} }));
+        editor.content.AddHandler(event, handler, true);
+        editor.pressEvents.emplace_back(event, handler);
+    };
+    onPointer(UIElement::PointerPressedEvent(), [&editor, glassControl](auto const& args) {
+        if (auto control = glassControl(args)) SetEditorPress(editor, control, true);
+    });
+    for (auto const& event : {UIElement::PointerReleasedEvent(), UIElement::PointerCanceledEvent(),
+                              UIElement::PointerCaptureLostEvent()})
+        onPointer(event, [&editor](auto const&) {
+            for (auto& press : editor.presses) press.motion.target = 0;
+            if (!editor.presses.empty()) StartEditorMotion(editor);
+        });
+    auto hover = [&editor](FrameworkElement const& control) {
+        if (editor.hovered != control) { editor.hovered = control; UpdateEditorSurface(editor, false); }
+    };
+    onPointer(UIElement::PointerMovedEvent(), [hover, glassControl](auto const& args) { hover(glassControl(args)); });
+    onPointer(UIElement::PointerExitedEvent(), [hover](auto const&) { hover(nullptr); });
+    auto command =[window = editor.window](int id) {
         SendMessageW(window, WM_COMMAND, id, 0);
     };
     editor.saveClick = editor.save.Click(winrt::auto_revoke,
@@ -3594,6 +3807,12 @@ DWORD WINAPI SettingsEditorThread(void*) {
         editor.textScaleChanged.revoke();
         editor.navigationChanged.revoke();
         editor.surfaceScrolled.revoke();
+        editor.layoutUpdated.revoke();
+        StopEditorMotion(editor);
+        for (auto const& [event, handler] : editor.pressEvents) editor.content.RemoveHandler(event, handler);
+        editor.pressEvents.clear();
+        editor.presses.clear();
+        editor.hovered = nullptr;
         editor.saveClick.revoke();
         editor.reloadClick.revoke();
         editor.openFileClick.revoke();
@@ -3971,13 +4190,7 @@ LiquidSettings ReadLiquidSettings(settingsjson::JsonObject const& settings) {
         return std::clamp(LocalInt(settings, key), low, high) / 100.0f;
     };
     LiquidSettings result;
-    auto choice = [&](PCWSTR key) {
-        auto value = LocalString(settings, key);
-        auto choices = SettingDefinition(key).choices;
-        for (size_t i = 0; i < choices.size(); ++i)
-            if (value == choices[i].value) return static_cast<float>(i);
-        return 0.0f;
-    };
+    auto choice = [&](PCWSTR key) { return static_cast<float>(LocalChoice(settings, key)); };
     result.zRadius = static_cast<float>(std::clamp(LocalInt(settings, L"liquid.zRadius"), 1, 100));
     result.refraction = percent(L"liquid.refraction", 0, 200);
     result.chroma = percent(L"liquid.chromaticAberration", 0, 30);
@@ -4029,6 +4242,21 @@ LiquidSettings ReadLiquidSettings(settingsjson::JsonObject const& settings) {
     result.glintSize = percent(L"liquid.glintSize", 5, 100);
     result.boundaryFade = float(std::clamp(LocalInt(settings, L"liquid.boundaryFade"), 0, 20));
     return ApplyLiquidPreset(LocalString(settings, L"liquid.preset"), result);
+}
+
+DockBorder ReadBorder(settingsjson::JsonObject const& settings, PCWSTR prefix) {
+    if (!LocalBool(settings, prefix)) return {};
+    std::wstring key(prefix);
+    auto choice = LocalString(settings, (key + L"Color").c_str());
+    auto alpha = uint8_t(std::lround(std::clamp(LocalInt(settings, (key + L"Opacity").c_str()), 0, 100) * 255 / 100.0));
+    winrt::Windows::UI::Color color{alpha, 128, 128, 128};
+    if (choice == L"black") color = {alpha, 0, 0, 0};
+    else if (choice == L"white") color = {alpha, 255, 255, 255};
+    else if (choice == L"custom") {
+        unsigned rgb = wcstoul(LocalString(settings, (key + L"CustomColor").c_str()).c_str() + 1, nullptr, 16);
+        color = {alpha, uint8_t(rgb >> 16), uint8_t(rgb >> 8), uint8_t(rgb)};
+    }
+    return {color, std::clamp(LocalInt(settings, (key + L"Width").c_str()), 1, 20) / 2.0f};
 }
 
 LiquidSettings ReadUiLiquidSettings(settingsjson::JsonObject const& ui, float scale) {
@@ -5039,13 +5267,16 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float bodyMaterialTint[4]{};
         float fluidPointer[4]{}; // Position and settled displacement, output pixels.
         float glintClock[4]{}; // Time, pointer present, animation allowed, reserved.
+        float border[4]{}; // r, g, b, a in 0..1.
+        float borderWidth[4]{}; // x: width in pixels, 0 = none; the rest keeps cbuffer alignment.
+        float outputOffset[4]{}; // x, y: output pixel to backdrop pixel; z: 1 draws the lenses alone, clear elsewhere.
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
     // Pins the cbuffer arithmetic the HLSL side relies on: a 224-byte header,
-    // six float4 arrays, then five trailing 16-byte registers. Adding a member without
+    // six float4 arrays, then eight trailing 16-byte registers. Adding a member without
     // accounting for it here would silently shift every lens the shader reads.
     static_assert(sizeof(LensConstants) ==
-                   224 + 6 * 16 * kMaxButtonLenses + 80);
+                   224 + 6 * 16 * kMaxButtonLenses + 128);
 
     struct CopyConstants {
         float offset[2]{};
@@ -5143,6 +5374,9 @@ cbuffer Lens : register(b0) {
     float4 bodyMaterialTint;
     float4 fluidPointer;
     float4 glintClock;
+    float4 border;
+    float4 borderWidth;
+    float4 outputOffset;
 };
 cbuffer Copy : register(b1) {
     float2 copyOffset;
@@ -5510,13 +5744,15 @@ float4 shadePixel(float2 pixel) {
     // resizing a sprite would stretch a crop from the final destination.
     float2 p = pixel - center;
     float distance = roundedDistance(p);
+    // A lenses-only layer draws plates beyond the window too: they can scroll into view before its next frame.
+    bool lensesOnly = outputOffset.z > 0.5;
     // Runtime already has the compositor's animated rounded clip. Sampled
     // shader bounds can reach the layout target before native motion starts;
     // a second mask would cut away the still-visible part of the dock.
     if (!compositorClip && bodyMode == 0 && distance > 0) return 0;
-    if (bodyMode == 3 && distance > 1) return 0;
+    if (bodyMode == 3 && distance > 1 && !lensesOnly) return 0;
     float4 original = backdrop.SampleLevel(linearClamp, pixel / imageSize, 0);
-    if (original.a <= 0.001) return 0;
+    if (original.a <= 0.001 && !lensesOnly) return 0;
 
     // Each button is a glass surface over the shared dock. Buttons do not overlap,
     // so the first hit wins and the cheap distance rejects every other lens. The
@@ -5524,6 +5760,7 @@ float4 shadePixel(float2 pixel) {
     // raw backdrop during native motion.
     float coverage = 0;
     float3 buttonColor = 0;
+    float panelBorder = 0;
     for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
         float nativeOpacity = 1 - saturate(lensFades[i].x);
         if (nativeOpacity <= 0) continue;
@@ -5544,6 +5781,9 @@ float4 shadePixel(float2 pixel) {
             itemMask = continuousCoverage(panelPoint, nativeRect.zw, cornerValue(panelPoint, lensRadii[i]));
             float2 clipCoverage = saturate(clipRect.zw - abs(pixel - clipRect.xy) + .5);
             itemMask *= clipCoverage.x * clipCoverage.y;
+            if (borderWidth.x > 0)
+                panelBorder = itemMask * border.a * smoothstep(-borderWidth.x - 0.5, -borderWidth.x + 0.5,
+                    continuousDistanceFor(panelPoint, nativeRect.zw, cornerValue(panelPoint, lensRadii[i])));
         }
         if (itemMask <= 0) continue;
         buttonColor = refractedBackdrop(pixel, item, pixel - clipRect.xy, clipRect.zw, false);
@@ -5557,6 +5797,7 @@ float4 shadePixel(float2 pixel) {
         coverage = itemMask * (shapeParams.w == 2 ? 1 : lensBlend) * nativeOpacity;
         break;
     }
+    if (lensesOnly) return float4(buttonColor, 1) * coverage * opacity;
 
     // Biconvex pill profile adapted from ybouane/liquidglass (MIT):
     // https://github.com/ybouane/liquidglass. The curved height field creates
@@ -5581,16 +5822,22 @@ float4 shadePixel(float2 pixel) {
         }
         color = lerp(dockColor, buttonColor, coverage);
     }
+    color = lerp(color, border.rgb, panelBorder);
 
     // Clip the finished UI once; keep its intermediate body opaque so edge
     // antialiasing isn't multiplied when panels are composed over it.
     float mask = bodyMode == 3 ? continuousCoverage(p, halfSize, radius) :
         !compositorClip && bodyMode == 0 ? 1 - smoothstep(-1.5, 0.5, distance) : 1;
     float alpha = mask * opacity * original.a;
-    return float4(color * alpha, alpha);
+    float4 result = float4(color * alpha, alpha);
+    if (borderWidth.x > 0 && (bodyMode == 0 || bodyMode == 3)) {
+        float band = border.a * smoothstep(-borderWidth.x - 0.5, -borderWidth.x + 0.5, distance);
+        result = lerp(result, float4(border.rgb, 1) * mask, band);
+    }
+    return result;
 }
 float4 ps(VertexOutput input) : SV_Target {
-    float2 pixel = input.position.xy;
+    float2 pixel = input.position.xy + outputOffset.xy;
     float distance = roundedDistance(pixel - center);
     // Refraction and lighting can vary faster than a pixel around the rim.
     // Filter that narrow band without adding a second runtime silhouette mask:
@@ -5742,8 +5989,51 @@ float4 ps(VertexOutput input) : SV_Target {
     winrt::com_ptr<ID3D11BlendState> copyBlend;
     ContainerVisual visualRoot{nullptr};
     SpriteVisual pixels{nullptr};
+    // A second output with only the lenses of scrolled content, in that content's own pixels. Its owner hosts
+    // layerPixels inside the content, so the compositor scrolls the plates with the text over them.
+    winrt::com_ptr<IDXGISwapChain1> layerChain;
+    winrt::com_ptr<ID3D11RenderTargetView> layerTarget;
+    LensConstants layerLens{};
+    UINT layerWidth{}, layerHeight{};
+    float layerRows[2]{}; // Drawn each frame; the rest stays clear.
+    SpriteVisual layerPixels{nullptr};
 
     ~LiquidRenderer() { TakeUnderLock().Drain(); }
+
+    // A premultiplied flip-model swapchain and the brush that composes it.
+    CompositionSurfaceBrush CreateChain(Compositor const& compositor, UINT pixelWidth, UINT pixelHeight,
+                                        UINT flags, winrt::com_ptr<IDXGISwapChain1>& chain) {
+        winrt::com_ptr<IDXGIAdapter> adapter;
+        winrt::check_hresult(device.as<IDXGIDevice>()->GetAdapter(adapter.put()));
+        winrt::com_ptr<IDXGIFactory2> factory;
+        winrt::check_hresult(adapter->GetParent(
+            __uuidof(IDXGIFactory2), factory.put_void()));
+        DXGI_SWAP_CHAIN_DESC1 swapDescription{};
+        swapDescription.Width = pixelWidth;
+        swapDescription.Height = pixelHeight;
+        swapDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        swapDescription.SampleDesc.Count = 1;
+        swapDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapDescription.BufferCount = 2;
+        swapDescription.Scaling = DXGI_SCALING_STRETCH;
+        swapDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        swapDescription.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+        swapDescription.Flags = flags;
+        winrt::check_hresult(factory->CreateSwapChainForComposition(
+            device.get(), &swapDescription, nullptr, chain.put()));
+        winrt::com_ptr<ICompositorInterop> compositorInterop;
+        winrt::check_hresult(
+            reinterpret_cast<IUnknown*>(winrt::get_abi(compositor))
+                ->QueryInterface(kIID_ICompositorInterop,
+                                 compositorInterop.put_void()));
+        winrt::com_ptr<IUnknown> abiSurface;
+        winrt::check_hresult(
+            compositorInterop->CreateCompositionSurfaceForSwapChain(
+                chain.get(), abiSurface.put()));
+        ICompositionSurface surface{
+            abiSurface.detach(), winrt::take_ownership_from_abi};
+        return compositor.CreateSurfaceBrush(surface);
+    }
 
     bool Initialize(Compositor const& compositor, HWND taskbarWindow,
                     UINT pixelWidth, UINT pixelHeight, HWND displayWindow=nullptr,
@@ -5771,11 +6061,6 @@ float4 ps(VertexOutput input) : SV_Target {
             winrt::check_hresult(CreateDirect3D11DeviceFromDXGIDevice(
                 dxgiDevice.get(), inspectable.put()));
             graphicsDevice = inspectable.as<direct3d11::IDirect3DDevice>();
-            winrt::com_ptr<IDXGIAdapter> adapter;
-            winrt::check_hresult(dxgiDevice->GetAdapter(adapter.put()));
-            winrt::com_ptr<IDXGIFactory2> factory;
-            winrt::check_hresult(adapter->GetParent(
-                __uuidof(IDXGIFactory2), factory.put_void()));
 
             auto const& code = GetShaderBytecode();
             winrt::check_hresult(device->CreateVertexShader(
@@ -5820,38 +6105,14 @@ float4 ps(VertexOutput input) : SV_Target {
             winrt::check_hresult(device->CreateBlendState(
                 &blendDescription, copyBlend.put()));
 
-            DXGI_SWAP_CHAIN_DESC1 swapDescription{};
-            swapDescription.Width = pixelWidth;
-            swapDescription.Height = pixelHeight;
-            swapDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-            swapDescription.SampleDesc.Count = 1;
-            swapDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-            swapDescription.BufferCount = 2;
-            swapDescription.Scaling = DXGI_SCALING_STRETCH;
-            swapDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-            swapDescription.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-            swapDescription.Flags =
-                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-            winrt::check_hresult(factory->CreateSwapChainForComposition(
-                device.get(), &swapDescription, nullptr, swapChain.put()));
+            auto surfaceBrush = CreateChain(compositor, pixelWidth, pixelHeight,
+                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, swapChain);
             auto pacedSwapChain = swapChain.as<IDXGISwapChain2>();
             winrt::check_hresult(pacedSwapChain->SetMaximumFrameLatency(1));
             frameLatencyWaitable =
                 pacedSwapChain->GetFrameLatencyWaitableObject();
             if (!frameLatencyWaitable)
                 throw winrt::hresult_error(E_FAIL);
-            winrt::com_ptr<ICompositorInterop> compositorInterop;
-            winrt::check_hresult(
-                reinterpret_cast<IUnknown*>(winrt::get_abi(compositor))
-                    ->QueryInterface(kIID_ICompositorInterop,
-                                     compositorInterop.put_void()));
-            winrt::com_ptr<IUnknown> abiSurface;
-            winrt::check_hresult(
-                compositorInterop->CreateCompositionSurfaceForSwapChain(
-                    swapChain.get(), abiSurface.put()));
-            ICompositionSurface surface{
-                abiSurface.detach(), winrt::take_ownership_from_abi};
-            auto surfaceBrush = compositor.CreateSurfaceBrush(surface);
             surfaceBrush.Stretch(CompositionStretch::Fill);
             pixels = compositor.CreateSpriteVisual();
             pixels.RelativeSizeAdjustment({1, 1});
@@ -6414,6 +6675,41 @@ float4 ps(VertexOutput input) : SV_Target {
         geometryReady = true;
         if (changed || pendingPresent) SchedulePresentLocked();
         return true;
+    }
+
+    // Lenses of scrolled content for the second output, in its pixels; only rows top to bottom are drawn.
+    // Returns the visual showing it at one texture pixel per unit.
+    SpriteVisual UpdateLayer(UINT pixelWidth, UINT pixelHeight, float top, float bottom, LensConstants const& lenses) {
+        std::lock_guard lock(mutex);
+        if (!running || FAILED(failure)) return nullptr;
+        pixelWidth = std::clamp<UINT>(pixelWidth, 1, D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION);
+        pixelHeight = std::clamp<UINT>(pixelHeight, 1, D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION);
+        bool resized = pixelWidth != layerWidth || pixelHeight != layerHeight;
+        if (!layerChain) {
+            auto compositor = pixels.Compositor();
+            auto brush = CreateChain(compositor, pixelWidth, pixelHeight, 0, layerChain);
+            // Unstretched: across a resize the old frame keeps its scale until the new one presents.
+            brush.Stretch(CompositionStretch::None);
+            brush.HorizontalAlignmentRatio(0);
+            brush.VerticalAlignmentRatio(0);
+            layerPixels = compositor.CreateSpriteVisual();
+            layerPixels.Brush(brush);
+        } else if (resized) {
+            layerTarget = nullptr;
+            ID3D11RenderTargetView* noTarget{};
+            context->OMSetRenderTargets(1, &noTarget, nullptr);
+            context->Flush();
+            winrt::check_hresult(layerChain->ResizeBuffers(2, pixelWidth, pixelHeight, DXGI_FORMAT_B8G8R8A8_UNORM, 0));
+        }
+        if (resized) layerPixels.Size({float(pixelWidth), float(pixelHeight)});
+        bool changed = resized || top != layerRows[0] || bottom != layerRows[1] || !SameLensInput(layerLens, lenses);
+        layerWidth = pixelWidth;
+        layerHeight = pixelHeight;
+        layerRows[0] = top;
+        layerRows[1] = bottom;
+        layerLens = lenses;
+        if (changed) SchedulePresentLocked();
+        return layerPixels;
     }
 
     // The UI thread calls this for every step of a window drag. A render holds
@@ -7261,15 +7557,15 @@ float4 ps(VertexOutput input) : SV_Target {
         context->PSSetShaderResources(0, 1, &noSource);
         context->OMSetBlendState(nullptr, blendFactor, UINT_MAX);
 
+        D3D11_VIEWPORT full{0,0,float(width),float(height),0,1};
         auto drawGlass = [&](ID3D11RenderTargetView* target, LensConstants parameters,
                               ID3D11ShaderResourceView* sharp,
                               ID3D11ShaderResourceView* blurred,
-                              ID3D11ShaderResourceView* body) {
+                              ID3D11ShaderResourceView* body, D3D11_VIEWPORT const& viewport) {
             parameters.imageSize[0]=float(width); parameters.imageSize[1]=float(height);
             parameters.compositorClip=taskbar!=nullptr;
             context->UpdateSubresource(constants.get(),0,nullptr,&parameters,0,0);
             auto buffer=constants.get();
-            D3D11_VIEWPORT viewport{0,0,float(width),float(height),0,1};
             ID3D11ShaderResourceView* inputs[]{sharp,blurred,body};
             context->OMSetRenderTargets(1,&target,nullptr);
             context->RSSetViewports(1,&viewport);
@@ -7324,7 +7620,7 @@ float4 ps(VertexOutput input) : SV_Target {
             auto bodyLens=effectsLens;
             bodyLens.lensCount=0; // Body first; no panels can feed back into it.
             context->ClearRenderTargetView(renderedBodyTarget.get(),clear);
-            drawGlass(renderedBodyTarget.get(),bodyLens,compositeView.get(),bodyBlur,bodyBlur);
+            drawGlass(renderedBodyTarget.get(),bodyLens,compositeView.get(),bodyBlur,bodyBlur,full);
             panelInput=renderedBodyView.get();
         }
         auto blurredView=blurBackdrop(panelInput,lens.optics.blur,1);
@@ -7365,10 +7661,34 @@ float4 ps(VertexOutput input) : SV_Target {
                     presentLens.lensFades[i][0] = 1 - sampledLensOpacity[i];
                 }
         }
-        drawGlass(backTarget.get(),presentLens,panelInput,blurredView,panelInput);
+        drawGlass(backTarget.get(),presentLens,panelInput,blurredView,panelInput,full);
         // Visibility can change after the latency wait. Never block with the
         // renderer mutex held while the UI thread is minimizing or closing it.
         hr = swapChain->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
+        if (hr == DXGI_ERROR_WAS_STILL_DRAWING) pendingPresent = true;
+        else if (FAILED(hr)) failure = hr;
+        if (!layerChain || FAILED(failure)) return;
+        if (!layerTarget) {
+            winrt::com_ptr<ID3D11Texture2D> buffer;
+            hr = layerChain->GetBuffer(0, __uuidof(ID3D11Texture2D), buffer.put_void());
+            if (SUCCEEDED(hr)) hr = device->CreateRenderTargetView(buffer.get(), nullptr, layerTarget.put());
+            if (FAILED(hr)) { failure = hr; return; }
+        }
+        context->ClearRenderTargetView(layerTarget.get(), clear);
+        // The shader works in backdrop pixels, so the lenses take the offset ps adds to each output pixel.
+        auto layer = layerLens;
+        layer.bodyMode = presentLens.bodyMode;
+        std::copy_n(effectsLens.fluidPointer, 4, layer.fluidPointer);
+        std::copy_n(effectsLens.glintClock, 4, layer.glintClock);
+        layer.outputOffset[2] = 1;
+        for (size_t i = 0; i < layer.lensCount; ++i)
+            for (int axis = 0; axis < 2; ++axis) {
+                layer.lensRects[i][axis] += layer.outputOffset[axis];
+                layer.lensNativeRects[i][axis] += layer.outputOffset[axis];
+            }
+        drawGlass(layerTarget.get(), layer, panelInput, blurredView, panelInput,
+                  {0, layerRows[0], float(layerWidth), layerRows[1] - layerRows[0], 0, 1});
+        hr = layerChain->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
         if (hr == DXGI_ERROR_WAS_STILL_DRAWING) pendingPresent = true;
         else if (FAILED(hr)) failure = hr;
     }
@@ -7500,6 +7820,14 @@ float4 ps(VertexOutput input) : SV_Target {
         return true;
     }
 };
+
+void ApplyBorder(LiquidRenderer::LensConstants& lens, DockBorder border, float scale) {
+    lens.border[0] = border.color.R / 255.0f;
+    lens.border[1] = border.color.G / 255.0f;
+    lens.border[2] = border.color.B / 255.0f;
+    lens.border[3] = border.color.A / 255.0f;
+    lens.borderWidth[0] = border.width * scale;
+}
 
 // Both callers supply measured/synthetic device-pixel rectangles. Appearance
 // decisions happen before packing; this function never changes a XAML element.
@@ -7664,6 +7992,7 @@ void CloseEditorSurface(SettingsEditor& editor) {
                 editor.backgroundRenderer->visualRoot)
                 Hosting::ElementCompositionPreview::SetElementChildVisual(editor.liquidBackground, nullptr);
         } catch (...) {}
+        try { Hosting::ElementCompositionPreview::SetElementChildVisual(editor.contentLayer, nullptr); } catch (...) {}
         editor.backgroundRenderer->Stop();
         editor.backgroundRenderer.reset();
     }
@@ -7713,14 +8042,20 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
     if (!editor.surface || editor.syncing || editor.updatingSurface) return;
     editor.updatingSurface = true;
     struct Reset { bool& value; ~Reset() { value = false; } } reset{editor.updatingSurface};
+    editor.navCard = {};
     try {
         using Color = winrt::Windows::UI::Color;
         using namespace winrt::Windows::UI::ViewManagement;
         bool contrast = HighContrastActive();
         bool dark = editor.content.RequestedTheme() == ElementTheme::Dark;
         bool glass = !contrast;
-        int body = std::clamp(editor.controls[42].input.as<Controls::ComboBox>().SelectedIndex(), 0, 3);
-        int appearance = body + (dark ? 5 : 0) + (contrast ? 10 : 0);
+        // Decided before the renderer exists, so the first frame already shows glass
+        // controls and a minimized window keeps them. A failed renderer falls back.
+        bool glassControls = glass && !editor.glassFailed;
+        int appearance = (glassControls ? 0 : 1) + (dark ? 5 : 0) + (contrast ? 10 : 0);
+        bool restyle = appearance != editor.surfaceAppearance;
+        auto foreground = contrast ? editor.systemColors.GetColorValue(UIColorType::Foreground) :
+            dark ? Color{255,245,245,245} : Color{255,20,20,20};
         auto solid = [](Color color) { return Media::SolidColorBrush(color); };
         auto resourceColor=[&](ResourceDictionary const& resources,std::wstring const& name,Color color) {
             auto key=winrt::box_value(name);
@@ -7733,13 +8068,11 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                 }
             resources.Insert(key,solid(color));
         };
-        if (appearance != editor.surfaceAppearance) {
+        if (restyle) {
             updateCards = true;
             editor.surfaceAppearance = appearance;
             auto background = contrast ? editor.systemColors.GetColorValue(UIColorType::Background) :
                 dark ? Color{255,32,32,32} : Color{255,243,243,243};
-            auto foreground = contrast ? editor.systemColors.GetColorValue(UIColorType::Foreground) :
-                dark ? Color{255,245,245,245} : Color{255,20,20,20};
             editor.surface.Background(solid(glass ? Color{0,0,0,0} : background));
             editor.content.Foreground(solid(foreground));
             if (editor.preview.refresh) editor.preview.refresh.Foreground(solid(foreground));
@@ -7768,27 +8101,73 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                 auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(editor.content).Compositor();
                 target.SystemBackdrop(contrast ? nullptr : compositor.CreateHostBackdropBrush());
             }
-            editor.bodyMaterial.Background(nullptr);
-            editor.bodyBackdrop.Brush(nullptr);
-            auto compositor = editor.bodyBackdrop.Compositor();
-            if (body == 2) {
-                auto acrylic = GlassMaterial(true, dark);
-                // In-app Acrylic stays active in XAML islands. Its native blur
-                // samples the raw host backdrop placed directly beneath it.
-                acrylic.BackgroundSource(Media::AcrylicBackgroundSource::Backdrop);
-                editor.bodyBackdrop.Brush(compositor.CreateHostBackdropBrush());
-                editor.bodyMaterial.Background(acrylic);
-            } else if (body == 1) {
-                if (auto wallpaper = compositor.try_as<ICompositorWithBlurredWallpaperBackdropBrush>())
-                    editor.bodyBackdrop.Brush(wallpaper.TryCreateBlurredWallpaperBackdropBrush());
-            } else if (body == 3) {
-                editor.bodyBackdrop.Brush(compositor.CreateHostBackdropBrush());
-            }
+            auto acrylic = GlassMaterial(true, dark);
+            // In-app Acrylic stays active in XAML islands. Its native blur
+            // samples the raw host backdrop placed directly beneath it.
+            acrylic.BackgroundSource(Media::AcrylicBackgroundSource::Backdrop);
+            editor.bodyBackdrop.Brush(editor.bodyBackdrop.Compositor().CreateHostBackdropBrush());
+            editor.bodyMaterial.Background(acrylic);
         }
+        auto localColor=[&](Controls::Control const& target,DependencyProperty const& property,Color color) {
+            auto brush=target.ReadLocalValue(property).try_as<Media::SolidColorBrush>();
+            if(brush) {if(brush.Color()!=color) brush.Color(color);}
+            else target.SetValue(property,solid(color));
+        };
+        auto accent=editor.systemColors.GetColorValue(UIColorType::Accent);
+        auto tinted=[&](BYTE alpha) { auto color=accent; color.A=alpha; return color; };
+        BYTE neutral=dark?255:0;
+        Color neutralTint{40,neutral,neutral,neutral}, navTint=tinted(110), accentTint=tinted(140);
+        Color hover{BYTE(dark?31:15),neutral,neutral,neutral}, pressed{BYTE(dark?51:26),neutral,neutral,neutral};
+        // Text on a tinted lens reads against the tint blended onto the body.
+        auto lensText=[&](Color tint) {
+            auto mix=[&](BYTE channel) {
+                return uint32_t(std::lround((channel*tint.A+(dark?32:243)*(255-tint.A))/255.0));
+            };
+            return ForegroundColor(PixelLuminance(mix(tint.R)<<16|mix(tint.G)<<8|mix(tint.B))<0.179);
+        };
+        // Clipping hides a toggle's pills and knob in every visual state, which animate their
+        // fill, stroke and opacity. A transparent thumb keeps its hit target.
+        auto showNative=[](EditorControl const& control,bool native) {
+            if(control.offPill) {
+                for(auto const& pill:{control.lensPart,control.offPill,control.knobPart})
+                    if(pill && bool(pill.Clip())==native) pill.Clip(native?nullptr:Media::RectangleGeometry());
+            } else if(control.lensPart && control.lensPart.Opacity()!=(native?1:0))
+                control.lensPart.Opacity(native?1:0);
+        };
+        // Lightweight keys the inbox templates read on each state change. Glass mode writes them;
+        // the solid path removes them so its states stay native. HasKey and Lookup also see the
+        // theme's shared brushes, so a scoped brush is inserted instead of recoloring one every control uses.
+        auto scope=[&](ResourceDictionary const& resources,std::wstring const& key,Color color) {
+            auto box=winrt::box_value(key);
+            if(!glassControls) {if(resources.HasKey(box)) resources.Remove(box); return;}
+            auto brush=resources.HasKey(box)?resources.Lookup(box).try_as<Media::SolidColorBrush>():nullptr;
+            if(!brush || brush.Color()!=color) resources.Insert(box,solid(color));
+        };
+        auto dropDownOf=[](EditorControl const& control) -> Controls::Border {
+            auto child=control.dropDown?control.dropDown.Child().try_as<FrameworkElement>():nullptr;
+            return child?Child(child,L"PopupBorder",false).try_as<Controls::Border>():nullptr;
+        };
         // Rows share their panel's material; only keyboard focus draws an outline.
         if (updateCards) {
+            // In glass mode each control is one lens that also draws its hover and press,
+            // so every state's own fill is transparent.
             auto buttonPalette=[&](Controls::Control const& button,bool primary=false) {
                 if(!button) return;
+                auto resources=button.Resources();
+                Color text=primary?lensText(accentTint):foreground;
+                bool toggle=bool(button.try_as<Controls::Primitives::ToggleButton>());
+                constexpr PCWSTR states[]{L"",L"PointerOver",L"Pressed",L"Checked",L"CheckedPointerOver",L"CheckedPressed"};
+                for(size_t i=0;i<(toggle?6:3);++i) {
+                    auto prefix=std::wstring(toggle?L"ToggleButton":L"Button");
+                    scope(resources,prefix+L"Background"+states[i],Color{});
+                    scope(resources,prefix+L"BorderBrush"+states[i],Color{});
+                    scope(resources,prefix+L"Foreground"+states[i],text);
+                }
+                if(glassControls) {
+                    localColor(button,Controls::Control::BackgroundProperty(),Color{});
+                    localColor(button,Controls::Control::ForegroundProperty(),text);
+                    return;
+                }
                 std::array<Color,3> backgrounds{},foregrounds{};
                 for(size_t state=0;state<3;++state) {
                     BYTE shade=dark?(state==2?40:state==1?76:56):(state==2?206:state==1?218:234);
@@ -7803,16 +8182,10 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                     foregrounds[state]=contrast?editor.systemColors.GetColorValue(UIColorType::Foreground):
                         ForegroundColor(PixelLuminance(rgb)<0.179);
                 }
-                auto localColor=[&](DependencyProperty const& property,Color color) {
-                    auto brush=button.ReadLocalValue(property).try_as<Media::SolidColorBrush>();
-                    if(brush) {if(brush.Color()!=color) brush.Color(color);}
-                    else button.SetValue(property,solid(color));
-                };
-                localColor(Controls::Control::BackgroundProperty(),backgrounds[0]);
-                localColor(Controls::Control::ForegroundProperty(),foregrounds[0]);
+                localColor(button,Controls::Control::BackgroundProperty(),backgrounds[0]);
+                localColor(button,Controls::Control::ForegroundProperty(),foregrounds[0]);
                 // The inbox XAML templates use these semantic resources for
                 // hover, press and checked states. Scope them to each button.
-                auto resources=button.Resources();
                 resourceColor(resources,L"SystemControlBackgroundBaseLowBrush",backgrounds[0]);
                 resourceColor(resources,L"SystemControlHighlightBaseLowBrush",backgrounds[1]);
                 resourceColor(resources,L"SystemControlHighlightBaseMediumLowBrush",backgrounds[2]);
@@ -7827,6 +8200,41 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                 buttonPalette(button);
             for(auto const& section:editor.sections) buttonPalette(section.header);
             for(auto const& row:editor.trayRows) {buttonPalette(row.choose);buttonPalette(row.reset);}
+            if(!glassControls) for(auto const& control:editor.controls) showNative(control,true);
+            // Choice and text fields keep only their native focus outline. A focused text field's
+            // template switches its text and clear glyph to the light theme's black.
+            auto inputPalette=[&](EditorControl const& control) {
+                auto combo=control.input.try_as<Controls::ComboBox>();
+                if(!combo && !control.input.try_as<Controls::TextBox>()) return;
+                auto resources=control.input.Resources();
+                constexpr PCWSTR comboFills[]{L"ComboBoxBackgroundPointerOver",L"ComboBoxBackgroundPressed",
+                    L"ComboBoxBorderBrushPointerOver",L"ComboBoxBorderBrushPressed"};
+                constexpr PCWSTR textFills[]{L"TextControlBackgroundPointerOver",L"TextControlBackgroundFocused",
+                    L"TextControlBorderBrushPointerOver",L"TextControlButtonBackgroundPointerOver",
+                    L"TextControlButtonBackgroundPressed",L"TextControlButtonBorderBrushPointerOver",
+                    L"TextControlButtonBorderBrushPressed"};
+                constexpr PCWSTR textInks[]{L"TextControlForegroundFocused",L"TextControlButtonForeground",
+                    L"TextControlButtonForegroundPointerOver",L"TextControlButtonForegroundPressed"};
+                if(combo) for(auto key:comboFills) scope(resources,key,Color{});
+                else {
+                    for(auto key:textFills) scope(resources,key,Color{});
+                    for(auto key:textInks) scope(resources,key,foreground);
+                }
+                if(glassControls) {
+                    localColor(control.input,Controls::Control::BackgroundProperty(),Color{});
+                    localColor(control.input,Controls::Control::BorderBrushProperty(),Color{});
+                    control.input.CornerRadius({8,8,8,8});
+                    return;
+                }
+                for(auto const& property:{Controls::Control::BackgroundProperty(),Controls::Control::BorderBrushProperty(),
+                                          Controls::Control::CornerRadiusProperty()})
+                    control.input.ClearValue(property);
+                if(auto border=dropDownOf(control))
+                    for(auto const& property:{Controls::Border::BackgroundProperty(),Controls::Border::BorderBrushProperty(),
+                                              Controls::Border::CornerRadiusProperty(),FrameworkElement::RequestedThemeProperty()})
+                        border.ClearValue(property);
+            };
+            if(restyle) for(auto const& control:editor.controls) inputPalette(control);
             for (auto const& control : editor.controls)
                 if (control.card) {
                     control.card.Background(editor.cardMaterial);
@@ -7836,13 +8244,35 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                 for (auto const& item : editor.trayList.Children())
                     if (auto border = item.try_as<Controls::Border>()) border.Background(editor.cardMaterial);
         }
+        // LayoutUpdated runs this, so layout-affecting writes happen only on change.
+        Style navStyle = glassControls ?
+            editor.navigation.Resources().Lookup(winrt::box_value(L"GlassNavItem")).as<Style>() : nullptr;
         for (uint32_t i = 0; i < editor.navigation.Items().Size(); ++i) {
             auto item = editor.navigation.Items().GetAt(i).as<Controls::ListBoxItem>();
             bool selected = int(i) == editor.navigation.SelectedIndex();
-            item.FontWeight(selected ? winrt::Windows::UI::Text::FontWeights::SemiBold() :
-                                       winrt::Windows::UI::Text::FontWeights::Normal());
-            item.Content().as<Controls::Panel>().Children().GetAt(1)
-                .as<Controls::TextBlock>().FontWeight(item.FontWeight());
+            auto weight = selected ? winrt::Windows::UI::Text::FontWeights::SemiBold() :
+                                     winrt::Windows::UI::Text::FontWeights::Normal();
+            if (item.FontWeight().Weight != weight.Weight) {
+                item.FontWeight(weight);
+                item.Content().as<Controls::Panel>().Children().GetAt(1)
+                    .as<Controls::TextBlock>().FontWeight(weight);
+            }
+            if (item.Style() != navStyle) item.Style(navStyle);
+            if (glassControls && selected)
+                localColor(item, Controls::Control::ForegroundProperty(), lensText(navTint));
+            else if (item.ReadLocalValue(Controls::Control::ForegroundProperty()) != DependencyProperty::UnsetValue())
+                item.ClearValue(Controls::Control::ForegroundProperty());
+        }
+        int page = editor.navigation.SelectedIndex();
+        // Only a dropdown inside the island can sit on the glass, and that is fixed at its first open.
+        for (size_t i = 0; i < editor.controls.size(); ++i) {
+            auto& control = editor.controls[i];
+            if (kSettingFields[i].kind != SettingKind::Choice || kSettingFields[i].page != page) continue;
+            if (!control.dropDown)
+                control.dropDown = Child(Child(control.input, L"LayoutRoot", false), L"Popup", false)
+                    .try_as<Controls::Primitives::Popup>();
+            if (control.dropDown && !control.dropDown.ShouldConstrainToRootBounds() && !control.dropDown.IsOpen())
+                try { control.dropDown.ShouldConstrainToRootBounds(true); } catch (...) {}
         }
         RECT shapeBounds{};
         if (GetClientRect(editor.window, &shapeBounds) && shapeBounds.right > 0 && shapeBounds.bottom > 0)
@@ -7877,30 +8307,25 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         editor.bodySurface.SourceSize({dipWidth,dipHeight});
         editor.bodySample.Size({float(width),float(height)});
         editor.bodyBackdrop.Size({dipWidth,dipHeight});
-        if (body>=2) {
-            // A host-backdrop brush becomes a stale snapshot through a captured
-            // VisualSurface. Feed live window pixels underneath native Acrylic
-            // instead; its material and the glass panels retain their own pass.
-            if (!editor.desktopRenderer) {
-                auto renderer=std::make_shared<LiquidRenderer>();
-                if (!renderer->Initialize(editor.bodyBackdrop.Compositor(),editor.window,
-                                          width,height,nullptr,false))
-                    throw winrt::hresult_error(E_FAIL,L"Settings backdrop unavailable");
-                editor.desktopRenderer=std::move(renderer);
-            }
-            LiquidRenderer::LensConstants desktop{};
-            desktop.bodyMode=4; // Unshaded, opaque input to the native material.
-            desktop.center[0]=desktop.halfSize[0]=width/2.0f;
-            desktop.center[1]=desktop.halfSize[1]=height/2.0f;
-            if (!editor.desktopRenderer->UpdateGeometry(rect,width,height,desktop))
-                throw winrt::hresult_error(E_FAIL,L"Settings backdrop device unavailable");
-            editor.bodyBackdrop.Brush(editor.desktopRenderer->pixels.Brush());
-            if (!InSendMessage())
-                editor.desktopRenderer->UpdateSources(editor.desktopRenderer->CandidateWindows());
-        } else if (editor.desktopRenderer) {
-            editor.desktopRenderer->Stop();
-            editor.desktopRenderer.reset();
+        // A host-backdrop brush becomes a stale snapshot through a captured
+        // VisualSurface. Feed live window pixels underneath native Acrylic
+        // instead; its material and the glass panels retain their own pass.
+        if (!editor.desktopRenderer) {
+            auto renderer=std::make_shared<LiquidRenderer>();
+            if (!renderer->Initialize(editor.bodyBackdrop.Compositor(),editor.window,
+                                      width,height,nullptr,false))
+                throw winrt::hresult_error(E_FAIL,L"Settings backdrop unavailable");
+            editor.desktopRenderer=std::move(renderer);
         }
+        LiquidRenderer::LensConstants desktop{};
+        desktop.bodyMode=4; // Unshaded, opaque input to the native material.
+        desktop.center[0]=desktop.halfSize[0]=width/2.0f;
+        desktop.center[1]=desktop.halfSize[1]=height/2.0f;
+        if (!editor.desktopRenderer->UpdateGeometry(rect,width,height,desktop))
+            throw winrt::hresult_error(E_FAIL,L"Settings backdrop device unavailable");
+        editor.bodyBackdrop.Brush(editor.desktopRenderer->pixels.Brush());
+        if (!InSendMessage())
+            editor.desktopRenderer->UpdateSources(editor.desktopRenderer->CandidateWindows());
         if (!editor.backgroundRenderer) {
             auto visual = Hosting::ElementCompositionPreview::GetElementVisual(editor.liquidBackground);
             auto compositor = visual.Compositor();
@@ -7922,51 +8347,220 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         lens.center[0] = lens.halfSize[0] = width / 2.0f;
         lens.center[1] = lens.halfSize[1] = height / 2.0f;
         lens.radius = windowRadius * scale;
-        auto ui = EditorPageValues(editor, 3);
+        auto const& ui = editor.savedValues;
         auto value = [&](PCWSTR key) {
             auto const& field = SettingDefinition(key);
             return std::clamp(LocalInt(ui, key), field.minimum, field.maximum);
         };
-        lens.bodyMode = body == 3 ? 1 : float(body + 4);
-        lens.bodyBlur = value(L"ui.bodyBlur") / 100.0f;
+        lens.bodyMode = 6; // Acrylic.
         lens.optics = ReadUiLiquidSettings(ui, scale);
+        ApplyBorder(lens, ReadBorder(ui, L"ui.bodyBorder"), scale);
         std::fill_n(lens.bodyMaterialTint, 3, dark ? 32.0f / 255 : 243.0f / 255);
         lens.bodyMaterialTint[3] = 0.8f;
-        auto addLayer = [&](FrameworkElement const& element, CornerRadius radius,
-                            float kind, Color tint = Color{}) {
-            if (!element || element.ActualWidth() <= 0 || element.ActualHeight() <= 0 ||
-                lens.lensCount == kMaxButtonLenses) return;
-            auto origin = element.TransformToVisual(editor.content).TransformPoint({0,0});
-            float left = std::max(origin.X, 0.0f);
-            float top = std::max(origin.Y, 0.0f);
-            float right = std::min(origin.X + float(element.ActualWidth()), dipWidth);
-            float bottom = std::min(origin.Y + float(element.ActualHeight()), dipHeight);
-            if (right <= left || bottom <= top) return;
-            auto i = lens.lensCount++;
-            float clipped[]{(left + right) * scale / 2, (top + bottom) * scale / 2,
-                            (right - left) * scale / 2, (bottom - top) * scale / 2};
-            float native[]{(origin.X + float(element.ActualWidth()) / 2) * scale,
-                           (origin.Y + float(element.ActualHeight()) / 2) * scale,
-                           float(element.ActualWidth()) * scale / 2, float(element.ActualHeight()) * scale / 2};
-            std::copy_n(clipped, 4, lens.lensRects[i]);
-            std::copy_n(native, 4, lens.lensNativeRects[i]);
-            float radii[]{float(radius.TopLeft) * scale, float(radius.TopRight) * scale,
-                          float(radius.BottomRight) * scale, float(radius.BottomLeft) * scale};
-            std::copy_n(radii, 4, lens.lensRadii[i]);
-            lens.lensShapeParams[i][0] = 1;
-            lens.lensShapeParams[i][3] = kind;
-            float color[]{tint.R/255.0f, tint.G/255.0f, tint.B/255.0f, tint.A/255.0f};
-            std::copy_n(color, 4, lens.lensTints[i]);
-        };
-        for (size_t i = 0; i < editor.captionButtons.size(); ++i)
-            if (editor.captionStates[i])
-                addLayer(editor.captionButtons[i], editor.captionButtons[i].CornerRadius(),
-                         2, EditorCaptionTint(editor, i));
-        addLayer(editor.sidebar, editor.sidebar.CornerRadius(), 1);
-        addLayer(editor.inspector, editor.inspector.CornerRadius(), 1);
         lens.lensRefraction = lens.optics.refraction;
         lens.lensBlend = value(L"ui.panelOpacity") / 100.0f;
         lens.alertTintOpacity = 1;
+        using Rect = winrt::Windows::Foundation::Rect;
+        size_t lensCap = kMaxButtonLenses - 2; // Keeps room for the two panels.
+        // Includes the RenderTransform that scales a pressed control.
+        auto boundsOf = [&](FrameworkElement const& element) {
+            return element.TransformToVisual(editor.content).TransformBounds(
+                {0, 0, float(element.ActualWidth()), float(element.ActualHeight())});
+        };
+        auto padding = editor.scroll.Padding();
+        auto viewport = boundsOf(editor.scroll);
+        viewport = {viewport.X + float(padding.Left), viewport.Y + float(padding.Top),
+                    viewport.Width - float(padding.Left + padding.Right),
+                    viewport.Height - float(padding.Top + padding.Bottom)};
+        // Scrolled plates go to a layer in the scrolled content's own coordinates, hosted in that content, so the
+        // compositor moves them with the text: a swapchain cannot present in step with a scroll. It draws the plates
+        // within half a viewport of the view; its offset only aims their refraction at the body beneath.
+        auto content = boundsOf(editor.contentLayer);
+        float rowsTop = viewport.Y - content.Y - viewport.Height / 2, rowsBottom = rowsTop + 2 * viewport.Height;
+        auto layer = lens;
+        layer.outputOffset[0] = content.X * scale;
+        layer.outputOffset[1] = content.Y * scale;
+        auto addRect = [&](Rect bounds, CornerRadius radius, float kind, Color tint = Color{}, bool scrolled = false) {
+            auto& target = scrolled ? layer : lens;
+            Rect clip{0, 0, dipWidth, dipHeight};
+            if (scrolled) {
+                bounds = {bounds.X - content.X, bounds.Y - content.Y, bounds.Width, bounds.Height};
+                clip = {0, 0, content.Width, content.Height};
+                if (bounds.Y > rowsBottom || bounds.Y + bounds.Height < rowsTop) return;
+            }
+            if (bounds.Width <= 0 || bounds.Height <= 0 || target.lensCount >= (scrolled ? kMaxButtonLenses : lensCap))
+                return;
+            float left = std::max(bounds.X, clip.X);
+            float top = std::max(bounds.Y, clip.Y);
+            float right = std::min(bounds.X + bounds.Width, clip.X + clip.Width);
+            float bottom = std::min(bounds.Y + bounds.Height, clip.Y + clip.Height);
+            if (right <= left || bottom <= top) return;
+            auto i = target.lensCount++;
+            float clipped[]{(left + right) * scale / 2, (top + bottom) * scale / 2,
+                            (right - left) * scale / 2, (bottom - top) * scale / 2};
+            float native[]{(bounds.X + bounds.Width / 2) * scale, (bounds.Y + bounds.Height / 2) * scale,
+                           bounds.Width * scale / 2, bounds.Height * scale / 2};
+            std::copy_n(clipped, 4, target.lensRects[i]);
+            std::copy_n(native, 4, target.lensNativeRects[i]);
+            float radii[]{float(radius.TopLeft) * scale, float(radius.TopRight) * scale,
+                          float(radius.BottomRight) * scale, float(radius.BottomLeft) * scale};
+            std::copy_n(radii, 4, target.lensRadii[i]);
+            target.lensShapeParams[i][0] = 1;
+            target.lensShapeParams[i][3] = kind;
+            float color[]{tint.R/255.0f, tint.G/255.0f, tint.B/255.0f, tint.A/255.0f};
+            std::copy_n(color, 4, target.lensTints[i]);
+        };
+        auto addLayer = [&](FrameworkElement const& element, CornerRadius radius, float kind,
+                            Color tint = Color{}, bool scrolled = false) {
+            if (element) addRect(boundsOf(element), radius, kind, tint, scrolled);
+        };
+        auto pressOf = [&](FrameworkElement const& element) {
+            for (auto const& press : editor.presses)
+                if (press.element == element) return press.motion.Eased();
+            return 0.0f;
+        };
+        auto blend = [](Color from, Color to, float t) {
+            auto mix = [t](BYTE a, BYTE b) { return BYTE(std::lround(std::lerp(float(a), float(b), t))); };
+            return Color{mix(from.A, to.A), mix(from.R, to.R), mix(from.G, to.G), mix(from.B, to.B)};
+        };
+        // A pressed control itself grows about its centre, and boundsOf brings its lens along.
+        auto grow = [&](FrameworkElement const& element, float growth) {
+            float press = pressOf(element);
+            if (press > 0) {
+                auto transform = element.ReadLocalValue(UIElement::RenderTransformProperty()).try_as<Media::ScaleTransform>();
+                if (!transform) {
+                    transform = Media::ScaleTransform();
+                    element.RenderTransformOrigin({.5, .5});
+                    element.RenderTransform(transform);
+                }
+                transform.ScaleX(1 + growth * press);
+                transform.ScaleY(1 + growth * press);
+            }
+            return press;
+        };
+        // Hover and press shade the control's own lens; the press takes over as it deepens.
+        auto overlay = [&](FrameworkElement const& element, float press) {
+            return std::lerp(element == editor.hovered ? float(hover.A) : 0.0f, float(pressed.A), press);
+        };
+        auto stateTint = [&](FrameworkElement const& element, Color tint, float press) {
+            return blend(tint, {255, neutral, neutral, neutral}, overlay(element, press) / 255);
+        };
+        // An open dropdown covers everything, so its plate comes first, in both layers: the scrolled plates
+        // draw above the window's. Its card takes the body's material because clear glass would show the rows beneath it.
+        for (size_t i = 0; glassControls && i < editor.controls.size(); ++i)
+            if (kSettingFields[i].kind == SettingKind::Choice && kSettingFields[i].page == page &&
+                editor.controls[i].input.as<Controls::ComboBox>().IsDropDownOpen())
+                if (auto card = dropDownOf(editor.controls[i])) {
+                    if (card.Background() != editor.bodyMaterial.Background()) {
+                        card.Background(editor.bodyMaterial.Background());
+                        card.BorderBrush(solid(Color{}));
+                        card.CornerRadius({8, 8, 8, 8});
+                        card.RequestedTheme(editor.content.RequestedTheme());
+                    }
+                    addLayer(card, card.CornerRadius(), 2, neutralTint);
+                    addLayer(card, card.CornerRadius(), 2, neutralTint, true);
+                }
+        // Window chrome keeps the native stillness: caption buttons tint, they never grow.
+        for (size_t i = 0; i < editor.captionButtons.size(); ++i)
+            if (editor.captionStates[i])
+                addLayer(editor.captionButtons[i], editor.captionButtons[i].CornerRadius(), 2, EditorCaptionTint(editor, i));
+        auto findPart = [](auto&& self, DependencyObject const& parent, PCWSTR name) -> FrameworkElement {
+            int count = Media::VisualTreeHelper::GetChildrenCount(parent);
+            for (int i = 0; i < count; ++i) {
+                auto child = Media::VisualTreeHelper::GetChild(parent, i);
+                if (auto element = child.try_as<FrameworkElement>(); element && element.Name() == name) return element;
+                if (auto found = self(self, child, name)) return found;
+            }
+            return nullptr;
+        };
+        auto addButton = [&](Controls::Control const& button, Color tint, bool scrolled = false, float growth = .15f) {
+            if (glassControls && button && button.Visibility() == Visibility::Visible && button.IsEnabled())
+                addLayer(button, button.CornerRadius(), 2, stateTint(button, tint, grow(button, growth)), scrolled);
+        };
+        // The shader shades each pixel with the first lens covering it, so the
+        // controls precede the panels they sit on. Page cards may outgrow the list.
+        if (glassControls && page >= 0) {
+            auto items = editor.navigation.Items();
+            auto selected = items.GetAt(page).as<Controls::ListBoxItem>();
+            float press = grow(selected, .08f);
+            auto from = editor.navFrom, to = boundsOf(selected);
+            float t = editor.navSlide.Eased();
+            editor.navCard = {std::lerp(from.X, to.X, t), std::lerp(from.Y, to.Y, t),
+                              std::lerp(from.Width, to.Width, t), std::lerp(from.Height, to.Height, t)};
+            addRect(editor.navCard, selected.CornerRadius(), 2, stateTint(selected, navTint, press));
+            // A hovered or pressed page shows before the selection follows it.
+            for (uint32_t i = 0; i < items.Size(); ++i)
+                if (auto item = items.GetAt(i).as<Controls::ListBoxItem>(); int(i) != page)
+                    if (float alpha = overlay(item, grow(item, .08f)); alpha > 0)
+                        addRect(boundsOf(item), item.CornerRadius(), 2, Color{BYTE(std::lround(alpha)), neutral, neutral, neutral});
+        }
+        addButton(editor.save, accentTint);
+        addButton(editor.reload, neutralTint);
+        addButton(editor.openFile, neutralTint);
+        if (page == 1) addButton(editor.enableLiquid, neutralTint, true);
+        if (page == 2) addButton(editor.refreshTray, neutralTint, true);
+        for (auto const& section : editor.sections)
+            if (section.page == page) addButton(section.header, neutralTint, true);
+        if (page == 2)
+            for (auto const& row : editor.trayRows)
+                for (auto const& button : {row.choose, row.reset}) addButton(button, neutralTint, true);
+        auto shown = [&](size_t i) {
+            auto const& control = editor.controls[i];
+            return kSettingFields[i].page == page && control.card.Visibility() == Visibility::Visible && (!control.disclosure ||
+                (control.disclosure.Visibility() == Visibility::Visible && control.disclosure.IsChecked().Value()));
+        };
+        // Choice and text fields grow less than buttons: they sit right beside their labels.
+        for (size_t i = 0; i < editor.controls.size(); ++i)
+            if (kSettingFields[i].kind != SettingKind::Toggle && shown(i))
+                addButton(editor.controls[i].input, neutralTint, true, .08f);
+        for (size_t i = 0; i < editor.controls.size(); ++i) {
+            auto& control = editor.controls[i];
+            auto toggle = control.input.try_as<Controls::ToggleSwitch>();
+            Controls::Control target = toggle ? Controls::Control(toggle) : control.slider;
+            if (!target) continue;
+            bool glassy = glassControls && shown(i) && target.IsEnabled();
+            if (glassy && !control.lensPart) {
+                control.lensPart = findPart(findPart, target, toggle ? L"SwitchKnobBounds" : L"HorizontalThumb");
+                if (toggle) {
+                    control.offPill = findPart(findPart, target, L"OuterBorder");
+                    control.knobPart = findPart(findPart, target, L"SwitchKnob");
+                }
+            }
+            glassy &= control.lensPart && (!toggle || (control.offPill && control.knobPart));
+            showNative(control, !glassy);
+            if (!glassy) continue;
+            auto part = boundsOf(control.lensPart);
+            float radius = part.Height / 2, press = pressOf(target);
+            // Knobs are solid circles at rest and stretch into clear glass capsules while held, after the
+            // kube.io switch and slider demos (held knob 1.24x the track height, thumb x1.667, fill alpha .1).
+            BYTE knobAlpha = BYTE(std::lround(std::lerp(255.0f, 25.0f, press)));
+            auto addKnob = [&](float x, float h, float w, Color tint) {
+                addRect({x - w / 2, part.Y + (part.Height - h) / 2, w, h}, {h / 2, h / 2, h / 2, h / 2}, 2, tint, true);
+            };
+            if (!toggle) {
+                float h = std::lerp(1.0f, 1.667f, press) * part.Height;
+                addKnob(part.X + part.Width / 2, h, std::lerp(h, 1.5f * h, press), tinted(knobAlpha));
+                continue;
+            }
+            float on = control.knob.Eased(), size = part.Height * .6f, inset = (part.Height - size) / 2;
+            float h = std::lerp(.6f, 1.25f, press) * part.Height;
+            BYTE off = dark ? 200 : 90;
+            // Ahead of its pill, which would otherwise shade the knob's pixels first.
+            addKnob(part.X + inset + size / 2 + on * (part.Width - 2 * inset - size), h, std::lerp(h, 1.6f * h, press),
+                    blend({knobAlpha, off, off, off}, {knobAlpha, 255, 255, 255}, on));
+            addRect(part, {radius, radius, radius, radius}, 2, blend(neutralTint, accentTint, on), true);
+        }
+        lensCap = kMaxButtonLenses;
+        addLayer(editor.sidebar, editor.sidebar.CornerRadius(), 1);
+        addLayer(editor.inspector, editor.inspector.CornerRadius(), 1);
+        if (glassControls) {
+            auto plates = editor.backgroundRenderer->UpdateLayer(UINT(std::ceil(content.Width * scale)),
+                UINT(std::ceil(content.Height * scale)), std::max(0.0f, rowsTop * scale), rowsBottom * scale, layer);
+            if (!plates) throw winrt::hresult_error(E_FAIL, L"Settings glass device unavailable");
+            plates.Scale({1 / scale, 1 / scale, 1});
+            if (Hosting::ElementCompositionPreview::GetElementChildVisual(editor.contentLayer) != plates)
+                Hosting::ElementCompositionPreview::SetElementChildVisual(editor.contentLayer, plates);
+        }
         if (!editor.backgroundRenderer->UpdateGeometry(rect, width, height, lens))
             throw winrt::hresult_error(E_FAIL, L"Settings glass device unavailable");
         if (!InSendMessage()) editor.backgroundRenderer->SetBodyVisual(editor.bodySample);
@@ -7977,6 +8571,12 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
     } catch (...) {
         Wh_Log(L"[UWSET] window material failed hr=%08X", winrt::to_hresult().value);
         try { CloseEditorSurface(editor); } catch (...) {}
+        // ponytail: stays set for this window, so a transient device loss keeps solid
+        // controls until the editor reopens. Clearing it on success could oscillate.
+        if (!editor.glassFailed) {
+            editor.glassFailed = true;
+            PostMessageW(editor.window, kEditorThemeMessage, 0, 0);
+        }
     }
 }
 
@@ -8202,10 +8802,10 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             Controls::Canvas::SetTop(image, y + (dockHeight - preview.metrics.iconHeight) / 2);
         }
         constexpr double trayOffsets[]{0, 38, 66};
-        auto trayInsets=GetButtonInsets({0,0},dockHeight,number(100));
+        auto trayInsets=GetButtonInsets({0,0},dockHeight,number(98));
         preview.trayHighlight.Width(28);
         preview.trayHighlight.Height(dockHeight-trayInsets.top-trayInsets.bottom);
-        preview.trayHighlight.CornerRadius({number(101),number(101),number(101),number(101)});
+        preview.trayHighlight.CornerRadius({number(99),number(99),number(99),number(99)});
         preview.trayHighlight.Background(Media::SolidColorBrush(PreviewHighlightColor(dark,highContrast)));
         Controls::Canvas::SetLeft(preview.trayHighlight,trayLeft+trayOffsets[1]);
         Controls::Canvas::SetTop(preview.trayHighlight,y+trayInsets.top);
@@ -8220,6 +8820,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         Controls::Canvas::SetTop(preview.startIcon, y + (dockHeight - preview.metrics.iconHeight) / 2);
         Controls::Canvas::SetLeft(preview.clock, trayLeft + 102);
         Controls::Canvas::SetTop(preview.clock, y + (dockHeight - 34) / 2);
+        auto border = highContrast ? DockBorder{} : ReadBorder(EditorPageValues(editor, 0), L"dockBorder");
 
         if (liquid && !preview.unavailable) {
             if (!preview.renderer) {
@@ -8241,6 +8842,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             lens.halfSize[1] = static_cast<float>(dockHeight / 2);
             lens.radius = static_cast<float>(radius);
             lens.optics = ReadLiquidSettings(EditorPageValues(editor, 1));
+            ApplyBorder(lens, border, 1);
             if (lens.optics.shadowOpacity > 0) {
                 if (!preview.shadow) {
                     auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(
@@ -8285,6 +8887,9 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                      : winrt::Windows::UI::Color{240, 243, 243, 243}));
         else
             preview.material.Background(GlassMaterial(theme != DockTheme::Glass, dark));
+        float borderWidth = liquid && !preview.unavailable ? 0 : border.width;
+        preview.material.BorderBrush(Media::SolidColorBrush(border.color));
+        preview.material.BorderThickness({borderWidth, borderWidth, borderWidth, borderWidth});
         ApplyPreviewButtonAppearance(editor,liquid && !preview.unavailable);
 
         auto mode = highContrast ? FontColorMode::Default : static_cast<FontColorMode>(choice(1));
@@ -10016,10 +10621,10 @@ void RestoreGlass(Root& root) {
     auto& dock=root.dock;
     StopLiquid(root);
     dock.shadow.reset();
-    if (!dock.material) return;
+    if (!dock.material && !dock.attachedVisual) return;
     // Restore independently: an unavailable element must not prevent the clip
     // or the other brush from being restored. Preserve later external writes.
-    for (bool stroke : {false, true}) {
+    if (dock.material) for (bool stroke : {false, true}) {
         try {
             auto rectangle = stroke ? dock.stroke : dock.fill;
             Media::Brush applied = stroke ? dock.transparentStroke.as<Media::Brush>()
@@ -10048,35 +10653,43 @@ void RestoreGlass(Root& root) {
 }
 
 ShapeVisual GlassHighlights(CompositionRoundedRectangleGeometry const& outline,
-                            DockTheme theme, bool dark) {
+                            DockTheme theme, bool dark, DockBorder border) {
     auto compositor = outline.Compositor();
     auto visual = compositor.CreateShapeVisual();
     visual.RelativeSizeAdjustment({1, 1});
     // Liquid draws the reference shader's 1.5-pixel, top-biased inner stroke.
     // A second Composition outline changes both its width and color profile.
-    if (theme == DockTheme::Liquid) return visual;
-    auto sheen = compositor.CreateLinearGradientBrush();
-    sheen.StartPoint({0, 0});
-    sheen.EndPoint({0, 1});
-    using Color = winrt::Windows::UI::Color;
-    sheen.ColorStops().Append(compositor.CreateColorGradientStop(0, Color{BYTE(dark ? 30 : 60), 255, 255, 255}));
-    sheen.ColorStops().Append(compositor.CreateColorGradientStop(0.45f, Color{0, 255, 255, 255}));
-    sheen.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{BYTE(dark ? 24 : 14), 0, 0, 0}));
-    auto rim = compositor.CreateLinearGradientBrush();
-    rim.StartPoint({0, 0});
-    rim.EndPoint({0.3f, 1});
-    rim.ColorStops().Append(compositor.CreateColorGradientStop(0, Color{190, 255, 255, 255}));
-    rim.ColorStops().Append(compositor.CreateColorGradientStop(
-        0.4f, Color{45, 255, 255, 255}));
-    rim.ColorStops().Append(compositor.CreateColorGradientStop(
-        0.75f, Color{25, 255, 255, 255}));
-    rim.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{100, 255, 255, 255}));
-    // Share the live clip geometry; no independent resize animation or layout.
-    auto shape = compositor.CreateSpriteShape(outline);
-    shape.FillBrush(sheen);
-    shape.StrokeBrush(rim);
-    shape.StrokeThickness(2); // Outer half is clipped, leaving a 1-DIP inner rim.
-    visual.Shapes().Append(shape);
+    if (theme == DockTheme::Glass || theme == DockTheme::Frosted) {
+        auto sheen = compositor.CreateLinearGradientBrush();
+        sheen.StartPoint({0, 0});
+        sheen.EndPoint({0, 1});
+        using Color = winrt::Windows::UI::Color;
+        sheen.ColorStops().Append(compositor.CreateColorGradientStop(0, Color{BYTE(dark ? 30 : 60), 255, 255, 255}));
+        sheen.ColorStops().Append(compositor.CreateColorGradientStop(0.45f, Color{0, 255, 255, 255}));
+        sheen.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{BYTE(dark ? 24 : 14), 0, 0, 0}));
+        auto rim = compositor.CreateLinearGradientBrush();
+        rim.StartPoint({0, 0});
+        rim.EndPoint({0.3f, 1});
+        rim.ColorStops().Append(compositor.CreateColorGradientStop(0, Color{190, 255, 255, 255}));
+        rim.ColorStops().Append(compositor.CreateColorGradientStop(
+            0.4f, Color{45, 255, 255, 255}));
+        rim.ColorStops().Append(compositor.CreateColorGradientStop(
+            0.75f, Color{25, 255, 255, 255}));
+        rim.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{100, 255, 255, 255}));
+        // Share the live clip geometry; no independent resize animation or layout.
+        auto shape = compositor.CreateSpriteShape(outline);
+        shape.FillBrush(sheen);
+        shape.StrokeBrush(rim);
+        shape.StrokeThickness(2); // Outer half is clipped, leaving a 1-DIP inner rim.
+        visual.Shapes().Append(shape);
+    }
+    if (border.width > 0) {
+        // Liquid shows this only after StopLiquid restores it; its shader draws the line meanwhile.
+        auto line = compositor.CreateSpriteShape(outline);
+        line.StrokeBrush(compositor.CreateColorBrush(border.color));
+        line.StrokeThickness(border.width * 2);
+        visual.Shapes().Append(line);
+    }
     return visual;
 }
 
@@ -10090,7 +10703,8 @@ bool HighContrastActive() {
 
 void PrepareGlass(Root& root) {
     auto& dock=root.dock;
-    if (g_theme == DockTheme::Native || dock.materialBlocked) {
+    bool native = g_theme == DockTheme::Native;
+    if ((native && g_dockBorder.width <= 0) || dock.materialBlocked) {
         RestoreGlass(root);
         return;
     }
@@ -10100,8 +10714,8 @@ void PrepareGlass(Root& root) {
     }
     try {
         auto theme = dock.background.ActualTheme();
-        if (dock.material) {
-            if (dock.fill.Fill() != dock.material || dock.stroke.Fill() != dock.transparentStroke ||
+        if (dock.attachedVisual) {
+            if ((dock.material && (dock.fill.Fill() != dock.material || dock.stroke.Fill() != dock.transparentStroke)) ||
                 Hosting::ElementCompositionPreview::GetElementChildVisual(dock.background) != dock.attachedVisual) {
                 RestoreGlass(root);
                 dock.materialBlocked = true;
@@ -10129,21 +10743,23 @@ void PrepareGlass(Root& root) {
         Media::SolidColorBrush transparent(
             winrt::Windows::UI::Color{0, 0, 0, 0});
         Media::Brush material = transparent;
-        if (g_theme != DockTheme::Liquid) {
+        if (g_theme == DockTheme::Glass || frosted) {
             material = GlassMaterial(frosted, dark);
         }
-        auto highlights = GlassHighlights(dock.geometry, g_theme, dark);
-        dock.fill = fill;
-        dock.stroke = stroke;
-        dock.originalFill = originalFill;
-        dock.originalStroke = originalStroke;
-        dock.material = material;
-        dock.transparentStroke = transparent;
+        auto highlights = GlassHighlights(dock.geometry, g_theme, dark, g_dockBorder);
+        if (!native) {
+            dock.fill = fill;
+            dock.stroke = stroke;
+            dock.originalFill = originalFill;
+            dock.originalStroke = originalStroke;
+            dock.material = material;
+            dock.transparentStroke = transparent;
+            fill.Fill(material);
+            stroke.Fill(transparent);
+        }
         dock.highlights = highlights;
         dock.attachedVisual = highlights;
         dock.materialTheme = theme;
-        fill.Fill(material);
-        stroke.Fill(transparent);
         Hosting::ElementCompositionPreview::SetElementChildVisual(dock.background, dock.attachedVisual);
         Wh_Log(L"[UWGLASS] installed theme=%d dark=%d background=%p", static_cast<int>(g_theme), dark,
                winrt::get_abi(dock.background));
@@ -11126,6 +11742,7 @@ void PrepareLiquid(Root& root, Measurements const& m) {
             EffectiveDockRadius(dockWidth, dockHeight) * scale);
         lens.optics = g_liquidSettings;
         ScaleLiquidSettings(lens.optics, float(scale));
+        ApplyBorder(lens, g_dockBorder, float(scale));
         auto accepted=AddButtonLenses(root, lens, scale);
         if (!dock.liquid->UpdateGeometry(
                 taskbarRect, pixelWidth, pixelHeight, lens, float(scale)))
@@ -11236,6 +11853,23 @@ void StopFollower(Root& root) {
     root.sources.clear();
 }
 
+// Task buttons laid out in the strip. The repeater keeps recycled buttons as
+// children parked at (-10000,-10000) with an empty slot after their windows
+// close, so the child count stays high long after the buttons are gone.
+int RealizedButtons(FrameworkElement const& repeater) {
+    int realized = 0;
+    int count = Media::VisualTreeHelper::GetChildrenCount(repeater);
+    for (int i = 0; i < count; ++i) {
+        auto child = Media::VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
+        if (!child || child.Visibility() != Visibility::Visible ||
+            winrt::get_class_name(child) != L"Taskbar.TaskListButton")
+            continue;
+        auto slot = Controls::Primitives::LayoutInformation::GetLayoutSlot(child);
+        if (EligibleSlot(slot.X, slot.Width, repeater.ActualWidth())) ++realized;
+    }
+    return realized;
+}
+
 void UpdateFollower(Root& root, FrameworkElement const& repeater,
                     Measurements const& m) {
     root.sourceLifecyclePending=false;
@@ -11246,7 +11880,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         source.plate = nullptr;
         return false;
     });
-    if (count > 64) throw winrt::hresult_error(E_BOUNDS);
+    if (RealizedButtons(repeater) > 64) throw winrt::hresult_error(E_BOUNDS);
     std::vector<uintptr_t> seen;
     for (int i = 0; i < count; ++i) {
         auto child = Media::VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
@@ -11415,9 +12049,7 @@ void Refresh(Root& root) {
     auto start = Child(repeater, L"LaunchListButton");
     auto tray = Child(parent, L"SystemTray.SystemTrayFrame", true);
     auto background = Child(grid, L"Taskbar.TaskbarBackground", true);
-    int realizedCount = repeater
-                            ? Media::VisualTreeHelper::GetChildrenCount(repeater)
-                            : 0;
+    int realizedCount = repeater ? RealizedButtons(repeater) : 0;
     if (!parent || !repeater || !start || !tray || !background) {
         if (!root.fallbackReported)
             Wh_Log(L"[UWPOS] native fallback: required tree element missing");
@@ -11427,7 +12059,7 @@ void Refresh(Root& root) {
     }
     if (realizedCount > 64) {
         if (!root.fallbackReported)
-            Wh_Log(L"[UWPOS] native fallback: realized child capacity=%d",
+            Wh_Log(L"[UWPOS] native fallback: realized button capacity=%d",
                    realizedCount);
         root.fallbackReported = true;
         RestoreRoot(root);
@@ -11545,8 +12177,8 @@ bool RootLayoutUnchanged(Root& root) {
         if (owned->installed && !root.follower && !StillOwned(*owned)) return false;
     auto& dock=root.dock;
     if (dock.clip && dock.visual.Clip()!=dock.clip) return false;
-    if (dock.material && (dock.fill.Fill()!=dock.material || dock.stroke.Fill()!=dock.transparentStroke ||
-        Hosting::ElementCompositionPreview::GetElementChildVisual(dock.background)!=dock.attachedVisual))
+    if ((dock.material && (dock.fill.Fill()!=dock.material || dock.stroke.Fill()!=dock.transparentStroke)) ||
+        (dock.attachedVisual && Hosting::ElementCompositionPreview::GetElementChildVisual(dock.background)!=dock.attachedVisual))
         return false;
     for (auto const& plate:root.statePlates) {
         if (plate.blocked || !plate.element) continue;
@@ -12174,6 +12806,7 @@ void SetModConfiguration(settingsjson::JsonObject const& local) {
     g_grayscaleTrayIcons = trayEnabled && LocalBool(local, L"tray.grayscale");
     g_customTrayIcons = trayEnabled ? ReadTrayOverrides(local) : TrayOverrides{};
     g_theme = ParseTheme(LocalString(local, L"theme"));
+    g_dockBorder = ReadBorder(local, L"dockBorder");
     g_fontColorMode = ParseFontColor(LocalString(local, L"fontColor"));
     g_adaptiveWindowMs = std::clamp(LocalInt(local, L"adaptive.windowSeconds"), 0, 1000) * 10;
     if (g_theme == DockTheme::Liquid) g_liquidSettings = ReadLiquidSettings(local);
