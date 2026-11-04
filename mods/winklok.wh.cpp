@@ -23,7 +23,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktop%20.jpg)
+![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktop.jpg)
 
 ---
 
@@ -39,12 +39,13 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Panel Layout modes](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/panelmodetable.jpg)
+![Panel Layout modes](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/modetable.png)
 
 ---
 
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/alltabs.png)
-
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowone.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowtwo.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthree.png)
 ---
 
 ## Features
