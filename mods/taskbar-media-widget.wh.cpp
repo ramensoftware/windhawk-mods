@@ -5028,13 +5028,43 @@ struct TaskbarEntry {
     uint64_t revision = 0;
     bool haveSnapshot = false;
     bool pendingIdle = false;
+    unsigned attachmentFailures = 0;
+    ULONGLONG retryAfter = 0;
 };
 
 bool NeedsTaskbarDispatch(TaskbarEntry const& entry,
-                          TaskbarSnapshot const& snapshot, uint64_t revision) {
-    return !entry.haveSnapshot || entry.snapshot != snapshot ||
-           entry.revision != revision || entry.pendingIdle ||
-           entry.ui->updateRequested || entry.ui->retryAttachment;
+                          TaskbarSnapshot const& snapshot, uint64_t revision,
+                          ULONGLONG now, bool requested = false) {
+    if (!entry.haveSnapshot || entry.snapshot != snapshot || requested) return true;
+    // Track/idle changes cannot repair an unavailable XAML host. Keep them from
+    // bypassing the backoff; attachment reads their latest state when it succeeds.
+    if (entry.attachmentFailures || entry.ui->retryAttachment) {
+        return now >= entry.retryAfter;
+    }
+    return entry.revision != revision || entry.pendingIdle;
+}
+
+void RecordTaskbarDispatch(TaskbarEntry& entry, TaskbarSnapshot const& snapshot,
+                           uint64_t revision, bool completed, bool resetRetry,
+                           ULONGLONG now) {
+    if (resetRetry) entry.attachmentFailures = 0;
+    // Remember even failed dispatches so an unchanged snapshot isn't mistaken
+    // for a new host on every tick. Preserve pending idle work on exceptions.
+    entry.snapshot = snapshot;
+    entry.haveSnapshot = true;
+    if (completed) {
+        entry.revision = revision;
+        entry.pendingIdle = false;
+    }
+    if (completed && !entry.ui->retryAttachment) {
+        entry.attachmentFailures = 0;
+        entry.retryAfter = 0;
+        return;
+    }
+    entry.attachmentFailures = std::min(entry.attachmentFailures + 1, 10u);
+    DWORD delay = entry.attachmentFailures < 5 ? 1000 :
+                  entry.attachmentFailures < 10 ? 5000 : 30000;
+    entry.retryAfter = now + delay;
 }
 
 void PruneRetiredWidgets(std::vector<TaskbarEntry>& widgets) {
@@ -5077,8 +5107,9 @@ void UiTickThread() {
             entry.pendingIdle |= rebuildIdle;
             auto snapshot = ReadTaskbarSnapshot(ui->taskbarWnd);
             uint64_t revision = g_uiRevision.load();
-            if (!NeedsTaskbarDispatch(entry, snapshot, revision)) continue;
-            ui->updateRequested = false;
+            bool requested = ui->updateRequested.exchange(false);
+            bool resetRetry = requested || !entry.haveSnapshot || entry.snapshot != snapshot;
+            if (!NeedsTaskbarDispatch(entry, snapshot, revision, GetTickCount64(), requested)) continue;
             struct Request {
                 WidgetUiState* ui;
                 bool rebuildIdle;
@@ -5096,14 +5127,9 @@ void UiTickThread() {
                     Wh_Log(L"Taskbar widget update failed");
                 }
             }, &request);
-            if (dispatched && request.completed) {
-                entry.snapshot = snapshot;
-                entry.revision = revision;
-                entry.haveSnapshot = true;
-                entry.pendingIdle = false;
-            } else {
-                ui->updateRequested = true;
-            }
+            RecordTaskbarDispatch(entry, snapshot, revision,
+                                  dispatched && request.completed, resetRetry,
+                                  GetTickCount64());
         }
         DWORD result = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, 1000);
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
