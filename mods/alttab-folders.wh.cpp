@@ -3,14 +3,25 @@
 // @name            Alt+Tab Folders
 // @description     Group windows into named folders; Alt+Tab cycles only the windows of the active folder
 // @version         1.0.0
-// @author          you
+// @a160k          you
 // @include         explorer.exe
 // @compilerOptions -ldwmapi -lgdi32 -luser32 -ladvapi32
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
-Alt+Tab Folders
+# Alt+Tab Folders
+
+Group open windows into named folders and limit **Alt+Tab** navigation exclusively to windows within the active folder.
+
+## Hotkeys (Default: Ctrl + Alt + Key)
+- **Ctrl + Alt + N:** Create a new folder and add the foreground window
+- **Ctrl + Alt + A:** Add the foreground window to the active folder
+- **Ctrl + Alt + R:** Remove the foreground window from the active folder
+- **Ctrl + Alt + P:** Pin / unpin the process (.exe) to the active folder
+- **Ctrl + Alt + F:** Switch to the next folder
+- **Ctrl + Alt + G:** Switch to the previous folder
+- **Ctrl + Alt + 0:** Show all windows (deactivate folder filter)
+- **Ctrl + Alt + D:** Delete the active folder
 */
 // ==/WindhawkModReadme==
 
