@@ -10463,7 +10463,6 @@ float CfgTextHeight(const std::wstring& text, IDWriteTextFormat* format, float w
     return std::ceil(m.height);
 }
 
-// Animation phases: the bar moves aside, the sections come out of the bar, the panel comes out of the gear
 // The settings are one window, as System Settings on macOS 27: it grows out of the bar and its content comes in
 // in turn; it closes where it is, like an old TV switched off. g_cfg.anim: 0 ... 1 = fully open
 bool CfgSettled() { return g_cfg.active && !g_cfg.closing && g_cfg.anim >= 1.0f; }
@@ -10791,7 +10790,7 @@ void CfgIcon(int section, const D2D1_RECT_F& r, IDWriteTextFormat* glyph) {
     CfgText(sec.glyph, glyph, r, D2D1::ColorF(1, 1, 1, 1));
 }
 
-void DrawCfgSideRows(float rad) {
+void DrawCfgSideRows() {
     float s = g_layout.scale;
     int n = 0;
     for (const CfgSideRow& row : g_cfgSideRows) {
@@ -10802,7 +10801,6 @@ void DrawCfgSideRows(float rad) {
         if (ph < 1.0f) { PushOpacity(ph); g_target->SetTransform(D2D1::Matrix3x2F::Translation(0, (1 - ph) * 8 * s) * base); }
         bool selected = g_cfg.search.empty() && row.section == g_cfg.section;
         float rowRad = std::round(7 * s);
-        (void)rad;
         if (selected) Fill(row.r, CfgAccent(), rowRad);
         else if (row.section == g_cfg.sideHover) Fill(row.r, Fg(0.09f), rowRad);
         float cy = (row.r.top + row.r.bottom) / 2, d = std::round(22 * s);
@@ -11178,7 +11176,7 @@ void DrawCfgPlainWindow() {
         DrawCfgBar();
         g_target->PopLayer();
     }
-    DrawCfgSideRows(rad);
+    DrawCfgSideRows();
     DrawCfgPanelContent();
     g_target->PopLayer();
 }
