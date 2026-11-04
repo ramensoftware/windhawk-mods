@@ -2,12 +2,11 @@
 // @id              gradual-night-light
 // @name            Gradual Night Light
 // @description     Gradually adjust Windows Night light strength using a daily schedule.
-// @version         0.2.1
+// @version         0.3.0
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -ladvapi32
+// @include         windhawk.exe
+// @compilerOptions -ladvapi32 -lshell32 -lwtsapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -50,22 +49,51 @@ further stages to create a five-stage schedule or a gradual morning fade.
 
 ## Behavior and restoration
 
+The scheduler runs in a dedicated Windhawk tool process, outside Explorer.
 The schedule is checked every ten seconds and catches up after sleep, sign-in,
 or an Explorer restart. While enabled, the mod replaces the native on/off
 schedule. Manual changes are reapplied from the mod's schedule at the next
 check; active drags of the Windows strength slider are allowed to finish.
 Disable other Night light schedulers while using this mod.
 
-Before making changes, the mod saves the original strength, native schedule
-enablement, and on/off state. Disabling the mod restores those values. The
-backup survives Explorer crashes, and existing schedule times and unrelated
-fields are preserved. If restoration fails, the backup is kept and the failure
-is logged; enable and disable the mod again to retry.
+Before making changes, the mod saves the original settings in storage isolated
+by the current user's Windows SID. Disabling the mod restores the original
+strength and native schedule enablement. When the original native schedule was
+enabled, Windows determines the current on/off state; otherwise the original
+manual on/off state is restored. Schedule times and unrelated fields are kept.
+If restoration fails, the backup is kept and the failure is logged.
+
+## Persistent Windows settings
+
+This mod writes the `Data` values in these two current-user registry keys:
+
+```
+HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings
+HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.bluelightreductionstate\windows.data.bluelightreduction.bluelightreductionstate
+```
+
+It temporarily disables the native schedule, changes color temperature and
+on/off state, and briefly enables then clears the preview flag to apply changes.
+Record timestamps and transition metadata advance and are not rolled back.
+The separate `Cloud` records are read for their timestamps and are never written.
+
+**A clean disable restores the settings described above. Sign-out, shutdown,
+forced termination, uninstall without clean unload, or failed restoration can
+leave the native schedule disabled and the last strength and on/off state on
+disk.** A termination during a preview pulse can also leave preview enabled.
+The next start recovers the SID-specific backup and any owned preview. To
+restore, enable and then disable the mod while Windows is running, or set Night
+light manually in Windows Settings. Do not delete the saved backup first.
+
+When upgrading from 0.2.1, disable that version in the account that originally
+enabled it before updating. Its old machine-wide backup has no reliable owner
+information, so this version never imports or deletes those legacy values.
 
 ## Requirements and limitations
 
-Tested on Windows 11 build 26300, x64. Other Windows versions and ARM64 have not
-been verified. The display driver must support Night light.
+The Night light controller was tested on Windows 11 build 26300, x64. Other
+Windows versions and ARM64 have not been verified. The display driver must
+support Night light. The tool launcher supports Windhawk 1.7.3 and newer.
 
 This mod uses undocumented CloudStore records with the modern `Current` layout.
 Unsupported or malformed records are refused. If records are missing, open
@@ -80,6 +108,7 @@ research below. No external helper, script, or runtime download is required.
 
 - [Night light registry format research](https://github.com/kvnxiao/win-nightlight-cli/blob/main/docs/nightlight-registry-format.md)
 - [Microsoft Bond CompactBinary protocol](https://github.com/microsoft/bond/blob/master/cpp/inc/bond/protocol/compact_binary.h)
+- [Official Windhawk tool mod launcher](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process)
 */
 // ==/WindhawkModReadme==
 
@@ -106,10 +135,7 @@ research below. No external helper, script, or runtime download is required.
 // ==/WindhawkModSettings==
 // clang-format on
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include <sddl.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -130,6 +156,50 @@ void Require(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
 }
+
+std::wstring CurrentUserSid() {
+    HANDLE token = nullptr;
+    Require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token),
+            "Cannot open process token");
+    alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    PWSTR sid = nullptr;
+    bool ok =
+        GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+        ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer)->User.Sid,
+                               &sid);
+    CloseHandle(token);
+    Require(ok, "Cannot get current user's SID");
+    std::wstring result;
+    try {
+        result = sid;
+    } catch (...) {
+        LocalFree(sid);
+        throw;
+    }
+    LocalFree(sid);
+    return result;
+}
+
+// Windhawk mod storage is machine-wide. Every persistent value must carry the
+// owner SID; even preview and timestamp journals must never cross users.
+struct StorageNames {
+    std::wstring baselineSaved, originalSettings, originalState;
+    std::wstring highestSettings, highestState, previewOwned;
+    StorageNames() = default;
+    explicit StorageNames(const std::wstring& sid) {
+        Require(sid.starts_with(L"S-1-"), "Invalid storage owner SID");
+        auto name = [&](PCWSTR base) {
+            return std::wstring(base) + L"_" + sid;
+        };
+        baselineSaved = name(L"BaselineSaved");
+        originalSettings = name(L"OriginalSettings");
+        originalState = name(L"OriginalState");
+        highestSettings = name(L"HighestSettings");
+        highestState = name(L"HighestState");
+        previewOwned = name(L"PreviewOwned");
+    }
+};
 
 // Preserve the bytes of every field we do not own, including nested fields.
 // Fail closed on unsupported types, inheritance, duplicate IDs, and bad
@@ -612,7 +682,18 @@ struct Controller {
             }
             Set(f, 70, kBool, {0});
         });
-        SetOn(on);
+        if (Bool(baseline.payload, 0)) {
+            // Do not reinstate a stale manual override (for example, an on
+            // state captured at 22:00 when disabling the mod at noon).
+            // Restoring schedule enablement above notifies Windows to
+            // reevaluate it.
+            Update(false, [](Fields& f) {
+                Erase(f, 10);  // Default transition cause: scheduled.
+            });
+            on = IsOn(Record(store.Read(false)).payload);
+        } else {
+            SetOn(on);
+        }
         if (on) {
             if (savePreview)
                 savePreview(true);
@@ -626,6 +707,9 @@ struct Controller {
 }  // namespace nightlight
 
 #ifndef NIGHT_LIGHT_TEST
+#include <shellapi.h>
+#include <windhawk_utils.h>
+#include <wtsapi32.h>
 #include <mutex>
 
 namespace {
@@ -637,18 +721,52 @@ struct Config {
 std::mutex configMutex;
 Config config;
 HANDLE stopEvent = nullptr, changedEvent = nullptr, worker = nullptr;
+StorageNames storageNames;  // Initialized with the token SID before any I/O.
+UINT taskbarCreatedMessage = 0;
+bool refreshRequested =
+    true;  // Only accessed by the worker and its window proc.
+
+LRESULT CALLBACK EventWindowProc(HWND hwnd,
+                                 UINT message,
+                                 WPARAM wParam,
+                                 LPARAM lParam) {
+    if (message == WM_QUERYENDSESSION)
+        return TRUE;
+    if (message == WM_ENDSESSION && wParam) {
+        SetEvent(stopEvent);  // Best-effort cleanup; forced termination can
+                              // still interrupt it.
+        return 0;
+    }
+    if (message == WM_DISPLAYCHANGE || message == WM_TIMECHANGE ||
+        (taskbarCreatedMessage && message == taskbarCreatedMessage) ||
+        (message == WM_WTSSESSION_CHANGE && wParam == WTS_SESSION_UNLOCK) ||
+        (message == WM_POWERBROADCAST && (wParam == PBT_APMRESUMEAUTOMATIC ||
+                                          wParam == PBT_APMRESUMESUSPEND))) {
+        refreshRequested = true;
+        return message == WM_POWERBROADCAST ? TRUE : 0;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+void WaitForWork(DWORD timeout) {
+    HANDLE events[]{stopEvent, changedEvent};
+    MsgWaitForMultipleObjectsEx(2, events, timeout, QS_ALLINPUT,
+                                MWMO_INPUTAVAILABLE);
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+}
 
 Config LoadConfig() {
     Config result;
     result.gradual = Wh_GetIntSetting(L"GradualTransitions") != 0;
-    auto offRaw = Wh_GetStringSetting(L"OffTime");
-    std::wstring offTime = offRaw ? offRaw : L"";
-    Wh_FreeStringSetting(offRaw);
+    std::wstring offTime = WindhawkUtils::StringSetting::make(L"OffTime").get();
     std::vector<Entry> stages;
     for (int i = 0; i <= 96; ++i) {
-        auto raw = Wh_GetStringSetting(L"Stages[%d].Time", i);
-        std::wstring time = raw ? raw : L"";
-        Wh_FreeStringSetting(raw);
+        std::wstring time =
+            WindhawkUtils::StringSetting::make(L"Stages[%d].Time", i).get();
         if (time.empty())
             break;
         stages.push_back(
@@ -667,56 +785,57 @@ Bytes Saved(PCWSTR name) {
 }
 void ClearBaseline() {
     // Clear the commit marker first; stale blobs are harmless without it.
-    Require(Wh_SetIntValue(L"BaselineSaved", 0),
+    Require(Wh_SetIntValue(storageNames.baselineSaved.c_str(), 0),
             "Cannot clear Night light backup marker");
-    Wh_DeleteValue(L"OriginalSettings");
-    Wh_DeleteValue(L"OriginalState");
+    Wh_DeleteValue(storageNames.originalSettings.c_str());
+    Wh_DeleteValue(storageNames.originalState.c_str());
 }
 DWORD WINAPI Run(void*) {
     RegistryStore store;
     Controller controller(store);
     controller.saveTimestamp = [](bool settings, uint64_t stamp) {
-        Require(
-            Wh_SetBinaryValue(settings ? L"HighestSettings" : L"HighestState",
-                              &stamp, sizeof(stamp)),
-            "Cannot save Night light timestamp");
+        Require(Wh_SetBinaryValue((settings ? storageNames.highestSettings
+                                            : storageNames.highestState)
+                                      .c_str(),
+                                  &stamp, sizeof(stamp)),
+                "Cannot save Night light timestamp");
     };
     controller.savePreview = [](bool owned) {
-        Require(Wh_SetIntValue(L"PreviewOwned", owned),
+        Require(Wh_SetIntValue(storageNames.previewOwned.c_str(), owned),
                 "Cannot save Night light preview marker");
     };
     Bytes originalSettings, originalState;
-    HANDLE instance = nullptr;
-    bool saved = false, initialized = false;
-    ULONGLONG lastRefresh = 0;
+    bool saved = false;
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<PCWSTR>(&EventWindowProc), &module);
+    const wchar_t* className = L"WindhawkGradualNightLightEvents";
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = EventWindowProc;
+    wc.hInstance = module;
+    wc.lpszClassName = className;
+    bool registered = RegisterClassW(&wc) != 0;
+    HWND eventWindow =
+        registered ? CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                     className, L"", WS_POPUP, 0, 0, 0, 0,
+                                     nullptr, nullptr, module, nullptr)
+                   : nullptr;
+    bool sessionRegistered =
+        eventWindow &&
+        WTSRegisterSessionNotification(eventWindow, NOTIFY_FOR_THIS_SESSION);
+    if (!eventWindow)
+        Wh_Log(L"Event window unavailable; scheduled changes still run");
+    taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
+    refreshRequested = true;
     std::string lastError;
-    HANDLE events[]{stopEvent, changedEvent};
     while (WaitForSingleObject(stopEvent, 0) == WAIT_TIMEOUT) {
         try {
-            if (!initialized) {
-                DWORD shellPid = 0;
-                GetWindowThreadProcessId(GetShellWindow(), &shellPid);
-                if (!shellPid) {
-                    WaitForMultipleObjects(2, events, FALSE, 1000);
-                    continue;
-                }
-                if (shellPid != GetCurrentProcessId())
-                    return 0;
-                instance = CreateMutexW(
-                    nullptr, FALSE, L"Local\\Windhawk-GradualNightLight-v1");
-                Require(instance != nullptr,
-                        "Cannot create Night light instance mutex");
-                auto result = WaitForSingleObject(instance, 0);
-                if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED) {
-                    CloseHandle(instance);
-                    return 0;
-                }
-                initialized = true;
-            }
             if (!saved) {
-                if (Wh_GetIntValue(L"BaselineSaved", 0)) {
-                    originalSettings = Saved(L"OriginalSettings");
-                    originalState = Saved(L"OriginalState");
+                if (Wh_GetIntValue(storageNames.baselineSaved.c_str(), 0)) {
+                    originalSettings =
+                        Saved(storageNames.originalSettings.c_str());
+                    originalState = Saved(storageNames.originalState.c_str());
                 } else {
                     originalSettings = store.Read(true);
                     originalState = store.Read(false);
@@ -727,29 +846,32 @@ DWORD WINAPI Run(void*) {
                 if (Bool(settings.payload, 70)) {
                     // Do not capture a transient slider preview as the
                     // baseline.
-                    WaitForMultipleObjects(2, events, FALSE, 1000);
+                    WaitForWork(1000);
                     continue;
                 }
-                Require(Wh_SetBinaryValue(L"OriginalSettings",
-                                          originalSettings.data(),
-                                          originalSettings.size()) &&
-                            Wh_SetBinaryValue(L"OriginalState",
-                                              originalState.data(),
-                                              originalState.size()) &&
-                            Wh_SetIntValue(L"BaselineSaved", 1),
-                        "Cannot save Night light baseline; no changes made");
+                Require(
+                    Wh_SetBinaryValue(storageNames.originalSettings.c_str(),
+                                      originalSettings.data(),
+                                      originalSettings.size()) &&
+                        Wh_SetBinaryValue(storageNames.originalState.c_str(),
+                                          originalState.data(),
+                                          originalState.size()) &&
+                        Wh_SetIntValue(storageNames.baselineSaved.c_str(), 1),
+                    "Cannot save Night light baseline; no changes made");
                 saved = true;
                 // Keep our high-water marks across Explorer crashes and mod
                 // reloads.
                 for (int i = 0; i < 2; ++i) {
                     uint64_t highest = 0;
-                    if (Wh_GetBinaryValue(
-                            i ? L"HighestSettings" : L"HighestState", &highest,
-                            sizeof(highest)) == sizeof(highest))
+                    if (Wh_GetBinaryValue((i ? storageNames.highestSettings
+                                             : storageNames.highestState)
+                                              .c_str(),
+                                          &highest,
+                                          sizeof(highest)) == sizeof(highest))
                         controller.highest[i] = highest;
                 }
                 controller.ownsPreview =
-                    Wh_GetIntValue(L"PreviewOwned", 0) != 0;
+                    Wh_GetIntValue(storageNames.previewOwned.c_str(), 0) != 0;
             }
             Config current;
             {
@@ -759,13 +881,10 @@ DWORD WINAPI Run(void*) {
             SYSTEMTIME now;
             GetLocalTime(&now);
             double minute = now.wHour * 60 + now.wMinute + now.wSecond / 60.0;
-            auto tick = GetTickCount64();
-            bool refreshed = tick - lastRefresh >= 60000 || lastRefresh == 0;
             if (controller.Apply(
                     StrengthAt(current.schedule, minute, current.gradual),
-                    refreshed)) {
-                if (refreshed)
-                    lastRefresh = tick;
+                    refreshRequested)) {
+                refreshRequested = false;
             }
             lastError.clear();
         } catch (const std::exception& e) {
@@ -773,7 +892,7 @@ DWORD WINAPI Run(void*) {
                 Wh_Log(L"Night light: %S", e.what());
             lastError = e.what();
         }
-        WaitForMultipleObjects(2, events, FALSE, 10000);
+        WaitForWork(10000);
     }
     if (saved) {
         try {
@@ -785,25 +904,24 @@ DWORD WINAPI Run(void*) {
                    e.what());
         }
     }
-    if (instance) {
-        ReleaseMutex(instance);
-        CloseHandle(instance);
-    }
+    if (sessionRegistered)
+        WTSUnRegisterSessionNotification(eventWindow);
+    if (eventWindow)
+        DestroyWindow(eventWindow);
+    if (registered)
+        UnregisterClassW(className, module);
     return 0;
 }
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     try {
         config = LoadConfig();
+        storageNames = StorageNames(CurrentUserSid());
     } catch (const std::exception& e) {
-        Wh_Log(L"Invalid schedule: %S", e.what());
+        Wh_Log(L"Cannot initialize Night light: %S", e.what());
         return FALSE;
     }
-    DWORD shellPid = 0;
-    GetWindowThreadProcessId(GetShellWindow(), &shellPid);
-    if (shellPid && shellPid != GetCurrentProcessId())
-        return FALSE;
     stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     changedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (stopEvent && changedEvent)
@@ -818,7 +936,7 @@ BOOL Wh_ModInit() {
     }
     return TRUE;
 }
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     try {
         auto next = LoadConfig();
         {
@@ -831,13 +949,11 @@ void Wh_ModSettingsChanged() {
                e.what());
     }
 }
-void Wh_ModBeforeUninit() {
+void WhTool_ModUninit() {
     if (worker) {
         SetEvent(stopEvent);
         WaitForSingleObject(worker, INFINITE);
     }
-}
-void Wh_ModUninit() {
     if (worker)
         CloseHandle(worker);
     if (stopEvent)
@@ -846,4 +962,185 @@ void Wh_ModUninit() {
         CloseHandle(changedEvent);
     worker = stopEvent = changedEvent = nullptr;
 }
+
+// clang-format off
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+// clang-format on
 #endif
