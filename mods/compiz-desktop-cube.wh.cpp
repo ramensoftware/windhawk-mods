@@ -8,22 +8,17 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lwindowscodecs -lshell32
+// @compilerOptions -lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Compiz Desktop Cube for Windows 11
 
+![Compiz Desktop Cube Preview](https://raw.githubusercontent.com/Soham-Barate/compiz-desktop-cube-windows11/main/images/cube-demo.gif)
+
 A Compiz / GNOME style 3D desktop prism for Windows 11 virtual desktops.
 Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
-
-## What's new in 5.9
-* Lower CPU use: the mouse hook no longer wakes the render thread with a system call on every mouse event, and the
-  compositor is no longer sent property values it already has (opacity / visibility of the faces).
-* Hidden glass rims and shading layers are really hidden (no GPU fill) instead of drawn at zero opacity.
-* The desktop composer runs in background mode and skips desktops it captured less than 20 seconds ago.
-* The emoji panel, touch keyboard, Start / Search hosts and other shell overlays no longer appear on the desktop faces.
 
 ## How to use
 1. Press and hold the **left mouse button** on **empty space** of the taskbar
@@ -1977,6 +1972,10 @@ void CubeRenderer::Shutdown() {
         CloseHandle(m_thread);
         m_thread = nullptr;
     }
+    if (m_goEvent) { CloseHandle(m_goEvent); m_goEvent = nullptr; }
+    if (m_quitEvent) { CloseHandle(m_quitEvent); m_quitEvent = nullptr; }
+    if (m_frameEvent) { CloseHandle(m_frameEvent); m_frameEvent = nullptr; }
+    if (m_wakeEvent) { CloseHandle(m_wakeEvent); m_wakeEvent = nullptr; }
     m_sceneActive.store(false);
 }
 
