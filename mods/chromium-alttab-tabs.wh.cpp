@@ -7,7 +7,7 @@
 // @github          https://github.com/Dszae
 // @homepage        https://github.com/Dszae/AltTabs
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi -std=c++20
+// @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -86,8 +86,6 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 #include <windhawk_utils.h>
 #define HAS_WINDHAWK_API 1
 #else
-#define Wh_Log(format, ...)
-#define Wh_GetIntSetting(name) 0
 #define HAS_WINDHAWK_API 0
 #endif
 
@@ -798,27 +796,37 @@ void StopKeyboardHookThread() {
 
 // --- WINDHAWK ENTRY POINTS ---
 BOOL Wh_ModInit() {
+#if HAS_WINDHAWK_API
     Wh_Log(L"Initializing Chromium Tabs in Alt-Tab Windhawk Mod v1.0.1...");
+#endif
 
     ChromiumAltTabMod::LoadSettings();
     ChromiumAltTabMod::StartKeyboardHookThread();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().Start();
 
+#if HAS_WINDHAWK_API
     Wh_Log(L"Chromium Tabs in Alt-Tab Mod loaded successfully.");
+#endif
     return TRUE;
 }
 
 void Wh_ModUninit() {
+#if HAS_WINDHAWK_API
     Wh_Log(L"Unloading Chromium Tabs in Alt-Tab Mod...");
+#endif
 
     ChromiumAltTabMod::StopKeyboardHookThread();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().Stop();
 
+#if HAS_WINDHAWK_API
     Wh_Log(L"Chromium Tabs in Alt-Tab Mod unloaded.");
+#endif
 }
 
 void Wh_ModSettingsChanged() {
+#if HAS_WINDHAWK_API
     Wh_Log(L"Settings updated for Chromium Tabs in Alt-Tab Mod.");
+#endif
     ChromiumAltTabMod::LoadSettings();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().TriggerImmediateScan();
 }
