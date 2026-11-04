@@ -5,6 +5,7 @@
 // @version         5.9.0
 // @author          Soham
 // @github          https://github.com/Soham-Barate
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lwindowscodecs -lshell32
@@ -72,6 +73,7 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
 - PrintWindow cannot render every app (some games, protected content). Those windows are left out of other desktops' faces.
 - The overlay is hidden from screenshots and screen recorders on purpose (needed for the live capture).
 - Desktop switching sends Win+Ctrl+Left/Right. No undocumented COM is used.
+- Screen recording: turn on "Screen Recording Mode" in the mod settings to make the cube visible to recorders (it applies the next time you open the cube). The front face is a still picture while it is on.
 - The Windows desktop slide animation is hidden only while the cube switches desktops (explorer is told "animations off" for that moment). Your Windows "Animation effects" setting is never changed.
 - If you still see a slide on your build, raise "Switch Settle Delay".
 */
@@ -112,6 +114,9 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
 - AutoHideTaskbarFix: true
   $name: Re-hide Auto-hide Taskbar
   $description: After the gesture, an auto-hide taskbar is hidden again right away and ready for the next gesture.
+- RecordingMode: false
+  $name: Screen Recording Mode
+  $description: Makes the cube visible to screen recorders and screenshots. Normally the cube hides itself from capture so the live view never films itself. In this mode the desktop on the front face is a still picture instead of live.
 - Perspective: 1100
   $name: Camera Perspective Distance (px)
   $description: Lower values give stronger 3D distortion. Minimum 700.
@@ -408,6 +413,7 @@ struct ModSettings {
     bool  altTab = false;
     int   bgHz = 15;
     bool  idleSave = true;
+    bool  recordingMode = false;
     bool  edgeEdit = true;
     float edgeZone = 0.10f;
     int   edgeReveal = 40;
@@ -439,6 +445,7 @@ static void LoadSettings() {
     s.faceSize = GetIntSetting(L"FaceSize", 66, 30, 90) / 100.0f;
     s.shrinkDist = (float)GetIntSetting(L"ShrinkDistance", 260, 60, 1200);
     s.autoHideFix = Wh_GetIntSetting(L"AutoHideTaskbarFix") != 0;
+    s.recordingMode = Wh_GetIntSetting(L"RecordingMode") != 0;
     s.sideOpacity = GetIntSetting(L"SideFaceOpacity", 55, 0, 100) / 100.0f;
     s.perspective = (float)GetIntSetting(L"Perspective", 1100, 700, 6000);
     s.dragSmoothMs = GetIntSetting(L"DragSmoothing", 35, 0, 400);
@@ -1759,6 +1766,7 @@ private:
     IDXGIOutput* m_output = nullptr;       // used for vblank pacing (any adapter)
     IDXGIOutput* m_dupOutput = nullptr;    // same adapter as the D3D device (duplication)
     bool m_canExclude = false;
+    void ApplyCaptureAffinity(bool recordingMode);
     float m_monitorHz = 0.0f;
     int m_bgW = 0, m_bgH = 0;
 
@@ -2263,9 +2271,7 @@ bool CubeRenderer::WarmInit() {
         LOG_ERR(L"CreateWindowExW failed: %lu", GetLastError());
         return false;
     }
-    // Hide the overlay from every capture API so the live feed never films itself.
-    m_canExclude = SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE) != 0;
-    if (!m_canExclude) LOG_INF(L"WDA_EXCLUDEFROMCAPTURE unavailable (needs Windows 10 2004+), live capture off");
+    ApplyCaptureAffinity(false);
 
     if (!EnsureDispatcherQueue()) {
         LOG_ERR(L"No DispatcherQueue on render thread");
@@ -2601,7 +2607,10 @@ bool CubeRenderer::StartLive(const DesktopCaptureManager::SnapshotData* initial)
     StopLive();
     m_liveFrames = 0;
     m_liveStatus = L"STATIC";
-    if (!m_canExclude) { m_liveStatus = L"STATIC (cannot hide overlay)"; return false; }
+    if (!m_canExclude) {
+        m_liveStatus = m_cfg.recordingMode ? L"STATIC (recording mode)" : L"STATIC (cannot hide overlay)";
+        return false;
+    }
     if (!m_d3dDevice || !m_d2dDevice) { m_liveStatus = L"STATIC (no GPU device)"; return false; }
 
     int w = (int)m_screenWidth, h = (int)m_screenHeight;
@@ -3639,7 +3648,22 @@ void CubeRenderer::ComputeGeometry(int total) {
     else m_D = W * 0.04f;
 }
 
+// Normally the overlay is hidden from every capture API so the live feed never films itself.
+// In recording mode it stays visible to capture; the live feed is then off (m_canExclude == false) and the
+// taskbar is not hidden from capture either, so a recording shows exactly what is on screen.
+void CubeRenderer::ApplyCaptureAffinity(bool recordingMode) {
+    if (!m_hwnd) return;
+    if (recordingMode) {
+        SetWindowDisplayAffinity(m_hwnd, 0 /*WDA_NONE*/);
+        m_canExclude = false;
+        return;
+    }
+    m_canExclude = SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE) != 0;
+    if (!m_canExclude) LOG_INF(L"WDA_EXCLUDEFROMCAPTURE unavailable (needs Windows 10 2004+), live capture off");
+}
+
 bool CubeRenderer::BeginScene() {
+    ApplyCaptureAffinity(m_cfg.recordingMode);
     // ---- monitor / geometry ----
     m_hMonitor = MonitorFromPoint(m_anchor, MONITOR_DEFAULTTONEAREST);
     MONITORINFOEXW mi{};
@@ -3665,8 +3689,8 @@ bool CubeRenderer::BeginScene() {
         DwmFlush(); DwmFlush();   // let DWM drop the taskbar from the next captured frame
         LOG_INF(L"Taskbar hidden from capture, faces are uncropped");
     } else {
-        RestoreTaskbarCapture();
-        LOG_INF(L"Taskbar could not be hidden from capture, using cropped work area");
+        RestoreTaskbarCapture();   // also undoes the flag from an earlier gesture made without recording mode
+        LOG_INF(L"Taskbar not hidden from capture (recording mode or unsupported), using cropped work area");
     }
 
     // ---- desktops, then the face count follows the desktop count ----
