@@ -47,7 +47,7 @@ call, also between ringtones and beeps. The log shows who handles the call.
   value is taken as the new "original" volume.
 - All active playback devices are handled.
 - The mod only works while audio is involved: it waits for Windows audio events
-  and does not poll while no trigger app is playing.
+  and does not poll while no trigger app has an open audio stream.
 - Windows remembers the volume of each app. While an app is ducked, the mod
   keeps a record of its original volume in Windhawk's storage, so the volume is
   restored after a restart of the mod, a closed and reopened app or a changed
@@ -111,13 +111,13 @@ However I did ask Claude to check for security vulnerabilities.
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <endpointvolume.h>
+#include <sddl.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cmath>
-#include <iterator>
 #include <map>
 #include <set>
 #include <string>
@@ -149,7 +149,6 @@ constexpr float kUserChangeTolerance = 0.02f;
 constexpr size_t kMaxDuckEntries = 64;
 constexpr size_t kMaxWatchedSessions = 256;
 constexpr UINT kMaxDevices = 16;
-constexpr PCWSTR kStoreKey = L"duckedVolumes";
 
 struct Settings {
     float duckVolume = 0.2f;
@@ -455,6 +454,7 @@ bool g_duckDirty = false;
 ULONGLONG g_lastTriggerActive = 0;
 int g_callState = 0;  // 0 none, 1 Windows handles the call, 2 mod handles it
 std::set<DWORD> g_loggedPids;
+std::map<DWORD, ULONGLONG> g_missedPids;  // PID -> process snapshot time of the first miss
 
 float MoveToward(float cur, float target, float step) {
     if (cur < target) {
@@ -463,12 +463,38 @@ float MoveToward(float cur, float target, float step) {
     return std::max(cur - step, target);
 }
 
+// Windhawk's mod storage is shared by all signed-in users, while the volumes
+// belong to one user's session: the value name contains the user's SID. Empty
+// if the SID can't be determined (then nothing is persisted).
+std::wstring g_storeName;
+
+std::wstring StoreValueName() {
+    std::wstring name;
+    HANDLE token;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        BYTE buf[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD len;
+        LPWSTR sid;
+        if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len) &&
+            ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
+            name = L"duckedVolumes_";
+            name += sid;
+            LocalFree(sid);
+        }
+        CloseHandle(token);
+    }
+    return name;
+}
+
 // Mirror of g_duck in Windhawk storage, so a ducked volume that Windows saved
 // can be restored after the mod (or the app) restarted.
 void SavePersisted() {
     g_duckDirty = false;
+    if (g_storeName.empty()) {
+        return;
+    }
     if (g_duck.empty()) {
-        Wh_DeleteValue(kStoreKey);
+        Wh_DeleteValue(g_storeName.c_str());
         return;
     }
     std::wstring out;
@@ -479,12 +505,17 @@ void SavePersisted() {
         out += key;
         out += L'\n';
     }
-    Wh_SetStringValue(kStoreKey, out.c_str());
+    Wh_SetStringValue(g_storeName.c_str(), out.c_str());
 }
 
 void LoadPersisted() {
+    g_storeName = StoreValueName();
+    if (g_storeName.empty()) {
+        Wh_Log(L"Could not determine the user SID, volumes are not persisted");
+        return;
+    }
     std::wstring buf(32768, L'\0');
-    buf.resize(Wh_GetStringValue(kStoreKey, buf.data(), buf.size()));
+    buf.resize(Wh_GetStringValue(g_storeName.c_str(), buf.data(), buf.size()));
 
     size_t pos = 0;
     while (pos < buf.size() && g_duck.size() < kMaxDuckEntries) {
@@ -564,8 +595,11 @@ struct CommWatcher {
     Com<IAudioSessionManager2> mgr;
     DuckNotifier* notifier = nullptr;
 
+    // The known communication sessions are kept when re-registering (e.g. after
+    // a device change during a call); the unduck notification and the session
+    // state check take care of stale entries.
     void Update(IMMDeviceEnumerator* enumerator) {
-        Stop();
+        Unregister();
         Com<IMMDevice> device;
         if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eCommunications,
                                                        &device)) ||
@@ -579,11 +613,11 @@ struct CommWatcher {
         HRESULT hr = mgr->RegisterDuckNotification(nullptr, notifier);
         if (FAILED(hr)) {
             Wh_Log(L"RegisterDuckNotification failed: 0x%08X", (unsigned)hr);
-            Stop();
+            Unregister();
         }
     }
 
-    void Stop() {
+    void Unregister() {
         if (mgr && notifier) {
             mgr->UnregisterDuckNotification(notifier);
         }
@@ -592,6 +626,10 @@ struct CommWatcher {
             notifier = nullptr;
         }
         mgr.Reset();
+    }
+
+    void Stop() {
+        Unregister();
         AcquireSRWLockExclusive(&g_commLock);
         g_commSessions.clear();
         ReleaseSRWLockExclusive(&g_commLock);
@@ -728,11 +766,20 @@ void ScanManager(IAudioSessionManager2* mgr, bool capture, const Settings& s,
         const ProcInfo* info = GetProc(pid);
         if (!info) {
             // A just-started process may be missing from a very recent
-            // snapshot (refreshes are rate limited): look again shortly.
-            if (GetTickCount64() - g_procsTime <= 500) {
+            // snapshot (refreshes are rate limited): look again until a
+            // snapshot newer than the first miss has been taken. After that
+            // the session is ignored, so a stale session can't keep us polling.
+            if (g_missedPids.size() > 1000) {
+                g_missedPids.clear();
+            }
+            auto miss = g_missedPids.emplace(pid, g_procsTime);
+            if (miss.second || g_procsTime <= miss.first->second) {
                 r.unresolved = true;
             }
             continue;
+        }
+        if (!g_missedPids.empty()) {
+            g_missedPids.erase(pid);
         }
         const std::wstring name = info->name;
 
@@ -861,11 +908,33 @@ bool Poll(bool restoreAll) {
     float step = s.fadeMs > 0 ? (float)kPollMs / s.fadeMs : 1.0f;
     bool fading = false;
 
+    // Several sessions can share one key (e.g. two processes of the same exe on
+    // the same device). The state machine runs once per key; the other sessions
+    // with that key get the same volume (-1 = the first one was left alone).
+    // While ducking, other sessions are only ever lowered, never raised.
+    struct Applied {
+        float volume;  // -1 = left alone
+        bool lowering;
+    };
+    std::map<std::wstring, Applied> appliedThisPoll;
+
     for (auto& t : targets.items) {
         float cur = 0;
         if (FAILED(t.vol->GetMasterVolume(&cur))) {
             continue;
         }
+
+        if (auto done = appliedThisPoll.find(t.key); done != appliedThisPoll.end()) {
+            const Applied& a = done->second;
+            bool skip = a.volume < 0 || (a.lowering && a.volume >= cur);
+            if (!skip && fabsf(cur - a.volume) > 0.001f) {
+                t.vol->SetMasterVolume(a.volume, nullptr);
+            }
+            continue;
+        }
+        float outcome = -1.0f;
+        bool lowering = false;
+
         auto it = g_duck.find(t.key);
 
         if (it != g_duck.end() && !it->second.adopted) {
@@ -884,28 +953,31 @@ bool Poll(bool restoreAll) {
         }
 
         if (ducking && t.wanted) {
-            if (it == g_duck.end()) {
-                if (cur <= s.duckVolume + 0.001f ||
-                    g_duck.size() >= kMaxDuckEntries) {
-                    continue;  // already quiet enough
+            bool alreadyQuiet = it == g_duck.end() &&
+                                (cur <= s.duckVolume + 0.001f ||
+                                 g_duck.size() >= kMaxDuckEntries);
+            if (!alreadyQuiet) {
+                if (it == g_duck.end()) {
+                    it = g_duck.insert({t.key, {cur, cur, s.duckVolume, true}}).first;
+                    g_duckDirty = true;
+                    Wh_Log(L"Ducking %s from %d%%", t.name.c_str(),
+                           (int)(cur * 100 + 0.5f));
+                } else if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
+                    // User changed the volume while ducked: new baseline.
+                    it->second.original = cur;
+                    it->second.duckedLevel = std::min(cur, s.duckVolume);
+                    g_duckDirty = true;
                 }
-                it = g_duck.insert({t.key, {cur, cur, s.duckVolume, true}}).first;
-                g_duckDirty = true;
-                Wh_Log(L"Ducking %s from %d%%", t.name.c_str(),
-                       (int)(cur * 100 + 0.5f));
-            } else if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
-                // User changed the volume while ducked: new baseline.
-                it->second.original = cur;
-                it->second.duckedLevel = std::min(cur, s.duckVolume);
-                g_duckDirty = true;
+                float desired = std::min(it->second.original, s.duckVolume);
+                float next = MoveToward(cur, desired, step);
+                if (next != cur) {
+                    t.vol->SetMasterVolume(next, nullptr);
+                }
+                it->second.lastSet = next;
+                outcome = next;
+                lowering = true;
+                fading = true;
             }
-            float desired = std::min(it->second.original, s.duckVolume);
-            float next = MoveToward(cur, desired, step);
-            if (next != cur) {
-                t.vol->SetMasterVolume(next, nullptr);
-            }
-            it->second.lastSet = next;
-            fading = true;
         } else if (it != g_duck.end()) {
             if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
                 // User took over; don't touch it.
@@ -918,6 +990,7 @@ bool Poll(bool restoreAll) {
                 if (next != cur) {
                     t.vol->SetMasterVolume(next, nullptr);
                 }
+                outcome = next;
                 if (next == it->second.original) {
                     Wh_Log(L"Restored %s to %d%%", t.name.c_str(),
                            (int)(next * 100 + 0.5f));
@@ -929,6 +1002,8 @@ bool Poll(bool restoreAll) {
                 }
             }
         }
+
+        appliedThisPoll[t.key] = {outcome, lowering};
     }
 
     if (g_duckDirty) {
