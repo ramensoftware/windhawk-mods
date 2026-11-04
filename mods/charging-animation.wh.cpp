@@ -6124,7 +6124,7 @@ void LoadSettings() {
     g_settings.statsFontSize = statsFontSize;
 }
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Charging Animation Init");
     LoadSettings();
 
