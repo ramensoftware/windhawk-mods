@@ -216,6 +216,7 @@ struct DomainCluster {
     std::wstring displayDomain;
     std::vector<std::shared_ptr<TabItem>> tabs;
     HWND proxyHwnd = nullptr;
+    HTHUMBNAIL hThumbnail = nullptr;
     size_t activeTabIndex = 0;
 };
 
@@ -283,10 +284,24 @@ public:
 // --- ACTIVATION ROUTER ---
 class TabActivator {
 public:
+    static void SwitchToWindow(HWND hwnd) {
+        if (!IsWindow(hwnd)) return;
+        typedef void (WINAPI *pfnSwitchToThisWindow)(HWND, BOOL);
+        static pfnSwitchToThisWindow s_pfn = (pfnSwitchToThisWindow)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SwitchToThisWindow");
+        if (IsIconic(hwnd)) {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        if (s_pfn) {
+            s_pfn(hwnd, TRUE);
+        } else {
+            SetForegroundWindow(hwnd);
+        }
+    }
+
     static bool ForceForeground(HWND hwnd) {
         if (!IsWindow(hwnd)) return false;
-        if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
-        return SetForegroundWindow(hwnd) != FALSE;
+        SwitchToWindow(hwnd);
+        return true;
     }
 
     static bool ActivateTab(const std::shared_ptr<TabItem>& tab) {
@@ -655,17 +670,23 @@ private:
     void ReconcileProxyWindows(std::unordered_map<std::wstring, std::shared_ptr<DomainCluster>> updatedClusters) {
         std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
 
-        // 1. Transfer existing HWNDs from old clusters to updated clusters
+        // 1. Transfer existing HWNDs and thumbnails from old clusters to updated clusters
         for (auto& [key, newCluster] : updatedClusters) {
             auto it = m_clusters.find(key);
             if (it != m_clusters.end() && it->second->proxyHwnd && IsWindow(it->second->proxyHwnd)) {
                 newCluster->proxyHwnd = it->second->proxyHwnd;
+                newCluster->hThumbnail = it->second->hThumbnail;
                 it->second->proxyHwnd = nullptr;
+                it->second->hThumbnail = nullptr;
             }
         }
 
         // 2. Destroy windows for removed clusters
         for (auto& [key, oldCluster] : m_clusters) {
+            if (oldCluster->hThumbnail) {
+                DwmUnregisterThumbnail(oldCluster->hThumbnail);
+                oldCluster->hThumbnail = nullptr;
+            }
             if (oldCluster->proxyHwnd && IsWindow(oldCluster->proxyHwnd)) {
                 g_proxyMap.erase(oldCluster->proxyHwnd);
                 DestroyWindow(oldCluster->proxyHwnd);
@@ -706,6 +727,18 @@ private:
             }
 
             if (hwnd) {
+                // Register live DWM thumbnail so Windows 11 Alt-Tab renders a real preview instead of a blank card
+                if (!cluster->hThumbnail && !cluster->tabs.empty() && cluster->tabs[0]->browserHwnd) {
+                    if (SUCCEEDED(DwmRegisterThumbnail(hwnd, cluster->tabs[0]->browserHwnd, &cluster->hThumbnail)) && cluster->hThumbnail) {
+                        DWM_THUMBNAIL_PROPERTIES dti = { 0 };
+                        dti.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY;
+                        dti.rcDestination = RECT{ 0, 0, 200, 150 };
+                        dti.fVisible = TRUE;
+                        dti.opacity = 255;
+                        DwmUpdateThumbnailProperties(cluster->hThumbnail, &dti);
+                    }
+                }
+
                 g_proxyMap[hwnd] = cluster;
 
                 if (!cluster->tabs.empty() && cluster->tabs[0]->hFavicon) {
@@ -721,6 +754,10 @@ private:
     void DestroyProxyWindows() {
         std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
         for (auto& [key, cluster] : m_clusters) {
+            if (cluster->hThumbnail) {
+                DwmUnregisterThumbnail(cluster->hThumbnail);
+                cluster->hThumbnail = nullptr;
+            }
             if (cluster->proxyHwnd && IsWindow(cluster->proxyHwnd)) {
                 DestroyWindow(cluster->proxyHwnd);
                 cluster->proxyHwnd = nullptr;
