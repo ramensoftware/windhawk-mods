@@ -59,6 +59,7 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 #include <dwmapi.h>
 #include <psapi.h>
 #include <shlwapi.h>
+#include <memory>
 
 // Lightweight standard Win32 COM Smart Pointer (MinGW & MSVC compatible, replacing ATL)
 template <typename T>
