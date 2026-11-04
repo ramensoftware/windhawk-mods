@@ -66,10 +66,12 @@
 // explorer processes skipped), and the margin writing / restoring
 // logic, including the `specific` monitor matching, is the one
 // the user confirmed working on a real machine with v0.5-v0.6.1.
-// The new part in v0.7 is the retry loop (readiness aggregation,
-// retry thread, generation counter); it was confirmed working on
-// the author's real machine with v0.7 (the reservation returns
-// automatically after an Explorer restart).
+// The retry loop was confirmed working on the author's real
+// machine with v0.7 (Windows 11 Pro 26H2, build 26300.9818,
+// three monitors). The ARM64 prologue branch (from
+// taskbar-multirow, with the same fail-safe bail) is included
+// so the file compiles for ARM64; ARM64 runtime behavior is
+// untested on real ARM64 hardware.
 // ---------------------------------------------------------------------------
 
 // ==WindhawkModReadme==
@@ -552,8 +554,34 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
             return nullptr;
         }
     }
+#elif defined(_M_ARM64)
+    {
+        // ARM64 branch, also adapted from taskbar-multirow v1.1.4
+        // (added so this file compiles for ARM64, which the official
+        // catalog's compatibility check builds for explorer.exe
+        // targets; not tested on real ARM64 hardware):
+        //   7f2303d5 pacibsp
+        //   fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        //   fd030091 mov     fp, sp
+        //   080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p && p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            // Same fail-safe deviation as the x86-64 branch above:
+            // bail out instead of proceeding with a default offset.
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight prologue, "
+                   L"bailing out (no offset guessed)");
+            if (taskbarHostSharedPtr[1]) {
+                std__Ref_count_base__Decref_Original(
+                    taskbarHostSharedPtr[1]);
+            }
+            return nullptr;
+        }
+    }
 #else
-#error "Unsupported architecture (this mod is x86-64 only)"
+#error "Unsupported architecture"
 #endif
 
     Wh_Log(L"TaskbarHost element IUnknown offset: 0x%IX",
