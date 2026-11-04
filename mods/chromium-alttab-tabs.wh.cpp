@@ -73,7 +73,7 @@ public:
         if (m_ptr) m_ptr->AddRef();
     }
     SafeComPtr& operator=(const SafeComPtr& other) {
-        if (this != &other) {
+        if (this != std::addressof(other)) {
             Release();
             m_ptr = other.m_ptr;
             if (m_ptr) m_ptr->AddRef();
@@ -85,7 +85,7 @@ public:
         other.m_ptr = nullptr;
     }
     SafeComPtr& operator=(SafeComPtr&& other) noexcept {
-        if (this != &other) {
+        if (this != std::addressof(other)) {
             Release();
             m_ptr = other.m_ptr;
             other.m_ptr = nullptr;
