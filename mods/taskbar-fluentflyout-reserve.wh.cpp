@@ -4,7 +4,7 @@
 // @name:ja-JP      FluentFlyout用タスクバー予約領域
 // @description     Reserves space on the Windows 11 taskbar for the FluentFlyout taskbar widget, on the primary monitor only by default
 // @description:ja-JP FluentFlyoutのタスクバーウィジェット用に、Windows 11タスクバーへ空き領域を確保する。既定ではプライマリーモニターのみ
-// @version         0.7
+// @version         0.8
 // @author          Ren9618
 // @github          https://github.com/Ren9618
 // @twitter         https://x.com/Ray_9618_2
@@ -22,8 +22,22 @@
 //   - XamlRootFromTaskbarHostSharedPtr()
 //   - GetTaskbarXamlRoot() / GetSecondaryTaskbarXamlRoot()
 //   - RunFromWindowThread()
-//   - FindCurrentProcessTaskbarWnd()
 //   - HookTaskbarDllSymbols() (reduced to the symbols listed below)
+// (FindCurrentProcessTaskbarWnd() was also adapted in v0.4-v0.7
+// and removed in v0.8, when the lifecycle stopped needing it.)
+//
+// v0.8 additionally adapts code from the "Taskbar Margin" mod
+// (taskbar-margin v1.0, by loliri, from ramensoftware/windhawk-mods,
+// also GPL v3.0):
+//   - OnWindowCreated() and the CreateWindowExW /
+//     CreateWindowInBand / CreateWindowInBandEx hooks
+//   - ForEachTaskbarWindow() (thread-deduplicated enumeration)
+//   - the per-thread DispatcherQueueTimer retry
+//     (StartRetryTimer / StopRetryTimer / RetryTimerTick)
+// The timer placement follows taskbar-margin (thread_local, one
+// timer per taskbar thread, stopped on that thread during
+// unload); see the "Global objects and process shutdown" wiki
+// page, section 4, for the teardown rules this follows.
 // The taskbar-multirow source states: "Source code is published under
 // The GNU General Public License v3.0." Because this file is a
 // derivative of that GPL code, it is NOT MIT-licensed (unlike the
@@ -48,30 +62,36 @@
 //      added before QueryInterface (multirow dereferences it
 //      unchecked).
 //   3. Only the 6 address-only symbols needed for XamlRoot
-//      acquisition are resolved. multirow additionally hooks
-//      functions in taskbar.dll and Taskbar.View.dll; none of that
-//      is needed here, and this file installs NO function hooks at
-//      all - the resolved GetTaskbarHost addresses are *called*,
-//      not hooked. (Note: multirow does not use a
-//      TrayUI::StartTaskbar hook either; that is a different mods'
-//      pattern.)
+//      acquisition are resolved from taskbar.dll. multirow
+//      additionally hooks functions in taskbar.dll and
+//      Taskbar.View.dll; none of that is needed here, and the
+//      resolved GetTaskbarHost addresses are *called*, not
+//      hooked. (v0.8 does install function hooks, but only the
+//      user32 window-creation hooks adapted from taskbar-margin -
+//      still no taskbar.dll function hooks.)
 //
-// STATUS: v0.7, which adds a "retry until the taskbar is ready"
-// re-application loop on top of v0.6.1, fixing the reservation
-// being lost after an Explorer restart (the one-shot application
-// at load time ran before the taskbar's XAML tree existed and
-// never retried). The XamlRoot acquisition path below is the one
-// verified on a real machine with v0.4.1 (symbols resolved, 3
-// XamlRoots obtained, 3 repeaters found, margins read, non-host
-// explorer processes skipped), and the margin writing / restoring
-// logic, including the `specific` monitor matching, is the one
-// the user confirmed working on a real machine with v0.5-v0.6.1.
-// The retry loop was confirmed working on the author's real
-// machine with v0.7 (Windows 11 Pro 26H2, build 26300.9818,
-// three monitors). The ARM64 prologue branch (from
-// taskbar-multirow, with the same fail-safe bail) is included
-// so the file compiles for ARM64; ARM64 runtime behavior is
-// untested on real ARM64 hardware.
+// STATUS: v0.8, a lifecycle rework driven by the AI review of
+// PR #6983 (items 1 and 2). The v0.7 worker-thread retry loop
+// is gone: the mod now hooks taskbar window creation
+// (CreateWindowExW / CreateWindowInBand / CreateWindowInBandEx,
+// adapted from taskbar-margin) and retries on a per-thread
+// DispatcherQueueTimer on the taskbar thread itself until the
+// XAML tree is ready. That covers taskbars created after the
+// mod loads (Explorer restart, monitor reconnect / dock) and
+// removes the detached thread that could outlive the DLL at
+// unload. The XamlRoot acquisition path is the one verified on
+// a real machine with v0.4.1, and the margin writing /
+// restoring logic, including the `specific` monitor matching,
+// is the one confirmed working with v0.5-v0.7. The v0.8
+// lifecycle was confirmed working on the author's real machine
+// (Windows 11 Pro 26H2, build 26300.9818, three monitors):
+// taskbars were picked up at creation by the hooks and the
+// reservation came back on its own after an Explorer restart.
+// The ARM64
+// prologue branch (restored post-v0.7, with the same fail-safe
+// bail) is kept so the file compiles for ARM64 in the catalog
+// compatibility check; ARM64 runtime behavior is untested on
+// real ARM64 hardware.
 // ---------------------------------------------------------------------------
 
 // ==WindhawkModReadme==
@@ -100,19 +120,39 @@ its original `Margin`:
 - When the mod is disabled / unloaded, the saved original margins
   are restored (and the restore is also read back and logged).
 
-Writes happen only when the mod loads and when its settings
-change, always on the taskbar's UI thread. This mod deliberately
-never writes from layout callbacks (`LayoutUpdated` etc.):
-writing layout-affecting properties from inside a layout pass is
-what causes the "Layout cycle detected" Explorer crash
-(0x802b0014).
+Writes happen when the mod loads, when its settings change,
+and when a taskbar window is created, always on the taskbar's
+UI thread. This mod deliberately never writes from layout
+callbacks (`LayoutUpdated` etc.): writing layout-affecting
+properties from inside a layout pass is what causes the
+"Layout cycle detected" Explorer crash (0x802b0014).
 
-If the taskbar UI is not ready yet when the mod loads - which
-is the normal case right after Explorer (re)starts, because the
-XAML tree is built only after the mod is already loaded - the
-application is retried with increasing intervals for up to
-about a minute, so the reservation comes back on its own within
-a few seconds once the taskbar is up.
+A newly created taskbar's XAML tree is not built yet at the
+moment the window appears - which is also the normal case
+right after Explorer (re)starts, because the mod is loaded
+before the taskbar UI exists. The application is therefore
+retried on a timer on the taskbar thread itself (every
+500 ms, up to 30 seconds), so the reservation appears on its
+own a few seconds after the taskbar is up. Because taskbar
+creation is hooked, this also covers taskbars that appear
+while Explorer keeps running, for example when a monitor is
+reconnected or a laptop is docked.
+
+## Relation to Taskbar Margin
+
+[Taskbar Margin](https://windhawk.net/mods/taskbar-margin)
+also leaves empty space on the taskbar, and its suggested use
+mentions FluentFlyout - but for the widget placed at the
+**bottom left**: it shifts the whole taskbar content to the
+right, leaving a margin on the left side, with an
+all / primary / secondary display scope.
+
+This mod is for the widget's usual place at the **right end**
+of the taskbar, next to the system tray, where it overlaps the
+right end of the app list: it widens the right margin of the
+app list itself (`TaskbarFrameRepeater`), and it can pin the
+reservation to one specific monitor. Use Taskbar Margin for
+left-side space; use this mod for the right side.
 
 ## Settings
 
@@ -144,29 +184,30 @@ a few seconds once the taskbar is up.
   the new device name and update this setting. (Matching by a
   stable monitor device-path ID instead is a future task.)
 
-## Known limitations (v0.7)
+## Known limitations
 
-- After Explorer restarts, the mod retries the application
-  until the taskbar UI is ready (up to about a minute), so the
-  reservation is restored automatically within a few seconds.
-  If a taskbar is recreated while Explorer keeps running,
-  however, the new taskbar is not picked up automatically yet;
-  toggling the mod off and on (or changing any setting)
-  re-applies it.
-- Adding / removing a monitor while the mod is running is not
-  tracked yet. Changing the primary monitor is only relevant to
-  the `primary` scope; with `specific`, the pinned target does
-  not move when the primary monitor changes. Toggle the mod or
-  change any setting to re-apply after a display change.
+- Taskbars created while the mod runs are picked up
+  automatically, and after an Explorer restart the reservation
+  is restored on its own within a few seconds. What is not
+  tracked is a change of *which* monitor is primary (or a
+  display rearrangement) that does not recreate the taskbars:
+  the scope decision is only re-evaluated when an application
+  runs. Toggle the mod or change any setting to re-apply after
+  such a change. With `specific`, the pinned target never moves
+  when the primary monitor changes - that is the point of the
+  mode.
 - Horizontal taskbars only; no special handling for vertical
   taskbars.
-- Do not let another mod write the same element's Margin at the
-  same time. In particular, if you used the FluentFlyout rules in
-  Windows 11 Taskbar Styler (the fixed 350 margin, the
-  `FFTaskbarWidth` capture, or the conditional margin on
-  `TaskbarFrameRepeater`), remove those rules from Styler before
-  using this mod, otherwise the two mods will overwrite each
-  other.
+- Do not let another mod write the same element's Margin at
+  the same time. The Multirow taskbar mod writes
+  `TaskbarFrameRepeater.Margin.Right` too, so do not enable it
+  together with this mod. Likewise, if you used the
+  FluentFlyout rules in Windows 11 Taskbar Styler (the fixed
+  350 margin, the `FFTaskbarWidth` capture, or the conditional
+  margin on `TaskbarFrameRepeater`), remove those rules from
+  Styler before using this mod, otherwise the two will
+  overwrite each other and the saved original margins go
+  stale.
 
 ## If something goes wrong
 
@@ -182,11 +223,17 @@ nothing is written to disk or to the registry.
 
 ## Status
 
-Margin writing, restore on unload, the `specific` monitor
-scope (device-name matching), and the retry-until-ready
-re-application after an Explorer restart were all confirmed
-working on the author's real machine (Windows 11 Pro 26H2,
-build 26300.9818, three monitors).
+v0.8 replaces the v0.7 worker-thread retry loop with
+taskbar-window creation hooks plus a retry timer on the
+taskbar thread, following the AI review of the initial
+catalog submission (PR #6983). Taskbars created after the mod
+loads are now covered as well. Margin writing, restore on
+unload, the `specific` monitor scope (device-name matching),
+and the v0.8 lifecycle - the reservation being applied at
+load and restored automatically after an Explorer restart
+through the creation hooks and the timer retry - were all
+confirmed working on the author's real machine (Windows 11
+Pro 26H2, build 26300.9818, three monitors).
 ---
 
 # （日本語）FluentFlyout用タスクバー予約領域
@@ -210,13 +257,32 @@ Windows 11 のタスクバーにあるアプリ一覧の右側に空き領域を
 - Mod を無効化／アンロードすると、保存した元の Margin に復元します
   （復元結果も読み戻してログに残します）。
 
-書き込みは Mod の読み込み時と設定変更時のみ、タスクバーの UI スレッド
-で行います。読み込み直後はタスクバーの XAML ツリーがまだ構築されていないことがある
-（特に Explorer 再起動直後）ため、その場合は間隔を広げながら最大約1分間自動で再試行します。
+書き込みは、Mod の読み込み時、設定変更時、そしてタスクバーの
+ウィンドウが生成されたときに行い、常にタスクバーの UI スレッドで
+実行します。新しく作られたタスクバーの XAML ツリーは、ウィンドウが
+現れた時点ではまだ構築されていません（Explorer 再起動直後に Mod が
+読み込まれる場合も同じです）。そのため、タスクバーのスレッド上の
+タイマーで 500 ミリ秒ごとに最大 30 秒再試行し、準備ができ次第、
+数秒以内に予約が付きます。タスクバーの生成をフックしているため、
+Explorer が動作している間にモニターの再接続やドッキングで現れた
+タスクバーにも自動で適用されます。
 レイアウト処理中のコールバック（`LayoutUpdated` など）から
 は決して書き込みません。レイアウトパスの中でレイアウトに影響する
 プロパティを変更すると、「Layout cycle detected」による Explorer の
 クラッシュ（0x802b0014）の原因になるためです。
+
+## Taskbar Margin との関係
+
+Taskbar Margin もタスクバーに空き領域を作る Mod で、その推奨用途には
+FluentFlyout が挙がっていますが、あちらはウィジェットを**左下**に置く
+前提です。タスクバーの内容全体を右へずらして左側に空きを作り、対象は
+全モニター／プライマリーのみ／セカンダリーのみから選びます。
+
+この Mod は、ウィジェットの通常位置であるタスクバーの**右端**（システム
+トレイの横）用です。アプリ一覧の右端にウィジェットが重なるため、アプリ
+一覧そのもの（TaskbarFrameRepeater）の右 Margin を広げます。特定の
+1台のモニターへの固定もできます。左側に空きが欲しい場合は Taskbar
+Margin を、この Mod は右側用です。
 
 ## 設定
 
@@ -247,22 +313,22 @@ Windows 11 のタスクバーにあるアプリ一覧の右側に空き領域を
 
 ## 既知の制限
 
-- Explorer の再起動後は、タスクバーの UI の準備ができるまで Mod が
-  自動で再試行する（最大約1分）ため、予約は数秒以内に自動で復旧
-  します。ただし、Explorer が動いたままタスクバーが再生成された
-  場合は、新しいタスクバーへの自動追従は未実装です。Mod の
-  無効化→有効化か、設定変更で再適用されます。
-- 動作中のモニターの追加／取り外しには未対応です。プライマリー
-  モニターの変更が関係するのは `primary` スコープのみで、`specific`
-  では固定先は動きません。ディスプレイ構成を変えたら、Mod の
-  トグルか設定変更で再適用してください。
+- 動作中に生成されたタスクバーには自動で適用され、Explorer の
+  再起動後も予約は数秒以内に自動で復旧します。追従できないのは、
+  タスクバーが再生成されない形でのプライマリーモニターの変更や
+  画面配置の変更で、その場合はスコープ判定が次の適用まで古いまま
+  です。ディスプレイ構成を変えたら、Mod のトグルか設定変更で
+  再適用してください。`specific` では固定先はプライマリーの変更で
+  動きません（それがこのモードの目的です）。
 - 横向きタスクバーのみ対応。縦置きタスクバーの特別処理はありません。
 - 同じ要素の Margin を別の Mod と同時に書き込まないでください。
-  特に、Windows 11 Taskbar Styler で FluentFlyout 用のルール
+  Multirow taskbar も `TaskbarFrameRepeater.Margin.Right` を
+  書き込むため、この Mod と同時に有効化しないでください。また、
+  Windows 11 Taskbar Styler で FluentFlyout 用のルール
   （350固定Margin、`FFTaskbarWidth` キャプチャ、`TaskbarFrameRepeater`
   への条件付き Margin）を使っていた場合は、この Mod を使う前に
   Styler 側のルールを削除してください。残っていると互いに上書き
-  し合います。
+  し合い、保存した元の Margin が古くなります。
 
 ## 問題が起きたら
 
@@ -278,18 +344,19 @@ Windows 11 のタスクバーにあるアプリ一覧の右側に空き領域を
 
 ## 状態
 
-Margin の書き込み、アンロード時の復元、`specific` スコープの照合、
-Explorer 再起動後の再試行による再適用は、作者の実機
-（Windows 11 Pro 26H2 / build 26300.9818、モニター3台）で動作を
-確認しています。
+Margin の書き込み、アンロード時の復元、`specific` スコープの
+照合に加え、v0.8 のウィンドウ生成フックとタスクバースレッド上の
+タイマー再試行（Explorer 再起動後の自動復旧を含む）は、作者の
+実機（Windows 11 Pro 26H2 / build 26300.9818、モニター3台）で
+動作を確認しています。
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - reservedWidth: 350
-  $name: Reserved width (pixels)
-  $name:ja-JP: 予約幅（ピクセル）
+  $name: Reserved width
+  $name:ja-JP: 予約幅
   $description: Width reserved on the right side of the taskbar app list, in XAML logical units. 0 means no reservation. 350 was verified with FluentFlyout by the author.
   $description:ja-JP: アプリ一覧の右側に確保する幅（XAML論理単位）。0で予約なし。350は作者がFluentFlyoutで検証した値。
 - monitorScope: primary
@@ -313,8 +380,9 @@ Explorer 再起動後の再試行による再適用は、作者の実機
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <atomic>
-#include <thread>
+#include <chrono>
 #include <vector>
 
 // Fix (from v0.4.1): winbase.h (pulled in via windows.h) defines a
@@ -326,6 +394,7 @@ Explorer 再起動後の再試行による再適用は、作者の実機
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/base.h>
@@ -719,35 +788,6 @@ bool RunFromWindowThread(HWND hWnd,
 }
 
 // ---------------------------------------------------------------------------
-// FindCurrentProcessTaskbarWnd, copied from taskbar-multirow v1.1.4
-// (GPL v3.0). This is also how this mod tells whether the current
-// explorer process hosts the taskbar at all: folder-window explorer
-// processes have no Shell_TrayWnd of their own, this returns
-// nullptr there, and the mod then does nothing.
-// ---------------------------------------------------------------------------
-
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD dwProcessId;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-                dwProcessId == GetCurrentProcessId() &&
-                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
-}
-
-// ---------------------------------------------------------------------------
 // Visual tree search (this project's own code, unchanged from
 // v0.4.1 where it was verified on a real machine).
 //
@@ -818,11 +858,13 @@ void SearchRepeaterRecursive(FrameworkElement element,
 // - holding no strong reference means this mod never keeps a dead
 //   taskbar's element alive.
 //
-// The list lives in a heap-allocated vector that is intentionally
-// never freed, so no XAML-related destructor runs at mod unload.
-// All accesses happen on the taskbar UI thread (apply and restore
-// both go through RunFromWindowThread), except the size check in
-// Wh_ModBeforeUninit before dispatching.
+// The list is a plain global vector. Its elements hold only a
+// weak_ref and a Thickness: a weak_ref's destructor is safe to
+// run from any thread (see the "Global objects and process
+// shutdown" wiki page, section 4), and every access happens on
+// the taskbar UI thread anyway (apply and restore both go
+// through RunFromWindowThread, and unload dispatches the
+// restore to that thread before returning).
 // ---------------------------------------------------------------------------
 
 struct TrackedRepeater {
@@ -830,15 +872,12 @@ struct TrackedRepeater {
     Thickness originalMargin{};
 };
 
-std::vector<TrackedRepeater>& TrackedRepeaters() {
-    static auto* tracked = new std::vector<TrackedRepeater>();
-    return *tracked;
-}
+std::vector<TrackedRepeater> g_trackedRepeaters;
 
 // Drops entries whose element no longer exists. Must be called on
 // the taskbar UI thread.
 void PruneStaleTrackedRepeaters() {
-    auto& tracked = TrackedRepeaters();
+    auto& tracked = g_trackedRepeaters;
     for (size_t i = 0; i < tracked.size();) {
         if (tracked[i].weak.get()) {
             i++;
@@ -858,7 +897,7 @@ void PruneStaleTrackedRepeaters() {
 int FindOrAddTrackedRepeater(FrameworkElement const& element,
                              Thickness currentMargin,
                              bool* added) {
-    auto& tracked = TrackedRepeaters();
+    auto& tracked = g_trackedRepeaters;
     for (size_t i = 0; i < tracked.size(); i++) {
         auto resolved = tracked[i].weak.get();
         if (resolved && resolved == element) {
@@ -893,13 +932,13 @@ void LogMargin(PCWSTR label, PCWSTR what, Thickness const& margin) {
 // ApplySettingsFromTaskbarThread().
 //
 // This is the only place in the mod that writes the Margin
-// property, and it is only ever entered via StartApplyWithRetry
-// (called from Wh_ModAfterInit and Wh_ModSettingsChanged) -
-// never from a layout event.
+// property. It is entered from the lifecycle entry points and
+// from the window-creation hooks, always dispatched to the
+// taskbar UI thread - never from a layout event.
 // ---------------------------------------------------------------------------
 
-// Readiness aggregation for one application pass (new in v0.7).
-// The retry loop in StartApplyWithRetry uses this to decide
+// Readiness aggregation for one application pass (new in v0.7,
+// kept in v0.8). The timer retry uses this to decide
 // whether the taskbar UI was fully up: right after Explorer
 // (re)starts, the mod is loaded before the taskbar's XAML tree
 // exists, so the one-shot application of v0.6.1 found no (or
@@ -916,8 +955,8 @@ struct ApplyStats {
 // was obtained for EVERY taskbar window, and the repeater was
 // found (and its margin written, or already equal to the
 // target) on EVERY in-scope taskbar. Out-of-scope taskbars do
-// not need a repeater. The "no taskbar window at all" case is
-// reported by RunApplyOnce as all-zero stats, never ready.
+// not need a repeater. A thread with no taskbar window yields
+// all-zero stats, never ready.
 bool IsReady(const ApplyStats& stats) {
     return stats.taskbarCount >= 1 &&
            stats.xamlRootCount >= stats.taskbarCount &&
@@ -1015,7 +1054,7 @@ void ApplyOneRoot(XamlRoot xamlRoot,
         int trackedIndex =
             FindOrAddTrackedRepeater(repeater, currentMargin, &added);
         Thickness originalMargin =
-            TrackedRepeaters()[trackedIndex].originalMargin;
+            g_trackedRepeaters[trackedIndex].originalMargin;
         if (added) {
             LogMargin(taskbarLabel,
                       L"saved as this element's original Margin",
@@ -1158,154 +1197,310 @@ ApplyStats ApplyFromTaskbarThread() {
 }
 
 // ---------------------------------------------------------------------------
-// Retry-until-ready application (new in v0.7).
+// Window-creation hooks and timer retry (new in v0.8, replacing
+// the v0.7 worker-thread retry loop).
 //
-// The bug this fixes: in v0.6.1 the application ran exactly
-// once, from Wh_ModAfterInit / Wh_ModSettingsChanged. Right
-// after Explorer (re)starts, Windhawk loads this mod into the
-// new explorer process BEFORE the taskbar's XAML tree
-// (XamlRoot / TaskbarFrameRepeater) has been built, so that
-// single attempt found no (or only some) roots / repeaters and
-// the reservation silently stayed off until the next settings
-// change or mod toggle.
+// Why: the AI review of PR #6983 pointed out that (1) the v0.7
+// retry thread was detached and never joined, so it could still
+// be running mod code when Windhawk unloaded the DLL after
+// Wh_ModUninit returned - a crash risk, plus races between the
+// retry passes, the restore, and LoadSettings; and (2) taskbars
+// created after the first pass (monitor reconnect, docking,
+// sleep resume) never got the reservation.
 //
-// Now every application runs on a dedicated retry thread (NOT
-// a hook thread - hooks are still zero in this mod): it tries
-// immediately, and while the pass is not "ready" (see
-// IsReady) it retries with growing intervals for up to about
-// a minute. All XAML access still happens on the taskbar UI
-// thread via RunFromWindowThread - the retry thread itself
-// never touches XAML; it only sleeps and dispatches. A pass in
-// which the taskbar window does not exist yet counts as "not
-// ready" (all-zero stats) and never blocks.
+// The fix follows Taskbar Margin (taskbar-margin v1.0, GPL
+// v3.0, see the license note at the top of this file): hook
+// taskbar window creation, and retry on a DispatcherQueueTimer
+// that lives on the taskbar thread itself. No worker thread
+// exists anymore, so nothing can outlive the unload, and a
+// taskbar that appears at any time is applied to.
 //
-// Generation management: every StartApplyWithRetry call bumps
-// g_applyGeneration and captures the new value; a retry loop
-// exits as soon as its captured generation is stale, so a
-// settings change supersedes the previous loop instead of two
-// loops running concurrently. Wh_ModBeforeUninit sets
-// g_modStopping and bumps the generation BEFORE restoring, so
-// a retry can never re-apply margins while (or after) the
-// restore runs.
-//
-// Settings note: LoadSettings() runs on the caller thread
-// (Wh_ModAfterInit / Wh_ModSettingsChanged) before the retry
-// thread starts; the thread creation synchronizes-with the new
-// thread, so it observes the new values. A superseded loop
-// exits before its next pass, so no pass reads g_settings
-// while the next LoadSettings writes it.
+// The timer is thread_local (one per taskbar thread, as in
+// taskbar-margin), is only ever touched on that thread, and is
+// stopped on that thread from Wh_ModBeforeUninit via
+// RemoveSettings - the teardown shape the "Global objects and
+// process shutdown" wiki page (section 4) prescribes for
+// UI-thread objects.
 // ---------------------------------------------------------------------------
 
-std::atomic<bool> g_modStopping{false};
-std::atomic<unsigned int> g_applyGeneration{0};
+std::atomic<bool> g_unloading{false};
 
-// One application pass. Returns the readiness stats of the
-// pass; all-zero stats mean "no taskbar window yet" (or the
-// dispatch to the UI thread failed), which is never ready.
-// Runs on the retry thread; the actual work is dispatched to
-// the taskbar UI thread by RunFromWindowThread.
-ApplyStats RunApplyOnce() {
-    ApplyStats stats;
+thread_local winrt::Windows::System::DispatcherQueueTimer g_retryTimer{
+    nullptr};
+thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
+    g_retryTimerRevoker;
+thread_local int g_retryAttempts;
 
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd) {
-        // Either a folder-window explorer process (which never
-        // hosts a taskbar - same as v0.6.1, it just keeps
-        // retrying harmlessly until the attempts run out), or
-        // the taskbar window has not been created yet.
-        Wh_Log(L"No taskbar window in this explorer process "
-               L"(yet), counting this attempt as not ready");
-        return stats;
+constexpr int kMaxApplyAttempts = 60;
+constexpr int kApplyRetryIntervalMs = 500;
+
+void StopRetryTimer() {
+    if (g_retryTimer) {
+        try {
+            g_retryTimer.Stop();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"StopRetryTimer: error %08X: %s", ex.code(),
+                   ex.message().c_str());
+        }
     }
 
-    struct ApplyPassParam {
-        ApplyStats stats;
-    };
-    ApplyPassParam param;
-
-    if (!RunFromWindowThread(
-            hTaskbarWnd,
-            [](void* pParam) -> void {
-                auto* param = static_cast<ApplyPassParam*>(pParam);
-                param->stats = ApplyFromTaskbarThread();
-            },
-            &param)) {
-        Wh_Log(L"RunFromWindowThread failed");
-        return stats;
-    }
-
-    return param.stats;
+    g_retryTimerRevoker.revoke();
+    g_retryTimer = nullptr;
+    g_retryAttempts = 0;
 }
 
-void ApplyRetryLoop(unsigned int generation) {
-    // Growing intervals between attempts; with the immediate
-    // first attempt the last retry happens about a minute
-    // after load / settings change, then the loop gives up.
-    static const int kRetryDelaysMs[] = {500, 1000, 2000, 3000,
-                                         5000, 8000, 10000, 15000,
-                                         20000};
+void RetryTimerTick(
+    winrt::Windows::System::DispatcherQueueTimer const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    if (g_unloading) {
+        StopRetryTimer();
+        return;
+    }
 
-    for (int attempt = 1;; attempt++) {
-        if (g_modStopping.load() ||
-            g_applyGeneration.load() != generation) {
-            Wh_Log(L"apply attempt %d: superseded or stopping, "
-                   L"retry loop exits",
-                   attempt);
-            return;
-        }
+    ApplyStats stats = ApplyFromTaskbarThread();
+    if (IsReady(stats)) {
+        Wh_Log(L"apply: ready on timer attempt %d", g_retryAttempts + 1);
+        StopRetryTimer();
+        return;
+    }
 
-        ApplyStats stats = RunApplyOnce();
-        bool ready = IsReady(stats);
-        Wh_Log(L"apply attempt %d: taskbars=%d, roots=%d, "
-               L"inScopeApplied=%d/%d -> %s",
-               attempt, stats.taskbarCount, stats.xamlRootCount,
-               stats.inScopeApplied, stats.inScopeTotal,
-               ready ? L"ready" : L"not ready");
-        if (ready) {
-            Wh_Log(L"apply: ready after %d attempt(s)", attempt);
-            return;
-        }
-
-        if (attempt > (int)ARRAYSIZE(kRetryDelaysMs)) {
-            Wh_Log(L"apply: giving up after %d attempts, the "
-                   L"taskbar UI did not become ready in time "
-                   L"(toggle the mod or change any setting to "
-                   L"retry)",
-                   attempt);
-            return;
-        }
-
-        // Interruptible sleep: bail out promptly when a newer
-        // generation starts or the mod is unloading, instead
-        // of sleeping through the whole delay.
-        int delayMs = kRetryDelaysMs[attempt - 1];
-        for (int sleptMs = 0; sleptMs < delayMs; sleptMs += 50) {
-            if (g_modStopping.load() ||
-                g_applyGeneration.load() != generation) {
-                Wh_Log(L"apply: retry wait interrupted "
-                       L"(superseded or stopping)");
-                return;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
+    if (++g_retryAttempts >= kMaxApplyAttempts) {
+        Wh_Log(L"apply: giving up after %d timer attempts, the "
+               L"taskbar UI did not become ready in time (toggle "
+               L"the mod or change any setting to retry)",
+               g_retryAttempts);
+        StopRetryTimer();
     }
 }
 
-// Starts a new retry-driven application, superseding any
-// retry loop that is still running. Safe to call from
-// Wh_ModAfterInit and Wh_ModSettingsChanged: it returns
-// immediately, the attempts run on a detached thread.
-void StartApplyWithRetry() {
-    unsigned int generation = g_applyGeneration.fetch_add(1) + 1;
+void StartRetryTimer() {
+    if (g_retryTimer) {
+        return;
+    }
+
     try {
-        std::thread(ApplyRetryLoop, generation).detach();
-    } catch (...) {
-        // Thread creation failed (extremely unlikely): fall
-        // back to the v0.6.1 behavior of a single synchronous
-        // attempt instead of never applying at all.
-        Wh_Log(L"StartApplyWithRetry: could not start the retry "
-               L"thread, applying once synchronously");
-        RunApplyOnce();
+        auto dispatcherQueue =
+            winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+        if (!dispatcherQueue) {
+            Wh_Log(L"StartRetryTimer: no dispatcher queue on this "
+                   L"thread, cannot retry");
+            return;
+        }
+
+        g_retryTimer = dispatcherQueue.CreateTimer();
+        g_retryTimer.IsRepeating(true);
+        g_retryTimer.Interval(
+            std::chrono::milliseconds{kApplyRetryIntervalMs});
+        g_retryTimerRevoker =
+            g_retryTimer.Tick(winrt::auto_revoke, RetryTimerTick);
+        g_retryTimer.Start();
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"StartRetryTimer: error %08X: %s", ex.code(),
+               ex.message().c_str());
+    }
+}
+
+// One application trigger on the taskbar thread: a single pass,
+// and if the taskbar UI is not fully up yet, the retry timer
+// keeps trying from this thread.
+void ApplySettingsOnTaskbarThread() {
+    ApplyStats stats = ApplyFromTaskbarThread();
+    if (!IsReady(stats) && !g_unloading) {
+        Wh_Log(L"apply: taskbar UI not ready yet (taskbars=%d, "
+               L"roots=%d, inScopeApplied=%d/%d), retrying on a "
+               L"timer",
+               stats.taskbarCount, stats.xamlRootCount,
+               stats.inScopeApplied, stats.inScopeTotal);
+        StartRetryTimer();
+    }
+}
+
+void ApplySettings(HWND hTaskbarWnd) {
+    RunFromWindowThread(
+        hTaskbarWnd,
+        [](void* pParam) -> void { ApplySettingsOnTaskbarThread(); },
+        nullptr);
+}
+
+void RestoreFromTaskbarThread();  // defined below
+
+void RemoveSettingsFromTaskbarThread() {
+    StopRetryTimer();
+    RestoreFromTaskbarThread();
+}
+
+void RemoveSettings(HWND hTaskbarWnd) {
+    RunFromWindowThread(
+        hTaskbarWnd,
+        [](void* pParam) -> void { RemoveSettingsFromTaskbarThread(); },
+        nullptr);
+}
+
+// Every taskbar window of this process, visiting each taskbar
+// thread only once (the apply pass already covers all the
+// taskbars on the thread it runs on). Adapted from
+// taskbar-margin.
+void ForEachTaskbarWindow(void (*proc)(HWND)) {
+    struct ENUM_PARAM {
+        void (*proc)(HWND);
+        std::vector<DWORD> visitedThreadIds;
+    };
+
+    ENUM_PARAM param{proc};
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* param = reinterpret_cast<ENUM_PARAM*>(lParam);
+
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) ==
+                0) {
+                return TRUE;
+            }
+
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") != 0 &&
+                _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") != 0) {
+                return TRUE;
+            }
+
+            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+            if (std::find(param->visitedThreadIds.begin(),
+                          param->visitedThreadIds.end(),
+                          dwThreadId) != param->visitedThreadIds.end()) {
+                return TRUE;
+            }
+
+            param->visitedThreadIds.push_back(dwThreadId);
+            param->proc(hWnd);
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&param));
+}
+
+// A taskbar window was just created in this process. The XAML
+// tree does not exist yet at this point; ApplySettings runs the
+// first pass on the new window's thread right away and the
+// retry timer takes it from there. Adapted from taskbar-margin.
+void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName) {
+    if (!lpClassName) {
+        return;
+    }
+
+    // Class names can also be atoms; only compare textual ones.
+    BOOL bTextualClassName =
+        ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (!bTextualClassName) {
+        return;
+    }
+
+    if (_wcsicmp(lpClassName, L"Shell_TrayWnd") == 0 ||
+        _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0) {
+        Wh_Log(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        ApplySettings(hWnd);
+    }
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName, DWORD dwStyle,
+                                 int X, int Y, int nWidth, int nHeight,
+                                 HWND hWndParent, HMENU hMenu,
+                                 HINSTANCE hInstance, PVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName,
+                                         lpWindowName, dwStyle, X, Y,
+                                         nWidth, nHeight, hWndParent,
+                                         hMenu, hInstance, lpParam);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName);
+
+    return hWnd;
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam,
+    DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName, DWORD dwStyle,
+                                    int X, int Y, int nWidth, int nHeight,
+                                    HWND hWndParent, HMENU hMenu,
+                                    HINSTANCE hInstance, PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth,
+        nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName);
+
+    return hWnd;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam,
+    DWORD dwBand, DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName, DWORD dwStyle,
+                                      int X, int Y, int nWidth, int nHeight,
+                                      HWND hWndParent, HMENU hMenu,
+                                      HINSTANCE hInstance, PVOID lpParam,
+                                      DWORD dwBand, DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth,
+        nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand,
+        dwTypeFlags);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName);
+
+    return hWnd;
+}
+
+void HookWindowCreationFunctions() {
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
+
+    HMODULE user32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!user32Module) {
+        return;
+    }
+
+    auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+        user32Module, "CreateWindowInBand");
+    if (pCreateWindowInBand) {
+        WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
+                                       CreateWindowInBand_Hook,
+                                       &CreateWindowInBand_Original);
+    }
+
+    auto pCreateWindowInBandEx = (CreateWindowInBandEx_t)GetProcAddress(
+        user32Module, "CreateWindowInBandEx");
+    if (pCreateWindowInBandEx) {
+        WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
+                                       CreateWindowInBandEx_Hook,
+                                       &CreateWindowInBandEx_Original);
     }
 }
 
@@ -1319,7 +1514,7 @@ void StartApplyWithRetry() {
 void RestoreFromTaskbarThread() {
     PruneStaleTrackedRepeaters();
 
-    auto& tracked = TrackedRepeaters();
+    auto& tracked = g_trackedRepeaters;
     int restoredCount = 0;
     int alreadyOriginalCount = 0;
 
@@ -1430,9 +1625,9 @@ bool HookTaskbarDllSymbols() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    Wh_Log(L"Taskbar Reserve Space for FluentFlyout v0.7 "
-           L"(adds retry-until-ready re-application after load; "
-           L"retry logic not yet tested)");
+    Wh_Log(L"Taskbar Reserve Space for FluentFlyout v0.8 "
+           L"(window-creation hooks + timer retry on the taskbar "
+           L"thread)");
     Wh_Log(L"reservedWidth=%d, monitorScope=%s, "
            L"specificMonitorDevice=%s",
            g_settings.reservedWidth, MonitorScopeName(),
@@ -1444,48 +1639,25 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    HookWindowCreationFunctions();
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    StartApplyWithRetry();
+    // Taskbars that already exist (the usual case when the mod
+    // is enabled while Explorer is running). Taskbars created
+    // later are covered by the window-creation hooks.
+    ForEachTaskbarWindow(ApplySettings);
 }
 
 void Wh_ModBeforeUninit() {
-    // Stop any in-flight retry loop first (v0.7): a retry that
-    // is still waiting for the taskbar to become ready must not
-    // re-apply margins while - or after - the restore below
-    // runs. Retry loops notice within ~50ms and exit without
-    // starting another pass.
-    g_modStopping = true;
-    g_applyGeneration.fetch_add(1);
-
-    if (TrackedRepeaters().empty()) {
-        Wh_Log(L"Wh_ModBeforeUninit: no tracked repeaters, "
-               L"nothing to restore");
-        return;
-    }
-
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd) {
-        Wh_Log(L"Wh_ModBeforeUninit: this explorer process does not "
-               L"host the taskbar, cannot restore (nothing was "
-               L"applied from this process)");
-        return;
-    }
-
-    if (!RunFromWindowThread(
-            hTaskbarWnd,
-            [](void* pParam) -> void { RestoreFromTaskbarThread(); },
-            nullptr)) {
-        Wh_Log(L"Wh_ModBeforeUninit: RunFromWindowThread failed, "
-               L"margins could not be restored by the mod (restart "
-               L"Explorer to clear them)");
-    }
-}
-
-void Wh_ModUninit() {
-    Wh_Log(L"v0.7 unloaded");
+    // Stop the retry timers and restore the saved original
+    // margins, on each taskbar thread. After this returns, no
+    // code of this mod runs on any thread: there is no worker
+    // thread, and the timers are stopped above.
+    g_unloading = true;
+    ForEachTaskbarWindow(RemoveSettings);
 }
 
 void Wh_ModSettingsChanged() {
@@ -1494,5 +1666,5 @@ void Wh_ModSettingsChanged() {
            L"specificMonitorDevice=%s",
            g_settings.reservedWidth, MonitorScopeName(),
            g_settings.specificMonitorDevice);
-    StartApplyWithRetry();
+    ForEachTaskbarWindow(ApplySettings);
 }
