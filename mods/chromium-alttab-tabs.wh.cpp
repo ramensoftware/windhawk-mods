@@ -7,7 +7,7 @@
 // @github          https://github.com/Dszae
 // @homepage        https://github.com/Dszae/AltTabs
 // @include         explorer.exe
-// @compilerOptions -luiautomation -ldwmapi -lshlwapi -lole32 -loleaut32 -std=c++20
+// @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,7 +59,53 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 #include <dwmapi.h>
 #include <psapi.h>
 #include <shlwapi.h>
-#include <atlbase.h>
+
+// Lightweight standard Win32 COM Smart Pointer (MinGW & MSVC compatible, replacing ATL)
+template <typename T>
+class SafeComPtr {
+    T* m_ptr = nullptr;
+public:
+    SafeComPtr() = default;
+    SafeComPtr(T* ptr) : m_ptr(ptr) { if (m_ptr) m_ptr->AddRef(); }
+    ~SafeComPtr() { Release(); }
+
+    SafeComPtr(const SafeComPtr& other) : m_ptr(other.m_ptr) {
+        if (m_ptr) m_ptr->AddRef();
+    }
+    SafeComPtr& operator=(const SafeComPtr& other) {
+        if (this != &other) {
+            Release();
+            m_ptr = other.m_ptr;
+            if (m_ptr) m_ptr->AddRef();
+        }
+        return *this;
+    }
+
+    SafeComPtr(SafeComPtr&& other) noexcept : m_ptr(other.m_ptr) {
+        other.m_ptr = nullptr;
+    }
+    SafeComPtr& operator=(SafeComPtr&& other) noexcept {
+        if (this != &other) {
+            Release();
+            m_ptr = other.m_ptr;
+            other.m_ptr = nullptr;
+        }
+        return *this;
+    }
+
+    void Release() {
+        if (m_ptr) {
+            m_ptr->Release();
+            m_ptr = nullptr;
+        }
+    }
+
+    T* Get() const { return m_ptr; }
+    T** operator&() { Release(); return &m_ptr; }
+    T* operator->() const { return m_ptr; }
+    operator T*() const { return m_ptr; }
+    operator bool() const { return m_ptr != nullptr; }
+};
 
 #include <string>
 #include <vector>
@@ -103,7 +149,7 @@ struct TabItem {
     HWND browserHwnd = nullptr;
     RECT boundingRect = { 0, 0, 0, 0 };
     bool isSelected = false;
-    CComPtr<IUIAutomationElement> uiaElement;
+    SafeComPtr<IUIAutomationElement> uiaElement;
     HICON hFavicon = nullptr;
 
     TabItem() = default;
@@ -244,12 +290,12 @@ public:
 
         // 1. Try UIA SelectionItemPattern
         if (tab->uiaElement) {
-            CComPtr<IUIAutomationSelectionItemPattern> pSel;
+            SafeComPtr<IUIAutomationSelectionItemPattern> pSel;
             if (SUCCEEDED(tab->uiaElement->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_IUIAutomationSelectionItemPattern, (void**)&pSel)) && pSel) {
                 if (SUCCEEDED(pSel->Select())) return true;
             }
 
-            CComPtr<IUIAutomationInvokePattern> pInv;
+            SafeComPtr<IUIAutomationInvokePattern> pInv;
             if (SUCCEEDED(tab->uiaElement->GetCurrentPatternAs(UIA_InvokePatternId, IID_IUIAutomationInvokePattern, (void**)&pInv)) && pInv) {
                 if (SUCCEEDED(pInv->Invoke())) return true;
             }
@@ -333,7 +379,7 @@ private:
     void WorkerThread() {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-        CComPtr<IUIAutomation> pUIA;
+        SafeComPtr<IUIAutomation> pUIA;
         if (FAILED(CoCreateInstance(CLSID_CUIAutomation8, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&pUIA)) || !pUIA) {
             CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&pUIA);
         }
@@ -346,10 +392,10 @@ private:
         VARIANT varProp;
         varProp.vt = VT_I4;
         varProp.lVal = UIA_TabItemControlTypeId;
-        CComPtr<IUIAutomationCondition> pTabCond;
+        SafeComPtr<IUIAutomationCondition> pTabCond;
         pUIA->CreatePropertyCondition(UIA_ControlTypePropertyId, varProp, &pTabCond);
 
-        CComPtr<IUIAutomationCacheRequest> pCache;
+        SafeComPtr<IUIAutomationCacheRequest> pCache;
         pUIA->CreateCacheRequest(&pCache);
         pCache->AddProperty(UIA_NamePropertyId);
         pCache->AddProperty(UIA_BoundingRectanglePropertyId);
@@ -416,17 +462,17 @@ private:
         std::vector<std::shared_ptr<TabItem>> extractedTabs;
 
         for (HWND bHwnd : browserWindows) {
-            CComPtr<IUIAutomationElement> pWinElem;
+            SafeComPtr<IUIAutomationElement> pWinElem;
             if (FAILED(pUIA->ElementFromHandle(bHwnd, &pWinElem)) || !pWinElem) continue;
 
-            CComPtr<IUIAutomationElementArray> pArray;
+            SafeComPtr<IUIAutomationElementArray> pArray;
             if (FAILED(pWinElem->FindAllBuildCache(TreeScope_Descendants, pCond, pCache, &pArray)) || !pArray) continue;
 
             int count = 0;
             pArray->get_Length(&count);
 
             for (int i = 0; i < count; ++i) {
-                CComPtr<IUIAutomationElement> pElem;
+                SafeComPtr<IUIAutomationElement> pElem;
                 if (FAILED(pArray->GetElement(i, &pElem)) || !pElem) continue;
 
                 auto tab = std::make_shared<TabItem>();
@@ -442,7 +488,7 @@ private:
                 if (tab->title.empty() || tab->title == L"Close") continue;
 
                 BOOL isSel = FALSE;
-                CComPtr<IUIAutomationSelectionItemPattern> pSel;
+                SafeComPtr<IUIAutomationSelectionItemPattern> pSel;
                 if (SUCCEEDED(pElem->GetCachedPatternAs(UIA_SelectionItemPatternId, IID_IUIAutomationSelectionItemPattern, (void**)&pSel)) && pSel) {
                     pSel->get_CachedIsSelected(&isSel);
                 }
