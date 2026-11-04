@@ -38,7 +38,7 @@ stored, logged or sent anywhere else, and no credential is written down.
 pane and card sizes are saved in Windhawk's own storage for this mod, so they
 leave when the mod does. State an earlier version wrote into Outlook's own local
 storage is moved across the first time this one runs. Other Outlook windows
-that are already open pick up a change when they are reopened.
+that are already open pick up a change as soon as you move into them.
 
 **Folder pane:** Favorites in groups that fold (right-click a group header for
 its menu, drag a favorite to move it, Shift+right-click it to rename or move
@@ -175,6 +175,8 @@ the parts that depend on this most.
 #include <urlmon.h>
 
 #include <atomic>
+#include <cstdarg>
+#include <cstdio>
 #include <map>
 #include <string>
 #include <string_view>
@@ -391,44 +393,92 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const post = text => { try { channel.postMessage(text); } catch {} };
     let loaded = false;
     let onMessage = null;
-    let last = '';
     // The state is asked for rather than baked into this script: a window that reloads
-    // then starts from what is saved now, not from what was saved when it opened. The
-    // mod sends it again whenever any window saves, which is how two open windows stay
-    // in step. The pane draws with the defaults meanwhile and redraws when it lands;
-    // writes stay shut until then, so nothing saved is ever overwritten unread, and the
-    // state is taken up here rather than behind a timeout, however late it arrives.
+    // then starts from what is saved now, not from what was saved when it opened. It is
+    // asked for again whenever the window is shown or focused, and whenever the pointer
+    // or a drag comes into it, which is how two open windows stay in step: a window is
+    // brought up to date before it can be clicked, typed in or dropped on, so it does not
+    // save over a newer edit from another one. The mod answers only the window that asks.
+    // The pane draws with the defaults meanwhile and redraws when it lands; writes stay
+    // shut until then, so nothing saved is ever overwritten unread, and the state is
+    // taken up here rather than behind a timeout, however late it arrives.
+    // Questions and answers are counted. The mod answers in the order it is asked, so
+    // answer n is the state as it stood when question n arrived, and a key this page
+    // wrote after sending question n is newer than answers 1 to n: it is kept over them.
+    let sent = 0, received = 0, askedAt = 0, again = false, retry = 0;
+    const writtenAfter = new Map();  // key -> how many questions had gone out before it was written
+    const ask = () => {
+      // One question at a time; a trigger meanwhile asks once more after the answer. An
+      // answer that never came must not stop the asking for good, so after two seconds a
+      // second question goes out. The count is left alone: a late answer then still lines
+      // up with its question, and a lost one only makes later answers look older than
+      // they are, which keeps this page's writes a little longer, never shorter.
+      if (sent > received && Date.now() - askedAt < 2000) { again = true; return; }
+      sent++; askedAt = Date.now();
+      post('olkt-get\n' + S.key);
+    };
+    const onVisible = () => { if (!document.hidden) ask(); };
+    // Only an entry from outside the window counts, not moves between its own elements.
+    // Drag events carry no relatedTarget at all, so entries are also held to one question
+    // per 300ms.
+    const onEnter = ev => { if (!ev.relatedTarget && Date.now() - askedAt > 300) ask(); };
+    const noteWrite = key => { if (sent > received) writtenAfter.set(key, sent); };
     if (channel && S.key) {
       onMessage = ev => {
         const text = typeof ev.data === 'string' ? ev.data : '';
         if (!text.startsWith('olkt-state\n')) return;
-        const body = text.slice('olkt-state\n'.length);
-        if (body === last) return;  // nothing changed since the last one; no redraw
-        last = body;
+        const n = received = Math.min(received + 1, sent);
+        const next = new Map();
+        let parsed = true;
         try {
-          const saved = JSON.parse(body);
-          mem.clear();
-          for (const key of STORE_KEYS) if (typeof saved[key] === 'string') mem.set(key, saved[key]);
-        } catch { return; }
+          const saved = JSON.parse(text.slice('olkt-state\n'.length));
+          for (const key of STORE_KEYS) if (typeof saved[key] === 'string') next.set(key, saved[key]);
+        } catch { parsed = false; }
+        // A value this page wrote after this question went out is newer than the answer.
+        if (parsed) for (const [k, after] of writtenAfter) if (after >= n) { if (mem.has(k)) next.set(k, mem.get(k)); else next.delete(k); }
+        for (const [k, after] of writtenAfter) if (after <= n) writtenAfter.delete(k);
+        if (again) { again = false; ask(); }
+        // An answer that will not parse: a page still waiting for its first one asks again.
+        if (!parsed) { if (!loaded) { clearTimeout(retry); retry = setTimeout(ask, 1000); } return; }
+        // An answer usually holds nothing new: no redraw then.
+        const same = loaded && next.size === mem.size && [...next].every(([k, v]) => mem.get(k) === v);
+        if (same) return;
+        mem.clear();
+        for (const [k, v] of next) mem.set(k, v);
         loaded = true;
         try { applyState(); } catch {}
       };
       channel.addEventListener('message', onMessage);
-      post('olkt-get\n' + S.key);
+      window.addEventListener('focus', ask);
+      document.addEventListener('visibilitychange', onVisible);
+      // On the document, which exists from the start; this script runs before the page
+      // has an html element. Both events bubble up to it as the pointer or a drag comes in.
+      document.addEventListener('mouseover', onEnter, true);
+      document.addEventListener('dragenter', onEnter, true);
+      ask();
     }
     return {
       getItem: key => (mem.has(key) ? mem.get(key) : null),
       setItem: (key, value) => {
         if (!loaded) return;
         mem.set(key, String(value));
+        noteWrite(key);
         post('olkt-set\n' + S.key + '\n' + key + '\n' + String(value));
       },
       removeItem: key => {
         if (!loaded) return;
         mem.delete(key);
+        noteWrite(key);
         post('olkt-set\n' + S.key + '\n' + key + '\n');
       },
-      stop() { if (channel && onMessage) { channel.removeEventListener('message', onMessage); onMessage = null; } },
+      stop() {
+        clearTimeout(retry);
+        window.removeEventListener('focus', ask);
+        document.removeEventListener('visibilitychange', onVisible);
+        document.removeEventListener('mouseover', onEnter, true);
+        document.removeEventListener('dragenter', onEnter, true);
+        if (channel && onMessage) { channel.removeEventListener('message', onMessage); onMessage = null; }
+      },
     };
   })();
   const stored = (key, fallback) => { try { const v = JSON.parse(store.getItem(key)); return Array.isArray(v) ? v : fallback; } catch { return fallback; } };
@@ -683,7 +733,17 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     out.push(`.olkt-menu button:disabled{opacity:.4;cursor:default}`);
     out.push(`.olkt-menu .olkt-sep{height:1px;margin:4px 6px;background:var(--colorNeutralStroke2,#3a3a3a)}`);
     out.push(`.olkt-menu .olkt-sub{padding:6px 12px 2px;font-size:11px;letter-spacing:.06em;color:var(--colorNeutralForeground3,#a3a3a3)}`);
-    out.push(`.olkt-tree{box-sizing:border-box!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:thin}`);
+    out.push(`.olkt-tree{box-sizing:border-box!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:auto!important;scrollbar-color:auto!important}`);
+    // A scrollbar like Outlook's own: thin, no arrows, a rounded thumb in the theme's stroke
+    // colour, shown while the pointer is over the tree. (scrollbar-width or scrollbar-color
+    // would switch these ::-webkit-scrollbar rules off, so neither is set.)
+    out.push(`.olkt-tree::-webkit-scrollbar{width:8px}`);
+    out.push(`.olkt-tree::-webkit-scrollbar-button{display:none;height:0}`);
+    // The track stops at the agenda's top edge, so the thumb never slides under it.
+    out.push(`.olkt-tree::-webkit-scrollbar-track{background:transparent;margin-bottom:var(--olkt-cover,0px)}`);
+    out.push(`.olkt-tree::-webkit-scrollbar-thumb{background-color:transparent;border:2px solid transparent;border-radius:4px;background-clip:padding-box}`);
+    out.push(`.olkt-tree:hover::-webkit-scrollbar-thumb{background-color:var(--colorNeutralStroke1,#666)}`);
+    out.push(`.olkt-tree::-webkit-scrollbar-thumb:hover{background-color:var(--colorNeutralStroke1Hover,#888)}`);
     out.push(`.olkt-tree > .customScrollBar{flex:none!important;height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}`);
     out.push(`.olkt-agenda{position:absolute;left:0;right:2px;bottom:0;z-index:15;box-sizing:border-box;display:flex;flex-direction:column;padding:0 8px 6px 6px;font-size:12px;color:var(--colorNeutralForeground1,#e6e6e6)}`);
     // Outlook hides the pane by sliding its own tree out; ours would stay behind.
@@ -1040,9 +1100,10 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   // its lower half to land first inside it. Outlook's own drag of the row is cancelled
   // for the press (the tree's order is ours; a native drop would only reorder Outlook's
   // hidden list). A press without movement stays a normal click.
-  // The drag holds names, not tree nodes: every save comes back from the mod as fresh
-  // state that replaces cfg.favorites, so a node taken at the press can be gone by the
-  // release. Names resolve against whatever tree is current when the drop lands.
+  // The drag holds names, not tree nodes: fresh state from the mod (asked for when the
+  // pointer comes into the window, for one) replaces cfg.favorites, so a node taken at
+  // the press can be gone by the release. Names resolve against whatever tree is
+  // current when the drop lands.
   const movable = name => name && !matchesAnyGroup(name) && !cfg.hide.includes(name);
   function onFavPress(ev) {
     const item = ev.button === 0 && ev.target.closest('[role="treeitem"]');
@@ -1815,6 +1876,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const cover = box.height ? Math.round(paneBottom - box.top) + 'px' : '';
     tree.style.paddingBottom = cover;
     tree.style.scrollPaddingBottom = cover;  // keyboard focus scrolls rows clear of it too
+    tree.style.setProperty('--olkt-cover', cover || '0px');
   }
 
   function bindGrip(grip) {
@@ -1913,7 +1975,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   function renameGroupSoon(g) {
     requestAnimationFrame(() => {
       const h = document.querySelector(`.olkt-head[data-group=${q(g.id)}]`);
-      // By id at commit: the save that created the group has come back as a new tree.
+      // By id at commit: fresh state may have replaced the tree while the box was open.
       if (h) rename(h, g.label, v => { const live = findGroup(g.id); if (v && live) { live.label = v; save(); } });
     });
   }
@@ -1939,8 +2001,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
 
   function groupMenu(g, header, x, y) {
     const at = locate(g);
-    // Each action finds the group by id when it runs; a save since the menu opened has
-    // replaced the tree, and a group another window deleted is left alone.
+    // Each action finds the group by id when it runs; fresh state since the menu opened
+    // may have replaced the tree, and a group another window deleted is left alone.
     const live = fn => () => { const cur = findGroup(g.id); if (cur) fn(cur); };
     showMenu(x, y, [
       { label: 'Rename group', run: () => rename(header, g.label, v => { const cur = findGroup(g.id); if (v && cur) { cur.label = v; save(); } }) },
@@ -1969,8 +2031,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   function folderMenu(node, item, x, y) {
     const at = locate(node);
     const original = (item.getAttribute('title') || node.folder).replace(/ - [\d,]+ items?( \([\d,]+ unread\))?$/, '');
-    // Each action looks its nodes up again when it runs: a save since the menu opened
-    // (placeUnplaced makes one) has replaced the tree these were read from.
+    // Each action looks its nodes up again when it runs: fresh state since the menu
+    // opened may have replaced the tree these were read from.
     const self = () => findFolder(node.folder) || node;
     const targets = [{ heading: 'MOVE TO' }, { label: 'Top level', indent: 0, disabled: !at || !at.parent, run: () => moveTo(self(), null) }];
     for (const { n: g, depth } of groups()) {
@@ -2016,8 +2078,6 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     return true;
   }
 
-  // Another Outlook window saved its edits: take them, so this window's next save
-  // cannot write back an older tree.
   // ==== calendar module ====
   // Left list: one row per account (the expanded account heading and "Show all" go, and
   // each account's "Calendar" row shows the account's short label); a narrower pane.
@@ -3080,7 +3140,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       clearInterval(agendaTimer);
       document.querySelectorAll(`${PANE} [role="tree"]`).forEach(n => {
         n.classList.remove('olkt-tree');
-        n.style.paddingBottom = ''; n.style.scrollPaddingBottom = '';
+        n.style.paddingBottom = ''; n.style.scrollPaddingBottom = ''; n.style.removeProperty('--olkt-cover');
       });
       document.querySelectorAll(OURS).forEach(n => n.remove());
       document.querySelectorAll('[data-olkt-favs]').forEach(n => n.removeAttribute('data-olkt-favs'));
@@ -3214,9 +3274,11 @@ void AddList(std::wstring& json, PCWSTR name, std::initializer_list<PCWSTR> fiel
 
 // Edits made inside Outlook (groups, renames, folds, account order, pane and card
 // sizes) are the mod's state, not Outlook's, so they live in Windhawk's storage and
-// leave with the mod. The page asks for them over the WebView's message channel and
-// sends each change back the same way, and every window is told when one lands (see
-// MessageReceived and BroadcastState).
+// leave with the mod. The page asks for them over the WebView's message channel, again
+// whenever its window is shown or focused or the pointer or a drag comes into it, and
+// sends each change back the same way (see MessageReceived). Only the asking window is
+// ever answered, on its own thread: nothing is pushed to other WebViews, which may be
+// showing third-party pages.
 constexpr PCWSTR kStoreKeys[] = {
     L"olkt-favorites", L"olkt-account-order", L"olkt-folds",        L"olkt-pane-width",
     L"olkt-agenda-height", L"olkt-other-height", L"olkt-other-split", L"olkt-other-folds",
@@ -3400,9 +3462,6 @@ void StoreValue(std::wstring_view name, std::wstring_view text) {
     ReleaseSRWLockExclusive(&g_storeLock);
 }
 
-// Defined with the thread helpers it needs, at the end of the file.
-void BroadcastState();
-
 // A line the page sent, once the sender has been vouched for:
 //   olkt-get <key>                 asks for the saved state, answered on the same channel
 //   olkt-set <key> <name> <value>  writes one value; an empty value deletes it
@@ -3425,10 +3484,9 @@ void HandleMessage(IUnknown* sender, PCWSTR text) {
         message.remove_prefix(line + 1);
         size_t name = message.find(L'\n');
         if (name == std::wstring_view::npos) return;
+        // Stored only. Another open window takes it up by asking, when it is shown or
+        // focused or the pointer or a drag comes into it.
         StoreValue(message.substr(0, name), message.substr(name + 1));
-        // Every window, not only the one that wrote: a second window would otherwise go
-        // on showing what it read at startup and then save that over this.
-        BroadcastState();
         return;
     }
     std::wstring answer = L"olkt-state\n" + StateJson();
@@ -3895,36 +3953,6 @@ void WINAPI ReleaseViewOnThread(PVOID param) {
     ReleaseView(*(const PageView*)param, true);
 }
 
-struct StatePost {
-    IUnknown* webview;
-    const wchar_t* text;
-};
-
-void WINAPI PostStateOnThread(PVOID param) {
-    auto* post = (StatePost*)param;
-    using Post_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPCWSTR);
-    reinterpret_cast<Post_t>(Slot(post->webview, kWebView_PostWebMessageAsString))(post->webview, post->text);
-}
-
-// Sends the state every window now shares, each on its own thread. The list is copied
-// under the lock and the WebViews held across the sends, so a window closing half way
-// through cannot pull one out from under us.
-void BroadcastState() {
-    std::wstring text = L"olkt-state\n" + StateJson();
-    std::vector<PageView> views;
-    AcquireSRWLockShared(&g_viewsLock);
-    for (const PageView& view : g_views) {
-        view.webview->AddRef();
-        views.push_back(view);
-    }
-    ReleaseSRWLockShared(&g_viewsLock);
-    for (const PageView& view : views) {
-        StatePost post{view.webview, text.c_str()};
-        RunForView(view, PostStateOnThread, &post);
-        view.webview->Release();
-    }
-}
-
 // Runs while the hooks are still in place, so every open Outlook window gives the script
 // back before the DLL goes: the styling, the timers and the wrapped fetch all stop at
 // once, with no restart needed.
@@ -3960,7 +3988,7 @@ void Wh_ModSettingsChanged() {
 }
 
 // Runs after Windhawk has removed the hooks, so no new handlers appear. Waits up to
-// 5 seconds for WebView2 to release the ones it still holds before the DLL unloads.
+// two minutes for WebView2 to release the ones it still holds before the DLL unloads.
 void Wh_ModUninit() {
     // Every view was torn down on its own thread above, so what is left is completion
     // handlers for windows that were being created during the disable. WebView2 lets
