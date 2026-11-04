@@ -1198,9 +1198,6 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
         }
         Track t = it->second;
         it = g_state.tracks.erase(it);
-        if (g_state.armed) {
-            Wh_Log(L"Lift %u: maxDist %.2f mm, hand %.2f mm", id, t.maxDist, g_state.travel - t.travelLand);
-        }
         g_state.lastLossTime = now;
         if (g_state.pairScroll && (id == g_state.scrollA || id == g_state.scrollB)) {
             g_state.pairScroll = false;
