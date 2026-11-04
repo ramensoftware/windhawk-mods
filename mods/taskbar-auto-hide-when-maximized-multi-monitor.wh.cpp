@@ -16,7 +16,7 @@
 // https://github.com/ramensoftware/windhawk-mods/issues
 //
 // For pull requests, development takes place here:
-// https://github.com/m417z/my-windhawk-mods
+// https://github.com/Saderius/multi-monitor-taskbar-autohide
 
 // ==WindhawkModReadme==
 /*
@@ -229,50 +229,16 @@ enum {
 constexpr WCHAR kUpdateTaskbarStatePendingTickCount[] =
     L"Windhawk_UpdateTaskbarStatePendingTickCount_" WH_MOD_ID;
 
-constexpr WCHAR kNonRudeHwndProp[] = L"NonRudeHWND";
-constexpr WCHAR kModNonRudeMarkerProp[] =
-    L"Windhawk_NonRude_" WH_MOD_ID;
-
-constexpr WPARAM kShellHookFullscreenEnter = 0x35;
-constexpr WPARAM kShellHookFullscreenExit = 0x36;
-
 static const UINT g_getTaskbarRectRegisteredMsg =
     RegisterWindowMessage(L"Windhawk_GetTaskbarRect_" WH_MOD_ID);
 
 static const UINT g_updateTaskbarStateRegisteredMsg =
     RegisterWindowMessage(L"Windhawk_UpdateTaskbarState_" WH_MOD_ID);
 
-static const UINT g_shellHookRegisteredMsg =
-    RegisterWindowMessage(L"SHELLHOOK");
-
-std::mutex g_nonRudeWindowsMutex;
-std::unordered_set<HWND> g_nonRudeWindows;
-
 enum {
     kTrayUITimerHide = 2,
     kTrayUITimerUnhide = 3,
 };
-
-// Timing and diagnostic trace log
-void TraceLog(PCWSTR format, ...) {
-    WCHAR buffer[512];
-    va_list args;
-    va_start(args, format);
-    vswprintf_s(buffer, ARRAYSIZE(buffer), format, args);
-    va_end(args);
-
-    Wh_Log(L"%s", buffer);
-}
-
-struct EdgeTiming {
-    ULONGLONG tEdgeTouch = 0;
-    ULONGLONG tTimerArmed = 0;
-    int64_t timerDelayMs = 0;
-    ULONGLONG tExpandCalled = 0;
-    uint64_t lastTarget = 0;
-};
-static EdgeTiming g_edgeTiming;
-static std::mutex g_edgeTimingMutex;
 
 #if __cplusplus < 202302L
 // Missing in older MinGW headers.
@@ -594,15 +560,13 @@ bool IsTaskbarOnScreen(HWND hTaskbarWnd, HMONITOR monitor) {
 bool IsTaskbarFullyShown(HWND hTaskbarWnd, HMONITOR monitor) {
     if (g_winVersion >= WinVersion::Win11 && !g_settings.oldTaskbarOnWin11) {
         if (ViewCoordinator_IsExpanded_Original) {
-            void* pViewCoord = nullptr;
             auto it = g_taskbarToViewCoordinator.find(hTaskbarWnd);
             if (it != g_taskbarToViewCoordinator.end() && it->second) {
-                pViewCoord = it->second;
-            } else if (!g_taskbarToViewCoordinator.empty()) {
-                pViewCoord = g_taskbarToViewCoordinator.begin()->second;
-            }
-            if (pViewCoord) {
-                return ViewCoordinator_IsExpanded_Original(pViewCoord, hTaskbarWnd);
+                try {
+                    return ViewCoordinator_IsExpanded_Original(it->second, hTaskbarWnd);
+                } catch (...) {
+                    // Fall back to geometric measurement if XAML coordinator throws
+                }
             }
         }
     }
@@ -953,145 +917,6 @@ bool IsMaximizedOrCoveringApp(HWND hWnd, const RECT& rcMonitor) {
     return false;
 }
 
-void NotifyShellRudeStateChanged(HWND hWnd, bool isRude) {
-    if (g_shellHookRegisteredMsg) {
-        DWORD recipients = BSM_APPLICATIONS;
-        BroadcastSystemMessage(
-            BSF_POSTMESSAGE, &recipients, g_shellHookRegisteredMsg,
-            isRude ? kShellHookFullscreenEnter : kShellHookFullscreenExit,
-            (LPARAM)hWnd);
-    }
-
-    NotifyWinEvent(EVENT_OBJECT_LOCATIONCHANGE, hWnd, OBJID_WINDOW,
-                   CHILDID_SELF);
-}
-
-// Frameless maximized windows (e.g. Electron apps with frame:false such as
-// ChatGPT, or Steam's custom Win32 frame) omit Chromium's 2 px auto-hide edge
-// inset, so their client rect equals rcMonitor when auto-hide is on. Windows
-// then classifies them as fullscreen ("rude") windows, stripping WS_EX_TOPMOST
-// from the taskbar and setting TaskbarModel::IsFullscreenWindowHidingTaskbar
-// so edge hover cannot reveal the bar. Marking such WS_MAXIMIZE windows with
-// the shell's NonRudeHWND property exempts them while preserving fullscreen
-// behavior whenever WS_MAXIMIZE is cleared (e.g. F11 or games).
-void EnsureMaximizedWindowNonRude(HWND hWnd, const RECT& rcMonitor) {
-    if (!IsMaximizedOrCoveringApp(hWnd, rcMonitor)) {
-        return;
-    }
-
-    bool hasModMarker = GetProp(hWnd, kModNonRudeMarkerProp) != nullptr;
-    if (hasModMarker) {
-        bool alreadyTracked = false;
-        {
-            std::lock_guard<std::mutex> guard(g_nonRudeWindowsMutex);
-            alreadyTracked = !g_nonRudeWindows.insert(hWnd).second;
-        }
-        if (alreadyTracked) {
-            return;
-        }
-
-        SetProp(hWnd, kNonRudeHwndProp, (HANDLE)1);
-        NotifyShellRudeStateChanged(hWnd, false);
-        return;
-    }
-
-    // Respect NonRudeHWND if the application set it on its own.
-    if (GetProp(hWnd, kNonRudeHwndProp) != nullptr) {
-        return;
-    }
-
-    if (!SetProp(hWnd, kNonRudeHwndProp, (HANDLE)1)) {
-        return;
-    }
-
-    SetProp(hWnd, kModNonRudeMarkerProp, (HANDLE)1);
-    {
-        std::lock_guard<std::mutex> guard(g_nonRudeWindowsMutex);
-        g_nonRudeWindows.insert(hWnd);
-    }
-
-    Wh_Log(L"Marked maximized full-monitor window %08X as NonRudeHWND",
-           (DWORD)(ULONG_PTR)hWnd);
-    NotifyShellRudeStateChanged(hWnd, false);
-}
-
-void EnsureMaximizedWindowNonRudeOnItsMonitor(HWND hWnd) {
-    if (!IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) ||
-        IsWindowExcluded(hWnd)) {
-        return;
-    }
-
-    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO monitorInfo{
-        .cbSize = sizeof(MONITORINFO),
-    };
-    if (!GetMonitorInfo(monitor, &monitorInfo)) {
-        return;
-    }
-
-    if (!IsMaximizedOrCoveringApp(hWnd, monitorInfo.rcMonitor)) {
-        return;
-    }
-
-    EnsureMaximizedWindowNonRude(hWnd, monitorInfo.rcMonitor);
-}
-
-void RestoreWindowRudeStateIfNeeded(HWND hWnd) {
-    {
-        std::lock_guard<std::mutex> guard(g_nonRudeWindowsMutex);
-        if (!g_nonRudeWindows.erase(hWnd)) {
-            return;
-        }
-    }
-
-    if (!IsWindow(hWnd) || !GetProp(hWnd, kModNonRudeMarkerProp)) {
-        return;
-    }
-
-    RemoveProp(hWnd, kModNonRudeMarkerProp);
-    RemoveProp(hWnd, kNonRudeHwndProp);
-
-    Wh_Log(L"Removed NonRudeHWND from window %08X", (DWORD)(ULONG_PTR)hWnd);
-
-    if (IsWindowVisible(hWnd) && !IsWindowCloaked(hWnd) && !IsIconic(hWnd)) {
-        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        if (GetMonitorInfo(monitor, &monitorInfo) &&
-            DoesWindowClientCoverMonitor(hWnd, monitorInfo.rcMonitor)) {
-            NotifyShellRudeStateChanged(hWnd, true);
-        }
-    }
-}
-
-void CleanupNonRudeWindows(bool removeAll = false) {
-    std::vector<HWND> tracked;
-    {
-        std::lock_guard<std::mutex> guard(g_nonRudeWindowsMutex);
-        if (g_nonRudeWindows.empty()) {
-            return;
-        }
-        tracked.assign(g_nonRudeWindows.begin(), g_nonRudeWindows.end());
-    }
-
-    for (HWND hWnd : tracked) {
-        if (removeAll || !IsWindow(hWnd) || IsWindowExcluded(hWnd)) {
-            RestoreWindowRudeStateIfNeeded(hWnd);
-            continue;
-        }
-
-        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        if (!GetMonitorInfo(monitor, &monitorInfo) ||
-            !IsMaximizedOrCoveringApp(hWnd, monitorInfo.rcMonitor)) {
-            RestoreWindowRudeStateIfNeeded(hWnd);
-        }
-    }
-}
-
 bool IsCandidateRudeWindow(HWND hWnd) {
     if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
         return false;
@@ -1174,38 +999,6 @@ HWND FindTopMonitorCoveringWindow(HMONITOR monitor,
     return hTopCoveringWnd;
 }
 
-void SyncAllMaximizedNonRudeWindows() {
-    CleanupNonRudeWindows(false);
-
-    DWORD dwTaskbarThreadId = GetCurrentThreadId();
-    auto enumProc = [&](HWND hWnd) -> BOOL {
-        if (GetWindowThreadProcessId(hWnd, nullptr) == dwTaskbarThreadId) {
-            return TRUE;
-        }
-
-        if (IsCandidateRudeWindow(hWnd) && !IsWindowExcluded(hWnd)) {
-            HMONITOR monitor =
-                MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO monitorInfo{
-                .cbSize = sizeof(MONITORINFO),
-            };
-            if (GetMonitorInfo(monitor, &monitorInfo) &&
-                IsMaximizedOrCoveringApp(hWnd, monitorInfo.rcMonitor)) {
-                EnsureMaximizedWindowNonRude(hWnd, monitorInfo.rcMonitor);
-            }
-        }
-
-        return TRUE;
-    };
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto& proc = *reinterpret_cast<decltype(enumProc)*>(lParam);
-            return proc(hWnd);
-        },
-        reinterpret_cast<LPARAM>(&enumProc));
-}
-
 bool CanHideTaskbarForWindow(HWND hWnd,
                              HMONITOR monitor,
                              const MONITORINFO* monitorInfo,
@@ -1240,7 +1033,6 @@ bool CanHideTaskbarForWindow(HWND hWnd,
 
     if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) == monitor) {
-            EnsureMaximizedWindowNonRude(hWnd, monitorInfo->rcMonitor);
             return true;
         }
 
@@ -1260,9 +1052,6 @@ bool CanHideTaskbarForWindow(HWND hWnd,
     // Don't keep the taskbar shown for a fullscreen or monitor-covering window.
     if (EqualRect(&windowRect, &monitorInfo->rcMonitor) ||
         DoesWindowClientCoverMonitor(hWnd, monitorInfo->rcMonitor)) {
-        if (IsMaximizedOrCoveringApp(hWnd, monitorInfo->rcMonitor)) {
-            EnsureMaximizedWindowNonRude(hWnd, monitorInfo->rcMonitor);
-        }
         return true;
     }
 
@@ -1410,6 +1199,10 @@ bool TryHookTaskbarViewDll(bool forceAttempt = false) {
     if (!g_taskbarViewHookInProgress.compare_exchange_strong(expected, true)) {
         return false;
     }
+    if (g_taskbarViewDllLoaded) {
+        g_taskbarViewHookInProgress = false;
+        return false;
+    }
 
     DWORD now = GetTickCount();
     DWORD last = g_taskbarViewLastAttemptTick.load();
@@ -1448,6 +1241,11 @@ bool TryHookTaskbarViewDll(bool forceAttempt = false) {
 // creates itself are topmost, so restore it here unless a true (non-maximized)
 // fullscreen window currently owns that monitor.
 void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
+    if (!g_taskbarsPendingTopmostCheck.contains(hTaskbarWnd)) {
+        return;
+    }
+    g_taskbarsPendingTopmostCheck.erase(hTaskbarWnd);
+
     HMONITOR monitor = MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{
         .cbSize = sizeof(MONITORINFO),
@@ -1461,15 +1259,6 @@ void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
         return;
     }
 
-    int cloaked = 0;
-    if (SUCCEEDED(DwmGetWindowAttribute(hTaskbarWnd, DWMWA_CLOAKED, &cloaked,
-                                        sizeof(cloaked))) &&
-        cloaked != 0) {
-        BOOL cloak = FALSE;
-        DwmSetWindowAttribute(hTaskbarWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
-        Wh_Log(L"Uncloaked taskbar %08X", (DWORD)(ULONG_PTR)hTaskbarWnd);
-    }
-
     if (!(GetWindowLongPtr(hTaskbarWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
         SetWindowPos(hTaskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -1479,8 +1268,6 @@ void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
 }
 
 void AdjustAllTaskbars() {
-    SyncAllMaximizedNonRudeWindows();
-
     std::unordered_set<HWND> secondaryTaskbarWindows;
     HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
     if (hWnd) {
@@ -1641,68 +1428,6 @@ using ViewCoordinator_ForceCompleteEdgeGesture_t = void(WINAPI*)(void* pThis,
 ViewCoordinator_ForceCompleteEdgeGesture_t
     ViewCoordinator_ForceCompleteEdgeGesture_Original;
 
-using ViewCoordinator_HandlePointerEnteredScreenEdge_t =
-    void(WINAPI*)(void* pThis, uint64_t id, int inputDeviceKind);
-ViewCoordinator_HandlePointerEnteredScreenEdge_t
-    ViewCoordinator_HandlePointerEnteredScreenEdge_Original;
-void WINAPI ViewCoordinator_HandlePointerEnteredScreenEdge_Hook(
-    void* pThis, uint64_t id, int inputDeviceKind) {
-    ULONGLONG now = GetTickCount64();
-    {
-        std::lock_guard<std::mutex> lock(g_edgeTimingMutex);
-        g_edgeTiming.tEdgeTouch = now;
-        g_edgeTiming.tTimerArmed = 0;
-        g_edgeTiming.timerDelayMs = 0;
-        g_edgeTiming.tExpandCalled = 0;
-        g_edgeTiming.lastTarget = id;
-    }
-    TraceLog(L"[TIMING] ========================================================");
-    TraceLog(L"[TIMING] >>> 1. SCREEN EDGE TOUCH: target=0x%016llX device=%d at tick %llu",
-             id, inputDeviceKind, now);
-    ViewCoordinator_HandlePointerEnteredScreenEdge_Original(pThis, id, inputDeviceKind);
-}
-
-using SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_t =
-    void(WINAPI*)(void* pThis, int64_t durationTicks, void* pCallback);
-SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_t
-    SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_Original;
-void WINAPI SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_Hook(
-    void* pThis, int64_t durationTicks, void* pCallback) {
-    ULONGLONG now = GetTickCount64();
-    int64_t delayMs = durationTicks / 10000;
-    ULONGLONG sinceTouch = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_edgeTimingMutex);
-        g_edgeTiming.tTimerArmed = now;
-        g_edgeTiming.timerDelayMs = delayMs;
-        if (g_edgeTiming.tEdgeTouch) {
-            sinceTouch = now - g_edgeTiming.tEdgeTouch;
-        }
-    }
-    TraceLog(L"[TIMING] >>> 2. HOVER TIMER ARMED: delay=%lld ms (time since edge touch: %llu ms) at tick %llu",
-             delayMs, sinceTouch, now);
-    SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_Original(
-        pThis, durationTicks, pCallback);
-}
-
-using SingleTaskbarViewCoordinatorState_Expand_t = void(WINAPI*)(void* pThis);
-SingleTaskbarViewCoordinatorState_Expand_t
-    SingleTaskbarViewCoordinatorState_Expand_Original;
-void WINAPI SingleTaskbarViewCoordinatorState_Expand_Hook(void* pThis) {
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG waitFromTouch = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_edgeTimingMutex);
-        g_edgeTiming.tExpandCalled = now;
-        if (g_edgeTiming.tEdgeTouch) {
-            waitFromTouch = now - g_edgeTiming.tEdgeTouch;
-        }
-    }
-    TraceLog(L"[TIMING] >>> 3. EXPAND CALLED (slide animation starting): delay waited=%llu ms at tick %llu",
-             waitFromTouch, now);
-    SingleTaskbarViewCoordinatorState_Expand_Original(pThis);
-}
-
 void UpdateViewCoordinatorIsExpanded(HWND hWnd) {
     // From ViewCoordinator::HandleIsPointerOverTaskbarFrameChanged.
     constexpr int kReasonIsPointerOverTaskbarFrameChanged = 7;
@@ -1712,12 +1437,15 @@ void UpdateViewCoordinatorIsExpanded(HWND hWnd) {
         auto it = g_taskbarToViewCoordinator.find(hWnd);
         if (it != g_taskbarToViewCoordinator.end() && it->second) {
             pViewCoord = it->second;
-        } else if (!g_taskbarToViewCoordinator.empty()) {
-            pViewCoord = g_taskbarToViewCoordinator.begin()->second;
         }
         if (pViewCoord) {
-            ViewCoordinator_UpdateIsExpanded_Original(
-                pViewCoord, hWnd, kReasonIsPointerOverTaskbarFrameChanged);
+            try {
+                ViewCoordinator_UpdateIsExpanded_Original(
+                    pViewCoord, hWnd, kReasonIsPointerOverTaskbarFrameChanged);
+            } catch (...) {
+                Wh_Log(L"Exception in ViewCoordinator_UpdateIsExpanded for hWnd %08X",
+                       (DWORD)(ULONG_PTR)hWnd);
+            }
         }
     }
 }
@@ -1730,14 +1458,21 @@ void CollapseWin11Taskbar(HWND hWnd) {
     auto it = g_taskbarToViewCoordinator.find(hWnd);
     if (it != g_taskbarToViewCoordinator.end() && it->second) {
         pVC = it->second;
-    } else if (!g_taskbarToViewCoordinator.empty()) {
-        pVC = g_taskbarToViewCoordinator.begin()->second;
     }
-    if (pVC && ViewCoordinator_ForceCompleteEdgeGesture_Original) {
-        ViewCoordinator_ForceCompleteEdgeGesture_Original(pVC, hWnd);
+    if (!pVC) {
+        return;
     }
-    if (pVC && ViewCoordinator_CollapseTaskbar_Original) {
-        ViewCoordinator_CollapseTaskbar_Original(pVC, hWnd);
+
+    try {
+        if (ViewCoordinator_ForceCompleteEdgeGesture_Original) {
+            ViewCoordinator_ForceCompleteEdgeGesture_Original(pVC, hWnd);
+        }
+        if (ViewCoordinator_CollapseTaskbar_Original) {
+            ViewCoordinator_CollapseTaskbar_Original(pVC, hWnd);
+        }
+    } catch (...) {
+        Wh_Log(L"Exception in CollapseWin11Taskbar for hWnd %08X",
+               (DWORD)(ULONG_PTR)hWnd);
     }
     UpdateViewCoordinatorIsExpanded(hWnd);
 }
@@ -1865,7 +1600,6 @@ void WINAPI TrayUI_RudenessChanged_Hook(void* pThis, int isRude) {
         if (hCoveringWnd &&
             IsMaximizedOrCoveringApp(hCoveringWnd, monitorInfo.rcMonitor) &&
             !IsWindowExcluded(hCoveringWnd)) {
-            EnsureMaximizedWindowNonRude(hCoveringWnd, monitorInfo.rcMonitor);
             Wh_Log(
                 L"Suppressing TrayUI::RudenessChanged(1) for maximized/covering window "
                 L"%08X",
@@ -1892,7 +1626,6 @@ void WINAPI CSecondaryTray_OnRudeWindowStateChange_Hook(void* pThis,
         };
         if (GetMonitorInfo(monitor, &monitorInfo) &&
             IsMaximizedOrCoveringApp(hRudeWnd, monitorInfo.rcMonitor)) {
-            EnsureMaximizedWindowNonRude(hRudeWnd, monitorInfo.rcMonitor);
             Wh_Log(
                 L"Suppressing CSecondaryTray::OnRudeWindowStateChange for "
                 L"maximized/covering window %08X",
@@ -1988,22 +1721,6 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         bool wasFullyShown = GetProp(hWnd, L"Windhawk_WasFullyShown") != nullptr;
         if (fullyShown && !wasFullyShown) {
             SetProp(hWnd, L"Windhawk_WasFullyShown", (HANDLE)1);
-            ULONGLONG now = GetTickCount64();
-            ULONGLONG slideTime = 0;
-            ULONGLONG totalLatency = 0;
-            {
-                std::lock_guard<std::mutex> lock(g_edgeTimingMutex);
-                if (g_edgeTiming.tExpandCalled) {
-                    slideTime = now - g_edgeTiming.tExpandCalled;
-                }
-                if (g_edgeTiming.tEdgeTouch) {
-                    totalLatency = now - g_edgeTiming.tEdgeTouch;
-                }
-            }
-            TraceLog(L"[TIMING] >>> 4. TASKBAR FULLY SHOWN (Primary TrayUI): hWnd=0x%p! TOTAL LATENCY=%llu ms (HoverWait=%llu ms, SlideDuration=%llu ms)",
-                     hWnd, totalLatency, (totalLatency >= slideTime ? totalLatency - slideTime : 0), slideTime);
-            TraceLog(L"[TIMING] ========================================================");
-
             // When the taskbar is fully revealed while auto-hide is active,
             // ensure the retract timer is running so it collapses after the cursor leaves.
             bool keepShown = ShouldKeepTaskbarShown(hWnd, mon);
@@ -2012,7 +1729,6 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             }
         } else if (!fullyShown && wasFullyShown) {
             RemoveProp(hWnd, L"Windhawk_WasFullyShown");
-            TraceLog(L"[TIMING] <<< TASKBAR HIDDEN / RETRACTED (Primary TrayUI): hWnd=0x%p", hWnd);
         }
     } else if (Msg == WM_TIMER && wParam == kModRetractTimer) {
         HMONITOR monitor =
@@ -2032,18 +1748,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
 
         bool isExpanded = false;
         if (g_winVersion >= WinVersion::Win11 && !g_settings.oldTaskbarOnWin11) {
-            if (ViewCoordinator_IsExpanded_Original) {
-                void* pVC = nullptr;
-                auto it = g_taskbarToViewCoordinator.find(hWnd);
-                if (it != g_taskbarToViewCoordinator.end() && it->second) {
-                    pVC = it->second;
-                } else if (!g_taskbarToViewCoordinator.empty()) {
-                    pVC = g_taskbarToViewCoordinator.begin()->second;
-                }
-                if (pVC) {
-                    isExpanded = ViewCoordinator_IsExpanded_Original(pVC, hWnd);
-                }
-            }
+            isExpanded = IsTaskbarFullyShown(hWnd, monitor);
         } else {
             isExpanded = IsTaskbarOnScreen(hWnd, monitor);
         }
@@ -2070,26 +1775,14 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             Wh_Log(L"Retract timeout expired, collapsing taskbar %08X",
                    (DWORD)(ULONG_PTR)hWnd);
 
-            void* pVC = nullptr;
-            auto it = g_taskbarToViewCoordinator.find(hWnd);
-            if (it != g_taskbarToViewCoordinator.end() && it->second) {
-                pVC = it->second;
-            } else if (!g_taskbarToViewCoordinator.empty()) {
-                pVC = g_taskbarToViewCoordinator.begin()->second;
-            }
+            CollapseWin11Taskbar(hWnd);
 
-            if (pVC && ViewCoordinator_ForceCompleteEdgeGesture_Original) {
-                ViewCoordinator_ForceCompleteEdgeGesture_Original(pVC, hWnd);
+            if (EnsureAutoHideEnabled()) {
+                PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
+            } else if (g_autoHideEnableFailed) {
+                TrayUI__Hide_Original(pThis);
+                SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
             }
-
-            if (pVC && ViewCoordinator_CollapseTaskbar_Original) {
-                ViewCoordinator_CollapseTaskbar_Original(pVC, hWnd);
-            }
-
-            EnsureAutoHideEnabled();
-            TrayUI__Hide_Original(pThis);
-            UpdateViewCoordinatorIsExpanded(hWnd);
-            SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
             return 0;
         }
 
@@ -2119,21 +1812,6 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
 
         EnsureTaskbarTopmost(hWnd);
         g_taskbarsPendingTopmostCheck.erase(hWnd);
-
-        void* pTrayUI_ITrayComponentHost =
-            QueryViaVtable(pThis, TrayUI_vftable_ITrayComponentHost);
-        if (pTrayUI_ITrayComponentHost && TrayUI_RudenessChanged_Original) {
-            HMONITOR hMon =
-                GetTaskbarMonitor(hWnd, TrayUI_GetStuckMonitor_Original(pThis));
-            MONITORINFO monitorInfo{
-                .cbSize = sizeof(MONITORINFO),
-            };
-            HWND hCov = FindTopMonitorCoveringWindow(hMon, &monitorInfo);
-            if (!hCov || IsMaximizedOrCoveringApp(hCov, monitorInfo.rcMonitor)) {
-                void* pITrayUI = (char*)pTrayUI_ITrayComponentHost - 0x08;
-                TrayUI_RudenessChanged_Original(pITrayUI, 0);
-            }
-        }
 
         if (!g_wasAutoHideProcessed) {
             g_wasAutoHideProcessed = true;
@@ -2225,8 +1903,6 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         g_taskbarWndByObject[pThis] = hWnd;
     } else if (Msg == WM_NCDESTROY) {
         Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
-        KillTimer(hWnd, kModRetractTimer);
-        RemoveProp(hWnd, kModRetractLeftTickProp);
         RemoveProp(hWnd, L"Windhawk_WasFullyShown");
         g_taskbarsKeptShown.erase(pThis);
         g_taskbarToViewCoordinator.erase(hWnd);
@@ -2243,125 +1919,9 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         bool wasFullyShown = GetProp(hWnd, L"Windhawk_WasFullyShown") != nullptr;
         if (fullyShown && !wasFullyShown) {
             SetProp(hWnd, L"Windhawk_WasFullyShown", (HANDLE)1);
-            ULONGLONG now = GetTickCount64();
-            ULONGLONG slideTime = 0;
-            ULONGLONG totalLatency = 0;
-            {
-                std::lock_guard<std::mutex> lock(g_edgeTimingMutex);
-                if (g_edgeTiming.tExpandCalled) {
-                    slideTime = now - g_edgeTiming.tExpandCalled;
-                }
-                if (g_edgeTiming.tEdgeTouch) {
-                    totalLatency = now - g_edgeTiming.tEdgeTouch;
-                }
-            }
-            TraceLog(L"[TIMING] >>> 4. TASKBAR FULLY SHOWN (SecondaryTray): hWnd=0x%p! TOTAL LATENCY=%llu ms (HoverWait=%llu ms, SlideDuration=%llu ms)",
-                     hWnd, totalLatency, (totalLatency >= slideTime ? totalLatency - slideTime : 0), slideTime);
-            TraceLog(L"[TIMING] ========================================================");
-
-            // When the taskbar is fully revealed while auto-hide is active,
-            // ensure the retract timer is running so it collapses after the cursor leaves.
-            bool keepShown = ShouldKeepTaskbarShown(hWnd, mon);
-            if (!keepShown) {
-                SetTimer(hWnd, kModRetractTimer, 100, nullptr);
-            }
         } else if (!fullyShown && wasFullyShown) {
             RemoveProp(hWnd, L"Windhawk_WasFullyShown");
-            TraceLog(L"[TIMING] <<< TASKBAR HIDDEN / RETRACTED (SecondaryTray): hWnd=0x%p", hWnd);
         }
-    } else if (Msg == WM_TIMER && wParam == kModRetractTimer) {
-        if (g_settings.primaryMonitorOnly) {
-            KillTimer(hWnd, kModRetractTimer);
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        void* pCSecondaryTray_ISecondaryTray =
-            QueryViaVtable(pThis, CSecondaryTray_vftable_ISecondaryTray);
-
-        HMONITOR monitor = GetTaskbarMonitor(
-            hWnd,
-            CSecondaryTray_GetMonitor_Original(pCSecondaryTray_ISecondaryTray));
-
-        bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
-
-        if (keepShown) {
-            KillTimer(hWnd, kModRetractTimer);
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        if (IsCursorOverTaskbar(hWnd) || IsTaskbarOrChildForeground(hWnd)) {
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        bool isExpanded = false;
-        if (g_winVersion >= WinVersion::Win11 && !g_settings.oldTaskbarOnWin11) {
-            if (ViewCoordinator_IsExpanded_Original) {
-                void* pVC = nullptr;
-                auto it = g_taskbarToViewCoordinator.find(hWnd);
-                if (it != g_taskbarToViewCoordinator.end() && it->second) {
-                    pVC = it->second;
-                } else if (!g_taskbarToViewCoordinator.empty()) {
-                    pVC = g_taskbarToViewCoordinator.begin()->second;
-                }
-                if (pVC) {
-                    isExpanded = ViewCoordinator_IsExpanded_Original(pVC, hWnd);
-                }
-            }
-        } else {
-            isExpanded = IsTaskbarOnScreen(hWnd, monitor);
-        }
-
-        // If neither expanded nor on screen, stop the retract timer.
-        if (!isExpanded && !IsTaskbarOnScreen(hWnd, monitor)) {
-            KillTimer(hWnd, kModRetractTimer);
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        DWORD currentTick = GetTickCount();
-        DWORD leftTick = (DWORD)(ULONG_PTR)GetProp(hWnd, kModRetractLeftTickProp);
-        if (leftTick == 0) {
-            SetProp(hWnd, kModRetractLeftTickProp,
-                    (HANDLE)(ULONG_PTR)currentTick);
-            return 0;
-        }
-
-        if (currentTick - leftTick >= 400) {
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            KillTimer(hWnd, kModRetractTimer);
-
-            Wh_Log(L"Retract timeout expired, collapsing secondary taskbar %08X",
-                   (DWORD)(ULONG_PTR)hWnd);
-
-            void* pVC = nullptr;
-            auto it = g_taskbarToViewCoordinator.find(hWnd);
-            if (it != g_taskbarToViewCoordinator.end() && it->second) {
-                pVC = it->second;
-            } else if (!g_taskbarToViewCoordinator.empty()) {
-                pVC = g_taskbarToViewCoordinator.begin()->second;
-            }
-
-            if (pVC && ViewCoordinator_ForceCompleteEdgeGesture_Original) {
-                ViewCoordinator_ForceCompleteEdgeGesture_Original(pVC, hWnd);
-            }
-
-            if (pVC && ViewCoordinator_CollapseTaskbar_Original) {
-                ViewCoordinator_CollapseTaskbar_Original(pVC, hWnd);
-            }
-
-            EnsureAutoHideEnabled();
-            KillTimer(hWnd, kTrayUITimerHide);
-            CSecondaryTray__AutoHide_Original(pThis, true);
-            UpdateViewCoordinatorIsExpanded(hWnd);
-            SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
-            SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
-            return 0;
-        }
-
-        return 0;
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
         if (g_settings.primaryMonitorOnly) {
             if (wParam) {
@@ -2400,8 +1960,6 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
 
             if (keepShown) {
                 KillTimer(hWnd, kTrayUITimerUnhide);
-                KillTimer(hWnd, kModRetractTimer);
-                RemoveProp(hWnd, kModRetractLeftTickProp);
                 g_taskbarsKeptShown[pThis] = hWnd;
 
                 CSecondaryTray__Unhide_Original(pThis, 0, 0);
@@ -2427,11 +1985,8 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                 PostMessage(hWnd, WM_TIMER, kTrayUITimerHide, 0);
             } else if (g_autoHideEnableFailed) {
                 if (!IsCursorOverTaskbar(hWnd) && !IsTaskbarOrChildForeground(hWnd)) {
-                    CollapseWin11Taskbar(hWnd);
                     CSecondaryTray__AutoHide_Original(pThis, true);
                     SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
-                } else {
-                    SetTimer(hWnd, kModRetractTimer, 100, nullptr);
                 }
             }
         }
@@ -2536,24 +2091,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
         GetWindowLogInfo(hWnd).c_str());
 
 
-    if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY ||
-        event == EVENT_OBJECT_CLOAKED) {
-        RestoreWindowRudeStateIfNeeded(hWnd);
-    } else if (event == EVENT_OBJECT_LOCATIONCHANGE ||
-               event == EVENT_OBJECT_SHOW ||
-               event == EVENT_OBJECT_UNCLOAKED ||
-               event == EVENT_SYSTEM_FOREGROUND) {
-        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        if (GetMonitorInfo(monitor, &monitorInfo) &&
-            IsMaximizedOrCoveringApp(hWnd, monitorInfo.rcMonitor)) {
-            EnsureMaximizedWindowNonRude(hWnd, monitorInfo.rcMonitor);
-        } else {
-            RestoreWindowRudeStateIfNeeded(hWnd);
-        }
-    }
+
 
     // Maximizing is the case where the hide delay is noticeable, so don't wait
     // for the event batch below: re-evaluate right away. Checking the flag is a
@@ -2727,24 +2265,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             nullptr,
             true,
         },
-        {
-            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::HandlePointerEnteredScreenEdge(unsigned __int64,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
-            &ViewCoordinator_HandlePointerEnteredScreenEdge_Original,
-            ViewCoordinator_HandlePointerEnteredScreenEdge_Hook,
-            true,
-        },
-        {
-            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::SingleTaskbarViewCoordinatorState::StartExpandCollapseTimer(class std::chrono::duration<__int64,struct std::ratio<1,10000000> >,class std::function<void __cdecl(void)> const &))"},
-            &SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_Original,
-            SingleTaskbarViewCoordinatorState_StartExpandCollapseTimer_Hook,
-            true,
-        },
-        {
-            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::SingleTaskbarViewCoordinatorState::Expand(void))"},
-            &SingleTaskbarViewCoordinatorState_Expand_Original,
-            SingleTaskbarViewCoordinatorState_Expand_Hook,
-            true,
-        },
     };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
@@ -2771,7 +2291,8 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     }
 
     Wh_Log(L"Loaded %s", lpLibFileName);
-    TryHookTaskbarViewDll(true);
+    bool force = (g_taskbarViewLastAttemptTick.load() == 0);
+    TryHookTaskbarViewDll(force);
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -3138,10 +2659,6 @@ BOOL Wh_ModInit() {
     g_autoHideEnableFailed = false;
     g_autoHideEnableAttempted = false;
     g_taskbarsPendingTopmostCheck.clear();
-    {
-        std::lock_guard<std::mutex> guard(g_nonRudeWindowsMutex);
-        g_nonRudeWindows.clear();
-    }
     g_multitaskingViewHwnd = nullptr;
     g_altTabViewHwnd = nullptr;
     g_wasAutoHideProcessed = false;
@@ -3247,15 +2764,15 @@ void Wh_ModUninit() {
     if (hTaskbarWnd) {
         KillTimer(hTaskbarWnd, kModRetractTimer);
         RemoveProp(hTaskbarWnd, kModRetractLeftTickProp);
+        RemoveProp(hTaskbarWnd, L"Windhawk_WasFullyShown");
     }
     for (const auto& pair : g_taskbarWndByObject) {
         if (pair.second && pair.second != hTaskbarWnd) {
             KillTimer(pair.second, kModRetractTimer);
             RemoveProp(pair.second, kModRetractLeftTickProp);
+            RemoveProp(pair.second, L"Windhawk_WasFullyShown");
         }
     }
-
-    CleanupNonRudeWindows(true);
 
     if (g_wasAutoHideOriginallyDisabled) {
         if (hTaskbarWnd) {
