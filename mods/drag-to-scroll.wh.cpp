@@ -21,15 +21,7 @@
 // @exclude         FileCoAuth.exe
 // @exclude         OneDrive.exe
 // @exclude         OneDrive.Sync.Service.exe
-// @exclude         csrss.exe
-// @exclude         wininit.exe
-// @exclude         winlogon.exe
-// @exclude         lsass.exe
-// @exclude         services.exe
 // @exclude         conhost.exe
-// @exclude         fontdrvhost.exe
-// @exclude         audiodg.exe
-// @exclude         spoolsv.exe
 // @exclude         ShellExperienceHost.exe
 // @exclude         Widgets.exe
 // @compilerOptions -luser32 -lgdi32 -lcrypt32
@@ -77,11 +69,12 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 
 ## ⚠️ Compatibility & Good to Know
 
-* **Right-Click Only Mode & Cruising:** If you select the "Right-Click Only" trigger in settings, Continuous Cruising is automatically disabled. Cruising requires the `Ctrl + Right-Click` mode to function.
+* **Right-Click Only Mode Trade-offs:** If you select the "Right-Click Only" trigger, cruising is disabled and right-mouse dragging is overridden globally. Native right-drag features in other apps (like Explorer's right-drag file copying or browser mouse gestures) will trigger scrolling instead. Additionally, quickly tapping right-click may occasionally register as a double-right-click in certain list views.
 * **Cruising Cursor Visibility:** When using the "Hold Ctrl" cruising anchor, your custom drag cursor will revert to the standard Windows arrow anytime it leaves the application window (such as hovering over the desktop, taskbar, or other apps). This happens because Windows strictly requires a physical mouse button to be held down to maintain a global cursor override. Use the "Hold Right-Click" anchor if you want the custom drag cursor to remain visible across the entire screen.
 * **Microsoft Store & Modern UWP Apps (Not Supported):** Modern packaged applications installed from the Microsoft Store (such as Calculator, Weather, Microsoft To Do) as well as Windows system surfaces handle input through isolated modern pointer pipelines that bypass classic Win32 mouse messages.
 * **Online Games & Anti-Cheat Protection:** Software with native `Ctrl + Right-Click` dragging shortcuts (such as Blender or CAD applications) or games protected by kernel anti-cheats (e.g., Vanguard, BattlEye, Easy Anti-Cheat) may conflict with global input hooks. You can safely exclude those specific programs under the mod's **Advanced** tab in Windhawk.
 * **Portable Windhawk & Elevation:** The mod works in elevated applications when using the standard Windhawk service. If you are using portable Windhawk without running it as Administrator, elevated application windows cannot be targeted.
+* **Console Windows (`conhost.exe`):** This mod intentionally excludes classic command prompt windows (`conhost.exe`) by default due to input compatibility.
 
 ---
 
@@ -139,9 +132,6 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 - smooth_wheel: true
   $name: "Ultra-Smooth Scrolling"
   $description: "Enables silky, trackpad-style smooth scrolling. Disable this if scrolling feels jittery or unresponsive in older programs."
-- enable_velocity: true
-  $name: "[Deprecated] Old Velocity Toggle"
-  $description: "Replaced by Dynamic Velocity Mode. This toggle is kept to prevent update errors for older versions but no longer does anything."
 */
 // ==/WindhawkModSettings==
 
@@ -236,12 +226,8 @@ struct SettingsManager {
     // Load settings from Windhawk storage using atomic relaxed stores
     static void Load() {
         // Parse trigger mode
-        int parsedTrigger = 0;
-        PCWSTR triggerStr = Wh_GetStringSetting(L"trigger_mode");
-        if (wcscmp(triggerStr, L"RMBOnly") == 0) {
-            parsedTrigger = 1;
-        }
-        Wh_FreeStringSetting(triggerStr);
+        auto triggerStr = WindhawkUtils::StringSetting::make(L"trigger_mode");
+        int parsedTrigger = (wcscmp(triggerStr.get(), L"RMBOnly") == 0) ? 1 : 0;
         trigger_mode.store(parsedTrigger, std::memory_order_relaxed);
 
         touch_style.store(Wh_GetIntSetting(L"touch_style") != 0,
@@ -253,15 +239,14 @@ struct SettingsManager {
         enable_cruising.store(Wh_GetIntSetting(L"enable_cruising") != 0,
                               std::memory_order_relaxed);
 
-        // Parse cruising anchor mode and free the returned Windhawk string
+        // Parse cruising anchor mode
         int parsedAnchor = 0;
-        PCWSTR anchorStr = Wh_GetStringSetting(L"cruise_anchor");
-        if (wcscmp(anchorStr, L"RMB") == 0) {
+        auto anchorStr = WindhawkUtils::StringSetting::make(L"cruise_anchor");
+        if (wcscmp(anchorStr.get(), L"RMB") == 0) {
             parsedAnchor = 1;
-        } else if (wcscmp(anchorStr, L"Either") == 0) {
+        } else if (wcscmp(anchorStr.get(), L"Either") == 0) {
             parsedAnchor = 2;
         }
-        Wh_FreeStringSetting(anchorStr);
         cruise_anchor.store(parsedAnchor, std::memory_order_relaxed);
 
         // Clamp step distance and drag deadzone to safe integer ranges
@@ -271,25 +256,19 @@ struct SettingsManager {
         deadzone.store(std::clamp(Wh_GetIntSetting(L"deadzone"), 0, 1000),
                        std::memory_order_relaxed);
 
-        // Parse dynamic velocity mode with empty-string fallback to legacy
-        // setting
-        int legacyEnableVel = Wh_GetIntSetting(L"enable_velocity");
-        int parsedVel = (legacyEnableVel == 0) ? 0 : 2;
-        PCWSTR velStr = Wh_GetStringSetting(L"velocity_mode");
-        if (velStr[0] != L'\0') {
-            if (wcscmp(velStr, L"Off") == 0) {
-                parsedVel = 0;
-            } else if (wcscmp(velStr, L"Gentle") == 0) {
-                parsedVel = 1;
-            } else if (wcscmp(velStr, L"Standard") == 0) {
-                parsedVel = 2;
-            } else if (wcscmp(velStr, L"Fast") == 0) {
-                parsedVel = 3;
-            } else if (wcscmp(velStr, L"UltraFast") == 0) {
-                parsedVel = 4;
-            }
+        int parsedVel = 2;
+        auto velStr = WindhawkUtils::StringSetting::make(L"velocity_mode");
+        if (wcscmp(velStr.get(), L"Off") == 0) {
+            parsedVel = 0;
+        } else if (wcscmp(velStr.get(), L"Gentle") == 0) {
+            parsedVel = 1;
+        } else if (wcscmp(velStr.get(), L"Standard") == 0) {
+            parsedVel = 2;
+        } else if (wcscmp(velStr.get(), L"Fast") == 0) {
+            parsedVel = 3;
+        } else if (wcscmp(velStr.get(), L"UltraFast") == 0) {
+            parsedVel = 4;
         }
-        Wh_FreeStringSetting(velStr);
         velocity_mode.store(parsedVel, std::memory_order_relaxed);
 
         smooth_wheel.store(Wh_GetIntSetting(L"smooth_wheel") != 0,
@@ -591,6 +570,10 @@ struct RuntimeState {
     // Check whether Ctrl masking should remain active for scroll or drain grace
     // period
     static bool IsInScrollOrGracePeriod() {
+        if (SettingsManager::trigger_mode.load(std::memory_order_relaxed) ==
+            1) {
+            return false;
+        }
         if (state.load(std::memory_order_acquire) !=
             ScrollTypes::ScrollState::Idle) {
             return true;
@@ -604,20 +587,52 @@ struct RuntimeState {
 // Encapsulate hardware key queries, window target resolution, and scroll
 // emission
 struct ScrollDispatcher {
-    // Query physical Ctrl key state bypassing our GetAsyncKeyState hook
-    static bool IsCtrlPhysicallyDown() {
+    // Check whether Windows has swapped primary and secondary mouse buttons
+    static bool AreButtonsSwapped() {
+        return GetSystemMetrics(SM_SWAPBUTTON) != 0;
+    }
+
+    // Query if a key is physically held down right now
+    static bool IsVkCurrentlyDown(int vk) {
         SHORT val = OriginalApis::GetAsyncKeyState
-                        ? OriginalApis::GetAsyncKeyState(VK_CONTROL)
-                        : GetAsyncKeyState(VK_CONTROL);
+                        ? OriginalApis::GetAsyncKeyState(vk)
+                        : GetAsyncKeyState(vk);
         return (val & 0x8000) != 0;
     }
 
-    // Query physical Right Mouse Button state bypassing our hook
-    static bool IsRmbPhysicallyDown() {
+    // Query if a key is currently down OR was pressed recently (catches fast
+    // clicks)
+    static bool IsVkPressed(int vk) {
         SHORT val = OriginalApis::GetAsyncKeyState
-                        ? OriginalApis::GetAsyncKeyState(VK_RBUTTON)
-                        : GetAsyncKeyState(VK_RBUTTON);
-        return (val & 0x8000) != 0;
+                        ? OriginalApis::GetAsyncKeyState(vk)
+                        : GetAsyncKeyState(vk);
+        return val != 0;
+    }
+
+    // Query physical Ctrl key state
+    static bool IsCtrlPhysicallyDown() { return IsVkCurrentlyDown(VK_CONTROL); }
+
+    // Query physical state of the logical Right Mouse Button (swap-aware)
+    static bool IsRmbPhysicallyDown() {
+        int vk = AreButtonsSwapped() ? VK_LBUTTON : VK_RBUTTON;
+        return IsVkCurrentlyDown(vk);
+    }
+
+    // Detect any non-anchor mouse click globally (swap-aware)
+    static bool IsCancelMouseButtonPressed(ScrollTypes::CruiseAnchor anchor) {
+        const bool swapped = AreButtonsSwapped();
+        const int logicalLmbVk = swapped ? VK_RBUTTON : VK_LBUTTON;
+        const int logicalRmbVk = swapped ? VK_LBUTTON : VK_RBUTTON;
+
+        if (IsVkCurrentlyDown(logicalLmbVk) || IsVkCurrentlyDown(VK_MBUTTON) ||
+            IsVkCurrentlyDown(VK_XBUTTON1) || IsVkCurrentlyDown(VK_XBUTTON2)) {
+            return true;
+        }
+        if (anchor == ScrollTypes::CruiseAnchor::Ctrl &&
+            IsVkCurrentlyDown(logicalRmbVk)) {
+            return true;
+        }
+        return false;
     }
 
     // Detect navigation or cancel keys pressed during hands-free cruising
@@ -626,10 +641,7 @@ struct ScrollDispatcher {
             VK_ESCAPE, VK_RETURN, VK_SPACE, VK_TAB,  VK_LEFT, VK_UP,
             VK_RIGHT,  VK_DOWN,   VK_PRIOR, VK_NEXT, VK_HOME, VK_END};
         for (int vk : kInterruptKeys) {
-            SHORT val = OriginalApis::GetAsyncKeyState
-                            ? OriginalApis::GetAsyncKeyState(vk)
-                            : GetAsyncKeyState(vk);
-            if ((val & 0x8000) != 0) {
+            if (IsVkCurrentlyDown(vk)) {
                 return true;
             }
         }
@@ -907,7 +919,8 @@ struct CruiseController {
                     anchorLost = true;
                 }
 
-                if (anchorLost || ScrollDispatcher::IsInterruptKeyPressed()) {
+                if (anchorLost || ScrollDispatcher::IsInterruptKeyPressed() ||
+                    ScrollDispatcher::IsCancelMouseButtonPressed(ctx.anchor)) {
                     EndCruiseFromWorker(ctx);
                     break;
                 }
@@ -1081,15 +1094,17 @@ struct InputEngine {
         ScrollDispatcher::EndDiscreteScroll(hDiscreteTarget, isDiscrete);
     }
 
-    // Replay a suppressed Ctrl + Right-Click tap when released within the
-    // deadzone
+    // Replay a suppressed Right-Click tap when released within the deadzone
     static void ReplayRightClickTap() {
+        const bool swapped = ScrollDispatcher::AreButtonsSwapped();
         INPUT inputs[2] = {};
         inputs[0].type = INPUT_MOUSE;
-        inputs[0].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+        inputs[0].mi.dwFlags =
+            swapped ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
         inputs[0].mi.dwExtraInfo = ScrollTypes::kReplayExtraInfo;
         inputs[1].type = INPUT_MOUSE;
-        inputs[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
+        inputs[1].mi.dwFlags =
+            swapped ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_RIGHTUP;
         inputs[1].mi.dwExtraInfo = ScrollTypes::kReplayExtraInfo;
         SendInput(2, inputs, sizeof(INPUT));
     }
@@ -1100,13 +1115,12 @@ struct InputEngine {
             return false;
         }
 
-        // Fast-reject unrelated Win32 messages while keeping WM_SETCURSOR and
-        // WM_CAPTURECHANGED
+        // Fast-reject unrelated Win32 messages while keeping posted
+        // WM_SETCURSOR
         const UINT m = pMsg->message;
         const bool isMouseMsg = (m >= WM_MOUSEFIRST && m <= WM_MOUSELAST);
         const bool isKeyMsg = (m >= WM_KEYFIRST && m <= WM_KEYLAST);
-        if (!isMouseMsg && !isKeyMsg && m != WM_SETCURSOR &&
-            m != WM_CAPTURECHANGED) {
+        if (!isMouseMsg && !isKeyMsg && m != WM_SETCURSOR) {
             return false;
         }
 
@@ -1139,48 +1153,6 @@ struct InputEngine {
                 }
             }
             PerformPostLockCleanup(hRelCap, hDisc, isDisc);
-        }
-
-        // Handle external mouse capture loss (e.g. Alt+Tab or system modal
-        // dialog)
-        if (m == WM_CAPTURECHANGED) {
-            HWND hDisc = nullptr;
-            bool isDisc = false;
-            bool abortedActive = false;
-            {
-                ScopedCriticalSection lock(&RuntimeState::stateCs);
-                if (RuntimeState::captureHwnd &&
-                    pMsg->hwnd == RuntimeState::captureHwnd &&
-                    reinterpret_cast<HWND>(pMsg->lParam) !=
-                        RuntimeState::captureHwnd) {
-                    RuntimeState::captureHwnd = nullptr;
-                    RuntimeState::captureThreadId = 0;
-                    ScrollTypes::ScrollState cur =
-                        RuntimeState::state.load(std::memory_order_relaxed);
-                    if (cur == ScrollTypes::ScrollState::Pending ||
-                        cur == ScrollTypes::ScrollState::Scrolling) {
-                        if (cur == ScrollTypes::ScrollState::Scrolling) {
-                            RuntimeState::lastScrollEndTime.store(
-                                GetTickCount64(), std::memory_order_relaxed);
-                        }
-                        RuntimeState::state.store(
-                            ScrollTypes::ScrollState::Idle,
-                            std::memory_order_release);
-                        RuntimeState::swallowRButtonUp.store(
-                            false, std::memory_order_release);
-                        hDisc = RuntimeState::scrollTargetHwnd;
-                        isDisc = RuntimeState::scrollTargetIsDiscrete;
-                        RuntimeState::scrollTargetHwnd = nullptr;
-                        RuntimeState::scrollTargetIsDiscrete = false;
-                        abortedActive = true;
-                    }
-                }
-            }
-            if (abortedActive) {
-                ScrollDispatcher::EndDiscreteScroll(hDisc, isDisc);
-                CursorManager::RestoreArrowCursor();
-            }
-            return false;
         }
 
         // Reset cruise-cancel button-up swallow tracker on any fresh
@@ -1255,26 +1227,12 @@ struct InputEngine {
             return false;
         }
 
-        // Enforce custom cursor on WM_SETCURSOR while dragging or cruising,
-        // or restore arrow cursor if cruise ended while RMB capture is still
-        // held
+        // Handle posted WM_SETCURSOR from RequestGuiCursorRefresh when cruise
+        // ends while RMB capture is still held
         if (m == WM_SETCURSOR) {
-            ScrollTypes::ScrollState st =
-                RuntimeState::state.load(std::memory_order_acquire);
-            if (st != ScrollTypes::ScrollState::Idle) {
-                // Keep the normal arrow while in the deadzone (Pending) for
-                // RMB-Only mode
-                if (SettingsManager::trigger_mode.load(
-                        std::memory_order_relaxed) == 1 &&
-                    st == ScrollTypes::ScrollState::Pending) {
-                    return false;
-                }
-                CursorManager::ApplyScrollCursor(
-                    st,
-                    RuntimeState::activeAxis.load(std::memory_order_relaxed));
-                return true;
-            }
-            if (RuntimeState::swallowRButtonUp.load(
+            if (RuntimeState::state.load(std::memory_order_acquire) ==
+                    ScrollTypes::ScrollState::Idle &&
+                RuntimeState::swallowRButtonUp.load(
                     std::memory_order_acquire)) {
                 CursorManager::RestoreArrowCursor();
                 return true;
@@ -1487,12 +1445,6 @@ struct InputEngine {
                     ScrollTypes::ScrollState::Pending,
                     ScrollTypes::DragAxis::VerticalOnly);
             }
-
-            LONG_PTR exStyle = GetWindowLongPtrW(hRootWnd, GWL_EXSTYLE);
-            if (!(exStyle & WS_EX_NOACTIVATE) &&
-                GetForegroundWindow() != hRootWnd) {
-                SetForegroundWindow(hRootWnd);
-            }
             return true;
         }
 
@@ -1551,6 +1503,10 @@ struct InputEngine {
                 ScrollTypes::DragAxis resultingAxis =
                     ScrollTypes::DragAxis::VerticalOnly;
                 bool abortedOutOfBounds = false;
+                bool lostCapture = false;
+                HWND hDiscLost = nullptr;
+                bool isDiscLost = false;
+                HWND hActivateRoot = nullptr;
 
                 {
                     ScopedCriticalSection lock(&RuntimeState::stateCs);
@@ -1565,10 +1521,28 @@ struct InputEngine {
                         return false;
                     }
 
-                    // Stop scrolling if cursor exits bounds, keeping capture
-                    // until RMB release
-                    if (!cfg.allow_out_of_bounds &&
-                        !PtInRect(&RuntimeState::windowBounds, curPt)) {
+                    // Abort cleanly if external event (Alt+Tab, modal dialog)
+                    // stole Win32 mouse capture from our window
+                    if (RuntimeState::captureHwnd &&
+                        GetCapture() != RuntimeState::captureHwnd) {
+                        if (cur == ScrollTypes::ScrollState::Scrolling) {
+                            RuntimeState::lastScrollEndTime.store(
+                                GetTickCount64(), std::memory_order_relaxed);
+                        }
+                        RuntimeState::captureHwnd = nullptr;
+                        RuntimeState::captureThreadId = 0;
+                        RuntimeState::state.store(
+                            ScrollTypes::ScrollState::Idle,
+                            std::memory_order_release);
+                        RuntimeState::swallowRButtonUp.store(
+                            false, std::memory_order_release);
+                        hDiscLost = RuntimeState::scrollTargetHwnd;
+                        isDiscLost = RuntimeState::scrollTargetIsDiscrete;
+                        RuntimeState::scrollTargetHwnd = nullptr;
+                        RuntimeState::scrollTargetIsDiscrete = false;
+                        lostCapture = true;
+                    } else if (!cfg.allow_out_of_bounds &&
+                               !PtInRect(&RuntimeState::windowBounds, curPt)) {
                         if (cur == ScrollTypes::ScrollState::Scrolling) {
                             RuntimeState::lastScrollEndTime.store(
                                 GetTickCount64(), std::memory_order_relaxed);
@@ -1602,6 +1576,13 @@ struct InputEngine {
                             RuntimeState::state.store(
                                 cur, std::memory_order_release);
                             RuntimeState::lastPt = curPt;
+                            if (RuntimeState::captureHwnd) {
+                                hActivateRoot = GetAncestor(
+                                    RuntimeState::captureHwnd, GA_ROOT);
+                                if (!hActivateRoot) {
+                                    hActivateRoot = RuntimeState::captureHwnd;
+                                }
+                            }
 
                             ScrollTypes::DragAxis lockedAxis =
                                 ScrollTypes::DragAxis::VerticalOnly;
@@ -1743,13 +1724,33 @@ struct InputEngine {
                     }
                 }
 
-                // Perform cursor updates and scroll dispatch outside stateCs
+                // Perform cursor updates, focus activation, and scroll dispatch
+                // outside stateCs
+                if (lostCapture) {
+                    ScrollDispatcher::EndDiscreteScroll(hDiscLost, isDiscLost);
+                    CursorManager::RestoreArrowCursor();
+                    return false;
+                }
+
                 if (abortedOutOfBounds) {
                     CursorManager::RestoreArrowCursor();
                     return true;
                 }
 
-                CursorManager::ApplyScrollCursor(resultingState, resultingAxis);
+                if (hActivateRoot) {
+                    LONG_PTR exStyle =
+                        GetWindowLongPtrW(hActivateRoot, GWL_EXSTYLE);
+                    if (!(exStyle & WS_EX_NOACTIVATE) &&
+                        GetForegroundWindow() != hActivateRoot) {
+                        SetForegroundWindow(hActivateRoot);
+                    }
+                }
+
+                if (!(cfg.trigger_mode == 1 &&
+                      resultingState == ScrollTypes::ScrollState::Pending)) {
+                    CursorManager::ApplyScrollCursor(resultingState,
+                                                     resultingAxis);
+                }
 
                 if (stepsToDispatchY != 0) {
                     ScrollDispatcher::DispatchVertical(
