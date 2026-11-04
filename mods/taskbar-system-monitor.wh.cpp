@@ -18,7 +18,7 @@
 ![Screenshot](https://raw.githubusercontent.com/exefile04/taskbar-system-monitor/main/images/screenshot.png)
 
 Shows CPU, GPU, RAM, disk and network usage in the empty space on the left of your Windows 11 taskbar.
-I made it for a centered taskbar (it also works with Taskbar Styler docks).
+It sticks to the taskbar you actually see, including Taskbar Styler docks and resized taskbars.
 
 ## What it does
 - Shows CPU, GPU, RAM, disk, download and upload, with small outline icons. The RAM icon fills up as memory gets used.
@@ -52,10 +52,9 @@ Windows doesn't let normal programs read the CPU temperature, so here is what yo
 - If your GPU is built into the CPU and has no sensor of its own, the mod can show the CPU temperature for it. There is a setting to turn that off.
 
 ## Good to know
-- There has to be free space to the left of the first taskbar icon. The mod measures where that icon is.
-  If you use a Taskbar Styler dock, put the dock's margin in the "dock margin" setting so the monitor stays in place.
-- While a taskbar hover preview or a flyout (like the keyboard language menu) is open, Windows draws it over
-  the monitor, so the monitor disappears for a moment. I couldn't fix that without risky tricks.
+- It measures the visible taskbar and sticks to it, so a Taskbar Styler dock or a different taskbar size needs no setup.
+- It sits left of the icons. If there's no space there (a left-aligned taskbar, for example), it moves to the gap
+  before the tray. If there's no space at all, it hides.
 - The mod only runs inside explorer.exe and doesn't hook any functions.
 - "Data used today" is saved, so it keeps counting after a restart.
 */
@@ -138,25 +137,25 @@ Windows doesn't let normal programs read the CPU temperature, so here is what yo
   - none: Nothing
 - customCommand: ""
   $name: Custom command for left click (arguments allowed)
-- autoPosition: true
-  $name: Auto-position next to the first taskbar icon
-- dockMargin: 0
-  $name: Taskbar Styler dock margin (px at 100% scale, 0 = hug the first icon)
-  $description: The monitor starts this far from the screen edge (plus the left padding), so it stays put when icons are added. It never overlaps the first icon.
-- leftPadding: 16
-  $name: Left padding inside the taskbar (px at 100% scale)
+- position: edge
+  $name: Where to sit on the taskbar
+  $description: It always stays inside the visible taskbar, whatever size or shape Taskbar Styler gives it.
+  $options:
+  - edge: At the left edge of the taskbar
+  - icons: Right next to the first icon
+- edgePadding: 16
+  $name: Distance from the taskbar edge (px at 100% scale)
 - gapToIcons: 16
   $name: Minimum gap to the first icon (px at 100% scale)
 - columnGap: 20
   $name: Gap between columns (px at 100% scale)
 - itemGap: 5
   $name: Gap between icon and text (px at 100% scale)
-- leftOffset: 262
-  $name: Manual position - left offset (px at 100% scale)
-- topOffset: 8
-  $name: Manual position - top offset (px at 100% scale)
-- height: 56
-  $name: Manual position - height (px at 100% scale)
+- nudgeX: 0
+  $name: Fine adjust, left / right (px at 100% scale)
+  $description: It can't leave the taskbar or cover the icons, however big this is.
+- nudgeY: 0
+  $name: Fine adjust, up / down (px at 100% scale)
 */
 // ==/WindhawkModSettings==
 
@@ -228,9 +227,9 @@ struct Settings {
     bool tips = true, interactive = true, tipLive = false, binary = true;
     int clickAction = 0;  // 0 taskmgr, 1 resmon, 2 custom, 3 none
     std::wstring customCmd;
-    bool autoPos = true;
-    int dockMargin = 0, leftPad = 16, gapIcons = 16, colGap = 20, itemGap = 5;
-    int leftOffset = 262, topOffset = 8, height = 56;
+    bool atIcons = false;
+    int edgePad = 16, gapIcons = 16, colGap = 20, itemGap = 5;
+    int nudgeX = 0, nudgeY = 0;
 };
 
 // Settings are immutable snapshots: a change publishes a new snapshot, readers on any thread use the current one.
@@ -329,15 +328,13 @@ static void LoadSettings() {
     std::wstring ca = GetStr(L"clickAction");
     s.clickAction = ca == L"resmon" ? 1 : ca == L"custom" ? 2 : ca == L"none" ? 3 : 0;
     s.customCmd = GetStr(L"customCommand");
-    s.autoPos = Wh_GetIntSetting(L"autoPosition") != 0;
-    s.dockMargin = Wh_GetIntSetting(L"dockMargin");
-    s.leftPad = Wh_GetIntSetting(L"leftPadding");
+    s.atIcons = GetStr(L"position") == L"icons";
+    s.edgePad = Wh_GetIntSetting(L"edgePadding");
     s.gapIcons = Wh_GetIntSetting(L"gapToIcons");
     s.colGap = Wh_GetIntSetting(L"columnGap");
     s.itemGap = Wh_GetIntSetting(L"itemGap");
-    s.leftOffset = Wh_GetIntSetting(L"leftOffset");
-    s.topOffset = Wh_GetIntSetting(L"topOffset");
-    s.height = Wh_GetIntSetting(L"height");
+    s.nudgeX = Wh_GetIntSetting(L"nudgeX");
+    s.nudgeY = Wh_GetIntSetting(L"nudgeY");
 
     std::lock_guard<std::mutex> lock(g_cfgMutex);
     g_cfgPtr.store(sp.get());
@@ -381,6 +378,7 @@ static const UINT WM_SETTINGS = WM_APP + 1;
 static const UINT WM_FRAME = WM_APP + 10;
 static const UINT WM_UPDATEPOS = WM_APP + 11;
 static const UINT WM_APPLYSTYLE = WM_APP + 12;
+static const UINT WM_RUNACTION = WM_APP + 13;
 
 static HINSTANCE GetModuleInstance() {
     HINSTANCE h = nullptr;
@@ -520,7 +518,7 @@ static void SampleDisk() {
     if (!g_diskTried) {
         g_diskTried = true;
         if (PdhOpenQueryW(nullptr, 0, &g_diskQ) == ERROR_SUCCESS) {
-            bool ok = PdhAddEnglishCounterW(g_diskQ, L"\\PhysicalDisk(_Total)\\% Disk Time", 0, &g_diskT) == ERROR_SUCCESS;
+            bool ok = PdhAddEnglishCounterW(g_diskQ, L"\\PhysicalDisk(_Total)\\% Idle Time", 0, &g_diskT) == ERROR_SUCCESS;
             PdhAddEnglishCounterW(g_diskQ, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &g_diskR);
             PdhAddEnglishCounterW(g_diskQ, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &g_diskW);
             if (ok) PdhCollectQueryData(g_diskQ); else { PdhCloseQuery(g_diskQ); g_diskQ = nullptr; }
@@ -529,7 +527,7 @@ static void SampleDisk() {
     }
     if (!g_diskQ || PdhCollectQueryData(g_diskQ) != ERROR_SUCCESS) return;
     PDH_FMT_COUNTERVALUE v;
-    if (PdhGetFormattedCounterValue(g_diskT, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS) g_st.disk = std::clamp(v.doubleValue, 0.0, 100.0);
+    if (PdhGetFormattedCounterValue(g_diskT, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS) g_st.disk = std::clamp(100.0 - v.doubleValue, 0.0, 100.0);  // same as Task Manager's "active time"
     if (g_diskR && PdhGetFormattedCounterValue(g_diskR, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS) g_st.diskRead = v.doubleValue;
     if (g_diskW && PdhGetFormattedCounterValue(g_diskW, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS) g_st.diskWrite = v.doubleValue;
 }
@@ -590,6 +588,16 @@ static KmtQueryAdapterInfo_t g_kmtQuery = nullptr;
 static KmtCloseAdapter_t g_kmtClose = nullptr;
 static bool g_kmtTried = false;
 
+static std::vector<UINT> g_kmtHandles;
+
+static void CloseKmtAdapters() {
+    for (UINT h : g_kmtHandles) {
+        KmtCloseAdapter c = {h};
+        g_kmtClose(&c);
+    }
+    g_kmtHandles.clear();
+}
+
 static void SampleGpuTempKmt() {
     if (!g_kmtTried) {
         g_kmtTried = true;
@@ -601,21 +609,29 @@ static void SampleGpuTempKmt() {
         }
     }
     if (!g_kmtEnum || !g_kmtQuery || !g_kmtClose) return;
-    KmtEnumAdapters2 en = {};
-    g_kmtEnum(&en);  // first call only reports the count
-    if (!en.numAdapters || en.numAdapters > 16) return;
-    std::vector<KmtAdapterInfo> adapters(en.numAdapters);
-    en.pAdapters = adapters.data();
-    if (g_kmtEnum(&en) != 0) return;
+    if (g_kmtHandles.empty()) {  // enumerate once and keep the handles
+        KmtEnumAdapters2 en = {};
+        g_kmtEnum(&en);  // first call only reports the count
+        if (!en.numAdapters || en.numAdapters > 16) return;
+        std::vector<KmtAdapterInfo> adapters(en.numAdapters);
+        en.pAdapters = adapters.data();
+        if (g_kmtEnum(&en) != 0) return;
+        for (ULONG i = 0; i < en.numAdapters; i++) g_kmtHandles.push_back(adapters[i].hAdapter);
+    }
     double best = -1;
-    for (ULONG i = 0; i < en.numAdapters; i++) {
+    bool failed = false;
+    for (UINT h : g_kmtHandles) {
         KmtAdapterPerfData perf = {};
-        KmtQueryAdapterInfo q = {adapters[i].hAdapter, kKmtAdapterPerfData, &perf, sizeof(perf)};
-        if (g_kmtQuery(&q) == 0 && perf.Temperature > 0) best = std::max(best, perf.Temperature / 10.0);  // tenths of a degree C
-        KmtCloseAdapter c = {adapters[i].hAdapter};
-        g_kmtClose(&c);
+        KmtQueryAdapterInfo q = {h, kKmtAdapterPerfData, &perf, sizeof(perf)};
+        LONG status = g_kmtQuery(&q);
+        if (status == 0) {
+            if (perf.Temperature > 0) best = std::max(best, perf.Temperature / 10.0);  // tenths of a degree C
+        } else {
+            failed = true;  // driver update, adapter removed ...
+        }
     }
     g_gpuTempKmt = best;
+    if (failed && best <= 0) CloseKmtAdapters();  // enumerate again next time
 }
 
 // ---- WMI: LibreHardwareMonitor (accurate CPU temperature, GPU temperature if the driver gives none) ----
@@ -709,7 +725,7 @@ static void SampleProcs() {
     std::unordered_map<DWORD, ULONGLONG> cur;
     std::unordered_map<std::wstring, ProcAgg> agg;
     ULONGLONG now = GetTickCount64();
-    double dt = prevTick ? (now - prevTick) / 1000.0 : 0;
+    double dt = (prevTick && now - prevTick < 8000) ? (now - prevTick) / 1000.0 : 0;  // an old baseline says nothing about now
     PROCESSENTRY32W pe = {sizeof(pe)};
     if (Process32FirstW(snap, &pe)) {
         do {
@@ -742,6 +758,7 @@ static void SampleProcs() {
     std::vector<ProcAgg> byCpu = all, byMem = all;
     std::sort(byCpu.begin(), byCpu.end(), [](const ProcAgg& a, const ProcAgg& b) { return a.cpu > b.cpu; });
     std::sort(byMem.begin(), byMem.end(), [](const ProcAgg& a, const ProcAgg& b) { return a.mem > b.mem; });
+    if (dt <= 0) byCpu.clear();
     if (byCpu.size() > 3) byCpu.resize(3);
     if (byMem.size() > 3) byMem.resize(3);
     AcquireSRWLockExclusive(&g_procLock);
@@ -752,7 +769,7 @@ static void SampleProcs() {
 
 // ---- 60 second history for sparklines ----
 static double g_hist[IT_COUNT][60];
-static int g_histPos = 0;
+static std::atomic<int> g_histPos{0};
 static SRWLOCK g_histLock = SRWLOCK_INIT;
 
 static void PushHistory() {
@@ -783,16 +800,26 @@ static void PublishStats() {
     ReleaseSRWLockExclusive(&g_pubLock);
 }
 
+static bool LayoutHas(const Settings& cfg, int item) {
+    for (const auto& col : cfg.cols)
+        if (std::find(col.begin(), col.end(), item) != col.end()) return true;
+    return false;
+}
+
 static void SampleAll() {
     static int tick = 0;
+    const Settings& cfg = g_s;
+    bool gpu = LayoutHas(cfg, IT_GPU);
+    bool cpuTemp = LayoutHas(cfg, IT_CPU) || (gpu && cfg.igpuFromCpu);
     SampleCpuRam();
-    SampleNet();
-    SampleGpuPdh();
-    SampleGpuTempKmt();
-    SampleDisk();
-    if (tick++ % 2 == 0) SampleWmi();
-    if (!g_lhm) SampleThermalPdh();
+    SampleNet();  // always: "data used today" keeps counting
+    if (gpu) SampleGpuPdh();
+    if (gpu && tick % 5 == 0) SampleGpuTempKmt();  // temperature changes slowly, and this reaches into the driver
+    if (LayoutHas(cfg, IT_DISK)) SampleDisk();
+    if ((cpuTemp || gpu) && tick % 2 == 0) SampleWmi();
+    if (cpuTemp && g_cpuTempLhm <= 0) SampleThermalPdh();  // also when LibreHardwareMonitor is connected but gives no value
     if (GetTickCount64() - g_procWanted.load() < 4000) SampleProcs();
+    tick++;
     PushHistory();
     PublishStats();
     PersistNetToday(false);
@@ -809,15 +836,20 @@ static DWORD WINAPI SamplerWorker(LPVOID) {
     if (g_thQ) { PdhCloseQuery(g_thQ); g_thQ = nullptr; }
     if (g_diskQ) { PdhCloseQuery(g_diskQ); g_diskQ = nullptr; }
     if (g_lhm) { g_lhm->Release(); g_lhm = nullptr; }
+    if (g_kmtClose) CloseKmtAdapters();
     CoUninitialize();
     return 0;
 }
 
 // ---------------------------------------------------- taskbar discovery ----
 
+// All relative to the taskbar window's top-left.
 struct BtnInfo {
     bool ok = false;
-    LONG relLeft = 0, relTop = 0, h = 0;  // relative to the taskbar window's top-left
+    LONG relLeft = 0, h = 0;                      // first icon: left edge, height
+    LONG lastAppRight = 0, trayLeft = 0;          // the free gap between the last app icon and the tray
+    LONG frameT = 0, frameB = 0;                  // top and bottom of the visible taskbar (Taskbar Styler can change them)
+    LONG leftLimit = 0;                           // left end of the free space (frame edge, or the Widgets button)
 };
 static std::unordered_map<HWND, BtnInfo> g_btns;
 static std::vector<HWND> g_tbList;
@@ -837,13 +869,15 @@ static BtnInfo GetBtn(HWND tb) {
 static void MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* cache, IUIAutomationCondition* cond, HWND tbWnd) {
     IUIAutomationElement* root = nullptr;
     if (FAILED(uia->ElementFromHandle(tbWnd, &root)) || !root) return;
+    RECT tb = {}, tbAfter = {};
+    GetWindowRect(tbWnd, &tb);
     IUIAutomationElementArray* arr = nullptr;
     root->FindAllBuildCache(TreeScope_Descendants, cond, cache, &arr);  // all rectangles in one round trip
-
-    RECT tb = {};
-    GetWindowRect(tbWnd, &tb);
-    bool have = false;
-    RECT best = {};
+    GetWindowRect(tbWnd, &tbAfter);
+    bool moved = !EqualRect(&tb, &tbAfter);  // the taskbar slid during the query: the numbers would not fit together
+    bool have = false, haveFrame = false, haveTray = false;
+    RECT first = {}, frame = {};
+    LONG lastAppRight = 0, trayLeft = 0, widgetsRight = 0;
     if (arr) {
         int len = 0;
         arr->get_Length(&len);
@@ -851,23 +885,43 @@ static void MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* 
             IUIAutomationElement* el = nullptr;
             if (FAILED(arr->GetElement(i, &el)) || !el) continue;
             RECT r = {};
+            BSTR autoId = nullptr;
+            el->get_CachedAutomationId(&autoId);
+            const wchar_t* id = autoId ? autoId : L"";
             if (SUCCEEDED(el->get_CachedBoundingRectangle(&r)) && r.right - r.left > 10 && r.bottom - r.top > 10 &&
                 r.left >= tb.left && r.right <= tb.right && r.top >= tb.top - 4 && r.bottom <= tb.bottom + 4) {
-                if (!have || r.left < best.left) { best = r; have = true; }
+                if (wcscmp(id, L"TaskbarFrame") == 0) {
+                    frame = r;
+                    haveFrame = true;
+                } else if (wcscmp(id, L"WidgetsButton") == 0) {  // sits far left on a centered taskbar
+                    widgetsRight = std::max(widgetsRight, r.right);
+                } else if (wcscmp(id, L"SystemTrayIcon") == 0) {
+                    trayLeft = haveTray ? std::min(trayLeft, r.left) : r.left;
+                    haveTray = true;
+                } else {
+                    if (!have || r.left < first.left) { first = r; have = true; }
+                    lastAppRight = std::max(lastAppRight, r.right);
+                }
             }
+            SysFreeString(autoId);
             el->Release();
         }
         arr->Release();
     }
     root->Release();
 
-    if (have) {
+    if (have && !moved) {
+        if (!haveFrame) frame = tb;  // not reported on this Windows build: use the whole window
         AcquireSRWLockExclusive(&g_btnLock);
         BtnInfo& b = g_btns[tbWnd];
         b.ok = true;
-        b.relLeft = best.left - tb.left;
-        b.relTop = best.top - tb.top;
-        b.h = best.bottom - best.top;
+        b.relLeft = first.left - tb.left;
+        b.h = first.bottom - first.top;
+        b.lastAppRight = lastAppRight - tb.left;
+        b.trayLeft = haveTray ? trayLeft - tb.left : frame.right - tb.left;
+        b.frameT = frame.top - tb.top;
+        b.frameB = frame.bottom - tb.top;
+        b.leftLimit = std::max(frame.left, widgetsRight) - tb.left;
         ReleaseSRWLockExclusive(&g_btnLock);
     }
 }
@@ -881,10 +935,22 @@ static DWORD WINAPI UiaWorker(LPVOID) {
     IUIAutomationCondition* cond = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia)) && uia) {
         uia->CreateCacheRequest(&cache);
-        if (cache) cache->AddProperty(UIA_BoundingRectanglePropertyId);
+        if (cache) {
+            cache->AddProperty(UIA_BoundingRectanglePropertyId);
+            cache->AddProperty(UIA_AutomationIdPropertyId);
+        }
+        // the buttons, and the frame that holds them (its rectangle is the visible taskbar)
+        IUIAutomationCondition* isButton = nullptr;
+        IUIAutomationCondition* isFrame = nullptr;
         VARIANT v; VariantInit(&v);
         v.vt = VT_I4; v.lVal = UIA_ButtonControlTypeId;
-        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond);
+        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &isButton);
+        v.vt = VT_BSTR; v.bstrVal = SysAllocString(L"TaskbarFrame");
+        uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, v, &isFrame);
+        VariantClear(&v);
+        if (isButton && isFrame) uia->CreateOrCondition(isButton, isFrame, &cond);
+        if (isFrame) isFrame->Release();
+        if (isButton) isButton->Release();
     }
     HANDLE handles[2] = {g_stopEvent, g_uiaEvent};
     while (!g_stop) {
@@ -1007,7 +1073,7 @@ static bool IsShellSurface(HWND w) {
 }
 
 // true when a window above the taskbar covers the whole monitor (fullscreen video, photo viewer, game ...)
-static bool CoveredByFullscreen(Overlay* ov, HWND* culprit = nullptr) {
+static bool CoveredByFullscreen(Overlay* ov) {
     HMONITOR mon = MonitorFromWindow(ov->taskbar, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = {sizeof(mi)};
     if (!GetMonitorInfoW(mon, &mi)) return false;
@@ -1025,12 +1091,13 @@ static bool CoveredByFullscreen(Overlay* ov, HWND* culprit = nullptr) {
         if (!GetWindowRect(w, &r)) continue;
         if (r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top && r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom) {
             if (IsShellSurface(w)) continue;  // flyouts (keyboard layout, network, ...) use full-screen host windows
-            if (culprit) *culprit = w;
             return true;
         }
     }
     return false;
 }
+
+static void HideTip(Overlay* ov);
 
 static void UpdatePosition(Overlay* ov, bool force) {
     if (!ov->hwnd || !ov->taskbar || !ov->lastW) return;
@@ -1045,18 +1112,31 @@ static void UpdatePosition(Overlay* ov, bool force) {
     BtnInfo b = GetBtn(ov->taskbar);
     LONG x, y;
     bool noRoom = false;
+    LONG nudgeX = (LONG)(s.nudgeX * sc), nudgeY = (LONG)(s.nudgeY * sc), pad = (LONG)(s.edgePad * sc);
     if (ov->lastAuto && b.ok) {
+        // everything is measured from the visible taskbar, so it follows Taskbar Styler's size and shape
         LONG gap = (LONG)(s.gapIcons * sc);
+        LONG minX = trc.left + b.leftLimit;
         LONG maxX = trc.left + b.relLeft - gap - ov->lastW;  // never overlap the first icon
-        if (maxX < trc.left) noRoom = true;                  // no free space left of the first icon
-        LONG wantX = s.dockMargin > 0 ? trc.left + (LONG)((s.dockMargin + s.leftPad) * sc) : maxX;
-        x = std::max<LONG>(trc.left, std::min(wantX, maxX));
-        y = trc.top + b.relTop;
-    } else {
-        x = trc.left + (LONG)(s.leftOffset * sc);
-        y = trc.top + (LONG)(s.topOffset * sc);
+        if (maxX >= minX) {
+            x = (s.atIcons ? maxX : minX + pad) + nudgeX;
+        } else {
+            // no space left of the icons (left-aligned taskbar, many icons): use the gap before the tray
+            minX = trc.left + b.lastAppRight + gap;
+            maxX = trc.left + b.trayLeft - gap - ov->lastW;
+            if (maxX < minX) noRoom = true;
+            x = maxX + nudgeX;
+        }
+        x = std::max(minX, std::min(x, maxX));
+        LONG top = trc.top + b.frameT, bottom = trc.top + b.frameB;
+        y = top + (bottom - top - ov->lastH) / 2 + nudgeY;
+        y = std::max(top, std::min<LONG>(y, std::max<LONG>(top, bottom - ov->lastH)));
+    } else {  // the first icon could not be measured yet: stay inside the taskbar window
+        x = trc.left + pad + nudgeX;
+        x = std::max<LONG>(trc.left, std::min<LONG>(x, std::max<LONG>(trc.left, trc.right - ov->lastW)));
+        y = trc.top + (trc.bottom - trc.top - ov->lastH) / 2;
     }
-    if (noRoom && !ov->noRoomLogged) { Wh_Log(L"No free space left of the first taskbar icon, monitor hidden"); ov->noRoomLogged = true; }
+    if (noRoom && !ov->noRoomLogged) { Wh_Log(L"No free space on the taskbar, monitor hidden"); ov->noRoomLogged = true; }
     if (!noRoom) ov->noRoomLogged = false;
 
     // hide while the taskbar is hidden, a fullscreen window covers the screen, or there is no room; debounced a
@@ -1065,7 +1145,13 @@ static void UpdatePosition(Overlay* ov, bool force) {
     if (wantHide) {
         if (!ov->hideSince) { ov->hideSince = now; SetTimer(ov->hwnd, 2, 90, nullptr); }
         if (now - ov->hideSince >= 80) {
-            if (ov->shown) { ShowWindow(ov->hwnd, SW_HIDE); ov->shown = false; }
+            if (ov->shown) {
+                HideTip(ov);
+                ov->hoverItem = -1;
+                ov->tracking = false;
+                ShowWindow(ov->hwnd, SW_HIDE);
+                ov->shown = false;
+            }
         }
         return;
     }
@@ -1210,6 +1296,7 @@ static void PositionTip(Overlay* ov, int item, int guessH) {
     GetMonitorInfoW(mon, &mi);
     int x = std::clamp<int>(cx, mi.rcMonitor.left, std::max<int>(mi.rcMonitor.left, mi.rcMonitor.right - w));
     int y = wr.top - h - 8;
+    if (y < mi.rcMonitor.top) y = wr.bottom + 8;  // taskbar at the top of the screen
     SendMessageW(ov->tip, TTM_TRACKPOSITION, 0, MAKELPARAM(x, y));
 }
 
@@ -1255,15 +1342,19 @@ static void HideTip(Overlay* ov) {
     ov->tipText.clear();
 }
 
-static void RunClickAction() {
-    switch (g_s.clickAction) {
-        case 0: ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
-        case 1: ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
-        case 2:
+enum Action { ACT_TASKMGR = 0, ACT_RESMON, ACT_CUSTOM, ACT_NONE, ACT_PERFMON };
+
+// runs on the worker thread (see WM_RUNACTION): opening a program can block, the taskbar thread must not
+static void RunAction(int action) {
+    switch (action) {
+        case ACT_TASKMGR: ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
+        case ACT_RESMON: ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
+        case ACT_PERFMON: ShellExecuteW(nullptr, L"open", L"perfmon.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
+        case ACT_CUSTOM:
             if (!g_s.customCmd.empty()) {
                 std::wstring cmd = g_s.customCmd;
                 std::vector<wchar_t> file(cmd.begin(), cmd.end());
-                file.push_back(0);
+                file.resize(std::max<size_t>(file.size() + 1, MAX_PATH), 0);
                 std::wstring args = PathGetArgsW(file.data());  // split "program arguments"
                 PathRemoveArgsW(file.data());
                 PathUnquoteSpacesW(file.data());
@@ -1271,6 +1362,10 @@ static void RunClickAction() {
             }
             break;
     }
+}
+
+static void PostAction(int action) {
+    if (HWND wnd = g_msgWnd.load()) PostMessageW(wnd, WM_RUNACTION, action, 0);
 }
 
 static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -1327,7 +1422,7 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             return 0;
         case WM_LBUTTONUP:
             if (ov) HideTip(ov);
-            RunClickAction();
+            PostAction(g_s.clickAction);
             return 0;
         case WM_RBUTTONUP: {
             if (ov) HideTip(ov);
@@ -1341,9 +1436,9 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, h, nullptr);
             PostMessageW(h, WM_NULL, 0, 0);
             DestroyMenu(menu);
-            if (cmd == 1) ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
-            else if (cmd == 2) ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
-            else if (cmd == 3) ShellExecuteW(nullptr, L"open", L"perfmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            if (cmd == 1) PostAction(ACT_TASKMGR);
+            else if (cmd == 2) PostAction(ACT_RESMON);
+            else if (cmd == 3) PostAction(ACT_PERFMON);
             return 0;
         }
         case WM_MOUSEACTIVATE:
@@ -1398,6 +1493,10 @@ static void WINAPI CreateOverlayOnThread(PVOID p) {
     ov->slot = cp->slot;
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)ov);
 
+    // Aero Peek (hovering a taskbar thumbnail) fades out every window that is not excluded from it
+    BOOL excludeFromPeek = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludeFromPeek, sizeof(excludeFromPeek));
+
     ov->tip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
                               WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP | TTS_NOANIMATE | TTS_NOFADE, 0, 0, 0, 0, hwnd, nullptr,
                               GetModuleInstance(), nullptr);
@@ -1427,33 +1526,17 @@ static void WINAPI DestroyOverlayOnThread(PVOID p) {
 
 // W-side bookkeeping for each overlay; the Overlay object itself belongs to the taskbar thread
 struct OvRef { HWND taskbar; HWND hwnd; ULONGLONG startTick; std::shared_ptr<FrameSlot> slot; std::wstring lastKey; };
-static std::vector<OvRef> g_refs;  // worker thread only
+[[clang::no_destroy]] static std::vector<OvRef> g_refs;  // worker thread only; emptied by the worker on unload
 
-static void NotifyOverlays(HWND onlyTaskbar) {
+static void NotifyOverlays() {
     std::lock_guard<std::mutex> lock(g_pairMutex);
-    for (const auto& pr : g_pairs)
-        if (!onlyTaskbar || pr.first == onlyTaskbar) PostMessageW(pr.second, WM_UPDATEPOS, 0, 0);
+    for (const auto& pr : g_pairs) PostMessageW(pr.second, WM_UPDATEPOS, 0, 0);
 }
 
-// instant reaction to taskbar movement (auto-hide animation), focus / minimise changes
-static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG, DWORD, DWORD) {
-    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
-        if (idObject != OBJID_WINDOW) return;
-        {
-            std::lock_guard<std::mutex> lock(g_pairMutex);
-            bool isTaskbar = false;
-            for (const auto& pr : g_pairs) if (pr.first == hwnd) { PostMessageW(pr.second, WM_UPDATEPOS, 0, 0); isTaskbar = true; }
-            if (!isTaskbar) return;
-        }
-        SetEvent(g_uiaEvent);
-        return;
-    }
-    if (event == EVENT_OBJECT_SHOW) {  // one of Explorer's own windows appeared (hover preview, flyout): may cover us
-        if (idObject == OBJID_WINDOW) NotifyOverlays(nullptr);
-        return;
-    }
-    NotifyOverlays(nullptr);  // foreground / minimise: z-order or covering may have changed
-    SetEvent(g_uiaEvent);     // ... and the taskbar icons may have moved
+// focus / minimise changes: z-order or covering may have changed, and the taskbar icons may have moved
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+    NotifyOverlays();
+    SetEvent(g_uiaEvent);
 }
 
 // ---- drawing (worker thread) ----
@@ -1564,11 +1647,14 @@ static void BuildSegs(int item, const Stats& st, std::vector<Seg>& out) {
             }
             break;
         }
-        case IT_RAM:
+        case IT_RAM: {
+            const wchar_t* d = st.ramTotalGB >= 100 ? L"999.9" : L"99.9";  // 2 or 3 digit machines
+            std::wstring ramTmpl = s.ramTotal ? Fmt(L"%s/%s %s", d, d, UG()) : Fmt(L"%s %s", d, UG());
             out.push_back(Seg{s.ramTotal ? Fmt(L"%.1f/%.1f %s", st.ramUsedGB, st.ramTotalGB, UG()) : Fmt(L"%.1f %s", st.ramUsedGB, UG()),
-                              s.ramTotal ? Fmt(L"99.9/99.9 %s", UG()) : Fmt(L"99.9 %s", UG()), st.ram >= s.warnUsage});
+                              ramTmpl, st.ram >= s.warnUsage});
             if (s.ramPct) out.push_back(usageSeg(st.ram));
             break;
+        }
         case IT_DISK:
             out.push_back(usageSeg(g_disp.disk));
             break;
@@ -1580,7 +1666,7 @@ static void BuildSegs(int item, const Stats& st, std::vector<Seg>& out) {
     }
 }
 
-// font and measured text widths are cached per settings snapshot and monitor scale, not rebuilt every frame
+// font and measured text widths are cached per settings snapshot and font size, not rebuilt every frame
 struct RenderCache {
     std::unique_ptr<FontFamily> fam;
     std::unique_ptr<Font> font;
@@ -1594,9 +1680,9 @@ struct RenderCache {
 [[clang::no_destroy]] static std::optional<std::map<UINT, std::unique_ptr<RenderCache>>> g_renderCaches;
 static const Settings* g_renderCacheSettings = nullptr;
 
-static RenderCache& GetRenderCache(UINT dpi, float fontPx) {
+static RenderCache& GetRenderCache(float fontPx) {
     if (g_renderCacheSettings != g_cfgPtr.load()) { g_renderCaches->clear(); g_renderCacheSettings = g_cfgPtr.load(); }
-    auto& slot = (*g_renderCaches)[dpi];
+    auto& slot = (*g_renderCaches)[(UINT)(fontPx * 16)];
     if (!slot) {
         slot = std::make_unique<RenderCache>();
         const Settings& s = g_s;
@@ -1620,15 +1706,16 @@ static void RenderOverlay(OvRef& ref) {
 
     // wait (hidden) for the first measurement instead of flashing at a wrong spot
     BtnInfo binfo = GetBtn(ref.taskbar);
-    bool useAuto = s.autoPos && binfo.ok && binfo.h >= 24;
-    if (s.autoPos && !useAuto && GetTickCount64() - ref.startTick < 4000) return;
+    bool useAuto = binfo.ok && binfo.h >= 16;
+    if (!useAuto && GetTickCount64() - ref.startTick < 4000) return;
 
     UINT dpi = GetDpiForWindow(ref.taskbar);
     float sc = dpi / 96.0f;
-    int H = s.height > 0 ? (int)(s.height * sc) : (trc.bottom - trc.top);
-    if (useAuto) H = binfo.h;
-    float fs = s.fontSize * sc;
-    float icon = fs * s.iconScale / 100.0f;
+    int H = useAuto ? binfo.h : (trc.bottom - trc.top);
+    int rows = 1;
+    for (const auto& c : s.cols) rows = std::max<int>(rows, (int)c.size());
+    float fs = std::min(s.fontSize * sc, H * 0.82f / rows);  // a thin taskbar gets smaller text instead of clipped text
+    float icon = std::min(fs * s.iconScale / 100.0f, H * 0.95f / rows);
     float gap = s.itemGap * sc, colGap = s.colGap * sc, pad = 4 * sc;
 
     BYTE alpha = (BYTE)(255 * s.opacity / 100);
@@ -1636,7 +1723,7 @@ static void RenderOverlay(OvRef& ref) {
                            : (g_lightTheme.load() ? Color(alpha, 30, 30, 30) : Color(alpha, 240, 240, 240));
     Color warnCol(alpha, s.wr, s.wg, s.wb);
 
-    RenderCache& rc = GetRenderCache(dpi, fs);
+    RenderCache& rc = GetRenderCache(fs);
     auto tw = [&](const std::wstring& str) {
         auto it = rc.widths.find(str);
         if (it != rc.widths.end()) return it->second;
@@ -1651,11 +1738,9 @@ static void RenderOverlay(OvRef& ref) {
     // layout: per column its items and segments
     struct ColLayout { std::vector<int> items; std::vector<std::vector<Seg>> segs; float w = 0; };
     std::vector<ColLayout> cols;
-    int rows = 1;
     for (const auto& c : s.cols) {
         ColLayout cl;
         cl.items = c;
-        rows = std::max<int>(rows, (int)c.size());
         for (int it : c) {
             std::vector<Seg> segs;
             if (it != IT_NONE) BuildSegs(it, st, segs);
@@ -1677,7 +1762,7 @@ static void RenderOverlay(OvRef& ref) {
         for (auto& cl : cols)
             for (auto& sv : cl.segs)
                 for (auto& sg : sv) key += sg.text + (sg.warn ? L"!" : L"") + L"\x1f";
-        if (s.spark) key += Fmt(L"h%d", g_histPos);
+        if (s.spark) key += Fmt(L"h%d", g_histPos.load());
         if (key == ref.lastKey) return;
         ref.lastKey = std::move(key);
     }
@@ -1798,6 +1883,10 @@ static void SyncOverlays() {
     AcquireSRWLockExclusive(&g_btnLock);
     bool changed = g_tbList != found;
     g_tbList = found;
+    for (auto it = g_btns.begin(); it != g_btns.end();) {  // a window handle of a gone taskbar can be reused
+        if (std::find(found.begin(), found.end(), it->first) == found.end()) it = g_btns.erase(it);
+        else ++it;
+    }
     ReleaseSRWLockExclusive(&g_btnLock);
     if (changed) SetEvent(g_uiaEvent);
 
@@ -1816,11 +1905,12 @@ static void SyncOverlays() {
             g_refs.push_back({tb, cp.result, GetTickCount64(), cp.slot, L""});
     }
 
-    // hide in full-screen apps / games, but only if that state lasts a few seconds
+    // exclusive full-screen games and presentation mode, but only if that state lasts a few seconds. Borderless
+    // full-screen windows are checked per monitor in CoveredByFullscreen, because QUNS_BUSY would hide every monitor.
     static int fsCount = 0;
     QUERY_USER_NOTIFICATION_STATE qs = QUNS_ACCEPTS_NOTIFICATIONS;
     SHQueryUserNotificationState(&qs);
-    bool fsRaw = (qs == QUNS_BUSY || qs == QUNS_RUNNING_D3D_FULL_SCREEN || qs == QUNS_PRESENTATION_MODE);
+    bool fsRaw = (qs == QUNS_RUNNING_D3D_FULL_SCREEN || qs == QUNS_PRESENTATION_MODE);
     fsCount = fsRaw ? fsCount + 1 : 0;
     g_fullscreen = fsCount >= 3;
     g_lightTheme = LightTheme();
@@ -1856,8 +1946,6 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                     EaseDisp();
                     RenderAll();
                 }
-                // keep a visible tooltip fresh: its owner thread does the work
-                NotifyOverlays(nullptr);
             } else if (w == 3) {  // easing animation, stops by itself once the values settled
                 bool moving = EaseDisp();
                 RenderAll();
@@ -1872,6 +1960,9 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             return 0;
         case WM_CLOSE:
             PostQuitMessage(0);
+            return 0;
+        case WM_RUNACTION:
+            RunAction((int)w);
             return 0;
         case WM_SETTINGS: {
             SetTimer(h, 1, g_s.refreshMs, nullptr);
@@ -1904,7 +1995,11 @@ static DWORD WINAPI Worker(LPVOID) {
 
     GdiplusStartupInput gin;
     ULONG_PTR token = 0;
-    GdiplusStartup(&token, &gin, nullptr);
+    if (GdiplusStartup(&token, &gin, nullptr) != Ok) {
+        Wh_Log(L"GdiplusStartup failed");
+        return 0;
+    }
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);  // ShellExecuteW asks for this
     g_renderCaches.emplace();
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
@@ -1937,13 +2032,10 @@ static DWORD WINAPI Worker(LPVOID) {
         g_uiaThread = CreateThread(nullptr, 0, UiaWorker, nullptr, 0, nullptr);
         SyncOverlays();
 
-        // event hooks (worker thread's message loop delivers them): taskbar movement, focus and minimise changes
-        HWINEVENTHOOK hooks[4] = {
-            SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, GetCurrentProcessId(), 0,
-                            WINEVENT_OUTOFCONTEXT),
+        // event hooks (worker thread's message loop delivers them); taskbar movement comes from the subclass
+        HWINEVENTHOOK hooks[2] = {
             SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT),
             SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT),
-            SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, WinEventProc, GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT),
         };
 
         SetTimer(msgWnd, 1, g_s.refreshMs, nullptr);
@@ -1974,6 +2066,7 @@ static DWORD WINAPI Worker(LPVOID) {
 
     g_renderCaches.reset();  // GDI+ objects must be gone before GdiplusShutdown
     GdiplusShutdown(token);
+    CoUninitialize();
     return 0;
 }
 
