@@ -2,15 +2,39 @@
 // @id              lock-screen-clock-styler
 // @name            Lock Screen Clock Styler
 // @name:tr-TR      Kilit Ekranı Saat Özelleştirici
+// @name:zh-CN      锁屏时钟样式定制
+// @name:zh-TW      鎖定畫面時鐘樣式自訂
+// @name:ja-JP      ロック画面の時計スタイラー
+// @name:ko-KR      잠금 화면 시계 스타일러
+// @name:de-DE      Sperrbildschirm-Uhr-Styler
+// @name:es-ES      Personalizador del reloj de la pantalla de bloqueo
+// @name:pt-BR      Personalizador de Relógio da Tela de Bloqueio
+// @name:fr-FR      Personnaliseur d'horloge d'écran de verrouillage
+// @name:it-IT      Personalizzatore orologio schermata di blocco
+// @name:pl-PL      Stylizator zegara ekranu blokady
+// @name:ru-RU      Стилизатор часов экрана блокировки
+// @name:uk-UA      Стилізатор годинника екрана блокування
 // @description     Customize the Windows 11 lock screen clock with modern styles, date display, and widget controls.
 // @description:tr-TR Windows 11 kilit ekranı saatini modern stiller, tarih göstergesi ve widget denetimleriyle özelleştirin.
-// @version         0.4.0
+// @description:zh-CN 使用现代样式、日期显示和小组件控制来自定义 Windows 11 锁屏时钟。
+// @description:zh-TW 使用現代樣式、日期顯示與小工具控制來自訂 Windows 11 鎖定畫面時鐘。
+// @description:ja-JP モダンなスタイル、日付表示、ウィジェット制御で Windows 11 のロック画面の時計をカスタマイズします。
+// @description:ko-KR 모던한 스타일, 날짜 표시 및 위젯 제어로 Windows 11 잠금 화면 시계를 맞춤 설정합니다.
+// @description:de-DE Passen Sie die Windows 11-Sperrbildschirmuhr mit modernen Stilen, Datumsanzeige und Widget-Steuerung an.
+// @description:es-ES Personaliza el reloj de la pantalla de bloqueo de Windows 11 con estilos modernos, visualización de fecha y control de widgets.
+// @description:pt-BR Personalize o relógio da tela de bloqueio do Windows 11 com estilos modernos, exibição de data e controle de widgets.
+// @description:fr-FR Personnalisez l'horloge de l'écran de verrouillage de Windows 11 avec des styles modernes, l'affichage de la date et le contrôle des widgets.
+// @description:it-IT Personalizza l'orologio della schermata di blocco di Windows 11 con stili moderni, visualizzazione della data e controllo dei widget.
+// @description:pl-PL Dostosuj zegar ekranu blokady systemu Windows 11 za pomocą nowoczesnych stylów, wyświetlania daty i kontroli widżetów.
+// @description:ru-RU Настройте часы экрана блокировки Windows 11 с современными стилями, отображением даты и управлением виджетами.
+// @description:uk-UA Налаштуйте годинник екрана блокування Windows 11 за допомогою сучасних стилів, відображення дати та керування віджетами.
+// @version         0.5.0
 // @author          ali0zdas
 // @github          https://github.com/ali0zdas
 // @license         MIT
 // @include         LockApp.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,33 +44,29 @@
 Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.
 
 ## Features:
-- **Minimalist Sonoma (Clean Typography):** Apple-inspired lock screen typography with date positioned above the time, slender display numerals, dual-layer atmospheric shadow, and bottom-left or center placement.
-- **Modern Flip Clock:** Split glass cards for hour and minute with an elegant horizontal flip seam.
-- **Classic Flip Clock:** Classic mechanical Solari-inspired flip clock with matte charcoal flap cards, aged ivory cream typography, mechanical split seam, and hinge axle clips.
-- **Cyberpunk Sci-Fi HUD Terminal:** Bespoke tactical Netrunner HUD terminal with dark obsidian glass chassis, tactical corner brackets in acid yellow and hot magenta, top telemetry diagnostic bar, electric cyan digits with rhythmic tactical pulse, and bottom telemetry date logger.
-- **Retro Pixel / LED Dot Matrix Clock:** Authentic dot matrix display inspired by classic digital boards with active and ambient inactive LED dots.
-- **Minimalist Aura / Floating Clock:** Frameless floating typography with ambient soft drop-shadow depth and an elegant frosted date pill.
-- **Battery & Charging Capsule:** Live battery percentage and power indicator (⚡ %85) for laptop users, automatically hidden on desktop PCs.
+- **Multiple Distinct Clock Styles:** Choose from a curated collection of clock designs including Retro Pixel / LED Dot Matrix, Modern Flip Clock, Classic Solari Flip Clock, Minimalist Sonoma, Cyberpunk Sci-Fi HUD, and Minimalist Aura.
+- **Lightweight & Thread-Safe:** Ultra-lightweight native XAML injection via the LockApp UI thread with ultra-low background CPU overhead. Direct visual tree navigation without XAML Diagnostics TAP, ensuring seamless compatibility with mods like Windows 11 Start Menu Styler.
+- **🎨 More Themes Coming Soon:** Have an idea for an aesthetic clock design or want your favorite style added? Reach out or open an issue on GitHub to suggest new themes!
 - **12-Hour / 24-Hour Format:** Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.
-- **Show Seconds Toggle:** Optional live seconds display. Supported by every style except the two flip clocks.
-- **Frosted Glass / Acrylic Styling:** Translucent glass panels with subtle border highlights and rounded corners.
+- **Show Seconds Toggle:** Optional live seconds display (supported across all non-flip styles).
 - **Dynamic Date Display:** Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.
 - **Hide Default Widgets:** Clean up the lock screen by hiding MSN weather, sports, and news widgets.
-- **Hide / Replace Default Clock:** Seamlessly replace the stock Windows 11 clock with custom styles or adjust vertical offsets.
-- **Extensive Customization:** Card opacity, font size, vertical offsets, and alignments are fully customizable via settings.
-- **No XAML Diagnostics:** The mod walks the lock screen visual tree from its own UI thread instead of registering a XAML Diagnostics TAP. It can therefore run alongside other XAML-based Windhawk mods such as Windows 11 Start Menu Styler.
+- **Extensive Customization:** Card opacity, font size, vertical offsets, and screen alignments are fully customizable via settings.
 
 ## Screenshots:
 | Style | Preview |
 | :---: | :---: |
-| Minimalist Sonoma | ![Minimalist Sonoma](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png) |
 | Retro Pixel / LED Matrix | ![Retro Pixel](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/Retro%20Pixel.png) |
 | Modern Flip Clock | ![Modern Flip Clock](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/modern%20flip%20clock.png) |
 | Classic Flip Clock | ![Classic Flip Clock](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/classical%20flip%20clock.png) |
+| Minimalist Sonoma | ![Minimalist Sonoma](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png) |
 | Cyberpunk Sci-Fi HUD | ![Cyberpunk Sci-Fi HUD](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20style.png) |
 
 ## Security Note:
 This mod exclusively targets `LockApp.exe`. It does not inject into or interfere with `LogonUI.exe` or `winlogon.exe` in the Secure Desktop, preventing any system lockup or logon security risks.
+
+## 🤝 Contributing & Feedback:
+Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like to suggest a new clock style, report an issue, or contribute code, feel free to visit the [GitHub repository](https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler) and open an issue or pull request.
 */
 // ==/WindhawkModReadme==
 
@@ -55,8 +75,32 @@ This mod exclusively targets `LockApp.exe`. It does not inject into or interfere
 - clockStyle: pixel
   $name: "Clock Style"
   $name:tr-TR: "Saat Tasarım Stili"
+  $name:zh-CN: "时钟样式"
+  $name:zh-TW: "時鐘樣式"
+  $name:ru-RU: "Стиль часов"
+  $name:de-DE: "Uhrstil"
+  $name:es-ES: "Estilo de reloj"
+  $name:pt-BR: "Estilo do relógio"
+  $name:fr-FR: "Style d'horloge"
+  $name:it-IT: "Stile orologio"
+  $name:pl-PL: "Styl zegara"
+  $name:ja-JP: "時計スタイル"
+  $name:ko-KR: "시계 스타일"
+  $name:uk-UA: "Стиль годинника"
   $description: "The clock style to display on the lock screen."
   $description:tr-TR: "Kilit ekranında görüntülenecek saat stili."
+  $description:zh-CN: "要在锁屏上显示的时钟样式。"
+  $description:zh-TW: "要在鎖定畫面上顯示的時鐘樣式。"
+  $description:ru-RU: "Стиль часов для отображения на экране блокировки."
+  $description:de-DE: "Der auf dem Sperrbildschirm anzuzeigende Uhrstil."
+  $description:es-ES: "El estilo de reloj que se mostrará en la pantalla de bloqueo."
+  $description:pt-BR: "O estilo de relógio a ser exibido na tela de bloqueio."
+  $description:fr-FR: "Le style d'horloge à afficher sur l'écran de verrouillage."
+  $description:it-IT: "Lo stile dell'orologio da visualizzare nella schermata di blocco."
+  $description:pl-PL: "Styl zegara do wyświetlenia na ekranie blokady."
+  $description:ja-JP: "ロック画面に表示する時計のスタイル。"
+  $description:ko-KR: "잠금 화면에 표시할 시계 스타일입니다."
+  $description:uk-UA: "Стиль годинника для відображення на екрані блокування."
   $options:
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
@@ -65,65 +109,526 @@ This mod exclusively targets `LockApp.exe`. It does not inject into or interfere
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
     - defaultOnly: "Default Clock Only (No Custom Clock)"
+  $options:tr-TR:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Yalnızca Varsayılan Saat (Özel Saat Yok)"
+  $options:zh-CN:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "仅默认时钟（无自定义时钟）"
+  $options:zh-TW:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "僅預設時鐘（無自訂時鐘）"
+  $options:ru-RU:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Только стандартные часы (без кастомных)"
+  $options:de-DE:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Nur Standard-Uhr (keine benutzerdefinierte Uhr)"
+  $options:es-ES:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Solo reloj predeterminado (sin reloj personalizado)"
+  $options:pt-BR:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Apenas relógio padrão (sem relógio personalizado)"
+  $options:fr-FR:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Horloge par défaut uniquement (aucune personnalisation)"
+  $options:it-IT:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Solo orologio predefinito (nessun orologio personalizzato)"
+  $options:pl-PL:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Tylko domyślny zegar (brak własnego zegara)"
+  $options:ja-JP:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "デフォルトの時計のみ（カスタム時計なし）"
+  $options:ko-KR:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "기본 시계만 사용 (사용자 지정 시계 없음)"
+  $options:uk-UA:
+    - pixel: "Retro Pixel / LED Dot Matrix"
+    - flip: "Modern Flip Clock"
+    - vintage: "Classic Flip Clock"
+    - macos: "Minimalist Sonoma (Clean Typography)"
+    - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
+    - aura: "Minimalist Aura / Floating Clock"
+    - defaultOnly: "Лише стандартний годинник (без власного)"
 - timeFormat: 24h
   $name: "Time Format"
   $name:tr-TR: "Saat Formatı"
+  $name:zh-CN: "时间格式"
+  $name:zh-TW: "時間格式"
+  $name:ru-RU: "Формат времени"
+  $name:de-DE: "Zeitformat"
+  $name:es-ES: "Formato de hora"
+  $name:pt-BR: "Formato de hora"
+  $name:fr-FR: "Format de l'heure"
+  $name:it-IT: "Formato ora"
+  $name:pl-PL: "Format czasu"
+  $name:ja-JP: "時刻の形式"
+  $name:ko-KR: "시간 형식"
+  $name:uk-UA: "Формат часу"
   $description: "Select 24-hour format or 12-hour format with AM/PM indicator."
   $description:tr-TR: "24 saat formatı veya AM/PM göstergeli 12 saat formatı seçimi."
+  $description:zh-CN: "选择 24 小时制或带有 AM/PM 指示器的 12 小时制。"
+  $description:zh-TW: "選擇 24 小時制或帶有 AM/PM 指示器的 12 小時制。"
+  $description:ru-RU: "Выберите 24-часовой формат или 12-часовой формат с индикатором AM/PM."
+  $description:de-DE: "Wählen Sie das 24-Stunden-Format oder das 12-Stunden-Format mit AM/PM-Anzeige."
+  $description:es-ES: "Selecciona el formato de 24 horas o el formato de 12 horas con indicador AM/PM."
+  $description:pt-BR: "Selecione o formato de 24 horas ou o formato de 12 horas com indicador AM/PM."
+  $description:fr-FR: "Sélectionnez le format 24 heures ou 12 heures avec indicateur AM/PM."
+  $description:it-IT: "Seleziona il formato a 24 ore o a 12 ore con indicatore AM/PM."
+  $description:pl-PL: "Wybierz format 24-godzinny lub 12-godzinny ze wskaźnikiem AM/PM."
+  $description:ja-JP: "24時間表示または午前/午後（AM/PM）表示の12時間表示を選択します。"
+  $description:ko-KR: "24시간 형식 또는 오전/오후(AM/PM) 표시가 있는 12시간 형식을 선택합니다."
+  $description:uk-UA: "Виберіть 24-годинний формат або 12-годинний формат з індикатором AM/PM."
   $options:
     - 24h: "24-Hour (14:30)"
     - 12h: "12-Hour AM/PM (02:30 PM)"
-- showSeconds: false
+  $options:tr-TR:
+    - 24h: "24 Saat (14:30)"
+    - 12h: "12 Saat AM/PM (02:30 PM)"
+  $options:zh-CN:
+    - 24h: "24 小时制 (14:30)"
+    - 12h: "12 小时制 AM/PM (02:30 PM)"
+  $options:zh-TW:
+    - 24h: "24 小時制 (14:30)"
+    - 12h: "12 小時制 AM/PM (02:30 PM)"
+  $options:ru-RU:
+    - 24h: "24-часовой (14:30)"
+    - 12h: "12-часовой AM/PM (02:30 PM)"
+  $options:de-DE:
+    - 24h: "24-Stunden (14:30)"
+    - 12h: "12-Stunden AM/PM (02:30 PM)"
+  $options:es-ES:
+    - 24h: "24 horas (14:30)"
+    - 12h: "12 horas AM/PM (02:30 PM)"
+  $options:pt-BR:
+    - 24h: "24 horas (14:30)"
+    - 12h: "12 horas AM/PM (02:30 PM)"
+  $options:fr-FR:
+    - 24h: "24 heures (14:30)"
+    - 12h: "12 heures AM/PM (02:30 PM)"
+  $options:it-IT:
+    - 24h: "24 ore (14:30)"
+    - 12h: "12 ore AM/PM (02:30 PM)"
+  $options:pl-PL:
+    - 24h: "24-godzinny (14:30)"
+    - 12h: "12-godzinny AM/PM (02:30 PM)"
+  $options:ja-JP:
+    - 24h: "24時間表示 (14:30)"
+    - 12h: "12時間表示 AM/PM (02:30 PM)"
+  $options:ko-KR:
+    - 24h: "24시간 형식 (14:30)"
+    - 12h: "12시간 형식 AM/PM (02:30 PM)"
+  $options:uk-UA:
+    - 24h: "24-годинний (14:30)"
+    - 12h: "12-годинний AM/PM (02:30 PM)"
+- showSeconds: true
   $name: "Show Seconds"
   $name:tr-TR: "Saniyeyi Göster"
+  $name:zh-CN: "显示秒数"
+  $name:zh-TW: "顯示秒數"
+  $name:ru-RU: "Показывать секунды"
+  $name:de-DE: "Sekunden anzeigen"
+  $name:es-ES: "Mostrar segundos"
+  $name:pt-BR: "Mostrar segundos"
+  $name:fr-FR: "Afficher les secondes"
+  $name:it-IT: "Mostra secondi"
+  $name:pl-PL: "Pokaż sekundy"
+  $name:ja-JP: "秒を表示"
+  $name:ko-KR: "초 표시"
+  $name:uk-UA: "Показувати секунди"
   $description: "Adds live seconds to the clock. Supported by every style except the Modern and Classic flip clocks."
   $description:tr-TR: "Saate canlı saniye ekler. Modern ve Klasik flip saatler dışındaki tüm stillerde desteklenir."
+  $description:zh-CN: "为时钟添加动态秒数。除现代和经典翻页时钟外的所有样式均支持。"
+  $description:zh-TW: "為時鐘新增動態秒數。除現代和經典翻頁時鐘外的所有樣式均支援。"
+  $description:ru-RU: "Добавляет отображение секунд в реальном времени. Поддерживается всеми стилями, кроме перекидных часов."
+  $description:de-DE: "Fügt der Uhr Live-Sekunden hinzu. Wird von jedem Stil außer den modernen und klassischen Klappuhren unterstützt."
+  $description:es-ES: "Añade segundos en vivo al reloj. Compatible con todos los estilos excepto los relojes flip modernos y clásicos."
+  $description:pt-BR: "Adiciona segundos ao vivo ao relógio. Suportado por todos os estilos, exceto os relógios flip modernos e clássicos."
+  $description:fr-FR: "Ajoute les secondes en direct à l'horloge. Pris en charge par tous les styles sauf les horloges à volets Modern et Classic."
+  $description:it-IT: "Aggiunge i secondi in tempo reale all'orologio. Supportato da tutti gli stili tranne gli orologi flip Modern e Classic."
+  $description:pl-PL: "Dodaje sekundy w czasie rzeczywistym do zegara. Obsługiwane przez wszystkie style z wyjątkiem zegarów klapkowych Modern i Classic."
+  $description:ja-JP: "時計にリアルタイムの秒表示を追加します。モダンおよびクラシックフリップ時計を除くすべてのスタイルでサポートされています。"
+  $description:ko-KR: "시계에 실시간 초 단위를 추가합니다. 모던 및 클래식 플립 시계를 제외한 모든 스타일에서 지원됩니다."
+  $description:uk-UA: "Додає відображення секунд у реальному часі. Підтримується всіма стилями, крім перекидних годинників."
 - glassOpacity: 45
-  $name: "Glass Opacity (Flip Cards)"
-  $name:tr-TR: "Cam Opaklığı (Flip Kartları)"
-  $description: "Translucency of the Modern and Classic flip clock cards (0 to 255; 0 is completely transparent, 255 is fully opaque). Other styles are not affected."
-  $description:tr-TR: "Modern ve Klasik flip saat kartlarının yarı saydamlığı (0 ile 255 arası; 0 tamamen saydam, 255 tam opak). Diğer stiller etkilenmez."
-- clockFontSize: 92
+  $name: "Glass Opacity (Modern Flip Cards)"
+  $name:tr-TR: "Cam Opaklığı (Modern Flip Kartları)"
+  $name:zh-CN: "玻璃不透明度（现代翻页卡片）"
+  $name:zh-TW: "玻璃不透明度（現代翻頁卡片）"
+  $name:ru-RU: "Непрозрачность стекла (карточки Modern Flip)"
+  $name:de-DE: "Glas-Deckkraft (Modern Flip-Karten)"
+  $name:es-ES: "Opacidad del cristal (Tarjetas Modern Flip)"
+  $name:pt-BR: "Opacidade do vidro (Cartões Modern Flip)"
+  $name:fr-FR: "Opacité du verre (Cartes Modern Flip)"
+  $name:it-IT: "Opacità vetro (schede Modern Flip)"
+  $name:pl-PL: "Nieprzezroczystość szkła (karty Modern Flip)"
+  $name:ja-JP: "ガラスの不透明度（モダンフリップカード）"
+  $name:ko-KR: "유리 불투명도(모던 플립 카드)"
+  $name:uk-UA: "Непрозорість скла (картки Modern Flip)"
+  $description: "Translucency of the Modern Flip clock cards (0 to 255; 0 is completely transparent, 255 is fully opaque). Other styles are not affected."
+  $description:tr-TR: "Modern Flip saat kartlarının yarı saydamlığı (0 ile 255 arası; 0 tamamen saydam, 255 tam opak). Diğer stiller etkilenmez."
+  $description:zh-CN: "现代翻页时钟卡片的半透明度（0 到 255；0 完全透明，255 完全不透明）。其他样式不受影响。"
+  $description:zh-TW: "現代翻頁時鐘卡片的半透明度（0 到 255；0 完全透明，255 完全不透明）。其他樣式不受影響。"
+  $description:ru-RU: "Полупрозрачность карточек часов Modern Flip (от 0 до 255; 0 — полностью прозрачные, 255 — полностью непрозрачные). Другие стили не затрагиваются."
+  $description:de-DE: "Lichtdurchlässigkeit der Modern Flip-Uhrenkarten (0 bis 255; 0 ist vollständig transparent, 255 vollständig deckend). Andere Stile sind nicht betroffen."
+  $description:es-ES: "Translucidez de las tarjetas de reloj Modern Flip (0 a 255; 0 es completamente transparente, 255 es totalmente opaco). Otros estilos no se ven afectados."
+  $description:pt-BR: "Translucidez dos cartões do relógio Modern Flip (0 a 255; 0 é totalmente transparente, 255 é totalmente opaco). Outros estilos não são afetados."
+  $description:fr-FR: "Translucidité des cartes d'horloge Modern Flip (0 à 255 ; 0 est totalement transparent, 255 est totalement opaque). Les autres styles ne sont pas affectés."
+  $description:it-IT: "Trasparenza delle schede dell'orologio Modern Flip (da 0 a 255; 0 è completamente trasparente, 255 è completamente opaco). Gli altri stili non sono interessati."
+  $description:pl-PL: "Półprzezroczystość kart zegara Modern Flip (od 0 do 255; 0 to całkowita przezroczystość, 255 to pełne krycie). Inne style nie ulegają zmianie."
+  $description:ja-JP: "モダンフリップ時計カードの半透明度（0〜255。0は完全に透明、255は完全に不透明）。他のスタイルには影響しません。"
+  $description:ko-KR: "모던 플립 시계 카드의 반투명도입니다(0~255, 0은 완전 투명, 255는 완전 불투명). 다른 스타일에는 영향을 주지 않습니다."
+  $description:uk-UA: "Напівпрозорість карток годинника Modern Flip (від 0 до 255; 0 — повністю прозорі, 255 — повністю непрозорі). Інші стилі не змінюються."
+- clockFontSize: 140
   $name: "Digit Font Size"
-  $name:tr-TR: "Rakam Font Boyutu"
+  $name:tr-TR: "Rakam Yazı Tipi Boyutu"
+  $name:zh-CN: "数字字体大小"
+  $name:zh-TW: "數字字型大小"
+  $name:ru-RU: "Размер шрифта цифр"
+  $name:de-DE: "Ziffernschriftgröße"
+  $name:es-ES: "Tamaño de fuente de dígitos"
+  $name:pt-BR: "Tamanho da fonte dos dígitos"
+  $name:fr-FR: "Taille de police des chiffres"
+  $name:it-IT: "Dimensione carattere cifre"
+  $name:pl-PL: "Rozmiar czcionki cyfr"
+  $name:ja-JP: "数字のフォントサイズ"
+  $name:ko-KR: "숫자 글꼴 크기"
+  $name:uk-UA: "Розмір шрифту цифр"
   $description: "Base font size for the clock digits (20 to 300). Each style scales this value for its own layout."
   $description:tr-TR: "Saat rakamları için temel punto büyüklüğü (20 ile 300 arası). Her stil bu değeri kendi yerleşimine göre ölçekler."
+  $description:zh-CN: "时钟数字的基本字体大小（20 到 300）。每个样式会根据自身布局缩放此值。"
+  $description:zh-TW: "時鐘數字的基本字型大小（20 到 300）。每個樣式會根據自身版面配置縮放此值。"
+  $description:ru-RU: "Базовый размер шрифта для цифр часов (от 20 до 300). Каждый стиль масштабирует это значение под собственный макет."
+  $description:de-DE: "Basis-Schriftgröße für die Ziffern (20 bis 300). Jeder Stil skaliert diesen Wert für sein eigenes Layout."
+  $description:es-ES: "Tamaño de fuente base para los dígitos del reloj (20 a 300). Cada estilo escala este valor para su propio diseño."
+  $description:pt-BR: "Tamanho base da fonte para os dígitos do relógio (20 a 300). Cada estilo dimensiona esse valor para seu próprio layout."
+  $description:fr-FR: "Taille de police de base pour les chiffres de l'horloge (20 à 300). Chaque style ajuste cette valeur à sa propre disposition."
+  $description:it-IT: "Dimensione di base del carattere per le cifre dell'orologio (da 20 a 300). Ogni stile ridimensiona questo valore in base al proprio layout."
+  $description:pl-PL: "Podstawowy rozmiar czcionki cyfr zegara (od 20 do 300). Każdy styl skaluje tę wartość do własnego układu."
+  $description:ja-JP: "時計の数字の基本フォントサイズ（20〜300）。各スタイルは独自のレイアウトに合わせてこの値を調整します。"
+  $description:ko-KR: "시계 숫자의 기본 글꼴 크기입니다(20~300). 각 스타일마다 고유한 레이아웃에 맞춰 이 값을 조정합니다."
+  $description:uk-UA: "Базовий розмір шрифту для цифр годинника (від 20 до 300). Кожен стиль масштабує це значення для свого макета."
 - verticalOffset: 0
   $name: "Vertical Offset (px)"
   $name:tr-TR: "Dikey Konum Ofseti (px)"
+  $name:zh-CN: "垂直偏移 (px)"
+  $name:zh-TW: "垂直位移 (px)"
+  $name:ru-RU: "Вертикальное смещение (пикс.)"
+  $name:de-DE: "Vertikaler Versatz (px)"
+  $name:es-ES: "Desplazamiento vertical (px)"
+  $name:pt-BR: "Deslocamento vertical (px)"
+  $name:fr-FR: "Décalage vertical (px)"
+  $name:it-IT: "Offset verticale (px)"
+  $name:pl-PL: "Przesunięcie pionowe (px)"
+  $name:ja-JP: "垂直オフセット (px)"
+  $name:ko-KR: "세로 오프셋 (px)"
+  $name:uk-UA: "Вертикальний зсув (пікс.)"
   $description: "Shifts the clock vertically (-200 to +400). Out-of-range values are clamped."
   $description:tr-TR: "Saati dikey olarak kaydırır (-200 ile +400 arası). Aralık dışı değerler sınırlandırılır."
+  $description:zh-CN: "在垂直方向上移动时钟（-200 到 +400）。超出范围的值将被限制。"
+  $description:zh-TW: "在垂直方向上位移時鐘（-200 到 +400）。超出範圍的數值將被限制。"
+  $description:ru-RU: "Смещает часы по вертикали (от -200 до +400). Значения вне диапазона ограничиваются."
+  $description:de-DE: "Verschiebt die Uhr vertikal (-200 bis +400). Werte außerhalb des Bereichs werden begrenzt."
+  $description:es-ES: "Desplaza el reloj verticalmente (-200 a +400). Los valores fuera de rango se limitan."
+  $description:pt-BR: "Desloca o relógio verticalmente (-200 a +400). Valores fora do intervalo são ajustados."
+  $description:fr-FR: "Décale l'horloge verticalement (-200 à +400). Les valeurs hors limites sont ajustées."
+  $description:it-IT: "Sposta l'orologio verticalmente (da -200 a +400). I valori fuori intervallo vengono limitati."
+  $description:pl-PL: "Przesuwa zegar w pionie (od -200 do +400). Wartości spoza zakresu są ograniczane."
+  $description:ja-JP: "時計を垂直方向に移動します（-200〜+400）。範囲外の値は制限されます。"
+  $description:ko-KR: "시계를 세로 방향으로 이동합니다(-200~+400). 범위를 벗어난 값은 제한됩니다."
+  $description:uk-UA: "Зсуває годинник по вертикалі (від -200 до +400). Значення за межами діапазону обмежуються."
 - clockAlignment: auto
   $name: "Clock Horizontal Alignment"
   $name:tr-TR: "Saat Yatay Hizalaması"
+  $name:zh-CN: "时钟水平对齐"
+  $name:zh-TW: "時鐘水平對齊"
+  $name:ru-RU: "Горизонтальное выравнивание часов"
+  $name:de-DE: "Horizontale Ausrichtung der Uhr"
+  $name:es-ES: "Alineación horizontal del reloj"
+  $name:pt-BR: "Alinhamento horizontal do relógio"
+  $name:fr-FR: "Alignement horizontal de l'horloge"
+  $name:it-IT: "Allineamento orizzontale orologio"
+  $name:pl-PL: "Wyrównanie poziome zegara"
+  $name:ja-JP: "時計の水平方向の配置"
+  $name:ko-KR: "시계 가로 정렬"
+  $name:uk-UA: "Горизонтальне вирівнювання годинника"
   $description: "Horizontal alignment and layout of the clock on screen. Automatic uses the theme default (bottom-left for Minimalist Sonoma, center for other styles)."
   $description:tr-TR: "Saatin ekrandaki yerleşim ve hizalaması. Otomatik seçeneği tema varsayılanını kullanır (Minimalist Sonoma için sol alt, diğer stiller için merkez)."
+  $description:zh-CN: "时钟在屏幕上的水平对齐与布局。“自动”将使用主题默认值（极简 Sonoma 为左下角，其他样式为居中）。"
+  $description:zh-TW: "時鐘在螢幕上的水平對齊與版面配置。「自動」將使用佈景主題預設值（極簡 Sonoma 為左下角，其他樣式為置中）。"
+  $description:ru-RU: "Горизонтальное выравнивание и расположение часов на экране. «Автоматически» использует настройки темы по умолчанию (слева внизу для Minimalist Sonoma, по центру для остальных стилей)."
+  $description:de-DE: "Horizontale Ausrichtung und Anordnung der Uhr auf dem Bildschirm. „Automatisch“ verwendet den Design-Standard (unten links für Minimalist Sonoma, mittig für andere Stile)."
+  $description:es-ES: "Alineación horizontal y diseño del reloj en pantalla. Automático utiliza el valor predeterminado del tema (abajo a la izquierda para Sonoma Minimalista, centrado para otros estilos)."
+  $description:pt-BR: "Alinhamento horizontal e layout do relógio na tela. Automático usa o padrão do tema (canto inferior esquerdo para Sonoma Minimalista, centro para outros estilos)."
+  $description:fr-FR: "Alignement horizontal et disposition de l'horloge à l'écran. Automatique utilise le style par défaut (en bas à gauche pour Minimalist Sonoma, centré pour les autres)."
+  $description:it-IT: "Allineamento orizzontale e layout dell'orologio sullo schermo. Automatico usa il valore predefinito del tema (in basso a sinistra per Minimalist Sonoma, centrato per gli altri)."
+  $description:pl-PL: "Wyrównanie poziome i układ zegara na ekranie. Opcja „Automatycznie” używa domyślnego motywu (w lewym dolnym rogu dla Minimalist Sonoma, na środku dla pozostałych)."
+  $description:ja-JP: "画面上の時計の水平方向の配置とレイアウト。「自動」はテーマのデフォルトを使用します（ミニマリスト Sonoma は左下、その他のスタイルは中央）。"
+  $description:ko-KR: "화면에서 시계의 가로 정렬 및 레이아웃입니다. '자동'은 테마 기본값을 사용합니다(미니멀리스트 Sonoma는 왼쪽 하단, 기타 스타일은 중앙)."
+  $description:uk-UA: "Горизонтальне вирівнювання та макет годинника на екрані. «Автоматично» використовує значення теми за замовчуванням (внизу ліворуч для Minimalist Sonoma, по центру для інших стилів)."
   $options:
     - auto: "Automatic (Theme Default)"
     - center: "Center of Screen"
     - bottomLeft: "Bottom-Left (Sonoma Style)"
     - left: "Left Side"
     - right: "Right Side"
+  $options:tr-TR:
+    - auto: "Otomatik (Tema Varsayılanı)"
+    - center: "Ekranın Ortası"
+    - bottomLeft: "Sol Alt (Sonoma Stili)"
+    - left: "Sol Taraf"
+    - right: "Sağ Taraf"
+  $options:zh-CN:
+    - auto: "自动（主题默认）"
+    - center: "屏幕居中"
+    - bottomLeft: "左下角（Sonoma 样式）"
+    - left: "靠左"
+    - right: "靠右"
+  $options:zh-TW:
+    - auto: "自動（佈景主題預設）"
+    - center: "螢幕置中"
+    - bottomLeft: "左下角（Sonoma 樣式）"
+    - left: "靠左"
+    - right: "靠右"
+  $options:ru-RU:
+    - auto: "Автоматически (по умолчанию темы)"
+    - center: "По центру экрана"
+    - bottomLeft: "Слева внизу (стиль Sonoma)"
+    - left: "Слева"
+    - right: "Справа"
+  $options:de-DE:
+    - auto: "Automatisch (Design-Standard)"
+    - center: "Bildschirmmitte"
+    - bottomLeft: "Unten links (Sonoma-Stil)"
+    - left: "Links"
+    - right: "Rechts"
+  $options:es-ES:
+    - auto: "Automático (predeterminado del tema)"
+    - center: "Centro de la pantalla"
+    - bottomLeft: "Abajo a la izquierda (estilo Sonoma)"
+    - left: "Lado izquierdo"
+    - right: "Lado derecho"
+  $options:pt-BR:
+    - auto: "Automático (padrão do tema)"
+    - center: "Centro da tela"
+    - bottomLeft: "Canto inferior esquerdo (estilo Sonoma)"
+    - left: "Lado esquerdo"
+    - right: "Lado direito"
+  $options:fr-FR:
+    - auto: "Automatique (par défaut)"
+    - center: "Centre de l'écran"
+    - bottomLeft: "En bas à gauche (style Sonoma)"
+    - left: "Côté gauche"
+    - right: "Côté droit"
+  $options:it-IT:
+    - auto: "Automatico (predefinito del tema)"
+    - center: "Centro dello schermo"
+    - bottomLeft: "In basso a sinistra (stile Sonoma)"
+    - left: "Lato sinistro"
+    - right: "Lato destro"
+  $options:pl-PL:
+    - auto: "Automatycznie (domyślne motywu)"
+    - center: "Środek ekranu"
+    - bottomLeft: "Lewy dolny róg (styl Sonoma)"
+    - left: "Po lewej stronie"
+    - right: "Po prawej stronie"
+  $options:ja-JP:
+    - auto: "自動（テーマの既定値）"
+    - center: "画面中央"
+    - bottomLeft: "左下（Sonoma スタイル）"
+    - left: "左寄せ"
+    - right: "右寄せ"
+  $options:ko-KR:
+    - auto: "자동 (테마 기본값)"
+    - center: "화면 중앙"
+    - bottomLeft: "왼쪽 하단 (Sonoma 스타일)"
+    - left: "왼쪽"
+    - right: "오른쪽"
+  $options:uk-UA:
+    - auto: "Автоматично (за замовчуванням теми)"
+    - center: "По центру екрана"
+    - bottomLeft: "Внизу ліворуч (стиль Sonoma)"
+    - left: "Ліворуч"
+    - right: "Праворуч"
 - hideDefaultWidgets: false
   $name: "Hide Default Widgets"
   $name:tr-TR: "Varsayılan Widget'ları Gizle"
+  $name:zh-CN: "隐藏默认小组件"
+  $name:zh-TW: "隱藏預設小工具"
+  $name:ru-RU: "Скрыть стандартные виджеты"
+  $name:de-DE: "Standard-Widgets ausblenden"
+  $name:es-ES: "Ocultar widgets predeterminados"
+  $name:pt-BR: "Ocultar widgets padrão"
+  $name:fr-FR: "Masquer les widgets par défaut"
+  $name:it-IT: "Nascondi widget predefiniti"
+  $name:pl-PL: "Ukryj domyślne widżety"
+  $name:ja-JP: "デフォルトのウィジェットを非表示にする"
+  $name:ko-KR: "기본 위젯 숨기기"
+  $name:uk-UA: "Приховати стандартні віджети"
   $description: "Hides MSN weather, sports, and news widget areas on the lock screen. Disabled by default so the mod only restyles the clock unless asked otherwise."
   $description:tr-TR: "Kilit ekranındaki MSN hava durumu, spor ve haber widget alanını gizler. Mod varsayılan olarak yalnızca saati yeniden stillendirir; widget'ları gizlemek için bu seçeneği açın."
+  $description:zh-CN: "隐藏锁屏上的 MSN 天气、体育和新闻小组件区域。默认禁用，以便模组仅重新设计时钟样式，除非另有指定。"
+  $description:zh-TW: "隱藏鎖定畫面上的 MSN 天氣、運動與新聞小工具區域。預設為停用，除非另有指定，否則模組僅變更時鐘樣式。"
+  $description:ru-RU: "Скрывает области виджетов погоды MSN, спорта и новостей на экране блокировки. Отключено по умолчанию, чтобы мод изменял только часы, если не указано иное."
+  $description:de-DE: "Blendet MSN-Wetter-, Sport- und Nachrichten-Widgets auf dem Sperrbildschirm aus. Standardmäßig deaktiviert, damit der Mod nur die Uhr anpasst, sofern nicht anders gewünscht."
+  $description:es-ES: "Oculta las áreas de widgets de MSN el tiempo, deportes y noticias en la pantalla de bloqueo. Desactivado de forma predeterminada para que el mod solo rediseñe el reloj a menos que se indique lo contrario."
+  $description:pt-BR: "Oculta as áreas de widgets de clima, esportes e notícias do MSN na tela de bloqueio. Desativado por padrão para que o mod apenas estilize o relógio, a menos que solicitado o contrário."
+  $description:fr-FR: "Masque les zones de widgets météo, sports et actualités MSN sur l'écran de verrouillage. Désactivé par défaut."
+  $description:it-IT: "Nasconde le aree dei widget meteo, sport e notizie MSN nella schermata di blocco. Disabilitato per impostazione predefinita."
+  $description:pl-PL: "Ukrywa obszary widżetów pogody MSN, wiadomości i sportu na ekranie blokady. Domyślnie wyłączone."
+  $description:ja-JP: "ロック画面上の MSN 天気、スポーツ、ニュースのウィジェット領域を非表示にします。指定がない限り時計のスタイル変更のみを行うよう、デフォルトでは無効になっています。"
+  $description:ko-KR: "잠금 화면의 MSN 날씨, 스포츠, 뉴스 위젯 영역을 숨깁니다. 별도로 설정하지 않는 한 시계 스타일만 변경되도록 기본적으로 비활성화되어 있습니다."
+  $description:uk-UA: "Приховує області віджетів погоди MSN, спорту та новин на екрані блокування. За замовчуванням вимкнено, щоб мод змінював лише стиль годинника, якщо не вказано інше."
 - hideDefaultClock: true
   $name: "Hide Default Lock Screen Clock"
   $name:tr-TR: "Varsayılan Kilit Ekranı Saatini Gizle"
+  $name:zh-CN: "隐藏默认锁屏时钟"
+  $name:zh-TW: "隱藏預設鎖定畫面時鐘"
+  $name:ru-RU: "Скрыть стандартные часы экрана блокировки"
+  $name:de-DE: "Standard-Sperrbildschirmuhr ausblenden"
+  $name:es-ES: "Ocultar reloj predeterminado de la pantalla de bloqueo"
+  $name:pt-BR: "Ocultar relógio padrão da tela de bloqueio"
+  $name:fr-FR: "Masquer l'horloge par défaut de l'écran de verrouillage"
+  $name:it-IT: "Nascondi orologio predefinito schermata di blocco"
+  $name:pl-PL: "Ukryj domyślny zegar ekranu blokady"
+  $name:ja-JP: "デフォルトのロック画面の時計を非表示にする"
+  $name:ko-KR: "기본 잠금 화면 시계 숨기기"
+  $name:uk-UA: "Приховати стандартний годинник екрана блокування"
   $description: "Hides the default Windows 11 clock and date text to make way for the new clock."
   $description:tr-TR: "Windows 11'in standart saat ve tarih metnini gizleyerek yeni saatin görünmesini sağlar."
+  $description:zh-CN: "隐藏默认的 Windows 11 时钟和日期文本，以便显示新的定制时钟。"
+  $description:zh-TW: "隱藏預設的 Windows 11 時鐘與日期文字，以便顯示新的自訂時鐘。"
+  $description:ru-RU: "Скрывает стандартный текст часов и даты Windows 11, освобождая место для новых часов."
+  $description:de-DE: "Blendet den standardmäßigen Windows 11-Uhr- und Datumstext aus, um Platz für die neue Uhr zu machen."
+  $description:es-ES: "Oculta el texto predeterminado de hora y fecha de Windows 11 para dar paso al nuevo reloj."
+  $description:pt-BR: "Oculta o texto padrão de relógio e data do Windows 11 para dar espaço ao novo relógio."
+  $description:fr-FR: "Masque le texte par défaut de l'horloge et de la date de Windows 11 pour afficher la nouvelle horloge."
+  $description:it-IT: "Nasconde il testo predefinito di data e ora di Windows 11 per fare spazio al nuovo orologio."
+  $description:pl-PL: "Ukrywa domyślny tekst zegara i daty systemu Windows 11, aby zrobić miejsce na nowy zegar."
+  $description:ja-JP: "新しい時計を表示するために、デフォルトの Windows 11 の時計と日付のテキストを非表示にします。"
+  $description:ko-KR: "새 시계를 표시하기 위해 기본 Windows 11 시계와 날짜 텍스트를 숨깁니다."
+  $description:uk-UA: "Приховує стандартний текст годинника та дати Windows 11, щоб звільнити місце для нового годинника."
 - showDateCapsule: true
   $name: "Show Date Display"
   $name:tr-TR: "Tarih Göstergesini Göster"
+  $name:zh-CN: "显示日期"
+  $name:zh-TW: "顯示日期"
+  $name:ru-RU: "Показывать дату"
+  $name:de-DE: "Datumsanzeige anzeigen"
+  $name:es-ES: "Mostrar fecha"
+  $name:pt-BR: "Mostrar exibição de data"
+  $name:fr-FR: "Afficher la date"
+  $name:it-IT: "Mostra data"
+  $name:pl-PL: "Pokaż datę"
+  $name:ja-JP: "日付を表示"
+  $name:ko-KR: "날짜 표시"
+  $name:uk-UA: "Показувати дату"
   $description: "Displays a date and weekday display (above or below clock cards)."
   $description:tr-TR: "Tarih ve gün göstergesini görüntüler."
+  $description:zh-CN: "显示日期和星期几（位于时钟卡片上方或下方）。"
+  $description:zh-TW: "顯示日期與星期（位於時鐘卡片上方或下方）。"
+  $description:ru-RU: "Отображает дату и день недели (над или под карточками часов)."
+  $description:de-DE: "Zeigt das Datum und den Wochentag an (über oder unter den Uhrenkarten)."
+  $description:es-ES: "Muestra la fecha y el día de la semana (encima o debajo de las tarjetas del reloj)."
+  $description:pt-BR: "Exibe a data e o dia da semana (acima ou abaixo dos cartões do relógio)."
+  $description:fr-FR: "Affiche la date et le jour de la semaine (au-dessus ou en dessous des cartes de l'horloge)."
+  $description:it-IT: "Visualizza la data e il giorno della settimana (sopra o sotto le schede dell'orologio)."
+  $description:pl-PL: "Wyświetla datę i dzień tygodnia (nad lub pod kartami zegara)."
+  $description:ja-JP: "日付と曜日を表示します（時計カードの上または下）。"
+  $description:ko-KR: "날짜와 요일을 표시합니다(시계 카드 위 또는 아래)."
+  $description:uk-UA: "Відображає дату та день тижня (над або під картками годинника)."
 - showBatteryStatus: false
   $name: "Show Battery & Charging Capsule"
   $name:tr-TR: "Pil ve Şarj Kapsülünü Göster"
+  $name:zh-CN: "显示电池与充电胶囊"
+  $name:zh-TW: "顯示電池與充電膠囊"
+  $name:ru-RU: "Показывать капсулу батареи и зарядки"
+  $name:de-DE: "Akku- und Ladekapsel anzeigen"
+  $name:es-ES: "Mostrar cápsula de batería y carga"
+  $name:pt-BR: "Mostrar cápsula de bateria e carregamento"
+  $name:fr-FR: "Afficher la capsule de batterie et de charge"
+  $name:it-IT: "Mostra capsula batteria e ricarica"
+  $name:pl-PL: "Pokaż kapsułę baterii i ładowania"
+  $name:ja-JP: "バッテリーと充電のカプセルを表示"
+  $name:ko-KR: "배터리 및 충전 캡슐 표시"
+  $name:uk-UA: "Показувати капсулу батареї та заряджання"
   $description: "Displays battery percentage and charging status on laptops (automatically hidden on desktop PCs)."
   $description:tr-TR: "Dizüstü bilgisayarlarda pil yüzdesi ve şarj durumu kapsülünü görüntüler (Masaüstü bilgisayarlarda otomatik gizlenir)."
+  $description:zh-CN: "在笔记本电脑上显示电池百分比和充电状态（在台式机上自动隐藏）。"
+  $description:zh-TW: "在筆記型電腦上顯示電池百分比與充電狀態（在桌上型電腦上會自動隱藏）。"
+  $description:ru-RU: "Отображает процент заряда батареи и статус зарядки на ноутбуках (на настольных ПК скрывается автоматически)."
+  $description:de-DE: "Zeigt den Akkustand und Ladestatus auf Laptops an (auf Desktop-PCs automatisch ausgeblendet)."
+  $description:es-ES: "Muestra el porcentaje de batería y el estado de carga en portátiles (se oculta automáticamente en PC de escritorio)."
+  $description:pt-BR: "Exibe a porcentagem da bateria e o status de carregamento em notebooks (oculto automaticamente em PCs desktop)."
+  $description:fr-FR: "Affiche le pourcentage de batterie et l'état de charge sur les ordinateurs portables (automatiquement masqué sur les PC fixes)."
+  $description:it-IT: "Visualizza la percentuale della batteria e lo stato di ricarica sui laptop (nascosto automaticamente sui PC desktop)."
+  $description:pl-PL: "Wyświetla procent baterii i stan ładowania na laptopach (automatycznie ukrywane na komputerach stacjonarnych)."
+  $description:ja-JP: "ノートパソコンでバッテリー残量と充電状態を表示します（デスクトップ PC では自動的に非表示になります）。"
+  $description:ko-KR: "노트북에서 배터리 백분율과 충전 상태를 표시합니다(데스크톱 PC에서는 자동으로 숨겨집니다)."
+  $description:uk-UA: "Відображає відсоток заряду батареї та статус заряджання на ноутбуках (на настільних ПК автоматично приховується)."
 */
 // ==/WindhawkModSettings==
 
@@ -196,9 +701,11 @@ void LoadSettings() {
     if (g_settings.glassOpacity < 0) g_settings.glassOpacity = 0;
     if (g_settings.glassOpacity > 255) g_settings.glassOpacity = 255;
 
-    g_settings.clockFontSize = Wh_GetIntSetting(L"clockFontSize");
-    if (g_settings.clockFontSize < 20) g_settings.clockFontSize = 20;
-    if (g_settings.clockFontSize > 300) g_settings.clockFontSize = 300;
+    int fontSetting = Wh_GetIntSetting(L"clockFontSize");
+    if (fontSetting == 0) fontSetting = 140;
+    if (fontSetting < 20) fontSetting = 20;
+    if (fontSetting > 300) fontSetting = 300;
+    g_settings.clockFontSize = fontSetting;
 
     g_settings.verticalOffset = Wh_GetIntSetting(L"verticalOffset");
     if (g_settings.verticalOffset < -200) g_settings.verticalOffset = -200;
@@ -1960,6 +2467,7 @@ void RestoreTrackedElements(std::vector<TrackedElement>& tracked) {
         }
     }
     tracked.clear();
+    tracked.shrink_to_fit();
 }
 
 // Keeps the tracking list in sync with the current tree and hides only the
@@ -2073,6 +2581,7 @@ void ResetClockElementReferences() {
 
     for (int i = 0; i < 6; i++) {
         g_pixelDigits[i].dots.clear();
+        g_pixelDigits[i].dots.shrink_to_fit();
         g_pixelDigits[i].lastVal = -1;
     }
     g_brushActiveDot = nullptr;
@@ -2448,5 +2957,6 @@ void Wh_ModSettingsChanged() {
     } else {
         // No visual tree yet, so nothing else can be reading these settings.
         LoadSettings();
+        g_settingsDirty = true;
     }
 }

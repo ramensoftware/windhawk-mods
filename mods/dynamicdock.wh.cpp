@@ -2,7 +2,7 @@
 // @id              dynamicdock
 // @name            DynamicDock
 // @description     For Ultrawide Monitors: Force the taskbar to follow your mouse when it touches the edge and your icons will be centered on your mouse. Works with default and modded taskbars.
-// @version         1.0
+// @version         1.0.1
 // @author          IIKiiNGsLYII
 // @github          https://github.com/IIKiiNGsLYII
 // @include         explorer.exe
@@ -46,6 +46,12 @@ This is still the real Windows taskbar, so everything works like normal: jump li
 Prefer the taskbar to stay full width at the bottom too? Turn on **Keep the bottom taskbar full width** (in the
 **Bottom taskbar** section). The taskbar then works like the top one: it pops up full width with Widgets in the
 left corner and the tray and clock at the right edge, and only the app icons slide to the mouse.
+
+## Start menu above the dock
+Want the Start menu to open above the moved bar instead of in the middle of the screen? Install the
+[Shell Flyout Positions](https://windhawk.net/mods/shell-flyout-positions) mod alongside DynamicDock and, in its
+**Start menu** settings, set **Horizontal alignment** to **Center-aligned to the Start button** (or left/right-aligned
+to the Start button). DynamicDock moves the Start button with the bar, so Start then opens right above it.
 
 ## Compatibility
 - Works with the **default Windows 11 taskbar** and with the **Windows 11 Taskbar
