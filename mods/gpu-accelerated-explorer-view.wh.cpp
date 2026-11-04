@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         1.0.3
+// @version         1.0.4
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -248,7 +248,9 @@ Enable **Enable logging** when reproducing a bug and include Windhawk's log in t
 #include <algorithm>
 #include <array>
 #include <bit>
+#if defined(__x86_64__) || defined(_M_X64)
 #include <emmintrin.h>
+#endif
 #include <limits>
 #include <atomic>
 #include <map>
@@ -1771,7 +1773,8 @@ struct ClipboardPathLess {
         // for the differing suffix (including Unicode and embedded terminators).
         size_t same=0;
         const auto length=std::min(a.size(),b.size());
-        // SSE2 is part of the mod's x64 baseline. Read only complete blocks
+#if defined(__x86_64__) || defined(_M_X64)
+        // SSE2 is part of the x64 baseline. Read only complete blocks
         // inside both strings; equal NULs stop comparison just like _wcsicmp.
         constexpr size_t lanes=sizeof(__m128i)/sizeof(wchar_t);
         const auto zero=_mm_setzero_si128();
@@ -1783,6 +1786,7 @@ struct ClipboardPathLess {
             if(mask!=0xFFFFu) {same+=std::countr_one(mask)/sizeof(wchar_t); break;}
             same+=lanes;
         }
+#endif
         while(same<length && a[same] && a[same]==b[same]) ++same;
         return _wcsicmp(a.c_str()+same,b.c_str()+same) < 0;
     }
