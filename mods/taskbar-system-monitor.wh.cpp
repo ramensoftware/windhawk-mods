@@ -906,9 +906,10 @@ static bool MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* 
     return true;
 }
 
-// Measures the first icon when g_uiaEvent says something may have moved it (taskbar moved, app focus / minimise
-// changes, settings), debounced, plus a slow safety net. Icons animate when apps open and close, and the numbers are
-// wrong meanwhile, so a measurement only counts once the next one agrees. Quick retries only until then.
+// Measures the icons when g_uiaEvent says something may have moved them (taskbar moved, app focus / minimise changes,
+// settings), plus a slow safety net. An event only causes one scan, after a pause that also swallows further events,
+// because every scan is answered by the taskbar's thread. Icons animate when apps open and close and the numbers are
+// wrong meanwhile, so a measurement only counts once the next one agrees; quick re-reads happen only while they differ.
 static DWORD WINAPI UiaWorker(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IUIAutomation* uia = nullptr;
@@ -935,42 +936,49 @@ static DWORD WINAPI UiaWorker(LPVOID) {
     }
     HANDLE handles[2] = {g_stopEvent, g_uiaEvent};
     std::unordered_map<HWND, BtnInfo> lastRead;
-    int followUps = 0;
+    DWORD failDelay = 200;
+    ULONGLONG changingSince = 0;
     while (!g_stop) {
         std::vector<HWND> list;
         AcquireSRWLockShared(&g_btnLock);
         list = g_tbList;
         ReleaseSRWLockShared(&g_btnLock);
-        bool settled = !list.empty();
+        bool failed = list.empty(), changing = false;
+        ULONGLONG now = GetTickCount64();
         for (HWND tb : list) {
             if (g_stop) break;
-            BtnInfo now;
-            if (!uia || !cache || !cond || !MeasureTaskbarButton(uia, cache, cond, tb, &now)) {
-                settled = false;
+            BtnInfo read;
+            if (!uia || !cache || !cond || !MeasureTaskbarButton(uia, cache, cond, tb, &read)) {
+                failed = true;
                 continue;
             }
             auto it = lastRead.find(tb);
-            if (it != lastRead.end() && it->second == now) {
+            bool agrees = it != lastRead.end() && it->second == read;
+            if (agrees || (changingSince && now - changingSince >= 2000)) {  // or it just never stops moving
                 AcquireSRWLockExclusive(&g_btnLock);
                 BtnInfo& stored = g_btns[tb];
-                bool changed = !(stored == now);
-                stored = now;
+                bool changed = !(stored == read);
+                stored = read;
                 ReleaseSRWLockExclusive(&g_btnLock);
                 if (changed)
                     if (HWND wnd = g_msgWnd.load()) PostMessageW(wnd, WM_MEASURED, 0, 0);
             } else {
-                settled = false;
+                changing = true;
             }
-            lastRead[tb] = now;
+            lastRead[tb] = read;
         }
-        // the icons start moving a moment after an app opens: keep looking for about a second after every event
-        DWORD r = WaitForMultipleObjects(2, handles, FALSE, (settled && !followUps) ? 3000 : 120);
-        if (followUps > 0) followUps--;
+        changingSince = !changing ? 0 : changingSince ? changingSince : now;
+        DWORD wait = changing ? 120 : 3000;
+        if (failed) {  // nothing readable yet (shell still starting, taskbar sliding): back off
+            wait = failDelay;
+            failDelay = std::min<DWORD>(failDelay * 2, 3000);
+        } else {
+            failDelay = 200;
+        }
+        DWORD r = WaitForMultipleObjects(2, handles, FALSE, wait);
         if (r == WAIT_OBJECT_0) break;
-        if (r == WAIT_OBJECT_0 + 1) {
-            followUps = 8;
-            if (WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;  // debounce
-        }
+        // the icons start moving a moment after an app opens, and focus changes come in bursts
+        if (r == WAIT_OBJECT_0 + 1 && WaitForSingleObject(g_stopEvent, 400) == WAIT_OBJECT_0) break;
     }
     if (cond) cond->Release();
     if (cache) cache->Release();
