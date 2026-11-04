@@ -21329,6 +21329,34 @@
         "version": "1.4.3"
       }
     },
+    "windhawk-ui-translator": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793765003000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793765003000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Zhanyuanium",
+        "compilerOptions": "-lole32 -luuid -ladvapi32 -lwinhttp",
+        "description": "Translates mod names, summaries, READMEs, settings and changelogs in place inside the Windhawk UI.",
+        "github": "https://github.com/Zhanyuanium",
+        "include": [
+          "windhawk-ui.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Windhawk UI Translator",
+        "version": "0.1"
+      }
+    },
     "window-border-customizer": {
       "details": {
         "defaultSorting": 10998,

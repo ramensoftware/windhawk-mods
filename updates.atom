@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-04T01:04:53.000Z</updated>
+    <updated>2026-11-04T04:03:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windhawk UI Translator 0.1]]></title>
+        <id>https://windhawk.net/mods/windhawk-ui-translator#680d719e41d0ce0736a4cb64b09e4d091977c261</id>
+        <link href="https://windhawk.net/mods/windhawk-ui-translator"/>
+        <updated>2026-11-04T04:03:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windhawkuitranslator">Windhawk UI Translator</h1>
+<p>Windhawk localizes its own interface, but not the content mods write. This mod
+translates it in place, inside the Windhawk 2.0 window.</p>
+<p><img src="https://raw.githubusercontent.com/Zhanyuanium/windhawk-ui-translator/main/docs/images/details.png" alt="" /></p>
+<h2 id="whatittranslates">What it translates</h2>
+<p>| Where | What |
+| --- | --- |
+| Details page | mod name, summary, README, changelog |
+| Settings page | titles, descriptions, tooltips, dropdown values and options, reset labels |
+| Explore and installed lists | mod names and one-line summaries |</p>
+<p>The Source tab and Windhawk's own interface strings are not translated.</p>
+<h2 id="usage">Usage</h2>
+<p>Hover a translated block to see the original; on a touch screen, tap once for
+the original and again for the translation. <code>Alt+Q</code> (configurable) or a
+two-finger double-tap toggles translation.</p>
+<h2 id="providers">Providers</h2>
+<p>Any OpenAI-compatible <code>/chat/completions</code> endpoint is recommended; a glossary
+and batching are built in. Store its API key in Windows Credential Manager:</p>
+<pre><code>cmdkey /generic:windhawk-ui-translator /user:translator /pass:&lt;your key&gt;
+</code></pre>
+<p>The free Microsoft Edge endpoint needs no key and is the fallback; <code>auto</code> picks
+the LLM once a base URL and a key are configured. Google is not offered.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Enabled while the UI is already running, the mod does nothing until the UI
+process restarts: close and reopen Windhawk (<code>windhawk-ui.exe</code>), not just the
+tray icon.</li>
+<li>The auto target language follows Windhawk's UI language, then the page or OS
+language (portable builds may not follow their own instance's); changes apply
+on the next page load or settings change.</li>
+<li>If the UI fails to start: <code>windhawk.exe -safe-mode</code>, or
+<code>windhawk-cli.exe mod disable windhawk-ui-translator</code>.</li>
+</ul>
+<h2 id="privacy">Privacy</h2>
+<p>Page text goes to Microsoft's translation service by default, or to the
+configured LLM endpoint. No telemetry, no other network access. The API key is
+read from Windows Credential Manager and never reaches the page; the optional
+plaintext setting is the fallback, stored in Windhawk's own settings.</p>]]></content>
+        <author>
+            <name>Zhanyuanium</name>
+            <uri>https://github.com/Zhanyuanium</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinTips OSD 1.2.1]]></title>
         <id>https://windhawk.net/mods/wintips-osd#468eb61fae183f46914dba7a37528cded99d146b</id>
@@ -1490,27 +1538,6 @@ the mod is removed.</li>
         <author>
             <name>afate123</name>
             <uri>https://github.com/afate123</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Address Bar Home Button 1.0.3]]></title>
-        <id>https://windhawk.net/mods/explorer-home-button#44e80ae3fab4de2e576ed6265eaac56a09caf378</id>
-        <link href="https://windhawk.net/mods/explorer-home-button"/>
-        <updated>2026-11-03T00:04:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexploreraddressbarhomebutton">File Explorer Address Bar Home Button</h1>
-<p>Adds a native WinUI 3 <strong>Home ("This PC")</strong> button directly adjacent to the <strong>Refresh</strong> button in the Windows 11 File Explorer address bar.</p>
-<p><img src="https://raw.githubusercontent.com/RBND/HomeExplorer/main/screenshot.png" alt="File Explorer Address Bar Home Button" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Native WinUI 3 Integration</strong>: Injects an <code>AppBarButton</code> directly into File Explorer's address bar command bar (<code>CommandBar#NavigationCommands</code>) next to <code>refreshButton</code>.</li>
-<li><strong>Exact Visual & Theme Match</strong>: Inherits the native <code>refreshButton</code>'s style, dimensions, margins, corner radius, and hover/pressed/focus visual states, dynamically matching Windows 11 Light, Dark, and High Contrast themes.</li>
-<li><strong>Active-Tab-Only Navigation</strong>: Uses COM Shell APIs (<code>IShellWindows</code>, <code>IServiceProvider</code>, <code>IShellBrowser::BrowseObject</code>, and <code>IWebBrowser2::Navigate2</code>) matched against the active <code>ShellTabWindowClass</code> child window so only the currently active tab navigates to <strong>This PC</strong> (<code>shell:MyComputerFolder</code> / <code>::{20D04FE0-3AEA-1069-A2D8-08002B30309D}</code>).</li>
-<li><strong>Configurable Settings</strong>: Customize the target shell location, button placement (before or after the Refresh button), icon glyph (<code>Home \uE80F</code> or <code>Computer \uE770</code>), and tooltip text (<code>This PC</code>).</li>
-<li><strong>Clean Lifecycle</strong>: Supports live injection into open File Explorer windows (appearing immediately or on window focus), live settings updates, and clean removal on mod unload without leaking XAML elements or conflicting with other XAML mods.</li>
-</ul>]]></content>
-        <author>
-            <name>RobotsNeverDie</name>
-            <uri>https://github.com/RBND</uri>
         </author>
     </entry>
 </feed>

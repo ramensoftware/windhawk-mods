@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-04T01:04:53.000Z</updated>
+    <updated>2026-11-04T04:03:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windhawk UI Translator 0.1]]></title>
+        <id>https://windhawk.net/mods/windhawk-ui-translator#680d719e41d0ce0736a4cb64b09e4d091977c261</id>
+        <link href="https://windhawk.net/mods/windhawk-ui-translator"/>
+        <updated>2026-11-04T04:03:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windhawkuitranslator">Windhawk UI Translator</h1>
+<p>Windhawk localizes its own interface, but not the content mods write. This mod
+translates it in place, inside the Windhawk 2.0 window.</p>
+<p><img src="https://raw.githubusercontent.com/Zhanyuanium/windhawk-ui-translator/main/docs/images/details.png" alt="" /></p>
+<h2 id="whatittranslates">What it translates</h2>
+<p>| Where | What |
+| --- | --- |
+| Details page | mod name, summary, README, changelog |
+| Settings page | titles, descriptions, tooltips, dropdown values and options, reset labels |
+| Explore and installed lists | mod names and one-line summaries |</p>
+<p>The Source tab and Windhawk's own interface strings are not translated.</p>
+<h2 id="usage">Usage</h2>
+<p>Hover a translated block to see the original; on a touch screen, tap once for
+the original and again for the translation. <code>Alt+Q</code> (configurable) or a
+two-finger double-tap toggles translation.</p>
+<h2 id="providers">Providers</h2>
+<p>Any OpenAI-compatible <code>/chat/completions</code> endpoint is recommended; a glossary
+and batching are built in. Store its API key in Windows Credential Manager:</p>
+<pre><code>cmdkey /generic:windhawk-ui-translator /user:translator /pass:&lt;your key&gt;
+</code></pre>
+<p>The free Microsoft Edge endpoint needs no key and is the fallback; <code>auto</code> picks
+the LLM once a base URL and a key are configured. Google is not offered.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Enabled while the UI is already running, the mod does nothing until the UI
+process restarts: close and reopen Windhawk (<code>windhawk-ui.exe</code>), not just the
+tray icon.</li>
+<li>The auto target language follows Windhawk's UI language, then the page or OS
+language (portable builds may not follow their own instance's); changes apply
+on the next page load or settings change.</li>
+<li>If the UI fails to start: <code>windhawk.exe -safe-mode</code>, or
+<code>windhawk-cli.exe mod disable windhawk-ui-translator</code>.</li>
+</ul>
+<h2 id="privacy">Privacy</h2>
+<p>Page text goes to Microsoft's translation service by default, or to the
+configured LLM endpoint. No telemetry, no other network access. The API key is
+read from Windows Credential Manager and never reaches the page; the optional
+plaintext setting is the fallback, stored in Windhawk's own settings.</p>]]></content>
+        <author>
+            <name>Zhanyuanium</name>
+            <uri>https://github.com/Zhanyuanium</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinTips OSD 1.2.1]]></title>
         <id>https://windhawk.net/mods/wintips-osd#468eb61fae183f46914dba7a37528cded99d146b</id>
@@ -1925,70 +1973,6 @@ y <code>RadiusY</code>. Estos estilos se configuran por separado de las opciones
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Crazy Time 0.7.0]]></title>
-        <id>https://windhawk.net/mods/crazy-time#f118f158f9aadaada6b351e15ad9f9e7a183573b</id>
-        <link href="https://windhawk.net/mods/crazy-time"/>
-        <updated>2026-11-01T04:01:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="crazytime">Crazy Time</h1>
-<p>A minimalist scheduler for shutdown, sleep and hibernate, living in the
-notification area. Português abaixo.</p>
-<p><img src="https://raw.githubusercontent.com/caikx11/Crazy-timer/c92d0c0f575f877a535377ca7ccf28734ca42306/docs/images/crazy-time-panel.png" alt="Crazy Time panel" /></p>
-<blockquote>
-  <p><strong>This mod really shuts down, sleeps or hibernates your computer</strong> when a
-  schedule fires. Save your work first. A warning notification appears before
-  the action, and you can cancel or postpone an occurrence from the panel.</p>
-  <p><strong>Windows 10 is untested.</strong> It was developed and tested on Windows 11 only.
-  It is expected to work on Windows 10 (version 1809 or newer for the dark
-  theme of the controls), but this has not been verified. Please report issues.</p>
-</blockquote>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>Schedule an action <strong>by duration</strong> (1 minute to 7 days), at a <strong>date and time</strong>,
-or <strong>repeating on chosen weekdays</strong>.</li>
-<li>Keep several schedules at once: edit, pause, cancel one occurrence,
-postpone it by 10 minutes, or delete.</li>
-<li>Countdown warnings at 30, 15, 10, 5 and 1 minute, with optional sound.</li>
-<li>Schedules at the same instant are detected and refused.</li>
-<li>Optional per-schedule "force apps to close" (shutdown only), off by default,
-with a data-loss warning.</li>
-<li>Actions the computer cannot perform are explained instead of scheduled.</li>
-<li>Portuguese and English; automatic, light or dark theme; high contrast.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Enable the mod. A tray icon appears; click it to open the panel.</li>
-<li>Pick the action and how it is scheduled, then press <strong>Add schedule</strong>.</li>
-<li>Click the tray icon to open the panel again. Closing the panel keeps the
-countdown running; right-click the icon or use <strong>Options</strong> to exit.
-<strong>Exit</strong> stops scheduling until Windhawk restarts or the mod is toggled off
-and on again; Windhawk still lists the mod as enabled.</li>
-<li>Disabling the mod stops everything and removes the icon. Schedules are saved
-per user; occurrences that expired while the mod was off are not run.</li>
-</ol>
-<p>Schedules are stored in Windhawk's mod storage, in a file named with your user
-SID. On first use, an existing legacy LocalAppData schedule file is copied there
-without overwriting an existing destination. The legacy file is kept as a backup.
-Removing the mod deletes Windhawk's managed storage; the legacy backup remains.</p>
-<h2 id="portugus">Português</h2>
-<p>Agendador minimalista de desligar, suspender e hibernar, na área de notificação.</p>
-<p><strong>Este mod realmente desliga, suspende ou hiberna o computador</strong> quando um
-agendamento dispara. Salve seu trabalho antes. Uma notificação de aviso aparece
-antes da ação e você pode cancelar ou adiar a ocorrência pelo painel.</p>
-<p><strong>Não testado no Windows 10.</strong> Desenvolvido e testado apenas no Windows 11. Deve
-funcionar no Windows 10 (versão 1809 ou mais nova para o tema escuro dos
-controles), mas isso não foi verificado. Relate problemas.</p>
-<p><strong>Como usar:</strong> ative o mod, escolha a ação e o tipo de agendamento (por
-duração, data e hora, ou repetição semanal) e clique em <strong>Adicionar
-agendamento</strong>. Clique no ícone da barra para reabrir o painel; fechar o
-painel não interrompe a contagem. Desativar o mod encerra tudo.
-<strong>Sair</strong> interrompe os agendamentos até reiniciar o Windhawk ou desativar e
-reativar o mod; ele ainda aparece como ativado no Windhawk.</p>]]></content>
-        <author>
-            <name>caikx11</name>
-            <uri>https://github.com/caikx11</uri>
         </author>
     </entry>
 </feed>
