@@ -383,23 +383,22 @@ public:
     }
 
     static void RemoveFromTaskbar(HWND hwnd) {
-        if (!hwnd || !IsWindow(hwnd)) return;
-        SafeComPtr<ITaskbarList> pTaskbarList;
-        if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskbarList, (void**)&pTaskbarList)) && pTaskbarList) {
-            if (SUCCEEDED(pTaskbarList->HrInit())) {
-                pTaskbarList->DeleteTab(hwnd);
-            }
-        }
+        // Preserved for taskbar list initialization without DeleteTab,
+        // ensuring the window remains visible in Windows 11 Alt-Tab.
     }
 
     static LRESULT CALLBACK ProxyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         if (uMsg == GetTaskbarCreatedMsg()) {
-            RemoveFromTaskbar(hwnd);
             return 0;
         }
 
         if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) {
-            RemoveFromTaskbar(hwnd);
+            // Postpone activation to next message cycle so Alt-Tab overlay finishes dismissing
+            PostMessageW(hwnd, WM_APP + 42, 0, 0);
+            return 0;
+        }
+
+        if (uMsg == (WM_APP + 42)) {
             std::shared_ptr<DomainCluster> cluster;
             {
                 std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
@@ -547,6 +546,10 @@ private:
         size_t tabCounter = 0;
 
         for (HWND bHwnd : browserWindows) {
+            // Wake up Chromium accessibility tree if idle
+            DWORD_PTR dwResult = 0;
+            SendMessageTimeoutW(bHwnd, WM_GETOBJECT, 0, (LPARAM)0xFFFFFFFC /* OBJID_CLIENT */, SMTO_ABORTIFHUNG, 50, &dwResult);
+
             SafeComPtr<IUIAutomationElement> pWinElem;
             if (FAILED(pUIA->ElementFromHandle(bHwnd, &pWinElem)) || !pWinElem) continue;
 
@@ -713,13 +716,11 @@ private:
                     L"ChromiumAltTab_VirtualHost",
                     title.c_str(),
                     WS_POPUP | WS_CLIPSIBLINGS,
-                    -32000, -32000, 200, 150,
+                    -32000, -32000, 400, 300,
                     nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
                 );
                 if (hwnd) {
                     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                    // Remove from taskbar after showing so it appears strictly in Alt-Tab
-                    RemoveFromTaskbar(hwnd);
                     cluster->proxyHwnd = hwnd;
                 }
             } else {
@@ -732,7 +733,7 @@ private:
                     if (SUCCEEDED(DwmRegisterThumbnail(hwnd, cluster->tabs[0]->browserHwnd, &cluster->hThumbnail)) && cluster->hThumbnail) {
                         DWM_THUMBNAIL_PROPERTIES dti = { 0 };
                         dti.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY;
-                        dti.rcDestination = RECT{ 0, 0, 200, 150 };
+                        dti.rcDestination = RECT{ 0, 0, 400, 300 };
                         dti.fVisible = TRUE;
                         dti.opacity = 255;
                         DwmUpdateThumbnailProperties(cluster->hThumbnail, &dti);
