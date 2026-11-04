@@ -85,13 +85,7 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 #include <sstream>
 #include <algorithm>
 
-#if __has_include(<windhawk_api.h>)
 #include <windhawk_api.h>
-#include <windhawk_utils.h>
-#define HAS_WINDHAWK_API 1
-#else
-#define HAS_WINDHAWK_API 0
-#endif
 
 namespace ChromiumAltTabMod {
 
@@ -111,7 +105,6 @@ std::mutex g_settingsMutex;
 
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-#if HAS_WINDHAWK_API
     g_settings.groupByDomain = Wh_GetIntSetting(L"GroupByDomain") != 0;
     
     int minTabs = Wh_GetIntSetting(L"MinTabsToGroup");
@@ -125,7 +118,6 @@ void LoadSettings() {
     g_settings.enableEdge = Wh_GetIntSetting(L"EnableEdge") != 0;
     g_settings.enableOpera = Wh_GetIntSetting(L"EnableOpera") != 0;
     g_settings.enableVivaldi = Wh_GetIntSetting(L"EnableVivaldi") != 0;
-#endif
 }
 
 // Lightweight standard Win32 COM Smart Pointer (MinGW & MSVC compatible, replacing ATL)
@@ -301,34 +293,8 @@ class TabActivator {
 public:
     static bool ForceForeground(HWND hwnd) {
         if (!IsWindow(hwnd)) return false;
-        if (GetForegroundWindow() == hwnd) return true;
-
-        DWORD curThread = GetCurrentThreadId();
-        DWORD fgThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-        DWORD targetThread = GetWindowThreadProcessId(hwnd, nullptr);
-
-        if (fgThread && fgThread != curThread) AttachThreadInput(curThread, fgThread, TRUE);
-        if (targetThread && targetThread != curThread) AttachThreadInput(curThread, targetThread, TRUE);
-
-        DWORD lockTimeout = 0;
-        SystemParametersInfoW(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, &lockTimeout, 0);
-        SystemParametersInfoW(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, 0, SPIF_SENDCHANGE);
-
-        AllowSetForegroundWindow(ASFW_ANY);
-
         if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
-        else ShowWindow(hwnd, SW_SHOW);
-
-        SetForegroundWindow(hwnd);
-        BringWindowToTop(hwnd);
-        SetFocus(hwnd);
-
-        SystemParametersInfoW(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, (PVOID)(ULONG_PTR)lockTimeout, SPIF_SENDCHANGE);
-
-        if (fgThread && fgThread != curThread) AttachThreadInput(curThread, fgThread, FALSE);
-        if (targetThread && targetThread != curThread) AttachThreadInput(curThread, targetThread, FALSE);
-
-        return true;
+        return SetForegroundWindow(hwnd) != FALSE;
     }
 
     static bool ActivateTab(const std::shared_ptr<TabItem>& tab) {
@@ -405,8 +371,29 @@ public:
         }
     }
 
+    static UINT GetTaskbarCreatedMsg() {
+        static UINT s_uMsg = RegisterWindowMessageW(L"TaskbarCreated");
+        return s_uMsg;
+    }
+
+    static void RemoveFromTaskbar(HWND hwnd) {
+        if (!hwnd || !IsWindow(hwnd)) return;
+        SafeComPtr<ITaskbarList> pTaskbarList;
+        if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskbarList, (void**)&pTaskbarList)) && pTaskbarList) {
+            if (SUCCEEDED(pTaskbarList->HrInit())) {
+                pTaskbarList->DeleteTab(hwnd);
+            }
+        }
+    }
+
     static LRESULT CALLBACK ProxyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+        if (uMsg == GetTaskbarCreatedMsg()) {
+            RemoveFromTaskbar(hwnd);
+            return 0;
+        }
+
         if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) {
+            RemoveFromTaskbar(hwnd);
             std::shared_ptr<DomainCluster> cluster;
             {
                 std::lock_guard<std::recursive_mutex> lock(g_proxyMapMutex);
@@ -694,10 +681,6 @@ private:
             }
         }
 
-        SafeComPtr<ITaskbarList> pTaskbarList;
-        CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskbarList, (void**)&pTaskbarList);
-        if (pTaskbarList) pTaskbarList->HrInit();
-
         // 3. Create or update windows for active clusters
         for (auto& [key, cluster] : updatedClusters) {
             if (cluster->tabs.empty()) continue;
@@ -721,11 +704,9 @@ private:
                     nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
                 );
                 if (hwnd) {
-                    // Remove from taskbar so it appears strictly in Alt-Tab
-                    if (pTaskbarList) {
-                        pTaskbarList->DeleteTab(hwnd);
-                    }
                     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                    // Remove from taskbar after showing so it appears strictly in Alt-Tab
+                    RemoveFromTaskbar(hwnd);
                     cluster->proxyHwnd = hwnd;
                 }
             } else {
@@ -816,37 +797,27 @@ void StopKeyboardHookThread() {
 
 // --- WINDHAWK TOOL MOD ENTRY POINTS ---
 BOOL WhTool_ModInit() {
-#if HAS_WINDHAWK_API
     Wh_Log(L"Initializing Chromium Tabs in Alt-Tab Tool Mod v1.0.1...");
-#endif
 
     ChromiumAltTabMod::LoadSettings();
     ChromiumAltTabMod::StartKeyboardHookThread();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().Start();
 
-#if HAS_WINDHAWK_API
     Wh_Log(L"Chromium Tabs in Alt-Tab Mod loaded successfully.");
-#endif
     return TRUE;
 }
 
 void WhTool_ModUninit() {
-#if HAS_WINDHAWK_API
     Wh_Log(L"Unloading Chromium Tabs in Alt-Tab Mod...");
-#endif
 
     ChromiumAltTabMod::StopKeyboardHookThread();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().Stop();
 
-#if HAS_WINDHAWK_API
     Wh_Log(L"Chromium Tabs in Alt-Tab Mod unloaded.");
-#endif
 }
 
 void WhTool_ModSettingsChanged() {
-#if HAS_WINDHAWK_API
     Wh_Log(L"Settings updated for Chromium Tabs in Alt-Tab Mod.");
-#endif
     ChromiumAltTabMod::LoadSettings();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().TriggerImmediateScan();
 }
@@ -855,8 +826,15 @@ void WhTool_ModSettingsChanged() {
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-
-#if HAS_WINDHAWK_API
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -1022,12 +1000,3 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
-
-#else
-
-// Standalone compilation entry points for non-Windhawk environments
-BOOL Wh_ModInit() { return WhTool_ModInit(); }
-void Wh_ModUninit() { WhTool_ModUninit(); }
-void Wh_ModSettingsChanged() { WhTool_ModSettingsChanged(); }
-
-#endif
