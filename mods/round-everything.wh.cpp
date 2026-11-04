@@ -4609,7 +4609,7 @@ BOOL Init() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))"},
             &GetRadiusFromCornerStyle,  // address only, no hook
@@ -4621,7 +4621,7 @@ BOOL Init() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(udwm, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks))) {
         Wh_Log(L"[dwm] HookSymbols failed (udwm.dll)");
         return FALSE;
     }
