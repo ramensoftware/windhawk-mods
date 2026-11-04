@@ -121,13 +121,14 @@ was selected.
   programs and nothing on the desktop.
 * The contents are put on the clipboard as text. Nothing is written to disk, and
   no temporary file is created.
-* When the mod is turned off, it asks its menus and prompts to close and waits
-  for tracked hook calls to finish. An unresponsive prompt may need to be closed
-  manually. A stalled file read cannot be interrupted and may leave Windhawk
-  uninitializing indefinitely; the Explorer window can remain unresponsive.
-  A different menu or another mod's hook may also delay uninitialization until
-  it closes or returns. Other mod updates in the process may have to wait.
-  The delay between separate clipboard items ends early when unloading starts.
+* When the mod is turned off, it asks open menus and its prompts to close and
+  waits for tracked hook calls to finish. A menu or prompt that does not close
+  may need to be closed manually. A stalled file read cannot be interrupted and
+  may leave Windhawk uninitializing indefinitely; the Explorer window can remain
+  unresponsive. A dialog opened by another Explorer shortcut, or another mod's
+  hook, may also delay uninitialization until it closes or returns. Other mod
+  updates in the process may have to wait. The delay between separate clipboard
+  items ends early when unloading starts.
 * With separate clipboard items turned on, Ctrl+V pastes only the last file. The
   earlier ones are reachable through Windows clipboard history (Win+V), and only
   there, and clipboard history has to be turned on for them to be kept.
@@ -1678,7 +1679,9 @@ BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, int x, int y,
 
     // Count the selection read, popup and any copy that follows, and check the
     // unload flag again after entering. HookGuard also tracks the outer hook.
-    BusyGuard busy(nullptr);
+    // An open popup can keep the hook active even if it has none of our
+    // entries, so ask its owner to close it when the mod is turned off.
+    BusyGuard busy(owner);
     if (g_unloading) {
         return track();
     }
@@ -1688,11 +1691,8 @@ BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, int x, int y,
     if (!base) {
         return track();
     }
-    // Register only popups to which we added entries.
-    busy.RegisterOwner(owner);
     if (g_unloading) {
         RemoveEntries(menu, base);
-        busy.UnregisterOwner();
         return track();
     }
 
