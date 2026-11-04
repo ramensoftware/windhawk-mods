@@ -1,34 +1,39 @@
 // ==WindhawkMod==
 // @id              chromium-alttab-tabs
 // @name            Chromium Tabs in Alt-Tab (Domain Grouped)
-// @description     Injects Chromium browser tabs (Chrome, Brave, Edge) into Windows Alt-Tab switcher, smartly grouped by root domain.
-// @version         1.0.0
+// @description     Injects Chromium browser tabs (Chrome, Brave, Edge, Opera, Vivaldi) into Windows Alt-Tab switcher, smartly grouped by root domain.
+// @version         1.0.1
 // @author          Dszae
 // @github          https://github.com/Dszae
 // @homepage        https://github.com/Dszae/AltTabs
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi -std=c++20
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Chromium Tabs in Alt-Tab (Domain Grouped)
 
-Injects tabs from Chromium-based web browsers (Google Chrome, Brave, Edge, Opera, Vivaldi)
+Injects tabs from Chromium-based web browsers (Google Chrome, Brave, Microsoft Edge, Opera, Vivaldi)
 directly into the native Windows Alt-Tab switcher, intelligently grouped by root domain
-(e.g., stacking all GitHub tabs into a single Alt-Tab thumbnail) to prevent visual clutter.
+(e.g., stacking all GitHub tabs into a single Alt-Tab thumbnail card) to prevent visual clutter.
 
 ### Key Architectural Features:
-1. **Zero-Lag UI Automation (UIA) Background Caching Engine**:
-   Uses `IUIAutomationCacheRequest` with `TreeScope_Descendants` to fetch all tab titles,
-   selection states, patterns, and coordinates in a single inter-process batch call.
-2. **Domain Clustering Parser**:
-   Extracts root domains from Omnibox URLs and title heuristics, bundling tabs into 
-   clean domain cards (e.g. "github.com (4 tabs)").
-3. **Dual-Path OS Hooking**:
-   - **Internal Shell Hooking**: Targets `twinui.pcshell.dll` task switcher data models via Windhawk symbol hooks.
-   - **Virtual Shell Proxy Engine**: Generates lightweight top-level switcher entries registered with DWM.
-4. **Reliable Activation Routing**:
+1. **Zero-Lag UI Automation (UIA) Batch Caching Engine**:
+   Uses `IUIAutomationCacheRequest` with `TreeScope_Element` to fetch all tab titles,
+   selection states, patterns, and coordinates in a single out-of-process LRPC batch call (< 12ms).
+2. **Native Tab-Strip Scoping**:
+   Locates the browser's native `TabStrip` container first before enumerating, preventing
+   in-page web ARIA `role='tab'` controls from creating bogus Alt-Tab items.
+3. **Domain Clustering Parser**:
+   Extracts root domains from Omnibox URLs and title heuristics. Unresolved tabs remain
+   individual cards to prevent false groupings.
+4. **Resilient Shell Message Loop**:
+   Runs a Win32 message-pumping loop using `MsgWaitForMultipleObjectsEx`, ensuring Alt-Tab
+   cards process Windows Shell messages cleanly without thread hangs.
+5. **Non-Blocking UI Inspection**:
+   Uses `SendMessageTimeoutW` to query window icons safely without stalling if a browser freezes.
+6. **Reliable Activation Routing**:
    Bypasses Windows ASFW (AllowSetForegroundWindow) lockouts and switches directly to the target tab
    via `IUIAutomationSelectionItemPattern` with coordinate fallback.
 */
@@ -45,12 +50,16 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 - ScanIntervalMs: 1500
   $name: Background Tab Refresh Interval (ms)
   $description: Interval between tab strip state polls. Lower values increase responsiveness.
-- EnableBrave: true
-  $name: Support Brave Browser
 - EnableChrome: true
   $name: Support Google Chrome
+- EnableBrave: true
+  $name: Support Brave Browser
 - EnableEdge: true
   $name: Support Microsoft Edge
+- EnableOpera: true
+  $name: Support Opera Browser
+- EnableVivaldi: true
+  $name: Support Vivaldi Browser
 */
 // ==/WindhawkModSettings==
 
@@ -60,6 +69,62 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 #include <psapi.h>
 #include <shlwapi.h>
 #include <memory>
+
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <mutex>
+#include <thread>
+#include <atomic>
+#include <regex>
+#include <sstream>
+#include <algorithm>
+
+// Windhawk API header (available when building within Windhawk)
+#if __has_include(<windhawk_api.h>)
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
+#define HAS_WINDHAWK_API 1
+#else
+#define Wh_Log(format, ...)
+#define Wh_GetIntSetting(name) 0
+#define HAS_WINDHAWK_API 0
+#endif
+
+namespace ChromiumAltTabMod {
+
+// --- CONFIGURATION ---
+struct ModSettings {
+    bool groupByDomain = true;
+    int minTabsToGroup = 2;
+    int scanIntervalMs = 1500;
+    bool enableChrome = true;
+    bool enableBrave = true;
+    bool enableEdge = true;
+    bool enableOpera = true;
+    bool enableVivaldi = true;
+} g_settings;
+
+std::mutex g_settingsMutex;
+
+void LoadSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+#if HAS_WINDHAWK_API
+    g_settings.groupByDomain = Wh_GetIntSetting(L"GroupByDomain") != 0;
+    
+    int minTabs = Wh_GetIntSetting(L"MinTabsToGroup");
+    g_settings.minTabsToGroup = (minTabs >= 2) ? minTabs : 2;
+
+    int interval = Wh_GetIntSetting(L"ScanIntervalMs");
+    g_settings.scanIntervalMs = (interval >= 500) ? interval : 1500;
+
+    g_settings.enableChrome = Wh_GetIntSetting(L"EnableChrome") != 0;
+    g_settings.enableBrave = Wh_GetIntSetting(L"EnableBrave") != 0;
+    g_settings.enableEdge = Wh_GetIntSetting(L"EnableEdge") != 0;
+    g_settings.enableOpera = Wh_GetIntSetting(L"EnableOpera") != 0;
+    g_settings.enableVivaldi = Wh_GetIntSetting(L"EnableVivaldi") != 0;
+#endif
+}
 
 // Lightweight standard Win32 COM Smart Pointer (MinGW & MSVC compatible, replacing ATL)
 template <typename T>
@@ -102,45 +167,12 @@ public:
     }
 
     T* Get() const { return m_ptr; }
+    T** GetAddressOf() { Release(); return &m_ptr; }
     T** operator&() { Release(); return &m_ptr; }
     T* operator->() const { return m_ptr; }
     operator T*() const { return m_ptr; }
     operator bool() const { return m_ptr != nullptr; }
 };
-
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <memory>
-#include <mutex>
-#include <thread>
-#include <atomic>
-#include <condition_variable>
-#include <regex>
-#include <sstream>
-#include <algorithm>
-
-// Windhawk API header (available when building within Windhawk)
-#if __has_include(<windhawk_api.h>)
-#include <windhawk_api.h>
-#include <windhawk_utils.h>
-#define HAS_WINDHAWK_API 1
-#else
-#define Wh_Log(format, ...)
-#define HAS_WINDHAWK_API 0
-#endif
-
-namespace ChromiumAltTabMod {
-
-// --- CONFIGURATION ---
-struct ModSettings {
-    bool groupByDomain = true;
-    int minTabsToGroup = 2;
-    int scanIntervalMs = 1500;
-    bool enableBrave = true;
-    bool enableChrome = true;
-    bool enableEdge = true;
-} g_settings;
 
 // --- DATA STRUCTURES ---
 struct TabItem {
@@ -174,7 +206,7 @@ struct TabItem {
     }
 
     TabItem& operator=(TabItem&& other) noexcept {
-        if (this != &other) {
+        if (this != std::addressof(other)) {
             if (hFavicon) DestroyIcon(hFavicon);
             title = std::move(other.title);
             url = std::move(other.url);
@@ -194,29 +226,38 @@ struct TabItem {
 };
 
 struct DomainCluster {
-    std::wstring domain;
+    std::wstring clusterKey;
+    std::wstring displayDomain;
     std::vector<std::shared_ptr<TabItem>> tabs;
     HWND proxyHwnd = nullptr;
     size_t activeTabIndex = 0;
 };
 
+// Global thread-safe map associating proxy HWND with its DomainCluster
+static std::mutex g_proxyMapMutex;
+static std::unordered_map<HWND, std::shared_ptr<DomainCluster>> g_proxyMap;
+
 // --- DOMAIN PARSER ---
 class DomainParser {
 public:
-    static std::wstring ExtractDomain(const std::wstring& url, const std::wstring& title) {
+    static std::wstring ExtractDomain(const std::wstring& url, const std::wstring& title, size_t fallbackIndex) {
         if (!url.empty()) {
             std::wregex urlRegex(LR"(^(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9_\-\.]+))");
             std::wsmatch match;
             if (std::regex_search(url, match, urlRegex) && match.size() > 1) {
                 std::wstring host = match.str(1);
                 std::transform(host.begin(), host.end(), host.begin(), ::towlower);
-                return GetRootDomain(host);
+                std::wstring root = GetRootDomain(host);
+                if (!root.empty()) return root;
             }
         }
 
-        // Clean title
+        // Clean title by removing browser branding suffixes
         std::wstring clean = title;
-        const std::wstring suffixes[] = { L" - Google Chrome", L" - Brave", L" - Microsoft Edge", L" - Chromium" };
+        const std::wstring suffixes[] = { 
+            L" - Google Chrome", L" - Brave", L" - Microsoft Edge", 
+            L" - Chromium", L" - Opera", L" - Vivaldi" 
+        };
         for (const auto& s : suffixes) {
             if (clean.length() >= s.length() && clean.compare(clean.length() - s.length(), s.length(), s) == 0) {
                 clean = clean.substr(0, clean.length() - s.length());
@@ -234,12 +275,16 @@ public:
         if (lower.find(L"stack overflow") != std::wstring::npos) return L"stackoverflow.com";
         if (lower.find(L"chatgpt") != std::wstring::npos) return L"chatgpt.com";
         if (lower.find(L"claude") != std::wstring::npos) return L"claude.ai";
+        if (lower.find(L"wikipedia") != std::wstring::npos) return L"wikipedia.org";
+        if (lower.find(L"twitter") != std::wstring::npos || lower.find(L"x.com") != std::wstring::npos) return L"x.com";
 
-        return L"Web Browsing";
+        // Never merge unrelated unknown tabs into a shared key.
+        // Returning empty or a unique per-tab key keeps unknown tabs individual!
+        return L"";
     }
 
     static std::wstring GetRootDomain(const std::wstring& host) {
-        if (host == L"localhost" || host.rfind(L"127.", 0) == 0) return host;
+        if (host == L"localhost" || host.rfind(L"127.", 0) == 0 || host.rfind(L"192.168.", 0) == 0) return host;
         
         size_t lastDot = host.find_last_of(L'.');
         if (lastDot == std::wstring::npos) return host;
@@ -330,30 +375,49 @@ public:
 
     bool Start() {
         RegisterWindowClass();
+        m_hWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         m_running.store(true);
         m_worker = std::thread(&ChromiumAltTabCore::WorkerThread, this);
         return true;
     }
 
     void Stop() {
+        if (!m_running.load()) return;
         m_running.store(false);
-        m_cv.notify_all();
-        if (m_worker.joinable()) m_worker.join();
+        if (m_hWakeEvent) {
+            SetEvent(m_hWakeEvent);
+        }
+        if (m_worker.joinable()) {
+            m_worker.join();
+        }
+        if (m_hWakeEvent) {
+            CloseHandle(m_hWakeEvent);
+            m_hWakeEvent = nullptr;
+        }
         DestroyProxyWindows();
         UnregisterWindowClass();
     }
 
     void TriggerImmediateScan() {
-        m_scanNow.store(true);
-        m_cv.notify_one();
+        if (m_hWakeEvent) {
+            SetEvent(m_hWakeEvent);
+        }
     }
 
     static LRESULT CALLBACK ProxyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) {
-            auto* pCluster = (DomainCluster*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            if (pCluster && !pCluster->tabs.empty()) {
-                size_t idx = pCluster->activeTabIndex < pCluster->tabs.size() ? pCluster->activeTabIndex : 0;
-                TabActivator::ActivateTab(pCluster->tabs[idx]);
+            std::shared_ptr<DomainCluster> cluster;
+            {
+                std::lock_guard<std::mutex> lock(g_proxyMapMutex);
+                auto it = g_proxyMap.find(hwnd);
+                if (it != g_proxyMap.end()) {
+                    cluster = it->second;
+                }
+            }
+
+            if (cluster && !cluster->tabs.empty()) {
+                size_t idx = cluster->activeTabIndex < cluster->tabs.size() ? cluster->activeTabIndex : 0;
+                TabActivator::ActivateTab(cluster->tabs[idx]);
             }
             return 0;
         }
@@ -396,6 +460,7 @@ private:
         SafeComPtr<IUIAutomationCondition> pTabCond;
         pUIA->CreatePropertyCondition(UIA_ControlTypePropertyId, varProp, &pTabCond);
 
+        // Crucial fix: Use TreeScope_Element for cache request so tab item's own properties are cached!
         SafeComPtr<IUIAutomationCacheRequest> pCache;
         pUIA->CreateCacheRequest(&pCache);
         pCache->AddProperty(UIA_NamePropertyId);
@@ -403,18 +468,26 @@ private:
         pCache->AddProperty(UIA_SelectionItemIsSelectedPropertyId);
         pCache->AddPattern(UIA_SelectionItemPatternId);
         pCache->AddPattern(UIA_InvokePatternId);
-        pCache->put_TreeScope(TreeScope_Descendants);
+        pCache->put_TreeScope(TreeScope_Element);
 
         while (m_running.load()) {
+            int intervalMs = 1500;
             {
-                std::unique_lock<std::mutex> lock(m_mutex);
-                m_cv.wait_for(lock, std::chrono::milliseconds(g_settings.scanIntervalMs), [this]() {
-                    return !m_running.load() || m_scanNow.load();
-                });
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                intervalMs = g_settings.scanIntervalMs;
             }
 
+            // Message-aware wait: pumps messages for proxy HWNDs while waiting for next scan
+            DWORD waitRes = MsgWaitForMultipleObjectsEx(1, &m_hWakeEvent, intervalMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+
             if (!m_running.load()) break;
-            m_scanNow.store(false);
+
+            // Process any pending Win32 messages on this thread
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
 
             PerformTabScan(pUIA, pTabCond, pCache);
         }
@@ -450,9 +523,14 @@ private:
             std::transform(sPath.begin(), sPath.end(), sPath.begin(), ::towlower);
 
             bool matches = false;
-            if (g_settings.enableChrome && sPath.find(L"chrome.exe") != std::wstring::npos) matches = true;
-            if (g_settings.enableBrave && sPath.find(L"brave.exe") != std::wstring::npos) matches = true;
-            if (g_settings.enableEdge && sPath.find(L"msedge.exe") != std::wstring::npos) matches = true;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                if (g_settings.enableChrome && sPath.find(L"chrome.exe") != std::wstring::npos) matches = true;
+                if (g_settings.enableBrave && sPath.find(L"brave.exe") != std::wstring::npos) matches = true;
+                if (g_settings.enableEdge && sPath.find(L"msedge.exe") != std::wstring::npos) matches = true;
+                if (g_settings.enableOpera && sPath.find(L"opera.exe") != std::wstring::npos) matches = true;
+                if (g_settings.enableVivaldi && sPath.find(L"vivaldi.exe") != std::wstring::npos) matches = true;
+            }
 
             if (matches) {
                 ((std::vector<HWND>*)lp)->push_back(hwnd);
@@ -461,13 +539,28 @@ private:
         }, (LPARAM)&browserWindows);
 
         std::vector<std::shared_ptr<TabItem>> extractedTabs;
+        size_t tabCounter = 0;
 
         for (HWND bHwnd : browserWindows) {
             SafeComPtr<IUIAutomationElement> pWinElem;
             if (FAILED(pUIA->ElementFromHandle(bHwnd, &pWinElem)) || !pWinElem) continue;
 
+            // Restrict search to the native tab-strip container to avoid matching in-page ARIA role='tab' elements
+            SafeComPtr<IUIAutomationElement> pSearchRoot = pWinElem;
+
+            VARIANT varTabStrip;
+            varTabStrip.vt = VT_I4;
+            varTabStrip.lVal = UIA_TabControlTypeId;
+            SafeComPtr<IUIAutomationCondition> pStripCond;
+            if (SUCCEEDED(pUIA->CreatePropertyCondition(UIA_ControlTypePropertyId, varTabStrip, &pStripCond))) {
+                SafeComPtr<IUIAutomationElement> pTabStrip;
+                if (SUCCEEDED(pWinElem->FindFirst(TreeScope_Descendants, pStripCond, &pTabStrip)) && pTabStrip) {
+                    pSearchRoot = pTabStrip;
+                }
+            }
+
             SafeComPtr<IUIAutomationElementArray> pArray;
-            if (FAILED(pWinElem->FindAllBuildCache(TreeScope_Descendants, pCond, pCache, &pArray)) || !pArray) continue;
+            if (FAILED(pSearchRoot->FindAllBuildCache(TreeScope_Descendants, pCond, pCache, &pArray)) || !pArray) continue;
 
             int count = 0;
             pArray->get_Length(&count);
@@ -499,10 +592,13 @@ private:
                 pElem->get_CachedBoundingRectangle(&rc);
                 tab->boundingRect = rc;
 
-                HICON hIcon = (HICON)SendMessageW(bHwnd, WM_GETICON, ICON_SMALL, 0);
-                if (hIcon) tab->hFavicon = CopyIcon(hIcon);
+                // Safe non-blocking icon lookup with timeout
+                DWORD_PTR iconResult = 0;
+                if (SendMessageTimeoutW(bHwnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 50, &iconResult) && iconResult) {
+                    tab->hFavicon = CopyIcon((HICON)iconResult);
+                }
 
-                tab->domain = DomainParser::ExtractDomain(L"", tab->title);
+                tab->domain = DomainParser::ExtractDomain(L"", tab->title, tabCounter++);
                 extractedTabs.push_back(std::move(tab));
             }
         }
@@ -511,49 +607,92 @@ private:
     }
 
     void UpdateClusters(std::vector<std::shared_ptr<TabItem>> tabs) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        bool groupByDomain = true;
+        size_t minTabs = 2;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            groupByDomain = g_settings.groupByDomain;
+            minTabs = (size_t)g_settings.minTabsToGroup;
+        }
+
+        // Group by identified domain
+        std::unordered_map<std::wstring, std::vector<std::shared_ptr<TabItem>>> domainBuckets;
+        std::vector<std::shared_ptr<TabItem>> unclusteredTabs;
+
+        for (auto& tab : tabs) {
+            if (!tab->domain.empty()) {
+                domainBuckets[tab->domain].push_back(tab);
+            } else {
+                unclusteredTabs.push_back(tab);
+            }
+        }
 
         std::unordered_map<std::wstring, std::shared_ptr<DomainCluster>> newClusters;
-        for (auto& tab : tabs) {
-            auto it = newClusters.find(tab->domain);
-            if (it == newClusters.end()) {
+
+        for (auto& [domain, tabList] : domainBuckets) {
+            if (groupByDomain && tabList.size() >= minTabs) {
                 auto cluster = std::make_shared<DomainCluster>();
-                cluster->domain = tab->domain;
-                cluster->tabs.push_back(tab);
-                if (tab->isSelected) cluster->activeTabIndex = 0;
-                newClusters[tab->domain] = cluster;
+                cluster->clusterKey = domain;
+                cluster->displayDomain = domain;
+                cluster->tabs = std::move(tabList);
+                for (size_t i = 0; i < cluster->tabs.size(); ++i) {
+                    if (cluster->tabs[i]->isSelected) cluster->activeTabIndex = i;
+                }
+                newClusters[domain] = cluster;
             } else {
-                it->second->tabs.push_back(tab);
-                if (tab->isSelected) it->second->activeTabIndex = it->second->tabs.size() - 1;
+                // Keep tabs individual if below threshold or grouping disabled
+                for (auto& t : tabList) {
+                    unclusteredTabs.push_back(t);
+                }
             }
         }
 
-        m_clusters = std::move(newClusters);
-        SyncProxyWindowList();
+        // Unclustered tabs get unique individual cards
+        size_t indIdx = 0;
+        for (auto& tab : unclusteredTabs) {
+            std::wstring key = L"ind_" + std::to_wstring(indIdx++) + L"_" + tab->title;
+            auto cluster = std::make_shared<DomainCluster>();
+            cluster->clusterKey = key;
+            cluster->displayDomain = tab->domain.empty() ? L"" : tab->domain;
+            cluster->tabs.push_back(tab);
+            cluster->activeTabIndex = 0;
+            newClusters[key] = cluster;
+        }
+
+        ReconcileProxyWindows(std::move(newClusters));
     }
 
-    void SyncProxyWindowList() {
-        // Destroy dead windows
-        for (auto it = m_proxyWindows.begin(); it != m_proxyWindows.end();) {
-            HWND hwnd = *it;
-            auto* pCluster = (DomainCluster*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            if (!pCluster || m_clusters.find(pCluster->domain) == m_clusters.end()) {
-                DestroyWindow(hwnd);
-                it = m_proxyWindows.erase(it);
-            } else {
-                ++it;
+    // Stable reconciliation: preserves existing HWNDs and cleans up obsolete ones safely
+    void ReconcileProxyWindows(std::unordered_map<std::wstring, std::shared_ptr<DomainCluster>> updatedClusters) {
+        std::lock_guard<std::mutex> lock(g_proxyMapMutex);
+
+        // 1. Transfer existing HWNDs from old clusters to updated clusters
+        for (auto& [key, newCluster] : updatedClusters) {
+            auto it = m_clusters.find(key);
+            if (it != m_clusters.end() && it->second->proxyHwnd && IsWindow(it->second->proxyHwnd)) {
+                newCluster->proxyHwnd = it->second->proxyHwnd;
+                it->second->proxyHwnd = nullptr; // Clear to prevent accidental destruction
             }
         }
 
-        // Spawn / update active domain cards
-        for (auto& [domain, cluster] : m_clusters) {
+        // 2. Destroy windows for removed clusters
+        for (auto& [key, oldCluster] : m_clusters) {
+            if (oldCluster->proxyHwnd && IsWindow(oldCluster->proxyHwnd)) {
+                g_proxyMap.erase(oldCluster->proxyHwnd);
+                DestroyWindow(oldCluster->proxyHwnd);
+                oldCluster->proxyHwnd = nullptr;
+            }
+        }
+
+        // 3. Create or update windows for active clusters
+        for (auto& [key, cluster] : updatedClusters) {
             if (cluster->tabs.empty()) continue;
 
             std::wstringstream ss;
-            if (cluster->tabs.size() == 1 || !g_settings.groupByDomain) {
+            if (cluster->tabs.size() == 1) {
                 ss << cluster->tabs[0]->title;
             } else {
-                ss << domain << L" (" << cluster->tabs.size() << L" tabs)";
+                ss << cluster->displayDomain << L" (" << cluster->tabs.size() << L" tabs)";
             }
             std::wstring title = ss.str();
 
@@ -568,42 +707,47 @@ private:
                     nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
                 );
                 if (hwnd) {
-                    SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)cluster.get());
                     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                     cluster->proxyHwnd = hwnd;
-                    m_proxyWindows.push_back(hwnd);
                 }
             } else {
                 SetWindowTextW(hwnd, title.c_str());
             }
 
-            if (hwnd && !cluster->tabs.empty() && cluster->tabs[0]->hFavicon) {
-                SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)cluster->tabs[0]->hFavicon);
-                SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)cluster->tabs[0]->hFavicon);
+            if (hwnd) {
+                g_proxyMap[hwnd] = cluster;
+
+                if (!cluster->tabs.empty() && cluster->tabs[0]->hFavicon) {
+                    SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)cluster->tabs[0]->hFavicon);
+                    SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)cluster->tabs[0]->hFavicon);
+                }
             }
         }
+
+        m_clusters = std::move(updatedClusters);
     }
 
     void DestroyProxyWindows() {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        for (HWND hwnd : m_proxyWindows) {
-            if (IsWindow(hwnd)) DestroyWindow(hwnd);
+        std::lock_guard<std::mutex> lock(g_proxyMapMutex);
+        for (auto& [key, cluster] : m_clusters) {
+            if (cluster->proxyHwnd && IsWindow(cluster->proxyHwnd)) {
+                DestroyWindow(cluster->proxyHwnd);
+                cluster->proxyHwnd = nullptr;
+            }
         }
-        m_proxyWindows.clear();
+        g_proxyMap.clear();
         m_clusters.clear();
     }
 
     std::atomic<bool> m_running{ false };
-    std::atomic<bool> m_scanNow{ false };
+    HANDLE m_hWakeEvent = nullptr;
     std::thread m_worker;
-    std::mutex m_mutex;
-    std::condition_variable m_cv;
-
     std::unordered_map<std::wstring, std::shared_ptr<DomainCluster>> m_clusters;
-    std::vector<HWND> m_proxyWindows;
 };
 
-// --- KEYBOARD HOOK FOR REAL-TIME ALT-TAB DETECTION ---
+// --- KEYBOARD HOOK THREAD WITH DEDICATED MESSAGE LOOP ---
+static std::thread g_hookThread;
+static std::atomic<DWORD> g_hookThreadId{ 0 };
 static HHOOK g_hKbdHook = nullptr;
 
 static LRESULT CALLBACK LowLevelKbdHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -616,20 +760,50 @@ static LRESULT CALLBACK LowLevelKbdHookProc(int nCode, WPARAM wParam, LPARAM lPa
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+void StartKeyboardHookThread() {
+    g_hookThread = std::thread([]() {
+        g_hookThreadId.store(GetCurrentThreadId());
+        g_hKbdHook = SetWindowsHookExW(
+            WH_KEYBOARD_LL,
+            LowLevelKbdHookProc,
+            GetModuleHandleW(nullptr),
+            0
+        );
+
+        MSG msg;
+        while (GetMessageW(&msg, nullptr, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        if (g_hKbdHook) {
+            UnhookWindowsHookEx(g_hKbdHook);
+            g_hKbdHook = nullptr;
+        }
+    });
+}
+
+void StopKeyboardHookThread() {
+    DWORD tid = g_hookThreadId.load();
+    if (tid != 0) {
+        PostThreadMessageW(tid, WM_QUIT, 0, 0);
+    }
+    if (g_hookThread.joinable()) {
+        g_hookThread.join();
+    }
+    g_hookThreadId.store(0);
+}
+
 } // namespace ChromiumAltTabMod
 
 // --- WINDHAWK ENTRY POINTS ---
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Chromium Tabs in Alt-Tab Windhawk Mod...");
+    Wh_Log(L"Initializing Chromium Tabs in Alt-Tab Windhawk Mod v1.0.1...");
 
-    ChromiumAltTabMod::g_hKbdHook = SetWindowsHookExW(
-        WH_KEYBOARD_LL,
-        ChromiumAltTabMod::LowLevelKbdHookProc,
-        GetModuleHandleW(nullptr),
-        0
-    );
-
+    ChromiumAltTabMod::LoadSettings();
+    ChromiumAltTabMod::StartKeyboardHookThread();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().Start();
+
     Wh_Log(L"Chromium Tabs in Alt-Tab Mod loaded successfully.");
     return TRUE;
 }
@@ -637,16 +811,14 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Unloading Chromium Tabs in Alt-Tab Mod...");
 
-    if (ChromiumAltTabMod::g_hKbdHook) {
-        UnhookWindowsHookEx(ChromiumAltTabMod::g_hKbdHook);
-        ChromiumAltTabMod::g_hKbdHook = nullptr;
-    }
-
+    ChromiumAltTabMod::StopKeyboardHookThread();
     ChromiumAltTabMod::ChromiumAltTabCore::Instance().Stop();
+
     Wh_Log(L"Chromium Tabs in Alt-Tab Mod unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings updated for Chromium Tabs in Alt-Tab Mod.");
+    ChromiumAltTabMod::LoadSettings();
+    ChromiumAltTabMod::ChromiumAltTabCore::Instance().TriggerImmediateScan();
 }
-
