@@ -63,12 +63,17 @@ directly into the native Windows Alt-Tab switcher, intelligently grouped by root
 */
 // ==/WindhawkModSettings==
 
+#include <initguid.h>
 #include <windows.h>
 #include <uiautomation.h>
 #include <dwmapi.h>
 #include <psapi.h>
 #include <shlwapi.h>
 #include <memory>
+
+#ifndef CLSID_CUIAutomation8
+static const CLSID CLSID_CUIAutomation8 = { 0xe22ad333, 0xb25f, 0x460c, { 0x83, 0xd0, 0x05, 0x81, 0x10, 0x73, 0x95, 0xc9 } };
+#endif
 
 #include <string>
 #include <vector>
