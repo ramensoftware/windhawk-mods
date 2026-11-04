@@ -7,7 +7,7 @@
 // @author          wa0dim
 // @github          https://github.com/wa0dim
 // @include         windhawk.exe
-// @compilerOptions -lole32 -luuid
+// @compilerOptions -lole32 -luuid -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +16,7 @@
 
 While WhatsApp or other chosen apps (voice messages, videos, calls' media, ...) produce sound, the
 per-app volume of the configured target apps (default: Spotify) is lowered to
-a fixed percentage. When WhatsApp or the specified apps has been silent for a short moment, the
+a fixed percentage. When WhatsApp or the specified apps have been silent for a short moment, the
 original volume is restored.
 
 This only changes the per-app volume slider of the Windows volume mixer, not
@@ -24,17 +24,18 @@ the system volume.
 
 ## Choosing messengers
 In the settings under "Messengers" you can switch on WhatsApp (default),
-Telegram, Signal, Discord, Microsoft Teams, Skype, Zoom, Slack, Viber and
-Element. Any other app can be added by its process name under "Additional
-trigger apps" (e.g. `Threema.exe`).
+Telegram, Signal, Discord, Microsoft Teams, Zoom, Slack, Viber and Element.
+Any other app can be added by its process name under "Additional trigger apps"
+(e.g. `Threema.exe`).
 
 ## Calls
-Windows lowers other apps by itself during calls (communication streams). The
-mod detects this via the Windows ducking notification and stays out of the way,
-so the volume is not lowered twice (changeable with "Also duck calls that
-Windows already ducks"). If a call is not flagged by Windows but a selected
-messenger has an open microphone stream, the mod ducks for the whole call,
-also between ringtones and beeps. The log shows who handles the call.
+Windows lowers other apps by itself during calls (communication streams) unless
+"Do nothing" is selected in the Sound control panel (Communications tab). The
+mod detects such calls via the Windows ducking notification and stays out of
+the way, so the volume is not lowered twice (changeable with "Also duck calls
+that Windows already ducks"). If a call is not flagged by Windows but a
+selected messenger has an open microphone stream, the mod ducks for the whole
+call, also between ringtones and beeps. The log shows who handles the call.
 
 ## Notes
 - Messengers are detected by process name. Audio from `msedgewebview2.exe`
@@ -44,7 +45,14 @@ also between ringtones and beeps. The log shows who handles the call.
   every audio session it sees when a new one appears.
 - If you change the volume of a target app yourself while it is ducked, your
   value is taken as the new "original" volume.
-- Only the default playback device is handled.
+- All active playback devices are handled.
+- The mod only works while audio is involved: it waits for Windows audio events
+  and does not poll while no trigger app is playing.
+- Windows remembers the volume of each app. While an app is ducked, the mod
+  keeps a record of its original volume in Windhawk's storage, so the volume is
+  restored after a restart of the mod, a closed and reopened app or a changed
+  playback device. If an app stays closed while the mod is turned off, Windows
+  can keep its lowered volume until you raise it in the volume mixer.
 
 ## Warning:
 I used AI (Claude Sonnet 5.5) to create this mod. I am not responsible for any damage using this mod may cause. Use at your own risk.
@@ -71,8 +79,6 @@ However I did ask Claude to check for security vulnerabilities.
     $name: Discord
   - teams: false
     $name: Microsoft Teams
-  - skype: false
-    $name: Skype
   - zoom: false
     $name: Zoom
   - slack: false
@@ -107,6 +113,7 @@ However I did ask Claude to check for security vulnerabilities.
 #include <endpointvolume.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cmath>
@@ -135,9 +142,14 @@ constexpr GUID kIidAudioMeterInformation = {
 
 namespace {
 
-constexpr DWORD kPollMs = 60;
+constexpr DWORD kPollMs = 60;  // only while audio is involved
+constexpr DWORD kIdleWatchdogMs = 5 * 60 * 1000;  // safety net while idle
 constexpr ULONGLONG kProcessCacheMs = 3000;
 constexpr float kUserChangeTolerance = 0.02f;
+constexpr size_t kMaxDuckEntries = 64;
+constexpr size_t kMaxWatchedSessions = 256;
+constexpr UINT kMaxDevices = 16;
+constexpr PCWSTR kStoreKey = L"duckedVolumes";
 
 struct Settings {
     float duckVolume = 0.2f;
@@ -161,7 +173,6 @@ constexpr MessengerPreset kMessengers[] = {
     {L"messengers.signal", {L"signal.exe", nullptr}},
     {L"messengers.discord", {L"discord.exe", nullptr}},
     {L"messengers.teams", {L"ms-teams.exe", L"teams.exe"}},
-    {L"messengers.skype", {L"skype.exe", nullptr}},
     {L"messengers.zoom", {L"zoom.exe", nullptr}},
     {L"messengers.slack", {L"slack.exe", nullptr}},
     {L"messengers.viber", {L"viber.exe", nullptr}},
@@ -172,7 +183,15 @@ Settings g_settings;
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 
 HANDLE g_stopEvent;
+HANDLE g_wakeEvent;  // auto-reset: something happened in the audio system
 HANDLE g_thread;
+LONG g_devicesDirty = 1;  // the device lists must be rebuilt
+
+void Wake() {
+    if (g_wakeEvent) {
+        SetEvent(g_wakeEvent);
+    }
+}
 
 template <typename T>
 struct Com {
@@ -207,16 +226,12 @@ bool Contains(const std::vector<std::wstring>& list, const std::wstring& lowerNa
 std::vector<std::wstring> LoadList(const wchar_t* key) {
     std::vector<std::wstring> result;
     for (int i = 0; i < 64; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"%s[%d]", key, i);
-        if (!value) {
-            break;
+        WindhawkUtils::StringSetting value =
+            WindhawkUtils::StringSetting::make(L"%s[%d]", key, i);
+        if (!*value.get()) {
+            continue;  // empty entry: skip it, later entries still count
         }
-        std::wstring s = value;
-        Wh_FreeStringSetting(value);
-        if (s.empty()) {
-            break;
-        }
-        result.push_back(Lower(s));
+        result.push_back(Lower(value.get()));
     }
     return result;
 }
@@ -252,6 +267,107 @@ Settings GetSettings() {
     ReleaseSRWLockShared(&g_settingsLock);
     return s;
 }
+
+// Windows lowers other apps during calls unless the user chose "Do nothing"
+// (UserDuckingPreference == 3) in the Sound control panel.
+bool WindowsDucksCalls() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Multimedia\\Audio",
+                     L"UserDuckingPreference", RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) != ERROR_SUCCESS) {
+        return true;
+    }
+    return value != 3;
+}
+
+// ---- COM helpers ------------------------------------------------------------
+
+template <typename Interface>
+class Unknown : public Interface {
+   public:
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) {
+            return E_POINTER;
+        }
+        if (riid == IID_IUnknown || riid == __uuidof(Interface)) {
+            *ppv = static_cast<Interface*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_ref); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG ref = InterlockedDecrement(&m_ref);
+        if (ref == 0) {
+            delete this;
+        }
+        return ref;
+    }
+
+   protected:
+    virtual ~Unknown() = default;
+
+   private:
+    LONG m_ref = 1;
+};
+
+// Playback/capture devices were added, removed or the defaults changed.
+class DeviceNotifier final : public Unknown<IMMNotificationClient> {
+   public:
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR, DWORD) override { return Dirty(); }
+    STDMETHODIMP OnDeviceAdded(LPCWSTR) override { return Dirty(); }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR) override { return Dirty(); }
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow, ERole, LPCWSTR) override {
+        return Dirty();
+    }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override {
+        return S_OK;
+    }
+
+   private:
+    static HRESULT Dirty() {
+        InterlockedExchange(&g_devicesDirty, 1);
+        Wake();
+        return S_OK;
+    }
+};
+
+// A new audio session was created on a device.
+class SessionCreatedNotifier final : public Unknown<IAudioSessionNotification> {
+   public:
+    STDMETHODIMP OnSessionCreated(IAudioSessionControl*) override {
+        Wake();
+        return S_OK;
+    }
+};
+
+// A watched (trigger app) session changed its state or went away.
+class SessionEventsNotifier final : public Unknown<IAudioSessionEvents> {
+   public:
+    STDMETHODIMP OnDisplayNameChanged(LPCWSTR, LPCGUID) override { return S_OK; }
+    STDMETHODIMP OnIconPathChanged(LPCWSTR, LPCGUID) override { return S_OK; }
+    STDMETHODIMP OnSimpleVolumeChanged(float, WINBOOL, LPCGUID) override {
+        return S_OK;
+    }
+    STDMETHODIMP OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) override {
+        return S_OK;
+    }
+    STDMETHODIMP OnGroupingParamChanged(LPCGUID, LPCGUID) override { return S_OK; }
+    STDMETHODIMP OnStateChanged(AudioSessionState) override {
+        Wake();
+        return S_OK;
+    }
+    STDMETHODIMP OnSessionDisconnected(AudioSessionDisconnectReason) override {
+        Wake();
+        return S_OK;
+    }
+};
+
+SessionCreatedNotifier* g_createdNotifier;
+SessionEventsNotifier* g_eventsNotifier;
 
 // ---- process info cache ---------------------------------------------------
 
@@ -327,11 +443,15 @@ bool IsTriggerProcess(DWORD pid, const std::wstring& name,
 // ---- ducking state ---------------------------------------------------------
 
 struct DuckState {
-    float original;
-    float lastSet;
+    float original;     // volume to restore
+    float lastSet;      // volume we set last (to notice user changes)
+    float duckedLevel;  // level we ducked it to
+    bool adopted;       // false for records loaded from storage until seen again
 };
 
-std::map<std::wstring, DuckState> g_duck;  // key: session instance identifier
+// Key: session identifier (stable for an app on a device across launches).
+std::map<std::wstring, DuckState> g_duck;
+bool g_duckDirty = false;
 ULONGLONG g_lastTriggerActive = 0;
 int g_callState = 0;  // 0 none, 1 Windows handles the call, 2 mod handles it
 std::set<DWORD> g_loggedPids;
@@ -341,6 +461,57 @@ float MoveToward(float cur, float target, float step) {
         return std::min(cur + step, target);
     }
     return std::max(cur - step, target);
+}
+
+// Mirror of g_duck in Windhawk storage, so a ducked volume that Windows saved
+// can be restored after the mod (or the app) restarted.
+void SavePersisted() {
+    g_duckDirty = false;
+    if (g_duck.empty()) {
+        Wh_DeleteValue(kStoreKey);
+        return;
+    }
+    std::wstring out;
+    for (const auto& [key, st] : g_duck) {
+        wchar_t nums[64];
+        swprintf_s(nums, L"%.4f\t%.4f\t", st.original, st.duckedLevel);
+        out += nums;
+        out += key;
+        out += L'\n';
+    }
+    Wh_SetStringValue(kStoreKey, out.c_str());
+}
+
+void LoadPersisted() {
+    std::wstring buf(32768, L'\0');
+    buf.resize(Wh_GetStringValue(kStoreKey, buf.data(), buf.size()));
+
+    size_t pos = 0;
+    while (pos < buf.size() && g_duck.size() < kMaxDuckEntries) {
+        size_t end = buf.find(L'\n', pos);
+        if (end == std::wstring::npos) {
+            end = buf.size();
+        }
+        std::wstring line = buf.substr(pos, end - pos);
+        pos = end + 1;
+
+        size_t t1 = line.find(L'\t');
+        size_t t2 = t1 == std::wstring::npos ? t1 : line.find(L'\t', t1 + 1);
+        if (t2 == std::wstring::npos) {
+            continue;
+        }
+        float original = wcstof(line.substr(0, t1).c_str(), nullptr);
+        float ducked = wcstof(line.substr(t1 + 1, t2 - t1 - 1).c_str(), nullptr);
+        std::wstring key = line.substr(t2 + 1);
+        if (!(original >= 0 && original <= 1 && ducked >= 0 && ducked <= 1) ||
+            key.empty() || key.size() > 1024) {
+            continue;
+        }
+        g_duck[key] = {original, original, ducked, false};
+    }
+    if (!g_duck.empty()) {
+        Wh_Log(L"Loaded %d ducked volume record(s) from storage", (int)g_duck.size());
+    }
 }
 
 // ---- call detection ----------------------------------------------------------
@@ -358,28 +529,8 @@ bool IsCommunicationSession(const wchar_t* id) {
     return found;
 }
 
-class DuckNotifier final : public IAudioVolumeDuckNotification {
+class DuckNotifier final : public Unknown<IAudioVolumeDuckNotification> {
    public:
-    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
-        if (!ppv) {
-            return E_POINTER;
-        }
-        if (riid == IID_IUnknown || riid == __uuidof(IAudioVolumeDuckNotification)) {
-            *ppv = static_cast<IAudioVolumeDuckNotification*>(this);
-            AddRef();
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_ref); }
-    STDMETHODIMP_(ULONG) Release() override {
-        ULONG ref = InterlockedDecrement(&m_ref);
-        if (ref == 0) {
-            delete this;
-        }
-        return ref;
-    }
     STDMETHODIMP OnVolumeDuckNotification(LPCWSTR sessionID,
                                           UINT32 countCommunicationSessions) override {
         // Runs on a Windows audio thread: no exception may escape.
@@ -395,45 +546,31 @@ class DuckNotifier final : public IAudioVolumeDuckNotification {
         } catch (...) {
             ReleaseSRWLockExclusive(&g_commLock);
         }
+        Wake();
         return S_OK;
     }
-    STDMETHODIMP OnVolumeUnduckNotification(LPCWSTR sessionID) override {
+    STDMETHODIMP OnVolumeUnduckNotification(LPCWSTR) override {
         // Sent when the last communication stream ended.
         AcquireSRWLockExclusive(&g_commLock);
         g_commSessions.clear();
         ReleaseSRWLockExclusive(&g_commLock);
+        Wake();
         return S_OK;
     }
-
-   private:
-    LONG m_ref = 1;
 };
 
 // Keeps the duck notification registered on the default communications device.
 struct CommWatcher {
     Com<IAudioSessionManager2> mgr;
     DuckNotifier* notifier = nullptr;
-    std::wstring deviceId;
 
     void Update(IMMDeviceEnumerator* enumerator) {
+        Stop();
         Com<IMMDevice> device;
         if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eCommunications,
                                                        &device)) ||
-            !device) {
-            return;
-        }
-        LPWSTR id = nullptr;
-        if (FAILED(device->GetId(&id)) || !id) {
-            return;
-        }
-        std::wstring newId = id;
-        CoTaskMemFree(id);
-        if (newId == deviceId) {
-            return;  // already registered, or registration failed for this device
-        }
-
-        Stop();
-        if (FAILED(device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL,
+            !device ||
+            FAILED(device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL,
                                     nullptr, (void**)&mgr)) ||
             !mgr) {
             return;
@@ -443,10 +580,7 @@ struct CommWatcher {
         if (FAILED(hr)) {
             Wh_Log(L"RegisterDuckNotification failed: 0x%08X", (unsigned)hr);
             Stop();
-            deviceId = newId;  // don't retry every second
-            return;
         }
-        deviceId = newId;
     }
 
     void Stop() {
@@ -458,104 +592,121 @@ struct CommWatcher {
             notifier = nullptr;
         }
         mgr.Reset();
-        deviceId.clear();
         AcquireSRWLockExclusive(&g_commLock);
         g_commSessions.clear();
         ReleaseSRWLockExclusive(&g_commLock);
     }
 };
 
+// ---- device managers and watched sessions --------------------------------------
+
+std::vector<IAudioSessionManager2*> g_renderMgrs;
+std::vector<IAudioSessionManager2*> g_captureMgrs;
+
+// Trigger-app sessions we get state-change events for. Key: instance identifier.
+std::map<std::wstring, IAudioSessionControl*> g_watched;
+
+void Unwatch(std::map<std::wstring, IAudioSessionControl*>::iterator it) {
+    it->second->UnregisterAudioSessionNotification(g_eventsNotifier);
+    it->second->Release();
+}
+
+void UnwatchAll() {
+    for (auto it = g_watched.begin(); it != g_watched.end(); ++it) {
+        Unwatch(it);
+    }
+    g_watched.clear();
+}
+
+void Watch(const std::wstring& id, IAudioSessionControl* ctl) {
+    if (g_watched.count(id) || g_watched.size() >= kMaxWatchedSessions) {
+        return;
+    }
+    if (SUCCEEDED(ctl->RegisterAudioSessionNotification(g_eventsNotifier))) {
+        ctl->AddRef();
+        g_watched[id] = ctl;
+    }
+}
+
+void PruneWatched(const std::set<std::wstring>& seen) {
+    for (auto it = g_watched.begin(); it != g_watched.end();) {
+        if (seen.count(it->first)) {
+            ++it;
+        } else {
+            Unwatch(it);
+            it = g_watched.erase(it);
+        }
+    }
+}
+
 void ReleaseManagers(std::vector<IAudioSessionManager2*>& managers) {
     for (auto* m : managers) {
+        m->UnregisterSessionNotification(g_createdNotifier);
         m->Release();
     }
     managers.clear();
 }
 
-void RefreshCaptureManagers(IMMDeviceEnumerator* enumerator,
-                            std::vector<IAudioSessionManager2*>& out) {
-    ReleaseManagers(out);
+void LoadManagers(IMMDeviceEnumerator* enumerator, EDataFlow flow,
+                  std::vector<IAudioSessionManager2*>& out) {
     Com<IMMDeviceCollection> devices;
     UINT n = 0;
-    if (FAILED(enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE,
+    if (FAILED(enumerator->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE,
                                               &devices)) ||
         !devices || FAILED(devices->GetCount(&n))) {
         return;
     }
-    for (UINT i = 0; i < n && i < 16; i++) {
+    for (UINT i = 0; i < n && i < kMaxDevices; i++) {
         Com<IMMDevice> device;
         IAudioSessionManager2* m = nullptr;
         if (SUCCEEDED(devices->Item(i, &device)) && device &&
             SUCCEEDED(device->Activate(__uuidof(IAudioSessionManager2),
                                        CLSCTX_ALL, nullptr, (void**)&m)) &&
             m) {
+            m->RegisterSessionNotification(g_createdNotifier);
             out.push_back(m);
         }
     }
 }
 
-// A trigger app with an open (active) microphone stream is in a call. This
-// works even when the app doesn't flag its stream as a communication stream.
-bool CaptureCallActive(const std::vector<IAudioSessionManager2*>& managers,
-                       const std::vector<std::wstring>& triggers) {
-    for (auto* m : managers) {
-        Com<IAudioSessionEnumerator> sessions;
-        int count = 0;
-        if (FAILED(m->GetSessionEnumerator(&sessions)) || !sessions ||
-            FAILED(sessions->GetCount(&count))) {
-            continue;
-        }
-        for (int i = 0; i < count; i++) {
-            Com<IAudioSessionControl> ctl;
-            AudioSessionState state;
-            if (FAILED(sessions->GetSession(i, &ctl)) || !ctl ||
-                FAILED(ctl->GetState(&state)) || state != AudioSessionStateActive) {
-                continue;
-            }
-            Com<IAudioSessionControl2> ctl2;
-            DWORD pid = 0;
-            if (FAILED(ctl->QueryInterface(__uuidof(IAudioSessionControl2),
-                                           (void**)&ctl2)) ||
-                !ctl2 || FAILED(ctl2->GetProcessId(&pid)) || pid == 0) {
-                continue;
-            }
-            const ProcInfo* info = GetProc(pid);
-            if (!info) {
-                continue;
-            }
-            const std::wstring name = info->name;
-            if (IsTriggerProcess(pid, name, triggers)) {
-                return true;
-            }
+// ---- polling ---------------------------------------------------------------------
+
+struct Target {
+    std::wstring key;
+    ISimpleAudioVolume* vol;
+    std::wstring name;
+    bool wanted;  // still in "Apps to duck" (otherwise only restored)
+};
+
+struct TargetList {
+    std::vector<Target> items;
+    TargetList() = default;
+    TargetList(const TargetList&) = delete;
+    TargetList& operator=(const TargetList&) = delete;
+    ~TargetList() {
+        for (auto& t : items) {
+            t.vol->Release();
         }
     }
-    return false;
-}
+};
 
-void Poll(IAudioSessionManager2* mgr,
-          const std::vector<IAudioSessionManager2*>& captureMgrs, bool restoreAll) {
-    Settings s = GetSettings();
+struct ScanResult {
+    bool triggerPeak = false;  // a trigger app is audibly playing
+    bool triggerOpen = false;  // a trigger app has an active stream
+    bool windowsCall = false;  // active communication stream of a trigger app
+    bool micCall = false;      // trigger app has an active microphone stream
+    bool unresolved = false;   // a process wasn't in the (fresh) process cache yet
+};
 
-    ULONGLONG now = GetTickCount64();
-    if (now - g_procsTime > kProcessCacheMs) {
-        RefreshProcs();
-    }
-
+void ScanManager(IAudioSessionManager2* mgr, bool capture, const Settings& s,
+                 ScanResult& r, TargetList& targets,
+                 std::set<std::wstring>& watchSeen) {
     Com<IAudioSessionEnumerator> sessions;
     int count = 0;
     if (FAILED(mgr->GetSessionEnumerator(&sessions)) || !sessions ||
         FAILED(sessions->GetCount(&count))) {
         return;
     }
-
-    struct Target {
-        std::wstring id;
-        ISimpleAudioVolume* vol;
-        std::wstring name;
-    };
-    std::vector<Target> targets;
-    bool triggerActive = false;
-    bool windowsCall = false;
 
     for (int i = 0; i < count; i++) {
         Com<IAudioSessionControl> ctl;
@@ -576,6 +727,11 @@ void Poll(IAudioSessionManager2* mgr,
         // Copy the name: later GetProc calls may invalidate ProcInfo pointers.
         const ProcInfo* info = GetProc(pid);
         if (!info) {
+            // A just-started process may be missing from a very recent
+            // snapshot (refreshes are rate limited): look again shortly.
+            if (GetTickCount64() - g_procsTime <= 500) {
+                r.unresolved = true;
+            }
             continue;
         }
         const std::wstring name = info->name;
@@ -584,68 +740,103 @@ void Poll(IAudioSessionManager2* mgr,
             g_loggedPids.clear();
         }
         if (g_loggedPids.insert(pid).second) {
-            Wh_Log(L"Audio session: %s (pid %u)", name.c_str(), pid);
+            Wh_Log(L"%s session: %s (pid %u)", capture ? L"Capture" : L"Audio",
+                   name.c_str(), pid);
         }
 
         bool isTrigger = IsTriggerProcess(pid, name, s.triggers);
-        bool isTarget = !isTrigger && Contains(s.targets, name);
 
-        if (isTrigger && !triggerActive) {
-            AudioSessionState state;
-            Com<IAudioMeterInformation> meter;
-            float peak = 0;
-            if (SUCCEEDED(ctl->GetState(&state)) &&
-                state == AudioSessionStateActive &&
-                SUCCEEDED(ctl->QueryInterface(kIidAudioMeterInformation,
-                                              (void**)&meter)) &&
-                meter && SUCCEEDED(meter->GetPeakValue(&peak)) &&
-                peak > s.peakThreshold) {
-                triggerActive = true;
-            }
-        }
+        if (isTrigger) {
+            LPWSTR rawId = nullptr;
+            if (SUCCEEDED(ctl2->GetSessionInstanceIdentifier(&rawId)) && rawId) {
+                std::wstring id = rawId;
+                CoTaskMemFree(rawId);
 
-        // Windows reports communication (call) streams through the ducking
-        // notification; a trigger app owning one of them means a call.
-        if (isTrigger && !windowsCall) {
-            AudioSessionState state;
-            LPWSTR id = nullptr;
-            if (SUCCEEDED(ctl->GetState(&state)) &&
-                state == AudioSessionStateActive &&
-                SUCCEEDED(ctl2->GetSessionInstanceIdentifier(&id)) && id &&
-                IsCommunicationSession(id)) {
-                windowsCall = true;
-            }
-            if (id) {
-                CoTaskMemFree(id);
-            }
-        }
+                // Watch first, then read the state: a change in between is
+                // either seen by the state read or reported as an event.
+                Watch(id, ctl.p);
+                watchSeen.insert(id);
 
-        if (isTarget) {
-            LPWSTR id = nullptr;
-            ISimpleAudioVolume* vol = nullptr;
-            if (SUCCEEDED(ctl2->GetSessionInstanceIdentifier(&id)) && id &&
-                SUCCEEDED(ctl->QueryInterface(__uuidof(ISimpleAudioVolume),
-                                              (void**)&vol)) &&
-                vol) {
-                targets.push_back({id, vol, name});
+                AudioSessionState state;
+                if (SUCCEEDED(ctl->GetState(&state)) &&
+                    state == AudioSessionStateActive) {
+                    r.triggerOpen = true;
+                    if (capture) {
+                        r.micCall = true;
+                    } else {
+                        if (IsCommunicationSession(id.c_str())) {
+                            r.windowsCall = true;
+                        }
+                        Com<IAudioMeterInformation> meter;
+                        float peak = 0;
+                        if (!r.triggerPeak &&
+                            SUCCEEDED(ctl->QueryInterface(kIidAudioMeterInformation,
+                                                          (void**)&meter)) &&
+                            meter && SUCCEEDED(meter->GetPeakValue(&peak)) &&
+                            peak > s.peakThreshold) {
+                            r.triggerPeak = true;
+                        }
+                    }
+                }
             }
-            if (id) {
-                CoTaskMemFree(id);
+        } else if (!capture) {
+            bool isTarget = Contains(s.targets, name);
+            if (isTarget || !g_duck.empty()) {
+                LPWSTR rawKey = nullptr;
+                if (SUCCEEDED(ctl2->GetSessionIdentifier(&rawKey)) && rawKey) {
+                    std::wstring key = rawKey;
+                    CoTaskMemFree(rawKey);
+
+                    ISimpleAudioVolume* vol = nullptr;
+                    // Sessions that are no longer targets but still hold a
+                    // ducked volume are kept so they get restored.
+                    if ((isTarget || g_duck.count(key)) &&
+                        SUCCEEDED(ctl->QueryInterface(__uuidof(ISimpleAudioVolume),
+                                                      (void**)&vol)) &&
+                        vol) {
+                        try {
+                            targets.items.push_back({key, vol, name, isTarget});
+                        } catch (...) {
+                            vol->Release();  // not owned by the list yet
+                            throw;
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+// Returns true while the next poll should come soon (audio is involved).
+bool Poll(bool restoreAll) {
+    Settings s = GetSettings();
+
+    ULONGLONG now = GetTickCount64();
+    if (now - g_procsTime > kProcessCacheMs) {
+        RefreshProcs();
+    }
+
+    ScanResult r;
+    TargetList targets;
+    std::set<std::wstring> watchSeen;
+    for (auto* m : g_renderMgrs) {
+        ScanManager(m, false, s, r, targets, watchSeen);
+    }
+    for (auto* m : g_captureMgrs) {
+        ScanManager(m, true, s, r, targets, watchSeen);
+    }
+    PruneWatched(watchSeen);
 
     // Calls: Windows already lowers other apps itself for communication
     // streams, so the mod stays out of the way there (unless asked otherwise)
-    // to avoid ducking twice. A call that Windows doesn't flag (detected only
-    // by an open microphone stream) is ducked by the mod for its whole length,
-    // regardless of the pauses between ringtones/beeps/speech.
-    bool windowsHandlesCall = windowsCall && !s.duckWindowsCalls;
-    bool modHandlesCall = false;
-    if (!restoreAll && !windowsHandlesCall) {
-        modHandlesCall =
-            windowsCall || CaptureCallActive(captureMgrs, s.triggers);
-    }
+    // to avoid ducking twice. A call that Windows doesn't flag (or doesn't duck
+    // because the user chose "Do nothing"), detected by an open microphone
+    // stream, is ducked by the mod for its whole length, regardless of the
+    // pauses between ringtones/beeps/speech.
+    bool windowsHandlesCall =
+        r.windowsCall && !s.duckWindowsCalls && WindowsDucksCalls();
+    bool modHandlesCall = !restoreAll && !windowsHandlesCall &&
+                          (r.windowsCall || r.micCall);
 
     int callState = windowsHandlesCall ? 1 : (modHandlesCall ? 2 : 0);
     if (callState != g_callState) {
@@ -661,76 +852,93 @@ void Poll(IAudioSessionManager2* mgr,
 
     if (windowsHandlesCall) {
         g_lastTriggerActive = 0;  // restore anything we ducked, without delay
-    } else if (triggerActive || modHandlesCall) {
+    } else if (r.triggerPeak || modHandlesCall) {
         g_lastTriggerActive = now;
     }
     bool ducking = !restoreAll && g_lastTriggerActive != 0 &&
                    now - g_lastTriggerActive <= s.releaseDelayMs;
 
     float step = s.fadeMs > 0 ? (float)kPollMs / s.fadeMs : 1.0f;
-    std::set<std::wstring> seen;
+    bool fading = false;
 
-    for (auto& t : targets) {
-        seen.insert(t.id);
-
+    for (auto& t : targets.items) {
         float cur = 0;
-        if (SUCCEEDED(t.vol->GetMasterVolume(&cur))) {
-            auto it = g_duck.find(t.id);
+        if (FAILED(t.vol->GetMasterVolume(&cur))) {
+            continue;
+        }
+        auto it = g_duck.find(t.key);
 
-            if (ducking) {
-                if (it == g_duck.end()) {
-                    it = g_duck.insert({t.id, {cur, cur}}).first;
-                    Wh_Log(L"Ducking %s from %d%%", t.name.c_str(),
-                           (int)(cur * 100 + 0.5f));
-                } else if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
-                    // User changed the volume while ducked: new baseline.
-                    it->second.original = cur;
+        if (it != g_duck.end() && !it->second.adopted) {
+            // Record from storage: only valid if the app still sits between the
+            // ducked level and its original volume (not changed meanwhile).
+            const DuckState& d = it->second;
+            float low = std::min(d.duckedLevel, d.original) - kUserChangeTolerance;
+            if (cur >= low && cur <= d.original + kUserChangeTolerance) {
+                it->second.adopted = true;
+                it->second.lastSet = cur;
+            } else {
+                g_duck.erase(it);
+                g_duckDirty = true;
+                it = g_duck.end();
+            }
+        }
+
+        if (ducking && t.wanted) {
+            if (it == g_duck.end()) {
+                if (cur <= s.duckVolume + 0.001f ||
+                    g_duck.size() >= kMaxDuckEntries) {
+                    continue;  // already quiet enough
                 }
-                float desired = std::min(it->second.original, s.duckVolume);
-                float next = MoveToward(cur, desired, step);
+                it = g_duck.insert({t.key, {cur, cur, s.duckVolume, true}}).first;
+                g_duckDirty = true;
+                Wh_Log(L"Ducking %s from %d%%", t.name.c_str(),
+                       (int)(cur * 100 + 0.5f));
+            } else if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
+                // User changed the volume while ducked: new baseline.
+                it->second.original = cur;
+                it->second.duckedLevel = std::min(cur, s.duckVolume);
+                g_duckDirty = true;
+            }
+            float desired = std::min(it->second.original, s.duckVolume);
+            float next = MoveToward(cur, desired, step);
+            if (next != cur) {
+                t.vol->SetMasterVolume(next, nullptr);
+            }
+            it->second.lastSet = next;
+            fading = true;
+        } else if (it != g_duck.end()) {
+            if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
+                // User took over; don't touch it.
+                g_duck.erase(it);
+                g_duckDirty = true;
+            } else {
+                float next = restoreAll
+                                 ? it->second.original
+                                 : MoveToward(cur, it->second.original, step);
                 if (next != cur) {
                     t.vol->SetMasterVolume(next, nullptr);
                 }
-                it->second.lastSet = next;
-            } else if (it != g_duck.end()) {
-                if (fabsf(cur - it->second.lastSet) > kUserChangeTolerance) {
-                    // User took over; don't touch it.
+                if (next == it->second.original) {
+                    Wh_Log(L"Restored %s to %d%%", t.name.c_str(),
+                           (int)(next * 100 + 0.5f));
                     g_duck.erase(it);
+                    g_duckDirty = true;
                 } else {
-                    float next = restoreAll
-                                     ? it->second.original
-                                     : MoveToward(cur, it->second.original, step);
-                    if (next != cur) {
-                        t.vol->SetMasterVolume(next, nullptr);
-                    }
-                    if (next == it->second.original) {
-                        Wh_Log(L"Restored %s to %d%%", t.name.c_str(),
-                               (int)(next * 100 + 0.5f));
-                        g_duck.erase(it);
-                    } else {
-                        it->second.lastSet = next;
-                    }
+                    it->second.lastSet = next;
+                    fading = true;
                 }
             }
         }
-        t.vol->Release();
     }
 
-    for (auto it = g_duck.begin(); it != g_duck.end();) {
-        it = seen.count(it->first) ? std::next(it) : g_duck.erase(it);
+    if (g_duckDirty) {
+        SavePersisted();
     }
-}
 
-bool GetManager(Com<IMMDeviceEnumerator>& enumerator,
-                Com<IAudioSessionManager2>& mgr) {
-    mgr.Reset();
-    Com<IMMDevice> device;
-    return SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
-                                                         &device)) &&
-           device &&
-           SUCCEEDED(device->Activate(__uuidof(IAudioSessionManager2),
-                                      CLSCTX_ALL, nullptr, (void**)&mgr)) &&
-           mgr;
+    // Poll quickly only while audio is involved. Records of apps that are not
+    // running stay in storage and wake us again when their session appears.
+    return (r.triggerOpen && !windowsHandlesCall) || ducking || fading ||
+           r.unresolved;
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
@@ -748,43 +956,64 @@ DWORD WINAPI WorkerThread(LPVOID) {
         return 1;
     }
 
-    Com<IAudioSessionManager2> mgr;
-    ULONGLONG mgrTime = 0;
-    CommWatcher commWatcher;
-    std::vector<IAudioSessionManager2*> captureMgrs;
+    DeviceNotifier* deviceNotifier = new DeviceNotifier();
+    g_createdNotifier = new SessionCreatedNotifier();
+    g_eventsNotifier = new SessionEventsNotifier();
+    bool deviceCallbackOk = SUCCEEDED(
+        enumerator->RegisterEndpointNotificationCallback(deviceNotifier));
+    if (!deviceCallbackOk) {
+        Wh_Log(L"RegisterEndpointNotificationCallback failed");
+    }
 
-    do {
-        ULONGLONG now = GetTickCount64();
-        // Re-query the devices regularly to follow device changes.
-        if (!mgr || mgrTime == 0 || now - mgrTime > 1000) {
-            Com<IAudioSessionManager2> fresh;
-            if (GetManager(enumerator, fresh)) {
-                mgr.Reset();
-                mgr.p = fresh.p;
-                fresh.p = nullptr;
-            }
+    CommWatcher commWatcher;
+    LoadPersisted();
+
+    HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
+    for (;;) {
+        if (InterlockedExchange(&g_devicesDirty, 0)) {
+            UnwatchAll();
+            ReleaseManagers(g_renderMgrs);
+            ReleaseManagers(g_captureMgrs);
+            LoadManagers(enumerator.p, eRender, g_renderMgrs);
+            LoadManagers(enumerator.p, eCapture, g_captureMgrs);
             commWatcher.Update(enumerator.p);
-            RefreshCaptureManagers(enumerator.p, captureMgrs);
-            mgrTime = now;
         }
-        if (mgr) {
-            try {
-                Poll(mgr.p, captureMgrs, false);
-            } catch (...) {
-                // e.g. out of memory: skip this cycle instead of crashing
-            }
+
+        bool busy = true;
+        try {
+            busy = Poll(false);
+        } catch (...) {
+            // e.g. out of memory: skip this cycle instead of crashing
         }
-    } while (WaitForSingleObject(g_stopEvent, kPollMs) == WAIT_TIMEOUT);
+
+        DWORD result =
+            WaitForMultipleObjects(2, waitHandles, FALSE, busy ? kPollMs : kIdleWatchdogMs);
+        if (result == WAIT_OBJECT_0) {
+            break;
+        }
+        if (result == WAIT_TIMEOUT && !busy && !deviceCallbackOk) {
+            InterlockedExchange(&g_devicesDirty, 1);  // no device events: rescan
+        }
+    }
 
     // Restore everything before exiting.
-    if (mgr) {
-        Poll(mgr.p, {}, true);
+    try {
+        Poll(true);
+    } catch (...) {
     }
-    g_duck.clear();
 
+    UnwatchAll();
     commWatcher.Stop();
-    ReleaseManagers(captureMgrs);
-    mgr.Reset();
+    ReleaseManagers(g_renderMgrs);
+    ReleaseManagers(g_captureMgrs);
+    if (deviceCallbackOk) {
+        enumerator->UnregisterEndpointNotificationCallback(deviceNotifier);
+    }
+    deviceNotifier->Release();
+    g_createdNotifier->Release();
+    g_createdNotifier = nullptr;
+    g_eventsNotifier->Release();
+    g_eventsNotifier = nullptr;
     enumerator.Reset();
     if (comInit) {
         CoUninitialize();
@@ -800,32 +1029,32 @@ BOOL WhTool_ModInit() {
     LoadSettings();
 
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
+    g_wakeEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_wakeEvent) {
         return FALSE;
     }
     g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
-    if (!g_thread) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-        return FALSE;
-    }
-    return TRUE;
+    return g_thread != nullptr;
 }
 
 void WhTool_ModSettingsChanged() {
     LoadSettings();
+    Wake();
 }
 
 void WhTool_ModUninit() {
     if (g_thread) {
         SetEvent(g_stopEvent);
-        WaitForSingleObject(g_thread, 5000);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+        // The process exits right after; handles are only closed once the
+        // worker is known to be done with them.
+        if (WaitForSingleObject(g_thread, 5000) == WAIT_OBJECT_0) {
+            CloseHandle(g_thread);
+            g_thread = nullptr;
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+            CloseHandle(g_wakeEvent);
+            g_wakeEvent = nullptr;
+        }
     }
 }
 
@@ -915,9 +1144,10 @@ BOOL Wh_ModInit() {
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD_PTR entryPoint =
-            (DWORD_PTR)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook((void*)entryPoint, (void*)EntryPoint_Hook, nullptr);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -959,7 +1189,7 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
@@ -980,8 +1210,7 @@ void Wh_ModAfterInit() {
     };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE,
-                                 CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
