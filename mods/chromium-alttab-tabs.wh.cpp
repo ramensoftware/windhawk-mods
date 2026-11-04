@@ -15,30 +15,22 @@
 # Chromium Tabs in Alt-Tab (Domain Grouped)
 
 Injects tabs from Chromium-based web browsers (Google Chrome, Brave, Microsoft Edge, Opera, Vivaldi)
-directly into the native Windows Alt-Tab switcher, intelligently grouped by root domain
-(e.g., stacking all GitHub tabs into a single Alt-Tab thumbnail card) to prevent visual clutter.
+directly into the native Windows Alt-Tab task switcher, grouped by root domain
+(e.g., stacking all GitHub tabs into a single Alt-Tab card) to prevent switcher clutter.
 
-### Key Architectural Features:
-1. **Dedicated Tool Process Isolation**:
-   Runs as an isolated Windhawk Tool Mod in its own background process, keeping File Explorer
-   100% stable and protected against crashes.
-2. **Zero-Lag UI Automation (UIA) Batch Caching Engine**:
-   Uses `IUIAutomationCacheRequest` with `TreeScope_Element` to fetch all tab titles,
-   selection states, patterns, and coordinates in a single out-of-process LRPC batch call (< 12ms).
-3. **Native Tab-Strip Scoping**:
-   Locates the browser's native `TabStrip` container first before enumerating, preventing
-   in-page web ARIA `role='tab'` controls from creating bogus Alt-Tab items.
-4. **Domain Clustering Parser**:
-   Extracts root domains from Omnibox URLs and title heuristics. Unresolved tabs remain
-   individual cards to prevent false groupings.
-5. **No Taskbar Clutter**:
-   Uses `ITaskbarList::DeleteTab` so virtual proxy cards appear exclusively in Alt-Tab
-   without producing unwanted taskbar buttons.
-6. **Non-Blocking UI Inspection**:
-   Uses `SendMessageTimeoutW` to query window icons safely without stalling if a browser freezes.
-7. **Reliable Activation Routing**:
-   Bypasses Windows ASFW (AllowSetForegroundWindow) lockouts and switches directly to the target tab
-   via `IUIAutomationSelectionItemPattern` with coordinate fallback.
+![Alt-Tab Simulator](https://raw.githubusercontent.com/Dszae/AltTabs/main/brag-output/brag.jpg)
+
+### What it does:
+- Discovers open browser tabs across Chromium browsers using Windows UI Automation.
+- Groups multiple tabs from the same website into a single Alt-Tab card showing the domain name and tab count.
+- Single tabs from distinct domains appear as individual cards.
+- Off-screen proxy windows are excluded from the Windows taskbar via `ITaskbarList::DeleteTab`, remaining visible only in the Alt-Tab switcher.
+- Selecting a card restores and focuses the browser window and activates the corresponding tab.
+
+### Notes & Limitations:
+- Running as a dedicated Windhawk Tool Mod ensures complete isolation from `explorer.exe`.
+- Virtual cards show the tab title and browser icon; thumbnails reflect the browser window state.
+- In Edge, if "Show tabs in Alt+Tab" is already enabled in Windows Settings, consider disabling that setting or disabling Edge in this mod to avoid duplicate entries.
 */
 // ==/WindhawkModReadme==
 
@@ -361,7 +353,6 @@ public:
             CloseHandle(m_hWakeEvent);
             m_hWakeEvent = nullptr;
         }
-        DestroyProxyWindows();
         UnregisterWindowClass();
     }
 
@@ -487,6 +478,7 @@ private:
             nextScan = GetTickCount64() + intervalMs;
         }
 
+        DestroyProxyWindows();
         pCache.Release();
         pTabCond.Release();
         pUIA.Release();
@@ -760,7 +752,10 @@ static LRESULT CALLBACK LowLevelKbdHookProc(int nCode, WPARAM wParam, LPARAM lPa
 }
 
 void StartKeyboardHookThread() {
-    g_hookThread = std::thread([]() {
+    HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hookThread = std::thread([ready]() {
+        MSG msg;
+        PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // Force message queue creation
         g_hookThreadId.store(GetCurrentThreadId());
         g_hKbdHook = SetWindowsHookExW(
             WH_KEYBOARD_LL,
@@ -768,8 +763,8 @@ void StartKeyboardHookThread() {
             GetModuleHandleW(nullptr),
             0
         );
+        SetEvent(ready);
 
-        MSG msg;
         while (GetMessageW(&msg, nullptr, 0, 0)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -780,6 +775,8 @@ void StartKeyboardHookThread() {
             g_hKbdHook = nullptr;
         }
     });
+    WaitForSingleObject(ready, INFINITE);
+    CloseHandle(ready);
 }
 
 void StopKeyboardHookThread() {
