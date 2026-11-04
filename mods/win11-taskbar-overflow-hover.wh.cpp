@@ -18,20 +18,12 @@ to open the hidden Apps icons.
 
 ![Hover overflow menu](https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png)
 
-Features:
-- Opens the overflow menu shortly after you hover the overflow button.
-- Closes the flyout as soon as the cursor leaves the combined area of the
-  button and the menu (the gap between them counts as part of the area).
-- Dismisses the flyout after you click an icon inside it.
-- Keeps the flyout open while a tray icon's popup menu is showing.
-- UI Automation is queried only when the cursor is over a taskbar window or
-  while the flyout is open.
-- The flyout is closed through the overflow button itself (UI Automation),
-  no keystrokes are sent to other applications.
-- No synthetic mouse-click fallback is used.
-- Runs as a dedicated Windhawk tool process, not inside Explorer.
+✨ Features:
+- Zero-Click Open: Auto-expands the hidden icons menu just by hovering.
+- Auto-Dismiss: Gracefully closes the menu automatically the moment your mouse leaves the overflow button or the flyout.
+- Instant App Launch: Instantly dismisses the overflow flyout the exact millisecond you click an app inside it, completely bypassing the native Windows UI lag.
 
-Developed by Cougar16 for Windows Community.
+Developed by Cougar16 for the Windows customization community.
 */
 // ==/WindhawkModReadme==
 
@@ -534,8 +526,17 @@ void WhTool_ModSettingsChanged() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or need to run in a separate process, to be able to load/unload.
-////////////////////////////////////////////////////////////////////////////////
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -605,15 +606,12 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandle(nullptr));
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
-            reinterpret_cast<IMAGE_NT_HEADERS*>(
-                reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD entryPointRVA =
-            ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
@@ -633,8 +631,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -664,7 +662,6 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
@@ -677,7 +674,6 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
-
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
