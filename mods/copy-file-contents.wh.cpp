@@ -2,7 +2,7 @@
 // @id              copy-file-contents
 // @name            Copy File Contents
 // @description     Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.
-// @version         1.4
+// @version         1.4.1
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -994,8 +994,11 @@ std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
                 DWORD read = 0;
                 if (!ReadFile(file, buffer.data(),
                               static_cast<DWORD>(buffer.size()), &read,
-                              nullptr) ||
-                    read == 0) {
+                              nullptr)) {
+                    success = false;
+                    break;
+                }
+                if (read == 0) {
                     break;
                 }
                 if (BCryptHashData(hash, buffer.data(), read, 0) != 0) {
