@@ -3,7 +3,7 @@
 // @name            Win Duo Bar
 // @description     A compact ring widget for the Windows 11 taskbar clock: a battery gauge ring, a Wi-Fi symbol, the time and date, and a charging animation
 // @description:zh-CN 一个替换 Windows 11 任务栏时钟的圆环小组件：电量圆环、Wi-Fi 图标、时间日期，以及充电动画
-// @version         1.1.3
+// @version         1.1.4
 // @author          Felinyu
 // @github          https://github.com/Felinyu
 // @license         GPL-3.0
@@ -663,10 +663,11 @@ int g_startupScansLeft = 0;
 std::atomic<bool> g_clockHookApplied{false};
 
 // Set by the network status change handler, which runs on a Windows Runtime
-// thread pool thread, and consumed by the 1 s UI timer. All the other network
-// state is UI-thread only.
+// thread pool thread, and consumed by the 1 s UI timer. The subscription state
+// is written by the taskbar UI thread (subscribe, from the timer tick) and by
+// the engine thread (unsubscribe, after the timer stopped), so it's atomic.
 std::atomic<bool> g_networkDirty{true};
-bool g_networkSubscribed = false;
+std::atomic<bool> g_networkSubscribed{false};
 winrt::event_token g_networkStatusToken{};
 
 // Keeps the network status handler alive while it may still be invoked, so
@@ -1017,6 +1018,11 @@ void BuildInstanceVisuals(WidgetInstance& instance) {
     wifiSymbol.Children().Append(wifiDot);
     Controls::Canvas::SetLeft(wifiSymbol, centerX - wifiWidth / 2.0);
     Controls::Canvas::SetTop(wifiSymbol, wifiTop);
+
+    // Apply the network icon setting from the first frame: the first network
+    // state update only arrives on a later timer tick.
+    wifiSymbol.Visibility(g_settings.showNetwork ? Visibility::Visible
+                                                : Visibility::Collapsed);
 
     // Ethernet still uses the system icon font glyph.
     double networkFont = size * kNetworkGlyphFrac;
@@ -1741,6 +1747,10 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 
 // ===== Network status subscription =====
 
+// Called from the 1 s timer tick, i.e. from the taskbar UI thread, but in a
+// normal context: the static NetworkInformation event may need to set up an
+// out-of-process event sink, which isn't allowed from the input-synchronous
+// context of the RunFromWindowThread callback.
 void SubscribeNetworkStatusChanged() {
     if (g_networkSubscribed) {
         return;
@@ -1771,6 +1781,10 @@ void SubscribeNetworkStatusChanged() {
     }
 }
 
+// Called on the Windhawk engine thread after the taskbar thread has stopped the
+// timers, i.e. outside of the input-synchronous RunFromWindowThread callback.
+// The engine thread is in the implicit MTA, where outgoing out-of-process calls
+// are allowed.
 void UnsubscribeNetworkStatusChanged() {
     if (!g_networkSubscribed) {
         return;
@@ -1781,19 +1795,26 @@ void UnsubscribeNetworkStatusChanged() {
     try {
         winrt::Windows::Networking::Connectivity::NetworkInformation::
             NetworkStatusChanged(g_networkStatusToken);
+        Wh_Log(L"Unsubscribed from network status changes");
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Failed to remove the network status change handler: %08X",
+               e.code().value);
     } catch (...) {
+        Wh_Log(L"Failed to remove the network status change handler");
     }
     g_networkStatusToken = {};
 
     // Removing the handler doesn't wait for an invocation which is already in
-    // flight, and the handler runs mod code, so wait for it before the mod
-    // gets unmapped.
+    // flight, and the handler runs mod code, so wait for it before the mod gets
+    // unmapped. This runs on the engine thread, so it doesn't block the
+    // taskbar.
     for (int i = 0; i < 500 && g_networkCallbackRef.use_count() > 1; i++) {
         Sleep(1);
     }
+    if (g_networkCallbackRef.use_count() > 1) {
+        Wh_Log(L"The network status handler is still in flight");
+    }
     g_networkCallbackRef.reset();
-
-    Wh_Log(L"Unsubscribed from network status changes");
 }
 
 // ===== Widget lifecycle =====
@@ -2076,15 +2097,7 @@ void RefreshWidgets(bool force) {
             g_lastNetworkInfo = *info;
             g_lastNetworkInfoValid = true;
             network = *info;
-            if (info->kind == NetworkKind::offline &&
-                g_networkReadRetriesLeft > 0) {
-                // A read that follows a forced refresh may have run in a bad
-                // call context; retry a few times before accepting "offline".
-                g_networkReadRetriesLeft--;
-                g_networkDirty.store(true);
-            } else {
-                g_networkReadRetriesLeft = 0;
-            }
+            g_networkReadRetriesLeft = 0;
         } else if (g_networkReadRetriesLeft > 0) {
             g_networkReadRetriesLeft--;
             g_networkDirty.store(true);
@@ -2108,6 +2121,14 @@ void OnTimerTick() {
         return;
     }
 
+    // Subscribe from here rather than from StartWidgetUi: StartWidgetUi runs
+    // inside the input-synchronous RunFromWindowThread callback, where adding
+    // an event handler isn't necessarily allowed because it can require an
+    // out-of-process call. Retry on every tick until it succeeds.
+    if (!g_networkSubscribed) {
+        SubscribeNetworkStatusChanged();
+    }
+
     g_tickCounter++;
 
     try {
@@ -2128,7 +2149,8 @@ bool StartWidgetUi() {
         return true;
     }
 
-    SubscribeNetworkStatusChanged();
+    // The network status subscription is created from the timer tick, see
+    // OnTimerTick.
 
     try {
         DispatcherTimer timer;
@@ -2143,11 +2165,9 @@ bool StartWidgetUi() {
         g_timer = timer;
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Failed to start the timer: %08X", e.code().value);
-        UnsubscribeNetworkStatusChanged();
         return false;
     } catch (...) {
         Wh_Log(L"Failed to start the timer");
-        UnsubscribeNetworkStatusChanged();
         return false;
     }
 
@@ -2175,8 +2195,9 @@ void StopWidgetUi() {
         g_timerToken = {};
     }
 
-    // Revoked on the UI thread, after the timers stopped.
-    UnsubscribeNetworkStatusChanged();
+    // The network status subscription is removed on the engine thread after
+    // this, in Wh_ModBeforeUninit; removing it here would run it in the
+    // input-synchronous RunFromWindowThread callback.
 
     if (g_autoRevokerList) {
         g_autoRevokerList->clear();
@@ -2533,7 +2554,12 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
 
     // Stops the timers and releases the XAML objects on the taskbar UI thread.
+    // The network handler is removed here, on this (engine) thread, after the
+    // UI thread stopped the timer: this thread is in the implicit MTA, where
+    // outgoing out-of-process calls are allowed, unlike in the input-synchronous
+    // RunFromWindowThread callback.
     ApplySettings();
+    UnsubscribeNetworkStatusChanged();
 }
 
 void Wh_ModUninit() {
