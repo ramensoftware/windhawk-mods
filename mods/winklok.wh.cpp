@@ -39,7 +39,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Panel Layout modes](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/modetable.png)
+![Panel Layout modes](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/modetable.jpg)
 
 ---
 
