@@ -1,3 +1,7 @@
+## 4.0 ([Nov 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7c6cbfe42f4b774fbfa8bda4e99a80cdb860269/mods/restore-folder-menubar-25h2.wh.cpp))
+
+* Add compatibility with explorerframe.dll spoofing
+
 ## 3.1.0 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a375d54f96fe347d9224f6a4154a40d102855e8/mods/restore-folder-menubar-25h2.wh.cpp))
 
 * Also hook registry query for greater reliability

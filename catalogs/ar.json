@@ -13932,7 +13932,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": -0.2593830018113195,
-        "updated": 1790618656000,
+        "updated": 1793815355000,
         "users": 461
       },
       "metadata": {
@@ -13947,7 +13947,7 @@
           "explorer.exe"
         ],
         "name": "ExplorerFrame and menubar fixes fork",
-        "version": "3.1.0"
+        "version": "4.0"
       }
     },
     "restore-legacy-network-tray": {
@@ -13959,7 +13959,7 @@
         "ratingUsers": 0,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792472569000,
+        "updated": 1793815367000,
         "users": 26
       },
       "metadata": {
@@ -13975,7 +13975,7 @@
         ],
         "license": "MIT",
         "name": "Restore legacy network tray",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "retrobar-clock-flyout-fix": {
@@ -20083,7 +20083,7 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 0.02783529672630373,
-        "updated": 1792594898000,
+        "updated": 1793815360000,
         "users": 405
       },
       "metadata": {
@@ -20098,7 +20098,7 @@
           "userinit.exe"
         ],
         "name": "Win10 taskbar on Win11 24H2 or later",
-        "version": "0.3.0"
+        "version": "0.4.0"
       }
     },
     "win10-taskbar-per-app-volume-control": {
@@ -21898,7 +21898,7 @@
         "rating": 9,
         "ratingBreakdown": [580, 408, 578, 1308, 15005],
         "ratingUsers": 17879,
-        "reviews": 2,
+        "reviews": 3,
         "trendingSorting": 0.7777422957685082,
         "updated": 1793749779000,
         "users": 1104246

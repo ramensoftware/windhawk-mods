@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-04T04:03:23.000Z</updated>
+    <updated>2026-11-04T18:02:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore legacy network tray 1.1]]></title>
+        <id>https://windhawk.net/mods/restore-legacy-network-tray#44384b2821f3a4fd90d2cfb7bf4e486d4b7dcc68</id>
+        <link href="https://windhawk.net/mods/restore-legacy-network-tray"/>
+        <updated>2026-11-04T18:02:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add ARM64 support</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or later 0.4.0]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#545613b3f902806b45f65e97e1ac126671ac4b70</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2026-11-04T18:02:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add ARM64 support</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 4.0]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#b7c6cbfe42f4b774fbfa8bda4e99a80cdb860269</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-11-04T18:02:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add compatibility with explorerframe.dll spoofing</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windhawk UI Translator 0.1]]></title>
         <id>https://windhawk.net/mods/windhawk-ui-translator#680d719e41d0ce0736a4cb64b09e4d091977c261</id>
@@ -1347,364 +1389,6 @@ while retaining strict pointer, field-copy and unknown-instruction checks.</li>
         <author>
             <name>caotu2k5</name>
             <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Dock 1.1.2]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-dock#ec6dbe374c301e756a29f4c47f32371c903009a7</id>
-        <link href="https://windhawk.net/mods/desktop-icon-dock"/>
-        <updated>2026-11-03T03:03:58.000Z</updated>
-        <content type="html"><![CDATA[<h1>Desktop Icon Dock</h1>
-<p>Turns shortcuts, files and folders that you drag onto it into a centered
-macOS-style dock. The dock is an independent list, not a mirror of the
-desktop. A fully transparent background is used by default, showing only the
-icons; an optional Liquid Glass panel is available.</p>
-<p><img src="https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg" alt="Desktop Icon Dock preview"></p>
-<p><em>Example: icons arranged as a centered macOS-style dock; the hovered icon is
-magnified with its label shown.</em></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Drag to add</strong>: drag a shortcut, file or folder from the desktop, File
-Explorer or a <code>shell:Desktop</code> window onto the dock. It is inserted at the
-drop position; items that are already in the dock are ignored. <code>.lnk</code> and
-<code>.url</code> shortcuts are copied into a dock-owned folder, so deleting the
-original shortcut from the desktop leaves the dock item intact; files,
-folders and virtual items are referenced by path.</li>
-<li><strong>Drag to reorder</strong>: hold the left mouse button on an icon and drag it
-within the dock. Icons rearrange live and the new order is saved when you
-release the button.</li>
-<li><strong>Drag out to put back on the desktop</strong>: drag an item outside the dock and
-release it over the desktop. The icon is placed at the release point. If the
-item already lives on the desktop, its original icon is moved there;
-otherwise a shortcut is created on the desktop and the original file or
-folder stays where it is. For a shortcut that was copied into the dock, the
-original shortcut is used, so dragging it out does not create a second
-<code>(2)</code> copy. Releasing over any other window leaves the item in the dock.
-Items that have no filesystem location, such as the Recycle Bin, are only
-removed from the dock. A dock-owned shortcut copy is removed after it has
-been placed back. Removing the last item brings back the empty-state hint.</li>
-<li><strong>Empty state</strong>: a visible drop target is shown when the list is empty, so
-the dock can always receive the first item. The window is never hidden just
-because the list is empty.</li>
-<li><strong>macOS-style hover magnification</strong>: icons grow smoothly as the pointer
-approaches, with cosine falloff and neighboring icons spreading aside.</li>
-<li><strong>Transparent background (default)</strong>: only the icons and a soft drop shadow
-are drawn, so the dock blends into the wallpaper; transparent areas of the
-dock window are click-through, so desktop right-click and clicks keep
-working.</li>
-<li><strong>Optional Liquid Glass panel</strong>: enabled by turning off &quot;Transparent
-background&quot;. Blurred wallpaper backdrop, milky glass tint, specular rim and
-a hover glow. The backdrop is sampled from the screen above the dock and
-works with Wallpaper Engine and other animated wallpapers.</li>
-<li><strong>Name labels</strong>: hovering an icon shows a name pill above it; in transparent
-mode the pill stays at a fixed position instead of jumping while icons
-scale.</li>
-<li><strong>Native interaction</strong>: left click opens an item; right click opens that
-item's native Explorer context menu (open, send to, create shortcut,
-properties, delete, ...).</li>
-<li><strong>Independent from the desktop</strong>: adding, removing, renaming or moving
-desktop icons does not change the dock. Shortcuts added to the dock are
-copied into its own folder, so even deleting them from the desktop does not
-affect the dock; files, folders and virtual items are referenced by path.
-The list is stored per user in Windhawk's mod storage and survives Explorer
-restarts.</li>
-<li><strong>Original desktop icons hidden in memory (optional)</strong>: when enabled, the
-desktop's list view is hidden while the dock is active; no Explorer setting
-or registry value is changed, and the icons are shown again when the mod is
-unloaded. Off by default, so the desktop remains available as a drag source.</li>
-<li><strong>Icon cache with cleanup</strong>: icons are cached per item path and reused;
-virtual items such as the Recycle Bin refresh their icons periodically.</li>
-</ul>
-<h2>How it works</h2>
-<p>The dock keeps its own ordered list. It does not read or rearrange the system
-desktop icons.</p>
-<ul>
-<li><strong>Storage</strong>: the ordered list is saved as <code>items.tsv</code> in Windhawk's mod
-storage, in a subfolder named after the current user's security identifier
-(SID), so each Windows user keeps a separate list. Each entry is a
-desktop-absolute parsing name, such as a full file path or a shell GUID for
-virtual items, followed by the original path for copied shortcuts. Shortcut
-copies live in the <code>Items</code> subfolder of the same directory. Every add,
-reorder and removal is written immediately. Windhawk removes the whole
-storage folder when the mod is uninstalled.</li>
-<li><strong>Adding</strong>: external drags are received through an OLE drop target
-(<code>IDropTarget</code>), supporting file drops and shell item lists. The insertion
-position follows the pointer; <code>.lnk</code> and <code>.url</code> shortcuts are copied into
-the dock folder first. Duplicates are skipped by parsing name. The drop is
-processed after the drop has been accepted, so a slow or unreachable path
-does not freeze the drag source.</li>
-<li><strong>Reordering and removing</strong>: these are handled inside the dock window with
-mouse capture, so they also work in the transparent gaps between icons.</li>
-<li><strong>Putting items back on the desktop</strong>: releasing outside the panel over the
-desktop places the item at the release point; releasing over any other
-window snaps it back into the dock. An item whose parent folder is already
-the user or public desktop has its original icon repositioned through the
-desktop's folder view; for a copied shortcut the original shortcut path is
-used. Any other file or folder gets a uniquely named <code>.lnk</code> shortcut on the
-user desktop (a source <code>.lnk</code> or <code>.url</code> is copied, other items get a new
-shortcut). The original file is never moved or deleted, and a dock-owned
-shortcut copy is removed after it has been placed back. Positioning follows
-the system &quot;align icons to grid&quot; setting.</li>
-<li><strong>Empty state</strong>: the centered hint pill is drawn with a non-transparent
-background and is registered as part of the same drop target.</li>
-<li><strong>Layout</strong>: centered horizontally at the bottom of the primary monitor,
-above the taskbar; the panel widens as items are added, and icons are
-vertically centered at rest.</li>
-<li><strong>Maintenance</strong>: every 30 seconds, entries that failed to resolve earlier
-are retried and the icons of virtual items are refreshed. Items that still
-cannot be resolved are skipped on screen but kept in storage.</li>
-<li><strong>Performance</strong>: in transparent mode the pointer position is polled every
-50 ms so hover magnification also works in the gaps between icons; idle CPU
-usage is negligible.</li>
-</ul>
-<h2>Settings</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Icon size</td>
-<td>48</td>
-<td>Base size in pixels at 100% DPI, scaled with system DPI (about 72 px at 150%)</td>
-</tr>
-<tr>
-<td>Icon spacing</td>
-<td>10</td>
-<td>Pixel gap between icons at rest</td>
-</tr>
-<tr>
-<td>Maximum scale (%)</td>
-<td>175</td>
-<td>Largest magnification of the hovered icon</td>
-</tr>
-<tr>
-<td>Effect radius</td>
-<td>160</td>
-<td>Distance in pixels over which magnification fades out from the cursor</td>
-</tr>
-<tr>
-<td>Neighbor spread (%)</td>
-<td>60</td>
-<td>How much neighboring icons move aside while magnifying</td>
-</tr>
-<tr>
-<td>Smoothing speed</td>
-<td>16</td>
-<td>Higher is snappier, lower is softer</td>
-</tr>
-<tr>
-<td>Bottom offset</td>
-<td>10</td>
-<td>Gap between the dock and the taskbar, in pixels at 100% DPI</td>
-</tr>
-<tr>
-<td>Transparent background</td>
-<td>On</td>
-<td>Show only the icons; turn off to use the Liquid Glass panel</td>
-</tr>
-<tr>
-<td>Glass opacity (%)</td>
-<td>24</td>
-<td>Glass mode only: strength of the milky tint</td>
-</tr>
-<tr>
-<td>Glass blur</td>
-<td>20</td>
-<td>Glass mode only: backdrop blur strength</td>
-</tr>
-<tr>
-<td>Show labels</td>
-<td>On</td>
-<td>Show a name pill for the hovered item</td>
-</tr>
-<tr>
-<td>Hide original desktop icons</td>
-<td>Off</td>
-<td>Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded</td>
-</tr>
-<tr>
-<td>Backdrop refresh interval (s)</td>
-<td>20</td>
-<td>How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh</td>
-</tr>
-</tbody>
-</table>
-<h2>How it differs from existing mods</h2>
-<p>This mod overlaps with Quick Launch Dock in the basic launcher behavior:
-drag in, reorder, click to launch, a persistent list. It exists separately
-because it targets a different use case: a dock that is part of the desktop,
-not a launcher that stays on top of other windows.</p>
-<ul>
-<li><strong>Desktop level</strong>: the window sits at the bottom of the Z-order, below all
-normal windows, and never takes focus. It is visible when the desktop is
-visible, like the desktop icons themselves.</li>
-<li><strong>Drag out to the desktop</strong>: items can be dragged from the dock back to the
-desktop, reusing the original shortcut when it is still there instead of
-creating a duplicate.</li>
-<li><strong>Desktop integration</strong>: hiding the system desktop icons in memory and
-opening the native Explorer context menu both work with the shell's desktop
-view from the mod's own process, without injecting into the running shell.</li>
-<li><strong>Screen-sampled glass</strong>: the backdrop and the name pills sample the screen
-area behind the dock, which requires a desktop-level window.</li>
-</ul>
-<h2>Compatibility and limitations</h2>
-<ul>
-<li>Windows 10 / 11 on x86-64 only. The mod runs as a Windhawk tool mod in a
-dedicated explorer.exe process, separate from the shell's own explorer.exe;
-the shell is only accessed through its published shell interfaces. (The
-windhawk.exe host cannot be used here: Windhawk is a 32-bit app, while this
-mod is x86-64.)</li>
-<li>Primary monitor only; the dock is anchored to the bottom of the primary
-monitor, above the taskbar.</li>
-<li>The dock is a layered window placed below normal windows; full-screen apps
-and other windows cover it, which is expected.</li>
-<li>In transparent mode, fully transparent pixels are click-through; the icons
-themselves remain clickable.</li>
-</ul>
-<h2>Troubleshooting</h2>
-<ul>
-<li><strong>After an Explorer restart</strong>: the dock runs in its own dedicated
-explorer.exe process, so a shell restart does not unload it; it reconnects to
-the new desktop view and reapplies the icon hiding.</li>
-<li><strong>An item disappeared</strong>: its stored parsing name could not be resolved (for
-example, the referenced file or folder was deleted or renamed). Shortcuts
-are copied into the dock folder and are not affected by deleting the
-desktop shortcut. The entry is kept in storage and retried; it reappears if
-the path is available again.</li>
-<li><strong>After dragging an item out, a shortcut appeared on the desktop</strong>: this is
-expected. Items that are not on the desktop are not moved; a shortcut is
-created at the release point instead. The original file or folder is not
-affected, and the shortcut can be deleted at any time.</li>
-<li><strong>Settings changes seem to have no effect</strong>: saving settings reloads and
-rebuilds the dock automatically; no Explorer restart is needed.</li>
-<li><strong>Add an item</strong>: drag it from the desktop or any File Explorer window onto
-the dock. You can also press Win+R and enter <code>shell:Desktop</code> to open a
-desktop folder and drag from there.</li>
-<li><strong>Reset the list</strong>: drag the items out, or uninstall the mod. Windhawk
-deletes the mod's storage, including the list and the shortcut copies, when
-the mod is removed.</li>
-</ul>
-<h2>中文说明</h2>
-<p>本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。</p>
-<ul>
-<li>从桌面、资源管理器或 <code>shell:Desktop</code> 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（<code>.lnk</code> / <code>.url</code>）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。</li>
-<li>按住图标在 Dock 内拖动可实时排序；拖到 Dock 外、在桌面上松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；对于复制进来的快捷方式会优先使用原快捷方式，不会产生多余的 <code>(2)</code> 副本；在其他窗口上松手则项目留在 Dock。回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。</li>
-<li>Dock 是独立列表，不同步桌面；列表保存在 Windhawk 模组存储的 <code>items.tsv</code> 中，并按当前用户 SID 分目录，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于同一目录的 <code>Items</code> 子目录。卸载模组时 Windhawk 会删除整个存储目录。</li>
-<li>图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。</li>
-<li>“隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。</li>
-<li>解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。</li>
-<li>与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。</li>
-<li>仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。</li>
-</ul>
-<p>各设置项的说明见上方英文表格。</p>
-]]></content>
-        <author>
-            <name>yizqq0721</name>
-            <uri>https://github.com/yizqq0721</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Background Dimmer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/background-dimmer#a7de0d897193602ab4c4fa4a8c35bf549f1e9999</id>
-        <link href="https://windhawk.net/mods/background-dimmer"/>
-        <updated>2026-11-03T03:03:52.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/HvfnpFn.png" alt="Background Dimmer"></p>
-<h1>Background Dimmer</h1>
-<p>Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.</p>
-<p>The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.</p>
-<p>Windows that run as administrator need Windhawk 2 (currently in alpha). On Windhawk 1.x the layer can't move behind them, so when one of them gets focus, the previously active window stays undimmed.</p>
-<h2>Live configuration</h2>
-<p>The look is tuned in the mod's own <strong>configuration window</strong>, where every change shows up immediately on screen. Open it with the <strong>configuration hotkey</strong> (<strong>Win+Ctrl+Alt+D</strong> by default, changeable in the mod settings).</p>
-<p>The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.</p>
-<p>Changes made in the configuration window are saved automatically. Dimming can be turned off with the <strong>Active</strong> checkbox in the window, or with an optional on/off hotkey.</p>
-<h2>How the controls work</h2>
-<ul>
-<li><strong>Opacity</strong>: how strongly the layer covers the background.</li>
-<li><strong>Brightness</strong>: the overall lightness of the layer.</li>
-<li><strong>Contrast</strong>: the difference between the light and dark parts of a pattern. At 0 the pattern disappears into a flat tint.</li>
-<li><strong>Size</strong>: the size of the checkerboard squares or the width of the stripes, in pixels.</li>
-<li><strong>Base color</strong>: tints the layer. White gives neutral gray tones.</li>
-</ul>
-<p>Brightness and contrast set the two pattern tones as <em>brightness ± contrast / 2</em>, so one controls how dark the layer is and the other how visible the pattern is. Near the ends of the range a tone is clipped to black or white, which keeps the pattern visible over a black base, as in the default look.</p>
-<h2>Behavior</h2>
-<ul>
-<li>Dialogs stay lit together with the window that owns them.</li>
-<li>The taskbar, Start, Alt+Tab and menus never move the layer.</li>
-<li>When the desktop has focus, the layer can either hide or cover everything (option in the configuration window).</li>
-<li>The mod runs in its own Windhawk process and does not inject into Explorer or any other program.</li>
-<li>Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).</li>
-<li>The appearance is stored per computer, so all Windows users of the same PC share it.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tab Router 1.1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-tab-router#62118eece92a009ea27315a1ba22c68555709bd9</id>
-        <link href="https://windhawk.net/mods/explorer-tab-router"/>
-        <updated>2026-11-03T00:04:26.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Tab Router / 资源管理器页签路由</h1>
-<p><img src="https://raw.githubusercontent.com/afate123/windhawk-mods/d3c374a386345b893a2318a483ff1adb0690dd2f/assets/explorer-tab-router.gif" alt="External folder requests become tabs; reopening reuses a tab / 外部打开转为页签，重复请求复用页签"></p>
-<h2>English</h2>
-<p>Explorer Tab Router keeps ordinary folder-opening requests together in Windows 11 File Explorer while preserving explicit requests for a separate window.</p>
-<h3>Behavior</h3>
-<ul>
-<li><strong>Open a folder externally:</strong> reuse and activate an existing tab for that folder. If the folder is not open, route the new folder window into a tab in an existing Explorer window.</li>
-<li><strong>Show a file in its folder:</strong> activate the matching folder tab and preserve the requested file selection.</li>
-<li><strong>Open in new tab from a folder context menu:</strong> create a new tab and switch to it automatically, including when that folder already has another tab. Middle-click, background tab creation, and restored tabs keep their native activation behavior.</li>
-<li><strong>Open in new window:</strong> keep the explicitly requested window separate.</li>
-<li><strong>Hold Shift while opening a folder:</strong> bypass ordinary window-to-tab routing and keep a separate window.</li>
-</ul>
-<p>Enable the mod in Windhawk, then use File Explorer and other applications normally. Folder routing and tab activation do not require a separate application list. Control Panel and unsupported shell locations are allowed to remain in their own windows.</p>
-<h3>Settings</h3>
-<p>Window routing, matching-tab reuse during routing, folder-menu new-tab activation, and ShellWindows lookup activation can be enabled independently. All four are enabled by default.</p>
-<p>The lookup compatibility option is needed by some external folder-opening and file-reveal requests. The ShellWindows query interface does not say whether a caller intends to open a folder or only inspect it. With this option enabled, a successful read-only query can also switch tabs. Disable it if query-triggered activation is undesirable; some external requests will then no longer switch an existing tab. Delayed lookup activation is canceled if the user switches to another foreground window or selects a different tab before it runs.</p>
-<h3>Source and conflicting mods</h3>
-<p>This mod builds on the routing approach introduced by <a href="https://windhawk.net/mods/explorer-single-window-tabs">Explorer Single Window Tabs</a> by <a href="https://github.com/almas-cp">ALMAS CP</a>. It adds existing-tab reuse and activation, file-selection preservation, explicit-window handling, automatic new-tab activation, and managed presentation recovery.</p>
-<p><strong>Do not enable Explorer Single Window Tabs and Explorer Tab Router together. Disable the other routing mod first.</strong></p>
-<h3>Compatibility and limitations</h3>
-<p>Windows 11 x64 with native File Explorer tabs is required. This mod uses internal shell symbols, which are checked when it loads. A future Windows update can require a compatibility update.</p>
-<p>For routing between Explorer processes, use windows on the same desktop and at the same privilege level. Mixing ordinary and elevated Explorer windows is outside the supported configuration.</p>
-<p>Ctrl+N and dragging a tab into a separate window can create frames without the explicit folder-menu intent this mod recognizes. Those frames may be routed back into tabs. Disable window routing when you need to retain them as separate windows.</p>
-<p>Some requests are handled through a temporary transparent Explorer window before routing completes. This is not a guarantee of entirely window-free navigation. If a request cannot be completed safely, the temporary window is restored instead of discarding the request. Window presentation state, including existing layered transparency, is restored on recovery.</p>
-<p>Tab activation uses verified position hints where available. A first activation or a tab reorder can still require intermediate tab switches. Activation has an overall time limit; a routing failure restores the original window. Navigation completion uses browser events with bounded direct-view checks for providers that omit events.</p>
-<p>The mod is distributed under the MIT license.</p>
-<h2>简体中文</h2>
-<p>资源管理器页签路由将普通的文件夹打开请求集中到 Windows 11 资源管理器页签中，同时保留明确要求打开独立窗口的操作。</p>
-<h3>使用行为</h3>
-<ul>
-<li><strong>从外部应用打开文件夹：</strong> 已有相同目录页签时，复用并切换过去；尚未打开时，将新目录窗口转入现有资源管理器的页签。</li>
-<li><strong>在文件夹中显示文件：</strong> 切换到对应目录页签，并保留目标文件的选中状态。</li>
-<li><strong>文件夹右键菜单中的“在新标签页中打开”：</strong> 新建页签并自动切换，即使相同目录已有其他页签。中键、其他后台创建及启动恢复的页签保持系统原有的激活行为。</li>
-<li><strong>在新窗口中打开：</strong> 保留明确请求的独立窗口。</li>
-<li><strong>按住 Shift 打开文件夹：</strong> 绕过普通窗口转页签行为，保留独立窗口。</li>
-</ul>
-<p>在 Windhawk 中启用后即可正常使用，不需要逐个添加应用名单。控制面板及不支持的 Shell 位置可以保持独立窗口。</p>
-<h3>设置</h3>
-<p>窗口转页签、路由时复用相同目录、文件夹菜单新页签自动激活、ShellWindows 查询命中后激活，可分别开关；默认全部启用。</p>
-<p>查询兼容开关用于部分外部打开目录和文件定位请求。ShellWindows 查询接口不区分“打开文件夹”和“只检查是否已打开”，因此启用后，成功的纯查询也可能切换页签。若不希望查询触发切换，可关闭此项；部分外部请求也会因此不再自动切换已有页签。延迟执行查询激活前，若用户已转到其他前台窗口或切换了不同页签，会取消这次延迟激活。</p>
-<h3>来源与冲突提示</h3>
-<p>本 mod 基于 <a href="https://github.com/almas-cp">ALMAS CP</a> 的 <a href="https://windhawk.net/mods/explorer-single-window-tabs">Explorer Single Window Tabs</a> 路由思路扩展，增加已有页签复用与切换、文件选中保留、明确的新窗口请求识别、新页签自动激活，以及窗口状态恢复管理。</p>
-<p><strong>请勿同时启用 Explorer Single Window Tabs 与 Explorer Tab Router；启用前先停用另一个路由 mod。</strong></p>
-<h3>兼容性与限制</h3>
-<p>需要 Windows 11 x64 以及支持原生页签的资源管理器。加载时会检查所需的系统内部符号，未来 Windows 更新可能需要同步更新兼容实现。</p>
-<p>在资源管理器进程之间路由时，请使用同一桌面、相同权限级别的窗口；混用普通权限和管理员权限的资源管理器窗口不属于支持范围。</p>
-<p>Ctrl+N 和将页签拖出为独立窗口，可能不携带本 mod 能识别的文件夹菜单意图，因此产生的窗口仍可能被合并回页签；需要保留这些独立窗口时，可关闭窗口转页签设置。</p>
-<p>部分请求会先经过临时透明窗口，再完成页签路由，因此不保证整个过程完全不创建窗口。无法安全完成时会恢复临时窗口，避免丢弃打开请求；恢复时会还原原有窗口显示状态，包括已有的分层透明属性。</p>
-<p>页签切换会复用经过验证的位置记录；首次切换或重新排序后仍可能短暂经过其他页签。激活设有总超时限制，路由失败时恢复原窗口。导航完成优先使用浏览器事件；缺少事件时只进行有限次直接视图检查。</p>
-<p>本 mod 使用 MIT 许可。</p>
-]]></content>
-        <author>
-            <name>afate123</name>
-            <uri>https://github.com/afate123</uri>
         </author>
     </entry>
 </feed>

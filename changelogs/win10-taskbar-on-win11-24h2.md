@@ -1,3 +1,7 @@
+## 0.4.0 ([Nov 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/545613b3f902806b45f65e97e1ac126671ac4b70/mods/win10-taskbar-on-win11-24h2.wh.cpp))
+
+* Add ARM64 support
+
 ## 0.3.0 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/60fe84cec4c9dfd974d3dcbdd22cc2cadbb73106/mods/win10-taskbar-on-win11-24h2.wh.cpp))
 
 * Add a link to readme for restoring the network icon
