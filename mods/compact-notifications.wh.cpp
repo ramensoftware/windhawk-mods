@@ -1397,6 +1397,47 @@ float AvatarSpace(const Card& card) {
     return card.showAvatar ? kAvatar + kGap : 0;
 }
 
+// Simple Markdown as chat apps (Slack, Discord, Teams) leave it in toasts: **bold**, __bold__, *italic*,
+// ~~strike~~, `code`. Marks are removed; each pair becomes a styled range. An unpaired mark stays as text.
+struct MarkRange {
+    UINT32 start, length;
+    int style;  // 0 bold, 1 italic, 2 strike, 3 code
+};
+
+std::wstring StripMarkdown(const std::wstring& in, std::vector<MarkRange>& ranges) {
+    static const struct { const wchar_t* mark; int style; } kMarks[] = {
+        {L"**", 0}, {L"__", 0}, {L"~~", 2}, {L"`", 3}, {L"*", 1}};
+    std::wstring out;
+    size_t i = 0;
+    while (i < in.size()) {
+        bool matched = false;
+        for (auto& m : kMarks) {
+            size_t len = wcslen(m.mark);
+            if (in.compare(i, len, m.mark) != 0) continue;
+            size_t close = in.find(m.mark, i + len);
+            // "***" closing "**...*x***": the inner mark closes first, the outer one is the last two.
+            while (close != std::wstring::npos && close + len < in.size() && in[close + len] == m.mark[0]) close++;
+            // Content must be non-empty and not start with a space ("2 * 3 * 4" stays as is).
+            if (close == std::wstring::npos || close == i + len || iswspace(in[i + len]) ||
+                iswspace(in[close - 1])) {
+                continue;
+            }
+            std::vector<MarkRange> inner;
+            std::wstring content = m.style == 3 ? in.substr(i + len, close - i - len)
+                                                : StripMarkdown(in.substr(i + len, close - i - len), inner);
+            UINT32 base = (UINT32)out.size();
+            for (auto& r : inner) ranges.push_back({base + r.start, r.length, r.style});
+            ranges.push_back({base, (UINT32)content.size(), m.style});
+            out += content;
+            i = close + len;
+            matched = true;
+            break;
+        }
+        if (!matched) out += in[i++];
+    }
+    return out;
+}
+
 void LayoutCard(Card& card) {
     float textWidth = g_settings.width - 2 * kPad - 2 * kCardPadX - AvatarSpace(card);
     std::wstring title = card.info.title.empty() ? card.info.app : card.info.title;
@@ -1404,8 +1445,27 @@ void LayoutCard(Card& card) {
         title = card.info.app + L" · " + title;
     }
     g_dwrite->CreateTextLayout(title.c_str(), (UINT32)title.size(), g_titleFormat, textWidth, kLine, &card.title);
-    g_dwrite->CreateTextLayout(card.info.text.c_str(), (UINT32)card.info.text.size(), g_textFormat, textWidth,
+    std::vector<MarkRange> ranges;
+    std::wstring text = StripMarkdown(card.info.text, ranges);
+    // Keep one-letter words and numbers with the next word ("za 1 h", "w domu"): a no-break space after them.
+    for (size_t i = 1; i < text.size(); i++) {
+        if (text[i] != L' ') continue;
+        size_t start = i;
+        while (start > 0 && !iswspace(text[start - 1])) start--;
+        bool number = start < i && std::all_of(text.begin() + start, text.begin() + i, iswdigit);
+        if (i - start == 1 || number) text[i] = 0x00A0;
+    }
+    g_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(), g_textFormat, textWidth,
                                g_settings.maxLines * kLine, &card.text);
+    if (card.text) {
+        for (auto& r : ranges) {
+            DWRITE_TEXT_RANGE range{r.start, r.length};
+            if (r.style == 0) card.text->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, range);
+            if (r.style == 1) card.text->SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range);
+            if (r.style == 2) card.text->SetStrikethrough(TRUE, range);
+            if (r.style == 3) card.text->SetFontFamilyName(L"Consolas", range);
+        }
+    }
     DWRITE_TEXT_METRICS metrics{};
     float textHeight = 0;
     if (card.text && SUCCEEDED(card.text->GetMetrics(&metrics))) {
