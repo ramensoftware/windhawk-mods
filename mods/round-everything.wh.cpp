@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -lgdiplus -lgdi32 -lshell32 -ldwmapi -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lgdiplus -lgdi32 -lshell32 -lshcore -ldwmapi -lole32 -loleaut32 -lruntimeobject
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -40,11 +40,10 @@ the mouse, like the taskbar. No explorer function is hooked: the taskbar's
 XAML tree is reached through a few `taskbar.dll` symbol lookups (no XAML
 diagnostics, so it coexists with Taskbar Styler).
 
-* **Color** – the frame has one color of your choice. By default the
-  taskbar's own background (`Taskbar.TaskbarBackground`) is painted with it
-  at the same opacity, so the taskbar and the frame are one surface. The
-  taskbar's own background is restored when the option or the mod is turned
-  off.
+* **Color** – the frame has one color of your choice, and the taskbar's own
+  background (`Taskbar.TaskbarBackground`) is painted with it at the same
+  opacity, so the taskbar and the frame are one surface. The taskbar's own
+  background is restored when the mod is turned off.
 * Frame and taskbar come and go together. When the mod starts, the frame
   appears in the same instant as the taskbar's new look. When the
   taskbar moves, resizes or rebuilds (changing its position, a taskbar mod
@@ -65,11 +64,11 @@ diagnostics, so it coexists with Taskbar Styler).
   afterwards.
 * **Work area** – *Shrink the work area to the rounded screen* (on by
   default) pushes the work area inwards so maximized and snapped windows stay
-  inside the frame; turned off, the frame is purely visual and overlaps the
-  edges of maximized windows. Shrinking registers one
-  invisible appbar per frame edge (the same mechanism the taskbar uses), so
-  the shell reserves the space itself; the appbars are removed and the work
-  area returns to normal when the option or the mod is turned off. *Extra
+  inside the frame; turned off, the frame is purely visual: it overlaps the
+  edges of maximized windows and lets the mouse through. Shrinking registers
+  one invisible appbar per frame edge (the same mechanism the taskbar uses),
+  so the shell reserves the space itself; the appbars are removed and the
+  work area returns to normal when the option or the mod is turned off. *Extra
   work-area inset* shrinks it further, on all four sides, so a strip of
   wallpaper stays visible between the frame/taskbar and your windows.
 * **Monitor corners** – the four outer corners of each monitor are rounded
@@ -94,21 +93,31 @@ windows square. With **Round window corners** on, the mod also runs inside
 Windows would round - normal, snapped or maximized - gets the one **Window
 corner radius** you set, and maximized windows are rounded too, so they sit in
 the rounded screen like cards. Windows that opt out of rounding (`DONOTROUND`)
-and small-radius surfaces (menus, tooltips) are left alone. Changes apply
-instantly: every visible window has its DWM corner preference toggled and set
-straight back, which makes DWM rebuild its clip. Full-screen windows share the
-maximized path in DWM, so they get rounded corners as well.
+and small-radius surfaces (menus, tooltips) are left alone. Changes apply at
+once: DWM is asked to re-evaluate every window (no window's own corner
+preference is touched). Full-screen windows share the maximized path in DWM,
+so they get rounded corners as well.
 
-`udwm.dll` symbols are required for this part (downloaded by Windhawk on first
-use); the frame itself does not depend on them.
+**This part needs one manual step.** Windhawk doesn't inject into `dwm.exe`
+by default (it is on Windhawk's list of critical system processes), so the
+window-corner part does nothing until you add `dwm.exe` to the **Process
+inclusion list** in Windhawk's advanced settings. The frame, the monitor
+corners and the work area don't depend on it and work right away. `udwm.dll`
+symbols are downloaded by Windhawk on first use.
+
+This does the same job as the *Round snapped and maximized windows* option of
+the **Custom Window Corner Radius** mod, through the same hook; use one or
+the other, not both. The mechanism is shared with the **Maximized Window
+Corners** mod.
 
 ## Notes
 
 * Shell flyouts (Start, notification center, Task View, …) live above the
   frame, so they are never covered.
-* The frame is solid to the mouse, like the taskbar: clicks on it (and on
-  the extra work-area inset strip) go nowhere, which keeps the invisible
-  resize borders of maximized windows underneath from being hit.
+* With the work area reserved, the frame is solid to the mouse, like the
+  taskbar: clicks on it (and on the extra work-area inset strip) go nowhere,
+  which keeps the invisible resize borders of maximized windows underneath
+  from being hit. Without it the frame lets the mouse through.
 * With an auto-hide taskbar the frame spans the whole monitor and the taskbar
   slides in over it.
 * Setting all offsets to 0 and keeping a radius gives you just the rounded
@@ -150,10 +159,7 @@ same license.
   $description: Treat offsets and radii as values at 100% scaling and scale them for each monitor.
 - customColor: "#585858"
   $name: Frame color
-  $description: Hex color (#RRGGBB).
-- colorTaskbar: true
-  $name: Taskbar background in the frame color
-  $description: Paint the taskbar's own background (Taskbar.TaskbarBackground) with the frame color at the frame's opacity, so the taskbar and the frame are one surface. The taskbar's own background is restored when the option or the mod is turned off.
+  $description: Hex color (#RRGGBB) of the frame and of the taskbar's background, which is painted with it at the same opacity so the two are one surface.
 - opacity: 100
   $name: Opacity (%)
 - reserveWorkArea: true
@@ -170,7 +176,7 @@ same license.
 - windowCorners:
   - enabled: true
     $name: Round window corners
-    $description: Round the corners of every window Windows would round - normal, snapped and maximized - with one radius. Maximized windows, which Windows draws square, become rounded like the screen. Runs inside dwm.exe (udwm.dll symbols are downloaded by Windhawk on first use).
+    $description: Round the corners of every window Windows would round - normal, snapped and maximized - with one radius. Maximized windows, which Windows draws square, become rounded like the screen. Runs inside dwm.exe, which Windhawk only injects into once dwm.exe is on the process inclusion list in its advanced settings (udwm.dll symbols are downloaded on first use).
   - radius: 16
     $name: Window corner radius (px)
     $description: Corner radius for all windows at 100% scaling. 0 keeps Windows' own radius (8 px) for normal windows and gives maximized windows that same radius.
@@ -184,6 +190,7 @@ same license.
 
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <gdiplus.h>
 
 #undef GetCurrentTime
@@ -203,6 +210,7 @@ same license.
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -250,8 +258,18 @@ constexpr ULONGLONG kVeilMaxMs = 1500;
 // A request to the taskbar thread that got no answer in this long is
 // considered lost (the window went away) and is sent again.
 constexpr ULONGLONG kTaskbarCallLostMs = 2000;
+// The regular tick is a fallback: taskbar, Task View and foreground changes
+// arrive as events and tick right away.
 constexpr UINT_PTR kTimerId = 1;
-constexpr UINT kTickIntervalMs = 100;
+constexpr UINT kTickIntervalMs = 500;
+// An event that arrives while the previous tick is still fresh is coalesced
+// into one tick a moment later, so a burst (an auto-hide slide) costs one
+// tick and its last event is never dropped.
+constexpr UINT_PTR kCoalesceTimerId = 2;
+constexpr UINT kCoalesceDelayMs = 16;
+// How often the appbar thread re-reads auto-hide and the primary taskbar's
+// edge from the shell when no taskbar event or ABN_* notification asked.
+constexpr ULONGLONG kShellStateRefreshMs = 2000;
 // A pass that answered "not found" (the taskbar's tree is being rebuilt) is
 // sent again after this long.
 constexpr ULONGLONG kPassRetryMs = 100;
@@ -269,7 +287,6 @@ struct Settings {
     COLORREF monitorCornerColor = RGB(0, 0, 0);
     bool scaleWithDpi = true;
     COLORREF customColor = RGB(0x58, 0x58, 0x58);
-    bool colorTaskbar = true;
     int opacity = 100;
     bool reserveWorkArea = true;
     int workAreaInset = 12;
@@ -429,7 +446,8 @@ std::vector<AppBarWish> g_appBarWishes;
 bool g_appBarsWanted = true;           // reserveWorkArea
 std::vector<AppBarStatus> g_appBarStatus;
 ShellState g_shellState;
-std::atomic<bool> g_appBarsDirty{false};  // ABN_POSCHANGED: re-query positions
+std::atomic<bool> g_appBarsDirty{false};    // ABN_POSCHANGED: re-query positions
+std::atomic<bool> g_shellStateDirty{true};  // re-read auto-hide / primary edge
 std::atomic<HWND> g_ctrlWnd{nullptr};
 std::atomic<bool> g_reloadRequested{false};
 std::atomic<bool> g_unloading{false};
@@ -477,11 +495,10 @@ UINT g_recolorSerial = 0;
 // the taskbar thread holds it while presenting from that bitmap.
 struct Reveal {
     UINT serial = 0;  // the recolor request it belongs to
-    HWND frame = nullptr;
+    HWND frame = nullptr;  // already placed and sized by the UI thread
     HDC memDc = nullptr;
     int width = 0;
     int height = 0;
-    RECT rect{};
 };
 std::mutex g_revealMutex;
 std::unordered_map<HWND, Reveal> g_reveals;
@@ -498,7 +515,6 @@ bool g_inTick = false;
 bool g_taskbarEventPending = false;  // a kMsgTaskbarEvent is queued
 ULONGLONG g_lastTickTime = 0;        // when the last tick ran (throttles event-driven ticks)
 ULONGLONG g_threadStartTick = 0;
-bool g_fillOwned = false;         // at least one taskbar background was painted
 bool g_xamlCornersOwned = false;  // corner ears were added to at least one taskbar
 DWORD g_lastFillArgb = 0;         // the brush last asked for (a change is applied at once)
 
@@ -526,25 +542,13 @@ HMODULE GetCurrentModule() {
 }
 
 UINT GetWindowDpi(HWND hwnd) {
-    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-    static GetDpiForWindow_t pGetDpiForWindow =
-        reinterpret_cast<GetDpiForWindow_t>(GetProcAddress(
-            GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-    UINT dpi = pGetDpiForWindow ? pGetDpiForWindow(hwnd) : 0;
+    UINT dpi = GetDpiForWindow(hwnd);
     return dpi ? dpi : 96;
 }
 
 UINT GetMonitorDpi(HMONITOR monitor) {
-    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-    static GetDpiForMonitor_t pGetDpiForMonitor = [] {
-        HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        return shcore ? reinterpret_cast<GetDpiForMonitor_t>(
-                            GetProcAddress(shcore, "GetDpiForMonitor"))
-                      : nullptr;
-    }();
     UINT dpiX = 0, dpiY = 0;
-    if (pGetDpiForMonitor &&
-        SUCCEEDED(pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY)) && dpiX) {
+    if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) && dpiX) {
         return dpiX;
     }
     return 96;
@@ -558,26 +562,17 @@ int ScaleForDpi(int value, UINT dpi) {
 }
 
 void SetThreadPerMonitorDpiAware() {
-    using SetThreadDpiAwarenessContext_t = HANDLE(WINAPI*)(HANDLE);
-    auto pSetThreadDpiAwarenessContext =
-        reinterpret_cast<SetThreadDpiAwarenessContext_t>(GetProcAddress(
-            GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
-    if (pSetThreadDpiAwarenessContext) {
-        // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-        pSetThreadDpiAwarenessContext(reinterpret_cast<HANDLE>(-4));
-    }
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 }
 
 void CloakWindow(HWND hwnd, bool cloak) {
     BOOL value = cloak ? TRUE : FALSE;
-    DwmSetWindowAttribute(hwnd, static_cast<DWMWINDOWATTRIBUTE>(13) /* DWMWA_CLOAK */, &value,
-                          sizeof(value));
+    DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &value, sizeof(value));
 }
 
 bool IsWindowCloaked(HWND hwnd) {
     DWORD cloaked = 0;
-    HRESULT hr = DwmGetWindowAttribute(hwnd, static_cast<DWMWINDOWATTRIBUTE>(14) /* DWMWA_CLOAKED */,
-                                       &cloaked, sizeof(cloaked));
+    HRESULT hr = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
     return SUCCEEDED(hr) && cloaked != 0;
 }
 
@@ -591,10 +586,6 @@ bool RectContains(const RECT& outer, const RECT& inner) {
 // ---------------------------------------------------------------------------
 
 COLORREF ParseHexColor(PCWSTR text, COLORREF fallback) {
-    if (!text) {
-        return fallback;
-    }
-
     std::wstring s(text);
     size_t begin = s.find_first_not_of(L" \t\r\n");
     size_t end = s.find_last_not_of(L" \t\r\n");
@@ -624,9 +615,6 @@ void ParseEdgeOffsets(PCWSTR text, int out[4]) {
     for (int i = 0; i < 4; i++) {
         out[i] = -1;
     }
-    if (!text) {
-        return;
-    }
 
     std::wstring_view rest(text);
     for (int i = 0; i < 4 && !rest.empty(); i++) {
@@ -655,34 +643,28 @@ void LoadSettings() {
 
     s.offset = std::max(0, Wh_GetIntSetting(L"offset"));
 
-    PCWSTR edgeOffsets = Wh_GetStringSetting(L"edgeOffsets");
-    ParseEdgeOffsets(edgeOffsets, s.edgeOffset);
-    Wh_FreeStringSetting(edgeOffsets);
+    auto edgeOffsets = WindhawkUtils::StringSetting::make(L"edgeOffsets");
+    ParseEdgeOffsets(edgeOffsets.get(), s.edgeOffset);
 
     s.radius = std::max(0, Wh_GetIntSetting(L"radius"));
 
     s.monitorCorners = Wh_GetIntSetting(L"monitorCorners.enabled") != 0;
     s.monitorCornerRadius = std::max(0, Wh_GetIntSetting(L"monitorCorners.radius"));
-    PCWSTR monitorCornerColor = Wh_GetStringSetting(L"monitorCorners.color");
-    s.monitorCornerColor = ParseHexColor(monitorCornerColor, RGB(0, 0, 0));
-    Wh_FreeStringSetting(monitorCornerColor);
+    auto monitorCornerColor = WindhawkUtils::StringSetting::make(L"monitorCorners.color");
+    s.monitorCornerColor = ParseHexColor(monitorCornerColor.get(), RGB(0, 0, 0));
 
     s.scaleWithDpi = Wh_GetIntSetting(L"scaleWithDpi") != 0;
 
-    PCWSTR customColor = Wh_GetStringSetting(L"customColor");
-    s.customColor = ParseHexColor(customColor, RGB(0x58, 0x58, 0x58));
-    Wh_FreeStringSetting(customColor);
-
-    s.colorTaskbar = Wh_GetIntSetting(L"colorTaskbar") != 0;
+    auto customColor = WindhawkUtils::StringSetting::make(L"customColor");
+    s.customColor = ParseHexColor(customColor.get(), RGB(0x58, 0x58, 0x58));
 
     s.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
 
     s.reserveWorkArea = Wh_GetIntSetting(L"reserveWorkArea") != 0;
     s.workAreaInset = std::max(0, Wh_GetIntSetting(L"workAreaInset"));
 
-    PCWSTR monitors = Wh_GetStringSetting(L"monitors");
-    s.primaryOnly = monitors && wcscmp(monitors, L"primary") == 0;
-    Wh_FreeStringSetting(monitors);
+    auto monitors = WindhawkUtils::StringSetting::make(L"monitors");
+    s.primaryOnly = wcscmp(monitors.get(), L"primary") == 0;
 
     g_settings = s;
 }
@@ -1158,10 +1140,11 @@ struct TaskbarWants {
     winrt::event_token rootToken{};
 };
 
-// Keyed by taskbar HWND. Touched only on the taskbar thread. Heap-allocated
-// and never freed (like g_strokes, g_fills and g_xamlCorners below) so no
-// XAML reference is released from the wrong thread at unload.
-auto* g_wants = new std::unordered_map<HWND, TaskbarWants>();
+// Keyed by taskbar HWND. Touched only on the taskbar thread. Not destroyed
+// with the image (like g_strokes, g_fills and g_xamlCorners below), so no
+// XAML reference is ever released from the wrong thread; the taskbar thread
+// empties it at unload (RestoreTaskbarsOnTaskbarThread).
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, TaskbarWants>> g_wants{std::in_place};
 
 // ---------------------------------------------------------------------------
 // Taskbar border line (BackgroundStroke) - taskbar thread only
@@ -1173,9 +1156,8 @@ struct StrokeState {
     bool hidden = false;
 };
 
-// Keyed by taskbar HWND. Touched only on the taskbar thread; leaked on purpose
-// (see g_wants).
-auto* g_strokes = new std::unordered_map<HWND, StrokeState>();
+// Keyed by taskbar HWND. Touched only on the taskbar thread (see g_wants).
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, StrokeState>> g_strokes{std::in_place};
 
 // Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundStroke
 wux::FrameworkElement FindBackgroundStroke(HWND taskbar) {
@@ -1216,12 +1198,17 @@ void WINAPI HideStrokeOnTaskbarThread(void* param) try {
         if (!stroke) {
             return;
         }
-        StrokeState state;
-        state.element = stroke;
-        state.originalOpacity = stroke.Opacity();
-        it = strokes.insert_or_assign(op->taskbar, state).first;
-        Wh_Log(L"taskbar %p: BackgroundStroke found (opacity %.2f)", op->taskbar,
-               state.originalOpacity);
+        if (it == strokes.end() || !SameObject(stroke, it->second.element.get())) {
+            // A new element: record what it looks like before we touch it.
+            // (The one we knew, found again after reporting itself unloaded,
+            // keeps its recorded original - its current value is ours.)
+            StrokeState state;
+            state.element = stroke;
+            state.originalOpacity = stroke.Opacity();
+            it = strokes.insert_or_assign(op->taskbar, state).first;
+            Wh_Log(L"taskbar %p: BackgroundStroke found (opacity %.2f)", op->taskbar,
+                   state.originalOpacity);
+        }
     }
 
     op->found = true;
@@ -1272,9 +1259,8 @@ struct FillState {
     bool applied = false;
 };
 
-// Keyed by taskbar HWND. Touched only on the taskbar thread; leaked on purpose
-// (see g_wants).
-auto* g_fills = new std::unordered_map<HWND, FillState>();
+// Keyed by taskbar HWND. Touched only on the taskbar thread (see g_wants).
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, FillState>> g_fills{std::in_place};
 
 // The element that paints the taskbar background:
 // Taskbar.TaskbarBackground#BackgroundControl > Grid > Rectangle#BackgroundFill
@@ -1352,9 +1338,13 @@ void WINAPI ApplyFillOnTaskbarThread(void* param) try {
             return;
         }
         target = state.target.get();
-        it = fills.insert_or_assign(op->taskbar, state).first;
-        Wh_Log(L"taskbar %p: background target found (%s)", op->taskbar,
-               state.isRectangle ? L"Rectangle#BackgroundFill" : L"TaskbarBackground control");
+        if (it == fills.end() || !SameObject(target, it->second.target.get())) {
+            // A new element (the one we knew, found again after reporting
+            // itself unloaded, keeps its recorded original brush).
+            it = fills.insert_or_assign(op->taskbar, state).first;
+            Wh_Log(L"taskbar %p: background target found (%s)", op->taskbar,
+                   state.isRectangle ? L"Rectangle#BackgroundFill" : L"TaskbarBackground control");
+        }
     }
 
     FillState& state = it->second;
@@ -1431,9 +1421,9 @@ struct XamlCornerState {
     bool placed = true;        // host laid out at the window's size (for the log)
 };
 
-// Keyed by taskbar HWND. Touched only on the taskbar thread; leaked on purpose
-// (see g_wants).
-auto* g_xamlCorners = new std::unordered_map<HWND, XamlCornerState>();
+// Keyed by taskbar HWND. Touched only on the taskbar thread (see g_wants).
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, XamlCornerState>> g_xamlCorners{
+    std::in_place};
 
 // The two monitor corners that lie on the taskbar's edge.
 void TaskbarEdgeCorners(int edge, int out[2]) {
@@ -2201,19 +2191,25 @@ inline DWORD BlendOver(DWORD top, DWORD bottom) {
 }
 
 // Pushes a frame bitmap to its window at a constant alpha (255 to show, 0
-// to take it off the screen); UpdateLayeredWindow also moves and resizes the
-// window to `rect`. Any thread; the caller holds g_revealMutex.
-bool PresentFrame(HWND hwnd, HDC memDc, int width, int height, const RECT& rect, BYTE alpha) {
+// to take it off the screen). With `rect`, UpdateLayeredWindow also moves
+// and resizes the window to it - which sends window messages to the mod's
+// UI thread, so only that thread passes a rect. The taskbar thread passes
+// none (position and size unchanged) and can therefore never block on the
+// UI thread. The caller holds g_revealMutex.
+bool PresentFrame(HWND hwnd, HDC memDc, int width, int height, const RECT* rect, BYTE alpha) {
     HDC screenDc = GetDC(nullptr);
     if (!screenDc) {
         return false;
     }
-    POINT dstPos{rect.left, rect.top};
+    POINT dstPos{};
     SIZE size{width, height};
+    if (rect) {
+        dstPos = {rect->left, rect->top};
+    }
     POINT srcPos{0, 0};
     BLENDFUNCTION blend{AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA};
-    BOOL ok = UpdateLayeredWindow(hwnd, screenDc, &dstPos, &size, memDc, &srcPos, 0, &blend,
-                                  ULW_ALPHA);
+    BOOL ok = UpdateLayeredWindow(hwnd, screenDc, rect ? &dstPos : nullptr, rect ? &size : nullptr,
+                                  memDc, &srcPos, 0, &blend, ULW_ALPHA);
     ReleaseDC(nullptr, screenDc);
     if (!ok) {
         Wh_Log(L"UpdateLayeredWindow failed: %u", GetLastError());
@@ -2229,7 +2225,7 @@ bool PresentOverlay(Overlay& overlay) {
     std::lock_guard<std::mutex> lock(g_revealMutex);
     const FrameSurface& surface = *overlay.surface;
     return PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
-                        overlay.layout.overlayRect, overlay.presentAlpha);
+                        &overlay.layout.overlayRect, overlay.presentAlpha);
 }
 
 // Colors the cached shape (one table lookup per pixel) and pushes it to the
@@ -2276,7 +2272,7 @@ bool PaintOverlay(Overlay& overlay, COLORREF rgb) {
     overlay.painted = true;
     overlay.paintedColor = rgb;
     return PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
-                        layout.overlayRect, overlay.presentAlpha);
+                        &layout.overlayRect, overlay.presentAlpha);
 }
 
 // ---------------------------------------------------------------------------
@@ -2462,11 +2458,22 @@ Overlay* FindOverlay(HMONITOR monitor) {
     return nullptr;
 }
 
+// With the work area reserved the frame is solid to the mouse where it is
+// painted, like the taskbar (the layered window passes the mouse through
+// wherever its pixels have zero alpha anyway): nothing that needs clicks is
+// under it, and the resize borders of maximized windows stay unreachable.
+// Without the work area the frame overlaps windows, so it lets the mouse
+// through everywhere.
+void ApplyFrameMouseStyle(HWND hwnd) {
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    LONG_PTR wanted = g_settings.reserveWorkArea ? (exStyle & ~WS_EX_TRANSPARENT)
+                                                 : (exStyle | WS_EX_TRANSPARENT);
+    if (wanted != exStyle) {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, wanted);
+    }
+}
+
 HWND CreateFrameWindow(const RECT& rect) {
-    // No WS_EX_TRANSPARENT: the layered window still passes the mouse
-    // through wherever its pixels have zero alpha (the inner area), while
-    // the painted frame swallows it - like the taskbar does. That keeps
-    // the resize borders of maximized windows under the frame unreachable.
     DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
     HWND hwnd = CreateWindowExW(exStyle, kFrameClassName, L"Round Everything", WS_POPUP,
                                 rect.left, rect.top, rect.right - rect.left,
@@ -2479,14 +2486,14 @@ HWND CreateFrameWindow(const RECT& rect) {
     // Aero Peek (taskbar thumbnail hover, show-desktop corner hover) fades
     // every other window to glass; keep the frame painted through it.
     BOOL excludedFromPeek = TRUE;
-    DwmSetWindowAttribute(hwnd, static_cast<DWMWINDOWATTRIBUTE>(12) /* DWMWA_EXCLUDED_FROM_PEEK */,
-                          &excludedFromPeek, sizeof(excludedFromPeek));
+    DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludedFromPeek,
+                          sizeof(excludedFromPeek));
     // No DWM show/hide animation: a frame that is hidden or destroyed must
     // vanish on the spot rather than dim out.
     BOOL noTransitions = TRUE;
-    DwmSetWindowAttribute(hwnd,
-                          static_cast<DWMWINDOWATTRIBUTE>(3) /* DWMWA_TRANSITIONS_FORCEDISABLED */,
-                          &noTransitions, sizeof(noTransitions));
+    DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions,
+                          sizeof(noTransitions));
+    ApplyFrameMouseStyle(hwnd);
     return hwnd;
 }
 
@@ -2526,6 +2533,7 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             }
             existing->layout = layout;
             existing->surface.reset();  // rebuilt by the paint below
+            ApplyFrameMouseStyle(existing->hwnd);
             if (layout.taskbar && taskbarChanged) {
                 // Shown again together with the taskbar once it is whole
                 // (a change of settings alone re-shapes on the spot).
@@ -2634,10 +2642,10 @@ bool TaskbarRecolored(HWND taskbar, UINT serial) {
     return it != g_taskbarRecolored.end() && it->second >= serial;
 }
 
-// Whether the frame is revealed through the taskbar (there must be something
-// of the mod inside the taskbar for its rendering pass to carry).
+// Whether the frame is revealed through the taskbar (its rendering pass
+// carries the background color, so only when the mod reaches the tree).
 bool UsesHandshake() {
-    return g_taskbarXamlAvailable && (g_settings.colorTaskbar || g_settings.monitorCorners);
+    return g_taskbarXamlAvailable;
 }
 
 // The handshake: the frame is made ready (painted, its window visible but at
@@ -2659,8 +2667,7 @@ UINT BeginReveal(Overlay& overlay) {
     if (overlay.surface) {
         std::lock_guard<std::mutex> lock(g_revealMutex);
         const FrameSurface& surface = *overlay.surface;
-        g_reveals[taskbar] = {serial, overlay.hwnd, surface.memDc, surface.width, surface.height,
-                              overlay.layout.overlayRect};
+        g_reveals[taskbar] = {serial, overlay.hwnd, surface.memDc, surface.width, surface.height};
         overlay.revealPending = true;
     }
     RequestTaskbarRecolor(taskbar, serial);
@@ -2934,6 +2941,9 @@ LRESULT CALLBACK AppBarWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case kMsgAppBarCallback:
             if (wParam == ABN_POSCHANGED) {
                 g_appBarsDirty = true;  // re-query on the next pass
+                g_shellStateDirty = true;
+            } else if (wParam == ABN_STATECHANGE) {
+                g_shellStateDirty = true;  // auto-hide toggled
             }
             return 0;
         case WM_NCHITTEST:
@@ -3219,7 +3229,9 @@ void ReconcileAppBars(std::vector<AppBarSet>& sets, ULONGLONG& lastWorkAreaTick,
     PublishAppBarStatus(sets);
 }
 
-// ABM_GETSTATE / ABM_GETTASKBARPOS, for the UI thread to read.
+// ABM_GETSTATE / ABM_GETTASKBARPOS, for the UI thread to read. Two
+// synchronous calls into the taskbar thread, so only when something asked
+// (a taskbar event, an ABN_* notification) or as a slow fallback.
 void RefreshShellState() {
     ShellState state;
     APPBARDATA stateData{};
@@ -3268,7 +3280,7 @@ DWORD WINAPI AppBarThreadProc(LPVOID) {
         }
 
         ULONGLONG now = GetTickCount64();
-        if (now - lastStateTick >= 250) {
+        if (g_shellStateDirty.exchange(false) || now - lastStateTick >= kShellStateRefreshMs) {
             RefreshShellState();
             lastStateTick = now;
         }
@@ -3507,7 +3519,7 @@ void ApplyRecolorsInRenderingTick() {
             auto reveal = g_reveals.find(recolor.taskbar);
             if (reveal != g_reveals.end() && reveal->second.serial <= recolor.serial) {
                 const Reveal& r = reveal->second;
-                PresentFrame(r.frame, r.memDc, r.width, r.height, r.rect, 255);
+                PresentFrame(r.frame, r.memDc, r.width, r.height, nullptr, 255);
                 g_reveals.erase(reveal);
             }
         }
@@ -3521,6 +3533,9 @@ void ApplyRecolorsInRenderingTick() {
 // UI thread: posts the recolor (with the request's serial, which the
 // kMsgTaskbarRecolored answer carries) to the taskbar's thread.
 void RequestTaskbarRecolor(HWND taskbar, UINT serial) {
+    if (!g_taskbarXamlAvailable) {
+        return;  // nothing of the mod inside the taskbar, and no hooks to drain at unload
+    }
     PostToWindowThread(taskbar, [taskbar, serial] {
         if (g_unloading) {
             return;
@@ -3552,6 +3567,9 @@ void WINAPI TransparentOnTaskbarThread(void* param) try {
 // Sent (sent messages go ahead of everything queued) with a short wait, so
 // an idle taskbar thread does it within the call; if it is busy, posted.
 void RequestTaskbarTransparent(HWND taskbar) {
+    if (!g_taskbarXamlAvailable) {
+        return;
+    }
     if (RunFromWindowThreadTimeout(taskbar, TransparentOnTaskbarThread, taskbar, 30)) {
         return;
     }
@@ -3822,6 +3840,11 @@ void WINAPI RestoreTaskbarsOnTaskbarThread(void*) try {
     RemoveXamlCornersOnTaskbarThread(nullptr);
     RestoreFillsOnTaskbarThread(nullptr);
     RestoreStrokesOnTaskbarThread(nullptr);
+    // The maps go away here, on the thread their XAML references belong to.
+    g_wants.reset();
+    g_strokes.reset();
+    g_fills.reset();
+    g_xamlCorners.reset();
 
     // Tell the UI thread once the handed-back taskbar has actually been
     // rendered, so the frames can go in the same instant it changes.
@@ -3915,8 +3938,6 @@ void OnPassResult(WPARAM wParam, LPARAM lParam) {
         state.doneTick = now;
         if (pass == kPassCorners) {
             g_xamlCornersOwned = true;
-        } else if (pass == kPassFill) {
-            g_fillOwned = true;
         }
     }
 }
@@ -3982,10 +4003,6 @@ void ApplyFills(DWORD argb, ULONGLONG now) {
             return op.found;
         });
     }
-}
-
-void RestoreFills() {
-    RestoreOnTaskbarThread(RestoreFillsOnTaskbarThread, g_fillOwned, L"taskbar background");
 }
 
 // Radius in DIPs for the XAML ears (XAML scales by the taskbar's DPI itself).
@@ -4089,12 +4106,7 @@ void Tick(bool forceRebuild) {
         RemoveXamlCorners();
     }
 
-    if (g_settings.colorTaskbar) {
-        ApplyFills(CustomColorArgb(), now);
-    } else if (g_fillOwned) {
-        RestoreFills();
-        g_lastFillArgb = 0;
-    }
+    ApplyFills(CustomColorArgb(), now);
 
     UpdateVisibility();
 
@@ -4178,7 +4190,25 @@ void CALLBACK TaskbarWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
         event != EVENT_OBJECT_LOCATIONCHANGE) {
         return;
     }
-    if (g_taskbarEventPending || !(IsTaskbarWindow(hwnd) || IsTaskViewWindowClass(hwnd))) {
+    bool taskbar = IsTaskbarWindow(hwnd);
+    if (!taskbar && !IsTaskViewWindowClass(hwnd)) {
+        return;
+    }
+    if (taskbar) {
+        // Auto-hide may have been toggled, the taskbar may have moved: the
+        // appbar thread re-reads the shell state - at most twice a second,
+        // since an auto-hide slide reports a location change every frame.
+        static ULONGLONG lastRefreshAsk = 0;
+        ULONGLONG now = GetTickCount64();
+        if (now - lastRefreshAsk >= 500) {
+            lastRefreshAsk = now;
+            g_shellStateDirty = true;
+            if (g_appBarWake) {
+                SetEvent(g_appBarWake);
+            }
+        }
+    }
+    if (g_taskbarEventPending) {
         return;
     }
     if (HWND ctrl = g_ctrlWnd.load()) {
@@ -4188,24 +4218,57 @@ void CALLBACK TaskbarWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     }
 }
 
+void HookForegroundLocation(HWND foreground);
+
 // A foreground change anywhere, or the foreground window moving or resizing
 // (the moment it can go full-screen - F11, a game switching modes), triggers
 // a tick right away so the frame hides in the same instant.
 void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                      LONG idChild, DWORD, DWORD) {
-    if (g_taskbarEventPending) {
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+        HookForegroundLocation(hwnd);
+    } else if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd ||
+               hwnd != GetForegroundWindow()) {
         return;
     }
-    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
-        if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd ||
-            hwnd != GetForegroundWindow()) {
-            return;
-        }
+    if (g_taskbarEventPending) {
+        return;
     }
     if (HWND ctrl = g_ctrlWnd.load()) {
         if (PostMessageW(ctrl, kMsgTaskbarEvent, 0, 0)) {
             g_taskbarEventPending = true;
         }
+    }
+}
+
+// The location hook follows the foreground window's process: a hook for all
+// processes would queue every location change in the session (cursor and
+// caret moves included) to this thread. Re-registered on each foreground
+// change; null unhooks.
+HWINEVENTHOOK g_locationHook = nullptr;
+DWORD g_locationHookPid = 0;
+
+void HookForegroundLocation(HWND foreground) {
+    DWORD pid = 0;
+    if (foreground) {
+        GetWindowThreadProcessId(foreground, &pid);
+    }
+    if (pid == g_locationHookPid && (g_locationHook || !pid)) {
+        return;
+    }
+    if (g_locationHook) {
+        UnhookWinEvent(g_locationHook);
+        g_locationHook = nullptr;
+    }
+    g_locationHookPid = pid;
+    if (!pid) {
+        return;
+    }
+    g_locationHook =
+        SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+                        ForegroundWinEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_locationHook) {
+        Wh_Log(L"SetWinEventHook (location, pid %u) failed: %u", pid, GetLastError());
     }
 }
 
@@ -4214,14 +4277,20 @@ LRESULT CALLBACK CtrlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_TIMER:
             if (wParam == kTimerId) {
                 Tick(false);
+            } else if (wParam == kCoalesceTimerId) {
+                KillTimer(hwnd, kCoalesceTimerId);
+                Tick(false);
             }
             return 0;
         case kMsgTaskbarEvent:
             g_taskbarEventPending = false;
-            // An auto-hide slide fires location changes every frame; the
-            // regular tick covers anything a throttled event misses.
-            if (GetTickCount64() - g_lastTickTime >= 16) {
+            // An auto-hide slide fires location changes every frame: an
+            // event right after a tick is coalesced into one tick a moment
+            // later rather than dropped.
+            if (GetTickCount64() - g_lastTickTime >= kCoalesceDelayMs) {
                 Tick(false);
+            } else {
+                SetTimer(hwnd, kCoalesceTimerId, kCoalesceDelayMs, nullptr);
             }
             return 0;
         case kMsgPassResult:
@@ -4247,6 +4316,10 @@ LRESULT CALLBACK CtrlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+// A class that already exists would be one a previous instance left behind,
+// with its window procedure in an unloaded image - never reused: every
+// failure is a failure. (Every window is destroyed before its class is
+// unregistered at unload, so this can't happen after a clean unload.)
 bool RegisterClasses() {
     WNDCLASSEXW frameClass{};
     frameClass.cbSize = sizeof(frameClass);
@@ -4254,7 +4327,7 @@ bool RegisterClasses() {
     frameClass.hInstance = g_module;
     frameClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     frameClass.lpszClassName = kFrameClassName;
-    if (!RegisterClassExW(&frameClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassExW(&frameClass)) {
         Wh_Log(L"RegisterClassExW (frame) failed: %u", GetLastError());
         return false;
     }
@@ -4264,7 +4337,7 @@ bool RegisterClasses() {
     ctrlClass.lpfnWndProc = CtrlWndProc;
     ctrlClass.hInstance = g_module;
     ctrlClass.lpszClassName = kCtrlClassName;
-    if (!RegisterClassExW(&ctrlClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassExW(&ctrlClass)) {
         Wh_Log(L"RegisterClassExW (ctrl) failed: %u", GetLastError());
         UnregisterClassW(kFrameClassName, g_module);
         return false;
@@ -4276,7 +4349,7 @@ bool RegisterClasses() {
     appBarClass.hInstance = g_module;
     appBarClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     appBarClass.lpszClassName = kAppBarClassName;
-    if (!RegisterClassExW(&appBarClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassExW(&appBarClass)) {
         Wh_Log(L"RegisterClassExW (appbar) failed: %u", GetLastError());
         UnregisterClassW(kFrameClassName, g_module);
         UnregisterClassW(kCtrlClassName, g_module);
@@ -4369,12 +4442,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     if (!foregroundEventHook) {
         Wh_Log(L"SetWinEventHook (foreground) failed: %u", GetLastError());
     }
-    HWINEVENTHOOK locationEventHook =
-        SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-                        ForegroundWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!locationEventHook) {
-        Wh_Log(L"SetWinEventHook (location) failed: %u", GetLastError());
-    }
+    HookForegroundLocation(GetForegroundWindow());
 
     for (;;) {
         DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_stopEvent, INFINITE, QS_ALLINPUT,
@@ -4400,15 +4468,14 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 
     g_ctrlWnd = nullptr;
     KillTimer(ctrl, kTimerId);
+    KillTimer(ctrl, kCoalesceTimerId);
     if (taskbarEventHook) {
         UnhookWinEvent(taskbarEventHook);
     }
     if (foregroundEventHook) {
         UnhookWinEvent(foregroundEventHook);
     }
-    if (locationEventHook) {
-        UnhookWinEvent(locationEventHook);
-    }
+    HookForegroundLocation(nullptr);
 
     // No more posted work; the synchronous restores below also drain any
     // hook call still in flight on the taskbar thread.
@@ -4422,41 +4489,47 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     // has been rendered; the frames are taken off the screen at that moment
     // (an immediate layered-window update). The slow part (appbars, work
     // area) comes after, when nothing of the mod is visible.
+    //
+    // Nothing here is given up on: Windhawk unmaps the image the moment
+    // Wh_ModUninit returns, so a handler left subscribed or a thread still
+    // running would crash Explorer. The calls into the taskbar thread are
+    // plain SendMessages (this thread keeps handling sent messages while it
+    // waits, so they can't deadlock); a busy taskbar delays the unload by a
+    // few seconds at worst.
     if (g_taskbarXamlAvailable) {
         if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
             if (g_taskbarRestored) {
                 ResetEvent(g_taskbarRestored);
             }
             ULONGLONG t0 = GetTickCount64();
-            if (!RunFromWindowThreadTimeout(taskbar, RestoreTaskbarsOnTaskbarThread, nullptr,
-                                            10000)) {
-                Wh_Log(L"taskbar thread didn't answer; taskbar may be left as it was");
+            if (!RunFromWindowThreadTimeout(taskbar, RestoreTaskbarsOnTaskbarThread, nullptr, 0)) {
+                Wh_Log(L"taskbar window gone before the hand-back");
             } else if (g_taskbarRestored) {
                 DWORD rendered = WaitForSingleObject(g_taskbarRestored, 1000);
                 Wh_Log(L"taskbar handed back in %llu ms (%s)", GetTickCount64() - t0,
                        rendered == WAIT_OBJECT_0 ? L"rendered" : L"render not seen");
-                if (rendered != WAIT_OBJECT_0) {
-                    RunFromWindowThreadTimeout(taskbar, UnsubscribeRestoredRenderOnTaskbarThread,
-                                               nullptr, 5000);
-                }
             }
+            // The Rendered handler must not outlive the image, whether or
+            // not it fired.
+            RunFromWindowThreadTimeout(taskbar, UnsubscribeRestoredRenderOnTaskbarThread, nullptr,
+                                       0);
         } else {
             Wh_Log(L"no taskbar window, nothing to hand back");
         }
     }
     HideOverlays(g_overlays);
-    g_fillOwned = false;
+    // The frame windows go now, so no other thread can have a reason to
+    // send to this one while it waits below.
+    DestroyOverlays(g_overlays);
     g_xamlCornersOwned = false;
     ResetPassStates();
-    // Only now the appbars: the appbar thread removes them and exits. A
-    // taskbar that is busy can delay that, so the wait is capped.
+    // Only now the appbars: the appbar thread removes them (each removal is a
+    // synchronous shell call) and exits; waited for however long that takes.
     if (g_appBarStop) {
         SetEvent(g_appBarStop);
     }
     if (g_appBarThread) {
-        if (WaitForSingleObject(g_appBarThread, 5000) != WAIT_OBJECT_0) {
-            Wh_Log(L"appbar thread didn't finish in time");
-        }
+        WaitForSingleObject(g_appBarThread, INFINITE);
         CloseHandle(g_appBarThread);
         g_appBarThread = nullptr;
     }
@@ -4483,7 +4556,6 @@ DWORD WINAPI ModThreadProc(LPVOID) {
         g_appBarStatus.clear();
         g_shellState = ShellState{};
     }
-    DestroyOverlays(g_overlays);
     {
         std::lock_guard<std::mutex> lock(g_revealMutex);
         g_reveals.clear();
@@ -4505,7 +4577,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 
 // ---------------------------------------------------------------------------
 // dwm.exe side: one corner radius for normal, snapped and maximized windows
-// (mechanism from the Maximized Window Corners mod)
+// (the mechanism is shared with the Maximized Window Corners mod)
 // ---------------------------------------------------------------------------
 
 namespace dwm {
@@ -4525,13 +4597,13 @@ void LoadDwmSettings() {
            g_enabled ? L"on" : L"off", g_radius.load());
 }
 
-// private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)
-// Pure style -> radius mapping with no maximized check. Resolved, not hooked.
+// CTopLevelWindow::GetRadiusFromCornerStyle: pure style -> radius mapping
+// with no maximized check. Resolved, not hooked.
 using GetRadiusFromCornerStyle_t = float(WINAPI*)(void* self);
 GetRadiusFromCornerStyle_t GetRadiusFromCornerStyle;
 
-// public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void)
-// Returns 0 for maximized / full-screen windows even when the style is rounded.
+// CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle: returns 0 for
+// maximized / full-screen windows even when the style is rounded.
 using GetFloatCornerRadiusForCurrentStyle_t = float(WINAPI*)(void* self);
 GetFloatCornerRadiusForCurrentStyle_t GetFloatCornerRadiusForCurrentStyle_Original;
 float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
@@ -4554,50 +4626,18 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
     return radius > 0 ? static_cast<float>(radius) : r;
 }
 
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
-constexpr DWORD kDwmwcpDefault = 0;
-constexpr DWORD kDwmwcpDoNotRound = 1;
-constexpr DWORD kDwmwcpRound = 2;
-
-// DWM rebuilds a window's corner radius / clip only when something it tracks
-// changes. A corner-preference change always goes through
-// CWindowList::SetCornerStyle -> radius -> border -> clip, so: set the
-// preference to a different value and straight back to the window's own
-// value (read first; Default assumed if it can't be read).
-void RefreshAllWindows(const wchar_t* why) {
-    struct Ctx {
-        int refreshed = 0;
-        int failed = 0;
-    } ctx;
-    EnumWindows(
-        [](HWND hwnd, LPARAM lp) -> BOOL {
-            auto* c = reinterpret_cast<Ctx*>(lp);
-            if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) {
-                return TRUE;
-            }
-
-            DWORD own = kDwmwcpDefault;
-            if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &own,
-                                             sizeof(own)))) {
-                own = kDwmwcpDefault;
-            }
-            DWORD other = (own == kDwmwcpDoNotRound) ? kDwmwcpRound : kDwmwcpDoNotRound;
-            HRESULT hr1 = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &other,
-                                                sizeof(other));
-            HRESULT hr2 =
-                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &own, sizeof(own));
-            if (SUCCEEDED(hr1) && SUCCEEDED(hr2)) {
-                c->refreshed++;
-            } else {
-                c->failed++;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&ctx));
-    Wh_Log(L"[dwm] refresh (%s): %d window(s) refreshed, %d failed", why, ctx.refreshed,
-           ctx.failed);
+// DWM rebuilds a window's corner radius and clip only when something it
+// tracks changes. A system color change makes it re-evaluate every top-level
+// window, without touching any window's own corner preference (which
+// DwmGetWindowAttribute can't read back, so it couldn't be restored).
+void RequestDwmRefresh(const wchar_t* why) {
+    HWND dwmWnd = FindWindowW(L"Dwm", nullptr);
+    if (!dwmWnd) {
+        Wh_Log(L"[dwm] refresh (%s): no Dwm window; corners update as windows change", why);
+        return;
+    }
+    PostMessageW(dwmWnd, WM_SYSCOLORCHANGE, 0, 0);
+    Wh_Log(L"[dwm] refresh (%s) requested", why);
 }
 
 BOOL Init() {
@@ -4609,13 +4649,17 @@ BOOL Init() {
         return FALSE;
     }
 
+    // Both access specifiers are listed: older Windows 11 builds export
+    // these members as private, newer ones as public.
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
-            {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))"},
+            {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
+             LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))"},
             &GetRadiusFromCornerStyle,  // address only, no hook
         },
         {
-            {LR"(public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))"},
+            {LR"(public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))",
+             LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))"},
             &GetFloatCornerRadiusForCurrentStyle_Original,
             GetFloatCornerRadiusForCurrentStyle_Hook,
         },
@@ -4631,18 +4675,18 @@ BOOL Init() {
 }
 
 void AfterInit() {
-    // Hooks are active from here on; rebuild existing windows' clips.
-    RefreshAllWindows(L"init");
+    // Hooks are active from here on; have existing windows re-evaluated.
+    RequestDwmRefresh(L"init");
 }
 
 void Uninit() {
-    // Hooks are already removed: this rebuild restores the stock corners.
-    RefreshAllWindows(L"uninit");
+    // Hooks are already removed: this re-evaluation restores the stock corners.
+    RequestDwmRefresh(L"uninit");
 }
 
 void SettingsChanged() {
     LoadDwmSettings();
-    RefreshAllWindows(L"settings");
+    RequestDwmRefresh(L"settings");
 }
 
 }  // namespace dwm
