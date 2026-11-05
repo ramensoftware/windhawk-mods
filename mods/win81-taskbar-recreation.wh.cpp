@@ -16,7 +16,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -std=c++20 -DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject
 // ==/WindhawkMod==
 //
 // ==WindhawkModReadme==
@@ -716,7 +716,11 @@ static const wchar_t* Tr(const wchar_t* it,const wchar_t* en) {
 namespace { void ActivateTask(HWND h); static bool RequestTaskClose(HWND h); static bool RequestTaskMinimize(HWND h); }
 
 // Small non-copyable RAII owners; never own shared system image lists.
-struct ScopedHandle {HANDLE h;explicit ScopedHandle(HANDLE value):h(value){}~ScopedHandle(){if(h && h!=INVALID_HANDLE_VALUE)CloseHandle(h);}ScopedHandle(const ScopedHandle&)=delete;ScopedHandle& operator=(const ScopedHandle&)=delete;};
+struct ScopedHandle {HANDLE h;
+    explicit ScopedHandle(HANDLE value):h(value){}~ScopedHandle(){if(h && h!=INVALID_HANDLE_VALUE)CloseHandle(h);
+    }ScopedHandle(const ScopedHandle&)=delete;
+    ScopedHandle& operator=(const ScopedHandle&)=delete;
+    };
 struct ScopedFind {
     HANDLE h=INVALID_HANDLE_VALUE; explicit ScopedFind(HANDLE v):h(v) {}
     ~ScopedFind(){if(h!=INVALID_HANDLE_VALUE) FindClose(h);}
@@ -725,7 +729,11 @@ struct ScopedFind {
 template<typename T> struct ReleaseCom {void operator()(T* p) const noexcept {if(p) p->Release();}};
 struct FreePidl {void operator()(ITEMIDLIST* p) const noexcept {if(p) CoTaskMemFree(p);}};
 struct FreeCoTask {void operator()(wchar_t* p) const noexcept {if(p) CoTaskMemFree(p);}};
-struct ScopedPropVariant {PROPVARIANT value{};ScopedPropVariant(){PropVariantInit(&value);}~ScopedPropVariant(){PropVariantClear(&value);}ScopedPropVariant(const ScopedPropVariant&)=delete;};
+struct ScopedPropVariant {PROPVARIANT value{};
+    ScopedPropVariant(){PropVariantInit(&value);
+    }~ScopedPropVariant(){PropVariantClear(&value);
+    }ScopedPropVariant(const ScopedPropVariant&)=delete;
+    };
 struct FreeBstr {void operator()(wchar_t* p) const noexcept {if(p) SysFreeString(p);}};
 struct DestroyIconHandle {void operator()(std::remove_pointer<HICON>::type* p) const noexcept {if(p) DestroyIcon(p);}};
 struct DeleteBitmapHandle {void operator()(std::remove_pointer<HBITMAP>::type* p) const noexcept {if(p) DeleteObject(p);}};
@@ -2077,7 +2085,9 @@ struct State {
     int hot = HIT_NONE;
     int ticks = 0;
     HWND preview = nullptr;
-    HWND jumpPopup = nullptr, jumpClosing=nullptr; std::wstring jumpGroupKey,jumpDismissKey,jumpPressedKey,jumpLeftDismissKey,jumpLeftPressedKey; ULONGLONG jumpDismissAt=0,jumpLeftDismissAt=0;
+    HWND jumpPopup = nullptr, jumpClosing=nullptr;
+         std::wstring jumpGroupKey,jumpDismissKey,jumpPressedKey,jumpLeftDismissKey,jumpLeftPressedKey;
+         ULONGLONG jumpDismissAt=0,jumpLeftDismissAt=0;
     HWND tooltip = nullptr;
     std::wstring tooltipText;
     bool hotCornerPreview=false; ULONGLONG recoveryTooltipUntil=0;
@@ -2280,7 +2290,10 @@ static bool IsBatteryCab(const LegacyFile& s) {return &s==&kBatteryCabIt || &s==
 static const LegacyFile& SelectedBatteryMui() {return ItalianUI()?kBatteryMuiIt:kBatteryMuiEn;}
 static std::wstring BatteryModuleDirectory(const std::wstring& dir) {return dir+L"\\battery1511";}
 static std::wstring BatteryMuiDirectory(const std::wstring& dir) {return BatteryModuleDirectory(dir)+(ItalianUI()?L"\\it-IT":L"\\en-US");}
-struct HttpHandle { HINTERNET h=nullptr; explicit HttpHandle(HINTERNET x=nullptr):h(x){} ~HttpHandle(){if(h)WinHttpCloseHandle(h);} HttpHandle(const HttpHandle&)=delete; };
+struct HttpHandle { HINTERNET h=nullptr;
+     explicit HttpHandle(HINTERNET x=nullptr):h(x){} ~HttpHandle(){if(h)WinHttpCloseHandle(h);
+    } HttpHandle(const HttpHandle&)=delete;
+     };
 struct BCryptAlg { BCRYPT_ALG_HANDLE h=nullptr; ~BCryptAlg(){if(h)BCryptCloseAlgorithmProvider(h,0);} };
 struct BCryptHash { BCRYPT_HASH_HANDLE h=nullptr; ~BCryptHash(){if(h)BCryptDestroyHash(h);} };
 struct ResourceModule {HMODULE h=nullptr; ~ResourceModule(){if(h)FreeLibrary(h);} };
@@ -2359,7 +2372,10 @@ static bool FetchResource(const std::wstring& dir,const LegacyFile& spec,HANDLE 
     bool flushed=wrote && FlushFileBuffers(out.h)!=FALSE; bool checked=flushed && ReadVerifiedHandle(out.h,spec);
     if(checked) {
         size_t nameBytes=path.size()*sizeof(wchar_t);std::vector<BYTE> renameBuffer(offsetof(FILE_RENAME_INFO,FileName)+nameBytes+sizeof(wchar_t),0);
-        auto* rename=(FILE_RENAME_INFO*)renameBuffer.data();rename->ReplaceIfExists=TRUE;rename->RootDirectory=nullptr;rename->FileNameLength=(DWORD)nameBytes;
+        auto* rename=(FILE_RENAME_INFO*)renameBuffer.data();
+            rename->ReplaceIfExists=TRUE;
+            rename->RootDirectory=nullptr;
+            rename->FileNameLength=(DWORD)nameBytes;
         memcpy(rename->FileName,path.data(),nameBytes);
         committed=SetFileInformationByHandle(out.h,FileRenameInfo,rename,(DWORD)renameBuffer.size())!=FALSE;
     }
@@ -2564,7 +2580,9 @@ static Bitmap* ResourceIcon(HMODULE module,int id,int size) {
 }
 static Bitmap* ResourceBattery(HMODULE module,int resource,int frame) {
     HRSRC resourceHandle=FindResourceW(module,MAKEINTRESOURCEW(resource),RT_BITMAP); if(!resourceHandle)return nullptr;
-    DWORD bytes=SizeofResource(module,resourceHandle);HGLOBAL loaded=LoadResource(module,resourceHandle);const BYTE* raw=loaded?(const BYTE*)LockResource(loaded):nullptr;
+    DWORD bytes=SizeofResource(module,resourceHandle);
+        HGLOBAL loaded=LoadResource(module,resourceHandle);
+        const BYTE* raw=loaded?(const BYTE*)LockResource(loaded):nullptr;
     if(!raw || bytes<sizeof(BITMAPINFOHEADER))return nullptr;
     BITMAPINFOHEADER header{};memcpy(&header,raw,sizeof(header));int width=frame*43,height=frame;
     if(header.biSize!=40 || header.biWidth!=width || std::abs(header.biHeight)!=height || header.biPlanes!=1 || header.biBitCount!=32 || header.biCompression!=BI_RGB ||
@@ -5245,7 +5263,11 @@ static void ApplyBatteryStatus(const SYSTEM_POWER_STATUS& p) {
     if(s->hasBattery) PublishCniSystemIcon(HIT_BATTERY);
     else RemoveCniSystemIcon(HIT_BATTERY);
 }
-void RefreshBattery() { SYSTEM_POWER_STATUS p{}; if(GetSystemPowerStatus(&p)) {bool old=s->hasBattery;ApplyBatteryStatus(p);if(old!=s->hasBattery && s->bar)BuildGroups();} }
+void RefreshBattery() { SYSTEM_POWER_STATUS p{};
+     if(GetSystemPowerStatus(&p)) {bool old=s->hasBattery;
+    ApplyBatteryStatus(p);
+    if(old!=s->hasBattery && s->bar)BuildGroups();
+    } }
 
 
 // Based on the supplied Windows 8.1 screenshot (1440x900, 40 px bar),
@@ -6190,7 +6212,9 @@ static bool OpenClassicClock();
 static std::vector<int> VisiblePrivateIcons();
 static std::vector<int> VisibleTrayEntries();
 static std::wstring TrayEntryKey(int entry);
-struct VerticalLayout {RECT start{},clock{},language{},desktop{},arrow{},icons{},network{},volume{},battery{},more{},desktopBand{},linksBand{},addressBand{}; int first=0, step=0, count=0, offset=0;};
+struct VerticalLayout {RECT start{},clock{},language{},desktop{},arrow{},icons{},network{},volume{},battery{},more{},desktopBand{},linksBand{},addressBand{};
+     int first=0, step=0, count=0, offset=0;
+    };
 static int VerticalClockHeight() {
     wchar_t time[64]{};GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,time,64);
     // Reserve a fourth line for localized time markers such as AM/PM.
@@ -6222,7 +6246,9 @@ static VerticalLayout GetVerticalLayout(int width,int height) {
         RECT row{0,y-cell,width,y};y-=cell;
         if(index==0)v.desktopBand=row;else if(index==1)v.linksBand=row;else v.addressBand=row;
     }
-    v.start=RECT{0,0,width,startHotCorner.load()?std::max(1,Px(2)):start};v.first=start+(beta8148 && !startHotCorner.load()?Px(4):0);v.step=std::max(1,Px(taskStep));
+    v.start=RECT{0,0,width,startHotCorner.load()?std::max(1,Px(2)):start};
+        v.first=start+(beta8148 && !startHotCorner.load()?Px(4):0);
+        v.step=std::max(1,Px(taskStep));
     int capacity=std::max(0,(y-v.first)/v.step), total=(int)s->groups.size();
     if(total>capacity && capacity>0) {y-=cell;v.more=RECT{0,y,width,y+cell};capacity=std::max(0,(y-v.first)/v.step);}
     v.count=std::min(total,capacity);v.offset=std::max(0,std::min(s->verticalOffset,std::max(0,total-v.count)));
@@ -6270,7 +6296,10 @@ static std::vector<int> VisiblePrivateIcons() {
 static std::vector<int> VisibleTrayEntries() {
     auto entries=VisiblePrivateIcons();if(!s || !s->privateActive)return entries;
     for(int hit:{HIT_BATTERY,HIT_NETWORK,HIT_VOLUME})if(IsSystemVisible(hit))entries.push_back(SystemEntry(hit));
-    auto rank=[&](int entry){auto key=TrayEntryKey(entry);auto it=std::find(s->trayBarOrder.begin(),s->trayBarOrder.end(),key);return it==s->trayBarOrder.end()?s->trayBarOrder.size():(size_t)(it-s->trayBarOrder.begin());};
+    auto rank=[&](int entry){auto key=TrayEntryKey(entry);
+        auto it=std::find(s->trayBarOrder.begin(),s->trayBarOrder.end(),key);
+        return it==s->trayBarOrder.end()?s->trayBarOrder.size():(size_t)(it-s->trayBarOrder.begin());
+        };
     std::stable_sort(entries.begin(),entries.end(),[&](int a,int b){return rank(a)<rank(b);});
     return entries;
 }
@@ -6334,7 +6363,11 @@ static void DrawTrayHoverTile(Graphics& g,const RECT& cell,bool onBar=false,floa
             RectF dest((float)x,(float)y,(float)tw,(float)th); g.DrawImage(s->overflowHoverImage,dest,0.f,0.f,31.f,27.f,UnitPixel,&attr);
         }
     }
-    else { SolidBrush fill(Color((int)std::lround(100*opacity),220,233,245)); Pen edge(Color((int)std::lround(170*opacity),110,165,210)); g.FillRectangle(&fill,x,y,tw,th); g.DrawRectangle(&edge,x,y,tw-1,th-1); }
+    else { SolidBrush fill(Color((int)std::lround(100*opacity),220,233,245));
+         Pen edge(Color((int)std::lround(170*opacity),110,165,210));
+         g.FillRectangle(&fill,x,y,tw,th);
+         g.DrawRectangle(&edge,x,y,tw-1,th-1);
+         }
 }
 // Geometry shared by tray, Desktop and Links arrows. Keep the hit rectangle
 // and the drawn glyph centred on the same anchor at every DPI.
@@ -6539,14 +6572,20 @@ static std::vector<int> OverflowPrivateItems() {
         if(!IsSystemVisible(hit)) out.push_back(SystemEntry(hit));
     }
     // Stable explicit order; previously unseen icons retain discovery order.
-    auto rank=[&](int entry){auto key=TrayEntryKey(entry);auto it=std::find(s->trayOverflowOrder.begin(),s->trayOverflowOrder.end(),key);return it==s->trayOverflowOrder.end()?s->trayOverflowOrder.size():(size_t)(it-s->trayOverflowOrder.begin());};
+    auto rank=[&](int entry){auto key=TrayEntryKey(entry);
+        auto it=std::find(s->trayOverflowOrder.begin(),s->trayOverflowOrder.end(),key);
+        return it==s->trayOverflowOrder.end()?s->trayOverflowOrder.size():(size_t)(it-s->trayOverflowOrder.begin());
+        };
     std::stable_sort(out.begin(),out.end(),[&](int a,int b){return rank(a)<rank(b);});
     return out;
 }
 static COLORREF PopupChromeColor() {
     DWORD preference=0,size=sizeof(preference);
     bool windowsBorders=RegGetValueW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\DWM",L"ColorPrevalence",RRF_RT_REG_DWORD,nullptr,&preference,&size)==ERROR_SUCCESS && preference!=0;
-    if(useAccent.load() || windowsBorders) { DWORD c=0; BOOL opaque=FALSE; if(SUCCEEDED(DwmGetColorizationColor(&c,&opaque))) return RGB((BYTE)(c>>16),(BYTE)(c>>8),(BYTE)c); }
+    if(useAccent.load() || windowsBorders) { DWORD c=0;
+         BOOL opaque=FALSE;
+         if(SUCCEEDED(DwmGetColorizationColor(&c,&opaque))) return RGB((BYTE)(c>>16),(BYTE)(c>>8),(BYTE)c);
+         }
     return RGB(15,74,121);
 }
 static int OverflowRowsShown() {
@@ -6685,7 +6724,10 @@ static void PaintPrivateOverflow(HWND h) {
         {
             Graphics g(mem);
             int inset=taskbarSkin.load()==1?0:Px(6);
-            if(inset) {COLORREF c=PopupChromeColor();SolidBrush chrome(Color(255,GetRValue(c),GetGValue(c),GetBValue(c)));g.FillRectangle(&chrome,0,0,r.right,r.bottom);}
+            if(inset) {COLORREF c=PopupChromeColor();
+                SolidBrush chrome(Color(255,GetRValue(c),GetGValue(c),GetBValue(c)));
+                g.FillRectangle(&chrome,0,0,r.right,r.bottom);
+                }
             Rect paper(inset,inset,std::max(1,(int)r.right-2*inset),std::max(1,(int)r.bottom-2*inset));
             LinearGradientBrush bg(Point(0,0),Point(0,std::max(1L,r.bottom)),Color(255,255,255,255),Color(255,244,244,244));
             g.FillRectangle(&bg,paper);
@@ -7064,7 +7106,10 @@ static void UpdateTrayDropFeedback(POINT screen) {
     if(s->overflowPanel && IsWindowVisible(s->overflowPanel) && ScreenToClient(s->overflowPanel,&q) && GetClientRect(s->overflowPanel,&r) && PtInRect(&r,q)) {
         s->trayDrag.dropArea=2;int entry=OverflowHit(q);auto items=OverflowPrivateItems();
         auto it=std::find(items.begin(),items.end(),entry);
-        if(entry!=-1 && it!=items.end()) {s->trayDrag.dropAnchor=TrayEntryKey(entry);s->trayDrag.dropCell=OverflowCell((int)(it-items.begin()));s->trayDrag.dropAfter=q.x>=(s->trayDrag.dropCell.left+s->trayDrag.dropCell.right)/2;}
+        if(entry!=-1 && it!=items.end()) {s->trayDrag.dropAnchor=TrayEntryKey(entry);
+            s->trayDrag.dropCell=OverflowCell((int)(it-items.begin()));
+            s->trayDrag.dropAfter=q.x>=(s->trayDrag.dropCell.left+s->trayDrag.dropCell.right)/2;
+            }
     } else {
         q=screen;if(ScreenToClient(s->bar,&q) && GetClientRect(s->bar,&r)) {
             Layout l=GetLayout(r.right,r.bottom);auto v=s->verticalActive?GetVerticalLayout(r.right,r.bottom):VerticalLayout{};
@@ -8002,7 +8047,10 @@ static void ShowSystemTrayContextMenu(int hit,POINT p) {
         Tr(L"Opzioni risparmio energia\nCentro PC portatile Windows",L"Power Options\nWindows Mobility Center");
     int cmd=w7t::ShellMenu::ShowContextMenuEx(p.x,p.y,true,lines,true);
     if(hit==HIT_VOLUME) {
-        if(cmd==1) { wchar_t dir[MAX_PATH]={}; if(GetSystemDirectoryW(dir,MAX_PATH)) { std::wstring exe=std::wstring(dir)+L"\\SndVol.exe"; ShellExecuteW(s->bar,L"open",exe.c_str(),nullptr,nullptr,SW_SHOWNORMAL); } }
+        if(cmd==1) { wchar_t dir[MAX_PATH]={};
+             if(GetSystemDirectoryW(dir,MAX_PATH)) { std::wstring exe=std::wstring(dir)+L"\\SndVol.exe";
+             ShellExecuteW(s->bar,L"open",exe.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+             } }
         else if(cmd>=2 && cmd<=4) { const wchar_t* tabs[]={L"mmsys.cpl,,0",L"mmsys.cpl,,1",L"mmsys.cpl,,2"}; ShellExecuteW(s->bar,L"open",L"control.exe",tabs[cmd-2],nullptr,SW_SHOWNORMAL); }
     } else if(hit==HIT_NETWORK) {
         if(cmd==1) ShellExecuteW(s->bar,L"open",L"ms-settings:troubleshoot",nullptr,nullptr,SW_SHOWNORMAL);
@@ -8065,28 +8113,73 @@ static LRESULT CALLBACK DesktopPopupProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         if(sys) ListView_SetImageList(d->list,sys,LVSIL_SMALL);
         LVCOLUMNW col{};col.mask=LVCF_WIDTH;col.cx=Px(260);ListView_InsertColumn(d->list,0,&col);
         SendMessageW(d->list,WM_SETFONT,(WPARAM)GetStockObject(DEFAULT_GUI_FONT),TRUE);
-        for(size_t i=0;i<d->items.size();++i) {LVITEMW it{};it.mask=LVIF_TEXT|LVIF_IMAGE;it.iItem=(int)i;it.pszText=(wchar_t*)d->items[i].name.c_str();it.iImage=d->items[i].image;ListView_InsertItem(d->list,&it);}
+        for(size_t i=0;i<d->items.size();++i) {LVITEMW it{};
+            it.mask=LVIF_TEXT|LVIF_IMAGE;
+            it.iItem=(int)i;
+            it.pszText=(wchar_t*)d->items[i].name.c_str();
+            it.iImage=d->items[i].image;
+            ListView_InsertItem(d->list,&it);
+            }
         SetTimer(h,1,100,nullptr); return 0;
     }
-    case WM_SIZE: {int w=LOWORD(lp),hh=HIWORD(lp),pad=Px(6); if(d->list) {MoveWindow(d->list,pad,pad,std::max(1,w-2*pad),std::max(1,hh-2*pad),TRUE); ListView_SetColumnWidth(d->list,0,std::max(1,w-2*pad-Px(20)));} return 0;}
-    case WM_PAINT: {PAINTSTRUCT ps{};HDC dc=BeginPaint(h,&ps);RECT r{};GetClientRect(h,&r);HBRUSH br=CreateSolidBrush(PopupChromeColor());FillRect(dc,&r,br);DeleteObject(br);EndPaint(h,&ps);return 0;}
-    case WM_NOTIFY: {auto* nm=(NMHDR*)lp; if(nm && nm->hwndFrom==d->list) {if(nm->code==NM_DBLCLK) {DesktopOpenItem(h,d);return 0;} if(nm->code==LVN_KEYDOWN && ((NMLVKEYDOWN*)lp)->wVKey==VK_RETURN) {DesktopOpenItem(h,d);return 0;} if(nm->code==LVN_KEYDOWN && ((NMLVKEYDOWN*)lp)->wVKey==VK_ESCAPE) {DestroyWindow(h);return 0;}} break;}
+    case WM_SIZE: {int w=LOWORD(lp),hh=HIWORD(lp),pad=Px(6);
+         if(d->list) {MoveWindow(d->list,pad,pad,std::max(1,w-2*pad),std::max(1,hh-2*pad),TRUE);
+         ListView_SetColumnWidth(d->list,0,std::max(1,w-2*pad-Px(20)));
+        } return 0;
+        }
+    case WM_PAINT: {PAINTSTRUCT ps{};
+        HDC dc=BeginPaint(h,&ps);
+        RECT r{};
+        GetClientRect(h,&r);
+        HBRUSH br=CreateSolidBrush(PopupChromeColor());
+        FillRect(dc,&r,br);
+        DeleteObject(br);
+        EndPaint(h,&ps);
+        return 0;
+        }
+    case WM_NOTIFY: {auto* nm=(NMHDR*)lp;
+         if(nm && nm->hwndFrom==d->list) {if(nm->code==NM_DBLCLK) {DesktopOpenItem(h,d);
+        return 0;
+        } if(nm->code==LVN_KEYDOWN && ((NMLVKEYDOWN*)lp)->wVKey==VK_RETURN) {DesktopOpenItem(h,d);
+        return 0;
+        } if(nm->code==LVN_KEYDOWN && ((NMLVKEYDOWN*)lp)->wVKey==VK_ESCAPE) {DestroyWindow(h);
+        return 0;
+        }} break;
+        }
     case WM_KEYDOWN: if(wp==VK_ESCAPE) {DestroyWindow(h);return 0;} break;
     case WM_ACTIVATE: if(LOWORD(wp)==WA_INACTIVE && IsWindowVisible(h)) {DestroyWindow(h);return 0;} break;
-    case WM_TIMER: if(wp==1) {if(GetAsyncKeyState(VK_LBUTTON)&0x8000 || GetAsyncKeyState(VK_RBUTTON)&0x8000) {POINT p{};RECT r{};GetCursorPos(&p);GetWindowRect(h,&r);if(!PtInRect(&r,p)) {DestroyWindow(h);return 0;}} return 0;}break;
-    case WM_NCDESTROY: KillTimer(h,1);if(s && s->desktopPopup==h) s->desktopPopup=nullptr;SetWindowLongPtrW(h,GWLP_USERDATA,0);if(d->windowOwns) delete d;return DefWindowProcW(h,msg,wp,lp);
+    case WM_TIMER: if(wp==1) {if(GetAsyncKeyState(VK_LBUTTON)&0x8000 || GetAsyncKeyState(VK_RBUTTON)&0x8000) {POINT p{};
+        RECT r{};
+        GetCursorPos(&p);
+        GetWindowRect(h,&r);
+        if(!PtInRect(&r,p)) {DestroyWindow(h);
+        return 0;
+        }} return 0;
+        }break;
+    case WM_NCDESTROY: KillTimer(h,1);
+        if(s && s->desktopPopup==h) s->desktopPopup=nullptr;
+        SetWindowLongPtrW(h,GWLP_USERDATA,0);
+        if(d->windowOwns) delete d;
+        return DefWindowProcW(h,msg,wp,lp);
     }
     return DefWindowProcW(h,msg,wp,lp);
     } catch(const std::bad_alloc&) {Wh_Log(L"[T81-DIAG] Desktop callback allocation failed");if(msg==WM_CREATE) return -1;if(msg!=WM_NCDESTROY) DestroyWindow(h);return 0;}
       catch(...) {Wh_Log(L"[T81-DIAG] Desktop callback C++ exception");if(msg==WM_CREATE) return -1;if(msg!=WM_NCDESTROY) DestroyWindow(h);return 0;}
 }
-static void DestroyDesktopPopup() {CloseDesktopPopup();if(s && s->desktopPopupClass) {UnregisterClassW(kDesktopPopupClass,GetModuleHandleW(nullptr));s->desktopPopupClass=false;}}
+static void DestroyDesktopPopup() {CloseDesktopPopup();
+    if(s && s->desktopPopupClass) {UnregisterClassW(kDesktopPopupClass,GetModuleHandleW(nullptr));
+    s->desktopPopupClass=false;
+    }}
 static void ShowDesktopBandPopup() {
     if(!s || !s->bar) return;
     if(s->desktopPopup && IsWindow(s->desktopPopup)) {CloseDesktopPopup();return;}
     Wh_Log(L"[T81-DIAG] Desktop namespace enumeration begin");
     auto d=std::make_unique<DesktopPopupData>(); IShellFolder* folderRaw=nullptr;
-    HRESULT hr=SHGetDesktopFolder(&folderRaw); std::unique_ptr<IShellFolder,ReleaseCom<IShellFolder>> folder(folderRaw); if(FAILED(hr) || !folder) {Wh_Log(L"[T81-DIAG] Desktop namespace failed hr=%08lx",(unsigned long)hr);return;}
+    HRESULT hr=SHGetDesktopFolder(&folderRaw);
+         std::unique_ptr<IShellFolder,ReleaseCom<IShellFolder>> folder(folderRaw);
+         if(FAILED(hr) || !folder) {Wh_Log(L"[T81-DIAG] Desktop namespace failed hr=%08lx",(unsigned long)hr);
+        return;
+        }
     IEnumIDList* enumRaw=nullptr; hr=folder->EnumObjects(s->bar,(SHCONTF)(SHCONTF_FOLDERS|SHCONTF_NONFOLDERS),&enumRaw);
     std::unique_ptr<IEnumIDList,ReleaseCom<IEnumIDList>> e(enumRaw);
     if(SUCCEEDED(hr) && e) {
@@ -8106,8 +8199,16 @@ static void ShowDesktopBandPopup() {
     Wh_Log(L"[T81-DIAG] Desktop namespace enumeration hr=%08lx items=%u",(unsigned long)hr,(unsigned)d->items.size());
     if(FAILED(hr)) return;
     INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES}; InitCommonControlsEx(&controls);
-    WNDCLASSW wc{};wc.hInstance=GetModuleHandleW(nullptr);wc.lpfnWndProc=DesktopPopupProc;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.lpszClassName=kDesktopPopupClass;
-    if(!s->desktopPopupClass) {if(!RegisterClassW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return;WNDCLASSW existing{};if(!GetClassInfoW(wc.hInstance,kDesktopPopupClass,&existing) || existing.lpfnWndProc!=DesktopPopupProc)return;s->desktopPopupClass=true;}
+    WNDCLASSW wc{};
+        wc.hInstance=GetModuleHandleW(nullptr);
+        wc.lpfnWndProc=DesktopPopupProc;
+        wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+        wc.lpszClassName=kDesktopPopupClass;
+    if(!s->desktopPopupClass) {if(!RegisterClassW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return;
+        WNDCLASSW existing{};
+        if(!GetClassInfoW(wc.hInstance,kDesktopPopupClass,&existing) || existing.lpfnWndProc!=DesktopPopupProc)return;
+        s->desktopPopupClass=true;
+        }
     RECT client{},bar{};GetClientRect(s->bar,&client);GetWindowRect(s->bar,&bar);Layout layout=GetLayout(client.right,client.bottom);
     MONITORINFO mi{};mi.cbSize=sizeof(mi);if(!GetMonitorInfoW(MonitorFromWindow(s->bar,MONITOR_DEFAULTTONEAREST),&mi)) return;
     int width=std::min(Px(290),(int)(mi.rcWork.right-mi.rcWork.left));
@@ -8139,7 +8240,9 @@ static void ShowBandPopup(int which) {
             std::unique_ptr<wchar_t,FreeCoTask> pathGuard(path);
             std::wstring prefix=std::wstring(path)+L"\\"; WIN32_FIND_DATAW fd{};
             HANDLE f=FindFirstFileW((prefix+L"*").c_str(),&fd);
-            if(f!=INVALID_HANDLE_VALUE) { ScopedFind findGuard(f); do { if(items.size()>=60) break; if(fd.cFileName[0]==L'.' || ((fd.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))==(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))) continue;
+            if(f!=INVALID_HANDLE_VALUE) { ScopedFind findGuard(f);
+                 do { if(items.size()>=60) break;
+                 if(fd.cFileName[0]==L'.' || ((fd.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))==(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))) continue;
                 SHFILEINFOW info{}; std::wstring full=prefix+fd.cFileName; SHGetFileInfoW(full.c_str(),0,&info,sizeof(info),SHGFI_DISPLAYNAME);
                 items.push_back({info.szDisplayName[0]?info.szDisplayName:fd.cFileName,full,(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)!=0}); } while(FindNextFileW(f,&fd)); }
         } else { if(path) CoTaskMemFree(path); (void)dir; }
@@ -8151,11 +8254,21 @@ static void ShowBandPopup(int which) {
     auto addBitmap=[&](HMENU m,UINT pos,const std::wstring& path) {
         SHFILEINFOW info{}; if(!SHGetFileInfoW(path.c_str(),0,&info,sizeof(info),SHGFI_ICON|SHGFI_SMALLICON) || !info.hIcon) return;
         std::unique_ptr<std::remove_pointer<HICON>::type,DestroyIconHandle> iconGuard(info.hIcon);
-        int size=Px(16); BITMAPINFO bi{}; bi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER); bi.bmiHeader.biWidth=size; bi.bmiHeader.biHeight=-size; bi.bmiHeader.biPlanes=1; bi.bmiHeader.biBitCount=32; bi.bmiHeader.biCompression=BI_RGB;
+        int size=Px(16);
+             BITMAPINFO bi{};
+             bi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+             bi.bmiHeader.biWidth=size;
+             bi.bmiHeader.biHeight=-size;
+             bi.bmiHeader.biPlanes=1;
+             bi.bmiHeader.biBitCount=32;
+             bi.bmiHeader.biCompression=BI_RGB;
         std::unique_ptr<std::remove_pointer<HDC>::type,DeleteMemDC> dc(CreateCompatibleDC(nullptr)); void* pixels=nullptr;
         std::unique_ptr<std::remove_pointer<HBITMAP>::type,DeleteBitmapHandle> bmp(dc?CreateDIBSection(dc.get(),&bi,DIB_RGB_COLORS,&pixels,nullptr,0):nullptr);
         if(!bmp || !pixels) return;
-        memset(pixels,0,(size_t)size*size*4); HGDIOBJ old=SelectObject(dc.get(),bmp.get()); DrawIconEx(dc.get(),0,0,info.hIcon,size,size,0,nullptr,DI_NORMAL); if(old) SelectObject(dc.get(),old);
+        memset(pixels,0,(size_t)size*size*4);
+             HGDIOBJ old=SelectObject(dc.get(),bmp.get());
+             DrawIconEx(dc.get(),0,0,info.hIcon,size,size,0,nullptr,DI_NORMAL);
+             if(old) SelectObject(dc.get(),old);
         bitmaps.values.push_back(bmp.get()); [[maybe_unused]] auto transferred_bmp=bmp.release();
         MENUITEMINFOW mi{}; mi.cbSize=sizeof(mi); mi.fMask=MIIM_BITMAP; mi.hbmpItem=bitmaps.values.back();
         SetMenuItemInfoW(m,pos,TRUE,&mi);
@@ -8171,9 +8284,14 @@ static void ShowBandPopup(int which) {
             if(sub) {
                 targets.push_back(item.path); UINT open=(UINT)targets.size(); AppendMenuW(sub,MF_STRING,open,Tr(L"Apri cartella",L"Open folder")); AppendMenuW(sub,MF_SEPARATOR,0,nullptr);
                 std::vector<BandEntry> children; WIN32_FIND_DATAW fd{}; HANDLE f=FindFirstFileW((item.path+L"\\*").c_str(),&fd);
-                if(f!=INVALID_HANDLE_VALUE) { ScopedFind findGuard(f); do { if(children.size()>=60) break; if(!wcscmp(fd.cFileName,L".")||!wcscmp(fd.cFileName,L"..")||((fd.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))==(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))) continue;
+                if(f!=INVALID_HANDLE_VALUE) { ScopedFind findGuard(f);
+                     do { if(children.size()>=60) break;
+                     if(!wcscmp(fd.cFileName,L".")||!wcscmp(fd.cFileName,L"..")||((fd.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))==(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))) continue;
                     std::wstring path=item.path+L"\\"+fd.cFileName; SHFILEINFOW info{}; SHGetFileInfoW(path.c_str(),0,&info,sizeof(info),SHGFI_DISPLAYNAME);
-                    std::wstring label=info.szDisplayName[0]?info.szDisplayName:fd.cFileName; if(label.size()>100) label.resize(100); for(auto& c:label) if(c<L' ') c=L' '; children.push_back({label,path,(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)!=0});
+                    std::wstring label=info.szDisplayName[0]?info.szDisplayName:fd.cFileName;
+                         if(label.size()>100) label.resize(100);
+                         for(auto& c:label) if(c<L' ') c=L' ';
+                         children.push_back({label,path,(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)!=0});
                 } while(FindNextFileW(f,&fd)); }
                 std::sort(children.begin(),children.end(),bandLess);
                 appendEntries(sub,children,depth+1);
@@ -8186,12 +8304,20 @@ static void ShowBandPopup(int which) {
     appendEntries(menu,items,0);
     if(items.empty()) AppendMenuW(menu,MF_STRING|MF_GRAYED,0,Tr(L"Nessun elemento",L"No items"));
     POINT pt{}; GetCursorPos(&pt); HWND owner=w7t::GetMenuOwnerWindow();
-    UINT cmd=0; if(owner) { w7t::ForegroundMenuScope scope(owner); cmd=TrackPopupMenuEx(menu,TPM_RETURNCMD|TPM_NONOTIFY|TPM_RIGHTBUTTON,pt.x,pt.y,owner,nullptr); }
+    UINT cmd=0;
+         if(owner) { w7t::ForegroundMenuScope scope(owner);
+         cmd=TrackPopupMenuEx(menu,TPM_RETURNCMD|TPM_NONOTIFY|TPM_RIGHTBUTTON,pt.x,pt.y,owner,nullptr);
+         }
     menuGuard.reset();
     if(cmd && cmd<=targets.size()) ShellExecuteW(s->bar,L"open",targets[cmd-1].c_str(),nullptr,nullptr,SW_SHOWNORMAL);
 }
 static void SaveBands() { BuildGroups(); Wh_SetStringValue(L"Taskbar81.Bands",(std::wstring(s->linksBand?L"1":L"0")+(s->desktopBand?L"1":L"0")+(s->addressBand?L"1":L"0")).c_str()); }
-static void LoadBands() { wchar_t value[8]={}; size_t n=Wh_GetStringValue(L"Taskbar81.Bands",value,8); if(n>=2) { s->linksBand=value[0]==L'1'; s->desktopBand=value[1]==L'1'; s->addressBand=n>=3 && value[2]==L'1'; }
+static void LoadBands() { wchar_t value[8]={};
+     size_t n=Wh_GetStringValue(L"Taskbar81.Bands",value,8);
+     if(n>=2) { s->linksBand=value[0]==L'1';
+     s->desktopBand=value[1]==L'1';
+     s->addressBand=n>=3 && value[2]==L'1';
+     }
     wchar_t lock[4]={};if(Wh_GetStringValue(L"Taskbar81.BandsLocked",lock,4)==1)s->bandsLocked=lock[0]!=L'0';
     wchar_t edge[4]={};if(Wh_GetStringValue(L"Taskbar81.PlacementEdge",edge,4)==1 && (edge[0]==L'1' || edge[0]==L'2' || (taskbarPlacementMode.load()==3 && (edge[0]==L'3' || edge[0]==L'4'))))s->barEdgeOverride=edge[0]-L'0';
     wchar_t order[8]={};if(Wh_GetStringValue(L"Taskbar81.BandOrder",order,8)==3 && order[0]>=L'0' && order[0]<=L'2' && order[1]>=L'0' && order[1]<=L'2' && order[2]>=L'0' && order[2]<=L'2' && order[0]!=order[1] && order[0]!=order[2] && order[1]!=order[2]) for(int i=0;i<3;i++)s->bandOrder[i]=order[i]-L'0';
@@ -8240,11 +8366,20 @@ static LRESULT AddressHostProcImpl(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         s->addressFontDpi=Dpi();
         s->addressFont=CreateFontW(-MulDiv(9,s->addressFontDpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI");
         if(s->addressFont) SendMessageW(s->addressEdit,WM_SETFONT,(WPARAM)s->addressFont,TRUE);
-        if(!SetWindowSubclass(s->addressEdit,AddressEditSubclass,1,0)) { DestroyWindow(s->addressEdit); s->addressEdit=nullptr; if(s->addressFont) {DeleteObject(s->addressFont);s->addressFont=nullptr;} return -1; }
+        if(!SetWindowSubclass(s->addressEdit,AddressEditSubclass,1,0)) { DestroyWindow(s->addressEdit);
+             s->addressEdit=nullptr;
+             if(s->addressFont) {DeleteObject(s->addressFont);
+            s->addressFont=nullptr;
+            } return -1;
+             }
         return 0;
     }
     case WM_SIZE: if(s->addressEdit) MoveWindow(s->addressEdit,0,0,LOWORD(lp),HIWORD(lp),TRUE); return 0;
-    case WM_NCDESTROY: s->addressEdit=nullptr; if(s->addressHost==h) s->addressHost=nullptr; if(s->addressFont) {DeleteObject(s->addressFont);s->addressFont=nullptr;} break;
+    case WM_NCDESTROY: s->addressEdit=nullptr;
+         if(s->addressHost==h) s->addressHost=nullptr;
+         if(s->addressFont) {DeleteObject(s->addressFont);
+        s->addressFont=nullptr;
+        } break;
     }
     return DefWindowProcW(h,msg,wp,lp);
 }
@@ -8270,7 +8405,11 @@ static void UpdateAddressBand() {
         return;
     }
     if(!s->addressClass) {
-        WNDCLASSW wc{}; wc.lpfnWndProc=AddressHostProc; wc.hInstance=GetModuleHandleW(nullptr); wc.hCursor=LoadCursorW(nullptr,IDC_ARROW); wc.lpszClassName=kAddressClass;
+        WNDCLASSW wc{};
+             wc.lpfnWndProc=AddressHostProc;
+             wc.hInstance=GetModuleHandleW(nullptr);
+             wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+             wc.lpszClassName=kAddressClass;
         if(!RegisterClassW(&wc)) { Wh_Log(L"[T81-DIAG] address window registration failed=%lu",GetLastError()); return; }
         s->addressClass=true;
     }
@@ -8282,7 +8421,11 @@ static void UpdateAddressBand() {
     }
     if(s->addressEdit && s->addressFontDpi!=Dpi()) {
         int dpi=Dpi(); HFONT font=CreateFontW(-MulDiv(9,dpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-        if(font) {SendMessageW(s->addressEdit,WM_SETFONT,(WPARAM)font,TRUE); if(s->addressFont) DeleteObject(s->addressFont); s->addressFont=font; s->addressFontDpi=dpi;}
+        if(font) {SendMessageW(s->addressEdit,WM_SETFONT,(WPARAM)font,TRUE);
+             if(s->addressFont) DeleteObject(s->addressFont);
+             s->addressFont=font;
+             s->addressFontDpi=dpi;
+            }
     }
     RECT r=s->verticalActive ? RECT{area.left+Px(2),area.top+Px(1),area.right-Px(2),area.bottom-Px(1)} :
         RECT{l.addressBand.left+Px(66),std::max(0,(int)(cr.bottom-Px(24))/2),l.addressBand.right-Px(3),std::min((int)cr.bottom,(int)(cr.bottom+Px(24))/2)};
@@ -8454,7 +8597,10 @@ static void QueueActionFlyoutPosition(int index,POINT screen) {
 static RECT PrivateSystemAnchor(int hit) {
     RECT r{};if(!s || !s->bar)return r;
     if(hit!=HIT_CLOCK && OverflowIconScreenRect(SystemEntry(hit),&r))return r;
-    if(hit==HIT_CLOCK) {RECT client{};GetClientRect(s->bar,&client);r=s->verticalActive?GetVerticalLayout(client.right,client.bottom).clock:GetLayout(client.right,client.bottom).clock;}
+    if(hit==HIT_CLOCK) {RECT client{};
+        GetClientRect(s->bar,&client);
+        r=s->verticalActive?GetVerticalLayout(client.right,client.bottom).clock:GetLayout(client.right,client.bottom).clock;
+        }
     else r=SystemCell(hit);
     if(!IsRectEmpty(&r))MapWindowPoints(s->bar,nullptr,(POINT*)&r,2);
     return r;
@@ -9462,7 +9608,11 @@ static LRESULT CALLBACK LanguageFlyoutProc(HWND hwnd,UINT message,WPARAM wp,LPAR
         }
     } catch(...) {
         Wh_Log(L"[T81-RECOVERY] language flyout C++ exception");
-        if(showRecoverableErrors.load()) {try {HideLanguageFlyout();RECT bar{};if(s && s->bar && GetWindowRect(s->bar,&bar))ShowInfoTooltip(Tr(L"Errore recuperabile nel flyout lingua. Controlla il log Windhawk.",L"Recoverable language flyout error. Check the Windhawk log."),(bar.left+bar.right)/2);if(s && s->tooltip && IsWindowVisible(s->tooltip))s->recoveryTooltipUntil=GetTickCount64()+5000;} catch(...) {}}
+        if(showRecoverableErrors.load()) {try {HideLanguageFlyout();
+            RECT bar{};
+            if(s && s->bar && GetWindowRect(s->bar,&bar))ShowInfoTooltip(Tr(L"Errore recuperabile nel flyout lingua. Controlla il log Windhawk.",L"Recoverable language flyout error. Check the Windhawk log."),(bar.left+bar.right)/2);
+            if(s && s->tooltip && IsWindowVisible(s->tooltip))s->recoveryTooltipUntil=GetTickCount64()+5000;
+            } catch(...) {}}
     }
     return DefWindowProcW(hwnd,message,wp,lp);
 }
@@ -9569,7 +9719,10 @@ static void LaunchSystemTrayHit(int hit,const POINT* click) {
         if(!RequestWin7NetworkFlyout() && !RequestWin8NetworkFlyout() && !RequestNativeWin8NetworkFlyout()) OpenNetworkConnectionInterface(s->bar);
     } else if(hit==HIT_BATTERY) {
         if(!TryOriginalBatteryFlyout1511()) {
-            RECT cell{};if(!OverflowIconScreenRect(SystemEntry(HIT_BATTERY),&cell)) {cell=SystemCell(HIT_BATTERY);MapWindowPoints(s->bar,nullptr,(POINT*)&cell,2);}
+            RECT cell{};
+                if(!OverflowIconScreenRect(SystemEntry(HIT_BATTERY),&cell)) {cell=SystemCell(HIT_BATTERY);
+                MapWindowPoints(s->bar,nullptr,(POINT*)&cell,2);
+                }
             if(useOriginalBatteryFlyout.load()) {
                 Wh_Log(L"[T81-DIAG] original battery flyout unavailable; requesting Settings fallback");
                 ShowInfoTooltip(Tr(L"Flyout batteria non disponibile: apro Impostazioni. Controlla il log Windhawk.",L"Battery flyout unavailable: opening Settings. Check the Windhawk log."),(cell.left+cell.right)/2);
@@ -10094,7 +10247,10 @@ static void DrawBarForeground(HDC mem,const Layout& L,int w,int h,
             const bool running=!s->groups[i].tasks.empty();
             const float fade=GroupHoverFade(i);
             RECT cell{x,0,x+L.width,h};const auto* transition=LiveButtonTransition(s->groups[i].key);
-            auto savedClip=g.Save();if(transition && transition->reveal) {RECT clip=ButtonRevealRect(cell,ButtonTransitionFraction(*transition),false);g.SetClip(Rect(clip.left,clip.top,clip.right-clip.left,clip.bottom-clip.top),CombineModeIntersect);}
+            auto savedClip=g.Save();
+                if(transition && transition->reveal) {RECT clip=ButtonRevealRect(cell,ButtonTransitionFraction(*transition),false);
+                g.SetClip(Rect(clip.left,clip.top,clip.right-clip.left,clip.bottom-clip.top),CombineModeIntersect);
+                }
             // Closed pins have no tile, unless hovered.
             int layers=TaskTileLayers(s->groups[i].tasks.size());
             int step=std::max(1,Px(3));RECT front=cell;
@@ -10167,9 +10323,14 @@ static void DrawBarForeground(HDC mem,const Layout& L,int w,int h,
         DrawIconEx(mem,ix,(h-icon)/2,GroupIcon(i),icon,icon,0,nullptr,DI_NORMAL);
     }
     HFONT font=CreateTaskbarFont(Dpi(),s->perPixelBar);
-    std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> fontGuard(font); ScopedSelection fontSelection(mem,font); SetTextColor(mem,RGB(255,255,255)); SetBkMode(mem,TRANSPARENT);
+    std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> fontGuard(font);
+         ScopedSelection fontSelection(mem,font);
+         SetTextColor(mem,RGB(255,255,255));
+         SetBkMode(mem,TRANSPARENT);
     if(L.labels) for(const auto& ghost:s->buttonTransitions)if(ValidGhost(ghost,w,h,false)) {
-        RECT c=ButtonRevealRect(ghost.rect,1.f-ButtonTransitionFraction(ghost),false);ScopedSavedDC clip(mem);IntersectClipRect(mem,c.left,c.top,c.right,c.bottom);
+        RECT c=ButtonRevealRect(ghost.rect,1.f-ButtonTransitionFraction(ghost),false);
+            ScopedSavedDC clip(mem);
+            IntersectClipRect(mem,c.left,c.top,c.right,c.bottom);
         RECT label{ghost.rect.left+Px(10)+icon+Px(6),1,ghost.rect.right-Px(4),h-1};
         DrawTextW(mem,ghost.title.c_str(),-1,&label,DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
     }
@@ -10192,7 +10353,10 @@ static void DrawBarForeground(HDC mem,const Layout& L,int w,int h,
         ClockTextRows rows=GetClockTextRows(L.clock,h,Dpi());
         Graphics clockGraphics(mem); clockGraphics.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
         FontFamily family(L"Segoe UI"); Gdiplus::Font clockFont(&family,(REAL)(9.0*Dpi()/72.0),FontStyleRegular,UnitPixel);
-        StringFormat format; format.SetAlignment(StringAlignmentCenter); format.SetLineAlignment(StringAlignmentCenter); format.SetFormatFlags(StringFormatFlagsNoWrap);
+        StringFormat format;
+             format.SetAlignment(StringAlignmentCenter);
+             format.SetLineAlignment(StringAlignmentCenter);
+             format.SetFormatFlags(StringFormatFlagsNoWrap);
         SolidBrush white(Color(255,255,255,255));
         auto clockRow=[&](const wchar_t* text,const RECT& row) {
             RectF rect((REAL)row.left,(REAL)row.top,(REAL)(row.right-row.left),(REAL)(row.bottom-row.top));
@@ -10215,7 +10379,10 @@ static void DrawBarForeground(HDC mem,const Layout& L,int w,int h,
             }
         }
     }
-    if(s->addressBand && L.addressBand.right>L.addressBand.left) { RECT label=L.addressBand; label.right=label.left+Px(66); DrawTextW(mem,Tr(L"Indirizzo",L"Address"),-1,&label,DT_VCENTER|DT_CENTER|DT_SINGLELINE|DT_NOPREFIX); }
+    if(s->addressBand && L.addressBand.right>L.addressBand.left) { RECT label=L.addressBand;
+         label.right=label.left+Px(66);
+         DrawTextW(mem,Tr(L"Indirizzo",L"Address"),-1,&label,DT_VCENTER|DT_CENTER|DT_SINGLELINE|DT_NOPREFIX);
+         }
     auto drawBand=[&](RECT band,const wchar_t* title) {
         RECT arrow=BandArrowRect(band); band.right=arrow.left;
         DrawTextW(mem,title,-1,&band,DT_VCENTER|DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
@@ -10599,11 +10766,17 @@ LRESULT CALLBACK PreviewProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         if(!s) return DefWindowProcW(h,msg,wp,lp);
         switch(msg) {
 #ifdef TASKBAR81_TEST
-        case WM_APP+940: {if(s->previews.empty())return 0;RECT r=PreviewCloseButtonRect(s->previews[0]);return MAKELPARAM((r.left+r.right)/2,(r.top+r.bottom)/2);}
+        case WM_APP+940: {if(s->previews.empty())return 0;
+            RECT r=PreviewCloseButtonRect(s->previews[0]);
+            return MAKELPARAM((r.left+r.right)/2,(r.top+r.bottom)/2);
+            }
         case WM_APP+941: {if(s->previews.empty())return 0;RECT r=s->previews[0].cell;return MAKELPARAM((r.left+r.right)/2,r.top+Px(10));}
         case WM_APP+942: return (s->previewClosePress?1:0)|(s->previewCloseHot?2:0)|(GetCapture()==h?4:0);
         case WM_APP+943: return s->perPixelPreview && s->previewPixelFrame?1:0;
-        case WM_APP+944: {for(const auto& item:s->previews)if(item.hwnd==(HWND)wp && !item.more) {RECT r=PreviewCloseButtonRect(item);return MAKELPARAM((r.left+r.right)/2,(r.top+r.bottom)/2);}return 0;}
+        case WM_APP+944: {for(const auto& item:s->previews)if(item.hwnd==(HWND)wp && !item.more) {RECT r=PreviewCloseButtonRect(item);
+            return MAKELPARAM((r.left+r.right)/2,(r.top+r.bottom)/2);
+            }return 0;
+            }
 #endif
         case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
         case WM_ERASEBKGND: return 1;
@@ -10618,7 +10791,11 @@ LRESULT CALLBACK PreviewProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
             return 0;
         }
         case WM_MOUSEMOVE: {
-            if(s->previewAnimClosing) {KillTimer(h,TIMER_PREVIEW_ANIM);s->previewAnimClosing=false;SetWindowPos(h,nullptr,s->previewAnimX,s->previewAnimY,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER);SetTimer(s->bar,TIMER_PREVIEW,350,nullptr);}
+            if(s->previewAnimClosing) {KillTimer(h,TIMER_PREVIEW_ANIM);
+                s->previewAnimClosing=false;
+                SetWindowPos(h,nullptr,s->previewAnimX,s->previewAnimY,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER);
+                SetTimer(s->bar,TIMER_PREVIEW,350,nullptr);
+                }
             if(!s->previewTracking) {
                 TRACKMOUSEEVENT track{sizeof(track),TME_LEAVE,h,0};
                 TrackMouseEvent(&track);
@@ -10760,7 +10937,10 @@ LRESULT CALLBACK PreviewProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
     } catch(...) {
         Wh_Log(L"[T81-RECOVERY] C++ exception in preview window; closing thumbnails");
         HidePreview();
-        if(showRecoverableErrors.load()) {try {RECT bar{};if(s && s->bar && GetWindowRect(s->bar,&bar))ShowInfoTooltip(Tr(L"Errore recuperabile nell'anteprima. Controlla il log Windhawk.",L"Recoverable preview error. Check the Windhawk log."),(bar.left+bar.right)/2);if(s && s->tooltip && IsWindowVisible(s->tooltip))s->recoveryTooltipUntil=GetTickCount64()+5000;} catch(...) {}}
+        if(showRecoverableErrors.load()) {try {RECT bar{};
+            if(s && s->bar && GetWindowRect(s->bar,&bar))ShowInfoTooltip(Tr(L"Errore recuperabile nell'anteprima. Controlla il log Windhawk.",L"Recoverable preview error. Check the Windhawk log."),(bar.left+bar.right)/2);
+            if(s && s->tooltip && IsWindowVisible(s->tooltip))s->recoveryTooltipUntil=GetTickCount64()+5000;
+            } catch(...) {}}
         return 0;
     }
 }
@@ -10784,11 +10964,17 @@ static LRESULT PinTooltipProcImpl(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             Pen frame(Color(255,55,44,70),1);g.DrawRectangle(&frame,0,0,92,74);
             const int xs[]={10,30,50,60,78}, widths[]={18,18,8,8,12};
             const int colors[4][5]={{0x0066AE,0x2973D9,0x008B46,0x008B99,0xB04408},{0xE05214,0x00A0AD,0x057825,0x4E790D,0x006D96},{0x094BA3,0x7B28A6,0x0A75A9,0xCE4B10,0x31A629},{0xA12E95,0x0073BA,0x672A99,0x006D99,0xAE4112}};
-            for(int y=0;y<4;y++)for(int x=0;x<5;x++){int c=colors[y][x];SolidBrush tile(Color(255,(c>>16)&255,(c>>8)&255,c&255));g.FillRectangle(&tile,xs[x],21+y*10,widths[x],8);}
+            for(int y=0;y<4;y++)for(int x=0;x<5;x++){int c=colors[y][x];
+                SolidBrush tile(Color(255,(c>>16)&255,(c>>8)&255,c&255));
+                g.FillRectangle(&tile,xs[x],21+y*10,widths[x],8);
+                }
             g.Flush(FlushIntentionSync);}
             SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(255,255,255));
             std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> font(CreateFontW(-Px(11),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI"));
-            {ScopedSelection selected(dc,font.get());RECT label{Px(10),Px(5),r.right-Px(4),Px(20)};DrawTextW(dc,L"Start",-1,&label,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_NOPREFIX);}
+            {ScopedSelection selected(dc,font.get());
+                RECT label{Px(10),Px(5),r.right-Px(4),Px(20)};
+                DrawTextW(dc,L"Start",-1,&label,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_NOPREFIX);
+                }
             return 0;
         }
         HBRUSH brush=CreateSolidBrush(RGB(250,250,250));
@@ -11845,7 +12031,10 @@ static void ReserveVerticalAppbar(RECT& desired,const MONITORINFO& mi,int side) 
     UINT_PTR queryResult=t81AppBarMessage(ABM_QUERYPOS,&abd);
     RECT queried=abd.rc;
     if(edge==ABE_LEFT)abd.rc.right=abd.rc.left+width;else abd.rc.left=abd.rc.right-width;
-    if(s->appbarEdge==edge && EqualRect(&desired,&s->appbarDesired) && EqualRect(&abd.rc,&s->appbarApproved)) {s->appbarDirty=false;desired=s->appbarApproved;return;}
+    if(s->appbarEdge==edge && EqualRect(&desired,&s->appbarDesired) && EqualRect(&abd.rc,&s->appbarApproved)) {s->appbarDirty=false;
+        desired=s->appbarApproved;
+        return;
+        }
     bool validQuery=ValidVerticalAppbar(abd.rc,mi.rcMonitor,width);
     UINT_PTR setResult=validQuery?t81AppBarMessage(ABM_SETPOS,&abd):0;
     bool validSet=setResult && ValidVerticalAppbar(abd.rc,mi.rcMonitor,width);
@@ -12335,7 +12524,10 @@ static bool IsOwnedModPin(const std::wstring& path) {
 static bool CreateModPin(IShellItem* item,const std::wstring& explicitId={},const std::wstring& displayName={}) {
     ModPinCandidate c;if(!InspectModPin(item,c))return false;
     if(!displayName.empty()) {c.name=displayName;if(c.name.size()>4 && !_wcsicmp(c.name.c_str()+c.name.size()-4,L".lnk"))c.name.resize(c.name.size()-4);}
-    if(!explicitId.empty() && !c.shortcut) {c.appId=explicitId;c.identity=explicitId;std::transform(c.identity.begin(),c.identity.end(),c.identity.begin(),[](wchar_t x){return (wchar_t)towlower(x);});}
+    if(!explicitId.empty() && !c.shortcut) {c.appId=explicitId;
+        c.identity=explicitId;
+        std::transform(c.identity.begin(),c.identity.end(),c.identity.begin(),[](wchar_t x){return (wchar_t)towlower(x);});
+        }
     std::wstring dir=w7t::ModPinsFolder();if(dir.empty())return false;
     std::vector<w7t::PinnedApp> existing;std::vector<std::wstring> seen;w7t::CollectFolder(dir,existing,seen,true);
     std::wstring key=(c.appId.empty()?L"exe:":L"app:")+c.identity;
@@ -12520,7 +12712,12 @@ static constexpr char kJumpClose32[] =
     "122MqouAuHDgAIAnARCgZF33vv1f8D0ZxJf0bjW3YAAAAASUVORK5CYII=";
 struct JumpPopupData {
     std::vector<JumpDocument> docs; std::vector<JumpRow> rows;
-    std::vector<HICON> icons; HICON appIcon=nullptr; Image* closeImage=nullptr; IStream* closeStream=nullptr; Image* referenceClose=nullptr; IStream* referenceStream=nullptr;
+    std::vector<HICON> icons;
+         HICON appIcon=nullptr;
+         Image* closeImage=nullptr;
+         IStream* closeStream=nullptr;
+         Image* referenceClose=nullptr;
+         IStream* referenceStream=nullptr;
     Image* referenceVariants[4]={}; IStream* referenceVariantStreams[4]={};
     std::wstring title,launch,activationAppId,pinKey,pinExe,modPinPath; bool pinAction=false,pinnedForMod=false;
     HICON pinIcon=nullptr;
@@ -12529,7 +12726,16 @@ struct JumpPopupData {
     bool betaCloseHot=false,betaCloseDown=false;
     int animX=0,animFinalY=0,animStartOffset=0,animStartOffsetX=0; ULONGLONG animStart=0;
     bool closing=false; int closeX=0,closeY=0,closeOffset=0,closeOffsetX=0; ULONGLONG closeStart=0;
-    ~JumpPopupData() { if(pinIcon)DestroyIcon(pinIcon);for(HICON i:icons) if(i) DestroyIcon(i); if(appIcon) DestroyIcon(appIcon); for(int i=0;i<4;i++){delete referenceVariants[i];if(referenceVariantStreams[i])referenceVariantStreams[i]->Release();} delete referenceClose; if(referenceStream) referenceStream->Release(); delete closeImage; if(closeStream) closeStream->Release(); }
+    ~JumpPopupData() { if(pinIcon)DestroyIcon(pinIcon);
+        for(HICON i:icons) if(i) DestroyIcon(i);
+         if(appIcon) DestroyIcon(appIcon);
+         for(int i=0;i<4;i++){delete referenceVariants[i];
+        if(referenceVariantStreams[i])referenceVariantStreams[i]->Release();
+        } delete referenceClose;
+         if(referenceStream) referenceStream->Release();
+         delete closeImage;
+         if(closeStream) closeStream->Release();
+         }
 };
 static HICON JumpDocumentIcon(IUnknown* object) {
     if(!object) return nullptr; IShellItem* item=nullptr; HICON result=nullptr;
@@ -12624,8 +12830,14 @@ static void ActivateJumpRow(HWND h,JumpPopupData* data,int row) {
         Wh_Log(L"[T81-PIN] menu action success=%d unpin=%d",ok?1:0,pinnedForMod?1:0);
         if(ok)RefreshModPinView();else {RECT rect{};if(owner)GetWindowRect(owner,&rect);ShowInfoTooltip(Tr(L"Impossibile aggiornare il collegamento della mod. Controlla il log Windhawk.",L"Unable to update the mod pin. Check the Windhawk log."),(rect.left+rect.right)/2);}
     }
-    else if(selected.kind==JR_ACTIVATE && !targets.empty()) {DWORD pid=0;GetWindowThreadProcessId(targets.front().first,&pid);if(pid && pid==targets.front().second && IsWindow(targets.front().first))ActivateTask(targets.front().first);}
-    else if(selected.kind==JR_CLOSE) for(auto target:targets) { DWORD pid=0; GetWindowThreadProcessId(target.first,&pid); if(pid && pid==target.second && IsWindow(target.first)) RequestTaskClose(target.first); }
+    else if(selected.kind==JR_ACTIVATE && !targets.empty()) {DWORD pid=0;
+        GetWindowThreadProcessId(targets.front().first,&pid);
+        if(pid && pid==targets.front().second && IsWindow(targets.front().first))ActivateTask(targets.front().first);
+        }
+    else if(selected.kind==JR_CLOSE) for(auto target:targets) { DWORD pid=0;
+         GetWindowThreadProcessId(target.first,&pid);
+         if(pid && pid==target.second && IsWindow(target.first)) RequestTaskClose(target.first);
+         }
 }
 // A decoded image can still fail to render; try the original artwork in
 // both the unavailable and the draw-failure cases before the GDI fallback.
@@ -12676,7 +12888,9 @@ static void PaintJumpPopup(HWND h,JumpPopupData* d) {
         HBRUSH foot=CreateSolidBrush(RGB(245,245,245)); FillRect(dc,&footer,foot); DeleteObject(foot); break;
     }
     HFONT font=CreateFontW(-MulDiv(9,Dpi(),72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> fontGuard(font); ScopedSelection fontSelection(dc,font); SetBkMode(dc,TRANSPARENT);
+    std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> fontGuard(font);
+         ScopedSelection fontSelection(dc,font);
+         SetBkMode(dc,TRANSPARENT);
     if(!d->docs.empty()) {
         RECT head{Px(15)-contentOffset,win7?Px(5):Px(10),client.right-Px(14)+contentOffset,d->headerHeight}; SetTextColor(dc,RGB(24,83,147));
         const wchar_t* heading=d->frequent?Tr(L"Frequenti",L"Frequent"):Tr(L"Recenti",L"Recent");
@@ -12692,7 +12906,13 @@ static void PaintJumpPopup(HWND h,JumpPopupData* d) {
     }
     for(size_t i=0;i<d->rows.size();++i) {
         const auto& row=d->rows[i]; RECT rr=row.rect;
-        if(row.kind==JR_APP) { HPEN sep=CreatePen(PS_SOLID,1,RGB(210,210,210)); HGDIOBJ pen=SelectObject(dc,sep); MoveToEx(dc,Px(7),rr.top,nullptr); LineTo(dc,client.right-Px(7),rr.top); if(pen) SelectObject(dc,pen); DeleteObject(sep); }
+        if(row.kind==JR_APP) { HPEN sep=CreatePen(PS_SOLID,1,RGB(210,210,210));
+             HGDIOBJ pen=SelectObject(dc,sep);
+             MoveToEx(dc,Px(7),rr.top,nullptr);
+             LineTo(dc,client.right-Px(7),rr.top);
+             if(pen) SelectObject(dc,pen);
+             DeleteObject(sep);
+             }
         if((int)i==d->hot) {
             RECT hover=rr; InflateRect(&hover,-Px(3),-Px(1));
             HBRUSH hb=CreateSolidBrush(RGB(222,240,252)); FillRect(dc,&hover,hb); DeleteObject(hb);
@@ -12747,7 +12967,16 @@ static void PaintJumpPopup(HWND h,JumpPopupData* d) {
             Image* primary=JumpClosePrimary(d,style,c);
             Image* fallback=style==1?d->referenceClose:d->closeImage;
             if(style==2 && primary && primary->GetWidth()==(UINT)c && primary->GetHeight()==(UINT)c)gfx.SetInterpolationMode(InterpolationModeNearestNeighbor);
-            if(!DrawJumpCloseImages(gfx,primary,fallback,Px(16)-contentOffset,y,c)) { HPEN p=CreatePen(PS_SOLID,std::max(1,Px(2)),RGB(160,35,35)); HGDIOBJ old=SelectObject(dc,p); int x=Px(18)-contentOffset,y=rr.top+(rr.bottom-rr.top)/2-Px(5); MoveToEx(dc,x,y,nullptr);LineTo(dc,x+Px(10),y+Px(10));MoveToEx(dc,x+Px(10),y,nullptr);LineTo(dc,x,y+Px(10));if(old)SelectObject(dc,old);DeleteObject(p); }
+            if(!DrawJumpCloseImages(gfx,primary,fallback,Px(16)-contentOffset,y,c)) { HPEN p=CreatePen(PS_SOLID,std::max(1,Px(2)),RGB(160,35,35));
+                 HGDIOBJ old=SelectObject(dc,p);
+                 int x=Px(18)-contentOffset,y=rr.top+(rr.bottom-rr.top)/2-Px(5);
+                 MoveToEx(dc,x,y,nullptr);
+                LineTo(dc,x+Px(10),y+Px(10));
+                MoveToEx(dc,x+Px(10),y,nullptr);
+                LineTo(dc,x,y+Px(10));
+                if(old)SelectObject(dc,old);
+                DeleteObject(p);
+                 }
             }
         }
         RECT tr{Px(37)-contentOffset,rr.top,client.right-Px(15)+contentOffset,rr.bottom};
@@ -12765,17 +12994,58 @@ static LRESULT CALLBACK JumpPopupProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         switch(msg) {
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: PaintJumpPopup(h,d); return 0;
-        case WM_NCHITTEST: {LRESULT hit=DefWindowProcW(h,msg,wp,lp);switch(hit) {case HTTOP:case HTTOPRIGHT:case HTRIGHT:case HTBOTTOMRIGHT:case HTBOTTOM:case HTBOTTOMLEFT:case HTLEFT:case HTTOPLEFT:return HTBORDER;default:return hit;}}
-        case WM_MOUSEMOVE: { POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}; int hot=JumpHit(d,p); bool close=BetaJumpCloseHit(d,p); if(hot!=d->hot || close!=d->betaCloseHot) {d->hot=hot;d->betaCloseHot=close;InvalidateRect(h,nullptr,FALSE);} TRACKMOUSEEVENT t{sizeof(t),TME_LEAVE,h,0}; TrackMouseEvent(&t); return 0; }
+        case WM_NCHITTEST: {LRESULT hit=DefWindowProcW(h,msg,wp,lp);
+            switch(hit) {case HTTOP:case HTTOPRIGHT:case HTRIGHT:case HTBOTTOMRIGHT:case HTBOTTOM:case HTBOTTOMLEFT:case HTLEFT:case HTTOPLEFT:return HTBORDER;
+            default:return hit;
+            }}
+        case WM_MOUSEMOVE: { POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
+             int hot=JumpHit(d,p);
+             bool close=BetaJumpCloseHit(d,p);
+             if(hot!=d->hot || close!=d->betaCloseHot) {d->hot=hot;
+            d->betaCloseHot=close;
+            InvalidateRect(h,nullptr,FALSE);
+            } TRACKMOUSEEVENT t{sizeof(t),TME_LEAVE,h,0};
+             TrackMouseEvent(&t);
+             return 0;
+             }
         case WM_MOUSELEAVE: d->hot=-1;d->betaCloseHot=false;InvalidateRect(h,nullptr,FALSE); return 0;
-        case WM_LBUTTONDOWN: {POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};if(BetaJumpCloseHit(d,p)){d->betaCloseDown=true;d->betaCloseHot=true;SetCapture(h);InvalidateRect(h,nullptr,FALSE);return 0;}break;}
-        case WM_CAPTURECHANGED: case WM_CANCELMODE: {if(d->betaCloseDown){d->betaCloseDown=false;d->betaCloseHot=false;InvalidateRect(h,nullptr,FALSE);}break;}
-        case WM_LBUTTONUP: { POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}; if(d->betaCloseDown){bool commit=BetaJumpCloseHit(d,p);d->betaCloseDown=false;if(GetCapture()==h)ReleaseCapture();if(commit)ActivateJumpRow(h,d,JumpHit(d,p));else InvalidateRect(h,nullptr,FALSE);return 0;}ActivateJumpRow(h,d,JumpHit(d,p)); return 0; }
+        case WM_LBUTTONDOWN: {POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
+            if(BetaJumpCloseHit(d,p)){d->betaCloseDown=true;
+            d->betaCloseHot=true;
+            SetCapture(h);
+            InvalidateRect(h,nullptr,FALSE);
+            return 0;
+            }break;
+            }
+        case WM_CAPTURECHANGED: case WM_CANCELMODE: {if(d->betaCloseDown){d->betaCloseDown=false;
+            d->betaCloseHot=false;
+            InvalidateRect(h,nullptr,FALSE);
+            }break;
+            }
+        case WM_LBUTTONUP: { POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
+             if(d->betaCloseDown){bool commit=BetaJumpCloseHit(d,p);
+            d->betaCloseDown=false;
+            if(GetCapture()==h)ReleaseCapture();
+            if(commit)ActivateJumpRow(h,d,JumpHit(d,p));
+            else InvalidateRect(h,nullptr,FALSE);
+            return 0;
+            }ActivateJumpRow(h,d,JumpHit(d,p));
+             return 0;
+             }
         case WM_KEYDOWN:
             if(wp==VK_ESCAPE) {CloseJumpPopup(true);return 0;}
-            if(wp==VK_UP || wp==VK_DOWN) { int n=(int)d->rows.size(); if(n) {int delta=wp==VK_UP?-1:1; d->hot=(d->hot<0?(delta>0?0:n-1):(d->hot+delta+n)%n); InvalidateRect(h,nullptr,FALSE);} return 0; }
+            if(wp==VK_UP || wp==VK_DOWN) { int n=(int)d->rows.size();
+                 if(n) {int delta=wp==VK_UP?-1:1;
+                 d->hot=(d->hot<0?(delta>0?0:n-1):(d->hot+delta+n)%n);
+                 InvalidateRect(h,nullptr,FALSE);
+                } return 0;
+                 }
             if(wp==VK_RETURN) {ActivateJumpRow(h,d,d->hot);return 0;} break;
-        case WM_ACTIVATE: if(LOWORD(wp)==WA_INACTIVE && IsWindowVisible(h)) {if(d->closing) return 0;MarkJumpDismissFromPointer();CloseJumpPopup(true);return 0;} break;
+        case WM_ACTIVATE: if(LOWORD(wp)==WA_INACTIVE && IsWindowVisible(h)) {if(d->closing) return 0;
+            MarkJumpDismissFromPointer();
+            CloseJumpPopup(true);
+            return 0;
+            } break;
         case WM_TIMER: { if(wp==3 && d->closing) {
                 ULONGLONG elapsed=GetTickCount64()-d->closeStart; double t=std::min(1.0,(double)elapsed/100.0);
                 int y=d->closeY+(int)std::lround(d->closeOffset*t*t);
@@ -12792,9 +13062,26 @@ static LRESULT CALLBACK JumpPopupProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
             }
             if(wp!=1) return 0;
             int now=((GetAsyncKeyState(VK_LBUTTON)&0x8000)?1:0)|((GetAsyncKeyState(VK_RBUTTON)&0x8000)?2:0); int fresh=now & ~d->mouseMask; d->mouseMask=now;
-            if(fresh) { POINT p{};RECT r{};GetCursorPos(&p);GetWindowRect(h,&r);if(!PtInRect(&r,p)) {if(d->closing) return 0;MarkJumpDismissFromPointer();CloseJumpPopup(true);return 0;} } return 0; }
+            if(fresh) { POINT p{};
+                RECT r{};
+                GetCursorPos(&p);
+                GetWindowRect(h,&r);
+                if(!PtInRect(&r,p)) {if(d->closing) return 0;
+                MarkJumpDismissFromPointer();
+                CloseJumpPopup(true);
+                return 0;
+                } } return 0;
+                 }
         case WM_CLOSE: DestroyWindow(h); return 0;
-        case WM_NCDESTROY: KillTimer(h,1); KillTimer(h,2); KillTimer(h,3); if(s && s->jumpClosing==h) s->jumpClosing=nullptr; if(s && s->jumpPopup==h) {s->jumpPopup=nullptr;s->jumpGroupKey.clear();} SetWindowLongPtrW(h,GWLP_USERDATA,0); if(d->windowOwns) delete d; return DefWindowProcW(h,msg,wp,lp);
+        case WM_NCDESTROY: KillTimer(h,1);
+             KillTimer(h,2);
+             KillTimer(h,3);
+             if(s && s->jumpClosing==h) s->jumpClosing=nullptr;
+             if(s && s->jumpPopup==h) {s->jumpPopup=nullptr;
+            s->jumpGroupKey.clear();
+            } SetWindowLongPtrW(h,GWLP_USERDATA,0);
+             if(d->windowOwns) delete d;
+             return DefWindowProcW(h,msg,wp,lp);
         }
     } catch(...) { if(msg!=WM_NCDESTROY) DestroyWindow(h); return 0; }
     return DefWindowProcW(h,msg,wp,lp);
@@ -12841,7 +13128,11 @@ static bool ShowJumpList(size_t index,POINT) {
         d->pinnedForMod=true;d->pinAction=true;
         if(IsOwnedModPin(d->launch))d->modPinPath=d->launch;
     }
-    for(auto i:group.tasks) if(i<s->tasks.size()) { const Task& t=s->tasks[i]; d->targets.push_back({t.hwnd,t.pid}); if(d->launch.empty()) d->launch=t.processPath;if(d->pinExe.empty())d->pinExe=t.processPath; }
+    for(auto i:group.tasks) if(i<s->tasks.size()) { const Task& t=s->tasks[i];
+         d->targets.push_back({t.hwnd,t.pid});
+         if(d->launch.empty()) d->launch=t.processPath;
+        if(d->pinExe.empty())d->pinExe=t.processPath;
+         }
     if(group.pin<0 && !group.tasks.empty()) {
         std::wstring app=d->pinKey.rfind(L"app:",0)==0?d->pinKey.substr(4):L"";
         // The synthetic Control Panel group does not identify a launchable app.
@@ -12852,7 +13143,11 @@ static bool ShowJumpList(size_t index,POINT) {
     HICON source=GroupIcon(index); if(source) d->appIcon=CopyIcon(source);
     if(d->pinAction)d->pinIcon=LoadLegacyPinIcon(d->pinnedForMod);
     auto referenceBytes=DecodeBase64(kJumpCloseReferencePng);
-    if(!referenceBytes.empty()) {d->referenceStream=SHCreateMemStream(referenceBytes.data(),(UINT)referenceBytes.size());if(d->referenceStream){d->referenceClose=Image::FromStream(d->referenceStream,FALSE);if(d->referenceClose && d->referenceClose->GetLastStatus()!=Ok){delete d->referenceClose;d->referenceClose=nullptr;}}}
+    if(!referenceBytes.empty()) {d->referenceStream=SHCreateMemStream(referenceBytes.data(),(UINT)referenceBytes.size());
+        if(d->referenceStream){d->referenceClose=Image::FromStream(d->referenceStream,FALSE);
+        if(d->referenceClose && d->referenceClose->GetLastStatus()!=Ok){delete d->referenceClose;
+        d->referenceClose=nullptr;
+        }}}
     const char* variants[]={kJumpClose16,kJumpClose20,kJumpClose24,kJumpClose32};
     for(int i=0;i<4;i++) {
         auto bytes=DecodeBase64(variants[i]);
@@ -12864,7 +13159,11 @@ static bool ShowJumpList(size_t index,POINT) {
         }
     }
     auto closeBytes=DecodeBase64(kJumpClosePng);
-    if(!closeBytes.empty()) { d->closeStream=SHCreateMemStream(closeBytes.data(),(UINT)closeBytes.size()); if(d->closeStream) { d->closeImage=Image::FromStream(d->closeStream,FALSE); if(d->closeImage && d->closeImage->GetLastStatus()!=Ok) {delete d->closeImage; d->closeImage=nullptr;} } }
+    if(!closeBytes.empty()) { d->closeStream=SHCreateMemStream(closeBytes.data(),(UINT)closeBytes.size());
+         if(d->closeStream) { d->closeImage=Image::FromStream(d->closeStream,FALSE);
+         if(d->closeImage && d->closeImage->GetLastStatus()!=Ok) {delete d->closeImage;
+         d->closeImage=nullptr;
+        } } }
     if(!id.empty()) d->docs=ReadJumpDocuments(id,d->frequent);
     RECT client{},bar{}; GetClientRect(s->bar,&client); GetWindowRect(s->bar,&bar); Layout l=GetLayout(client.right,client.bottom);
     RECT button{};
@@ -12882,7 +13181,10 @@ static bool ShowJumpList(size_t index,POINT) {
         d->icons.push_back(icon.get()); [[maybe_unused]] auto transferred_icon=icon.release();
         d->rows.push_back({JR_DOCUMENT,(int)i,{Px(10),y,Px(242),y+Px(22)}}); y+=Px(22);
     }
-    if(!d->launch.empty() || !d->activationAppId.empty()) {if(!win7Jump || !d->docs.empty())y+=Px(4); d->rows.push_back({JR_APP,-1,{Px(10),y,Px(242),y+Px(25)}}); y+=Px(25);}
+    if(!d->launch.empty() || !d->activationAppId.empty()) {if(!win7Jump || !d->docs.empty())y+=Px(4);
+         d->rows.push_back({JR_APP,-1,{Px(10),y,Px(242),y+Px(25)}});
+         y+=Px(25);
+        }
     if(showJumpShowWindow.load() && d->docs.empty() && !d->targets.empty()) {d->rows.push_back({JR_ACTIVATE,-1,{Px(10),y,Px(242),y+Px(25)}});y+=Px(25);}
     if(d->pinAction) {d->rows.push_back({JR_PIN,-1,{Px(10),y,Px(242),y+Px(22)}});y+=Px(22);}
     if(!d->targets.empty()) {d->rows.push_back({JR_CLOSE,-1,{Px(10),y,Px(242),y+Px(22)}});y+=Px(22);}
@@ -12916,7 +13218,11 @@ static bool ShowJumpList(size_t index,POINT) {
     if(top<mi.rcMonitor.top) top=button.bottom+Px(4);
     if(s->verticalActive) {x=s->verticalSide==1?bar.right+Px(4):bar.left-w-Px(4);top=(button.top+button.bottom-h)/2;
         x=std::max((int)mi.rcWork.left,std::min(x,(int)mi.rcWork.right-w));top=std::max((int)mi.rcWork.top,std::min(top,(int)mi.rcWork.bottom-h));}
-    WNDCLASSW wc{}; wc.hInstance=GetModuleHandleW(nullptr); wc.lpfnWndProc=JumpPopupProc; wc.hCursor=LoadCursorW(nullptr,IDC_ARROW); wc.lpszClassName=kJumpClass;
+    WNDCLASSW wc{};
+         wc.hInstance=GetModuleHandleW(nullptr);
+         wc.lpfnWndProc=JumpPopupProc;
+         wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+         wc.lpszClassName=kJumpClass;
     if(!RegisterClassW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {Wh_Log(L"[T81-DIAG] Jump List class registration failed"); return false;}
     WNDCLASSW existing{}; if(!GetClassInfoW(wc.hInstance,kJumpClass,&existing) || existing.lpfnWndProc!=JumpPopupProc) return false;
     // Ownership transfers at WM_NCCREATE; on CreateWindow failure Windows may
@@ -13281,7 +13587,11 @@ static void UpdateBarEdgeDrag(HWND h,POINT point) {
 // Limitations: no native vertical bar; vertical AppBar is controlled by its own work-area option.
 static int VerticalHit(int x,int y) {
     RECT r{};GetClientRect(s->bar,&r);VerticalLayout v=GetVerticalLayout(r.right,r.bottom);POINT p{x,y};
-    if(PtInRect(&v.icons,p)) {auto shown=VisibleTrayEntries();int slot=(p.y-v.icons.top)/std::max(1,Px(24));if(slot>=0 && (size_t)slot<shown.size()){int entry=shown[slot],hit=SystemHitForEntry(entry);return hit?hit:HIT_TRAY_ICON_BASE-entry;}}
+    if(PtInRect(&v.icons,p)) {auto shown=VisibleTrayEntries();
+        int slot=(p.y-v.icons.top)/std::max(1,Px(24));
+        if(slot>=0 && (size_t)slot<shown.size()){int entry=shown[slot],hit=SystemHitForEntry(entry);
+        return hit?hit:HIT_TRAY_ICON_BASE-entry;
+        }}
     if(PtInRect(&v.start,p) && (!startHotCorner.load() || (s->verticalSide==1?x<std::max(1,Px(2)):x>=r.right-std::max(1,Px(2)))))return HIT_START;if(PtInRect(&v.desktop,p))return HIT_DESKTOP;
     if(PtInRect(&v.language,p))return HIT_LANGUAGE;
     if(PtInRect(&v.clock,p))return HIT_CLOCK;if(PtInRect(&v.arrow,p))return HIT_TRAY_MORE;
@@ -13379,7 +13689,10 @@ static void CommitButtonChanges(PendingButtonChanges&& p,const std::vector<Task>
     }
     for(const Task& task:s->tasks)if(!TaskIdentityPresent(previous,task)) {
         for(size_t i=0;i<s->groups.size();++i) {
-            bool inGroup=false;for(size_t idx:s->groups[i].tasks)if(idx<s->tasks.size() && s->tasks[idx].hwnd==task.hwnd && s->tasks[idx].pid==task.pid){inGroup=true;break;}
+            bool inGroup=false;
+                for(size_t idx:s->groups[i].tasks)if(idx<s->tasks.size() && s->tasks[idx].hwnd==task.hwnd && s->tasks[idx].pid==task.pid){inGroup=true;
+                break;
+                }
             if(!inGroup)continue;
             RECT r=ButtonGroupRect(i);if(IsRectEmpty(&r))break;
             ButtonTransition t;t.key=s->groups[i].key;t.vertical=s->verticalActive;t.rect=r;
@@ -13490,7 +13803,9 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
             auto fillState=g.Save();g.ResetTransform();
             SolidBrush fullTile(Color((int)std::lround(255*fade),17,17,17));
             g.FillRectangle(&fullTile,0,0,w,(int)v.start.bottom);g.Restore(fillState);
-            Color tint=(taskbarSkin.load()==4 && customStartColor.load())?StartCustomColor():StartHoverColor();DrawStartImage(g,sw,sh,0,fade,&tint);DrawStartImage(g,sw,sh,down?2:1,fade);
+            Color tint=(taskbarSkin.load()==4 && customStartColor.load())?StartCustomColor():StartHoverColor();
+                DrawStartImage(g,sw,sh,0,fade,&tint);
+                DrawStartImage(g,sw,sh,down?2:1,fade);
         }
         if(down) {SolidBrush pressed(Color(50,0,0,0));g.FillRectangle(&pressed,0,0,sw,sh);}
         }
@@ -13522,7 +13837,11 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
                 g.FillRectangle(&attention,(int)tile.left,(int)tile.top,(int)(tile.right-tile.left),(int)(tile.bottom-tile.top));
             }
         }
-        if(s->dragActive && s->dragInsertion>=0){int slot=std::max(0,std::min(v.count,s->dragInsertion-v.offset));int yy=v.first+slot*v.step;SolidBrush caret(Color(220,255,255,255));g.FillRectangle(&caret,Px(4),yy-Px(1),std::max(1,w-Px(8)),std::max(1,Px(2)));}
+        if(s->dragActive && s->dragInsertion>=0){int slot=std::max(0,std::min(v.count,s->dragInsertion-v.offset));
+            int yy=v.first+slot*v.step;
+            SolidBrush caret(Color(220,255,255,255));
+            g.FillRectangle(&caret,Px(4),yy-Px(1),std::max(1,w-Px(8)),std::max(1,Px(2)));
+            }
         for(auto pair:{std::pair<int,RECT>{HIT_NETWORK,v.network},{HIT_VOLUME,v.volume},{HIT_BATTERY,v.battery},{HIT_CLOCK,v.clock},{HIT_LANGUAGE,v.language},{HIT_BAND_ADDRESS,v.addressBand},{HIT_OVERFLOW,v.more},{HIT_BAND_DESKTOP,v.desktopBand},{HIT_BAND_LINKS,v.linksBand}})
             if(s->hot==pair.first)DrawVerticalTrayHover(g,pair.second);
         for(int index:VisiblePrivateIcons())if(s->hot==HIT_TRAY_ICON_BASE-index)DrawVerticalTrayHover(g,PrivateIconRect(index));
@@ -13532,7 +13851,11 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
         }
         bool win7Arrow=DrawWin7OverflowButton(g,v.arrow,true);
         if(!win7Arrow && (s->hot==HIT_TRAY_MORE || (s->overflowPanel && IsWindowVisible(s->overflowPanel)))) {
-            auto saved=g.Save();BeginVerticalTile(g,v.arrow);RECT r{0,0,v.arrow.bottom-v.arrow.top,v.arrow.right-v.arrow.left};DrawTrayArrowHover(g,r);g.Restore(saved);
+            auto saved=g.Save();
+                BeginVerticalTile(g,v.arrow);
+                RECT r{0,0,v.arrow.bottom-v.arrow.top,v.arrow.right-v.arrow.left};
+                DrawTrayArrowHover(g,r);
+                g.Restore(saved);
         }
         if(BetaTextureAvailable(0) && !IsRectEmpty(&v.desktop)) {
             auto ds=g.Save();BeginVerticalTile(g,v.desktop);
@@ -13552,7 +13875,10 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
         if(!IsRectEmpty(&v.battery))DrawBatteryGlyph(g,w/2.f,(v.battery.top+v.battery.bottom)/2.f,scale,s->batteryPct,s->batteryCharging);
         if(!win7Arrow && !IsRectEmpty(&v.arrow))DrawVerticalTrayArrow(g,v.arrow,s->verticalSide);
     }
-    for(int index:VisiblePrivateIcons()) {RECT cell=PrivateIconRect(index);int size=Px(16);if(index>=0 && (size_t)index<s->trayIcons.size() && s->trayIcons[index].icon)DrawIconEx(dc,(cell.left+cell.right-size)/2,(cell.top+cell.bottom-size)/2,s->trayIcons[index].icon,size,size,0,nullptr,DI_NORMAL);}
+    for(int index:VisiblePrivateIcons()) {RECT cell=PrivateIconRect(index);
+        int size=Px(16);
+        if(index>=0 && (size_t)index<s->trayIcons.size() && s->trayIcons[index].icon)DrawIconEx(dc,(cell.left+cell.right-size)/2,(cell.top+cell.bottom-size)/2,s->trayIcons[index].icon,size,size,0,nullptr,DI_NORMAL);
+        }
     for(const auto& t:s->buttonTransitions)if(ValidGhost(t,w,h,true) && t.icon) {
         int step=t.rect.bottom-t.rect.top,size=std::max(1,std::min(Px(26),std::min(w,step)-Px(6)));
         RECT c=ButtonRevealRect(t.rect,1.f-ButtonTransitionFraction(t),true);ScopedSavedDC clip(dc);IntersectClipRect(dc,c.left,c.top,c.right,c.bottom);
@@ -13560,7 +13886,10 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
     }
     for(int slot=0;slot<v.count;slot++) {int i=v.offset+slot;int size=std::max(1,std::min(Px(BetaTextureAvailable(11)?32:26),std::min(w,v.step)-Px(6)));
         ScopedSavedDC clip(dc);const auto* t=LiveButtonTransition(s->groups[i].key);
-        if(t && t->reveal){RECT cell{0,v.first+slot*v.step,w,v.first+(slot+1)*v.step};RECT c=ButtonRevealRect(cell,ButtonTransitionFraction(*t),true);IntersectClipRect(dc,c.left,c.top,c.right,c.bottom);}
+        if(t && t->reveal){RECT cell{0,v.first+slot*v.step,w,v.first+(slot+1)*v.step};
+            RECT c=ButtonRevealRect(cell,ButtonTransitionFraction(*t),true);
+            IntersectClipRect(dc,c.left,c.top,c.right,c.bottom);
+            }
         DrawIconEx(dc,(w-size)/2,v.first+slot*v.step+(v.step-size)/2,GroupIcon(i),size,size,0,nullptr,DI_NORMAL);}
     HFONT font=CreateTaskbarFont(Dpi(),s->perPixelBar);ScopedSelection sel(dc,font);SetTextColor(dc,RGB(255,255,255));SetBkMode(dc,TRANSPARENT);
     if(!IsRectEmpty(&v.more)){RECT r=v.more;DrawTextW(dc,L"\u00bb",-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE);}
@@ -13568,7 +13897,9 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
                     {v.linksBand,Tr(L"Link \u00bb",L"Links \u00bb")}}) {
         RECT r=entry.first;if(!IsRectEmpty(&r))DrawTextW(dc,entry.second,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
     }
-    wchar_t time[64]{},date[64]{};GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,time,64);GetDateFormatW(LOCALE_USER_DEFAULT,DATE_SHORTDATE,nullptr,nullptr,date,64);
+    wchar_t time[64]{},date[64]{};
+        GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,time,64);
+        GetDateFormatW(LOCALE_USER_DEFAULT,DATE_SHORTDATE,nullptr,nullptr,date,64);
     std::wstring firstTime=time,timeMarker,firstDate=date,year;
     SIZE timeSize{},dateSize{};
     GetTextExtentPoint32W(dc,time,(int)wcslen(time),&timeSize);GetTextExtentPoint32W(dc,date,(int)wcslen(date),&dateSize);
@@ -13651,7 +13982,11 @@ static void PaintVertical(HWND h) {
             {Graphics g(bg.dc);PaintVerticalBackground(g,w,ht);}PatBlt(black.dc,0,0,w,ht,BLACKNESS);PatBlt(white.dc,0,0,w,ht,WHITENESS);
             DrawVerticalForeground(black.dc,w,ht);DrawVerticalForeground(white.dc,w,ht);GdiFlush();
             ComposeForeground(bg.bits,black.bits,white.bits,(size_t)w*(size_t)ht,EffectiveBarBackgroundOpacity());
-            RECT screen{};GetWindowRect(h,&screen);SIZE size{w,ht};POINT src{0,0},dst{screen.left,screen.top};BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+            RECT screen{};
+                GetWindowRect(h,&screen);
+                SIZE size{w,ht};
+                POINT src{0,0},dst{screen.left,screen.top};
+                BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
 #ifdef TASKBAR81_TEST
             if(!testForceLayeredFailure)
 #endif
@@ -13663,7 +13998,11 @@ static void PaintVertical(HWND h) {
     if(!rendered) {
         std::unique_ptr<std::remove_pointer<HDC>::type,DeleteMemDC> mem(CreateCompatibleDC(dc));
         std::unique_ptr<std::remove_pointer<HBITMAP>::type,DeleteBitmapHandle> bmp(CreateCompatibleBitmap(dc,w,ht));ScopedSelection sel(mem.get(),bmp.get());
-        if(mem && bmp && sel.old && sel.old!=HGDI_ERROR){ {Graphics g(mem.get());PaintVerticalBackground(g,w,ht);}DrawVerticalForeground(mem.get(),w,ht);BitBlt(dc,0,0,w,ht,mem.get(),0,0,SRCCOPY);}
+        if(mem && bmp && sel.old && sel.old!=HGDI_ERROR){ {Graphics g(mem.get());
+            PaintVerticalBackground(g,w,ht);
+            }DrawVerticalForeground(mem.get(),w,ht);
+            BitBlt(dc,0,0,w,ht,mem.get(),0,0,SRCCOPY);
+            }
     }
 }
 static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
@@ -13672,11 +14011,37 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
         if(s->trayDrag.capture==h){MoveTrayDrag(h,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)});return true;}
         if(s->dragCandidate && (wp&MK_LBUTTON)) {int dx=GET_X_LPARAM(lp)-s->dragStart.x,dy=GET_Y_LPARAM(lp)-s->dragStart.y;
             if(allowDragReorder.load() && (std::abs(dx)>=GetSystemMetrics(SM_CXDRAG)/2 || std::abs(dy)>=GetSystemMetrics(SM_CYDRAG)/2))s->dragActive=true;
-            if(s->dragActive){RECT r{};GetClientRect(h,&r);auto v=GetVerticalLayout(r.right,r.bottom);int pos=(GET_Y_LPARAM(lp)-v.first+v.step/2)/v.step;s->dragInsertion=v.offset+std::max(0,std::min(pos,v.count));KillTimer(h,TIMER_HOVER);HidePreview();InvalidateRect(h,nullptr,FALSE);return true;}}
-        if(!s->tracking){TRACKMOUSEEVENT t{sizeof(t),TME_LEAVE,h,0};TrackMouseEvent(&t);s->tracking=true;}int hit=hitAt();if(BetaTextureAvailable(2) && hit>=0 && hit==s->hot)InvalidateRect(h,nullptr,FALSE);if(hit!=s->hot){s->hot=hit;s->hover=hit;KillTimer(h,TIMER_HOVER);HidePreview();
+            if(s->dragActive){RECT r{};
+                GetClientRect(h,&r);
+                auto v=GetVerticalLayout(r.right,r.bottom);
+                int pos=(GET_Y_LPARAM(lp)-v.first+v.step/2)/v.step;
+                s->dragInsertion=v.offset+std::max(0,std::min(pos,v.count));
+                KillTimer(h,TIMER_HOVER);
+                HidePreview();
+                InvalidateRect(h,nullptr,FALSE);
+                return true;
+                }}
+        if(!s->tracking){TRACKMOUSEEVENT t{sizeof(t),TME_LEAVE,h,0};
+            TrackMouseEvent(&t);
+            s->tracking=true;
+            }int hit=hitAt();
+            if(BetaTextureAvailable(2) && hit>=0 && hit==s->hot)InvalidateRect(h,nullptr,FALSE);
+            if(hit!=s->hot){s->hot=hit;
+            s->hover=hit;
+            KillTimer(h,TIMER_HOVER);
+            HidePreview();
         if(hit>=0 || hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE)SetTimer(h,TIMER_HOVER,450,nullptr);
         s->fadeTick=GetTickCount64();SetTimer(h,TIMER_FADE,16,nullptr);InvalidateRect(h,nullptr,FALSE);}return true;}
-    if(m==WM_MOUSELEAVE){if((s->hot==HIT_START || s->hot==HIT_DESKTOP) && !s->hotCornerPreview)HidePreview();s->tracking=false;s->hot=HIT_NONE;s->hover=HIT_NONE;KillTimer(h,TIMER_HOVER);s->fadeTick=GetTickCount64();SetTimer(h,TIMER_FADE,16,nullptr);InvalidateRect(h,nullptr,FALSE);return true;}
+    if(m==WM_MOUSELEAVE){if((s->hot==HIT_START || s->hot==HIT_DESKTOP) && !s->hotCornerPreview)HidePreview();
+        s->tracking=false;
+        s->hot=HIT_NONE;
+        s->hover=HIT_NONE;
+        KillTimer(h,TIMER_HOVER);
+        s->fadeTick=GetTickCount64();
+        SetTimer(h,TIMER_FADE,16,nullptr);
+        InvalidateRect(h,nullptr,FALSE);
+        return true;
+        }
     if(m==WM_LBUTTONDOWN || m==WM_LBUTTONDBLCLK){
         if(g_languageDismissTick && GetTickCount64()-g_languageDismissTick>200)g_languageDismissTick=0;
         s->verticalPressed=hitAt();int hit=s->verticalPressed;
@@ -13693,21 +14058,53 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
                 }return true;
             }
         }
-        if(hit<=HIT_TRAY_ICON_BASE || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY) {int index=hit<=HIT_TRAY_ICON_BASE?HIT_TRAY_ICON_BASE-hit:SystemEntry(hit);BeginTrayDrag(h,index,false,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)});return true;}
-        if(hit>=0 && (size_t)hit<s->groups.size()){s->dragCandidate=true;s->dragActive=false;s->dragInsertion=-1;s->dragKey=s->groups[hit].key;s->dragStart=POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};}
+        if(hit<=HIT_TRAY_ICON_BASE || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY) {int index=hit<=HIT_TRAY_ICON_BASE?HIT_TRAY_ICON_BASE-hit:SystemEntry(hit);
+            BeginTrayDrag(h,index,false,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)});
+            return true;
+            }
+        if(hit>=0 && (size_t)hit<s->groups.size()){s->dragCandidate=true;
+            s->dragActive=false;
+            s->dragInsertion=-1;
+            s->dragKey=s->groups[hit].key;
+            s->dragStart=POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
+            }
         SetCapture(h);InvalidateRect(h,nullptr,FALSE);return true;}
     if(m==WM_LBUTTONUP) {
         if(s->barDragCandidate){CancelBarEdgeDrag(true);return true;}
-        if(s->trayDrag.capture==h){if(s->trayDrag.endQueued)s->trayDrag.nativeUpSeen=true;else EndTrayDrag(h,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)});s->verticalPressed=HIT_NONE;return true;}
+        if(s->trayDrag.capture==h) {
+            if(s->trayDrag.endQueued) {
+                s->trayDrag.nativeUpSeen=true;
+            } else {
+                EndTrayDrag(h,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)});
+            }
+            s->verticalPressed=HIT_NONE;
+            return true;
+        }
         int hit=hitAt(),pressed=s->verticalPressed,insertion=s->dragInsertion;bool moved=s->dragActive;std::wstring key=s->dragKey;
-        s->verticalPressed=HIT_NONE;s->dragCandidate=false;s->dragActive=false;s->dragInsertion=-1;s->dragKey.clear();if(GetCapture()==h)ReleaseCapture();InvalidateRect(h,nullptr,FALSE);
+        s->verticalPressed=HIT_NONE;
+            s->dragCandidate=false;
+            s->dragActive=false;
+            s->dragInsertion=-1;
+            s->dragKey.clear();
+            if(GetCapture()==h)ReleaseCapture();
+            InvalidateRect(h,nullptr,FALSE);
         if(moved){MoveGroupToInsertion(key,insertion);BuildGroups();InvalidateRect(h,nullptr,FALSE);return true;}
         if(hit!=pressed || hit==HIT_NONE || (hit>=0 && ((size_t)hit>=s->groups.size() || s->groups[hit].key!=key)))return true;
         if(hit==HIT_START){SendWin(0);return true;}if(hit==HIT_DESKTOP){ToggleDesktop();return true;}
         if(hit==HIT_LANGUAGE){if(!ConsumeLanguageDismissClick())ShowLanguageIndicatorMenu();return true;}
         if(hit==HIT_BAND_DESKTOP || hit==HIT_BAND_LINKS){ShowBandPopup(hit);return true;}
-        if(hit==HIT_BAND_ADDRESS){UpdateAddressBand();if(s->addressHost && s->addressEdit){SetForegroundWindow(s->addressHost);SetFocus(s->addressEdit);}return true;}
-        if(hit==HIT_OVERFLOW){RECT r{};GetClientRect(h,&r);auto v=GetVerticalLayout(r.right,r.bottom);s->verticalOffset=(v.offset+std::max(1,v.count))%(int)s->groups.size();InvalidateRect(h,nullptr,FALSE);return true;}
+        if(hit==HIT_BAND_ADDRESS){UpdateAddressBand();
+            if(s->addressHost && s->addressEdit){SetForegroundWindow(s->addressHost);
+            SetFocus(s->addressEdit);
+            }return true;
+            }
+        if(hit==HIT_OVERFLOW){RECT r{};
+            GetClientRect(h,&r);
+            auto v=GetVerticalLayout(r.right,r.bottom);
+            s->verticalOffset=(v.offset+std::max(1,v.count))%(int)s->groups.size();
+            InvalidateRect(h,nullptr,FALSE);
+            return true;
+            }
         if(hit<=HIT_CLOCK && hit>=HIT_TRAY_MORE) {POINT pt{};GetCursorPos(&pt);LaunchSystemTrayHit(hit,&pt);return true;}
         if(hit>=0 && (size_t)hit<s->groups.size()) {
             Group& g=s->groups[hit];
@@ -13723,8 +14120,20 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
     if(m==WM_CANCELMODE || m==WM_CAPTURECHANGED){s->verticalPressed=HIT_NONE;InvalidateRect(h,nullptr,FALSE);return false;}
     if(m==WM_MOUSEWHEEL){POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(h,&p);int hit=VerticalHit(p.x,p.y);
         if(hit==HIT_VOLUME && volumeWheel.load())AdjustVolumeWheel(GET_WHEEL_DELTA_WPARAM(wp));
-        else {RECT r{};GetClientRect(h,&r);auto v=GetVerticalLayout(r.right,r.bottom);int max=std::max(0,(int)s->groups.size()-v.count);s->verticalOffset=std::max(0,std::min(max,v.offset+(GET_WHEEL_DELTA_WPARAM(wp)<0?1:-1)));InvalidateRect(h,nullptr,FALSE);}return true;}
-    if(m==WM_RBUTTONDOWN){int hit=hitAt();if(hit<=HIT_TRAY_ICON_BASE){POINT pt{};GetCursorPos(&pt);SendPrivateIconEvent(HIT_TRAY_ICON_BASE-hit,m,pt);}return true;}
+        else {RECT r{};
+            GetClientRect(h,&r);
+            auto v=GetVerticalLayout(r.right,r.bottom);
+            int max=std::max(0,(int)s->groups.size()-v.count);
+            s->verticalOffset=std::max(0,std::min(max,v.offset+(GET_WHEEL_DELTA_WPARAM(wp)<0?1:-1)));
+            InvalidateRect(h,nullptr,FALSE);
+            }return true;
+            }
+    if(m==WM_RBUTTONDOWN){int hit=hitAt();
+        if(hit<=HIT_TRAY_ICON_BASE){POINT pt{};
+        GetCursorPos(&pt);
+        SendPrivateIconEvent(HIT_TRAY_ICON_BASE-hit,m,pt);
+        }return true;
+        }
     if(m==WM_RBUTTONUP){int hit=hitAt();POINT pt{};GetCursorPos(&pt);
         if(hit<=HIT_TRAY_ICON_BASE){HandlePrivateIconEvent(hit,m);return true;}
         if(hit==HIT_START)SendWin('X');else if(hit==HIT_LANGUAGE)ShowLanguageIndicatorMenu();else if(hit==HIT_CLOCK)ShowClockContextMenu();
@@ -13780,7 +14189,11 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         else if(s->appbarRegistered && wp==ABN_WINDOWARRANGE) {s->appbarArranging=lp!=0;UpdatePlacement();}
         return 0;
     case WM_TIMER:
-        if(wp==TIMER_LANGUAGE_REFRESH) {KillTimer(h,TIMER_LANGUAGE_REFRESH);if(s->privateActive){RefreshLanguageIndicator();ConfirmLanguageFlyoutRequest();}return 0;}
+        if(wp==TIMER_LANGUAGE_REFRESH) {KillTimer(h,TIMER_LANGUAGE_REFRESH);
+            if(s->privateActive){RefreshLanguageIndicator();
+            ConfirmLanguageFlyoutRequest();
+            }return 0;
+            }
         if(wp==TIMER_ATTENTION) {PruneAttention();if(!s->attention.empty())s->attentionOn=!s->attentionOn;InvalidateRect(h,nullptr,FALSE);return 0;}
         if(wp==TIMER_NETWORK_POSITION) {
             HWND f=FindOwnNetworkFlyout();
@@ -13861,8 +14274,20 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
             if(s->peekOn && !s->peekDesktop && (!s->peekTarget || !IsWindow(s->peekTarget))) PeekOff(false);
             UpdatePlacement(); Refresh();
         }
-        if(wp==TIMER_DESKTOP_PEEK) { KillTimer(h,TIMER_DESKTOP_PEEK); POINT p{}; if(s->hot==HIT_DESKTOP && GetCursorPos(&p) && ScreenToClient(h,&p) && Hit(p.x,p.y)==HIT_DESKTOP) { PeekDesktop(); Wh_Log(L"[T81-DIAG] desktop Peek active=%d",s->peekDesktop?1:0); } }
-        if(wp==TIMER_HOVER) { KillTimer(h,TIMER_HOVER); if(s->trayDrag.capture)return 0; if(s->hover>=0) ShowPreview(s->hover); else if(s->hover==HIT_START && startHotCorner.load()) ShowHotCornerPreview(); else if(s->hover==HIT_START || s->hover==HIT_DESKTOP) ShowBarButtonTooltip(s->hover); else if(s->hover==HIT_NETWORK || s->hover==HIT_VOLUME || s->hover==HIT_BATTERY) ShowSystemTooltip(s->hover); else if(s->hover==HIT_LANGUAGE) ShowLanguageTooltip(); else if(s->hover<=HIT_TRAY_ICON_BASE) ShowPrivateIconTooltip(s->hover); }
+        if(wp==TIMER_DESKTOP_PEEK) { KillTimer(h,TIMER_DESKTOP_PEEK);
+             POINT p{};
+             if(s->hot==HIT_DESKTOP && GetCursorPos(&p) && ScreenToClient(h,&p) && Hit(p.x,p.y)==HIT_DESKTOP) { PeekDesktop();
+             Wh_Log(L"[T81-DIAG] desktop Peek active=%d",s->peekDesktop?1:0);
+             } }
+        if(wp==TIMER_HOVER) { KillTimer(h,TIMER_HOVER);
+             if(s->trayDrag.capture)return 0;
+             if(s->hover>=0) ShowPreview(s->hover);
+             else if(s->hover==HIT_START && startHotCorner.load()) ShowHotCornerPreview();
+             else if(s->hover==HIT_START || s->hover==HIT_DESKTOP) ShowBarButtonTooltip(s->hover);
+             else if(s->hover==HIT_NETWORK || s->hover==HIT_VOLUME || s->hover==HIT_BATTERY) ShowSystemTooltip(s->hover);
+             else if(s->hover==HIT_LANGUAGE) ShowLanguageTooltip();
+             else if(s->hover<=HIT_TRAY_ICON_BASE) ShowPrivateIconTooltip(s->hover);
+             }
         if(wp==TIMER_CLOCK_FIX) {
             if(AttachClassicClockFrame()) { KillTimer(h,TIMER_CLOCK_FIX); s->clockFixAttempts=0; }
             else if(--s->clockFixAttempts<=0) {
@@ -13898,9 +14323,28 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
     case WM_POWERBROADCAST: if(wp==PBT_APMPOWERSTATUSCHANGE) RefreshBattery(); return TRUE;
     case WM_RESOURCES_READY: if(!SetTimer(h,TIMER_RESOURCE_RELOAD,120,nullptr))LoadLegacyImages();return 0;
     case WM_WIFI_CHANGED: InvalidateRect(h,nullptr,FALSE);if(s->overflowPanel)InvalidateRect(s->overflowPanel,nullptr,FALSE);return 0;
-    case WM_UPDATE_SETTINGS: CloseJumpPopup(); if(s->overflowPanel){HidePrivateOverflow();ConfigureSystemPopupFrame(s->overflowPanel);ResizePrivateOverflow();} BuildGroups(); if(!s->resourceDir.empty()) LoadLegacyImages(); if(s->jumpPopup) InvalidateRect(s->jumpPopup,nullptr,FALSE); if(s->overflowPanel) InvalidateRect(s->overflowPanel,nullptr,FALSE); HidePreview(); s->clockMetricsDpi=0;s->languageMetricsDpi=0;if(s->privateActive)RefreshLanguageIndicator(); if(!aeroPeek.load()) PeekOff(false); ConfigureBarAlpha(h,perPixelTaskbar.load()); UpdatePlacement(); InvalidateRect(h,nullptr,FALSE); return 0;
+    case WM_UPDATE_SETTINGS: CloseJumpPopup();
+         if(s->overflowPanel){HidePrivateOverflow();
+        ConfigureSystemPopupFrame(s->overflowPanel);
+        ResizePrivateOverflow();
+        } BuildGroups();
+         if(!s->resourceDir.empty()) LoadLegacyImages();
+         if(s->jumpPopup) InvalidateRect(s->jumpPopup,nullptr,FALSE);
+         if(s->overflowPanel) InvalidateRect(s->overflowPanel,nullptr,FALSE);
+         HidePreview();
+         s->clockMetricsDpi=0;
+        s->languageMetricsDpi=0;
+        if(s->privateActive)RefreshLanguageIndicator();
+         if(!aeroPeek.load()) PeekOff(false);
+         ConfigureBarAlpha(h,perPixelTaskbar.load());
+         UpdatePlacement();
+         InvalidateRect(h,nullptr,FALSE);
+         return 0;
     case WM_DWMCOMPOSITIONCHANGED: InvalidateRect(h,nullptr,FALSE);return 0;
-    case WM_DWMCOLORIZATIONCOLORCHANGED: if(s->jumpPopup) InvalidateRect(s->jumpPopup,nullptr,FALSE); if(s->overflowPanel) InvalidateRect(s->overflowPanel,nullptr,FALSE); InvalidateRect(h,nullptr,FALSE); return 0;
+    case WM_DWMCOLORIZATIONCOLORCHANGED: if(s->jumpPopup) InvalidateRect(s->jumpPopup,nullptr,FALSE);
+         if(s->overflowPanel) InvalidateRect(s->overflowPanel,nullptr,FALSE);
+         InvalidateRect(h,nullptr,FALSE);
+         return 0;
     case WM_DISPLAYCHANGE: case WM_SETTINGCHANGE: case WM_DPICHANGED:
         s->buttonTransitions.clear();KillTimer(h,TIMER_BUTTON_TRANSITION);
         if(m!=WM_SETTINGCHANGE || taskbarPlacementMode.load()!=3)CancelBarEdgeDrag(true);
@@ -13960,7 +14404,10 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         RECT desktopArrow=BandArrowRect(hoverLayout.desktopBand),linksArrow=BandArrowRect(hoverLayout.linksBand);
         bool arrowHot=hit==HIT_BAND_DESKTOP && PtInRect(&desktopArrow,mouse);
         bool linksHot=hit==HIT_BAND_LINKS && PtInRect(&linksArrow,mouse);
-        if(arrowHot!=s->desktopArrowHot || linksHot!=s->linksArrowHot) {s->desktopArrowHot=arrowHot;s->linksArrowHot=linksHot;InvalidateRect(h,nullptr,FALSE);}
+        if(arrowHot!=s->desktopArrowHot || linksHot!=s->linksArrowHot) {s->desktopArrowHot=arrowHot;
+            s->linksArrowHot=linksHot;
+            InvalidateRect(h,nullptr,FALSE);
+            }
         if(hit!=s->hot) {
             s->hot=hit;
             s->hover=hit;
@@ -14096,11 +14543,23 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
             auto id=[](int hit){return hit==HIT_BAND_DESKTOP?0:hit==HIT_BAND_LINKS?1:hit==HIT_BAND_ADDRESS?2:-1;};
             int a=id(from),b=id(to);if(a>=0 && b>=0 && a!=b) {
                 int ia=-1,ib=-1;for(int i=0;i<3;i++){if(s->bandOrder[i]==a)ia=i;if(s->bandOrder[i]==b)ib=i;}
-                if(ia>=0 && ib>=0) {std::swap(s->bandOrder[ia],s->bandOrder[ib]);wchar_t value[4]={(wchar_t)(L'0'+s->bandOrder[0]),(wchar_t)(L'0'+s->bandOrder[1]),(wchar_t)(L'0'+s->bandOrder[2]),0};Wh_SetStringValue(L"Taskbar81.BandOrder",value);UpdateAddressBand();InvalidateRect(h,nullptr,FALSE);}
+                if(ia>=0 && ib>=0) {std::swap(s->bandOrder[ia],s->bandOrder[ib]);
+                    wchar_t value[4]={(wchar_t)(L'0'+s->bandOrder[0]),(wchar_t)(L'0'+s->bandOrder[1]),(wchar_t)(L'0'+s->bandOrder[2]),0};
+                    Wh_SetStringValue(L"Taskbar81.BandOrder",value);
+                    UpdateAddressBand();
+                    InvalidateRect(h,nullptr,FALSE);
+                    }
             } return 0;
         }
         if(!s->jumpLeftPressedKey.empty()) {s->jumpLeftPressedKey.clear();return 0;}
-        if(s->trayDrag.capture==h) { if(s->trayDrag.endQueued)s->trayDrag.nativeUpSeen=true;else EndTrayDrag(h,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}); return 0; }
+        if(s->trayDrag.capture==h) {
+            if(s->trayDrag.endQueued) {
+                s->trayDrag.nativeUpSeen=true;
+            } else {
+                EndTrayDrag(h,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)});
+            }
+            return 0;
+        }
         int hit=Hit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));
         bool startClick=s->startPressed && hit==HIT_START;
         bool didDrag=s->dragActive;
@@ -14119,7 +14578,11 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         s->startPressed=false;
         if(hadCapture) InvalidateRect(h,nullptr,FALSE);
         if(hit<=HIT_TRAY_ICON_BASE) return 0;
-        if(hit==HIT_BAND_ADDRESS) { UpdateAddressBand(); if(s->addressHost && s->addressEdit) {SetForegroundWindow(s->addressHost);SetFocus(s->addressEdit);} return 0; }
+        if(hit==HIT_BAND_ADDRESS) { UpdateAddressBand();
+             if(s->addressHost && s->addressEdit) {SetForegroundWindow(s->addressHost);
+            SetFocus(s->addressEdit);
+            } return 0;
+             }
         if(hit==HIT_BAND_LINKS || hit==HIT_BAND_DESKTOP) { ShowBandPopup(hit); return 0; }
         if(hit==HIT_LANGUAGE) { if(!ConsumeLanguageDismissClick())ShowLanguageIndicatorMenu(); return 0; }
         if(hit<=HIT_CLOCK && hit>=HIT_TRAY_MORE) { LaunchSystemTrayHit(hit); if(hit==HIT_TRAY_MORE)InvalidateRect(h,nullptr,FALSE); return 0; }
@@ -14138,7 +14601,11 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
 #ifdef TASKBAR81_TEST
     case WM_APP+945: testButtonAnimationOverride=(int)wp;return 0;
     case WM_APP+946: {Refresh();int flags=0;for(const auto& t:s->buttonTransitions)flags|=t.ghost?2:t.reveal?1:4;return flags;}
-    case WM_APP+947: {for(auto& t:s->buttonTransitions)t.start=GetTickCount64()-(ULONGLONG)wp;InvalidateRect(h,nullptr,FALSE);UpdateWindow(h);return (LRESULT)s->buttonTransitions.size();}
+    case WM_APP+947: {for(auto& t:s->buttonTransitions)t.start=GetTickCount64()-(ULONGLONG)wp;
+        InvalidateRect(h,nullptr,FALSE);
+        UpdateWindow(h);
+        return (LRESULT)s->buttonTransitions.size();
+        }
     case WM_APP+937: HandleAttentionEvent((UINT_PTR)wp,(HWND)lp);return 0;
     case WM_APP+938: return (LRESULT)s->attention.size();
     case WM_APP+939: return GroupNeedsAttention((size_t)wp)?1:0;
@@ -14149,12 +14616,30 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
     case WM_APP+929: return s->barEdgeOverride;
     case WM_APP+930: return s->appbarRegistered?((LRESULT)s->appbarEdge+1):0;
     case WM_APP+931: {RECT r{};GetClientRect(h,&r);for(int y=r.bottom/2;y>=0;--y)if(VerticalHit(r.right/2,y)==HIT_NONE)return y;return -1;}
-    case WM_APP+912: {RECT r{};GetClientRect(h,&r);auto v=GetVerticalLayout(r.right,r.bottom);RECT a=wp==1?v.start:wp==2?v.arrow:wp==3?v.network:wp==4?v.volume:wp==5?v.clock:wp==6?v.desktop:wp==7?v.more:wp==8?v.desktopBand:wp==9?v.linksBand:wp==10?v.addressBand:RECT{};return MAKELPARAM((a.left+a.right)/2,(a.top+a.bottom)/2);}
-    case WM_APP+913: {RECT r{};GetClientRect(h,&r);auto v=GetVerticalLayout(r.right,r.bottom);int i=(int)wp;if(i<v.offset || i>=v.offset+v.count)return 0;return MAKELPARAM(r.right/2,v.first+(i-v.offset)*v.step+v.step/2);}
+    case WM_APP+912: {RECT r{};
+        GetClientRect(h,&r);
+        auto v=GetVerticalLayout(r.right,r.bottom);
+        RECT a=wp==1?v.start:wp==2?v.arrow:wp==3?v.network:wp==4?v.volume:wp==5?v.clock:wp==6?v.desktop:wp==7?v.more:wp==8?v.desktopBand:wp==9?v.linksBand:wp==10?v.addressBand:RECT{};
+        return MAKELPARAM((a.left+a.right)/2,(a.top+a.bottom)/2);
+        }
+    case WM_APP+913: {RECT r{};
+        GetClientRect(h,&r);
+        auto v=GetVerticalLayout(r.right,r.bottom);
+        int i=(int)wp;
+        if(i<v.offset || i>=v.offset+v.count)return 0;
+        return MAKELPARAM(r.right/2,v.first+(i-v.offset)*v.step+v.step/2);
+        }
     case WM_APP+914: return VerticalHit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));
     case WM_APP+915: for(size_t i=0;i<s->groups.size();++i)for(size_t t:s->groups[i].tasks)if(s->tasks[t].hwnd==(HWND)wp)return (LRESULT)i+1;return 0;
-    case WM_APP+916: testForceLayeredFailure=false;ConfigureBarAlpha(h,true);InvalidateRect(h,nullptr,FALSE);UpdateWindow(h);return s->perPixelBar && s->perPixelFrame;
-    case WM_APP+917: if(s->trayIcons.empty())return 0;if(std::find(s->trayPinned.begin(),s->trayPinned.end(),s->trayIcons.front().preferenceKey)==s->trayPinned.end())s->trayPinned.push_back(s->trayIcons.front().preferenceKey);InvalidateRect(h,nullptr,FALSE);return 1;
+    case WM_APP+916: testForceLayeredFailure=false;
+        ConfigureBarAlpha(h,true);
+        InvalidateRect(h,nullptr,FALSE);
+        UpdateWindow(h);
+        return s->perPixelBar && s->perPixelFrame;
+    case WM_APP+917: if(s->trayIcons.empty())return 0;
+        if(std::find(s->trayPinned.begin(),s->trayPinned.end(),s->trayIcons.front().preferenceKey)==s->trayPinned.end())s->trayPinned.push_back(s->trayIcons.front().preferenceKey);
+        InvalidateRect(h,nullptr,FALSE);
+        return 1;
     case WM_APP+924: PositionOriginalBatteryFlyout((HWND)wp);return 0;
     case WM_APP+926: return (size_t)wp<s->groups.size()?(LRESULT)s->groups[(size_t)wp].tasks.size():0;
     case WM_APP+927: return (LRESULT)s->previews.size();
@@ -14172,7 +14657,12 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
     }
     case WM_APP+909: s->bandsLocked=wp!=0;return 0;
     case WM_APP+908: ShowPrivateOverflow();return s->overflowPanel && IsWindowVisible(s->overflowPanel);
-    case WM_APP+907: if(wp>1){s->desktopBand=(wp&2)!=0;s->linksBand=(wp&4)!=0;} s->addressBand=(wp&1)!=0; UpdateAddressBand(); InvalidateRect(h,nullptr,FALSE); return s->addressHost && IsWindowVisible(s->addressHost);
+    case WM_APP+907: if(wp>1){s->desktopBand=(wp&2)!=0;
+        s->linksBand=(wp&4)!=0;
+        } s->addressBand=(wp&1)!=0;
+         UpdateAddressBand();
+         InvalidateRect(h,nullptr,FALSE);
+         return s->addressHost && IsWindowVisible(s->addressHost);
     case WM_APP+906: return testBarFrames;
     case WM_APP+904: return s->perPixelBar && s->perPixelFrame;
     case WM_APP+905: testForceLayeredFailure=true; InvalidateRect(h,nullptr,FALSE); return 0;
@@ -14191,7 +14681,10 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         if(volumeWheel.load() && ScreenToClient(h,&p) && Hit(p.x,p.y)==HIT_VOLUME) {AdjustVolumeWheel(GET_WHEEL_DELTA_WPARAM(wp));return 0;}
         break;
     }
-    case WM_MBUTTONDOWN: { int hit=Hit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp)); if(hit<=HIT_TRAY_ICON_BASE) HandlePrivateIconEvent(hit,WM_MBUTTONDOWN); return 0; }
+    case WM_MBUTTONDOWN: { int hit=Hit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));
+         if(hit<=HIT_TRAY_ICON_BASE) HandlePrivateIconEvent(hit,WM_MBUTTONDOWN);
+         return 0;
+         }
     case WM_MBUTTONUP: {
         int hit=Hit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));
         if(hit<=HIT_TRAY_ICON_BASE) { HandlePrivateIconEvent(hit,WM_MBUTTONUP); return 0; }
@@ -14210,7 +14703,10 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         int hit=Hit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));
         if(hit<=HIT_TRAY_ICON_BASE) { HandlePrivateIconEvent(hit,WM_RBUTTONUP); return 0; }
         if(hit==HIT_LANGUAGE) { ShowLanguageIndicatorMenu(); return 0; }
-        if(hit>=0 && (size_t)hit<s->groups.size() && !s->jumpPressedKey.empty() && s->jumpPressedKey==s->groups[hit].key) {s->jumpPressedKey.clear();s->jumpDismissKey.clear();return 0;}
+        if(hit>=0 && (size_t)hit<s->groups.size() && !s->jumpPressedKey.empty() && s->jumpPressedKey==s->groups[hit].key) {s->jumpPressedKey.clear();
+            s->jumpDismissKey.clear();
+            return 0;
+            }
         s->jumpPressedKey.clear(); s->jumpDismissKey.clear();
         if(hit==HIT_CLOCK) { ShowClockContextMenu(); return 0; }
         if(hit==HIT_DESKTOP) {POINT p{};GetCursorPos(&p);ShowDesktopContextMenu(p);return 0;}
@@ -14239,7 +14735,38 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         }
         return 0;
     }
-    case WM_DESTROY: s->buttonTransitions.clear();KillTimer(h,TIMER_BUTTON_TRANSITION);StopAttentionHook(h);KillTimer(h,TIMER_NETWORK_POSITION); KillTimer(h,TIMER_VOLUME_POSITION); KillTimer(h,TIMER_ACTION_POSITION); CancelBarEdgeDrag(false); RemoveWorkAreaAppBar(); KillTimer(h,TIMER_CLASSIC_POSITION_NOTIFY); KillTimer(h,TIMER_RESOURCE_RELOAD); CancelBatterySlide(); CleanupBatteryFrame(); CancelDragHover(); CancelActivationRetry(); if(s && s->dropRegistered) {RevokeDragDrop(h);s->dropRegistered=false;} DestroyDesktopPopup(); DestroyAddressBand(); CloseJumpPopup(); KillTimer(h,TIMER_REFRESH);KillTimer(h,TIMER_LANGUAGE_REFRESH); KillTimer(h,TIMER_HOVER); KillTimer(h,TIMER_PREVIEW); KillTimer(h,TIMER_CLOCK_FIX); KillTimer(h,TIMER_ANIMATION); KillTimer(h,TIMER_FADE); KillTimer(h,TIMER_Z_GUARD); KillTimer(h,TIMER_DESKTOP_PEEK); PeekOff(false); HidePreview(); PostQuitMessage(0); return 0;
+    case WM_DESTROY: s->buttonTransitions.clear();
+        KillTimer(h,TIMER_BUTTON_TRANSITION);
+        StopAttentionHook(h);
+        KillTimer(h,TIMER_NETWORK_POSITION);
+         KillTimer(h,TIMER_VOLUME_POSITION);
+         KillTimer(h,TIMER_ACTION_POSITION);
+         CancelBarEdgeDrag(false);
+         RemoveWorkAreaAppBar();
+         KillTimer(h,TIMER_CLASSIC_POSITION_NOTIFY);
+         KillTimer(h,TIMER_RESOURCE_RELOAD);
+         CancelBatterySlide();
+         CleanupBatteryFrame();
+         CancelDragHover();
+         CancelActivationRetry();
+         if(s && s->dropRegistered) {RevokeDragDrop(h);
+        s->dropRegistered=false;
+        } DestroyDesktopPopup();
+         DestroyAddressBand();
+         CloseJumpPopup();
+         KillTimer(h,TIMER_REFRESH);
+        KillTimer(h,TIMER_LANGUAGE_REFRESH);
+         KillTimer(h,TIMER_HOVER);
+         KillTimer(h,TIMER_PREVIEW);
+         KillTimer(h,TIMER_CLOCK_FIX);
+         KillTimer(h,TIMER_ANIMATION);
+         KillTimer(h,TIMER_FADE);
+         KillTimer(h,TIMER_Z_GUARD);
+         KillTimer(h,TIMER_DESKTOP_PEEK);
+         PeekOff(false);
+         HidePreview();
+         PostQuitMessage(0);
+         return 0;
     }
     return DefWindowProcW(h,m,wp,lp);
 }
