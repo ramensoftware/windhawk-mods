@@ -4,7 +4,7 @@
 // @name:zh-CN      一拖即删
 // @description     Drag & Trash: a cursor-following or nearby/top Recycle Bin with custom still/animated icons, batch recycling and Ctrl+Z undo.
 // @description:zh-CN 一拖即删：回收站可跟随鼠标或显示在附近/顶部，支持自定义静态/动态图标，并保留批量删除与 Ctrl+Z 撤销。
-// @version         1.3.1
+// @version         1.3.2
 // @author          XandriW
 // @github          https://github.com/xandri19wang
 // @include         explorer.exe
@@ -58,6 +58,7 @@ Use the Windows Recycle Bin icon, a local image/GIF, or an HTTPS image URL fetch
 - **Auto mirror / 自动翻转:** Flip custom images according to their position relative to the cursor.
 - **Batch recycling / 批量回收:** Drop several files together in one Shell operation.
 - **Ctrl+Z undo / 撤销:** Restore a supported recycle operation in File Explorer (within the active Shell session).
+- **Distance-aware auto-hide / 距离自动隐藏:** In Follow and Nearby modes, the bin fades out when you drag far away and reappears when you return. Top mode remains unchanged.
 - **Lightweight / 轻量:** GIF playback runs only while dragging. An explicitly selected HTTPS image is downloaded on a bounded background worker and cached, never on the drag or UI thread.
 
 ## Credits & license / 原作者与授权
@@ -145,6 +146,15 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
   #! $max: 220
   #! $format: slider
   #! $hideIf: {Placement: top}
+- AutoHideDistance: 280
+  $name: Auto-hide distance (0 = off)
+  $name:zh-CN: 自动隐藏距离（0 = 关闭）
+  $description: Hides after dragging far away for 150 ms, then restores when you return closer. Follow measures from the drag start, Nearby from the bin. Top mode is unaffected.
+  $description:zh-CN: 远离后持续 150 毫秒则淡出，返回较近距离时恢复。跟随模式从拖拽起点计算，附近模式从垃圾桶计算；屏幕顶部模式不受影响。
+  #! $min: 0
+  #! $max: 600
+  #! $format: slider
+  #! $hideIf: {Placement: top}
 - TopMargin: 8
   $name: Top margin (px)
   $name:zh-CN: 顶部边距（像素）
@@ -226,12 +236,21 @@ struct UserSettings {
     int desktopDistance = 72;
     int folderDistance = 100;
     int topMargin = 8;
+    int autoHideDistance = 280;
 };
 static UserSettings g_settings;
 static std::wstring g_activeImage;
 static HICON g_customIcon = nullptr;
 static POINT g_lastCursor = {};
 static bool g_haveLastCursor = false;
+static POINT g_autoHideDragStart = {};
+static bool g_autoHideConcealed = false;
+static bool g_autoHideWindowHidden = false;
+static ULONGLONG g_autoHideDistantSince = 0;
+static ULONGLONG g_autoHideFadeStarted = 0;
+static float g_autoHideOpacity = 1.0f;
+static float g_autoHideFadeStart = 1.0f;
+static float g_autoHideFadeTarget = 1.0f;
 
 static std::wstring ReadString(PCWSTR name) {
     PCWSTR s = Wh_GetStringSetting(name);
@@ -258,6 +277,7 @@ static void ReadSettings() {
     g_settings.desktopDistance = ReadNumber(L"DesktopDistance", 48, 220);
     g_settings.folderDistance = ReadNumber(L"FolderDistance", 48, 220);
     g_settings.topMargin = ReadNumber(L"TopMargin", 0, 100);
+    g_settings.autoHideDistance = ReadNumber(L"AutoHideDistance", 0, 600);
 }
 
 static bool SafeImageFile(const std::wstring& path) {
@@ -742,7 +762,7 @@ void RenderFrame(HWND hWnd) {
     POINT ptDst = { wndLeft, wndTop };
     POINT ptSrc = { 0, 0 };
     SIZE wndSize = { wndWidth, wndHeight };
-    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, static_cast<BYTE>(std::clamp(g_autoHideOpacity, 0.0f, 1.0f) * 255.0f), AC_SRC_ALPHA };
 
     UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &wndSize, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
 
@@ -1186,6 +1206,107 @@ static void RestoreDragOverlayZOrder(HWND hWnd, bool force) {
                      SWP_NOOWNERZORDER);
     }
 }
+// When a long drag returns to its starting area, reattach the follow target
+// near the cursor instead of showing it at a stale, distant location.
+static void RepositionFollowTargetAfterAutoHide(HWND hWnd, POINT pt) {
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetMonitorInfoW(monitor, &mi)) g_targetWorkArea = mi.rcWork;
+    const float scale = g_currentDpiScale;
+    const int width = (int)(BASE_WND_WIDTH * scale);
+    const int height = (int)(BASE_WND_HEIGHT * scale);
+    const bool desktop = InterlockedCompareExchange(&g_dragFromDesktop, 0, 0) != 0;
+    const int offset = desktop ? g_settings.desktopDistance : g_settings.folderDistance;
+    const int ox = (int)(offset * scale);
+    const int oy = (int)(offset * (desktop ? 1.0f : 0.94f) * scale);
+    const int margin = (int)(8 * scale);
+    int centerX = pt.x + ox;
+    int centerY = pt.y - oy;
+    if (centerX + width / 2 > g_targetWorkArea.right - margin)
+        centerX = pt.x - ox;
+    if (centerY - height / 2 < g_targetWorkArea.top + margin)
+        centerY = pt.y + oy;
+    const int minX = g_targetWorkArea.left + margin;
+    const int minY = g_targetWorkArea.top + margin;
+    const int maxX = std::max(minX, (int)(g_targetWorkArea.right - margin - width));
+    const int maxY = std::max(minY, (int)(g_targetWorkArea.bottom - margin - height));
+    g_overlayOrigin.x = std::clamp(centerX - width / 2, minX, maxX);
+    g_overlayOrigin.y = std::clamp(centerY - height / 2, minY, maxY);
+    g_lastCursor = pt;
+    g_haveLastCursor = true;
+    SetWindowPos(hWnd, nullptr, g_overlayOrigin.x, g_overlayOrigin.y, 0, 0,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOOWNERZORDER);
+}
+
+// Called only by the existing 25 ms drag timer. No global hook or worker.
+// Once faded out, the actual OLE target is also hidden to prevent accidental drops.
+static bool UpdateDragDistanceAutoHide(HWND hWnd) {
+    if (g_animState != AnimState::VISIBLE ||
+        g_settings.placement == L"top" || g_settings.autoHideDistance == 0 ||
+        g_targetScale == 0.0f) return false;
+
+    POINT cursor = {};
+    if (!GetCursorPos(&cursor)) return false;
+    const float scale = g_currentDpiScale;
+    const POINT anchor = g_settings.placement == L"follow"
+        ? g_autoHideDragStart
+        : POINT{g_overlayOrigin.x + (int)(BASE_WND_WIDTH * scale) / 2,
+                g_overlayOrigin.y + (int)(BASE_WND_HEIGHT * scale) / 2};
+    const LONGLONG dx = (LONGLONG)cursor.x - anchor.x;
+    const LONGLONG dy = (LONGLONG)cursor.y - anchor.y;
+    const LONGLONG distanceSquared = dx * dx + dy * dy;
+    const float hideRadius = g_settings.autoHideDistance * scale;
+    const float restoreRadius = std::max(32.0f * scale,
+        hideRadius - std::min(90.0f * scale, hideRadius * 0.35f));
+    const bool isFar = (float)distanceSquared > hideRadius * hideRadius;
+    const bool isNear = (float)distanceSquared < restoreRadius * restoreRadius;
+    const ULONGLONG now = GetTickCount64();
+    bool repositioned = false;
+
+    if (!g_autoHideConcealed) {
+        if (isFar && !g_hovering) {
+            if (!g_autoHideDistantSince) g_autoHideDistantSince = now;
+            if (now - g_autoHideDistantSince >= 150) {
+                g_autoHideConcealed = true;
+                g_autoHideFadeStart = g_autoHideOpacity;
+                g_autoHideFadeTarget = 0.0f;
+                g_autoHideFadeStarted = now;
+            }
+        } else {
+            g_autoHideDistantSince = 0;
+        }
+    } else if (isNear || g_hovering) {
+        g_autoHideConcealed = false;
+        g_autoHideDistantSince = 0;
+        g_autoHideFadeStart = g_autoHideOpacity;
+        g_autoHideFadeTarget = 1.0f;
+        g_autoHideFadeStarted = now;
+        if (g_settings.placement == L"follow") {
+            RepositionFollowTargetAfterAutoHide(hWnd, cursor);
+            repositioned = true;
+        }
+    }
+
+    const float previousOpacity = g_autoHideOpacity;
+    if (g_autoHideOpacity != g_autoHideFadeTarget) {
+        const float progress = std::min(1.0f,
+            (float)(now - g_autoHideFadeStarted) / 120.0f);
+        g_autoHideOpacity = g_autoHideFadeStart +
+            (g_autoHideFadeTarget - g_autoHideFadeStart) * progress;
+        if (progress >= 1.0f) g_autoHideOpacity = g_autoHideFadeTarget;
+    }
+
+    if (g_autoHideOpacity <= 0.0f && !g_autoHideWindowHidden) {
+        g_autoHideOpacity = 0.0f;
+        ShowWindow(hWnd, SW_HIDE);
+        g_autoHideWindowHidden = true;
+    } else if (g_autoHideOpacity > 0.0f && g_autoHideWindowHidden) {
+        g_autoHideWindowHidden = false;
+        ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+        RestoreDragOverlayZOrder(hWnd, true);
+    }
+    return repositioned || previousOpacity != g_autoHideOpacity;
+}
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_HTTPS_IMAGE_READY: {
@@ -1208,6 +1329,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                                     (wParam & 4) ? 1 : 0);
                 POINT ptCursor;
                 GetCursorPos(&ptCursor);
+                g_autoHideDragStart = ptCursor;
+                g_autoHideConcealed = false;
+                g_autoHideWindowHidden = false;
+                g_autoHideDistantSince = 0;
+                g_autoHideFadeStarted = GetTickCount64();
+                g_autoHideFadeStart = 1.0f;
+                g_autoHideFadeTarget = 1.0f;
+                g_autoHideOpacity = 1.0f;
                 HMONITOR hMon = MonitorFromPoint(ptCursor, MONITOR_DEFAULTTONEAREST);
                 MONITORINFO mi = { sizeof(mi) };
                 if (GetMonitorInfoW(hMon, &mi)) {
@@ -1303,12 +1432,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     return 0;
                 }
 
-                bool frameChanged = (g_hovering && (g_hoverImage || g_hoverIcon))
-                                    ? StepHoverGif() : StepDragGif();
-                bool moved = FollowCursor(hWnd);
+                bool opacityChanged = UpdateDragDistanceAutoHide(hWnd);
+                bool frameChanged = !g_autoHideWindowHidden &&
+                    ((g_hovering && (g_hoverImage || g_hoverIcon))
+                     ? StepHoverGif() : StepDragGif());
+                bool moved = !g_autoHideConcealed && FollowCursor(hWnd);
                 bool flipped = UpdateAutoMirror();
                 bool hoverChanged = g_hovering != g_lastRenderedHover;
-                if (frameChanged || moved || flipped || hoverChanged ||
+                if (opacityChanged || frameChanged || moved || flipped || hoverChanged ||
                     g_currentScale != g_lastRenderedScale) {
                     g_lastRenderedScale = g_currentScale;
                     g_lastRenderedHover = g_hovering;
