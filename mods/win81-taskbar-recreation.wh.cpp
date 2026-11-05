@@ -78,8 +78,10 @@ Windhawk explain their scope and any restart requirements.
 - Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.
 - The Windows 8 Start corner is illustrated, not a live Start-screen preview.
 - Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.
-- Some resources are downloaded on first use. The advanced battery flyout loads a Windows 10 1511 DLL into Explorer; the DLL stays loaded until Explorer restarts.
-- Other shell mods can conflict. Keep a way to disable the mod or restart Explorer.
+- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into Explorer and stays loaded until Explorer restarts.
+- The integrated tray creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and other mods that find the taskbar by class may see this host instead of the native window; tray and appbar messages are forwarded where applicable. Other shell mods can conflict.
+- The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
+- Keep a way to disable the mod or restart Explorer.
 - Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
 
 ## Credits
@@ -157,33 +159,33 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Usar la barra de tareas integrada y ocultar la original"
   $name:fr: "Utiliser la barre des tâches intégrée et masquer la barre d’origine"
   $name:pt: "Usar a barra de tarefas integrada e ocultar a original"
-  $description: "This setting has the following behavior: Uses the mod’s own notification area and hides the original taskbar. Keeps the original bar if the integrated tray cannot start. Restart the mod after changing this option."
-  $description:it: "Questa impostazione ha il seguente comportamento: Usa l’area di notifica della mod e nasconde la barra originale. Mantiene la barra originale se l’area integrata non si avvia. Riavvia la mod dopo aver modificato questa opzione."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Usa el área de notificación del mod y oculta la barra original. Mantiene la barra original si el área integrada no puede iniciarse. Reinicia el mod después de cambiar esta opción."
-  $description:fr: "Ce paramètre a le comportement suivant : Utilise la zone de notification du mod et masque la barre d’origine. Conserve la barre d’origine si la zone intégrée ne peut pas démarrer. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Usa a área de notificação do mod e oculta a barra original. Mantém a barra original se a área integrada não puder iniciar. Reinicie o mod depois de alterar esta opção."
+  $description: "This setting: Uses the mod’s own notification area and hides the original taskbar. Keeps the original bar if the integrated tray cannot start. A private Shell_TrayWnd host may be found by other apps or taskbar mods instead of the native window. Restart the mod after changing this option."
+  $description:it: "Questa impostazione: Usa l’area di notifica della mod e nasconde la barra originale. Mantiene la barra originale se l’area integrata non si avvia. Altre app o mod possono trovare una finestra Shell_TrayWnd privata invece di quella nativa. Riavvia la mod dopo aver modificato questa opzione."
+  $description:es: "Esta configuración: Usa el área de notificación del mod y oculta la barra original. Mantiene la barra original si el área integrada no puede iniciarse. Otras aplicaciones o mods pueden encontrar una ventana Shell_TrayWnd privada en lugar de la nativa. Reinicia el mod después de cambiar esta opción."
+  $description:fr: "Ce paramètre : Utilise la zone de notification du mod et masque la barre d’origine. Conserve la barre d’origine si la zone intégrée ne peut pas démarrer. D’autres applications ou mods peuvent trouver une fenêtre Shell_TrayWnd privée au lieu de la fenêtre native. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração: Usa a área de notificação do mod e oculta a barra original. Mantém a barra original se a área integrada não puder iniciar. Outros aplicativos ou mods podem encontrar uma janela Shell_TrayWnd privada em vez da janela nativa. Reinicie o mod depois de alterar esta opção."
 - reserveWorkArea: true
   $name: "Reserve desktop space for a moved taskbar"
   $name:it: "Riserva spazio sul desktop per la barra spostata"
   $name:es: "Reservar espacio del escritorio para la barra desplazada"
   $name:fr: "Réserver de l’espace sur le bureau pour la barre déplacée"
   $name:pt: "Reservar espaço na área de trabalho para a barra movida"
-  $description: "This setting has the following behavior: Enabled by default. Requests a Windows AppBar when the integrated taskbar is on a different edge from the native taskbar. Windows or other mods may prevent reservation or retain space at the native edge; windows can then overlap the bar. The reservation is removed on normal unload; restarting the shell may be necessary after an unexpected interruption."
-  $description:it: "Questa impostazione ha il seguente comportamento: Attiva per impostazione predefinita. Richiede una AppBar di Windows quando la barra integrata si trova su un bordo diverso da quella nativa. Windows o altre mod possono impedire la riserva o mantenere spazio sul bordo nativo; le finestre possono quindi sovrapporsi alla barra. La riserva viene rimossa alla chiusura normale; dopo un’interruzione imprevista può essere necessario riavviare la shell."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Activada de forma predeterminada. Solicita una AppBar de Windows cuando la barra integrada está en un borde distinto de la barra nativa. Windows u otros mods pueden impedir la reserva o conservar espacio en el borde nativo; las ventanas pueden superponerse a la barra. La reserva se elimina al descargarse normalmente; después de una interrupción inesperada puede ser necesario reiniciar el shell."
-  $description:fr: "Ce paramètre a le comportement suivant : Activé par défaut. Demande une AppBar Windows lorsque la barre intégrée se trouve sur un bord différent de la barre native. Windows ou d’autres mods peuvent empêcher la réservation ou conserver de l’espace au bord natif ; les fenêtres peuvent alors recouvrir la barre. La réservation est supprimée lors d’un déchargement normal ; après une interruption inattendue, un redémarrage du shell peut être nécessaire."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Ativada por padrão. Solicita uma AppBar do Windows quando a barra integrada está em uma borda diferente da barra nativa. O Windows ou outros mods podem impedir a reserva ou manter espaço na borda nativa; as janelas podem então sobrepor a barra. A reserva é removida no descarregamento normal; após uma interrupção inesperada, pode ser necessário reiniciar o shell."
+  $description: "This setting: Enabled by default. Requests a Windows AppBar when the integrated taskbar is on a different edge from the native taskbar. Windows or other mods may prevent reservation or retain space at the native edge; windows can then overlap the bar. The reservation is removed on normal unload; restarting the shell may be necessary after an unexpected interruption."
+  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Richiede una AppBar di Windows quando la barra integrata si trova su un bordo diverso da quella nativa. Windows o altre mod possono impedire la riserva o mantenere spazio sul bordo nativo; le finestre possono quindi sovrapporsi alla barra. La riserva viene rimossa alla chiusura normale; dopo un’interruzione imprevista può essere necessario riavviare la shell."
+  $description:es: "Esta configuración: Activada de forma predeterminada. Solicita una AppBar de Windows cuando la barra integrada está en un borde distinto de la barra nativa. Windows u otros mods pueden impedir la reserva o conservar espacio en el borde nativo; las ventanas pueden superponerse a la barra. La reserva se elimina al descargarse normalmente; después de una interrupción inesperada puede ser necesario reiniciar el shell."
+  $description:fr: "Ce paramètre : Activé par défaut. Demande une AppBar Windows lorsque la barre intégrée se trouve sur un bord différent de la barre native. Windows ou d’autres mods peuvent empêcher la réservation ou conserver de l’espace au bord natif ; les fenêtres peuvent alors recouvrir la barre. La réservation est supprimée lors d’un déchargement normal ; après une interruption inattendue, un redémarrage du shell peut être nécessaire."
+  $description:pt: "Esta configuração: Ativada por padrão. Solicita uma AppBar do Windows quando a barra integrada está em uma borda diferente da barra nativa. O Windows ou outros mods podem impedir a reserva ou manter espaço na borda nativa; as janelas podem então sobrepor a barra. A reserva é removida no descarregamento normal; após uma interrupção inesperada, pode ser necessário reiniciar o shell."
 - taskbarPlacement: "allEdges"
   $name: "Taskbar position"
   $name:it: "Posizione della barra delle applicazioni"
   $name:es: "Posición de la barra de tareas"
   $name:fr: "Position de la barre des tâches"
   $name:pt: "Posição da barra de tarefas"
-  $description: "This setting has the following behavior: Applies to the integrated taskbar. All edges starts at the native horizontal position and allows dragging the unlocked bar by an empty area to any edge. Left and Right select a vertical edge directly. Work-area reservation is controlled separately; Windows and other taskbar mods can affect placement."
-  $description:it: "Questa impostazione ha il seguente comportamento: Si applica alla barra integrata. Tutti i bordi segue inizialmente la posizione orizzontale di Windows e consente di trascinare la barra sbloccata da uno spazio vuoto verso qualsiasi bordo. Sinistra e Destra scelgono direttamente un bordo verticale. La riserva dell’area di lavoro si gestisce separatamente; Windows e altre mod possono influire sul posizionamento."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Se aplica a la barra integrada. Todos los bordes sigue inicialmente la posición horizontal de Windows y permite arrastrar la barra desbloquejada desde un área vacía a cualquier borde. Izquierda y Derecha seleccionan directamente un borde vertical. La reserva del área de trabajo se controla por separado; Windows y otros mods pueden afectar a la posición."
-  $description:fr: "Ce paramètre a le comportement suivant : S’applique à la barre intégrée. Tous les bords suit d’abord la position horizontale de Windows et permet de faire glisser la barre déverrouillée depuis un espace vide vers n’importe quel bord. Gauche et Droite choisissent directement un bord vertical. La réservation de la zone de travail se règle séparément ; Windows et d’autres mods peuvent affecter le positionnement."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Aplica-se à barra integrada. Todas as bordas segue inicialmente a posição horizontal do Windows e permite arrastar a barra desbloqueada por uma área vazia para qualquer borda. Esquerda e Direita selecionam diretamente uma borda vertical. A reserva da área de trabalho é controlada separadamente; o Windows e outros mods podem afetar o posicionamento."
+  $description: "This setting: Applies to the integrated taskbar. All edges starts at the native horizontal position and allows dragging the unlocked bar by an empty area to any edge. Left and Right select a vertical edge directly. Work-area reservation is controlled separately; Windows and other taskbar mods can affect placement."
+  $description:it: "Questa impostazione: Si applica alla barra integrata. Tutti i bordi segue inizialmente la posizione orizzontale di Windows e consente di trascinare la barra sbloccata da uno spazio vuoto verso qualsiasi bordo. Sinistra e Destra scelgono direttamente un bordo verticale. La riserva dell’area di lavoro si gestisce separatamente; Windows e altre mod possono influire sul posizionamento."
+  $description:es: "Esta configuración: Se aplica a la barra integrada. Todos los bordes sigue inicialmente la posición horizontal de Windows y permite arrastrar la barra desbloquejada desde un área vacía a cualquier borde. Izquierda y Derecha seleccionan directamente un borde vertical. La reserva del área de trabajo se controla por separado; Windows y otros mods pueden afectar a la posición."
+  $description:fr: "Ce paramètre : S’applique à la barre intégrée. Tous les bords suit d’abord la position horizontale de Windows et permet de faire glisser la barre déverrouillée depuis un espace vide vers n’importe quel bord. Gauche et Droite choisissent directement un bord vertical. La réservation de la zone de travail se règle séparément ; Windows et d’autres mods peuvent affecter le positionnement."
+  $description:pt: "Esta configuração: Aplica-se à barra integrada. Todas as bordas segue inicialmente a posição horizontal do Windows e permite arrastar a barra desbloqueada por uma área vazia para qualquer borda. Esquerda e Direita selecionam diretamente uma borda vertical. A reserva da área de trabalho é controlada separadamente; o Windows e outros mods podem afetar o posicionamento."
   $options:
     - native: "Follow Windows (horizontal)"
     - left: "Left"
@@ -215,11 +217,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Reservar espacio del escritorio junto a la barra vertical"
   $name:fr: "Réserver de l’espace sur le bureau à côté de la barre verticale"
   $name:pt: "Reservar espaço na área de trabalho ao lado da barra vertical"
-  $description: "This setting has the following behavior: Enabled by default. Requests a Windows AppBar for a vertical taskbar and removes it if the work area cannot be observed. If the request fails, maximized windows may extend beneath the bar and native top or bottom space may remain. The mod does not force the work area through build-specific Explorer hooks."
-  $description:it: "Questa impostazione ha il seguente comportamento: Attiva per impostazione predefinita. Richiede una AppBar di Windows per la barra verticale e la rimuove se non è possibile rilevare l’area di lavoro. Se la richiesta non riesce, le finestre ingrandite possono estendersi sotto la barra e può restare spazio nativo in alto o in basso. La mod non forza l’area di lavoro tramite hook interni di Explorer dipendenti dalla build."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Activada de forma predeterminada. Solicita una AppBar de Windows para la barra vertical y la elimina si no puede observar el área de trabajo. Si la solicitud falla, las ventanas maximizadas pueden extenderse debajo de la barra y puede quedar espacio nativo arriba o abajo. El mod no fuerza el área de trabajo mediante hooks internos de Explorer dependientes de la compilación."
-  $description:fr: "Ce paramètre a le comportement suivant : Activé par défaut. Demande une AppBar Windows pour la barre verticale et la supprime si la zone de travail ne peut pas être observée. Si la demande échoue, les fenêtres agrandies peuvent s’étendre sous la barre et un espace natif peut subsister en haut ou en bas. Le mod ne force pas la zone de travail via des hooks internes d’Explorer propres à la build."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Ativada por padrão. Solicita uma AppBar do Windows para a barra vertical e a remove se a área de trabalho não puder ser observada. Se a solicitação falhar, as janelas maximizadas podem se estender sob a barra e o espaço nativo superior ou inferior pode permanecer. O mod não força a área de trabalho por meio de hooks internos do Explorer dependentes da build."
+  $description: "This setting: Enabled by default. Requests a Windows AppBar for a vertical taskbar and removes it if the work area cannot be observed. If the request fails, maximized windows may extend beneath the bar and native top or bottom space may remain. The mod does not force the work area through build-specific Explorer hooks."
+  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Richiede una AppBar di Windows per la barra verticale e la rimuove se non è possibile rilevare l’area di lavoro. Se la richiesta non riesce, le finestre ingrandite possono estendersi sotto la barra e può restare spazio nativo in alto o in basso. La mod non forza l’area di lavoro tramite hook interni di Explorer dipendenti dalla build."
+  $description:es: "Esta configuración: Activada de forma predeterminada. Solicita una AppBar de Windows para la barra vertical y la elimina si no puede observar el área de trabajo. Si la solicitud falla, las ventanas maximizadas pueden extenderse debajo de la barra y puede quedar espacio nativo arriba o abajo. El mod no fuerza el área de trabajo mediante hooks internos de Explorer dependientes de la compilación."
+  $description:fr: "Ce paramètre : Activé par défaut. Demande une AppBar Windows pour la barre verticale et la supprime si la zone de travail ne peut pas être observée. Si la demande échoue, les fenêtres agrandies peuvent s’étendre sous la barre et un espace natif peut subsister en haut ou en bas. Le mod ne force pas la zone de travail via des hooks internes d’Explorer propres à la build."
+  $description:pt: "Esta configuração: Ativada por padrão. Solicita uma AppBar do Windows para a barra vertical e a remove se a área de trabalho não puder ser observada. Se a solicitação falhar, as janelas maximizadas podem se estender sob a barra e o espaço nativo superior ou inferior pode permanecer. O mod não força a área de trabalho por meio de hooks internos do Explorer dependentes da build."
 - taskbarOpacity: 220
   $name: "Global opacity in classic mode (140-255)"
   $name:it: "Opacità globale in modalità classica (140-255)"
@@ -248,22 +250,22 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Transparencia por píxel de la barra de tareas"
   $name:fr: "Transparence pixel par pixel de la barre des tâches"
   $name:pt: "Transparência por pixel da barra de tarefas"
-  $description: "This setting has the following behavior: Enabled by default. Separates background and content using UpdateLayeredWindow, rather than the original Windows 8.1 compositor. Compatibility can vary with the Windows build and other mods. Disable this option if the bar is invisible."
-  $description:it: "Questa impostazione ha il seguente comportamento: Attiva per impostazione predefinita. Separa sfondo e contenuto usando UpdateLayeredWindow, anziché il compositor originale di Windows 8.1. La compatibilità può variare con la build di Windows e le altre mod. Disattiva questa opzione se la barra è invisibile."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Activada de forma predeterminada. Separa el fondo y el contenido mediante UpdateLayeredWindow, en lugar del compositor original de Windows 8.1. La compatibilidad puede variar con la compilación de Windows y otros mods. Desactiva esta opción si la barra es invisible."
-  $description:fr: "Ce paramètre a le comportement suivant : Activé par défaut. Sépare l’arrière-plan et le contenu avec UpdateLayeredWindow, plutôt qu’avec le compositeur d’origine de Windows 8.1. La compatibilité peut varier selon la version de Windows et les autres mods. Désactivez cette option si la barre est invisible."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Ativada por padrão. Separa o fundo e o conteúdo usando UpdateLayeredWindow, em vez do compositor original do Windows 8.1. A compatibilidade pode variar com a build do Windows e outros mods. Desative esta opção se a barra estiver invisível."
+  $description: "This setting: Enabled by default. Separates background and content using UpdateLayeredWindow, rather than the original Windows 8.1 compositor. Compatibility can vary with the Windows build and other mods. Disable this option if the bar is invisible."
+  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Separa sfondo e contenuto usando UpdateLayeredWindow, anziché il compositor originale di Windows 8.1. La compatibilità può variare con la build di Windows e le altre mod. Disattiva questa opzione se la barra è invisibile."
+  $description:es: "Esta configuración: Activada de forma predeterminada. Separa el fondo y el contenido mediante UpdateLayeredWindow, en lugar del compositor original de Windows 8.1. La compatibilidad puede variar con la compilación de Windows y otros mods. Desactiva esta opción si la barra es invisible."
+  $description:fr: "Ce paramètre : Activé par défaut. Sépare l’arrière-plan et le contenu avec UpdateLayeredWindow, plutôt qu’avec le compositeur d’origine de Windows 8.1. La compatibilité peut varier selon la version de Windows et les autres mods. Désactivez cette option si la barre est invisible."
+  $description:pt: "Esta configuração: Ativada por padrão. Separa o fundo e o conteúdo usando UpdateLayeredWindow, em vez do compositor original do Windows 8.1. A compatibilidade pode variar com a build do Windows e outros mods. Desative esta opção se a barra estiver invisível."
 - perPixelPreview: true
   $name: "Per-pixel preview transparency"
   $name:it: "Trasparenza per pixel delle anteprime"
   $name:es: "Transparencia por píxel de las vistas previas"
   $name:fr: "Transparence pixel par pixel des aperçus"
   $name:pt: "Transparência por pixel das visualizações"
-  $description: "This setting has the following behavior: Enabled by default. Requires DWM; live thumbnails may fail on some Windows builds or with other mods. Disable this option if previews are invisible."
-  $description:it: "Questa impostazione ha il seguente comportamento: Attiva per impostazione predefinita. Richiede DWM; le miniature live possono non funzionare su alcune build di Windows o con altre mod. Disattiva questa opzione se le anteprime sono invisibili."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Activada de forma predeterminada. Requiere DWM; las miniaturas en directo pueden fallar en algunas compilaciones de Windows o con otros mods. Desactiva esta opción si las vistas previas son invisibles."
-  $description:fr: "Ce paramètre a le comportement suivant : Activé par défaut. Nécessite DWM ; les miniatures dynamiques peuvent échouer sur certaines versions de Windows ou avec d’autres mods. Désactivez cette option si les aperçus sont invisibles."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Ativada por padrão. Requer DWM; as miniaturas ao vivo podem falhar em algumas builds do Windows ou com outros mods. Desative esta opção se as visualizações estiverem invisíveis."
+  $description: "This setting: Enabled by default. Requires DWM; live thumbnails may fail on some Windows builds or with other mods. Disable this option if previews are invisible."
+  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Richiede DWM; le miniature live possono non funzionare su alcune build di Windows o con altre mod. Disattiva questa opzione se le anteprime sono invisibili."
+  $description:es: "Esta configuración: Activada de forma predeterminada. Requiere DWM; las miniaturas en directo pueden fallar en algunas compilaciones de Windows o con otros mods. Desactiva esta opción si las vistas previas son invisibles."
+  $description:fr: "Ce paramètre : Activé par défaut. Nécessite DWM ; les miniatures dynamiques peuvent échouer sur certaines versions de Windows ou avec d’autres mods. Désactivez cette option si les aperçus sont invisibles."
+  $description:pt: "Esta configuração: Ativada por padrão. Requer DWM; as miniaturas ao vivo podem falhar em algumas builds do Windows ou com outros mods. Desative esta opção se as visualizações estiverem invisíveis."
 - previewOpacity: 200
   $name: "Preview background opacity (140-255)"
   $name:it: "Opacità dello sfondo delle anteprime (140-255)"
@@ -281,11 +283,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Esquina Inicio al estilo Windows 8"
   $name:fr: "Coin Démarrer de style Windows 8"
   $name:pt: "Canto Iniciar no estilo Windows 8"
-  $description: "This setting has the following behavior: Hides the Start button and shows an illustrated, clickable Start preview on hover at the start of the reconstructed bar. It is not a live screenshot or a system-wide hot corner."
-  $description:it: "Questa impostazione ha il seguente comportamento: Nasconde il pulsante Start e mostra al passaggio del mouse un'anteprima illustrata e cliccabile all'inizio della barra ricreata. Non è una cattura live né un angolo attivo in tutto il sistema."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Oculta el botón Inicio y muestra una vista ilustrada y pulsable al pasar el ratón al inicio de la barra recreada. No es una captura en vivo ni una esquina activa en todo el sistema."
-  $description:fr: "Ce paramètre a le comportement suivant : Masque le bouton Démarrer et affiche un aperçu illustré cliquable au survol du début de la barre recréée. Ce n'est ni une capture en direct ni un coin actif dans tout le système."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Oculta o botão Iniciar e mostra uma prévia ilustrada clicável ao passar o mouse no início da barra recriada. Não é uma captura ao vivo nem um canto ativo em todo o sistema."
+  $description: "This setting: Hides the Start button and shows an illustrated, clickable Start preview on hover at the start of the reconstructed bar. It is not a live screenshot or a system-wide hot corner."
+  $description:it: "Questa impostazione: Nasconde il pulsante Start e mostra al passaggio del mouse un'anteprima illustrata e cliccabile all'inizio della barra ricreata. Non è una cattura live né un angolo attivo in tutto il sistema."
+  $description:es: "Esta configuración: Oculta el botón Inicio y muestra una vista ilustrada y pulsable al pasar el ratón al inicio de la barra recreada. No es una captura en vivo ni una esquina activa en todo el sistema."
+  $description:fr: "Ce paramètre : Masque le bouton Démarrer et affiche un aperçu illustré cliquable au survol du début de la barre recréée. Ce n'est ni une capture en direct ni un coin actif dans tout le système."
+  $description:pt: "Esta configuração: Oculta o botão Iniciar e mostra uma prévia ilustrada clicável ao passar o mouse no início da barra recriada. Não é uma captura ao vivo nem um canto ativo em todo o sistema."
 - customStartColor: false
   $name: "Custom Windows 8.1 Start hover color"
   $name:it: "Colore personalizzato Start Windows 8.1 al passaggio del mouse"
@@ -380,22 +382,22 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Notificar errores recuperables de la interfaz"
   $name:fr: "Signaler les erreurs récupérables de l'interface"
   $name:pt: "Notificar erros recuperáveis da interface"
-  $description: "This setting has the following behavior: Shows a tooltip for caught C++ errors in the preview and language flyout. Does not intercept fatal faults or guarantee Explorer will not restart."
-  $description:it: "Questa impostazione ha il seguente comportamento: Mostra un tooltip per errori C++ intercettati nell'anteprima e nel flyout lingua. Non intercetta errori fatali e non garantisce che Explorer non si riavvii."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Muestra un aviso para errores C++ capturados en las vistas previas y el panel de idiomas. No intercepta fallos fatales ni garantiza que Explorer no se reinicie."
-  $description:fr: "Ce paramètre a le comportement suivant : Affiche une infobulle pour les erreurs C++ capturées dans les aperçus et le volet de langue. N'intercepte pas les erreurs fatales et ne garantit pas qu'Explorer ne redémarre pas."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Mostra uma dica para erros C++ capturados nas prévias e no painel de idioma. Não intercepta falhas fatais nem garante que o Explorer não reinicie."
+  $description: "This setting: Shows a tooltip for caught C++ errors in the preview and language flyout. Does not intercept fatal faults or guarantee Explorer will not restart."
+  $description:it: "Questa impostazione: Mostra un tooltip per errori C++ intercettati nell'anteprima e nel flyout lingua. Non intercetta errori fatali e non garantisce che Explorer non si riavvii."
+  $description:es: "Esta configuración: Muestra un aviso para errores C++ capturados en las vistas previas y el panel de idiomas. No intercepta fallos fatales ni garantiza que Explorer no se reinicie."
+  $description:fr: "Ce paramètre : Affiche une infobulle pour les erreurs C++ capturées dans les aperçus et le volet de langue. N'intercepte pas les erreurs fatales et ne garantit pas qu'Explorer ne redémarre pas."
+  $description:pt: "Esta configuração: Mostra uma dica para erros C++ capturados nas prévias e no painel de idioma. Não intercepta falhas fatais nem garante que o Explorer não reinicie."
 - useBetaStartLogo: false
   $name: "Windows 8 Beta 8148 skin"
   $name:it: "Skin Windows 8 Beta 8148"
   $name:es: "Estilo Windows 8 Beta 8148"
   $name:fr: "Thème Windows 8 Beta 8148"
   $name:pt: "Tema Windows 8 Beta 8148"
-  $description: "This setting has the following behavior: Applies a best-effort skin inspired by Windows 8 Beta 8148, including Start, taskbar textures, task buttons, Show desktop and the Jump List close icon. Turn off to restore the standard Windows 8.1 appearance."
-  $description:it: "Questa impostazione ha il seguente comportamento: Applica una skin best effort ispirata a Windows 8 Beta 8148, con Start, texture della barra, pulsanti delle app, Mostra desktop e icona di chiusura della Jump List. Disattivala per ripristinare l'aspetto standard di Windows 8.1."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Aplica un estilo aproximado inspirado en Windows 8 Beta 8148, con Inicio, texturas de la barra, botones de aplicaciones, Mostrar escritorio y el icono de cierre de la lista de accesos directos. Desactívalo para recuperar el aspecto estándar de Windows 8.1."
-  $description:fr: "Ce paramètre a le comportement suivant : Applique un thème approximatif inspiré de Windows 8 Beta 8148, avec Démarrer, les textures de la barre, les boutons d'applications, Afficher le bureau et l'icône de fermeture des listes de raccourcis. Désactivez-le pour retrouver l'apparence standard de Windows 8.1."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Aplica um tema aproximado inspirado no Windows 8 Beta 8148, com Iniciar, texturas da barra, botões de aplicativos, Mostrar área de trabalho e ícone de fechar da lista de atalhos. Desative para restaurar a aparência padrão do Windows 8.1."
+  $description: "This setting: Applies a best-effort skin inspired by Windows 8 Beta 8148, including Start, taskbar textures, task buttons, Show desktop and the Jump List close icon. Turn off to restore the standard Windows 8.1 appearance."
+  $description:it: "Questa impostazione: Applica una skin best effort ispirata a Windows 8 Beta 8148, con Start, texture della barra, pulsanti delle app, Mostra desktop e icona di chiusura della Jump List. Disattivala per ripristinare l'aspetto standard di Windows 8.1."
+  $description:es: "Esta configuración: Aplica un estilo aproximado inspirado en Windows 8 Beta 8148, con Inicio, texturas de la barra, botones de aplicaciones, Mostrar escritorio y el icono de cierre de la lista de accesos directos. Desactívalo para recuperar el aspecto estándar de Windows 8.1."
+  $description:fr: "Ce paramètre : Applique un thème approximatif inspiré de Windows 8 Beta 8148, avec Démarrer, les textures de la barre, les boutons d'applications, Afficher le bureau et l'icône de fermeture des listes de raccourcis. Désactivez-le pour retrouver l'apparence standard de Windows 8.1."
+  $description:pt: "Esta configuração: Aplica um tema aproximado inspirado no Windows 8 Beta 8148, com Iniciar, texturas da barra, botões de aplicativos, Mostrar área de trabalho e ícone de fechar da lista de atalhos. Desative para restaurar a aparência padrão do Windows 8.1."
 - enableAeroPeek: true
   $name: "Aero Peek on previews"
   $name:it: "Aero Peek sulle anteprime"
@@ -457,11 +459,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Usar el panel de batería Win32 original (reiniciar el mod)"
   $name:fr: "Utiliser le panneau de batterie Win32 d’origine (redémarrer le mod)"
   $name:pt: "Usar o painel de bateria Win32 original (reiniciar o mod)"
-  $description: "This setting has the following behavior: Advanced feature. Executes the verified Windows 10 1511 stobject DLL inside Explorer; compatibility may vary between Windows builds. The DLL stays loaded until Explorer restarts. When off or unavailable, battery opens Windows Settings."
-  $description:it: "Questa impostazione ha il seguente comportamento: Funzionalità avanzata. Esegue la DLL stobject verificata di Windows 10 1511 dentro Explorer; la compatibilità può variare tra le versioni di Windows. La DLL resta caricata fino al riavvio di Explorer. Se disattivata o non disponibile, la batteria apre Impostazioni di Windows."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Función avanzada. Ejecuta la DLL stobject verificada de Windows 10 1511 dentro de Explorer; la compatibilidad puede variar entre versiones de Windows. La DLL permanece cargada hasta que Explorer se reinicie. Si está desactivada o no está disponible, la batería abre la Configuración de Windows."
-  $description:fr: "Ce paramètre a le comportement suivant : Fonctionnalité avancée. Exécute la DLL stobject vérifiée de Windows 10 1511 dans Explorer ; la compatibilité peut varier selon la version de Windows. La DLL reste chargée jusqu’au redémarrage d’Explorer. Si cette option est désactivée ou indisponible, la batterie ouvre les Paramètres Windows."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Recurso avançado. Executa a DLL stobject verificada do Windows 10 1511 dentro do Explorer; a compatibilidade pode variar entre versões do Windows. A DLL permanece carregada até o Explorer reiniciar. Se estiver desativada ou indisponível, a bateria abre as Configurações do Windows."
+  $description: "This setting: Advanced feature. Executes the verified Windows 10 1511 stobject DLL inside Explorer; compatibility may vary between Windows builds. The DLL stays loaded until Explorer restarts. When off or unavailable, battery opens Windows Settings."
+  $description:it: "Questa impostazione: Funzionalità avanzata. Esegue la DLL stobject verificata di Windows 10 1511 dentro Explorer; la compatibilità può variare tra le versioni di Windows. La DLL resta caricata fino al riavvio di Explorer. Se disattivata o non disponibile, la batteria apre Impostazioni di Windows."
+  $description:es: "Esta configuración: Función avanzada. Ejecuta la DLL stobject verificada de Windows 10 1511 dentro de Explorer; la compatibilidad puede variar entre versiones de Windows. La DLL permanece cargada hasta que Explorer se reinicie. Si está desactivada o no está disponible, la batería abre la Configuración de Windows."
+  $description:fr: "Ce paramètre : Fonctionnalité avancée. Exécute la DLL stobject vérifiée de Windows 10 1511 dans Explorer ; la compatibilité peut varier selon la version de Windows. La DLL reste chargée jusqu’au redémarrage d’Explorer. Si cette option est désactivée ou indisponible, la batterie ouvre les Paramètres Windows."
+  $description:pt: "Esta configuração: Recurso avançado. Executa a DLL stobject verificada do Windows 10 1511 dentro do Explorer; a compatibilidade pode variar entre versões do Windows. A DLL permanece carregada até o Explorer reiniciar. Se estiver desativada ou indisponível, a bateria abre as Configurações do Windows."
 - networkUse100PercentArtwork: false
   $name: "Use 100% DPI artwork for network, volume and battery"
   $name:it: "Usa le risorse grafiche al 100% DPI per rete, volume e batteria"
@@ -523,11 +525,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Usar el color de Windows en otros elementos de la interfaz"
   $name:fr: "Utiliser la couleur de Windows dans les autres éléments de l'interface"
   $name:pt: "Usar a cor do Windows em outros elementos da interface"
-  $description: "This setting has the following behavior: Controls the accent in related UI elements. Both recreated taskbar skins follow the Windows colorization color independently of this setting."
-  $description:it: "Questa impostazione ha il seguente comportamento: Controlla il colore principale negli elementi dell'interfaccia collegati. Entrambe le skin della barra ricreata seguono il colore di Windows indipendentemente da questa impostazione."
-  $description:es: "Esta configuración tiene el siguiente comportamiento: Controla el color de énfasis en otros elementos de la interfaz. Ambos estilos de la barra recreada siguen el color de Windows independientemente de esta opción."
-  $description:fr: "Ce paramètre a le comportement suivant : Contrôle la couleur d'accentuation dans les autres éléments de l'interface. Les deux thèmes de la barre recréée suivent la couleur de Windows indépendamment de ce paramètre."
-  $description:pt: "Esta configuração tem o seguinte comportamento: Controla a cor de destaque nos outros elementos da interface. Ambos os temas da barra recriada seguem a cor do Windows independentemente desta opção."
+  $description: "This setting: Controls the accent in related UI elements. Both recreated taskbar skins follow the Windows colorization color independently of this setting."
+  $description:it: "Questa impostazione: Controlla il colore principale negli elementi dell'interfaccia collegati. Entrambe le skin della barra ricreata seguono il colore di Windows indipendentemente da questa impostazione."
+  $description:es: "Esta configuración: Controla el color de énfasis en otros elementos de la interfaz. Ambos estilos de la barra recreada siguen el color de Windows independientemente de esta opción."
+  $description:fr: "Ce paramètre : Contrôle la couleur d'accentuation dans les autres éléments de l'interface. Les deux thèmes de la barre recréée suivent la couleur de Windows indépendamment de ce paramètre."
+  $description:pt: "Esta configuração: Controla a cor de destaque nos outros elementos da interface. Ambos os temas da barra recriada seguem a cor do Windows independentemente desta opção."
 - showLanguageIndicator: true
   $name: "Show the input language and its flyout"
   $name:it: "Mostra la lingua di input e il relativo flyout"
@@ -614,6 +616,12 @@ static bool testThrowEnum=false;
 enum class UiLanguage { English, Italian, Spanish, French, Portuguese };
 struct UiTranslation { const wchar_t* english; const wchar_t* spanish; const wchar_t* french; const wchar_t* portuguese; };
 static const UiTranslation kUiTranslations[]={
+    {L"App: ",L"Aplicación: ",L"Application : ",L"Aplicativo: "},
+    {L"Desktop",L"Escritorio",L"Bureau",L"Área de trabalho"},
+    {L"Desktop »",L"Escritorio »",L"Bureau »",L"Área de trabalho »"},
+    {L"*Desktop\n",L"*Escritorio\n",L"*Bureau\n",L"*Área de trabalho\n"},
+    {L"Desktop\n",L"Escritorio\n",L"Bureau\n",L"Área de trabalho\n"},
+    {L"Windows 8.1 Taskbar Recreation",L"Recreación de la barra de tareas de Windows 8.1",L"Recréation de la barre des tâches de Windows 8.1",L"Recriação da barra de tarefas do Windows 8.1"},
     {L"Restore",L"Restaurar",L"Restaurer",L"Restaurar"},
     {L"Move",L"Mover",L"Déplacer",L"Mover"},
     {L"Size",L"Tamaño",L"Taille",L"Tamanho"},
@@ -3984,6 +3992,18 @@ static BOOL CALLBACK FindHostedIdentity(HWND child, LPARAM arg) {
     } catch(...) { context->ambiguous=true; Wh_Log(L"[T81-DIAG] hosted identity C++ exception"); return FALSE; }
 }
 
+static const std::wstring& ControlPanelDisplayName() {
+    static const std::wstring name=[]() -> std::wstring {
+        PIDLIST_ABSOLUTE pidl=nullptr;
+        if (FAILED(SHGetSpecialFolderLocation(nullptr,CSIDL_CONTROLS,&pidl)) || !pidl) return {};
+        SHFILEINFOW info{};
+        DWORD_PTR ok=SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl),0,&info,sizeof(info),
+                                   SHGFI_PIDL|SHGFI_DISPLAYNAME);
+        CoTaskMemFree(pidl);
+        return ok?std::wstring(info.szDisplayName):std::wstring();
+    }();
+    return name;
+}
 static std::wstring WindowIdentity(HWND h, std::wstring* relaunchPath=nullptr) {
     static const PROPERTYKEY appKey={{0x9f4c2855,0x9f79,0x4b39,{0xa8,0xd0,0xe1,0xd4,0x2d,0xe1,0xd5,0xf3}},5};
     static const PROPERTYKEY relaunchKey={{0x9f4c2855,0x9f79,0x4b39,{0xa8,0xd0,0xe1,0xd4,0x2d,0xe1,0xd5,0xf3}},2};
@@ -4020,7 +4040,8 @@ static std::wstring WindowIdentity(HWND h, std::wstring* relaunchPath=nullptr) {
             control=command.find(L"{26ee0668-a00a-44d7-9371-beb064c98683}")!=std::wstring::npos ||
                 command.find(L"{21ec2020-3aea-1069-a2dd-08002b30309d}")!=std::wstring::npos ||
                 id.find(L"controlpanel")!=std::wstring::npos ||
-                !_wcsicmp(caption.c_str(),L"Control Panel") || !_wcsicmp(caption.c_str(),L"Pannello di controllo");
+                (!_wcsicmp(caption.c_str(),L"Control Panel")) ||
+                (!ControlPanelDisplayName().empty() && !_wcsicmp(caption.c_str(),ControlPanelDisplayName().c_str()));
         }
     }
     if(control) { if(relaunchPath) relaunchPath->clear(); return L"app:taskbar81.controlpanel"; }
@@ -4616,8 +4637,7 @@ std::wstring GroupTitle(size_t i) {
     if(g.pin>=0 && (size_t)g.pin<s->pins.size()) return LocalizeExplorerTitle(s->pins[g.pin].title);
     return L"";
 }
-// Aero Peek copied from user's GPL-3.0-or-later mod.txt v0.5.0; uses
-// undocumented dwmapi ordinal 113. No guarantee on Windows 11 24H2.
+// Aero Peek uses undocumented dwmapi ordinal 113; availability varies by build.
 typedef HRESULT (WINAPI* ActivateLivePreviewFn)(BOOL, HWND, HWND, UINT, UINT_PTR);
 const UINT kPeekWindow = 3, kPeekDesktop = 1;
 
@@ -6175,7 +6195,7 @@ static void GuardPrivateTray() {
     EnumWindows(HideOwnedStart,0);
 }
 // Event-based repair reduces the interval in which Explorer's own bar can
-// reappear after a balloon/notification. The 100ms guard remains as backup.
+// reappear after a balloon/notification. A periodic guard remains as backup.
 static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LONG object,LONG child,DWORD,DWORD) {
     if(!s || !hwnd || object!=OBJID_WINDOW || child!=CHILDID_SELF) return;
     DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);if(pid!=GetCurrentProcessId())return;
@@ -6829,7 +6849,11 @@ static LRESULT CALLBACK PrivateOverflowProc(HWND h,UINT msg,WPARAM wp,LPARAM lp)
             return 0;
         }
         case WM_CAPTURECHANGED: case WM_CANCELMODE:
-            if(s->trayDrag.capture==h) CancelTrayDrag(); return 0;
+            if(s->trayDrag.capture==h) {
+                Wh_Log(L"[T81-DIAG] tray-drag cancelled popup message=0x%04X active=%d",msg,s->trayDrag.active?1:0);
+                CancelTrayDrag();
+            }
+            return 0;
         case WM_LBUTTONUP: case WM_RBUTTONUP: {
             POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
             if(msg==WM_LBUTTONUP && s->trayDrag.capture==h) { if(s->trayDrag.endQueued)s->trayDrag.nativeUpSeen=true;else EndTrayDrag(h,p); return 0; }
@@ -6860,7 +6884,10 @@ static LRESULT CALLBACK PrivateOverflowProc(HWND h,UINT msg,WPARAM wp,LPARAM lp)
         }
         case WM_SETCURSOR: {
             POINT p{}; GetCursorPos(&p); ScreenToClient(h,&p); RECT footer=OverflowFooter();
-            if(PtInRect(&footer,p)) {SetCursor(LoadCursorW(nullptr,MAKEINTRESOURCEW(32649)));return TRUE;} break;
+            if(!s->trayDrag.capture && PtInRect(&footer,p)) {
+                SetCursor(LoadCursorW(nullptr,MAKEINTRESOURCEW(32649)));return TRUE;
+            }
+            break;
         }
         case WM_CLOSE: HidePrivateOverflow(); return 0;
         }
@@ -7104,7 +7131,9 @@ static void UpdateTrayDropFeedback(POINT screen) {
     s->trayDrag.dropArea=0;s->trayDrag.dropCell=RECT{};s->trayDrag.dropAfter=false;s->trayDrag.dropAnchor.clear();
     POINT q=screen;RECT r{};
     if(s->overflowPanel && IsWindowVisible(s->overflowPanel) && ScreenToClient(s->overflowPanel,&q) && GetClientRect(s->overflowPanel,&r) && PtInRect(&r,q)) {
-        s->trayDrag.dropArea=2;int entry=OverflowHit(q);auto items=OverflowPrivateItems();
+        RECT footer=OverflowFooter();
+        if(!PtInRect(&footer,q)) s->trayDrag.dropArea=2;
+        int entry=s->trayDrag.dropArea==2?OverflowHit(q):-1;auto items=OverflowPrivateItems();
         auto it=std::find(items.begin(),items.end(),entry);
         if(entry!=-1 && it!=items.end()) {s->trayDrag.dropAnchor=TrayEntryKey(entry);
             s->trayDrag.dropCell=OverflowCell((int)(it-items.begin()));
@@ -7248,6 +7277,9 @@ struct CniCallbackScope {
     CniCallbackScope() { g_trayCniCallbackDepth.fetch_add(1, std::memory_order_acq_rel); }
     ~CniCallbackScope() { g_trayCniCallbackDepth.fetch_sub(1, std::memory_order_acq_rel); }
 };
+
+// The private tray's preference exists only during this mod session.
+static std::atomic<DWORD> g_privateAutoTray{1};
 
 class CPrivateTrayNotify final : public ITrayNotifyWin8 {
     struct CallbackSlot {
@@ -7479,13 +7511,7 @@ public:
     HRESULT EnableAutoTrayOnUi(BOOL enabled) {
         if (!s || !s->privateActive) return E_UNEXPECTED;
         try {
-            DWORD value = enabled ? 1u : 0u;
-            LSTATUS error = RegSetKeyValueW(
-                HKEY_CURRENT_USER,
-                L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer",
-                L"EnableAutoTray", REG_DWORD, &value, sizeof(value));
-            if (error != ERROR_SUCCESS) return HRESULT_FROM_WIN32(error);
-
+            g_privateAutoTray.store(enabled ? 1u : 0u, std::memory_order_release);
             s->trayShowAll = !enabled;
             RefreshPrivateTray();
             Wh_Log(L"[T81-CNI] private EnableAutoTray applied enabled=%d tid=%lu",
@@ -7497,14 +7523,7 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE EnableAutoTray(BOOL enabled) override {
-        // Write the registry synchronously because taskbarcpl UpdateUI reads it
-        // immediately after this call. Only private State/layout is deferred.
-        DWORD value = enabled ? 1u : 0u;
-        LSTATUS error = RegSetKeyValueW(
-            HKEY_CURRENT_USER,
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer",
-            L"EnableAutoTray", REG_DWORD, &value, sizeof(value));
-        if (error != ERROR_SUCCESS) return HRESULT_FROM_WIN32(error);
+        // The UI request updates the private in-memory value and tray layout.
         Wh_Log(L"[T81-CNI] EnableAutoTray queued enabled=%d tid=%lu",
                (int)enabled, GetCurrentThreadId());
         auto* request = new (std::nothrow) CniUiRequest();
@@ -7588,6 +7607,170 @@ static DWORD g_trayCniPrivateCookie = 0;
 // come from another Explorer process and therefore do not test this local flag.
 static std::atomic<bool> g_trayCniPrivateRegistered{false};
 static std::atomic<DWORD> g_trayCniUiThreadId{0};
+
+// In-memory read virtualization, inspired by Windows 8 Network Flyout Restorer
+// (GPL-3.0). Limit it to the exact key and the page's activation thread.
+// Shell helpers may perform the actual read, so checking only the direct
+// calling module can miss the page's own read.
+static SRWLOCK g_cniPageLock = SRWLOCK_INIT;
+struct CniPageThread { DWORD id; unsigned refs; };
+static CniPageThread g_cniPageThreads[32]{};
+static bool CniTrackPageThread(DWORD id) noexcept {
+    AcquireSRWLockExclusive(&g_cniPageLock);
+    CniPageThread* slot = nullptr;
+    for (auto& entry : g_cniPageThreads) {
+        if (entry.id == id) { slot = &entry; break; }
+        if (!entry.id && !slot) slot = &entry;
+    }
+    if (slot) { slot->id = id; ++slot->refs; }
+    ReleaseSRWLockExclusive(&g_cniPageLock);
+    return slot != nullptr;
+}
+static void CniUntrackPageThread(DWORD id) noexcept {
+    AcquireSRWLockExclusive(&g_cniPageLock);
+    for (auto& entry : g_cniPageThreads) {
+        if (entry.id == id) {
+            if (--entry.refs == 0) entry.id = 0;
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_cniPageLock);
+}
+static bool CniIsPageThread() noexcept {
+    bool found = false;
+    DWORD id = GetCurrentThreadId();
+    AcquireSRWLockShared(&g_cniPageLock);
+    for (const auto& entry : g_cniPageThreads) {
+        if (entry.id == id) { found = true; break; }
+    }
+    ReleaseSRWLockShared(&g_cniPageLock);
+    return found;
+}
+using T81NtQueryKey = LONG (NTAPI*)(HANDLE, int, PVOID, ULONG, PULONG);
+using T81RegGetValue = decltype(&RegGetValueW);
+using T81RegQueryValue = decltype(&RegQueryValueExW);
+static T81NtQueryKey g_cniNtQueryKey = nullptr;
+static T81RegGetValue g_cniRegGetValue = nullptr;
+static T81RegQueryValue g_cniRegQueryValue = nullptr;
+static std::wstring g_cniExplorerKeyName;
+
+static bool CniRegistryKeyName(HKEY key, std::wstring& name) {
+    if (!g_cniNtQueryKey || !key) return false;
+    alignas(ULONG) BYTE storage[4096]{};
+    ULONG used = 0;
+    // KeyNameInformation = 3; the name is a byte-counted, non-NUL string.
+    if (g_cniNtQueryKey(key, 3, storage, sizeof(storage), &used) < 0) return false;
+    ULONG bytes = 0;
+    memcpy(&bytes, storage, sizeof(bytes));
+    if (bytes % sizeof(wchar_t) || bytes > sizeof(storage) - sizeof(ULONG)) return false;
+    const wchar_t* text = reinterpret_cast<const wchar_t*>(storage + sizeof(ULONG));
+    name.assign(text, bytes / sizeof(wchar_t));
+    return true;
+}
+static bool CniExplorerKey(HKEY key) noexcept {
+    try {
+        if (g_cniExplorerKeyName.empty()) return false;
+        std::wstring name;
+        return CniRegistryKeyName(key, name) && !_wcsicmp(name.c_str(), g_cniExplorerKeyName.c_str());
+    } catch (...) { return false; }
+}
+static bool CniTaskbarCplCaller(void* address) noexcept {
+    if (!g_trayCniPrivateRegistered.load(std::memory_order_acquire)) return false;
+    if (CniIsPageThread()) return true;
+    HMODULE caller = nullptr, cpl = GetModuleHandleW(L"taskbarcpl.dll");
+    return cpl && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(address), &caller) && caller == cpl;
+}
+static LSTATUS CniVirtualAutoTray(DWORD flags, LPDWORD type, void* data, LPDWORD size) noexcept {
+    DWORD value = g_privateAutoTray.load(std::memory_order_acquire);
+    if (data && !size) return ERROR_INVALID_PARAMETER;
+    DWORD accepted = flags & RRF_RT_ANY;
+    if (accepted && !(accepted & RRF_RT_REG_DWORD)) {
+        if ((flags & RRF_ZEROONFAILURE) && data && size) memset(data, 0, *size);
+        return ERROR_UNSUPPORTED_TYPE;
+    }
+    if (type) *type = REG_DWORD;
+    if (data && *size < sizeof(value)) {
+        DWORD capacity = *size;
+        *size = sizeof(value);
+        if (flags & RRF_ZEROONFAILURE) memset(data, 0, capacity);
+        return ERROR_MORE_DATA;
+    }
+    if (data) memcpy(data, &value, sizeof(value));
+    if (size) *size = sizeof(value);
+    return ERROR_SUCCESS;
+}
+static LSTATUS WINAPI CniRegGetValueHook(HKEY key, LPCWSTR subkey, LPCWSTR value,
+    DWORD flags, LPDWORD type, PVOID data, LPDWORD size) {
+    if (!value || _wcsicmp(value, L"EnableAutoTray") ||
+        (flags & (RRF_SUBKEY_WOW6432KEY | RRF_SUBKEY_WOW6464KEY)) ||
+        !CniTaskbarCplCaller(__builtin_return_address(0)))
+        return g_cniRegGetValue(key, subkey, value, flags, type, data, size);
+    const wchar_t* path = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer";
+    bool exact = key == HKEY_CURRENT_USER && subkey && !_wcsicmp(subkey, path);
+    if (!exact && (!subkey || !*subkey)) exact = CniExplorerKey(key);
+    if (exact) {
+        LSTATUS result = CniVirtualAutoTray(flags, type, data, size);
+        Wh_Log(L"[T81-CNI] virtual RegGetValue enabled=%lu tid=%lu status=%ld",
+               (unsigned long)g_privateAutoTray.load(), GetCurrentThreadId(), result);
+        return result;
+    }
+    return g_cniRegGetValue(key, subkey, value, flags, type, data, size);
+}
+static LSTATUS WINAPI CniRegQueryValueHook(HKEY key, LPCWSTR value, LPDWORD reserved,
+    LPDWORD type, LPBYTE data, LPDWORD size) {
+    if (!reserved && value && !_wcsicmp(value, L"EnableAutoTray") &&
+        CniTaskbarCplCaller(__builtin_return_address(0)) && CniExplorerKey(key)) {
+        LSTATUS result = CniVirtualAutoTray(0, type, data, size);
+        Wh_Log(L"[T81-CNI] virtual RegQueryValue enabled=%lu tid=%lu status=%ld",
+               (unsigned long)g_privateAutoTray.load(), GetCurrentThreadId(), result);
+        return result;
+    }
+    return g_cniRegQueryValue(key, value, reserved, type, data, size);
+}
+// This Shell helper is imported by taskbarcpl builds that use a boolean
+// HKCU/HKLM read rather than calling RegGetValueW from the page directly.
+using T81SHRegGetBool = BOOL (WINAPI*)(LPCWSTR, LPCWSTR, BOOL);
+static T81SHRegGetBool g_cniSHRegGetBool = nullptr;
+static BOOL WINAPI CniSHRegGetBoolHook(LPCWSTR key, LPCWSTR value, BOOL fallback) {
+    if (key && value &&
+        !_wcsicmp(key, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer") &&
+        !_wcsicmp(value, L"EnableAutoTray") &&
+        CniTaskbarCplCaller(__builtin_return_address(0))) {
+        DWORD result = g_privateAutoTray.load(std::memory_order_acquire);
+        Wh_Log(L"[T81-CNI] virtual SHRegGetBool enabled=%lu tid=%lu",
+               (unsigned long)result, GetCurrentThreadId());
+        return result != 0;
+    }
+    return g_cniSHRegGetBool(key, value, fallback);
+}
+static void InstallCniRegistryReadHooks() {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    g_cniNtQueryKey = ntdll ? reinterpret_cast<T81NtQueryKey>(GetProcAddress(ntdll, "NtQueryKey")) : nullptr;
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
+        try { CniRegistryKeyName(key, g_cniExplorerKeyName); } catch (...) { g_cniExplorerKeyName.clear(); }
+        RegCloseKey(key);
+    }
+    HMODULE advapi = GetModuleHandleW(L"advapi32.dll");
+    void* get = advapi ? reinterpret_cast<void*>(GetProcAddress(advapi, "RegGetValueW")) : nullptr;
+    void* query = advapi ? reinterpret_cast<void*>(GetProcAddress(advapi, "RegQueryValueExW")) : nullptr;
+    bool getOk = get && Wh_SetFunctionHook(get, reinterpret_cast<void*>(CniRegGetValueHook),
+        reinterpret_cast<void**>(&g_cniRegGetValue));
+    bool queryOk = query && Wh_SetFunctionHook(query, reinterpret_cast<void*>(CniRegQueryValueHook),
+        reinterpret_cast<void**>(&g_cniRegQueryValue));
+    HMODULE shlwapi = GetModuleHandleW(L"shlwapi.dll");
+    void* boolean = shlwapi ? reinterpret_cast<void*>(GetProcAddress(shlwapi,
+        "SHRegGetBoolValueFromHKCUHKLM")) : nullptr;
+    bool boolOk = boolean && Wh_SetFunctionHook(boolean,
+        reinterpret_cast<void*>(CniSHRegGetBoolHook),
+        reinterpret_cast<void**>(&g_cniSHRegGetBool));
+    Wh_Log(L"[T81-CNI] in-memory registry read hooks get=%d query=%d bool=%d key=%d",
+        getOk ? 1 : 0, queryOk ? 1 : 0, boolOk ? 1 : 0,
+        g_cniExplorerKeyName.empty() ? 0 : 1);
+}
 
 HRESULT STDMETHODCALLTYPE CPrivateTrayFactory::CreateInstance(
     IUnknown* outer, REFIID riid, void** ppv) {
@@ -7677,6 +7860,7 @@ static bool StartTrayNotifyServer() {
             L"EnableAutoTray", RRF_RT_REG_DWORD, nullptr,
             &autoTray, &size) != ERROR_SUCCESS)
         autoTray = 1;
+    g_privateAutoTray.store(autoTray ? 1u : 0u, std::memory_order_release);
     s->trayShowAll = (autoTray == 0);
 
     g_trayCni = new (std::nothrow) CPrivateTrayNotify();
@@ -7757,16 +7941,24 @@ static void NotifyTrayCni(ULONG event, const PrivateIcon& icon) {
     if (g_trayCni) g_trayCni->NotifyOne(event, icon);
 }
 
-// Client-side bridge returned only by our filtered activation hook. Register
-// and callback teardown keep using the COM backend that already works. The two
-// write methods stay in this mod, avoiding the first-write COM proxy path seen
-// in the runtime log and applying the icon change before returning to the CPL.
+// The page must be closed before unloading the mod: this client bridge has
+// a mod-owned vtable and can remain referenced by the page. The write methods
+// avoid passing the private item through the COM proxy.
 class CTrayCniClientBridge final : public ITrayNotifyWin8 {
     std::atomic<ULONG> refs_{1};
     ITrayNotifyWin8* backend_;
+    DWORD pageThread_;
+    bool tracked_;
 public:
-    explicit CTrayCniClientBridge(ITrayNotifyWin8* backend) : backend_(backend) {}
-    ~CTrayCniClientBridge() { if (backend_) backend_->Release(); }
+    explicit CTrayCniClientBridge(ITrayNotifyWin8* backend)
+        : backend_(backend), pageThread_(GetCurrentThreadId()),
+          tracked_(CniTrackPageThread(pageThread_)) {
+        Wh_Log(L"[T81-CNI] page read scope tid=%lu tracked=%d", pageThread_, tracked_ ? 1 : 0);
+    }
+    ~CTrayCniClientBridge() {
+        if (tracked_) CniUntrackPageThread(pageThread_);
+        if (backend_) backend_->Release();
+    }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (!ppv) return E_POINTER;
@@ -7973,6 +8165,11 @@ static void EndTrayDrag(HWND capture,POINT client) {
         else { RECT r=system?SystemCell(system):PrivateIconRect(index); clickSame=PtInRect(&r,q)!=FALSE; }
     }
     RECT panel{}, bar{}; bool inPanel=s->overflowPanel && IsWindowVisible(s->overflowPanel) && GetWindowRect(s->overflowPanel,&panel) && PtInRect(&panel,p);
+    if(inPanel) {
+        POINT q=p; ScreenToClient(s->overflowPanel,&q);
+        RECT footer=OverflowFooter();
+        if(PtInRect(&footer,q)) inPanel=false;
+    }
     GetClientRect(s->bar,&bar); Layout layout=GetLayout(bar.right,bar.bottom);
     VerticalLayout vl=s->verticalActive?GetVerticalLayout(bar.right,bar.bottom):VerticalLayout{};
     RECT tray=s->verticalActive?RECT{0,vl.arrow.top,bar.right,vl.clock.top}:layout.tray;MapWindowPoints(s->bar,nullptr,(POINT*)&tray,2);
@@ -8222,7 +8419,7 @@ static void ShowDesktopBandPopup() {
         x=std::max((int)mi.rcWork.left,std::min(x,(int)mi.rcWork.right-width));
         y=std::max((int)mi.rcWork.top,std::min((int)(bar.top+v.desktopBand.top),(int)mi.rcWork.bottom-height));
     }
-    DesktopPopupData* raw=d.get(); HWND popup=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,kDesktopPopupClass,L"Desktop",WS_POPUP|WS_BORDER,x,y,width,height,s->bar,nullptr,wc.hInstance,raw);
+    DesktopPopupData* raw=d.get(); HWND popup=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,kDesktopPopupClass,Tr(L"Desktop",L"Desktop"),WS_POPUP|WS_BORDER,x,y,width,height,s->bar,nullptr,wc.hInstance,raw);
     if(!popup) {Wh_Log(L"[T81-DIAG] Desktop popup create failed=%lu",GetLastError());return;}
     raw->windowOwns=true;[[maybe_unused]] auto transferred_d=d.release();s->desktopPopup=popup;ExcludeFromPeek(popup);
     SetWindowPos(popup,HWND_TOPMOST,x,y,width,height,SWP_SHOWWINDOW);SetForegroundWindow(popup);if(raw->list) SetFocus(raw->list);
@@ -8439,7 +8636,7 @@ static std::wstring BuildBarMenuText(bool clock) {
     lines+=Tr(L">Barre degli strumenti\n",L">Toolbars\n");
     lines+=s->addressBand?Tr(L"*Indirizzo\n",L"*Address\n"):Tr(L"Indirizzo\n",L"Address\n");
     lines+=s->linksBand?Tr(L"*Collegamenti\n",L"*Links\n"):Tr(L"Collegamenti\n",L"Links\n");
-    lines+=s->desktopBand?L"*Desktop\n":L"Desktop\n";
+    lines+=s->desktopBand?Tr(L"*Desktop\n",L"*Desktop\n"):Tr(L"Desktop\n",L"Desktop\n");
     lines+=L"<\n-\n";
     if(clock) lines+=Tr(L"Modifica data/ora\nPersonalizza icone di notifica\n-\n",L"Adjust date/time\nCustomize notification icons\n-\n");
     lines+=Tr(L"Sovrapponi le finestre\nMostra le finestre in pila\nMostra le finestre affiancate\nMostra desktop\n-\nGestione attività\n-\n",L"Cascade windows\nShow windows stacked\nShow windows side by side\nShow the desktop\n-\nTask Manager\n-\n");
@@ -9205,7 +9402,7 @@ static bool OpenNetworkConnectionInterface(HWND owner) {
     se.lpFile=L"control.exe";se.lpParameters=L"ncpa.cpl";se.hInstApp=nullptr;
     if(networkShellExecute(&se)) {Wh_Log(L"[T81-DIAG] classic network connections request accepted");return true;}
     Wh_Log(L"[T81-DIAG] network connections fallback failed error=%lu",GetLastError());
-    MessageBoxW(owner,Tr(L"Impossibile aprire le connessioni di rete. Controlla il log Windhawk.",L"Unable to open network connections. Check the Windhawk log."),L"Windows 8.1 Taskbar Recreation",MB_OK|MB_ICONERROR);
+    MessageBoxW(owner,Tr(L"Impossibile aprire le connessioni di rete. Controlla il log Windhawk.",L"Unable to open network connections. Check the Windhawk log."),Tr(L"Ricreazione della barra delle applicazioni di Windows 8.1",L"Windows 8.1 Taskbar Recreation"),MB_OK|MB_ICONERROR);
     return false;
 }
 #ifdef TASKBAR81_TEST
@@ -10388,7 +10585,7 @@ static void DrawBarForeground(HDC mem,const Layout& L,int w,int h,
         DrawTextW(mem,title,-1,&band,DT_VCENTER|DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
         DrawTextW(mem,L"»",-1,&arrow,DT_VCENTER|DT_CENTER|DT_SINGLELINE|DT_NOPREFIX);
     };
-    if(s->desktopBand && L.desktopBand.right>L.desktopBand.left) drawBand(L.desktopBand,L"Desktop");
+    if(s->desktopBand && L.desktopBand.right>L.desktopBand.left) drawBand(L.desktopBand,Tr(L"Desktop",L"Desktop"));
     if(s->linksBand && L.linksBand.right>L.linksBand.left) drawBand(L.linksBand,Tr(L"Collegamenti",L"Links"));
     if(s->privateActive) { Graphics trayGraphics(mem); trayGraphics.SetSmoothingMode(SmoothingModeAntiAlias); PaintPrivateArea(trayGraphics,mem,L,h); }
 }
@@ -11237,7 +11434,7 @@ void ShowOverflow() {
         std::replace(title.begin(),title.end(),L'\r',L' ');
         if(title.empty()) title=Tr(L"Applicazione",L"Application");
         if(!labels.empty()) labels+=L"\n";
-        labels+=L"App: "+title;
+        labels+=std::wstring(Tr(L"App: ",L"App: "))+title;
         targets.push_back(std::move(target));
     }
     POINT p{}; GetCursorPos(&p);
@@ -13541,7 +13738,7 @@ static LRESULT CALLBACK BarDragHookProc(int code,WPARAM msg,LPARAM data) {
         }
         else if(msg==WM_LBUTTONUP) {
             if(PostMessageW(s->bar,WM_BAR_DRAG_END,(WPARAM)(INT_PTR)event->pt.x,(LPARAM)event->pt.y)) {
-                s->barHookEndQueued=true;return 1; // the empty-space release belongs to this gesture
+                s->barHookEndQueued=true; // Forward the release to the rest of the hook chain.
             }
         }
     }
@@ -13893,7 +14090,7 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
         DrawIconEx(dc,(w-size)/2,v.first+slot*v.step+(v.step-size)/2,GroupIcon(i),size,size,0,nullptr,DI_NORMAL);}
     HFONT font=CreateTaskbarFont(Dpi(),s->perPixelBar);ScopedSelection sel(dc,font);SetTextColor(dc,RGB(255,255,255));SetBkMode(dc,TRANSPARENT);
     if(!IsRectEmpty(&v.more)){RECT r=v.more;DrawTextW(dc,L"\u00bb",-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE);}
-    for(auto entry:{std::pair<RECT,const wchar_t*>{v.desktopBand,L"Desktop \u00bb"},
+    for(auto entry:{std::pair<RECT,const wchar_t*>{v.desktopBand,Tr(L"Desktop \u00bb",L"Desktop \u00bb")},
                     {v.linksBand,Tr(L"Link \u00bb",L"Links \u00bb")}}) {
         RECT r=entry.first;if(!IsRectEmpty(&r))DrawTextW(dc,entry.second,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
     }
@@ -14246,7 +14443,12 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         if(wp==TIMER_Z_GUARD) {
             if(s->barDragCandidate && (!s->privateActive || s->bandsLocked ||
                (!s->barHookEndQueued && !(GetAsyncKeyState(VK_LBUTTON)&0x8000)))) CancelBarEdgeDrag(true);
-            GuardPrivateTray(); GuardOverlayZOrder(); TickTrayDrag(); DismissOverflowOnOutsideClick(); }
+            // Keep responsive input checks at 100 ms; run the heavier tray
+            // guard once per second, with event-driven rehide still active.
+            static ULONGLONG lastPrivateGuard=0;
+            ULONGLONG now=GetTickCount64();
+            if(now-lastPrivateGuard>=1000) {lastPrivateGuard=now;GuardPrivateTray();}
+            GuardOverlayZOrder(); TickTrayDrag(); DismissOverflowOnOutsideClick(); }
         if(wp==TIMER_BUTTON_TRANSITION) {TickButtonTransitions();return 0;}
         if(wp==TIMER_ANIMATION || wp==TIMER_FADE) InvalidateRect(h,nullptr,FALSE);
         if(wp==TIMER_REFRESH) {
@@ -14500,7 +14702,10 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         return 0;
     case WM_CAPTURECHANGED:
         CancelBarEdgeDrag(true);s->bandDragHit=0;
-        if(s->trayDrag.capture==h) CancelTrayDrag();
+        if(s->trayDrag.capture==h) {
+            Wh_Log(L"[T81-DIAG] tray-drag cancelled bar capture-changed active=%d",s->trayDrag.active?1:0);
+            CancelTrayDrag();
+        }
         s->startPressed=false;s->betaDesktopPressed=false;
         s->dragCandidate=false; s->dragActive=false; s->dragInsertion=-1; s->dragKey.clear();
         InvalidateRect(h,nullptr,FALSE);
@@ -14923,6 +15128,7 @@ BOOL Wh_ModInit() {
     quitting.store(false);
     LoadSettings();
     InstallTrayCniHook();
+    InstallCniRegistryReadHooks();
     if(useOriginalBatteryFlyout.load()) {
         HMODULE user=GetModuleHandleW(L"user32.dll");
         void* target=user?(void*)GetProcAddress(user,"LoadStringW"):nullptr;
