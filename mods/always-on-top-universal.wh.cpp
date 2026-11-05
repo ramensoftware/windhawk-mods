@@ -2,7 +2,7 @@
 // @id              always-on-top-universal
 // @name            Always on Top (Universal)
 // @description     Adds a customizable "Always on Top" option to window menus, plus a force-topmost process list.
-// @version         1.0.1
+// @version         1.0.2
 // @author          gloobus1
 // @github          https://github.com/glooobus1
 // @include         *
@@ -31,13 +31,13 @@ Examples:
 ## Force topmost list
 Processes listed in **Force topmost processes** (separated by `;`) will always have their
 windows kept above all others, regardless of the menu toggle. Example:
-`cmd.exe;Taskmgr.exe;regedit.exe`
+`Taskmgr.exe;regedit.exe`
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabledPrefix: " "
+- enabledPrefix: "✓ "
   $name: Enabled prefix
   $description: Text substituted for %enabled% when the window is topmost. Leave empty for no prefix.
 - menuTemplate: "%enabled%%text%"
@@ -46,9 +46,9 @@ windows kept above all others, regardless of the menu toggle. Example:
 - baseText: "On Top"
   $name: Base text
   $description: Text substituted for %text% in the template.
-- forceTopmostList: "cmd.exe;Taskmgr.exe;regedit.exe"
+- forceTopmostList: ""
   $name: Force topmost processes
-  $description: Semicolon-separated process names (e.g. cmd.exe;Taskmgr.exe;regedit.exe). Their windows are always kept on top.
+  $description: Semicolon-separated process names (e.g. Taskmgr.exe;regedit.exe). Their windows are always kept on top.
 */
 // ==/WindhawkModSettings==
 
@@ -203,10 +203,12 @@ void EnforceForceTopmost(HWND hWnd) {
 }
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    if (Msg == WM_INITMENUPOPUP && HIWORD(lParam) == MF_SYSMENU) {
+    if (Msg == WM_INITMENUPOPUP && HIWORD(lParam)) {
+        // TRUE for the window menu
         AddMenuItem(hWnd, (HMENU)wParam);
     } 
-    else if (Msg == WM_UNINITMENUPOPUP && HIWORD(lParam) == MF_SYSMENU) {
+    else if (Msg == WM_UNINITMENUPOPUP && HIWORD(lParam)) {
+        // MF_SYSMENU for the window menu
         RemoveMenuItem((HMENU)wParam);
     }
     else if (Msg == WM_SYSCOMMAND) {
