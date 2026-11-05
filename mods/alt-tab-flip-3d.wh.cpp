@@ -4,11 +4,11 @@
 // @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
 // @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
 // @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.7.2
+// @version         1.7.3
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
-// @donateUrl       https://livepix.gg/caliberda
+// @donateUrl       https://github.com/sponsors/cesarkali
 // @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32
@@ -154,6 +154,9 @@ above. Only one of them can take over Alt+Tab.
 * Minimized windows show their last content, like the taskbar previews (this
   can be turned off). Windows that refuse to be captured are shown as a card
   with the app icon.
+* On a monitor with HDR on, windows with HDR content (videos, games, photos)
+  keep their full brightness in the switcher, like in the native Alt+Tab
+  (*HDR* setting).
 * With the *Dim only* background, the real windows stay visible behind the
   stack. The wallpaper backgrounds hide them, like the original Flip 3D.
 * If the switcher can't start (e.g. no GPU device), the native Alt+Tab keeps
@@ -323,6 +326,9 @@ acima. Só um deles consegue assumir o Alt+Tab.
 * Janelas minimizadas mostram o último conteúdo, como as miniaturas da barra de
   tarefas (dá para desligar). Janelas que bloqueiam captura aparecem como um
   cartão com o ícone do app.
+* Num monitor com HDR ligado, janelas com conteúdo HDR (vídeos, jogos, fotos)
+  mantêm o brilho todo no alternador, como no Alt+Tab nativo (configuração
+  *HDR*).
 * Com o fundo *Apenas escurecer*, as janelas reais continuam visíveis atrás da
   pilha. Os fundos com papel de parede as escondem, como no Flip 3D original.
 * Se o alternador não conseguir iniciar (ex.: sem dispositivo de GPU), o Alt+Tab
@@ -837,6 +843,11 @@ escrever em português.
   - "90": Cerca de 90 FPS
   - "60": Cerca de 60 FPS
   - "30": Cerca de 30 FPS
+- hdr: true
+  $name: HDR
+  $name:pt-BR: HDR
+  $description: On a monitor with HDR on (Settings > System > Display > Use HDR), windows with HDR content (videos, games, photos) keep their full brightness in the switcher, like in the native Alt+Tab. It takes more graphics memory; when off, they're shown at SDR brightness. Monitors without HDR aren't affected
+  $description:pt-BR: Num monitor com HDR ligado (Configurações > Sistema > Tela > Usar HDR), janelas com conteúdo HDR (vídeos, jogos, fotos) mantêm o brilho todo no alternador, como no Alt+Tab nativo. Usa mais memória de vídeo; desligado, elas aparecem com o brilho de SDR. Monitores sem HDR não mudam
 - middleClickClose: true
   $name: Middle-click closes a window
   $name:pt-BR: Clique do meio fecha a janela
@@ -869,7 +880,7 @@ escrever em português.
 #include <dcomp.h>
 #include <dwmapi.h>
 #include <dwrite.h>
-#include <dxgi1_3.h>
+#include <dxgi1_6.h>
 #include <inspectable.h>
 #include <propsys.h>
 #include <shellscalingapi.h>
@@ -1122,6 +1133,7 @@ struct Settings {
     // 0: the screen's refresh rate, plus fpsAboveScreen.
     int maxFps;
     int fpsAboveScreen;
+    bool hdr;
     bool middleClickClose;
     bool closeButton;
     bool hideBars;
@@ -1323,6 +1335,7 @@ Settings LoadSettings() {
     const auto frameRate = WindhawkUtils::StringSetting::make(L"frameRate");
     s.maxFps = std::clamp(_wtoi(frameRate), 0, 240);
     s.fpsAboveScreen = wcscmp(frameRate, L"screenPlus20") == 0 ? 20 : 0;
+    s.hdr = Wh_GetIntSetting(L"hdr") != 0;
     s.middleClickClose = Wh_GetIntSetting(L"middleClickClose") != 0;
     s.closeButton = Wh_GetIntSetting(L"closeButton") != 0;
     s.hideBars = Wh_GetIntSetting(L"hideBars") != 0;
@@ -2510,12 +2523,22 @@ D2D1_COLOR_F GetAccentColor() {
 ////////////////////////////////////////////////////////////////////////////////
 // The switcher (UI thread).
 
-// The GPU the monitor is connected to. On laptops with two GPUs, rendering on
-// the other one means every frame is copied between them.
-com_ptr<IDXGIAdapter1> FindMonitorAdapter(HMONITOR monitor) {
-    com_ptr<IDXGIFactory1> factory;
-    if (!monitor || FAILED(CreateDXGIFactory1(IID_PPV_ARGS(factory.put())))) {
+// The GPU the monitor is connected to, and optionally its output for that
+// monitor, from the given DXGI factory or a new one. On laptops with two
+// GPUs, rendering on the other one means every frame is copied between them.
+com_ptr<IDXGIAdapter1> FindMonitorAdapter(
+    HMONITOR monitor,
+    com_ptr<IDXGIOutput>* monitorOutput = nullptr,
+    IDXGIFactory1* factory = nullptr) {
+    com_ptr<IDXGIFactory1> newFactory;
+    if (!monitor) {
         return nullptr;
+    }
+    if (!factory) {
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(newFactory.put())))) {
+            return nullptr;
+        }
+        factory = newFactory.get();
     }
     com_ptr<IDXGIAdapter1> adapter;
     for (UINT i = 0; SUCCEEDED(factory->EnumAdapters1(i, adapter.put()));
@@ -2525,6 +2548,9 @@ com_ptr<IDXGIAdapter1> FindMonitorAdapter(HMONITOR monitor) {
              j++) {
             DXGI_OUTPUT_DESC desc;
             if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == monitor) {
+                if (monitorOutput) {
+                    *monitorOutput = output;
+                }
                 return adapter;
             }
             output = nullptr;
@@ -2542,6 +2568,114 @@ bool GetMonitorAdapterLuid(HMONITOR monitor, LUID* luid) {
     }
     *luid = desc.AdapterLuid;
     return true;
+}
+
+// Whether Windows shows the monitor in HDR ("Use HDR" is on for it). The
+// factory must be current (see UpdateHdr): one keeps what it saw when made.
+bool IsHdrMonitor(HMONITOR monitor, IDXGIFactory1* factory) {
+    com_ptr<IDXGIOutput> output;
+    if (!FindMonitorAdapter(monitor, &output, factory) || !output) {
+        return false;
+    }
+    auto output6 = output.try_as<IDXGIOutput6>();
+    DXGI_OUTPUT_DESC1 desc;
+    return output6 && SUCCEEDED(output6->GetDesc1(&desc)) &&
+           desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+}
+
+// The brightness Windows gives SDR content on an HDR monitor (its "SDR
+// content brightness"), in scRGB: 1 is 80 nits.
+float GetSdrWhiteLevel(HMONITOR monitor) {
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    UINT32 pathCount = 0;
+    UINT32 modeCount = 0;
+    if (!GetMonitorInfoW(monitor, &info) ||
+        GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount,
+                                    &modeCount) != ERROR_SUCCESS) {
+        return 1;
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                           &modeCount, modes.data(),
+                           nullptr) != ERROR_SUCCESS) {
+        return 1;
+    }
+    for (UINT32 i = 0; i < pathCount; i++) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        source.header.size = sizeof(source);
+        source.header.adapterId = paths[i].sourceInfo.adapterId;
+        source.header.id = paths[i].sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS ||
+            wcscmp(source.viewGdiDeviceName, info.szDevice) != 0) {
+            continue;
+        }
+        DISPLAYCONFIG_SDR_WHITE_LEVEL white{};
+        white.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
+        white.header.size = sizeof(white);
+        white.header.adapterId = paths[i].targetInfo.adapterId;
+        white.header.id = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&white.header) == ERROR_SUCCESS &&
+            white.SDRWhiteLevel > 0) {
+            // In thousandths of 80 nits.
+            return white.SDRWhiteLevel / 1000.0f;
+        }
+        break;
+    }
+    return 1;
+}
+
+// Whether the window is full screen like a game or a video: it covers its
+// whole monitor, and has no frame and isn't maximized (a maximized window's
+// frame goes past its monitor's edges too, e.g. with the taskbar hidden).
+// Also which monitor.
+bool IsFullScreenWindow(HWND hwnd, HMONITOR* monitor = nullptr) {
+    if (!hwnd || IsZoomed(hwnd) ||
+        (GetWindowLongPtrW(hwnd, GWL_STYLE) & (WS_CAPTION | WS_THICKFRAME))) {
+        return false;
+    }
+    HMONITOR windowMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+    MONITORINFO info{sizeof(info)};
+    RECT rect;
+    if (!windowMonitor || !GetMonitorInfoW(windowMonitor, &info) ||
+        !GetWindowRect(hwnd, &rect) || rect.left > info.rcMonitor.left ||
+        rect.top > info.rcMonitor.top || rect.right < info.rcMonitor.right ||
+        rect.bottom < info.rcMonitor.bottom) {
+        return false;
+    }
+    if (monitor) {
+        *monitor = windowMonitor;
+    }
+    return true;
+}
+
+// Sets a color matrix effect to scale * value + offset on the colors.
+void SetColorMatrix(ID2D1Effect* effect, float scale, float offset) {
+    effect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX,
+                     D2D1::Matrix5x4F(scale, 0, 0, 0,  //
+                                      0, scale, 0, 0,  //
+                                      0, 0, scale, 0,  //
+                                      0, 0, 0, 1,      //
+                                      offset, offset, offset, 0));
+}
+
+// Sets a gamma transfer effect to amplitude * value ^ exponent + offset on
+// the colors.
+void SetGammaTransfer(ID2D1Effect* effect,
+                      float amplitude,
+                      float exponent,
+                      float offset) {
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_AMPLITUDE, amplitude);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_OFFSET, offset);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_AMPLITUDE, amplitude);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_OFFSET, offset);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_AMPLITUDE, amplitude);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_OFFSET, offset);
 }
 
 struct EffectChain {
@@ -2563,8 +2697,8 @@ struct Item {
     com_ptr<ID2D1Bitmap1> placeholder;
 
     // Minimized and hidden windows can't be captured directly. Their DWM
-    // thumbnail (the last content, as in the taskbar previews) is shown in an
-    // off-screen proxy window, which is captured instead.
+    // thumbnail (the last content, as in the taskbar previews) is shown in a
+    // proxy window out of sight (see ProxyPlace), which is captured instead.
     HWND proxy = nullptr;
     HTHUMBNAIL thumbnail = nullptr;
 
@@ -2596,6 +2730,12 @@ struct Item {
     float Width() const { return (float)(rect.right - rect.left); }
     float Height() const { return (float)(rect.bottom - rect.top); }
 };
+
+// Where a proxy window is put. Some PCs refuse to capture it off-screen
+// (#6179), so it's then put almost entirely past an outer edge of the
+// switcher's monitor, with one row or column of pixels on it, under every
+// window (and the taskbar, at the bottom).
+enum class ProxyPlace { OffScreen, MonitorEdge };
 
 struct DrawEntry {
     Item* item;
@@ -2638,6 +2778,7 @@ class Switcher {
     void MoveDeviceToMonitor();
     void HandleDeviceLost();
     void UpdateFrameRate();
+    void UpdateHdr();
     void StopRestoreCheck();
     void CheckRestored();
     bool EnsureSwapChain(UINT width, UINT height);
@@ -2661,12 +2802,20 @@ class Switcher {
     std::unique_ptr<Item> MakeItem(HWND hwnd, bool hidden);
     void CollectWindows();
     void OnToggleMonitors();
-    bool CreateProxy(Item& item);
+    bool FindEdgeProxyRect(SIZE size, RECT* rect) const;
+    bool CreateProxy(Item& item, ProxyPlace place);
     void StartCaptures();
     void StartCaptures(const std::vector<Item*>& items);
     bool FirstFramesReady();
     void StartCapture(Item& item);
+    bool TryCapture(Item& item, HWND source);
+    wgdx::DirectXPixelFormat CaptureFormat() const;
     void StopCapture(Item& item);
+    HRESULT CreateFrameTexture(UINT width,
+                               UINT height,
+                               com_ptr<ID3D11Texture2D>& texture,
+                               com_ptr<ID2D1Bitmap1>& bitmap);
+    HRESULT ConvertHdrFrame(Item& item, UINT width, UINT height);
     bool PollFrames(Item& item);
     void Teardown();
 
@@ -2715,7 +2864,10 @@ class Switcher {
     com_ptr<IWICBitmap> ReadAppIconPixels(HWND hwnd);
     com_ptr<ID2D1Bitmap1> CreateIconBitmap(IWICBitmap* pixels);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
-    com_ptr<ID2D1Bitmap1> CreateTargetBitmap(UINT width, UINT height);
+    com_ptr<ID2D1Bitmap1> CreateTargetBitmap(
+        UINT width,
+        UINT height,
+        DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
     com_ptr<ID2D1Bitmap1> DecodeWallpaper(const std::wstring& path,
                                           UINT width,
                                           UINT height,
@@ -2767,6 +2919,31 @@ class Switcher {
     // The last frame's result, so a repeating error is logged once.
     HRESULT m_lastRenderError = S_OK;
 
+    // HDR (see UpdateHdr): the session's monitor shows HDR, and its white for
+    // SDR content in scRGB (1 is 80 nits). The swap chain is in scRGB, unless
+    // that failed (see m_hdrFailed).
+    bool m_hdr = false;
+    float m_sdrWhite = 1;
+    bool m_swapHdr = false;
+    // Set when HDR couldn't be set up; cleared with a new device or new
+    // settings, so a device lost at that moment (a driver update) doesn't
+    // turn HDR off for good.
+    bool m_hdrFailed = false;
+    // Tells whether the switcher's monitor shows HDR (see UpdateHdr).
+    com_ptr<IDXGIFactory1> m_hdrFactory;
+    // HDR: the frame drawn in SDR's terms, the texture every captured frame
+    // goes through, and the effects (see UpdateHdr) turning a captured frame
+    // (scRGB) into SDR's terms (scaled and clamped, lifted, encoded) and the
+    // drawn frame back into scRGB (lifted, decoded).
+    com_ptr<ID2D1Bitmap1> m_sceneBitmap;
+    com_ptr<ID3D11Texture2D> m_hdrFrameTexture;
+    com_ptr<ID2D1Bitmap1> m_hdrFrame;
+    com_ptr<ID2D1Effect> m_clampScRgb;
+    com_ptr<ID2D1Effect> m_liftScRgb;
+    com_ptr<ID2D1Effect> m_fromScRgb;
+    com_ptr<ID2D1Effect> m_liftScene;
+    com_ptr<ID2D1Effect> m_toScRgb;
+
     // A minimized window being switched to, checked until it's restored (see
     // CheckRestored).
     HWND m_restoreWnd = nullptr;
@@ -2815,6 +2992,9 @@ class Switcher {
     // when their first frames arrived, or at this time at the latest.
     bool m_capturing = false;
     double m_captureDeadline = 0;
+    // Proxies were last captured at the monitor's edge only (see ProxyPlace),
+    // so that's tried first.
+    bool m_edgeProxies = false;
     double m_lastFrame = 0;
     double m_altReleasedAt = 0;
     Tween m_open;
@@ -3226,12 +3406,21 @@ void Switcher::ReleaseDeviceResources() {
     for (auto& [hwnd, entry] : m_iconCache) {
         entry.bitmap = nullptr;
     }
+    m_clampScRgb = nullptr;
+    m_liftScRgb = nullptr;
+    m_fromScRgb = nullptr;
+    m_liftScene = nullptr;
+    m_toScRgb = nullptr;
+    m_hdrFrame = nullptr;
+    m_hdrFrameTexture = nullptr;
+    m_sceneBitmap = nullptr;
     if (m_ctx) {
         m_ctx->SetTarget(nullptr);
     }
     m_targetBitmap = nullptr;
     m_swapChain = nullptr;
     m_swapWidth = m_swapHeight = 0;
+    m_swapHdr = false;
     m_dcompVisual = nullptr;
     m_dcompTarget = nullptr;
     m_dcompDevice = nullptr;
@@ -3262,6 +3451,7 @@ bool Switcher::DeviceRemoved() const {
 // tried again regularly.
 void Switcher::RecreateDevice(HMONITOR monitor) {
     ReleaseDeviceResources();
+    m_hdrFailed = false;
     if (CreateDeviceResources(monitor)) {
         g_ready = true;
         KillTimer(m_hwnd, kDeviceRetryTimerId);
@@ -3359,15 +3549,126 @@ void Switcher::UpdateFrameRate() {
     }
 }
 
+// On a monitor with HDR on, windows with HDR content (videos, games, photos)
+// keep their brightness, like in the native Alt+Tab. Everything is drawn in
+// SDR's terms as usual, in half floats: values from 0 to 1 are SDR's colors,
+// gamma-encoded, and brighter parts of the captured windows go above 1. Each
+// captured frame (scRGB, linear, SDR white at m_sdrWhite) is divided by the
+// SDR white and encoded (see ConvertHdrFrame), and the drawn frame is decoded
+// and multiplied back into scRGB (see RenderFrame), so the windows come out
+// exactly as they were. Looked up when a session's captures start, since
+// Windows' HDR can be switched any time.
+//
+// The decoding follows the sRGB curve, as Windows shows SDR content on an HDR
+// monitor, so the wallpaper and the rest drawn by the switcher look the same
+// as on the desktop: ((value + a) / (1 + a)) ^ 2.4, minus its value at 0 (c),
+// scaled so 1 stays 1. It goes on above 1, which the sRGB curve itself
+// doesn't; it differs from it only in the darkest tones, by less than 0.1% of
+// white. Both ways take two effects: a color matrix for what's inside the
+// power, and a gamma transfer.
+//
+// Colors beyond sRGB's are negative in scRGB, and have no power: they're
+// clamped to 0 first. The clamp keeps 0 to 1 only, so the frame is scaled
+// down by kHdrHeadroom before it, and scaled back by the gamma's amplitude.
+void Switcher::UpdateHdr() {
+    // The brightest kept, in SDR whites (at least 10000 nits).
+    constexpr float kHdrHeadroom = 128;
+    constexpr float a = 0.055f;
+    constexpr float exponent = 2.4f;
+    const float c = std::pow(a / (1 + a), exponent);
+
+    const bool wasHdr = m_hdr;
+    const float wasSdrWhite = m_sdrWhite;
+    HMONITOR monitor = MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY);
+    m_hdr = false;
+    if (m_settings.hdr && !m_hdrFailed) {
+        // A factory tells when the displays or their HDR state changed since
+        // it was made (IsCurrent); only then is it made again.
+        if (!m_hdrFactory || !m_hdrFactory->IsCurrent()) {
+            m_hdrFactory = nullptr;
+            CreateDXGIFactory1(IID_PPV_ARGS(m_hdrFactory.put()));
+        }
+        m_hdr = m_hdrFactory && IsHdrMonitor(monitor, m_hdrFactory.get());
+    }
+    m_sdrWhite = m_hdr ? GetSdrWhiteLevel(monitor) : 1;
+    if (m_hdr && !m_fromScRgb) {
+        if (FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_clampScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_liftScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1GammaTransfer,
+                                       m_fromScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_liftScene.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1GammaTransfer,
+                                       m_toScRgb.put()))) {
+            Wh_Log(L"HDR effects failed, HDR off");
+            m_clampScRgb = nullptr;
+            m_liftScRgb = nullptr;
+            m_fromScRgb = nullptr;
+            m_liftScene = nullptr;
+            m_toScRgb = nullptr;
+            m_hdr = false;
+            m_hdrFailed = true;
+        } else {
+            m_clampScRgb->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT,
+                                   (BOOL)TRUE);
+            m_liftScRgb->SetInputEffect(0, m_clampScRgb.get());
+            m_fromScRgb->SetInputEffect(0, m_liftScRgb.get());
+            m_toScRgb->SetInputEffect(0, m_liftScene.get());
+        }
+    }
+    if (m_hdr) {
+        // Encoding: y = x / (white * headroom), clamped; then
+        // value = (1 + a) * (headroom * ((1 - c) * y + c / headroom))
+        //         ^ (1 / 2.4) - a.
+        SetColorMatrix(m_clampScRgb.get(), 1 / (m_sdrWhite * kHdrHeadroom), 0);
+        SetColorMatrix(m_liftScRgb.get(), 1 - c, c / kHdrHeadroom);
+        SetGammaTransfer(m_fromScRgb.get(),
+                         (1 + a) * std::pow(kHdrHeadroom, 1 / exponent),
+                         1 / exponent, -a);
+        // Decoding: x = white * (((value + a) / (1 + a)) ^ 2.4 - c) / (1 - c).
+        SetColorMatrix(m_liftScene.get(), 1, a);
+        SetGammaTransfer(m_toScRgb.get(),
+                         m_sdrWhite / (std::pow(1 + a, exponent) * (1 - c)),
+                         exponent, -m_sdrWhite * c / (1 - c));
+    }
+    // The effects' own buffers (perspective, shadows) keep values above 1.
+    // Without HDR, they're left as they come (8 bits).
+    D2D1_RENDERING_CONTROLS controls;
+    m_ctx->GetRenderingControls(&controls);
+    if (m_hdr !=
+        (controls.bufferPrecision == D2D1_BUFFER_PRECISION_16BPC_FLOAT)) {
+        controls.bufferPrecision = m_hdr ? D2D1_BUFFER_PRECISION_16BPC_FLOAT
+                                         : D2D1_BUFFER_PRECISION_8BPC_UNORM;
+        m_ctx->SetRenderingControls(&controls);
+    }
+
+    if (m_hdr && (!wasHdr || m_sdrWhite != wasSdrWhite)) {
+        Wh_Log(L"HDR on, SDR white at %d nits",
+               (int)std::lround(m_sdrWhite * 80));
+    } else if (!m_hdr && wasHdr) {
+        Wh_Log(L"HDR off");
+    }
+}
+
 bool Switcher::EnsureSwapChain(UINT width, UINT height) {
-    if (m_swapChain && m_swapWidth == width && m_swapHeight == height) {
+    // HDR: half floats in scRGB, which Windows shows brighter than SDR white
+    // where the values go above it.
+    const bool hdr = m_hdr && !m_hdrFailed;
+    if (m_swapChain && m_swapWidth == width && m_swapHeight == height &&
+        m_swapHdr == hdr) {
         return true;
     }
 
     m_ctx->SetTarget(nullptr);
     m_targetBitmap = nullptr;
+    m_sceneBitmap = nullptr;
     m_swapChain = nullptr;
     m_swapWidth = m_swapHeight = 0;
+    m_swapHdr = false;
+    const DXGI_FORMAT format =
+        hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
 
     com_ptr<IDXGIAdapter> adapter;
     com_ptr<IDXGIFactory2> factory;
@@ -3379,7 +3680,7 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     DXGI_SWAP_CHAIN_DESC1 desc{};
     desc.Width = width;
     desc.Height = height;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.Format = format;
     desc.SampleDesc.Count = 1;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.BufferCount = 2;
@@ -3388,7 +3689,29 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
     HRESULT hr = factory->CreateSwapChainForComposition(
         m_d3dDevice.get(), &desc, nullptr, m_swapChain.put());
+    if (SUCCEEDED(hr) && hdr) {
+        com_ptr<IDXGISwapChain3> swapChain3;
+        hr = m_swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put()));
+        if (SUCCEEDED(hr)) {
+            hr = swapChain3->SetColorSpace1(
+                DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
+        }
+        // The frame is drawn here first (see UpdateHdr).
+        if (SUCCEEDED(hr)) {
+            m_sceneBitmap = CreateTargetBitmap(width, height, format);
+            hr = m_sceneBitmap ? S_OK : E_FAIL;
+        }
+    }
     if (FAILED(hr)) {
+        m_sceneBitmap = nullptr;
+        m_swapChain = nullptr;
+        if (hdr) {
+            // Not tried again until there's a new device or new settings.
+            // The windows' content, in SDR's terms, is then drawn as is.
+            Wh_Log(L"HDR swap chain failed, HDR off: 0x%08X", (UINT)hr);
+            m_hdrFailed = true;
+            return EnsureSwapChain(width, height);
+        }
         Wh_Log(L"CreateSwapChainForComposition failed: 0x%08X", (UINT)hr);
         return false;
     }
@@ -3398,8 +3721,7 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     if (SUCCEEDED(hr)) {
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                              D2D1_ALPHA_MODE_PREMULTIPLIED));
+            D2D1::PixelFormat(format, D2D1_ALPHA_MODE_PREMULTIPLIED));
         hr = m_ctx->CreateBitmapFromDxgiSurface(surface.get(), &props,
                                                 m_targetBitmap.put());
     }
@@ -3412,12 +3734,14 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     if (FAILED(hr)) {
         Wh_Log(L"Swap chain setup failed: 0x%08X", (UINT)hr);
         m_targetBitmap = nullptr;
+        m_sceneBitmap = nullptr;
         m_swapChain = nullptr;
         return false;
     }
 
     m_swapWidth = width;
     m_swapHeight = height;
+    m_swapHdr = hdr;
     return true;
 }
 
@@ -3433,6 +3757,7 @@ void Switcher::Shutdown() {
     m_iconCache.clear();
     m_dwriteFactory = nullptr;
     m_wicFactory = nullptr;
+    m_hdrFactory = nullptr;
     if (m_hwnd) {
         DestroyWindow(m_hwnd);
         m_hwnd = nullptr;
@@ -3602,6 +3927,7 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
 
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
+            m_hdrFailed = false;
             // A session in progress keeps the style of its shortcut.
             if (m_state != State::Idle) {
                 m_settings.style =
@@ -3807,10 +4133,11 @@ void Switcher::OnStart(WPARAM flags) {
 }
 
 // Used when the keyboard hook can't see the keys (e.g. an elevated window has
-// the focus). Like the native switcher, the switcher then takes the keyboard
-// focus, so the rest of the session goes through the hook again. A tiny
-// window off the screen takes it, not the overlay: animated wallpaper apps
-// pause while a full-screen window has the focus.
+// the focus), and over full-screen games (see ShowOverlay). Like the native
+// switcher, the switcher then takes the keyboard focus, so the rest of the
+// session goes through the hook again. A tiny window off the screen takes it,
+// not the overlay: animated wallpaper apps pause while a full-screen window
+// has the focus.
 void Switcher::TakeFocus() {
     if (!m_focusWnd) {
         return;
@@ -3818,7 +4145,9 @@ void Switcher::TakeFocus() {
     SetWindowPos(m_focusWnd, HWND_TOP, GetSystemMetrics(SM_XVIRTUALSCREEN) - 100,
                  GetSystemMetrics(SM_YVIRTUALSCREEN), 1, 1,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    // Receiving the hotkey allows this process to change the foreground.
+    // Receiving the hotkey, or input, allows this process to change the
+    // foreground.
+    SendDummyKeyPress();
     m_hasFocus = SetForegroundWindow(m_focusWnd) != FALSE;
     if (!m_hasFocus) {
         Wh_Log(L"Couldn't take the focus");
@@ -4473,11 +4802,42 @@ void Switcher::OnToggleMonitors() {
     }
 }
 
-bool Switcher::CreateProxy(Item& item) {
-    item.proxy = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-        kProxyClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, g_module,
-        nullptr);
+BOOL CALLBACK CountMonitorsProc(HMONITOR, HDC, LPRECT, LPARAM data) {
+    (*(int*)data)++;
+    return TRUE;
+}
+
+// A place for a proxy of this size with one row or column of pixels on the
+// switcher's monitor, and the rest on no monitor: past its bottom edge (under
+// the taskbar, usually), or else its right, left or top one.
+bool Switcher::FindEdgeProxyRect(SIZE size, RECT* rect) const {
+    const RECT& m = m_monitor;
+    const RECT candidates[] = {
+        {m.left, m.bottom - 1, m.left + size.cx, m.bottom - 1 + size.cy},
+        {m.right - 1, m.top, m.right - 1 + size.cx, m.top + size.cy},
+        {m.left + 1 - size.cx, m.top, m.left + 1, m.top + size.cy},
+        {m.left, m.top + 1 - size.cy, m.left + size.cx, m.top + 1},
+    };
+    for (const RECT& candidate : candidates) {
+        int monitors = 0;
+        EnumDisplayMonitors(nullptr, &candidate, CountMonitorsProc,
+                            (LPARAM)&monitors);
+        if (monitors == 1) {
+            *rect = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Switcher::CreateProxy(Item& item, ProxyPlace place) {
+    // Off-screen, it doesn't need a surface of its own. At the edge, it has
+    // one, like any window, in case that's what the capture is missing.
+    const DWORD exStyle =
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+        (place == ProxyPlace::OffScreen ? WS_EX_NOREDIRECTIONBITMAP : 0);
+    item.proxy = CreateWindowExW(exStyle, kProxyClassName, L"", WS_POPUP, 0, 0,
+                                 1, 1, nullptr, nullptr, g_module, nullptr);
     if (!item.proxy) {
         return false;
     }
@@ -4504,15 +4864,21 @@ bool Switcher::CreateProxy(Item& item) {
         return false;
     }
 
-    // To the left of all monitors, where nobody can see or click it.
-    const int x = GetSystemMetrics(SM_XVIRTUALSCREEN) - size.cx - 100;
-    const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    return SetWindowPos(item.proxy, HWND_BOTTOM, x, y, size.cx, size.cy,
-                        SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    RECT rect;
+    if (place == ProxyPlace::OffScreen) {
+        // To the left of all monitors, where nobody can see or click it.
+        rect.left = GetSystemMetrics(SM_XVIRTUALSCREEN) - size.cx - 100;
+        rect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    } else if (!FindEdgeProxyRect(size, &rect)) {
+        return false;
+    }
+    return SetWindowPos(item.proxy, HWND_BOTTOM, rect.left, rect.top, size.cx,
+                        size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 void Switcher::StartCaptures() {
     m_capturing = true;
+    UpdateHdr();
     std::vector<Item*> items;
     for (auto& item : m_items) {
         items.push_back(item.get());
@@ -4541,19 +4907,40 @@ bool Switcher::FirstFramesReady() {
 
 // A window that can't be captured is left with its icon.
 void Switcher::StartCapture(Item& item) {
-    HWND source = item.hwnd;
-    if (item.minimized || item.hidden) {
-        if (item.minimized && !m_settings.minimizedContent) {
-            return;
-        }
-        if (!CreateProxy(item)) {
-            Wh_Log(L"Proxy failed for %p", item.hwnd);
+    if (!item.minimized && !item.hidden) {
+        if (!TryCapture(item, item.hwnd)) {
             StopCapture(item);
-            return;
         }
-        source = item.proxy;
+        return;
+    }
+    if (item.minimized && !m_settings.minimizedContent) {
+        return;
     }
 
+    // Where proxies were last captured comes first.
+    ProxyPlace places[] = {ProxyPlace::OffScreen, ProxyPlace::MonitorEdge};
+    if (m_edgeProxies) {
+        std::swap(places[0], places[1]);
+    }
+    for (ProxyPlace place : places) {
+        const bool edge = place == ProxyPlace::MonitorEdge;
+        if (!CreateProxy(item, place)) {
+            Wh_Log(L"Proxy failed for %p%s", item.hwnd,
+                   edge ? L" at the monitor's edge" : L"");
+        } else if (TryCapture(item, item.proxy)) {
+            if (edge != m_edgeProxies) {
+                Wh_Log(L"Proxies are captured %s now",
+                       edge ? L"at the monitor's edge" : L"off-screen");
+                m_edgeProxies = edge;
+            }
+            return;
+        }
+        StopCapture(item);
+    }
+}
+
+// Whether the capture started. If not, the caller stops what's left of it.
+bool Switcher::TryCapture(Item& item, HWND source) {
     // Logged with the error, so a report tells which step failed.
     PCWSTR step = L"CreateForWindow";
     try {
@@ -4568,14 +4955,12 @@ void Switcher::StartCapture(Item& item) {
 
         const auto size = item.captureItem.Size();
         if (size.Width <= 0 || size.Height <= 0) {
-            StopCapture(item);
-            return;
+            return false;
         }
 
         step = L"CreateFreeThreaded";
         item.framePool = wgc::Direct3D11CaptureFramePool::CreateFreeThreaded(
-            m_captureDevice, wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-            2, size);
+            m_captureDevice, CaptureFormat(), 2, size);
         item.poolSize = size;
         step = L"CreateCaptureSession";
         item.session = item.framePool.CreateCaptureSession(item.captureItem);
@@ -4593,12 +4978,19 @@ void Switcher::StartCapture(Item& item) {
 
         step = L"StartCapture";
         item.session.StartCapture();
+        return true;
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Capture failed for %p%s at %s: 0x%08X", item.hwnd,
                item.proxy ? L" (through its proxy)" : L"", step,
                (UINT)e.code());
-        StopCapture(item);
+        return false;
     }
+}
+
+// HDR: half floats in scRGB, which keep what's brighter than SDR white.
+wgdx::DirectXPixelFormat Switcher::CaptureFormat() const {
+    return m_hdr ? wgdx::DirectXPixelFormat::R16G16B16A16Float
+                 : wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized;
 }
 
 void Switcher::StopCapture(Item& item) {
@@ -4623,6 +5015,65 @@ void Switcher::StopCapture(Item& item) {
         DestroyWindow(item.proxy);
         item.proxy = nullptr;
     }
+}
+
+// A texture for captured frames, in their format, and a bitmap showing it.
+// Both are set only if both could be made.
+HRESULT Switcher::CreateFrameTexture(UINT width,
+                                     UINT height,
+                                     com_ptr<ID3D11Texture2D>& texture,
+                                     com_ptr<ID2D1Bitmap1>& bitmap) {
+    const DXGI_FORMAT format =
+        m_hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = format;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    com_ptr<ID3D11Texture2D> newTexture;
+    com_ptr<ID2D1Bitmap1> newBitmap;
+    HRESULT hr = m_d3dDevice->CreateTexture2D(&desc, nullptr, newTexture.put());
+    if (SUCCEEDED(hr)) {
+        const D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_NONE,
+            D2D1::PixelFormat(format, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        hr = m_ctx->CreateBitmapFromDxgiSurface(
+            newTexture.as<IDXGISurface>().get(), &props, newBitmap.put());
+    }
+    if (SUCCEEDED(hr)) {
+        texture = newTexture;
+        bitmap = newBitmap;
+    }
+    return hr;
+}
+
+// HDR: turns the captured frame (scRGB, in the shared texture) into the
+// window's content in SDR's terms (see UpdateHdr).
+HRESULT Switcher::ConvertHdrFrame(Item& item, UINT width, UINT height) {
+    if (!item.content || item.content->GetPixelSize().width != width ||
+        item.content->GetPixelSize().height != height) {
+        item.content =
+            CreateTargetBitmap(width, height, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        if (!item.content) {
+            return E_FAIL;
+        }
+    }
+
+    const D2D1_RECT_F frame{0, 0, (float)width, (float)height};
+    m_clampScRgb->SetInput(0, m_hdrFrame.get());
+    m_ctx->SetTarget(item.content.get());
+    m_ctx->BeginDraw();
+    m_ctx->DrawImage(m_fromScRgb.get(), nullptr, &frame,
+                     D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                     D2D1_COMPOSITE_MODE_SOURCE_COPY);
+    const HRESULT hr = m_ctx->EndDraw();
+    m_ctx->SetTarget(nullptr);
+    return hr;
 }
 
 // Takes the newest frame of the window, if a new one came. Returns whether
@@ -4660,46 +5111,43 @@ bool Switcher::PollFrames(Item& item) {
         const UINT height = std::min((UINT)std::max(contentSize.Height, 1),
                                      sourceDesc.Height);
 
+        // The frame is copied to the window's own texture, which its content
+        // shows. With HDR, it goes to a texture shared by every window
+        // instead, grown to fit the largest, and is then turned into the
+        // window's content.
         D3D11_TEXTURE2D_DESC desc{};
-        if (item.texture) {
-            item.texture->GetDesc(&desc);
-        }
-        if (!item.texture || desc.Width != width || desc.Height != height) {
-            desc = {};
-            desc.Width = width;
-            desc.Height = height;
-            desc.MipLevels = 1;
-            desc.ArraySize = 1;
-            desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-            desc.SampleDesc.Count = 1;
-            desc.Usage = D3D11_USAGE_DEFAULT;
-            desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-            com_ptr<ID3D11Texture2D> texture;
-            com_ptr<ID2D1Bitmap1> content;
-            winrt::check_hresult(
-                m_d3dDevice->CreateTexture2D(&desc, nullptr, texture.put()));
-            D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-                D2D1_BITMAP_OPTIONS_NONE,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                  D2D1_ALPHA_MODE_PREMULTIPLIED));
-            winrt::check_hresult(m_ctx->CreateBitmapFromDxgiSurface(
-                texture.as<IDXGISurface>().get(), &props, content.put()));
-            item.texture = texture;
-            item.content = content;
+        if (m_hdr) {
+            if (m_hdrFrameTexture) {
+                m_hdrFrameTexture->GetDesc(&desc);
+            }
+            if (desc.Width < width || desc.Height < height) {
+                winrt::check_hresult(CreateFrameTexture(
+                    std::max(width, desc.Width), std::max(height, desc.Height),
+                    m_hdrFrameTexture, m_hdrFrame));
+            }
+        } else {
+            if (item.texture) {
+                item.texture->GetDesc(&desc);
+            }
+            if (!item.texture || desc.Width != width || desc.Height != height) {
+                winrt::check_hresult(CreateFrameTexture(
+                    width, height, item.texture, item.content));
+            }
         }
 
         const D3D11_BOX box{0, 0, 0, width, height, 1};
-        m_d3dContext->CopySubresourceRegion(item.texture.get(), 0, 0, 0, 0,
-                                            source.get(), 0, &box);
+        m_d3dContext->CopySubresourceRegion(
+            m_hdr ? m_hdrFrameTexture.get() : item.texture.get(), 0, 0, 0, 0,
+            source.get(), 0, &box);
         latest.Close();
+        if (m_hdr) {
+            winrt::check_hresult(ConvertHdrFrame(item, width, height));
+        }
 
         if (contentSize.Width != item.poolSize.Width ||
             contentSize.Height != item.poolSize.Height) {
-            item.framePool.Recreate(
-                m_captureDevice,
-                wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2,
-                contentSize);
+            item.framePool.Recreate(m_captureDevice, CaptureFormat(), 2,
+                                    contentSize);
             item.poolSize = contentSize;
         }
         return true;
@@ -4721,6 +5169,13 @@ void Switcher::Teardown() {
     m_titleLayout = nullptr;
     m_titleIndex = -1;
     m_capturing = false;
+    // As large as the largest window: not kept while idle. The effect holds
+    // on to it too.
+    if (m_clampScRgb) {
+        m_clampScRgb->SetInput(0, nullptr);
+    }
+    m_hdrFrame = nullptr;
+    m_hdrFrameTexture = nullptr;
     m_filter = {};
     m_desktops = nullptr;
 }
@@ -4775,6 +5230,17 @@ void Switcher::ShowOverlay() {
     }
     SetWindowPos(m_hwnd, HWND_TOPMOST, m_monitor.left, m_monitor.top, width,
                  height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+    // A full-screen game in front keeps drawing, and Windows gives the GPU to
+    // the app with the focus first: the switcher would run at half its frame
+    // rate or less (Counter-Strike 2). It takes the focus then, like the
+    // native Alt+Tab. Only for a window it lists, not the desktop.
+    if (!m_hasFocus && IsFullScreenWindow(m_previousForeground) &&
+        std::any_of(m_items.begin(), m_items.end(), [&](const auto& item) {
+            return item->hwnd == m_previousForeground;
+        })) {
+        TakeFocus();
+    }
 }
 
 void Switcher::BeginClose(bool commit) {
@@ -4845,10 +5311,40 @@ HWND ActivationTarget(HWND hwnd) {
     return popup;
 }
 
+// A full-screen window that stays always on top while it's in front (SDL's
+// full-screen windows do, e.g. Counter-Strike 2's) keeps covering the window
+// switched to, which only gets the focus. It's put right under that window,
+// which also takes its always-on-top away; SDL sets it again when the game is
+// in front again. Only borderless full-screen windows (see
+// IsFullScreenWindow), so windows pinned on top by the user keep their pin.
+// Asynchronously, so a busy game can't hold the switcher up.
+void LowerFullScreenWindow(HWND left, HWND target) {
+    HMONITOR monitor;
+    if (!left || left == target || !IsWindow(left) ||
+        !(GetWindowLongPtrW(left, GWL_EXSTYLE) & WS_EX_TOPMOST) ||
+        (GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOPMOST) ||
+        !IsFullScreenWindow(left, &monitor)) {
+        return;
+    }
+    // A minimized window comes back where it was, which may be this monitor.
+    if (!IsIconic(target) &&
+        MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST) != monitor) {
+        return;
+    }
+    WCHAR className[64] = L"";
+    GetClassNameW(left, className, ARRAYSIZE(className));
+    Wh_Log(L"Full-screen window %p (%s, style %08X) put under %p", left,
+           className, (UINT)GetWindowLongPtrW(left, GWL_STYLE), target);
+    SetWindowPos(left, target, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                     SWP_ASYNCWINDOWPOS);
+}
+
 void Switcher::ActivateWindow(HWND hwnd) {
     if (!IsWindow(hwnd)) {
         return;
     }
+    LowerFullScreenWindow(m_previousForeground, hwnd);
 
     // Input first, which allows this process to change the foreground. A
     // restore asked for before that can leave the window activated but still
@@ -6485,7 +6981,8 @@ void Switcher::RenderFrame() {
     m_redraw = false;
     m_lastFrameKey = key;
 
-    m_ctx->SetTarget(m_targetBitmap.get());
+    // HDR: drawn in SDR's terms first (see UpdateHdr).
+    m_ctx->SetTarget(m_swapHdr ? m_sceneBitmap.get() : m_targetBitmap.get());
     m_ctx->BeginDraw();
     m_ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
 
@@ -6532,6 +7029,13 @@ void Switcher::RenderFrame() {
         DrawTitle(t);
     }
 
+    if (m_swapHdr) {
+        m_ctx->SetTarget(m_targetBitmap.get());
+        m_liftScene->SetInput(0, m_sceneBitmap.get());
+        m_ctx->DrawImage(m_toScRgb.get(),
+                         D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                         D2D1_COMPOSITE_MODE_SOURCE_COPY);
+    }
     HRESULT hr = m_ctx->EndDraw();
     m_ctx->SetTarget(nullptr);
     if (SUCCEEDED(hr)) {
@@ -6699,12 +7203,13 @@ com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(IWICBitmap* pixels) {
     return bitmap;
 }
 
-com_ptr<ID2D1Bitmap1> Switcher::CreateTargetBitmap(UINT width, UINT height) {
+com_ptr<ID2D1Bitmap1> Switcher::CreateTargetBitmap(UINT width,
+                                                   UINT height,
+                                                   DXGI_FORMAT format) {
     com_ptr<ID2D1Bitmap1> bitmap;
     const D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_TARGET,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                          D2D1_ALPHA_MODE_PREMULTIPLIED));
+        D2D1::PixelFormat(format, D2D1_ALPHA_MODE_PREMULTIPLIED));
     if (FAILED(m_ctx->CreateBitmap({width, height}, nullptr, 0, &props,
                                    bitmap.put()))) {
         return nullptr;

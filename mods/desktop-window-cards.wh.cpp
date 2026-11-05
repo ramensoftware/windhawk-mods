@@ -2,7 +2,7 @@
 // @id              desktop-window-cards
 // @name            Desktop Window Cards
 // @description     Minimized windows fall onto the desktop as dimmed thumbnail cards you can restore or close
-// @version         1.8
+// @version         1.8.1
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -457,17 +457,25 @@ void LoadSettings() {
         g_settings.modifierVk && action && wcscmp(action, L"only") == 0;
     Wh_FreeStringSetting(action);
     g_settings.excludedApps.clear();
+    // Windhawk returns an empty string both for a blank entry and past the end
+    // of the list, so read the whole range: a blank entry in the middle must
+    // not hide the entries after it. This only runs on start and on reload.
     for (int i = 0; i < 256; i++) {
         PCWSTR app = Wh_GetStringSetting(L"ExcludedApps[%d]", i);
         std::wstring entry = app ? app : L"";
         Wh_FreeStringSetting(app);
-        // Trim spaces and quotes, compare case-insensitively.
-        size_t first = entry.find_first_not_of(L" \t\"");
-        size_t last = entry.find_last_not_of(L" \t\"");
-        if (first == std::wstring::npos) break;  // end of the list
+        // Trim spaces, line breaks and quotes, compare case-insensitively.
+        size_t first = entry.find_first_not_of(L" \t\r\n\"");
+        size_t last = entry.find_last_not_of(L" \t\r\n\"");
+        if (first == std::wstring::npos) continue;  // blank entry
         entry = entry.substr(first, last - first + 1);
+        // Accept forward slashes in full paths (C:/Program Files/...).
+        std::replace(entry.begin(), entry.end(), L'/', L'\\');
         CharLowerBuffW(entry.data(), static_cast<DWORD>(entry.size()));
-        g_settings.excludedApps.push_back(std::move(entry));
+        if (std::find(g_settings.excludedApps.begin(), g_settings.excludedApps.end(), entry) ==
+            g_settings.excludedApps.end()) {
+            g_settings.excludedApps.push_back(std::move(entry));
+        }
     }
     int dragDelay = Wh_GetIntSetting(L"DragOpenDelayMs");
     g_settings.dragOpenDelayMs = dragDelay <= 0 ? 0 : std::clamp(dragDelay, 200, 2000);
@@ -2697,13 +2705,14 @@ DWORD WINAPI WorkerThread(void*) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpfnWndProc = CardWndProc;
     wc.lpszClassName = kCardClass;
-    RegisterClassExW(&wc);
+    bool classesReady = RegisterClassExW(&wc) != 0;
     wc.lpfnWndProc = DefWindowProcW;
     wc.lpszClassName = kLayeredClass;
-    RegisterClassExW(&wc);
+    classesReady = RegisterClassExW(&wc) != 0 && classesReady;
     wc.lpfnWndProc = ControllerWndProc;
     wc.lpszClassName = kControllerClass;
-    RegisterClassExW(&wc);
+    classesReady = RegisterClassExW(&wc) != 0 && classesReady;
+    if (!classesReady) Wh_Log(L"Window class registration failed: %lu", GetLastError());
 
     HMODULE dcomp = LoadLibraryExW(L"dcomp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (dcomp) {
@@ -2718,7 +2727,10 @@ DWORD WINAPI WorkerThread(void*) {
                                       nullptr, ModuleInstance(), nullptr);
     g_controller = controller;
 
-    if (controller && !g_stop.load()) {
+    if (!g_frameTimer) Wh_Log(L"Frame timer creation failed: %lu", GetLastError());
+    if (!controller) Wh_Log(L"Controller window creation failed: %lu", GetLastError());
+    // Without the frame timer the wait below would fail at once and spin.
+    if (classesReady && controller && g_frameTimer && !g_stop.load()) {
         const DWORD flags = WINEVENT_OUTOFCONTEXT;
         g_hooks[0] = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr,
                                      WinEventProc, 0, 0, flags);
@@ -2775,6 +2787,10 @@ DWORD WINAPI WorkerThread(void*) {
                     if (TickAnimations()) ArmFrameTimer();
                 } else if (r > WAIT_OBJECT_0 && r < WAIT_OBJECT_0 + handles.size()) {
                     OnDesktopSwitchSignaled(r - WAIT_OBJECT_0 - 1);
+                } else if (r == WAIT_FAILED) {
+                    // A failed wait must not turn into a CPU-consuming busy loop.
+                    Wh_Log(L"Wait failed: %lu, stopping", GetLastError());
+                    quit = true;
                 }
             }
             MSG msg;

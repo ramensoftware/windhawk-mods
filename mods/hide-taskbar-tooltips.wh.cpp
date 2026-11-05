@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
-// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional delayed hover display.
-// @version         1.3.1
+// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional hover delay tuning.
+// @version         1.4.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -22,7 +22,6 @@ Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:
 - Taskbar app icon tooltips and labels on hover
 - Windows Start button hover tooltip
 - System tray status icons tooltips (Network, Volume, Battery, Clock)
-- System XAML shell UI hosted in Explorer (Task View, snap layouts, and virtual desktops)
 
 If you also wish to hide application window preview thumbnails, use the [Disable Taskbar Thumbnails](https://windhawk.net/mods/taskbar-thumbnails) mod, which can be used alongside this mod.
 
@@ -40,7 +39,7 @@ If you also wish to hide application window preview thumbnails, use the [Disable
 - **Hide Start Button Tooltip**: Suppresses the hover tooltip appearing over the Windows Start button.
 - **Hide System Tray & Status Tooltips**: Suppresses hover tooltips over system status icons (Network, Volume, Battery, and Clock).
 - **Hide System Tray Overflow Tooltips**: Suppresses hover tooltips for hidden application icons inside the system tray overflow drawer. When turned off, tooltips remain visible for apps in the drawer.
-- **Additional Hover Delay for Visible Tooltips (ms)**: Adds an extra stationary hover delay in milliseconds before displaying tooltips for areas that are **not** hidden (`0` = native timing). Areas configured to be hidden remain permanently suppressed and are unaffected by this delay.
+- **Tooltip Hover Delay (ms)**: Configures the hover delay in milliseconds before displaying tooltips for areas that are **not** hidden (`0` = native Windows timing ~800 ms, `-1` = instant, `1` to `10000` = custom delay). Hidden areas remain permanently suppressed.
 
 ## Compatibility
 
@@ -76,11 +75,11 @@ If you find this mod useful, you can support its development and maintenance:
     tray overflow drawer. When turned off, tooltips remain visible for apps in
     the drawer.
 - tooltipHoverDelayMs: 0
-  $name: Additional Hover Delay for Visible Tooltips (ms)
+  $name: Tooltip Hover Delay (ms)
   $description: >-
-    Adds an extra stationary hover delay in milliseconds before displaying
-    tooltips that are not hidden (0 = native timing). Hidden tooltip areas
-    remain permanently suppressed.
+    Duration in milliseconds before displaying visible tooltips. Set to 0 for
+    native Windows timing (~800 ms), -1 for instant display, or 1-10000 for
+    custom delay. Hidden areas remain permanently suppressed.
 */
 // ==/WindhawkModSettings==
 
@@ -89,7 +88,6 @@ If you find this mod useful, you can support its development and maintenance:
 
 #include <inspectable.h>
 #include <roapi.h>
-#include <weakreference.h>
 #include <windows.h>
 #include <winstring.h>
 #include <wrl/client.h>
@@ -98,7 +96,6 @@ If you find this mod useful, you can support its development and maintenance:
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <cstdlib>
 #include <mutex>
 #include <string_view>
 #include <unordered_set>
@@ -358,7 +355,6 @@ static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic<bool> g_uninitializing{false};
 static thread_local int t_tooltipScopeDepth = 0;
 static thread_local int t_startButtonHoverDepth = 0;
-static thread_local bool t_allowingDelayedOpen = false;
 
 struct Settings {
     std::atomic<bool> hideTaskbarAppTooltips{true};
@@ -383,7 +379,7 @@ static void LoadSettings() {
         std::memory_order_relaxed);
 
     int delayMs = Wh_GetIntSetting(L"tooltipHoverDelayMs");
-    delayMs = std::clamp(delayMs, 0, 60000);
+    delayMs = std::clamp(delayMs, -1, 10000);
     g_settings.tooltipHoverDelayMs.store(delayMs, std::memory_order_relaxed);
 }
 
@@ -753,7 +749,7 @@ static HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-static HWND GetTaskbarWndForTimer() {
+static HWND GetTaskbarWnd() {
     HWND hWnd = g_taskbarWnd.load(std::memory_order_relaxed);
     if (hWnd && IsWindow(hWnd)) {
         return hWnd;
@@ -769,203 +765,50 @@ static HWND GetTaskbarWndForTimer() {
     return hWnd;
 }
 
+static bool IsTaskbarXamlCaller(void* returnAddress) {
+    HMODULE caller = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            static_cast<LPCWSTR>(returnAddress), &caller) ||
+        caller != GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
+        return false;
+    }
+
+    HWND hTaskbarWnd = GetTaskbarWnd();
+    return hTaskbarWnd &&
+           GetWindowThreadProcessId(hTaskbarWnd, nullptr) == GetCurrentThreadId();
+}
+
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+static SystemParametersInfoW_t SystemParametersInfoW_Original = nullptr;
+
+static BOOL WINAPI SystemParametersInfoW_Hook(UINT uiAction,
+                                              UINT uiParam,
+                                              PVOID pvParam,
+                                              UINT fWinIni) {
+    if (uiAction == SPI_GETMOUSEHOVERTIME && pvParam) {
+        int delayMs =
+            g_settings.tooltipHoverDelayMs.load(std::memory_order_relaxed);
+        if (delayMs != 0 && IsTaskbarXamlCaller(__builtin_return_address(0))) {
+            if (delayMs < 0) {
+                *static_cast<UINT*>(pvParam) = 0;
+            } else {
+                *static_cast<UINT*>(pvParam) =
+                    static_cast<UINT>((delayMs + 1) / 2);
+            }
+            return TRUE;
+        }
+    }
+    return SystemParametersInfoW_Original(uiAction, uiParam, pvParam, fWinIni);
+}
+
 // WinRT IToolTip ABI: put_IsOpen is at vtable index 9
 using ToolTip_put_IsOpen_t = HRESULT(__stdcall*)(void* pThis, boolean value);
 static ToolTip_put_IsOpen_t g_toolTipPutIsOpenOriginal = nullptr;
 static std::atomic<bool> g_putIsOpenHooked{false};
 
-constexpr UINT_PTR kDelayedTooltipOpenTimerId = 0x57485401;
-constexpr UINT_PTR kDelayedTooltipWatchTimerId = 0x57485402;
-constexpr UINT kDelayedTooltipWatchIntervalMs = 100;
-constexpr int kCursorDriftTolerancePx = 12;
-
-struct DelayedToolTipState {
-    ComPtr<IWeakReference> pendingToolTip;
-    ComPtr<IWeakReference> activeToolTip;
-    void* pendingRawPtr = nullptr;
-    void* activeRawPtr = nullptr;
-    POINT initialPt{0, 0};
-    bool openTimerArmed = false;
-    bool watchTimerArmed = false;
-};
-static DelayedToolTipState g_delayedState;
-
-static ComPtr<IWeakReference> MakeWeakToolTip(IUnknown* pUnk) {
-    ComPtr<IWeakReference> spWeak;
-    if (!pUnk) {
-        return spWeak;
-    }
-    ComPtr<IWeakReferenceSource> spSource;
-    if (SUCCEEDED(
-            pUnk->QueryInterface(__uuidof(IWeakReferenceSource), &spSource)) &&
-        spSource) {
-        spSource->GetWeakReference(&spWeak);
-    }
-    return spWeak;
-}
-
-static ComPtr<IToolTipAbi> ResolveWeakToolTip(IWeakReference* pWeak) {
-    ComPtr<IToolTipAbi> spToolTip;
-    if (!pWeak) {
-        return spToolTip;
-    }
-    ComPtr<IInspectable> spInsp;
-    if (SUCCEEDED(pWeak->Resolve(kIID_IToolTip, &spInsp)) && spInsp) {
-        spInsp->QueryInterface(kIID_IToolTip, &spToolTip);
-    }
-    return spToolTip;
-}
-
-static void CancelDelayedOpenTimer() {
-    HWND hWnd = g_taskbarWnd.load(std::memory_order_relaxed);
-    if (g_delayedState.openTimerArmed && hWnd && IsWindow(hWnd)) {
-        KillTimer(hWnd, kDelayedTooltipOpenTimerId);
-    }
-    g_delayedState.openTimerArmed = false;
-    g_delayedState.pendingToolTip.Reset();
-    g_delayedState.pendingRawPtr = nullptr;
-}
-
-static void CloseActiveDelayedToolTip() {
-    HWND hWnd = g_taskbarWnd.load(std::memory_order_relaxed);
-    if (g_delayedState.watchTimerArmed && hWnd && IsWindow(hWnd)) {
-        KillTimer(hWnd, kDelayedTooltipWatchTimerId);
-    }
-    g_delayedState.watchTimerArmed = false;
-    ComPtr<IToolTipAbi> spActive =
-        ResolveWeakToolTip(g_delayedState.activeToolTip.Get());
-    g_delayedState.activeToolTip.Reset();
-    g_delayedState.activeRawPtr = nullptr;
-    if (spActive && g_toolTipPutIsOpenOriginal) {
-        g_toolTipPutIsOpenOriginal(spActive.Get(), FALSE);
-    }
-}
-
-static void CALLBACK DelayedTooltipTimerProc(HWND hWnd,
-                                             UINT /*uMsg*/,
-                                             UINT_PTR idEvent,
-                                             DWORD /*dwTime*/) {
-    if (g_uninitializing.load(std::memory_order_relaxed)) {
-        KillTimer(hWnd, idEvent);
-        return;
-    }
-    try {
-        if (idEvent == kDelayedTooltipOpenTimerId) {
-            KillTimer(hWnd, kDelayedTooltipOpenTimerId);
-            g_delayedState.openTimerArmed = false;
-
-            ComPtr<IToolTipAbi> spToolTip =
-                ResolveWeakToolTip(g_delayedState.pendingToolTip.Get());
-            void* rawPtr = g_delayedState.pendingRawPtr;
-            g_delayedState.pendingToolTip.Reset();
-            g_delayedState.pendingRawPtr = nullptr;
-
-            if (!spToolTip || !g_toolTipPutIsOpenOriginal) {
-                return;
-            }
-
-            if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
-                (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
-                return;
-            }
-
-            POINT pt{};
-            if (!GetCursorPos(&pt)) {
-                return;
-            }
-            if (std::abs(pt.x - g_delayedState.initialPt.x) >
-                    kCursorDriftTolerancePx ||
-                std::abs(pt.y - g_delayedState.initialPt.y) >
-                    kCursorDriftTolerancePx) {
-                return;
-            }
-
-            t_allowingDelayedOpen = true;
-            g_toolTipPutIsOpenOriginal(spToolTip.Get(), TRUE);
-            t_allowingDelayedOpen = false;
-
-            g_delayedState.activeToolTip = MakeWeakToolTip(spToolTip.Get());
-            g_delayedState.activeRawPtr = rawPtr;
-            if (SetTimer(hWnd, kDelayedTooltipWatchTimerId,
-                         kDelayedTooltipWatchIntervalMs,
-                         DelayedTooltipTimerProc) != 0) {
-                g_delayedState.watchTimerArmed = true;
-            }
-        } else if (idEvent == kDelayedTooltipWatchTimerId) {
-            POINT pt{};
-            bool shouldClose =
-                !GetCursorPos(&pt) ||
-                (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
-                (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
-                std::abs(pt.x - g_delayedState.initialPt.x) >
-                    (kCursorDriftTolerancePx + 4) ||
-                std::abs(pt.y - g_delayedState.initialPt.y) >
-                    (kCursorDriftTolerancePx + 4);
-            if (shouldClose) {
-                CloseActiveDelayedToolTip();
-            }
-        }
-    } catch (...) {
-        t_allowingDelayedOpen = false;
-        Wh_Log(L"[TOOLTIP] Exception in DelayedTooltipTimerProc");
-    }
-}
-
-static bool ScheduleDelayedToolTipOpen(void* pThis, int delayMs) {
-    if (!pThis || g_uninitializing.load(std::memory_order_relaxed)) {
-        return false;
-    }
-    HWND hWnd = GetTaskbarWndForTimer();
-    if (!hWnd) {
-        return false;
-    }
-    if (GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId()) {
-        return false;
-    }
-    try {
-        auto* pUnk = static_cast<IUnknown*>(pThis);
-        ComPtr<IToolTipAbi> spToolTip;
-        if (FAILED(pUnk->QueryInterface(kIID_IToolTip, &spToolTip)) ||
-            !spToolTip) {
-            return false;
-        }
-
-        POINT pt{};
-        if (!GetCursorPos(&pt)) {
-            return false;
-        }
-
-        if (g_delayedState.openTimerArmed &&
-            g_delayedState.pendingRawPtr == pThis &&
-            std::abs(pt.x - g_delayedState.initialPt.x) <=
-                kCursorDriftTolerancePx &&
-            std::abs(pt.y - g_delayedState.initialPt.y) <=
-                kCursorDriftTolerancePx) {
-            return true;
-        }
-
-        if (g_delayedState.activeRawPtr &&
-            g_delayedState.activeRawPtr != pThis) {
-            CloseActiveDelayedToolTip();
-        }
-
-        g_delayedState.pendingToolTip = MakeWeakToolTip(spToolTip.Get());
-        g_delayedState.pendingRawPtr = pThis;
-        g_delayedState.initialPt = pt;
-        if (SetTimer(hWnd, kDelayedTooltipOpenTimerId,
-                     static_cast<UINT>(delayMs),
-                     DelayedTooltipTimerProc) != 0) {
-            g_delayedState.openTimerArmed = true;
-            return true;
-        }
-    } catch (...) {
-        Wh_Log(L"[TOOLTIP] Exception in ScheduleDelayedToolTipOpen");
-    }
-    return false;
-}
-
 static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
-    if (t_allowingDelayedOpen) {
+    if (g_uninitializing.load(std::memory_order_relaxed)) {
         if (g_toolTipPutIsOpenOriginal) {
             return g_toolTipPutIsOpenOriginal(pThis, value);
         }
@@ -973,16 +816,6 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
     }
 
     if (!value) {
-        DWORD taskbarThreadId =
-            g_taskbarThreadId.load(std::memory_order_relaxed);
-        if (taskbarThreadId != 0 && GetCurrentThreadId() == taskbarThreadId) {
-            if (pThis && pThis == g_delayedState.pendingRawPtr) {
-                CancelDelayedOpenTimer();
-            }
-            if (pThis && pThis == g_delayedState.activeRawPtr) {
-                CloseActiveDelayedToolTip();
-            }
-        }
         if (g_toolTipPutIsOpenOriginal) {
             return g_toolTipPutIsOpenOriginal(pThis, value);
         }
@@ -997,29 +830,20 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
         g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed);
     bool hideDrawer =
         g_settings.hideTrayOverflowTooltips.load(std::memory_order_relaxed);
-    int delayMs =
-        g_settings.tooltipHoverDelayMs.load(std::memory_order_relaxed);
 
     if (hideApps && hideStart && hideTray && hideDrawer) {
         // All areas suppressed: always suppress with zero overhead
         return S_OK;
     }
 
-    if (!hideApps && !hideStart && !hideTray && !hideDrawer && delayMs <= 0) {
-        // All areas visible and no extra delay: allow opening immediately
-        if (g_toolTipPutIsOpenOriginal) {
-            return g_toolTipPutIsOpenOriginal(pThis, value);
-        }
-        return S_OK;
+    if (!hideApps && !hideStart && !hideTray && !hideDrawer) {
+        // All areas visible: allow opening immediately with zero overhead
+        return g_toolTipPutIsOpenOriginal ? g_toolTipPutIsOpenOriginal(pThis, value) : S_OK;
     }
 
     ToolTipArea area = IdentifyToolTipArea(pThis);
     if (IsAreaSuppressed(area)) {
         // Hidden area: always suppress permanently
-        return S_OK;
-    }
-
-    if (delayMs > 0 && ScheduleDelayedToolTipOpen(pThis, delayMs)) {
         return S_OK;
     }
 
@@ -1166,11 +990,6 @@ static void WINAPI EagerHookToolTipOnTaskbarThread(void* /*procParam*/) {
     } catch (...) {
         Wh_Log(L"[HOOK] Eager ToolTip hook on UI thread caught exception");
     }
-}
-
-static void WINAPI CleanupDelayedToolTipOnTaskbarThread(void* /*procParam*/) {
-    CancelDelayedOpenTimer();
-    CloseActiveDelayedToolTip();
 }
 
 static void EnsurePutIsOpenHooked() {
@@ -1719,6 +1538,9 @@ BOOL Wh_ModInit() {
                                    &ShowWindow_Original);
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
+    WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
+                                   SystemParametersInfoW_Hook,
+                                   &SystemParametersInfoW_Original);
 
     if (HMODULE systemTrayModule = GetModuleHandleW(L"SystemTray.dll")) {
         g_systemTrayHooked = true;
@@ -1763,11 +1585,6 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    HWND hTaskbarWnd = GetTaskbarWndForTimer();
-    if (hTaskbarWnd) {
-        RunFromWindowThread(hTaskbarWnd, CleanupDelayedToolTipOnTaskbarThread,
-                            nullptr);
-    }
     Wh_Log(
         L"[SETTINGS] Updated settings (hideTaskbarApp=%d, hideStartButton=%d, "
         L"hideSystemTray=%d, hideTrayOverflow=%d, delayMs=%d)",
@@ -1784,11 +1601,6 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     g_uninitializing.store(true, std::memory_order_relaxed);
-    HWND hTaskbarWnd = g_taskbarWnd.load(std::memory_order_relaxed);
-    if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
-        RunFromWindowThread(hTaskbarWnd, CleanupDelayedToolTipOnTaskbarThread,
-                            nullptr);
-    }
 }
 
 void Wh_ModUninit() {

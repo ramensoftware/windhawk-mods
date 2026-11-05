@@ -752,15 +752,22 @@ class ModMetadataValidator:
         if not prop:
             return
 
+        # WIL headers require -fms-extensions.
+        includes_wil = re.search(
+            r'^\s*#\s*include\s*[<"]wil/',
+            blank_comments(self.mod_source),
+            re.MULTILINE,
+        )
+
         def is_allowed_option(option: str) -> bool:
             return bool(
                 option.startswith('-l')
                 or option
                 in [
                     '-DWIN32_LEAN_AND_MEAN',
-                    '-fms-extensions',
                     '-ffp-exception-behavior=maytrap',
                 ]
+                or (option == '-fms-extensions' and includes_wil)
             )
 
         options = prop.value.split()
@@ -843,14 +850,17 @@ class ModMetadataValidator:
     def validate_tool_mod(self):
         """Validate the metadata of a tool mod: one that targets windhawk.exe
         with a WhTool_ModInit entry point or a -tool-mod launcher, or any
-        windhawk-*.exe process."""
+        windhawk-*.exe process other than windhawk-ui.exe and windhawk-cli.exe."""
         prop = self.property('include')
         if not prop:
             return
 
         includes = {x.lower() for x in prop.value.split('\n') if x != ''}
         windhawk_includes = {
-            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            x
+            for x in includes
+            if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            and x not in ('windhawk-ui.exe', 'windhawk-cli.exe')
         }
         defines_tool_mod_init = (
             re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
@@ -1744,6 +1754,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
+        (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
         (r'^\s*#\s*define\s+(?!WH_WINRT_WINUI2\b)W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
     ]
     # fmt: on
@@ -1977,10 +1988,8 @@ def test_run():
 
 def validate_pr_changelog(pr_body: str) -> int:
     """Mod updates must describe the changes in the PR description."""
-    markers_re = re.compile(
-        r'<!--\s*changelog:start\s*-->(.*?)<!--\s*changelog:end\s*-->',
-        re.DOTALL | re.IGNORECASE,
-    )
+    start_marker_re = re.compile(r'<!--\s*changelog:start\s*-->', re.IGNORECASE)
+    end_marker_re = re.compile(r'<!--\s*changelog:end\s*-->', re.IGNORECASE)
 
     # The sample items of the pull request template, which are to be replaced
     # with the actual changes.
@@ -1993,17 +2002,20 @@ def validate_pr_changelog(pr_body: str) -> int:
         ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
     )
 
-    matches = markers_re.findall(pr_body)
-    if len(matches) != 1:
+    starts = list(start_marker_re.finditer(pr_body))
+    ends = list(end_marker_re.finditer(pr_body))
+    if len(starts) != 1 or len(ends) != 1 or starts[0].end() > ends[0].start():
         return add_warning(
             Path('.github/pull_request_template.md'),
             1,
             'Mod updates must have a changelog in the PR description, between a single'
-            ' pair of the "<!-- changelog:start -->" and "<!-- changelog:end -->"'
-            f' markers, found {len(matches)} such pairs.' + template_hint,
+            ' "<!-- changelog:start -->" marker and a single "<!-- changelog:end -->"'
+            f' marker after it, found {len(starts)} start and {len(ends)} end markers.'
+            + template_hint,
         )
 
-    changelog = placeholder_item_re.sub('', matches[0]).strip()
+    changelog = pr_body[starts[0].end() : ends[0].start()]
+    changelog = placeholder_item_re.sub('', changelog).strip()
     if changelog == '':
         return add_warning(
             Path('.github/pull_request_template.md'),
