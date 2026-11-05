@@ -17,9 +17,9 @@
 
 ![Screenshot](https://raw.githubusercontent.com/exefile04/taskbar-system-monitor/main/images/screenshot.png)
 
-Shows CPU, GPU, RAM, disk and network on your taskbar, left of the icons. Works with Taskbar Styler docks too.
+Shows CPU, GPU, RAM, disk and network on taskbar.
 
-Hover a number for more info. Click to open Task Manager, right-click for a menu. Pretty much everything can be changed in the settings.
+Hover a number for more info. Click to open Task Manager, right-click for a menu.
 
 ## Layout
 Write it as text: `|` between columns, `,` between rows. Items are `cpu`, `gpu`, `ram`, `disk`, `down`, `up`, and `-` for an empty spot.
@@ -33,10 +33,10 @@ Write it as text: `|` between columns, `,` between rows. Items are `cpu`, `gpu`,
 ## Temperatures
 GPU temp comes from the driver. For CPU temp, run [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) as admin. Without it you get a rough number from Windows, and some PCs don't have that.
 
-If your GPU is built into the CPU and has no sensor, it shows the CPU temp instead. You can turn that off.
+If your GPU is built into the CPU and has no sensor, it shows the CPU temp instead.
 
 ## Similar mods
-Taskbar System Info and Taskbar Network Speed Indicator show some of this too. I wanted everything in one small block, with icons, hover details and my own layout.
+Taskbar System Info and Taskbar Network Speed Indicator.
 
 ## Notes
 If there's no room left of the icons, it moves next to the tray. If there's no room there either, it hides.
