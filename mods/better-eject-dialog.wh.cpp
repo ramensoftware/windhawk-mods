@@ -220,30 +220,21 @@ struct InFlightScope {
     InFlightScope& operator=(const InFlightScope&) = delete;
 };
 
-// Keeps the mod loaded while a dialog is open. Normally the mod waits for open
-// dialogs before it unloads. If a dialog takes too long to close (for example
-// while a UAC prompt is open), the reference is kept, so that the code that
-// still runs on that thread stays loaded.
-class ModuleReference {
-   public:
-    ModuleReference() {
-        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                                reinterpret_cast<LPCWSTR>(&g_inFlight),
-                                &m_module)) {
-            m_module = nullptr;
+// Waits for a handle, but stops early when the mod is being unloaded.
+void WaitUnlessUnloading(HANDLE handle, DWORD timeoutMs) {
+    ULONGLONG start = GetTickCount64();
+    while (!g_unloading) {
+        ULONGLONG elapsed = GetTickCount64() - start;
+        if (elapsed >= timeoutMs) {
+            return;
         }
-    }
-    ~ModuleReference() {
-        if (m_module && !g_unloading) {
-            FreeLibrary(m_module);
-        }
-    }
-    ModuleReference(const ModuleReference&) = delete;
-    ModuleReference& operator=(const ModuleReference&) = delete;
 
-   private:
-    HMODULE m_module = nullptr;
-};
+        DWORD slice = static_cast<DWORD>(std::min<ULONGLONG>(100, timeoutMs - elapsed));
+        if (WaitForSingleObject(handle, slice) != WAIT_TIMEOUT) {
+            return;
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Small helpers
@@ -1583,7 +1574,7 @@ bool TerminateTarget(const ProcessTarget& target, std::wstring& error) {
     }
 
     Wh_Log(L"Ended %s (PID %u)", target.exeName.c_str(), target.pid);
-    WaitForSingleObject(process.Get(), 5000);
+    WaitUnlessUnloading(process.Get(), 5000);
     return true;
 }
 
@@ -1593,7 +1584,7 @@ void WaitForTargetExit(const ProcessTarget& target, DWORD timeoutMs) {
     if (process &&
         ProcessMatches(process.Get(), target.exeName, target.eventTime,
                        nullptr)) {
-        WaitForSingleObject(process.Get(), timeoutMs);
+        WaitUnlessUnloading(process.Get(), timeoutMs);
     }
 }
 
@@ -1665,7 +1656,7 @@ bool RunElevated(PCWSTR program,
     Wh_Log(L"Ran %s %s", program, parameters.c_str());
 
     if (info.hProcess) {
-        WaitForSingleObject(info.hProcess, timeoutMs);
+        WaitUnlessUnloading(info.hProcess, timeoutMs);
         CloseHandle(info.hProcess);
     }
 
@@ -2382,20 +2373,10 @@ void StartWork(EjectSession& session,
     session.workingInstruction = std::move(instruction);
     session.workingContent = std::move(content);
 
-    // The worker keeps the mod loaded until it's done. It releases the
-    // reference with FreeLibraryAndExitThread.
-    HMODULE module = nullptr;
-    HANDLE thread = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                           reinterpret_cast<LPCWSTR>(&WorkerThreadProc),
-                           &module)) {
-        thread = CreateThread(nullptr, 0, WorkerThreadProc, &session, 0,
-                              nullptr);
-        if (!thread) {
-            FreeLibrary(module);
-        }
-    }
-
+    // The dialog doesn't close while the worker runs, and the mod waits for
+    // open dialogs before it unloads, so the worker never outlives the mod.
+    HANDLE thread =
+        CreateThread(nullptr, 0, WorkerThreadProc, &session, 0, nullptr);
     if (!thread) {
         session.status = L"Couldn't start the action (error " +
                          std::to_wstring(GetLastError()) + L").";
@@ -2620,12 +2601,7 @@ void RunWork(EjectSession& session) {
 
 DWORD WINAPI WorkerThreadProc(LPVOID parameter) {
     RunWork(*static_cast<EjectSession*>(parameter));
-
-    HMODULE module = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&WorkerThreadProc), &module);
-    FreeLibraryAndExitThread(module, 0);
+    return 0;
 }
 
 bool IsDeviceGone(CONFIGRET result, PNP_VETO_TYPE vetoType) {
@@ -2902,11 +2878,9 @@ using TaskDialogIndirect_t = HRESULT(WINAPI*)(const TASKDIALOGCONFIG*,
                                               BOOL*);
 
 TaskDialogIndirect_t GetTaskDialogIndirect() {
+    // Explorer always has comctl32 loaded. Without it, the original message
+    // box is shown.
     HMODULE comctl32 = GetModuleHandleW(L"comctl32.dll");
-    if (!comctl32) {
-        comctl32 = LoadLibraryW(L"comctl32.dll");
-    }
-
     return comctl32 ? reinterpret_cast<TaskDialogIndirect_t>(
                           GetProcAddress(comctl32, "TaskDialogIndirect"))
                     : nullptr;
@@ -3150,16 +3124,15 @@ CONFIGRET WINAPI CM_Request_Device_Eject_ExW_Hook(DEVINST dnDevInst,
                                                   HMACHINE hMachine) {
     void* returnAddress = __builtin_return_address(0);
 
+    // Counted before g_unloading is checked, so that Wh_ModBeforeUninit can't
+    // miss a call that has just passed the check.
+    InFlightScope inFlight;
+
     if (hMachine || g_unloading || !IsCallerHotplug(returnAddress)) {
         return CM_Request_Device_Eject_ExW_Original(dnDevInst, pVetoType,
                                                     pszVetoName, ulNameLength,
                                                     ulFlags, hMachine);
     }
-
-    // Declared in this order, so the module reference is released while the
-    // call still counts as in flight.
-    InFlightScope inFlight;
-    ModuleReference moduleReference;
 
     // Events of this attempt come after the bookmark.
     UniqueEvtHandle bookmark(CreateSystemLogBookmark());
@@ -3264,15 +3237,13 @@ void Wh_ModBeforeUninit() {
         }
     }
 
-    // The hooks are removed after this function returns. Wait for open
-    // dialogs to close, they finish a running action first.
-    ULONGLONG start = GetTickCount64();
-    while (g_inFlight.load() > 0 && GetTickCount64() - start < 60000) {
+    // The hooks are removed after this function returns, and the mod is
+    // unloaded right after that. Wait for every hooked call to return. Open
+    // dialogs close as soon as a running action finishes, and every action
+    // stops its waits early while unloading, except for an open UAC prompt,
+    // which ends when the user answers it.
+    while (g_inFlight.load() > 0) {
         Sleep(50);
-    }
-
-    if (g_inFlight.load() > 0) {
-        Wh_Log(L"An eject dialog is still open");
     }
 }
 
