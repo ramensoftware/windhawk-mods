@@ -38,7 +38,7 @@ taking the keyboard focus, so games are never minimized.
   pressing it again restores every app individually.
 - **Custom volume OSD (BETA)** – 9 styles, can replace the Windows volume flyout for the media keys and the volume
   tooltip of the taskbar, draggable. Like the Windows flyout, it stays while the pointer rests on it, and the mouse
-  wheel over it changes the volume.
+  wheel or a click on its bar changes the volume.
 - **System tray icon (BETA)** – 9 icon styles that follow the volume and the light/dark taskbar, 7 popup styles,
   mouse wheel over the icon changes the volume, middle click mutes.
 - **17 mixer layouts and 22 color themes.**
@@ -68,9 +68,10 @@ Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Gr
 Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
 frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
 
-- Once the pointer moves onto the OSD, it stays on screen until the pointer leaves; the mouse wheel or touchpad
-  scrolling over it changes the volume it shows (the master volume or the app), and a click closes it. Otherwise
-  clicks pass through it (unless dragging is enabled), and a hidden pointer (games) is ignored.
+- Once the pointer moves onto the OSD, it works like the Windows flyout and stays on screen until the pointer
+  leaves. The mouse wheel or touchpad scrolling over it changes the volume it shows (the master volume or the
+  app), a click or a drag on its bar sets the level, a click on its icon mutes, and a right-click closes it.
+  Otherwise clicks pass through it (unless dragging is enabled), and a hidden pointer (games) is ignored.
 - **Replace the Windows volume flyout**: the media volume keys and the mouse wheel over the taskbar notification
   area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
   tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
@@ -2273,6 +2274,17 @@ float g_osdMasterVol = -1.0f;  // the master level and mute the OSD shows
 bool g_osdMasterMute = false;
 POINT g_osdShowPointer{0, 0};  // pointer position when the OSD appeared
 bool g_osdPointerMoved = false;
+float g_osdShownVol = 0.0f;    // the level and mute the OSD draws
+bool g_osdShownMute = false;
+bool g_osdSliding = false;     // the user drags the OSD's bar
+// Where the OSD draws its level bar and icon, in client pixels, so that a
+// click or a drag there works like on the Windows flyout.
+struct OsdHitZones {
+    enum class Bar { None, Horizontal, Vertical, Ring } bar = Bar::None;
+    float x = 0, y = 0, w = 0, h = 0;              // the bar (the ring: its bounding square)
+    float iconX = 0, iconY = 0, iconW = 0, iconH = 0;  // 0 x 0 when there's no icon
+};
+OsdHitZones g_osdZones;
 
 // Popup state (UI thread only)
 bool g_visible = false;
@@ -3712,15 +3724,15 @@ void AdjustForegroundAppVolume(float delta, bool toggleMute) {
     if (g_visible && RefreshValues()) Render();
 }
 
-// Mouse wheel over the OSD of an app: changes that app on every device.
-void AdjustAppVolumeByKey(const std::wstring& key, float delta) {
+// Mouse wheel or a click on the OSD of an app: changes that app on every device.
+void AdjustAppVolumeByKey(const std::wstring& key, float delta, bool toggleMute = false) {
     std::vector<Item> items;
     BuildItems(items, true, true);
     std::vector<Item*> matches;
     for (Item& it : items) {
         if (it.kind == 2 && it.key == key) matches.push_back(&it);
     }
-    if (!matches.empty()) ChangeAppSessions(matches, delta, false);
+    if (!matches.empty()) ChangeAppSessions(matches, delta, toggleMute);
     ReleaseItems(items);
     if (g_visible && RefreshValues()) Render();
 }
@@ -3743,6 +3755,23 @@ void OnOsdWheel(int delta) {
     const float step = notches * g_cfg.wheelStep / 100.0f;
     if (g_osdTarget == OsdTarget::Master) AdjustMasterVolume(step, false, true);
     else if (g_osdTarget == OsdTarget::App && !g_osdTargetKey.empty()) AdjustAppVolumeByKey(g_osdTargetKey, step);
+}
+
+// A click on the OSD's icon mutes or unmutes what it shows.
+void ToggleOsdMute() {
+    if (g_osdTarget == OsdTarget::Master) AdjustMasterVolume(0.0f, true, true);
+    else if (g_osdTarget == OsdTarget::App && !g_osdTargetKey.empty()) AdjustAppVolumeByKey(g_osdTargetKey, 0.0f, true);
+}
+
+// A click or a drag on the OSD's bar sets the level there and, like the Windows
+// flyout, unmutes.
+void SetOsdLevel(float level) {
+    if (g_osdTarget == OsdTarget::None) return;
+    if (g_osdShownMute) ToggleOsdMute();
+    const float delta = std::clamp(level, 0.0f, 1.0f) - g_osdShownVol;
+    if (std::abs(delta) < 0.005f) return;
+    if (g_osdTarget == OsdTarget::Master) AdjustMasterVolume(delta, false, true);
+    else if (!g_osdTargetKey.empty()) AdjustAppVolumeByKey(g_osdTargetKey, delta);
 }
 
 void ToggleForegroundAppMute() {
@@ -5509,6 +5538,7 @@ void ApplyOsdWindowStyle() {
 // appears, so one that already rested there doesn't hold it, and a hidden
 // pointer (games) never counts.
 void UpdateOsdHover() {
+    if (g_osdSliding) return;  // the OSD keeps the mouse until the drag ends
     CURSORINFO ci{sizeof(ci)};
     RECT r{};
     const bool visible = IsWindowVisible(g_hwndOsd) && GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING);
@@ -5551,6 +5581,9 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
         g_osdPointerMoved = false;
     }
     vol = std::clamp(vol, 0.0f, 1.0f);
+    g_osdShownVol = vol;
+    g_osdShownMute = mute;
+    g_osdZones = OsdHitZones{};
 
     HMONITOR mon = nullptr;
     bool useCustom = false;
@@ -5650,6 +5683,17 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
     auto drawIcon = [&](float x, float y, float sz) {
         if (icon) g.DrawImage(icon, RectF(x, y, sz, sz));
         else DrawSpeaker(g, x + sz / 2.0f, y + sz / 2.0f, sz, th.text, mute, vol);
+        g_osdZones.iconX = x;
+        g_osdZones.iconY = y;
+        g_osdZones.iconW = sz;
+        g_osdZones.iconH = sz;
+    };
+    auto barZone = [&](OsdHitZones::Bar kind, float x, float y, float w, float h) {
+        g_osdZones.bar = kind;
+        g_osdZones.x = x;
+        g_osdZones.y = y;
+        g_osdZones.w = w;
+        g_osdZones.h = h;
     };
     auto drawBar = [&](float x, float y, float w, float h) {
         FillRoundRect(g, th.trackBg, x, y, w, h, h / 2.0f);
@@ -5674,6 +5718,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
         const float dotR = fH * 0.18f;
         const float startX = (fW - (dotCount * dotR * 2.8f)) / 2.0f;
         const int activeDots = (int)std::lround(vol * dotCount);
+        barZone(OsdHitZones::Bar::Horizontal, startX, 0.0f, dotCount * dotR * 2.8f, fH);
         for (int i = 0; i < dotCount; i++) {
             const float cx = startX + i * dotR * 2.8f + dotR;
             const Color dotCol = mute ? Color(180, 240, 80, 80) :
@@ -5689,6 +5734,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
 
         const float arcPad = P(8);
         const float arcSz = fW - arcPad * 2.0f;
+        barZone(OsdHitZones::Bar::Ring, arcPad, arcPad, arcSz, arcSz);
         Pen arcBgPen(th.trackBg, P(4.5f));
         arcBgPen.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
         g.DrawArc(&arcBgPen, arcPad, arcPad, arcSz, arcSz, -90.0f, 360.0f);
@@ -5710,6 +5756,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
         const float barX = (fW - barW) / 2.0f;
         const float barY = pad + P(22);
         const float barH = fH - barY - pad - icSz - P(8);
+        barZone(OsdHitZones::Bar::Vertical, barX, barY, barW, barH);
         FillRoundRect(g, th.trackBg, barX, barY, barW, barH, barW / 2.0f);
         if (!mute && vol > 0.001f) {
             const float fillH = std::max(barW, barH * vol);
@@ -5718,6 +5765,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
     } else if (style == L"pill_slider") {
         // Control Center pill: the whole capsule is the level indicator
         const float r = (fH - 2.0f) / 2.0f;
+        barZone(OsdHitZones::Bar::Horizontal, 1.0f, 0.0f, fW - 2.0f, fH);
         FillRoundRect(g, bgCol, 1.0f, 1.0f, fW - 2.0f, fH - 2.0f, r);
         if (!mute && vol > 0.001f) {
             FillRoundRect(g, WithAlpha(th.trackFill, op), 1.0f, 1.0f, std::max(fH - 2.0f, (fW - 2.0f) * vol), fH - 2.0f, r);
@@ -5757,6 +5805,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
             g.DrawString(name.c_str(), -1, fName, RectF(textX, P(8), textW - P(44), P(18)), &sfL, &tBr);
             g.DrawString(valStr, -1, g_gcOsd.fontBig, RectF(textX, P(4), textW, P(26)), &sfR, mute ? &mBr : &tBr);
             const float barY = P(34);
+            barZone(OsdHitZones::Bar::Horizontal, textX, barY - P(10), textW, P(26));
             drawBar(textX, barY, textW, P(6));
             if (g_cfg.vuMeters && !mute) {
                 // Thin level line under the volume bar
@@ -5773,6 +5822,7 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon, OsdKi
             const float barX = icX + icSz + (smallPill ? 8.0f : 12.0f) * s;
             const float barW = valX - barX - (smallPill ? 6.0f : 10.0f) * s;
             const float barH = (smallPill ? 4.0f : 5.0f) * s;
+            barZone(OsdHitZones::Bar::Horizontal, barX, 0.0f, barW, fH);  // the whole height is easy to hit
             if (hud) {
                 // Segmented ammo-style bar
                 const int segs = 12;
@@ -5833,6 +5883,44 @@ void ShowOsdDragPreview() {
     ShowOsd(L10n(StrId::OsdDragHint), 0.5f, false, nullptr, OsdKind::Always, L"", 10000);
 }
 
+static bool PtOnOsdIcon(float x, float y) {
+    const OsdHitZones& z = g_osdZones;
+    const float pad = 4.0f;
+    return z.iconW > 0 && x >= z.iconX - pad && x < z.iconX + z.iconW + pad && y >= z.iconY - pad &&
+           y < z.iconY + z.iconH + pad;
+}
+
+// The level under a point of the bar. With clamp (while dragging) any point
+// gives a level; otherwise the point has to be on the bar.
+static bool OsdLevelAt(float x, float y, bool clamp, float* level) {
+    const OsdHitZones& z = g_osdZones;
+    const float pad = 6.0f;
+    switch (z.bar) {
+    case OsdHitZones::Bar::Horizontal:
+        if (!clamp && (x < z.x - pad || x > z.x + z.w + pad || y < z.y || y > z.y + z.h)) return false;
+        *level = (x - z.x) / std::max(1.0f, z.w);
+        break;
+    case OsdHitZones::Bar::Vertical:
+        if (!clamp && (y < z.y - pad || y > z.y + z.h + pad)) return false;
+        *level = (z.y + z.h - y) / std::max(1.0f, z.h);
+        break;
+    case OsdHitZones::Bar::Ring: {
+        // Clockwise from the top, like the arc; the middle holds the icon.
+        const float dx = x - (z.x + z.w / 2.0f);
+        const float dy = y - (z.y + z.h / 2.0f);
+        if (!clamp && std::sqrt(dx * dx + dy * dy) < z.w * 0.3f) return false;
+        float a = std::atan2(dx, -dy);
+        if (a < 0.0f) a += 6.2831853f;
+        *level = a / 6.2831853f;
+        break;
+    }
+    default:
+        return false;
+    }
+    *level = std::clamp(*level, 0.0f, 1.0f);
+    return true;
+}
+
 LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_MOUSEACTIVATE:
@@ -5843,7 +5931,14 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_SETCURSOR:
         if (g_cfg.osdAllowDrag) {
-            SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
+            POINT pt{};
+            GetCursorPos(&pt);
+            ScreenToClient(hwnd, &pt);
+            float level = 0.0f;
+            const bool onControl = g_osdTarget != OsdTarget::None &&
+                                   (PtOnOsdIcon((float)pt.x, (float)pt.y) ||
+                                    OsdLevelAt((float)pt.x, (float)pt.y, false, &level));
+            SetCursor(LoadCursorW(nullptr, onControl ? IDC_ARROW : IDC_SIZEALL));
             return TRUE;
         }
         break;
@@ -5857,14 +5952,24 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
 
     case WM_TIMER:
-        if (wParam == ID_TIMER_OSD && !g_osdDragging) {
+        if (wParam == ID_TIMER_OSD && !g_osdDragging && !g_osdSliding) {
             UpdateOsdHover();
             if (!g_hookOsdHover && (LONG)(GetTickCount() - g_osdHideTick) >= 0) HideOsd();
         }
         return 0;
 
-    case WM_LBUTTONDOWN:
-        if (g_cfg.osdAllowDrag) {
+    case WM_LBUTTONDOWN: {
+        // Like the Windows flyout: the bar sets the level, the icon mutes.
+        const float x = (float)(short)LOWORD(lParam);
+        const float y = (float)(short)HIWORD(lParam);
+        float level = 0.0f;
+        if (g_osdTarget != OsdTarget::None && PtOnOsdIcon(x, y)) {
+            ToggleOsdMute();
+        } else if (g_osdTarget != OsdTarget::None && OsdLevelAt(x, y, false, &level)) {
+            g_osdSliding = true;
+            SetCapture(hwnd);
+            SetOsdLevel(level);
+        } else if (g_cfg.osdAllowDrag) {
             g_osdDragging = true;
             SetCapture(hwnd);
             GetCursorPos(&g_osdDragStart);
@@ -5872,13 +5977,19 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             GetWindowRect(hwnd, &r);
             g_osdWinStart.x = r.left;
             g_osdWinStart.y = r.top;
-        } else {
-            HideOsd();  // a click on the OSD closes it, so it never stands in the way
+        } else if (g_osdTarget == OsdTarget::None) {
+            HideOsd();  // a banner closes on a click
         }
         return 0;
+    }
 
     case WM_MOUSEMOVE:
-        if (g_osdDragging) {
+        if (g_osdSliding) {
+            float level = 0.0f;
+            const float x = (float)(short)LOWORD(lParam);
+            const float y = (float)(short)HIWORD(lParam);
+            if (OsdLevelAt(x, y, true, &level)) SetOsdLevel(level);
+        } else if (g_osdDragging) {
             POINT pt;
             GetCursorPos(&pt);
             g_customOsdX = g_osdWinStart.x + (pt.x - g_osdDragStart.x);
@@ -5888,7 +5999,10 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
 
     case WM_LBUTTONUP:
-        if (g_osdDragging) {
+        if (g_osdSliding) {
+            g_osdSliding = false;
+            ReleaseCapture();
+        } else if (g_osdDragging) {
             g_osdDragging = false;
             ReleaseCapture();
             g_hasCustomOsdPos = true;
@@ -5901,6 +6015,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_CAPTURECHANGED:
         g_osdDragging = false;
+        g_osdSliding = false;
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
