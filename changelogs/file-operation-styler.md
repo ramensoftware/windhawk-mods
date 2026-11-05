@@ -1,3 +1,10 @@
+## 1.4.0 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/950046a0779a24d00464e335cf187745dccec53f/mods/file-operation-styler.wh.cpp))
+
+* Added experimental support for third-party file managers using compatible native Windows file-operation dialogs.
+* Improved Common Controls v6 compatibility when loading into additional application processes.
+* Added instructions for enabling other file managers through Windhawk's custom process inclusion list.
+* Preserved existing Windows Explorer functionality and styling.
+
 ## 1.3.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2ca0c456759cd0eeb5f5d0f4d737362b6b406d74/mods/file-operation-styler.wh.cpp))
 
 * Fixed compatibility with Windows 11 26H2 builds where the native transfer-rate calculation symbol is unavailable.

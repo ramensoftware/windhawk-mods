@@ -1,3 +1,109 @@
+## 3.0.0 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11347634795228e9aff5efcb89f39c9f758113bc/mods/mac-island-dock.wh.cpp))
+
+**Icons**
+* A new Icons tab: a picture and a color for each of the island's icons, and 12 icon packs to download (Fluent, Lucide, Material, Phosphor, Emoji and more, with their licenses) or your own folder.
+
+**The island**
+* "Hide as its line" can now hide it with the mouse away, while a window is maximized, or while a window is over it (Island style, #6068, #6532, #6798).
+* "Only the clock when hidden" (off by default, under "When it hides"): hidden by the auto-hide, a small pill with the time stays instead of the line, and turns into the line while an app's window is under it; the mouse on it opens the island (Island and Fixed styles, #6204). The Bar hidden with Win+J closes into the same pill (gone while a window is under it), and the mouse on it brings the bar back; hidden that way, new notifications follow "Banners even with the pill minimized".
+* "Fade the line after": the minimized line fades after 30 s, 2 min or 10 min (off by default), for OLED screens (#6525).
+* "Opens the line: With the mouse / With a click" (Hiding tab, the mouse by default; asked on Discord): with a click, the minimized line (and the hidden Bar's clock) only grows under the mouse and opens when clicked; it hides again when the mouse leaves, as before.
+* "Timer on the minimized line" (on by default, Hiding tab; asked on Discord): while a timer, Pomodoro or the stopwatch runs with the island minimized, the line becomes a small pill with the ring and time of the one ending first; with "Only the clock when hidden", the time goes beside the clock (not on the notches nor upright, where the line has no room).
+* With "Line that opens the island" on one notch, the other notches' lines are hidden and clicks there go to the windows below (#6468).
+* Notches in the Island style too (#6485): the same notches as the Fixed style, without keeping a strip (windows go under them). Each style keeps its own choice, so the Island style starts without notches and the Fixed style keeps its own.
+* "See-through bar" (off by default, Bar style): only the bar's items over what's behind it, or, with the frosted glass, only the blur with a light tint; with the opacity slider these are the bar's three looks asked for in #6109.
+* The bar on the left or the right side too (#6479): its items one under the other, its inner corners rounded (their size is a setting), the windows kept beside it.
+* The text size has its own slider, apart from the icons' size.
+* Win+J hides the whole bar in the Bar style too (#6519).
+* Profiles that turn on by themselves (#6166): in a profile's pencil, the apps that bring it once one stays in front a moment (the last app in front is one click away) and the styles; after its app, the island goes back to the profile before or stays.
+* A Reset button beside Export and Import (a double click) puts the island's settings back as they came; notes, tasks, events and profiles stay.
+* What's new rewritten for every version: each item says what it does and which tab has its option, and a click on it shows that option. An item with an option lights under the mouse, and a click anywhere on it shows that option.
+* "Light and shadow like macOS 27" (off by default, under Liquid Glass; an idea by Thiago Silva): the glass gets a sheen, a beveled edge, light along its bottom and a soft shadow, and the panels' cards look like glass too. It's drawn over Windows' own blur, so it shows in screenshots and recordings.
+* About shows Instagram's logo.
+
+**On the pill**
+* "Your commands" (off by default): shortcuts to programs, files, folders, links or command lines, each with the icon of what it opens ("Choose..." picks a file); they're listed in their panel, and any of them can also be a button on the pill. Its form names each field and says what each kind does. Command lines run in a hidden job of their own (the 64-bit cmd.exe); one that fails shows a terminal. They're each Windows account's own (#6161, #6165, #6654).
+* "AI usage" (off by default, #6636): how much of the limits of Claude Code in a terminal and Codex is used, the one closer to its end with the time until it starts over (yellow from 70%, red from 90%), and both the 5-hour session and the week in its panel. It reads only what the agents keep on the PC (Codex's logs, and what Claude Code gives its status line, saved by a line the user adds to their status line's script): no login, token or network. The island never changes Claude Code's settings: its panel copies that line (for Git Bash or PowerShell), and the file it saves into is made first so only that Windows account can read it. The Claude desktop app doesn't leave its limits on the PC, so the option says it's the terminal one. Each agent shows with its installed app's icon.
+* The app in focus can show its window's title too (#6165).
+* A Caps Lock notice (an option, off by default, #6233).
+* Celsius or Fahrenheit for the weather (#6629, #6673).
+
+**Panels**
+* A calendar card (off by default): the chosen day big beside the month (neighbor days dimmed, holidays in red, the week number), buttons for an alarm, a timer and the agendas, that day's events, and the upcoming events and holidays. The month its days show is named over them (a click on it goes back to today, #6165).
+* The weather's details as cards, like a phone's (off by default, #6129).
+* The control center changes the mobile hotspot's name and password; its mixer shows each volume in percent (#6160, #6537).
+* Pages opened straight from the pill have a back arrow (#6160).
+* The event editor says what its reminder does.
+* The weather can use your location ("Use my location" beside the city, asked on Discord): off until clicked, it uses Windows' own location permission ("Let desktop apps access your location"), on the weather's thread; refused or off, the city typed stays, and after a few times without a position the city typed shows meanwhile. The coordinates are rounded to about a kilometer before they go to Open-Meteo, and typing a city goes back to it.
+* Alarms have an optional name and the days they ring (asked on Discord): seven day buttons in the order of Windows' first day of the week; all of them is "Every day", none is "Once" (it turns itself off after ringing), and the list says "Weekdays", "Weekends" or the days. Alarms saved before ring every day.
+* "Brightness of external monitors (DDC/CI)" (on by default, Control center tab, #6502): off, nothing goes over the monitor's cable, for monitors that flicker or docks and MST hubs that reset when the control center opens; the built-in screen keeps Windows' own brightness.
+* On a monitor with HDR on, its brightness slider changes Windows' brightness of SDR content (the SDR white level), which is what the desktop shows, instead of the panel's DDC/CI level (#6700).
+
+**Notifications**
+* Banners at a point of the screen (off by default): one of nine (the corners, the edges' middles or the center), in a window of their own sliding in from its edge; hover, buttons and replies work there as in the pill.
+* The banner's size (50% to 200%), width and corners.
+* "Calls and alarms silent in Do not disturb" (off by default): with it, calls, alarms and reminders don't ring either in the island's Do not disturb.
+
+**The dock**
+* "When it hides" (Windhawk settings, Hiding and showing): "Mouse away" as before (the default), or "Window maximized" / "Window over it": the dock (or the transparent taskbar) stays up on the desktop and hides only while an app's window is maximized on its monitor, or is over it, or an app is full screen; the mouse at the bottom edge still brings it up (#6202, #6368, #6798). It's told by window events (SetWinEventHook), not by looking every few moments.
+* A width of its own (#6152): the dock stops at a width you choose, and the other apps scroll with the mouse wheel, like a box.
+* The magnification, the bounces and "When it hides" on the Windows taskbar kept as it is with only its apps too (an option there, #6167).
+
+**Files**
+* A shelf (off by default, in the Desktop tab): files dropped anywhere on the pill (but on the folders' item) wait there, the newest first, 5 to 30 of them (10 by default, the oldest going). Its item shows how many; its panel lists them with thumbnails, to drag into another app (copied or moved as chosen for the folders panel), open, or take off one by one or all at once. Only their paths are kept, in the mod's storage.
+* Thumbnails of pictures, videos and documents in the folders panel and on the shelf (on by default), made on a thread; the mouse resting on one for half a second shows a bigger preview, like macOS' Quick Look.
+* A browser's download standing still for 30 s shows paused, in yellow (Edge, Chrome, Firefox, Brave, Opera, Vivaldi): browsers never tell the taskbar a download is paused.
+
+**Languages**
+* Vietnamese (Tiếng Việt): the island's texts, What's new and the Windhawk settings, translated by @caotu2k5 in #6826 and completed for 3.0.
+
+**Settings**
+* The settings window looks like Windows 11's: its own title bar on the Mica (with Windows' caption buttons and snap layouts), bigger texts, the small options two on a line in a wide window, a side bar as wide as the window allows, and scroll bars always shown, wider under the mouse and dragged like Windows' own (the side bar's too).
+* The mod's site, island.caliberda.com.br, in About: every option explained, the roadmap and votes. The mod's logo is on the settings window's title bar, its taskbar button and About.
+* The bubbles that ask or tell something (an option's needs, the icons' tips, the settings bubble) are opaque whatever the island's opacity.
+* A setup assistant (its own tab, under About) walks a new user through the main choices in six short steps: what the island is, the style, a ready-made set of pill items, hiding and notifications, the look (and how the dock is chosen in Windhawk), and a summary with links to each option. Each choice shows live and Cancel puts back what was there; it opens by itself only on a new install (never for an update), and its tab brings it back any time.
+* New tabs: Style (only what the chosen style has), Hiding (everything about the line, Win+J too), Control center and Banners; the loading bar moved to System, the Bar style's side, inner corners and items at the corners to Look, and the clock in the middle to Clock and calendar (the items' order stays the preview over every tab).
+* No choice cuts its names: each is measured, and the buttons go to more rows when they don't fit one.
+* The banners' place is picked on a little screen with its nine points; the bar's side, its inner corners and the banner's corners are drawn.
+* A dimmed option's reason opens a bubble with everything it needs (found by trying the changes in memory), as wide as its text; "Yes, change" makes them all at once and turns it on, and "Restore what changed" puts them back.
+* Files dragged out of the folders panel or the shelf: asked the first time or every time, or copied, or moved; the shelf asks like the folders panel.
+
+**Fixes**
+* Alt or F10 in the settings window, or moving and sizing it, no longer stops the islands' animations until a click (Windows' menu mode); the settings window comes back on the main island after a restart when its monitor is gone.
+* The weather panel on another monitor's island no longer stays on "Searching" after a search or "Use my location".
+* With brightness through Windows only, a screen with HDR whose SDR brightness Windows refuses no longer hands its slider to the next screen.
+* An old custom icon without transparency on a pinned shortcut no longer shows as a black square in the dock.
+* "When it hides: window over it" looks at each monitor's own dock.
+* The Caps Lock bubble shows with three notches wherever the bell is; "Restore what changed" stays after the islands start again and leaves an option changed again since; the pill's shelf count follows files gone; a drop of only too long paths isn't said to be on the shelf.
+* The AI usage file (what Claude Code's status line saves) is each Windows account's own.
+* The dock keeps the icons set on the shortcuts pinned to the taskbar (changed in their properties) instead of the app's own (#6891).
+* With a monitor of another scale under the dock, the dock is no longer cut off center after its taskbar mode is switched (its icons' room measured in its own scale).
+* The tray icons of programs the island can't open (like NVIDIA's settings icon, from its display driver's service) keep their picture and show again after the mod is turned off and on (their program is asked to Windows by the process's ID).
+* With Windhawk run as administrator, the island gets the other apps' tray icons, the apps' badges and the download progress from the taskbar again, and notices when Explorer restarts (#6598); a tray icon's click then reaches only apps that aren't run as administrator.
+* With animations off, a panel opening from the pill no longer stretches the pill sideways for a few frames before it drops down, and the power button's confirmation shows.
+* Shortcuts and notes keep their line breaks with Windhawk portable (#6542).
+* Song lyrics for Apple Music (the app, Cider and its web page), whose artist comes with the album, and for players that don't tell a song's length (#6612).
+* Apps with notifications seen on one island (a notch or another monitor's) are seen on all of them.
+* No white band under the dock or the see-through taskbar after the taskbar hides by itself: the taskbar's own window is painted clear in those modes, also under its XAML.
+* With graphics drivers that can't make pictures smaller the smooth way (D2DERR_INTERMEDIATE_TOO_LARGE), the island turns that way off and draws again, instead of losing its frames (#6638).
+* In the Bar style with the clock in the middle, items no longer flash over the clock: an item whose side of the clock changes fades instead of sliding over it.
+* The Recycle Bin's count is watched again when Explorer starts after the island.
+* The bar moved to a side gives the screen's top back (and that side, when it moves again).
+* The dock comes up when the mouse slides along the bottom edge into it.
+* Changing the power mode or plan in the control center runs on a thread of its own: the island no longer freezes while Windows applies it (#6652).
+* Lyrics are looked for with players that don't tell a song's length, like Nagi (#6691); a log line says why a song gets none.
+* The places and icons per app go back to the general ones on the desktop and the taskbar, instead of staying the last app's (#6692).
+* Over another monitor below, the hidden dock slides away past the screen's edge like on the other monitors, instead of shrinking into a line above the edge: its window's room above the dock is higher there, so the window keeps more than half on its own monitor (its scale) with the whole dock past the edge.
+* With input methods that tell nothing when Shift switches their mode (the newest Microsoft Pinyin), the 中/英 item and its bubble follow it: the mode is asked every half second while a Chinese, Japanese or Korean keyboard is in front, from the window with the keyboard focus, and from Windows' text services when that window doesn't answer (#6460, #6422).
+* The control center's usage page reads CPU, RAM and VRAM by itself while it's open (it showed nothing without those items on the pill), and has CPU, RAM and VRAM tabs (#6790).
+* With two monitors, an island stays hidden while its own monitor has a full-screen window, whatever window has the focus (clicking the other monitor brought it back over a video); the dock's full-screen checks look at the monitor the same way (#6800).
+* A keyboard switched in the same app (Alt+Shift, Win+Space) shows on the island's language item: with two keyboards or more, the keyboard in front is read again every half second (newer Windows builds tell no event for it) (#6816).
+* A click on a notification of an unpackaged app (like Discord or other Electron apps) goes where the notification points, through the activator the app registered in its Start menu shortcut or in the registry, read on a thread of its own; before, only packaged apps' were found and the click only brought the app up (#6822).
+* The panels' corners follow the pill's corners setting (a square pill no longer opens into rounded panels), and the screenshot selection (Win+Shift+S) no longer counts as the app in front for the colors, places and profiles per app (#6609).
+* An app clicked in the dock bounces from the click until its window shows (up to the 6 s the dock waits for it), as "Bounce on launch" says, instead of only once its window was already there, over the new window and with the dock about to hide.
+* An app's own choice of icons ("Place and icons per app") kept before some items existed no longer shows those items while they're off for all apps (#6785, #6759).
+* The dock no longer turns the taskbar's auto-hide on while another app's auto-hide bar is on that edge (Windows answered with its "only one auto-hide toolbar per side" dialog); the log names that app.
+
 ## 2.1.0 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/41fdb9158f257c7d4bbc3358369facf21ab625a7/mods/mac-island-dock.wh.cpp))
 
 **Folders**
