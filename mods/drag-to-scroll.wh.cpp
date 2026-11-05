@@ -9,10 +9,7 @@
 // @license         MIT
 // @include         *
 // @exclude         unsecapp.exe
-// @exclude         svchost.exe
-// @exclude         dwm.exe
 // @exclude         sihost.exe
-// @exclude         taskhostw.exe
 // @exclude         TextInputHost.exe
 // @exclude         RuntimeBroker.exe
 // @exclude         UserOOBEBroker.exe
@@ -24,7 +21,7 @@
 // @exclude         conhost.exe
 // @exclude         ShellExperienceHost.exe
 // @exclude         Widgets.exe
-// @compilerOptions -luser32 -lgdi32 -lcrypt32
+// @compilerOptions -luser32 -lgdi32 -lcrypt32 -ladvapi32
 // ==/WindhawkMod==
 
 // clang-format off
@@ -71,6 +68,7 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 
 * **Right-Click Only Mode Trade-offs:** If you select the "Right-Click Only" trigger, cruising is disabled and right-mouse dragging is overridden globally. Native right-drag features in other apps (like Explorer's right-drag file copying or browser mouse gestures) will trigger scrolling instead. Additionally, quickly tapping right-click may occasionally register as a double-right-click in certain list views.
 * **Cruising Cursor Visibility:** When using the "Hold Ctrl" cruising anchor, your custom drag cursor will revert to the standard Windows arrow anytime it leaves the application window (such as hovering over the desktop, taskbar, or other apps). This happens because Windows strictly requires a physical mouse button to be held down to maintain a global cursor override. Use the "Hold Right-Click" anchor if you want the custom drag cursor to remain visible across the entire screen.
+* **Cross-Process Cruising Clicks (Ctrl-Anchor Mode):** When cruising with the `Ctrl` anchor and Out-of-Bounds dragging enabled, clicking on standard desktop apps (like browsers, Notepad, or File Explorer) stops the glide cleanly without clicking the app behind your cursor. However, clicking on modern UWP/system surfaces (Start Menu, Settings, Calculator), Administrator-elevated windows (Task Manager, `mmc.exe` / `services.msc`) from a non-elevated app, or excluded apps (`conhost.exe`) will stop cruising while allowing that click through.
 * **Microsoft Store & Modern UWP Apps (Not Supported):** Modern packaged applications installed from the Microsoft Store (such as Calculator, Weather, Microsoft To Do) as well as Windows system surfaces handle input through isolated modern pointer pipelines that bypass classic Win32 mouse messages.
 * **Online Games & Anti-Cheat Protection:** Software with native `Ctrl + Right-Click` dragging shortcuts (such as Blender or CAD applications) or games protected by kernel anti-cheats (e.g., Vanguard, BattlEye, Easy Anti-Cheat) may conflict with global input hooks. You can safely exclude those specific programs under the mod's **Advanced** tab in Windhawk.
 * **Portable Windhawk & Elevation:** The mod works in elevated applications when using the standard Windhawk service. If you are using portable Windhawk without running it as Administrator, elevated application windows cannot be targeted.
@@ -187,6 +185,7 @@ struct ScrollTypes {
         HWND targetHwnd = nullptr;
         bool isDiscrete = false;
         CruiseAnchor anchor = CruiseAnchor::Ctrl;
+        uint32_t generation = 0;
     };
 };
 
@@ -366,6 +365,7 @@ struct CursorAssets {
         "pf8pTQcat75KjQlLpgnBfNbncJomiSUQQKFQJNbQE8V/CPwB7EDxzwFfAwUgUP5zoAIC+CPK/zCInpAr9HxABZ/1OZxmkBFYCajyF9kSoIEgowpkKxx7ofiTwJNgMYpfAo6ACxBAFQQgUP4qcAECOIrybwGLIYDvofwZoDf+3SpgQpAiOYeLHwz5/w8dI3e2Ep2JAAAAAElFTkSuQmCC";
 };
 // clang-format on
+
 // Decode, cache, and clean up custom high-DPI cursors in a thread-safe manner
 struct CursorManager {
     inline static INIT_ONCE initOnce = INIT_ONCE_STATIC_INIT;
@@ -535,12 +535,217 @@ struct CursorManager {
     }
 };
 
+// Coordinate cross-process Ctrl-cruise click swallowing via per-session,
+// per-elevation POD shared memory and an HWND marker property on hooked apps
+struct SharedCruiseManager {
+    static constexpr ULONGLONG kHeartbeatTimeoutMs = 150;
+
+    // Pure POD layout accessed exclusively via Win32 Interlocked intrinsics to
+    // avoid cross-process C++ object-lifetime undefined behavior
+    struct alignas(8) SharedBlock {
+        volatile LONG cruisingPid;
+        LONG reserved;
+        volatile LONGLONG heartbeatTick;
+    };
+    static_assert(sizeof(SharedBlock) == 16, "SharedBlock must stay 16 bytes");
+
+    inline static HANDLE hMapFile = nullptr;
+    inline static SharedBlock* pShared = nullptr;
+    inline static wchar_t hookedPropName[64] = {};
+
+    static LONGLONG AtomicLoad64(volatile LONGLONG* ptr) {
+        return InterlockedCompareExchange64(ptr, 0, 0);
+    }
+
+    static void AtomicStore64(volatile LONGLONG* ptr, LONGLONG val) {
+        LONGLONG cur = *ptr;
+        while (true) {
+            LONGLONG prev = InterlockedCompareExchange64(ptr, val, cur);
+            if (prev == cur) {
+                break;
+            }
+            cur = prev;
+        }
+    }
+
+    static bool IsProcessElevated() {
+        bool elevated = false;
+        HANDLE hToken = nullptr;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+            TOKEN_ELEVATION te = {};
+            DWORD cbSize = sizeof(te);
+            if (GetTokenInformation(hToken, TokenElevation, &te, sizeof(te),
+                                    &cbSize)) {
+                elevated = (te.TokenIsElevated != 0);
+            }
+            CloseHandle(hToken);
+        }
+        return elevated;
+    }
+
+    static BOOL CALLBACK TagEnumProc(HWND hWnd, LPARAM lParam) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid == static_cast<DWORD>(lParam) && hookedPropName[0] != L'\0') {
+            if (!GetPropW(hWnd, hookedPropName)) {
+                SetPropW(hWnd, hookedPropName, reinterpret_cast<HANDLE>(1));
+            }
+        }
+        return TRUE;
+    }
+
+    static BOOL CALLBACK UntagEnumProc(HWND hWnd, LPARAM lParam) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid == static_cast<DWORD>(lParam) && hookedPropName[0] != L'\0') {
+            RemovePropW(hWnd, hookedPropName);
+        }
+        return TRUE;
+    }
+
+    // Open or create per-session, per-elevation shared memory so standard and
+    // elevated processes never block each other with ERROR_ACCESS_DENIED
+    static void Init() {
+        DWORD sessionId = 0;
+        ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+        const int elevFlag = IsProcessElevated() ? 1 : 0;
+
+        wsprintfW(hookedPropName, L"Windhawk_DragToScroll_Hooked_1_2_E%d",
+                  elevFlag);
+
+        wchar_t mapName[96] = {};
+        wsprintfW(mapName, L"Local\\Windhawk_DragToScroll_Cruise_v1_%lu_E%d",
+                  static_cast<unsigned long>(sessionId), elevFlag);
+
+        hMapFile =
+            CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+                               sizeof(SharedBlock), mapName);
+        if (!hMapFile) {
+            return;
+        }
+
+        void* view = MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0,
+                                   sizeof(SharedBlock));
+        if (!view) {
+            CloseHandle(hMapFile);
+            hMapFile = nullptr;
+            return;
+        }
+
+        pShared = static_cast<SharedBlock*>(view);
+
+        // Pre-tag existing top-level windows in this process so cold-start
+        // clicks on already-open background windows are recognized immediately
+        EnumWindows(TagEnumProc, static_cast<LPARAM>(GetCurrentProcessId()));
+    }
+
+    static void Uninit() {
+        ClearSelf();
+        if (pShared) {
+            UnmapViewOfFile(pShared);
+            pShared = nullptr;
+        }
+        if (hMapFile) {
+            CloseHandle(hMapFile);
+            hMapFile = nullptr;
+        }
+    }
+
+    // Tag newly created top-level windows only when shared memory is active
+    static void TagWindowRootIfNeeded(HWND hWnd) {
+        if (!pShared || hookedPropName[0] == L'\0' || !hWnd ||
+            !IsWindow(hWnd)) {
+            return;
+        }
+        HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+        if (!hRoot) {
+            hRoot = hWnd;
+        }
+        if (!GetPropW(hRoot, hookedPropName)) {
+            SetPropW(hRoot, hookedPropName, reinterpret_cast<HANDLE>(1));
+        }
+    }
+
+    static void RemoveProcessWindowTags() {
+        if (hookedPropName[0] != L'\0') {
+            EnumWindows(UntagEnumProc,
+                        static_cast<LPARAM>(GetCurrentProcessId()));
+        }
+    }
+
+    static bool IsWindowInHookedProcess(HWND hWnd) {
+        if (!pShared || hookedPropName[0] == L'\0' || !hWnd ||
+            !IsWindow(hWnd)) {
+            return false;
+        }
+        HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+        if (!hRoot) {
+            hRoot = hWnd;
+        }
+        return GetPropW(hRoot, hookedPropName) != nullptr;
+    }
+
+    // Publish or refresh this process as the active Ctrl-cruising owner
+    static void PublishHeartbeat() {
+        if (!pShared) {
+            return;
+        }
+        AtomicStore64(&pShared->heartbeatTick,
+                      static_cast<LONGLONG>(GetTickCount64()));
+        InterlockedExchange(&pShared->cruisingPid,
+                            static_cast<LONG>(GetCurrentProcessId()));
+    }
+
+    // Check if this process is still registered as the active cruiser
+    static bool IsSelfStillCruising() {
+        if (!pShared) {
+            return true;
+        }
+        LONG owner = InterlockedCompareExchange(&pShared->cruisingPid, 0, 0);
+        return static_cast<DWORD>(owner) == GetCurrentProcessId();
+    }
+
+    // Clear shared ownership if owned by this process
+    static void ClearSelf() {
+        if (!pShared) {
+            return;
+        }
+        LONG selfPid = static_cast<LONG>(GetCurrentProcessId());
+        InterlockedCompareExchange(&pShared->cruisingPid, 0, selfPid);
+    }
+
+    // Called by OTHER processes on mouse button down when local state is Idle:
+    // atomically claims and cancels remote Ctrl-cruising if heartbeat is fresh
+    static bool TryCancelRemoteCruiseOnClick() {
+        if (!pShared) {
+            return false;
+        }
+        LONG ownerPid = InterlockedCompareExchange(&pShared->cruisingPid, 0, 0);
+        if (ownerPid == 0 ||
+            static_cast<DWORD>(ownerPid) == GetCurrentProcessId()) {
+            return false;
+        }
+
+        ULONGLONG hb =
+            static_cast<ULONGLONG>(AtomicLoad64(&pShared->heartbeatTick));
+        ULONGLONG now = GetTickCount64();
+        if (hb == 0 || (now - hb) > kHeartbeatTimeoutMs) {
+            InterlockedCompareExchange(&pShared->cruisingPid, 0, ownerPid);
+            return false;
+        }
+
+        return InterlockedCompareExchange(&pShared->cruisingPid, 0, ownerPid) ==
+               ownerPid;
+    }
+};
+
 // Hold shared atomic flags and synchronized drag/cruise session state
 struct RuntimeState {
     inline static std::atomic<ScrollTypes::ScrollState> state{
         ScrollTypes::ScrollState::Idle};
     inline static std::atomic<ScrollTypes::DragAxis> activeAxis{
         ScrollTypes::DragAxis::VerticalOnly};
+    inline static std::atomic<uint32_t> cruiseGen{0};
     inline static std::atomic<ULONGLONG> lastScrollEndTime{0};
     inline static std::atomic<ULONGLONG> lastSynthesizedWheelTick{0};
     inline static std::atomic<bool> swallowRButtonUp{false};
@@ -598,15 +803,6 @@ struct ScrollDispatcher {
                         ? OriginalApis::GetAsyncKeyState(vk)
                         : GetAsyncKeyState(vk);
         return (val & 0x8000) != 0;
-    }
-
-    // Query if a key is currently down OR was pressed recently (catches fast
-    // clicks)
-    static bool IsVkPressed(int vk) {
-        SHORT val = OriginalApis::GetAsyncKeyState
-                        ? OriginalApis::GetAsyncKeyState(vk)
-                        : GetAsyncKeyState(vk);
-        return val != 0;
     }
 
     // Query physical Ctrl key state
@@ -856,15 +1052,25 @@ struct ScrollDispatcher {
 
 // Manage the background cruising worker thread and synchronized cruise startup
 struct CruiseController {
-    // Finalize cruise state safely from the worker thread when cruising
-    // disengages
+    // Finalize cruise state safely from the worker thread only if the active
+    // generation still matches this worker pass
     static void EndCruiseFromWorker(const ScrollTypes::CruiseContext& ctx) {
-        RuntimeState::lastScrollEndTime.store(GetTickCount64(),
-                                              std::memory_order_relaxed);
-        ScrollTypes::ScrollState expected = ScrollTypes::ScrollState::Cruising;
-        if (RuntimeState::state.compare_exchange_strong(
-                expected, ScrollTypes::ScrollState::Idle,
-                std::memory_order_acq_rel)) {
+        bool ended = false;
+        {
+            ScopedCriticalSection lock(&RuntimeState::stateCs);
+            if (RuntimeState::cruiseGen.load(std::memory_order_relaxed) ==
+                    ctx.generation &&
+                RuntimeState::state.load(std::memory_order_relaxed) ==
+                    ScrollTypes::ScrollState::Cruising) {
+                SharedCruiseManager::ClearSelf();
+                RuntimeState::lastScrollEndTime.store(
+                    GetTickCount64(), std::memory_order_relaxed);
+                RuntimeState::state.store(ScrollTypes::ScrollState::Idle,
+                                          std::memory_order_release);
+                ended = true;
+            }
+        }
+        if (ended) {
             ScrollDispatcher::EndDiscreteScroll(ctx.targetHwnd, ctx.isDiscrete);
             ScrollDispatcher::RequestGuiCursorRefresh(ctx.targetHwnd);
         }
@@ -893,14 +1099,28 @@ struct CruiseController {
 
             double cruiseAccumY = 0.0;
             double cruiseAccumX = 0.0;
+            ULONGLONG remoteButtonDownSince = 0;
 
-            // Emit continuous scroll increments at ~50 Hz while Cruising
-            // remains active
+            // Emit continuous scroll increments at ~50 Hz while Cruising and
+            // session generation remain active
             while (RuntimeState::state.load(std::memory_order_acquire) ==
-                   ScrollTypes::ScrollState::Cruising) {
+                       ScrollTypes::ScrollState::Cruising &&
+                   RuntimeState::cruiseGen.load(std::memory_order_acquire) ==
+                       ctx.generation) {
                 if (WaitForSingleObject(RuntimeState::stopEvent, 0) ==
                     WAIT_OBJECT_0) {
+                    SharedCruiseManager::ClearSelf();
                     return 0;
+                }
+
+                // Stop immediately if a remote hooked process swallowed a
+                // cancel click and cleared our shared cruisingPid
+                if (ctx.anchor == ScrollTypes::CruiseAnchor::Ctrl) {
+                    if (!SharedCruiseManager::IsSelfStillCruising()) {
+                        EndCruiseFromWorker(ctx);
+                        break;
+                    }
+                    SharedCruiseManager::PublishHeartbeat();
                 }
 
                 // Disengage if the target window closed or anchor/interrupt
@@ -919,8 +1139,7 @@ struct CruiseController {
                     anchorLost = true;
                 }
 
-                if (anchorLost || ScrollDispatcher::IsInterruptKeyPressed() ||
-                    ScrollDispatcher::IsCancelMouseButtonPressed(ctx.anchor)) {
+                if (anchorLost || ScrollDispatcher::IsInterruptKeyPressed()) {
                     EndCruiseFromWorker(ctx);
                     break;
                 }
@@ -932,6 +1151,38 @@ struct CruiseController {
                     EndCruiseFromWorker(ctx);
                     break;
                 }
+
+                // Clicks on this process's windows are cancelled and swallowed
+                // by ProcessMessage (and with RMB anchor, SetCapture routes all
+                // clicks there). For Ctrl-anchored clicks over ANOTHER process:
+                // - If that process is unhooked/UWP/elevated, stop immediately.
+                // - If that process has our mod hooked at the same elevation,
+                //   let its ProcessMessage swallow the click and clear
+                //   SharedCruiseManager first, with an 80 ms fallback in case
+                //   that foreign window is hung.
+                if (ctx.anchor == ScrollTypes::CruiseAnchor::Ctrl) {
+                    if (ScrollDispatcher::IsCancelMouseButtonPressed(
+                            ctx.anchor)) {
+                        HWND hPointWnd = WindowFromPoint(curPt);
+                        if (!ScrollDispatcher::IsSameProcessWindow(hPointWnd)) {
+                            if (!SharedCruiseManager::IsWindowInHookedProcess(
+                                    hPointWnd)) {
+                                EndCruiseFromWorker(ctx);
+                                break;
+                            }
+                            ULONGLONG now = GetTickCount64();
+                            if (remoteButtonDownSince == 0) {
+                                remoteButtonDownSince = now;
+                            } else if ((now - remoteButtonDownSince) >= 80) {
+                                EndCruiseFromWorker(ctx);
+                                break;
+                            }
+                        }
+                    } else {
+                        remoteButtonDownSince = 0;
+                    }
+                }
+
                 if (!ctx.allow_out_of_bounds &&
                     !PtInRect(&ctx.windowBounds, curPt)) {
                     EndCruiseFromWorker(ctx);
@@ -1005,14 +1256,15 @@ struct CruiseController {
 
                 if (WaitForSingleObject(RuntimeState::stopEvent, 20) ==
                     WAIT_OBJECT_0) {
+                    SharedCruiseManager::ClearSelf();
                     return 0;
                 }
             }
         }
     }
 
-    // Populate cruise context and lazily create the worker thread under lock
-    // protection
+    // Populate cruise context, publish shared heartbeat BEFORE exposing
+    // Cruising state, and lazily create the worker thread under lock protection
     static bool Start(ScrollTypes::CruiseAnchor anchor,
                       const ScrollTypes::SettingsSnapshot& cfg) {
         ScopedCriticalSection lock(&RuntimeState::stateCs);
@@ -1020,6 +1272,19 @@ struct CruiseController {
             !RuntimeState::cruiseEvent) {
             return false;
         }
+
+        // Create the worker thread inside stateCs so unload can never miss the
+        // handle
+        if (!RuntimeState::hCruiseThread) {
+            RuntimeState::hCruiseThread =
+                CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
+            if (!RuntimeState::hCruiseThread) {
+                return false;
+            }
+        }
+
+        const uint32_t nextGen =
+            RuntimeState::cruiseGen.fetch_add(1, std::memory_order_acq_rel) + 1;
 
         RuntimeState::cruiseCtx.anchorPt = RuntimeState::anchorPt;
         RuntimeState::cruiseCtx.windowBounds = RuntimeState::windowBounds;
@@ -1035,17 +1300,16 @@ struct CruiseController {
         RuntimeState::cruiseCtx.isDiscrete =
             RuntimeState::scrollTargetIsDiscrete;
         RuntimeState::cruiseCtx.anchor = anchor;
+        RuntimeState::cruiseCtx.generation = nextGen;
 
-        // Create the worker thread inside stateCs so unload can never miss the
-        // handle
-        if (!RuntimeState::hCruiseThread) {
-            RuntimeState::hCruiseThread =
-                CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
-            if (!RuntimeState::hCruiseThread) {
-                return false;
-            }
+        if (anchor == ScrollTypes::CruiseAnchor::Ctrl) {
+            SharedCruiseManager::PublishHeartbeat();
+        } else {
+            SharedCruiseManager::ClearSelf();
         }
 
+        RuntimeState::state.store(ScrollTypes::ScrollState::Cruising,
+                                  std::memory_order_release);
         SetEvent(RuntimeState::cruiseEvent);
         return true;
     }
@@ -1053,6 +1317,48 @@ struct CruiseController {
 
 // Process intercepted Win32 mouse and keyboard messages for drag-to-scroll
 struct InputEngine {
+    static bool IsMatchingButtonUp(UINT msg, UINT expectedClientUp) {
+        switch (expectedClientUp) {
+            case WM_LBUTTONUP:
+                return msg == WM_LBUTTONUP || msg == WM_NCLBUTTONUP;
+            case WM_RBUTTONUP:
+                return msg == WM_RBUTTONUP || msg == WM_NCRBUTTONUP;
+            case WM_MBUTTONUP:
+                return msg == WM_MBUTTONUP || msg == WM_NCMBUTTONUP;
+            case WM_XBUTTONUP:
+                return msg == WM_XBUTTONUP || msg == WM_NCXBUTTONUP;
+            default:
+                return false;
+        }
+    }
+
+    static UINT MapButtonDownToClientUp(UINT msg) {
+        switch (msg) {
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONDBLCLK:
+            case WM_NCLBUTTONDOWN:
+            case WM_NCLBUTTONDBLCLK:
+                return WM_LBUTTONUP;
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONDBLCLK:
+            case WM_NCRBUTTONDOWN:
+            case WM_NCRBUTTONDBLCLK:
+                return WM_RBUTTONUP;
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONDBLCLK:
+            case WM_NCMBUTTONDOWN:
+            case WM_NCMBUTTONDBLCLK:
+                return WM_MBUTTONUP;
+            case WM_XBUTTONDOWN:
+            case WM_XBUTTONDBLCLK:
+            case WM_NCXBUTTONDOWN:
+            case WM_NCXBUTTONDBLCLK:
+                return WM_XBUTTONUP;
+            default:
+                return 0;
+        }
+    }
+
     // Detach capture ownership under lock and return handles for post-lock
     // cleanup
     static void DetachCaptureLocked(DWORD currentTid,
@@ -1115,12 +1421,14 @@ struct InputEngine {
             return false;
         }
 
-        // Fast-reject unrelated Win32 messages while keeping posted
-        // WM_SETCURSOR
+        // Fast-reject unrelated Win32 messages while keeping client/non-client
+        // mouse messages, keyboard messages, and posted WM_SETCURSOR
         const UINT m = pMsg->message;
         const bool isMouseMsg = (m >= WM_MOUSEFIRST && m <= WM_MOUSELAST);
+        const bool isNcMouseBtnMsg =
+            (m >= WM_NCLBUTTONDOWN && m <= WM_NCXBUTTONDBLCLK);
         const bool isKeyMsg = (m >= WM_KEYFIRST && m <= WM_KEYLAST);
-        if (!isMouseMsg && !isKeyMsg && m != WM_SETCURSOR) {
+        if (!isMouseMsg && !isNcMouseBtnMsg && !isKeyMsg && m != WM_SETCURSOR) {
             return false;
         }
 
@@ -1131,6 +1439,7 @@ struct InputEngine {
         }
 
         const DWORD currentTid = GetCurrentThreadId();
+        SharedCruiseManager::TagWindowRootIfNeeded(pMsg->hwnd);
 
         // Clean up any leftover capture on its owning thread once RMB
         // swallowing is finished
@@ -1155,19 +1464,19 @@ struct InputEngine {
             PerformPostLockCleanup(hRelCap, hDisc, isDisc);
         }
 
+        const UINT upToSwallow = MapButtonDownToClientUp(m);
+
         // Reset cruise-cancel button-up swallow tracker on any fresh
-        // button-down
-        if (m == WM_LBUTTONDOWN || m == WM_LBUTTONDBLCLK ||
-            m == WM_RBUTTONDOWN || m == WM_RBUTTONDBLCLK ||
-            m == WM_MBUTTONDOWN || m == WM_MBUTTONDBLCLK ||
-            m == WM_XBUTTONDOWN || m == WM_XBUTTONDBLCLK) {
+        // client or non-client button-down
+        if (upToSwallow != 0) {
             RuntimeState::swallowButtonUp.store(0, std::memory_order_relaxed);
         }
 
-        // Swallow the matching button-up from a click that cancelled cruising
+        // Swallow the matching client or non-client button-up from a click that
+        // cancelled cruising
         UINT expectedUp =
             RuntimeState::swallowButtonUp.load(std::memory_order_relaxed);
-        if (expectedUp != 0 && m == expectedUp) {
+        if (expectedUp != 0 && IsMatchingButtonUp(m, expectedUp)) {
             RuntimeState::swallowButtonUp.store(0, std::memory_order_relaxed);
             return true;
         }
@@ -1189,8 +1498,11 @@ struct InputEngine {
                         RuntimeState::lastScrollEndTime.store(
                             GetTickCount64(), std::memory_order_relaxed);
                     }
+                    RuntimeState::cruiseGen.fetch_add(
+                        1, std::memory_order_acq_rel);
                     RuntimeState::state.store(ScrollTypes::ScrollState::Idle,
                                               std::memory_order_release);
+                    SharedCruiseManager::ClearSelf();
                     DetachCaptureLocked(currentTid, true, hRelCap, hDisc,
                                         isDisc);
                 }
@@ -1255,9 +1567,12 @@ struct InputEngine {
                         ScopedCriticalSection lock(&RuntimeState::stateCs);
                         RuntimeState::lastScrollEndTime.store(
                             GetTickCount64(), std::memory_order_relaxed);
+                        RuntimeState::cruiseGen.fetch_add(
+                            1, std::memory_order_acq_rel);
                         RuntimeState::state.store(
                             ScrollTypes::ScrollState::Idle,
                             std::memory_order_release);
+                        SharedCruiseManager::ClearSelf();
                         if (!RuntimeState::swallowRButtonUp.load(
                                 std::memory_order_relaxed)) {
                             DetachCaptureLocked(currentTid, true, hRelCap,
@@ -1288,9 +1603,6 @@ struct InputEngine {
                          (cfg.cruise_anchor == 1 || cfg.cruise_anchor == 2));
 
                     if (enteringCruise) {
-                        RuntimeState::state.store(
-                            ScrollTypes::ScrollState::Cruising,
-                            std::memory_order_release);
                         if (CruiseController::Start(
                                 ScrollTypes::CruiseAnchor::Rmb, cfg)) {
                             CursorManager::ApplyScrollCursor(
@@ -1314,9 +1626,12 @@ struct InputEngine {
                             ScopedCriticalSection lock(&RuntimeState::stateCs);
                             RuntimeState::lastScrollEndTime.store(
                                 GetTickCount64(), std::memory_order_relaxed);
+                            RuntimeState::cruiseGen.fetch_add(
+                                1, std::memory_order_acq_rel);
                             RuntimeState::state.store(
                                 ScrollTypes::ScrollState::Idle,
                                 std::memory_order_release);
+                            SharedCruiseManager::ClearSelf();
 
                             // Keep capture while RMB stays held so releasing
                             // RMB does not open a menu
@@ -1337,30 +1652,11 @@ struct InputEngine {
             }
         }
 
-        // Stop cruising cleanly on any mouse click (including Ctrl +
-        // Right-Click)
-        if (RuntimeState::state.load(std::memory_order_acquire) ==
-            ScrollTypes::ScrollState::Cruising) {
-            UINT upToSwallow = 0;
-            switch (m) {
-                case WM_LBUTTONDOWN:
-                case WM_LBUTTONDBLCLK:
-                    upToSwallow = WM_LBUTTONUP;
-                    break;
-                case WM_RBUTTONDOWN:
-                case WM_RBUTTONDBLCLK:
-                    upToSwallow = WM_RBUTTONUP;
-                    break;
-                case WM_MBUTTONDOWN:
-                case WM_MBUTTONDBLCLK:
-                    upToSwallow = WM_MBUTTONUP;
-                    break;
-                case WM_XBUTTONDOWN:
-                case WM_XBUTTONDBLCLK:
-                    upToSwallow = WM_XBUTTONUP;
-                    break;
-            }
-            if (upToSwallow != 0) {
+        // Stop local cruising cleanly on any client or non-client mouse click,
+        // or swallow a click that cancels another hooked process's Ctrl cruise
+        if (upToSwallow != 0) {
+            if (RuntimeState::state.load(std::memory_order_acquire) ==
+                ScrollTypes::ScrollState::Cruising) {
                 HWND hRelCap = nullptr;
                 HWND hDisc = nullptr;
                 bool isDisc = false;
@@ -1368,8 +1664,11 @@ struct InputEngine {
                     ScopedCriticalSection lock(&RuntimeState::stateCs);
                     RuntimeState::lastScrollEndTime.store(
                         GetTickCount64(), std::memory_order_relaxed);
+                    RuntimeState::cruiseGen.fetch_add(
+                        1, std::memory_order_acq_rel);
                     RuntimeState::state.store(ScrollTypes::ScrollState::Idle,
                                               std::memory_order_release);
+                    SharedCruiseManager::ClearSelf();
                     if (!RuntimeState::swallowRButtonUp.load(
                             std::memory_order_relaxed)) {
                         RuntimeState::swallowButtonUp.store(
@@ -1383,6 +1682,14 @@ struct InputEngine {
                 }
                 PerformPostLockCleanup(hRelCap, hDisc, isDisc);
                 CursorManager::RestoreArrowCursor();
+                return true;
+            }
+
+            if (RuntimeState::state.load(std::memory_order_acquire) ==
+                    ScrollTypes::ScrollState::Idle &&
+                SharedCruiseManager::TryCancelRemoteCruiseOnClick()) {
+                RuntimeState::swallowButtonUp.store(upToSwallow,
+                                                    std::memory_order_relaxed);
                 return true;
             }
         }
@@ -1430,6 +1737,7 @@ struct InputEngine {
                 RuntimeState::activeAxis.store(
                     ScrollTypes::DragAxis::VerticalOnly,
                     std::memory_order_relaxed);
+                RuntimeState::cruiseGen.fetch_add(1, std::memory_order_acq_rel);
                 RuntimeState::swallowRButtonUp.store(true,
                                                      std::memory_order_release);
                 RuntimeState::state.store(ScrollTypes::ScrollState::Pending,
@@ -1466,9 +1774,12 @@ struct InputEngine {
                             ScrollTypes::ScrollState::Cruising) {
                             RuntimeState::lastScrollEndTime.store(
                                 GetTickCount64(), std::memory_order_relaxed);
+                            RuntimeState::cruiseGen.fetch_add(
+                                1, std::memory_order_acq_rel);
                             RuntimeState::state.store(
                                 ScrollTypes::ScrollState::Idle,
                                 std::memory_order_release);
+                            SharedCruiseManager::ClearSelf();
                             hDisc = RuntimeState::scrollTargetHwnd;
                             isDisc = RuntimeState::scrollTargetIsDiscrete;
                             RuntimeState::scrollTargetHwnd = nullptr;
@@ -1807,8 +2118,6 @@ struct InputEngine {
                 CursorManager::RestoreArrowCursor();
                 ReplayRightClickTap();
             } else if (enteringCruise) {
-                RuntimeState::state.store(ScrollTypes::ScrollState::Cruising,
-                                          std::memory_order_release);
                 if (CruiseController::Start(ScrollTypes::CruiseAnchor::Ctrl,
                                             cfg)) {
                     CursorManager::ApplyScrollCursor(
@@ -1828,8 +2137,10 @@ struct InputEngine {
                     RuntimeState::lastScrollEndTime.store(
                         GetTickCount64(), std::memory_order_relaxed);
                 }
+                RuntimeState::cruiseGen.fetch_add(1, std::memory_order_acq_rel);
                 RuntimeState::state.store(ScrollTypes::ScrollState::Idle,
                                           std::memory_order_release);
+                SharedCruiseManager::ClearSelf();
                 CursorManager::RestoreArrowCursor();
             }
             return true;
@@ -1963,8 +2274,10 @@ struct ModLifecycle {
     // Stop and join the background cruise worker thread safely before hooks are
     // removed
     static void StopWorkerThread() {
+        RuntimeState::cruiseGen.fetch_add(1, std::memory_order_acq_rel);
         RuntimeState::state.store(ScrollTypes::ScrollState::Idle,
                                   std::memory_order_release);
+        SharedCruiseManager::ClearSelf();
         RuntimeState::swallowRButtonUp.store(false, std::memory_order_release);
         RuntimeState::swallowButtonUp.store(0, std::memory_order_relaxed);
 
@@ -2010,6 +2323,8 @@ struct ModLifecycle {
             RuntimeState::csInitialized = false;
         }
 
+        SharedCruiseManager::RemoveProcessWindowTags();
+        SharedCruiseManager::Uninit();
         CursorManager::DestroyAll();
     }
 };
@@ -2031,6 +2346,7 @@ BOOL Wh_ModInit() {
     InitializeCriticalSection(&RuntimeState::stateCs);
     RuntimeState::csInitialized = true;
     RuntimeState::shuttingDown = false;
+    SharedCruiseManager::Init();
 
     RuntimeState::stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     RuntimeState::cruiseEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
