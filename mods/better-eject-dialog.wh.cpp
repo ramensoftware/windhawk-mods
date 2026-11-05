@@ -40,17 +40,24 @@ When a USB drive is in use, Windows refuses to eject it with a message like
 currently in use. Close any programs or windows that might be using the device,
 and then try again."* It doesn't say which program is using the drive.
 
+| Before | After |
+| --- | --- |
+| ![Before](https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-before.png) | ![After](https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-after.png) |
+
 This mod replaces that message with a dialog that:
 
 * **Lists the programs that are using the drive**, with their name, process ID,
   path and command line. Background helpers get a clearer name, for example
   *COM Surrogate (Plan9FileSystem)* for the server that WSL uses to access
   Windows drives.
+* **Explains common causes**, such as WSL, Windows Search, Microsoft Defender
+  and File Explorer.
 * **Closes or ends a program** with one click. Programs with windows are asked
   to close, so they can still ask you to save your work. Background processes
   are ended. Programs that run as administrator get a UAC prompt.
 * **Ejects automatically** once the blocking programs exit, so you can leave the
-  dialog open and close them yourself.
+  dialog open and close them yourself. If the drive keeps being used, it stops
+  after 5 attempts in a row until you click a button.
 * **Force ejects** as a last resort. After a confirmation and a UAC prompt, the
   drive is flushed and dismounted so that programs lose access to it, and then
   it's ejected. Programs may lose unsaved changes to files on the drive.
@@ -76,6 +83,13 @@ services and Windows itself.
   inside it. Close File Explorer windows or previews that show the drive.
 * **Windows services and core Windows processes** are listed so that you know
   what's using the drive, but they aren't closed from the dialog.
+
+## Notes
+
+* Ejects started by other programs, such as third-party eject tools, aren't
+  changed.
+* Force eject can lose unsaved changes that programs still have for files on
+  the drive. Use it only if you can't close the programs.
 */
 // ==/WindhawkModReadme==
 
