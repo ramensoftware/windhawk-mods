@@ -78,8 +78,9 @@ frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
   Windows itself; when Windows shows its flyout for one of them, the mod keeps that flyout invisible (it clips
   Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step,
   at 0 % and 100 % too. Only the very first flyout after Explorer starts can show for a moment, before the mod
-  knows its window. Brightness and other Windows indicators use the same window and stay visible; one that
-  appears right after an outside volume change, or while the volume is at 0 % or 100 %, can be hidden as well.
+  knows its window. Brightness and other Windows indicators use the same window and stay visible: Windows
+  reports brightness changes, so the brightness indicator shows even at 0 % or 100 % volume. Airplane mode and
+  other rare indicators shown right after an outside volume change, or at 0 % or 100 %, can be hidden as well.
   While the option is on, other tray apps and mods
   that react to the wheel in the notification area (for example Taskbar Volume Control with the tray area as its
   scroll area) don't get it. Volume indicators of manufacturer utilities (laptop or keyboard software) are
@@ -2280,6 +2281,7 @@ bool g_osdPointerMoved = false;
 float g_osdShownVol = 0.0f;    // the level and mute the OSD draws
 bool g_osdShownMute = false;
 bool g_osdSliding = false;     // the user drags the OSD's bar
+std::vector<Item> g_osdSlideItems;  // the app's sessions, looked up once per drag
 // Where the OSD draws its level bar and icon, in client pixels, so that a
 // click or a drag there works like on the Windows flyout.
 struct OsdHitZones {
@@ -3773,8 +3775,37 @@ void SetOsdLevel(float level) {
     if (g_osdShownMute) ToggleOsdMute();
     const float delta = std::clamp(level, 0.0f, 1.0f) - g_osdShownVol;
     if (std::abs(delta) < 0.005f) return;
-    if (g_osdTarget == OsdTarget::Master) AdjustMasterVolume(delta, false, true);
-    else if (!g_osdTargetKey.empty()) AdjustAppVolumeByKey(g_osdTargetKey, delta);
+    if (g_osdTarget == OsdTarget::Master) {
+        AdjustMasterVolume(delta, false, true);
+    } else if (!g_osdSlideItems.empty()) {
+        std::vector<Item*> matches;
+        for (Item& it : g_osdSlideItems) matches.push_back(&it);
+        ChangeAppSessions(matches, delta, false);
+        if (g_visible && RefreshValues()) Render();
+    } else if (!g_osdTargetKey.empty()) {
+        AdjustAppVolumeByKey(g_osdTargetKey, delta);
+    }
+}
+
+// A drag on an app's OSD changes the same sessions on every mouse move, so they
+// are looked up once when it starts.
+void BeginOsdSlide() {
+    g_osdSliding = true;
+    if (g_osdTarget != OsdTarget::App || g_osdTargetKey.empty()) return;
+    std::vector<Item> items;
+    BuildItems(items, true, true);
+    std::vector<Item> others;
+    for (Item& it : items) {
+        if (it.kind == 2 && it.key == g_osdTargetKey) g_osdSlideItems.push_back(std::move(it));
+        else others.push_back(std::move(it));
+    }
+    ReleaseItems(others);
+}
+
+void EndOsdSlide() {
+    g_osdSliding = false;
+    ReleaseItems(g_osdSlideItems);
+    g_osdSlideItems.clear();
 }
 
 void ToggleForegroundAppMute() {
@@ -5920,6 +5951,12 @@ static bool OsdLevelAt(float x, float y, bool clamp, float* level) {
         float a = std::atan2(dx, -dy);
         if (a < 0.0f) a += 6.2831853f;
         *level = a / 6.2831853f;
+        // While dragging, the top of the ring is a stop: crossing it doesn't
+        // jump between 0 % and 100 %.
+        if (clamp) {
+            if (g_osdShownVol < 0.25f && *level > 0.75f) *level = 0.0f;
+            else if (g_osdShownVol > 0.75f && *level < 0.25f) *level = 1.0f;
+        }
         break;
     }
     default:
@@ -5974,7 +6011,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (g_osdTarget != OsdTarget::None && PtOnOsdIcon(x, y)) {
             ToggleOsdMute();
         } else if (g_osdTarget != OsdTarget::None && OsdLevelAt(x, y, false, &level)) {
-            g_osdSliding = true;
+            BeginOsdSlide();
             SetCapture(hwnd);
             SetOsdLevel(level);
         } else if (g_cfg.osdAllowDrag) {
@@ -6008,7 +6045,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_LBUTTONUP:
         if (g_osdSliding) {
-            g_osdSliding = false;
+            EndOsdSlide();
             ReleaseCapture();
         } else if (g_osdDragging) {
             g_osdDragging = false;
@@ -6023,7 +6060,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_CAPTURECHANGED:
         g_osdDragging = false;
-        g_osdSliding = false;
+        if (g_osdSliding) EndOsdSlide();
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -6913,6 +6950,14 @@ HWINEVENTHOOK g_flyoutHook = nullptr;
 DWORD g_flyoutHookPid = 0;
 std::vector<HWND> g_clippedFlyouts;  // Explorer windows that carry the mod's empty region
 std::vector<HWND> g_knownFlyouts;    // Explorer windows that have shown a volume flyout
+// Windows reports brightness changes as a power setting, so a brightness
+// indicator in the same window is never taken for a volume flyout.
+constexpr GUID kBrightnessSetting = {0x8ffee2c6, 0x2d01, 0x46be, {0xad, 0xb9, 0x39, 0x8a, 0xdd, 0xc5, 0xb4, 0xff}};
+HPOWERNOTIFY g_brightnessNotify = nullptr;
+DWORD g_brightnessNotifyTick = 0;    // the first report, right after registering, is the current value
+DWORD g_brightnessChangeTick = 0;
+HWND g_guessedFlyout = nullptr;      // hidden without a level change (0 %, 100 %, an outside change)
+DWORD g_guessedFlyoutTick = 0;
 HWND g_sysFlyoutPending = nullptr;   // shown before its volume change was seen
 DWORD g_sysFlyoutTick = 0;
 DWORD g_volumeChangeTick = 0;        // last master volume change made outside the mod
@@ -6988,18 +7033,20 @@ static void ShowMasterVolumeOsd() {
 // An empty window region keeps Windows' indicator invisible even while Explorer
 // shows it again for every step of a gesture, so it never flashes. The region
 // is only touched while Explorer responds, so a hung Explorer can't stall the
-// mod's UI thread.
-static bool SetFlyoutRegion(HWND hwnd, bool empty) {
+// mod's UI thread. A window that is shown has to redraw at once (SetWindowRgn
+// then waits for Explorer's thread); a hidden one gets the region without a
+// redraw, which sends nothing to Explorer.
+static bool SetFlyoutRegion(HWND hwnd, bool empty, bool redraw = true) {
     if (IsHungAppWindow(hwnd)) return false;
     HRGN rgn = empty ? CreateRectRgn(0, 0, 0, 0) : nullptr;
-    if (SetWindowRgn(hwnd, rgn, TRUE)) return true;  // the window owns the region from here on
+    if (SetWindowRgn(hwnd, rgn, redraw ? TRUE : FALSE)) return true;  // the window owns the region from here on
     if (rgn) DeleteObject(rgn);
     return false;
 }
 
-static void ClipSystemFlyout(HWND hwnd) {
+static void ClipSystemFlyout(HWND hwnd, bool redraw = true) {
     if (std::find(g_clippedFlyouts.begin(), g_clippedFlyouts.end(), hwnd) != g_clippedFlyouts.end()) return;
-    if (SetFlyoutRegion(hwnd, true)) g_clippedFlyouts.push_back(hwnd);
+    if (SetFlyoutRegion(hwnd, true, redraw)) g_clippedFlyouts.push_back(hwnd);
 }
 
 // Only windows the mod clipped itself get their region removed.
@@ -7056,7 +7103,7 @@ static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, L
     if (event == EVENT_OBJECT_HIDE) {
         // Clipped again as soon as a brightness or another indicator is gone,
         // so the next volume flyout doesn't show for a single frame.
-        if (IsKnownFlyout(hwnd)) ClipSystemFlyout(hwnd);
+        if (IsKnownFlyout(hwnd)) ClipSystemFlyout(hwnd, false);
         return;
     }
     if (!IsSystemIndicatorWindow(hwnd)) return;
@@ -7064,14 +7111,45 @@ static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, L
     float v = 0.0f;
     bool m = false;
     const bool levelChanged = ReadMasterChange(&v, &m) && now - g_ownVolumeChangeTick > kOwnChangeMs;
+    const bool brightness = now - g_brightnessChangeTick < kFlyoutMatchMs;
     const bool atLimit = IsKnownFlyout(hwnd) && (v <= 0.001f || v >= 0.999f);
-    if (levelChanged || atLimit || g_externalVolumeChange || now - g_volumeChangeTick < kFlyoutMatchMs) {
+    const bool guess = !brightness && (atLimit || g_externalVolumeChange || now - g_volumeChangeTick < kFlyoutMatchMs);
+    if (levelChanged || guess) {
         ReplaceSystemFlyout(hwnd);
+        if (!levelChanged) {
+            g_guessedFlyout = hwnd;  // a brightness report right after puts it back
+            g_guessedFlyoutTick = now;
+        }
         return;
     }
     UnclipSystemFlyout(hwnd);  // brightness or another indicator: shown as Windows wants
     g_sysFlyoutPending = hwnd;
     g_sysFlyoutTick = now;
+}
+
+// The brightness changed: an indicator that was just hidden as a guess was the
+// brightness one, so it comes back and the mod's volume OSD goes.
+void OnBrightnessChanged() {
+    const DWORD now = GetTickCount();
+    if (now - g_brightnessNotifyTick < 1000) return;
+    g_brightnessChangeTick = now;
+    if (!g_guessedFlyout || now - g_guessedFlyoutTick >= kFlyoutMatchMs || !IsWindow(g_guessedFlyout)) return;
+    UnclipSystemFlyout(g_guessedFlyout);
+    ShowWindowAsync(g_guessedFlyout, SW_SHOWNA);
+    g_guessedFlyout = nullptr;
+    if (g_osdTarget == OsdTarget::Master && IsWindowVisible(g_hwndOsd)) HideOsd();
+}
+
+static void StartBrightnessNotify() {
+    if (g_brightnessNotify || !g_hwnd) return;
+    g_brightnessNotifyTick = GetTickCount();
+    g_brightnessNotify = RegisterPowerSettingNotification(g_hwnd, &kBrightnessSetting, DEVICE_NOTIFY_WINDOW_HANDLE);
+}
+
+static void StopBrightnessNotify() {
+    if (g_brightnessNotify) UnregisterPowerSettingNotification(g_brightnessNotify);
+    g_brightnessNotify = nullptr;
+    g_guessedFlyout = nullptr;
 }
 
 // Called for every change of the default device's volume or mute.
@@ -7107,7 +7185,12 @@ void UpdateFlyoutHook() {
                                          WINEVENT_OUTOFCONTEXT)
                        : nullptr;
     g_flyoutHookPid = g_flyoutHook ? pid : 0;
-    if (g_flyoutHook) ResyncMasterLevel();
+    if (g_flyoutHook) {
+        ResyncMasterLevel();
+        StartBrightnessNotify();
+    } else {
+        StopBrightnessNotify();
+    }
 }
 
 // Leaves Windows' indicators as they were.
@@ -7116,6 +7199,7 @@ void StopFlyoutHook() {
     g_flyoutHook = nullptr;
     g_flyoutHookPid = 0;
     g_sysFlyoutPending = nullptr;
+    StopBrightnessNotify();
     UnclipAllSystemFlyouts();
     g_knownFlyouts.clear();
 }
@@ -7360,6 +7444,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
 
         case WM_QUERYENDSESSION:
+            return TRUE;
+
+        case WM_POWERBROADCAST:
+            if (wParam == PBT_POWERSETTINGCHANGE && lParam &&
+                IsEqualGUID(((POWERBROADCAST_SETTING*)lParam)->PowerSetting, kBrightnessSetting)) {
+                OnBrightnessChanged();
+            }
             return TRUE;
 
         // Sign-out or shutdown: the process is then ended without the normal
