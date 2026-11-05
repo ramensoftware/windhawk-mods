@@ -65,7 +65,7 @@ Brave's **Show rounded corners on main content areas** setting can remain enable
 | **Acrylic popups** | On | Blur supported native browser bubbles, site information, recent downloads, media controls, and the native Extensions manager. Permission controls, download actions, album art, text and playback buttons keep their native painting. Extension and website HTML overlays keep their own styling. |
 | **Blur search suggestions** | On | Use a native results popup with Windows blur below the input cutout. Typed text, result text and input remain native and sharp. |
 | **Popup background opacity (%)** | 62 | Control the background tint of menus, native popups and suggestions from 0 (transparent) to 100 (opaque). Text, icons and controls retain their native opacity. Restart Brave after changing it. |
-| **Hide duplicate Windows buttons** | Off | Optional workaround that removes the real Windows system-menu style. It can affect Alt+Space, taskbar menus and other window tools. Prefer Brave's **Use compact mode** option in Appearance. |
+| **Hide duplicate Windows buttons** | On | Hide the extra Windows minimize, maximize and close buttons while keeping Brave’s controls. This can affect Alt+Space, taskbar menus and other window tools. |
 | **Use online symbol cache** | On | Let Windhawk download small exact-build files from the author-controlled cache. Turn off to use existing local cached symbols only, then restart Brave. |
 
 Restart Brave after applying settings, even when a change appears immediately. Some backing views and native popup choices are created with their windows. Webpage backing can apply on tab selection without refreshing the page; restarting after disabling it restores existing renderer defaults. The caption-button option can apply immediately.
@@ -122,7 +122,7 @@ The extractor handles verified compiler folding according to each function's rol
 
 ## Duplicate corner buttons
 
-If two sets of minimize/maximize/close buttons appear, first enable **Use compact mode** in Brave **Settings → Appearance**. The optional **Hide duplicate Windows buttons** workaround is off on a fresh install because it removes the window's actual `WS_SYSMENU` style. Windows system menus, taskbar interactions, accessibility tools or other window managers may be affected. Disabling the option or unloading the mod restores its recorded style changes.
+**Hide duplicate Windows buttons** is on by default. It removes the window’s `WS_SYSMENU` style, which can affect Alt+Space, taskbar menus, accessibility tools and window managers. Turn the option off to restore the original window style.
 
 ## Troubleshooting
 
@@ -157,9 +157,9 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
 - popupOpacity: 62
   $name: Popup background opacity (%)
   $description: "Background tint for menus, native popups and search suggestions. 0 is transparent and 100 is opaque; text, icons and controls stay fully visible."
-- hideNativeCaptionButtons: false
+- hideNativeCaptionButtons: true
   $name: Hide duplicate Windows buttons
-  $description: "Optional workaround: removes the real Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Prefer Brave Appearance > Use compact mode. Applies immediately."
+  $description: Hide the extra Windows minimize, maximize and close buttons while keeping Brave’s controls. This removes the Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Applies immediately.
 - useOnlineSymbolCache: true
   $name: Use online symbol cache
   $description: Download small compatibility files from the author-controlled symbol cache. No login, uploads, telemetry or PDB downloads. GitHub sees your IP and requested build URLs. Turn off to use local cached symbols only. Restart Brave after applying changes.
