@@ -52,6 +52,24 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 
 ---
 
+## 🛡️ Recommended Settings (Best Balance of Control & Safety)
+
+For the most seamless, predictable, and conflict-free experience across all Windows applications, use this configuration:
+
+* **Trigger Key Combination:** `Ctrl + Right-Click (Supports Cruising)` — Preserves native right-click dragging in File Explorer, browsers, and creative tools while unlocking hands-free cruising.
+* **Allow Out-of-Bounds Dragging:** `Enabled` (`true`) — Lets you drag and cruise comfortably without stopping when your cursor crosses window borders or reaches the edge of your monitor.
+* **Continuous Cruising (Hands-Free):** `Enabled` (`true`) — Glide through long articles, logs, and source code effortlessly.
+* **Cruising Anchor Key:** `Hold Right-Click (Release Ctrl)` — **Highly Recommended.**
+* **Dynamic Velocity Mode:** `Standard (Smooth & Controlled)` — Gives you 1:1 precision on slow movements with a gentle boost on quick flicks.
+* **Ultra-Smooth Scrolling:** `Enabled` (`true`) — Delivers fluid, trackpad-grade scrolling increments (`15` delta chunks).
+
+> 💡 **Why choose "Hold Right-Click" as your Cruising Anchor?**
+> When you keep the Right Mouse Button held down to cruise (releasing `Ctrl`), Windows maintains strict kernel-level mouse capture (`SetCapture`) on the scrolling window. This gives you two major advantages over the `Hold Ctrl` anchor when Out-of-Bounds dragging is enabled:
+> 1. **100% Leak-Proof Safety:** Stopping the glide (by releasing Right-Click or clicking another mouse button) will **never** accidentally click, focus, or trigger context menus on background windows—even if your cursor is hovering over Administrator-elevated apps (like Task Manager), modern UWP/system surfaces (Start Menu, Settings, Calculator), or excluded processes (`conhost.exe`).
+> 2. **Global Custom Cursor:** Because a physical mouse button remains held, Windows keeps the custom high-contrast cruising cursor visible across the entire screen instead of reverting to the standard arrow outside the window.
+
+---
+
 ## ✨ Why You'll Love It (Key Highlights)
 
 * 🎛️ **Customizable Triggers:** Choose between the deliberate `Ctrl + Right-Click` or the seamless `Right-Click Only` mode to perfectly match your workflow.
@@ -105,7 +123,7 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 - enable_cruising: false
   $name: "Continuous Cruising (Hands-Free)"
   $description: "Let go of the anchor button to let the page keep scrolling on its own. Disengages on any click or keypress. (Note: Requires the 'Ctrl + Right-Click' trigger mode)."
-- cruise_anchor: "Ctrl"
+- cruise_anchor: "RMB"
   $name: "Cruising Anchor Key"
   $description: "Only used when Continuous Cruising is enabled. Choose which button you keep holding while releasing the other to start gliding."
   $options:
@@ -216,7 +234,7 @@ struct SettingsManager {
     inline static std::atomic<bool> enable_horizontal{true};
     inline static std::atomic<bool> allow_out_of_bounds{false};
     inline static std::atomic<bool> enable_cruising{false};
-    inline static std::atomic<int> cruise_anchor{0};
+    inline static std::atomic<int> cruise_anchor{1};
     inline static std::atomic<int> pixels_per_notch{45};
     inline static std::atomic<int> deadzone{5};
     inline static std::atomic<int> velocity_mode{2};
@@ -239,7 +257,7 @@ struct SettingsManager {
                               std::memory_order_relaxed);
 
         // Parse cruising anchor mode
-        int parsedAnchor = 0;
+        int parsedAnchor = 1;
         auto anchorStr = WindhawkUtils::StringSetting::make(L"cruise_anchor");
         if (wcscmp(anchorStr.get(), L"RMB") == 0) {
             parsedAnchor = 1;
