@@ -48,7 +48,7 @@ with `RBP:` in the Windhawk log. Keep logging off during normal use.
 
 ## Project
 
-[Source code and issue reports](https://github.com/luizbizzio/recycle-bin-file-preview)
+View the source code, report issues, or suggest improvements on [GitHub](https://github.com/luizbizzio/recycle-bin-file-preview).
 
 Author: **Luiz Bizzio**. Licensed under **MIT**.
 */
