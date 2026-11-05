@@ -52,7 +52,7 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 
 ---
 
-## 🛡️ Recommended Setup for Cruising & Out-of-Bounds (Best Balance of Control & Safety)
+## 🛡️ Recommended Setup (Best Balance of Control & Safety)
 
 While **Continuous Cruising** and **Out-of-Bounds Dragging** are disabled by default to keep initial scrolling simple and predictable, enabling them together unlocks the full power of the mod. If you turn them on, here is the recommended configuration:
 
