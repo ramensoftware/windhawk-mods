@@ -7,6 +7,7 @@
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-27-Finder-Bar
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -ldwmapi -ld2d1 -ldwrite -lversion -lshcore -lshell32 -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lwlanapi -lbthprops -lpowrprof -ladvapi32 -lwindowscodecs -lwbemuuid -ldxva2 -lruntimeobject -lwinhttp -lcfgmgr32
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -26,8 +27,6 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 ![Notifications](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/notifications.png)
 
 ![Logo menu](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/logo-menu.png)
-
-![Settings window](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png)
 
 ---
 
@@ -68,7 +67,7 @@ Small glass pills drop from the bar for headphones, audio output, low battery, c
 
 ## Notifications
 
-Turn on **Windows notifications** in the pill settings (off by default) and the bar shows your apps' notifications:
+Turn on **Pill - Windows notifications** in the mod's settings (off by default) and the bar shows your apps' notifications:
 
 - in the pill and in the bell panel, grouped by app
 - **reply** to messages (like WhatsApp) right from the pill, when the app supports replies
@@ -85,7 +84,31 @@ Turn on **Windows notifications** in the pill settings (off by default) and the 
 
 ## Settings
 
-Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. Windhawk's settings page has the same options.
+Windhawk's settings page for the mod holds every option, applied live without restarting the bar. Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad for what has no place there: the panel glass, the weather place and widget, imported .ics files and the look of that window.
+
+## What changes Windows settings
+
+Some Control Center tiles and menu items change real Windows settings, the same ones Windows' own quick settings change. They stay changed after the mod is turned off, as they would if you used Windows' quick settings:
+
+- **Dark mode**: the app and system light/dark theme (sets both to the same value)
+- **Night light**: on or off
+- **Power mode and power plan**: picking a power mode also switches the plan to Balanced, as Windows requires
+- **Energy saver** and **Do Not Disturb**
+- **Brightness**, **default audio device**, **volume and mute**, **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
+
+Nothing is changed unless you click the matching tile or item.
+
+## Network use
+
+The mod only goes online for features you set up yourself:
+
+- **Weather**, once you pick a place: the place search uses OpenStreetMap Nominatim or Open-Meteo, and the forecast comes from the service you choose (Open-Meteo, MET Norway or wttr.in) with the place's coordinates rounded to about 1 km. Turning the weather icon off stops all requests.
+- **.ics links** you add in Windhawk's settings, downloaded when you open the calendar, at most every 15 minutes. Local .ics files never use the network.
+- **App update count** (off by default): runs `winget upgrade`, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.
+
+## Privacy
+
+The "copied" pill skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.
 
 ## Known limitations
 
@@ -268,10 +291,15 @@ Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus 
   $name: Show battery percentage
   $name:pt-BR: Mostrar porcentagem da bateria
 - checkUpdates: true
-  $name: Show pending updates in the logo menu
-  $name:pt-BR: Mostrar atualizações pendentes no menu do logo
-  $description: Counts Windows updates (from the last Windows Update check) and app updates (through winget) and shows them next to "System Settings" and "Microsoft Store".
-  $description:pt-BR: Conta as atualizações do Windows (pela última verificação do Windows Update) e dos apps (pelo winget) e mostra ao lado de "Configurações do Sistema" e "Microsoft Store".
+  $name: Show pending Windows updates in the logo menu
+  $name:pt-BR: Mostrar atualizações pendentes do Windows no menu do logo
+  $description: Counts the updates found by the last Windows Update check (offline, no network) and shows the number next to "System Settings".
+  $description:pt-BR: Conta as atualizações encontradas pela última verificação do Windows Update (offline, sem rede) e mostra o número ao lado de "Configurações do Sistema".
+- checkAppUpdates: false
+  $name: Also count app updates with winget (uses the network)
+  $name:pt-BR: Contar também as atualizações de apps pelo winget (usa a rede)
+  $description: Runs "winget upgrade" hidden every 3 hours and shows the number next to "Microsoft Store". winget checks its sources online. It only works if you have already accepted winget's source agreements yourself (run "winget upgrade" once in a terminal); the mod never accepts them for you.
+  $description:pt-BR: Roda "winget upgrade" escondido a cada 3 horas e mostra o número ao lado de "Microsoft Store". O winget consulta as fontes dele pela internet. Só funciona se você já tiver aceitado os termos das fontes do winget (rode "winget upgrade" uma vez num terminal); o mod nunca aceita por você.
 - showNetwork: true
   $name: Show network / Wi-Fi
   $name:pt-BR: Mostrar rede / Wi-Fi
@@ -527,6 +555,8 @@ Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus 
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <atomic>
+#include <chrono>
+#include <optional>
 #include <cmath>
 // Evita que o macro DrawText (A/W) renomeie o método do Direct2D.
 #ifdef DrawText
@@ -612,7 +642,7 @@ struct Settings {
     std::wstring desktopName;
     bool showGlobalMenu, genericMenus;
     bool showDisplay, showKeyboard, showBattery, showBatteryPercent;
-    bool checkUpdates;
+    bool checkUpdates, checkAppUpdates;
     bool showNetwork, showBluetooth, showVolume;
     bool showTray, trayDoubleClick;
     bool showControlCenter, ccFullPill, ccRounded;
@@ -633,7 +663,6 @@ struct Settings {
     bool showOsd;
     bool flyouts;
     bool bgBlur;
-    int ccGlass;
     DWORD ccAccent;
     std::wstring dateFormat, timeFormat;
     bool dateUpper;
@@ -667,86 +696,8 @@ static bool SelColor(bool menu, D2D1_COLOR_F* c, bool* darkText = nullptr) {
     return true;
 }
 
-// Padrões das configurações (iguais aos do bloco acima). Usados quando o
-// Windhawk não entrega nenhuma configuração (por exemplo, se o bloco não pôde
-// ser lido): sem isso tudo viria como 0/vazio e a barra perderia os itens.
-static bool g_settingsMissing = false;
-struct IntDef { PCWSTR key; int def; };
-static const IntDef kIntDefaults[] = {
-    {L"winNotifs", 0}, {L"winNotifsOnly", 0}, {L"islHistNotices", 1}, {L"islFocus", 1}, {L"islBattery", 1}, {L"islBluetooth", 1}, {L"islAudio", 1}, {L"islHistory", 1},
-    {L"islSize", 100}, {L"islDuration", 26}, {L"npSize", 300},
-    {L"height", 28},
-    {L"fontSize", 13},
-    {L"iconScale", 100},
-    {L"menuTransparency", 30},
-    {L"solidWhenMaximized", 1},
-    {L"allMonitors", 1},
-    {L"autoHide", 0},
-    {L"hideOnFullscreen", 1},
-    {L"showGlobalMenu", 1},
-    {L"genericMenus", 1},
-    {L"showDisplay", 1},
-    {L"showKeyboard", 1},
-    {L"showBattery", 1},
-    {L"showBatteryPercent", 1},
-    {L"checkUpdates", 1},
-    {L"showNetwork", 1},
-    {L"showBluetooth", 1},
-    {L"showVolume", 1},
-    {L"showTray", 1},
-    {L"ccDimScreen", 0},
-    {L"showOsd", 1},
-    {L"flyouts", 1},
-    {L"showControlCenter", 1},
-    {L"showWeather", 1},
-    {L"showNowPlaying", 1},
-    {L"showFocus", 1},
-    {L"showSearch", 1},
-    {L"showPrivacy", 1},
-    {L"menuOverflow", 1},
-    {L"islandPills", 1},
-    {L"usbPills", 1},
-    {L"downloadPills", 1},
-    {L"clipPills", 1},
-    {L"shotPills", 1},
-    {L"kbdNav", 0},
-    {L"dateUpper", 0},
-};
-struct StrDef { PCWSTR key; PCWSTR def; };
-static const StrDef kStrDefaults[] = {
-    {L"npBar", L"line"}, {L"npLayout", L"big"}, {L"islStyle", L"glass"}, {L"islIn", L"expand"}, {L"islOut", L"shrink"}, {L"islPos", L"center"},
-    {L"fontFamily", L"Segoe UI Variable Text"},
-    {L"theme", L"auto"},
-    {L"panelLook", L"auto"},
-    {L"tintDark", L"#401A1A1A"},
-    {L"tintLight", L"#50F2F2F2"},
-    {L"barStyle", L"transparent"},
-    {L"selectionBar", L"blue"},
-    {L"selectionMenu", L"blue"},
-    {L"menuGlass", L"glass"},
-    {L"searchTarget", L"windows"},
-    {L"language", L"auto"},
-    {L"desktopName", L"Finder"},
-    {L"openAnim", L"cascade"},
-    {L"ccOnStyle", L"circle"},
-    {L"ccShape", L"pill"},
-    {L"ccAccent", L"#3B82F6"},
-    {L"trayClick", L"single"},
-    {L"dateFormat", L"ddd d MMM"},
-    {L"timeFormat", L"HH:mm"},
-};
-static int WhInt(PCWSTR key) {
-    if (!g_settingsMissing) return Wh_GetIntSetting(key);
-    for (const auto& d : kIntDefaults)
-        if (wcscmp(d.key, key) == 0) return d.def;
-    return 0;
-}
+static int WhInt(PCWSTR key) { return Wh_GetIntSetting(key); }
 static std::wstring ReadStr(PCWSTR name) {
-    if (g_settingsMissing) {
-        for (const auto& d : kStrDefaults)
-            if (wcscmp(d.key, name) == 0) return d.def;
-        return L"";
-    }
     PCWSTR v = Wh_GetStringSetting(name);
     std::wstring s = v ? v : L"";
     Wh_FreeStringSetting(v);
@@ -793,11 +744,30 @@ static void LoadGlassPrefs() {
     }
 }
 
+// Gravação adiada: sliders mudam a cada movimento do mouse, e o valor só vai
+// para o armazenamento do mod quando o movimento para (ou no encerramento).
+static std::map<std::wstring, std::wstring> g_saveLater;
+static UINT_PTR g_saveTimer = 0;
+static void FlushSaves() {
+    if (g_saveTimer) {
+        KillTimer(nullptr, g_saveTimer);
+        g_saveTimer = 0;
+    }
+    for (const auto& kv : g_saveLater) Wh_SetStringValue(kv.first.c_str(), kv.second.c_str());
+    g_saveLater.clear();
+}
+static void CALLBACK SaveTimerProc(HWND, UINT, UINT_PTR, DWORD) { FlushSaves(); }
+static void SaveLater(PCWSTR key, const std::wstring& v) {
+    g_saveLater[key] = v;
+    if (g_saveTimer) KillTimer(nullptr, g_saveTimer);
+    g_saveTimer = SetTimer(nullptr, 0, 400, SaveTimerProc);
+}
+
 static void SaveGlassPrefs() {
     wchar_t buf[128];
     swprintf(buf, ARRAYSIZE(buf), L"%d;%d;%d;%d;%d;%d", g_glass.transparency, g_glass.clear ? 1 : 0,
              g_glass.liquid ? 1 : 0, g_glass.refraction, g_glass.blur, g_glass.live ? 1 : 0);
-    Wh_SetStringValue(L"glass", buf);
+    SaveLater(L"glass", buf);
 }
 
 // Enquanto um menu é criado/desenhado no estilo "Vidro", o vidro é o fosco
@@ -832,49 +802,22 @@ static float MenuGap() { return g_settings.menuGlass == 0 ? 0.0f : PanelGap(); }
 struct LiquidSurface;
 static void LqFree(LiquidSurface*& l);
 
-// Ajustes feitos na janela "Barra de Menus" por cima das configurações do
-// Windhawk. Cada um guarda também o valor do Windhawk de quando foi feito: se
-// a opção mudar depois no Windhawk, vale a do Windhawk.
+// As configurações valem só pela página do mod no Windhawk. Versões antigas
+// guardavam uma cópia (ui.<chave>) feita pela janela de Ajustes; é apagada
+// na primeira leitura.
+static void OvrForget(PCWSTR key) {
+    wchar_t name[80], buf[8] = {};
+    swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
+    if (Wh_GetStringValue(name, buf, ARRAYSIZE(buf)) || buf[0]) Wh_SetStringValue(name, L"");
+}
 static int OvrInt(PCWSTR key) {
-    int wh = WhInt(key);
-    wchar_t name[80], buf[64] = {};
-    swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
-    Wh_GetStringValue(name, buf, ARRAYSIZE(buf));
-    int v, seen;
-    if (buf[0] && swscanf(buf, L"%d|%d", &v, &seen) == 2) {
-        if (seen == wh) return v;
-        Wh_SetStringValue(name, L"");
-    }
-    return wh;
+    OvrForget(key);
+    return WhInt(key);
 }
-
-static void OvrSetInt(PCWSTR key, int v) {
-    wchar_t name[80], buf[64];
-    swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
-    swprintf(buf, ARRAYSIZE(buf), L"%d|%d", v, WhInt(key));
-    Wh_SetStringValue(name, buf);
-}
-
 static std::wstring ReadStr(PCWSTR name);
 static std::wstring OvrStr(PCWSTR key) {
-    std::wstring wh = ReadStr(key);
-    wchar_t name[80], buf[256] = {};
-    swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
-    Wh_GetStringValue(name, buf, ARRAYSIZE(buf));
-    std::wstring st = buf;
-    size_t sep = st.find(L'\x1F');
-    if (sep != std::wstring::npos) {
-        if (st.substr(sep + 1) == wh) return st.substr(0, sep);
-        Wh_SetStringValue(name, L"");
-    }
-    return wh;
-}
-
-static void OvrSetStr(PCWSTR key, const std::wstring& v) {
-    wchar_t name[80];
-    swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
-    std::wstring st = v + L'\x1F' + ReadStr(key);
-    Wh_SetStringValue(name, st.c_str());
+    OvrForget(key);
+    return ReadStr(key);
 }
 
 // ===========================================================================
@@ -987,10 +930,7 @@ static float MarqueeOffset(float textW, float gap, float s, ULONGLONG start) {
 }
 
 static void LoadSettings() {
-    // A altura nunca é 0 quando o Windhawk lê as configurações; 0 = não leu nada.
-    g_settingsMissing = false;
-    g_settingsMissing = Wh_GetIntSetting(L"height") == 0 && Wh_GetIntSetting(L"fontSize") == 0;
-    if (g_settingsMissing) Wh_Log(L"Configurações indisponíveis: usando os padrões do mod");
+    FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima
     LoadGlassPrefs();
     Settings& s = g_settings;
     s.height = OvrInt(L"height");
@@ -1024,6 +964,7 @@ static void LoadSettings() {
     s.showBattery = OvrInt(L"showBattery") != 0;
     s.showBatteryPercent = OvrInt(L"showBatteryPercent") != 0;
     s.checkUpdates = OvrInt(L"checkUpdates") != 0;
+    s.checkAppUpdates = WhInt(L"checkAppUpdates") != 0;
     s.showNetwork = OvrInt(L"showNetwork") != 0;
     s.showBluetooth = OvrInt(L"showBluetooth") != 0;
     s.showVolume = OvrInt(L"showVolume") != 0;
@@ -1089,7 +1030,6 @@ static void LoadSettings() {
     s.flyouts = OvrInt(L"flyouts") != 0;
     s.ccFullPill = ReadStr(L"ccOnStyle") == L"pill";
     s.ccRounded = ReadStr(L"ccShape") == L"rounded";
-    s.ccGlass = std::clamp(WhInt(L"ccGlass"), 0, 100);
     {
         std::wstring a = ReadStr(L"ccAccent");
         DWORD v = 0x3B82F6;
@@ -1247,8 +1187,80 @@ static bool NowVisible() {
 static HANDLE g_thread = nullptr;
 static DWORD g_threadId = 0;
 static HANDLE g_stopEvent = nullptr;
+
+// ---- Threads curtas (tempo, calendário, respostas, leitura de avisos) ----
+// Toda thread que o mod cria fica registrada aqui, para o encerramento esperar
+// cada uma terminar antes de a DLL sair da memória.
+static SRWLOCK g_jobLock = SRWLOCK_INIT;
+static std::vector<HANDLE> g_jobThreads;
+static std::vector<DWORD> g_jobComTids;      // threads com chamada COM que pode ser cancelada
+static std::atomic<bool> g_jobsStopping{false};
+
+static bool StartJobThread(LPTHREAD_START_ROUTINE proc, void* arg) {
+    if (g_jobsStopping) return false;
+    HANDLE h = CreateThread(nullptr, 0, proc, arg, 0, nullptr);
+    if (!h) return false;
+    AcquireSRWLockExclusive(&g_jobLock);
+    for (size_t i = 0; i < g_jobThreads.size();) {
+        if (WaitForSingleObject(g_jobThreads[i], 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_jobThreads[i]);
+            g_jobThreads.erase(g_jobThreads.begin() + i);
+        } else {
+            i++;
+        }
+    }
+    g_jobThreads.push_back(h);
+    ReleaseSRWLockExclusive(&g_jobLock);
+    return true;
+}
+
+// Uma thread que faz chamadas COM para outro processo se registra aqui, para
+// o encerramento poder cancelar a chamada (CoCancelCall) se o app não responder.
+static void JobComEnter() {
+    CoEnableCallCancellation(nullptr);
+    AcquireSRWLockExclusive(&g_jobLock);
+    g_jobComTids.push_back(GetCurrentThreadId());
+    ReleaseSRWLockExclusive(&g_jobLock);
+}
+static void JobComLeave() {
+    AcquireSRWLockExclusive(&g_jobLock);
+    auto it = std::find(g_jobComTids.begin(), g_jobComTids.end(), GetCurrentThreadId());
+    if (it != g_jobComTids.end()) g_jobComTids.erase(it);
+    ReleaseSRWLockExclusive(&g_jobLock);
+    CoDisableCallCancellation(nullptr);
+}
+
+static void HttpCancelAll();
+
+// Cancela o que der e espera todas as threads curtas terminarem.
+static void StopJobThreads() {
+    g_jobsStopping = true;
+    HttpCancelAll();
+    for (;;) {
+        AcquireSRWLockExclusive(&g_jobLock);
+        std::vector<HANDLE> hs;
+        hs.swap(g_jobThreads);
+        for (DWORD tid : g_jobComTids) CoCancelCall(tid, 0);
+        ReleaseSRWLockExclusive(&g_jobLock);
+        if (hs.empty()) break;
+        for (HANDLE h : hs) {
+            // Repete o cancelamento enquanto espera: uma chamada COM pode começar depois.
+            while (WaitForSingleObject(h, 200) == WAIT_TIMEOUT) {
+                HttpCancelAll();
+                AcquireSRWLockExclusive(&g_jobLock);
+                for (DWORD tid : g_jobComTids) CoCancelCall(tid, 0);
+                ReleaseSRWLockExclusive(&g_jobLock);
+            }
+            CloseHandle(h);
+        }
+    }
+}
 static HINSTANCE g_hInst = nullptr;
 static HWND g_owner = nullptr;
+// Janela só de mensagens (não recebe broadcasts): as threads de trabalho mandam
+// para ela os resultados, que levam um ponteiro no lParam.
+static HWND g_worker = nullptr;
+static const wchar_t kWorkerClass[] = L"WhFinderTopBarWorker";
 static ID2D1Factory* g_d2d = nullptr;
 static IDWriteFactory* g_dwrite = nullptr;
 static std::wstring g_iconFont = L"Segoe Fluent Icons";
@@ -1308,23 +1320,35 @@ static void OpenUri(PCWSTR uri, PCWSTR params = nullptr) {
 }
 
 static bool Confirm(PCWSTR text) {
-    return MessageBoxW(nullptr, T(text), L"Mac OS 27 Finder Bar",
+    // Dono = a janela do mod: a caixa não vira o "app ativo" da barra.
+    return MessageBoxW(g_owner, T(text), L"Mac OS 27 Finder Bar",
                        MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND) == IDYES;
 }
 
-static bool EnablePrivilege(PCWSTR name) {
-    HANDLE token;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
-        return false;
-    TOKEN_PRIVILEGES tp{};
-    tp.PrivilegeCount = 1;
-    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-    bool ok = LookupPrivilegeValueW(nullptr, name, &tp.Privileges[0].Luid) &&
-              AdjustTokenPrivileges(token, FALSE, &tp, 0, nullptr, nullptr) &&
-              GetLastError() == ERROR_SUCCESS;
-    CloseHandle(token);
-    return ok;
-}
+// Liga um privilégio só durante a chamada e devolve o estado anterior no fim
+// (o token é o do Explorer).
+struct PrivGuard {
+    HANDLE token = nullptr;
+    TOKEN_PRIVILEGES prev{};
+    DWORD prevLen = 0;
+    bool changed = false;
+    explicit PrivGuard(PCWSTR name) {
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
+            token = nullptr;
+            return;
+        }
+        TOKEN_PRIVILEGES tp{};
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        changed = LookupPrivilegeValueW(nullptr, name, &tp.Privileges[0].Luid) &&
+                  AdjustTokenPrivileges(token, FALSE, &tp, sizeof(prev), &prev, &prevLen) &&
+                  GetLastError() == ERROR_SUCCESS;
+    }
+    ~PrivGuard() {
+        if (changed && prev.PrivilegeCount) AdjustTokenPrivileges(token, FALSE, &prev, 0, nullptr, nullptr);
+        if (token) CloseHandle(token);
+    }
+};
 
 enum { M_CTRL = 1, M_SHIFT = 2, M_ALT = 4, M_WIN = 8 };
 
@@ -1367,13 +1391,14 @@ static void ForceForeground(HWND h) {
         SetFocus(h);
         return;
     }
-    HWND fg = GetForegroundWindow();
-    DWORD me = GetCurrentThreadId(), other = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    bool attached = other && other != me && AttachThreadInput(other, me, TRUE);
+    // Sem AttachThreadInput (dividiria a fila de entrada com outro app): uma
+    // entrada vazia conta como "última entrada", e o Windows libera a troca.
+    INPUT in{};
+    in.type = INPUT_MOUSE;
+    SendInput(1, &in, sizeof(in));
     BringWindowToTop(h);
     SetForegroundWindow(h);
     SetFocus(h);
-    if (attached) AttachThreadInput(other, me, FALSE);
 }
 
 static bool IsCloaked(HWND h) {
@@ -1433,16 +1458,30 @@ static std::vector<HWND> WindowsOfPid(DWORD pid, bool others = false) {
 // Tema e vidro
 // ===========================================================================
 
+// Os painéis leem o tema a cada quadro da animação: o valor fica guardado por
+// meio segundo. Quem precisa do valor novo (mudança de tema) zera o guardado.
+static ULONGLONG g_persTick = 0;
+static std::map<std::wstring, DWORD> g_persCache;
+static void PersonalizeForget() { g_persTick = 0; }
 static DWORD ReadPersonalizeDword(PCWSTR value, DWORD fallback) {
+    ULONGLONG now = GetTickCount64();
+    if (now - g_persTick > 500) {
+        g_persCache.clear();
+        g_persTick = now;
+    }
+    auto it = g_persCache.find(value);
+    if (it != g_persCache.end()) return it->second;
     DWORD v = fallback, size = sizeof(v);
     if (RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", value,
                      RRF_RT_REG_DWORD, nullptr, &v, &size) != ERROR_SUCCESS)
         v = fallback;
+    g_persCache[value] = v;
     return v;
 }
 
 static void ResolveTheme() {
+    PersonalizeForget();
     if (g_settings.theme == 1) g_light = false;
     else if (g_settings.theme == 2) g_light = true;
     else g_light = ReadPersonalizeDword(L"SystemUsesLightTheme", 0) != 0;
@@ -1491,7 +1530,7 @@ static void ApplyGlass(Bar* b) {
 static void AllowDarkMenus(HWND h) {
     using AllowDarkModeForWindow_t = BOOL(WINAPI*)(HWND, BOOL);
     HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
-    if (!ux) ux = LoadLibraryW(L"uxtheme.dll");
+    if (!ux) ux = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!ux) return;
     auto fn = (AllowDarkModeForWindow_t)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(133));
     if (fn) fn(h, TRUE);
@@ -2084,7 +2123,13 @@ static void BuildTopMenus() {
     const std::wstring& exe = g_active.exe;
     auto is = [&](PCWSTR n) { return IEquals(exe, n); };
     bool office = is(L"winword.exe") || is(L"excel.exe") || is(L"powerpnt.exe");
-    if (!g_active.finder && !g_active.browser && !office && g_active.hwnd) {
+    // Apps Chromium/Electron (VS Code, Teams, Discord...): a leitura faria o app
+    // ligar a árvore de acessibilidade inteira (CPU e memória) e quase nunca acha
+    // uma barra de menus; ficam com os menus prontos.
+    wchar_t cls[64] = L"";
+    if (g_active.hwnd) GetClassNameW(g_active.hwnd, cls, ARRAYSIZE(cls));
+    bool chromium = wcsncmp(cls, L"Chrome_WidgetWin_", 17) == 0;
+    if (!g_active.finder && !g_active.browser && !office && !chromium && g_active.hwnd) {
         auto it = g_uiaCache.find(g_active.hwnd);
         if (it != g_uiaCache.end()) {
             if (!it->second.empty()) {
@@ -2559,7 +2604,7 @@ enum {
     ID_DARK = 801, ID_TOPO_INTERNAL, ID_TOPO_CLONE, ID_TOPO_EXTEND, ID_TOPO_EXTERNAL,
     ID_NIGHTLIGHT, ID_DISPLAY_SETTINGS,
     ID_KBD_LIST = 900, ID_EMOJI = 950, ID_OSK, ID_KBD_SETTINGS,
-    ID_NOTIFY = 1101, ID_DATETIME, ID_DATE_UPPER,
+    ID_NOTIFY = 1101, ID_DATETIME,
     ID_KEYS = 1200, ID_GO = 1500,
     ID_SW_WIFI = 1980, ID_SW_BT, ID_SW_DARK, ID_SW_MUTE, ID_SW_NIGHT, ID_SLIDER_VOL = 1990, ID_SLIDER_BRIGHT, ID_SLIDER_GLASS, ID_SLIDER_REFRACT, ID_SLIDER_SOFT, ID_SLIDER_WXGLASS,
     ID_SW_GLASSCLEAR = 1970, ID_SW_LIQUID, ID_SW_LIVE, ID_BAR_SETTINGS = 1975,
@@ -2592,10 +2637,39 @@ static std::vector<HKL> g_menuKbd;
 
 // ---- Atualizações pendentes (Windows Update e apps), no menu do logo ----
 // Windows Update: a lista da última verificação do próprio Windows (busca
-// offline, rápida e sem rede). Apps: "winget upgrade", escondido, a cada 3 horas.
+// offline, rápida e sem rede). Apps (opcional, desligado por padrão): "winget
+// upgrade", escondido, a cada 3 horas.
 static std::atomic<int> g_updWin{-1}, g_updApps{-1};
 static std::atomic<ULONGLONG> g_updTick{0};
 static HANDLE g_updThread = nullptr, g_updStop = nullptr, g_updKick = nullptr;
+
+// Avisa (por um evento) quando a busca assíncrona do Windows Update termina.
+// ISearchCompletedCallback (wuapi.h), declarado aqui: nem todo SDK o traz.
+static const IID kIID_SearchCompletedCallback = {0x88AEE058, 0xD4B0, 0x4725, {0xA2, 0xF1, 0x81, 0x4A, 0x67, 0xAE, 0x96, 0x4C}};
+struct UpdSearchDone : IUnknown {
+    LONG refs = 1;
+    HANDLE ev;
+    explicit UpdSearchDone(HANDLE e) : ev(e) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == kIID_SearchCompletedCallback) {
+            *ppv = static_cast<IUnknown*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG r = InterlockedDecrement(&refs);
+        if (!r) delete this;
+        return r;
+    }
+    virtual HRESULT STDMETHODCALLTYPE Invoke(ISearchJob*, IUnknown* /*ISearchCompletedCallbackArgs*/) {
+        SetEvent(ev);
+        return S_OK;
+    }
+};
 
 static int CountWindowsUpdates() {
     static const CLSID kClsid = {0x4cb43d7f, 0x7eee, 0x4906, {0x86, 0x98, 0x60, 0xda, 0x1c, 0x38, 0xf2, 0xfe}};
@@ -2610,9 +2684,31 @@ static int CountWindowsUpdates() {
         se->put_Online(VARIANT_FALSE);
         BSTR q = SysAllocString(L"IsInstalled=0 and IsHidden=0");
         LONG c = 0;
-        if (SUCCEEDED(se->Search(q, &res)) && res && SUCCEEDED(res->get_Updates(&col)) && col &&
-            SUCCEEDED(col->get_Count(&c)))
-            n = (int)c;
+        // Busca assíncrona: o encerramento pode interromper (RequestAbort).
+        HANDLE ev = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        UpdSearchDone* cb = ev ? new UpdSearchDone(ev) : nullptr;
+        ISearchJob* job = nullptr;
+        VARIANT state;
+        VariantInit(&state);
+        if (cb && SUCCEEDED(se->BeginSearch(q, cb, state, &job)) && job) {
+            HANDLE hs[2] = {g_updStop, ev};
+            bool aborted = false;
+            for (;;) {
+                DWORD r = WaitForMultipleObjects(2, hs, FALSE, 500);
+                VARIANT_BOOL done = VARIANT_FALSE;
+                if (r == WAIT_OBJECT_0 + 1 || (SUCCEEDED(job->get_IsCompleted(&done)) && done)) break;
+                if (r == WAIT_OBJECT_0 && !aborted) {
+                    job->RequestAbort();
+                    aborted = true;
+                }
+            }
+            if (SUCCEEDED(se->EndSearch(job, &res)) && res && !aborted && SUCCEEDED(res->get_Updates(&col)) && col &&
+                SUCCEEDED(col->get_Count(&c)))
+                n = (int)c;
+            job->Release();
+        }
+        if (cb) cb->Release();
+        if (ev) CloseHandle(ev);
         SysFreeString(q);
     }
     if (col) col->Release();
@@ -2653,7 +2749,8 @@ static int CountAppUpdates() {
     wchar_t exe[MAX_PATH];
     if (!ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Microsoft\\WindowsApps\\winget.exe", exe, MAX_PATH)) return -1;
     if (GetFileAttributesW(exe) == INVALID_FILE_ATTRIBUTES) return -1;
-    std::wstring cmd = std::wstring(L"\"") + exe + L"\" upgrade --accept-source-agreements --disable-interactivity";
+    // Sem --accept-source-agreements: os termos das fontes são do usuário aceitar.
+    std::wstring cmd = std::wstring(L"\"") + exe + L"\" upgrade --disable-interactivity";
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE rd = nullptr, wr = nullptr;
     if (!CreatePipe(&rd, &wr, &sa, 0)) return -1;
@@ -2712,8 +2809,12 @@ static DWORD WINAPI UpdThreadProc(LPVOID) {
         }
         g_updWin = CountWindowsUpdates();
         if (WaitForSingleObject(g_updStop, 0) == WAIT_OBJECT_0) break;
-        int a = CountAppUpdates();
-        if (a >= 0 || g_updApps < 0) g_updApps = a;
+        if (g_settings.checkAppUpdates) {
+            int a = CountAppUpdates();
+            if (a >= 0 || g_updApps < 0) g_updApps = a;
+        } else {
+            g_updApps = -1;
+        }
         g_updTick = GetTickCount64();
         wait = 3 * 60 * 60 * 1000;
     }
@@ -2731,7 +2832,7 @@ static void StartUpdChecker() {
 static void StopUpdChecker() {
     if (!g_updThread) return;
     SetEvent(g_updStop);
-    WaitForSingleObject(g_updThread, 8000);
+    WaitForSingleObject(g_updThread, INFINITE);
     CloseHandle(g_updThread);
     CloseHandle(g_updStop);
     CloseHandle(g_updKick);
@@ -2914,7 +3015,7 @@ static IUIAutomationElement* UiaFindMenuBar(IUIAutomation* ua, IUIAutomationElem
     IUIAutomationElement* found = nullptr;
     size_t head = 0;
     int visited = 0;
-    while (head < queue.size() && !found && visited < 900) {
+    while (head < queue.size() && !found && visited < 900 && !g_uiaQuit) {
         auto [e, depth] = queue[head++];
         visited++;
         int ct = UiaInt(e, UIA_ControlTypePropertyId);
@@ -3019,7 +3120,7 @@ static bool UiaExpand(IUIAutomationElement* e, bool expand) {
 
 static IUIAutomationElement* UiaOpen(IUIAutomation* ua, IUIAutomationElement* item, DWORD pid) {
     if (!UiaExpand(item, true)) return nullptr;
-    for (int t = 0; t < 14; t++) {  // até ~700 ms
+    for (int t = 0; t < 14 && !g_uiaQuit; t++) {  // até ~700 ms
         Sleep(t == 0 ? 60 : 50);
         if (IUIAutomationElement* p = UiaFindPopup(ua, item, pid)) return p;
     }
@@ -3031,6 +3132,7 @@ static void UiaReadItems(IUIAutomation* ua, IUIAutomationElement* container, DWO
     auto items = UiaMenuItems(ua, container);
     int subsRead = 0;
     for (auto* e : items) {
+        if (g_uiaQuit) break;
         UiaItem it;
         if (UiaInt(e, UIA_ControlTypePropertyId) == UIA_SeparatorControlTypeId) {
             it.sep = true;
@@ -3177,7 +3279,7 @@ static DWORD WINAPI UiaThreadProc(LPVOID) {
             if (j->done) SetEvent(j->done);
             if (j->type == 0 && g_owner) {
                 InterlockedIncrement(&j->refs);  // a janela dona libera
-                if (!PostMessageW(g_owner, WM_APP_UIA, 0, (LPARAM)j)) UiaJobRelease(j);
+                if (!g_worker || !PostMessageW(g_worker, WM_APP_UIA, 0, (LPARAM)j)) UiaJobRelease(j);
             }
             UiaJobRelease(j);
         }
@@ -3204,7 +3306,9 @@ static void UiaStop() {
     if (!g_uiaThread) return;
     g_uiaQuit = true;
     SetEvent(g_uiaWake);
-    WaitForSingleObject(g_uiaThread, 4000);
+    // Espera até o fim: a DLL não pode sair com a thread rodando. As chamadas
+    // de UIA têm tempo limite (1,5 s) e as leituras longas olham g_uiaQuit.
+    WaitForSingleObject(g_uiaThread, INFINITE);
     CloseHandle(g_uiaThread);
     CloseHandle(g_uiaWake);
     g_uiaThread = g_uiaWake = nullptr;
@@ -3544,8 +3648,6 @@ static HMENU BuildClockMenu() {
     GetDateFormatEx(UiLocale(), DATE_LONGDATE, &st, nullptr, full, ARRAYSIZE(full), nullptr);
     AddHeader(m, full);
     AddSep(m);
-    AddItem(m, ID_DATE_UPPER, L"Data em maiúsculas", g_settings.dateUpper);
-    AddSep(m);
     AddItem(m, ID_NOTIFY, L"Central de notificações e calendário\tWin+N");
     AddItem(m, ID_DATETIME, L"Configurações de data e hora...");
     return m;
@@ -3564,6 +3666,7 @@ static void SetDarkMode(bool dark) {
     DWORD v = dark ? 0 : 1;
     RegSetValueExW(k, L"AppsUseLightTheme", 0, REG_DWORD, (BYTE*)&v, sizeof(v));
     RegSetValueExW(k, L"SystemUsesLightTheme", 0, REG_DWORD, (BYTE*)&v, sizeof(v));
+    PersonalizeForget();
     RegCloseKey(k);
     DWORD_PTR r;
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet",
@@ -3649,35 +3752,31 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
     switch (cmd) {
         case ID_ABOUT: OpenUri(L"ms-settings:about"); break;
         case ID_BAR_SETTINGS: BsOpen(); break;
-        case ID_DATE_UPPER:
-            g_settings.dateUpper = !g_settings.dateUpper;
-            OvrSetInt(L"dateUpper", g_settings.dateUpper ? 1 : 0);
-            PollStatus(true);
-            RedrawAll();
-            break;
         case ID_SETTINGS: OpenUri(g_settings.checkUpdates && g_updWin > 0 ? L"ms-settings:windowsupdate" : L"ms-settings:"); break;
         case ID_STORE:
-            OpenUri(g_settings.checkUpdates && g_updApps > 0 ? L"ms-windows-store://downloadsandupdates" : L"ms-windows-store:");
+            OpenUri(g_settings.checkAppUpdates && g_updApps > 0 ? L"ms-windows-store://downloadsandupdates" : L"ms-windows-store:");
             break;
         case ID_TASKMGR: OpenUri(L"taskmgr.exe"); break;
         case ID_DESKTOP: SendKeys(M_WIN, 'D'); break;
-        case ID_SLEEP:
-            EnablePrivilege(SE_SHUTDOWN_NAME);
+        case ID_SLEEP: {
+            PrivGuard pg(SE_SHUTDOWN_NAME);
             SetSuspendState(FALSE, FALSE, FALSE);
             break;
-        case ID_HIBERNATE:
-            EnablePrivilege(SE_SHUTDOWN_NAME);
+        }
+        case ID_HIBERNATE: {
+            PrivGuard pg(SE_SHUTDOWN_NAME);
             SetSuspendState(TRUE, FALSE, FALSE);
             break;
+        }
         case ID_RESTART:
             if (Confirm(L"Reiniciar o computador agora?")) {
-                EnablePrivilege(SE_SHUTDOWN_NAME);
+                PrivGuard pg(SE_SHUTDOWN_NAME);
                 ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
             }
             break;
         case ID_SHUTDOWN:
             if (Confirm(L"Desligar o computador agora?")) {
-                EnablePrivilege(SE_SHUTDOWN_NAME);
+                PrivGuard pg(SE_SHUTDOWN_NAME);
                 ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF,
                               SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
             }
@@ -3705,13 +3804,19 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
         case ID_QUIT_APP:
             for (HWND h : WindowsOfPid(g_active.pid)) PostMessageW(h, WM_CLOSE, 0, 0);
             break;
-        case ID_FORCE_QUIT:
-            if (g_active.pid && g_active.pid != GetCurrentProcessId() &&
-                Confirm(TF(L"Forçar o encerramento de %s? Alterações não salvas serão perdidas.", {g_active.name}).c_str())) {
-                HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, g_active.pid);
+        case ID_FORCE_QUIT: {
+            // Copia o app antes de perguntar: enquanto a caixa está aberta o app
+            // ativo pode mudar, e o encerramento tem de ser do app que foi perguntado.
+            DWORD pid = g_active.pid;
+            std::wstring name = g_active.name;
+            if (pid && pid != GetCurrentProcessId() &&
+                Confirm(TF(L"Forçar o encerramento de %s? Alterações não salvas serão perdidas.", {name}).c_str()) &&
+                pid != GetCurrentProcessId()) {
+                HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
                 if (h) { TerminateProcess(h, 1); CloseHandle(h); }
             }
             break;
+        }
         case ID_NEW_FINDER: OpenUri(L"explorer.exe"); break;
         case ID_EMPTY_BIN: SHEmptyRecycleBinW(nullptr, nullptr, 0); break;
 
@@ -3930,7 +4035,11 @@ struct TrayPopup {
     HWND ctxOwner = nullptr;
     float footerTop = 0;
 };
-static TrayPopup g_tray;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<TrayPopup> g_trayStore{std::in_place};
+static TrayPopup& g_tray = *g_trayStore;
 
 static HWND HandleFrom32(DWORD v) { return (HWND)(LONG_PTR)(LONG)v; }
 
@@ -4298,20 +4407,33 @@ static int WlanRadio(int set) {
     return state;
 }
 
+#if FTB_WINRT
+// Espera uma operação assíncrona por no máximo `ms`; se passar, cancela e lança.
+// Assim a thread da Central sempre termina, mesmo com um app que não responde.
+template <typename Op>
+static auto CcAwait(Op const& op, DWORD ms = 3000) {
+    if (op.wait_for(std::chrono::milliseconds(ms)) == winrt::Windows::Foundation::AsyncStatus::Started) {
+        op.Cancel();
+        throw winrt::hresult_canceled();
+    }
+    return op.GetResults();
+}
+#endif
+
 static void CcDoRadios(unsigned jobs) {
     int bt = -1, wifi = -1;
 #if FTB_WINRT
     using namespace winrt::Windows::Devices::Radios;
     static bool access = false;
-    if (!access) access = Radio::RequestAccessAsync().get() == RadioAccessStatus::Allowed;
-    for (auto const& r : Radio::GetRadiosAsync().get()) {
+    if (!access) access = CcAwait(Radio::RequestAccessAsync()) == RadioAccessStatus::Allowed;
+    for (auto const& r : CcAwait(Radio::GetRadiosAsync())) {
         if (r.Kind() == RadioKind::Bluetooth) {
             if (jobs & JOB_SET_BT)
-                r.SetStateAsync(g_ccWantBt ? RadioState::On : RadioState::Off).get();
+                CcAwait(r.SetStateAsync(g_ccWantBt ? RadioState::On : RadioState::Off));
             bt = r.State() == RadioState::On ? 1 : 0;
         } else if (r.Kind() == RadioKind::WiFi) {
             if (jobs & JOB_SET_WIFI)
-                r.SetStateAsync(g_ccWantWifi ? RadioState::On : RadioState::Off).get();
+                CcAwait(r.SetStateAsync(g_ccWantWifi ? RadioState::On : RadioState::Off));
             wifi = r.State() == RadioState::On ? 1 : 0;
         }
     }
@@ -4336,7 +4458,7 @@ struct MediaManager {
 static void CcDoMedia(unsigned jobs, MediaManager& mgr) {
 #if FTB_WINRT
     using namespace winrt::Windows::Media::Control;
-    if (!mgr) mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+    if (!mgr) mgr = CcAwait(GlobalSystemMediaTransportControlsSessionManager::RequestAsync());
     auto session = mgr.GetCurrentSession();
     if (!session) {
         AcquireSRWLockExclusive(&g_ccLock);
@@ -4345,15 +4467,15 @@ static void CcDoMedia(unsigned jobs, MediaManager& mgr) {
         ReleaseSRWLockExclusive(&g_ccLock);
         return;
     }
-    if (jobs & JOB_MEDIA_PREV) session.TrySkipPreviousAsync().get();
-    if (jobs & JOB_MEDIA_TOGGLE) session.TryTogglePlayPauseAsync().get();
-    if (jobs & JOB_MEDIA_NEXT) session.TrySkipNextAsync().get();
+    if (jobs & JOB_MEDIA_PREV) CcAwait(session.TrySkipPreviousAsync());
+    if (jobs & JOB_MEDIA_TOGGLE) CcAwait(session.TryTogglePlayPauseAsync());
+    if (jobs & JOB_MEDIA_NEXT) CcAwait(session.TrySkipNextAsync());
     if (jobs & JOB_MEDIA_SEEK) {
         long long want = g_ccWantSeekMs.exchange(-1);
-        if (want >= 0) session.TryChangePlaybackPositionAsync((int64_t)want * 10000).get();
+        if (want >= 0) CcAwait(session.TryChangePlaybackPositionAsync((int64_t)want * 10000));
     }
 
-    auto props = session.TryGetMediaPropertiesAsync().get();
+    auto props = CcAwait(session.TryGetMediaPropertiesAsync());
     std::wstring title(props.Title()), artist(props.Artist());
     bool playing = session.GetPlaybackInfo().PlaybackStatus() ==
                    GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
@@ -4365,11 +4487,11 @@ static void CcDoMedia(unsigned jobs, MediaManager& mgr) {
     std::vector<BYTE> bytes;
     if (newTrack) {
         if (auto thumb = props.Thumbnail()) {
-            auto stream = thumb.OpenReadAsync().get();
+            auto stream = CcAwait(thumb.OpenReadAsync());
             uint32_t size = (uint32_t)std::min<uint64_t>(stream.Size(), 8u * 1024 * 1024);
             if (size) {
                 winrt::Windows::Storage::Streams::DataReader reader(stream);
-                reader.LoadAsync(size).get();
+                CcAwait(reader.LoadAsync(size));
                 bytes.resize(size);
                 reader.ReadBytes(bytes);
             }
@@ -4487,7 +4609,7 @@ static void StartCcWorker() {
 static void StopCcWorker() {
     if (!g_ccWorker) return;
     SetEvent(g_ccStop);
-    WaitForSingleObject(g_ccWorker, 5000);
+    WaitForSingleObject(g_ccWorker, INFINITE);
     CloseHandle(g_ccWorker);
     CloseHandle(g_ccStop);
     CloseHandle(g_ccJobEvent);
@@ -4525,13 +4647,20 @@ static bool NightRead(std::vector<BYTE>& d) {
 }
 
 // 1 ligada, 0 desligada, -1 desconhecido.
+static int g_nightCache = -1;
+static ULONGLONG g_nightTick = 0;
 static int NightGet() {
+    // Lido a cada quadro da animação da Central: guardado por meio segundo.
+    ULONGLONG now = GetTickCount64();
+    if (g_nightTick && now - g_nightTick < 500) return g_nightCache;
     std::vector<BYTE> d;
-    if (!NightRead(d)) return -1;
-    return d[18] == 0x15 ? 1 : d[18] == 0x13 ? 0 : -1;
+    g_nightCache = !NightRead(d) ? -1 : d[18] == 0x15 ? 1 : d[18] == 0x13 ? 0 : -1;
+    g_nightTick = now;
+    return g_nightCache;
 }
 
 static bool NightSet(bool on) {
+    g_nightTick = 0;  // a leitura seguinte vem do registro
     std::vector<BYTE> d;
     if (!NightRead(d)) return false;
     bool cur = d[18] == 0x15;
@@ -4565,7 +4694,9 @@ static bool DndWrite(bool on) {
 
 // ---- Modo e plano de energia (powrprof; o modo é a "sobreposição" do Windows 11) ----
 static HMODULE PowrProf() {
-    static HMODULE h = LoadLibraryW(L"powrprof.dll");
+    // Já ligada pelo @compilerOptions; as funções de modo de energia não estão em todo SDK.
+    static HMODULE h = GetModuleHandleW(L"powrprof.dll") ? GetModuleHandleW(L"powrprof.dll")
+                                                         : LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     return h;
 }
 static const GUID kPlanBalanced = {0x381b4222, 0xf694, 0x41f0, {0x96, 0x85, 0xff, 0x5b, 0xb2, 0x60, 0xdf, 0x2e}};
@@ -4758,16 +4889,6 @@ static void CcLoadOrder() {
         if (comma == std::wstring::npos) break;
         start = comma + 1;
     }
-    // v0.37: uma central já personalizada ganha, uma vez, os blocos novos no fim
-    // (dá para tirar ou mover em "Editar controles").
-    wchar_t ver[8] = L"";
-    Wh_GetStringValue(L"ccLayoutVer", ver, ARRAYSIZE(ver));
-    if (_wtoi(ver) < 2) {
-        for (int id : {CC_POWERMODE, CC_SAVER, CC_MAGNIFIER, CC_RECORD})
-            if (std::find(g_ccOrder.begin(), g_ccOrder.end(), id) == g_ccOrder.end()) g_ccOrder.push_back(id);
-        CcSaveOrder();
-        Wh_SetStringValue(L"ccLayoutVer", L"2");
-    }
 }
 
 struct CcShape { D2D1_RECT_F r; float radius; };
@@ -4822,11 +4943,15 @@ struct CcPanel {
     bool animating = false;
     GlassLayer* backdrop = nullptr;  // fundo da tela desfocado/escurecido
 };
-static CcPanel g_cc;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<CcPanel> g_ccStore{std::in_place};
+static CcPanel& g_cc = *g_ccStore;
 
 #if FTB_WINRT
-static winrt::Windows::UI::Composition::Compositor g_compositor{nullptr};
-static winrt::Windows::UI::Composition::CompositionBrush g_backdrop{nullptr};
+[[clang::no_destroy]] static winrt::Windows::UI::Composition::Compositor g_compositor{nullptr};
+[[clang::no_destroy]] static winrt::Windows::UI::Composition::CompositionBrush g_backdrop{nullptr};
 #endif
 static IUnknown* g_dqController = nullptr;
 
@@ -4843,7 +4968,7 @@ struct ICompositorDesktopInteropLite : IUnknown {
         if (!g_dqController) {
             struct DqOptions { DWORD dwSize; int threadType; int apartmentType; };
             using Create_t = HRESULT(WINAPI*)(DqOptions, IUnknown**);
-            HMODULE cm = LoadLibraryW(L"CoreMessaging.dll");
+            HMODULE cm = LoadLibraryExW(L"CoreMessaging.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
             auto create = cm ? (Create_t)(void*)GetProcAddress(cm, "CreateDispatcherQueueController") : nullptr;
             DqOptions opt{sizeof(DqOptions), 2 /*DQTYPE_THREAD_CURRENT*/, 2 /*DQTAT_COM_STA*/};
             if (!create || FAILED(create(opt, &g_dqController))) {
@@ -4983,6 +5108,7 @@ static void CcDestroyGlass() {
         if (g_cc.root) g_cc.root.Children().RemoveAll();
     } catch (...) {
     }
+    g_cc.visuals.clear();
     g_cc.root = nullptr;
     g_cc.target = nullptr;
 #endif
@@ -5360,7 +5486,12 @@ static bool CcEnsureResources() {
         void* bits = nullptr;
         g_cc.memDC = CreateCompatibleDC(nullptr);
         g_cc.dib = CreateDIBSection(g_cc.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_cc.memDC || !g_cc.dib) return false;
+        if (!g_cc.memDC || !g_cc.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_cc.dib) { DeleteObject(g_cc.dib); g_cc.dib = nullptr; }
+            if (g_cc.memDC) { DeleteDC(g_cc.memDC); g_cc.memDC = nullptr; }
+            return false;
+        }
         g_cc.oldBmp = SelectObject(g_cc.memDC, g_cc.dib);
     }
     if (!g_cc.rt) {
@@ -7901,7 +8032,7 @@ static void GmSliderSet(UINT id, int v) {
         g_wxGlassT = v;
         wchar_t buf[16];
         swprintf(buf, 16, L"%d", v);
-        Wh_SetStringValue(L"weatherGlass", buf);
+        SaveLater(L"weatherGlass", buf);
         if (g_wxGlassChanged) g_wxGlassChanged();
         return;
     }
@@ -8163,7 +8294,12 @@ static bool GmEnsureGraphics(GmLevel* lv) {
         void* bits = nullptr;
         lv->memDC = CreateCompatibleDC(nullptr);
         lv->dib = CreateDIBSection(lv->memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!lv->memDC || !lv->dib) return false;
+        if (!lv->memDC || !lv->dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (lv->dib) { DeleteObject(lv->dib); lv->dib = nullptr; }
+            if (lv->memDC) { DeleteDC(lv->memDC); lv->memDC = nullptr; }
+            return false;
+        }
         lv->oldBmp = SelectObject(lv->memDC, lv->dib);
     }
     if (!lv->rt) {
@@ -8995,7 +9131,8 @@ static UINT GlassTrackMenu(HMENU menu, int x, int y, bool alignRight, UINT dpi) 
 
     GmCloseLevelsAbove(-1);
     GmReleaseFonts();
-    g_menuOpen = wasMenuOpen;
+    // Um painel pode ter fechado durante o menu: recalcula em vez de só restaurar.
+    g_menuOpen = wasMenuOpen && AnyOtherPanelOpen(nullptr);
     if (g_gmReloadPending) {
         g_gmReloadPending = false;
         PostThreadMessageW(g_threadId, WM_APP_RELOAD, g_gmReloadParam, 0);
@@ -9097,7 +9234,12 @@ static void RenderTrayPopup() {
         void* bits = nullptr;
         g_tray.memDC = CreateCompatibleDC(nullptr);
         g_tray.dib = CreateDIBSection(g_tray.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_tray.memDC || !g_tray.dib) return;
+        if (!g_tray.memDC || !g_tray.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_tray.dib) { DeleteObject(g_tray.dib); g_tray.dib = nullptr; }
+            if (g_tray.memDC) { DeleteDC(g_tray.memDC); g_tray.memDC = nullptr; }
+            return;
+        }
         g_tray.oldBmp = SelectObject(g_tray.memDC, g_tray.dib);
     }
     if (!g_tray.rt) {
@@ -9431,7 +9573,11 @@ struct Osd {
     ULONGLONG openTick = 0, lastTick = 0, closeTick = 0;
     bool closing = false;
 };
-static Osd g_osd;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<Osd> g_osdStore{std::in_place};
+static Osd& g_osd = *g_osdStore;
 
 static void OsdReleaseGraphics() {
     SafeRelease(g_osd.brush);
@@ -9492,7 +9638,12 @@ static void OsdRender() {
         void* bits = nullptr;
         g_osd.memDC = CreateCompatibleDC(nullptr);
         g_osd.dib = CreateDIBSection(g_osd.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_osd.memDC || !g_osd.dib) return;
+        if (!g_osd.memDC || !g_osd.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_osd.dib) { DeleteObject(g_osd.dib); g_osd.dib = nullptr; }
+            if (g_osd.memDC) { DeleteDC(g_osd.memDC); g_osd.memDC = nullptr; }
+            return;
+        }
         g_osd.oldBmp = SelectObject(g_osd.memDC, g_osd.dib);
     }
     if (!g_osd.rt) {
@@ -9676,13 +9827,12 @@ static void OsdShow(int kind, int value, bool mute) {
 // ===========================================================================
 
 static const wchar_t kFlyClass[] = L"WhFinderTopBarFly";
-#define WM_APP_OPENMENU (WM_APP + 6)
 #define FLY_TIMER_ANIM 1
 #define FLY_TIMER_BT 2
 #define FLY_TIMER_BTPOLL 3
 
 enum FlyKind { FLY_VOL, FLY_BRIGHT, FLY_BT };
-enum FlyHit { FH_NONE = -1, FH_MORE = 0, FH_SWITCH = 1, FH_FOOTER = 2, FH_TRACK = 3, FH_DEV = 10 };
+enum FlyHit { FH_NONE = -1, FH_SWITCH = 1, FH_FOOTER = 2, FH_TRACK = 3, FH_DEV = 10 };
 
 struct FlyDev {
     std::wstring name;
@@ -9713,7 +9863,11 @@ struct Flyout {
     bool dragging = false, tracking = false;
     ULONGLONG openTick = 0;
 };
-static Flyout g_fly;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<Flyout> g_flyStore{std::in_place};
+static Flyout& g_fly = *g_flyStore;
 static bool g_forceFullMenu = false;  // abrir o menu completo em vez da pílula
 
 static void FlyLoadBt() {
@@ -9829,7 +9983,12 @@ static void FlyRender() {
         void* bits = nullptr;
         g_fly.memDC = CreateCompatibleDC(nullptr);
         g_fly.dib = CreateDIBSection(g_fly.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_fly.memDC || !g_fly.dib) return;
+        if (!g_fly.memDC || !g_fly.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_fly.dib) { DeleteObject(g_fly.dib); g_fly.dib = nullptr; }
+            if (g_fly.memDC) { DeleteDC(g_fly.memDC); g_fly.memDC = nullptr; }
+            return;
+        }
         g_fly.oldBmp = SelectObject(g_fly.memDC, g_fly.dib);
     }
     if (!g_fly.rt) {
@@ -9974,6 +10133,7 @@ static void FlyRender() {
 // Posição: centralizada sob o ícone, logo abaixo da barra.
 static void FlyPlace() {
     Bar* b = g_fly.bar;
+    if (!b || !g_fly.hwnd) return;
     float s = g_fly.s;
     RECT wr;
     GetWindowRect(b->hwnd, &wr);
@@ -10104,16 +10264,7 @@ static LRESULT CALLBACK FlyWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             int hit = FlyHitTest((float)LP_X(lp), (float)LP_Y(lp));
-            if (hit == FH_MORE) {
-                // Menu completo do mesmo ícone (aberto pela janela dona, fora desta).
-                Bar* b = g_fly.bar;
-                int idx = g_fly.barIdx;
-                int bi = -1;
-                for (int k = 0; k < (int)g_bars.size(); k++)
-                    if (g_bars[k] == b) bi = k;
-                FlyClose(false);
-                if (bi >= 0) PostMessageW(g_owner, WM_APP_OPENMENU, bi, idx);
-            } else if (hit == FH_SWITCH) {
+            if (hit == FH_SWITCH) {
                 int st = GmSwitchGet(ID_SW_BT);
                 if (st < 0) {
                     FlyClose(false);
@@ -10258,7 +10409,11 @@ struct NowPlayingWnd {
     bool optPlaying = false;
     int pressBtn = 0;
 };
-static NowPlayingWnd g_np;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<NowPlayingWnd> g_npStore{std::in_place};
+static NowPlayingWnd& g_np = *g_npStore;
 
 static std::wstring NpAppName(std::wstring id) {
     size_t bang = id.find(L'!');
@@ -10457,7 +10612,12 @@ static void NpRender() {
         void* bits = nullptr;
         g_np.memDC = CreateCompatibleDC(nullptr);
         g_np.dib = CreateDIBSection(g_np.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_np.memDC || !g_np.dib) return;
+        if (!g_np.memDC || !g_np.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_np.dib) { DeleteObject(g_np.dib); g_np.dib = nullptr; }
+            if (g_np.memDC) { DeleteDC(g_np.memDC); g_np.memDC = nullptr; }
+            return;
+        }
         g_np.oldBmp = SelectObject(g_np.memDC, g_np.dib);
     }
     if (!g_np.rt) {
@@ -11029,8 +11189,9 @@ static bool AnyOtherPanelOpen(HWND closing) {
 // Uma janela de vidro no estilo dos Ajustes do Sistema do macOS 27: itens da
 // barra com caixa de seleção e ícone colorido, grupos com interruptores e
 // sliders. Abre pelo logo da barra ("Ajustes da Barra de Menus...").
-// As mudanças valem na hora e ficam guardadas pelo mod; se a mesma opção for
-// mudada depois nas configurações do Windhawk, vale a do Windhawk.
+// Só guarda o que não existe nas configurações do Windhawk (vidro, previsão
+// do tempo, calendários importados, o vidro desta janela). O resto fica na
+// página do mod no Windhawk, a única fonte desses ajustes.
 // ===========================================================================
 
 static const wchar_t kBsClass[] = L"WhFinderTopBarSettings";
@@ -11057,85 +11218,18 @@ struct BsRowDef {
 };
 
 static const BsRowDef kBsRows[] = {
-    {BR_HEADER, BV_NONE, L"Itens da barra de menus", 0xE700, 0x8E8E93, L"O que aparece na barra, do lado direito e no menu do app"},
-    {BR_ITEM, BV_CLOCK, L"Relógio", 0xE823, 0x8E8E93, L"Fica sempre na barra; o botão escolhe o formato da data e da hora"},
-    {BR_ITEM, BV_GLOBALMENU, L"Menus do app", 0xE700, 0xFF9F0A, L"Arquivo, Editar, Exibir… do app em primeiro plano"},
-    {BR_ITEM, BV_NET, L"Wi-Fi e rede", 0xE701, 0x0A84FF},
-    {BR_ITEM, BV_BT, L"Bluetooth", 0xE702, 0x0A84FF},
-    {BR_ITEM, BV_BATT, L"Bateria", 0xE83F, 0x30D158},
-    {BR_ITEM, BV_DISPLAY, L"Tela", 0xE706, 0x0A84FF},
-    {BR_ITEM, BV_VOL, L"Som", 0xE767, 0xFF375F},
-    {BR_ITEM, BV_KBD, L"Entrada de texto", 0xE765, 0x8E8E93, L"Aparece quando há mais de um layout de teclado"},
-    {BR_ITEM, BV_TRAY, L"Bandeja do sistema", 0xE70D, 0x5E5CE6},
-    {BR_ITEM, BV_CC, L"Central de Controle", 0, 0x8E8E93},
-    {BR_ITEM, BV_WEATHER, L"Previsão do tempo", 0xE753, 0x5AC8FA},
-    {BR_ITEM, BV_NOW, L"Tocando agora", 0xEC4F, 0xFF375F},
-    {BR_ITEM, BV_FOCUS, L"Foco (quando ativo)", 0xE708, 0x5E5CE6},
-    {BR_ITEM, BV_SEARCH, L"Busca", 0xE721, 0x8E8E93},
-    {BR_CHOICE, BV_SEARCHTGT, L"A busca abre", 0, 0, L"Siri Plus: a janela padrão dele, no estilo Spotlight"},
-    {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Pontos laranja e verde quando um app usa o microfone ou a câmera"},
-    {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Fundo, cores de seleção, tamanho e quando a barra aparece"},
-    {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
-    {BR_CHOICE, BV_BARSTYLE, L"Fundo", 0, 0},
-    {BR_COLORS, BV_SELBAR, L"Seleção na barra", 0, 0},
-    {BR_COLORS, BV_SELMENU, L"Seleção nos menus", 0, 0},
-    {BR_GROUP, BV_NONE, L"Tamanho", 0, 0},
-    {BR_SLIDER, BV_HEIGHT, L"Altura da barra", 0, 0},
-    {BR_SLIDER, BV_FONT, L"Tamanho da fonte", 0, 0},
-    {BR_SLIDER, BV_ICONS, L"Tamanho dos ícones", 0, 0},
-    {BR_GROUP, BV_NONE, L"Comportamento", 0, 0},
-    {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
-    {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
-    {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
-    {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
-    {BR_SWITCH, BV_ALLMON, L"Mostrar em todos os monitores", 0, 0},
-    {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
-    {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Estilo dos menus, Tocando agora, pílulas de volume e brilho"},
-    {BR_CHOICE, BV_MENUGLASS, L"Estilo dos menus", 0, 0, L"Menus da barra, pílula do Bluetooth, Tocando agora e Notificações. A Central de Controle não muda"},
-    {BR_SLIDER, BV_MENUTRANSP, L"Transparência dos menus (Vidro)", 0, 0},
-    {BR_SWITCH, BV_UPDATES, L"Atualizações pendentes no menu do logo", 0, 0},
-    {BR_SWITCH, BV_KBDNAV, L"Ctrl+F2 navega a barra pelo teclado", 0, 0},
-    {BR_GROUP, BV_NONE, L"Tocando agora", 0, 0},
-    {BR_CHOICE, BV_NPLAYOUT, L"Painel", 0, 0},
-    {BR_SLIDER, BV_NPSIZE, L"Tamanho", 0, 0},
-    {BR_CHOICE, BV_NPBAR, L"Barra de progresso", 0, 0},
-    {BR_GROUP, BV_NONE, L"Volume, brilho e Central", 0, 0},
-    {BR_SWITCH, BV_FLYOUTS, L"Pílulas de vidro (volume, brilho, Bluetooth)", 0, 0},
-    {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
-    {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
     {BR_HEADER, BV_NONE, L"Vidro dos painéis", 0xE790, 0x5AC8FA, L"Do transparente ao tingido: o vidro dos menus, da Central e dos painéis"},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ tingido", 0, 0, L"À esquerda o vidro limpo; à direita, mais cor"},
     {BR_SWITCH, BV_G_LIQUID, L"Vidro líquido (experimental)", 0, 0, L"Refração nas bordas, como o Liquid Glass"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
+    {BR_NOTE, BV_NONE,
+     L"Os outros ajustes (itens da barra, aparência, menus, pílulas e notificações) ficam na página do mod no Windhawk: abra o Windhawk, escolha Mac OS 27 Finder Bar e a aba Configurações (Settings).", 0, 0},
     {BR_HEADER, BV_NONE, L"Pílulas de aviso", 0xEA8F, 0xFF375F, L"Avisos que descem da barra e o botão de Notificações"},
-    {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
-    {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
-    {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Líquido usa os ajustes de “Vidro dos painéis”"},
-    {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
-    {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0},
-    {BR_CHOICE, BV_ISLPOS, L"Posição", 0, 0},
-    {BR_CHOICE, BV_ISLIN, L"Como aparece", 0, 0},
-    {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
-    {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
-    {BR_SWITCH, BV_ISLHIST, L"Botão de Notificações na barra (sino)", 0, 0, L"Notificações agrupadas por app, em cartões de vidro"},
-    {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_ACTION, BV_ISLCLEAR, L"Limpar as notificações", 0, 0},
-    {BR_GROUP, BV_NONE, L"Avisar quando", 0, 0},
-    {BR_SWITCH, BV_WINNOTIF, L"Notificações do Windows (experimental)", 0, 0, L"WhatsApp, Discord, e-mail… Clicar abre o app"},
-    {BR_SWITCH, BV_WINONLY, L"Somente a barra mostra as notificações", 0, 0, L"Tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam"},
-    {BR_SWITCH, BV_CLIP, L"Texto, imagem ou arquivos copiados", 0, 0},
-    {BR_SWITCH, BV_SHOT, L"Capturas de tela", 0, 0, L"Clique na pílula para abrir a captura"},
-    {BR_SWITCH, BV_DLDONE, L"Downloads concluídos", 0, 0, L"Clique na pílula para abrir o arquivo"},
-    {BR_SWITCH, BV_USB, L"Dispositivos USB e discos", 0, 0},
-    {BR_SWITCH, BV_ISLBT, L"Aparelhos Bluetooth (fones, mouse...)", 0, 0},
-    {BR_SWITCH, BV_ISLAUDIO, L"Troca da saída de áudio", 0, 0},
-    {BR_SWITCH, BV_ISLBATT, L"Bateria fraca e carregador", 0, 0},
-    {BR_SWITCH, BV_ISLFOCUS, L"Foco (Não Perturbe)", 0, 0},
     {BR_HEADER, BV_NONE, L"Previsão do tempo", 0xE753, 0x5AC8FA, L"Lugar, serviço, unidade e aparência do widget"},
-    {BR_SWITCH, BV_WEATHER, L"Mostrar na barra", 0, 0},
     {BR_SWITCH, BV_WXTEMP, L"Temperatura ao lado do ícone", 0, 0},
     {BR_INPUT, BV_WXPLACE, L"Bairro", 0, 0},
     {BR_PLACE, BV_WXRESULT, L"", 0, 0},  // modelo das linhas de resultado (dinâmicas)
@@ -11161,58 +11255,6 @@ static const BsRowDef kBsRows[] = {
      0},
 };
 
-struct BsBoolKey {
-    int val;
-    PCWSTR key;
-    bool Settings::*field;
-};
-static const BsBoolKey kBsKeys[] = {
-    {BV_GLOBALMENU, L"showGlobalMenu", &Settings::showGlobalMenu},
-    {BV_NET, L"showNetwork", &Settings::showNetwork},
-    {BV_BT, L"showBluetooth", &Settings::showBluetooth},
-    {BV_BATT, L"showBattery", &Settings::showBattery},
-    {BV_DISPLAY, L"showDisplay", &Settings::showDisplay},
-    {BV_VOL, L"showVolume", &Settings::showVolume},
-    {BV_KBD, L"showKeyboard", &Settings::showKeyboard},
-    {BV_TRAY, L"showTray", &Settings::showTray},
-    {BV_CC, L"showControlCenter", &Settings::showControlCenter},
-    {BV_WEATHER, L"showWeather", &Settings::showWeather},
-    {BV_NOW, L"showNowPlaying", &Settings::showNowPlaying},
-    {BV_FOCUS, L"showFocus", &Settings::showFocus},
-    {BV_SEARCH, L"showSearch", &Settings::showSearch},
-    {BV_PRIV, L"showPrivacy", &Settings::showPrivacy},
-    {BV_MORE, L"menuOverflow", &Settings::menuOverflow},
-    {BV_ISLAND, L"islandPills", &Settings::islandPills},
-    {BV_KBDNAV, L"kbdNav", &Settings::kbdNav},
-    {BV_USB, L"usbPills", &Settings::usbPills},
-    {BV_DLDONE, L"downloadPills", &Settings::downloadPills},
-    {BV_CLIP, L"clipPills", &Settings::clipPills},
-    {BV_SHOT, L"shotPills", &Settings::shotPills},
-    {BV_ISLFOCUS, L"islFocus", &Settings::islFocus},
-    {BV_WINNOTIF, L"winNotifs", &Settings::winNotifs},
-    {BV_WINONLY, L"winNotifsOnly", &Settings::winNotifsOnly},
-    {BV_ISLBATT, L"islBattery", &Settings::islBattery},
-    {BV_ISLBT, L"islBluetooth", &Settings::islBluetooth},
-    {BV_ISLAUDIO, L"islAudio", &Settings::islAudio},
-    {BV_ISLHIST, L"islHistory", &Settings::islHistory},
-    {BV_ISLHISTNOT, L"islHistNotices", &Settings::islHistNotices},
-    {BV_BATTPCT, L"showBatteryPercent", &Settings::showBatteryPercent},
-    {BV_UPDATES, L"checkUpdates", &Settings::checkUpdates},
-    {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
-    {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
-    {BV_SOLIDMAX, L"solidWhenMaximized", &Settings::solidWhenMaximized},
-    {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
-    {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
-    {BV_OSD, L"showOsd", &Settings::showOsd},
-    {BV_DIM, L"ccDimScreen", &Settings::bgBlur},
-};
-
-static const BsBoolKey* BsKeyFor(int val) {
-    for (auto& k : kBsKeys)
-        if (k.val == val) return &k;
-    return nullptr;
-}
-
 // Vidro só da janela de ajustes: 0 desfoque, 1 líquido, 2 transparente; e a transparência.
 static int g_bsStyle = -1, g_bsTransp = 80;
 static void BsOpenAt(const POINT* at, float scroll);
@@ -11225,38 +11267,18 @@ static void BsAction(int val);
 static const int* g_glassTranspSaved = nullptr;
 static int GlassTranspValue() { return g_glassTranspSaved ? *g_glassTranspSaved : g_glass.transparency; }
 static int BsGet(int val) {
-    if (const BsBoolKey* k = BsKeyFor(val)) return g_settings.*(k->field) ? 1 : 0;
     switch (val) {
         case BV_G_TINT: return 100 - GlassTranspValue();
-        case BV_SEARCHTGT: return g_settings.searchTarget;
-        case BV_LANG: return g_langChoice;
         case BV_G_TRANSP: return GlassTranspValue();
         case BV_G_REFRACT: return g_glass.refraction;
         case BV_G_BLUR: return g_glass.blur;
         case BV_G_CLEAR: return g_glass.clear;
         case BV_G_LIQUID: return g_glass.liquid;
         case BV_G_LIVE: return g_glass.live;
-        case BV_BARSTYLE: return g_settings.barStyle;
         case BV_BSSTYLE: return g_bsStyle;
-        case BV_ISLSTYLE: return g_settings.islStyle;
-        case BV_ISLSIZE: return std::clamp((g_settings.islSize - 80) * 100 / 60, 0, 100);
-        case BV_ISLDUR: return std::clamp((g_settings.islDur - 15) * 100 / 65, 0, 100);
-        case BV_ISLIN: return g_settings.islIn;
-        case BV_NPLAYOUT: return g_settings.npLayout;
-        case BV_NPBAR: return g_settings.npBar;
-        case BV_NPSIZE: return std::clamp((g_settings.npSize - 240) * 100 / 200, 0, 100);
-        case BV_ISLOUT: return g_settings.islOut;
-        case BV_ISLPOS: return g_settings.islPos;
         case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             return WxSettingGet(val);
-        case BV_SELBAR: return g_settings.selBar;
-        case BV_SELMENU: return g_settings.selMenu;
         case BV_BSTRANSP: return g_bsTransp;
-        case BV_MENUGLASS: return g_settings.menuGlass;
-        case BV_MENUTRANSP: return g_settings.menuTransp;
-        case BV_HEIGHT: return std::clamp((g_settings.height - 20) * 100 / 28, 0, 100);
-        case BV_FONT: return std::clamp((int)std::lround((g_settings.fontSize - 10) * 10), 0, 100);
-        case BV_ICONS: return std::clamp((int)std::lround((g_settings.iconScale * 100 - 70) * 100 / 90), 0, 100);
     }
     return 0;
 }
@@ -11282,105 +11304,16 @@ static void BsLoadLook() {
 static void BsSaveLook() {
     wchar_t buf[32];
     swprintf(buf, ARRAYSIZE(buf), L"%d;%d", g_bsStyle, g_bsTransp);
-    Wh_SetStringValue(L"settingsLook", buf);
+    SaveLater(L"settingsLook", buf);
 }
 
 static void BarsApplyLive(bool geometry);
 static void BarsRestyle();
 static void BsSet(int val, int v) {
-    if (const BsBoolKey* k = BsKeyFor(val)) {
-        bool on = v != 0;
-        if (g_settings.*(k->field) == on) return;
-        g_settings.*(k->field) = on;
-        OvrSetInt(k->key, on ? 1 : 0);
-        // Só "todos os monitores" e "ocultar automaticamente" precisam refazer as
-        // barras; o resto vale na hora, sem a barra piscar.
-        if (val == BV_ALLMON || val == BV_AUTOHIDE) {
-            if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
-        } else {
-            BarsApplyLive(false);
-        }
-        return;
-    }
     switch (val) {
-        case BV_ISLSTYLE: {
-            static const PCWSTR k[] = {L"glass", L"liquid", L"dark"};
-            g_settings.islStyle = std::clamp(v, 0, 2);
-            OvrSetStr(L"islStyle", k[g_settings.islStyle]);
-            return;
-        }
-        case BV_ISLSIZE:
-            g_settings.islSize = 80 + (int)std::lround(std::clamp(v, 0, 100) * 60 / 100.0);
-            OvrSetInt(L"islSize", g_settings.islSize);
-            return;
-        case BV_ISLDUR:
-            g_settings.islDur = 15 + (int)std::lround(std::clamp(v, 0, 100) * 65 / 100.0);
-            OvrSetInt(L"islDuration", g_settings.islDur);
-            return;
-        case BV_ISLIN: {
-            static const PCWSTR k[] = {L"expand", L"circle", L"drop", L"fade"};
-            g_settings.islIn = std::clamp(v, 0, 3);
-            OvrSetStr(L"islIn", k[g_settings.islIn]);
-            return;
-        }
-        case BV_ISLOUT: {
-            static const PCWSTR k[] = {L"shrink", L"suck", L"rise", L"circle", L"fade"};
-            g_settings.islOut = std::clamp(v, 0, 4);
-            OvrSetStr(L"islOut", k[g_settings.islOut]);
-            return;
-        }
-        case BV_NPBAR: {
-            static const PCWSTR k[] = {L"line", L"colored", L"wave"};
-            g_settings.npBar = std::clamp(v, 0, 2);
-            OvrSetStr(L"npBar", k[g_settings.npBar]);
-            return;
-        }
-        case BV_NPLAYOUT:
-            g_settings.npLayout = v == 1 ? 1 : 0;
-            OvrSetStr(L"npLayout", g_settings.npLayout ? L"compact" : L"big");
-            return;
-        case BV_NPSIZE:
-            g_settings.npSize = 240 + (int)std::lround(std::clamp(v, 0, 100) * 200 / 100.0);
-            OvrSetInt(L"npSize", g_settings.npSize);
-            return;
-        case BV_ISLPOS:
-            g_settings.islPos = v == 1 ? 1 : 0;
-            OvrSetStr(L"islPos", g_settings.islPos ? L"right" : L"center");
-            return;
         case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             WxSettingSet(val, v);
             return;
-    }
-    if (val == BV_LANG) {
-        v = std::clamp(v, 0, (int)ARRAYSIZE(kLangCodes) - 1);
-        if (v == g_langChoice) return;
-        SetUiLangChoice(kLangCodes[v]);
-        OvrSetStr(L"language", kLangCodes[v]);
-        if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);  // barras e menus no idioma novo
-        return;
-    }
-    if (val == BV_SEARCHTGT) {
-        g_settings.searchTarget = v == 1 ? 1 : 0;
-        OvrSetStr(L"searchTarget", g_settings.searchTarget ? L"siri" : L"windows");
-        return;
-    }
-    if (val == BV_MENUGLASS) {
-        g_settings.menuGlass = v == 1 ? 1 : 0;
-        OvrSetStr(L"menuGlass", g_settings.menuGlass ? L"central" : L"glass");
-        return;
-    }
-    if (val == BV_MENUTRANSP) {
-        g_settings.menuTransp = std::clamp(v, 0, 100);
-        OvrSetInt(L"menuTransparency", g_settings.menuTransp);
-        return;
-    }
-    if (val == BV_SELBAR || val == BV_SELMENU) {
-        int idx = v < 0 || v >= kSelCount ? -1 : v;
-        (val == BV_SELBAR ? g_settings.selBar : g_settings.selMenu) = idx;
-        OvrSetStr(val == BV_SELBAR ? L"selectionBar" : L"selectionMenu",
-                  idx < 0 ? L"frosted" : kSelPalette[idx].key);
-        RedrawAll();
-        return;
     }
     if (val == BV_BSTRANSP) {
         g_bsTransp = std::clamp(v, 0, 100);
@@ -11393,32 +11326,6 @@ static void BsSet(int val, int v) {
         g_bsStyle = v;
         BsSaveLook();
         g_bsReopen = true;  // o vidro é criado com a janela: reabre no mesmo lugar
-        return;
-    }
-    if (val == BV_HEIGHT || val == BV_FONT || val == BV_ICONS) {
-        // As barras são refeitas ao soltar o slider (g_bsPendingReload).
-        v = std::clamp(v, 0, 100);
-        if (val == BV_HEIGHT) {
-            g_settings.height = 20 + (int)std::lround(v * 28 / 100.0);
-            OvrSetInt(L"height", g_settings.height);
-        } else if (val == BV_FONT) {
-            g_settings.fontSize = (float)(10 + (int)std::lround(v / 10.0));
-            OvrSetInt(L"fontSize", (int)g_settings.fontSize);
-        } else {
-            int pct = 70 + (int)std::lround(v * 90 / 100.0);
-            g_settings.iconScale = pct / 100.0f;
-            OvrSetInt(L"iconScale", pct);
-        }
-        g_bsPendingReload = true;
-        return;
-    }
-    if (val == BV_BARSTYLE) {
-        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid"};
-        v = std::clamp(v, 0, 2);
-        if (g_settings.barStyle == v) return;
-        g_settings.barStyle = v;
-        OvrSetStr(L"barStyle", kNames[v]);
-        BarsRestyle();  // troca o fundo na barra que já existe
         return;
     }
     v = std::clamp(v, 0, 100);
@@ -11502,7 +11409,11 @@ struct BarSettingsWnd {
     float originX = -1;   // de onde a janela cresce (x na janela)
     ULONGLONG openTick = 0, closeTick = 0;
 };
-static BarSettingsWnd g_bs;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<BarSettingsWnd> g_bsStore{std::in_place};
+static BarSettingsWnd& g_bs = *g_bsStore;
 
 static const float kBsOpenMs = 700.0f, kBsCloseMs = 420.0f;
 
@@ -12034,7 +11945,6 @@ static void BsPieceEnd(int piece) {
     g_bs.rt->PopLayer();
 }
 
-static bool BsRowDisabled(int rowIdx);
 static void BsDrawRow(size_t i, const BsRow& row, float oy) {
     ID2D1DCRenderTarget* rt = g_bs.rt;
     float s = g_bs.s, in = std::round(14 * s);
@@ -12326,16 +12236,7 @@ static void BsDrawWindow() {
         D2D1_RECT_F r = shift(row.r);
         if (r.bottom < g_bs.view.top || r.top > g_bs.view.bottom) continue;
         if (!(piece = BsPieceBegin(cardStart(cardOf(row.r.top + 1))))) continue;
-        ID2D1Layer* dimLayer = nullptr;
-        if (BsRowDisabled((int)i) && SUCCEEDED(rt->CreateLayer(&dimLayer)))
-            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
-                                                D2D1::IdentityMatrix(), 0.35f),
-                          dimLayer);
         BsDrawRow(i, row, oy);
-        if (dimLayer) {
-            rt->PopLayer();
-            dimLayer->Release();
-        }
         BsPieceEnd(piece);
     }
     if (g_bs.rows.empty() && !g_bs.query.empty())
@@ -12372,7 +12273,12 @@ static void BsRender() {
         void* bits = nullptr;
         g_bs.memDC = CreateCompatibleDC(nullptr);
         g_bs.dib = CreateDIBSection(g_bs.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_bs.memDC || !g_bs.dib) return;
+        if (!g_bs.memDC || !g_bs.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_bs.dib) { DeleteObject(g_bs.dib); g_bs.dib = nullptr; }
+            if (g_bs.memDC) { DeleteDC(g_bs.memDC); g_bs.memDC = nullptr; }
+            return;
+        }
         g_bs.oldBmp = SelectObject(g_bs.memDC, g_bs.dib);
     }
     if (!g_bs.rt) {
@@ -12456,23 +12362,7 @@ static void BsRender() {
 }
 
 // O que está sob o ponto (coordenadas da janela). `part`: 1 = sobre o controle; 10+k = amostra de cor k.
-// Linha inativa (apagada e sem resposta): a transparência dos menus no estilo
-// "Igual à Central", em que os menus usam o vidro da Central.
-static bool BsRowDisabled(int rowIdx) {
-    if (rowIdx < 0 || rowIdx >= (int)g_bs.rows.size()) return false;
-    const BsRowDef& d = kBsRows[g_bs.rows[rowIdx].def];
-    return d.kind != BR_HEADER && d.val == BV_MENUTRANSP && g_settings.menuGlass == 1;
-}
-static int BsHitRaw(float x, float y, int* part);
 static int BsHit(float x, float y, int* part) {
-    int hit = BsHitRaw(x, y, part);
-    if (BsRowDisabled(hit)) {
-        *part = 0;
-        return -1;
-    }
-    return hit;
-}
-static int BsHitRaw(float x, float y, int* part) {
     *part = 0;
     auto in = [&](const D2D1_RECT_F& r) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; };
     if (in(g_bs.doneBtn)) return -2;
@@ -12507,54 +12397,6 @@ static void BsSliderFromX(int rowIdx, float x) {
     int v = (int)std::lround((x - tr.left) * 100.0f / std::max(1.0f, tr.right - tr.left));
     BsSet(kBsRows[row.def].val, std::clamp(v, 0, 100));
     BsRender();
-}
-// Opções do relógio: formatos de data e hora, com o exemplo de agora.
-static void BsClockOptions() {
-    struct Opt {
-        PCWSTR fmt;
-        bool date;
-    };
-    static const Opt kOpts[] = {
-        {L"ddd d MMM", true}, {L"dddd, d 'de' MMMM", true}, {L"dd/MM", true}, {L"", true},
-        {L"HH:mm", false},    {L"HH:mm:ss", false},          {L"h:mm tt", false},
-    };
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    HMENU m = CreatePopupMenu();
-    AddHeader(m, L"Data");
-    for (int i = 0; i < (int)ARRAYSIZE(kOpts); i++) {
-        if (i == 4) {
-            AddSep(m);
-            AddHeader(m, L"Hora");
-        }
-        wchar_t buf[96] = L"";
-        if (!kOpts[i].fmt[0]) wcscpy(buf, L"Não mostrar");
-        else if (kOpts[i].date)
-            GetDateFormatEx(UiLocale(), 0, &st, T(kOpts[i].fmt), buf, ARRAYSIZE(buf), nullptr);
-        else
-            GetTimeFormatEx(UiLocale(), 0, &st, kOpts[i].fmt, buf, ARRAYSIZE(buf));
-        const std::wstring& cur = kOpts[i].date ? g_settings.dateFormat : g_settings.timeFormat;
-        AddItem(m, 1 + i, buf, cur == kOpts[i].fmt, false, true);
-    }
-    AddSep(m);
-    AddItem(m, 50, L"Data em maiúsculas", g_settings.dateUpper);
-    const D2D1_RECT_F& b = g_bs.clockBtn;
-    UINT cmd = GlassTrackMenu(m, g_bs.pos.x + (int)b.right, g_bs.pos.y + (int)b.bottom + 4, true,
-                              (UINT)std::lround(g_bs.s * 96));
-    DestroyMenu(m);
-    if (g_bs.hwnd) SetForegroundWindow(g_bs.hwnd);
-    if (cmd == 50) {
-        g_settings.dateUpper = !g_settings.dateUpper;
-        OvrSetInt(L"dateUpper", g_settings.dateUpper ? 1 : 0);
-        PollStatus(true);
-        RedrawAll();
-    }
-    if (cmd >= 1 && cmd <= ARRAYSIZE(kOpts)) {
-        const Opt& o = kOpts[cmd - 1];
-        (o.date ? g_settings.dateFormat : g_settings.timeFormat) = o.fmt;
-        OvrSetStr(o.date ? L"dateFormat" : L"timeFormat", o.fmt);
-        RedrawAll();
-    }
 }
 
 
@@ -12827,9 +12669,7 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
             } else if (hit >= 0) {
                 const BsRowDef& d = kBsRows[g_bs.rows[hit].def];
-                if (d.kind == BR_ITEM && d.val == BV_CLOCK) {
-                    if (part == 1) BsClockOptions();
-                } else if (d.kind == BR_COLORS) {
+                if (d.kind == BR_COLORS) {
                     if (part >= 10) {
                         BsSet(d.val, part - 11);  // 10 = fosca (-1)
                         BsRender();
@@ -13121,6 +12961,32 @@ static std::wstring UrlEncode(const std::wstring& s) {
 }
 
 // GET por HTTPS (WinHTTP). Corpo em UTF-8.
+// Pedidos em andamento: o encerramento fecha o pedido, e a chamada que estava
+// esperando a rede volta na hora com erro.
+static SRWLOCK g_httpLock = SRWLOCK_INIT;
+static std::vector<HINTERNET> g_httpReqs;
+static bool HttpTrack(HINTERNET req) {
+    AcquireSRWLockExclusive(&g_httpLock);
+    bool ok = !g_jobsStopping;
+    if (ok) g_httpReqs.push_back(req);
+    ReleaseSRWLockExclusive(&g_httpLock);
+    return ok;
+}
+static bool HttpUntrack(HINTERNET req) {
+    AcquireSRWLockExclusive(&g_httpLock);
+    auto it = std::find(g_httpReqs.begin(), g_httpReqs.end(), req);
+    bool mine = it != g_httpReqs.end();
+    if (mine) g_httpReqs.erase(it);
+    ReleaseSRWLockExclusive(&g_httpLock);
+    return mine;
+}
+static void HttpCancelAll() {
+    AcquireSRWLockExclusive(&g_httpLock);
+    for (HINTERNET r : g_httpReqs) WinHttpCloseHandle(r);
+    g_httpReqs.clear();
+    ReleaseSRWLockExclusive(&g_httpLock);
+}
+
 static bool HttpGet(const std::wstring& url, std::string& out) {
     URL_COMPONENTS uc{};
     uc.dwStructSize = sizeof(uc);
@@ -13141,11 +13007,19 @@ static bool HttpGet(const std::wstring& url, std::string& out) {
     if (!ses) return false;
     WinHttpSetTimeouts(ses, 6000, 6000, 8000, 10000);
     bool ok = false;
+    if (g_jobsStopping) {
+        WinHttpCloseHandle(ses);
+        return false;
+    }
     HINTERNET con = WinHttpConnect(ses, std::wstring(host, uc.dwHostNameLength).c_str(), uc.nPort, 0);
     HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", obj.c_str(), nullptr, WINHTTP_NO_REFERER,
                                              WINHTTP_DEFAULT_ACCEPT_TYPES,
                                              uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)
                         : nullptr;
+    if (req && !HttpTrack(req)) {
+        WinHttpCloseHandle(req);
+        req = nullptr;
+    }
     if (req && WinHttpSendRequest(req, L"Accept: application/json\r\n", (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
         WinHttpReceiveResponse(req, nullptr)) {
         DWORD status = 0, sz = sizeof(status);
@@ -13162,7 +13036,7 @@ static bool HttpGet(const std::wstring& url, std::string& out) {
         }
         ok = status == 200 && !out.empty();
     }
-    if (req) WinHttpCloseHandle(req);
+    if (req && HttpUntrack(req)) WinHttpCloseHandle(req);  // senão o encerramento já fechou
     if (con) WinHttpCloseHandle(con);
     WinHttpCloseHandle(ses);
     return ok;
@@ -13416,9 +13290,10 @@ static bool UtcIsoToLocal(const std::string& iso, SYSTEMTIME& out) {
     return SystemTimeToTzSpecificLocalTime(nullptr, &u, &out) != FALSE;
 }
 
+// Coordenadas com 2 casas (~1 km): basta para a previsão e não aponta o endereço.
 static void WxFetchMet(WxJob* j) {
     wchar_t url[300];
-    swprintf(url, ARRAYSIZE(url), L"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=%.4f&lon=%.4f", j->lat,
+    swprintf(url, ARRAYSIZE(url), L"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=%.2f&lon=%.2f", j->lat,
              j->lon);
     std::string body;
     if (!HttpGet(url, body)) return;
@@ -13536,7 +13411,7 @@ static int WwoCode(int c) {
 
 static void WxFetchWttr(WxJob* j) {
     wchar_t url[200];
-    swprintf(url, ARRAYSIZE(url), L"https://wttr.in/%.4f,%.4f?format=j1", j->lat, j->lon);
+    swprintf(url, ARRAYSIZE(url), L"https://wttr.in/%.2f,%.2f?format=j1", j->lat, j->lon);
     std::string body;
     if (!HttpGet(url, body)) return;
     JVal v;
@@ -13588,7 +13463,7 @@ static void WxFetch(WxJob* j) {
 static void WxFetchOpenMeteo(WxJob* j) {
     wchar_t url[600];
     swprintf(url, ARRAYSIZE(url),
-             L"https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
+             L"https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f"
              L"&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,is_day"
              L"&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7",
              j->lat, j->lon);
@@ -13645,18 +13520,17 @@ static DWORD WINAPI WxThread(LPVOID param) {
     WxJob* j = (WxJob*)param;
     if (j->type == 0) WxSearch(j);
     else WxFetch(j);
-    if (!g_owner || !PostMessageW(g_owner, WM_APP_WEATHER, 0, (LPARAM)j)) delete j;
+    if (!g_worker || !PostMessageW(g_worker, WM_APP_WEATHER, 0, (LPARAM)j)) delete j;
     return 0;
 }
 
 static void WxStart(WxJob* j) {
-    HANDLE h = CreateThread(nullptr, 0, WxThread, j, 0, nullptr);
-    if (h) CloseHandle(h);
-    else delete j;
+    if (!StartJobThread(WxThread, j)) delete j;
 }
 
 static void WxRefresh() {
-    if (!g_wx.hasPlace || g_wx.loading) return;
+    // Ícone desligado: nada de rede (o temporizador também passa por aqui).
+    if (!g_settings.showWeather || !g_wx.hasPlace || g_wx.loading) return;
     g_wx.loading = true;
     WxJob* j = new WxJob();
     j->type = 1;
@@ -13851,7 +13725,11 @@ struct WxWidget {
     IDWriteTextFormat *fName = nullptr, *fBig = nullptr, *fText = nullptr, *fTextR = nullptr, *fSmall = nullptr,
                       *fSmallR = nullptr, *fHourC = nullptr, *fDay = nullptr, *fIcon = nullptr;
 };
-static WxWidget g_wxw;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<WxWidget> g_wxwStore{std::in_place};
+static WxWidget& g_wxw = *g_wxwStore;
 
 static const float kWxPanelW = 344, kWxPanelH = 500;
 static void WxOpen(Bar* b, int idx, bool search);
@@ -14118,7 +13996,12 @@ static void WxRender() {
         void* bits = nullptr;
         g_wxw.memDC = CreateCompatibleDC(nullptr);
         g_wxw.dib = CreateDIBSection(g_wxw.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_wxw.memDC || !g_wxw.dib) { g_light = savedLight; return; }
+        if (!g_wxw.memDC || !g_wxw.dib) {
+            if (g_wxw.dib) { DeleteObject(g_wxw.dib); g_wxw.dib = nullptr; }
+            if (g_wxw.memDC) { DeleteDC(g_wxw.memDC); g_wxw.memDC = nullptr; }
+            g_light = savedLight;
+            return;
+        }
         g_wxw.oldBmp = SelectObject(g_wxw.memDC, g_wxw.dib);
     }
     if (!g_wxw.rt) {
@@ -14727,7 +14610,7 @@ static void WxSettingSet(int val, int v) {
             g_wxGlassT = std::clamp(v, 0, 100);
             wchar_t buf[16];
             swprintf(buf, 16, L"%d", g_wxGlassT);
-            Wh_SetStringValue(L"weatherGlass", buf);
+            SaveLater(L"weatherGlass", buf);
             break;
         }
         case BV_WXINT:
@@ -15012,11 +14895,48 @@ static bool CalOccursOn(const CalEvent& e, int64_t d) {
     return false;
 }
 
-// Arquivos .ics importados pela janela de Ajustes (guardados pelo mod, separados por "|").
+// Arquivos .ics importados pela janela de Ajustes: um valor por arquivo
+// (icsPath0, icsPath1...) e o total em icsCount, no máximo kIcsMax.
+static const int kIcsMax = 64;
+static std::vector<std::wstring> IcsImportedList() {
+    std::vector<std::wstring> v;
+    int n = std::clamp(Wh_GetIntValue(L"icsCount", 0), 0, kIcsMax);
+    for (int i = 0; i < n; i++) {
+        wchar_t name[32], buf[MAX_PATH + 1] = L"";
+        swprintf(name, ARRAYSIZE(name), L"icsPath%d", i);
+        Wh_GetStringValue(name, buf, ARRAYSIZE(buf));
+        if (buf[0]) v.push_back(buf);
+    }
+    // Versões antigas guardavam tudo num valor só ("icsImported", separado por "|").
+    wchar_t old[8192] = L"";
+    if (Wh_GetStringValue(L"icsImported", old, ARRAYSIZE(old)) && old[0]) {
+        std::wstring all = old;
+        size_t a = 0;
+        while (a <= all.size()) {
+            size_t b = all.find(L'|', a);
+            if (b == std::wstring::npos) b = all.size();
+            std::wstring p = all.substr(a, b - a);
+            if (!p.empty() && (int)v.size() < kIcsMax && std::find(v.begin(), v.end(), p) == v.end()) v.push_back(p);
+            a = b + 1;
+        }
+    }
+    return v;
+}
+static void IcsImportedSave(const std::vector<std::wstring>& v) {
+    int old = std::clamp(Wh_GetIntValue(L"icsCount", 0), 0, kIcsMax);
+    int n = std::min((int)v.size(), kIcsMax);
+    for (int i = 0; i < std::max(n, old); i++) {
+        wchar_t name[32];
+        swprintf(name, ARRAYSIZE(name), L"icsPath%d", i);
+        Wh_SetStringValue(name, i < n ? v[i].c_str() : L"");
+    }
+    Wh_SetIntValue(L"icsCount", n);
+    Wh_SetStringValue(L"icsImported", L"");
+}
 static std::wstring IcsImported() {
-    wchar_t buf[8192] = L"";
-    Wh_GetStringValue(L"icsImported", buf, ARRAYSIZE(buf));
-    return buf;
+    std::wstring out;
+    for (const auto& p : IcsImportedList()) out += (out.empty() ? L"" : L"|") + p;
+    return out;
 }
 
 // Lista de calendários: os das configurações e os importados (sem vazios nem repetidos).
@@ -15096,7 +15016,7 @@ struct IcsJob {
 static DWORD WINAPI IcsThread(LPVOID p) {
     IcsJob* j = (IcsJob*)p;
     j->ok = HttpGet(j->url, j->body);
-    if (!g_owner || !PostMessageW(g_owner, WM_APP_ICS, 0, (LPARAM)j)) delete j;
+    if (!g_worker || !PostMessageW(g_worker, WM_APP_ICS, 0, (LPARAM)j)) delete j;
     return 0;
 }
 
@@ -15127,9 +15047,7 @@ static void CalEnsureLoaded() {
             changed = true;
             IcsJob* j = new IcsJob();
             j->url = c.src;
-            HANDLE h = CreateThread(nullptr, 0, IcsThread, j, 0, nullptr);
-            if (h) CloseHandle(h);
-            else { delete j; c.loading = false; c.fetched = now; c.error = TF(L"Não foi possível baixar %s", {CalShortName(c.src)}); }
+            if (!StartJobThread(IcsThread, j)) { delete j; c.loading = false; c.fetched = now; c.error = TF(L"Não foi possível baixar %s", {CalShortName(c.src)}); }
             continue;
         }
         WIN32_FILE_ATTRIBUTE_DATA fa{};
@@ -15186,7 +15104,11 @@ struct CalWnd {
     IDWriteTextFormat *fTitle = nullptr, *fDay = nullptr, *fDayB = nullptr, *fWeek = nullptr, *fText = nullptr,
                       *fSmall = nullptr, *fIcon = nullptr;
 };
-static CalWnd g_calw;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<CalWnd> g_calwStore{std::in_place};
+static CalWnd& g_calw = *g_calwStore;
 static const float kCalW = 320, kCalH = 590;
 
 static D2D1_RECT_F CalCellRect(int i) {
@@ -15260,7 +15182,12 @@ static void CalRender() {
         void* bits = nullptr;
         g_calw.memDC = CreateCompatibleDC(nullptr);
         g_calw.dib = CreateDIBSection(g_calw.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_calw.memDC || !g_calw.dib) return;
+        if (!g_calw.memDC || !g_calw.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_calw.dib) { DeleteObject(g_calw.dib); g_calw.dib = nullptr; }
+            if (g_calw.memDC) { DeleteDC(g_calw.memDC); g_calw.memDC = nullptr; }
+            return;
+        }
         g_calw.oldBmp = SelectObject(g_calw.memDC, g_calw.dib);
     }
     if (!g_calw.rt) {
@@ -16001,7 +15928,11 @@ struct IslandWnd {
     D2D1_RECT_F field{}, btn{};
     int caretPhase = -1;
 };
-static IslandWnd g_isl;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<IslandWnd> g_islStore{std::in_place};
+static IslandWnd& g_isl = *g_islStore;
 // Tempos: entrada, parada (ajuste) e saída.
 static double IslIn() { return g_settings.islIn == 1 ? 600 : g_settings.islIn == 3 ? 300 : 440; }
 static double IslHold() { return g_settings.islDur * 100.0; }
@@ -16424,7 +16355,8 @@ static void IslandReplyDone(bool ok, const IslandNote& n, const std::wstring& te
         return;
     }
     // Não deu para responder daqui: o texto vai para a área de transferência e o app abre.
-    if (OpenClipboard(nullptr)) {
+    // A janela do mod fica dona da área de transferência (sem dono, SetClipboardData falha).
+    if (OpenClipboard(g_owner)) {
         EmptyClipboard();
         size_t bytes = (text.size() + 1) * sizeof(wchar_t);
         if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
@@ -16701,7 +16633,7 @@ static std::wstring UsbFriendlyName(PCWSTR iface) {
     ULONG size = sizeof(inst);
     // Carregada na hora (nem todo cabeçalho do SDK a declara).
     using GetIfaceProp_t = CONFIGRET(WINAPI*)(LPCWSTR, const DEVPROPKEY*, DEVPROPTYPE*, PBYTE, PULONG, ULONG);
-    static auto getIfaceProp = (GetIfaceProp_t)(void*)GetProcAddress(LoadLibraryW(L"cfgmgr32.dll"),
+    static auto getIfaceProp = (GetIfaceProp_t)(void*)GetProcAddress(GetModuleHandleW(L"cfgmgr32.dll"),
                                                                       "CM_Get_Device_Interface_PropertyW");
     if (!getIfaceProp || getIfaceProp(iface, &kInst, &type, (PBYTE)inst, &size, 0) != CR_SUCCESS) return L"";
     DEVINST dev = 0;
@@ -16827,7 +16759,7 @@ static bool IsImageFile(const std::wstring& n) {
 static DWORD WINAPI DlThreadProc(LPVOID param) {
     int kind = (int)(INT_PTR)param;
     PWSTR dl = nullptr;
-    if (FAILED(SHGetKnownFolderPath(kind == 1 ? FOLDERID_Screenshots : FOLDERID_Downloads, kind == 1 ? (DWORD)KF_FLAG_CREATE : 0u,
+    if (FAILED(SHGetKnownFolderPath(kind == 1 ? FOLDERID_Screenshots : FOLDERID_Downloads, 0,
                                     nullptr, &dl)) ||
         !dl)
         return 0;
@@ -16868,7 +16800,7 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
                         lastDone = full;
                         lastDoneTick = now;
                         auto* msg = new std::wstring(full);
-                        if (!g_owner || !PostMessageW(g_owner, WM_APP_SHOT, 0, (LPARAM)msg)) delete msg;
+                        if (!g_worker || !PostMessageW(g_worker, WM_APP_SHOT, 0, (LPARAM)msg)) delete msg;
                     }
                 }
             } else if (fi->Action == FILE_ACTION_RENAMED_OLD_NAME) {
@@ -16881,7 +16813,7 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
                         lastDone = full;
                         lastDoneTick = now;
                         auto* msg = new std::wstring(full);
-                        if (!g_owner || !PostMessageW(g_owner, WM_APP_DLDONE, 0, (LPARAM)msg)) delete msg;
+                        if (!g_worker || !PostMessageW(g_worker, WM_APP_DLDONE, 0, (LPARAM)msg)) delete msg;
                     }
                 }
                 oldWasTemp = false;
@@ -16905,10 +16837,10 @@ static void StartDlWatcher() {
 static void StopDlWatcher() {
     if (!g_dlThread) return;
     SetEvent(g_dlStop);
-    WaitForSingleObject(g_dlThread, 3000);
+    WaitForSingleObject(g_dlThread, INFINITE);
     CloseHandle(g_dlThread);
     if (g_shotThread) {
-        WaitForSingleObject(g_shotThread, 3000);
+        WaitForSingleObject(g_shotThread, INFINITE);
         CloseHandle(g_shotThread);
         g_shotThread = nullptr;
     }
@@ -16929,11 +16861,33 @@ static bool ClipOpen() {
     return false;
 }
 
+// Conteúdo marcado como privado (gerenciadores de senha e afins): o mod não lê
+// nem mostra. São as marcas que o histórico da área de transferência respeita.
+static bool ClipIsPrivate() {
+    static const UINT kExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    static const UINT kHistory = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+    static const UINT kIgnore = RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
+    if ((kExclude && IsClipboardFormatAvailable(kExclude)) || (kIgnore && IsClipboardFormatAvailable(kIgnore)))
+        return true;
+    if (!kHistory || !IsClipboardFormatAvailable(kHistory)) return false;
+    if (!ClipOpen()) return true;  // na dúvida, não mostra
+    bool priv = false;
+    if (HANDLE h = GetClipboardData(kHistory)) {
+        if (auto* p = (const DWORD*)GlobalLock(h)) {
+            priv = GlobalSize(h) >= sizeof(DWORD) && *p == 0;
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    return priv;
+}
+
 static void ClipOnUpdate() {
     if (!g_settings.clipPills && !g_settings.shotPills) return;
     ULONGLONG now = GetTickCount64();
     if (now - g_clipLastTick < 300) return;  // vários formatos de uma vez
     g_clipLastTick = now;
+    if (ClipIsPrivate()) return;
     if (IsClipboardFormatAvailable(CF_HDROP)) {
         if (!g_settings.clipPills || !ClipOpen()) return;
         UINT n = 0;
@@ -17042,7 +16996,7 @@ struct NotifMsg {
 static HANDLE g_notifThread = nullptr, g_notifStop = nullptr;
 
 static void NotifPost(NotifMsg* m) {
-    if (!g_owner || !PostMessageW(g_owner, WM_APP_NOTIF, 0, (LPARAM)m)) delete m;
+    if (!g_worker || !PostMessageW(g_worker, WM_APP_NOTIF, 0, (LPARAM)m)) delete m;
 }
 
 // ---- Responder e abrir pela notificação ----
@@ -17280,6 +17234,7 @@ struct ReplyJob {
 static DWORD WINAPI ReplyThreadProc(LPVOID p) {
     ReplyJob* job = (ReplyJob*)p;
     HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (SUCCEEDED(co)) JobComEnter();
     bool ok = false;
     INotifActivationCallback* cb = nullptr;
     if (SUCCEEDED(CoCreateInstance(job->note.reply.clsid, nullptr, CLSCTX_LOCAL_SERVER, kIID_NotifActivationCallback,
@@ -17294,7 +17249,10 @@ static DWORD WINAPI ReplyThreadProc(LPVOID p) {
         }
         cb->Release();
     }
-    if (SUCCEEDED(co)) CoUninitialize();
+    if (SUCCEEDED(co)) {
+        JobComLeave();
+        CoUninitialize();
+    }
     if (!job->open) {
         NotifMsg* m = new NotifMsg();
         m->kind = ok ? 5 : 6;
@@ -17312,9 +17270,7 @@ static DWORD WINAPI ReplyThreadProc(LPVOID p) {
 // Envia a resposta (ou abre a conversa) numa thread: o app pode demorar.
 static void ReplySend(const IslandNote& n, const std::wstring& text, bool open) {
     ReplyJob* job = new ReplyJob{n, text, open};
-    HANDLE t = CreateThread(nullptr, 0, ReplyThreadProc, job, 0, nullptr);
-    if (t) CloseHandle(t);
-    else delete job;
+    if (!StartJobThread(ReplyThreadProc, job)) delete job;
 }
 
 #if FTB_NOTIF
@@ -17397,12 +17353,20 @@ static ULONGLONG g_toastLastTick = 0;
 
 static DWORD WINAPI ToastReadProc(LPVOID p) {
     HWND hwnd = (HWND)p;
-    Sleep(450);  // o conteúdo do aviso termina de aparecer
+    for (int i = 0; i < 9 && !g_jobsStopping; i++) Sleep(50);  // o conteúdo do aviso termina de aparecer
     if (CoInitializeEx(nullptr, COINIT_MULTITHREADED) >= 0) {
         IUIAutomation* ua = nullptr;
         CoCreateInstance(kClsidCUIAutomation, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&ua);
+        if (ua) {
+            IUIAutomation2* ua2 = nullptr;
+            if (SUCCEEDED(ua->QueryInterface(__uuidof(IUIAutomation2), (void**)&ua2)) && ua2) {
+                ua2->put_ConnectionTimeout(1500);
+                ua2->put_TransactionTimeout(1500);
+                ua2->Release();
+            }
+        }
         IUIAutomationElement* root = nullptr;
-        if (ua && IsWindow(hwnd) && SUCCEEDED(ua->ElementFromHandle(hwnd, &root)) && root) {
+        if (ua && !g_jobsStopping && IsWindow(hwnd) && SUCCEEDED(ua->ElementFromHandle(hwnd, &root)) && root) {
             VARIANT v;
             VariantInit(&v);
             v.vt = VT_I4;
@@ -17456,9 +17420,7 @@ static void CALLBACK ToastEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObje
     g_toastLastTick = now;
     if (g_toastJobs >= 3) return;
     g_toastJobs++;
-    HANDLE h = CreateThread(nullptr, 0, ToastReadProc, hwnd, 0, nullptr);
-    if (h) CloseHandle(h);
-    else g_toastJobs--;
+    if (!StartJobThread(ToastReadProc, hwnd)) g_toastJobs--;
 }
 
 static void ToastWatchStart() {
@@ -17470,15 +17432,15 @@ static void ToastWatchStart() {
 static void ToastWatchStop() {
     if (g_toastHook) UnhookWinEvent(g_toastHook);
     g_toastHook = nullptr;
-    for (int i = 0; i < 40 && g_toastJobs > 0; i++) Sleep(50);  // espera as leituras em andamento
+    // As leituras em andamento são esperadas por StopJobThreads no encerramento.
 }
 
 static void NotifStop() {
     ToastWatchStop();
     if (!g_notifThread) return;
     SetEvent(g_notifStop);
-    // Os prazos da thread somam no máximo ~6 s; espera tudo para não sobrar código rodando.
-    WaitForSingleObject(g_notifThread, 9000);
+    // Cada espera da thread tem prazo; espera até o fim para não sobrar código rodando.
+    WaitForSingleObject(g_notifThread, INFINITE);
     CloseHandle(g_notifThread);
     CloseHandle(g_notifStop);
     g_notifThread = g_notifStop = nullptr;
@@ -17553,10 +17515,34 @@ static bool BnrLooksLikeBanners(HWND w, DWORD* pidOut) {
 static void BnrMoveTo(LONG top) {
     RECT r;
     if (!g_bnrWnd || !IsWindow(g_bnrWnd) || !GetWindowRect(g_bnrWnd, &r)) return;
+    // Assíncrono: um ShellExperienceHost travado não trava a barra. (O evento de
+    // movimento que volta depois não muda nada: ver BnrEvent.)
     g_bnrSelfMove = true;
-    SetWindowPos(g_bnrWnd, nullptr, r.left, top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(g_bnrWnd, nullptr, r.left, top, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
     g_bnrSelfMove = false;
 }
+
+// Se o Explorer caiu (ou o mod saiu) com a pilha fora da tela, ela ficaria
+// escondida até o ShellExperienceHost reiniciar. Na partida, a janela que
+// estiver exatamente onde o mod a deixa (logo abaixo das telas) volta para o
+// canto de baixo da área de trabalho.
+static BOOL CALLBACK BnrRescueProc(HWND w, LPARAM) {
+    wchar_t cls[48];
+    if (!GetClassNameW(w, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"Windows.UI.Core.CoreWindow") != 0) return TRUE;
+    RECT r;
+    if (!GetWindowRect(w, &r) || std::abs(r.top - BnrBelowScreens()) > 2) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    if (!BnrIsShellHost(pid)) return TRUE;
+    MONITORINFO mi{sizeof(mi)};
+    POINT pt{r.left + (r.right - r.left) / 2, GetSystemMetrics(SM_YVIRTUALSCREEN)};
+    if (!GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY), &mi)) return TRUE;
+    SetWindowPos(w, nullptr, r.left, mi.rcWork.bottom - (r.bottom - r.top), 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    return TRUE;
+}
+static void BnrRescueParked() { EnumWindows(BnrRescueProc, 0); }
 
 // Tira a pilha da tela (guardando onde a base dela fica).
 static void BnrTakeOff() {
@@ -17670,33 +17656,9 @@ static void BnrOnNotification() {
     }
 }
 
-// Versões anteriores desligavam as faixas no registro (ShowBanner = 0): desfaz.
-static void BannersUndoRegistry() {
-    wchar_t buf[16384] = L"";
-    Wh_GetStringValue(L"bannersOff", buf, ARRAYSIZE(buf));
-    std::wstring list = buf;
-    if (list.empty()) return;
-    size_t start = 0;
-    while (start <= list.size()) {
-        size_t end = list.find(L'|', start);
-        if (end == std::wstring::npos) end = list.size();
-        std::wstring app = list.substr(start, end - start);
-        start = end + 1;
-        if (app.empty()) continue;
-        std::wstring key = L"Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\" + app;
-        HKEY k = nullptr;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, key.c_str(), 0, KEY_SET_VALUE, &k) == ERROR_SUCCESS) {
-            RegDeleteValueW(k, L"ShowBanner");
-            RegCloseKey(k);
-        }
-    }
-    Wh_SetStringValue(L"bannersOff", L"");
-}
-
 // Liga/desliga conforme o ajuste.
 static void NotifApply() {
     bool want = g_settings.winNotifs && g_settings.islandPills;
-    BannersUndoRegistry();
     if (!want) {
         NotifStop();
         g_notifApiOk = false;
@@ -17826,7 +17788,11 @@ struct NotifPanel {
                       *fIcon = nullptr, *fAvatar = nullptr;
     std::map<std::wstring, ID2D1Bitmap*> icons;  // aumid -> ícone (deste alvo de desenho)
 };
-static NotifPanel g_ntf;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<NotifPanel> g_ntfStore{std::in_place};
+static NotifPanel& g_ntf = *g_ntfStore;
 
 // Ícone do app pelo id (AUMID), em bitmap com transparência; guardado por id.
 static std::map<std::wstring, HBITMAP> g_appIconCache;
@@ -18027,7 +17993,12 @@ static void NtfRender() {
         void* bits = nullptr;
         g_ntf.memDC = CreateCompatibleDC(nullptr);
         g_ntf.dib = CreateDIBSection(g_ntf.memDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!g_ntf.memDC || !g_ntf.dib) return;
+        if (!g_ntf.memDC || !g_ntf.dib) {
+            // Sem o bitmap, o DC não serve: libera os dois e tenta de novo no próximo desenho.
+            if (g_ntf.dib) { DeleteObject(g_ntf.dib); g_ntf.dib = nullptr; }
+            if (g_ntf.memDC) { DeleteDC(g_ntf.memDC); g_ntf.memDC = nullptr; }
+            return;
+        }
         g_ntf.oldBmp = SelectObject(g_ntf.memDC, g_ntf.dib);
     }
     if (!g_ntf.rt) {
@@ -18571,7 +18542,7 @@ static void IcsImport() {
     if (SUCCEEDED(dlg->Show(g_bs.hwnd))) {
         IShellItemArray* arr = nullptr;
         if (SUCCEEDED(dlg->GetResults(&arr))) {
-            std::wstring list = IcsImported();
+            std::vector<std::wstring> list = IcsImportedList();
             DWORD n = 0;
             arr->GetCount(&n);
             for (DWORD i = 0; i < n; i++) {
@@ -18581,8 +18552,9 @@ static void IcsImport() {
                 if (SUCCEEDED(it->GetDisplayName(SIGDN_FILESYSPATH, &p)) && p) {
                     std::wstring path = p;
                     CoTaskMemFree(p);
-                    if ((L"|" + list + L"|").find(L"|" + path + L"|") == std::wstring::npos) {
-                        list += (list.empty() ? L"" : L"|") + path;
+                    if (std::find(list.begin(), list.end(), path) == list.end() && (int)list.size() < kIcsMax &&
+                        path.size() <= MAX_PATH) {
+                        list.push_back(path);
                         last = CalShortName(path);
                         added++;
                     }
@@ -18590,7 +18562,7 @@ static void IcsImport() {
                 it->Release();
             }
             arr->Release();
-            Wh_SetStringValue(L"icsImported", list.c_str());
+            IcsImportedSave(list);
         }
     }
     dlg->Release();
@@ -18603,7 +18575,7 @@ static void BsAction(int val) {
     switch (val) {
         case BV_ICSADD: IcsImport(); break;
         case BV_ICSCLEAR:
-            Wh_SetStringValue(L"icsImported", L"");
+            IcsImportedSave({});
             IslandShow(0xE787, 0x8E8E93, L"Calendários importados removidos", L"", L"", false, true);
             break;
         case BV_ISLTEST:
@@ -18847,6 +18819,17 @@ static void OpenItemMenu(Bar* b, int idx) {
         }
         return;
     }
+    // Menu copiado do app: os IDs são os do próprio app (podem coincidir com os
+    // do mod), então vai direto para o app antes de qualquer comando do mod.
+    if (it.kind == K_MENU && hasTm && tm.type == TM_NATIVE) {
+        if (nativeSub) {
+            DWORD_PTR r;
+            SendMessageTimeoutW(target, WM_UNINITMENUPOPUP, (WPARAM)nativeSub, 0, SMTO_ABORTIFHUNG, 200, &r);
+        }
+        FocusActive();
+        if (cmd && target && IsWindow(target)) PostMessageW(target, WM_COMMAND, MAKEWPARAM(cmd, 0), 0);
+        return;
+    }
     switch (cmd) {
         case ID_NOW_PREV: CcQueue(JOB_MEDIA_PREV); FocusActive(); return;
         case ID_NOW_PLAY: CcQueue(JOB_MEDIA_TOGGLE); FocusActive(); return;
@@ -18874,15 +18857,6 @@ static void OpenItemMenu(Bar* b, int idx) {
         return;
     }
 
-    if (it.kind == K_MENU && hasTm && tm.type == TM_NATIVE) {
-        if (nativeSub) {
-            DWORD_PTR r;
-            SendMessageTimeoutW(target, WM_UNINITMENUPOPUP, (WPARAM)nativeSub, 0, SMTO_ABORTIFHUNG, 200, &r);
-        }
-        FocusActive();
-        if (cmd && target && IsWindow(target)) PostMessageW(target, WM_COMMAND, MAKEWPARAM(cmd, 0), 0);
-        return;
-    }
 
     if (cmd == ID_SLIDER_VOL || cmd == ID_SLIDER_BRIGHT) {
         FlyToggle(b, idx, cmd == ID_SLIDER_VOL ? FLY_VOL : FLY_BRIGHT);
@@ -19069,14 +19043,15 @@ static void BarSyncShadow(Bar* b) {
 static void BarLiquidTick() {
     bool any = false;
     for (Bar* b : g_bars) {
+        if (b->lq) any = true;
         if (!b->lq || b->solid || !IsWindowVisible(b->hwnd)) continue;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
         InflateRect(&wr, kLiquidMargin, kLiquidMargin);
         if (LqCapture(*b->lq, wr, false)) InvalidateRect(b->hwnd, nullptr, FALSE);
-        any = true;
     }
-    if (!any && g_bars.empty()) KillTimer(g_owner, TIMER_BARLIQUID);
+    // Nenhuma barra no estilo líquido (trocou de estilo): a captura para.
+    if (!any) KillTimer(g_owner, TIMER_BARLIQUID);
 }
 
 // Prepara a barra para o estilo escolhido (chamado ao criar).
@@ -19240,7 +19215,11 @@ struct TipWnd {
     Bar* bar = nullptr;
     int idx = -1;
 };
-static TipWnd g_tip;
+// Guardado num optional sem destrutor automático: os objetos de composição
+// dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
+// encerramento do processo.
+[[clang::no_destroy]] static std::optional<TipWnd> g_tipStore{std::in_place};
+static TipWnd& g_tip = *g_tipStore;
 
 static std::wstring BarItemName(Bar* b, int idx) {
     if (idx < 0 || idx >= (int)b->items.size()) return L"";
@@ -20052,7 +20031,11 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     if (g_msgTaskbarCreated && msg == g_msgTaskbarCreated) {
         if (GetTickCount64() < g_ignoreTaskbarCreatedUntil) return 0;  // fomos nós que enviamos
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+        // Cada barra recebe o aviso: uma reconstrução só, para todas.
+        if (!g_rebuildScheduled) {
+            g_rebuildScheduled = true;
+            PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+        }
         return 0;
     }
 
@@ -20409,15 +20392,6 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
         case WM_DEVICECHANGE:
             UsbOnDeviceChange(wp, lp);
             return TRUE;
-        case WM_APP_DLDONE:
-            DlOnDone((std::wstring*)lp);
-            return 0;
-        case WM_APP_SHOT:
-            ShotOnSaved((std::wstring*)lp);
-            return 0;
-        case WM_APP_NOTIF:
-            NotifOnMsg((NotifMsg*)lp);
-            return 0;
         case WM_CLIPBOARDUPDATE:
             SetTimer(hwnd, TIMER_CLIP, 150, nullptr);  // lê logo depois (o app pode ainda estar escrevendo)
             return 0;
@@ -20444,43 +20418,6 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             for (GmLevel* lv : g_gm) GmRender(lv);
             if (g_fly.hwnd && !g_fly.dragging) FlyRender();
             if (g_np.hwnd) NpRender();
-            return 0;
-        case WM_APP_ICS:
-            CalOnIcs((IcsJob*)lp);
-            return 0;
-        case WM_APP_WEATHER:
-            WxOnResult((WxJob*)lp);
-            return 0;
-        case WM_APP_UIA: {
-            UiaJob* j = (UiaJob*)lp;
-            g_uiaPending.erase(j->hwnd);
-            if (g_uiaCache.size() > 64) {
-                for (auto it = g_uiaCache.begin(); it != g_uiaCache.end();) {
-                    if (IsWindow(it->first)) {
-                        ++it;
-                    } else {
-                        g_uiaEmptyTick.erase(it->first);
-                        it = g_uiaCache.erase(it);
-                    }
-                }
-            }
-            g_uiaCache[j->hwnd] = j->ok ? j->names : std::vector<std::wstring>();
-            if (!j->ok || j->names.empty()) g_uiaEmptyTick[j->hwnd] = GetTickCount64();
-            else g_uiaEmptyTick.erase(j->hwnd);
-            bool mine = j->hwnd == g_active.hwnd && j->ok && !j->names.empty();
-            UiaJobRelease(j);
-            if (mine && g_gm.empty()) {
-                BuildTopMenus();
-                RedrawAll();
-            }
-            return 0;
-        }
-        case WM_APP_OPENMENU:
-            if ((size_t)wp < g_bars.size()) {
-                g_forceFullMenu = true;
-                OpenItemMenu(g_bars[wp], (int)lp);
-                g_forceFullMenu = false;
-            }
             return 0;
         case WM_APP_VOLUME:
             PollStatus(false);
@@ -20589,6 +20526,89 @@ static bool WaitForOwnTaskbar() {
     }
 }
 
+// Fecha os painéis que guardam um ponteiro para uma barra.
+static void CloseBarPanels() {
+    if (g_tray.hwnd) DestroyWindow(g_tray.hwnd);
+    if (g_cc.hwnd) DestroyWindow(g_cc.hwnd);
+    if (g_osd.hwnd) DestroyWindow(g_osd.hwnd);
+    if (g_fly.hwnd) DestroyWindow(g_fly.hwnd);
+    if (g_np.hwnd) DestroyWindow(g_np.hwnd);
+    if (g_ntf.hwnd) DestroyWindow(g_ntf.hwnd);
+    if (g_wxw.hwnd) DestroyWindow(g_wxw.hwnd);
+    if (g_calw.hwnd) DestroyWindow(g_calw.hwnd);
+    TipHide();
+    g_tray.bar = nullptr;
+    g_cc.bar = nullptr;
+    g_osd.bar = nullptr;
+    g_fly.bar = nullptr;
+    g_np.bar = nullptr;
+    g_ntf.bar = nullptr;
+    g_wxw.bar = nullptr;
+    g_calw.bar = nullptr;
+    g_tip.bar = nullptr;
+}
+
+// Libera os painéis guardados em optional (ver a declaração de g_cc).
+static void FreePanelGlobals() {
+    g_ccStore.reset();
+    g_trayStore.reset();
+    g_osdStore.reset();
+    g_flyStore.reset();
+    g_npStore.reset();
+    g_bsStore.reset();
+    g_wxwStore.reset();
+    g_calwStore.reset();
+    g_islStore.reset();
+    g_ntfStore.reset();
+    g_tipStore.reset();
+}
+
+// Resultados das threads de trabalho (ver g_worker).
+static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_APP_DLDONE:
+            DlOnDone((std::wstring*)lp);
+            return 0;
+        case WM_APP_SHOT:
+            ShotOnSaved((std::wstring*)lp);
+            return 0;
+        case WM_APP_NOTIF:
+            NotifOnMsg((NotifMsg*)lp);
+            return 0;
+        case WM_APP_ICS:
+            CalOnIcs((IcsJob*)lp);
+            return 0;
+        case WM_APP_WEATHER:
+            WxOnResult((WxJob*)lp);
+            return 0;
+        case WM_APP_UIA: {
+            UiaJob* j = (UiaJob*)lp;
+            g_uiaPending.erase(j->hwnd);
+            if (g_uiaCache.size() > 64) {
+                for (auto it = g_uiaCache.begin(); it != g_uiaCache.end();) {
+                    if (IsWindow(it->first)) {
+                        ++it;
+                    } else {
+                        g_uiaEmptyTick.erase(it->first);
+                        it = g_uiaCache.erase(it);
+                    }
+                }
+            }
+            g_uiaCache[j->hwnd] = j->ok ? j->names : std::vector<std::wstring>();
+            if (!j->ok || j->names.empty()) g_uiaEmptyTick[j->hwnd] = GetTickCount64();
+            else g_uiaEmptyTick.erase(j->hwnd);
+            bool mine = j->hwnd == g_active.hwnd && j->ok && !j->names.empty();
+            UiaJobRelease(j);
+            if (mine && g_gm.empty()) {
+                BuildTopMenus();
+                RedrawAll();
+            }
+            return 0;
+        }
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
 static DWORD WINAPI BarThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
@@ -20658,6 +20678,14 @@ static DWORD WINAPI BarThread(LPVOID) {
     // Janela oculta: dona dos menus pop-up e dos timers; recebe broadcasts.
     g_owner = CreateWindowExW(WS_EX_TOOLWINDOW, kOwnerClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr,
                               nullptr, g_hInst, nullptr);
+    {
+        WNDCLASSEXW wk{sizeof(wk)};
+        wk.lpfnWndProc = WorkerWndProc;
+        wk.hInstance = g_hInst;
+        wk.lpszClassName = kWorkerClass;
+        RegisterClassExW(&wk);
+        g_worker = CreateWindowExW(0, kWorkerClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInst, nullptr);
+    }
     AllowDarkMenus(g_owner);
 
     WNDCLASSEXW tc{};
@@ -20740,6 +20768,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     KbdNavApply();
     UsbRegister();
     StartDlWatcher();
+    BnrRescueParked();  // faixas do Windows deixadas fora da tela por uma sessão anterior
     NotifApply();
     AddClipboardFormatListener(g_owner);
     SetTimer(g_owner, TIMER_STATUS, 1000, nullptr);
@@ -20771,8 +20800,9 @@ static DWORD WINAPI BarThread(LPVOID) {
                     ApplySettingsLive(before);
                     continue;
                 }
-                if (g_tray.hwnd) DestroyWindow(g_tray.hwnd);
-                if (g_cc.hwnd) DestroyWindow(g_cc.hwnd);
+                // Todo painel que aponta para uma barra fecha antes de as barras
+                // serem destruídas (senão ficaria com um ponteiro solto).
+                CloseBarPanels();
                 DestroyBars();
                 g_nameCache.clear();
                 PollStatus(true);
@@ -20790,53 +20820,42 @@ static DWORD WINAPI BarThread(LPVOID) {
         if (quit) break;
     }
 
+    FlushSaves();  // sliders mexidos há pouco
+    // 1) Primeiro o gancho na thread da barra de tarefas: depois disto nada do
+    //    mod roda dentro de outra thread do Explorer.
+    RemoveTrayHook();
     if (g_fgHook) { UnhookWinEvent(g_fgHook); g_fgHook = nullptr; }
-    if (g_tray.hwnd) DestroyWindow(g_tray.hwnd);
-    if (g_cc.hwnd) DestroyWindow(g_cc.hwnd);
-    if (g_osd.hwnd) DestroyWindow(g_osd.hwnd);
-    if (g_fly.hwnd) DestroyWindow(g_fly.hwnd);
-    if (g_bs.hwnd) DestroyWindow(g_bs.hwnd);
-    if (g_wxw.hwnd) DestroyWindow(g_wxw.hwnd);
-    TipHide();
-    if (g_calw.hwnd) DestroyWindow(g_calw.hwnd);
+    // 2) Threads de trabalho: cancela o que estiver em andamento e espera todas.
     UiaStop();
-    UnregisterVolumeCallback();
-    UnregisterClassW(kOsdClass, g_hInst);
-    UnregisterClassW(kFlyClass, g_hInst);
-    if (g_np.hwnd) DestroyWindow(g_np.hwnd);
-    UnregisterClassW(kNpClass, g_hInst);
-    if (g_ntf.hwnd) DestroyWindow(g_ntf.hwnd);
-    UnregisterClassW(kNtfClass, g_hInst);
-    for (auto& kv : g_appIconCache)
-        if (kv.second) DeleteObject(kv.second);
-    g_appIconCache.clear();
-    UnregisterClassW(kBsClass, g_hInst);
-    UnregisterClassW(kWxClass, g_hInst);
-    UnregisterClassW(kShadowClass, g_hInst);
-    UnregisterClassW(kTipClass, g_hInst);
-    if (g_isl.hwnd) DestroyWindow(g_isl.hwnd);
-    g_isl.hwnd = nullptr;
-    UnregisterClassW(kIslClass, g_hInst);
-    UnregisterClassW(kCalClass, g_hInst);
     StopCcWorker();
     StopUpdChecker();
     StopDlWatcher();
     NotifStop();
+    StopJobThreads();
     g_notifApiOk = false;
     BnrApply();  // as faixas do Windows voltam ao lugar e a vigia sai
+    // 3) Janelas e recursos da própria thread.
+    CloseBarPanels();
+    if (g_bs.hwnd) DestroyWindow(g_bs.hwnd);
+    if (g_isl.hwnd) DestroyWindow(g_isl.hwnd);
+    g_isl.hwnd = nullptr;
+    UnregisterVolumeCallback();
+    for (auto& kv : g_appIconCache)
+        if (kv.second) DeleteObject(kv.second);
+    g_appIconCache.clear();
     UsbUnregister();
     if (g_owner) RemoveClipboardFormatListener(g_owner);
-    ReleaseCompositor();
-    UnregisterClassW(kCcClass, g_hInst);
-    UnregisterClassW(kGmClass, g_hInst);
-    UnregisterClassW(kCcGlassClass, g_hInst);
-    RemoveTrayHook();
-    UnregisterClassW(kTrayClass, g_hInst);
     SafeRelease(g_wic);
     DestroyBars();
+    if (g_worker) { DestroyWindow(g_worker); g_worker = nullptr; }
     if (g_owner) { DestroyWindow(g_owner); g_owner = nullptr; }
-    UnregisterClassW(kBarClass, g_hInst);
-    UnregisterClassW(kOwnerClass, g_hInst);
+    for (PCWSTR cls : {kWorkerClass, kOsdClass, kFlyClass, kNpClass, kNtfClass, kBsClass, kWxClass, kShadowClass, kTipClass,
+                       kIslClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kOwnerClass})
+        UnregisterClassW(cls, g_hInst);
+    // 4) Composição: os painéis (e os visuais dentro deles) saem aqui, na
+    //    thread que os criou, antes do compositor e da fila de despacho.
+    FreePanelGlobals();
+    ReleaseCompositor();
     SafeRelease(g_nlm);
     SafeRelease(g_mmEnum);
     if (g_wlan) { WlanCloseHandle(g_wlan, nullptr); g_wlan = nullptr; }
@@ -20869,7 +20888,11 @@ void Wh_ModUninit() {
     Wh_Log(L"Mac OS 27 Finder Bar: uninit");
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
-        WaitForSingleObject(g_thread, 5000);
+        // WM_QUIT também tira a thread de uma caixa de mensagem ou do diálogo de
+        // abrir arquivo (os laços modais saem com ele e o repassam). A espera é
+        // até o fim: a DLL só pode sair depois que nada do mod estiver rodando.
+        if (g_threadId) PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
@@ -21462,5 +21485,6 @@ const UiTr kUiTr[] = {
     {L"Resposta enviada", L"Reply sent", L"Respuesta enviada", L"Réponse envoyée", L"Antwort gesendet", L"Risposta inviata", L"回复已发送"},
     {L"Não deu para responder daqui", L"Couldn’t reply from here", L"No se pudo responder desde aquí", L"Impossible de répondre d’ici", L"Antworten von hier nicht möglich", L"Impossibile rispondere da qui", L"无法在此回复"},
     {L"Texto copiado: cole na conversa", L"Text copied: paste it in the chat", L"Texto copiado: pégalo en la conversación", L"Texte copié : collez-le dans la conversation", L"Text kopiert: im Chat einfügen", L"Testo copiato: incollalo nella chat", L"文本已复制: 请粘贴到对话中"},
+    {L"Os outros ajustes (itens da barra, aparência, menus, pílulas e notificações) ficam na página do mod no Windhawk: abra o Windhawk, escolha Mac OS 27 Finder Bar e a aba Configurações (Settings).", L"The other settings (bar items, look, menus, pills and notifications) are on the mod's page in Windhawk: open Windhawk, pick Mac OS 27 Finder Bar and the Settings tab.", L"Los demás ajustes (elementos de la barra, aspecto, menús, píldoras y notificaciones) están en la página del mod en Windhawk: abre Windhawk, elige Mac OS 27 Finder Bar y la pestaña Settings.", L"Les autres réglages (éléments de la barre, apparence, menus, pastilles et notifications) se trouvent sur la page du mod dans Windhawk : ouvrez Windhawk, choisissez Mac OS 27 Finder Bar puis l’onglet Settings.", L"Die übrigen Einstellungen (Leistenelemente, Aussehen, Menüs, Pillen und Mitteilungen) stehen auf der Seite der Mod in Windhawk: Windhawk öffnen, Mac OS 27 Finder Bar wählen und den Tab Settings.", L"Le altre impostazioni (elementi della barra, aspetto, menu, pillole e notifiche) sono nella pagina della mod in Windhawk: apri Windhawk, scegli Mac OS 27 Finder Bar e la scheda Settings.", L"其他设置 (菜单栏项目、外观、菜单、胶囊提示和通知) 位于 Windhawk 中此模组的页面: 打开 Windhawk, 选择 Mac OS 27 Finder Bar, 然后打开 Settings 选项卡。"},
 };
 const size_t kUiTrCount = ARRAYSIZE(kUiTr);
