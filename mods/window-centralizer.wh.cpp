@@ -20,7 +20,7 @@ The window is placed **before** it appears, so there is no jump, no flicker, and
 
 ## Modes
 
-- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Oprhan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.
+- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.
 - **Parent monitor only**: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.
 - **Mouse cursor**: centered on the mouse cursor.
 
@@ -41,7 +41,7 @@ Press **Win+Alt+I** while a window is active to stop centering that kind of wind
 
 It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.
 
-The **Ignored windows** list opens with **Win+Ctrl+Alt+I**, and entries can be managed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
+The **Ignored windows** list opens with **Win+Ctrl+Alt+I**, and entries can be reviewed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
 Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.
 
