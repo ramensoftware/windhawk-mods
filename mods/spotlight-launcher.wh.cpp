@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         1.1.0
+// @version         1.1.1
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -122,22 +122,22 @@ Copyright (c) 2026-present David Ravelo.
   - Opacity: 90
     $name: Panel opacity (percentage)
     $description: How solid the colour of the bar is, from 70 to 100. A lower value lets more of the background show through and a higher value makes the colour stronger (Glass stays see-through in any case). Ignored with "Solid", which is always fully opaque.
-  - Effect: acrylic
+  - Effect: solid
     $name: Background effect
     $description: The background style of the bar. Acrylic, Mica, Glass, Frosted and Aurora show a blurred view of whatever is behind the bar, each with its own look; "Solid" shows a plain colour with no blur. The blurred effects rely on Windows' "Transparency effects" (Settings > Personalization > Colors); with that turned off, Windows draws no blur and these effects fall back to a flat colour. Only "Solid" is unaffected.
     $options:
+      - solid: Solid (no effect)
       - acrylic: Acrylic
       - mica: Mica
       - glass: Glass
       - frosted: Frosted
       - aurora: Aurora
-      - solid: Solid (no effect)
-  - LiveAcrylic: true
+  - LiveAcrylic: false
     $name: Live acrylic (real time)
-    $description: Keeps the background blur live. Acrylic, Glass, Frosted and Aurora follow whatever is behind the bar in real time. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. With it on, the blur strength of those effects is fixed by Windows and the Blur strength setting has no effect on them (Mica always follows it). Needs Windows 10 1803 or newer.
+    $description: Live background blur tracks the desktop in real time for Acrylic, Glass, Frosted, and Aurora. It is off by default because Windows renders it via a separate layer, which can cause minor edge seams during animations and impacts performance. Enabling it on Windows 11 keeps the blur live but causes Windows to override manual blur strength settings. On Windows 10, the live option is ignored and always uses a single snapshot to prevent compositor trails.
   - BlurAmount: 50
     $name: Blur strength (0 to 100)
-    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects only while Live acrylic is off (with it on, Windows sets their blur strength). Ignored with "Solid".
+    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects while Live acrylic is off — on Windows 11, with it on, Windows sets their blur strength. Ignored with "Solid".
   - Color: midnight
     $name: Color
     $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
@@ -154,6 +154,12 @@ Copyright (c) 2026-present David Ravelo.
       - white: White
       - sky: Sky
       - lavender: Lavender
+  - PanelAlign: together
+    $name: Panel position
+    $description: What stays centered while the details panel is open. "Bar and panel centered together" moves the search bar to the left so the bar and the panel are centered as one block; "Bar centered on its own" leaves the search bar where it is and opens the panel to its right.
+    $options:
+      - together: Bar and panel centered together
+      - bar: Bar centered on its own
   $name: Appearance
 - Behavior:
   - OpenOn: cursor
@@ -1440,6 +1446,9 @@ enum class DetailsKey { CtrlI, CtrlK, CtrlSpace, F4 };
 enum class OpenMonitor { Cursor, Foreground, Primary };
 enum class WebEngine { Google, Bing, DuckDuckGo, YouTube, Wikipedia };
 enum class BgEffect { Acrylic, Mica, Glass, Frosted, Aurora, Solid };
+// What stays centered while the details panel is open: the bar together with the panel (the bar
+// slides left), or the bar on its own (the panel opens to its right).
+enum class PanelAlign { Together, Bar };
 enum class CalcStyle { Hero, Ghost, Both };
 
 // A placeholder found in a custom entry's Target or Arguments ({folder}, {folder?}, {branch=main}).
@@ -1506,9 +1515,10 @@ struct LauncherSettings {
     int verticalPct = 30;
     int maxRows = 8;                 // cap on how many results the search returns
     int opacityPct = 90;
-    BgEffect effect = BgEffect::Acrylic;
+    BgEffect effect = BgEffect::Solid;
+    PanelAlign panelAlign = PanelAlign::Together;
     int blurPct = 50;     // 0..100 -> multiplies the effect's base blur (50 = x1)
-    bool liveAcrylic = true;  // DWM acrylic in real time (Acrylic / Frosted / Aurora)
+    bool liveAcrylic = false;  // DWM acrylic in real time (Acrylic / Frosted / Aurora)
     int colorIdx = 0;     // index in kColors
     bool hideUtility = true;
     bool disableFullscreen = true;  // ignore the shortcut while a fullscreen window is focused
@@ -2386,11 +2396,13 @@ static void LoadSettings() {
                    : (ef == L"glass")   ? BgEffect::Glass
                    : (ef == L"frosted") ? BgEffect::Frosted
                    : (ef == L"aurora")  ? BgEffect::Aurora
-                   : (ef == L"solid")   ? BgEffect::Solid
-                                        : BgEffect::Acrylic;
+                   : (ef == L"acrylic") ? BgEffect::Acrylic
+                                        : BgEffect::Solid;  // same as the declared default
     }
     c.blurPct = std::clamp(GetIntSetting(L"Appearance.BlurAmount"), 0, 100);
     c.liveAcrylic = GetIntSetting(L"Appearance.LiveAcrylic") != 0;
+    c.panelAlign = GetStringSetting(L"Appearance.PanelAlign") == L"bar" ? PanelAlign::Bar
+                                                                       : PanelAlign::Together;
 
     {
         std::wstring col = GetStringSetting(L"Appearance.Color");
@@ -9099,10 +9111,13 @@ static HWND g_livePanel = nullptr;                  // acrylic of the details pa
 static bool g_liveWin11 = false;                    // Windows 11: corners rounded by DWM
 typedef HRESULT(WINAPI* LvDwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
 static LvDwmSetWindowAttribute_t g_pDwmSetAttr = nullptr;
-static int g_liveRgnSize[2][2] = {};                // Windows 10: size of the last region
 static int g_livePos[2][4] = {};                    // last x, y, w, h given to each window
 
 static bool UseLive() {
+    // Windows 10 cannot move a DWM acrylic window in step with the bar (it needs a window region on
+    // every resize), so the blur lags behind the drawn frame and leaves seams while the panel
+    // animates. There the effects keep working from a single snapshot instead: one surface, no second
+    // window, nothing to desynchronize.
     if (!g_liveSupported || !g_cfg.liveAcrylic) return false;
     return g_cfg.effect == BgEffect::Acrylic || g_cfg.effect == BgEffect::Glass ||
            g_cfg.effect == BgEffect::Frosted || g_cfg.effect == BgEffect::Aurora;
@@ -9146,7 +9161,7 @@ static bool LiveCreate(HINSTANCE hInst) {
     HMODULE u = GetModuleHandleW(L"user32.dll");
     g_pSetWCA = u ? (LvSetWindowCompositionAttribute_t)GetProcAddress(u, "SetWindowCompositionAttribute")
                   : nullptr;
-    g_liveSupported = g_pSetWCA && WindowsBuildAtLeast(17134);  // acrylic: 1803+
+    g_liveSupported = g_pSetWCA && WindowsBuildAtLeast(22000);  // live blur is Windows 11 only
     if (!g_liveSupported) return false;
 
     g_liveWin11 = WindowsBuildAtLeast(22000);
@@ -9213,7 +9228,6 @@ static void LiveHide() {
     LiveDisableAccent();
     if (g_liveWnd) ShowWindow(g_liveWnd, SW_HIDE);
     if (g_livePanel) ShowWindow(g_livePanel, SW_HIDE);
-    memset(g_liveRgnSize, 0, sizeof(g_liveRgnSize));
     memset(g_livePos, 0, sizeof(g_livePos));
 }
 
@@ -10395,10 +10409,17 @@ static void QueuePreviewImage(const std::wstring& path) {
 // horizontally using the animated g_detailPos; vertically the bar stays at g_anchorTop unless
 // the expanded card would not fit in the work area.
 static void MainOrigin(float& ox, float& oy) {
-    const double a = std::clamp(g_detailPos, 0.0, 1.0);
-    const double innerW = kWidth + kPanelGap + kPanelW;
-    const double compW = kWidth + a * (kPanelGap + kPanelW);
-    ox = (float)((kMargin + (innerW - compW) / 2) * g_scale);
+    if (g_cfg.panelAlign == PanelAlign::Bar) {
+        // Only the bar is centered: it never moves, and the panel opens to its right.
+        ox = (float)(kMargin * g_scale);
+    } else {
+        // The bar and the panel are centered as one block, so the bar slides left while the panel is
+        // open (the default).
+        const double a = std::clamp(g_detailPos, 0.0, 1.0);
+        const double innerW = kWidth + kPanelGap + kPanelW;
+        const double compW = kWidth + a * (kPanelGap + kPanelW);
+        ox = (float)((kMargin + (innerW - compW) / 2) * g_scale);
+    }
 
     const double blockPx = BlockHeight() * g_scale;
     const double cardTop =
@@ -10767,14 +10788,7 @@ static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
         if (IsWindowVisible(wnd)) ShowWindow(wnd, SW_HIDE);
         return;
     }
-    if (!g_liveWin11 && (g_liveRgnSize[idx][0] != w || g_liveRgnSize[idx][1] != h)) {
-        g_liveRgnSize[idx][0] = w;
-        g_liveRgnSize[idx][1] = h;
-        const int d = (int)std::lround(kRadius * (float)g_scale * 2.f);
-        HRGN rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
-        SetWindowRgn(wnd, rgn, TRUE);  // the system takes ownership of rgn
-    }
-    // Acrylic windows are slow to move on some Windows 10 builds, so the window is only touched
+    // Acrylic windows are slow to move on some builds, so the window is only touched
     // when its rect changed, it is hidden, or something got between it and g_hwnd. Both acrylic
     // windows sit right below g_hwnd, in either order.
     const bool visible = IsWindowVisible(wnd) != FALSE;
@@ -10796,6 +10810,14 @@ static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
 }
 
 // Call from Present(): keeps the acrylic window aligned with g_hwnd.
+// The details panel's last pixels, where Windows collapses the rounded blur layer into a minimum
+// pill. Below this width the panels draw a tinted tail and the blur layer is hidden, so both sides
+// have to compare the same number: the rounded pixel width, never the raw float.
+static const float kTailPx = 24.f;
+static bool LivePanelTooNarrow(float widthPx) {
+    return widthPx < std::round(kTailPx * (float)g_scale);
+}
+
 static void LiveSync() {
     if (!g_liveWnd) return;
 
@@ -10820,8 +10842,16 @@ static void LiveSync() {
         const float a = (float)std::clamp(g_detailPos, 0.0, 1.0);
         if (a > 0.02f && g_panelMode == PanelMode::Actions) {  // Quick Look has a flat background
             const float ox = cx + (kWidth + kPanelGap + (1.f - a) * 14.f) * s;
-            LivePlaceWindow(g_livePanel, 1, baseX + (int)std::lround(ox), baseY + (int)std::lround(cy),
-                            (int)std::lround(kPanelW * s * a), (int)std::lround(DetailsPanelH() * s));
+            const int pwid = (int)std::lround(kPanelW * s * a);
+            // Below this width DWM's rounded acrylic stops shrinking and becomes a pill; the card
+            // finishes the wipe alone (with a solid tail, see DrawDetailsPanel).
+            if (!LivePanelTooNarrow((float)pwid)) {  // same threshold as the tail (24 * s), not 24 px
+                LivePlaceWindow(g_livePanel, 1, baseX + (int)std::lround(ox),
+                                baseY + (int)std::lround(cy), pwid,
+                                (int)std::lround(DetailsPanelH() * s));
+            } else if (IsWindowVisible(g_livePanel)) {
+                ShowWindow(g_livePanel, SW_HIDE);
+            }
         } else if (IsWindowVisible(g_livePanel)) {
             ShowWindow(g_livePanel, SW_HIDE);
         }
@@ -11618,11 +11648,15 @@ static bool HitHelp(int mx, int my) {
 
 static void DrawDetailsPanel(AppEntry& app, const AppDetails& d) {
     const float s = (float)g_scale;
-    const float a = (float)std::clamp(g_detailPos, 0.0, 1.0);
+    const float prog = (float)std::clamp(g_detailPos, 0.0, 1.0);  // position and width
+    // Live acrylic cannot fade: DWM paints its blur at full opacity and has no alpha to animate. In
+    // that mode the panel wipes instead — position and width follow the animation, everything drawn
+    // stays opaque — so the card and the DWM window are the same opaque shape at every frame.
+    const float a = UseLive() ? 1.f : prog;
     float mainX = 0, mainY = 0;
     MainOrigin(mainX, mainY);
     // Attached to the right edge of the main panel; it slides in a bit when opening.
-    const float ox = mainX + (kWidth + kPanelGap + (1.f - a) * 14.f) * s;
+    const float ox = mainX + (kWidth + kPanelGap + (1.f - prog) * 14.f) * s;
     const float oy = mainY;
     const float pw = kPanelW * s;
     const float ph = (float)DetailsPanelH() * s;   // always the same as the search bar
@@ -11632,9 +11666,20 @@ static void DrawDetailsPanel(AppEntry& app, const AppDetails& d) {
     // closes (see LiveSync), so it sweeps. The card's own layers (shadow, veil, glow, grain, rim,
     // border) and the content clip use that same width; at full width they would only fade and
     // would not follow the window.
-    const float cardW = UseLive() ? std::max(1.f, pw * a) : pw;
+    const float cardW = std::max(1.f, pw * prog);
 
     DrawCard(ox, oy, cardW, ph, a);
+    // DWM cannot draw its rounded acrylic narrower than ~2× the corner radius (it collapses into a
+    // minimum pill). The last few pixels of the wipe are drawn as a solid tail instead, so the card
+    // and the effect end together instead of the blur getting stuck.
+    if (UseLive() && LivePanelTooNarrow(std::round(cardW))) {
+        // Same translucent tint the acrylic has and it dissolves as the width reaches 0, so there is
+        // no dark bar at the end.
+        const float t = std::clamp(cardW / (kTailPx * s), 0.f, 1.f);
+        D2D1_COLOR_F tail = g_pal.bg;
+        tail.a = EffectTintAlpha();
+        FillRR(ox, oy, ox + cardW, oy + ph, kRadius * s, tail, a * t * t);
+    }
 
     D2D1_RECT_F clip = D2D1::RectF(ox, oy, ox + cardW, oy + ph);
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
@@ -11727,17 +11772,30 @@ static void DrawWindowTile(float x, float y, float px, float radius, const std::
 // bar stays open and the list behind it keeps its selection.
 static void DrawWindowPanel(const WinPanelInfo& w) {
     const float s = (float)g_scale;
-    const float a = (float)std::clamp(g_detailPos, 0.0, 1.0);
+    const float prog = (float)std::clamp(g_detailPos, 0.0, 1.0);  // position and width
+    // Same rule as the app panel: live acrylic has no fade, so the panel wipes with an opaque card.
+    const float a = UseLive() ? 1.f : prog;
     float mainX = 0, mainY = 0;
     MainOrigin(mainX, mainY);
-    const float ox = mainX + (kWidth + kPanelGap + (1.f - a) * 14.f) * s;
+    const float ox = mainX + (kWidth + kPanelGap + (1.f - prog) * 14.f) * s;
     const float oy = mainY;
     const float pw = kPanelW * s;
     const float ph = (float)DetailsPanelH() * s;
     const float pad = kPanelPad * s;
-    const float cardW = UseLive() ? std::max(1.f, pw * a) : pw;
+    const float cardW = std::max(1.f, pw * prog);
 
     DrawCard(ox, oy, cardW, ph, a);
+    // DWM cannot draw its rounded acrylic narrower than ~2× the corner radius (it collapses into a
+    // minimum pill). The last few pixels of the wipe are drawn as a solid tail instead, so the card
+    // and the effect end together instead of the blur getting stuck.
+    if (UseLive() && LivePanelTooNarrow(std::round(cardW))) {
+        // Same translucent tint the acrylic has and it dissolves as the width reaches 0, so there is
+        // no dark bar at the end.
+        const float t = std::clamp(cardW / (kTailPx * s), 0.f, 1.f);
+        D2D1_COLOR_F tail = g_pal.bg;
+        tail.a = EffectTintAlpha();
+        FillRR(ox, oy, ox + cardW, oy + ph, kRadius * s, tail, a * t * t);
+    }
 
     D2D1_RECT_F clip = D2D1::RectF(ox, oy, ox + cardW, oy + ph);
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
@@ -13566,7 +13624,7 @@ static void ShowLauncher() {
     }
     LoadPalette();
     // With live acrylic on Windows 11, DWM rounds the corners (fixed radius ~8 px).
-    kRadius = (UseLive() && g_liveWin11) ? 8.f : 20.f;
+    kRadius = UseLive() ? 8.f : 20.f;
     if (!EnsureTarget()) {
         return;
     }
@@ -13630,7 +13688,13 @@ static void ShowLauncher() {
     // (accounting for the bar height). The bar keeps that position while growing, moving up
     // only if the expanded card would not fit (see MainOrigin).
     const int monW = mi.rcMonitor.right - mi.rcMonitor.left;
-    g_winX = mi.rcMonitor.left + (monW - g_bmpW) / 2;
+    if (g_cfg.panelAlign == PanelAlign::Bar) {
+        // Only the bar is centered; the panel opens to its right without moving it.
+        const int barW = (int)std::lround((kWidth + 2 * kMargin) * g_scale);
+        g_winX = mi.rcMonitor.left + (monW - barW) / 2;
+    } else {
+        g_winX = mi.rcMonitor.left + (monW - g_bmpW) / 2;  // bar and panel centered together
+    }
     g_workTop = (double)mi.rcWork.top;
     g_workBottom = (double)mi.rcWork.bottom;
     const double barH = kBarH * g_scale;
