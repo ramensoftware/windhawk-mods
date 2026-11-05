@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              click-wallpaper-reveal-desktop
 // @name            Click Wallpaper to Reveal Desktop
-// @description     macOS-style: click the wallpaper to sweep your windows aside, click again to bring back only those windows
+// @description     macOS-style: click the wallpaper to sweep your windows aside, click again to bring back only those windows. Also hides desktop icons while windows are open (can be turned off)
 // @version         1.0.0
 // @author          tetsu0s
 // @github          https://github.com/tetsudaux
 // @include         explorer.exe
 // @license         MIT
-// @compilerOptions -lcomctl32 -lole32 -luuid -ldwmapi -ladvapi32 -lshlwapi -luser32
+// @compilerOptions -lcomctl32 -lole32 -luuid -ldwmapi -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -40,8 +40,8 @@ wallpaper to reveal desktop" behavior of macOS, built the Windows way.
   mouse button, a hot corner, or a click on the taskbar.
 - **Clean-desktop mode.** Desktop icons show up only when the desktop is
   clear, and stay out of the way while you work. Turn it off in the settings.
-- **Light on resources.** No polling loops: the mod reacts to clicks and
-  system events, and sits idle the rest of the time.
+- **Light on resources.** The mod reacts to clicks and system events, plus a
+  tiny check every few seconds, and sits idle the rest of the time.
 - **Nothing gets lost.** Swept-aside windows are regular minimized windows, so
   they are always in the taskbar, even if you disable the mod.
 
@@ -54,8 +54,8 @@ wallpaper to reveal desktop" behavior of macOS, built the Windows way.
 | Click empty wallpaper when the mod moved nothing | Nothing. Your own minimized windows stay put |
 | Press the hotkey (`Win+Shift+D`) | Same as clicking the wallpaper, from anywhere |
 
-Clicks on icons, drags (selection rectangles), double-clicks and the click
-that just closes the Start menu or Search are ignored.
+Clicks on icons, drags (selection rectangles) and the click that just closes
+the Start menu or Search are ignored. A double-click counts as one click.
 
 ## Make it feel native
 
@@ -79,15 +79,18 @@ that just closes the Start menu or Search are ignored.
   - *Clean desktop, always*: same, even if "Show desktop icons" is off.
   - *Don't change*: Windows handles the icons as usual.
 - **Excluded programs:** executables that are never swept aside and don't
-  count as open windows, for example launchers or widgets. Separate them with
-  `;`, wildcards `*` and `?` work.
+  count as open windows, for example launchers or widgets. One per entry,
+  wildcards `*` and `?` work.
 
 ## Good to know
 
 - Works on Windows 10 and Windows 11. Tested on Windows 11 build 26220.
 - Only windows on the current virtual desktop are affected.
-- If an app keeps coming back on its own, the mod log names it, so you can add
-  it to *Excluded programs*.
+- A window that refuses to minimize doesn't block the restore: the next click
+  still brings the others back. If an app keeps coming back on its own, the
+  mod log names it, so you can add it to *Excluded programs*.
+- Changing a setting reloads the mod. Windows swept aside before the change
+  stay minimized in the taskbar.
 */
 // ==/WindhawkModReadme==
 
@@ -105,9 +108,9 @@ that just closes the Start menu or Search are ignored.
   - respectWindows: Clean desktop (icons only when no window is open, if "Show desktop icons" is on)
   - auto: Clean desktop, always (even if "Show desktop icons" is off)
   - off: Don't change
-- excludeExe: microsoft.cmdpal.ui.exe;powertoys.powerlauncher.exe
+- excludeExe: [microsoft.cmdpal.ui.exe, powertoys.powerlauncher.exe]
   $name: Excluded programs
-  $description: Executables that are never swept aside and don't count as open windows. Separate with ; (wildcards * and ? work).
+  $description: Executables that are never swept aside and don't count as open windows, one per entry (wildcards * and ? work).
 */
 // ==/WindhawkModSettings==
 
@@ -124,6 +127,7 @@ that just closes the Start menu or Search are ignored.
 #include <atomic>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifndef EVENT_OBJECT_CLOAKED
@@ -201,11 +205,26 @@ struct ExeCacheEntry {
     ULONGLONG at;
 };
 
+struct DeferredEvent {
+    DWORD event;
+    HWND hwnd;
+};
+
 // Worker thread state (only the worker thread touches it).
 static struct {
     IVirtualDesktopManager* vdm = nullptr;
+    // Set up only in the Explorer process that owns the desktop (see
+    // InstallSystemHooks), not in separate folder-window processes.
+    bool systemHooksInstalled = false;
     std::vector<HWINEVENTHOOK> eventHooks;
     bool hotkeyRegistered = false;
+
+    // While a reveal or restore pass runs, COM calls can pump messages and
+    // deliver WinEvents re-entrantly. Events that change the sessions are
+    // queued and replayed when the pass ends.
+    int passDepth = 0;
+    ULONGLONG passStartedAt = 0;
+    std::vector<DeferredEvent> deferredEvents;
 
     bool iconsHidden = false;
     bool userHidesIcons = false;
@@ -293,27 +312,22 @@ static bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
 static void LoadSettings() {
     g_settings.revealOnClick = Wh_GetIntSetting(L"revealOnClick") != 0;
 
-    PCWSTR hk = Wh_GetStringSetting(L"revealHotkey");
-    std::wstring hotkey = hk ? hk : L"";
-    Wh_FreeStringSetting(hk);
+    std::wstring hotkey = WindhawkUtils::StringSetting::make(L"revealHotkey").get();
     if (!ParseHotkey(hotkey, &g_settings.hotkeyMods, &g_settings.hotkeyVk) &&
         !Trim(hotkey).empty()) {
         Wh_Log(L"[hotkey] invalid hotkey: '%s'", hotkey.c_str());
     }
 
-    PCWSTR mode = Wh_GetStringSetting(L"iconsMode");
-    std::wstring m = mode ? mode : L"";
-    Wh_FreeStringSetting(mode);
+    std::wstring m = WindhawkUtils::StringSetting::make(L"iconsMode").get();
     g_settings.iconsMode = m == L"auto"  ? ICONS_AUTO
                            : m == L"off" ? ICONS_OFF
                                          : ICONS_RESPECT_WINDOWS;
 
-    PCWSTR ex = Wh_GetStringSetting(L"excludeExe");
-    std::wstring exclude = ex ? ex : L"";
-    Wh_FreeStringSetting(ex);
     g_settings.excludeExe.clear();
-    for (auto& p : Split(exclude, L';')) {
-        std::wstring t = Lower(Trim(p));
+    for (int i = 0;; i++) {
+        std::wstring exe = WindhawkUtils::StringSetting::make(L"excludeExe[%d]", i).get();
+        if (exe.empty()) break;
+        std::wstring t = Lower(Trim(exe));
         if (!t.empty()) g_settings.excludeExe.push_back(t);
     }
 }
@@ -538,12 +552,7 @@ static void RevealDesktop(std::vector<RevealEntry>& visible) {
     for (auto& e : visible) {
         e.apartedAt = now;
         if (e.hwnd == W.lastAppForeground) focus = e.hwnd;
-        if (FindInSessions(e.hwnd)) {
-            // Still in a session yet visible: it didn't stay minimized.
-            DescribeWindow(e.hwnd, e.pid, desc, ARRAYSIZE(desc));
-            Wh_Log(L"[diag] did not stay minimized: %s", desc);
-        }
-        ForgetWindow(e.hwnd);
+        ForgetWindow(e.hwnd);  // it may still be in a session if it didn't stay minimized
     }
     if (!focus) focus = visible.front().hwnd;
 
@@ -648,7 +657,7 @@ static void SetIconsHidden(bool hide) {
 }
 
 static void RecomputeIcons() {
-    if (!IconsManaged() || W.taskViewActive) return;
+    if (!g_listView || !IconsManaged() || W.taskViewActive) return;
     SetIconsHidden(AnyVisibleAppWindow());
 }
 
@@ -681,7 +690,21 @@ static void ActivateDesktop() {
     if (HWND progman = FindWindowW(L"Progman", nullptr)) SetForegroundWindow(progman);
 }
 
+static void ReplayDeferredEvents();
+
+struct PassGuard {
+    PassGuard() {
+        if (W.passDepth++ == 0) W.passStartedAt = GetTickCount64();
+    }
+    ~PassGuard() {
+        if (--W.passDepth == 0) ReplayDeferredEvents();
+    }
+    PassGuard(const PassGuard&) = delete;
+    PassGuard& operator=(const PassGuard&) = delete;
+};
+
 static void OnRevealToggle(bool fromHotkey) {
+    if (W.passDepth) return;  // re-entered from a message pumped during a pass
     if (W.taskViewActive) return;
     if (!fromHotkey && !g_settings.revealOnClick) return;
 
@@ -693,15 +716,36 @@ static void OnRevealToggle(bool fromHotkey) {
     W.lastToggleAt = now;
     CancelPendingRestore();
 
+    PassGuard pass;
+
     std::vector<RevealEntry> visible;
     CollectCtx c{&visible, false};
     EnumWindows(CollectVisibleProc, reinterpret_cast<LPARAM>(&c));
 
-    if (!visible.empty()) {
+    // A window that ignored the previous sweep (still in this desktop's
+    // session, yet visible) must not keep the swept windows from coming back.
+    int idx = SessionIndexForCurrentDesktop();
+    bool anyNew = false;
+    for (const auto& e : visible) {
+        bool stubborn = false;
+        if (idx >= 0) {
+            for (const auto& s : W.sessions[idx].windows) {
+                if (s.hwnd == e.hwnd) stubborn = true;
+            }
+        }
+        if (stubborn) {
+            WCHAR desc[400];
+            DescribeWindow(e.hwnd, e.pid, desc, ARRAYSIZE(desc));
+            Wh_Log(L"[diag] did not stay minimized: %s", desc);
+        } else {
+            anyNew = true;
+        }
+    }
+
+    if (anyNew) {
         RevealDesktop(visible);
         if (fromHotkey) ActivateDesktop();
     } else {
-        int idx = SessionIndexForCurrentDesktop();
         if (idx >= 0) {
             RevealSession s = W.sessions[idx];
             W.sessions.erase(W.sessions.begin() + idx);
@@ -777,6 +821,9 @@ static bool FindDesktop(HWND* defView, HWND* listView) {
     return true;
 }
 
+static void InstallSystemHooks();
+static void OnForeground(HWND h);
+
 static void EnsureDesktopHooked() {
     HWND lv = g_listView;
     if (lv && IsWindow(lv)) return;
@@ -790,8 +837,13 @@ static void EnsureDesktopHooked() {
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(lv, DesktopSubclassProc, KIND_LISTVIEW)) {
         g_listView = lv;
         W.iconsHidden = !IsWindowVisible(lv);
-        ScheduleRecompute();
         Wh_Log(L"[desktop] defView=%p listView=%p", dv, lv);
+        // The desktop belongs to this process, so this is the shell. Only now
+        // set up what is system-wide; other explorer.exe processes stay idle.
+        InstallSystemHooks();
+        RefreshUserIconsSetting();
+        OnForeground(GetForegroundWindow());
+        ScheduleRecompute();
     }
 }
 
@@ -827,6 +879,22 @@ static void OnMinimizeEnd(HWND h) {
     }
 }
 
+static void ReplayDeferredEvents() {
+    std::vector<DeferredEvent> events;
+    events.swap(W.deferredEvents);
+    for (const auto& d : events) {
+        if (d.event == EVENT_OBJECT_DESTROY) {
+            ForgetWindow(d.hwnd);
+        } else if (const RevealEntry* e = FindInSessions(d.hwnd)) {
+            // Swept aside during this very pass: an earlier un-minimize is
+            // stale, and if the window came straight back, the next click
+            // handles it ("did not stay minimized").
+            if (e->apartedAt >= W.passStartedAt) continue;
+            OnMinimizeEnd(d.hwnd);
+        }
+    }
+}
+
 static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND h, LONG idObject, LONG idChild,
                                   DWORD, DWORD) {
     if (g_stopping || !h || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
@@ -837,12 +905,14 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND h, LONG idObject
             break;
 
         case EVENT_SYSTEM_MINIMIZEEND:
-            OnMinimizeEnd(h);
+            if (W.passDepth) W.deferredEvents.push_back({ev, h});
+            else OnMinimizeEnd(h);
             if (!W.iconsHidden) ScheduleRecompute();
             break;
 
         case EVENT_OBJECT_DESTROY:
-            ForgetWindow(h);
+            if (W.passDepth) W.deferredEvents.push_back({ev, h});
+            else ForgetWindow(h);
             if (W.iconsHidden) ScheduleRecompute();
             break;
 
@@ -861,13 +931,62 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND h, LONG idObject
     }
 }
 
+// System-wide WinEvent hooks and the hotkey. Called once, from
+// EnsureDesktopHooked, in the process that owns the desktop.
+static void InstallSystemHooks() {
+    HWND wnd = g_workerWnd;
+    if (W.systemHooksInstalled || !wnd || g_stopping) return;
+    W.systemHooksInstalled = true;
+
+    // Small, specific event ranges. No WINEVENT_SKIPOWNPROCESS: File Explorer
+    // windows and Task View belong to explorer.exe and matter here.
+    const DWORD flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNTHREAD;
+    std::vector<std::pair<DWORD, DWORD>> ranges = {
+        {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
+        {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
+    };
+    if (g_settings.iconsMode == ICONS_OFF) {
+        ranges.push_back({EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY});
+    } else {
+        // Show/hide and cloak/uncloak are only needed for the desktop icons.
+        ranges.push_back({EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE});
+        ranges.push_back({EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED});
+    }
+    for (const auto& r : ranges) {
+        HWINEVENTHOOK hk = SetWinEventHook(r.first, r.second, nullptr, WinEventProc, 0, 0, flags);
+        if (hk) W.eventHooks.push_back(hk);
+    }
+
+    if (g_settings.hotkeyVk) {
+        W.hotkeyRegistered = RegisterHotKey(wnd, HOTKEY_REVEAL,
+                                            g_settings.hotkeyMods | MOD_NOREPEAT,
+                                            g_settings.hotkeyVk) != 0;
+        if (W.hotkeyRegistered) {
+            Wh_Log(L"[hotkey] registered");
+        } else {
+            Wh_Log(L"[hotkey] couldn't register (%u): another app or Windows already uses it",
+                   GetLastError());
+        }
+    }
+}
+
 static void OnWatchdog() {
+    if (!g_listView) {
+        // A separate explorer.exe process (folder windows, for example): the
+        // desktop belongs to another process, so there's nothing to do here.
+        HWND shell = GetShellWindow();
+        if (shell && !IsOwnProcess(shell)) {
+            if (HWND w = g_workerWnd) KillTimer(w, TIMER_WATCHDOG);
+            Wh_Log(L"[desktop] not the shell process, staying idle");
+            return;
+        }
+    }
     if (!W.vdm) {  // the virtual desktop service may not be ready while Explorer starts
         CoCreateInstance(CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
                          IID_IVirtualDesktopManager, (void**)&W.vdm);
     }
     EnsureDesktopHooked();
-    RefreshUserIconsSetting();
+    if (g_listView) RefreshUserIconsSetting();
 }
 
 // ---------------------------------------------------------------------------
@@ -934,40 +1053,14 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
     g_workerWnd = wnd;
 
-    // Small, specific event ranges. No WINEVENT_SKIPOWNPROCESS: File Explorer
-    // windows and Task View belong to explorer.exe and matter here.
-    const DWORD flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNTHREAD;
-    const DWORD ranges[][2] = {
-        {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
-        {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
-        {EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE},
-        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
-    };
-    for (const auto& r : ranges) {
-        HWINEVENTHOOK hk = SetWinEventHook(r[0], r[1], nullptr, WinEventProc, 0, 0, flags);
-        if (hk) W.eventHooks.push_back(hk);
-    }
-
-    if (g_settings.hotkeyVk) {
-        W.hotkeyRegistered = RegisterHotKey(wnd, HOTKEY_REVEAL,
-                                            g_settings.hotkeyMods | MOD_NOREPEAT,
-                                            g_settings.hotkeyVk) != 0;
-        if (W.hotkeyRegistered) {
-            Wh_Log(L"[hotkey] registered");
-        } else {
-            Wh_Log(L"[hotkey] couldn't register (%u): another app or Windows already uses it",
-                   GetLastError());
-        }
-    }
-
     // From here on Wh_ModUninit may stop the thread. What follows can wait on
     // the desktop thread, so it runs after the signal.
     SetEvent(g_hWorkerReady);
 
-    RefreshUserIconsSetting();
-    EnsureDesktopHooked();
-    OnForeground(GetForegroundWindow());
+    // Hooks the desktop, and with it the system-wide events and the hotkey,
+    // as soon as this process turns out to own it (see EnsureDesktopHooked).
     SetTimer(wnd, TIMER_WATCHDOG, WATCHDOG_MS, nullptr);
+    OnWatchdog();
 
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) DispatchMessageW(&m);
