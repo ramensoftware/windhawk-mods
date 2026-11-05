@@ -19,7 +19,7 @@
 System utilities integrated into the Windows 11 Taskbar XAML context menu with
 **native XAML flyout cards** and **zero UAC prompts**.
 
-![Taskbar System Utilities Screenshot](https://i.imgur.com/lALSDAI.gif)
+![Taskbar System Utilities Screenshot](https://i.imgur.com/c9MhpB0.gif)
 
 ## Features
 - **Restart Explorer**: Instantly restarts the `explorer.exe` shell process from
