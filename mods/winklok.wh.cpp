@@ -35,7 +35,9 @@ live stopwatch and timer previews right next to the taskbar clock.
 | **Everything in one panel** | Calendar, Stopwatch, Timer, Alarm, Notes and Settings, one click away from the clock. |
 | **Live taskbar previews** | A running stopwatch or timer is shown beside the clock with pause/play and reset buttons. |
 | **Smooth scrolling** | Mouse wheel, precision touchpad (tracked from raw two-finger movement with kinetic momentum), touch and pen share smooth scrolling. |
-| **Private by design** | No network access, no telemetry, no accounts. Everything is stored locally by Windhawk. |
+| **Local by design** | No network access, no telemetry, no accounts. WinKlok data stays on this PC in shared local storage. |
+
+WinKlok keeps its shared snapshots in a `WinKlokData` folder inside Windhawk's shared per-mod storage directory. This preserves the existing shared-data scope and storage permissions. When a save cannot be committed, WinKlok writes a rolling recovery copy in `WinKlokData\Recovery` when possible. Legacy Windhawk values are retained as migration-time fallbacks, but are not mirrored after v2 storage becomes authoritative. Back up `WinKlokData` before removing the mod or downgrading to an older WinKlok version; older versions cannot read v2 snapshots, and Windhawk removes a mod's storage directory when the mod is removed.
 
 ---
 
@@ -148,6 +150,7 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <shobjidl.h>
 #include <winsvc.h>
 #include <dwmapi.h>
@@ -158,6 +161,8 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cwchar>
@@ -230,6 +235,552 @@ static HINSTANCE ModInst()
 static inline bool WkActive()
 {
     return !g_shuttingDown.load();
+}
+
+// Durable file-backed snapshots for data that can exceed Windhawk's string-value
+// limits. Files live in a WinKlokData subdirectory of Windhawk's shared per-mod
+// storage, preserving the established account-sharing and permission model. Every
+// commit uses two slots plus an atomic pointer: an incomplete write never replaces
+// the last committed generation. Legacy Wh_* values remain untouched as migration-time
+// fallbacks; they are not mirrored after v2 becomes authoritative.
+namespace wkstore
+{
+#pragma pack(push, 1)
+    struct DataHeader
+    {
+        char magic[8];
+        uint32_t version;
+        uint32_t reserved;
+        uint64_t revision;
+        uint64_t charCount;
+        uint64_t hash;
+    };
+    struct ActivePointer
+    {
+        char magic[8];
+        uint32_t version;
+        uint32_t slot;
+        uint64_t revision;
+        uint64_t hash;
+    };
+#pragma pack(pop)
+
+    static constexpr char kDataMagic[8] = {'W', 'K', 'D', 'A', 'T', 'A', '0', '1'};
+    static constexpr char kPointerMagic[8] = {'W', 'K', 'A', 'C', 'T', '0', '1'};
+    static std::atomic<unsigned long long> g_tempSequence{0};
+    static const unsigned long long g_instanceTag = []()
+    {
+        LARGE_INTEGER qpc{};
+        QueryPerformanceCounter(&qpc);
+        return GetTickCount64() ^ (unsigned long long)qpc.QuadPart;
+    }();
+    static std::atomic<bool> g_lastWriteConflict{false};
+    static std::atomic<bool> g_lastRecoveryCopySaved{false};
+    static constexpr unsigned long long kMaxSnapshotBytes = 128ULL * 1024 * 1024;
+
+    static bool LastWriteWasConflict()
+    {
+        return g_lastWriteConflict.load();
+    }
+    static bool LastRecoveryCopySaved()
+    {
+        return g_lastRecoveryCopySaved.load();
+    }
+
+    static uint64_t HashBytes(const void *data, size_t bytes)
+    {
+        // FNV-1a is an integrity check, not a security primitive.
+        const auto *p = static_cast<const unsigned char *>(data);
+        uint64_t h = 14695981039346656037ULL;
+        for (size_t i = 0; i < bytes; ++i)
+        {
+            h ^= p[i];
+            h *= 1099511628211ULL;
+        }
+        return h;
+    }
+
+    static bool EnsureRoot(std::wstring &root)
+    {
+        // Keep snapshots inside Windhawk's own shared per-mod storage directory.
+        // This retains the same account-sharing and access model as existing Wh_* data,
+        // avoids introducing a new Public Documents location or custom ACL, and is
+        // available in regular and portable Windhawk installations.
+        std::vector<wchar_t> base(32768, L'\0');
+        const size_t n = Wh_GetModStoragePath(base.data(), base.size());
+        if (!n || n >= base.size())
+            return false;
+        const std::wstring basePath(base.data(), n);
+        // Wh_GetModStoragePath supplies the path; explicitly ensure the directory
+        // exists before creating our child directory. ERROR_ALREADY_EXISTS is only
+        // accepted after verifying that the existing object is actually a directory.
+        // The API documents the path but does not promise that every parent
+        // directory already exists. SHCreateDirectoryEx creates missing parents
+        // safely and reports existing paths for the attribute checks below.
+        const int baseResult = SHCreateDirectoryExW(nullptr, basePath.c_str(), nullptr);
+        if (baseResult != ERROR_SUCCESS && baseResult != ERROR_ALREADY_EXISTS && baseResult != ERROR_FILE_EXISTS)
+            return false;
+        const DWORD baseAttr = GetFileAttributesW(basePath.c_str());
+        if (baseAttr == INVALID_FILE_ATTRIBUTES || !(baseAttr & FILE_ATTRIBUTE_DIRECTORY))
+            return false;
+        root = basePath + L"\\WinKlokData";
+        const int rootResult = SHCreateDirectoryExW(nullptr, root.c_str(), nullptr);
+        if (rootResult != ERROR_SUCCESS && rootResult != ERROR_ALREADY_EXISTS && rootResult != ERROR_FILE_EXISTS)
+            return false;
+        const DWORD attr = GetFileAttributesW(root.c_str());
+        return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    }
+
+    static bool ValidKey(const std::wstring &key)
+    {
+        if (key.empty() || key.size() > 80)
+            return false;
+        for (wchar_t c : key)
+            if (!((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') ||
+                  (c >= L'0' && c <= L'9') || c == L'_' || c == L'-'))
+                return false;
+        return true;
+    }
+
+    static std::wstring Path(const std::wstring &root, const std::wstring &key, const wchar_t *suffix)
+    {
+        return root + L"\\" + key + suffix;
+    }
+
+    static bool ReadExact(HANDLE h, void *buffer, size_t bytes)
+    {
+        auto *p = static_cast<unsigned char *>(buffer);
+        while (bytes)
+        {
+            const DWORD part = static_cast<DWORD>(std::min<size_t>(bytes, 1u << 20));
+            DWORD got = 0;
+            if (!ReadFile(h, p, part, &got, nullptr) || got != part)
+                return false;
+            p += got;
+            bytes -= got;
+        }
+        return true;
+    }
+
+    static bool WriteExact(HANDLE h, const void *buffer, size_t bytes)
+    {
+        const auto *p = static_cast<const unsigned char *>(buffer);
+        while (bytes)
+        {
+            const DWORD part = static_cast<DWORD>(std::min<size_t>(bytes, 1u << 20));
+            DWORD put = 0;
+            if (!WriteFile(h, p, part, &put, nullptr) || put != part)
+                return false;
+            p += put;
+            bytes -= put;
+        }
+        return true;
+    }
+
+    static bool WriteAtomicFile(const std::wstring &target, const void *data, size_t bytes)
+    {
+        const unsigned long long serial = ++g_tempSequence;
+        const std::wstring temp = target + L".tmp-" + std::to_wstring(GetCurrentProcessId()) +
+                                  L"-" + std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(serial);
+        HANDLE h = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                               FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_WRITE_THROUGH, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        bool ok = WriteExact(h, data, bytes) && FlushFileBuffers(h);
+        CloseHandle(h);
+        if (ok)
+            ok = MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+        if (!ok)
+            DeleteFileW(temp.c_str());
+        return ok;
+    }
+
+    // When a shared write cannot be committed, preserve this session's exact
+    // serialized payload in one rolling recovery file per key/process/session.
+    // Later saves replace that file with the latest full snapshot, so repeated timer
+    // ticks or edits cannot create an unbounded pile of recovery files.
+    static bool SaveRecoveryCopy(const std::wstring &root, const std::wstring &key,
+                                 const std::wstring &value)
+    {
+        const std::wstring dir = root + L"\\Recovery";
+        if (!CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+            return false;
+        DWORD session = 0;
+        ProcessIdToSessionId(GetCurrentProcessId(), &session);
+        std::wstring path = dir + L"\\recovery-" + key + L"-" +
+                            std::to_wstring(GetCurrentProcessId()) + L"-" +
+                            std::to_wstring(session) + L"-" + std::to_wstring(g_instanceTag);
+        path += L"-retry"; // one rolling copy until a later successful commit supersedes it
+        path += L".txt";
+        std::vector<wchar_t> text;
+        text.reserve(value.size() + 1);
+        text.push_back((wchar_t)0xFEFF); // UTF-16 BOM for Notepad and other editors
+        text.insert(text.end(), value.begin(), value.end());
+        return WriteAtomicFile(path, text.data(), text.size() * sizeof(wchar_t));
+    }
+
+    static void DeleteOwnRecoveryCopy(const std::wstring &root, const std::wstring &key)
+    {
+        DWORD session = 0;
+        ProcessIdToSessionId(GetCurrentProcessId(), &session);
+        const std::wstring path = root + L"\\Recovery\\recovery-" + key + L"-" +
+                                  std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                  std::to_wstring(session) + L"-" + std::to_wstring(g_instanceTag) + L"-retry.txt";
+        DeleteFileW(path.c_str()); // only this process/session's obsolete transient-failure copy
+    }
+
+    static bool SaveRecoveryOnly(const wchar_t *keyText, const std::wstring &value)
+    {
+        const std::wstring key(keyText ? keyText : L"");
+        std::wstring root;
+        if (!ValidKey(key) || !EnsureRoot(root) || value.size() > kMaxSnapshotBytes / sizeof(wchar_t))
+            return false;
+        return SaveRecoveryCopy(root, key, value);
+    }
+
+    static bool ReadSlot(const std::wstring &path, std::wstring &out, uint64_t &revision, uint64_t &hash)
+    {
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        LARGE_INTEGER size{};
+        DataHeader head{};
+        bool ok = GetFileSizeEx(h, &size) && size.QuadPart >= (LONGLONG)sizeof(head) &&
+                  (unsigned long long)size.QuadPart <= kMaxSnapshotBytes && ReadExact(h, &head, sizeof(head));
+        const unsigned long long payloadBytes = ok ? head.charCount * sizeof(wchar_t) : 0;
+        if (!ok || memcmp(head.magic, kDataMagic, sizeof(kDataMagic)) != 0 || head.version != 1 ||
+            head.charCount > kMaxSnapshotBytes / sizeof(wchar_t) ||
+            payloadBytes != (unsigned long long)size.QuadPart - sizeof(head))
+        {
+            CloseHandle(h);
+            return false;
+        }
+        std::wstring value((size_t)head.charCount, L'\0');
+        ok = value.empty() || ReadExact(h, &value[0], (size_t)payloadBytes);
+        CloseHandle(h);
+        if (!ok || value.find(L'\0') != std::wstring::npos ||
+            HashBytes(value.data(), (size_t)payloadBytes) != head.hash)
+            return false;
+        out = std::move(value);
+        revision = head.revision;
+        hash = head.hash;
+        return true;
+    }
+
+    static bool ReadPointer(const std::wstring &path, ActivePointer &ptr)
+    {
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        LARGE_INTEGER size{};
+        const bool ok = GetFileSizeEx(h, &size) && size.QuadPart == sizeof(ptr) && ReadExact(h, &ptr, sizeof(ptr));
+        CloseHandle(h);
+        return ok && memcmp(ptr.magic, kPointerMagic, sizeof(kPointerMagic)) == 0 &&
+               ptr.version == 1 && ptr.slot <= 1;
+    }
+
+    static bool SnapshotArtifactsExist(const wchar_t *keyText)
+    {
+        const std::wstring key(keyText ? keyText : L"");
+        std::wstring root;
+        if (!ValidKey(key) || !EnsureRoot(root))
+            return false;
+        for (const wchar_t *suffix : {L".active", L".0.bin", L".1.bin"})
+        {
+            const DWORD attr = GetFileAttributesW(Path(root, key, suffix).c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES)
+                return true;
+        }
+        return false;
+    }
+
+    static bool ReadSnapshot(const wchar_t *keyText, std::wstring &out, uint64_t &revision)
+    {
+        const std::wstring key(keyText ? keyText : L"");
+        std::wstring root;
+        if (!ValidKey(key) || !EnsureRoot(root))
+            return false;
+        const std::wstring ptrPath = Path(root, key, L".active");
+        const std::wstring slot0 = Path(root, key, L".0.bin");
+        const std::wstring slot1 = Path(root, key, L".1.bin");
+        ActivePointer ptr{};
+        if (ReadPointer(ptrPath, ptr))
+        {
+            std::wstring value;
+            uint64_t rev = 0, hash = 0;
+            if (ReadSlot(ptr.slot ? slot1 : slot0, value, rev, hash) &&
+                rev == ptr.revision && hash == ptr.hash)
+            {
+                out = std::move(value);
+                revision = rev;
+                return true;
+            }
+        }
+        // The pointer may have been lost during a power cut. Recover the highest
+        // complete slot; never interpret an incomplete file as an empty store.
+        std::wstring v0, v1;
+        uint64_t r0 = 0, r1 = 0, h0 = 0, h1 = 0;
+        const bool ok0 = ReadSlot(slot0, v0, r0, h0);
+        const bool ok1 = ReadSlot(slot1, v1, r1, h1);
+        if (!ok0 && !ok1)
+            return false;
+        // Equal revisions with different payloads are ambiguous (for example, a
+        // manually restored or copied storage folder). Never choose one arbitrarily.
+        if (ok0 && ok1 && r0 == r1 && v0 != v1)
+            return false;
+        if (ok1 && (!ok0 || r1 > r0))
+        {
+            out = std::move(v1);
+            revision = r1;
+        }
+        else
+        {
+            out = std::move(v0);
+            revision = r0;
+        }
+        return true;
+    }
+
+    // Read the immediately previous committed generation, but only when the active
+    // pointer and its current slot are both intact. This is used when the current
+    // payload passes its file checksum but fails WinKlok's record/schema validation.
+    // The caller must treat the recovered value as read-only: the newer suspect
+    // generation remains untouched for manual recovery.
+    static bool ReadPreviousSnapshot(const wchar_t *keyText, std::wstring &out, uint64_t &revision)
+    {
+        const std::wstring key(keyText ? keyText : L"");
+        std::wstring root;
+        if (!ValidKey(key) || !EnsureRoot(root))
+            return false;
+
+        const std::wstring slot0 = Path(root, key, L".0.bin");
+        const std::wstring slot1 = Path(root, key, L".1.bin");
+        ActivePointer ptr{};
+        std::wstring current;
+        uint64_t currentRevision = 0, currentHash = 0;
+        bool haveCurrent = false;
+        uint32_t currentSlot = 0;
+
+        // Prefer the exact active pointer when it is intact.
+        if (ReadPointer(Path(root, key, L".active"), ptr))
+        {
+            const std::wstring activePath = ptr.slot ? slot1 : slot0;
+            if (ReadSlot(activePath, current, currentRevision, currentHash) &&
+                currentRevision == ptr.revision && currentHash == ptr.hash)
+            {
+                haveCurrent = true;
+                currentSlot = ptr.slot;
+            }
+        }
+
+        // If the pointer itself is damaged, infer the current generation from the
+        // two independently checksummed slots. This allows recovery of the older
+        // valid generation without overwriting either file.
+        if (!haveCurrent)
+        {
+            std::wstring v0, v1;
+            uint64_t r0 = 0, r1 = 0, h0 = 0, h1 = 0;
+            const bool ok0 = ReadSlot(slot0, v0, r0, h0);
+            const bool ok1 = ReadSlot(slot1, v1, r1, h1);
+            if (!ok0 || !ok1 || r0 == r1)
+                return false;
+            if (r1 > r0)
+            {
+                current = std::move(v1);
+                currentRevision = r1;
+                currentSlot = 1;
+            }
+            else
+            {
+                current = std::move(v0);
+                currentRevision = r0;
+                currentSlot = 0;
+            }
+            haveCurrent = true;
+        }
+        if (!haveCurrent)
+            return false;
+
+        const std::wstring previousPath = currentSlot ? slot0 : slot1;
+        std::wstring previous;
+        uint64_t previousRevision = 0, previousHash = 0;
+        if (!ReadSlot(previousPath, previous, previousRevision, previousHash) ||
+            previousRevision >= currentRevision)
+            return false;
+        out = std::move(previous);
+        revision = previousRevision;
+        return true;
+    }
+
+    static bool WriteSnapshot(const wchar_t *keyText, const std::wstring &value, uint64_t &revision)
+    {
+        g_lastWriteConflict = false;
+        g_lastRecoveryCopySaved = false;
+        const std::wstring key(keyText ? keyText : L"");
+        std::wstring root;
+        if (!ValidKey(key) || !EnsureRoot(root) || value.size() > kMaxSnapshotBytes / sizeof(wchar_t))
+            return false;
+
+        // A no-sharing lock file serializes slot/pointer commits across Explorer
+        // processes and Windows sessions. The lock is released automatically if a
+        // process exits unexpectedly. Failure leaves the last committed slot intact.
+        const std::wstring lockPath = Path(root, key, L".lock");
+        HANDLE lock = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
+                                  FILE_ATTRIBUTE_HIDDEN, nullptr);
+        if (lock == INVALID_HANDLE_VALUE)
+        {
+            // Storage writes are initiated by Explorer's UI thread. Never wait on
+            // another session here: preserve a recovery copy and retry only when
+            // appropriate, without freezing the taskbar.
+            g_lastRecoveryCopySaved = SaveRecoveryCopy(root, key, value);
+            return false;
+        }
+
+        std::wstring oldValue;
+        uint64_t oldRevision = 0;
+        const bool haveOld = ReadSnapshot(key.c_str(), oldValue, oldRevision);
+        if (haveOld && revision != oldRevision)
+        {
+            // Another Explorer session committed after this instance loaded its
+            // snapshot. Do not silently overwrite the newer shared data. Keep this
+            // session's complete payload in its own recovery file instead.
+            g_lastWriteConflict = true;
+            g_lastRecoveryCopySaved = SaveRecoveryCopy(root, key, value);
+            CloseHandle(lock);
+            return false;
+        }
+        if (!haveOld && (revision != 0 || SnapshotArtifactsExist(key.c_str())))
+        {
+            // Files exist but none can be validated. Do not overwrite a possibly
+            // recoverable snapshot with a fresh first generation.
+            g_lastRecoveryCopySaved = SaveRecoveryCopy(root, key, value);
+            CloseHandle(lock);
+            return false;
+        }
+        uint32_t activeSlot = 1; // first commit writes slot 0
+        if (haveOld)
+        {
+            ActivePointer ptr{};
+            bool pointerSlotValid = false;
+            if (ReadPointer(Path(root, key, L".active"), ptr))
+            {
+                std::wstring check;
+                uint64_t rev = 0, hash = 0;
+                pointerSlotValid = ReadSlot(Path(root, key, ptr.slot ? L".1.bin" : L".0.bin"), check, rev, hash) &&
+                                   rev == ptr.revision && hash == ptr.hash;
+                if (pointerSlotValid)
+                    activeSlot = ptr.slot;
+            }
+            if (!pointerSlotValid)
+            {
+                std::wstring a, b;
+                uint64_t ra = 0, rb = 0, ha = 0, hb = 0;
+                const bool va = ReadSlot(Path(root, key, L".0.bin"), a, ra, ha);
+                const bool vb = ReadSlot(Path(root, key, L".1.bin"), b, rb, hb);
+                activeSlot = vb && (!va || rb > ra) ? 1 : 0;
+            }
+        }
+        const uint32_t targetSlot = activeSlot ? 0 : 1;
+        const uint64_t nextRevision = (haveOld ? oldRevision : 0) + 1;
+        const size_t payloadBytes = value.size() * sizeof(wchar_t);
+        DataHeader head{};
+        memcpy(head.magic, kDataMagic, sizeof(kDataMagic));
+        head.version = 1;
+        head.revision = nextRevision;
+        head.charCount = value.size();
+        head.hash = HashBytes(value.data(), payloadBytes);
+        std::vector<unsigned char> blob(sizeof(head) + payloadBytes);
+        memcpy(blob.data(), &head, sizeof(head));
+        if (payloadBytes)
+            memcpy(blob.data() + sizeof(head), value.data(), payloadBytes);
+        const std::wstring slotPath = Path(root, key, targetSlot ? L".1.bin" : L".0.bin");
+        bool ok = WriteAtomicFile(slotPath, blob.data(), blob.size());
+        if (ok)
+        {
+            ActivePointer ptr{};
+            memcpy(ptr.magic, kPointerMagic, sizeof(kPointerMagic));
+            ptr.version = 1;
+            ptr.slot = targetSlot;
+            ptr.revision = nextRevision;
+            ptr.hash = head.hash;
+            ok = WriteAtomicFile(Path(root, key, L".active"), &ptr, sizeof(ptr));
+        }
+        CloseHandle(lock);
+        if (ok)
+        {
+            revision = nextRevision;
+            DeleteOwnRecoveryCopy(root, key); // a later successful commit supersedes this session's transient backup
+        }
+        else
+            g_lastRecoveryCopySaved = SaveRecoveryCopy(root, key, value);
+        return ok;
+    }
+
+    // Legacy Wh_* string values may be flattened or truncated by some Portable
+    // Windhawk versions. Before importing the old task/note payloads, verify that
+    // this installation can round-trip a string larger than their worst-case
+    // escaped representation. The probe uses a reserved, temporary key and is
+    // removed immediately; failure means legacy values are preserved untouched.
+    static bool LegacyStringStoreReliable()
+    {
+        static int cached = -1;
+        if (cached >= 0)
+            return cached != 0;
+
+        const std::wstring probeKey = L"__winklok_legacy_probe_" + std::to_wstring(GetCurrentProcessId()) +
+                                      L"_" + std::to_wstring(GetTickCount64()) +
+                                      L"_" + std::to_wstring(++g_tempSequence);
+        std::wstring probe(200000, L'X');
+        for (size_t i = 0; i < probe.size(); ++i)
+            probe[i] = (wchar_t)(L'A' + (i % 26));
+
+        if (!Wh_SetStringValue(probeKey.c_str(), probe.c_str()))
+        {
+            Wh_DeleteValue(probeKey.c_str());
+            cached = 0;
+            Wh_Log(L"WinKlok: legacy string storage cannot accept the full migration probe; old task/note values will not be rewritten");
+            return false;
+        }
+
+        std::vector<wchar_t> readback(probe.size() + 1);
+        const size_t copied = Wh_GetStringValue(probeKey.c_str(), readback.data(), readback.size());
+        const bool exact = copied == probe.size() &&
+                           std::wstring(readback.data(), copied) == probe;
+        const bool removed = Wh_DeleteValue(probeKey.c_str()) != FALSE;
+        cached = exact && removed ? 1 : 0;
+        if (!cached)
+            Wh_Log(L"WinKlok: legacy string storage failed the large-value round-trip probe; old task/note values are preserved without migration");
+        return cached != 0;
+    }
+
+    // Reserve monotonically increasing record IDs across Explorer processes/sessions.
+    // The small counter value remains in shared Windhawk storage; a dedicated file lock
+    // prevents two WinKlok instances from allocating the same ID at the same time.
+    static bool ReserveSharedId(const wchar_t *lockKeyText, const wchar_t *valueName, int minimum, int &reserved)
+    {
+        const std::wstring lockKey(lockKeyText ? lockKeyText : L"");
+        std::wstring root;
+        if (!ValidKey(lockKey) || !valueName || !*valueName || !EnsureRoot(root))
+            return false;
+        const std::wstring lockPath = Path(root, lockKey, L".lock");
+        HANDLE lock = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
+                                  FILE_ATTRIBUTE_HIDDEN, nullptr);
+        if (lock == INVALID_HANDLE_VALUE)
+            return false; // non-blocking: caller can retry without freezing Explorer
+        const int stored = std::max(1, Wh_GetIntValue(valueName, 1));
+        const int candidate = std::max(std::max(1, minimum), stored);
+        const bool ok = candidate < INT_MAX - 1 && Wh_SetIntValue(valueName, candidate + 1);
+        CloseHandle(lock);
+        if (!ok)
+            return false;
+        reserved = candidate;
+        return true;
+    }
+
 }
 
 // ============================================================================
@@ -499,6 +1050,210 @@ namespace td
         return r;
     }
 
+    // Portable Windhawk versions may flatten line breaks in string values to spaces.
+    // Esc() escapes literal pipes, so these record prefixes are unambiguous boundaries.
+    static std::vector<std::wstring> SplitFlattenedState(const std::wstring &s)
+    {
+        if (s.find(L'\n') != std::wstring::npos)
+            return Split(s, L'\n');
+        if (s.rfind(L"v1 ", 0) != 0)
+            return Split(s, L'\n');
+        const wchar_t *const markers[] = {L"T|", L"SW|", L"LAP|", L"TM|", L"TP|", L"AL|"};
+        std::vector<std::wstring> out{L"v1"};
+        auto appendRecord = [&](size_t begin, size_t length)
+        {
+            std::wstring record = s.substr(begin, length);
+            // Portable INI storage can flatten the final newline into a trailing
+            // space. Engine records all end in a numeric field, so trimming only
+            // the record's trailing whitespace is lossless.
+            while (!record.empty() && iswspace(record.back()))
+                record.pop_back();
+            out.push_back(std::move(record));
+        };
+        size_t pos = 3;
+        while (pos < s.size())
+        {
+            while (pos < s.size() && iswspace(s[pos])) ++pos;
+            if (pos >= s.size()) break;
+            size_t next = std::wstring::npos;
+            for (const wchar_t *marker : markers)
+            {
+                const std::wstring pattern = std::wstring(L" ") + marker;
+                const size_t hit = s.find(pattern, pos + 1);
+                if (hit != std::wstring::npos && (next == std::wstring::npos || hit < next))
+                    next = hit;
+            }
+            appendRecord(pos, next == std::wstring::npos ? std::wstring::npos : next - pos);
+            if (next == std::wstring::npos) break;
+            pos = next + 1;
+        }
+        return out;
+    }
+
+    static bool IsTodoRecordStart(const std::wstring &s, size_t p)
+    {
+        const size_t begin = p;
+        while (p < s.size() && s[p] >= L'0' && s[p] <= L'9') ++p;
+        if (p == begin || p + 6 >= s.size() || s[p] != L'|' ||
+            (s[p + 1] != L'0' && s[p + 1] != L'1') || s.compare(p + 2, 5, L"|0|0|") != 0)
+            return false;
+        p += 7; // id | done | 0 | 0 |
+        const size_t stamp = p;
+        while (p < s.size() && s[p] >= L'0' && s[p] <= L'9') ++p;
+        return p > stamp && p < s.size() && s[p] == L'|';
+    }
+
+    static std::vector<std::wstring> SplitFlattenedTodos(const std::wstring &s)
+    {
+        if (s.find(L'\n') != std::wstring::npos)
+            return Split(s, L'\n');
+        if (s.rfind(L"v1 ", 0) != 0)
+            return Split(s, L'\n');
+        std::vector<std::wstring> out{L"v1"};
+        auto appendRecord = [&](size_t begin, size_t length)
+        {
+            std::wstring record = s.substr(begin, length);
+            // Todo input is trimmed before saving, so trailing whitespace here is
+            // the separator produced when the INI backend flattened the final newline.
+            while (!record.empty() && iswspace(record.back()))
+                record.pop_back();
+            out.push_back(std::move(record));
+        };
+        size_t pos = 3;
+        while (pos < s.size())
+        {
+            while (pos < s.size() && iswspace(s[pos])) ++pos;
+            if (pos >= s.size()) break;
+            size_t next = std::wstring::npos;
+            for (size_t i = pos + 1; i < s.size(); ++i)
+                if (s[i] == L' ' && IsTodoRecordStart(s, i + 1))
+                {
+                    next = i;
+                    break;
+                }
+            appendRecord(pos, next == std::wstring::npos ? std::wstring::npos : next - pos);
+            if (next == std::wstring::npos) break;
+            pos = next + 1;
+        }
+        return out;
+    }
+
+    static bool IsUnsignedDecimal(const std::wstring &s)
+    {
+        return !s.empty() && std::all_of(s.begin(), s.end(), [](wchar_t c)
+                                         { return c >= L'0' && c <= L'9'; });
+    }
+
+    static bool ParseUnsignedDecimal(const std::wstring &s, long long &value)
+    {
+        if (!IsUnsignedDecimal(s) || s.size() > 18)
+            return false;
+        wchar_t *end = nullptr;
+        errno = 0;
+        const long long parsed = wcstoll(s.c_str(), &end, 10);
+        if (errno == ERANGE || !end || *end != 0 || parsed < 0)
+            return false;
+        value = parsed;
+        return true;
+    }
+
+    static bool ValidEngineRecords(const std::vector<std::wstring> &lines)
+    {
+        if (lines.empty() || lines[0] != L"v1")
+            return false;
+        bool haveTime = false, haveStopwatch = false;
+        size_t laps = 0, timers = 0, presets = 0, alarms = 0;
+        std::vector<int> timerIds, alarmIds;
+        for (size_t i = 1; i < lines.size(); ++i)
+        {
+            if (lines[i].empty())
+                continue;
+            const auto f = Split(lines[i], L'|');
+            if (f.empty())
+                return false;
+            long long a = 0, b = 0, c = 0, d = 0, e = 0;
+            if (f[0] == L"T" && f.size() == 2)
+            {
+                if (haveTime || !ParseUnsignedDecimal(f[1], a) || a <= 0)
+                    return false;
+                haveTime = true;
+            }
+            else if (f[0] == L"SW" && f.size() == 3)
+            {
+                if (haveStopwatch || !ParseUnsignedDecimal(f[1], a) || (f[2] != L"0" && f[2] != L"1"))
+                    return false;
+                haveStopwatch = true;
+            }
+            else if (f[0] == L"LAP" && f.size() == 2)
+            {
+                if (++laps > 200 || !ParseUnsignedDecimal(f[1], a))
+                    return false;
+            }
+            else if (f[0] == L"TM" && f.size() == 7)
+            {
+                if (++timers > 50 || !ParseUnsignedDecimal(f[1], a) || !ParseUnsignedDecimal(f[3], b) ||
+                    (f[4] != L"0" && f[4] != L"1") || !ParseUnsignedDecimal(f[5], c) || !ParseUnsignedDecimal(f[6], d))
+                    return false;
+                if (a <= 0 || a >= INT_MAX - 1 || b < 1000 || b > 99LL * 3600 * 1000 + 59 * 60000 + 59000 || c > b ||
+                    Unesc(f[2]).size() > 40)
+                    return false;
+                const int timerId = (int)a;
+                if (std::find(timerIds.begin(), timerIds.end(), timerId) != timerIds.end())
+                    return false;
+                timerIds.push_back(timerId);
+            }
+            else if (f[0] == L"TP" && f.size() == 3)
+            {
+                if (++presets > 40 || !ParseUnsignedDecimal(f[2], a) || a <= 0 || Unesc(f[1]).size() > 40)
+                    return false;
+            }
+            else if (f[0] == L"AL" && (f.size() == 8 || f.size() == 9))
+            {
+                if (++alarms > 40 || !ParseUnsignedDecimal(f[1], a) || !ParseUnsignedDecimal(f[2], b) ||
+                    !ParseUnsignedDecimal(f[3], c) || !ParseUnsignedDecimal(f[4], d) ||
+                    (f[5] != L"0" && f[5] != L"1") || !ParseUnsignedDecimal(f[7], e))
+                    return false;
+                long long sound = kDefaultAlarmSound;
+                if (f.size() == 9 && !ParseUnsignedDecimal(f[8], sound))
+                    return false;
+                if (a <= 0 || a >= INT_MAX - 1 || b > 23 || c > 59 || d > 127 || e < 1 || e > 60 ||
+                    sound < 0 || sound >= kSoundCount || Unesc(f[6]).size() > 40)
+                    return false;
+                const int alarmId = (int)a;
+                if (std::find(alarmIds.begin(), alarmIds.end(), alarmId) != alarmIds.end())
+                    return false;
+                alarmIds.push_back(alarmId);
+            }
+            else
+                return false;
+        }
+        return haveTime && haveStopwatch;
+    }
+
+    static bool ValidTodoRecords(const std::vector<std::wstring> &lines)
+    {
+        if (lines.empty() || lines[0] != L"v1")
+            return false;
+        std::vector<int> ids;
+        size_t count = 0;
+        for (size_t i = 1; i < lines.size(); ++i)
+        {
+            if (lines[i].empty())
+                continue;
+            const auto f = Split(lines[i], L'|');
+            long long id = 0, created = 0;
+            if (f.size() != 6 || !ParseUnsignedDecimal(f[0], id) || !ParseUnsignedDecimal(f[4], created) ||
+                (f[1] != L"0" && f[1] != L"1") || f[2] != L"0" || f[3] != L"0" ||
+                id <= 0 || id >= INT_MAX || created <= 0 || ++count > 300)
+                return false;
+            const int taskId = (int)id;
+            if (std::find(ids.begin(), ids.end(), taskId) != ids.end() || Unesc(f[5]).empty() || Unesc(f[5]).size() > 200)
+                return false;
+            ids.push_back(taskId);
+        }
+        return true;
+    }
+
     static std::wstring ClampName(std::wstring s, size_t n = 40)
     {
         if (s.size() > n)
@@ -666,6 +1421,9 @@ namespace td
         long long seqCounter = 0;
         std::vector<MissedItem> missed; // collected at load / tick, shown once by the UI as one popup
         ULONGLONG lastBeat = 0;
+        uint64_t storeRevision = 0;
+        ULONGLONG lastSaveAttempt = 0;
+        bool savePending = false, saveWarning = false, saveConflict = false, saveRecoverySaved = false, persistenceBlocked = false;
 
         long long SwElapsedL(ULONGLONG now) const
         {
@@ -687,7 +1445,7 @@ namespace td
         }
 
         // ---------------- persistence ----------------
-        void SaveL()
+        bool SaveL()
         {
             ULONGLONG now = MonoMs();
             std::wstring o = L"v1\n";
@@ -704,24 +1462,129 @@ namespace td
                 o += L"AL|" + std::to_wstring(a.id) + L"|" + std::to_wstring(a.hh) + L"|" + std::to_wstring(a.mm) + L"|" +
                      std::to_wstring(a.days) + L"|" + (a.enabled ? L"1" : L"0") + L"|" + Esc(a.label) + L"|" +
                      std::to_wstring(a.snoozeMin) + L"|" + std::to_wstring(a.sound) + L"\n";
-            Wh_SetStringValue(L"state", o.c_str());
+            if (persistenceBlocked)
+            {
+                // The legacy engine value was unreadable, so never publish a new
+                // active snapshot over it. Preserve any new in-session changes in
+                // the separate recovery area instead.
+                savePending = false;
+                saveWarning = true;
+                saveConflict = false;
+                saveRecoverySaved = wkstore::SaveRecoveryOnly(L"engine", o);
+                Wh_Log(L"WinKlok: engine persistence is blocked by unreadable legacy data; original storage was preserved");
+                return false;
+            }
+            lastSaveAttempt = now;
+            const bool ok = wkstore::WriteSnapshot(L"engine", o, storeRevision);
+            saveConflict = !ok && wkstore::LastWriteWasConflict();
+            saveRecoverySaved = !ok && wkstore::LastRecoveryCopySaved();
+            savePending = !ok && !(saveConflict && saveRecoverySaved);
+            if (!ok)
+            {
+                saveWarning = true;
+                if (saveRecoverySaved)
+                    Wh_Log(L"WinKlok: engine save was not committed to the shared snapshot; a recovery copy was written");
+                else
+                    Wh_Log(L"WinKlok: engine snapshot save failed; previous committed data was retained");
+            }
+            else
+                saveConflict = false;
+            return ok;
         }
 
         void Load()
         {
             std::lock_guard<std::mutex> g(m);
-            std::vector<wchar_t> buf(32768);
-            size_t n = Wh_GetStringValue(L"state", buf.data(), buf.size());
-            if (n == 0 || n >= buf.size())
+            std::wstring serialized;
+            const bool fromSnapshot = wkstore::ReadSnapshot(L"engine", serialized, storeRevision);
+            const bool snapshotArtifacts = wkstore::SnapshotArtifactsExist(L"engine");
+            bool legacyPresent = false;
+            if (!fromSnapshot)
+            {
+                // Keep the legacy Windhawk value intact as a migration/recovery copy.
+                std::vector<wchar_t> buf(32768);
+                const size_t n = Wh_GetStringValue(L"state", buf.data(), buf.size());
+                if (n > 0 && n < buf.size())
+                {
+                    serialized.assign(buf.data(), n);
+                    legacyPresent = true;
+                }
+            }
+            if (!fromSnapshot && snapshotArtifacts)
+            {
+                persistenceBlocked = true; // display legacy data if possible, but never overwrite suspect v2 files
+                saveWarning = true;
+                Wh_Log(L"WinKlok: engine snapshot artifacts exist but no active generation could be read; legacy data is read-only");
+            }
+            if (serialized.empty())
             {
                 SeedPresetsL();
+                if (!fromSnapshot && snapshotArtifacts)
+                {
+                    Wh_Log(L"WinKlok: engine snapshot files exist but none passed validation; refusing to replace them with defaults");
+                    return;
+                }
+                if (!fromSnapshot && !legacyPresent)
+                    SaveL(); // genuine first run: initialize the new file-backed store
                 return;
             }
-            auto lines = Split(std::wstring(buf.data(), n), L'\n');
-            if (lines.empty() || lines[0] != L"v1")
+            auto lines = SplitFlattenedState(serialized);
+            if (!ValidEngineRecords(lines))
             {
-                SeedPresetsL();
-                return;
+                bool recoveredPrevious = false;
+                if (fromSnapshot)
+                {
+                    std::wstring previous;
+                    uint64_t previousRevision = 0;
+                    if (wkstore::ReadPreviousSnapshot(L"engine", previous, previousRevision))
+                    {
+                        auto previousLines = SplitFlattenedState(previous);
+                        if (ValidEngineRecords(previousLines))
+                        {
+                            serialized = std::move(previous);
+                            lines = std::move(previousLines);
+                            storeRevision = previousRevision;
+                            persistenceBlocked = true; // read the last good copy, never overwrite the suspect generation
+                            saveWarning = true;
+                            recoveredPrevious = true;
+                            Wh_Log(L"WinKlok: current engine snapshot failed record validation; loaded the previous validated generation read-only");
+                        }
+                    }
+                }
+                if (!recoveredPrevious && fromSnapshot)
+                {
+                    // The first migration deliberately kept the old, bounded engine
+                    // value as a last-resort copy. Its maximum size is constrained by
+                    // the timer/alarm/lap limits, so 32K is enough to read a valid v1
+                    // engine value without relying on the portable large-value probe.
+                    std::vector<wchar_t> legacyBuffer(32768);
+                    const size_t legacyChars = Wh_GetStringValue(L"state", legacyBuffer.data(), legacyBuffer.size());
+                    if (legacyChars > 0 && legacyChars < legacyBuffer.size())
+                    {
+                        std::wstring legacy(legacyBuffer.data(), legacyChars);
+                        auto legacyLines = SplitFlattenedState(legacy);
+                        if (ValidEngineRecords(legacyLines))
+                        {
+                            serialized = std::move(legacy);
+                            lines = std::move(legacyLines);
+                            persistenceBlocked = true;
+                            saveWarning = true;
+                            recoveredPrevious = true;
+                            Wh_Log(L"WinKlok: current and previous engine snapshots were unusable; loaded the preserved legacy engine value read-only");
+                        }
+                    }
+                }
+                if (!recoveredPrevious)
+                {
+                    // An invalid legacy value or a snapshot with no valid previous
+                    // generation is preserved. Never replace it with seeded defaults.
+                    persistenceBlocked = true;
+                    savePending = false;
+                    saveWarning = true;
+                    SeedPresetsL();
+                    Wh_Log(L"WinKlok: stored engine data did not pass validation; original data was preserved and not overwritten");
+                    return;
+                }
             }
 
             ULONGLONG now = MonoMs();
@@ -771,6 +1634,14 @@ namespace td
                     t.remainMs = std::max(0LL, ToLL(f[5]));
                     t.seq = ToLL(f[6]);
                     maxId = std::max(maxId, t.id);
+                    if (persistenceBlocked && t.running)
+                    {
+                        // A fallback generation may predate a cancellation or a newer
+                        // schedule. Preserve the remaining value, but pause it so stale
+                        // recovery data cannot unexpectedly ring after startup.
+                        t.remainMs = std::max(0LL, t.remainMs - elapsedRaw);
+                        t.running = false;
+                    }
                     if (t.running && t.remainMs <= elapsedRaw)
                     { // it ended while the device was off: report it, never ring it
                         MissedItem mi;
@@ -796,6 +1667,8 @@ namespace td
                     a.mm = (int)std::min(59LL, std::max(0LL, ToLL(f[3])));
                     a.days = (unsigned)(ToLL(f[4]) & 0x7F);
                     a.enabled = f[5] == L"1";
+                    if (persistenceBlocked)
+                        a.enabled = false; // recovered generations are read-only and may contain obsolete schedules
                     a.label = ClampName(Unesc(f[6]));
                     a.snoozeMin = (int)std::min(60LL, std::max(1LL, ToLL(f[7], 10)));
                     a.sound = f.size() >= 9 ? (int)std::min((long long)kSoundCount - 1, std::max(0LL, ToLL(f[8], kDefaultAlarmSound)))
@@ -834,7 +1707,9 @@ namespace td
             nextId = maxId + 1;
             if (presets.empty())
                 SeedPresetsL();
-            if (!missed.empty())
+            // Migrate only after the complete legacy record set passed validation.
+            // The old Windhawk value is deliberately retained as a recovery copy.
+            if (!fromSnapshot || !missed.empty())
                 SaveL(); // the missed items are consumed: do not report them again after another reload
         }
 
@@ -890,16 +1765,25 @@ namespace td
                 return 0;
             totalMs = std::min(totalMs, 99LL * 3600 * 1000 + 59 * 60000 + 59000);
             TimerItem t;
-            t.id = nextId++;
+            if (!wkstore::ReserveSharedId(L"engine-id", L"engineNextId", nextId, t.id))
+                return 0;
+            nextId = t.id + 1;
             t.name = ClampName(name);
             t.totalMs = totalMs;
             t.running = true;
             t.endMono = MonoMs() + (ULONGLONG)totalMs;
             t.remainMs = totalMs;
             t.seq = ++seqCounter;
+            const int createdId = t.id;
             timers.push_back(t);
-            SaveL();
-            return t.id;
+            if (!SaveL())
+            {
+                timers.pop_back();
+                --seqCounter;
+                savePending = false; // this creation was rolled back; the input stays in the UI
+                return 0;
+            }
+            return createdId;
         }
         void TimerToggle(int id)
         {
@@ -947,11 +1831,14 @@ namespace td
             a.sound = std::min(kSoundCount - 1, std::max(0, a.sound));
             a.ringing = false;
             a.nextFire = a.enabled ? NextFire(a.hh, a.mm, a.days, WallMs()) : 0;
+            const std::vector<AlarmItem> previousAlarms = alarms;
             if (a.id == 0)
             {
                 if (alarms.size() >= 40)
                     return 0;
-                a.id = nextId++;
+                if (!wkstore::ReserveSharedId(L"engine-id", L"engineNextId", nextId, a.id))
+                    return 0;
+                nextId = a.id + 1;
                 alarms.push_back(a);
             }
             else
@@ -968,14 +1855,21 @@ namespace td
                     }
                 if (!found)
                 {
-                    a.id = nextId++;
-                    alarms.push_back(a);
+                    // This was an edit, not a new alarm. It may have been removed
+                    // by another Explorer session; never recreate it with a guessed ID.
+                    return 0;
                 }
             }
             std::sort(alarms.begin(), alarms.end(), [](const AlarmItem &l, const AlarmItem &r)
                       { return l.hh != r.hh ? l.hh < r.hh : l.mm < r.mm; });
-            SaveL();
-            return a.id;
+            const int savedId = a.id;
+            if (!SaveL())
+            {
+                alarms = previousAlarms;
+                savePending = false; // keep the alarm editor's values for a retry
+                return 0;
+            }
+            return savedId;
         }
         void AlarmDelete(int id)
         {
@@ -1040,20 +1934,41 @@ namespace td
         }
 
         // ---------------- presets ----------------
-        void PresetAdd(const std::wstring &name, long long secs)
+        bool PresetAdd(const std::wstring &name, long long secs)
         {
             std::lock_guard<std::mutex> g(m);
             if (secs < 1 || presets.size() >= 40)
-                return;
+                return false;
             presets.push_back({name.empty() ? FmtDuration(secs * 1000) : ClampName(name), secs});
-            SaveL();
+            if (!SaveL())
+            {
+                presets.pop_back();
+                savePending = false;
+                return false;
+            }
+            return true;
         }
-        void PresetDelete(size_t idx)
+        bool PresetDelete(size_t idx)
         {
             std::lock_guard<std::mutex> g(m);
-            if (idx < presets.size())
-                presets.erase(presets.begin() + idx);
-            SaveL();
+            if (idx >= presets.size())
+                return false;
+            const PresetItem removed = presets[idx];
+            presets.erase(presets.begin() + idx);
+            if (!SaveL())
+            {
+                presets.insert(presets.begin() + idx, removed);
+                savePending = false;
+                return false;
+            }
+            return true;
+        }
+
+        void FlushPendingSave()
+        {
+            std::lock_guard<std::mutex> g(m);
+            if (savePending)
+                SaveL();
         }
 
         // ---------------- tick / snapshots ----------------
@@ -1125,6 +2040,8 @@ namespace td
             }
             if (dirty)
                 SaveL();
+            else if (savePending && now - lastSaveAttempt >= 5000)
+                SaveL(); // retry transient file/lock failures without discarding in-memory state
             if (lastBeat == 0 || now - lastBeat >= 60000)
             { // heartbeat: lets the next start tell how long WinKlok was not running
                 lastBeat = now;
@@ -1173,6 +2090,28 @@ namespace td
             std::sort(v.begin(), v.end(), [](const MissedItem &a, const MissedItem &b)
                       { return a.whenWall < b.whenWall; });
             return v;
+        }
+
+        bool TakeSaveWarning()
+        {
+            std::lock_guard<std::mutex> g(m);
+            const bool value = saveWarning;
+            saveWarning = false;
+            return value;
+        }
+        bool TakeSaveConflict()
+        {
+            std::lock_guard<std::mutex> g(m);
+            const bool value = saveConflict;
+            saveConflict = false;
+            return value;
+        }
+        bool TakeSaveRecoverySaved()
+        {
+            std::lock_guard<std::mutex> g(m);
+            const bool value = saveRecoverySaved;
+            saveRecoverySaved = false;
+            return value;
         }
 
         PanelSnap Snapshot()
@@ -1279,7 +2218,8 @@ namespace tb
         std::vector<wuxc::TextBlock> allText;
         std::vector<std::function<void()>> revokers;
         std::vector<std::pair<wux::FrameworkElement, wux::Thickness>> shifted;
-        std::vector<std::pair<wux::FrameworkElement, wux::Visibility>> bells;
+        std::vector<std::pair<wux::FrameworkElement, wux::Visibility>> bells; // at most the current native glyph
+        wux::FrameworkElement bellButton{nullptr}, bellLeaf{nullptr};
         // Every tooltip attached to the native clock (and its ancestors) is removed and remembered here.
         std::vector<std::pair<wux::DependencyObject, wf::IInspectable>> tooltips;
         bool injected = false, bellHidden = false, seenLoaded = false;
@@ -1287,7 +2227,7 @@ namespace tb
         bool bellDumped = false; // the not-found diagnostic is written once only
         // Time stamps (ms, GetTickCount64) so the periodic jobs keep their cadence whatever the tick interval is.
         ULONGLONG unloadedSinceMs = 0, lastTipMs = 0, lastMeasureMs = 0, lastBrushMs = 0;
-        ULONGLONG lastBellCheckMs = 0;
+        ULONGLONG bellNextSearchAt = 0, bellRetryMs = 1000, lastBellCheckMs = 0;
         double shift = 0, nativeH = 0, nativeDy = 0;
 
         void ClearUi()
@@ -1577,54 +2517,113 @@ namespace tb
         }
     }
 
-    // Find only the notification glyph content inside NotificationCenterButton.
-    // The button itself must NEVER be collapsed: Windows places the taskbar clock/time
-    // in the same notification/date-time surface on some Windows 11 builds.
-    // Windhawk's Taskbar Styler target identifies the safe leaf as:
-    // NotificationCenterButton > ... > IconView#SystemTrayIcon > Grid > Grid > TextIconContent.
-    static wux::FrameworkElement FindNativeBell(Entry &en)
+    // Only the unique TextIconContent leaf inside the verified NotificationCenterButton
+    // tree is hidden. Neither the button nor any ancestor/container is ever changed:
+    // those can also contain the date/time surface on some Windows builds.
+    static bool IsBellLeafInBranch(wux::FrameworkElement const &leaf, wux::FrameworkElement const &button)
     {
-        auto findInsideButton = [](wux::DependencyObject const &root) -> wux::FrameworkElement
-        {
-            auto button = FindVisualByName(root, L"NotificationCenterButton", 64);
-            if (!button)
-                return nullptr;
-
-            // Prefer the exact icon branch; fall back to the same leaf class within this
-            // button for taskbar builds that change one of the intermediate containers.
-            auto iconView = FindVisualByName(button, L"SystemTrayIcon", 64);
-            if (iconView)
-            {
-                auto iconContent = FindVisualByClass(iconView, L"SystemTray.TextIconContent", 64);
-                if (iconContent)
-                    return iconContent;
-            }
-
-            return FindVisualByClass(button, L"SystemTray.TextIconContent", 64);
-        };
-
+        if (!leaf || !button)
+            return false;
         try
         {
-            // The clock and notification button can be siblings, so search their shared XamlRoot.
-            auto xamlRoot = en.clock.XamlRoot();
-            if (xamlRoot)
+            if (winrt::get_class_name(leaf) != L"SystemTray.TextIconContent")
+                return false;
+            wux::DependencyObject cur = leaf;
+            for (int i = 0; i < 24 && cur; ++i)
             {
-                auto content = xamlRoot.Content();
-                if (auto iconContent = findInsideButton(content))
-                    return iconContent;
+                if (cur == button)
+                    return true;
+                cur = wuxm::VisualTreeHelper::GetParent(cur);
             }
+        }
+        catch (...)
+        {
+        }
+        return false;
+    }
 
-            // Fallback for a temporarily unavailable XamlRoot. This still returns only the
-            // TextIconContent leaf, never NotificationCenterButton or one of its parents.
-            wux::DependencyObject root = en.clock;
-            for (int i = 0; i < 64 && root; ++i)
+    static bool IsButtonInClockRoot(Entry &en, wux::FrameworkElement const &button)
+    {
+        if (!en.clock || !button)
+            return false;
+        try
+        {
+            auto root = en.clock.XamlRoot();
+            if (!root)
+                return false;
+            auto content = root.Content();
+            if (!content)
+                return false;
+            wux::DependencyObject cur = button;
+            for (int i = 0; i < 64 && cur; ++i)
             {
-                wux::DependencyObject parent = wuxm::VisualTreeHelper::GetParent(root);
-                if (!parent)
-                    break;
-                root = parent;
+                if (cur == content)
+                    return true;
+                cur = wuxm::VisualTreeHelper::GetParent(cur);
             }
-            return findInsideButton(root);
+        }
+        catch (...)
+        {
+        }
+        return false;
+    }
+
+    static wux::FrameworkElement FindNotificationButtonFromClock(Entry &en)
+    {
+        // Some Windows 11 builds place the clock inside this button. Try the cheap
+        // ancestor path first; the XamlRoot fallback is used only on a cache miss.
+        try
+        {
+            wux::DependencyObject cur = en.clock;
+            for (int i = 0; i < 20 && cur; ++i)
+            {
+                cur = wuxm::VisualTreeHelper::GetParent(cur);
+                auto fe = cur.try_as<wux::FrameworkElement>();
+                if (fe && _wcsicmp(fe.Name().c_str(), L"NotificationCenterButton") == 0)
+                    return fe;
+            }
+        }
+        catch (...)
+        {
+        }
+        try
+        {
+            auto root = en.clock.XamlRoot();
+            if (root)
+                return FindVisualByName(root.Content(), L"NotificationCenterButton", 64);
+        }
+        catch (...)
+        {
+        }
+        return nullptr;
+    }
+
+    static wux::FrameworkElement FindBellLeafInButton(wux::FrameworkElement const &button)
+    {
+        if (!button)
+            return nullptr;
+        try
+        {
+            // Search only inside the verified NotificationCenterButton and require
+            // exactly one TextIconContent leaf. Never collapse the button or a parent:
+            // some taskbar builds place the clock/date surface in the same container.
+            wux::FrameworkElement found{nullptr};
+            int count = 0;
+            WalkVisual(button, [&](wux::DependencyObject const &o, int)
+                       {
+                auto fe = o.try_as<wux::FrameworkElement>();
+                if (!fe) return false;
+                try
+                {
+                    if (winrt::get_class_name(fe) == L"SystemTray.TextIconContent")
+                    {
+                        found = fe;
+                        ++count;
+                    }
+                }
+                catch (...) {}
+                return false; }, 0, 24);
+            return count == 1 && IsBellLeafInBranch(found, button) ? found : nullptr;
         }
         catch (...)
         {
@@ -1632,57 +2631,114 @@ namespace tb
         }
     }
 
-    // ---- native Windows notification icon ----------------------------------------------
+    static void RestoreTrackedBell(Entry &en)
+    {
+        for (auto &b : en.bells)
+        {
+            try
+            {
+                if (b.first)
+                    b.first.Visibility(b.second);
+            }
+            catch (...)
+            {
+            }
+        }
+        en.bells.clear();
+        en.bellLeaf = nullptr;
+        en.bellButton = nullptr;
+        en.bellHidden = false;
+    }
+
     static void ApplyBell(Entry &en)
     {
         if (!WkActive())
             return;
 
         const ULONGLONG now = GetTickCount64();
-        if (en.lastBellCheckMs && now - en.lastBellCheckMs < 1000)
-            return;
-        en.lastBellCheckMs = now;
+        // Reuse the cached leaf. The fast path checks only its bounded ancestor chain
+        // (never the full taskbar tree); the XamlRoot relationship is rechecked once
+        // per second, not on every 100 ms stopwatch frame.
+        if (en.bellLeaf)
+        {
+            try
+            {
+                // This inexpensive ancestry check runs on every tick, so a detached or
+                // reparented leaf is never hidden for a full polling interval. The
+                // XamlRoot relationship is checked only once per second.
+                const bool attached = (bool)wuxm::VisualTreeHelper::GetParent(en.bellLeaf);
+                const bool inBranch = attached && IsBellLeafInBranch(en.bellLeaf, en.bellButton);
+                if (inBranch && now - en.lastBellCheckMs < 1000)
+                {
+                    if (en.bellLeaf.Visibility() != wux::Visibility::Collapsed)
+                        en.bellLeaf.Visibility(wux::Visibility::Collapsed);
+                    en.bellHidden = true;
+                    return;
+                }
+                en.lastBellCheckMs = now;
+                if (inBranch && IsButtonInClockRoot(en, en.bellButton))
+                {
+                    if (en.bellLeaf.Visibility() != wux::Visibility::Collapsed)
+                        en.bellLeaf.Visibility(wux::Visibility::Collapsed);
+                    en.bellHidden = true;
+                    return;
+                }
+            }
+            catch (...)
+            {
+                // A detached/retemplated WinRT element is expected occasionally.
+            }
+            // The old object left the tree or no longer belongs to the verified branch.
+            // Restore only the exact old leaf; never touch its former parent or a new candidate.
+            RestoreTrackedBell(en);
+            en.bellRetryMs = 1000;
+            en.bellNextSearchAt = now;
+            en.lastBellCheckMs = 0;
+        }
 
-        auto iconContent = FindNativeBell(en);
-        if (!iconContent)
+        if (now < en.bellNextSearchAt)
+            return;
+        auto button = FindNotificationButtonFromClock(en);
+        auto leaf = FindBellLeafInButton(button);
+        if (!button || !leaf)
         {
             en.bellHidden = false;
             if (!en.bellDumped)
             {
                 en.bellDumped = true;
-                Wh_Log(L"WinKlok: native TextIconContent bell glyph was not found; retrying");
+                Wh_Log(L"WinKlok: verified native notification glyph not found; retrying with backoff");
             }
+            en.bellNextSearchAt = now + en.bellRetryMs;
+            en.bellRetryMs = std::min<ULONGLONG>(en.bellRetryMs * 2, 60000);
             return;
         }
 
-        bool tracked = false;
-        for (const auto &b : en.bells)
-            tracked = tracked || b.first == iconContent;
-        if (!tracked)
+        try
         {
-            const wux::Visibility original = iconContent.Visibility();
-            en.bells.emplace_back(iconContent, original);
+            const wux::Visibility original = leaf.Visibility();
+            en.bellButton = button;
+            en.bellLeaf = leaf;
+            en.bells.clear();
+            en.bells.emplace_back(leaf, original);
             if (td::g_set.bellUnset.load())
             { // Preserve the existing first-run default for WinKlok's own notification icon.
                 td::g_set.bellUnset = false;
                 td::g_set.showBell = original == wux::Visibility::Visible ? 1 : 0;
                 td::g_set.Save();
             }
-            Wh_Log(L"WinKlok: found native TextIconContent bell glyph; original visibility=%d", (int)original);
-        }
-
-        try
-        {
-            if (iconContent.Visibility() != wux::Visibility::Collapsed)
-                iconContent.Visibility(wux::Visibility::Collapsed);
+            leaf.Visibility(wux::Visibility::Collapsed);
+            en.bellHidden = true;
+            en.bellRetryMs = 1000;
+            en.bellNextSearchAt = 0;
+            en.lastBellCheckMs = now;
+            Wh_Log(L"WinKlok: hid the unique verified NotificationCenterButton TextIconContent leaf; original visibility=%d", (int)original);
         }
         catch (...)
         {
-            en.bellHidden = false;
-            return;
+            RestoreTrackedBell(en);
+            en.bellNextSearchAt = now + en.bellRetryMs;
+            en.bellRetryMs = std::min<ULONGLONG>(en.bellRetryMs * 2, 60000);
         }
-
-        en.bellHidden = true;
     }
 
     // ---- click handling ------------------------------------------------------------------
@@ -2024,31 +3080,36 @@ namespace tb
 
     static void Restore(Entry &en)
     {
-        try
+        for (auto &r : en.revokers)
         {
-            for (auto &r : en.revokers)
-                r();
-            en.revokers.clear();
-            ShiftNative(en, 0);
-            for (auto &b : en.bells)
+            try { r(); }
+            catch (...) { Wh_Log(L"exception while revoking a taskbar handler"); }
+        }
+        en.revokers.clear();
+        try { ShiftNative(en, 0); }
+        catch (...) { Wh_Log(L"exception while restoring native clock layout"); }
+        // Bell restoration is independent of preview/clock cleanup. Never let an
+        // unrelated revoker exception leave the native notification leaf collapsed.
+        for (auto &b : en.bells)
+        {
+            try
             {
-                try
-                {
+                if (b.first)
                     b.first.Visibility(b.second);
-                }
-                catch (...)
-                {
-                }
             }
-            en.bells.clear();
-            en.bellHidden = false;
-            RestoreClockTooltips(en);
-            RemoveOurChildren(en);
+            catch (...) { Wh_Log(L"exception while restoring native notification visibility"); }
         }
-        catch (...)
-        {
-            Wh_Log(L"exception while restoring clock");
-        }
+        en.bells.clear();
+        en.bellButton = nullptr;
+        en.bellLeaf = nullptr;
+        en.bellHidden = false;
+        en.bellNextSearchAt = 0;
+        en.bellRetryMs = 1000;
+        en.lastBellCheckMs = 0;
+        try { RestoreClockTooltips(en); }
+        catch (...) { Wh_Log(L"exception while restoring clock tooltips"); }
+        try { RemoveOurChildren(en); }
+        catch (...) { Wh_Log(L"exception while removing WinKlok taskbar children"); }
         en.ClearUi();
     }
 
@@ -2168,34 +3229,62 @@ namespace tb
         SetTimer(it->second, 1, ms, nullptr);
     }
 
-    // The tick only runs as fast as what is on screen needs: 100 ms for a running stopwatch preview (tenths),
-    // 250 ms for a running timer preview or while the bell is still being set up, 100 ms until the first
-    // injection has succeeded, and 1 s otherwise. Engine and settings changes do not wait for the next tick:
-    // they post a refresh (PostRefreshAll).
     static bool IsTaskbarWindow(HWND w)
     {
         wchar_t cls[64] = {};
         return w && GetClassNameW(w, cls, 64) > 0 && (wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0);
     }
-    // The window that was in front before the taskbar was clicked: the first normal, visible, uncloaked top-level window
-    // below the taskbar in z-order (not the desktop, not tool windows, not our own flyouts).
+    // A foreground candidate may belong to an unresponsive Explorer thread. Query its caption with a bounded
+    // WM_GETTEXT call instead of GetWindowTextLengthW, which can synchronously wait for a same-process window.
+    // This uses documented APIs and skips a candidate that does not answer promptly.
+    static bool HasCaptionNoHang(HWND w, ULONGLONG deadline)
+    {
+        if (!w)
+            return false;
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline)
+            return false;
+        const UINT timeout = (UINT)std::min<ULONGLONG>(40, deadline - now);
+        wchar_t title[2] = {};
+        DWORD_PTR copied = 0;
+        const LRESULT sent = SendMessageTimeoutW(
+            w, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT,
+            timeout, &copied);
+        return sent != 0 && title[0] != L'\0';
+    }
+
+    // The window that was in front before the taskbar was clicked. Prefer ordinary
+    // app windows before always-on-top utilities; a hung candidate is simply skipped.
     static HWND PreviousForegroundWindow()
     {
-        for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT))
+        const ULONGLONG deadline = GetTickCount64() + 160;
+        for (int pass = 0; pass < 2; ++pass)
         {
-            if (!IsWindowVisible(w) || IsIconic(w) || GetWindow(w, GW_OWNER))
-                continue;
-            if (GetWindowLongPtrW(w, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE))
-                continue;
-            wchar_t cls[64] = {};
-            if (!GetClassNameW(w, cls, 64) || IsTaskbarWindow(w) || wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0)
-                continue;
-            if (GetWindowTextLengthW(w) <= 0)
-                continue;
-            DWORD cloaked = 0;
-            if (SUCCEEDED(DwmGetWindowAttribute(w, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) && cloaked)
-                continue;
-            return w;
+            for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT))
+            {
+                if (GetTickCount64() >= deadline)
+                    return nullptr;
+                if (!IsWindowVisible(w) || IsIconic(w) || GetWindow(w, GW_OWNER))
+                    continue;
+                const LONG_PTR ex = GetWindowLongPtrW(w, GWL_EXSTYLE);
+                if (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE))
+                    continue;
+                const bool topmost = (ex & WS_EX_TOPMOST) != 0;
+                if (topmost != (pass == 1))
+                    continue;
+                wchar_t cls[64] = {};
+                if (!GetClassNameW(w, cls, ARRAYSIZE(cls)) || IsTaskbarWindow(w) ||
+                    wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0 ||
+                    wcscmp(cls, L"WinklokUiWindow") == 0)
+                    continue;
+                DWORD cloaked = 0;
+                if (SUCCEEDED(DwmGetWindowAttribute(w, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) && cloaked)
+                    continue;
+                if (!HasCaptionNoHang(w, deadline))
+                    continue;
+                return w;
+            }
         }
         return nullptr;
     }
@@ -2260,6 +3349,10 @@ namespace tb
             SetForegroundWindow(desk);
     }
 
+    // The tick only runs as fast as what is on screen needs: 100 ms for a running stopwatch preview (tenths),
+    // 250 ms for a running timer preview, 100 ms until the first injection has succeeded, and 1 s otherwise.
+    // The native bell is cached and retried with backoff, so it never forces a fast poll. Engine and settings changes
+    // post a refresh (PostRefreshAll) rather than waiting for this interval.
     static void OnTick()
     {
         auto list = EntriesForThisThread();
@@ -2305,7 +3398,7 @@ namespace tb
                 }
                 if (!active)
                 {
-                    if (en->injected)
+                    if (en->injected || en->bellLeaf || !en->bells.empty())
                         Restore(*en);
                     continue;
                 }
@@ -2341,15 +3434,12 @@ namespace tb
                 want = 100;
             else if (previews && snap.tmOn && snap.tmRun)
                 want = 250;
-            const bool bell = true; // the native bell is always looked for (and hidden)
             for (auto &en : list)
             {
                 if (!en->clock)
                     continue;
                 if (!en->injected && en->injectFailures < 25)
                     want = std::min(want, 100u); // retry the first injection quickly
-                else if (bell && !en->bellHidden)
-                    want = std::min(want, 250u); // keep checking until the native notification control is found
             }
         }
         SetTickMs(want);
@@ -9653,6 +10743,11 @@ namespace ui
             long long modified = 0;
         }; // modified = unix seconds
         std::vector<Note> notes;
+        std::unordered_map<int, uint64_t> noteStoreRevisions;
+        std::vector<int> missingNoteIds, pendingNoteIds, pendingNoteDeletes, readOnlyNoteBodyIds;
+        uint64_t noteIndexRevision = 0;
+        ULONGLONG noteLastSaveAttempt = 0;
+        bool noteIndexSavePending = false, notesIndexBlocked = false;
         int nextNoteId = 1, curNote = 0, noteView = 0; // noteView: 0 list, 1 rich preview, 2 editor
         int noteZoom = 100, pendingFocus = -1, noteDelArmedId = 0;
         bool noteDirty = false, suppressChange = false, docValid = false;
@@ -9883,23 +10978,91 @@ namespace ui
         }
         void EditorWheelFromEdit(int delta) { EditorWheel(delta); }
 
-        void SaveIndex()
+        static std::wstring NoteStorageKey(int id) { return L"note-id-" + std::to_wstring(id); }
+
+        bool SaveIndex()
         {
-            std::wstring ids;
-            for (auto &n : notes)
+            std::wstring ids = L"v1\n" + std::to_wstring(nextNoteId) + L"\n";
+            std::vector<int> all;
+            all.reserve(notes.size() + missingNoteIds.size());
+            for (const auto &n : notes)
+                if (n.id > 0 && std::find(all.begin(), all.end(), n.id) == all.end()) all.push_back(n.id);
+            for (int id : missingNoteIds)
+                if (id > 0 && std::find(all.begin(), all.end(), id) == all.end()) all.push_back(id);
+            std::sort(all.begin(), all.end());
+            for (int id : all)
+                ids += std::to_wstring(id) + L"\n";
+
+            if (notesIndexBlocked)
             {
-                if (!ids.empty())
-                    ids += L",";
-                ids += std::to_wstring(n.id);
+                noteIndexSavePending = false; // never replace a suspect/oversized shared manifest
+                const bool recovered = wkstore::SaveRecoveryOnly(L"notes-index", ids);
+                SetStatus(recovered
+                              ? L"The shared note index is read-only until repaired. Your latest list change was saved in WinKlokData\\Recovery."
+                              : L"The shared note index is read-only until repaired. Its original data was preserved.");
+                return false;
             }
-            Wh_SetStringValue(L"noteIds", ids.c_str());
-            Wh_SetIntValue(L"noteNext", nextNoteId);
+
+            noteLastSaveAttempt = MonoMs();
+            const bool ok = wkstore::WriteSnapshot(L"notes-index", ids, noteIndexRevision);
+            noteIndexSavePending = !ok;
+            if (!ok)
+            {
+                const bool conflict = wkstore::LastWriteWasConflict();
+                if (conflict && wkstore::LastRecoveryCopySaved())
+                {
+                    noteIndexSavePending = false;
+                    pendingNoteDeletes.clear(); // keep old bodies; the recovery manifest records the intended list
+                    SetStatus(L"Another WinKlok session changed the note list. Your list changes were saved in WinKlokData\\Recovery.");
+                }
+                else
+                    SetStatus(wkstore::LastRecoveryCopySaved()
+                                  ? L"Could not save the note list. A recovery copy was saved in WinKlokData\\Recovery."
+                                  : L"Could not save the note list. Your existing notes were retained; WinKlok will retry.");
+                return false;
+            }
+            // Do not delete note-body generations when a note is removed from the
+            // active index. The previous index generation may still reference that
+            // body and is our rollback point if the newest manifest is damaged.
+            // Orphaned bodies are harmless and are preferable to breaking recovery.
+            pendingNoteDeletes.clear();
+            return true;
         }
-        void SaveNoteData(const Note &n)
+
+        bool SaveNoteData(const Note &n)
         {
-            const std::wstring v = std::to_wstring(n.modified) + L"|" + td::Esc(n.title) + L"|" + td::Esc(n.body);
-            Wh_SetStringValue(NoteKey(n.id).c_str(), v.c_str());
+            const std::wstring v = L"v1\n" + std::to_wstring(n.modified) + L"|" + td::Esc(n.title) + L"|" + td::Esc(n.body);
+            if (std::find(readOnlyNoteBodyIds.begin(), readOnlyNoteBodyIds.end(), n.id) != readOnlyNoteBodyIds.end())
+            {
+                noteLastSaveAttempt = MonoMs(); // throttle retries if the recovery area is unavailable
+                const bool recovered = wkstore::SaveRecoveryOnly(NoteStorageKey(n.id).c_str(), v);
+                SetStatus(recovered
+                              ? L"This note was recovered from an older valid copy. Your edits were saved in WinKlokData\\Recovery; the damaged snapshot was preserved."
+                              : L"This note was recovered from an older valid copy and is read-only until its stored data is repaired.");
+                return recovered;
+            }
+            bool ok = wkstore::WriteSnapshot(NoteStorageKey(n.id).c_str(), v, noteStoreRevisions[n.id]);
+            noteLastSaveAttempt = MonoMs();
+            auto it = std::find(pendingNoteIds.begin(), pendingNoteIds.end(), n.id);
+            if (ok)
+            {
+                if (it != pendingNoteIds.end()) pendingNoteIds.erase(it);
+            }
+            else if (wkstore::LastWriteWasConflict() && wkstore::LastRecoveryCopySaved())
+            {
+                if (it != pendingNoteIds.end()) pendingNoteIds.erase(it);
+                SetStatus(L"Another WinKlok session changed this note. Your latest text was saved in WinKlokData\\Recovery.");
+            }
+            else
+            {
+                if (it == pendingNoteIds.end()) pendingNoteIds.push_back(n.id);
+                SetStatus(wkstore::LastRecoveryCopySaved()
+                              ? L"Could not save a note. A recovery copy was saved in WinKlokData\\Recovery."
+                              : L"Could not save a note. Your current text is still in memory; WinKlok will retry.");
+            }
+            return ok;
         }
+
         void SortNotes()
         {
             std::stable_sort(notes.begin(), notes.end(), [](const Note &a, const Note &b)
@@ -9908,34 +11071,329 @@ namespace ui
         void LoadNotes()
         {
             notes.clear();
+            missingNoteIds.clear();
+            pendingNoteIds.clear();
+            pendingNoteDeletes.clear();
+            readOnlyNoteBodyIds.clear();
+            noteStoreRevisions.clear();
+            noteIndexSavePending = false;
+            notesIndexBlocked = false;
             noteZoom = std::min(250, std::max(60, Wh_GetIntValue(L"noteZoom", 100)));
-            std::vector<wchar_t> buf(100000);
-            const size_t n = Wh_GetStringValue(L"noteIds", buf.data(), buf.size());
-            int maxId = 0;
-            if (n > 0 && n < buf.size())
+
+            std::wstring index;
+            const bool fromNewIndex = wkstore::ReadSnapshot(L"notes-index", index, noteIndexRevision);
+            const bool noteIndexArtifacts = wkstore::SnapshotArtifactsExist(L"notes-index");
+            bool newIndexValid = false;
+            bool notesIndexReadable = true; // can display a validated previous or legacy manifest in read-only mode
+            std::vector<int> ids;
+            int storedNext = Wh_GetIntValue(L"noteNext", 1);
+            if (!fromNewIndex && noteIndexArtifacts)
             {
-                for (const std::wstring &tok : td::Split(std::wstring(buf.data(), n), L','))
+                notesIndexBlocked = true;
+                SetStatus(L"New note storage could not be read. Any legacy note list is shown read-only and the original files were preserved.");
+            }
+            auto parseIndex = [&](const std::wstring &raw, int &next, std::vector<int> &parsedIds)
+            {
+                const auto rows = td::Split(raw, L'\n');
+                const long long parsedNext = rows.size() >= 2 ? td::ToLL(rows[1], 0) : 0;
+                bool valid = rows.size() >= 2 && rows[0] == L"v1" && parsedNext > 0 && parsedNext <= INT_MAX;
+                std::vector<int> parsed;
+                for (size_t i = 2; valid && i < rows.size(); ++i)
                 {
-                    const int id = (int)td::ToLL(tok, 0);
-                    if (id <= 0)
+                    if (rows[i].empty())
                         continue;
-                    const size_t m = Wh_GetStringValue(NoteKey(id).c_str(), buf.data(), buf.size());
-                    if (m == 0 || m >= buf.size())
-                        continue;
-                    const auto f = td::Split(std::wstring(buf.data(), m), L'|');
-                    if (f.size() < 3)
-                        continue;
-                    Note note;
-                    note.id = id;
-                    note.modified = td::ToLL(f[0]);
-                    note.title = td::Unesc(f[1]);
-                    note.body = td::Unesc(f[2]);
-                    notes.push_back(std::move(note));
-                    maxId = std::max(maxId, id);
+                    const long long parsedId = td::ToLL(rows[i], 0);
+                    if (parsedId <= 0 || parsedId >= parsedNext || parsedId >= INT_MAX)
+                    {
+                        valid = false;
+                        break;
+                    }
+                    const int id = (int)parsedId;
+                    if (std::find(parsed.begin(), parsed.end(), id) == parsed.end())
+                        parsed.push_back(id);
+                }
+                if (!valid)
+                    return false;
+                next = (int)parsedNext;
+                parsedIds.swap(parsed);
+                return true;
+            };
+            if (fromNewIndex)
+            {
+                int parsedNext = 0;
+                std::vector<int> parsedIds;
+                if (parseIndex(index, parsedNext, parsedIds))
+                {
+                    newIndexValid = true;
+                    storedNext = std::max(storedNext, parsedNext);
+                    ids.swap(parsedIds);
+                }
+                else
+                {
+                    std::wstring previous;
+                    uint64_t previousRevision = 0;
+                    int previousNext = 0;
+                    std::vector<int> previousIds;
+                    if (wkstore::ReadPreviousSnapshot(L"notes-index", previous, previousRevision) &&
+                        parseIndex(previous, previousNext, previousIds))
+                    {
+                        index = std::move(previous);
+                        noteIndexRevision = previousRevision;
+                        newIndexValid = true;
+                        notesIndexBlocked = true; // show the last valid manifest but do not overwrite the suspect one
+                        noteIndexSavePending = false;
+                        storedNext = std::max(storedNext, previousNext);
+                        ids.swap(previousIds);
+                        SetStatus(L"The newest note index failed validation. The previous valid note list was loaded read-only; the newer data was preserved.");
+                        Wh_Log(L"WinKlok: loaded the previous validated note-index generation read-only");
+                    }
+                    else
+                    {
+                        index.clear();
+                        notesIndexBlocked = true;
+                        notesIndexReadable = false;
+                        noteIndexSavePending = false;
+                        SetStatus(L"The saved note index failed validation; it was preserved and not overwritten");
+                    }
                 }
             }
-            nextNoteId = std::max(maxId + 1, Wh_GetIntValue(L"noteNext", 1));
+            if (index.empty())
+            {
+                // Legacy index is only a fallback. Read it only after proving the
+                // current Windhawk backend can return a complete oversized value;
+                // otherwise a truncated prefix could become the new manifest.
+                // A valid legacy index can contain at most one ID for each value
+                // below noteNext. Leave generous room for up to 100,000 ten-digit
+                // IDs plus separators; larger counters with an empty read fail closed.
+                constexpr size_t kLegacyNoteIndexBufferChars = 1100001;
+                std::vector<wchar_t> buf(kLegacyNoteIndexBufferChars);
+                const size_t n = Wh_GetStringValue(L"noteIds", buf.data(), buf.size());
+                if (n > 0 && n < buf.size())
+                {
+                    const bool legacyStoreReliable = wkstore::LegacyStringStoreReliable();
+                    std::vector<int> legacyIds;
+                    bool validLegacy = true;
+                    bool ignoredTruncatedTail = false;
+                    const auto legacyTokens = td::Split(std::wstring(buf.data(), n), L',');
+                    for (size_t tokenIndex = 0; tokenIndex < legacyTokens.size(); ++tokenIndex)
+                    {
+                        long long parsedId = 0;
+                        const std::wstring &tok = legacyTokens[tokenIndex];
+                        if (!td::ParseUnsignedDecimal(tok, parsedId) || parsedId <= 0 || parsedId >= INT_MAX)
+                        {
+                            // When the backend's large-value probe fails, the last token
+                            // may simply be the tail of a value truncated at its storage
+                            // limit. Keep the complete prefix visible, but mark it as
+                            // potentially incomplete and strictly read-only.
+                            if (!legacyStoreReliable && tokenIndex + 1 == legacyTokens.size())
+                            {
+                                ignoredTruncatedTail = true;
+                                break;
+                            }
+                            validLegacy = false;
+                            break;
+                        }
+                        const int id = (int)parsedId;
+                        if (std::find(legacyIds.begin(), legacyIds.end(), id) == legacyIds.end())
+                            legacyIds.push_back(id);
+                    }
+                    if (validLegacy)
+                    {
+                        ids.swap(legacyIds);
+                        notesIndexReadable = true;
+                        if (!legacyStoreReliable)
+                        {
+                            notesIndexBlocked = true;
+                            SetStatus(ignoredTruncatedTail
+                                          ? L"The preserved old note list may be incomplete on this Portable Windhawk version. The readable notes are shown read-only; original data was not changed."
+                                          : L"The preserved old note list could not be verified as complete. Readable notes are shown read-only; original data was not changed.");
+                        }
+                        else if (fromNewIndex)
+                        {
+                            notesIndexBlocked = true; // old manifest is only a read-only fallback
+                            SetStatus(L"The newest note index could not be validated. The preserved older note list is shown read-only; newer files were left untouched.");
+                        }
+                    }
+                    else
+                    {
+                        notesIndexBlocked = true;
+                        notesIndexReadable = false;
+                        ids.clear();
+                        SetStatus(L"The existing note index contains an invalid entry; it was preserved and not overwritten");
+                    }
+                }
+                else if (wkstore::SnapshotArtifactsExist(L"notes-index") || storedNext > 100000 ||
+                         (storedNext > 1 && !wkstore::LegacyStringStoreReliable()))
+                {
+                    // An empty noteIds value with a large next-id counter can be a
+                    // legitimate all-notes-deleted state. Trust it only when this
+                    // backend proves that a large value would not be truncated.
+                    notesIndexBlocked = true;
+                    notesIndexReadable = false;
+                    noteIndexSavePending = false;
+                    SetStatus(L"The existing note index is too large or unreadable; it was preserved and not overwritten");
+                }
+            }
+
+            int maxId = 0;
+            if (!notesIndexReadable)
+                ids.clear();
+            for (int id : ids)
+            {
+                maxId = std::max(maxId, id);
+                std::wstring value;
+                uint64_t revision = 0;
+                bool newValue = wkstore::ReadSnapshot(NoteStorageKey(id).c_str(), value, revision);
+                const bool bodyArtifacts = !newValue && wkstore::SnapshotArtifactsExist(NoteStorageKey(id).c_str());
+                if (newValue)
+                    noteStoreRevisions[id] = revision;
+                if (bodyArtifacts)
+                {
+                    readOnlyNoteBodyIds.push_back(id);
+                    SetStatus(L"A note's newest storage copy could not be read. Its legacy copy, when available, is read-only; the damaged files were preserved.");
+                }
+                bool legacyBodyBestEffort = false;
+                if (!newValue)
+                {
+                    // Do not migrate a legacy value unless this Windhawk installation
+                    // has proved it can round-trip the full worst-case escaped payload.
+                    // When it cannot, still display a bounded readable prefix as
+                    // read-only where possible; never write that prefix over the source.
+                    if (!wkstore::LegacyStringStoreReliable())
+                    {
+                        std::vector<wchar_t> bestEffort(32768);
+                        const size_t n = Wh_GetStringValue(NoteKey(id).c_str(), bestEffort.data(), bestEffort.size());
+                        if (n > 0 && n < bestEffort.size())
+                        {
+                            value.assign(bestEffort.data(), n);
+                            legacyBodyBestEffort = true;
+                            readOnlyNoteBodyIds.push_back(id);
+                        }
+                        else
+                        {
+                            missingNoteIds.push_back(id);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        std::vector<wchar_t> buf(200001);
+                        const size_t n = Wh_GetStringValue(NoteKey(id).c_str(), buf.data(), buf.size());
+                        if (n > 0 && n < buf.size())
+                            value.assign(buf.data(), n);
+                    }
+                }
+                auto parseNote = [&](const std::wstring &raw, Note &parsed)
+                {
+                    size_t dataStart = 0;
+                    if (raw.rfind(L"v1\n", 0) == 0 || raw.rfind(L"v1 ", 0) == 0)
+                        dataStart = 3;
+                    const auto fields = td::Split(raw.substr(dataStart), L'|');
+                    long long modified = 0;
+                    if (fields.size() != 3 || !td::ParseUnsignedDecimal(fields[0], modified))
+                        return false;
+                    parsed.id = id;
+                    parsed.modified = modified;
+                    parsed.title = td::Unesc(fields[1]);
+                    parsed.body = td::Unesc(fields[2]);
+                    return parsed.title.size() <= 120 && parsed.body.size() <= 40000;
+                };
+                Note note;
+                if (!parseNote(value, note))
+                {
+                    bool recoveredPrevious = false;
+                    if (newValue)
+                    {
+                        std::wstring previous;
+                        uint64_t previousRevision = 0;
+                        Note recovered;
+                        if (wkstore::ReadPreviousSnapshot(NoteStorageKey(id).c_str(), previous, previousRevision) &&
+                            parseNote(previous, recovered))
+                        {
+                            note = std::move(recovered);
+                            noteStoreRevisions[id] = previousRevision;
+                            readOnlyNoteBodyIds.push_back(id); // never overwrite the semantically damaged generation
+                            recoveredPrevious = true;
+                            Wh_Log(L"WinKlok: loaded previous validated body for note %d read-only", id);
+                            SetStatus(L"One note was recovered from its previous valid copy. Its stored data was preserved; edits go to Recovery.");
+                        }
+                    }
+                    if (!recoveredPrevious && newValue && wkstore::LegacyStringStoreReliable())
+                    {
+                        std::vector<wchar_t> legacyBuffer(200001);
+                        const size_t legacyChars = Wh_GetStringValue(NoteKey(id).c_str(), legacyBuffer.data(), legacyBuffer.size());
+                        if (legacyChars > 0 && legacyChars < legacyBuffer.size())
+                        {
+                            Note legacyNote;
+                            if (parseNote(std::wstring(legacyBuffer.data(), legacyChars), legacyNote))
+                            {
+                                note = std::move(legacyNote);
+                                readOnlyNoteBodyIds.push_back(id);
+                                recoveredPrevious = true;
+                                SetStatus(L"A note was recovered from its preserved older copy. Its newer snapshot was left untouched; edits go to Recovery.");
+                                Wh_Log(L"WinKlok: loaded preserved legacy body for note %d read-only", id);
+                            }
+                        }
+                    }
+                    if (!recoveredPrevious)
+                    {
+                        missingNoteIds.push_back(id); // keep its manifest entry and every stored generation intact
+                        continue;
+                    }
+                }
+                notes.push_back(note);
+                if (legacyBodyBestEffort)
+                {
+                    SetStatus(L"One or more old notes may be incomplete because of the Portable Windhawk storage limit. Readable content is shown read-only; original data was not changed.");
+                }
+                if (!newValue && !legacyBodyBestEffort && !notesIndexBlocked && !bodyArtifacts)
+                    SaveNoteData(notes.back()); // migrate only after the whole note was read and no suspect v2 body exists
+            }
+            nextNoteId = std::max(maxId + 1, std::max(1, storedNext));
+            if (!missingNoteIds.empty() && !notesIndexBlocked)
+                SetStatus(L"Some notes could not be read safely. Their stored data was preserved.");
             SortNotes();
+            if (!newIndexValid && !notesIndexBlocked)
+                SaveIndex(); // file-backed manifest; legacy noteIds remains as a recovery copy
+        }
+
+        void RetryNotePersistence()
+        {
+            if (noteDirty)
+            {
+                FlushNote();
+                return;
+            }
+            if (!pendingNoteIds.empty())
+            {
+                const std::vector<int> pending = pendingNoteIds;
+                for (int id : pending)
+                    if (Note *n = FindNote(id))
+                        SaveNoteData(*n);
+            }
+            // The index is committed only after all pending note bodies have been
+            // written successfully. This prevents a manifest from pointing at a
+            // note whose first body write failed.
+            if (pendingNoteIds.empty() && noteIndexSavePending && !notesIndexBlocked)
+                SaveIndex();
+        }
+
+        void FlushPersistenceOnShutdown()
+        {
+            FlushNote();
+            RetryNotePersistence();
+            if (todoDropOpen && edits[E_TODO])
+            {
+                const std::wstring draft = rich::Trim(EditText(E_TODO));
+                if (!draft.empty())
+                {
+                    const std::wstring payload = L"v1\n" + std::to_wstring(todoEditId) + L"|" + td::Esc(draft);
+                    if (!wkstore::SaveRecoveryOnly(L"todo-draft", payload))
+                        Wh_Log(L"WinKlok: could not save the open task draft to Recovery during shutdown");
+                }
+            }
+            if (todosSavePending)
+                SaveTodos();
         }
 
         void FlushNote()
@@ -9944,9 +11402,15 @@ namespace ui
                 KillTimer(hwnd, TIMER_NOTE_SAVE);
             if (!noteDirty)
                 return;
-            noteDirty = false;
             if (Note *n = FindNote(curNote))
-                SaveNoteData(*n);
+            {
+                const bool saved = SaveNoteData(*n);
+                noteDirty = !saved && !(wkstore::LastWriteWasConflict() && wkstore::LastRecoveryCopySaved());
+            }
+            else
+                noteDirty = false;
+            if (noteDirty && hwnd)
+                SetTimer(hwnd, TIMER_NOTE_SAVE, 1500, nullptr);
         }
         void OnNoteTextChanged()
         {
@@ -9990,12 +11454,34 @@ namespace ui
         }
         void NewNote()
         {
+            if (notesIndexBlocked)
+            {
+                SetStatus(L"New notes are unavailable until the existing note index can be read safely");
+                return;
+            }
             Note n;
-            n.id = nextNoteId++;
+            if (!wkstore::ReserveSharedId(L"notes-id", L"noteNext", nextNoteId, n.id))
+            {
+                SetStatus(L"A new note could not be reserved safely. Please try again.");
+                return;
+            }
+            nextNoteId = n.id + 1;
             n.modified = td::WallMs() / 1000;
             notes.insert(notes.begin(), n);
-            SaveNoteData(n);
-            SaveIndex();
+            const bool bodySaved = SaveNoteData(n);
+            if (bodySaved)
+            {
+                if (!SaveIndex() && !wkstore::LastWriteWasConflict())
+                    noteIndexSavePending = true;
+            }
+            else if (!(wkstore::LastWriteWasConflict() && wkstore::LastRecoveryCopySaved()))
+            {
+                // Never publish an index entry before the note body is committed.
+                // RetryNotePersistence writes the body first, then the manifest.
+                noteIndexSavePending = true;
+            }
+            if (!pendingNoteIds.empty() || noteIndexSavePending)
+                SetTimer(hwnd, TIMER_NOTE_SAVE, 1500, nullptr);
             EnterEdit(n.id, E_NTITLE);
         }
         void OpenNote(int id)
@@ -10024,11 +11510,19 @@ namespace ui
         }
         void DeleteNote(int id)
         {
+            if (notesIndexBlocked)
+            {
+                SetStatus(L"The shared note index is read-only because its newest copy could not be validated. Notes were not deleted.");
+                return;
+            }
             notes.erase(std::remove_if(notes.begin(), notes.end(), [&](const Note &n)
                                        { return n.id == id; }),
                         notes.end());
-            Wh_DeleteValue(NoteKey(id).c_str());
-            SaveIndex();
+            pendingNoteIds.erase(std::remove(pendingNoteIds.begin(), pendingNoteIds.end(), id), pendingNoteIds.end());
+            if (std::find(pendingNoteDeletes.begin(), pendingNoteDeletes.end(), id) == pendingNoteDeletes.end())
+                pendingNoteDeletes.push_back(id);
+            if (!SaveIndex() && hwnd)
+                SetTimer(hwnd, TIMER_NOTE_SAVE, 1500, nullptr);
             if (curNote == id)
             {
                 curNote = 0;
@@ -10829,12 +12323,29 @@ namespace ui
         void OnTick()
         {
             auto evs = td::g_eng.Tick();
+            if (todosSavePending && MonoMs() - todosLastSaveAttempt >= 3000)
+                SaveTodos();
+            if ((noteDirty || noteIndexSavePending || !pendingNoteIds.empty()) &&
+                MonoMs() - noteLastSaveAttempt >= 3000)
+                RetryNotePersistence();
             for (auto &e : evs)
                 AddAlertFor(e);
             {
                 auto missedNow = td::g_eng.TakeMissed(); // one popup for everything that was missed
                 if (!missedNow.empty())
                     AddMissedAlert(missedNow);
+            }
+            if (td::g_eng.TakeSaveWarning())
+            {
+                const bool conflict = td::g_eng.TakeSaveConflict();
+                const bool recoverySaved = td::g_eng.TakeSaveRecoverySaved();
+                SetStatus(conflict
+                              ? (recoverySaved
+                                     ? L"Another WinKlok session changed timer/alarm data. A recovery copy was saved in WinKlokData\\Recovery; reopen WinKlok before editing again."
+                                     : L"Another WinKlok session changed timer/alarm data. This change could not be saved; keep WinKlok open and try again.")
+                              : (recoverySaved
+                                     ? L"Could not commit timers or alarms to shared storage. A recovery copy was saved in WinKlokData\\Recovery."
+                                     : L"Could not save timers or alarms. Your current changes are still in memory; WinKlok will retry."));
             }
             UpdateTickInterval();
             KeepAlertsPlaced();
@@ -11417,7 +12928,11 @@ namespace ui
             }
             wchar_t nm[64] = {};
             GetWindowTextW(edits[E_TNAME], nm, 64);
-            td::g_eng.TimerStart(nm, ms);
+            if (!td::g_eng.TimerStart(nm, ms))
+            {
+                SetStatus(L"Could not start the timer. Your input was kept; please try again.");
+                return;
+            }
             SetWindowTextW(edits[E_TNAME], L"");
             Invalidate();
         }
@@ -11444,7 +12959,11 @@ namespace ui
             }
             wchar_t nm[64] = {};
             GetWindowTextW(edits[E_TNAME], nm, 64);
-            td::g_eng.PresetAdd(nm, secs);
+            if (!td::g_eng.PresetAdd(nm, secs))
+            {
+                SetStatus(L"Could not save the preset. Your timer values were kept; please try again.");
+                return;
+            }
             SetStatus(L"Preset saved");
         }
 
@@ -11534,7 +13053,11 @@ namespace ui
             GetWindowTextW(edits[E_ALABEL], nm, 64);
             edit.label = nm;
             edit.enabled = true;
-            td::g_eng.AlarmSave(edit);
+            if (!td::g_eng.AlarmSave(edit))
+            {
+                SetStatus(L"Could not save the alarm. Your changes were kept; please try again.");
+                return;
+            }
             // The tone and snooze just chosen become the defaults for the next alarm.
             td::g_set.alarmSound = std::min(td::kSoundCount - 1, std::max(0, edit.sound));
             td::g_set.alarmSnooze = std::min(60, std::max(1, edit.snoozeMin));
@@ -11854,6 +13377,9 @@ namespace ui
             std::wstring text;
         };
         std::vector<Todo> todos;
+        uint64_t todosStoreRevision = 0;
+        ULONGLONG todosLastSaveAttempt = 0;
+        bool todosSavePending = false, todosPersistenceBlocked = false;
         int nextTodoId = 1, todoFilter = 0 /*0 all, 1 active, 2 done*/, todoEditId = 0, todoDelArmedId = 0;
         bool todoDropOpen = false; // the "new task" input that drops down under the header
         float todoDropK = 0.f, todoDropFrom = 0.f;
@@ -11875,41 +13401,158 @@ namespace ui
             return L"Created " + DateStr(st, L"MMM d, yyyy") + L"  \u00B7  " + td::FmtTimeOfDay(st.wHour, st.wMinute);
         }
 
-        void SaveTodos()
+        bool SaveTodos()
         {
             std::wstring o = L"v1\n";
             for (const Todo &t : todos)
                 o += std::to_wstring(t.id) + L"|" + (t.done ? L"1" : L"0") + L"|0|0|" + std::to_wstring(t.created) + L"|" + td::Esc(t.text) + L"\n";
-            Wh_SetStringValue(L"todos", o.c_str());
-            Wh_SetIntValue(L"todoNext", nextTodoId);
+            if (todosPersistenceBlocked)
+            {
+                todosSavePending = false; // never overwrite an unreadable legacy task list
+                const bool recovered = wkstore::SaveRecoveryOnly(L"todos", o);
+                SetStatus(recovered
+                              ? L"Existing task data could not be validated. Your new task changes were kept in WinKlokData\\Recovery; original data was preserved."
+                              : L"Tasks were not saved because existing task data could not be validated; original data was preserved.");
+                return false;
+            }
+            todosLastSaveAttempt = MonoMs();
+            const bool ok = wkstore::WriteSnapshot(L"todos", o, todosStoreRevision);
+            const bool conflict = !ok && wkstore::LastWriteWasConflict();
+            todosSavePending = !ok && !conflict;
+            if (!ok)
+                SetStatus(conflict
+                              ? (wkstore::LastRecoveryCopySaved()
+                                     ? L"Another WinKlok session changed the task list. Your change was saved in WinKlokData\\Recovery; reopen WinKlok before editing again."
+                                     : L"Another WinKlok session changed the task list. Your change could not be committed; copy it before closing WinKlok.")
+                              : (wkstore::LastRecoveryCopySaved()
+                                     ? L"Could not save tasks. A recovery copy was saved in WinKlokData\\Recovery."
+                                     : L"Could not save tasks. Your current changes are still in memory; WinKlok will retry."));
+            return ok;
         }
         void LoadTodos()
         {
             todos.clear();
-            // Room for a full list: kMaxTodos lines of up to 200 characters with every one of them escaped, plus the fields.
-            std::vector<wchar_t> buf(kMaxTodos * 460 + 64);
-            const size_t n = Wh_GetStringValue(L"todos", buf.data(), buf.size());
-            int maxId = 0;
-            if (n > 0 && n < buf.size())
+            std::wstring serialized;
+            const bool fromSnapshot = wkstore::ReadSnapshot(L"todos", serialized, todosStoreRevision);
+            const bool snapshotArtifacts = wkstore::SnapshotArtifactsExist(L"todos");
+            if (!fromSnapshot && snapshotArtifacts)
             {
-                const auto lines = td::Split(std::wstring(buf.data(), n), L'\n');
-                for (size_t i = 1; i < lines.size() && todos.size() < kMaxTodos; ++i)
+                todosPersistenceBlocked = true;
+                SetStatus(L"New task storage could not be read. Legacy tasks are shown read-only and the original files were preserved.");
+            }
+            if (!fromSnapshot)
+            {
+                // Legacy string values are read only for migration. Never delete or rewrite them.
+                // A capacity probe is required because a truncated prefix can end at a
+                // complete record boundary and otherwise pass structural validation.
+                if (wkstore::LegacyStringStoreReliable())
                 {
-                    const auto f = td::Split(lines[i], L'|');
-                    if (f.size() < 6)
-                        continue;
-                    Todo t;
-                    t.id = (int)td::ToLL(f[0]);
-                    if (t.id <= 0)
-                        continue;
-                    t.done = f[1] == L"1";
-                    t.created = td::ToLL(f[4]);
-                    t.text = td::ClampName(td::Unesc(f[5]), 200);
-                    maxId = std::max(maxId, t.id);
-                    todos.push_back(std::move(t));
+                    std::vector<wchar_t> buf(200001);
+                    const size_t n = Wh_GetStringValue(L"todos", buf.data(), buf.size());
+                    if (n > 0 && n < buf.size())
+                        serialized.assign(buf.data(), n);
+                }
+                else
+                {
+                    std::vector<wchar_t> detect(32768);
+                    const size_t legacyChars = Wh_GetStringValue(L"todos", detect.data(), detect.size());
+                    if (legacyChars > 0 && legacyChars < detect.size())
+                    {
+                        // Best-effort visibility only. The value may be a truncated
+                        // prefix, so keep the task list read-only and never migrate it.
+                        serialized.assign(detect.data(), legacyChars);
+                        todosPersistenceBlocked = true;
+                        SetStatus(L"The preserved old task list may be incomplete on this Portable Windhawk version. Readable tasks are shown read-only; original data was not changed.");
+                    }
+                    else if (legacyChars > 0 || Wh_GetIntValue(L"todoNext", 1) > 1)
+                    {
+                        todosPersistenceBlocked = true;
+                        SetStatus(L"Existing tasks were preserved, but no safe readable copy of the complete old task list was available");
+                    }
                 }
             }
-            nextTodoId = std::max(maxId + 1, Wh_GetIntValue(L"todoNext", 1));
+            int maxId = 0;
+            const int storedNextTodo = std::max(1, Wh_GetIntValue(L"todoNext", 1));
+            if (serialized.empty() && (storedNextTodo > 1 || snapshotArtifacts))
+            {
+                todosPersistenceBlocked = true;
+                SetStatus(L"The existing task list may be unreadable; it was preserved and not overwritten");
+            }
+            if (!serialized.empty())
+            {
+                auto lines = td::SplitFlattenedTodos(serialized);
+                if (!td::ValidTodoRecords(lines))
+                {
+                    bool recoveredPrevious = false;
+                    if (fromSnapshot)
+                    {
+                        std::wstring previous;
+                        uint64_t previousRevision = 0;
+                        if (wkstore::ReadPreviousSnapshot(L"todos", previous, previousRevision))
+                        {
+                            auto previousLines = td::SplitFlattenedTodos(previous);
+                            if (td::ValidTodoRecords(previousLines))
+                            {
+                                serialized = std::move(previous);
+                                lines = std::move(previousLines);
+                                todosStoreRevision = previousRevision;
+                                todosPersistenceBlocked = true; // keep the newer suspect generation intact
+                                recoveredPrevious = true;
+                                SetStatus(L"The newest task snapshot failed validation. The previous valid task list was loaded read-only; the newer data was preserved.");
+                                Wh_Log(L"WinKlok: loaded the previous validated task generation read-only");
+                            }
+                        }
+                    }
+                    if (!recoveredPrevious && fromSnapshot && wkstore::LegacyStringStoreReliable())
+                    {
+                        std::vector<wchar_t> legacyBuffer(200001);
+                        const size_t legacyChars = Wh_GetStringValue(L"todos", legacyBuffer.data(), legacyBuffer.size());
+                        if (legacyChars > 0 && legacyChars < legacyBuffer.size())
+                        {
+                            std::wstring legacy(legacyBuffer.data(), legacyChars);
+                            auto legacyLines = td::SplitFlattenedTodos(legacy);
+                            if (td::ValidTodoRecords(legacyLines))
+                            {
+                                serialized = std::move(legacy);
+                                lines = std::move(legacyLines);
+                                todosPersistenceBlocked = true;
+                                recoveredPrevious = true;
+                                SetStatus(L"The newest task data could not be validated. The preserved older task list is shown read-only; newer files were left untouched.");
+                                Wh_Log(L"WinKlok: loaded preserved legacy task list read-only");
+                            }
+                        }
+                    }
+                    if (!recoveredPrevious)
+                    {
+                        todos.clear();
+                        todosPersistenceBlocked = true;
+                        todosSavePending = false;
+                        Wh_Log(L"WinKlok: task data did not pass validation; the original data was preserved");
+                        SetStatus(L"Existing task data could not be validated; it was preserved and not overwritten");
+                    }
+                }
+                if (td::ValidTodoRecords(lines))
+                {
+                    for (size_t i = 1; i < lines.size(); ++i)
+                    {
+                        if (lines[i].empty())
+                            continue;
+                        const auto f = td::Split(lines[i], L'|');
+                        Todo t;
+                        t.id = (int)td::ToLL(f[0]);
+                        t.done = f[1] == L"1";
+                        t.created = td::ToLL(f[4]);
+                        t.text = td::Unesc(f[5]);
+                        maxId = std::max(maxId, t.id);
+                        todos.push_back(std::move(t));
+                    }
+                    if (!fromSnapshot && !todosPersistenceBlocked)
+                        SaveTodos(); // migrate only after the complete legacy list has been parsed
+                }
+            }
+            nextTodoId = std::max(maxId + 1, storedNextTodo);
+            if (!todosPersistenceBlocked && !fromSnapshot && serialized.empty())
+                SaveTodos(); // create an empty v2 store on a genuine first run
         }
 
         // Newest first. Completed tasks are listed separately, below the open ones.
@@ -11979,9 +13622,20 @@ namespace ui
                 return;
             if (todoEditId)
             { // saving an edit
-                if (Todo *t = FindTodo(todoEditId))
-                    t->text = text;
-                SaveTodos();
+                Todo *t = FindTodo(todoEditId);
+                if (!t)
+                {
+                    SetStatus(L"This task no longer exists in the current shared list. Reopen WinKlok to load the latest list.");
+                    return;
+                }
+                const std::wstring previousText = t->text;
+                t->text = text;
+                if (!SaveTodos())
+                {
+                    t->text = previousText;
+                    todosSavePending = false; // preserve the editor text; don't retry a rolled-back edit
+                    return;
+                }
                 SetTodoDrop(false);
                 ResizePanelToContent();
                 Invalidate();
@@ -11993,13 +13647,24 @@ namespace ui
                 return;
             }
             Todo t;
-            t.id = nextTodoId++;
+            if (!wkstore::ReserveSharedId(L"todos-id", L"todoNext", nextTodoId, t.id))
+            {
+                SetStatus(L"A new task could not be reserved safely. Please try again.");
+                return;
+            }
+            nextTodoId = t.id + 1;
             t.text = text;
             t.created = td::WallMs() / 1000;
             todos.push_back(std::move(t));
+            if (!SaveTodos())
+            {
+                todos.pop_back();
+                todosSavePending = false; // the input remains available for an explicit retry
+                SetWindowTextW(edits[E_TODO], text.c_str());
+                return;
+            }
             SetWindowTextW(edits[E_TODO], L"");
             pendingFocus = E_TODO; // ready for the next task
-            SaveTodos();
             ResizePanelToContent();
             Invalidate();
         }
@@ -12401,9 +14066,13 @@ namespace ui
             case ID_TM_PRESET_DELETE:
                 if (param >= 0 && param < (int)snap.presets.size())
                 {
-                    td::g_eng.PresetDelete((size_t)param);
-                    presetDeleteIndex = -1;
-                    snap = td::g_eng.Snapshot();
+                    if (td::g_eng.PresetDelete((size_t)param))
+                    {
+                        presetDeleteIndex = -1;
+                        snap = td::g_eng.Snapshot();
+                    }
+                    else
+                        SetStatus(L"Could not remove the preset. Your existing presets were kept; please try again.");
                 }
                 break;
             case ID_TM_SAVEPRESET:
@@ -12532,10 +14201,18 @@ namespace ui
                     break;
                 if (todoClearArmedUntil && now < todoClearArmedUntil)
                 {
+                    const std::vector<Todo> previous = todos;
                     todos.clear();
-                    todoClearArmedUntil = 0;
-                    SetTodoDrop(false);
-                    SaveTodos();
+                    if (SaveTodos())
+                    {
+                        todoClearArmedUntil = 0;
+                        SetTodoDrop(false);
+                    }
+                    else
+                    {
+                        todos = previous;
+                        todosSavePending = false;
+                    }
                 }
                 else
                     todoClearArmedUntil = now + 3000;
@@ -12546,19 +14223,34 @@ namespace ui
                 ScrollTo(0.f);
                 break;
             case ID_TD_CLEARDONE:
+            {
+                const std::vector<Todo> previous = todos;
                 todos.erase(std::remove_if(todos.begin(), todos.end(), [](const Todo &t)
                                            { return t.done; }),
                             todos.end());
-                SaveTodos();
-                if (todoEditId && !FindTodo(todoEditId))
-                    SetTodoDrop(false); // the task being edited was a completed one and is gone: close the input
+                if (SaveTodos())
+                {
+                    if (todoEditId && !FindTodo(todoEditId))
+                        SetTodoDrop(false); // the task being edited was completed and is now gone
+                }
+                else
+                {
+                    todos = previous;
+                    todosSavePending = false;
+                }
                 break;
+            }
             case ID_TD_CHECK:
             case ID_TD_ROW:
                 if (Todo *t = FindTodo(param))
                 {
+                    const bool previousDone = t->done;
                     t->done = !t->done;
-                    SaveTodos();
+                    if (!SaveTodos())
+                    {
+                        t->done = previousDone;
+                        todosSavePending = false;
+                    }
                 }
                 break;
             case ID_TD_EDIT:
@@ -12574,14 +14266,22 @@ namespace ui
                 const ULONGLONG now = MonoMs();
                 if (todoDelArmedId == param && now < todoDelArmedUntil)
                 {
+                    const std::vector<Todo> previous = todos;
                     todos.erase(std::remove_if(todos.begin(), todos.end(), [&](const Todo &t)
                                                { return t.id == param; }),
                                 todos.end());
-                    if (todoEditId == param)
-                        SetTodoDrop(false);
-                    todoDelArmedId = 0;
-                    todoDelArmedUntil = 0;
-                    SaveTodos();
+                    if (SaveTodos())
+                    {
+                        if (todoEditId == param)
+                            SetTodoDrop(false);
+                        todoDelArmedId = 0;
+                        todoDelArmedUntil = 0;
+                    }
+                    else
+                    {
+                        todos = previous;
+                        todosSavePending = false;
+                    }
                     break;
                 }
                 todoDelArmedId = param;
@@ -12730,7 +14430,7 @@ namespace ui
                     AdvanceScrollAnimation();
                     return 0;
                 case TIMER_NOTE_SAVE:
-                    FlushNote();
+                    RetryNotePersistence();
                     return 0;
                 case TIMER_ABOUT_ANIM:
                     if (!aboutA.Running(kAboutMs))
@@ -13179,6 +14879,8 @@ namespace ui
             }
             if (copied != size.QuadPart)
                 ok = false; // reject a source file that changed or was truncated during the copy
+            if (ok && !FlushFileBuffers(out))
+                ok = false;
             CloseHandle(in);
             CloseHandle(out);
             return ok;
@@ -13213,15 +14915,37 @@ namespace ui
             return Utf8ToWide((const char *)b + off, n - off);
         }
 
-        // The private copy lives in the mod's own storage folder (removed together with the mod), under a fixed name: only
-        // one read runs at a time. Anything left from an interrupted read is deleted before the next one and at start-up.
+        // The Windows notification database is sensitive and machine-wide Windhawk
+        // storage is shared between accounts. Keep this disposable copy under the
+        // current user's LocalAppData, with a distinct name per logon session/process.
+        static std::wstring CacheDirectory()
+        {
+            std::vector<wchar_t> local(32768, L'\0');
+            const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local.data(), (DWORD)local.size());
+            if (!n || n >= local.size())
+                return L"";
+            const std::wstring userDir = std::wstring(local.data(), n) + L"\\WinKlok";
+            if (!CreateDirectoryW(userDir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+                return L"";
+            const DWORD userAttr = GetFileAttributesW(userDir.c_str());
+            if (userAttr == INVALID_FILE_ATTRIBUTES || !(userAttr & FILE_ATTRIBUTE_DIRECTORY))
+                return L"";
+            const std::wstring cacheDir = userDir + L"\\NotificationCache";
+            if (!CreateDirectoryW(cacheDir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+                return L"";
+            const DWORD cacheAttr = GetFileAttributesW(cacheDir.c_str());
+            return cacheAttr != INVALID_FILE_ATTRIBUTES && (cacheAttr & FILE_ATTRIBUTE_DIRECTORY) ? cacheDir : L"";
+        }
         static std::wstring CopyBase()
         {
-            wchar_t dir[MAX_PATH] = {};
-            if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) || !dir[0])
+            const std::wstring dir = CacheDirectory();
+            if (dir.empty())
                 return L"";
-            CreateDirectoryW(dir, nullptr); // (already there in most cases)
-            return std::wstring(dir) + L"\\wpndatabase-copy.db";
+            DWORD sessionId = 0;
+            if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId))
+                return L"";
+            return dir + L"\\wpndatabase-copy-s" + std::to_wstring(sessionId) +
+                   L"-p" + std::to_wstring(GetCurrentProcessId()) + L".db";
         }
         static void DeleteCopy(const std::wstring &dst)
         {
@@ -13232,24 +14956,70 @@ namespace ui
             DeleteFileW((dst + L"-shm").c_str());
             DeleteFileW((dst + L"-journal").c_str());
         }
+        static HANDLE AcquireCopyLock(const std::wstring &dst, bool create)
+        {
+            if (dst.empty())
+                return INVALID_HANDLE_VALUE;
+            // FILE_SHARE_DELETE allows marking the lock for deletion while held,
+            // but denies another reader's read/write access until this handle closes.
+            return CreateFileW((dst + L".lock").c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_DELETE,
+                               nullptr, create ? OPEN_ALWAYS : OPEN_EXISTING, FILE_ATTRIBUTE_HIDDEN, nullptr);
+        }
+        static bool DeleteExactFileWhenIdle(const std::wstring &path)
+        {
+            // FILE_FLAG_DELETE_ON_CLOSE is used only when an exclusive open succeeds.
+            // An older WinKlok reader that still has the file open makes this fail.
+            HANDLE h = CreateFileW(path.c_str(), GENERIC_READ | DELETE, 0, nullptr, OPEN_EXISTING,
+                                   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+            if (h != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(h);
+                return true;
+            }
+            const DWORD error = GetLastError();
+            return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+        }
+        static void CleanupLegacySharedCache()
+        {
+            wchar_t storage[32768] = {};
+            const size_t n = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+            if (!n || n >= ARRAYSIZE(storage))
+                return;
+            const std::wstring oldBase = std::wstring(storage, n) + L"\\wpndatabase-copy.db";
+            // If the main DB is still open by an older session, leave every sidecar
+            // alone too. Deleting a WAL/journal independently could change its read.
+            if (!DeleteExactFileWhenIdle(oldBase))
+                return;
+            DeleteExactFileWhenIdle(oldBase + L"-wal");
+            DeleteExactFileWhenIdle(oldBase + L"-shm");
+            DeleteExactFileWhenIdle(oldBase + L"-journal");
+        }
         static void CleanupLeftovers()
         {
-            DeleteCopy(CopyBase());
-            // Copies that earlier test builds left in %TEMP% (WKP<hex>.tmp and its -wal/-shm/-journal).
-            wchar_t tmp[MAX_PATH] = {};
-            const DWORD n = GetTempPathW(MAX_PATH, tmp);
-            if (!n || n >= MAX_PATH)
+            CleanupLegacySharedCache(); // exact legacy filename only; never sweep unrelated temporary files
+            const std::wstring dir = CacheDirectory();
+            if (dir.empty())
                 return;
             WIN32_FIND_DATAW fd{};
-            HANDLE h = FindFirstFileW((std::wstring(tmp) + L"WKP*.tmp*").c_str(), &fd);
-            if (h == INVALID_HANDLE_VALUE)
+            HANDLE find = FindFirstFileW((dir + L"\\wpndatabase-copy-*.db.lock").c_str(), &fd);
+            if (find == INVALID_HANDLE_VALUE)
                 return;
             do
             {
-                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-                    DeleteFileW((std::wstring(tmp) + fd.cFileName).c_str());
-            } while (FindNextFileW(h, &fd));
-            FindClose(h);
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                    continue;
+                const std::wstring lockPath = dir + L"\\" + fd.cFileName;
+                HANDLE lock = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_DELETE,
+                                          nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_HIDDEN, nullptr);
+                if (lock == INVALID_HANDLE_VALUE)
+                    continue; // another Explorer session is actively using this copy
+                const std::wstring base = lockPath.substr(0, lockPath.size() - 5); // remove ".lock"
+                DeleteCopy(base);
+                // Leave the zero-byte lock file in place. A persistent file avoids
+                // a delete/recreate race between concurrent readers.
+                CloseHandle(lock);
+            } while (FindNextFileW(find, &fd));
+            FindClose(find);
         }
 
         // Reads the toast notifications currently held by Windows, newest first. False: they could not be read.
@@ -13263,12 +15033,24 @@ namespace ui
             const std::wstring dst = CopyBase();
             if (src.empty() || dst.empty())
                 return false;
+            HANDLE cacheLock = AcquireCopyLock(dst, true);
+            if (cacheLock == INVALID_HANDLE_VALUE)
+                return false; // never share or delete another session's temporary database copy
             auto cleanup = [&]()
             { DeleteCopy(dst); };
-            cleanup(); // a leftover of an interrupted read
+            auto releaseLock = [&]()
+            {
+                // Keep the zero-byte lock file permanently. Deleting its pathname
+                // before closing the handle would let another process recreate the
+                // same path while this handle still protects the old file object.
+                CloseHandle(cacheLock);
+                cacheLock = INVALID_HANDLE_VALUE;
+            };
+            cleanup(); // our own stale copy, while holding its per-process lock
             if (!CopyShared(src, dst))
             {
                 cleanup();
+                releaseLock();
                 return false;
             }
             auto copySidecar = [&](const wchar_t *suffix)
@@ -13285,6 +15067,7 @@ namespace ui
             if (!copySidecar(L"-wal") || !copySidecar(L"-journal"))
             { // an existing WAL/journal is part of the database snapshot, not an optional decoration
                 cleanup();
+                releaseLock();
                 return false;
             }
             const std::string path = [&]()
@@ -13345,6 +15128,7 @@ namespace ui
             else if (db)
                 g_sql.close(db);
             cleanup();
+            releaseLock();
             return ok;
         }
 
@@ -14837,7 +16621,8 @@ namespace ui
         g_notifWnd = nullptr;
         wpn::Shutdown(); // the notification reader is cancelled and joined before anything it uses goes away
         if (g_panel && g_panel->hwnd)
-            g_panel->FlushNote();
+            g_panel->FlushPersistenceOnShutdown();
+        td::g_eng.FlushPendingSave();
         RemoveWheelHook();
         std::vector<AlertWindow *> alerts = g_alerts;
         g_alerts.clear();
