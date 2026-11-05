@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.99
+// @version         0.4.0
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -70,6 +70,17 @@ DIP in half-DIP steps, and **Border opacity** fades the line. It is off by
 default and applies to every dock theme. High contrast keeps the Windows
 material without it.
 
+**Shape** and **Alignment** are under **Dock layout**. **Island**, the default,
+floats the dock **Distance from screen edge** away from the screen edge with every
+corner rounded. **Edge** puts the dock on the screen edge: its corners there are
+square and its far corners keep the dock corner radius. Edge ignores the edge
+distance, so the taskbar is that much shorter and the dock keeps its height.
+**Whole group**, the default, centers the buttons, the 12-DIP gap, and the tray
+together. **Button area** centers Start through the last app button on the
+monitor, and the tray follows 12 DIP to their right. Every theme, the border line,
+and the Liquid shadow follow the shape. They are saved as `shape` (`island` or
+`edge`) and `alignment` (`group` or `buttons`) in `[settings]`.
+
 **Text color** can retain Windows' color, force light or dark text, or
 adapt each text element from its local composed background. Adaptive color uses
 a rolling, time-weighted brightness average to reduce switching on animated
@@ -107,17 +118,19 @@ in pixels and DIPs. **Refresh** remeasures after external changes. Unsupported
 icon trees use a clearly marked estimate. The samples use real Windows app
 icon resources; transparent padding within an icon and Windows materials can
 vary. The preview stays centered regardless of taskbar position or screen-edge
-distance. **Save & apply** (Ctrl+S) saves to:
+distance; with the Edge shape it sits on its bottom edge. **Save & apply** (Ctrl+S) saves to:
 `%LOCALAPPDATA%\Windhawk\windows-11-better-ultrawide-taskbar\settings.toml`.
 The window body is Acrylic over the desktop, using the native Acrylic brush. The
 floating panels and the controls on them are liquid glass, drawn by the same
 shader as the taskbar. The glass controls are the buttons, the toggles, the
-slider knobs, the choice lists and number fields, and the sidebar pages. Each
+slider knobs, the choice lists and number fields, the segmented switches, and the
+sidebar pages. Each
 is a single glass plate that shows its own hover and press. An open choice list
 is a rounded frosted card. A pressed control grows,
 and toggle and slider knobs turn from solid to clear glass and grow past their
 track while held.
-Toggle knobs slide to their new side and the page card slides to the selected
+Toggle knobs slide to their new side, a segmented switch's knob slides to the
+selected segment, and the page card slides to the selected
 page, following Windows animation settings. The settings on the
 **Settings UI** page tune that glass. Panel blur, refraction, depth, and
 highlights apply to the panels and the glass controls. These values live in
@@ -232,7 +245,7 @@ where they apply to the floating panels and the glass controls.
 
 The **Taskbar height and icon size** mod is detected automatically. When using
 it, set that mod's taskbar height to:
-`normal height + edge distance - 4`.
+`normal height + edge distance - 4`, or `normal height - 4` with the Edge shape.
 Native task and tray hover plates fit the dock without changing button
 layout.
 
@@ -387,6 +400,8 @@ constexpr unsigned kRefreshRetryLimit = 10;
 #define UW_STRINGIZE_IMPL(value) #value
 #define UW_STRINGIZE(value) UW_STRINGIZE_IMPL(value)
 constexpr size_t kMaxButtonLenses = UW_BUTTON_LENS_CAP;
+#define UW_DOCK_PIECE_CAP 4
+constexpr size_t kMaxDockPieces = UW_DOCK_PIECE_CAP;
 constexpr wchar_t kWindowClass[] = L"Windhawk.BetterUltrawideTaskbar.2";
 std::atomic<bool> g_stopping{};
 std::atomic<unsigned> g_active{};
@@ -585,7 +600,8 @@ settingsjson::JsonObject ReadLocalSettings(std::wstring const& path) {
     }
 }
 
-enum class SettingKind { Choice, Number, Toggle, Color };
+// Segmented holds a choice like Choice and shows it as a row of segments.
+enum class SettingKind { Choice, Number, Toggle, Color, Segmented };
 struct SettingChoice { PCWSTR value; PCWSTR label; };
 constexpr SettingChoice kThemeChoices[]{
     {L"native", L"Windows"}, {L"glass", L"Glass"},
@@ -609,6 +625,8 @@ constexpr SettingChoice kSurfaceChoices[]{
 constexpr SettingChoice kLightingChoices[]{
     {L"original", L"Original"}, {L"rich", L"Rich specular"},
     {L"rim", L"Directional rim"}};
+constexpr SettingChoice kShapeChoices[]{{L"island", L"Island"}, {L"edge", L"Edge"}};
+constexpr SettingChoice kAlignmentChoices[]{{L"group", L"Whole group"}, {L"buttons", L"Button area"}};
 struct SettingField {
     PCWSTR key;
     PCWSTR label;
@@ -731,6 +749,8 @@ constexpr SettingField kSettingFields[]{
     {L"ui.bodyBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0},
     {L"ui.bodyBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 3, 2, 1, 20, {}, 2},
     {L"ui.bodyBorderOpacity", L"Border opacity (%)", SettingKind::Number, 3, 100, 0, 100},
+    {L"shape", L"Shape", SettingKind::Segmented, 0, 0, 0, 0, kShapeChoices},
+    {L"alignment", L"Alignment", SettingKind::Segmented, 0, 0, 0, 0, kAlignmentChoices},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -791,6 +811,19 @@ int LocalChoice(settingsjson::JsonObject const& settings, PCWSTR key) {
         if (value == field.choices[i].value) return static_cast<int>(i);
     return field.defaultValue;
 }
+
+enum class DockShape { Island, Edge };        // kShapeChoices order.
+enum class DockAlignment { Group, Buttons };  // kAlignmentChoices order.
+// The dock settings the taskbar and the editor preview both draw from.
+struct DockStyle {
+    DockShape shape{};
+    DockAlignment alignment{};
+};
+DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
+    return {DockShape(LocalChoice(values, L"shape")),
+            DockAlignment(LocalChoice(values, L"alignment"))};
+}
+DockStyle g_dockStyle;
 
 std::wstring CanonicalTrayId(std::wstring const& text) {
     if (text.empty() || text.size() > 20 ||
@@ -1578,9 +1611,11 @@ struct EditorControl {
     // Template parts under the glass lens: a toggle's on/off pills and knob, a slider's thumb.
     FrameworkElement lensPart{nullptr}, offPill{nullptr}, knobPart{nullptr};
     Controls::Primitives::Popup dropDown{nullptr}; // A choice's dropdown.
-    GlassMotion knob; // 0 off, 1 on.
+    GlassMotion knob; // A toggle: 0 off, 1 on. A segmented switch: 1 once its knob reaches the selection.
+    // A segmented knob's start and last drawn bounds, in its list's coordinates so a scroll cannot move them.
+    winrt::Windows::Foundation::Rect segmentFrom{}, segmentCard{};
     std::wstring help, lastValidColor;
-    Controls::ComboBox::SelectionChanged_revoker selection;
+    Controls::Primitives::Selector::SelectionChanged_revoker selection;
     Controls::ToggleSwitch::Toggled_revoker toggled;
     Controls::TextBox::TextChanging_revoker textChanged;
     Controls::Slider::ValueChanged_revoker valueChanged;
@@ -1892,8 +1927,11 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
     int uiModel = editor.controls[41].input.as<Controls::ComboBox>().SelectedIndex();
     bool uiSnell = uiModel == 1;
     bool uiRim = editor.controls[52].input.as<Controls::ComboBox>().SelectedIndex() == 2;
+    bool island = editor.controls[110].input.as<Controls::Primitives::Selector>().SelectedIndex() ==
+        int(DockShape::Island);
     for (size_t i = 0; i < editor.controls.size(); ++i) {
         bool enabled = true;
+        if (i == 6) enabled &= island; // Edge sits on the screen edge.
         if (i == 8 || i == 9) enabled &= liquid;
         if (kSettingFields[i].page == 1 && i != 9) enabled &= liquid && custom;
         if (i == 2) enabled &= editor.trayEnabled.IsOn();
@@ -2492,8 +2530,8 @@ void ReloadEditor(SettingsEditor& editor) {
             auto const& control = editor.controls[i];
             if (field.kind == SettingKind::Toggle) {
                 control.input.as<Controls::ToggleSwitch>().IsOn(values.GetNamedBoolean(field.key));
-            } else if (field.kind == SettingKind::Choice) {
-                control.input.as<Controls::ComboBox>().SelectedIndex(LocalChoice(values, field.key));
+            } else if (field.kind == SettingKind::Choice || field.kind == SettingKind::Segmented) {
+                control.input.as<Controls::Primitives::Selector>().SelectedIndex(LocalChoice(values, field.key));
             } else if (field.kind == SettingKind::Color) {
                 control.input.as<Controls::TextBox>().Text(LocalString(values, field.key));
             } else {
@@ -2530,8 +2568,8 @@ settingsjson::JsonObject EditorPageValues(SettingsEditor const& editor, int page
             double value = std::round(control.slider.Value() * field.displayDivisor) /
                            field.displayDivisor;
             values.Insert(field.key, settingsjson::JsonValue::CreateNumberValue(value));
-        } else if (field.kind == SettingKind::Choice) {
-            auto index = control.input.as<Controls::ComboBox>().SelectedIndex();
+        } else if (field.kind == SettingKind::Choice || field.kind == SettingKind::Segmented) {
+            auto index = control.input.as<Controls::Primitives::Selector>().SelectedIndex();
             if (index >= 0 && static_cast<size_t>(index) < field.choices.size())
                 values.Insert(field.key, settingsjson::JsonValue::CreateStringValue(field.choices[index].value));
         } else if (field.kind == SettingKind::Color) {
@@ -2555,8 +2593,8 @@ bool SaveEditor(SettingsEditor& editor) {
         if (field.kind == SettingKind::Toggle) {
             values.Insert(field.key, settingsjson::JsonValue::CreateBooleanValue(
                 input.as<Controls::ToggleSwitch>().IsOn()));
-        } else if (field.kind == SettingKind::Choice) {
-            auto index = input.as<Controls::ComboBox>().SelectedIndex();
+        } else if (field.kind == SettingKind::Choice || field.kind == SettingKind::Segmented) {
+            auto index = input.as<Controls::Primitives::Selector>().SelectedIndex();
             if (index < 0 || static_cast<size_t>(index) >= field.choices.size()) return false;
             values.Insert(field.key, settingsjson::JsonValue::CreateStringValue(field.choices[index].value));
         } else if (field.kind == SettingKind::Color) {
@@ -3178,7 +3216,7 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.refreshTray = find(L"RefreshTray").as<Controls::Button>();
     editor.syncing = true;
     constexpr size_t displayOrder[]{
-        0, 1, 36, 100, 101, 102, 103, 104, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
+        0, 1, 36, 100, 101, 102, 103, 104, 110, 111, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
         9, 20, 21, 10, 22, 23, 24, 11, 25, 12, 26,
         29, 14, 13, 15, 30, 31, 32, 16, 17, 18, 27, 28, 33, 34, 35,
         58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
@@ -3195,7 +3233,8 @@ void CreateEditorContent(SettingsEditor& editor) {
         auto const& field = kSettingFields[i];
         auto& control = editor.controls[i];
         auto fields = targets[field.page];
-        PCWSTR section = i == 98 ? L"Tray highlights" : i == 0 ? L"Style & color" : i == 3 ? L"Geometry" :
+        PCWSTR section = i == 98 ? L"Tray highlights" : i == 0 ? L"Style & color" : i == 110 ? L"Dock layout" :
+            i == 3 ? L"Geometry" :
             i == 7 ? L"Buttons" : i == 9 ? L"Material" : i == 21 ? L"Surface" :
             i == 11 ? L"Refraction" : i == 29 ? L"Lighting" :
             i == 16 ? L"Finish" : i == 33 ? L"Shadow" :
@@ -3263,6 +3302,44 @@ void CreateEditorContent(SettingsEditor& editor) {
             control.input = choice;
             control.selection = choice.SelectionChanged(winrt::auto_revoke,
                 [&editor](auto const&, auto const&) { EditorChanged(editor); });
+        } else if (field.kind == SettingKind::Segmented) {
+            // The page scrolls; the list never needs to, so it cannot take the wheel.
+            auto list = Markup::XamlReader::Load(LR"XAML(
+<ListBox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+         Padding="2" CornerRadius="8" BorderThickness="0" FontSize="13"
+         ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+  <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+</ListBox>)XAML").as<Controls::ListBox>();
+            for (auto const& item : field.choices) {
+                Controls::ListBoxItem segment;
+                segment.Content(winrt::box_value(item.label));
+                segment.Padding({12, 5, 12, 5});
+                segment.MinHeight(0);
+                segment.CornerRadius({6, 6, 6, 6});
+                segment.HorizontalContentAlignment(HorizontalAlignment::Center);
+                list.Items().Append(segment);
+            }
+            control.input = list;
+            control.knob = {1, 1};
+            control.selection = list.SelectionChanged(winrt::auto_revoke,
+                [&editor, i](auto const&, auto const& args) {
+                    auto& control = editor.controls[i];
+                    auto list = control.input.as<Controls::ListBox>();
+                    // Ctrl+click clears a single selection; a switch always has one segment on.
+                    if (list.SelectedIndex() < 0) {
+                        if (args.RemovedItems().Size()) list.SelectedItem(args.RemovedItems().GetAt(0));
+                        return;
+                    }
+                    // A reload places the knob; a change while editing slides it from where it was drawn.
+                    if (editor.syncing || control.segmentCard.Width <= 0) {
+                        control.knob = {1, 1};
+                    } else {
+                        control.segmentFrom = control.segmentCard;
+                        control.knob = {0, 1};
+                        StartEditorMotion(editor);
+                    }
+                    EditorChanged(editor);
+                });
         } else if (field.kind == SettingKind::Toggle) {
             Controls::ToggleSwitch toggle;
             toggle.OnContent(winrt::box_value(L""));
@@ -3331,6 +3408,8 @@ void CreateEditorContent(SettingsEditor& editor) {
         Automation::AutomationProperties::SetAutomationId(control.input, field.key);
         PCWSTR help = i == 3 || i == 4 ? L"Rounded corners are limited to half the visible shape's width or height." :
             i == 5 ? L"Space above and below each button background. Icons and click targets keep their native size." :
+            i == 110 ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it." :
+            i == 111 ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
             i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
             i == 21 || i == 42 ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
             i == 22 || i == 43 ? L"Width of the curved edge, independent of the glass base thickness." :
@@ -4142,6 +4221,12 @@ double EffectiveDockRadius(double width, double height) {
                     std::max(0.0, std::min(width, height) / 2));
 }
 
+// How far Edge's outline runs past the screen edge: beyond its rounded corners and
+// the widest inner border line (10 DIP), so neither shows along the edge.
+double DockBleed(DockShape shape, double radius) {
+    return shape == DockShape::Edge ? std::max(radius, 11.0) : 0;
+}
+
 struct LiquidSettings {
     float zRadius{40};
     float refraction{0.69f};
@@ -4326,7 +4411,7 @@ struct GlassShadow {
     DropShadow shadow{nullptr};
 
     GlassShadow(Controls::Panel const& panel, FrameworkElement const& before,
-                CompositionRoundedRectangleGeometry const& geometry) {
+                CompositionGeometry const& geometry) {
         auto compositor = geometry.Compositor();
         host = Controls::Canvas();
         host.IsHitTestVisible(false);
@@ -4899,9 +4984,11 @@ struct Measurements {
     double trayWidth{};
     double buttonsWidth{};
     double shift{};
+    double center{}; // The dock's mirror line in background DIP: right edge = 2 * center - left edge.
     double backgroundOrigin{};
     double dockHeight{};
     DockInsets insets{};
+    bool atTop{};
 
     double dockOrigin() const { return origin - backgroundOrigin; }
     double visibleDockHeight() const {
@@ -4909,23 +4996,31 @@ struct Measurements {
     }
 };
 
+// Where the button area's centre goes on the host. The one place alignment is decided.
+double ButtonsCenter(double host, double tray, DockStyle const& style) {
+    return style.alignment == DockAlignment::Buttons ? host / 2 : (host - tray - kGap) / 2;
+}
+
 bool Plan(double host, double buttons, double tray, double nativeCenter,
-          double nativeTrayLeft, double nativeStartDelta, Placement& result) {
+          double nativeTrayLeft, double nativeStartDelta, Placement& result,
+          DockStyle const& style = {}) {
+    double buttonsCenter = ButtonsCenter(host, tray, style);
+    // Button area is off-centre, so its extent is checked on each side.
     if (!std::isfinite(host) || !std::isfinite(buttons) ||
         !std::isfinite(tray) || !std::isfinite(nativeCenter) ||
         !std::isfinite(nativeTrayLeft) || !std::isfinite(nativeStartDelta) ||
-        host <= 0 || buttons <= 0 || tray <= 0 || buttons + kGap + tray > host ||
+        host <= 0 || buttons <= 0 || tray <= 0 ||
+        buttonsCenter - buttons / 2 < 0 || buttonsCenter + buttons / 2 + kGap + tray > host ||
         std::abs(nativeCenter - host / 2) > 1 || nativeStartDelta > 1 ||
         nativeCenter + nativeStartDelta - buttons / 2 < -1 ||
         nativeCenter + nativeStartDelta + buttons / 2 > host + 1) {
         return false;
     }
-    double left = (host - buttons - kGap - tray) / 2;
     // buttonsX is the pure specification of the button shift; production routes
     // it through BoundaryThreshold's animated correction instead, but the check
     // harness asserts the 12-DIP gap and centering from the pair. Keep both.
-    result = {left + buttons / 2 - nativeCenter - nativeStartDelta,
-              left + buttons + kGap - nativeTrayLeft};
+    result = {buttonsCenter - nativeCenter - nativeStartDelta,
+              buttonsCenter + buttons / 2 + kGap - nativeTrayLeft};
     return true;
 }
 
@@ -4941,7 +5036,11 @@ struct OwnedDock {
     Visual visual{nullptr};
     CompositionClip originalClip{nullptr};
     CompositionGeometricClip clip{nullptr};
+    // The hull: the visible band, animated off Start. The tray and the liquid sampler follow it.
     CompositionRoundedRectangleGeometry geometry{nullptr};
+    // The silhouette the clip, highlights, border line and shadow draw: the hull itself for
+    // Island, the hull carried past the screen edge for Edge.
+    CompositionGeometry outline{nullptr};
     Shapes::Rectangle fill{nullptr};
     Shapes::Rectangle stroke{nullptr};
     winrt::Windows::Foundation::IInspectable originalFill{nullptr};
@@ -5270,13 +5369,17 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float border[4]{}; // r, g, b, a in 0..1.
         float borderWidth[4]{}; // x: width in pixels, 0 = none; the rest keeps cbuffer alignment.
         float outputOffset[4]{}; // x, y: output pixel to backdrop pixel; z: 1 draws the lenses alone, clear elsewhere.
+        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the pieces; y: the piece count.
+        float dockShape[4]{};
+        // Each piece is a box of the dock radius; its left, top, right and bottom sit these pixels from the hull's.
+        float dockPieceRect[kMaxDockPieces][4]{};
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
     // Pins the cbuffer arithmetic the HLSL side relies on: a 224-byte header,
-    // six float4 arrays, then eight trailing 16-byte registers. Adding a member without
-    // accounting for it here would silently shift every lens the shader reads.
+    // six float4 arrays, eight trailing 16-byte registers, then the dock outline.
+    // Adding a member without accounting for it here would silently shift every lens the shader reads.
     static_assert(sizeof(LensConstants) ==
-                   224 + 6 * 16 * kMaxButtonLenses + 128);
+                   224 + 6 * 16 * kMaxButtonLenses + 128 + 16 + 16 * kMaxDockPieces);
 
     struct CopyConstants {
         float offset[2]{};
@@ -5377,6 +5480,8 @@ cbuffer Lens : register(b0) {
     float4 border;
     float4 borderWidth;
     float4 outputOffset;
+    float4 dockShape;
+    float4 dockPieceRect[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
 };
 cbuffer Copy : register(b1) {
     float2 copyOffset;
@@ -5456,6 +5561,25 @@ float roundedDistance(float2 p) {
 }
 float opticalDistance(float2 p) {
     return opticalDistanceFor(p, halfSize, radius);
+}
+// The union of the dock's pieces in output pixels. Their edges hold fixed offsets from the
+// hull's, so they follow the sampled hull between layout passes.
+float dockPiecesDistance(float2 pixel, bool optical) {
+    float distance = 1e10;
+    for (uint i = 0; i < uint(dockShape.y); ++i) {
+        float4 edges = float4(center - halfSize, center + halfSize) + dockPieceRect[i];
+        float2 size = (edges.zw - edges.xy) / 2;
+        float2 p = pixel - (edges.xy + size);
+        float cornerRadius = min(radius, min(size.x, size.y));
+        distance = min(distance, optical ? opticalDistanceFor(p, size, cornerRadius) :
+                                           roundedDistanceFor(p, size, cornerRadius));
+    }
+    return distance;
+}
+// Only the taskbar dock and its preview have pieces; the editor window keeps its own outline.
+float dockDistance(float2 pixel) {
+    if (bodyMode != 0 || dockShape.x == 0) return roundedDistance(pixel - center);
+    return dockPiecesDistance(pixel, false);
 }
 float cornerValue(float2 p, float4 values) {
     return p.x < 0
@@ -5581,22 +5705,29 @@ void glassRefraction(inout Glass g, float2 gradient, float height, float bevel,
     }
     g.shift += -p * (1 - 1 / (1 + magnification)) * g.depth;
 }
+// The dock surface's field. With pieces, only the field changes: depth, radial terms and the
+// lighting's top bias keep the hull's visible band.
+float glassField(float2 p, float2 halfExtent, float4 radii, bool optical) {
+    if (bodyMode == 0 && dockShape.x != 0) return dockPiecesDistance(p + center, optical);
+    return optical ? opticalDistanceForCorners(p, halfExtent, radii) :
+                     roundedDistanceForCorners(p, halfExtent, radii);
+}
 Glass glassAt(float2 p, float2 halfExtent, float4 radii, float depthRadius,
               float refractionAmount, float shiftGain, float radialGain,
               float edgeGain) {
     Glass g = (Glass)0;
-    g.distance = roundedDistanceForCorners(p, halfExtent, radii);
+    g.distance = glassField(p, halfExtent, radii, false);
     g.inside = -g.distance;
     float e = 2;
-    float opticalInside = -opticalDistanceForCorners(p, halfExtent, radii);
+    float opticalInside = -glassField(p, halfExtent, radii, true);
     float lensZ = min(model > 0.5 && model < 1.5 ? bezelWidth : depthRadius,
                       min(halfExtent.x, halfExtent.y));
     float hCenter = bevelHeightFor(opticalInside, lensZ);
     float2 gradient = float2(
-        bevelHeightFor(-opticalDistanceForCorners(p + float2(e, 0), halfExtent, radii), lensZ) -
-            bevelHeightFor(-opticalDistanceForCorners(p - float2(e, 0), halfExtent, radii), lensZ),
-        bevelHeightFor(-opticalDistanceForCorners(p + float2(0, e), halfExtent, radii), lensZ) -
-            bevelHeightFor(-opticalDistanceForCorners(p - float2(0, e), halfExtent, radii), lensZ)) / (2 * e);
+        bevelHeightFor(-glassField(p + float2(e, 0), halfExtent, radii, true), lensZ) -
+            bevelHeightFor(-glassField(p - float2(e, 0), halfExtent, radii, true), lensZ),
+        bevelHeightFor(-glassField(p + float2(0, e), halfExtent, radii, true), lensZ) -
+            bevelHeightFor(-glassField(p - float2(0, e), halfExtent, radii, true), lensZ)) / (2 * e);
     g.depth = smoothstep(0, max(lensZ, 0.5), opticalInside);
     glassRefraction(g, gradient, hCenter, lensZ, p, halfExtent,
                     refractionAmount, shiftGain, radialGain);
@@ -5743,7 +5874,7 @@ float4 shadePixel(float2 pixel) {
     // The surface stays in screen coordinates. Only the native clip moves;
     // resizing a sprite would stretch a crop from the final destination.
     float2 p = pixel - center;
-    float distance = roundedDistance(p);
+    float distance = dockDistance(pixel);
     // A lenses-only layer draws plates beyond the window too: they can scroll into view before its next frame.
     bool lensesOnly = outputOffset.z > 0.5;
     // Runtime already has the compositor's animated rounded clip. Sampled
@@ -5838,7 +5969,7 @@ float4 shadePixel(float2 pixel) {
 }
 float4 ps(VertexOutput input) : SV_Target {
     float2 pixel = input.position.xy + outputOffset.xy;
-    float distance = roundedDistance(pixel - center);
+    float distance = dockDistance(pixel);
     // Refraction and lighting can vary faster than a pixel around the rim.
     // Filter that narrow band without adding a second runtime silhouette mask:
     // the compositor still owns the dock's animated clip.
@@ -7829,6 +7960,16 @@ void ApplyBorder(LiquidRenderer::LensConstants& lens, DockBorder border, float s
     lens.borderWidth[0] = border.width * scale;
 }
 
+// Island keeps the hull's own rounded rect. Edge is one box: the hull carried past the
+// screen edge by the bleed, in pixels, like the composition outline.
+void ApplyDockShape(LiquidRenderer::LensConstants& lens, DockShape shape, bool atTop, float bleed) {
+    if (shape == DockShape::Island) return;
+    lens.dockShape[0] = 1;
+    lens.dockShape[1] = 1;
+    lens.dockPieceRect[0][1] = atTop ? -bleed : 0;
+    lens.dockPieceRect[0][3] = atTop ? 0 : bleed;
+}
+
 // Both callers supply measured/synthetic device-pixel rectangles. Appearance
 // decisions happen before packing; this function never changes a XAML element.
 uint32_t AppendButtonLens(LiquidRenderer::LensConstants& lens,
@@ -8043,6 +8184,7 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
     editor.updatingSurface = true;
     struct Reset { bool& value; ~Reset() { value = false; } } reset{editor.updatingSurface};
     editor.navCard = {};
+    for (auto& control : editor.controls) control.segmentCard = {};
     try {
         using Color = winrt::Windows::UI::Color;
         using namespace winrt::Windows::UI::ViewManagement;
@@ -8204,6 +8346,11 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
             // Choice and text fields keep only their native focus outline. A focused text field's
             // template switches its text and clear glyph to the light theme's black.
             auto inputPalette=[&](EditorControl const& control) {
+                if(auto list=control.input.try_as<Controls::ListBox>()) {
+                    if(glassControls) localColor(list,Controls::Control::BackgroundProperty(),Color{});
+                    else list.ClearValue(Controls::Control::BackgroundProperty());
+                    return;
+                }
                 auto combo=control.input.try_as<Controls::ComboBox>();
                 if(!combo && !control.input.try_as<Controls::TextBox>()) return;
                 auto resources=control.input.Resources();
@@ -8247,6 +8394,13 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         // LayoutUpdated runs this, so layout-affecting writes happen only on change.
         Style navStyle = glassControls ?
             editor.navigation.Resources().Lookup(winrt::box_value(L"GlassNavItem")).as<Style>() : nullptr;
+        auto styleItem = [&](Controls::ListBoxItem const& item, bool selected, bool glassy) {
+            if (Style style = glassy ? navStyle : nullptr; item.Style() != style) item.Style(style);
+            if (glassy && selected)
+                localColor(item, Controls::Control::ForegroundProperty(), lensText(navTint));
+            else if (item.ReadLocalValue(Controls::Control::ForegroundProperty()) != DependencyProperty::UnsetValue())
+                item.ClearValue(Controls::Control::ForegroundProperty());
+        };
         for (uint32_t i = 0; i < editor.navigation.Items().Size(); ++i) {
             auto item = editor.navigation.Items().GetAt(i).as<Controls::ListBoxItem>();
             bool selected = int(i) == editor.navigation.SelectedIndex();
@@ -8257,11 +8411,15 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                 item.Content().as<Controls::Panel>().Children().GetAt(1)
                     .as<Controls::TextBlock>().FontWeight(weight);
             }
-            if (item.Style() != navStyle) item.Style(navStyle);
-            if (glassControls && selected)
-                localColor(item, Controls::Control::ForegroundProperty(), lensText(navTint));
-            else if (item.ReadLocalValue(Controls::Control::ForegroundProperty()) != DependencyProperty::UnsetValue())
-                item.ClearValue(Controls::Control::ForegroundProperty());
+            styleItem(item, selected, glassControls);
+        }
+        // A disabled switch draws no lens, so like a toggle it returns to its native template.
+        for (size_t i = 0; i < editor.controls.size(); ++i) {
+            if (kSettingFields[i].kind != SettingKind::Segmented) continue;
+            auto list = editor.controls[i].input.as<Controls::ListBox>();
+            for (uint32_t j = 0; j < list.Items().Size(); ++j)
+                styleItem(list.Items().GetAt(j).as<Controls::ListBoxItem>(), int(j) == list.SelectedIndex(),
+                          glassControls && list.IsEnabled());
         }
         int page = editor.navigation.SelectedIndex();
         // Only a dropdown inside the island can sit on the glass, and that is fixed at its first open.
@@ -8477,23 +8635,29 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
             if (glassControls && button && button.Visibility() == Visibility::Visible && button.IsEnabled())
                 addLayer(button, button.CornerRadius(), 2, stateTint(button, tint, grow(button, growth)), scrolled);
         };
+        // The selected item's card slides on from where it was drawn; from and card are in the list's
+        // coordinates. A hovered or pressed item shows before the selection follows it.
+        auto addSelector = [&](Controls::ListBox const& list, Rect const& from, Rect& card, float t, bool scrolled) {
+            int index = list.SelectedIndex();
+            if (index < 0) return;
+            auto items = list.Items();
+            auto origin = boundsOf(list);
+            auto selected = items.GetAt(index).as<Controls::ListBoxItem>();
+            float press = grow(selected, .08f);
+            auto to = boundsOf(selected);
+            card = {std::lerp(from.X, to.X - origin.X, t), std::lerp(from.Y, to.Y - origin.Y, t),
+                    std::lerp(from.Width, to.Width, t), std::lerp(from.Height, to.Height, t)};
+            addRect({origin.X + card.X, origin.Y + card.Y, card.Width, card.Height}, selected.CornerRadius(), 2,
+                    stateTint(selected, navTint, press), scrolled);
+            for (uint32_t i = 0; i < items.Size(); ++i)
+                if (auto item = items.GetAt(i).as<Controls::ListBoxItem>(); int(i) != index)
+                    if (float alpha = overlay(item, grow(item, .08f)); alpha > 0)
+                        addRect(boundsOf(item), item.CornerRadius(), 2,
+                                Color{BYTE(std::lround(alpha)), neutral, neutral, neutral}, scrolled);
+        };
         // The shader shades each pixel with the first lens covering it, so the
         // controls precede the panels they sit on. Page cards may outgrow the list.
-        if (glassControls && page >= 0) {
-            auto items = editor.navigation.Items();
-            auto selected = items.GetAt(page).as<Controls::ListBoxItem>();
-            float press = grow(selected, .08f);
-            auto from = editor.navFrom, to = boundsOf(selected);
-            float t = editor.navSlide.Eased();
-            editor.navCard = {std::lerp(from.X, to.X, t), std::lerp(from.Y, to.Y, t),
-                              std::lerp(from.Width, to.Width, t), std::lerp(from.Height, to.Height, t)};
-            addRect(editor.navCard, selected.CornerRadius(), 2, stateTint(selected, navTint, press));
-            // A hovered or pressed page shows before the selection follows it.
-            for (uint32_t i = 0; i < items.Size(); ++i)
-                if (auto item = items.GetAt(i).as<Controls::ListBoxItem>(); int(i) != page)
-                    if (float alpha = overlay(item, grow(item, .08f)); alpha > 0)
-                        addRect(boundsOf(item), item.CornerRadius(), 2, Color{BYTE(std::lround(alpha)), neutral, neutral, neutral});
-        }
+        if (glassControls) addSelector(editor.navigation, editor.navFrom, editor.navCard, editor.navSlide.Eased(), false);
         addButton(editor.save, accentTint);
         addButton(editor.reload, neutralTint);
         addButton(editor.openFile, neutralTint);
@@ -8511,8 +8675,16 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         };
         // Choice and text fields grow less than buttons: they sit right beside their labels.
         for (size_t i = 0; i < editor.controls.size(); ++i)
-            if (kSettingFields[i].kind != SettingKind::Toggle && shown(i))
+            if (kSettingFields[i].kind != SettingKind::Toggle && kSettingFields[i].kind != SettingKind::Segmented && shown(i))
                 addButton(editor.controls[i].input, neutralTint, true, .08f);
+        // A segmented switch: its knob and its segments' hover and press, then the track beneath them.
+        for (size_t i = 0; glassControls && i < editor.controls.size(); ++i) {
+            auto& control = editor.controls[i];
+            if (kSettingFields[i].kind != SettingKind::Segmented || !shown(i) || !control.input.IsEnabled()) continue;
+            auto list = control.input.as<Controls::ListBox>();
+            addSelector(list, control.segmentFrom, control.segmentCard, control.knob.Eased(), true);
+            addLayer(list, list.CornerRadius(), 2, neutralTint, true);
+        }
         for (size_t i = 0; i < editor.controls.size(); ++i) {
             auto& control = editor.controls[i];
             auto toggle = control.input.try_as<Controls::ToggleSwitch>();
@@ -8765,7 +8937,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             return editor.controls[index].input.as<Controls::ToggleSwitch>().IsOn();
         };
         auto choice = [&](size_t index) {
-            return editor.controls[index].input.as<Controls::ComboBox>().SelectedIndex();
+            return editor.controls[index].input.as<Controls::Primitives::Selector>().SelectedIndex();
         };
         bool dark = editor.content.RequestedTheme() == ElementTheme::Dark;
         auto theme = highContrast ? DockTheme::Native : static_cast<DockTheme>(choice(0));
@@ -8776,8 +8948,14 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double step = buttonWidth + 8;
         double dockWidth = 5 * step + 284;
         double trayLeft = 64 + 5 * step + 20;
-        double y = (preview.height - dockHeight) / 2;
+        auto pageValues = EditorPageValues(editor, 0);
+        // Alignment places the dock on the host, so only the shape shows here. Edge sits on the
+        // canvas bottom as a bottom taskbar sits on its screen edge.
+        auto shape = ReadDockStyle(pageValues).shape;
+        bool edge = shape == DockShape::Edge;
+        double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         double radius = std::min(number(3), dockHeight / 2);
+        double bleed = DockBleed(shape, radius);
         auto buttonInsets=GetButtonInsets({0,0},dockHeight,number(5));
         double padding=buttonInsets.top;
         double buttonHeight=float(dockHeight-buttonInsets.top-buttonInsets.bottom);
@@ -8785,7 +8963,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         Controls::Canvas::SetTop(preview.material, y);
         preview.material.Height(dockHeight);
         preview.material.Width(dockWidth);
-        preview.material.CornerRadius({radius, radius, radius, radius});
+        preview.material.CornerRadius(edge ? CornerRadius{radius, radius, 0, 0} : CornerRadius{radius, radius, radius, radius});
         for (size_t i = 0; i < preview.buttons.size(); ++i) {
             auto button = preview.buttons[i];
             button.Width(buttonWidth);
@@ -8820,7 +8998,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         Controls::Canvas::SetTop(preview.startIcon, y + (dockHeight - preview.metrics.iconHeight) / 2);
         Controls::Canvas::SetLeft(preview.clock, trayLeft + 102);
         Controls::Canvas::SetTop(preview.clock, y + (dockHeight - 34) / 2);
-        auto border = highContrast ? DockBorder{} : ReadBorder(EditorPageValues(editor, 0), L"dockBorder");
+        auto border = highContrast ? DockBorder{} : ReadBorder(pageValues, L"dockBorder");
 
         if (liquid && !preview.unavailable) {
             if (!preview.renderer) {
@@ -8843,6 +9021,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             lens.radius = static_cast<float>(radius);
             lens.optics = ReadLiquidSettings(EditorPageValues(editor, 1));
             ApplyBorder(lens, border, 1);
+            ApplyDockShape(lens, shape, false, float(bleed));
             if (lens.optics.shadowOpacity > 0) {
                 if (!preview.shadow) {
                     auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(
@@ -8853,7 +9032,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                 }
                 preview.shadowGeometry.Offset({lens.center[0] - lens.halfSize[0],
                                                 lens.center[1] - lens.halfSize[1]});
-                preview.shadowGeometry.Size({lens.halfSize[0] * 2, lens.halfSize[1] * 2});
+                preview.shadowGeometry.Size({lens.halfSize[0] * 2, lens.halfSize[1] * 2 + float(bleed)});
                 preview.shadowGeometry.CornerRadius({lens.radius, lens.radius});
                 preview.shadow->Update({float(preview.width), float(preview.height)}, {}, lens.optics);
             } else {
@@ -8889,7 +9068,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             preview.material.Background(GlassMaterial(theme != DockTheme::Glass, dark));
         float borderWidth = liquid && !preview.unavailable ? 0 : border.width;
         preview.material.BorderBrush(Media::SolidColorBrush(border.color));
-        preview.material.BorderThickness({borderWidth, borderWidth, borderWidth, borderWidth});
+        preview.material.BorderThickness({borderWidth, borderWidth, borderWidth, edge ? 0 : borderWidth});
         ApplyPreviewButtonAppearance(editor,liquid && !preview.unavailable);
 
         auto mode = highContrast ? FontColorMode::Default : static_cast<FontColorMode>(choice(1));
@@ -9106,6 +9285,7 @@ void EndLiquidMotionBatch(CompositionScopedBatch const& batch) noexcept {
 #undef UW_STRINGIZE
 #undef UW_STRINGIZE_IMPL
 #undef UW_BUTTON_LENS_CAP
+#undef UW_DOCK_PIECE_CAP
 
 winrt::weak_ref<FrameworkElement> MotionEvent(
     void* abi, Root::Source::Life life, bool cancelled = false,
@@ -10652,7 +10832,7 @@ void RestoreGlass(Root& root) {
     dock.originalStroke = nullptr;
 }
 
-ShapeVisual GlassHighlights(CompositionRoundedRectangleGeometry const& outline,
+ShapeVisual GlassHighlights(CompositionGeometry const& outline,
                             DockTheme theme, bool dark, DockBorder border) {
     auto compositor = outline.Compositor();
     auto visual = compositor.CreateShapeVisual();
@@ -10746,7 +10926,7 @@ void PrepareGlass(Root& root) {
         if (g_theme == DockTheme::Glass || frosted) {
             material = GlassMaterial(frosted, dark);
         }
-        auto highlights = GlassHighlights(dock.geometry, g_theme, dark, g_dockBorder);
+        auto highlights = GlassHighlights(dock.outline, g_theme, dark, g_dockBorder);
         if (!native) {
             dock.fill = fill;
             dock.stroke = stroke;
@@ -11686,7 +11866,7 @@ void PrepareLiquid(Root& root, Measurements const& m) {
             if (!dock.shadow) {
                 auto parent = Media::VisualTreeHelper::GetParent(dock.background).try_as<Controls::Panel>();
                 if (!parent) throw winrt::hresult_error(E_NOTIMPL, L"Shadow parent unavailable");
-                dock.shadow = std::make_shared<GlassShadow>(parent, dock.background, dock.geometry);
+                dock.shadow = std::make_shared<GlassShadow>(parent, dock.background, dock.outline);
             }
             auto offset = dock.background.ActualOffset();
             dock.shadow->Update({float(dock.background.ActualWidth()), float(dock.background.ActualHeight())},
@@ -11707,7 +11887,7 @@ void PrepareLiquid(Root& root, Measurements const& m) {
         // match the dock expression, independently of app order or dragging.
         double dockLeft = anchorElement.TransformToVisual(dock.background)
                               .TransformPoint({0, 0}).X - kDockPadding;
-        double dockWidth = 2 * (m.host / 2 - m.backgroundOrigin - dockLeft);
+        double dockWidth = 2 * (m.center - dockLeft);
         if (!std::isfinite(dockLeft) || !std::isfinite(dockWidth) ||
             dockWidth <= 0)
             throw winrt::hresult_error(E_PENDING, L"Optical bounds unavailable");
@@ -11743,6 +11923,8 @@ void PrepareLiquid(Root& root, Measurements const& m) {
         lens.optics = g_liquidSettings;
         ScaleLiquidSettings(lens.optics, float(scale));
         ApplyBorder(lens, g_dockBorder, float(scale));
+        ApplyDockShape(lens, g_dockStyle.shape, m.atTop,
+                       static_cast<float>(DockBleed(g_dockStyle.shape, EffectiveDockRadius(dockWidth, dockHeight)) * scale));
         auto accepted=AddButtonLenses(root, lens, scale);
         if (!dock.liquid->UpdateGeometry(
                 taskbarRect, pixelWidth, pixelHeight, lens, float(scale)))
@@ -11777,7 +11959,10 @@ void RestoreDock(Root& root) {
     else Wh_Log(L"[UWDOCK] clip ownership lost; external clip retained");
     dock.geometry.StopAnimation(L"Offset");
     dock.geometry.StopAnimation(L"Size");
+    dock.outline.StopAnimation(L"Offset");
+    dock.outline.StopAnimation(L"Size");
     dock.geometry = nullptr;
+    dock.outline = nullptr;
     dock.clip = nullptr;
     dock.visual = nullptr;
     dock.originalClip = nullptr;
@@ -11786,7 +11971,8 @@ void RestoreDock(Root& root) {
 bool PrepareDock(OwnedDock& dock, FrameworkElement background,
                  DockInsets insets) {
     if (dock.clip) {
-        return dock.background == background && dock.visual.Clip() == dock.clip;
+        return dock.background == background && dock.visual.Clip() == dock.clip &&
+               dock.clip.Geometry() == dock.outline;
     }
     auto visual = Hosting::ElementCompositionPreview::GetElementVisual(background);
     auto compositor = visual.Compositor();
@@ -11798,12 +11984,22 @@ bool PrepareDock(OwnedDock& dock, FrameworkElement background,
     geometry.Offset({0, static_cast<float>(insets.top)});
     geometry.Size({static_cast<float>(background.ActualWidth()),
                    static_cast<float>(height)});
-    auto clip = compositor.CreateGeometricClip(geometry);
+    CompositionGeometry outline = geometry;
+    if (g_dockStyle.shape == DockShape::Edge) {
+        // UpdateFollower binds it to the hull; until then it is the hull's rest rect.
+        auto extended = compositor.CreateRoundedRectangleGeometry();
+        extended.CornerRadius({radius, radius});
+        extended.Offset(geometry.Offset());
+        extended.Size(geometry.Size());
+        outline = extended;
+    }
+    auto clip = compositor.CreateGeometricClip(outline);
     dock.background = background;
     dock.visual = visual;
     dock.originalClip = visual.Clip();
     dock.clip = clip;
     dock.geometry = geometry;
+    dock.outline = outline;
     visual.Clip(clip);
     return true;
 }
@@ -11944,9 +12140,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         static_cast<float>(m.origin - m.dockOrigin() - kDockPadding -
                            m.trayWidth - m.trayLeft));
     root.metrics.InsertScalar(L"dockOrigin", static_cast<float>(m.dockOrigin()));
-    root.metrics.InsertScalar(
-        L"center",
-        static_cast<float>(m.host / 2 - (m.origin - m.dockOrigin())));
+    root.metrics.InsertScalar(L"center", static_cast<float>(m.center));
     root.metrics.InsertScalar(L"padding", static_cast<float>(kDockPadding));
     root.metrics.InsertScalar(L"margin", static_cast<float>(m.insets.top));
     root.metrics.InsertScalar(L"height",
@@ -11956,7 +12150,12 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         static_cast<float>((m.insets.top - m.insets.bottom) / 2));
     float radius = static_cast<float>(
         EffectiveDockRadius(m.host, m.visibleDockHeight()));
+    float bleed = static_cast<float>(DockBleed(g_dockStyle.shape, radius));
+    root.metrics.InsertScalar(L"bleed", bleed);
+    root.metrics.InsertScalar(L"bleedTop", m.atTop ? bleed : 0);
     root.dock.geometry.CornerRadius({radius, radius});
+    if (root.dock.outline != root.dock.geometry)
+        root.dock.outline.as<CompositionRoundedRectangleGeometry>().CornerRadius({radius, radius});
     if (root.follower && !anchorChanged) return;
     auto anchorVisual = Hosting::ElementCompositionPreview::GetElementVisual(start);
     auto animation =
@@ -11969,7 +12168,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     auto dockOffsetAnimation = root.metrics.Compositor().CreateExpressionAnimation(
         L"Vector2(" + dockLeft + L", geometry.margin)");
     // New buttons receive their final right edge before their native entrance.
-    // The combined group is centered, so its animated leading edge is sufficient.
+    // The dock is symmetric about geometry.center, so its animated leading edge is sufficient.
     auto dockSizeAnimation = root.metrics.Compositor().CreateExpressionAnimation(
         L"Vector2(2 * Max(0, geometry.center - (" + dockLeft +
         L")), geometry.height)");
@@ -11992,6 +12191,19 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     root.trayTranslation.element.StartAnimation(animation);
     root.dock.geometry.StartAnimation(L"Offset", dockOffsetAnimation);
     root.dock.geometry.StartAnimation(L"Size", dockSizeAnimation);
+    if (root.dock.outline != root.dock.geometry) {
+        // Bound to the hull, like the tray, so it moves in the hull's compositor frame.
+        auto outlineOffset = root.metrics.Compositor().CreateExpressionAnimation(
+            L"Vector2(dock.Offset.X, dock.Offset.Y - geometry.bleedTop)");
+        auto outlineSize = root.metrics.Compositor().CreateExpressionAnimation(
+            L"Vector2(dock.Size.X, dock.Size.Y + geometry.bleed)");
+        for (auto const& expression : {outlineOffset, outlineSize}) {
+            expression.SetReferenceParameter(L"dock", root.dock.geometry);
+            expression.SetReferenceParameter(L"geometry", root.metrics);
+        }
+        root.dock.outline.StartAnimation(L"Offset", outlineOffset);
+        root.dock.outline.StartAnimation(L"Size", outlineSize);
+    }
 }
 
 void RestoreRoot(Root& root) {
@@ -12097,7 +12309,7 @@ void Refresh(Root& root) {
     bool supported = !overflowing && background.ActualWidth() > 0 &&
         background.ActualHeight() > DockInsetSum(background.ActualHeight()) &&
         std::abs(frame.ActualWidth() - host) <= 1 &&
-        Plan(host, buttons, trayWidth, nativeCenter, trayLeft, startTarget - expectedStart, target);
+        Plan(host, buttons, trayWidth, nativeCenter, trayLeft, startTarget - expectedStart, target, g_dockStyle);
     if (!supported) {
         if (!root.fallbackReported) Wh_Log(L"[UWPOS] native fallback host=%.3f frame=%.3f buttons=%.3f tray=%.3f center=%.3f start=%.3f overflow=%d root=%p repeaterWidth=%.3f expectedStart=%.3f trayLeft=%.3f",
             host, frame.ActualWidth(), buttons, trayWidth, nativeCenter, startTarget, overflowing,
@@ -12124,6 +12336,8 @@ void Refresh(Root& root) {
         RestoreRoot(root);
         return;
     }
+    double buttonsCenter = ButtonsCenter(host, trayWidth, g_dockStyle);
+    double backgroundOrigin = background.TransformToVisual(parent).TransformPoint({0, 0}).X;
     Measurements m{
         .host = host,
         .origin = origin,
@@ -12131,11 +12345,12 @@ void Refresh(Root& root) {
         .trayLeft = trayLeft,
         .trayWidth = trayWidth,
         .buttonsWidth = buttons,
-        .shift = (host - trayWidth - kGap) / 2 - nativeCenter,
-        .backgroundOrigin =
-            background.TransformToVisual(parent).TransformPoint({0, 0}).X,
+        .shift = buttonsCenter - nativeCenter,
+        .center = buttonsCenter + (kGap + trayWidth) / 2 - backgroundOrigin,
+        .backgroundOrigin = backgroundOrigin,
         .dockHeight = background.ActualHeight(),
         .insets = GetDockInsets(root.taskbar, background.ActualHeight()),
+        .atTop = TaskbarAtTop(root.taskbar),
     };
     root.measurements = m;
     root.measurementsReady = true;
@@ -12176,7 +12391,7 @@ bool RootLayoutUnchanged(Root& root) {
     for (auto const* owned : {&root.buttonsTranslation,&root.trayTranslation})
         if (owned->installed && !root.follower && !StillOwned(*owned)) return false;
     auto& dock=root.dock;
-    if (dock.clip && dock.visual.Clip()!=dock.clip) return false;
+    if (dock.clip && (dock.visual.Clip()!=dock.clip || dock.clip.Geometry()!=dock.outline)) return false;
     if ((dock.material && (dock.fill.Fill()!=dock.material || dock.stroke.Fill()!=dock.transparentStroke)) ||
         (dock.attachedVisual && Hosting::ElementCompositionPreview::GetElementChildVisual(dock.background)!=dock.attachedVisual))
         return false;
@@ -12798,7 +13013,9 @@ void SetModConfiguration(settingsjson::JsonObject const& local) {
         LocalInt(local, L"buttonVerticalPadding"), 0, 100);
     g_trayHighlightPadding=std::clamp(LocalInt(local,L"tray.highlightPadding"),0,100);
     g_trayHighlightRadius=std::clamp(LocalInt(local,L"tray.highlightRadius"),0,100);
-    g_dockEdgeDistance = std::clamp(
+    g_dockStyle = ReadDockStyle(local);
+    // Edge sits on the screen edge: the frame drops the distance and the visible band keeps its height.
+    g_dockEdgeDistance = g_dockStyle.shape == DockShape::Edge ? 0 : std::clamp(
         LocalInt(local, L"edgeDistance"), 0, 100);
     g_keepButtonRim = LocalBool(local, L"button.border");
     g_buttonLiquidLayer = LocalBool(local, L"button.liquidLayer");
