@@ -4,7 +4,7 @@
 // @name:zh-CN      桌面图标 Dock
 // @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel
 // @description:zh-CN 独立的 macOS 风格 Dock：把快捷方式、文件和文件夹拖进来，拖动排序，拖出放回桌面；快捷方式会复制到 Dock 自己的目录，清理桌面不影响 Dock；可选液态玻璃面板
-// @version         1.1.2
+// @version         1.1.3
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -470,6 +470,7 @@ bool g_externalDragActive = false;
 int g_dropInsertIndex = 0;
 
 bool g_dockShown = false;
+bool g_hideIconsRequested = false;
 bool g_iconsHiddenByUs = false;
 bool g_menuOpen = false;
 bool g_gdiplusStarted = false;
@@ -979,6 +980,10 @@ bool AreDesktopIconsHidden() {
 // reenters comctl32 in the middle of the shell's own desktop refresh and can
 // crash Explorer, so visibility changes are always posted from here.
 void SetDesktopIconsHidden(bool hide) {
+    // Keep the request even if the desktop view is not available yet. The
+    // maintenance timer retries until the shell has created it.
+    g_hideIconsRequested = hide;
+
     HWND listView = DesktopListView();
     if (!listView) return;
     if (hide) {
@@ -996,13 +1001,14 @@ void SetDesktopIconsHidden(bool hide) {
 }
 
 void EnsureDesktopIconsHidden() {
-    if (!g_iconsHiddenByUs || !g_settings.hideDesktopIcons ||
+    if (!g_hideIconsRequested || !g_settings.hideDesktopIcons ||
         AreDesktopIconsHidden()) {
         return;
     }
     HWND listView = DesktopListView();
     if (listView && IsWindowVisible(listView)) {
         ShowWindowAsync(listView, SW_HIDE);
+        g_iconsHiddenByUs = true;
     }
 }
 
