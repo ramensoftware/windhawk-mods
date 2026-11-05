@@ -6,7 +6,7 @@
 // @description     Smooth WinUI-like page transition animations for the File Explorer content area.
 // @description:pt  Animações suaves de transição de página inspiradas no WinUI para a área de conteúdo do Explorador de Arquivos.
 // @description:es  Animaciones suaves de transición de página inspiradas en WinUI para el área de contenido del Explorador de Archivos.
-// @version         1.0.2
+// @version         1.0.3
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -26,16 +26,12 @@
 
 A smooth, WinUI-inspired page transition system for the File Explorer content area on Windows 11.
 
-### What's new in 1.0.2
+### What's new in 1.0.3
 
-A big part of the mod was rewritten for this version. The animations now use DirectUI's own standard layer mechanism, so the motion and the item effects run on the system compositor instead of Explorer's UI thread: they stay smooth even while thumbnails and large folders are still loading. On builds where this isn't available, the mod keeps Explorer's native layout and the fade.
-
-- **Smoother page transitions** - The folder content itself moves, without moving Explorer's windows. The defaults now follow WinUI: 450 ms (a 150 ms hold plus 300 ms of motion) and a 140 DIP entrance. Opening a folder uses the same entrance animation.
-- **Staggered item reveal (optional)** - Items grow and fade in one after another, with the same curves as WinUI's AddDelete transition. On supported builds, deleted items also leave with a short animation.
-- **Waits for your files** - In slow folders the page waits for the first files to show up before moving, instead of animating an empty view.
-- **No more flashes** - The end of each animation is covered, so the content no longer flashes empty or shows duplicated text.
-- **Responds to you** - Clicking or pressing a key during an animation finishes it quickly, and scrolling hands the content back right away, also with smooth scrolling mods.
-- Requires symbol resolution on explorerframe.dll, dui70.dll and duser.dll, plus windows.storage.dll for deletions (handled automatically by Windhawk). The new **Motion animations** option can be turned off if a Windows update breaks the symbols.
+- **Text stays visible during animations** - In light mode, text could vanish or turn into faint white artifacts until the animation ended; a mod that replaces the text renderer could hide this. Text now stays visible in light and dark mode, with neutral smoothing close in weight to ClearType until the animation ends.
+- **The column header stays in place** - Only the scrollable area moves now, so the header no longer turns opaque or changes color during the animation with translucent backgrounds.
+- **Scrolling during an animation** - The content is handed back under a copy that follows the scroll, so it no longer flashes empty, also with smooth scrolling mods.
+- **New Styler text compatibility option** - Optional even with the Windows 11 File Explorer Styler active: only turn it on if you notice a difference in the text after the animation ends.
 
 ### Features
 
@@ -46,7 +42,11 @@ A big part of the mod was rewritten for this version. The animations now use Dir
 - Per-window first open delay (optional)
 - Navigation delay to hide the "Working on it..." message
 - Zero flicker / no black flashes
+- Runs on the system compositor, staying smooth while thumbnails and large folders load; on builds where this isn't available, the mod keeps Explorer's native layout and the fade
+- Waits for the first files in slow folders before moving
+- Clicking or pressing a key during an animation finishes it quickly
 - Compatible with the Translucent Windows mod
+- Requires symbol resolution on explorerframe.dll, dui70.dll and duser.dll, plus windows.storage.dll for deletions (handled automatically by Windhawk)
 
 ### Settings
 
@@ -77,16 +77,12 @@ observed on stable Windows 11 builds; it appears to be resolved in recent Inside
 
 Uma animacao suave de transicao de pagina inspirada no WinUI para o Explorador de Arquivos no Windows 11.
 
-### Novidades na 1.0.2
+### Novidades na 1.0.3
 
-Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo padrao de camadas da propria DirectUI, entao o movimento e os efeitos dos itens rodam no compositor do sistema, e nao na thread de interface do Explorer: continuam suaves mesmo enquanto miniaturas e pastas grandes ainda estao carregando. Nas builds em que isso nao estiver disponivel, o mod mantem o layout nativo do Explorer e o fade.
-
-- **Transicoes de pagina mais suaves** - O proprio conteudo da pasta se move, sem mover as janelas do Explorer. Os padroes agora seguem o WinUI: 450 ms (150 ms de espera mais 300 ms de movimento) e entrada de 140 DIPs. Abrir uma pasta usa a mesma animacao de entrada.
-- **Revelacao escalonada dos itens (opcional)** - Os itens crescem e aparecem um depois do outro, com as mesmas curvas da transicao AddDelete do WinUI. Nas builds suportadas, itens excluidos tambem saem com uma animacao curta.
-- **Espera pelos seus arquivos** - Em pastas lentas a pagina espera os primeiros arquivos aparecerem antes de se mover, em vez de animar uma view vazia.
-- **Sem flashes** - O fim de cada animacao fica coberto, e o conteudo nao pisca mais vazio nem mostra texto duplicado.
-- **Responde a voce** - Clicar ou pressionar uma tecla durante a animacao a conclui rapido, e a rolagem devolve o conteudo na hora, inclusive com mods de rolagem suave.
-- Requer resolucao de simbolos no explorerframe.dll, dui70.dll e duser.dll, e tambem windows.storage.dll para as exclusoes (feito automaticamente pelo Windhawk). A nova opcao **Animacoes de movimento** pode ser desativada se uma atualizacao do Windows quebrar os simbolos.
+- **O texto continua visivel durante as animacoes** - No modo claro, o texto podia sumir ou virar artefatos brancos fracos ate o fim da animacao; um mod que troca o renderizador de texto podia esconder isso. Agora o texto continua visivel nos modos claro e escuro, com suavizacao neutra de peso proximo ao ClearType ate o fim da animacao.
+- **O cabecalho de colunas fica parado** - Agora so a area rolavel se move, entao o cabecalho nao fica mais opaco nem muda de cor durante a animacao com fundos translucidos.
+- **Rolagem durante a animacao** - O conteudo e devolvido sob uma copia que acompanha a rolagem, e nao pisca mais vazio, inclusive com mods de rolagem suave.
+- **Nova opcao de compatibilidade com o texto do Styler** - Opcional mesmo com o Windows 11 File Explorer Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao.
 
 ### Recursos
 
@@ -97,7 +93,11 @@ Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo
 - Delay opcional na primeira abertura
 - Delay de navegacao para esconder o "Trabalhando nisso..."
 - Sem flicker / sem flashes pretos
+- Roda no compositor do sistema e continua suave enquanto miniaturas e pastas grandes carregam; nas builds em que isso nao estiver disponivel, o mod mantem o layout nativo do Explorer e o fade
+- Espera os primeiros arquivos em pastas lentas antes de se mover
+- Clicar ou pressionar uma tecla durante a animacao a conclui rapido
 - Compativel com o mod Translucent Windows
+- Requer resolucao de simbolos no explorerframe.dll, dui70.dll e duser.dll, e tambem windows.storage.dll para as exclusoes (feito automaticamente pelo Windhawk)
 
 ### Configuracoes
 
@@ -129,16 +129,12 @@ builds recentes do canal Insider/Beta.
 
 Una animacion suave de transicion de pagina inspirada en WinUI para el Explorador de Archivos en Windows 11.
 
-### Novedades en 1.0.2
+### Novedades en 1.0.3
 
-Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el mecanismo estandar de capas de la propia DirectUI, asi que el movimiento y los efectos de los elementos se ejecutan en el compositor del sistema y no en el hilo de interfaz del Explorador: siguen fluidos incluso mientras las miniaturas y las carpetas grandes todavia se estan cargando. En las versiones donde esto no esta disponible, el mod conserva la distribucion nativa del Explorador y el fundido.
-
-- **Transiciones de pagina mas fluidas** - El propio contenido de la carpeta se mueve, sin mover las ventanas del Explorador. Los valores predeterminados ahora siguen WinUI: 450 ms (150 ms de espera mas 300 ms de movimiento) y una entrada de 140 DIPs. Abrir una carpeta usa la misma animacion de entrada.
-- **Aparicion escalonada de elementos (opcional)** - Los elementos crecen y aparecen uno tras otro, con las mismas curvas de la transicion AddDelete de WinUI. En las versiones compatibles, los elementos eliminados tambien salen con una animacion corta.
-- **Espera a tus archivos** - En carpetas lentas la pagina espera a que aparezcan los primeros archivos antes de moverse, en lugar de animar una vista vacia.
-- **Sin destellos** - El final de cada animacion queda cubierto, y el contenido ya no parpadea vacio ni muestra texto duplicado.
-- **Responde a ti** - Hacer clic o pulsar una tecla durante la animacion la termina rapido, y el desplazamiento devuelve el contenido al instante, tambien con mods de desplazamiento suave.
-- Requiere resolucion de simbolos en explorerframe.dll, dui70.dll y duser.dll, y tambien windows.storage.dll para las eliminaciones (manejado automaticamente por Windhawk). La nueva opcion **Animaciones de movimiento** puede desactivarse si una actualizacion de Windows rompe los simbolos.
+- **El texto sigue visible durante las animaciones** - En modo claro, el texto podia desaparecer o convertirse en artefactos blancos tenues hasta el final de la animacion; un mod que cambia el renderizador de texto podia ocultarlo. Ahora el texto sigue visible en modo claro y oscuro, con suavizado neutro de peso cercano a ClearType hasta el final de la animacion.
+- **El encabezado de columnas se queda quieto** - Ahora solo se mueve el area desplazable, asi que el encabezado ya no se vuelve opaco ni cambia de color durante la animacion con fondos translucidos.
+- **Desplazamiento durante la animacion** - El contenido se devuelve bajo una copia que sigue el desplazamiento, y ya no parpadea vacio, tambien con mods de desplazamiento suave.
+- **Nueva opcion de compatibilidad con el texto del Styler** - Opcional incluso con el Windows 11 File Explorer Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion.
 
 ### Caracteristicas
 
@@ -149,7 +145,11 @@ Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el
 - Retraso opcional en la primera apertura
 - Retraso de navegacion para ocultar el texto de carga
 - Sin parpadeo / sin destellos negros
+- Se ejecuta en el compositor del sistema y sigue fluida mientras se cargan miniaturas y carpetas grandes; en las versiones donde esto no esta disponible, el mod conserva la distribucion nativa del Explorador y el fundido
+- Espera a los primeros archivos en carpetas lentas antes de moverse
+- Hacer clic o pulsar una tecla durante la animacion la termina rapido
 - Compatible con el mod Translucent Windows
+- Requiere resolucion de simbolos en explorerframe.dll, dui70.dll y duser.dll, y tambien windows.storage.dll para las eliminaciones (manejado automaticamente por Windhawk)
 
 ### Configuracion
 
