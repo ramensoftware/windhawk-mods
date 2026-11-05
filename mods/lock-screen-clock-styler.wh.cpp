@@ -35,7 +35,7 @@
 // @license         MIT
 // @include         LockApp.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lpowrprof
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lpowrprof
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -50,6 +50,8 @@ Customize and enhance the Windows 11 lock screen clock with modern designs, fros
 - **Lightweight & Thread-Safe:** Ultra-lightweight native XAML injection via the LockApp UI thread with ultra-low background CPU overhead. Direct visual tree navigation without XAML Diagnostics TAP, ensuring seamless compatibility with mods like Windows 11 Start Menu Styler.
 - **12-Hour / 24-Hour Format:** Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.
 - **Show Seconds Toggle:** Optional live seconds display (supported across all non-flip and non-vertical styles).
+- **Dynamic Date Display:** Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.
+- **Hide Default Widgets:** Clean up the lock screen by hiding MSN weather, sports, and news widgets.
 - **Extensive Customization:** Card opacity, font size, vertical offsets, and screen alignments are fully customizable via settings.
 
 ## Screenshots:
@@ -678,7 +680,6 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
 
 #include <windows.h>
 #undef GetCurrentTime
-#include <dwmapi.h>
 #include <powrprof.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -719,6 +720,12 @@ struct ModSettings {
     bool showBatteryStatus;
 } g_settings;
 
+inline bool IsVerticalStyle(const std::wstring& style) {
+    return style == L"verticalBahnschrift" ||
+           style == L"verticalSegoe" ||
+           style == L"verticalImpact";
+}
+
 // Loads every setting. Before the UI hook is installed this may run on any
 // thread; afterwards it must run on the lock screen UI thread.
 void LoadSettings() {
@@ -742,9 +749,7 @@ void LoadSettings() {
 
     // The settings UI is the single source of truth for seconds. Flip clocks
     // and 2-row vertical stack clocks have no seconds display, so the toggle is ignored for them.
-    bool isVertical = (g_settings.clockStyle == L"verticalBahnschrift" ||
-                       g_settings.clockStyle == L"verticalSegoe" ||
-                       g_settings.clockStyle == L"verticalImpact");
+    bool isVertical = IsVerticalStyle(g_settings.clockStyle);
     bool supportsSeconds =
         (g_settings.clockStyle != L"flip" && g_settings.clockStyle != L"vintage" && !isVertical);
     g_settings.showSeconds = supportsSeconds && Wh_GetIntSetting(L"showSeconds") != 0;
@@ -1231,9 +1236,7 @@ void UpdateTimeAndDate() {
             }
             g_timeCache.lastAuraTime = timeBuf;
         }
-    } else if (g_settings.clockStyle == L"verticalBahnschrift" ||
-               g_settings.clockStyle == L"verticalSegoe" ||
-               g_settings.clockStyle == L"verticalImpact") {
+    } else if (IsVerticalStyle(g_settings.clockStyle)) {
         if (g_verticalHourText && (hourChanged || g_timeCache.lastVerticalHour.empty())) {
             WCHAR hourBuf[8];
             swprintf_s(hourBuf, L"%02d", displayHour);
@@ -1309,10 +1312,8 @@ void UpdateTimeAndDate() {
     }
 
     if (g_dateTextBlock && g_settings.showDateCapsule && (dateChanged || g_timeCache.lastDateStr.empty())) {
-        WCHAR dateBuf[128];
-        bool isVertical = (g_settings.clockStyle == L"verticalBahnschrift" ||
-                           g_settings.clockStyle == L"verticalSegoe" ||
-                           g_settings.clockStyle == L"verticalImpact");
+        WCHAR dateBuf[128] = {0};
+        bool isVertical = IsVerticalStyle(g_settings.clockStyle);
         bool formatted = false;
         if (isVertical) {
             // Preserves natural locale word order (e.g. "31 Ekim Cumartesi", "Saturday, October 31", "10月31日 星期六")
@@ -1353,11 +1354,11 @@ void UpdateTimeAndDate() {
                 }
             }
         }
-        if (!formatted) {
-            GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, nullptr, dateBuf, ARRAYSIZE(dateBuf));
+        if (formatted ||
+            GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, nullptr, dateBuf, ARRAYSIZE(dateBuf)) > 0) {
+            g_dateTextBlock.Text(dateBuf);
+            g_timeCache.lastDateStr = dateBuf;
         }
-        g_dateTextBlock.Text(dateBuf);
-        g_timeCache.lastDateStr = dateBuf;
     }
 
     // Battery percentage and power status update
@@ -2762,12 +2763,12 @@ typedef struct _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
     PVOID Context;
 } DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, *PDEVICE_NOTIFY_SUBSCRIBE_PARAMETERS;
 
-// 6fe69556-704a-47a0-8f24-c21edfb930cb
+// GUID_CONSOLE_DISPLAY_STATE {6FE69556-704A-47A0-8F24-C28D936FDA47}
 static constexpr GUID GUID_CONSOLE_DISPLAY_STATE_LOCAL = {
     0x6fe69556,
     0x704a,
     0x47a0,
-    {0x8f, 0x24, 0xc2, 0x1e, 0xdf, 0xb9, 0x30, 0xcb}};
+    {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
 
 std::atomic<bool> g_isDisplayOn{true};
 std::atomic<bool> g_isSystemAwake{true};
@@ -3214,6 +3215,12 @@ void OnUiThreadTick() {
         return;
     }
 
+    ULONGLONG now = GetTickCount64();
+    int intervalMs = g_settings.showSeconds ? 500 : 1000;
+    if ((now - g_lastUiTick) < static_cast<ULONGLONG>(intervalMs)) {
+        return;
+    }
+
     HWND coreWnd = g_coreWindow.load();
     if (!coreWnd || !IsWindow(coreWnd) || !IsWindowVisible(coreWnd)) {
         return;
@@ -3228,11 +3235,6 @@ void OnUiThreadTick() {
         return;
     }
 
-    ULONGLONG now = GetTickCount64();
-    int intervalMs = g_settings.showSeconds ? 500 : 1000;
-    if ((now - g_lastUiTick) < static_cast<ULONGLONG>(intervalMs)) {
-        return;
-    }
     g_lastUiTick = now;
 
     if (g_settingsDirty.exchange(false)) {
