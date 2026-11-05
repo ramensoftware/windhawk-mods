@@ -2,12 +2,196 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-05T03:03:34.000Z</updated>
+    <updated>2026-11-05T04:00:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Round Everything 1.0.0]]></title>
+        <id>https://windhawk.net/mods/round-everything#37be93ac3c0356ab82594e732a758a2aa245f46b</id>
+        <link href="https://windhawk.net/mods/round-everything"/>
+        <updated>2026-11-05T04:00:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Round Everything</h1>
+<p>Turns the taskbar into a frame around the whole screen. The taskbar keeps its
+rectangular shape, and the other three screen edges get a band of the same
+color, pushed inwards by a configurable offset. The visible &quot;screen&quot; becomes a
+rounded rectangle that sits flush against the taskbar, with one configurable
+corner radius.</p>
+<p>Works with the taskbar on any edge (top, bottom, left, right) and on every
+monitor. A monitor without a taskbar (&quot;Show my taskbar on all displays&quot; off)
+gets the frame on all four edges.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/round-everything/demo.gif" alt="Demo"></p>
+<h2>How it works</h2>
+<p>The mod runs inside the taskbar's <code>explorer.exe</code> and creates one layered,
+always-on-top window per monitor covering the area next to the taskbar:
+three bands of the configured offset with the rounded corners. The taskbar
+itself, its background painted in the frame color, is the fourth side. The
+frame shape is drawn with GDI+ (anti-aliased); the inner area is fully
+transparent and lets the mouse through, while the painted frame is solid to
+the mouse, like the taskbar. No explorer function is hooked: the taskbar's
+XAML tree is reached through a few <code>taskbar.dll</code> symbol lookups (no XAML
+diagnostics, so it coexists with Taskbar Styler).</p>
+<ul>
+<li><strong>Color</strong> – the frame has one color of your choice, and the taskbar's own
+background (<code>Taskbar.TaskbarBackground</code>) is painted with it at the same
+opacity, so the taskbar and the frame are one surface. The taskbar's own
+background is restored when the mod is turned off.</li>
+<li>Frame and taskbar come and go together. When the mod starts, the frame
+appears in the same instant as the taskbar's new look. When the
+taskbar moves, resizes or rebuilds (changing its position, a taskbar mod
+reloading) its background turns transparent and the frame goes away the
+instant the taskbar window moves; once everything has settled - taskbar
+at its new edge and uncloaked, its corners in place, the work area
+reserved - the taskbar paints its background again and, from inside that
+same rendering pass, reveals the frame (re-shaped for the new edge), so
+the two reach the screen in one composition. When the mod is turned off
+the frame disappears as the taskbar is handed back.</li>
+<li>The frame stays visible during Aero Peek (hovering a taskbar thumbnail or
+the show-desktop corner), like the taskbar itself.</li>
+<li><strong>Task View</strong> (Win+Tab) – the frame goes away and the taskbar's background
+and monitor corners turn transparent while it is open; everything comes
+back together when it closes.</li>
+<li><strong>Full-screen apps</strong> – the frame hides on a monitor while a full-screen
+window (game, video, F11 browser) is showing there, and comes back
+afterwards.</li>
+<li><strong>Work area</strong> – <em>Shrink the work area to the rounded screen</em> (on by
+default) pushes the work area inwards so maximized and snapped windows stay
+inside the frame; turned off, the frame is purely visual: it overlaps the
+edges of maximized windows and lets the mouse through. Shrinking registers
+one invisible appbar per frame edge (the same mechanism the taskbar uses),
+so the shell reserves the space itself; the appbars are removed and the
+work area returns to normal when the option or the mod is turned off. <em>Extra
+work-area inset</em> shrinks it further, on all four sides, so a strip of
+wallpaper stays visible between the frame/taskbar and your windows.</li>
+<li><strong>Monitor corners</strong> – the four outer corners of each monitor are rounded
+too, so the whole screen reads as a rounded panel: the sliver outside a
+quarter circle is painted in the <em>Monitor corner color</em> (black by default).
+The two corners away from the taskbar are part of the frame itself; the
+two on the taskbar are XAML shapes added inside the taskbar (no extra
+windows, so nothing to fight over z-order with), click-through, removed
+when the mod is disabled.</li>
+<li><strong>Taskbar border line</strong> – the taskbar draws a 1px line along its inner edge
+(<code>BackgroundStroke</code>), which shows up as a seam between the taskbar and the
+frame. The mod sets that line's opacity to 0 and restores it when disabled.</li>
+<li>Offsets and radii are in pixels at 100% scaling and scaled per monitor
+(configurable).</li>
+</ul>
+<h2>Window corners (dwm.exe)</h2>
+<p>Windows 11 rounds normal windows with a fixed 8 px radius and draws maximized
+windows square. With <strong>Round window corners</strong> on, the mod also runs inside
+<code>dwm.exe</code> and hooks the corner-radius decision
+(<code>CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle</code>): every window that
+Windows would round - normal, snapped or maximized - gets the one <strong>Window
+corner radius</strong> you set, and maximized windows are rounded too, so they sit in
+the rounded screen like cards. Windows that opt out of rounding (<code>DONOTROUND</code>)
+and small-radius surfaces (menus, tooltips) are left alone. Changes apply at
+once: DWM is asked to re-evaluate every window (no window's own corner
+preference is touched). Full-screen windows share the maximized path in DWM,
+so they get rounded corners as well.</p>
+<p><strong>This part needs one manual step.</strong> Windhawk doesn't inject into <code>dwm.exe</code>
+by default (it is on Windhawk's list of critical system processes), so the
+window-corner part does nothing until you add <code>dwm.exe</code> to the <strong>Process
+inclusion list</strong> in Windhawk's advanced settings. The frame, the monitor
+corners and the work area don't depend on it and work right away. <code>udwm.dll</code>
+symbols are downloaded by Windhawk on first use.</p>
+<p>This does the same job as the <em>Rounded corners for maximized and snapped
+windows</em> option of the
+<a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a>
+mod, through the same hook - the mechanism is the one Alexey Lavrinenko
+contributed there; use one mod or the other for window corners, not both.</p>
+<h2>Notes</h2>
+<ul>
+<li>Shell flyouts (Start, notification center, Task View, …) live above the
+frame, so they are never covered.</li>
+<li>With the work area reserved, the frame is solid to the mouse, like the
+taskbar: clicks on it (and on the extra work-area inset strip) go nowhere,
+which keeps the invisible resize borders of maximized windows underneath
+from being hit. Without it the frame lets the mouse through.</li>
+<li>With an auto-hide taskbar the frame spans the whole monitor and the taskbar
+slides in over it.</li>
+<li>Setting all offsets to 0 and keeping a radius gives you just the rounded
+screen corners against the taskbar.</li>
+</ul>
+<h2>Credits</h2>
+<p>The taskbar-thread helpers (<code>RunFromWindowThreadTimeout</code>,
+<code>FindCurrentProcessTaskbarWnd</code>) and the <code>taskbar.dll</code> XAML-root lookup are
+ported from <a href="https://windhawk.net/mods/taskbar-multirow">Taskbar multi-row</a>
+by m417z, licensed under the GNU GPL v3.0. This mod is published under the
+same license.</p>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Window Cards 1.8.1]]></title>
+        <id>https://windhawk.net/mods/desktop-window-cards#47e9614d53032425caead5d34b842c8125812e22</id>
+        <link href="https://windhawk.net/mods/desktop-window-cards"/>
+        <updated>2026-11-05T04:00:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Excluded programs: a blank entry hides the entries after it. Windhawk returns &quot;&quot; both for a blank array entry and past the end of the list, so the break on an empty entry ended the list at the first blank one. Every program listed after it stopped being excluded, with no warning. The loop now reads the bounded range (256 entries, only on start and on reload) and skips blank entries.</li>
+<li>Excluded programs: normalization. \r/\n are trimmed along with spaces and quotes, / is accepted in full paths (C:/Program Files/...), and duplicate entries are ignored.</li>
+<li>Worker: no busy loop on init failure. If the frame timer can't be created, handles[0] is null and MsgWaitForMultipleObjectsEx fails immediately, so the loop spins at 100% CPU. The worker now checks the window classes, controller and frame timer before it starts, logs which one failed, and leaves the loop on WAIT_FAILED.</li>
+</ul>
+<p>THANKS TO @MayconDIS</p>
+]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 1.1.1]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#89c1a71fccf3768d9e5d5b5b6da2c2701bf684a1</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-11-05T04:00:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Panel position.</strong> A new Appearance option decides what stays centered while the details panel is
+open: the bar together with the panel (the bar slides left, the default) or the bar on its own (the
+panel opens to its right without moving it).</li>
+<li><strong>Solid is the new default background effect.</strong> A fresh install now starts with a plain, opaque
+colour instead of Acrylic. Anyone who already saved the settings keeps their choice. If the settings
+tab was never saved, the mod starts from the defaults, so the effect may change after this update.</li>
+<li><strong>Live acrylic is off by default, and it is a Windows 11 option.</strong> The live blur is drawn by Windows
+in a separate layer behind the bar, so while the details panel animates that layer can trail the bar
+by a frame and leave a slight seam at the edges. Off, the same effects come from a single snapshot
+taken when the bar opens: smoother and lighter on laptops. On Windows 10 the option is ignored and
+the snapshot is always used, because the compositor trails the most there.</li>
+<li><strong>The details panel wipes instead of fading in live mode.</strong> Windows cannot fade the blur layer, so
+the panel now animates its width with an opaque card: both layers are the same shape at every frame.</li>
+<li><strong>The last strip of the closing panel.</strong> Below a certain width Windows collapses the rounded blur
+layer into a minimum pill, which stayed on screen after the card had shrunk past it. The last few
+pixels are now drawn as a tinted tail that dissolves with the card, and the blur layer is hidden
+before it reaches that size.</li>
+</ul>
+]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.23.0]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#af08e3162218984b6e83d0f10f3738e63ab94795</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-11-05T04:00:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>0.23.0: The notification no longer leaves a Start Menu shortcut or a registry entry behind. SnapSentry's name and icon now come from a temporary entry that Windows discards at sign-out.</li>
+<li>Windows keeps your notification banner and sound settings for SnapSentry when the mod is disabled or updated.</li>
+<li>Screenshots are renamed as soon as they appear, before the popup, so other tools watching the folder see the final name right away.</li>
+<li>Screenshots you keep are renamed too.</li>
+<li>When the window in front has no title, the program's name is used instead of skipping the rename.</li>
+<li>New &quot;Name by time only&quot; setting, which names each file with just the timestamp.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Operation Styler 1.4.0]]></title>
         <id>https://windhawk.net/mods/file-operation-styler#950046a0779a24d00464e335cf187745dccec53f</id>
@@ -1275,225 +1459,6 @@ los 12 minutos.</p>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.3.0]]></title>
-        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#9139f648d3da6bb9520a2a6b622a5a0b86e62e21</id>
-        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
-        <updated>2026-11-03T23:01:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a tiny horizontal scrollbar sometimes appearing on Windows 11 26H2</li>
-</ul>
-]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.6.1]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#5cf491884d624c9e771bff6d9c482e54e7291672</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-11-03T23:01:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated settings descriptions and mod information, with clearer names for custom offsets and display profile fields.</li>
-<li>Code formatting cleanup only; no behavior changes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Usage 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-usage#f4350f743d2adcf3fa2efe4c869ad6d9feaf0126</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-usage"/>
-        <updated>2026-11-03T23:01:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar AI Usage</h1>
-<p>See how much of your AI subscription you have left in one place. Get a glimpse
-of all your accounts on the taskbar: Dynamic rings fill as you use your quota.
-A Fluent flyout shows the details of every limit, time for the next reset and
-whether you are burning through it faster than the clock.</p>
-<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/hero.png" alt="Claude flyout above the taskbar tiles"></p>
-<h3>Supported services</h3>
-<ul>
-<li><strong>Claude.</strong> 5-hour session, weekly, Fable weekly, model and surface limits,
-and monthly extra usage.</li>
-<li><strong>ChatGPT / Codex.</strong> 5-hour session, weekly, additional rate limits such as
-Codex Spark, and prepaid credits.</li>
-<li><strong>Antigravity.</strong> Gemini and other-model pools, each with session and weekly
-quotas.</li>
-<li><strong>GitHub Copilot.</strong> Monthly AI credits.</li>
-</ul>
-<h3>Features</h3>
-<ul>
-<li><strong>Multiple tiles and accounts.</strong> Pick up to three quotas to show on the tiles.
-The color moves from green to yellow, orange and red as you pass your
-thresholds.</li>
-<li><strong>Pace at a glance.</strong> A dot on each ring marks where you would be if you
-spread your usage evenly over the window. An indicator estimates when you will
-hit your next limit.</li>
-<li><strong>Fluent flyout.</strong> Compact rows per quota with its reset countdown, banked
-free resets, and direct access to the provider dashboard. Click to show or get
-a glance on hover.</li>
-<li><strong>Sign in your way.</strong> With your permission, the mod finds the Claude Code,
-Codex, Visual Studio and GitHub CLI sign-ins already on this PC and adds an
-account for each, using that sign-in read-only. Or sign in each account on its
-own. Antigravity can read its running local session. An account you remove
-stays removed until you rescan.</li>
-<li><strong>Notifications.</strong> On by default: a notification tells you when usage crosses
-the red threshold, with the next reset time. Pick another threshold or turn
-them off in Settings &gt; Behavior.</li>
-<li><strong>Languages.</strong> English, Spanish and Simplified Chinese, following your Windows
-display language.</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th>Codex</th>
-<th>Antigravity</th>
-<th>Copilot</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-codex.png" alt="Codex flyout"></td>
-<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-antigravity.png" alt="Antigravity flyout"></td>
-<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-copilot.png" alt="Copilot flyout"></td>
-</tr>
-</tbody>
-</table>
-<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/settings-display.png" alt="Settings window, Display page"></p>
-<h3>Getting started</h3>
-<ol>
-<li>Enable the mod. Settings opens and asks whether the mod may look for AI
-providers already signed in on this PC. Choose <strong>Find accounts</strong> to add them,
-or <strong>Not now</strong>. You can rescan later with <strong>Rescan</strong> on the Accounts page.</li>
-<li>For anything else, click the <strong>+</strong> tile (or right-click a tile and choose
-<strong>Settings</strong>), add the account and click <strong>Sign in</strong>.</li>
-<li>Left-click a tile for its flyout. Right-click it to refresh, open the
-dashboard, hide accounts or open settings.</li>
-</ol>
-<p>If you use <strong>Taskbar AI Quota Bars</strong>, disable it first. Both mods would poll the
-same accounts, and they don't share accounts or sign-ins.</p>
-<h3>Privacy and disclaimers</h3>
-<ul>
-<li>Sign-ins are stored only on this PC, encrypted with Windows DPAPI for your
-user account. Each token is sent only to the provider that issued it, and the
-mod sends no telemetry. Details are under <strong>Network and credentials</strong>.</li>
-<li>A borrowed sign-in is read on every poll. The mod never writes, refreshes or
-stores it, and never sends a prompt.</li>
-<li><strong>Let Claude Code renew its expired sign-in</strong> (per Claude account, in the
-account editor) is off by default. When you turn it on and a borrowed Claude
-Code sign-in expires, the mod starts <code>claude.exe</code> hidden so that Claude Code
-renews and rewrites its own credentials. It starts in safe mode, without your
-hooks, plugins or MCP servers, with its telemetry and update checks off, and
-receives no prompt. The mod only runs <code>claude.exe</code> from
-<code>%LOCALAPPDATA%\Microsoft\WinGet\Links</code> or <code>%USERPROFILE%\.local\bin</code>, at most
-every 10 minutes, and stops after three failed attempts. With it off, an
-expired sign-in shows &quot;run claude&quot;.</li>
-<li>Usage comes from undocumented endpoints that can change and stop working
-without notice. The author is not responsible for its accuracy.</li>
-<li>Neither this mod nor its author is affiliated with Anthropic, OpenAI, Google,
-GitHub, Microsoft or any other usage provider.</li>
-</ul>
-<h3>Network and credentials</h3>
-<ul>
-<li>
-<p><strong>Hosts contacted.</strong> Each sign-in only goes to its own provider:</p>
-<ul>
-<li>Claude: <code>console.anthropic.com</code> (sign-in, token refresh) and
-<code>api.anthropic.com</code> (usage, profile).</li>
-<li>ChatGPT / Codex: <code>auth.openai.com</code> (sign-in, token refresh) and
-<code>chatgpt.com</code> (usage, credits).</li>
-<li>Antigravity: <code>oauth2.googleapis.com</code> (sign-in, token refresh, revocation)
-and <code>cloudcode-pa.googleapis.com</code> / <code>daily-cloudcode-pa.googleapis.com</code>
-(quota, polled at your poll interval). Without its own sign-in, it asks the
-running Antigravity app's local server on <code>127.0.0.1</code> every minute. Signing
-out, or removing the account together with its sign-in, also revokes that
-sign-in at Google.</li>
-<li>GitHub Copilot: <code>github.com</code> (device sign-in) and <code>api.github.com</code> (user,
-Copilot quota).</li>
-</ul>
-</li>
-<li>
-<p><strong>Client identities.</strong> Sign-in uses the public OAuth clients of Claude Code,
-Codex, Antigravity and GitHub Copilot (copilot.vim). The Claude usage request
-identifies itself as the Claude Code CLI, because the server only returns the
-free-resets data to it. Antigravity requests use the Antigravity app's user
-agent.</p>
-</li>
-<li>
-<p><strong>Scopes requested.</strong></p>
-<ul>
-<li>Claude: <code>org:create_api_key user:profile user:inference</code>.</li>
-<li>OpenAI: <code>openid profile email offline_access api.connectors.read api.connectors.invoke</code>.</li>
-<li>Google: <code>cloud-platform userinfo.email userinfo.profile</code>, the same set
-Google's Gemini CLI requests for these Cloud Code endpoints, which publish
-no narrower scope. A scope never grants more than your Google account
-already has.</li>
-<li>GitHub: <code>read:user</code>.</li>
-</ul>
-<p>A borrowed sign-in keeps whatever scopes its own app requested.</p>
-</li>
-<li>
-<p><strong>On this PC.</strong></p>
-<ul>
-<li>During a sign-in only (up to 3 minutes), a listener on <code>127.0.0.1</code> receives
-the browser redirect: ports 1455/1457 for OpenAI, 51121 for Google.</li>
-<li>To find a running Antigravity session, the mod reads the command line of
-the Antigravity language server process in your session.</li>
-<li>Read-only files: the Claude Code and Codex credential files (for borrowed
-sign-ins) and Claude Code's usage cache (<code>.claude.json</code>). Credential
-Manager: the GitHub CLI and Visual Studio GitHub entries. None of these is
-read to find accounts until you allow it.</li>
-<li>Notifications register
-<code>HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAiUsage</code> while they
-are on. The mod deletes it when it unloads, when you turn notifications off,
-and at start if notifications are off. After the first notification Windows
-keeps its own entry in Settings &gt; System &gt; Notifications, which may remain
-after the mod is removed.</li>
-</ul>
-</li>
-</ul>
-<h3>Credits</h3>
-<ul>
-<li>Based on a fork of
-<a href="https://github.com/Cleroth/windhawk-taskbar-ai-quota">Taskbar AI Quota Bars</a>
-by Cleroth.</li>
-<li>The flyout and button styling come from
-<a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player">Taskbar Fluent Media Player</a>
-by Salyts.</li>
-<li>Provider logos come from <a href="https://simpleicons.org">Simple Icons</a>
-(CC0); the Copilot logo is from
-<a href="https://github.com/primer/octicons">Primer Octicons</a> (MIT, GitHub Inc.).</li>
-<li>Claude, Anthropic, OpenAI, Codex, Gemini, Antigravity, GitHub and Copilot are
-trademarks of their owners. Their names and logos appear only to identify
-which account a tile belongs to.</li>
-</ul>
-<h3>Report a bug</h3>
-<p>Found a problem or have an idea?
-<a href="https://github.com/Sof2245/taskbar-ai-usage/issues">Open an issue on GitHub</a>.</p>
-]]></content>
-        <author>
-            <name>Sof2245</name>
-            <uri>https://github.com/Sof2245</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Expanded Clipboard (Win+V) 0.7.5]]></title>
-        <id>https://windhawk.net/mods/expanded-clipboard#b981076dc9c81084b9fcc2ab9f5b5f706a5f0024</id>
-        <link href="https://windhawk.net/mods/expanded-clipboard"/>
-        <updated>2026-11-03T23:01:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Only target the svchost instance hosting the clipboard service (<code>cbdhsvc</code>), fixing breakage of unrelated svchost-hosted services (Control Panel network adapter properties page). https://github.com/ramensoftware/windhawk-mods/issues/5060</li>
-</ul>
-]]></content>
-        <author>
-            <name>takattowo</name>
-            <uri>https://github.com/takattowo</uri>
         </author>
     </entry>
 </feed>

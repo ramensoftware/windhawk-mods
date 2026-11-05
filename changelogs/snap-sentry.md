@@ -1,3 +1,12 @@
+## 0.23.0 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/af08e3162218984b6e83d0f10f3738e63ab94795/mods/snap-sentry.wh.cpp))
+
+* 0.23.0: The notification no longer leaves a Start Menu shortcut or a registry entry behind. SnapSentry's name and icon now come from a temporary entry that Windows discards at sign-out.
+* Windows keeps your notification banner and sound settings for SnapSentry when the mod is disabled or updated.
+* Screenshots are renamed as soon as they appear, before the popup, so other tools watching the folder see the final name right away.
+* Screenshots you keep are renamed too.
+* When the window in front has no title, the program's name is used instead of skipping the rename.
+* New "Name by time only" setting, which names each file with just the timestamp.
+
 ## 0.22.0 ([Oct 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/aa98356ec7e6636ffed55ee598f18d6d9bdad12b/mods/snap-sentry.wh.cpp))
 
 * Before deleting or recycling a screenshot, SnapSentry now checks that it is still the same file with the same contents it copied. A file replaced or edited during the countdown is kept.

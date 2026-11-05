@@ -1,3 +1,23 @@
+## 1.1.1 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/89c1a71fccf3768d9e5d5b5b6da2c2701bf684a1/mods/spotlight-launcher.wh.cpp))
+
+* **Panel position.** A new Appearance option decides what stays centered while the details panel is
+  open: the bar together with the panel (the bar slides left, the default) or the bar on its own (the
+  panel opens to its right without moving it).
+* **Solid is the new default background effect.** A fresh install now starts with a plain, opaque
+  colour instead of Acrylic. Anyone who already saved the settings keeps their choice. If the settings
+  tab was never saved, the mod starts from the defaults, so the effect may change after this update.
+* **Live acrylic is off by default, and it is a Windows 11 option.** The live blur is drawn by Windows
+  in a separate layer behind the bar, so while the details panel animates that layer can trail the bar
+  by a frame and leave a slight seam at the edges. Off, the same effects come from a single snapshot
+  taken when the bar opens: smoother and lighter on laptops. On Windows 10 the option is ignored and
+  the snapshot is always used, because the compositor trails the most there.
+* **The details panel wipes instead of fading in live mode.** Windows cannot fade the blur layer, so
+  the panel now animates its width with an opaque card: both layers are the same shape at every frame.
+* **The last strip of the closing panel.** Below a certain width Windows collapses the rounded blur
+  layer into a minimum pill, which stayed on screen after the card had shrunk past it. The last few
+  pixels are now drawn as a tinted tail that dissolves with the card, and the blur layer is hidden
+  before it reaches that size.
+
 ## 1.1.0 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4d0e222da8df9e1d8a040cdb0c9cf3d2f46d9c7f/mods/spotlight-launcher.wh.cpp))
 
 * **Actions on the window switcher.** `win:` no longer only brings a window to the front. **Ctrl + M**

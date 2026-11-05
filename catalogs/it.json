@@ -4540,7 +4540,7 @@
         "ratingUsers": 44,
         "reviews": 0,
         "trendingSorting": -0.6779056944857158,
-        "updated": 1792260143000,
+        "updated": 1793851239000,
         "users": 794
       },
       "metadata": {
@@ -4553,7 +4553,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Desktop Window Cards",
-        "version": "1.8"
+        "version": "1.8.1"
       }
     },
     "disable-audio-limiter": {
@@ -14038,6 +14038,35 @@
         "version": "1.0.1"
       }
     },
+    "round-everything": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793851243000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793851243000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Deen-0x",
+        "compilerOptions": "-lgdiplus -lgdi32 -lshell32 -lshcore -ldwmapi -lole32 -loleaut32 -lruntimeobject",
+        "description": "Turns the taskbar into a frame around a rounded screen, rounds the monitor corners, and gives every window - maximized included - one corner radius",
+        "github": "https://github.com/Deen-0x",
+        "include": [
+          "explorer.exe",
+          "dwm.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Round Everything",
+        "version": "1.0.0"
+      }
+    },
     "rounded-selection-rectangle": {
       "details": {
         "defaultSorting": 5800,
@@ -14831,7 +14860,7 @@
         "ratingUsers": 16,
         "reviews": 1,
         "trendingSorting": -0.11572562361846477,
-        "updated": 1793214102000,
+        "updated": 1793851230000,
         "users": 154
       },
       "metadata": {
@@ -14844,7 +14873,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.22.0"
+        "version": "0.23.0"
       }
     },
     "snipping-tool-pen-text": {
@@ -14955,7 +14984,7 @@
         "ratingUsers": 62,
         "reviews": 2,
         "trendingSorting": 7.675009986129491,
-        "updated": 1793545408000,
+        "updated": 1793851234000,
         "users": 987
       },
       "metadata": {
@@ -14968,7 +14997,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "standard-title-bar-colors": {

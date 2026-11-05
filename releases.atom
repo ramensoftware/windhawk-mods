@@ -2,12 +2,130 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-04T04:03:23.000Z</updated>
+    <updated>2026-11-05T04:00:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Round Everything 1.0.0]]></title>
+        <id>https://windhawk.net/mods/round-everything#37be93ac3c0356ab82594e732a758a2aa245f46b</id>
+        <link href="https://windhawk.net/mods/round-everything"/>
+        <updated>2026-11-05T04:00:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Round Everything</h1>
+<p>Turns the taskbar into a frame around the whole screen. The taskbar keeps its
+rectangular shape, and the other three screen edges get a band of the same
+color, pushed inwards by a configurable offset. The visible &quot;screen&quot; becomes a
+rounded rectangle that sits flush against the taskbar, with one configurable
+corner radius.</p>
+<p>Works with the taskbar on any edge (top, bottom, left, right) and on every
+monitor. A monitor without a taskbar (&quot;Show my taskbar on all displays&quot; off)
+gets the frame on all four edges.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/round-everything/demo.gif" alt="Demo"></p>
+<h2>How it works</h2>
+<p>The mod runs inside the taskbar's <code>explorer.exe</code> and creates one layered,
+always-on-top window per monitor covering the area next to the taskbar:
+three bands of the configured offset with the rounded corners. The taskbar
+itself, its background painted in the frame color, is the fourth side. The
+frame shape is drawn with GDI+ (anti-aliased); the inner area is fully
+transparent and lets the mouse through, while the painted frame is solid to
+the mouse, like the taskbar. No explorer function is hooked: the taskbar's
+XAML tree is reached through a few <code>taskbar.dll</code> symbol lookups (no XAML
+diagnostics, so it coexists with Taskbar Styler).</p>
+<ul>
+<li><strong>Color</strong> – the frame has one color of your choice, and the taskbar's own
+background (<code>Taskbar.TaskbarBackground</code>) is painted with it at the same
+opacity, so the taskbar and the frame are one surface. The taskbar's own
+background is restored when the mod is turned off.</li>
+<li>Frame and taskbar come and go together. When the mod starts, the frame
+appears in the same instant as the taskbar's new look. When the
+taskbar moves, resizes or rebuilds (changing its position, a taskbar mod
+reloading) its background turns transparent and the frame goes away the
+instant the taskbar window moves; once everything has settled - taskbar
+at its new edge and uncloaked, its corners in place, the work area
+reserved - the taskbar paints its background again and, from inside that
+same rendering pass, reveals the frame (re-shaped for the new edge), so
+the two reach the screen in one composition. When the mod is turned off
+the frame disappears as the taskbar is handed back.</li>
+<li>The frame stays visible during Aero Peek (hovering a taskbar thumbnail or
+the show-desktop corner), like the taskbar itself.</li>
+<li><strong>Task View</strong> (Win+Tab) – the frame goes away and the taskbar's background
+and monitor corners turn transparent while it is open; everything comes
+back together when it closes.</li>
+<li><strong>Full-screen apps</strong> – the frame hides on a monitor while a full-screen
+window (game, video, F11 browser) is showing there, and comes back
+afterwards.</li>
+<li><strong>Work area</strong> – <em>Shrink the work area to the rounded screen</em> (on by
+default) pushes the work area inwards so maximized and snapped windows stay
+inside the frame; turned off, the frame is purely visual: it overlaps the
+edges of maximized windows and lets the mouse through. Shrinking registers
+one invisible appbar per frame edge (the same mechanism the taskbar uses),
+so the shell reserves the space itself; the appbars are removed and the
+work area returns to normal when the option or the mod is turned off. <em>Extra
+work-area inset</em> shrinks it further, on all four sides, so a strip of
+wallpaper stays visible between the frame/taskbar and your windows.</li>
+<li><strong>Monitor corners</strong> – the four outer corners of each monitor are rounded
+too, so the whole screen reads as a rounded panel: the sliver outside a
+quarter circle is painted in the <em>Monitor corner color</em> (black by default).
+The two corners away from the taskbar are part of the frame itself; the
+two on the taskbar are XAML shapes added inside the taskbar (no extra
+windows, so nothing to fight over z-order with), click-through, removed
+when the mod is disabled.</li>
+<li><strong>Taskbar border line</strong> – the taskbar draws a 1px line along its inner edge
+(<code>BackgroundStroke</code>), which shows up as a seam between the taskbar and the
+frame. The mod sets that line's opacity to 0 and restores it when disabled.</li>
+<li>Offsets and radii are in pixels at 100% scaling and scaled per monitor
+(configurable).</li>
+</ul>
+<h2>Window corners (dwm.exe)</h2>
+<p>Windows 11 rounds normal windows with a fixed 8 px radius and draws maximized
+windows square. With <strong>Round window corners</strong> on, the mod also runs inside
+<code>dwm.exe</code> and hooks the corner-radius decision
+(<code>CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle</code>): every window that
+Windows would round - normal, snapped or maximized - gets the one <strong>Window
+corner radius</strong> you set, and maximized windows are rounded too, so they sit in
+the rounded screen like cards. Windows that opt out of rounding (<code>DONOTROUND</code>)
+and small-radius surfaces (menus, tooltips) are left alone. Changes apply at
+once: DWM is asked to re-evaluate every window (no window's own corner
+preference is touched). Full-screen windows share the maximized path in DWM,
+so they get rounded corners as well.</p>
+<p><strong>This part needs one manual step.</strong> Windhawk doesn't inject into <code>dwm.exe</code>
+by default (it is on Windhawk's list of critical system processes), so the
+window-corner part does nothing until you add <code>dwm.exe</code> to the <strong>Process
+inclusion list</strong> in Windhawk's advanced settings. The frame, the monitor
+corners and the work area don't depend on it and work right away. <code>udwm.dll</code>
+symbols are downloaded by Windhawk on first use.</p>
+<p>This does the same job as the <em>Rounded corners for maximized and snapped
+windows</em> option of the
+<a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a>
+mod, through the same hook - the mechanism is the one Alexey Lavrinenko
+contributed there; use one mod or the other for window corners, not both.</p>
+<h2>Notes</h2>
+<ul>
+<li>Shell flyouts (Start, notification center, Task View, …) live above the
+frame, so they are never covered.</li>
+<li>With the work area reserved, the frame is solid to the mouse, like the
+taskbar: clicks on it (and on the extra work-area inset strip) go nowhere,
+which keeps the invisible resize borders of maximized windows underneath
+from being hit. Without it the frame lets the mouse through.</li>
+<li>With an auto-hide taskbar the frame spans the whole monitor and the taskbar
+slides in over it.</li>
+<li>Setting all offsets to 0 and keeping a radius gives you just the rounded
+screen corners against the taskbar.</li>
+</ul>
+<h2>Credits</h2>
+<p>The taskbar-thread helpers (<code>RunFromWindowThreadTimeout</code>,
+<code>FindCurrentProcessTaskbarWnd</code>) and the <code>taskbar.dll</code> XAML-root lookup are
+ported from <a href="https://windhawk.net/mods/taskbar-multirow">Taskbar multi-row</a>
+by m417z, licensed under the GNU GPL v3.0. This mod is published under the
+same license.</p>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windhawk UI Translator 0.1]]></title>
         <id>https://windhawk.net/mods/windhawk-ui-translator#680d719e41d0ce0736a4cb64b09e4d091977c261</id>
@@ -2226,132 +2344,6 @@ If you enjoy this mod and want to support its author:
         <author>
             <name>dekvas</name>
             <uri>https://github.com/dekvas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Rounded Selection Rectangle 1.0]]></title>
-        <id>https://windhawk.net/mods/rounded-selection-rectangle#aca316a66c25f7e2a896ccebf684d9ed9ddc7134</id>
-        <link href="https://windhawk.net/mods/rounded-selection-rectangle"/>
-        <updated>2026-11-01T04:01:47.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/rounded-selection-rectangle.gif" alt="Rounded Selection Rectangle / Retângulo de Seleção Arredondado"></p>
-<h2>English</h2>
-<p>Gives the rectangle you draw to select files rounded corners and a gentle fade
-when you release the mouse. Works on the desktop, in File Explorer and in apps
-that use standard Windows list controls.</p>
-<ul>
-<li>Adjust the corner roundness, border width and background opacity.</li>
-<li>Choose background and border colors independently, or keep <strong>Windows default</strong>
-for either one.</li>
-<li>Set the fade-out duration, or use <strong>0</strong> to turn it off. The mod respects the
-Windows animation setting.</li>
-</ul>
-<p>In <strong>Background color</strong> and <strong>Border color</strong>, choose <strong>Custom color</strong> and enter a
-color such as <code>#8B5CF6</code>. <strong>Windows default</strong> ignores the custom value and follows
-the system color. Custom colors affect only the selection rectangle.</p>
-<p>Compatible with <strong>Win32 UI Modernizer</strong>.</p>
-<p>Other selection-rectangle mods, such as <strong>Desktop Marquee Fade</strong> and <strong>Classic
-Selection Rectangle Color</strong>, can overlap with this mod's fade or override its
-colors. Disable overlapping features if you use them together.</p>
-<p>This mod depends on symbols published by Microsoft. If a Windows update has no
-published symbols, or changes the symbols the mod uses, the mod will stop working
-until compatible symbols or an updated mod are available.</p>
-<h3>Rounded selection in Home (WinUI)</h3>
-<p>File Explorer's <strong>Home</strong> page uses WinUI. To round its selection rectangle,
-install and enable <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a> in Windhawk.
-In that mod's settings, add an entry under <strong>Control styles</strong> and set <strong>Target</strong>
-to:</p>
-<pre><code class="language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
-</code></pre>
-<p>Under <strong>Styles</strong>, add each of these four lines as a separate style:</p>
-<pre><code class="language-text">Fill:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; Opacity=&quot;0.25&quot; /&gt;
-Stroke:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; /&gt;
-RadiusX:=8
-RadiusY:=8
-</code></pre>
-<p>Save the settings. This uses the Windows accent color, a 25% opacity fill and
-8-unit corner radii. To change the roundness, adjust both <code>RadiusX</code> and <code>RadiusY</code>.
-These styles are configured separately from this mod's settings.</p>
-<h2>Português</h2>
-<p>Deixa o retângulo que você arrasta para selecionar arquivos com cantos
-arredondados e um desaparecimento suave ao soltar o mouse. Funciona na área de
-trabalho, no Explorador de Arquivos e em aplicativos com listas padrão do Windows.</p>
-<ul>
-<li>Ajuste o arredondamento dos cantos, a espessura da borda e a opacidade do fundo.</li>
-<li>Escolha as cores do fundo e da borda separadamente, ou mantenha o <strong>Padrão do
-Windows</strong> em cada uma.</li>
-<li>Defina a duração do desaparecimento, ou use <strong>0</strong> para desativá-lo. O mod
-respeita a configuração de animações do Windows.</li>
-</ul>
-<p>Em <strong>Cor do fundo</strong> e <strong>Cor da borda</strong>, escolha <strong>Cor personalizada</strong> e informe uma
-cor como <code>#8B5CF6</code>. <strong>Padrão do Windows</strong> ignora o valor personalizado e acompanha a
-cor do sistema. As cores personalizadas afetam somente o retângulo de seleção.</p>
-<p>Compatível com o <strong>Win32 UI Modernizer</strong>.</p>
-<p>Outros mods de retângulo de seleção, como <strong>Desktop Marquee Fade</strong> e <strong>Classic
-Selection Rectangle Color</strong>, podem sobrepor o fade ou as cores deste mod.
-Desative as funções equivalentes se usar esses mods juntos.</p>
-<p>Este mod depende dos símbolos publicados pela Microsoft. Se uma atualização do
-Windows não tiver símbolos publicados, ou alterar os símbolos usados pelo mod,
-ele deixará de funcionar até que símbolos compatíveis ou uma atualização do mod
-estejam disponíveis.</p>
-<h3>Seleção arredondada na pasta Início (WinUI)</h3>
-<p>A pasta <strong>Início</strong> do Explorador de Arquivos usa WinUI. Para arredondar seu
-retângulo de seleção, instale e ative o <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
-no Windhawk. Nas configurações desse mod, adicione uma entrada em <strong>Control styles</strong>
-(estilos dos controles) e preencha <strong>Target</strong> (alvo) com:</p>
-<pre><code class="language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
-</code></pre>
-<p>Em <strong>Styles</strong> (estilos), adicione cada uma destas quatro linhas como um estilo separado:</p>
-<pre><code class="language-text">Fill:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; Opacity=&quot;0.25&quot; /&gt;
-Stroke:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; /&gt;
-RadiusX:=8
-RadiusY:=8
-</code></pre>
-<p>Salve as configurações. Isso usa a cor de destaque do Windows, fundo com 25% de
-opacidade e cantos de 8 unidades. Para mudar o arredondamento, ajuste <code>RadiusX</code>
-e <code>RadiusY</code>. Esses estilos são configurados separadamente das opções deste mod.</p>
-<h2>Español</h2>
-<p>Da esquinas redondeadas y un desvanecimiento suave al rectángulo que arrastras
-para seleccionar archivos. Funciona en el escritorio, en el Explorador de archivos
-y en aplicaciones con listas estándar de Windows.</p>
-<ul>
-<li>Ajusta las esquinas, el grosor del borde y la opacidad del fondo.</li>
-<li>Elige los colores de fondo y borde por separado, o conserva el
-<strong>Predeterminado de Windows</strong> para cada uno.</li>
-<li>Ajusta la duración del desvanecimiento, o usa <strong>0</strong> para desactivarlo. El mod
-respeta la configuración de animaciones de Windows.</li>
-</ul>
-<p>En <strong>Color de fondo</strong> y <strong>Color del borde</strong>, selecciona <strong>Color personalizado</strong> e
-introduce un color como <code>#8B5CF6</code>. <strong>Predeterminado de Windows</strong> ignora el valor
-personalizado y sigue el color del sistema. Los colores personalizados afectan
-sólo al rectángulo de selección.</p>
-<p>Compatible con <strong>Win32 UI Modernizer</strong>.</p>
-<p>Otros mods del rectángulo de selección, como <strong>Desktop Marquee Fade</strong> y <strong>Classic
-Selection Rectangle Color</strong>, pueden superponer el desvanecimiento o los colores.
-Desactiva las funciones equivalentes si usas esos mods juntos.</p>
-<p>Este mod depende de los símbolos publicados por Microsoft. Si una actualización
-de Windows no tiene símbolos publicados, o cambia los símbolos que usa el mod,
-dejará de funcionar hasta que haya símbolos compatibles o una actualización
-del mod.</p>
-<h3>Selección redondeada en Inicio (WinUI)</h3>
-<p>La página <strong>Inicio</strong> del Explorador de archivos usa WinUI. Para redondear su
-rectángulo de selección, instala y activa <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
-en Windhawk. En los ajustes de ese mod, añade una entrada en <strong>Control styles</strong>
-(estilos de controles) e introduce lo siguiente en <strong>Target</strong> (destino):</p>
-<pre><code class="language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
-</code></pre>
-<p>En <strong>Styles</strong> (estilos), añade cada una de estas cuatro líneas como un estilo separado:</p>
-<pre><code class="language-text">Fill:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; Opacity=&quot;0.25&quot; /&gt;
-Stroke:=&lt;SolidColorBrush Color=&quot;{ThemeResource SystemAccentColor}&quot; /&gt;
-RadiusX:=8
-RadiusY:=8
-</code></pre>
-<p>Guarda los ajustes. Esto usa el color de énfasis de Windows, un fondo con un 25%
-de opacidad y esquinas de 8 unidades. Para cambiar el redondeado, ajusta <code>RadiusX</code>
-y <code>RadiusY</code>. Estos estilos se configuran por separado de las opciones de este mod.</p>
-]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,11 @@
+## 1.8.1 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/47e9614d53032425caead5d34b842c8125812e22/mods/desktop-window-cards.wh.cpp))
+
+- Excluded programs: a blank entry hides the entries after it. Windhawk returns "" both for a blank array entry and past the end of the list, so the break on an empty entry ended the list at the first blank one. Every program listed after it stopped being excluded, with no warning. The loop now reads the bounded range (256 entries, only on start and on reload) and skips blank entries.
+- Excluded programs: normalization. \r/\n are trimmed along with spaces and quotes, / is accepted in full paths (C:/Program Files/...), and duplicate entries are ignored.
+- Worker: no busy loop on init failure. If the frame timer can't be created, handles[0] is null and MsgWaitForMultipleObjectsEx fails immediately, so the loop spins at 100% CPU. The worker now checks the window classes, controller and frame timer before it starts, logs which one failed, and leaves the loop on WAIT_FAILED.
+
+THANKS TO @MayconDIS
+
 ## 1.8 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/15eab1d96589bcbec11e4d9e8aeb2659510e1206/mods/desktop-window-cards.wh.cpp))
 
 - New: hold a modifier key (Shift, Ctrl or Alt) while minimizing to send the window to the taskbar without a card.
