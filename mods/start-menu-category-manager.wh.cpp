@@ -2,7 +2,7 @@
 // @id start-menu-category-manager
 // @name Start Menu Category Manager
 // @name:pt-BR Gerenciador de Categorias do Menu Iniciar
-// @description Adds a "Manage Categories" item to the Windows 11 Start menu's right-click menu, for customising app categories.
+// @description Adds a "Manage Categories" item to the Windows 11 Start menu's right-click menu, for customising app categories. Also hides empty category tiles from the Start menu (optional).
 // @description:pt-BR Adiciona o item "Gerenciar Categorias" ao menu de contexto (botão direito) do Menu Iniciar do Windows 11, para personalizar as categorias dos aplicativos.
 // @version 1.0.0
 // @author Feuer
@@ -166,8 +166,8 @@ your layout.
 
 ## Tested on
 
-Only Windows 11 build 26300, on one x64 computer, with Windows in Brazilian Portuguese. The mod is built for x86-64
-only; it has not been tested on ARM64 and does not target it. On any other build the mod may
+Only Windows 11 build 26300, on one x64 computer, with Windows in Brazilian Portuguese. The mod has not been
+tested on ARM64, because I have no ARM64 device. On any other build the mod may
 fail to attach to the Start menu (see below).
 
 ## If a Windows update breaks the mod
@@ -5641,19 +5641,6 @@ void __cdecl StartMenuVectorAppend_Hook(void* pThis, wuxc::MenuFlyoutItemBase co
 std::atomic<int> g_rebuildCount{0};
 bool g_startupCleanupAllowed = false;
 
-// Reads through ReadProcessMemory instead of dereferencing after a VirtualQuery check. A check and a read cannot be
-// made atomic, so memory that is freed in between would still fault. ReadProcessMemory on this process copies inside
-// the kernel and reports bad memory as a failure instead of raising an exception.
-bool ReadWordAt(const void* base, size_t offset, unsigned long long* out) {
-    if (!base) return false;
-    const void* p = static_cast<const unsigned char*>(base) + offset;
-    unsigned long long value = 0;
-    SIZE_T got = 0;
-    if (!ReadProcessMemory(GetCurrentProcess(), p, &value, sizeof(value), &got) || got != sizeof(value)) return false;
-    *out = value;
-    return true;
-}
-
 // A category with no apps is a group whose own list of items is empty. This does not depend on the display language,
 // and it never matches a pinned app or folder, because those are not groups.
 bool IsEmptyGroup(wf::IInspectable const& entry) {
@@ -5948,16 +5935,25 @@ void __cdecl PruneAndCombine_Hook(void* self, void* map) {
 // does anything else with the list, does not. So that is where empty entries are removed from those lists. The one
 // list that never goes through such a call here is the one built when Start starts up (see ProcessCategoryGrid).
 
-// Removes empty category groups from the list that Start has just filled, before the menu draws it.
-// `abi` is the ABI pointer of the list.
-void RemoveEmptyGroupsFromAbi(void* abi) {
+// The C++ wrapper of the category list's ReplaceAll. It covers the callers that use the out-of-line copy of the
+// wrapper, which is how Start fills the category list on the build this mod was tested on.
+//
+// The real parameter is a winrt::array_view<AllAppsGroupViewModel const> passed by value: a 16-byte {pointer,
+// uint32_t} struct. x64 passes it by pointer to a copy, and ARM64 passes it in two registers (x1, x2), so the hook
+// has to declare the real type to be correct on both. array_view has the same layout whatever the element type.
+using GroupArrayView = winrt::array_view<wf::IInspectable const>;
+
+using ReplaceAll_t = void(__cdecl*)(void*, GroupArrayView);
+ReplaceAll_t ReplaceAll_Original = nullptr;
+
+void __cdecl ReplaceAll_Hook(void* self, GroupArrayView items) {
+    ReplaceAll_Original(self, items);
+    if (!g_hideEmptyTiles) return;
     try {
-        unsigned long long vtable = 0;
-        if (!ReadWordAt(abi, 0, &vtable)) return;
-        wf::IInspectable inspectable{nullptr};
-        winrt::copy_from_abi(inspectable, abi);
-        auto items = inspectable.try_as<IInspectableList>();
-        if (!items) {
+        // `self` is the C++/WinRT wrapper, whose only member is the projected vector.
+        auto const& vector = *static_cast<wf::IInspectable const*>(self);
+        auto list = vector.try_as<IInspectableList>();
+        if (!list) {
             static bool loggedNotList = false;
             if (!loggedNotList) {
                 loggedNotList = true;
@@ -5965,24 +5961,10 @@ void RemoveEmptyGroupsFromAbi(void* abi) {
             }
             return;
         }
-        RemoveEmptyGroups(items);
+        RemoveEmptyGroups(list);
     } catch (...) {
         Wh_Log(L"[start] Removing the empty groups failed with an exception");
     }
-}
-
-// The C++ wrapper of the category list's ReplaceAll. It covers the callers that use the out-of-line copy of the
-// wrapper, which is how Start fills the category list on the build this mod was tested on. `self` is the address of
-// the vector wrapper, whose first member is the ABI pointer; this layout is an assumption about Start's build, so it
-// is read safely.
-using ReplaceAll_t = void(__cdecl*)(void*, void*);
-ReplaceAll_t ReplaceAll_Original = nullptr;
-
-void __cdecl ReplaceAll_Hook(void* self, void* items) {
-    ReplaceAll_Original(self, items);
-    if (!g_hideEmptyTiles) return;
-    unsigned long long abi = 0;
-    if (ReadWordAt(self, 0, &abi)) RemoveEmptyGroupsFromAbi(reinterpret_cast<void*>(abi));
 }
 
 bool HookStartMenuDllSymbols(HMODULE module) {
