@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-left-speed-meter
 // @name            Taskbar Left Speed Meter
-// @description     Displays real-time Internet download and upload speed on the bottom-left corner of the taskbar with full customization.
+// @description     Displays real-time Internet download and upload speed on the bottom-left corner of the taskbar with custom colors and fonts.
 // @version         1.1.0
 // @author          RAKIBUL ISLAM SANI
 // @github          https://github.com/rakibulislamsani
@@ -13,21 +13,25 @@
 /*
 # Taskbar Left Speed Meter
 
-A lightweight network traffic monitor docked on the bottom-left corner of the Windows taskbar (specifically tailored for centered taskbars in Windows 11).
+A dedicated, lightweight network traffic monitor docked on the bottom-left corner of the Windows taskbar (specifically tailored for centered taskbars in Windows 11).
 
-### Features & Customization
-- **Tailored Left-Corner Docking:** Seamlessly positions network rates on the bottom-left of the taskbar.
-- **Deep Visual Styling:** Fully customizable via the Settings tab:
+### Comparison with existing mods
+- **net-speed-taskbar:** Offers comprehensive chart and minimal layouts anywhere along the taskbar. In contrast, this mod focuses strictly on a simple, lightweight text readout anchored at the bottom-left corner, adding deep font customization (arbitrary font families, bold styling) and custom HEX color selection.
+- **taskbar-system-info:** Displays multi-resource readouts (CPU/GPU/RAM/Network) together. If you only want a standalone network speed monitor without system resource counters, this mod provides that focused experience.
+
+### Features
+- Real-time download and upload speed monitoring.
+- Deep visual styling via the Settings tab:
   - Custom arbitrary text color (HEX code support).
   - Custom font family (e.g. Segoe UI, Consolas, Arial, Tahoma).
   - Toggleable bold text styling.
   - Custom font size with automatic per-monitor DPI scaling.
   - Horizontal margin offset adjustments.
-- **Auto-Hide Support:** Automatically hides when applications go fullscreen (videos, games) or when the taskbar is set to auto-hide.
-- **Click-Through:** Transparent overlay that does not block mouse clicks to underlying taskbar elements.
+- Auto-hides when applications go fullscreen (videos, games) or when the taskbar auto-hides.
+- Click-through transparent overlay that never blocks underlying taskbar elements.
 
-### Author
-Developed by **RAKIBUL ISLAM SANI**.
+### Placement Note
+On Windows 11 with centered taskbar icons, this docks in the empty bottom-left corner. If you have the Widgets (Weather) icon enabled at the left corner, adjust the `Left Margin (X)` setting to position the meter neatly alongside it.
 */
 // ==/WindhawkModReadme==
 
@@ -78,7 +82,6 @@ BOOL g_hideOnFullscreen = TRUE;
 DWORD prevInBytes = 0, prevOutBytes = 0;
 wchar_t displayText[128] = L"▼ 0.0 KB/s\n▲ 0.0 KB/s";
 
-// Retrieve the current module handle safely
 HINSTANCE GetCurrentModuleHandle() {
     HINSTANCE hInst = NULL;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -87,7 +90,6 @@ HINSTANCE GetCurrentModuleHandle() {
     return hInst;
 }
 
-// Get DPI for the given window with fallback
 UINT GetTaskbarDpi(HWND hWnd) {
     HMODULE hUser32 = GetModuleHandle(L"user32.dll");
     if (hUser32) {
@@ -213,13 +215,13 @@ void UpdatePosition(HWND hTaskbar) {
 }
 
 void RefreshSpeed() {
-    // Verify that the taskbar window exists and belongs to the current shell process
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     DWORD taskbarPid = 0;
     if (hTaskbar) {
         GetWindowThreadProcessId(hTaskbar, &taskbarPid);
     }
 
+    // Only display inside the genuine shell process
     if (!hTaskbar || taskbarPid != GetCurrentProcessId()) {
         if (IsWindowVisible(hOverlayWnd)) {
             ShowWindow(hOverlayWnd, SW_HIDE);
@@ -350,10 +352,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
         SetLayeredWindowAttributes(hOverlayWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
         FetchNetworkTraffic(&prevInBytes, &prevOutBytes);
 
-        if (hTaskbar) {
-            UpdatePosition(hTaskbar);
-            ShowWindow(hOverlayWnd, SW_SHOWNOACTIVATE);
-        }
+        // Run RefreshSpeed directly to avoid duplicate flashes in secondary explorer processes
+        RefreshSpeed();
 
         SetTimer(hOverlayWnd, TIMER_ID, 1000, NULL);
     }
