@@ -1349,56 +1349,73 @@ bool IsWslProcess(const std::wstring& exeName) {
                   L"wslrelay.exe", L"vmmem", L"vmmemWSL"});
 }
 
+// A one-line hint below the program in the list. Task dialogs can't indent
+// wrapped lines, so the hints are kept short enough to fit on one line.
 std::wstring GetBlockerHint(const Blocker& blocker,
                             const DescribeContext& context) {
     const std::wstring& exe = blocker.exeName;
 
     if (blocker.kind == BlockerKind::System) {
-        return L"Windows or a driver has the drive open, for example for "
-               L"indexing, virus scanning, WSL or a mounted disk image. It "
-               L"usually lets go once the other programs are closed.";
+        return L"Windows or a driver has the drive open. It usually lets go "
+               L"once programs close.";
     }
 
     if (blocker.kind == BlockerKind::Explorer) {
-        return L"File Explorer has something on the drive open, such as a "
-               L"folder window, the preview pane or a thumbnail. Close File "
-               L"Explorer windows that show the drive.";
+        return L"File Explorer has something open on the drive. Close windows "
+               L"that show it.";
     }
 
     if (ContainsIgnoreCase(blocker.comName, L"Plan9") || IsWslProcess(exe)) {
-        return L"WSL makes the drive available in Linux as " +
-               context.wslPath +
-               L". Close WSL shells that use it, or run \"wsl --shutdown\".";
+        return L"WSL shares this drive as " + context.wslPath +
+               L". Close WSL shells or run \"wsl --shutdown\".";
     }
 
     if (IsOneOfIgnoreCase(exe, {L"SearchIndexer.exe", L"SearchProtocolHost.exe",
                                 L"SearchFilterHost.exe"})) {
         return L"Windows Search is indexing the drive. It usually stops by "
-               L"itself within a few seconds.";
+               L"itself.";
     }
 
     if (IsOneOfIgnoreCase(exe, {L"MsMpEng.exe", L"MpDefenderCoreService.exe",
                                 L"NisSrv.exe", L"MpCopyAccelerator.exe"})) {
-        return L"Microsoft Defender is scanning files on the drive. It usually "
-               L"finishes by itself.";
+        return L"Microsoft Defender is scanning the drive. It usually finishes "
+               L"by itself.";
     }
 
     if (!blocker.services.empty()) {
-        return L"Runs the Windows service: " + blocker.services + L".";
+        return L"Runs the service: " + blocker.services + L".";
     }
 
     if (EqualsIgnoreCase(exe, L"dllhost.exe")) {
-        return L"COM Surrogate runs components for other programs, such as "
-               L"thumbnail or file property handlers.";
+        return L"Runs helpers for other programs, such as thumbnails or file "
+               L"properties.";
     }
 
     if (blocker.kind == BlockerKind::Protected) {
-        return L"This is a core Windows process, so it isn't closed from here.";
+        return L"A core Windows process, so it isn't closed from here.";
     }
 
     if (blocker.kind == BlockerKind::Service) {
-        return L"This process runs as a service or for another user, so it "
-               L"isn't closed from here.";
+        return L"Runs as a service or for another user, so it isn't closed "
+               L"from here.";
+    }
+
+    return {};
+}
+
+// A longer explanation for the details section, where text can wrap freely.
+std::wstring GetBlockerDetailNote(const Blocker& blocker) {
+    if (blocker.kind == BlockerKind::System) {
+        return L"Windows or a driver has the drive open, for example for "
+               L"indexing, virus scanning, WSL or a mounted disk image. If it "
+               L"doesn't let go after the other programs are closed, use Force "
+               L"eject.";
+    }
+
+    if (blocker.kind == BlockerKind::Explorer) {
+        return L"File Explorer has something on the drive open, such as a "
+               L"folder window, the preview pane or a thumbnail. It can't be "
+               L"closed from here, because this dialog runs inside it.";
     }
 
     return {};
@@ -2041,8 +2058,10 @@ std::wstring BuildBlockersContent(const EjectSession& session) {
     if (!running.empty()) {
         text = L"It's being used by:";
 
+        int number = 0;
         for (const Blocker* blocker : running) {
-            text += L"\n\n\u2022 " + blocker->displayName;
+            text += L"\n\n" + std::to_wstring(++number) + L". " +
+                    blocker->displayName;
             if (blocker->kind == BlockerKind::System ||
                 EqualsIgnoreCase(blocker->displayName, blocker->exeName)) {
                 text += L" (PID " + std::to_wstring(blocker->pid) + L")";
@@ -2056,7 +2075,8 @@ std::wstring BuildBlockersContent(const EjectSession& session) {
             }
 
             if (!blocker->hint.empty()) {
-                text += L"\n" + blocker->hint;
+                // Indented to line up with the name after the number.
+                text += L"\n    " + blocker->hint;
             }
         }
     } else if (!session.blockers.empty()) {
@@ -2132,6 +2152,11 @@ std::wstring BuildDetails(const EjectSession& session) {
 
         if (!blocker.services.empty()) {
             text += L"\nServices: " + blocker.services;
+        }
+
+        std::wstring note = GetBlockerDetailNote(blocker);
+        if (!note.empty()) {
+            text += L"\n" + note;
         }
 
         for (const auto& device : blocker.vetoingDevices) {
