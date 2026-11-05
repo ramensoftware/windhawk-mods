@@ -79,7 +79,7 @@ Version **2.2** adds progressive result loading, native Everything ordering, Win
 - **Silent App-list Updates**: Windows registry, Store/MSIX package and Start-menu shortcut notifications refresh the catalog after changes settle. Install/update/remove events bypass the installed-metadata cache. Reopening search keeps a safety refresh with a five-second minimum; otherwise unchanged installation metadata is reused for up to 30 seconds. A native background worker builds a replacement catalog and loads icons while app matching continues against the last complete snapshot. No network requests or periodic polling are needed for these listeners.
 - **Background Catalog and Icon Warmup**: After the taskbar is available, app, Settings and installed-program metadata load on a background worker, followed by app icons and configured custom-command image icons. First search reuses that work without waiting for icon I/O. Visible missing icons take priority over the remaining background queue. Opening search before warmup finishes or moving to another display scale can still show temporary fallback icons. The in-memory icon cache stays bounded, and the search window and its XAML UI remain deferred until needed.
 - **Independent App Results**: App results update without waiting for Everything's file search. Cached icons appear immediately; missing icons fill in afterward. File results arrive separately and preserve the app selection.
-- **Windows Services**: Use `/services` to find services by name or description and manage them from the right-click menu.
+- **Windows Services**: Use `/services` to find services by name or description and manage them from the right-click menu. Scroll near the bottom to load 40 more matches at a time, preserving the existing rows. Live status updates keep the expanded batch visible.
 - **Online Utility Cards**: Use `/weather` for your approximate local weather, `/money 100 USD > EUR` for currency conversion, `/crypto BTC` for a crypto spot price, or `/speedtest` for a connection test with a circular speed meter. Data loads separately from local search. See [Online Cards](#online-cards).
 - **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
 - **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start switches immediately without an opening animation and carries the opening text into search. The search bar uses Windows' own search icon.
@@ -16182,9 +16182,14 @@ bool RequestMoreFiles(const std::wstring& query,size_t visible,uint64_t revision
 
 // Publish only the current request. The revision also rejects stale results
 // when the user types A -> B -> A, or changes settings with the same text.
-bool PublishAppResults(uint64_t revision, const std::wstring& query, std::vector<Row> rows,bool more=false) {
+bool PublishAppResults(uint64_t revision, const std::wstring& query, std::vector<Row> rows,
+                       bool more=false,size_t expectedLimit=0) {
     std::scoped_lock lock(g_queryMutex, g_resultsMutex);
     if (g_searchQuit.load() || revision != g_queryRevision) return false;
+    // A live tool refresh must not replace a newer scrolling batch for the
+    // same query while its larger request is being prepared.
+    if(expectedLimit && (g_appsBatch.revision!=revision ||
+                         g_appsBatch.requested!=expectedLimit))return false;
     if(g_appsBatch.revision==revision)g_appsBatch.Complete(rows.size(),more);
     g_appRows = std::move(rows);
     g_appsQuery = query;
@@ -25663,7 +25668,7 @@ std::vector<Row> Rows(const std::wstring& args, size_t limit, const std::vector<
     });
     std::vector<Row> rows;
     for (const auto& [rank, entry] : matches) {
-        if (rows.size() >= std::clamp<size_t>(limit, 1, 100))
+        if (rows.size() >= std::max<size_t>(limit, 1))
             break;
         Row row;
         row.title = entry->display;
@@ -25797,6 +25802,8 @@ void Run() {
     std::wstring acting;
     ULONGLONG next = 0;
     uint64_t lastRevision = ~uint64_t{0};
+    size_t lastLimit = 0;
+    bool lastMore = false;
     std::wstring lastRows;
     std::map<std::wstring, std::wstring> descriptions;
     while (!g_searchQuit) {
@@ -25849,7 +25856,8 @@ void Run() {
             next = 0;
         }
         const bool visible = request && g_visible && Current(*request);
-        if (visible && (GetTickCount64() >= next || request->revision != lastRevision)) {
+        if (visible && (GetTickCount64() >= next || request->revision != lastRevision ||
+                        request->limit != lastLimit)) {
             try {
                 auto entries = Enumerate();
                 ScHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT));
@@ -25878,15 +25886,22 @@ void Run() {
                 g_loaded = true;
                 g_error = ERROR_GEN_FAILURE;
             }
-            auto rows = Initial(request->args, request->limit);
+            auto rows = Initial(request->args, request->limit + 1);
+            const bool more = rows.size() > request->limit;
+            if (more)
+                rows.resize(request->limit);
             std::wstring signature;
             for (const auto& row : rows)
                 signature += row.title + L"\n" + row.subtitle + L"\n" + row.cardSignature;
-            if (request->revision != lastRevision || signature != lastRows) {
-                if (PublishAppResults(request->revision, request->query, std::move(rows)))
+            if (request->revision != lastRevision || request->limit != lastLimit ||
+                more != lastMore || signature != lastRows) {
+                if (PublishAppResults(request->revision, request->query, std::move(rows),
+                                      more, request->limit))
                     RequestRender();
                 lastRows = std::move(signature);
                 lastRevision = request->revision;
+                lastLimit = request->limit;
+                lastMore = more;
             }
             next = GetTickCount64() + 1000;
         }
@@ -26224,7 +26239,7 @@ void SearchThreadMain() {
 
         if (isConflictCommand) appRows.push_back(online::ConflictRow());
         else if (isUsageCommand) appRows = hardware::Initial(query, validUsageCommand);
-        else if (isServicesCommand) appRows = services::Initial(serviceArgs,static_cast<size_t>(maxApps));
+        else if (isServicesCommand) appRows = services::Initial(serviceArgs,appLookahead);
         else if (isOnline) {
             auto initial = online::BeginBatch(onlineBatch);
             appRows = std::move(initial.rows);
@@ -26368,7 +26383,10 @@ void SearchThreadMain() {
         }
 
         bool moreApps=false;
-        if(!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand &&
+        if(isServicesCommand) {
+            moreApps=appRows.size()>static_cast<size_t>(maxApps);
+            if(moreApps)appRows.resize(static_cast<size_t>(maxApps));
+        } else if(!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand &&
            !isInstalledCommand && !isExplicitWeb) {
             const size_t tools=std::count_if(appRows.begin(),appRows.end(),[](const Row& row){return row.matchScore<0;});
             const size_t shown=tools+static_cast<size_t>(maxApps);
@@ -26380,7 +26398,8 @@ void SearchThreadMain() {
             if(auto cached=g_appsWarmup->Cached(row.iconKey,settingsRevision))row.icon=std::move(*cached);
             else iconJobs.push_back({{},nullptr,row.iconKey,CustomCommandIconPath(row.commandIcon),iconPixels,settingsRevision});
         }
-        if (!PublishAppResults(revision, query, std::move(appRows),moreApps)) continue;
+        if (!PublishAppResults(revision, query, std::move(appRows),moreApps,
+                               isServicesCommand?static_cast<size_t>(maxApps):0)) continue;
         RequestRender();
         g_appsWarmup->Prioritize(std::move(iconJobs));
         if (fetchOnline) online::Schedule(std::move(onlineBatch));
