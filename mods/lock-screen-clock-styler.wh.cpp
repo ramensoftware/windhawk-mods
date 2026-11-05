@@ -28,13 +28,15 @@
 // @description:pl-PL Dostosuj zegar ekranu blokady systemu Windows 11 za pomocą nowoczesnych stylów, wyświetlania daty i kontroli widżetów.
 // @description:ru-RU Настройте часы экрана блокировки Windows 11 с современными стилями, отображением даты и управлением виджетами.
 // @description:uk-UA Налаштуйте годинник екрана блокування Windows 11 за допомогою сучасних стилів, відображення дати та керування віджетами.
-// @version         0.5.0
+// @version         0.6.0
 // @author          ali0zdas
 // @github          https://github.com/ali0zdas
+// @twitter         https://twitter.com/ali0zdas
+// @homepage        https://aliozdas.is-a.dev
 // @license         MIT
 // @include         LockApp.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lpowrprof
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -44,13 +46,11 @@
 Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.
 
 ## Features:
-- **Multiple Distinct Clock Styles:** Choose from a curated collection of clock designs including Retro Pixel / LED Dot Matrix, Modern Flip Clock, Classic Solari Flip Clock, Minimalist Sonoma, Cyberpunk Sci-Fi HUD, and Minimalist Aura.
+- **✨ NEW in v0.6.0 — 3 VERTICAL CLOCK STYLES:** Pixel, Dual Weight & Impact.
+- **Multiple Distinct Clock Styles:** Choose from a curated collection of clock designs including Retro Pixel / LED Dot Matrix, Modern Flip Clock, Classic Solari Flip Clock, Minimalist Sonoma, Cyberpunk Sci-Fi HUD, Minimalist Aura, and Vertical Stack Clocks.
 - **Lightweight & Thread-Safe:** Ultra-lightweight native XAML injection via the LockApp UI thread with ultra-low background CPU overhead. Direct visual tree navigation without XAML Diagnostics TAP, ensuring seamless compatibility with mods like Windows 11 Start Menu Styler.
-- **🎨 More Themes Coming Soon:** Have an idea for an aesthetic clock design or want your favorite style added? Reach out or open an issue on GitHub to suggest new themes!
 - **12-Hour / 24-Hour Format:** Switch between 24-hour time and 12-hour time with dedicated AM/PM indicators across themes.
-- **Show Seconds Toggle:** Optional live seconds display (supported across all non-flip styles).
-- **Dynamic Date Display:** Elegant date and day capsule positioned beneath or above the clock, adapting to the user's system locale.
-- **Hide Default Widgets:** Clean up the lock screen by hiding MSN weather, sports, and news widgets.
+- **Show Seconds Toggle:** Optional live seconds display (supported across all non-flip and non-vertical styles).
 - **Extensive Customization:** Card opacity, font size, vertical offsets, and screen alignments are fully customizable via settings.
 
 ## Screenshots:
@@ -59,6 +59,9 @@ Customize and enhance the Windows 11 lock screen clock with modern designs, fros
 | Retro Pixel / LED Matrix | ![Retro Pixel](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/Retro%20Pixel.png) |
 | Modern Flip Clock | ![Modern Flip Clock](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/modern%20flip%20clock.png) |
 | Classic Flip Clock | ![Classic Flip Clock](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/classical%20flip%20clock.png) |
+| Vertical Pixel / Nothing OS (Bahnschrift) | ![Vertical Pixel](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/vertical%20pixel.png) |
+| Vertical Modern / Dual Weight (Segoe UI) | ![Vertical Modern](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/vertical%20modern.png) |
+| Vertical Poster / Heavy Impact (Impact) | ![Vertical Poster](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/vertical%20poster.png) |
 | Minimalist Sonoma | ![Minimalist Sonoma](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/sonoma.png) |
 | Cyberpunk Sci-Fi HUD | ![Cyberpunk Sci-Fi HUD](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20style.png) |
 
@@ -105,6 +108,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -113,6 +119,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -121,6 +130,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -129,6 +141,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -137,6 +152,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -145,6 +163,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -153,6 +174,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -161,6 +185,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -169,6 +196,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -177,6 +207,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -185,6 +218,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -193,6 +229,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -201,6 +240,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -209,6 +251,9 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
     - pixel: "Retro Pixel / LED Dot Matrix"
     - flip: "Modern Flip Clock"
     - vintage: "Classic Flip Clock"
+    - verticalBahnschrift: "Vertical Pixel / Nothing OS (Bahnschrift)"
+    - verticalSegoe: "Vertical Modern / Dual Weight (Segoe UI)"
+    - verticalImpact: "Vertical Poster / Heavy Impact (Impact)"
     - macos: "Minimalist Sonoma (Clean Typography)"
     - cyberpunk: "Cyberpunk Sci-Fi HUD Terminal"
     - aura: "Minimalist Aura / Floating Clock"
@@ -299,20 +344,20 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
   $name:ja-JP: "秒を表示"
   $name:ko-KR: "초 표시"
   $name:uk-UA: "Показувати секунди"
-  $description: "Adds live seconds to the clock. Supported by every style except the Modern and Classic flip clocks."
-  $description:tr-TR: "Saate canlı saniye ekler. Modern ve Klasik flip saatler dışındaki tüm stillerde desteklenir."
-  $description:zh-CN: "为时钟添加动态秒数。除现代和经典翻页时钟外的所有样式均支持。"
-  $description:zh-TW: "為時鐘新增動態秒數。除現代和經典翻頁時鐘外的所有樣式均支援。"
-  $description:ru-RU: "Добавляет отображение секунд в реальном времени. Поддерживается всеми стилями, кроме перекидных часов."
-  $description:de-DE: "Fügt der Uhr Live-Sekunden hinzu. Wird von jedem Stil außer den modernen und klassischen Klappuhren unterstützt."
-  $description:es-ES: "Añade segundos en vivo al reloj. Compatible con todos los estilos excepto los relojes flip modernos y clásicos."
-  $description:pt-BR: "Adiciona segundos ao vivo ao relógio. Suportado por todos os estilos, exceto os relógios flip modernos e clássicos."
-  $description:fr-FR: "Ajoute les secondes en direct à l'horloge. Pris en charge par tous les styles sauf les horloges à volets Modern et Classic."
-  $description:it-IT: "Aggiunge i secondi in tempo reale all'orologio. Supportato da tutti gli stili tranne gli orologi flip Modern e Classic."
-  $description:pl-PL: "Dodaje sekundy w czasie rzeczywistym do zegara. Obsługiwane przez wszystkie style z wyjątkiem zegarów klapkowych Modern i Classic."
-  $description:ja-JP: "時計にリアルタイムの秒表示を追加します。モダンおよびクラシックフリップ時計を除くすべてのスタイルでサポートされています。"
-  $description:ko-KR: "시계에 실시간 초 단위를 추가합니다. 모던 및 클래식 플립 시계를 제외한 모든 스타일에서 지원됩니다."
-  $description:uk-UA: "Додає відображення секунд у реальному часі. Підтримується всіма стилями, крім перекидних годинників."
+  $description: "Adds live seconds to the clock. Supported by every style except flip clocks and vertical stack styles."
+  $description:tr-TR: "Saate canlı saniye ekler. Flip saatler ve dikey yığın stilleri dışındaki tüm stillerde desteklenir."
+  $description:zh-CN: "为时钟添加动态秒数。除翻页时钟和垂直堆叠样式外的所有样式均支持。"
+  $description:zh-TW: "為時鐘新增動態秒數。除翻頁時鐘和垂直堆疊樣式外的所有樣式均支援。"
+  $description:ru-RU: "Добавляет отображение секунд в реальном времени. Поддерживается всеми стилями, кроме перекидных часов и вертикальных стилей."
+  $description:de-DE: "Fügt der Uhr Live-Sekunden hinzu. Wird von jedem Stil außer Klappuhren und vertikalen Stilen unterstützt."
+  $description:es-ES: "Añade segundos en vivo al reloj. Compatible con todos los estilos excepto los relojes flip y los estilos verticales."
+  $description:pt-BR: "Adiciona segundos ao vivo ao relógio. Suportado por todos os estilos, exceto relógios flip e estilos verticais."
+  $description:fr-FR: "Ajoute les secondes en direct à l'horloge. Pris en charge par tous les styles sauf les horloges à volets et les styles verticaux."
+  $description:it-IT: "Aggiunge i secondi in tempo reale all'orologio. Supportato da tutti gli stili tranne gli orologi flip e gli stili verticali."
+  $description:pl-PL: "Dodaje sekundy w czasie rzeczywistym do zegara. Obsługiwane przez wszystkie style z wyjątkiem zegarów klapkowych i stylów pionowych."
+  $description:ja-JP: "時計にリアルタイムの秒表示を追加します。フリップ時計および垂直スタックスタイルを除くすべてのスタイルでサポートされています。"
+  $description:ko-KR: "시계에 실시간 초 단위를 추가합니다. 플립 시계 및 세로 스택 스타일을 제외한 모든 스타일에서 지원됩니다."
+  $description:uk-UA: "Додає відображення секунд у реальному часі. Підтримується всіма стилями, крім перекидних годинників та вертикальних стилів."
 - glassOpacity: 45
   $name: "Glass Opacity (Modern Flip Cards)"
   $name:tr-TR: "Cam Opaklığı (Modern Flip Kartları)"
@@ -634,6 +679,8 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
 
 #include <windows.h>
 #undef GetCurrentTime
+#include <dwmapi.h>
+#include <powrprof.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <winrt/Windows.Foundation.h>
@@ -681,6 +728,9 @@ void LoadSettings() {
     if (g_settings.clockStyle != L"pixel" && g_settings.clockStyle != L"flip" &&
         g_settings.clockStyle != L"vintage" && g_settings.clockStyle != L"macos" &&
         g_settings.clockStyle != L"cyberpunk" && g_settings.clockStyle != L"aura" &&
+        g_settings.clockStyle != L"verticalBahnschrift" &&
+        g_settings.clockStyle != L"verticalSegoe" &&
+        g_settings.clockStyle != L"verticalImpact" &&
         g_settings.clockStyle != L"defaultOnly") {
         g_settings.clockStyle = L"pixel";
     }
@@ -691,10 +741,13 @@ void LoadSettings() {
         g_settings.timeFormat = L"24h";
     }
 
-    // The settings UI is the single source of truth for seconds. The flip
-    // clocks have no seconds display, so the toggle is ignored for them.
+    // The settings UI is the single source of truth for seconds. Flip clocks
+    // and 2-row vertical stack clocks have no seconds display, so the toggle is ignored for them.
+    bool isVertical = (g_settings.clockStyle == L"verticalBahnschrift" ||
+                       g_settings.clockStyle == L"verticalSegoe" ||
+                       g_settings.clockStyle == L"verticalImpact");
     bool supportsSeconds =
-        (g_settings.clockStyle != L"flip" && g_settings.clockStyle != L"vintage");
+        (g_settings.clockStyle != L"flip" && g_settings.clockStyle != L"vintage" && !isVertical);
     g_settings.showSeconds = supportsSeconds && Wh_GetIntSetting(L"showSeconds") != 0;
 
     g_settings.glassOpacity = Wh_GetIntSetting(L"glassOpacity");
@@ -754,6 +807,12 @@ void LoadSettings() {
 [[clang::no_destroy]] wuxc::TextBlock g_macosDateTextBlock{ nullptr };
 [[clang::no_destroy]] wuxc::TextBlock g_macosDateShadowBlock{ nullptr };
 
+// Vertical Stack Clock Themes State
+[[clang::no_destroy]] wuxc::TextBlock g_verticalHourText{ nullptr };
+[[clang::no_destroy]] wuxc::TextBlock g_verticalHourShadow{ nullptr };
+[[clang::no_destroy]] wuxc::TextBlock g_verticalMinText{ nullptr };
+[[clang::no_destroy]] wuxc::TextBlock g_verticalMinShadow{ nullptr };
+
 // Battery Capsule State
 [[clang::no_destroy]] wuxc::Border g_batteryCapsule{ nullptr };
 [[clang::no_destroy]] wuxc::TextBlock g_batteryIconText{ nullptr };
@@ -790,6 +849,8 @@ struct TimeCache {
     std::wstring lastDateStr;
     std::wstring lastMacosTime;
     std::wstring lastMacosDate;
+    std::wstring lastVerticalHour;
+    std::wstring lastVerticalMin;
     int lastBatteryPct = -1;
     bool lastIsCharging = false;
 
@@ -805,6 +866,8 @@ struct TimeCache {
         lastDateStr.clear();
         lastMacosTime.clear();
         lastMacosDate.clear();
+        lastVerticalHour.clear();
+        lastVerticalMin.clear();
         lastBatteryPct = -1;
         lastIsCharging = false;
     }
@@ -1169,6 +1232,28 @@ void UpdateTimeAndDate() {
             }
             g_timeCache.lastAuraTime = timeBuf;
         }
+    } else if (g_settings.clockStyle == L"verticalBahnschrift" ||
+               g_settings.clockStyle == L"verticalSegoe" ||
+               g_settings.clockStyle == L"verticalImpact") {
+        if (g_verticalHourText && (hourChanged || g_timeCache.lastVerticalHour.empty())) {
+            WCHAR hourBuf[8];
+            swprintf_s(hourBuf, L"%02d", displayHour);
+            g_verticalHourText.Text(hourBuf);
+            if (g_verticalHourShadow) {
+                g_verticalHourShadow.Text(hourBuf);
+            }
+            g_timeCache.lastVerticalHour = hourBuf;
+        }
+
+        if (g_verticalMinText && (minuteChanged || g_timeCache.lastVerticalMin.empty())) {
+            WCHAR minBuf[8];
+            swprintf_s(minBuf, L"%02d", st.wMinute);
+            g_verticalMinText.Text(minBuf);
+            if (g_verticalMinShadow) {
+                g_verticalMinShadow.Text(minBuf);
+            }
+            g_timeCache.lastVerticalMin = minBuf;
+        }
     } else {
         // Flip Clock, Retro Vintage, Cyberpunk HUD
         if (g_hourTextBlock && hourChanged) {
@@ -1226,10 +1311,54 @@ void UpdateTimeAndDate() {
 
     if (g_dateTextBlock && g_settings.showDateCapsule && (dateChanged || g_timeCache.lastDateStr.empty())) {
         WCHAR dateBuf[128];
-        if (GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, nullptr, dateBuf, ARRAYSIZE(dateBuf)) > 0) {
-            g_dateTextBlock.Text(dateBuf);
-            g_timeCache.lastDateStr = dateBuf;
+        bool isVertical = (g_settings.clockStyle == L"verticalBahnschrift" ||
+                           g_settings.clockStyle == L"verticalSegoe" ||
+                           g_settings.clockStyle == L"verticalImpact");
+        bool formatted = false;
+        if (isVertical) {
+            // Preserves natural locale word order (e.g. "31 Ekim Cumartesi", "Saturday, October 31", "10月31日 星期六")
+            // by taking system long date and removing the redundant 4-digit year.
+            WCHAR rawDate[128];
+            if (GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, nullptr, rawDate, ARRAYSIZE(rawDate)) > 0) {
+                WCHAR yearStr[16];
+                swprintf_s(yearStr, L"%d", st.wYear);
+                std::wstring s(rawDate);
+                size_t pos = s.find(yearStr);
+                if (pos != std::wstring::npos) {
+                    size_t eraseStart = pos;
+                    size_t eraseCount = wcslen(yearStr);
+                    if (eraseStart + eraseCount < s.size() && (s[eraseStart + eraseCount] == L'年' || s[eraseStart + eraseCount] == L'년')) {
+                        eraseCount++;
+                    }
+                    if (eraseStart + eraseCount + 3 <= s.size()) {
+                        if (s.substr(eraseStart + eraseCount, 3) == L" г." || s.substr(eraseStart + eraseCount, 3) == L" р.") {
+                            eraseCount += 3;
+                        }
+                    }
+                    if (eraseStart >= 2 && s[eraseStart - 2] == L',' && s[eraseStart - 1] == L' ') {
+                        eraseStart -= 2;
+                        eraseCount += 2;
+                    } else if (eraseStart >= 1 && s[eraseStart - 1] == L' ') {
+                        eraseStart -= 1;
+                        eraseCount += 1;
+                    } else if (eraseStart + eraseCount < s.size() && s[eraseStart + eraseCount] == L' ') {
+                        eraseCount += 1;
+                    }
+                    s.erase(eraseStart, eraseCount);
+                    while (!s.empty() && (s.front() == L' ' || s.front() == L',')) s.erase(s.begin());
+                    while (!s.empty() && (s.back() == L' ' || s.back() == L',')) s.pop_back();
+                }
+                if (!s.empty()) {
+                    wcsncpy_s(dateBuf, s.c_str(), _TRUNCATE);
+                    formatted = true;
+                }
+            }
         }
+        if (!formatted) {
+            GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, nullptr, dateBuf, ARRAYSIZE(dateBuf));
+        }
+        g_dateTextBlock.Text(dateBuf);
+        g_timeCache.lastDateStr = dateBuf;
     }
 
     // Battery percentage and power status update
@@ -2330,6 +2459,243 @@ wux::UIElement BuildMacOSClockElement() {
     return rootContainer;
 }
 
+// ---------------------------------------------------------------------------
+// Vertical Stack Clock Builder (Bahnschrift, Segoe UI Dual Weight, Impact)
+// ---------------------------------------------------------------------------
+
+wux::UIElement BuildVerticalClockHelper(
+    const wchar_t* containerName,
+    const wchar_t* fontFamilyName,
+    double fontScaleFactor,
+    winrt::Windows::UI::Text::FontWeight hourWeight,
+    winrt::Windows::UI::Text::FontWeight minWeight,
+    wu::Color hourColor,
+    wu::Color minColor,
+    wu::Color shadowHourColor,
+    wu::Color shadowMinColor,
+    double shadowOffsetY,
+    double spacingOverlapFactor,
+    int charSpacing)
+{
+    wuxc::Grid rootContainer;
+    rootContainer.Name(containerName);
+    ApplyAlignmentAndMargin(rootContainer);
+
+    bool isLeftAligned = (g_settings.clockAlignment == L"left" || g_settings.clockAlignment == L"bottomLeft");
+    bool isRightAligned = (g_settings.clockAlignment == L"right");
+    auto horizAlignment = isLeftAligned ? wux::HorizontalAlignment::Left
+                        : (isRightAligned ? wux::HorizontalAlignment::Right : wux::HorizontalAlignment::Center);
+    auto textAlignment = isLeftAligned ? wux::TextAlignment::Left
+                       : (isRightAligned ? wux::TextAlignment::Right : wux::TextAlignment::Center);
+
+    wuxc::StackPanel verticalLayout;
+    verticalLayout.Orientation(wuxc::Orientation::Vertical);
+    verticalLayout.HorizontalAlignment(horizAlignment);
+
+    // 1. Date Capsule (Positioned above vertical clock digits)
+    if (g_settings.showDateCapsule) {
+        wuxc::Border capsule;
+        capsule.Name(L"WindhawkVerticalDateCapsule");
+        capsule.Background(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(32, 255, 255, 255)));
+        capsule.BorderBrush(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(52, 255, 255, 255)));
+        capsule.BorderThickness(wux::Thickness{ 1.0, 1.0, 1.0, 1.0 });
+        capsule.CornerRadius(wux::CornerRadiusHelper::FromUniformRadius(18.0));
+        capsule.Padding(wux::Thickness{ 18.0, 5.0, 18.0, 5.0 });
+        capsule.Margin(wux::Thickness{ 0.0, 0.0, 0.0, 14.0 });
+        capsule.HorizontalAlignment(horizAlignment);
+
+        wuxc::StackPanel panel;
+        panel.Orientation(wuxc::Orientation::Horizontal);
+        panel.VerticalAlignment(wux::VerticalAlignment::Center);
+
+        wuxc::TextBlock dateText;
+        dateText.Name(L"WindhawkVerticalDateText");
+        dateText.FontSize(16.0);
+        dateText.FontFamily(wuxm::FontFamily(L"Segoe UI Variable Text"));
+        dateText.FontWeight(winrt::Windows::UI::Text::FontWeights::Medium());
+        dateText.Foreground(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(250, 255, 255, 255)));
+        panel.Children().Append(dateText);
+        g_dateTextBlock = dateText;
+
+        if (g_settings.timeFormat == L"12h") {
+            wuxc::TextBlock sepText;
+            sepText.FontSize(15.0);
+            sepText.FontFamily(wuxm::FontFamily(L"Segoe UI Variable Text"));
+            sepText.FontWeight(winrt::Windows::UI::Text::FontWeights::Normal());
+            sepText.Foreground(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(160, 255, 255, 255)));
+            sepText.Text(L"  •  ");
+            panel.Children().Append(sepText);
+
+            wuxc::TextBlock ampmText;
+            ampmText.Name(L"WindhawkVerticalAmPmText");
+            ampmText.FontSize(15.0);
+            ampmText.FontFamily(wuxm::FontFamily(L"Segoe UI Variable Text"));
+            ampmText.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            ampmText.Foreground(wuxm::SolidColorBrush(wu::Colors::White()));
+            panel.Children().Append(ampmText);
+            g_ampmTextBlock = ampmText;
+        }
+
+        capsule.Child(panel);
+        verticalLayout.Children().Append(capsule);
+    } else if (g_settings.timeFormat == L"12h") {
+        // Dedicated AM/PM capsule if date capsule is disabled
+        wuxc::Border ampmCapsule;
+        ampmCapsule.Background(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(32, 255, 255, 255)));
+        ampmCapsule.BorderBrush(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(52, 255, 255, 255)));
+        ampmCapsule.BorderThickness(wux::Thickness{ 1.0, 1.0, 1.0, 1.0 });
+        ampmCapsule.CornerRadius(wux::CornerRadiusHelper::FromUniformRadius(12.0));
+        ampmCapsule.Padding(wux::Thickness{ 14.0, 4.0, 14.0, 4.0 });
+        ampmCapsule.Margin(wux::Thickness{ 0.0, 0.0, 0.0, 12.0 });
+        ampmCapsule.HorizontalAlignment(horizAlignment);
+
+        wuxc::TextBlock ampmText;
+        ampmText.Name(L"WindhawkVerticalAmPmText");
+        ampmText.FontSize(14.0);
+        ampmText.FontFamily(wuxm::FontFamily(L"Segoe UI Variable Text"));
+        ampmText.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        ampmText.Foreground(wuxm::SolidColorBrush(wu::Colors::White()));
+        ampmCapsule.Child(ampmText);
+        verticalLayout.Children().Append(ampmCapsule);
+        g_ampmTextBlock = ampmText;
+    }
+
+    // 2. Vertical Clock Digits (Row 1: Hour, Row 2: Minute)
+    double fontSize = (double)g_settings.clockFontSize * fontScaleFactor;
+
+    // Hour Row Layer Grid
+    wuxc::Grid hourGrid;
+    hourGrid.HorizontalAlignment(horizAlignment);
+
+    wuxc::TextBlock hourShadow;
+    hourShadow.FontSize(fontSize);
+    hourShadow.FontFamily(wuxm::FontFamily(fontFamilyName));
+    hourShadow.FontWeight(hourWeight);
+    hourShadow.Foreground(wuxm::SolidColorBrush(shadowHourColor));
+    hourShadow.HorizontalAlignment(horizAlignment);
+    hourShadow.TextAlignment(textAlignment);
+    hourShadow.Margin(wux::Thickness{ 0.0, shadowOffsetY, 0.0, 0.0 });
+    if (charSpacing != 0) hourShadow.CharacterSpacing(charSpacing);
+    wuxd::Typography::SetNumeralAlignment(hourShadow, wux::FontNumeralAlignment::Tabular);
+    hourGrid.Children().Append(hourShadow);
+    g_verticalHourShadow = hourShadow;
+
+    wuxc::TextBlock hourText;
+    hourText.Name(L"WindhawkVerticalHourText");
+    hourText.FontSize(fontSize);
+    hourText.FontFamily(wuxm::FontFamily(fontFamilyName));
+    hourText.FontWeight(hourWeight);
+    hourText.Foreground(wuxm::SolidColorBrush(hourColor));
+    hourText.HorizontalAlignment(horizAlignment);
+    hourText.TextAlignment(textAlignment);
+    if (charSpacing != 0) hourText.CharacterSpacing(charSpacing);
+    wuxd::Typography::SetNumeralAlignment(hourText, wux::FontNumeralAlignment::Tabular);
+    hourGrid.Children().Append(hourText);
+    g_verticalHourText = hourText;
+
+    verticalLayout.Children().Append(hourGrid);
+
+    // Minute Row Layer Grid (with overlap factor for tight vertical stacking)
+    wuxc::Grid minGrid;
+    minGrid.HorizontalAlignment(horizAlignment);
+    minGrid.Margin(wux::Thickness{ 0.0, -fontSize * spacingOverlapFactor, 0.0, 0.0 });
+
+    wuxc::TextBlock minShadow;
+    minShadow.FontSize(fontSize);
+    minShadow.FontFamily(wuxm::FontFamily(fontFamilyName));
+    minShadow.FontWeight(minWeight);
+    minShadow.Foreground(wuxm::SolidColorBrush(shadowMinColor));
+    minShadow.HorizontalAlignment(horizAlignment);
+    minShadow.TextAlignment(textAlignment);
+    minShadow.Margin(wux::Thickness{ 0.0, shadowOffsetY, 0.0, 0.0 });
+    if (charSpacing != 0) minShadow.CharacterSpacing(charSpacing);
+    wuxd::Typography::SetNumeralAlignment(minShadow, wux::FontNumeralAlignment::Tabular);
+    minGrid.Children().Append(minShadow);
+    g_verticalMinShadow = minShadow;
+
+    wuxc::TextBlock minText;
+    minText.Name(L"WindhawkVerticalMinText");
+    minText.FontSize(fontSize);
+    minText.FontFamily(wuxm::FontFamily(fontFamilyName));
+    minText.FontWeight(minWeight);
+    minText.Foreground(wuxm::SolidColorBrush(minColor));
+    minText.HorizontalAlignment(horizAlignment);
+    minText.TextAlignment(textAlignment);
+    if (charSpacing != 0) minText.CharacterSpacing(charSpacing);
+    wuxd::Typography::SetNumeralAlignment(minText, wux::FontNumeralAlignment::Tabular);
+    minGrid.Children().Append(minText);
+    g_verticalMinText = minText;
+
+    verticalLayout.Children().Append(minGrid);
+
+    // 3. Battery Capsule (Below minutes if enabled)
+    if (g_settings.showBatteryStatus) {
+        auto batteryCapsule = CreateBatteryCapsule(isLeftAligned);
+        if (batteryCapsule) {
+            verticalLayout.Children().Append(batteryCapsule);
+        }
+    }
+
+    rootContainer.Children().Append(verticalLayout);
+    UpdateTimeAndDate();
+
+    return rootContainer;
+}
+
+// 1. Vertical Pixel / Nothing OS (Bahnschrift DIN Norm)
+wux::UIElement BuildVerticalBahnschriftClockElement() {
+    return BuildVerticalClockHelper(
+        L"WindhawkVerticalBahnschriftContainer",
+        L"Bahnschrift",
+        1.25, // Scaled for prominent vertical 2-row presence
+        winrt::Windows::UI::Text::FontWeights::SemiBold(),
+        winrt::Windows::UI::Text::FontWeights::SemiBold(),
+        wu::Colors::White(),
+        wu::ColorHelper::FromArgb(192, 255, 255, 255), // Subtle contrast for minutes (75% opacity)
+        wu::ColorHelper::FromArgb(100, 0, 0, 0),
+        wu::ColorHelper::FromArgb(80, 0, 0, 0),
+        4.0,
+        0.18, // Compact vertical line spacing
+        -25   // -2.5% em letter-spacing
+    );
+}
+
+// 2. Vertical Modern / Dual Weight (Segoe UI Variable)
+wux::UIElement BuildVerticalSegoeClockElement() {
+    return BuildVerticalClockHelper(
+        L"WindhawkVerticalSegoeContainer",
+        L"Segoe UI Variable Display",
+        1.25, // Scaled for prominent vertical 2-row presence
+        winrt::Windows::UI::Text::FontWeights::SemiBold(),   // Hour bold
+        winrt::Windows::UI::Text::FontWeights::ExtraLight(), // Minute light (high-contrast dual-weight matching preview font-weight: 200)
+        wu::Colors::White(),
+        wu::ColorHelper::FromArgb(215, 255, 255, 255),
+        wu::ColorHelper::FromArgb(90, 0, 0, 0),
+        wu::ColorHelper::FromArgb(70, 0, 0, 0),
+        4.0,
+        0.16,
+        -30
+    );
+}
+
+// 3. Vertical Poster / Heavy Impact (Impact)
+wux::UIElement BuildVerticalImpactClockElement() {
+    return BuildVerticalClockHelper(
+        L"WindhawkVerticalImpactContainer",
+        L"Impact",
+        1.30, // Proportional scaling for condensed poster glyphs
+        winrt::Windows::UI::Text::FontWeights::Normal(),
+        winrt::Windows::UI::Text::FontWeights::Normal(),
+        wu::Colors::White(),
+        wu::Colors::White(),
+        wu::ColorHelper::FromArgb(130, 0, 0, 0),
+        wu::ColorHelper::FromArgb(130, 0, 0, 0),
+        5.0,
+        0.22, // Tight line spacing for poster aesthetic
+        10    // Slight positive tracking
+    );
+}
+
 // Factory function for selected clock style
 wux::UIElement BuildClockElement() {
     if (g_settings.clockStyle == L"macos") {
@@ -2344,6 +2710,12 @@ wux::UIElement BuildClockElement() {
         return BuildCyberpunkClockElement();
     } else if (g_settings.clockStyle == L"aura") {
         return BuildAuraClockElement();
+    } else if (g_settings.clockStyle == L"verticalBahnschrift") {
+        return BuildVerticalBahnschriftClockElement();
+    } else if (g_settings.clockStyle == L"verticalSegoe") {
+        return BuildVerticalSegoeClockElement();
+    } else if (g_settings.clockStyle == L"verticalImpact") {
+        return BuildVerticalImpactClockElement();
     }
     return BuildPixelClockElement();
 }
@@ -2357,6 +2729,89 @@ std::atomic<HHOOK> g_getMessageHook{ nullptr };
 std::atomic<bool> g_settingsDirty{ false };
 HANDLE g_stopEvent = nullptr;
 HANDLE g_workerThread = nullptr;
+
+// ---------------------------------------------------------------------------
+// Power management and display state tracking
+// ---------------------------------------------------------------------------
+
+#ifndef DEVICE_NOTIFY_CALLBACK
+#define DEVICE_NOTIFY_CALLBACK 2
+#endif
+
+#ifndef PBT_APMSUSPEND
+#define PBT_APMSUSPEND 0x0004
+#endif
+
+#ifndef PBT_APMRESUMEAUTOMATIC
+#define PBT_APMRESUMEAUTOMATIC 0x0012
+#endif
+
+#ifndef PBT_APMRESUMESUSPEND
+#define PBT_APMRESUMESUSPEND 0x0007
+#endif
+
+#ifndef PBT_POWERSETTINGCHANGE
+#define PBT_POWERSETTINGCHANGE 0x8013
+#endif
+
+typedef ULONG(CALLBACK* DEVICE_NOTIFY_CALLBACK_ROUTINE)(PVOID Context,
+                                                        ULONG Type,
+                                                        PVOID Setting);
+
+typedef struct _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
+    DEVICE_NOTIFY_CALLBACK_ROUTINE Callback;
+    PVOID Context;
+} DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, *PDEVICE_NOTIFY_SUBSCRIBE_PARAMETERS;
+
+// 6fe69556-704a-47a0-8f24-c21edfb930cb
+static constexpr GUID GUID_CONSOLE_DISPLAY_STATE_LOCAL = {
+    0x6fe69556,
+    0x704a,
+    0x47a0,
+    {0x8f, 0x24, 0xc2, 0x1e, 0xdf, 0xb9, 0x30, 0xcb}};
+
+std::atomic<bool> g_isDisplayOn{true};
+std::atomic<bool> g_isSystemAwake{true};
+std::atomic<ULONGLONG> g_resumeTimeMs{0};
+HPOWERNOTIFY g_hDisplayNotify = nullptr;
+HPOWERNOTIFY g_hSuspendResumeNotify = nullptr;
+
+ULONG CALLBACK SuspendResumeCallback(PVOID /*context*/,
+                                     ULONG type,
+                                     PVOID /*setting*/) {
+    if (type == PBT_APMSUSPEND) {
+        Wh_Log(L"Power notification: System suspending (PBT_APMSUSPEND).");
+        g_isSystemAwake.store(false);
+    } else if (type == PBT_APMRESUMEAUTOMATIC || type == PBT_APMRESUMESUSPEND) {
+        Wh_Log(L"Power notification: System resumed (type=0x%x).", type);
+        g_isSystemAwake.store(true);
+        g_resumeTimeMs.store(GetTickCount64());
+        g_settingsDirty.store(true);
+    }
+    return 0;
+}
+
+ULONG CALLBACK DisplaySettingCallback(PVOID /*context*/,
+                                      ULONG type,
+                                      PVOID setting) {
+    if (type == PBT_POWERSETTINGCHANGE && setting) {
+        auto* pbs = reinterpret_cast<const POWERBROADCAST_SETTING*>(setting);
+        if (pbs->DataLength >= sizeof(DWORD)) {
+            DWORD state = *reinterpret_cast<const DWORD*>(pbs->Data);
+            if (state == 0) {
+                Wh_Log(L"Display notification: Console display is OFF.");
+                g_isDisplayOn.store(false);
+            } else {
+                Wh_Log(L"Display notification: Console display is ON (state=%u).",
+                       state);
+                g_isDisplayOn.store(true);
+                g_resumeTimeMs.store(GetTickCount64());
+                g_settingsDirty.store(true);
+            }
+        }
+    }
+    return 0;
+}
 
 UINT g_runOnUiThreadMessage = 0;
 
@@ -2571,6 +3026,10 @@ void ResetClockElementReferences() {
     g_macosShadowTextBlock = nullptr;
     g_macosDateTextBlock = nullptr;
     g_macosDateShadowBlock = nullptr;
+    g_verticalHourText = nullptr;
+    g_verticalHourShadow = nullptr;
+    g_verticalMinText = nullptr;
+    g_verticalMinShadow = nullptr;
     g_batteryCapsule = nullptr;
     g_batteryIconText = nullptr;
     g_batteryStatusText = nullptr;
@@ -2655,7 +3114,26 @@ void ScanNode(wux::DependencyObject const& node, ScanResult& result, int depth) 
 // Finds the lock screen root and the stock clock/widget elements, then injects
 // or refreshes the selected clock. Must run on the lock screen UI thread.
 void AttachToTree() {
-    auto content = wux::Window::Current().Content();
+    if (!g_isSystemAwake.load() || !g_isDisplayOn.load()) {
+        return;
+    }
+
+    wux::Window currentWindow{nullptr};
+    try {
+        currentWindow = wux::Window::Current();
+        if (!currentWindow || !currentWindow.Visible()) {
+            return;
+        }
+    } catch (...) {
+        return;
+    }
+
+    wux::UIElement content{nullptr};
+    try {
+        content = currentWindow.Content();
+    } catch (...) {
+        return;
+    }
     if (!content) {
         return;
     }
@@ -2733,6 +3211,24 @@ ULONGLONG g_lastUiTick = 0;
 ULONGLONG g_lastFullScan = 0;
 
 void OnUiThreadTick() {
+    if (!g_isSystemAwake.load() || !g_isDisplayOn.load()) {
+        return;
+    }
+
+    HWND coreWnd = g_coreWindow.load();
+    if (!coreWnd || !IsWindow(coreWnd) || !IsWindowVisible(coreWnd)) {
+        return;
+    }
+
+    try {
+        auto currentWindow = wux::Window::Current();
+        if (!currentWindow || !currentWindow.Visible()) {
+            return;
+        }
+    } catch (...) {
+        return;
+    }
+
     ULONGLONG now = GetTickCount64();
     int intervalMs = g_settings.showSeconds ? 500 : 1000;
     if ((now - g_lastUiTick) < static_cast<ULONGLONG>(intervalMs)) {
@@ -2825,8 +3321,12 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             break;
         }
 
+        if (!g_isSystemAwake.load() || !g_isDisplayOn.load()) {
+            continue;
+        }
+
         HWND window = FindCoreWindow();
-        if (!window) {
+        if (!window || !IsWindowVisible(window)) {
             continue;
         }
 
@@ -2845,6 +3345,15 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     // Wake the UI thread periodically. The hook itself throttles updates to
     // 500 ms when seconds are shown and to 1000 ms otherwise.
     while (WaitForSingleObject(g_stopEvent, 500) == WAIT_TIMEOUT) {
+        if (!g_isSystemAwake.load() || !g_isDisplayOn.load()) {
+            continue;
+        }
+
+        ULONGLONG resumeTime = g_resumeTimeMs.load();
+        if (resumeTime != 0 && (GetTickCount64() - resumeTime) < 1000) {
+            continue;
+        }
+
         HWND window = g_coreWindow.load();
         if (!window) {
             continue;
@@ -2852,6 +3361,9 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         if (!IsWindow(window)) {
             Wh_Log(L"The lock screen window disappeared; stopping the worker.");
             break;
+        }
+        if (!IsWindowVisible(window)) {
+            continue;
         }
         PostMessageW(window, WM_NULL, 0, 0);
     }
@@ -2884,10 +3396,43 @@ BOOL Wh_ModInit() {
     g_coreWindow = nullptr;
     g_getMessageHook = nullptr;
     g_settingsDirty = false;
+    g_isDisplayOn = true;
+    g_isSystemAwake = true;
+    g_resumeTimeMs = 0;
+
+    // Register for console display state (on/off) notifications
+    DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS displayParams = {DisplaySettingCallback, nullptr};
+    DWORD dispRes = PowerSettingRegisterNotification(
+        &GUID_CONSOLE_DISPLAY_STATE_LOCAL,
+        DEVICE_NOTIFY_CALLBACK,
+        reinterpret_cast<HANDLE>(&displayParams),
+        &g_hDisplayNotify);
+    if (dispRes != ERROR_SUCCESS) {
+        Wh_Log(L"PowerSettingRegisterNotification failed: %u", dispRes);
+        g_hDisplayNotify = nullptr;
+    }
+
+    // Register for system suspend / resume notifications
+    DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS suspendParams = {SuspendResumeCallback, nullptr};
+    g_hSuspendResumeNotify = RegisterSuspendResumeNotification(
+        reinterpret_cast<HANDLE>(&suspendParams),
+        DEVICE_NOTIFY_CALLBACK);
+    if (!g_hSuspendResumeNotify) {
+        Wh_Log(L"RegisterSuspendResumeNotification failed: %u", GetLastError());
+        g_hSuspendResumeNotify = nullptr;
+    }
 
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
     if (!g_workerThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
+        if (g_hDisplayNotify) {
+            PowerSettingUnregisterNotification(g_hDisplayNotify);
+            g_hDisplayNotify = nullptr;
+        }
+        if (g_hSuspendResumeNotify) {
+            UnregisterSuspendResumeNotification(g_hSuspendResumeNotify);
+            g_hSuspendResumeNotify = nullptr;
+        }
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return FALSE;
@@ -2898,6 +3443,15 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Lock Screen Clock Styler uninitializing (Wh_ModUninit)...");
+
+    if (g_hDisplayNotify) {
+        PowerSettingUnregisterNotification(g_hDisplayNotify);
+        g_hDisplayNotify = nullptr;
+    }
+    if (g_hSuspendResumeNotify) {
+        UnregisterSuspendResumeNotification(g_hSuspendResumeNotify);
+        g_hSuspendResumeNotify = nullptr;
+    }
 
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
@@ -2955,8 +3509,8 @@ void Wh_ModSettingsChanged() {
         Wh_Log(L"Deferring settings change to the UI thread.");
         g_settingsDirty = true;
     } else {
-        // No visual tree yet, so nothing else can be reading these settings.
-        LoadSettings();
+        // Not attached yet: the first UI tick reloads settings on the UI
+        // thread (RebuildOnUiThread), so don't touch g_settings from here.
         g_settingsDirty = true;
     }
 }
