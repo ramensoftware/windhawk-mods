@@ -31,7 +31,6 @@
 // @version         0.6.0
 // @author          ali0zdas
 // @github          https://github.com/ali0zdas
-// @twitter         https://twitter.com/ali0zdas
 // @homepage        https://aliozdas.is-a.dev
 // @license         MIT
 // @include         LockApp.exe
