@@ -25,24 +25,21 @@ System utilities integrated into the Windows 11 Taskbar XAML context menu with
 - **Restart Explorer**: Instantly restarts the `explorer.exe` shell process from
   the taskbar context menu.
 - **Clean Temp**: Comprehensive temporary file cleaner for `%TEMP%` and
-  accessible files in `%WINDIR%\Temp`. Deletes all unlocked temporary
-files regardless of age (files currently locked by active processes are skipped)
-and displays a XAML summary card.
-- **Reduce Memory**: Trims working sets of all accessible running processes
-  to reclaim RAM, displaying a XAML summary card with the number of processes
-  optimized and memory freed. Equivalent to "Empty Working Set" behavior found
-  in RAMMap / EmptyStandbyList, without requiring UAC.
+  accessible files in `%WINDIR%\Temp`. Deletes all unlocked temporary files
+  regardless of age (files currently locked by active processes are skipped) and
+  displays a XAML summary card.
+- **Reduce Memory**: Trims the working sets of your own non-elevated running
+  processes via `EmptyWorkingSet` to reclaim RAM, displaying a XAML summary card
+  with the number of processes optimized and memory freed.
 - **Restart Graphics Driver**: Triggers the `Win + Ctrl + Shift + B` display
   driver reset shortcut.
 - **Get IP Addresses**: Lists active local IPv4 and IPv6 addresses across
-  network adapters. Optionally queries public IP via `api.ipify.org` if
-enabled in settings (disabled by default for privacy). Includes
-clipboard copy.
-- **Rebuild Icon & Thumbnail Cache**: Deletes thumbnail cache files from
+  network adapters. Optionally queries public IP via `api.ipify.org` if enabled
+  in settings (disabled by default for privacy). Includes clipboard copy.
+- **Rebuild Icon & Thumbnail Cache**: Deletes unlocked thumbnail cache files
+from
   `%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db` and rebuilds the
   Windows icon cache via `ie4uinit.exe -show`, without restarting Explorer.
-  Locked thumbnail files (in use by the shell) are skipped and reported in the
-  summary card.
 - **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
   `dnsapi.dll!DnsFlushResolverCache`.
 
@@ -806,31 +803,39 @@ void OnReduceMemoryClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
         MEMORYSTATUSEX memBefore = {sizeof(memBefore)};
         GlobalMemoryStatusEx(&memBefore);
 
-        DWORD pids[2048] = {};
+        std::vector<DWORD> pids(1024);
         DWORD bytesReturned = 0;
+        while (K32EnumProcesses(pids.data(),
+                                static_cast<DWORD>(pids.size() * sizeof(DWORD)),
+                                &bytesReturned)) {
+            if (bytesReturned < pids.size() * sizeof(DWORD)) {
+                break;
+            }
+            pids.resize(pids.size() * 2);
+        }
+
+        DWORD currentPid = GetCurrentProcessId();
+        DWORD count = bytesReturned / sizeof(DWORD);
         DWORD trimmedCount = 0;
         DWORD skippedCount = 0;
 
-        if (K32EnumProcesses(pids, sizeof(pids), &bytesReturned)) {
-            DWORD count = bytesReturned / sizeof(DWORD);
-            for (DWORD i = 0; i < count && !g_unloading.load(); ++i) {
-                if (pids[i] == 0 || pids[i] == 4) {
-                    continue;
-                }
+        for (DWORD i = 0; i < count && !g_unloading.load(); ++i) {
+            if (pids[i] == 0 || pids[i] == 4 || pids[i] == currentPid) {
+                continue;
+            }
 
-                HANDLE hProc = OpenProcess(
-                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA,
-                    FALSE, pids[i]);
-                if (hProc) {
-                    if (K32EmptyWorkingSet(hProc)) {
-                        trimmedCount++;
-                    } else {
-                        skippedCount++;
-                    }
-                    CloseHandle(hProc);
+            HANDLE hProc = OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA, FALSE,
+                pids[i]);
+            if (hProc) {
+                if (K32EmptyWorkingSet(hProc)) {
+                    trimmedCount++;
                 } else {
                     skippedCount++;
                 }
+                CloseHandle(hProc);
+            } else {
+                skippedCount++;
             }
         }
 
@@ -926,6 +931,9 @@ std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
             continue;
         }
 
+        bool hasIpv4 = false;
+        bool hasIpv6 = false;
+
         for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr;
              unicast = unicast->Next) {
             if (unicast->DadState != IpDadStatePreferred) {
@@ -938,21 +946,28 @@ std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
             }
 
             wchar_t ipStr[INET6_ADDRSTRLEN] = {};
-            if (addr->sa_family == AF_INET) {
+            if (addr->sa_family == AF_INET && !hasIpv4) {
                 auto* sa4 = reinterpret_cast<sockaddr_in*>(addr);
                 const auto* bytes =
                     reinterpret_cast<const uint8_t*>(&sa4->sin_addr);
-                // Skip 169.254.0.0/16 autoconfiguration addresses
+                // Skip addresses APIPA 169.254.0.0/16
                 if (bytes[0] == 169 && bytes[1] == 254) {
                     continue;
                 }
-                InetNtopW(AF_INET, &sa4->sin_addr, ipStr, ARRAYSIZE(ipStr));
-            } else if (addr->sa_family == AF_INET6) {
+                if (InetNtopW(AF_INET, &sa4->sin_addr, ipStr,
+                              ARRAYSIZE(ipStr))) {
+                    hasIpv4 = true;
+                }
+            } else if (addr->sa_family == AF_INET6 && !hasIpv6) {
                 auto* sa6 = reinterpret_cast<sockaddr_in6*>(addr);
+                // Skip link-local addresses (fe80::/10)
                 if (IN6_IS_ADDR_LINKLOCAL(&sa6->sin6_addr)) {
                     continue;
                 }
-                InetNtopW(AF_INET6, &sa6->sin6_addr, ipStr, ARRAYSIZE(ipStr));
+                if (InetNtopW(AF_INET6, &sa6->sin6_addr, ipStr,
+                              ARRAYSIZE(ipStr))) {
+                    hasIpv6 = true;
+                }
             }
 
             if (ipStr[0] != L'\0') {
@@ -977,6 +992,17 @@ std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
     return rows;
 }
 
+std::mutex g_inetMutex;
+HINTERNET g_activeInternet = nullptr;
+
+void CancelActivePublicIpRequest() {
+    std::lock_guard<std::mutex> lock(g_inetMutex);
+    if (g_activeInternet) {
+        InternetCloseHandle(g_activeInternet);
+        g_activeInternet = nullptr;
+    }
+}
+
 std::wstring GetPublicIP() {
     std::wstring result = L"Unavailable";
     HINTERNET hInternet =
@@ -984,6 +1010,15 @@ std::wstring GetPublicIP() {
                       INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!hInternet) {
         return result;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_inetMutex);
+        if (g_unloading.load()) {
+            InternetCloseHandle(hInternet);
+            return result;
+        }
+        g_activeInternet = hInternet;
     }
 
     DWORD timeout = 2500;
@@ -1000,7 +1035,8 @@ std::wstring GetPublicIP() {
     if (hConnect) {
         char buffer[64] = {};
         DWORD bytesRead = 0;
-        if (InternetReadFile(hConnect, buffer, sizeof(buffer) - 1,
+        if (!g_unloading.load() &&
+            InternetReadFile(hConnect, buffer, sizeof(buffer) - 1,
                              &bytesRead) &&
             bytesRead > 0) {
             buffer[bytesRead] = '\0';
@@ -1021,7 +1057,14 @@ std::wstring GetPublicIP() {
         }
         InternetCloseHandle(hConnect);
     }
-    InternetCloseHandle(hInternet);
+
+    {
+        std::lock_guard<std::mutex> lock(g_inetMutex);
+        if (g_activeInternet == hInternet) {
+            g_activeInternet = nullptr;
+            InternetCloseHandle(hInternet);
+        }
+    }
     return result;
 }
 
@@ -1122,10 +1165,12 @@ void OnRebuildCacheClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
                 if (CreateProcessW(exePath.c_str(), cmdLine, nullptr, nullptr,
                                    FALSE, CREATE_NO_WINDOW, nullptr, nullptr,
                                    &si, &pi)) {
-                    WaitForSingleObject(pi.hProcess, 5000);
+                    DWORD waitRes = WaitForSingleObject(pi.hProcess, 5000);
+                    DWORD exitCode = 1;
+                    GetExitCodeProcess(pi.hProcess, &exitCode);
                     CloseHandle(pi.hThread);
                     CloseHandle(pi.hProcess);
-                    iconsRebuilt = true;
+                    iconsRebuilt = (waitRes == WAIT_OBJECT_0 && exitCode == 0);
                 } else {
                     Wh_Log(L"ie4uinit.exe launch failed: %lu", GetLastError());
                 }
@@ -1467,9 +1512,8 @@ BOOL Wh_ModInit() {
     }
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
-            g_taskbarViewModuleHooked.store(true);
-        } else {
+        g_taskbarViewModuleHooked.store(true);
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
             Wh_Log(L"Failed to hook Taskbar.View symbols during init");
         }
     }
@@ -1507,25 +1551,10 @@ void Wh_ModUninit() {
         threads.swap(g_threads);
     }
 
-    for (HANDLE thread : threads) {
-        for (;;) {
-            DWORD waitResult = MsgWaitForMultipleObjects(1, &thread, FALSE,
-                                                         INFINITE, QS_ALLINPUT);
+    CancelActivePublicIpRequest();
 
-            if (waitResult == WAIT_OBJECT_0) {
-                break;
-            }
-            if (waitResult == WAIT_OBJECT_0 + 1) {
-                MSG msg;
-                while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-                continue;
-            }
-            Wh_Log(L"MsgWaitForMultipleObjects failed: %lu", GetLastError());
-            break;
-        }
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
         CloseHandle(thread);
     }
 
