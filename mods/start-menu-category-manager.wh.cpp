@@ -43,8 +43,13 @@ when Start reads an app's category. If you disable or uninstall the mod, every c
 chose, so keep the mod installed to keep your layout. **Export** saves a copy of it to a file. The layout belongs to
 the Windows account that made it: other accounts on the same PC keep their own.
 
-**Known issue:** if you move every app out of the *Other* category, Windows 11 still shows an empty *Other* container
-in the Start menu. That is Start's own behavior. Please report it to Microsoft through the Feedback Hub.
+**Empty categories.** In the category view of **All apps**, a category with no apps still shows up as an empty tile.
+The **Hide empty category tiles** option (on by default) hides those tiles, shows them again as soon as an app is
+assigned to the category, and lets the tiles after them move up to fill the gap. A tile counts as empty when its
+category holds no apps, so this does not depend on the display language, and pinned items and other tiles are never
+touched. This includes the empty *Other* container Windows 11 shows when you move every app out of *Other*. The option
+does not change any category and does not write to the registry. Changing it, like disabling the mod, restarts the
+Start menu process, because Start does not rebuild its category list every time the menu opens.
 
 **Export** saves the category changes the mod applies (not Windows' own categories), including apps that are not
 installed, to a text file. **Import** adds such a file to your current changes. Export, Import and Reset all ask for
@@ -161,7 +166,8 @@ your layout.
 
 ## Tested on
 
-Only Windows 11 build 26300, on one computer, with Windows in Brazilian Portuguese. On any other build the mod may
+Only Windows 11 build 26300, on one x64 computer, with Windows in Brazilian Portuguese. The mod is built for x86-64
+only; it has not been tested on ARM64 and does not target it. On any other build the mod may
 fail to attach to the Start menu (see below).
 
 ## If a Windows update breaks the mod
@@ -175,15 +181,34 @@ working. What you may see:
 - **Your categories stop applying** (the manager still opens and lists them). The hook on `RegGetValueW` in
   `kernelbase.dll`, which gives Start your category, is not being used by this build of Start. The log lines starting
   with `[start]` say whether it was installed and whether it served a category.
+- **Empty tiles are not hidden, or are hidden but the other tiles do not move up.** The hooks for the **Hide empty
+  category tiles** option were not found (all of them are optional). If only the `ReplaceAll` hook is missing, the
+  empty tiles are still hidden and only the gaps return. The menu item and your categories are not affected.
 
-Where to look: the Windhawk log (lines starting with `[start]`) says whether the hooks were found. The only function the
-mod hooks in the Start menu DLL (`StartMenu.dll`, or `StartUI.dll` on some builds) is
-`consume_..._IVector<IVector<MenuFlyoutItemBase>>::Append`, which adds the menu item. To find its new name after an
-update, search the Start menu DLL's symbols in Windhawk for that class and function name. The mod also hooks
+Where to look: the Windhawk log (lines starting with `[start]`) says whether the hooks were found. The function the
+mod needs in the Start menu DLL (`StartMenu.dll`, or `StartUI.dll` on some builds) is
+`consume_..._IVector<IVector<MenuFlyoutItemBase>>::Append`, which adds the menu item. The empty-tile option also uses
+`CategoryProvider::PruneAndCombineCategories`, `StartBlendedFlexFrame::OnContextRequested` and the `ReplaceAll` of the
+category list (`AllAppsGroupViewModel`), all optional. To find their new names after an update, search the Start menu
+DLL's symbols in Windhawk for those class and function names. The mod also hooks
 `RegGetValueW` in `kernelbase.dll` inside the Start menu process, which `StartTileData.dll` uses to read each app's
 `Category` value.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- hideEmptyTiles: true
+  $name: "Hide empty category tiles"
+  $description: >-
+    On (default): category tiles with no apps are hidden and the other tiles move up to fill the gap. Off: this mod
+    leaves the tiles alone. Changing this restarts the Start menu process.
+  $name:pt-BR: "Ocultar blocos de categoria vazios"
+  $description:pt-BR: >-
+    Ligado (padrão): os blocos de categoria sem aplicativos são ocultados e os outros blocos sobem para preencher o
+    espaço. Desligado: este mod não mexe nos blocos. Alterar esta opção reinicia o processo do Menu Iniciar.
+*/
+// ==/WindhawkModSettings==
 
 // ===========================================================================
 // CODE MAP. Search for these banner titles; line numbers move.
@@ -201,6 +226,7 @@ update, search the Start menu DLL's symbols in Windhawk for that class and funct
 //   Creating and showing the manager window
 //   Opening the manager from the Start menu process   the named event between the two processes
 //   Start menu context menu injection runs inside StartMenuExperienceHost.exe
+//   Hiding empty category tiles       also inside StartMenuExperienceHost.exe
 //   Wh_ModInit and friends            entry points
 // ===========================================================================
 
@@ -267,6 +293,7 @@ namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxa = winrt::Windows::UI::Xaml::Media::Animation;
+namespace wuxd = winrt::Windows::UI::Xaml::Data;
 
 namespace {
 
@@ -370,6 +397,9 @@ int g_conflictsLogged = 0;
 
 std::atomic<HWND> g_xamlListWindow{nullptr};  // The manager window; it is reused, not opened again.
 std::atomic<bool> g_shuttingDown{false};
+// The "Hide empty category tiles" setting. Both processes read it; Start reads it when it loads.
+std::atomic<bool> g_hideEmptyTiles{true};
+using IInspectableList = wf::Collections::IVector<wf::IInspectable>;
 HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 SRWLOCK g_uiLock = SRWLOCK_INIT;
@@ -5602,6 +5632,359 @@ void __cdecl StartMenuVectorAppend_Hook(void* pThis, wuxc::MenuFlyoutItemBase co
     MenuFlyoutItemBaseVector_Append_Original(pThis, item);
 }
 
+// ---------------------------------------------------------------------------
+// Hiding empty category tiles (runs inside StartMenuExperienceHost.exe)
+// ---------------------------------------------------------------------------
+
+// How many times Start has rebuilt its categories since this mod loaded, and whether the first rebuild was the one
+// Start does when it starts up (the process was young), before anyone opened the menu.
+std::atomic<int> g_rebuildCount{0};
+bool g_startupCleanupAllowed = false;
+
+// Reads through ReadProcessMemory instead of dereferencing after a VirtualQuery check. A check and a read cannot be
+// made atomic, so memory that is freed in between would still fault. ReadProcessMemory on this process copies inside
+// the kernel and reports bad memory as a failure instead of raising an exception.
+bool ReadWordAt(const void* base, size_t offset, unsigned long long* out) {
+    if (!base) return false;
+    const void* p = static_cast<const unsigned char*>(base) + offset;
+    unsigned long long value = 0;
+    SIZE_T got = 0;
+    if (!ReadProcessMemory(GetCurrentProcess(), p, &value, sizeof(value), &got) || got != sizeof(value)) return false;
+    *out = value;
+    return true;
+}
+
+// A category with no apps is a group whose own list of items is empty. This does not depend on the display language,
+// and it never matches a pinned app or folder, because those are not groups.
+bool IsEmptyGroup(wf::IInspectable const& entry) {
+    if (!entry) return false;
+    auto group = entry.try_as<wuxd::ICollectionViewGroup>();
+    return group && group.GroupItems().Size() == 0;
+}
+
+// Removes the empty groups from a list of groups.
+void RemoveEmptyGroups(IInspectableList const& items) {
+    for (uint32_t i = items.Size(); i-- > 0;) {
+        if (IsEmptyGroup(items.GetAt(i))) items.RemoveAt(i);
+    }
+}
+
+// The tiles this mod has collapsed, so that only those are ever shown again or reset. Only used on Start's UI thread.
+std::vector<winrt::weak_ref<wux::FrameworkElement>> g_collapsedTiles;
+
+// True if the tile was one this mod collapsed (and forgets it).
+bool TakeCollapsedTile(wux::FrameworkElement const& element) {
+    bool found = false;
+    for (size_t i = 0; i < g_collapsedTiles.size();) {
+        auto tile = g_collapsedTiles[i].get();
+        if (!tile) {
+            g_collapsedTiles.erase(g_collapsedTiles.begin() + i);
+            continue;
+        }
+        if (!found && winrt::get_abi(tile) == winrt::get_abi(element)) {
+            found = true;
+            g_collapsedTiles.erase(g_collapsedTiles.begin() + i);
+            continue;
+        }
+        ++i;
+    }
+    return found;
+}
+
+// Shows again every tile this mod collapsed. Runs on Start's UI thread when the mod unloads.
+void RestoreCollapsedTiles() {
+    std::vector<winrt::weak_ref<wux::FrameworkElement>> tiles;
+    tiles.swap(g_collapsedTiles);
+    for (auto const& weakTile : tiles) {
+        try {
+            if (auto tile = weakTile.get()) tile.ClearValue(wux::UIElement::VisibilityProperty());
+        } catch (...) {
+        }
+    }
+}
+
+// The GridView that shows the items of this panel, or null.
+wuxc::GridView FindOwningGridView(wux::DependencyObject const& panel) {
+    wux::DependencyObject walker = panel;
+    for (int i = 0; i < 10; ++i) {
+        walker = wuxm::VisualTreeHelper::GetParent(walker);
+        if (!walker) return nullptr;
+        if (auto gridView = walker.try_as<wuxc::GridView>()) return gridView;
+    }
+    return nullptr;
+}
+
+// The list the category view is bound to, or null when this GridView shows something else. The category list is a list
+// of groups; the lists of pinned and recommended items are not.
+IInspectableList CategoryListOf(wuxc::GridView const& gridView) {
+    auto source = gridView.ItemsSource();
+    if (!source) return nullptr;
+    auto list = source.try_as<IInspectableList>();
+    if (!list || list.Size() == 0) return nullptr;
+    auto first = list.GetAt(0);
+    if (!first || !first.try_as<wuxd::ICollectionViewGroup>()) return nullptr;
+    return list;
+}
+
+// Hides the tile of every empty category, and shows again the tiles this mod hid that now hold apps.
+void ApplyCategoryTiles(wux::DependencyObject const& panel) {
+    const int count = wuxm::VisualTreeHelper::GetChildrenCount(panel);
+    for (int i = 0; i < count; ++i) {
+        auto item = wuxm::VisualTreeHelper::GetChild(panel, i);
+        if (!item.try_as<wuxc::GridViewItem>()) continue;
+        auto element = item.try_as<wux::FrameworkElement>();
+        if (!element) continue;
+
+        if (IsEmptyGroup(element.DataContext())) {
+            if (element.Visibility() != wux::Visibility::Collapsed) {
+                element.Visibility(wux::Visibility::Collapsed);
+                g_collapsedTiles.push_back(winrt::make_weak(element));
+            }
+        } else if (TakeCollapsedTile(element)) {
+            element.ClearValue(wux::UIElement::VisibilityProperty());  // Back to what Start's style gives it.
+        }
+    }
+}
+
+// Handles the tiles of the category view: hides the empty ones, and, once, removes the empty groups from the list the
+// view is bound to so the other tiles move up. The removal is only done for the list Start builds when it starts up,
+// while nobody has opened the menu: the same removal from a timer right after the rebuild that happens when the menu
+// opens crashed Start (access violation inside StartMenu.dll, 30 to 50 ms later). Those later lists are cleaned inside
+// Start's own ReplaceAll call instead (see ReplaceAll_Hook).
+void ProcessCategoryGrid(wux::DependencyObject const& panel) {
+    auto gridView = FindOwningGridView(panel);
+    if (!gridView) return;
+    auto list = CategoryListOf(gridView);
+    if (!list) return;
+
+    ApplyCategoryTiles(panel);
+
+    if (!g_startupCleanupAllowed || g_rebuildCount != 1) return;
+    try {
+        RemoveEmptyGroups(list);
+        // The removed groups no longer need hiding, and their containers go back to the panel's recycle pool. XAML does
+        // not reset a local value when it reuses a container, so a container left collapsed would stay hidden when a
+        // category with apps is later shown in it.
+        RestoreCollapsedTiles();
+    } catch (...) {
+        static bool loggedFailure = false;
+        if (!loggedFailure) {
+            loggedFailure = true;
+            Wh_Log(L"[start] Could not remove the empty category from the grid's list");
+        }
+    }
+}
+
+void FindItemGrids(wux::DependencyObject const& obj, int depth) {
+    if (depth > 60) return;
+    if (obj.try_as<wuxc::ItemsWrapGrid>()) {
+        ProcessCategoryGrid(obj);
+        return;  // The tiles inside are not searched.
+    }
+    const int count = wuxm::VisualTreeHelper::GetChildrenCount(obj);
+    for (int i = 0; i < count; ++i) {
+        FindItemGrids(wuxm::VisualTreeHelper::GetChild(obj, i), depth + 1);
+    }
+}
+
+// A weak reference: a strong global would be released on the wrong thread when the mod unloads.
+winrt::weak_ref<wux::UIElement> g_startRoot;
+
+void UpdateCategoryTiles() {
+    try {
+        wux::DependencyObject root{nullptr};
+        if (auto window = wux::Window::Current()) {
+            if (auto content = window.Content()) root = content;
+        }
+        if (!root) {
+            if (auto saved = g_startRoot.get()) root = saved;  // Fallback: the frame from the last right-click.
+        }
+        if (!root) return;
+        FindItemGrids(root, 0);
+    } catch (...) {
+        g_startRoot = nullptr;  // The tree was torn down; look for a fresh root next time.
+    }
+}
+
+// The check runs on a timer inside Start's own window, so it also works when the menu was already open before the mod
+// loaded. The timer only runs for a few seconds after something shows that Start is in use (the mod loading, a
+// right-click, Start rebuilding its categories); it stops itself after that and is started again by the next sign.
+// The window is subclassed with WindhawkUtils, so other mods' subclasses of the same window keep working.
+constexpr UINT_PTR kTileTimerId = 0x5448;
+constexpr UINT kTileTimerMs = 250;
+constexpr ULONGLONG kTileActiveMs = 5000;
+std::atomic<HWND> g_tileWindow{nullptr};
+std::atomic<ULONGLONG> g_tileActiveUntil{0};
+
+// SetTimer needs the window's own thread, and some callers run on another one. In that case a private message makes
+// the window's thread start (or stop) the timer itself.
+UINT TileStartMessage() {
+    static const UINT message = RegisterWindowMessageW(L"WindhawkStartCategoryManager.TileTimerStart");
+    return message;
+}
+
+UINT TileStopMessage() {
+    static const UINT message = RegisterWindowMessageW(L"WindhawkStartCategoryManager.TileTimerStop");
+    return message;
+}
+
+void StartTileTimer(HWND hwnd) {
+    if (!SetTimer(hwnd, kTileTimerId, kTileTimerMs, nullptr)) {
+        Wh_Log(L"[start] Could not start the tile timer (error %lu)", GetLastError());
+    }
+}
+
+// Keeps the timer running for a few more seconds.
+void ArmTileTimer() {
+    g_tileActiveUntil = GetTickCount64() + kTileActiveMs;
+    HWND hwnd = g_tileWindow;
+    if (!hwnd) return;
+    if (GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId()) {
+        StartTileTimer(hwnd);
+    } else {
+        PostMessageW(hwnd, TileStartMessage(), 0, 0);
+    }
+}
+
+bool IsStartCoreWindow(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return false;
+    wchar_t cls[128]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
+    return wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0;
+}
+
+LRESULT CALLBACK TileSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
+    if (msg == WM_TIMER && wParam == kTileTimerId) {
+        if (g_shuttingDown || GetTickCount64() >= g_tileActiveUntil) {
+            KillTimer(hwnd, kTileTimerId);
+        } else {
+            UpdateCategoryTiles();  // Runs on the window's own thread, which may use the UI.
+        }
+        return 0;
+    }
+    if (msg == TileStartMessage()) {
+        if (!g_shuttingDown) StartTileTimer(hwnd);
+        return 0;
+    }
+    if (msg == TileStopMessage()) {
+        KillTimer(hwnd, kTileTimerId);
+        RestoreCollapsedTiles();  // On the window's own thread, which owns the tiles.
+        return 0;
+    }
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+BOOL CALLBACK AttachTileSubclass(HWND hwnd, LPARAM) {
+    if (g_tileWindow || !IsStartCoreWindow(hwnd)) return TRUE;
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TileSubclassProc, 0)) g_tileWindow = hwnd;
+    return TRUE;
+}
+
+void StartCategoryTileWatch() {
+    if (!g_tileWindow) EnumWindows(AttachTileSubclass, 0);
+    ArmTileTimer();
+}
+
+void StopCategoryTileWatch() {
+    HWND hwnd = g_tileWindow;
+    if (!hwnd) return;
+    g_tileWindow.store(nullptr);
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(hwnd, TileStopMessage(), 0, 0, SMTO_ABORTIFHUNG, 2000, &ignored);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TileSubclassProc);
+}
+
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+using StartFrameContextRequested_t = void(__cdecl*)(void*, void*, void*);
+StartFrameContextRequested_t StartFrameContextRequested_Original = nullptr;
+
+// Start's right-click handler runs on the UI thread, so it also starts the tile watch.
+void __cdecl StartFrameContextRequested_Hook(void* self, void* sender, void* args) {
+    if (!g_hideEmptyTiles) {
+        StartFrameContextRequested_Original(self, sender, args);
+        return;
+    }
+    try {
+        auto const& element = *static_cast<wux::UIElement const*>(sender);
+        g_startRoot = winrt::make_weak(element);
+    } catch (...) {
+    }
+    StartCategoryTileWatch();
+    StartFrameContextRequested_Original(self, sender, args);
+}
+
+using PruneAndCombine_t = void(__cdecl*)(void*, void*);
+PruneAndCombine_t PruneAndCombine_Original = nullptr;
+
+// Start rebuilds its categories when it opens, on the UI thread, so this is where the tile check
+// starts without a right-click.
+void __cdecl PruneAndCombine_Hook(void* self, void* map) {
+    if (!g_hideEmptyTiles) {
+        PruneAndCombine_Original(self, map);
+        return;
+    }
+    if (++g_rebuildCount == 1) {
+        FILETIME created{}, exited{}, kernel{}, user{}, now{};
+        GetSystemTimeAsFileTime(&now);
+        if (GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) {
+            const ULONGLONG start = (static_cast<ULONGLONG>(created.dwHighDateTime) << 32) | created.dwLowDateTime;
+            const ULONGLONG current = (static_cast<ULONGLONG>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+            const ULONGLONG ageMs = current > start ? (current - start) / 10000 : 0;
+            g_startupCleanupAllowed = ageMs < 10000;
+        }
+    }
+    StartCategoryTileWatch();
+    PruneAndCombine_Original(self, map);
+    UpdateCategoryTiles();
+}
+
+// Removing entries from Start's list from a timer right after the rebuild that happens when the menu opens crashes
+// Start: it faults inside StartMenu.dll 30 to 50 ms later. Removing them inside Start's own ReplaceAll call, before it
+// does anything else with the list, does not. So that is where empty entries are removed from those lists. The one
+// list that never goes through such a call here is the one built when Start starts up (see ProcessCategoryGrid).
+
+// Removes empty category groups from the list that Start has just filled, before the menu draws it.
+// `abi` is the ABI pointer of the list.
+void RemoveEmptyGroupsFromAbi(void* abi) {
+    try {
+        unsigned long long vtable = 0;
+        if (!ReadWordAt(abi, 0, &vtable)) return;
+        wf::IInspectable inspectable{nullptr};
+        winrt::copy_from_abi(inspectable, abi);
+        auto items = inspectable.try_as<IInspectableList>();
+        if (!items) {
+            static bool loggedNotList = false;
+            if (!loggedNotList) {
+                loggedNotList = true;
+                Wh_Log(L"[start] ReplaceAll was given something that is not a list; the hook's layout assumption may be wrong for this build");
+            }
+            return;
+        }
+        RemoveEmptyGroups(items);
+    } catch (...) {
+        Wh_Log(L"[start] Removing the empty groups failed with an exception");
+    }
+}
+
+// The C++ wrapper of the category list's ReplaceAll. It covers the callers that use the out-of-line copy of the
+// wrapper, which is how Start fills the category list on the build this mod was tested on. `self` is the address of
+// the vector wrapper, whose first member is the ABI pointer; this layout is an assumption about Start's build, so it
+// is read safely.
+using ReplaceAll_t = void(__cdecl*)(void*, void*);
+ReplaceAll_t ReplaceAll_Original = nullptr;
+
+void __cdecl ReplaceAll_Hook(void* self, void* items) {
+    ReplaceAll_Original(self, items);
+    if (!g_hideEmptyTiles) return;
+    unsigned long long abi = 0;
+    if (ReadWordAt(self, 0, &abi)) RemoveEmptyGroupsFromAbi(reinterpret_cast<void*>(abi));
+}
+
 bool HookStartMenuDllSymbols(HMODULE module) {
     // StartMenu.dll, StartUI.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
@@ -5612,6 +5995,33 @@ bool HookStartMenuDllSymbols(HMODULE module) {
             &MenuFlyoutItemBaseVector_Append_Original,
             StartMenuVectorAppend_Hook,
         },
+        {
+            // Optional. Only an extra trigger for the empty-tile check (a right-click on the menu).
+            {
+                LR"(public: void __cdecl winrt::StartMenu::implementation::StartBlendedFlexFrame::OnContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))",
+            },
+            &StartFrameContextRequested_Original,
+            StartFrameContextRequested_Hook,
+            true,
+        },
+        {
+            // Optional: only the "Hide empty category tiles" option needs it.
+            {
+                LR"(private: void __cdecl winrt::StartMenu::implementation::CategoryProvider::PruneAndCombineCategories(class std::unordered_map<enum winrt::StartMenu::AppCategory,class std::vector<struct winrt::StartMenu::IAllAppsItemViewModel,class std::allocator<struct winrt::StartMenu::IAllAppsItemViewModel> >,struct std::hash<enum winrt::StartMenu::AppCategory>,struct std::equal_to<enum winrt::StartMenu::AppCategory>,class std::allocator<struct std::pair<enum winrt::StartMenu::AppCategory const ,class std::vector<struct winrt::StartMenu::IAllAppsItemViewModel,class std::allocator<struct winrt::StartMenu::IAllAppsItemViewModel> > > > > &))",
+            },
+            &PruneAndCombine_Original,
+            PruneAndCombine_Hook,
+            true,
+        },
+        {
+            // Optional. If a Windows update renames it, the other tile hooks keep working and only the gaps return.
+            {
+                LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IObservableVector<struct winrt::StartMenu::AllAppsGroupViewModel>,struct winrt::StartMenu::AllAppsGroupViewModel>::ReplaceAll(struct winrt::array_view<struct winrt::StartMenu::AllAppsGroupViewModel const >)const )",
+            },
+            &ReplaceAll_Original,
+            ReplaceAll_Hook,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
@@ -5621,6 +6031,15 @@ bool HookStartMenuDllSymbols(HMODULE module) {
     }
     Wh_Log(L"[start] Hooking the Start menu DLL");
     ReportHooks(true);
+    if (g_hideEmptyTiles) {
+        if (!PruneAndCombine_Original) {
+            Wh_Log(L"[start] Windows build %ls: the category rebuild hook was not found; empty category tiles are only checked on a timer",
+                   WindowsBuildString().c_str());
+        }
+        if (!ReplaceAll_Original) {
+            Wh_Log(L"[start] The category list's ReplaceAll was not found; empty tiles will be hidden but may leave gaps");
+        }
+    }
     return true;
 }
 
@@ -5704,6 +6123,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 // ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     Wh_Log(L"Start Menu Category Manager %ls", WH_MOD_VERSION);
+    g_hideEmptyTiles = Wh_GetIntSetting(L"hideEmptyTiles") != 0;
     wchar_t exePath[MAX_PATH]{};
     GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
     g_isStartHost = _wcsicmp(PathFindFileNameW(exePath), L"StartMenuExperienceHost.exe") == 0;
@@ -5726,6 +6146,7 @@ BOOL Wh_ModInit() {
             g_startModuleHooked = true;
             HookStartMenuDllSymbols(startModule);
         }
+        if (g_hideEmptyTiles) StartCategoryTileWatch();
 
         HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
         auto loadLibraryExW = kernelBase
@@ -5769,9 +6190,20 @@ void Wh_ModAfterInit() {
     }
 }
 
+// Changing the option restarts the Start menu process, so the new process loads with the new value from its start.
+void Wh_ModSettingsChanged() {
+    const bool previous = g_hideEmptyTiles;
+    g_hideEmptyTiles = Wh_GetIntSetting(L"hideEmptyTiles") != 0;
+    if (!g_isStartHost && previous != g_hideEmptyTiles) {
+        Wh_Log(L"The \"Hide empty category tiles\" option changed; restarting the Start menu process");
+        RestartStartMenuHost();
+    }
+}
+
 void Wh_ModUninit() {
     g_shuttingDown = true;
     if (g_isStartHost) {
+        StopCategoryTileWatch();  // Shows the tiles it collapsed again, then removes the window subclass.
         // Besides the hooks, only the menu items' Click handler lives in Start. It is removed on Start's UI thread,
         // and this returns only after that has happened.
         ReleaseInjectedItemsOnUiThread();
@@ -5799,7 +6231,8 @@ void Wh_ModUninit() {
     UnregisterManagerWindowClasses();  // No window of these classes exists any more, and their code is about to unload.
 
     // Start keeps the categories it has already built until it restarts, so restart it to show Windows' own categories
-    // again. Nothing to do when the mod had no overrides.
-    if (!g_overrides.empty()) RestartStartMenuHost();
+    // again. The same goes for the empty categories the tile option removed from Start's list. Nothing to do when
+    // the mod changed neither.
+    if (!g_overrides.empty() || g_hideEmptyTiles) RestartStartMenuHost();
     CloseHookStatusEvents();
 }
