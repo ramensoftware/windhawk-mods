@@ -81,6 +81,7 @@ Windhawk explain their scope and any restart requirements.
 - On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into Explorer and stays loaded until Explorer restarts.
 - The integrated tray creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and other mods that find the taskbar by class may see this host instead of the native window; tray and appbar messages are forwarded where applicable. Other shell mods can conflict.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
+- Close the Notification Area Icons page before disabling, updating, or reloading the mod. Although no crash was observed in a test with the page open, this uncommon situation could cause problems.
 - Keep a way to disable the mod or restart Explorer.
 - Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
 
@@ -2476,6 +2477,25 @@ static int ReadWifiQuality() {
     }
     return quality;
 }
+// The 1511 flyout is x64 code with private RVAs. Fail closed if the host
+// architecture cannot be established, including ARM64 and ARM64EC builds.
+static bool Battery1511ArchitectureSupported() {
+#if defined(_M_ARM64) || defined(_M_ARM64EC) || defined(__aarch64__)
+    return false;
+#else
+    using IsWow64Process2Fn = BOOL (WINAPI*)(HANDLE, USHORT*, USHORT*);
+    HMODULE kernel=GetModuleHandleW(L"kernel32.dll");
+    auto query=kernel?reinterpret_cast<IsWow64Process2Fn>(GetProcAddress(kernel,"IsWow64Process2")):nullptr;
+    USHORT processMachine=0, nativeMachine=0;
+    if(!query || !query(GetCurrentProcess(),&processMachine,&nativeMachine)) return false;
+    return nativeMachine==IMAGE_FILE_MACHINE_AMD64 && processMachine==IMAGE_FILE_MACHINE_UNKNOWN;
+#endif
+}
+static bool Battery1511PowerAvailable() {
+    SYSTEM_POWER_STATUS power{};
+    if(!GetSystemPowerStatus(&power) || power.BatteryFlag==255) return false;
+    return (power.BatteryFlag&128)==0;
+}
 struct ResourceWork {std::wstring directory;HWND bar;HANDLE stop;};
 static DWORD WINAPI ResourceWorker(void* parameter) {
     std::unique_ptr<ResourceWork> work((ResourceWork*)parameter);
@@ -2491,17 +2511,25 @@ static DWORD WINAPI ResourceWorker(void* parameter) {
             else if(WaitForSingleObject(work->stop,0)!=WAIT_OBJECT_0) PostMessageW(work->bar,WM_RESOURCES_READY,0,0);
         }
         if(WaitForSingleObject(work->stop,0)!=WAIT_OBJECT_0) PostMessageW(work->bar,WM_RESOURCES_READY,0,0);
-        if(useOriginalBatteryFlyout.load() && WaitForSingleObject(work->stop,0)!=WAIT_OBJECT_0) {
-            std::wstring batteryDir=BatteryModuleDirectory(work->directory);
-            bool made=CreateDirectoryW(batteryDir.c_str(),nullptr) || GetLastError()==ERROR_ALREADY_EXISTS;
-            bool ok=made && FetchResourceWithRetry(batteryDir,kBattery1511,work->stop);
-            Wh_Log(L"[T81-DIAG] original battery DLL ready=%d; no Windows compatibility guarantee",ok?1:0);
-            if(ok && WaitForSingleObject(work->stop,0)!=WAIT_OBJECT_0) {
-                bool mui=PrepareBatteryMui(work->directory,work->stop);
-                Wh_Log(L"[T81-DIAG] original battery MUI ready=%d; resource resolution is not guaranteed",mui?1:0);
-            }
-        }
+        const bool batteryArchitecture=Battery1511ArchitectureSupported();
+        bool batteryAttempted=false;
+        if(useOriginalBatteryFlyout.load() && !batteryArchitecture)
+            Wh_Log(L"[T81-DIAG] original battery flyout skipped: unsupported or unknown architecture");
+        else if(useOriginalBatteryFlyout.load() && !Battery1511PowerAvailable())
+            Wh_Log(L"[T81-DIAG] original battery resources deferred: no battery or power status unknown");
         while(WaitForSingleObject(work->stop,0)!=WAIT_OBJECT_0) {
+            // Recheck so a battery attached later can enable the feature without reload.
+            if(!batteryAttempted && batteryArchitecture && useOriginalBatteryFlyout.load() && Battery1511PowerAvailable()) {
+                batteryAttempted=true;
+                std::wstring batteryDir=BatteryModuleDirectory(work->directory);
+                bool made=CreateDirectoryW(batteryDir.c_str(),nullptr) || GetLastError()==ERROR_ALREADY_EXISTS;
+                bool ok=made && FetchResourceWithRetry(batteryDir,kBattery1511,work->stop);
+                Wh_Log(L"[T81-DIAG] original battery DLL ready=%d; no Windows compatibility guarantee",ok?1:0);
+                if(ok && WaitForSingleObject(work->stop,0)!=WAIT_OBJECT_0) {
+                    bool mui=PrepareBatteryMui(work->directory,work->stop);
+                    Wh_Log(L"[T81-DIAG] original battery MUI ready=%d; resource resolution is not guaranteed",mui?1:0);
+                }
+            }
             int quality=ReadWifiQuality();int before=wifiQuality.exchange(quality);
             if(before!=quality) PostMessageW(work->bar,WM_WIFI_CHANGED,0,0);
             if(WaitForSingleObject(work->stop,5000)==WAIT_OBJECT_0) break;
@@ -9157,6 +9185,10 @@ static void ClearBatteryInitialChildFocus(HWND flyout) {
 // BatMeterFlyout class. These private APIs are version-sensitive.
 static bool TryOriginalBatteryFlyout1511() {
     if(!s || !useOriginalBatteryFlyout.load() || s->resourceDir.empty())return false;
+    if(!Battery1511ArchitectureSupported() || !Battery1511PowerAvailable()) {
+        Wh_Log(L"[T81-DIAG] original battery flyout skipped: architecture or power status unavailable");
+        return false;
+    }
     std::wstring source=ResourcePath(BatteryModuleDirectory(s->resourceDir),kBattery1511);
     std::wstring sourceMui=ResourcePath(BatteryMuiDirectory(s->resourceDir),SelectedBatteryMui());
     if(PathIsRelativeW(source.c_str()) || !VerifiedOnDisk(source,kBattery1511) || !VerifiedOnDisk(sourceMui,SelectedBatteryMui())) {
@@ -11263,6 +11295,18 @@ static void ShowSystemTooltip(int hit) {
     if(!s || !s->bar) return;
     RECT cell=SystemCell(hit); MapWindowPoints(s->bar,nullptr,(POINT*)&cell,2);
     ShowInfoTooltip(SystemTooltipText(hit),(cell.left+cell.right)/2);
+}
+
+static void ShowClockTooltip() {
+    if(!s || !s->privateActive || !s->bar) return;
+    // Use the user's regional long-date format, including any custom format.
+    int length=GetDateFormatEx(LOCALE_NAME_USER_DEFAULT,DATE_LONGDATE,nullptr,nullptr,nullptr,0,nullptr);
+    if(length<=1 || length>1024) return;
+    std::wstring date((size_t)length,L'\0');
+    if(!GetDateFormatEx(LOCALE_NAME_USER_DEFAULT,DATE_LONGDATE,nullptr,nullptr,date.data(),length,nullptr)) return;
+    date.resize((size_t)length-1);
+    RECT cell=PrivateSystemAnchor(HIT_CLOCK);
+    if(!IsRectEmpty(&cell)) ShowInfoTooltip(date,(cell.left+cell.right)/2);
 }
 
 static void ShowBarButtonTooltip(int hit) {
@@ -14227,9 +14271,9 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
             s->hover=hit;
             KillTimer(h,TIMER_HOVER);
             HidePreview();
-        if(hit>=0 || hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE)SetTimer(h,TIMER_HOVER,450,nullptr);
+        if(hit>=0 || hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_CLOCK || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE)SetTimer(h,TIMER_HOVER,450,nullptr);
         s->fadeTick=GetTickCount64();SetTimer(h,TIMER_FADE,16,nullptr);InvalidateRect(h,nullptr,FALSE);}return true;}
-    if(m==WM_MOUSELEAVE){if((s->hot==HIT_START || s->hot==HIT_DESKTOP) && !s->hotCornerPreview)HidePreview();
+    if(m==WM_MOUSELEAVE){if((s->hot==HIT_START || s->hot==HIT_DESKTOP || s->hot==HIT_CLOCK) && !s->hotCornerPreview)HidePreview();
         s->tracking=false;
         s->hot=HIT_NONE;
         s->hover=HIT_NONE;
@@ -14242,7 +14286,7 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
     if(m==WM_LBUTTONDOWN || m==WM_LBUTTONDBLCLK){
         if(g_languageDismissTick && GetTickCount64()-g_languageDismissTick>200)g_languageDismissTick=0;
         s->verticalPressed=hitAt();int hit=s->verticalPressed;
-        if(hit==HIT_START || hit==HIT_DESKTOP){KillTimer(h,TIMER_HOVER);HidePreview();}
+        if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_CLOCK){KillTimer(h,TIMER_HOVER);HidePreview();}
         if(hit==HIT_NONE && !s->bandsLocked && s->privateActive && taskbarPlacementMode.load()==3) {
             POINT point{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};MONITORINFO mi{};mi.cbSize=sizeof(mi);
             if(ClientToScreen(h,&point) && GetMonitorInfoW(MonitorFromWindow(h,MONITOR_DEFAULTTONEAREST),&mi)) {
@@ -14487,6 +14531,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
              else if(s->hover==HIT_START && startHotCorner.load()) ShowHotCornerPreview();
              else if(s->hover==HIT_START || s->hover==HIT_DESKTOP) ShowBarButtonTooltip(s->hover);
              else if(s->hover==HIT_NETWORK || s->hover==HIT_VOLUME || s->hover==HIT_BATTERY) ShowSystemTooltip(s->hover);
+             else if(s->hover==HIT_CLOCK) ShowClockTooltip();
              else if(s->hover==HIT_LANGUAGE) ShowLanguageTooltip();
              else if(s->hover<=HIT_TRAY_ICON_BASE) ShowPrivateIconTooltip(s->hover);
              }
@@ -14617,14 +14662,14 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
             KillTimer(h,TIMER_HOVER); KillTimer(h,TIMER_DESKTOP_PEEK); PeekOff(true);
             if(hit==HIT_DESKTOP && s->desktopPeekEnabled) { DWORD delay=DesktopPeekDelay(); SetTimer(h,TIMER_DESKTOP_PEEK,std::max<DWORD>(1,delay),nullptr); }
             if(hit>=0) { HidePreview(); if(!(s->jumpPopup && IsWindow(s->jumpPopup))) SetTimer(h,TIMER_HOVER,450,nullptr); }
-            else { HidePreview(); if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE) SetTimer(h,TIMER_HOVER,450,nullptr); }
+            else { HidePreview(); if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_CLOCK || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE) SetTimer(h,TIMER_HOVER,450,nullptr); }
             InvalidateRect(h,nullptr,FALSE);
         } return 0;
     }
     case WM_MOUSELEAVE:
         if(gWin7OrbReady && gWin7OrbWindow) {POINT cursor{};RECT orb{};
             if(GetCursorPos(&cursor) && GetWindowRect(gWin7OrbWindow,&orb) && PtInRect(&orb,cursor)) {s->tracking=false;return 0;}}
-        if((s->hot==HIT_START || s->hot==HIT_DESKTOP) && !s->hotCornerPreview)HidePreview();
+        if((s->hot==HIT_START || s->hot==HIT_DESKTOP || s->hot==HIT_CLOCK) && !s->hotCornerPreview)HidePreview();
         s->tracking=false; s->hot=HIT_NONE; s->hover=HIT_NONE; s->desktopArrowHot=false; s->linksArrowHot=false;
         s->fadeTick=GetTickCount64(); SetTimer(h,TIMER_FADE,16,nullptr);
         KillTimer(h,TIMER_HOVER); KillTimer(h,TIMER_DESKTOP_PEEK); PeekOff(true); InvalidateRect(h,nullptr,FALSE); return 0;
@@ -14671,7 +14716,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         if(hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY) {
             BeginTrayDrag(h,SystemEntry(hit),false,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}); return 0;
         }
-        if(hit==HIT_START || hit==HIT_DESKTOP){KillTimer(h,TIMER_HOVER);HidePreview();}
+        if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_CLOCK){KillTimer(h,TIMER_HOVER);HidePreview();}
         if(hit==HIT_TRAY_MORE && taskbarSkin.load()==1)InvalidateRect(h,nullptr,FALSE);
         if(hit==HIT_DESKTOP && BetaTextureAvailable(0)) {
             s->betaDesktopPressed=true;SetCapture(h);InvalidateRect(h,nullptr,FALSE);
@@ -15129,7 +15174,7 @@ BOOL Wh_ModInit() {
     LoadSettings();
     InstallTrayCniHook();
     InstallCniRegistryReadHooks();
-    if(useOriginalBatteryFlyout.load()) {
+    if(useOriginalBatteryFlyout.load() && Battery1511ArchitectureSupported()) {
         HMODULE user=GetModuleHandleW(L"user32.dll");
         void* target=user?(void*)GetProcAddress(user,"LoadStringW"):nullptr;
         if(!target || !Wh_SetFunctionHook(target,(void*)BatteryLoadStringHook,(void**)&realLoadStringW))
