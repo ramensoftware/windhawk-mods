@@ -2,12 +2,303 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-05T04:00:43.000Z</updated>
+    <updated>2026-11-05T05:01:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#08e84491fa69a919455b948e06fd1539ca6c8963</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-05T05:01:50.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Live HUD</h1>
+<p>A compact system monitoring widget for the Windows 11 taskbar.
+Displays real-time CPU usage, RAM load, network traffic, and optional latency,
+with an optional process memory trimmer.</p>
+<p>This is a tool mod: it runs in its own dedicated process instead of being
+injected into <code>explorer.exe</code>, so it cannot affect the shell's stability and
+survives Explorer restarts.</p>
+<p><img src="https://i.imgur.com/dDy0BoL.png" alt="Screenshot"></p>
+<h3>Features</h3>
+<ul>
+<li><strong>Real-time monitoring:</strong> CPU load, RAM usage and active network speed.</li>
+<li><strong>Windows 11 look:</strong> blends with the taskbar, configurable corner style.</li>
+<li><strong>Auto-hide:</strong> hides itself when a fullscreen game or application is active.</li>
+<li><strong>Ping (opt-in, off by default):</strong> when enabled, an ICMP echo request is sent
+to the selected public DNS resolver (Cloudflare 1.1.1.1, Google 8.8.8.8 or
+Quad9 9.9.9.9) roughly every 1.6 seconds. Nothing is sent while it is disabled.</li>
+<li><strong>Process Memory Trimmer (opt-in, off by default):</strong> trims the working sets
+of all user processes that can be opened with the current privileges. Trimmed
+pages move to the standby list and programs page the data back in when they
+need it, so this does not free memory in a lasting way and may cause a short
+slowdown.</li>
+</ul>
+<h3>Controls</h3>
+<ul>
+<li><strong>Ctrl + Left Click:</strong> trim memory (only if enabled in settings).</li>
+<li><strong>Alt + Left Click and drag:</strong> adjust the horizontal position on the taskbar.</li>
+</ul>
+<h3>Known limitations</h3>
+<ul>
+<li>Only the primary taskbar is supported (no secondary monitors).</li>
+<li>Network speed is the sum of all active non-loopback adapters.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/lemon-web-stack</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Overflow on Hover 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win11-taskbar-overflow-hover#8a36fa8d78e5834e3ef4039b816a3b33fdb06681</id>
+        <link href="https://windhawk.net/mods/win11-taskbar-overflow-hover"/>
+        <updated>2026-11-05T05:01:45.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Overflow on Hover 🚀</h1>
+<p>A zero-click QoL upgrade for Windows 11. Hover over the taskbar overflow button
+to open the hidden Apps icons.</p>
+<p><img src="https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png" alt="Hover overflow menu"></p>
+<p>✨ Features:</p>
+<ul>
+<li>Zero-Click Open: Auto-expands the hidden icons menu just by hovering.</li>
+<li>Auto-Dismiss: Gracefully closes the menu automatically the moment your mouse leaves the overflow button or the flyout.</li>
+<li>Instant App Launch: Instantly dismisses the overflow flyout the exact millisecond you click an app inside it, completely bypassing the native Windows UI lag.</li>
+</ul>
+<p>Developed by Cougar16 for the Windows customization community.</p>
+]]></content>
+        <author>
+            <name>Cougar16</name>
+            <uri>https://github.com/Cougar16</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win Duo Bar 1.1.4]]></title>
+        <id>https://windhawk.net/mods/win-duo-bar#8547431ba5abfd36a44820fed01031f532886fd8</id>
+        <link href="https://windhawk.net/mods/win-duo-bar"/>
+        <updated>2026-11-05T05:01:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>Win Duo Bar</h1>
+<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/hero.png" alt="Win Duo Bar in the notification area"></p>
+<p>A compact, minimal ring widget that replaces the Windows 11 notification-area
+clock. It shows the device status at a glance:</p>
+<ul>
+<li><strong>Battery ring</strong> - a 263 degree gauge with round caps and a translucent track.
+The filled part follows the battery level; the ring is green while plugged in,
+red when the battery is low (20% or less), yellow in battery saver mode and
+uses the taskbar text colour otherwise.</li>
+<li><strong>Wi-Fi symbol</strong> in the middle - two thick rounded arcs plus a solid dot,
+traced from the original 09 Wi-Fi icon. It switches to the wired/VPN icon
+when the active connection is not wireless and dims when offline.</li>
+<li><strong>Time and date</strong> - two rows of four bold digits (<code>1427</code> = 14:27, <code>1102</code> =
+November 2nd), no separators.</li>
+<li><strong>Charging animation</strong> - a notch opens at the top of the ring, a white bolt
+grows out of it, the Wi-Fi symbol slides down a little and the colours
+cross-fade (about 0.5 s, 60 fps).</li>
+<li><strong>One widget per taskbar</strong> - every taskbar clock gets its own widget, so
+multi-monitor setups keep a clock on every taskbar.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/states.png" alt="Win Duo Bar states"></p>
+<p>Every visual parameter (ring diameter/thickness/gauge span/track opacity/notch
+angle/bolt size, Wi-Fi size/thickness/opening/position, digits size and row
+positions) can be adjusted in the mod settings. The settings are localized
+(English and Simplified Chinese).</p>
+<p>The widget is 38 DIP by default. The DIP geometry values below are relative to
+that default size and scale together with the &quot;Widget size&quot; setting.</p>
+<p>This mod replaces the clock only. To hide the system battery and network tray
+icons, which the widget makes redundant, use the
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
+mod instead.</p>
+<p>Only Windows 11 is supported.</p>
+<h1>中文说明</h1>
+<p>Win Duo Bar 是一个替换 Windows 11 通知区域时钟的圆环小组件：</p>
+<ul>
+<li><strong>电量圆环</strong>：263° 圆环，圆头、带半透明轨道；电量部分随电量变化，插电时绿色、
+低电量（≤20%）红色、节电模式黄色，其他情况跟随任务栏文字颜色。</li>
+<li><strong>Wi-Fi 图标</strong>：中间两条粗圆头弧线 + 实心圆点（按原版 09 图标描出）；当前连接
+不是无线时显示有线/VPN 图标，断网时变暗。</li>
+<li><strong>时间日期</strong>：下方两行四位数字（<code>1427</code>=14:27、<code>1102</code>=11月2日），无分隔符。</li>
+<li><strong>充电动画</strong>：充电时顶部张开豁口、白色闪电长出、Wi-Fi 图标下移、颜色渐变，
+约 0.5 秒 60fps。</li>
+<li><strong>每个任务栏一个小组件</strong>：每个任务栏时钟都有独立的小组件，多显示器任务栏
+都会显示。</li>
+</ul>
+<p>所有视觉参数（圆环外径/粗细/弧度范围/轨道透明度/豁口角度/闪电大小、Wi-Fi 尺寸/
+粗细/开口/位置、数字字号和两行位置）都能在设置里调整，设置项已本地化
+（英文/简体中文）。</p>
+<p>小组件默认 38 DIP；下面的 DIP 几何参数以该默认尺寸为基准，并随「小组件尺寸」
+设置一起缩放。</p>
+<p>本模组只替换时钟。如需隐藏系统托盘的电量和网络图标（小组件已替代它们），
+请使用
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
+模组。</p>
+<p>仅支持 Windows 11。</p>
+<h2>Credits / 致谢</h2>
+<p>The taskbar XAML access code (XamlRoot lookup, symbol hooks, running code on the
+taskbar thread) is derived from the Windhawk mods by
+<a href="https://m417z.com/">m417z</a> (GPLv3), including the
+<a href="https://github.com/m417z/my-windhawk-mods">Taskbar tray system icon tweaks</a>
+mod. The Wi-Fi symbol geometry is traced from a &quot;09&quot;-style Wi-Fi icon reference.</p>
+<p>任务栏 XAML 访问代码（XamlRoot 获取、符号挂钩、任务栏线程执行）派生自
+<a href="https://m417z.com/">m417z</a> 的 Windhawk 模组（GPLv3）。Wi-Fi 图标几何按 09 风格
+参考图标描出。</p>
+]]></content>
+        <author>
+            <name>Felinyu</name>
+            <uri>https://github.com/Felinyu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Outlook Refined 0.6]]></title>
+        <id>https://windhawk.net/mods/outlook-refined#990c27e145efb3be3be4a934663578ea209ed651</id>
+        <link href="https://windhawk.net/mods/outlook-refined"/>
+        <updated>2026-11-05T05:01:34.000Z</updated>
+        <content type="html"><![CDATA[<h1>Outlook Refined</h1>
+<p>Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
+adds one script to each Outlook window when the window is created, and the
+script stops at once unless the page is one of Outlook's own. It opens no ports
+and brings nothing of its own down from the network: every asset it draws with
+is in this file. It reads your account addresses from Outlook's own storage, to
+label the folder tree, and with the agenda, month grid or Other card on it calls
+Outlook's mail service as described below.</p>
+<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/folder-pane.png" alt="Folder pane"></p>
+<p>Restart Outlook after enabling the mod or changing a setting.</p>
+<p><strong>What it asks Outlook for.</strong> The agenda, month grid and Other inbox card read
+your calendar and inbox through Outlook's own mail service, from inside its
+page, signed with the session Outlook already holds: the mod keeps the request
+headers Outlook sets, in memory, and reuses them. Those features refresh every
+few minutes while they are on, and each is off until you turn it on. Nothing is
+stored, logged or sent anywhere else, and no credential is written down.</p>
+<p><strong>Where your edits are kept.</strong> Groups, renames, folds, account order and the
+pane and card sizes are saved in Windhawk's own storage for this mod, so they
+leave when the mod does. State an earlier version wrote into Outlook's own local
+storage is moved across the first time this one runs. Other Outlook windows
+that are already open pick up a change as soon as you move into them.</p>
+<p><strong>Folder pane:</strong> Favorites in groups that fold (right-click a group header for
+its menu, drag a favorite to move it, Shift+right-click it to rename or move
+it), per-account compose buttons, a resizable pane, account trees under one
+foldable heading, accounts reordered by dragging.</p>
+<p><strong>Agenda:</strong> today and the next days from every account's calendar at the bottom
+of the folder pane, with a join button for online meetings, under a month grid
+shaded by booked hours. <strong>Other inbox:</strong> the newest Other conversations below
+the Focused list.</p>
+<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/other-inbox.png" alt="Agenda and the Other inbox card"></p>
+<p><strong>Calendar:</strong> one row per account, compact time zones, start and end times on
+event tiles, overlapping events cascaded or merged.</p>
+<p><strong>Reading pane:</strong> To and Cc on one line, a compact blocked-content bar, a
+readable body width. <strong>Ribbon:</strong> the group-name row under the buttons goes.</p>
+<p><strong>Print:</strong> printing a message prints the message, not the whole window: the
+panes, ribbon and buttons go, panes that scroll are released so nothing is cut
+off, quoted replies can be lightened or dropped, pictures and tables are kept
+whole, and anything too wide for the page is scaled down to fit.</p>
+<p><strong>Known limits.</strong> Most features find Outlook's own elements by English labels
+(&quot;Focused&quot;, &quot;Other&quot;, &quot;Navigation pane&quot;, &quot;Reading Pane&quot;) and read times written
+as 1:30 PM, so in another display language, or with a 24-hour clock, those
+parts quietly do nothing. The folder pane, the agenda and the print layout are
+the parts that depend on this most.</p>
+]]></content>
+        <author>
+            <name>Analytic Endeavors</name>
+            <uri>https://github.com/ae-reid-havens</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ThinkPad Battery Controls 0.9.17]]></title>
+        <id>https://windhawk.net/mods/thinkpad-battery-controls#5a3110472be3b0f634f91538af4cdcede6ba7a79</id>
+        <link href="https://windhawk.net/mods/thinkpad-battery-controls"/>
+        <updated>2026-11-05T05:01:30.000Z</updated>
+        <content type="html"><![CDATA[<h1>ThinkPad Battery Controls</h1>
+<p>Right-click the Windows battery icon to set charging limits, apply saved presets,
+or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.</p>
+<p>The manufacturer should have made these everyday controls part of the Windows
+battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.</p>
+<h2>Screenshots</h2>
+<p><strong>Battery menu</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-menu.png" alt="Battery menu"></p>
+<p><strong>Charge thresholds</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charge-thresholds.png" alt="Charge thresholds"></p>
+<p><strong>Quick charging presets</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charging-presets.png" alt="Quick charging presets"></p>
+<p><strong>Manage presets</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/manage-presets.png" alt="Manage presets"></p>
+<p><strong>Battery health</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-health.png" alt="Battery health"></p>
+<p><strong>Power controls</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/power-controls.png" alt="Power controls"></p>
+<p><strong>Calibration confirmation</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/calibration-confirmation.png" alt="Calibration confirmation"></p>
+<h2>Setup</h2>
+<p>Choose a backend in Windhawk Settings:</p>
+<ul>
+<li><strong>Integrated Lenovo service</strong> (default): no utility download. Requires compatible
+Lenovo Power Manager service and drivers.</li>
+<li><strong>Lenovo ChargeThreshold.exe</strong>: <a href="https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/ChargeThreshold.exe">download Lenovo's utility</a>,
+save it wherever you prefer on a local drive, and enter its full path in Settings.
+The mod verifies the reviewed executable before running it. It never downloads,
+installs or elevates anything. Setup and diagnostics includes the download link.
+Only Lenovo's version 1.0.0.2 build is accepted; a newer Lenovo build needs a mod
+update. Choose a folder that other accounts cannot change.</li>
+</ul>
+<p>The gear beside the charge summary opens diagnostics and a driver link based on
+this machine's detected model. No serial number is read or sent. Drivers are installed separately.</p>
+<h2>Charging and presets</h2>
+<p>Save up to 20 named presets and choose up to five quick favorites. Manage presets
+is available in Set charge threshold and at the bottom of Apply charging preset.
+Quick presets apply to both batteries. Set charge threshold can edit each battery
+separately or link their limits with the integrated backend. Each result is read back.</p>
+<p>Charge to full saves the original limits, disables them temporarily, then restores
+at 100% or after eight hours. Cancel restores immediately. A newer enabled range
+from Vantage is preserved. The integrated backend restores each battery separately;
+Lenovo's executable cannot restore different ranges on two batteries. Select the
+integrated backend for that situation. Present batteries restore independently; recovery for a missing battery is retained.</p>
+<p>Charging limits belong to the laptop, not to one Windows account. Signed-in
+sessions share recovery records and normally coordinate through a machine-wide
+lock. If the lock cannot be used, charging commands and recovery continue without
+coordination immediately. If a holder blocks ten consecutive periodic checks
+(about five minutes), they also continue without coordination. The menu then says
+(not coordinated). The mod retries the lock and resumes coordination when it
+acquires it. During fallback, simultaneous changes in different sessions can
+overwrite one another. This favors restoring charge limits over waiting indefinitely.</p>
+<p><strong>Thresholds persist after this mod is disabled or removed.</strong> Disabling or updating
+the mod ends a pending full-charge request early: it tries to restore your limits
+first. Signing out, restarting, shutting down or an Explorer crash skips that step;
+the saved request is then restored the next time the mod runs, at 100% or once its
+eight hours have passed. If restoration fails, or the mod is removed while it cannot
+run, limits may remain off and charging can continue to 100% until the mod runs
+again or you set limits in Vantage. Removing the mod also removes its Windhawk
+recovery data. Restore protection before removal.</p>
+<p>If an initiated write is cancelled before completion, or its utility process is
+terminated while running, further changes and recovery pause to avoid racing
+a command still running in Lenovo's service. Ordinary launch failures and completed
+errors do not trigger this warning. The menu header links the paused state to setup. Saved limits are retained. Restart
+Windows, then use Setup and diagnostics to acknowledge the restart and resume
+recovery. This applies to both backends; cancelling a client cannot undo a server write.</p>
+<h2>Advanced controls</h2>
+<p>Battery health shows supported readings. Power offers the verified three-state USB
+control. Always-on USB settings persist after disabling or removing the mod.
+Advanced &gt; Experimental groups calibration and independent two-battery limits.
+Both have simulated coverage, not complete physical validation. Set charge threshold
+applies one range to both batteries; separate ranges are available only through
+Experimental. Calibration requires a separate confirmation and connected power; it saves
+current limits and blocks charging edits while running. Cancellation also requires
+confirmation. Removing the mod during calibration loses saved recovery: check its
+state and charging limits in Vantage. Cooling and airplane controls remain omitted
+until supported behavior is verified. Calibration is not a battery-health treatment.</p>
+<h2>Compatibility</h2>
+<p>Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
+mock coverage only and is experimental until a two-battery hardware test is completed. The executable backend
+requires English output. Private taskbar symbols can change after Windows updates.
+The tray icon hook is placed in SystemTray.dll, an older Taskbar.View.dll or
+ExplorerExtensions.dll, as Taskbar tray system icon tweaks does.</p>
+<p>Author/publisher: Bill Bauman. Apache-2.0. Project-name trademark and attribution
+terms are in the source repository; Lenovo's executable remains separately licensed.
+No Lenovo or Microsoft endorsement is implied.</p>
+]]></content>
+        <author>
+            <name>Bill Bauman</name>
+            <uri>https://github.com/billbauman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Round Everything 1.0.0]]></title>
         <id>https://windhawk.net/mods/round-everything#37be93ac3c0356ab82594e732a758a2aa245f46b</id>
@@ -743,722 +1034,6 @@ and their buttons can remain light.</li>
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartPad 1.0]]></title>
-        <id>https://windhawk.net/mods/startpad#76edbcc836b994efec92065992b9a02be87d82a1</id>
-        <link href="https://windhawk.net/mods/startpad"/>
-        <updated>2026-11-04T01:04:37.000Z</updated>
-        <content type="html"><![CDATA[<h1>StartPad</h1>
-<p><img src="https://raw.githubusercontent.com/frankh93/StartPad/main/preview.png" alt="StartPad Preview"></p>
-<p>A macOS Launchpad-style fullscreen app launcher that replaces the Windows 11 Start menu, featuring horizontal paginated grids, interactive app folders, drag-and-drop reordering, and customizable visual themes.</p>
-<h2>Features &amp; How to Use</h2>
-<h3>Pages &amp; Navigation</h3>
-<ul>
-<li><strong>Horizontal Pages</strong>: Apps are organized into pages rather than a vertical scrolling list.</li>
-<li><strong>Switching Pages</strong>: Click and drag horizontally with the mouse, scroll the mouse wheel (vertical or horizontal), click the pagination dots at the bottom, or use <strong>Page Up / Page Down</strong>.</li>
-<li><strong>2D Arrow Key Navigation</strong>: Use the <strong>Arrow keys</strong> or <strong>Tab</strong> to move selection across icons. Moving past the left or right edge of the grid automatically flips to the previous or next page.</li>
-</ul>
-<h3>Drag-and-Drop &amp; Folders</h3>
-<ul>
-<li><strong>Reorder Apps</strong>: <strong>Click and hold</strong> (~320 ms) on any app or folder icon to pick it up, then drag it to a new position on the grid or across pages (hold near the screen edge to flip pages).</li>
-<li><strong>Create Folders</strong>:
-<ul>
-<li><strong>Drag &amp; Drop</strong>: Drag one app icon directly onto another app icon (or into an existing folder).</li>
-<li><strong>Selection Mode</strong>: Click the <strong>More (<code>...</code>)</strong> button on the right side of the search bar and choose <strong>Create folder</strong>, click the apps you want to bundle (marked with a blue checkmark), and click the <strong>Done (<code>✓</code>)</strong> button in the search bar (or press <strong>Enter</strong>).</li>
-</ul>
-</li>
-<li><strong>Rename Folders</strong>: When a folder is open, <strong>click its title</strong> at the top or press <strong>F2</strong> (also works when a folder is selected on the main grid), type the new name, and press <strong>Enter</strong>.</li>
-<li><strong>Remove or Ungroup</strong>: Drag an icon outside the open folder panel to move it back to the main grid, or right-click a folder and select <strong>Ungroup folder</strong>.</li>
-<li><strong>Persistent Layout</strong>: Your custom icon order, folders, and hidden apps are automatically saved to Windhawk's mod storage per user.</li>
-</ul>
-<h3>Search &amp; Launching</h3>
-<ul>
-<li><strong>Instant Search</strong>: Start typing anywhere to filter apps immediately. Press <strong>Esc</strong> or click the clear (<code>×</code>) button to reset the search.</li>
-<li><strong>Launch App</strong>: Click an icon or press <strong>Enter</strong> on the selected app.</li>
-<li><strong>Run as Administrator</strong>: Hold <strong>Ctrl + Shift + Enter</strong> on a selected app, or right-click the app and choose <strong>Run as administrator</strong>.</li>
-<li><strong>Context Menu</strong>: Right-click any app to <strong>Open</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Remove from folder</strong>, or <strong>Hide</strong>.</li>
-</ul>
-<h3>More Options (<code>...</code>) &amp; Hiding Apps</h3>
-<p>Click the <strong><code>...</code></strong> button inside the right side of the search bar to access:</p>
-<ul>
-<li><strong>Create folder</strong>: Interactively select multiple apps to group into a new folder.</li>
-<li><strong>Edit hidden apps</strong>: Toggle visibility badges on all apps to hide or unhide multiple items at once, then click the <strong>Done (<code>✓</code>)</strong> button in the search bar to save.</li>
-<li><strong>Search in hidden apps</strong>: When checked, typing a search query will also return matching apps that you have hidden.</li>
-<li><strong>Reset layout</strong>: Restores the default alphabetical layout and removes all custom folders and hidden-app rules.</li>
-</ul>
-<h3>Power Menu &amp; Visuals</h3>
-<ul>
-<li><strong>Power Button</strong>: Located at the bottom right (aligned with the page dots and last column), providing quick access to <strong>Lock</strong>, <strong>Sign out</strong>, <strong>Sleep</strong>, <strong>Shut down</strong>, and <strong>Restart</strong>.</li>
-<li><strong>Visual Styles</strong>: Choose between <strong>MacOS Style</strong> (pill search bar &amp; squircle folders) and <strong>Windows 11 Fluent</strong> (Acrylic-inspired search box with system accent bar), automatically adapting to Windows Light and Dark modes.</li>
-<li><strong>Legacy Icon Cleanup</strong>: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.</li>
-<li><strong>Localized UI</strong>: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.</li>
-</ul>
-<h2>How StartPad differs from &quot;fullscreen-start&quot; mod</h2>
-<p>Both mods replace the Start menu with a fullscreen app launcher, and <strong>they cannot be enabled at the same time</strong> because both intercept <code>XamlLauncher::ShowStartView</code>.</p>
-<ul>
-<li><strong>StartPad</strong> focuses on a <strong>paginated macOS Launchpad workflow</strong>: horizontal pages with spring physics, <strong>folders</strong> (creation, renaming, ungrouping), <strong>drag-and-drop icon reordering</strong> with persistent layout storage, <strong>hiding apps</strong>, a <strong>right-click context menu</strong> (Run as administrator, Open file location), an integrated <strong>Power menu</strong>, a <strong>Windows 11 Fluent visual style</strong>, and <strong>multilingual UI strings</strong>.</li>
-<li><strong>Fullscreen Start (<code>fullscreen-start</code>)</strong> by Rafael Mendes focuses on a single <strong>vertically scrolled grid</strong> with Direct2D rendering, live DWM Acrylic/Blur backdrops, <code>Ctrl+V</code> clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.</li>
-</ul>
-<h2>Credits &amp; License</h2>
-<ul>
-<li>Hooking <code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code> (<code>kShowMethodKeyboard</code> / <code>kShowFlagKeyboard</code>), secondary folder-process detection (<code>IsFolderWindowsProcess</code>), and thread initialization/uninitialization structure are adapted from <a href="https://github.com/RafaelMendes1407"><strong>Fullscreen Start (Launchpad style)</strong> (<code>fullscreen-start</code>)</a> by <strong>Rafael Mendes</strong>, licensed under the MIT License (Copyright (c) Rafael Mendes).</li>
-<li>Licensed under the <strong>MIT License</strong>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Frankh93</name>
-            <uri>https://github.com/frankh93</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hourly Peek Buddy 1.0]]></title>
-        <id>https://windhawk.net/mods/hourly-peek-buddy#660bc1995e97a6f66040c56cb782989087a68073</id>
-        <link href="https://windhawk.net/mods/hourly-peek-buddy"/>
-        <updated>2026-11-04T00:03:08.000Z</updated>
-        <content type="html"><![CDATA[<h1>Hourly Peek Buddy</h1>
-<p><img src="https://i.imgur.com/pSUzh1o.gif" alt="Screenshot"></p>
-<p>A fun reminder for the top of every hour or at the times you choose.</p>
-<p>A funny little character pops up from the bottom corner of your screen, waves
-at you with a speech bubble, and goes away again. It shows up at the top of every
-hour and at any other times you choose, and it appears on top of all your
-apps. There are 14 characters and 6 ways of showing up, and you can see the
-result right away with the built-in preview, so you never have to wait for the
-next hour.</p>
-<p>All characters are drawn by the mod itself, so there are no images to download.</p>
-<h2>Preview</h2>
-<p>Windhawk settings cannot have a button, so the preview works like this:</p>
-<ul>
-<li><strong>Preview when settings are saved</strong> (on by default): every time you press
-<em>Save</em>, the character shows up once with your new settings.</li>
-<li><strong>Preview now</strong>: flip this switch and save, and the character shows up again
-even if nothing else has changed.</li>
-</ul>
-<p>Tip: pick a character or a movement, save, and watch. Repeat until you find your favorite.</p>
-<h2>Characters</h2>
-<p>Ghost, Cat, Alien, Robot, Penguin (with a party hat), Duck, Slime, Grumpy bomb,
-Cactus, Pumpkin, Teddy bear, Mushroom, Donut and Pizza slice. Or choose
-<strong>Random</strong> to be surprised every time.</p>
-<h2>Ways of showing up</h2>
-<ul>
-<li><strong>Peek</strong>: Rises from the bottom edge and wiggles.</li>
-<li><strong>Springy</strong>: Pops up like a jack-in-the-box and bounces.</li>
-<li><strong>Slide</strong>: Slides in from the side of the screen with a little overshoot.</li>
-<li><strong>Hop</strong>: Hops in from the side of the screen.</li>
-<li><strong>Spin</strong>: Flies in from the corner while spinning.</li>
-<li><strong>Pop</strong>: Grows out of the corner with a bounce.</li>
-</ul>
-<h2>When does it show up?</h2>
-<ul>
-<li>At the top of every hour (can be turned off).</li>
-<li>Every N minutes, counted from midnight (for example 15 means :00, :15, :30
-and :45; 0 turns this off).</li>
-<li>At exact times of your choice, for example <code>09:30, 13:15, 17:45</code>.</li>
-<li>Quiet hours: it stays away between the two hours you choose (for example from
-23 to 8). Using the same value for both turns quiet hours off.</li>
-<li>Optional: skip it while a full-screen game, video or presentation is active.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li>Preview when settings are saved / Preview now</li>
-<li>Character, Movement, Corner (bottom right or bottom left), Monitor (primary
-or the one with the mouse)</li>
-<li>Schedule: top of every hour, every N minutes, exact times, quiet hours</li>
-<li>Stay time (seconds), Size (%), Opacity (%)</li>
-<li>Speech bubble: time with a funny message, time only, your own message
-(<code>{time}</code> is replaced with the current time), or no bubble</li>
-<li>Message language: automatic (follows Windows), Turkish or English</li>
-<li>Click to dismiss, Play a sound, Skip full-screen apps</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The mod runs in its own <code>windhawk.exe</code> process and does not inject into
-other programs. It does not change any system or registry setting.</li>
-<li>The character window never takes the keyboard focus. If <strong>Click to dismiss</strong>
-is off, the character is click-through and the mouse goes straight to the
-app below.</li>
-<li>The size follows the DPI of the monitor.</li>
-<li>It appears above the taskbar edge (the work area), as if it peeks out from
-behind it.</li>
-<li>If you start a new show (for example with the preview) while one is on the
-screen, the old one is replaced.</li>
-</ul>
-<hr>
-<h1>Saat Başı Sürpriz Dostu</h1>
-<p>Ekranın alt köşesinden komik, küçük bir karakter çıkar, konuşma balonuyla size
-göz kırpar ve tekrar gider. Her saat başı ve seçtiğiniz diğer zamanlarda ortaya
-çıkar, üstelik tüm uygulamaların üzerinde görünür. 14 karakter ve 6 farklı
-çıkış şekli vardır; yerleşik ön izleme sayesinde sonucu hemen görürsünüz, bir
-sonraki saat başını beklemenize gerek kalmaz.</p>
-<p>Tüm karakterleri modun kendisi çizer, bu yüzden indirilecek görsel yoktur.</p>
-<h2>Ön izleme</h2>
-<p>Windhawk ayarlarında düğme olamadığı için ön izleme şöyle çalışır:</p>
-<ul>
-<li><strong>Ayarlar kaydedilince ön izle</strong> (varsayılan olarak açık): <em>Kaydet</em>'e her
-bastığınızda karakter, yeni ayarlarınızla bir kez ortaya çıkar.</li>
-<li><strong>Şimdi ön izle</strong>: Bu anahtarı çevirip kaydederseniz, başka hiçbir şey
-değişmemiş olsa bile karakter yeniden çıkar.</li>
-</ul>
-<p>İpucu: Bir karakter veya hareket seçin, kaydedin ve izleyin. Favorinizi bulana
-kadar tekrarlayın.</p>
-<h2>Karakterler</h2>
-<p>Hayalet, Kedi, Uzaylı, Robot, Penguen (parti şapkalı), Ördek, Jöle, Huysuz
-bomba, Kaktüs, Balkabağı, Oyuncak ayı, Mantar, Donut ve Pizza dilimi. Her
-seferinde sürpriz için <strong>Rastgele</strong>'yi seçebilirsiniz.</p>
-<h2>Çıkış şekilleri</h2>
-<ul>
-<li><strong>Dikizleme</strong>: Alt kenardan yükselir ve sallanır.</li>
-<li><strong>Yaylı</strong>: Kutudan fırlayan oyuncak gibi çıkar ve zıplar.</li>
-<li><strong>Kayma</strong>: Ekranın kenarından hafif taşarak kayarak gelir.</li>
-<li><strong>Hoplama</strong>: Ekranın kenarından hoplaya hoplaya gelir.</li>
-<li><strong>Dönme</strong>: Köşeden dönerek uçarak gelir.</li>
-<li><strong>Patlama</strong>: Köşeden zıplayarak büyür.</li>
-</ul>
-<h2>Ne zaman çıkar?</h2>
-<ul>
-<li>Her saat başı (kapatılabilir).</li>
-<li>Her N dakikada bir, geceyarısından itibaren sayılır (örneğin 15 için :00,
-:15, :30 ve :45; 0 bunu kapatır).</li>
-<li>Seçtiğiniz tam saatlerde, örneğin <code>09:30, 13:15, 17:45</code>.</li>
-<li>Sessiz saatler: Seçtiğiniz iki saat arasında çıkmaz (örneğin 23 ile 8
-arası). İkisine de aynı değeri vermek sessiz saatleri kapatır.</li>
-<li>İsteğe bağlı: Tam ekran oyun, video veya sunum varken atlanır.</li>
-</ul>
-<h2>Ayarlar</h2>
-<ul>
-<li>Ayarlar kaydedilince ön izle / Şimdi ön izle</li>
-<li>Karakter, Hareket, Köşe (sağ alt veya sol alt), Monitör (ana monitör veya
-fare imlecinin olduğu monitör)</li>
-<li>Zamanlama: her saat başı, her N dakikada bir, tam saatler, sessiz saatler</li>
-<li>Kalma süresi (saniye), Boyut (%), Opaklık (%)</li>
-<li>Konuşma balonu: saat ve komik mesaj, sadece saat, kendi mesajınız
-(<code>{time}</code> yerine o anki saat yazılır) veya balonsuz</li>
-<li>Mesaj dili: otomatik (Windows'u izler), Türkçe veya İngilizce</li>
-<li>Tıklayınca kapat, Ses çal, Tam ekran uygulamaları atla</li>
-</ul>
-<h2>Notlar</h2>
-<ul>
-<li>Mod kendi <code>windhawk.exe</code> sürecinde çalışır ve başka programlara kod
-enjekte etmez. Hiçbir sistem veya kayıt defteri ayarını değiştirmez.</li>
-<li>Karakter penceresi klavye odağını almaz. <strong>Tıklayınca kapat</strong> kapalıysa
-karakter tıklamayı geçirir; fare doğrudan alttaki uygulamaya gider.</li>
-<li>Boyut, monitörün DPI değerini izler.</li>
-<li>Karakter görev çubuğunun kenarının (çalışma alanının) üstünde, sanki
-arkasından dikiliyormuş gibi görünür.</li>
-<li>Ekranda bir karakter varken yenisi başlatılırsa (örneğin ön izleme ile)
-eskisinin yerini alır.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DahaSakinOlamazdim</name>
-            <uri>https://github.com/DahaSakinOlamazdim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Cursor Themes 1.0]]></title>
-        <id>https://windhawk.net/mods/mouse-cursor-themes#558d15d24060a8952809d06abbbbe8424d8205c3</id>
-        <link href="https://windhawk.net/mods/mouse-cursor-themes"/>
-        <updated>2026-11-04T00:03:04.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mouse Cursor Themes</h1>
-<p>Replaces the Windows mouse cursors with a theme of your choice. All cursors are
-drawn by the mod itself, so every theme is available right after you enable the
-mod and you can switch themes from the settings at any time.</p>
-<p>The mod draws cursor files for the theme and replaces the system cursors of
-your current Windows session with them. It does not change your saved pointer
-scheme or any registry settings. Because of this, the theme works in every
-program that uses the standard Windows cursors.</p>
-<h2>Preview</h2>
-<p><img src="https://i.imgur.com/YBKMSqy.gif" alt="Preview 1"></p>
-<p><img src="https://i.imgur.com/oIhV764.gif" alt="Preview 2"></p>
-<p><img src="https://i.imgur.com/lO9i7j0.gif" alt="Preview 3"></p>
-<h2>Themes</h2>
-<ul>
-<li><strong>Classic White</strong>: White arrow with a black outline.</li>
-<li><strong>Classic Black</strong>: Black arrow with a white outline.</li>
-<li><strong>Neon Blue / Neon Pink / Neon Green</strong>: Bright outline with a glowing halo.</li>
-<li><strong>Sunset</strong>: Orange to pink gradient with a soft warm glow.</li>
-<li><strong>Ocean</strong>: Aqua to deep blue gradient.</li>
-<li><strong>Gold</strong>: Golden gradient with a dark brown outline.</li>
-<li><strong>Rainbow</strong>: A rainbow-colored cursor.</li>
-<li><strong>Crimson</strong>: Red cursor with a white outline and a red glow.</li>
-<li><strong>Silver</strong>: Metallic silver gradient with a dark outline.</li>
-<li><strong>Forest</strong>: Light green to deep green gradient with a dark green outline.</li>
-<li><strong>Lava</strong>: Yellow to red-orange gradient with a hot orange glow.</li>
-<li><strong>Lavender</strong>: Soft lilac to purple gradient.</li>
-<li><strong>Aurora</strong>: Mint to violet gradient with a cool glow.</li>
-<li><strong>Ice</strong>: White to icy blue gradient with a blue outline.</li>
-<li><strong>Candy</strong>: Pink to sky blue gradient with a white outline.</li>
-<li><strong>Midnight</strong>: Dark navy cursor with a golden outline and glow.</li>
-<li><strong>Ghost</strong>: Only an outline, the inside is transparent.</li>
-<li><strong>Custom</strong>: Pick your own fill, outline and glow colors.</li>
-</ul>
-<h2>Pointer shapes</h2>
-<p>The shape of the main pointer can be changed independently from the theme. The
-same shape is also used by the busy (working in background) and help cursors.
-Shapes marked &quot;tip&quot; click with their tip, the others click at their center.</p>
-<ul>
-<li><strong>Classic arrow</strong>: The standard Windows arrow (tip).</li>
-<li><strong>Arrowhead</strong>: The classic arrow without its stem (tip).</li>
-<li><strong>Triangle</strong>: A plain triangle (tip).</li>
-<li><strong>Wedge</strong>: A slim triangle with a straight left edge (tip).</li>
-<li><strong>Kite</strong>: A kite shape (tip).</li>
-<li><strong>Navigator</strong>: A sharp navigation-style arrowhead (tip).</li>
-<li><strong>Chevron</strong>: Two strokes forming an open corner (tip).</li>
-<li><strong>Diamond / Square / Dot / Ring / Target</strong>: Simple geometric shapes.</li>
-<li><strong>Star / Sparkle / Heart</strong>: Decorative shapes.</li>
-</ul>
-<h2>Cursors that are replaced</h2>
-<p>Normal arrow, text (I-beam), link (hand), busy (animated), working in
-background (animated), precision cross, up arrow, all resize cursors, move,
-unavailable (forbidden) and help.</p>
-<h2>Settings</h2>
-<ul>
-<li>Theme</li>
-<li>Pointer shape: Shape of the main pointer (see above).</li>
-<li>Cursor size (%): 100 matches the original Windows cursor size.</li>
-<li>Glow (%): Makes the glow of the themes weaker or stronger (0 turns it off).</li>
-<li>Outline thickness (%): Makes the outline of the cursor thinner or thicker. A thicker outline is easier to see.</li>
-<li>Crisp edges: Draws sharper, less blurry cursor edges.</li>
-<li>Contrast edge: Adds a thin dark or light line around the outline, so the cursor stays clearly visible on any background.</li>
-<li>Animated busy cursors: Turns the spinning busy cursors on or off.</li>
-<li>Custom colors: Used only when the &quot;Custom&quot; theme is selected (format: #RRGGBB).</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The cursor size follows the Windows pointer size setting (Settings &gt;
-Accessibility &gt; Mouse pointer and touch). The cursors are drawn in several sizes, so they stay sharp.</li>
-<li>The mod never changes your saved pointer scheme. When you disable the mod,
-Windows reloads your own pointer scheme. The replaced cursors only live in
-memory, so after you sign out they return to your pointer scheme until the
-mod is started again.</li>
-<li>Programs that use their own cursors (for example some games and drawing
-programs) keep their own cursors.</li>
-<li>If you change the pointer scheme from the Windows settings while the mod is
-running, the mod notices it and applies the theme again.</li>
-<li>The generated cursor files are kept in Windhawk's storage folder for this mod
-and are removed when the mod is disabled.</li>
-</ul>
-<hr>
-<h1>Fare İmleci Temaları</h1>
-<p>Windows fare imleçlerini seçtiğiniz bir temayla değiştirir. Tüm imleçler modun
-kendisi tarafından çizilir; bu yüzden modu açtığınız anda bütün temalar hazırdır
-ve ayarlardan istediğiniz zaman tema değiştirebilirsiniz.</p>
-<p>Mod, tema için imleç dosyaları çizer ve geçerli Windows oturumunuzun sistem
-imleçlerini bu dosyalarla değiştirir. Kayıtlı işaretçi şemanızı veya kayıt defteri
-ayarlarını değiştirmez. Bu sayede tema, standart Windows imleçlerini kullanan her
-programda çalışır.</p>
-<h2>Temalar</h2>
-<ul>
-<li><strong>Klasik Beyaz</strong>: Siyah çerçeveli beyaz ok.</li>
-<li><strong>Klasik Siyah</strong>: Beyaz çerçeveli siyah ok.</li>
-<li><strong>Neon Mavi / Neon Pembe / Neon Yeşil</strong>: Parlak çerçeve ve ışıldayan halo.</li>
-<li><strong>Gün Batımı</strong>: Turuncudan pembeye geçişli, yumuşak sıcak parıltılı.</li>
-<li><strong>Okyanus</strong>: Açık turkuazdan koyu maviye geçişli.</li>
-<li><strong>Altın</strong>: Koyu kahverengi çerçeveli altın renkli geçiş.</li>
-<li><strong>Gökkuşağı</strong>: Gökkuşağı renklerinde imleç.</li>
-<li><strong>Kızıl</strong>: Beyaz çerçeveli, kırmızı parıltılı kırmızı imleç.</li>
-<li><strong>Gümüş</strong>: Koyu çerçeveli, metalik gümüş geçişli.</li>
-<li><strong>Orman</strong>: Açık yeşilden koyu yeşile geçişli, koyu yeşil çerçeveli.</li>
-<li><strong>Lav</strong>: Sarıdan kırmızı-turuncuya geçişli, sıcak turuncu parıltılı.</li>
-<li><strong>Lavanta</strong>: Yumuşak leylaktan mora geçişli.</li>
-<li><strong>Aurora</strong>: Naneden menekşeye geçişli, serin parıltılı.</li>
-<li><strong>Buz</strong>: Beyazdan buz mavisine geçişli, mavi çerçeveli.</li>
-<li><strong>Şeker</strong>: Pembeden gök mavisine geçişli, beyaz çerçeveli.</li>
-<li><strong>Gece Yarısı</strong>: Koyu lacivert, altın sarısı çerçeveli ve parıltılı.</li>
-<li><strong>Hayalet</strong>: Sadece çerçeve, içi şeffaf.</li>
-<li><strong>Özel</strong>: Dolgu, çerçeve ve parıltı renklerini kendiniz seçersiniz.</li>
-</ul>
-<h2>İşaretçi şekilleri</h2>
-<p>Ana işaretçinin şekli temadan bağımsız olarak değiştirilebilir. Aynı şekil,
-meşgul (arka planda çalışıyor) ve yardım imleçlerinde de kullanılır.
-&quot;uç&quot; yazan şekiller uç noktalarıyla, diğerleri merkezleriyle tıklar.</p>
-<ul>
-<li><strong>Klasik ok</strong>: Standart Windows oku (uç).</li>
-<li><strong>Ok başı</strong>: Klasik okun çubuksuz hâli (uç).</li>
-<li><strong>Üçgen</strong>: Sade bir üçgen (uç).</li>
-<li><strong>Kama</strong>: Sol kenarı düz, ince bir üçgen (uç).</li>
-<li><strong>Uçurtma</strong>: Uçurtma biçimi (uç).</li>
-<li><strong>Pusula oku</strong>: Keskin, navigasyon tarzı ok başı (uç).</li>
-<li><strong>Köşe</strong>: Açık bir köşe oluşturan iki çizgi (uç).</li>
-<li><strong>Elmas / Kare / Nokta / Halka / Hedef</strong>: Sade geometrik şekiller.</li>
-<li><strong>Yıldız / Parıltı / Kalp</strong>: Süslü şekiller.</li>
-</ul>
-<h2>Değiştirilen imleçler</h2>
-<p>Normal ok, metin (I imleci), bağlantı (el), meşgul (animasyonlu), arka planda
-çalışıyor (animasyonlu), hassas artı, yukarı ok, tüm boyutlandırma imleçleri,
-taşıma, kullanılamaz (yasak) ve yardım.</p>
-<h2>Ayarlar</h2>
-<ul>
-<li>Tema</li>
-<li>İşaretçi şekli: Ana işaretçinin şekli (yukarıya bakın).</li>
-<li>İmleç boyutu (%): 100, orijinal Windows imleç boyutuna denk gelir.</li>
-<li>Parıltı (%): Temaların parıltısını azaltır veya artırır (0 kapatır).</li>
-<li>Çerçeve kalınlığı (%): İmlecin çerçevesini inceltir veya kalınlaştırır. Kalın çerçeve imleci daha kolay görünür yapar.</li>
-<li>Keskin kenarlar: İmleç kenarlarını daha keskin, daha az bulanık çizer.</li>
-<li>Kontrast kenarı: Çerçevenin etrafına ince bir koyu veya açık çizgi ekler; böylece imleç her arka planda net görünür.</li>
-<li>Animasyonlu meşgul imleçleri: Dönen meşgul imleçlerini açar veya kapatır.</li>
-<li>Özel renkler: Sadece &quot;Özel&quot; tema seçiliyse kullanılır (biçim: #RRGGBB).</li>
-</ul>
-<h2>Notlar</h2>
-<ul>
-<li>İmleç boyutu Windows'un işaretçi boyutu ayarını izler (Ayarlar &gt; Erişilebilirlik &gt;
-Fare işaretçisi ve dokunma). İmleçler birkaç boyutta çizildiği için net kalır.</li>
-<li>Mod kayıtlı işaretçi şemanızı hiçbir zaman değiştirmez. Modu kapattığınızda Windows
-kendi işaretçi şemanızı yeniden yükler. Değiştirilen imleçler yalnızca bellekte
-bulunur; oturumu kapattığınızda mod yeniden başlayana kadar işaretçi şemanıza döner.</li>
-<li>Kendi imleçlerini kullanan programlar (örneğin bazı oyunlar ve çizim programları)
-kendi imleçlerini korur.</li>
-<li>Mod çalışırken Windows ayarlarından işaretçi şemasını değiştirirseniz mod bunu
-fark eder ve temayı yeniden uygular.</li>
-<li>Oluşturulan imleç dosyaları, Windhawk'ın bu mod için ayırdığı depolama klasöründe
-tutulur ve mod kapatılınca silinir.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DahaSakinOlamazdim</name>
-            <uri>https://github.com/DahaSakinOlamazdim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#a59167ace74a357b5c27f8755145a407bf5baf9a</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2026-11-03T23:49:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the following themes: Blob, Borderless, Command Center, DockLike, FluentGlass, LiquidGlass, Luminosity, OS26 Liquid Glass, Pills, Surface, TaskbarXII, TintedGlass.</li>
-<li>Object values such as brushes and transforms are now created separately for each element. Previously, the state of one element could affect other elements that use the same value. This fixes some long-standing issues such as <a href="https://github.com/ramensoftware/windhawk-mods/issues/742">Acrylic background not working with multiple monitors</a> and <a href="https://github.com/ramensoftware/windhawk-mods/issues/1403">problems with multiple progress bars</a>.</li>
-<li>Fixed crashes when the mod is disabled or its settings are changed.</li>
-<li>Improved restoration of some styles that weren't restored correctly.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AI Voice Typing 1.0.0]]></title>
-        <id>https://windhawk.net/mods/ai-voice-typing#245488f83190691fbd1edc64d149ac240debf2b0</id>
-        <link href="https://windhawk.net/mods/ai-voice-typing"/>
-        <updated>2026-11-03T23:01:40.000Z</updated>
-        <content type="html"><![CDATA[<h1>AI Voice Typing</h1>
-<p><strong>English</strong> | <a href="#portugu%C3%AAs">Português</a> | <a href="#espa%C3%B1ol">Español</a></p>
-<p>Press a shortcut, speak, press it again, and your words are typed where the
-cursor is, in any app. An AI transcribes what you said and cleans it up in the
-style you choose, or translates it. It uses a cloud provider you set up with
-your own key: <strong>Groq</strong> is recommended (very fast, and its key is free).</p>
-<p><img src="https://i.imgur.com/c9LNTHL.gif" alt="Dictating into a text field: the live text, the AI rewrite and the result"></p>
-<h2>What it does</h2>
-<ul>
-<li><strong>Dictation in any app.</strong> A small bar at the bottom of the screen shows what
-you're saying while you speak. When you stop, the text is pasted where you
-were typing and also left on the clipboard. Dictating again right after, in
-the same field, adds the space between the two.</li>
-<li><strong>Cleaned up in your style.</strong> The AI removes the &quot;ums&quot;, repetitions and false
-starts, and fixes punctuation, without changing what you said. Styles:
-Natural, Professional, Prompt (for writing to an AI), Raw and Transcript
-only, plus your own. Each app can have its own style (Outlook always
-Professional, VS Code always Prompt).</li>
-<li><strong>Translation.</strong> Ctrl+Shift+Y dictates and translates, to one of 34
-languages.</li>
-<li><strong>The result card.</strong> After each dictation, a card shows the text. Its chips
-redo it in another style or translate it, and <strong>Replace</strong> swaps the pasted
-text for the new version.</li>
-<li><strong>Command.</strong> Select text in any app, press Ctrl+Alt+K and say what to do
-with it (&quot;more formal&quot;, &quot;translate to Spanish&quot;, &quot;summarize as bullets&quot;). The
-result replaces the selection.</li>
-<li><strong>About 100 languages</strong> to speak in, detected by itself or chosen. The
-settings and the bar are in English, Spanish, Portuguese, French, German,
-Japanese, Chinese, Russian, Hindi and Bengali.</li>
-<li><strong>Several providers</strong>: Groq, Google Gemini, Mistral, OpenRouter, OpenAI, or
-an OpenAI-compatible server. With more than one set up, the next one is
-tried when one fails. If the transcription still fails, the recording is
-kept so you can <strong>try again</strong> without speaking it all again.</li>
-</ul>
-<p><img src="https://i.imgur.com/teLIabS.gif" alt="Command: the selected text rewritten from a spoken instruction"></p>
-<h2>Getting started</h2>
-<ol>
-<li>Create a free key at <a href="https://console.groq.com/keys">console.groq.com/keys</a>
-(or at another provider: the settings show how, step by step).</li>
-<li>The first time, a short setup wizard opens: the look, the provider (paste
-the key and it's tested at once), the shortcut and style, and a test
-dictation. It can be done again from General.</li>
-<li>Click any text field, press <strong>Ctrl+Shift+Space</strong>, speak, and press it again
-(or click the bar's stop button).</li>
-</ol>
-<table>
-<thead>
-<tr>
-<th>Shortcut</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Ctrl+Shift+Space</strong></td>
-<td>Dictate (press again to stop; in hold mode, hold it while you speak)</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Shift+Y</strong></td>
-<td>Dictate and translate</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Alt+K</strong></td>
-<td>Command on the selected text (while you speak, the card also offers the styles, to apply one without speaking)</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Cancel while recording (while it's being processed, the bar's ✕ cancels)</td>
-</tr>
-</tbody>
-</table>
-<p>Every shortcut can be changed in the settings. &quot;Paste again&quot; (the last
-dictation into the app in front) and &quot;Dictate now&quot; are in the icon's menu;
-&quot;Paste again&quot; has no shortcut by default, because Ctrl+Alt+V is Office's
-Paste Special.</p>
-<p><img src="https://i.imgur.com/1YTQOiV.png" alt="The result card, translated to Spanish"></p>
-<h2>Settings</h2>
-<p>Click the mod's icon in the notification area to open them (right-click it
-for a quick menu): this session's history (with &quot;Redo&quot; in another style or
-language), the styles and your own ones, a style per app, the providers (keys,
-models and the order they're tried in), the shortcuts, the spoken language,
-microphone and dictionary, and the look: theme, accent color, the card's width
-and a glass look for the bar. Start and stop sounds are on by default and can
-be turned off.</p>
-<p><img src="https://i.imgur.com/GKBPArQ.png" alt="The settings window"></p>
-<h2>Privacy</h2>
-<ul>
-<li>The audio goes only to the speech provider you set up (for example Groq,
-<code>api.groq.com</code>), and only with a key saved: while you speak (the live
-preview, which can be turned off) and when you stop. The transcript then
-goes to the text provider for the style or the translation, along with the
-name of the app you're typing into (so the text fits it) and the words in
-your dictionary. With Command, the selected text goes too. Each provider's
-own privacy policy applies (on Gemini's free tier, Google may use what's
-sent to improve its products).</li>
-<li>If Groq answers that the chosen model no longer exists, the mod asks Groq
-for its current list of models, tries up to 4 of them with a short test
-(a second of near-silence, or &quot;OK&quot;), and keeps the one that works.</li>
-<li>Servers contacted, only those of the providers you set up:
-<code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
-<code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, or the address you
-give for an OpenAI-compatible server.</li>
-<li>Nothing is saved to disk: the audio, the text and the history stay in
-memory. A recording whose transcription failed also stays only in memory
-(the last 3), until it's tried again or the history is cleared.</li>
-<li>The dictated text is left on the clipboard, like a normal copy. Command
-copies the selection with Ctrl+C and then puts your clipboard back as it
-was.</li>
-<li>Your keys are stored encrypted for your Windows account (DPAPI), in the
-mod's own storage, and are removed with the mod.</li>
-</ul>
-<h2>Known limitations</h2>
-<ul>
-<li>Windows doesn't let a normal app type into apps running as administrator:
-there, the text is only copied (paste it with Ctrl+V), and Command can't
-read the selection.</li>
-<li>Command doesn't work in terminals (Ctrl+C stops the program there).</li>
-<li>Ctrl+Alt is AltGr on many keyboards: where AltGr+K types a character (for
-example Hungarian or Czech), Command starts without a shortcut; choose one
-in the settings.</li>
-<li>The glass look needs Windows' transparency effects (with them off, or with
-the energy saver on, the bar stays solid).</li>
-<li>Cloud providers only (no local models), over https, so it needs an internet
-connection. The OpenAI-compatible server is used for the text, not for
-speech.</li>
-<li>A recording stops by itself after 12 minutes and is transcribed (the
-providers take files of about 13 minutes at most).</li>
-</ul>
-<p>Prefer a standalone app with more options? The same author makes
-<a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
-<h2>Contact and support</h2>
-<p>Made in Brazil by <strong>caliberda</strong>. Bugs: please open
-<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&amp;body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on GitHub</a>
-(that's where they're tracked). If the mod helps you, you can support it on
-<a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a>. Instagram:
-<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
-<a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<h2>Português</h2>
-<p>Aperte um atalho, fale, aperte de novo, e suas palavras são digitadas onde
-está o cursor, em qualquer app. Uma IA transcreve o que você disse e limpa no
-estilo que você escolher, ou traduz. Ela usa um provedor na nuvem que você
-configura com a sua própria chave: a <strong>Groq</strong> é a recomendada (muito rápida,
-e a chave é grátis).</p>
-<h3>O que faz</h3>
-<ul>
-<li><strong>Ditado em qualquer app.</strong> Uma barrinha embaixo da tela mostra o que você
-está falando enquanto fala. Quando você para, o texto é colado onde você
-estava digitando e também fica na área de transferência. Ditando de novo
-logo em seguida, no mesmo campo, o espaço entre os dois entra sozinho.</li>
-<li><strong>Limpo no seu estilo.</strong> A IA tira os &quot;hã&quot;, &quot;né&quot;, repetições e frases
-começadas de novo, e acerta a pontuação, sem mudar o que você disse.
-Estilos: Natural, Profissional, Prompt (para escrever para uma IA), Cru e Só
-transcrição, e os seus. Cada app pode ter o seu estilo (Outlook sempre
-Profissional, VS Code sempre Prompt).</li>
-<li><strong>Tradução.</strong> Ctrl+Shift+Y dita e traduz, para um de 34 idiomas.</li>
-<li><strong>O card do resultado.</strong> Depois de cada ditado, um card mostra o texto. Os
-chips refazem em outro estilo ou traduzem, e <strong>Substituir</strong> troca o texto
-colado pela versão nova.</li>
-<li><strong>Comando.</strong> Selecione um texto em qualquer app, aperte Ctrl+Alt+K e diga o
-que fazer (&quot;mais formal&quot;, &quot;traduz pro inglês&quot;, &quot;resume em tópicos&quot;). O
-resultado substitui a seleção.</li>
-<li><strong>Cerca de 100 idiomas</strong> para falar, detectados sozinhos ou escolhidos. As
-configurações e a barra estão em português, inglês, espanhol, francês,
-alemão, japonês, chinês, russo, hindi e bengali.</li>
-<li><strong>Vários provedores</strong>: Groq, Google Gemini, Mistral, OpenRouter, OpenAI ou
-um servidor compatível com a OpenAI. Com mais de um, o próximo é tentado
-quando um falha. Se a transcrição ainda assim falhar, a gravação fica
-guardada para <strong>tentar de novo</strong> sem falar tudo outra vez.</li>
-</ul>
-<h3>Como começar</h3>
-<ol>
-<li>Crie uma chave grátis em
-<a href="https://console.groq.com/keys">console.groq.com/keys</a> (ou em outro
-provedor: as configurações mostram o passo a passo).</li>
-<li>Na primeira vez, abre um assistente rápido: a aparência, o provedor (cole
-a chave e ela é testada na hora), o atalho e o estilo, e um ditado de
-teste. Dá para refazer em Geral.</li>
-<li>Clique em qualquer campo de texto, aperte <strong>Ctrl+Shift+Espaço</strong>, fale e
-aperte de novo (ou clique no botão de parar da barra).</li>
-</ol>
-<table>
-<thead>
-<tr>
-<th>Atalho</th>
-<th>O que faz</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Ctrl+Shift+Espaço</strong></td>
-<td>Ditar (aperte de novo para parar; no modo segurar, segure enquanto fala)</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Shift+Y</strong></td>
-<td>Ditar e traduzir</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Alt+K</strong></td>
-<td>Comando no texto selecionado (enquanto você fala, o card também oferece os estilos, para aplicar um sem falar)</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Cancela durante a gravação (enquanto processa, o ✕ da barra cancela)</td>
-</tr>
-</tbody>
-</table>
-<p>Todos os atalhos podem ser trocados nas configurações. &quot;Colar de novo&quot; (o
-último ditado no app da frente) e &quot;Ditar agora&quot; ficam no menu do ícone;
-&quot;Colar de novo&quot; não tem atalho por padrão, porque Ctrl+Alt+V é o Colar
-especial do Office.</p>
-<h3>Configurações</h3>
-<p>Clique no ícone do mod na área de notificação para abri-las (com o botão
-direito, um menu rápido): o histórico desta sessão (com &quot;Refazer&quot; em outro
-estilo ou idioma), os estilos e os seus, um estilo por app, os provedores
-(chaves, modelos e a ordem de tentativa), os atalhos, o idioma falado, o
-microfone e o dicionário, e a aparência: tema, cor de destaque, largura do
-card e o visual de vidro da barra. Os sons de início e fim vêm ligados e dá
-para desligar.</p>
-<h3>Privacidade</h3>
-<ul>
-<li>O áudio vai só para o provedor de voz que você configurou (por exemplo a
-Groq, <code>api.groq.com</code>) e só com uma chave salva: enquanto você fala (a
-prévia ao vivo, que dá para desligar) e quando você para. A transcrição
-então vai ao provedor de texto para o estilo ou a tradução, junto com o
-nome do app em que você está digitando (para o texto combinar com ele) e
-as palavras do seu dicionário. No Comando, o texto selecionado vai junto.
-Vale a política de privacidade de cada provedor (no plano grátis do
-Gemini, o Google pode usar o que é enviado para melhorar os produtos dele).</li>
-<li>Se a Groq responder que o modelo escolhido não existe mais, o mod pede à
-Groq a lista atual de modelos, testa até 4 deles com um teste curto (um
-segundo de quase silêncio, ou &quot;OK&quot;) e fica com o que funcionar.</li>
-<li>Servidores contatados, só os dos provedores que você configurou:
-<code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
-<code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, ou o endereço que
-você informar para um servidor compatível com a OpenAI.</li>
-<li>Nada é gravado em disco: o áudio, o texto e o histórico ficam na memória.
-Uma gravação cuja transcrição falhou também fica só na memória (as 3
-últimas), até ser tentada de novo ou o histórico ser limpo.</li>
-<li>O texto ditado fica na área de transferência, como uma cópia normal. O
-Comando copia a seleção com Ctrl+C e depois devolve a sua área de
-transferência como estava.</li>
-<li>As chaves são guardadas criptografadas para a sua conta do Windows
-(DPAPI), no armazenamento do próprio mod, e são apagadas junto com ele.</li>
-</ul>
-<h3>Limitações conhecidas</h3>
-<ul>
-<li>O Windows não deixa um app comum digitar em apps abertos como
-administrador: neles, o texto só é copiado (cole com Ctrl+V), e o Comando
-não consegue ler a seleção.</li>
-<li>O Comando não funciona em terminais (lá o Ctrl+C interrompe o programa).</li>
-<li>Ctrl+Alt é o AltGr em muitos teclados: onde AltGr+K digita um caractere
-(por exemplo húngaro ou tcheco), o Comando começa sem atalho; escolha um
-nas configurações.</li>
-<li>O vidro precisa dos efeitos de transparência do Windows (desligados, ou
-com a economia de energia, a barra fica sólida).</li>
-<li>Só provedores na nuvem (sem modelos locais), por https, então precisa de
-internet. O servidor compatível com a OpenAI é usado para o texto, não para
-a voz.</li>
-<li>Uma gravação para sozinha depois de 12 minutos e é transcrita (os
-provedores aceitam arquivos de uns 13 minutos no máximo).</li>
-</ul>
-<p>Prefere um app separado com mais opções? O mesmo autor faz o
-<a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
-<h3>Contato e apoio</h3>
-<p>Feito no Brasil por <strong>caliberda</strong>. Bugs: abra
-<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&amp;body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no GitHub</a>
-(é lá que eles são acompanhados). Se o mod te ajuda, dá para apoiar pelo
-<a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a> ou por Pix no
-<a href="https://livepix.gg/caliberda">LivePix</a>. Instagram:
-<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
-<a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<h2>Español</h2>
-<p>Pulsa un atajo, habla, vuelve a pulsarlo y tus palabras se escriben donde
-está el cursor, en cualquier app. Una IA transcribe lo que dijiste y lo
-limpia en el estilo que elijas, o lo traduce. Usa un proveedor en la nube que
-configuras con tu propia clave: se recomienda <strong>Groq</strong> (muy rápido, y la clave
-es gratis).</p>
-<ul>
-<li><strong>Dictado en cualquier app</strong>, con una barra pequeña que muestra lo que dices
-mientras hablas. El texto se pega donde escribías y también queda en el
-portapapeles.</li>
-<li><strong>Limpio en tu estilo</strong> (Natural, Profesional, Prompt, Crudo, Solo
-transcripción y los tuyos), con un estilo por app.</li>
-<li><strong>Traducción</strong> a 34 idiomas con Ctrl+Shift+Y, y una tarjeta con chips para
-rehacer el texto en otro estilo o idioma.</li>
-<li><strong>Comando</strong> (Ctrl+Alt+K): selecciona un texto, di qué hacer y el resultado
-reemplaza la selección.</li>
-<li><strong>Unos 100 idiomas</strong> para hablar; la configuración y la barra están en
-español, inglés, portugués, francés, alemán, japonés, chino, ruso, hindi y
-bengalí.</li>
-<li><strong>Varios proveedores</strong> (Groq, Gemini, Mistral, OpenRouter, OpenAI o un
-servidor compatible con OpenAI): si uno falla, se usa el siguiente, y si la
-transcripción falla, la grabación se guarda para reintentar sin volver a
-hablar.</li>
-</ul>
-<p>Para empezar: crea una clave gratis en
-<a href="https://console.groq.com/keys">console.groq.com/keys</a>; la primera vez se
-abre un asistente rápido. Luego haz clic en un campo de texto, pulsa
-<strong>Ctrl+Shift+Espacio</strong>, habla y vuelve a pulsarlo. <strong>Esc</strong> cancela. &quot;Pegar de
-nuevo&quot; y &quot;Dictar ahora&quot; están en el menú del icono del área de notificación.</p>
-<p>Privacidad: el audio va solo al proveedor de voz que configuraste, solo con
-una clave guardada (mientras hablas, para la vista previa en vivo, y al
-parar); el texto va al proveedor de texto, con el nombre de la app en la que
-escribes y las palabras de tu diccionario, y con el Comando también va el
-texto seleccionado. Si Groq responde que el modelo elegido ya no existe, el
-mod pide su lista de modelos y prueba hasta 4 con una prueba corta. Rige la
-política de privacidad de cada proveedor. No se
-guarda nada en disco: si una transcripción falla, la grabación queda solo en
-memoria (las 3 últimas). Las claves se guardan cifradas para tu cuenta de
-Windows. Limitaciones: no escribe en apps abiertas como administrador (el
-texto queda copiado), el Comando no funciona en terminales, solo usa
-proveedores en la nube y necesita internet, y una grabación se detiene sola a
-los 12 minutos.</p>
-]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
         </author>
     </entry>
 </feed>

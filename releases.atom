@@ -2,12 +2,303 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-05T04:00:43.000Z</updated>
+    <updated>2026-11-05T05:01:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#08e84491fa69a919455b948e06fd1539ca6c8963</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-05T05:01:50.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Live HUD</h1>
+<p>A compact system monitoring widget for the Windows 11 taskbar.
+Displays real-time CPU usage, RAM load, network traffic, and optional latency,
+with an optional process memory trimmer.</p>
+<p>This is a tool mod: it runs in its own dedicated process instead of being
+injected into <code>explorer.exe</code>, so it cannot affect the shell's stability and
+survives Explorer restarts.</p>
+<p><img src="https://i.imgur.com/dDy0BoL.png" alt="Screenshot"></p>
+<h3>Features</h3>
+<ul>
+<li><strong>Real-time monitoring:</strong> CPU load, RAM usage and active network speed.</li>
+<li><strong>Windows 11 look:</strong> blends with the taskbar, configurable corner style.</li>
+<li><strong>Auto-hide:</strong> hides itself when a fullscreen game or application is active.</li>
+<li><strong>Ping (opt-in, off by default):</strong> when enabled, an ICMP echo request is sent
+to the selected public DNS resolver (Cloudflare 1.1.1.1, Google 8.8.8.8 or
+Quad9 9.9.9.9) roughly every 1.6 seconds. Nothing is sent while it is disabled.</li>
+<li><strong>Process Memory Trimmer (opt-in, off by default):</strong> trims the working sets
+of all user processes that can be opened with the current privileges. Trimmed
+pages move to the standby list and programs page the data back in when they
+need it, so this does not free memory in a lasting way and may cause a short
+slowdown.</li>
+</ul>
+<h3>Controls</h3>
+<ul>
+<li><strong>Ctrl + Left Click:</strong> trim memory (only if enabled in settings).</li>
+<li><strong>Alt + Left Click and drag:</strong> adjust the horizontal position on the taskbar.</li>
+</ul>
+<h3>Known limitations</h3>
+<ul>
+<li>Only the primary taskbar is supported (no secondary monitors).</li>
+<li>Network speed is the sum of all active non-loopback adapters.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/lemon-web-stack</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Overflow on Hover 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win11-taskbar-overflow-hover#8a36fa8d78e5834e3ef4039b816a3b33fdb06681</id>
+        <link href="https://windhawk.net/mods/win11-taskbar-overflow-hover"/>
+        <updated>2026-11-05T05:01:45.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Overflow on Hover 🚀</h1>
+<p>A zero-click QoL upgrade for Windows 11. Hover over the taskbar overflow button
+to open the hidden Apps icons.</p>
+<p><img src="https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png" alt="Hover overflow menu"></p>
+<p>✨ Features:</p>
+<ul>
+<li>Zero-Click Open: Auto-expands the hidden icons menu just by hovering.</li>
+<li>Auto-Dismiss: Gracefully closes the menu automatically the moment your mouse leaves the overflow button or the flyout.</li>
+<li>Instant App Launch: Instantly dismisses the overflow flyout the exact millisecond you click an app inside it, completely bypassing the native Windows UI lag.</li>
+</ul>
+<p>Developed by Cougar16 for the Windows customization community.</p>
+]]></content>
+        <author>
+            <name>Cougar16</name>
+            <uri>https://github.com/Cougar16</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win Duo Bar 1.1.4]]></title>
+        <id>https://windhawk.net/mods/win-duo-bar#8547431ba5abfd36a44820fed01031f532886fd8</id>
+        <link href="https://windhawk.net/mods/win-duo-bar"/>
+        <updated>2026-11-05T05:01:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>Win Duo Bar</h1>
+<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/hero.png" alt="Win Duo Bar in the notification area"></p>
+<p>A compact, minimal ring widget that replaces the Windows 11 notification-area
+clock. It shows the device status at a glance:</p>
+<ul>
+<li><strong>Battery ring</strong> - a 263 degree gauge with round caps and a translucent track.
+The filled part follows the battery level; the ring is green while plugged in,
+red when the battery is low (20% or less), yellow in battery saver mode and
+uses the taskbar text colour otherwise.</li>
+<li><strong>Wi-Fi symbol</strong> in the middle - two thick rounded arcs plus a solid dot,
+traced from the original 09 Wi-Fi icon. It switches to the wired/VPN icon
+when the active connection is not wireless and dims when offline.</li>
+<li><strong>Time and date</strong> - two rows of four bold digits (<code>1427</code> = 14:27, <code>1102</code> =
+November 2nd), no separators.</li>
+<li><strong>Charging animation</strong> - a notch opens at the top of the ring, a white bolt
+grows out of it, the Wi-Fi symbol slides down a little and the colours
+cross-fade (about 0.5 s, 60 fps).</li>
+<li><strong>One widget per taskbar</strong> - every taskbar clock gets its own widget, so
+multi-monitor setups keep a clock on every taskbar.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/states.png" alt="Win Duo Bar states"></p>
+<p>Every visual parameter (ring diameter/thickness/gauge span/track opacity/notch
+angle/bolt size, Wi-Fi size/thickness/opening/position, digits size and row
+positions) can be adjusted in the mod settings. The settings are localized
+(English and Simplified Chinese).</p>
+<p>The widget is 38 DIP by default. The DIP geometry values below are relative to
+that default size and scale together with the &quot;Widget size&quot; setting.</p>
+<p>This mod replaces the clock only. To hide the system battery and network tray
+icons, which the widget makes redundant, use the
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
+mod instead.</p>
+<p>Only Windows 11 is supported.</p>
+<h1>中文说明</h1>
+<p>Win Duo Bar 是一个替换 Windows 11 通知区域时钟的圆环小组件：</p>
+<ul>
+<li><strong>电量圆环</strong>：263° 圆环，圆头、带半透明轨道；电量部分随电量变化，插电时绿色、
+低电量（≤20%）红色、节电模式黄色，其他情况跟随任务栏文字颜色。</li>
+<li><strong>Wi-Fi 图标</strong>：中间两条粗圆头弧线 + 实心圆点（按原版 09 图标描出）；当前连接
+不是无线时显示有线/VPN 图标，断网时变暗。</li>
+<li><strong>时间日期</strong>：下方两行四位数字（<code>1427</code>=14:27、<code>1102</code>=11月2日），无分隔符。</li>
+<li><strong>充电动画</strong>：充电时顶部张开豁口、白色闪电长出、Wi-Fi 图标下移、颜色渐变，
+约 0.5 秒 60fps。</li>
+<li><strong>每个任务栏一个小组件</strong>：每个任务栏时钟都有独立的小组件，多显示器任务栏
+都会显示。</li>
+</ul>
+<p>所有视觉参数（圆环外径/粗细/弧度范围/轨道透明度/豁口角度/闪电大小、Wi-Fi 尺寸/
+粗细/开口/位置、数字字号和两行位置）都能在设置里调整，设置项已本地化
+（英文/简体中文）。</p>
+<p>小组件默认 38 DIP；下面的 DIP 几何参数以该默认尺寸为基准，并随「小组件尺寸」
+设置一起缩放。</p>
+<p>本模组只替换时钟。如需隐藏系统托盘的电量和网络图标（小组件已替代它们），
+请使用
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
+模组。</p>
+<p>仅支持 Windows 11。</p>
+<h2>Credits / 致谢</h2>
+<p>The taskbar XAML access code (XamlRoot lookup, symbol hooks, running code on the
+taskbar thread) is derived from the Windhawk mods by
+<a href="https://m417z.com/">m417z</a> (GPLv3), including the
+<a href="https://github.com/m417z/my-windhawk-mods">Taskbar tray system icon tweaks</a>
+mod. The Wi-Fi symbol geometry is traced from a &quot;09&quot;-style Wi-Fi icon reference.</p>
+<p>任务栏 XAML 访问代码（XamlRoot 获取、符号挂钩、任务栏线程执行）派生自
+<a href="https://m417z.com/">m417z</a> 的 Windhawk 模组（GPLv3）。Wi-Fi 图标几何按 09 风格
+参考图标描出。</p>
+]]></content>
+        <author>
+            <name>Felinyu</name>
+            <uri>https://github.com/Felinyu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Outlook Refined 0.6]]></title>
+        <id>https://windhawk.net/mods/outlook-refined#990c27e145efb3be3be4a934663578ea209ed651</id>
+        <link href="https://windhawk.net/mods/outlook-refined"/>
+        <updated>2026-11-05T05:01:34.000Z</updated>
+        <content type="html"><![CDATA[<h1>Outlook Refined</h1>
+<p>Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
+adds one script to each Outlook window when the window is created, and the
+script stops at once unless the page is one of Outlook's own. It opens no ports
+and brings nothing of its own down from the network: every asset it draws with
+is in this file. It reads your account addresses from Outlook's own storage, to
+label the folder tree, and with the agenda, month grid or Other card on it calls
+Outlook's mail service as described below.</p>
+<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/folder-pane.png" alt="Folder pane"></p>
+<p>Restart Outlook after enabling the mod or changing a setting.</p>
+<p><strong>What it asks Outlook for.</strong> The agenda, month grid and Other inbox card read
+your calendar and inbox through Outlook's own mail service, from inside its
+page, signed with the session Outlook already holds: the mod keeps the request
+headers Outlook sets, in memory, and reuses them. Those features refresh every
+few minutes while they are on, and each is off until you turn it on. Nothing is
+stored, logged or sent anywhere else, and no credential is written down.</p>
+<p><strong>Where your edits are kept.</strong> Groups, renames, folds, account order and the
+pane and card sizes are saved in Windhawk's own storage for this mod, so they
+leave when the mod does. State an earlier version wrote into Outlook's own local
+storage is moved across the first time this one runs. Other Outlook windows
+that are already open pick up a change as soon as you move into them.</p>
+<p><strong>Folder pane:</strong> Favorites in groups that fold (right-click a group header for
+its menu, drag a favorite to move it, Shift+right-click it to rename or move
+it), per-account compose buttons, a resizable pane, account trees under one
+foldable heading, accounts reordered by dragging.</p>
+<p><strong>Agenda:</strong> today and the next days from every account's calendar at the bottom
+of the folder pane, with a join button for online meetings, under a month grid
+shaded by booked hours. <strong>Other inbox:</strong> the newest Other conversations below
+the Focused list.</p>
+<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/other-inbox.png" alt="Agenda and the Other inbox card"></p>
+<p><strong>Calendar:</strong> one row per account, compact time zones, start and end times on
+event tiles, overlapping events cascaded or merged.</p>
+<p><strong>Reading pane:</strong> To and Cc on one line, a compact blocked-content bar, a
+readable body width. <strong>Ribbon:</strong> the group-name row under the buttons goes.</p>
+<p><strong>Print:</strong> printing a message prints the message, not the whole window: the
+panes, ribbon and buttons go, panes that scroll are released so nothing is cut
+off, quoted replies can be lightened or dropped, pictures and tables are kept
+whole, and anything too wide for the page is scaled down to fit.</p>
+<p><strong>Known limits.</strong> Most features find Outlook's own elements by English labels
+(&quot;Focused&quot;, &quot;Other&quot;, &quot;Navigation pane&quot;, &quot;Reading Pane&quot;) and read times written
+as 1:30 PM, so in another display language, or with a 24-hour clock, those
+parts quietly do nothing. The folder pane, the agenda and the print layout are
+the parts that depend on this most.</p>
+]]></content>
+        <author>
+            <name>Analytic Endeavors</name>
+            <uri>https://github.com/ae-reid-havens</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ThinkPad Battery Controls 0.9.17]]></title>
+        <id>https://windhawk.net/mods/thinkpad-battery-controls#5a3110472be3b0f634f91538af4cdcede6ba7a79</id>
+        <link href="https://windhawk.net/mods/thinkpad-battery-controls"/>
+        <updated>2026-11-05T05:01:30.000Z</updated>
+        <content type="html"><![CDATA[<h1>ThinkPad Battery Controls</h1>
+<p>Right-click the Windows battery icon to set charging limits, apply saved presets,
+or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.</p>
+<p>The manufacturer should have made these everyday controls part of the Windows
+battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.</p>
+<h2>Screenshots</h2>
+<p><strong>Battery menu</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-menu.png" alt="Battery menu"></p>
+<p><strong>Charge thresholds</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charge-thresholds.png" alt="Charge thresholds"></p>
+<p><strong>Quick charging presets</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charging-presets.png" alt="Quick charging presets"></p>
+<p><strong>Manage presets</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/manage-presets.png" alt="Manage presets"></p>
+<p><strong>Battery health</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-health.png" alt="Battery health"></p>
+<p><strong>Power controls</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/power-controls.png" alt="Power controls"></p>
+<p><strong>Calibration confirmation</strong></p>
+<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/calibration-confirmation.png" alt="Calibration confirmation"></p>
+<h2>Setup</h2>
+<p>Choose a backend in Windhawk Settings:</p>
+<ul>
+<li><strong>Integrated Lenovo service</strong> (default): no utility download. Requires compatible
+Lenovo Power Manager service and drivers.</li>
+<li><strong>Lenovo ChargeThreshold.exe</strong>: <a href="https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/ChargeThreshold.exe">download Lenovo's utility</a>,
+save it wherever you prefer on a local drive, and enter its full path in Settings.
+The mod verifies the reviewed executable before running it. It never downloads,
+installs or elevates anything. Setup and diagnostics includes the download link.
+Only Lenovo's version 1.0.0.2 build is accepted; a newer Lenovo build needs a mod
+update. Choose a folder that other accounts cannot change.</li>
+</ul>
+<p>The gear beside the charge summary opens diagnostics and a driver link based on
+this machine's detected model. No serial number is read or sent. Drivers are installed separately.</p>
+<h2>Charging and presets</h2>
+<p>Save up to 20 named presets and choose up to five quick favorites. Manage presets
+is available in Set charge threshold and at the bottom of Apply charging preset.
+Quick presets apply to both batteries. Set charge threshold can edit each battery
+separately or link their limits with the integrated backend. Each result is read back.</p>
+<p>Charge to full saves the original limits, disables them temporarily, then restores
+at 100% or after eight hours. Cancel restores immediately. A newer enabled range
+from Vantage is preserved. The integrated backend restores each battery separately;
+Lenovo's executable cannot restore different ranges on two batteries. Select the
+integrated backend for that situation. Present batteries restore independently; recovery for a missing battery is retained.</p>
+<p>Charging limits belong to the laptop, not to one Windows account. Signed-in
+sessions share recovery records and normally coordinate through a machine-wide
+lock. If the lock cannot be used, charging commands and recovery continue without
+coordination immediately. If a holder blocks ten consecutive periodic checks
+(about five minutes), they also continue without coordination. The menu then says
+(not coordinated). The mod retries the lock and resumes coordination when it
+acquires it. During fallback, simultaneous changes in different sessions can
+overwrite one another. This favors restoring charge limits over waiting indefinitely.</p>
+<p><strong>Thresholds persist after this mod is disabled or removed.</strong> Disabling or updating
+the mod ends a pending full-charge request early: it tries to restore your limits
+first. Signing out, restarting, shutting down or an Explorer crash skips that step;
+the saved request is then restored the next time the mod runs, at 100% or once its
+eight hours have passed. If restoration fails, or the mod is removed while it cannot
+run, limits may remain off and charging can continue to 100% until the mod runs
+again or you set limits in Vantage. Removing the mod also removes its Windhawk
+recovery data. Restore protection before removal.</p>
+<p>If an initiated write is cancelled before completion, or its utility process is
+terminated while running, further changes and recovery pause to avoid racing
+a command still running in Lenovo's service. Ordinary launch failures and completed
+errors do not trigger this warning. The menu header links the paused state to setup. Saved limits are retained. Restart
+Windows, then use Setup and diagnostics to acknowledge the restart and resume
+recovery. This applies to both backends; cancelling a client cannot undo a server write.</p>
+<h2>Advanced controls</h2>
+<p>Battery health shows supported readings. Power offers the verified three-state USB
+control. Always-on USB settings persist after disabling or removing the mod.
+Advanced &gt; Experimental groups calibration and independent two-battery limits.
+Both have simulated coverage, not complete physical validation. Set charge threshold
+applies one range to both batteries; separate ranges are available only through
+Experimental. Calibration requires a separate confirmation and connected power; it saves
+current limits and blocks charging edits while running. Cancellation also requires
+confirmation. Removing the mod during calibration loses saved recovery: check its
+state and charging limits in Vantage. Cooling and airplane controls remain omitted
+until supported behavior is verified. Calibration is not a battery-health treatment.</p>
+<h2>Compatibility</h2>
+<p>Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
+mock coverage only and is experimental until a two-battery hardware test is completed. The executable backend
+requires English output. Private taskbar symbols can change after Windows updates.
+The tray icon hook is placed in SystemTray.dll, an older Taskbar.View.dll or
+ExplorerExtensions.dll, as Taskbar tray system icon tweaks does.</p>
+<p>Author/publisher: Bill Bauman. Apache-2.0. Project-name trademark and attribution
+terms are in the source repository; Lenovo's executable remains separately licensed.
+No Lenovo or Microsoft endorsement is implied.</p>
+]]></content>
+        <author>
+            <name>Bill Bauman</name>
+            <uri>https://github.com/billbauman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Round Everything 1.0.0]]></title>
         <id>https://windhawk.net/mods/round-everything#37be93ac3c0356ab82594e732a758a2aa245f46b</id>
@@ -1765,585 +2056,6 @@ the mod is removed.</li>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.1.0]]></title>
-        <id>https://windhawk.net/mods/bluetooth-auto-toggle#825ac6bf19f87740412dc3afba8254259886932a</id>
-        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
-        <updated>2026-11-02T23:02:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Bluetooth Auto Toggle</h1>
-<p>A Windhawk tool mod that automatically cycles Windows Bluetooth off and back on (in milliseconds) whenever Windhawk boots with your system and a connected Bluetooth device is detected.</p>
-<h3>Why this mod?</h3>
-<p>Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or degraded state on fresh system boots—even when Windows displays them as &quot;connected&quot;—causing audio silence, latency, or connection drops unless Bluetooth is power-cycled. This mod automates that process by waiting until a device is connected, pausing a configurable few seconds for the driver stack to settle, and cleanly cycling the Bluetooth radio off and then back on in the background.</p>
-<h3>Key Features</h3>
-<ul>
-<li><strong>Device-Aware Activation:</strong> By default, only cycles Bluetooth when a connected Bluetooth device (headset, mouse, keyboard, etc.) is found.</li>
-<li><strong>Precise Millisecond Timing:</strong> Configurable startup delay, post-connection delay, and off-to-on toggle duration in milliseconds.</li>
-<li><strong>Dedicated Tool Mod Architecture:</strong> Runs in an isolated <code>windhawk.exe</code> background tool process without injecting into or hooking <code>explorer.exe</code> or any other critical system process.</li>
-<li><strong>Cold Boot Hardware Retry:</strong> Automatically retries radio enumeration if the Bluetooth service (<code>bthserv</code>) or adapter driver is still initializing during Windows boot.</li>
-<li><strong>State-Safe Cycling:</strong> Only toggles radios that are already powered ON (leaving radios in Airplane mode or turned off alone).</li>
-<li><strong>Safe Power Restoration:</strong> Minimizes the off window and ensures radios are commanded back on with retries even if the mod is unloaded mid-cycle.</li>
-<li><strong>Session-Safe:</strong> Remembers the current Windows logon session across tool process restarts using Windows Terminal Services (WTS) logon timestamps.</li>
-<li><strong>Graceful Lifecycle &amp; Live Testing:</strong> Responsive to settings updates, mod reload, and instant cancellation on shutdown.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Desktop Icon Spacing 1.1.6]]></title>
-        <id>https://windhawk.net/mods/force-desktop-icon-spacing#d73440af76a0f26cebb28452af94b9312da51b31</id>
-        <link href="https://windhawk.net/mods/force-desktop-icon-spacing"/>
-        <updated>2026-11-02T23:02:24.000Z</updated>
-        <content type="html"><![CDATA[<p>Precisely control the desktop icon spacing: set the horizontal/vertical icon grid spacing and reserve a blank margin at the bottom of the icon area (above the taskbar).</p>
-<h2>How it works</h2>
-<ul>
-<li>The desktop list view (<code>SysListView32</code>) is subclassed (event-driven; the only polling is a one-time boot check that polls the icon count once a second for up to a minute after Explorer starts): every spacing request Explorer makes is transparently replaced with the configured values, and the icon area height is capped so it never enters the reserved bottom strip.</li>
-<li>Values are absolute and applied in one pass: the same settings always produce the same layout, never cumulative drift.</li>
-<li>The vertical grid is anchored at the top: increasing the vertical spacing stretches the grid downward, so the extra space is absorbed by the bottom region. No blank strip is created at the top, and the icon area is never shifted as a whole.</li>
-<li>The bottom margin caps the icon area height only (the top edge stays fixed), so icon columns wrap earlier and never enter the reserved bottom strip.</li>
-<li>All pixel values are scaled by the list view's DPI: the configured numbers apply at 100% scaling and scale up automatically on higher DPI.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Horizontal spacing (pixels)</strong>: width of each icon grid cell, at 100% scaling. Larger = more horizontal gap between icons.</li>
-<li><strong>Vertical spacing (pixels)</strong>: height of each icon grid cell, at 100% scaling. Larger = taller rows; the grid grows downward and the extra space is absorbed by the bottom region.</li>
-<li><strong>Bottom margin (pixels)</strong>: blank strip reserved at the bottom of the icon area, above the taskbar, at 100% scaling. The icon grid never enters it. 0 = no reservation.</li>
-<li><strong>Rearrange icons on startup</strong>: arrange icons once when the mod loads and every time Explorer starts (sign-in, reboot, Explorer restart), so the spacing/margin take effect. Turn this off to keep icons where you place them by hand. Changes made in the settings always rearrange.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The grid cell size stays fixed when you change the icon size (Large/Medium/Small icons or Ctrl+wheel); adjust the spacing settings when you switch to Large icons, otherwise large icons may overlap their labels.</li>
-<li>This mod doesn't write any registry values. If you want free icon placement, turn off &quot;Auto arrange icons&quot; and &quot;Align icons to grid&quot; in the desktop right-click menu yourself.</li>
-<li>Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual &quot;Arrange icons&quot;).</li>
-<li>The bottom margin applies to the whole icon area (the list view spans all monitors); on multi-monitor setups it lands above the taskbar of the bottom-most monitor.</li>
-</ul>
-<h2>简体中文说明</h2>
-<p>精确控制桌面图标间距：自由调节图标网格的水平/垂直间距，并在图标区域底部（任务栏上方）预留空白边距。</p>
-<h3>工作原理</h3>
-<ul>
-<li>通过子类化（事件驱动；唯一的轮询是资源管理器启动后长达一分钟、每秒一次的图标数量一次性开机检查）挂钩桌面列表视图（<code>SysListView32</code>）：资源管理器发出的每个间距设置请求都会被透明替换为配置值，图标区域高度被限制在预留边距之上。</li>
-<li>所有数值均为绝对值、一次性应用——同一配置永远得到同一布局，不存在多次叠加漂移。</li>
-<li>垂直网格顶端锚定：调大垂直间距时行距拉大、网格向下延伸，多余空间挤占底部区域——顶部不会产生空白，图标区域也不会被整体移动。</li>
-<li>底部边距只限制图标区域高度（顶边固定），图标换列提前，永不进入底部预留区。</li>
-<li>所有像素值按列表视图的 DPI 自动缩放：配置数值对应 100% 缩放，高 DPI 下自动放大。</li>
-</ul>
-<h3>设置项</h3>
-<ul>
-<li><strong>水平间距（像素）</strong>：图标网格单元宽度（100% 缩放下），数值越大图标水平间距越大。</li>
-<li><strong>垂直间距（像素）</strong>：图标网格单元高度（100% 缩放下），数值越大行距越大，网格向下延伸，多余空间挤占底部区域。</li>
-<li><strong>底部边距（像素）</strong>：图标区域底部（任务栏上方）预留的空白高度（100% 缩放下），图标网格不会进入该区域。0 = 不预留。</li>
-<li><strong>启动时重排图标</strong>：模组加载时以及资源管理器每次启动时（登录、重启、重启资源管理器）各执行一次&quot;排列图标&quot;，使间距/边距生效。若希望保留手动拖放的图标布局，可关闭此项。在设置面板修改参数时始终会重排。</li>
-</ul>
-<h3>注意</h3>
-<ul>
-<li>切换图标大小（大/中/小图标或 Ctrl+滚轮）时网格单元尺寸保持不变；切换到大图标时请相应调大间距设置，否则大图标可能与文字标签重叠。</li>
-<li>本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭&quot;自动排列图标&quot;和&quot;将图标与网格对齐&quot;。</li>
-<li>停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动&quot;排列图标&quot;一致）。</li>
-<li>底部边距作用于整个图标区域（列表视图横跨所有显示器）；多显示器下预留空白位于最底部显示器的任务栏上方。</li>
-</ul>
-]]></content>
-        <author>
-            <name>Koewen</name>
-            <uri>https://github.com/Koewen</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Language Switcher Position 1.3]]></title>
-        <id>https://windhawk.net/mods/language-switcher-position#45b36d8bf133e4b61001eedfac9d5ac0a07909f0</id>
-        <link href="https://windhawk.net/mods/language-switcher-position"/>
-        <updated>2026-11-02T23:02:19.000Z</updated>
-        <content type="html"><![CDATA[<h1>Language Switcher Position</h1>
-<h2>English</h2>
-<p>This mod allows you to customize the position of the modern Windows 11 26H2 input language switcher, which appears when clicking the language indicator (РУС / ENG) in the system tray.</p>
-<h3>Features</h3>
-<ul>
-<li><strong>Left</strong> — positions the switcher at the left edge of the screen.</li>
-<li><strong>Center</strong> — positions the switcher in the center of the screen.</li>
-<li><strong>Right</strong> — positions the switcher at the right edge of the screen.</li>
-<li><strong>Custom X/Y</strong> — manually sets the window coordinates.</li>
-<li><strong>Vertical offset</strong> — provides additional vertical positioning control.</li>
-</ul>
-<h3>Screenshots</h3>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/left.png" alt="Left position"></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/center.png" alt="Center position"></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/right.png" alt="Right position"></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/default.png" alt="Default position"></p>
-<h3>Settings</h3>
-<p><strong>Horizontal position</strong> — selects the horizontal alignment: Left, Center, Right, or Custom X/Y.</p>
-<p><strong>Custom X coordinate</strong> — the horizontal window coordinate in pixels.</p>
-<p><strong>Custom Y coordinate</strong> — the vertical window coordinate in pixels.</p>
-<p><strong>Vertical offset</strong> — additional vertical displacement relative to the original Windows position. Used with Left, Center, and Right modes.</p>
-<h3>Compatibility</h3>
-<ul>
-<li>Windows 11 26H2</li>
-<li>Windows Explorer (explorer.exe)</li>
-<li>Modern XAML input language switcher.</li>
-</ul>
-<h3>Note</h3>
-<p>Positioning is calculated relative to the full monitor dimensions, including the taskbar area. Custom coordinates are specified in screen pixels.</p>
-<p>The mod only changes the position of the switcher window and does not modify Windows input language settings.</p>
-<hr>
-<h2>Українська</h2>
-<p>Мод дозволяє змінювати положення сучасного перемикача мов введення Windows 11 26H2, який з'являється після натискання на індикатор мови (РУС / ENG) у системному треї.</p>
-<h3>Можливості</h3>
-<ul>
-<li><strong>Left</strong> — розміщення перемикача біля лівого краю екрана.</li>
-<li><strong>Center</strong> — розміщення по центру екрана.</li>
-<li><strong>Right</strong> — розміщення біля правого краю екрана.</li>
-<li><strong>Custom X/Y</strong> — ручне налаштування координат вікна.</li>
-<li><strong>Vertical offset</strong> — додаткове вертикальне зміщення.</li>
-</ul>
-<h3>Налаштування</h3>
-<p><strong>Horizontal position</strong> — вибір горизонтального розташування перемикача: Left, Center, Right або Custom X/Y.</p>
-<p><strong>Custom X coordinate</strong> — горизонтальна координата вікна в пікселях.</p>
-<p><strong>Custom Y coordinate</strong> — вертикальна координата вікна в пікселях.</p>
-<p><strong>Vertical offset</strong> — додаткове вертикальне зміщення відносно початкової позиції Windows. Використовується в режимах Left, Center та Right.</p>
-<h3>Сумісність</h3>
-<ul>
-<li>Windows 11 26H2</li>
-<li>Windows Explorer (explorer.exe)</li>
-<li>Сучасний XAML-перемикач мов введення.</li>
-</ul>
-<h3>Примітка</h3>
-<p>Позиціонування виконується відносно повного розміру монітора, включно з областю панелі завдань. Користувацькі координати задаються в екранних пікселях.</p>
-<p>Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.</p>
-]]></content>
-        <author>
-            <name>MaestroSky</name>
-            <uri>https://github.com/MaestroSky</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Siri Plus Launchpad 1.0.0]]></title>
-        <id>https://windhawk.net/mods/siri-plus-launchpad#91b08e11456122862911513f39e4ca8f79542c49</id>
-        <link href="https://windhawk.net/mods/siri-plus-launchpad"/>
-        <updated>2026-11-01T16:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1>Siri Plus Launchpad</h1>
-<p>A <a href="https://windhawk.net">Windhawk</a> mod that replaces the Windows 11 Start menu with a macOS-inspired launcher: a Siri-style search bar with a categories menu, app tabs, file search, clipboard history, quick actions and live glass effects.</p>
-<p>Press the <strong>Windows key</strong> (or click <strong>Start</strong>) and type, or pick what you want to search from the menu that drops down from the bar.</p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri.gif" alt="Original Siri mode"></p>
-<hr>
-<h2>Highlights</h2>
-<ul>
-<li><strong>Four modes</strong>: Original Siri (default), Floating, Window and Fullscreen</li>
-<li><strong>Live glass</strong>: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus an experimental liquid glass with refraction in the Siri modes</li>
-<li><strong>One search for everything</strong>: Apps, Files, Clipboard and Actions</li>
-<li><strong>App tabs</strong>: All, automatic categories and up to 6 tabs of your own</li>
-<li><strong>Recent apps row</strong>: recently opened or installed apps (or the most used ones) on top</li>
-<li><strong>Power options</strong>: type <em>shut down</em>, <em>restart</em>, <em>sleep</em>, <em>lock</em> or <em>sign out</em>, or use the floating power button</li>
-<li><strong>Keyboard shortcuts</strong>: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, and can also open the launcher from any program (optional)</li>
-<li><strong>Custom icons</strong>: give any app your own icon (PNG, JPG, ICO, WebP...), or pick one from an <strong>icon gallery</strong> (any folder of icons, such as a downloaded icon pack), with search and a color filter</li>
-<li><strong>Themes</strong>: Clear glass, Light, Dark, OLED (deep black), Siri (macOS 27 gradient) and a fully Custom theme, with an optional glass effect on Light, Dark and OLED</li>
-<li><strong>Settings panel</strong>: the <strong>⋯</strong> button at the end of the bar opens every setting in a macOS-style panel, applied live</li>
-<li><strong>Move the bar</strong>: hold the Siri bar and drag it anywhere, on any monitor</li>
-<li><strong>Backup</strong>: save settings, folders, tabs and custom icons to one file and restore them, even after reinstalling</li>
-<li><strong>Your language</strong>: follows the Windows display language, or pick one (English, Portuguese, Spanish, French, German and Italian)</li>
-</ul>
-<hr>
-<h2>Screenshots</h2>
-<h3>Original Siri (default)</h3>
-<table>
-<thead>
-<tr>
-<th>Clear glass</th>
-<th>Dark</th>
-<th>OLED</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png" alt="Original Siri, Clear glass theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png" alt="Original Siri, Dark theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png" alt="Original Siri, OLED theme"></td>
-</tr>
-</tbody>
-</table>
-<h3>Floating</h3>
-<table>
-<thead>
-<tr>
-<th>Clear glass</th>
-<th>Light</th>
-<th>Siri gradient</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-glass.png" alt="Floating, Clear glass theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-light.png" alt="Floating, Light theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-siri.png" alt="Floating, Siri theme"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>Dark</th>
-<th>OLED</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-dark.png" alt="Floating, Dark theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-oled.png" alt="Floating, OLED theme"></td>
-</tr>
-</tbody>
-</table>
-<h3>Window</h3>
-<table>
-<thead>
-<tr>
-<th>Clear glass</th>
-<th>Light</th>
-<th>Siri gradient</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-glass.png" alt="Window, Clear glass theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-light.png" alt="Window, Light theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-siri.png" alt="Window, Siri theme"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>Dark</th>
-<th>OLED</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-dark.png" alt="Window, Dark theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-oled.png" alt="Window, OLED theme"></td>
-</tr>
-</tbody>
-</table>
-<h3>Fullscreen</h3>
-<table>
-<thead>
-<tr>
-<th>Clear glass</th>
-<th>Light</th>
-<th>Siri gradient</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-glass.png" alt="Fullscreen, Clear glass theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-light.png" alt="Fullscreen, Light theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-siri.png" alt="Fullscreen, Siri theme"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>Dark</th>
-<th>OLED</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-dark.png" alt="Fullscreen, Dark theme"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-oled.png" alt="Fullscreen, OLED theme"></td>
-</tr>
-</tbody>
-</table>
-<h3>In action</h3>
-<table>
-<thead>
-<tr>
-<th>Settings panel</th>
-<th>Moving the bar</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/settings-panel.gif" alt="The settings panel"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/drag-the-bar.gif" alt="Dragging the Siri bar"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>Right-click menus and tabs</th>
-<th>Power options</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/menus-and-tabs.gif" alt="Right-click menus and app tabs"></td>
-<td><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/power-options.gif" alt="Typing to shut down"></td>
-</tr>
-</tbody>
-</table>
-<hr>
-<h2>Modes</h2>
-<h3>Original Siri (default)</h3>
-<p>A search bar in the macOS 27 style.</p>
-<ul>
-<li><strong>Categories menu</strong>: hover over the bar (or click it) and a menu drops down with <strong>Applications</strong>, <strong>Files</strong>, <strong>Actions</strong> and <strong>Clipboard</strong>, each with its icon and its keyboard shortcut (default <strong>Ctrl+1 … Ctrl+4</strong>, configurable).</li>
-<li>Picking a category makes its icon and name glide from the menu into the bar, and the search then works inside that category. If you type straight away, you go to Applications.</li>
-<li><strong>Going back</strong>: hover the category icon in the bar and it turns into a back arrow. Click it, or press <strong>Esc</strong>, to return to &quot;Search&quot; with the magnifier and pick another category.</li>
-<li><strong>App tabs</strong>:
-<ul>
-<li><strong>All</strong> comes first and shows every app.</li>
-<li>Then the automatic categories: Utilities, Productivity, Entertainment, Social, Creativity, Reading and Other.</li>
-<li>Then up to <strong>6 tabs of your own</strong>, for example &quot;Games&quot;.</li>
-</ul>
-</li>
-<li><strong>First row</strong>: recently opened or installed apps, or the most used ones (configurable), separated from the rest by a thin line.</li>
-<li><strong>Actions</strong>: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin. Shut down works like Windows' own (fast startup when it is on) and warns before signing off other users who are still signed in.</li>
-</ul>
-<h3>Floating</h3>
-<p>The bar appears out of an animated circle, the <strong>Siri wave</strong> or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is &quot;sucked&quot; back into the bubble.</p>
-<h3>Window and Fullscreen</h3>
-<p>The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.</p>
-<hr>
-<h2>Managing app tabs (Original Siri)</h2>
-<table>
-<thead>
-<tr>
-<th>What</th>
-<th>How</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Create a tab</td>
-<td>Right-click an app → <strong>New tab with this app</strong>, or right-click the tab strip / an empty area → <strong>New tab</strong>. Type the name and press <strong>Enter</strong></td>
-</tr>
-<tr>
-<td>Add apps</td>
-<td>Inside a tab, right-click → <strong>Add app</strong>. A picker shows every app: <strong>long-press</strong> the first one, then a simple click selects or deselects the others (selected apps jiggle); <strong>Done</strong> saves</td>
-</tr>
-<tr>
-<td>Remove an app</td>
-<td>Inside a tab, right-click the app → <strong>Remove from tab</strong></td>
-</tr>
-<tr>
-<td>Rename or delete</td>
-<td>Right-click the tab → <strong>Rename tab</strong> / <strong>Delete tab</strong></td>
-</tr>
-<tr>
-<td>Built-in tabs</td>
-<td>They can also be edited (add or remove apps) and deleted. <strong>Restore default tabs</strong> brings them back</td>
-</tr>
-<tr>
-<td>Move through tabs</td>
-<td><strong>Tab / Shift+Tab</strong>, or click and drag the strip sideways (the mouse wheel works too)</td>
-</tr>
-</tbody>
-</table>
-<hr>
-<h2>Files</h2>
-<ul>
-<li><strong>Indexer</strong>: Everything (through IPC, no DLL needed), Windows Search or a direct scan. The default, Automatic, uses the first one that is available.</li>
-<li>When the search is empty, your <strong>recent searches</strong> are shown, with a button to clear them. History can be turned off.</li>
-<li>Results show the <strong>folder</strong> of each file under its name, in a list or as icons.</li>
-<li>The maximum number of results is configurable.</li>
-</ul>
-<h2>Clipboard</h2>
-<ul>
-<li>Keeps the texts you copy while the mod runs (in memory only, never saved). The number of items and how long a copy stays (15 minutes to 7 days, or until Windows restarts) are configurable.</li>
-<li>The category only shows up when there is something in it. Each item has an <strong>×</strong> to remove it, and right-clicking gives <strong>Clear clipboard</strong>, which empties the history and the Windows clipboard.</li>
-<li><strong>Passwords stay out</strong>: items that password managers and browsers mark as secret are skipped, just like Windows' own clipboard history (Win+V).</li>
-<li>Shown as a <strong>list</strong>: the first line of each text, with a preview of the rest (or its size) underneath.</li>
-<li>Click an item to copy it again. Turning the category off also stops monitoring and clears the history.</li>
-</ul>
-<h2>Apps and icons</h2>
-<ul>
-<li><strong>Search</strong> apps by typing.</li>
-<li><strong>Folders</strong> (Window and Fullscreen): drag apps together, rename, undo. The Siri modes list the apps of every folder together.</li>
-<li><strong>Multi-select</strong> with jiggling icons, <strong>pin to taskbar</strong> (also by dragging an icon to the taskbar), <strong>uninstall</strong>.</li>
-<li><strong>Custom icons</strong>: right-click an app → <strong>Change icon...</strong> and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; <strong>Reset icon</strong> brings back the original. Works in every mode, including apps inside folders.</li>
-<li><strong>Icon gallery</strong>: choose a folder of icon images in the settings (<em>Apps and icons → Icon gallery folder</em>, typed or picked with <strong>Choose…</strong>), for example a downloaded icon pack. Then right-click an app → <strong>Icon from gallery...</strong> The folder's images (subfolders included) show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.</li>
-<li>Icon size, number of columns and the scrolling direction are configurable.</li>
-</ul>
-<h2>Settings panel</h2>
-<ul>
-<li>Click the <strong>⋯</strong> button at the end of the bar (every mode). The bar moves to the left and becomes a list of sections, and a panel with the settings comes out of the button. Every change applies at once.</li>
-<li>Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.</li>
-<li><strong>Theme defaults</strong> (Appearance) brings back the chosen theme's own look. <strong>Restore all defaults</strong> (General) puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.</li>
-<li><strong>Back up</strong> saves everything to a <code>.siribackup</code> file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. <strong>Restore a backup</strong> brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.</li>
-<li>In Window and Fullscreen the window folds into its search field while the settings are open. With the bar low on the screen, the settings open upward.</li>
-</ul>
-<h2>Moving the bar (Floating and Original Siri)</h2>
-<ul>
-<li>Hold the bar for a moment and drag it anywhere, on any monitor. Its place is remembered. Low on the screen, the results and menus open above it.</li>
-<li>Right-click the bar → <strong>Put the bar back in the center</strong> (shown once it has been moved).</li>
-</ul>
-<hr>
-<h2>Customization</h2>
-<p>All options are in the <strong>⋯</strong> settings panel (in six languages) and in the mod's <strong>Settings</strong> tab in Windhawk (English and Portuguese).</p>
-<table>
-<thead>
-<tr>
-<th>Block</th>
-<th>Options</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>① Mode</td>
-<td>Original Siri (default), Floating, Window, Fullscreen</td>
-</tr>
-<tr>
-<td>② Theme</td>
-<td>Clear glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom</td>
-</tr>
-<tr>
-<td>Language</td>
-<td>Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano</td>
-</tr>
-<tr>
-<td>③ Appearance</td>
-<td>Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED</td>
-</tr>
-<tr>
-<td>④ Custom theme</td>
-<td>Color, opacity, dark-to-light gradient, border width, color and opacity</td>
-</tr>
-<tr>
-<td>⑤ Window and Fullscreen</td>
-<td>Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders</td>
-</tr>
-<tr>
-<td>⑥ Floating and Original Siri</td>
-<td>Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults <strong>Ctrl+1</strong>, <strong>Ctrl+2</strong>, <strong>Ctrl+3</strong>, <strong>Ctrl+4</strong>; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default)</td>
-</tr>
-<tr>
-<td>⑦ Opening</td>
-<td>Open with the Windows key and/or the Start button</td>
-</tr>
-<tr>
-<td>⑧ Apps and icons</td>
-<td>Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder</td>
-</tr>
-<tr>
-<td>⑨ Files</td>
-<td>On/off, search history, list or icons, indexer, maximum results</td>
-</tr>
-<tr>
-<td>⑩ Clipboard</td>
-<td>On/off, number of items kept, how long a copy stays</td>
-</tr>
-</tbody>
-</table>
-<hr>
-<h2>Keyboard and mouse</h2>
-<table>
-<thead>
-<tr>
-<th>Key / action</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Win</strong> / Start button</td>
-<td>Open or close</td>
-</tr>
-<tr>
-<td>Type</td>
-<td>Search (in Original Siri, typing right away searches Applications)</td>
-</tr>
-<tr>
-<td><strong>Ctrl+1 / 2 / 3 / 4</strong></td>
-<td>Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With <em>Also with the launcher closed</em> on (off by default) they open the launcher from any program, and other programs no longer get those keys</td>
-</tr>
-<tr>
-<td><strong>Tab / Shift+Tab</strong></td>
-<td>Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions</td>
-</tr>
-<tr>
-<td>Arrows + <strong>Enter</strong></td>
-<td>Move through results / open</td>
-</tr>
-<tr>
-<td>Other <strong>Ctrl+digits</strong></td>
-<td>Launch the matching result (never an action such as Shut down)</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Closes menus, then clears the search, goes back to the categories and finally closes</td>
-</tr>
-<tr>
-<td>Right-click on the search bar</td>
-<td>Cut, Copy, Paste, Select all, Delete all</td>
-</tr>
-<tr>
-<td>Long-press an app</td>
-<td>Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → <strong>New folder with N items</strong> puts them in a folder; Original Siri: inside the app picker)</td>
-</tr>
-</tbody>
-</table>
-<hr>
-<h2>Requirements</h2>
-<ul>
-<li>Windows 11 (x64)</li>
-<li><a href="https://windhawk.net">Windhawk</a></li>
-<li>Live blur needs <strong>Transparency effects</strong> turned on in Windows (<em>Settings → Personalization → Colors</em>). Without it, a blurred still image is used.</li>
-<li>Optional: <a href="https://www.voidtools.com">Everything</a> for instant file search (run it normally, not as administrator)</li>
-</ul>
-<h2>Privacy and files</h2>
-<ul>
-<li>The mod never goes online.</li>
-<li>Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose.</li>
-<li>The clipboard history lives in memory only and is never written to disk.</li>
-</ul>
-<h2>Compatibility</h2>
-<ul>
-<li><strong>Category shortcuts from any program</strong> (off by default): when <em>Shortcuts → Also with the launcher closed</em> is on, Ctrl+1 … Ctrl+4 are registered as system hotkeys, so other programs no longer get them (for example, the browser's Ctrl+1 for the first tab). Leave it off, or pick other combinations, if you need those keys elsewhere.</li>
-<li><strong>Fullscreen Start</strong> (<code>fullscreen-start</code>): don't enable both. Each one replaces the Start menu through the same hook without calling the original, so only one of them would get the Windows key.</li>
-<li><strong>Spotlight Launcher</strong>: it adds a separate search bar on Alt+Space and leaves the Start menu alone. This mod replaces the Start menu itself (Windows key and Start button) and adds app tabs, folders, files, clipboard history and actions. Both can be used together.</li>
-</ul>
-<hr>
-<h2>Support the project</h2>
-<p>If you enjoy Siri Plus Launchpad, you can support its development with a Pix donation:</p>
-<p><strong><a href="https://livepix.gg/kurokobr">Donate with LivePix (Pix)</a></strong></p>
-<hr>
-<h2>Author</h2>
-<p>Developed and maintained by <strong>Thiago Silva</strong> (<a href="https://github.com/brideinflame-rgb">github.com/brideinflame-rgb</a>).</p>
-<h2>License</h2>
-<p>Copyright (c) 2026 Thiago Silva. Licensed under the <strong>GNU General Public License v3.0</strong>.</p>
-]]></content>
-        <author>
-            <name>Thiago Silva</name>
-            <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Desktop Widgets 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-desktop-widgets#e30d1f91b4bf2553646a6f156c4abd8cd7769e6e</id>
-        <link href="https://windhawk.net/mods/win7-desktop-widgets"/>
-        <updated>2026-11-01T05:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/u7F6iG9.png" alt="Screenshot">
-<img src="https://i.imgur.com/cQDjOws.png" alt="Screenshot">
-<img src="https://i.imgur.com/IdDURoO.png" alt="Screenshot"></p>
-<h1>Windows 7 Desktop Widgets</h1>
-<p>I really missed the classic Windows 7 desktop widgets and couldn't find a proper, lightweight version anywhere without bloat, broken scaling, or missing multi-monitor support. I love how simple and handy they were, so I made this accurate recreation. Enjoy!</p>
-<h3>What's included:</h3>
-<ul>
-<li><strong>Classic Windows 7 Clock</strong>: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -&gt; <strong>Options...</strong>).</li>
-<li><strong>Classic Windows 7 Calendar</strong>: Spiral-bound notebook with an expandable monthly grid (click the expand icon on the hover bar or double-click the calendar), date picking, and smooth navigation.</li>
-<li><strong>Clean &amp; Fast</strong>: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.</li>
-</ul>
-<hr>
-<p>☕ <strong>Support / Donations:</strong>
-If you enjoy this mod and want to support its author:
-<a href="https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link">Support on Boosty</a></p>
-]]></content>
-        <author>
-            <name>dekvas</name>
-            <uri>https://github.com/dekvas</uri>
         </author>
     </entry>
 </feed>
