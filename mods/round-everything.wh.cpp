@@ -105,7 +105,9 @@ XAML diagnostics, so it coexists with Taskbar Styler).
 * Offsets, radii and the blur are in pixels at 100% scaling and scaled per
   monitor (configurable).
 * The acrylic fill is rendered by DWM through Windows.UI.Composition; if that
-  can't be set up on a machine, the mod logs why and uses the solid fill.
+  can't be set up on a machine, the mod logs why and uses the solid fill. Like
+  Windows' own acrylic it is solid while transparency effects are off in the
+  system's personalization settings, and comes back when they are turned on.
 
 ## Window corners (dwm.exe)
 
@@ -181,7 +183,7 @@ same license.
     $description: A soft shadow cast by the frame and the taskbar onto the screen content, along all four edges of the rounded screen.
   - blur: 24
     $name: Blur (px)
-    $description: How far the shadow fades into the screen. 0 turns it off.
+    $description: How far the shadow fades into the screen (up to 60). 0 turns it off.
   - opacity: 35
     $name: Opacity (%)
   - color: "#000000"
@@ -269,6 +271,8 @@ same license.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.DirectX.h>
 #include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Composition.Desktop.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -299,7 +303,9 @@ namespace wf = winrt::Windows::Foundation;
 namespace wgd = winrt::Windows::Graphics::DirectX;
 namespace wge = winrt::Windows::Graphics::Effects;
 namespace wu = winrt::Windows::UI;
+namespace ws = winrt::Windows::System;
 namespace wuc = winrt::Windows::UI::Composition;
+namespace wuvm = winrt::Windows::UI::ViewManagement;
 namespace wucd = winrt::Windows::UI::Composition::Desktop;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
@@ -328,6 +334,7 @@ constexpr UINT kMsgPassResult = WM_APP + 4;        // a XAML pass finished on th
 constexpr UINT kMsgTaskbarReady = WM_APP + 5;      // a taskbar's tree is whole and rendered
 constexpr UINT kMsgTaskbarMoving = WM_APP + 6;     // a taskbar window just moved/resized
 constexpr UINT kMsgTaskbarRecolored = WM_APP + 7;  // the taskbar's background is painted again
+constexpr UINT kMsgTaskbarZOrder = WM_APP + 8;     // a taskbar window changed its place in the z-order
 // A recolor request to the taskbar thread is waited for at most this long
 // before the frame shows anyway (a taskbar thread still busy after a layout
 // change answers late).
@@ -463,28 +470,38 @@ struct Acrylic {
     HWND strips[4] = {};   // the one-pixel bezel ring the frame leaves uncovered
     wucd::DesktopWindowTarget target{nullptr};
     wuc::ContainerVisual root{nullptr};
-    wuc::CompositionMaskBrush maskBrush{nullptr};        // source: the effect brush; mask: the shape
     wuc::CompositionEffectBrush effectBrush{nullptr};    // backdrop -> blur -> ... -> tint
     wuc::CompositionDrawingSurface maskSurface{nullptr};
     wuc::CompositionDrawingSurface overlaySurface{nullptr};  // ears and noise
     bool built = false;  // surfaces and sprites are in place for the current layout
 };
 
+// One slice of the inner shadow: a click-through layered window along one
+// edge of the rounded screen, as wide as the band where the shadow is
+// non-zero, with that band's pixels.
+struct ShadowSlice {
+    RECT rect{};  // screen coordinates; empty: no slice
+    HWND hwnd = nullptr;
+    std::unique_ptr<FrameSurface> surface;
+};
+constexpr int kShadowSlices = 4;
+
 struct Overlay {
     Layout layout;
     HWND hwnd = nullptr;
     // Set for an acrylic frame: hwnd is then a composition window (owned,
     // one pixel short of the monitor, under the taskbar) and the shadow
-    // window sits above it rather than below.
+    // windows sit above it rather than below.
     std::unique_ptr<Acrylic> acrylic;
     std::unique_ptr<FrameSurface> surface;
-    // The inner shadow: a second, click-through layered window covering the
-    // rounded screen, kept right behind the frame in z-order and shown,
-    // hidden and revealed with it. Separate because a layered window's
-    // painted pixels catch the mouse, and the shadow lies over the screen
-    // content (and over maximized windows' edges).
-    HWND shadowHwnd = nullptr;
-    std::unique_ptr<FrameSurface> shadowSurface;  // color-independent; built once per layout
+    // The inner shadow: separate, click-through layered windows along the
+    // edges of the rounded screen (never one covering it: a layered window
+    // over the whole screen keeps DWM from presenting the windows under it
+    // directly), kept next to the frame in z-order and shown, hidden and
+    // revealed with it. Separate because a layered window's painted pixels
+    // catch the mouse, and the shadow lies over the screen content.
+    ShadowSlice shadow[kShadowSlices];
+    bool shadowBuilt = false;  // the slices' surfaces are built for the current layout
     bool shown = false;
     // Waiting for the taskbar: the frame stays off the screen from the
     // moment its taskbar changes (moves, is cloaked, is new) until the
@@ -588,8 +605,11 @@ std::atomic<bool> g_reloadRequested{false};
 std::atomic<bool> g_unloading{false};
 bool g_taskbarXamlAvailable = false;  // taskbar.dll symbols resolved
 
-// State owned by the mod's UI thread.
-std::vector<Overlay> g_overlays;
+// State owned by the mod's UI thread. The frames (and, with the acrylic
+// fill, their composition objects) are released by that thread at unload;
+// not destroyed with the image, so that an explorer exit without an unload
+// never releases thread-affine composition objects from the exiting thread.
+[[clang::no_destroy]] std::optional<std::vector<Overlay>> g_overlays{std::in_place};
 std::unordered_map<HWND, PassState> g_passState[kPassCount];
 UINT g_requestSerial = 0;  // tags requests to the taskbar thread; stale answers are dropped
 // The last usable taskbar seen on each monitor, to tell a window that moved
@@ -634,10 +654,13 @@ struct Reveal {
     HDC memDc = nullptr;
     int width = 0;
     int height = 0;
-    HWND shadow = nullptr;  // the shadow window, if any (same treatment)
-    HDC shadowDc = nullptr;
-    int shadowWidth = 0;
-    int shadowHeight = 0;
+    // The shadow slices, if any (same treatment).
+    struct {
+        HWND hwnd = nullptr;
+        HDC memDc = nullptr;
+        int width = 0;
+        int height = 0;
+    } shadow[kShadowSlices];
     // An acrylic frame is revealed by uncloaking it (and its bezel ring)
     // instead of a layered-window update.
     bool composition = false;
@@ -661,15 +684,20 @@ ULONGLONG g_threadStartTick = 0;
 bool g_xamlCornersOwned = false;  // corner ears were added to at least one taskbar
 
 // Composition (acrylic fill), owned by the mod's UI thread; null when the
-// composition couldn't be set up, which leaves the solid fill.
-wuc::Compositor g_compositor{nullptr};
-wuc::CompositionGraphicsDevice g_graphicsDevice{nullptr};
-bool g_overlaysAcrylic = false;  // the frames in g_overlays are acrylic ones
+// composition couldn't be set up, which leaves the solid fill. Released by
+// that thread at unload, never by the image's destructors (see g_overlays).
+[[clang::no_destroy]] wuc::Compositor g_compositor{nullptr};
+[[clang::no_destroy]] wuc::CompositionGraphicsDevice g_graphicsDevice{nullptr};
+[[clang::no_destroy]] wuvm::UISettings g_uiSettings{nullptr};
+std::atomic<bool> g_overlaysAcrylic{false};  // the frames in g_overlays are acrylic ones
 std::atomic<bool> g_acrylicUnavailable{false};  // building an acrylic frame failed: solid fill
+std::atomic<bool> g_advancedEffects{true};  // the system's transparency effects are on
 
-// Whether frames are built as acrylic (composition) windows.
+// Whether frames are built as acrylic (composition) windows. Like Windows'
+// own acrylic, the mod's is solid while transparency effects are off.
 bool UsesAcrylic() {
-    return g_settings.acrylic && g_compositor && g_graphicsDevice && !g_acrylicUnavailable;
+    return g_settings.acrylic && g_compositor && g_graphicsDevice && !g_acrylicUnavailable &&
+           g_advancedEffects;
 }
 
 // ---------------------------------------------------------------------------
@@ -822,7 +850,7 @@ void LoadSettings() {
     s.noiseDensity = std::clamp(Wh_GetIntSetting(L"backdrop.noiseDensity"), 0, 100);
 
     s.shadow = Wh_GetIntSetting(L"innerShadow.enabled") != 0;
-    s.shadowBlur = std::clamp(Wh_GetIntSetting(L"innerShadow.blur"), 0, 400);
+    s.shadowBlur = std::clamp(Wh_GetIntSetting(L"innerShadow.blur"), 0, 60);
     s.shadowOpacity = std::clamp(Wh_GetIntSetting(L"innerShadow.opacity"), 0, 100);
     auto shadowColor = WindhawkUtils::StringSetting::make(L"innerShadow.color");
     s.shadowColor = ParseHexColor(shadowColor.get(), RGB(0, 0, 0));
@@ -952,9 +980,8 @@ std::unordered_map<DWORD, ThreadHooks> g_asyncHooks;  // thread id -> hooks
 
 // Defined with the taskbar-side code: a taskbar window just moved/resized.
 void OnTaskbarWindowPosChanged(HWND hwnd, const WINDOWPOS* pos);
-// Defined with the acrylic code: a taskbar window just changed its z-order.
-void FollowTaskbarZOrder(HWND taskbar);
-void ClearFollow();
+bool IsTaskbarWindow(HWND hwnd);  // defined with the mod's thread code
+std::atomic<bool> g_zOrderEventPending{false};  // a kMsgTaskbarZOrder is queued
 
 LRESULT CALLBACK TaskbarCallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
@@ -965,8 +992,17 @@ LRESULT CALLBACK TaskbarCallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam)
                 OnTaskbarWindowPosChanged(cwp->hwnd, pos);
             } catch (...) {
             }
-            if (!(pos->flags & SWP_NOZORDER)) {
-                FollowTaskbarZOrder(cwp->hwnd);
+            // The acrylic frame has to stay under its taskbar: a z-order
+            // change of a taskbar window is reported to the UI thread, which
+            // puts the frame back under it if needed. Nothing is done here:
+            // this thread must never wait on the UI thread.
+            if (!(pos->flags & SWP_NOZORDER) && g_overlaysAcrylic && !g_zOrderEventPending &&
+                IsTaskbarWindow(cwp->hwnd)) {
+                if (HWND ctrl = g_ctrlWnd.load()) {
+                    if (PostMessageW(ctrl, kMsgTaskbarZOrder, 0, 0)) {
+                        g_zOrderEventPending = true;
+                    }
+                }
             }
         }
     }
@@ -1041,7 +1077,6 @@ bool PostToWindowThread(HWND hWnd, std::function<void()> fn) {
 }
 
 void RemoveAsyncHooks() {
-    ClearFollow();  // nothing for the z-order hook to touch from here on
     std::lock_guard<std::mutex> lock(g_asyncHookMutex);
     for (auto& entry : g_asyncHooks) {
         if (entry.second.getMessage) {
@@ -1681,9 +1716,7 @@ wuxc::Grid FindCornerHost(HWND taskbar) {
     return nullptr;
 }
 
-// Ear shape in DIPs: an r x r square minus a circle of radius r centered on
-// the square's inner corner (the one pointing into the screen).
-// An ear: the square at the corner minus the quarter circle of radius `r`
+// An ear (DIPs): the square at the corner minus the quarter circle of radius `r`
 // whose arc is tangent to the edges `inset` in from the window's corner -
 // the inner edge of the one-pixel bezel ring, where the frame's own ears'
 // arcs start too.
@@ -2495,28 +2528,78 @@ std::unique_ptr<FrameSurface> BuildFrameSurface(const Layout& layout, bool withB
 // interval); only the vertical pass sums taps, and only over the band along
 // the edges where the shadow is non-zero.
 
-// The rounded screen in the shadow bitmap's own coordinates, opaque white:
-// its alpha is the anti-aliased "inside" coverage the shadow is clipped to.
-void DrawInnerMask(Gdiplus::Graphics& graphics, const Layout& layout) {
+// The band along the edges of the rounded screen where the shadow can be
+// non-zero (scaled px): the kernel's reach, the offset and the corner
+// radius.
+int ShadowBand(const Layout& layout) {
+    double sigma = layout.shadowBlur / 2.0;
+    int kr = static_cast<int>(std::ceil(3.0 * sigma));
+    return kr + std::max(std::abs(layout.shadowOffsetX), std::abs(layout.shadowOffsetY)) +
+           layout.radius + 2;
+}
+
+// The four slices: top and bottom rows across the whole width, left and
+// right columns between them; on a screen the band fills, one slice is the
+// whole rounded screen. Empty rects for slices not needed.
+void ShadowSliceRects(const Layout& layout, RECT out[kShadowSlices]) {
+    for (int i = 0; i < kShadowSlices; i++) {
+        out[i] = RECT{};
+    }
+    const RECT& r = layout.innerRect;
+    int width = r.right - r.left, height = r.bottom - r.top;
+    if (width <= 0 || height <= 0 || layout.shadowBlur <= 0) {
+        return;
+    }
+    int band = ShadowBand(layout);
+    if (2 * band >= height || 2 * band >= width) {
+        out[0] = r;
+        return;
+    }
+    out[0] = RECT{r.left, r.top, r.right, r.top + band};
+    out[1] = RECT{r.left, r.bottom - band, r.right, r.bottom};
+    out[2] = RECT{r.left, r.top + band, r.left + band, r.bottom - band};
+    out[3] = RECT{r.right - band, r.top + band, r.right, r.bottom - band};
+}
+
+// The rounded screen's anti-aliased "inside" coverage for one slice, in the
+// slice's own coordinates (the alpha the shadow is clipped to).
+bool RenderInsideMask(const Layout& layout, const RECT& slice, std::vector<DWORD>& out) {
+    int width = slice.right - slice.left, height = slice.bottom - slice.top;
+    out.assign(static_cast<size_t>(width) * height, 0);
+    Gdiplus::Bitmap bitmap(width, height, width * 4, PixelFormat32bppPARGB,
+                           reinterpret_cast<BYTE*>(out.data()));
+    Gdiplus::Graphics graphics(&bitmap);
+    if (graphics.GetLastStatus() != Gdiplus::Ok) {
+        return false;
+    }
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+    graphics.TranslateTransform(static_cast<Gdiplus::REAL>(layout.innerRect.left - slice.left),
+                                static_cast<Gdiplus::REAL>(layout.innerRect.top - slice.top));
     RECT inner = layout.innerRect;
     OffsetRect(&inner, -layout.innerRect.left, -layout.innerRect.top);
     Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
     AddRoundedRectPath(path, inner, layout.radius);
     Gdiplus::SolidBrush brush(Gdiplus::Color(255, 255, 255, 255));
     graphics.FillPath(&brush, &path);
+    graphics.Flush(Gdiplus::FlushIntentionSync);
+    return true;
 }
 
-std::unique_ptr<FrameSurface> BuildShadowSurface(const Layout& layout) {
-    int width = layout.innerRect.right - layout.innerRect.left;
-    int height = layout.innerRect.bottom - layout.innerRect.top;
-    if (width <= 0 || height <= 0 || layout.shadowBlur <= 0) {
-        return nullptr;
+// Builds the shadow's pixels for every slice of the layout (the slices'
+// rects are set here too). Each slice is computed on its own: the
+// horizontal blur has the closed form above, the vertical pass sums taps
+// over the slice plus the kernel's reach above and below it.
+bool BuildShadowSurfaces(const Layout& layout, ShadowSlice slices[kShadowSlices]) {
+    RECT rects[kShadowSlices];
+    ShadowSliceRects(layout, rects);
+    for (int i = 0; i < kShadowSlices; i++) {
+        slices[i].rect = rects[i];
+        slices[i].surface.reset();
     }
-
-    std::vector<DWORD> inside;
-    if (!RenderToPixels(width, height, inside, DrawInnerMask, layout)) {
-        Wh_Log(L"shadow rasterization failed");
-        return nullptr;
+    if (layout.shadowBlur <= 0 || IsRectEmpty(&rects[0])) {
+        return false;
     }
 
     // Gaussian kernel: the blur setting is the visible extent (~2 sigma).
@@ -2536,8 +2619,11 @@ std::unique_ptr<FrameSurface> BuildShadowSurface(const Layout& layout) {
     }
 
     // The occluder: everything outside the rounded screen shifted by the
-    // offset. Its horizontal blur at pixel x of row y is 1 minus the kernel
-    // mass that falls inside the row's inside interval [xl, xr).
+    // offset. Its horizontal blur at pixel x of row y (rounded-screen
+    // coordinates) is 1 minus the kernel mass that falls inside the row's
+    // inside interval [xl, xr).
+    int width = layout.innerRect.right - layout.innerRect.left;
+    int height = layout.innerRect.bottom - layout.innerRect.top;
     double left = layout.shadowOffsetX, top = layout.shadowOffsetY;
     double right = left + width, bottom = top + height;
     double r = layout.radius;
@@ -2560,65 +2646,61 @@ std::unique_ptr<FrameSurface> BuildShadowSurface(const Layout& layout) {
         return 1.0f - (kb > ka ? cumulative[kb] - cumulative[ka] : 0.0f);
     };
 
-    // The band along the edges where the shadow can be non-zero.
-    int band = kr + std::max(std::abs(layout.shadowOffsetX), std::abs(layout.shadowOffsetY)) +
-               layout.radius + 2;
-    std::vector<float> shadow(static_cast<size_t>(width) * height, 0.0f);
-    auto blurStrip = [&](int sx0, int sy0, int sx1, int sy1) {
-        if (sx1 <= sx0 || sy1 <= sy0) {
-            return;
+    COLORREF rgb = g_settings.shadowColor;
+    double opacity = g_settings.shadowOpacity / 100.0;
+    bool any = false;
+    for (int i = 0; i < kShadowSlices; i++) {
+        const RECT& rc = rects[i];
+        if (IsRectEmpty(&rc)) {
+            continue;
         }
-        int sw = sx1 - sx0, sh = sy1 - sy0;
+        int sx0 = rc.left - layout.innerRect.left, sy0 = rc.top - layout.innerRect.top;
+        int sw = rc.right - rc.left, sh = rc.bottom - rc.top;
+
+        std::vector<DWORD> inside;
+        if (!RenderInsideMask(layout, rc, inside)) {
+            Wh_Log(L"shadow rasterization failed");
+            return any;
+        }
         std::vector<float> rows(static_cast<size_t>(sh + 2 * kr) * sw);
         for (int yy = 0; yy < sh + 2 * kr; yy++) {
-            int y = sy0 - kr + yy;
             float* row = &rows[static_cast<size_t>(yy) * sw];
             for (int xx = 0; xx < sw; xx++) {
-                row[xx] = blurredRow(y, sx0 + xx);
+                row[xx] = blurredRow(sy0 - kr + yy, sx0 + xx);
             }
         }
+
+        auto surface = std::make_unique<FrameSurface>();
+        surface->width = sw;
+        surface->height = sh;
+        if (!AllocateSurfaceBitmap(*surface)) {
+            return any;
+        }
         for (int yy = 0; yy < sh; yy++) {
-            float* out = &shadow[static_cast<size_t>(sy0 + yy) * width + sx0];
+            DWORD* out = &surface->pixels[static_cast<size_t>(yy) * sw];
+            const DWORD* mask = &inside[static_cast<size_t>(yy) * sw];
             for (int xx = 0; xx < sw; xx++) {
                 float acc = 0.0f;
                 for (int k = 0; k <= 2 * kr; k++) {
                     acc += kernel[k] * rows[static_cast<size_t>(yy + k) * sw + xx];
                 }
-                out[xx] = acc;
+                double a = std::clamp(static_cast<double>(acc), 0.0, 1.0) * opacity *
+                           (mask[xx] >> 24) / 255.0;
+                unsigned alpha = static_cast<unsigned>(a * 255.0 + 0.5);
+                if (alpha == 0) {
+                    out[xx] = 0;
+                    continue;
+                }
+                unsigned pr = GetRValue(rgb) * alpha / 255;
+                unsigned pg = GetGValue(rgb) * alpha / 255;
+                unsigned pb = GetBValue(rgb) * alpha / 255;
+                out[xx] = (alpha << 24) | (pr << 16) | (pg << 8) | pb;
             }
         }
-    };
-    if (2 * band >= height || 2 * band >= width) {
-        blurStrip(0, 0, width, height);  // tiny screen: the band is everything
-    } else {
-        blurStrip(0, 0, width, band);                   // top
-        blurStrip(0, height - band, width, height);     // bottom
-        blurStrip(0, band, band, height - band);        // left
-        blurStrip(width - band, band, width, height - band);  // right
+        slices[i].surface = std::move(surface);
+        any = true;
     }
-
-    auto surface = std::make_unique<FrameSurface>();
-    surface->width = width;
-    surface->height = height;
-    if (!AllocateSurfaceBitmap(*surface)) {
-        return nullptr;
-    }
-    COLORREF rgb = g_settings.shadowColor;
-    double opacity = g_settings.shadowOpacity / 100.0;
-    for (size_t i = 0; i < shadow.size(); i++) {
-        double a = std::clamp(static_cast<double>(shadow[i]), 0.0, 1.0) * opacity *
-                   (inside[i] >> 24) / 255.0;
-        unsigned alpha = static_cast<unsigned>(a * 255.0 + 0.5);
-        if (alpha == 0) {
-            surface->pixels[i] = 0;
-            continue;
-        }
-        unsigned pr = GetRValue(rgb) * alpha / 255;
-        unsigned pg = GetGValue(rgb) * alpha / 255;
-        unsigned pb = GetBValue(rgb) * alpha / 255;
-        surface->pixels[i] = (alpha << 24) | (pr << 16) | (pg << 8) | pb;
-    }
-    return surface;
+    return any;
 }
 
 // Premultiplied "source over": `top` over `bottom`. Two channels per multiply;
@@ -2646,8 +2728,7 @@ inline DWORD BlendOver(DWORD top, DWORD bottom) {
 // inner shadow stays the layered window it is with the solid fill, placed
 // right above the frame so the backdrop never samples it.
 //
-// Two rules of the window manager shape the windows (found while
-// prototyping this):
+// Two rules of the window manager shape the windows:
 // - a topmost window whose rectangle contains a whole monitor is a
 //   full-screen app to the shell, which then lowers the taskbar under it.
 //   So the frame stops one pixel short of every monitor edge, and four
@@ -2666,9 +2747,10 @@ inline DWORD BlendOver(DWORD top, DWORD bottom) {
 // handshake: a cloaked window keeps its place in the z-order, and
 // uncloaking is instant.
 
-// The composition window's constant alpha (it is layered as well, which is
-// what keeps a monitor-sized borderless popup from being taken for a
-// full-screen app). 254 is what the prototype ran on; 255 was never tested.
+// The composition window's constant alpha: it is layered as well, which is
+// part of what keeps a monitor-sized borderless popup from being taken for
+// a full-screen app, and just short of opaque so that it stays a layered
+// window in every respect.
 constexpr BYTE kAcrylicWindowAlpha = 254;
 
 // GUIDs spelled out: uuid.lib isn't linked, and the composition interop
@@ -2937,12 +3019,13 @@ wge::IGraphicsEffectSource MakeEffect(const GUID& clsid, PCWSTR name,
 
 // ---- Composition plumbing (mod UI thread) ------------------------------------
 
-::IUnknown* g_dispatcherController = nullptr;
+[[clang::no_destroy]] ws::DispatcherQueueController g_dispatcherController{nullptr};
 winrt::event_token g_deviceReplacedToken{};
+winrt::event_token g_advancedEffectsToken{};
 std::atomic<bool> g_surfacesLost{false};  // the rendering device was replaced: redraw
 
 // A Compositor needs a DispatcherQueue on its thread.
-::IUnknown* CreateDispatcherQueueOnThisThread() {
+ws::DispatcherQueueController CreateDispatcherQueueOnThisThread() {
     HMODULE coreMessaging =
         LoadLibraryExW(L"CoreMessaging.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     auto create = coreMessaging
@@ -2961,7 +3044,21 @@ std::atomic<bool> g_surfacesLost{false};  // the rendering device was replaced: 
         Wh_Log(L"CreateDispatcherQueueController failed: %08X", hr);
         return nullptr;
     }
-    return static_cast<::IUnknown*>(controller);
+    return ws::DispatcherQueueController{controller, winrt::take_ownership_from_abi};
+}
+
+// Pumps this thread's messages until a dispatcher-queue operation (its
+// shutdown) has completed.
+void PumpUntilDone(wf::IAsyncAction const& action) {
+    ULONGLONG start = GetTickCount64();
+    while (action.Status() == wf::AsyncStatus::Started && GetTickCount64() - start < 2000) {
+        MsgWaitForMultipleObjectsEx(0, nullptr, 50, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
 }
 
 // The Direct2D-backed composition graphics device the mask and overlay
@@ -3041,6 +3138,28 @@ bool CreateGraphicsDevice() {
 }
 
 void InitComposition() {
+    // Transparency effects: the acrylic follows the system setting, like
+    // Windows' own does.
+    try {
+        g_uiSettings = wuvm::UISettings();
+        g_advancedEffects = g_uiSettings.AdvancedEffectsEnabled();
+        g_advancedEffectsToken = g_uiSettings.AdvancedEffectsEnabledChanged(
+            [](wuvm::UISettings const& settings, wf::IInspectable const&) {
+                bool on = settings.AdvancedEffectsEnabled();
+                g_advancedEffects = on;
+                Wh_Log(L"transparency effects %s", on ? L"on: acrylic fill" : L"off: solid fill");
+                if (HWND ctrl = g_ctrlWnd.load()) {
+                    PostMessageW(ctrl, kMsgReload, 0, 0);
+                }
+            });
+        if (!g_advancedEffects) {
+            Wh_Log(L"transparency effects are off: solid fill until they are on");
+        }
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"UISettings threw %08X; transparency effects assumed on", e.code().value);
+        g_uiSettings = nullptr;
+    }
+
     g_dispatcherController = CreateDispatcherQueueOnThisThread();
     if (!g_dispatcherController) {
         return;
@@ -3061,7 +3180,7 @@ void InitComposition() {
 
 // Everything of the composition must be released on this thread before the
 // image goes away: the effect objects' vtables live in it.
-void ShutdownComposition(HWND ctrl) {
+void ShutdownComposition() {
     if (g_graphicsDevice) {
         try {
             if (g_deviceReplacedToken) {
@@ -3073,18 +3192,25 @@ void ShutdownComposition(HWND ctrl) {
         g_graphicsDevice = nullptr;
     }
     g_compositor = nullptr;
-    // Let the dispatcher queue drain the compositor's shutdown work (the
-    // control window's own queued messages are dropped: no more ticks).
-    MSG msg;
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        if (msg.hwnd && msg.hwnd == ctrl) {
-            continue;
+    if (g_uiSettings) {
+        try {
+            if (g_advancedEffectsToken) {
+                g_uiSettings.AdvancedEffectsEnabledChanged(g_advancedEffectsToken);
+            }
+        } catch (...) {
         }
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        g_advancedEffectsToken = {};
+        g_uiSettings = nullptr;
     }
+    // The queue is shut down before its thread ends; its shutdown work (and
+    // the compositor's) is pumped here (a tick that might come by is a
+    // no-op: the mod is unloading).
     if (g_dispatcherController) {
-        g_dispatcherController->Release();
+        try {
+            PumpUntilDone(g_dispatcherController.ShutdownQueueAsync());
+        } catch (winrt::hresult_error const& e) {
+            Wh_Log(L"ShutdownQueueAsync threw %08X", e.code().value);
+        }
         g_dispatcherController = nullptr;
     }
 }
@@ -3157,18 +3283,13 @@ wuc::CompositionDrawingSurface CreateSurface(int width, int height, const DWORD*
 }
 
 // ---- Z-order -----------------------------------------------------------------
-// The windows the taskbar thread's hook keeps under their taskbar. Written
-// by the UI thread, read by the hook; guarded.
+// The windows of one acrylic frame, as the placement code sees them.
 struct FollowEntry {
     HWND taskbar = nullptr;
     HWND frame = nullptr;
-    HWND shadow = nullptr;
+    HWND shadow[kShadowSlices] = {};
     HWND strips[4] = {};
 };
-std::mutex g_followMutex;
-std::vector<FollowEntry> g_follow;
-std::atomic<unsigned> g_followCount{0};
-thread_local bool t_inFollow = false;
 
 bool IsTopmost(HWND hwnd) {
     return (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
@@ -3184,13 +3305,18 @@ bool WindowAbove(HWND above, HWND below) {
     return false;
 }
 
-// Frame topmost, the shadow right above it, the bezel ring right below it,
-// and the taskbar - when it is topmost; it is never made so here - on top
-// of them all.
+// UI thread. Frame topmost, the shadow right above it, the bezel ring right
+// below it, and the taskbar - when it is topmost; it is never made so here
+// - on top of them all. The mod's own windows are placed synchronously; the
+// taskbar, which belongs to another thread, asynchronously and last, so
+// this thread never waits on the taskbar thread and the order still ends
+// with the taskbar on top.
 void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
     SetWindowPos(e.frame, HWND_TOPMOST, 0, 0, 0, 0, flags);
-    if (e.shadow) {
-        SetWindowPos(e.shadow, HWND_TOPMOST, 0, 0, 0, 0, flags);
+    for (HWND shadow : e.shadow) {
+        if (shadow) {
+            SetWindowPos(shadow, HWND_TOPMOST, 0, 0, 0, 0, flags);
+        }
     }
     for (HWND strip : e.strips) {
         if (strip) {
@@ -3199,7 +3325,8 @@ void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
     }
     if (e.taskbar && IsTopmost(e.taskbar)) {
         SetWindowPos(e.taskbar, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING |
+                         SWP_ASYNCWINDOWPOS);
     }
 }
 
@@ -3212,8 +3339,10 @@ bool AcrylicOrderBroken(const FollowEntry& e) {
     if (e.taskbar && IsTopmost(e.taskbar) && WindowAbove(e.frame, e.taskbar)) {
         return true;
     }
-    if (e.shadow && IsWindowVisible(e.shadow) && !WindowAbove(e.shadow, e.frame)) {
-        return true;
+    for (HWND shadow : e.shadow) {
+        if (shadow && IsWindowVisible(shadow) && !WindowAbove(shadow, e.frame)) {
+            return true;
+        }
     }
     return false;
 }
@@ -3222,80 +3351,15 @@ FollowEntry FollowEntryFor(const Overlay& overlay) {
     FollowEntry e;
     e.taskbar = overlay.layout.taskbar;
     e.frame = overlay.hwnd;
-    e.shadow = overlay.shadowHwnd;
+    for (int i = 0; i < kShadowSlices; i++) {
+        e.shadow[i] = overlay.shadow[i].hwnd;
+    }
     if (overlay.acrylic) {
         for (int i = 0; i < 4; i++) {
             e.strips[i] = overlay.acrylic->strips[i];
         }
     }
     return e;
-}
-
-void RemoveFollowLocked(HWND frame) {
-    g_follow.erase(std::remove_if(g_follow.begin(), g_follow.end(),
-                                  [frame](const FollowEntry& e) { return e.frame == frame; }),
-                   g_follow.end());
-}
-
-// UI thread: (re)registers an acrylic frame with the hook, or takes a frame
-// out when it isn't acrylic.
-void UpdateFollow(const Overlay& overlay) {
-    std::lock_guard<std::mutex> lock(g_followMutex);
-    RemoveFollowLocked(overlay.hwnd);
-    if (overlay.acrylic && overlay.hwnd && overlay.layout.taskbar) {
-        g_follow.push_back(FollowEntryFor(overlay));
-    }
-}
-
-// UI thread: a frame is going away.
-void RemoveFollow(HWND frame) {
-    std::lock_guard<std::mutex> lock(g_followMutex);
-    RemoveFollowLocked(frame);
-}
-
-void ClearFollow() {
-    std::lock_guard<std::mutex> lock(g_followMutex);
-    g_follow.clear();
-}
-
-// On the taskbar thread, inside the taskbar window's WM_WINDOWPOSCHANGED
-// (WH_CALLWNDPROC hook): the taskbar just changed its place in the z-order.
-// If the frame ended up above it (or lost its topmost bit), put it back
-// under, in the same call, so no composed frame ever shows the acrylic over
-// the taskbar. At most a few follows per second: our own SetWindowPos calls
-// come back through this hook.
-void FollowTaskbarZOrder(HWND taskbar) {
-    if (t_inFollow || g_unloading) {
-        return;
-    }
-    FollowEntry entry;
-    {
-        std::lock_guard<std::mutex> lock(g_followMutex);
-        for (const FollowEntry& e : g_follow) {
-            if (e.taskbar == taskbar) {
-                entry = e;
-                break;
-            }
-        }
-    }
-    if (!entry.frame || !IsWindowVisible(entry.frame) || !AcrylicOrderBroken(entry)) {
-        return;
-    }
-    static ULONGLONG windowStart = 0;
-    static int followsInWindow = 0;
-    ULONGLONG now = GetTickCount64();
-    if (now - windowStart >= 1000) {
-        windowStart = now;
-        followsInWindow = 0;
-    }
-    if (followsInWindow >= 5) {
-        return;
-    }
-    followsInWindow++;
-    t_inFollow = true;
-    PlaceAcrylicOrder(entry, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-    t_inFollow = false;
-    g_followCount++;
 }
 
 // ---- Windows -----------------------------------------------------------------
@@ -3503,7 +3567,6 @@ void DestroyAcrylic(Overlay& overlay) {
         }
     } catch (...) {
     }
-    ac.maskBrush = nullptr;
     ac.effectBrush = nullptr;
     ac.maskSurface = nullptr;
     ac.overlaySurface = nullptr;
@@ -3614,6 +3677,27 @@ int BuildAcrylicBrush(Overlay& overlay, COLORREF rgb) {
     return -1;
 }
 
+// The window-sized frame cut into the bands that hold its painted pixels
+// (the taskbar strip, outside the rounded screen, is inside them): top and
+// bottom across the whole width, left and right between them, each
+// `reach` pixels past the rounded screen's edge. One band, the whole
+// window, when they would overlap.
+int BackdropBandRects(int width, int height, const RECT& inner, int reach, RECT out[4]) {
+    int top = std::min<int>(height, inner.top + reach);
+    int bottom = std::max<int>(0, inner.bottom - reach);
+    int left = std::min<int>(width, inner.left + reach);
+    int right = std::max<int>(0, inner.right - reach);
+    if (top >= bottom || left >= right) {
+        out[0] = RECT{0, 0, width, height};
+        return 1;
+    }
+    out[0] = RECT{0, 0, width, top};
+    out[1] = RECT{0, bottom, width, height};
+    out[2] = RECT{0, top, left, bottom};
+    out[3] = RECT{right, top, width, bottom};
+    return 4;
+}
+
 wuc::CompositionSurfaceBrush SurfaceBrushFor(wuc::CompositionDrawingSurface const& surface) {
     auto brush = g_compositor.CreateSurfaceBrush(surface);
     brush.Stretch(wuc::CompositionStretch::None);
@@ -3687,28 +3771,50 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
         return false;
     }
 
-    // The sprites, window-sized: the backdrop through the mask, the tint
-    // over it when the graph couldn't carry it, and the overlay on top.
+    // The backdrop sprites: not one over the whole window - DWM would then
+    // blur the whole monitor whenever something behind it changes - but one
+    // per band, each reaching far enough inwards for the blur at the band's
+    // inner edge to be complete (the corner radius plus the kernel's reach).
+    // The mask is the one window-sized surface, offset into each band. The
+    // tint rides on the same sprites when the graph couldn't carry it; the
+    // overlay (ears, noise: no effect) is one window-sized sprite on top.
     wf::Numerics::float2 size{static_cast<float>(width), static_cast<float>(height)};
     ac.root.Children().RemoveAll();
     ac.root.Size(size);
-    ac.maskBrush = g_compositor.CreateMaskBrush();
-    ac.maskBrush.Mask(SurfaceBrushFor(ac.maskSurface));
-    ac.maskBrush.Source(ac.effectBrush);
-    auto fill = g_compositor.CreateSpriteVisual();
-    fill.Size(size);
-    fill.Brush(ac.maskBrush);
-    ac.root.Children().InsertAtTop(fill);
-    if (level > 0 && g_settings.tintOpacity > 0) {
-        auto tintMask = g_compositor.CreateMaskBrush();
-        tintMask.Mask(SurfaceBrushFor(ac.maskSurface));
-        tintMask.Source(g_compositor.CreateColorBrush(
-            wu::Color{static_cast<uint8_t>(g_settings.tintOpacity * 255 / 100), GetRValue(rgb),
-                      GetGValue(rgb), GetBValue(rgb)}));
-        auto tint = g_compositor.CreateSpriteVisual();
-        tint.Size(size);
-        tint.Brush(tintMask);
-        ac.root.Children().InsertAtTop(tint);
+    RECT inner = layout.innerRect;
+    OffsetRect(&inner, -layout.overlayRect.left, -layout.overlayRect.top);
+    int reach = layout.radius + static_cast<int>(std::ceil(3.0f * layout.backdropBlur)) + 1;
+    RECT bands[4];
+    int bandCount = BackdropBandRects(width, height, inner, reach, bands);
+    for (int b = 0; b < bandCount; b++) {
+        wf::Numerics::float2 origin{static_cast<float>(bands[b].left),
+                                    static_cast<float>(bands[b].top)};
+        wf::Numerics::float2 extent{static_cast<float>(bands[b].right - bands[b].left),
+                                    static_cast<float>(bands[b].bottom - bands[b].top)};
+        auto maskBrush = g_compositor.CreateMaskBrush();
+        auto maskSurfaceBrush = SurfaceBrushFor(ac.maskSurface);
+        maskSurfaceBrush.Offset({-origin.x, -origin.y});
+        maskBrush.Mask(maskSurfaceBrush);
+        maskBrush.Source(ac.effectBrush);
+        auto fill = g_compositor.CreateSpriteVisual();
+        fill.Offset({origin.x, origin.y, 0.0f});
+        fill.Size(extent);
+        fill.Brush(maskBrush);
+        ac.root.Children().InsertAtTop(fill);
+        if (level > 0 && g_settings.tintOpacity > 0) {
+            auto tintMask = g_compositor.CreateMaskBrush();
+            auto tintMaskSurface = SurfaceBrushFor(ac.maskSurface);
+            tintMaskSurface.Offset({-origin.x, -origin.y});
+            tintMask.Mask(tintMaskSurface);
+            tintMask.Source(g_compositor.CreateColorBrush(
+                wu::Color{static_cast<uint8_t>(g_settings.tintOpacity * 255 / 100), GetRValue(rgb),
+                          GetGValue(rgb), GetBValue(rgb)}));
+            auto tint = g_compositor.CreateSpriteVisual();
+            tint.Offset({origin.x, origin.y, 0.0f});
+            tint.Size(extent);
+            tint.Brush(tintMask);
+            ac.root.Children().InsertAtTop(tint);
+        }
     }
     auto top = g_compositor.CreateSpriteVisual();
     top.Size(size);
@@ -3766,22 +3872,32 @@ bool PresentOverlayLocked(Overlay& overlay) {
         ok = PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
                           &overlay.layout.overlayRect, overlay.presentAlpha);
     }
-    if (overlay.shadowHwnd) {
-        if (!overlay.shadowSurface) {
-            overlay.shadowSurface = BuildShadowSurface(overlay.layout);
-        }
-        if (overlay.shadowSurface) {
-            const FrameSurface& shadow = *overlay.shadowSurface;
-            PresentFrame(overlay.shadowHwnd, shadow.memDc, shadow.width, shadow.height,
-                         &overlay.layout.innerRect, overlay.presentAlpha);
+    for (const ShadowSlice& slice : overlay.shadow) {
+        if (slice.hwnd && slice.surface) {
+            PresentFrame(slice.hwnd, slice.surface->memDc, slice.surface->width,
+                         slice.surface->height, &slice.rect, overlay.presentAlpha);
         }
     }
     return ok;
 }
 
+// Builds the shadow slices' pixels for the current layout if they aren't
+// (a CPU blur along the screen's edges), outside any lock: the taskbar
+// thread's rendering tick takes g_revealMutex while a reveal is pending.
+void EnsureShadowSurfaces(Overlay& overlay) {
+    if (overlay.shadowBuilt || !overlay.shadow[0].hwnd) {
+        return;
+    }
+    BuildShadowSurfaces(overlay.layout, overlay.shadow);
+    overlay.shadowBuilt = true;
+}
+
 bool PresentOverlay(Overlay& overlay) {
     if (!overlay.hwnd || (!overlay.surface && !overlay.acrylic)) {
         return false;
+    }
+    if (overlay.presentAlpha != 0) {
+        EnsureShadowSurfaces(overlay);  // taking it off the screen needs no pixels
     }
     std::lock_guard<std::mutex> lock(g_revealMutex);
     return PresentOverlayLocked(overlay);
@@ -3799,6 +3915,16 @@ bool PaintOverlay(Overlay& overlay, COLORREF rgb) {
         if (!overlay.surface) {
             return false;
         }
+        if (!overlay.acrylic) {
+            // The solid frame's painted shape as its window region: DWM then
+            // composes only the bands, not a monitor-sized layered surface
+            // over every window (the acrylic frame gets its region with its
+            // content).
+            SetWindowRgn(overlay.hwnd, RegionFromSurface(*overlay.surface), FALSE);
+        }
+    }
+    if (overlay.presentAlpha != 0) {
+        EnsureShadowSurfaces(overlay);
     }
     if (overlay.acrylic) {
         // The shape goes to the composition surfaces; the color into the
@@ -3996,8 +4122,10 @@ void HideFrame(Overlay& overlay) {
         overlay.presentAlpha = 0;
         PresentOverlay(overlay);  // a no-op without a surface
         ShowWindow(overlay.hwnd, SW_HIDE);
-        if (overlay.shadowHwnd) {
-            ShowWindow(overlay.shadowHwnd, SW_HIDE);
+        for (const ShadowSlice& slice : overlay.shadow) {
+            if (slice.hwnd) {
+                ShowWindow(slice.hwnd, SW_HIDE);
+            }
         }
         if (overlay.acrylic) {
             for (HWND strip : overlay.acrylic->strips) {
@@ -4014,7 +4142,6 @@ void HideFrame(Overlay& overlay) {
 void DestroyOverlay(Overlay& overlay) {
     if (overlay.hwnd) {
         HideFrame(overlay);
-        RemoveFollow(overlay.hwnd);
         if (overlay.acrylic) {
             DestroyAcrylic(overlay);
         } else {
@@ -4022,11 +4149,14 @@ void DestroyOverlay(Overlay& overlay) {
             overlay.hwnd = nullptr;
         }
     }
-    if (overlay.shadowHwnd) {
-        DestroyWindow(overlay.shadowHwnd);
-        overlay.shadowHwnd = nullptr;
+    for (ShadowSlice& slice : overlay.shadow) {
+        if (slice.hwnd) {
+            DestroyWindow(slice.hwnd);
+            slice.hwnd = nullptr;
+        }
+        slice.surface.reset();
     }
-    overlay.shadowSurface.reset();
+    overlay.shadowBuilt = false;
 }
 
 // Takes every frame off the screen on the spot, leaving the windows to be
@@ -4045,7 +4175,7 @@ void DestroyOverlays(std::vector<Overlay>& overlays) {
 }
 
 Overlay* FindOverlay(HMONITOR monitor) {
-    for (Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : *g_overlays) {
         if (overlay.layout.monitor == monitor) {
             return &overlay;
         }
@@ -4093,8 +4223,8 @@ HWND CreateFrameWindow(const RECT& rect) {
     return hwnd;
 }
 
-// The shadow window: like the frame, but always click-through (its pixels
-// lie over the screen content). Created hidden; shown with the frame.
+// A shadow slice's window: like the frame, but always click-through (its
+// pixels lie over the screen content). Created hidden; shown with the frame.
 HWND CreateShadowWindow(const RECT& rect) {
     DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
                     WS_EX_TOPMOST;
@@ -4114,20 +4244,33 @@ HWND CreateShadowWindow(const RECT& rect) {
     return hwnd;
 }
 
-// Creates or removes a frame's shadow window to match its layout. Returns
-// whether a window was created (it is still hidden then).
-bool SyncShadowWindow(Overlay& overlay) {
-    bool wanted = overlay.layout.shadowBlur > 0;
-    if (wanted && !overlay.shadowHwnd) {
-        overlay.shadowHwnd = CreateShadowWindow(overlay.layout.innerRect);
-        return overlay.shadowHwnd != nullptr;
+// Creates, moves or removes a frame's shadow windows to match its layout
+// (one per slice the layout calls for). The pixels are built later, by the
+// next paint. Returns whether a window was created (it is still hidden
+// then).
+bool SyncShadowWindows(Overlay& overlay) {
+    RECT rects[kShadowSlices];
+    ShadowSliceRects(overlay.layout, rects);
+    bool created = false;
+    for (int i = 0; i < kShadowSlices; i++) {
+        ShadowSlice& slice = overlay.shadow[i];
+        slice.surface.reset();
+        bool wanted = !IsRectEmpty(&rects[i]);
+        if (wanted && !slice.hwnd) {
+            slice.hwnd = CreateShadowWindow(rects[i]);
+            created = created || slice.hwnd != nullptr;
+        } else if (wanted && !EqualRect(&slice.rect, &rects[i])) {
+            SetWindowPos(slice.hwnd, nullptr, rects[i].left, rects[i].top,
+                         rects[i].right - rects[i].left, rects[i].bottom - rects[i].top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        } else if (!wanted && slice.hwnd) {
+            DestroyWindow(slice.hwnd);
+            slice.hwnd = nullptr;
+        }
+        slice.rect = rects[i];
     }
-    if (!wanted && overlay.shadowHwnd) {
-        DestroyWindow(overlay.shadowHwnd);
-        overlay.shadowHwnd = nullptr;
-        overlay.shadowSurface.reset();
-    }
-    return false;
+    overlay.shadowBuilt = false;
+    return created;
 }
 
 // Brings the frames in line with the layouts: one persistent frame window per
@@ -4140,7 +4283,7 @@ void RaiseFrame(Overlay& overlay, bool show);
 
 void SyncOverlays(const std::vector<Layout>& layouts) {
     // Frames of monitors that are gone.
-    for (Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : *g_overlays) {
         bool present = false;
         for (const Layout& layout : layouts) {
             present = present || layout.monitor == overlay.layout.monitor;
@@ -4149,9 +4292,9 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             DestroyOverlay(overlay);
         }
     }
-    g_overlays.erase(std::remove_if(g_overlays.begin(), g_overlays.end(),
+    g_overlays->erase(std::remove_if(g_overlays->begin(), g_overlays->end(),
                                     [](const Overlay& o) { return o.hwnd == nullptr; }),
-                     g_overlays.end());
+                     g_overlays->end());
 
     for (const Layout& layout : layouts) {
         if (Overlay* existing = FindOverlay(layout.monitor)) {
@@ -4167,14 +4310,12 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             }
             existing->layout = layout;
             existing->surface.reset();  // rebuilt by the paint below
-            existing->shadowSurface.reset();
-            bool shadowCreated = SyncShadowWindow(*existing);
+            bool shadowCreated = SyncShadowWindows(*existing);  // moved to the new layout
             ApplyFrameMouseStyle(existing->hwnd);
             if (existing->acrylic) {
                 PlaceAcrylicFrame(*existing);  // moved now; content rebuilt by the paint
                 EnsureTaskbarHooks(layout.taskbar);
             }
-            UpdateFollow(*existing);
             if (layout.taskbar && taskbarChanged) {
                 // Shown again together with the taskbar once it is whole
                 // (a change of settings alone re-shapes on the spot).
@@ -4194,12 +4335,6 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
                                  layout.overlayRect.top,
                                  layout.overlayRect.right - layout.overlayRect.left,
                                  layout.overlayRect.bottom - layout.overlayRect.top,
-                                 SWP_NOZORDER | SWP_NOACTIVATE);
-                }
-                if (existing->shadowHwnd) {
-                    SetWindowPos(existing->shadowHwnd, nullptr, layout.innerRect.left,
-                                 layout.innerRect.top, layout.innerRect.right - layout.innerRect.left,
-                                 layout.innerRect.bottom - layout.innerRect.top,
                                  SWP_NOZORDER | SWP_NOACTIVATE);
                 }
                 existing->painted = false;
@@ -4222,14 +4357,13 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
                 continue;
             }
         }
-        SyncShadowWindow(overlay);
-        UpdateFollow(overlay);
+        SyncShadowWindows(overlay);
         if (layout.taskbar) {
             overlay.waiting = true;  // appears together with the taskbar
             overlay.waitSince = GetTickCount64();
         }
         PaintOverlay(overlay, g_settings.customColor);
-        g_overlays.push_back(std::move(overlay));
+        g_overlays->push_back(std::move(overlay));
     }
 }
 
@@ -4278,8 +4412,10 @@ void RaiseFrame(Overlay& overlay, bool show) {
         return;
     }
     SetWindowPos(overlay.hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
-    if (overlay.shadowHwnd) {
-        SetWindowPos(overlay.shadowHwnd, overlay.hwnd, 0, 0, 0, 0, flags);
+    for (const ShadowSlice& slice : overlay.shadow) {
+        if (slice.hwnd) {
+            SetWindowPos(slice.hwnd, overlay.hwnd, 0, 0, 0, 0, flags);
+        }
     }
 }
 
@@ -4332,6 +4468,7 @@ bool UsesHandshake() {
 UINT BeginReveal(Overlay& overlay) {
     HWND taskbar = overlay.layout.taskbar;
     overlay.presentAlpha = 0;
+    EnsureShadowSurfaces(overlay);  // the taskbar thread presents them from the registration
     if (!overlay.painted) {
         PaintOverlay(overlay, g_settings.customColor);
     } else {
@@ -4349,11 +4486,12 @@ UINT BeginReveal(Overlay& overlay) {
                 reveal.strips[i] = overlay.acrylic->strips[i];
             }
         }
-        if (overlay.shadowHwnd && overlay.shadowSurface) {
-            reveal.shadow = overlay.shadowHwnd;
-            reveal.shadowDc = overlay.shadowSurface->memDc;
-            reveal.shadowWidth = overlay.shadowSurface->width;
-            reveal.shadowHeight = overlay.shadowSurface->height;
+        for (int i = 0; i < kShadowSlices; i++) {
+            const ShadowSlice& slice = overlay.shadow[i];
+            if (slice.hwnd && slice.surface) {
+                reveal.shadow[i] = {slice.hwnd, slice.surface->memDc, slice.surface->width,
+                                    slice.surface->height};
+            }
         }
         g_reveals[taskbar] = reveal;
         overlay.revealPending = true;
@@ -4463,31 +4601,6 @@ bool IsTaskViewWindow(HWND hwnd) {
     return wcscmp(title, L"Task View") == 0 || hwnd == GetForegroundWindow();
 }
 
-// Diagnostics: every window of the Task View classes, as it is right now.
-void LogTaskViewCandidates(PCWSTR why) {
-    static const PCWSTR kClasses[] = {L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame"};
-    HWND foreground = GetForegroundWindow();
-    for (PCWSTR cls : kClasses) {
-        for (HWND hwnd = FindWindowExW(nullptr, nullptr, cls, nullptr); hwnd;
-             hwnd = FindWindowExW(nullptr, hwnd, cls, nullptr)) {
-            if (!IsWindowVisible(hwnd)) {
-                continue;
-            }
-            WCHAR title[64] = L"";
-            GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            RECT rc{};
-            GetWindowRect(hwnd, &rc);
-            Wh_Log(L"%s: %s %p \"%s\" (%ld,%ld,%ld,%ld) spans monitor %d, cloaked %d, foreground "
-                   L"%d, owner %p, style %08X exstyle %08X",
-                   why, cls, hwnd, title, rc.left, rc.top, rc.right, rc.bottom,
-                   SpansItsMonitor(hwnd) ? 1 : 0, IsWindowCloaked(hwnd) ? 1 : 0,
-                   hwnd == foreground ? 1 : 0, GetWindow(hwnd, GW_OWNER),
-                   static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE)),
-                   static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)));
-        }
-    }
-}
-
 // The open Task View window, or null.
 HWND FindTaskViewWindow() {
     static const PCWSTR kClasses[] = {L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame"};
@@ -4507,9 +4620,31 @@ HWND FindTaskViewWindow() {
 void OnTaskbarMoving(LPARAM lParam) {
     HWND taskbar = reinterpret_cast<HWND>(lParam);
     ULONGLONG now = GetTickCount64();
-    for (Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : *g_overlays) {
         if (overlay.layout.taskbar == taskbar) {
             WaitForTaskbar(overlay, now, L"taskbar moving");
+        }
+    }
+}
+
+// kMsgTaskbarZOrder (from the taskbar thread's hook): a taskbar window
+// changed its place in the z-order. An acrylic frame that is no longer
+// right under its taskbar is put back there now.
+void OnTaskbarZOrder() {
+    static ULONGLONG lastLogTick = 0;
+    for (Overlay& overlay : *g_overlays) {
+        if (!overlay.acrylic || !overlay.hwnd || !IsWindowVisible(overlay.hwnd)) {
+            continue;
+        }
+        FollowEntry entry = FollowEntryFor(overlay);
+        if (!AcrylicOrderBroken(entry)) {
+            continue;
+        }
+        PlaceAcrylicOrder(entry, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        ULONGLONG now = GetTickCount64();
+        if (now - lastLogTick >= 5000) {
+            lastLogTick = now;
+            Wh_Log(L"monitor %p: frame put back under its taskbar", overlay.layout.monitor);
         }
     }
 }
@@ -4519,20 +4654,8 @@ void UpdateVisibility() {
     ULONGLONG now = GetTickCount64();
     HWND taskViewWnd = FindTaskViewWindow();
     bool taskView = taskViewWnd != nullptr;
-    // Diagnostics: a monitor-sized island window in the foreground that was
-    // *not* taken for Task View (a clicked thumbnail flyout, say) - logged
-    // once per window, with what it looks like.
-    if (!taskView) {
-        static HWND lastRejected = nullptr;
-        HWND foreground = GetForegroundWindow();
-        if (foreground && foreground != lastRejected && IsTaskViewWindowClass(foreground) &&
-            SpansItsMonitor(foreground)) {
-            lastRejected = foreground;
-            LogTaskViewCandidates(L"foreground island not taken for Task View");
-        }
-    }
 
-    for (Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : *g_overlays) {
         HWND fullscreenWnd = nullptr;
         bool detected = HasFullscreenWindow(overlay.layout, overlay.fullscreenWnd, &fullscreenWnd);
         // The foreground window itself spanning the monitor (F11, a game) is
@@ -4579,7 +4702,6 @@ void UpdateVisibility() {
             Wh_Log(L"monitor %p: Task View open (%p \"%s\"%s), frame off and taskbar transparent",
                    overlay.layout.monitor, taskViewWnd, title,
                    taskViewWnd == GetForegroundWindow() ? L", foreground" : L"");
-            LogTaskViewCandidates(L"Task View candidates");
         }
         bool taskViewHolds = false;
         if (!taskView && overlay.taskViewHidden) {
@@ -5025,7 +5147,7 @@ DWORD WINAPI AppBarThreadProc(LPVOID) {
 // appbar thread. Cheap, called every tick.
 void PublishAppBarWishes() {
     std::vector<AppBarWish> wishes;
-    for (const Overlay& overlay : g_overlays) {
+    for (const Overlay& overlay : *g_overlays) {
         const Layout& layout = overlay.layout;
         AppBarWish wish;
         wish.monitor = layout.monitor;
@@ -5254,8 +5376,11 @@ void ApplyRecolorsInRenderingTick() {
                 // resized under us, say): the UI thread then presents it
                 // itself instead of counting it as revealed.
                 const Reveal& r = reveal->second;
-                if (r.shadow) {
-                    PresentFrame(r.shadow, r.shadowDc, r.shadowWidth, r.shadowHeight, nullptr, 255);
+                for (auto const& shadow : r.shadow) {
+                    if (shadow.hwnd) {
+                        PresentFrame(shadow.hwnd, shadow.memDc, shadow.width, shadow.height, nullptr,
+                                     255);
+                    }
                 }
                 bool presented;
                 if (r.composition) {
@@ -5735,7 +5860,7 @@ void HideStrokes(ULONGLONG now) {
     if (!g_taskbarXamlAvailable) {
         return;
     }
-    for (const Overlay& overlay : g_overlays) {
+    for (const Overlay& overlay : *g_overlays) {
         HWND taskbar = overlay.layout.taskbar;
         if (!taskbar) {
             continue;
@@ -5762,12 +5887,14 @@ DWORD CustomColorArgb() {
 }
 
 // What the taskbar on a monitor is painted with: the frame color (solid
-// fill), or transparent, so that the acrylic frame under it shows through
-// (whenever the frame is off - Task View, a full-screen window - the
-// taskbar is transparent as well, as it is in Task View with either fill).
+// fill), or transparent, so that the acrylic frame under it shows through.
+// An auto-hide taskbar slides in over the screen, where the acrylic frame
+// has no band, so it keeps the color. (Whenever the frame is off - Task
+// View, a full-screen window - the taskbar is transparent as well, as it
+// is in Task View with either fill.)
 DWORD FillArgbFor(const Overlay& overlay) {
     DWORD argb = CustomColorArgb();
-    if (overlay.acrylic) {
+    if (overlay.acrylic && !IsRectEmpty(&overlay.layout.taskbarRect)) {
         argb &= 0x00FFFFFF;
     }
     return argb;
@@ -5777,7 +5904,7 @@ void ApplyFills(ULONGLONG now) {
     if (!g_taskbarXamlAvailable) {
         return;
     }
-    for (Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : *g_overlays) {
         HWND taskbar = overlay.layout.taskbar;
         if (!taskbar) {
             continue;
@@ -5815,7 +5942,7 @@ void ApplyXamlCorners(ULONGLONG now) {
     if (!g_taskbarXamlAvailable) {
         return;
     }
-    for (const Overlay& overlay : g_overlays) {
+    for (const Overlay& overlay : *g_overlays) {
         const Layout& layout = overlay.layout;
         HWND taskbar = layout.taskbar;
         if (!taskbar) {
@@ -5875,12 +6002,12 @@ void Tick(bool forceRebuild) {
     bool acrylic = UsesAcrylic();
     if (acrylic != g_overlaysAcrylic) {
         Wh_Log(L"fill: %s", acrylic ? L"acrylic" : L"solid");
-        DestroyOverlays(g_overlays);
+        DestroyOverlays(*g_overlays);
         g_overlaysAcrylic = acrylic;
         forceRebuild = true;
     }
     if (g_surfacesLost.exchange(false)) {
-        for (Overlay& overlay : g_overlays) {
+        for (Overlay& overlay : *g_overlays) {
             if (overlay.acrylic) {
                 overlay.acrylic->built = false;  // drawn again by the paint below
                 overlay.painted = false;
@@ -5891,10 +6018,10 @@ void Tick(bool forceRebuild) {
     std::vector<Layout> layouts;
     std::wstring signature = ComputeLayouts(layouts);
     if (forceRebuild || signature != g_layoutSignature ||
-        layouts.size() != g_overlays.size()) {
+        layouts.size() != g_overlays->size()) {
         if (forceRebuild) {
             // Settings changed: every frame is rebuilt from scratch.
-            for (Overlay& overlay : g_overlays) {
+            for (Overlay& overlay : *g_overlays) {
                 overlay.layout.signature.clear();
             }
         }
@@ -5930,7 +6057,7 @@ void Tick(bool forceRebuild) {
     // Tick fast while a frame waits for its taskbar (it must appear within a
     // frame of the taskbar being uncloaked), at the regular rate otherwise.
     bool anyWaiting = false;
-    for (const Overlay& overlay : g_overlays) {
+    for (const Overlay& overlay : *g_overlays) {
         // A frame hidden for full-screen or Task View can't show until that
         // ends, and the event that ends it ticks right away - no need to
         // spin at 60 Hz for as long as a game runs.
@@ -5945,7 +6072,7 @@ void Tick(bool forceRebuild) {
     }
 
     // A changed color (settings) is painted right away.
-    for (Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : *g_overlays) {
         if (!overlay.painted || overlay.paintedColor != g_settings.customColor) {
             PaintOverlay(overlay, g_settings.customColor);
         }
@@ -6124,6 +6251,10 @@ LRESULT CALLBACK CtrlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             OnTaskbarMoving(lParam);
             Tick(false);
             return 0;
+        case kMsgTaskbarZOrder:
+            g_zOrderEventPending = false;
+            OnTaskbarZOrder();
+            return 0;
         case kMsgTaskbarRecolored: {
             UINT& last = g_taskbarRecolored[reinterpret_cast<HWND>(lParam)];
             last = std::max(last, static_cast<UINT>(wParam));
@@ -6200,15 +6331,22 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 
     SetThreadPerMonitorDpiAware();
     g_threadStartTick = GetTickCount64();
-    // The composition (acrylic fill) lives on this thread: an apartment and
-    // a dispatcher queue for it.
-    bool apartment = false;
-    try {
-        winrt::init_apartment(winrt::apartment_type::single_threaded);
-        apartment = true;
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"init_apartment threw %08X", e.code().value);
-    }
+    // The composition (acrylic fill) lives on this thread: an apartment (left
+    // on every exit path) and a dispatcher queue for it.
+    struct Apartment {
+        bool entered = false;
+        Apartment() try {
+            winrt::init_apartment(winrt::apartment_type::single_threaded);
+            entered = true;
+        } catch (winrt::hresult_error const& e) {
+            Wh_Log(L"init_apartment threw %08X", e.code().value);
+        }
+        ~Apartment() {
+            if (entered) {
+                winrt::uninit_apartment();
+            }
+        }
+    } apartment;
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
     ULONG_PTR gdiplusToken = 0;
@@ -6348,15 +6486,13 @@ DWORD WINAPI ModThreadProc(LPVOID) {
             Wh_Log(L"no taskbar window, nothing to hand back");
         }
     }
-    HideOverlays(g_overlays);
+    HideOverlays(*g_overlays);
     // The frame windows go now, so no other thread can have a reason to
     // send to this one while it waits below.
-    DestroyOverlays(g_overlays);
+    DestroyOverlays(*g_overlays);
+    g_overlays.reset();
     g_overlaysAcrylic = false;
-    if (unsigned follows = g_followCount.load()) {
-        Wh_Log(L"the z-order hook put the frame back under the taskbar %u times", follows);
-    }
-    ShutdownComposition(ctrl);
+    ShutdownComposition();
     g_xamlCornersOwned = false;
     ResetPassStates();
     // Only now the appbars: the appbar thread removes them (each removal is a
@@ -6408,9 +6544,6 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     UnregisterClassW(kCtrlClassName, g_module);
     UnregisterClassW(kAppBarClassName, g_module);
     Gdiplus::GdiplusShutdown(gdiplusToken);
-    if (apartment) {
-        winrt::uninit_apartment();
-    }
     return 0;
 }
 
