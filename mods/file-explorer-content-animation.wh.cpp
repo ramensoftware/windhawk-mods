@@ -1710,6 +1710,242 @@ static bool Owned(const Group& group) {
     return group.state.load(std::memory_order_acquire) == Busy &&
         group.owner.load(std::memory_order_relaxed) == GetCurrentThreadId();
 }
+// Texto GDI na pintura com alfa forcado: o GDI grava a cor e deixa o alfa como
+// estava, e a superficie premultiplicada soma essa cor ao que esta atras. Texto
+// preto some, cinza vira marcas claras no modo claro e, no escuro, o texto sai
+// mais claro. O DWrite de outros mods nao passa por aqui e fica intacto; a
+// superficie DComp nao expoe bits, entao DTT_COMPOSITED tambem nao grava alfa nela.
+static thread_local int alphaPaintDepth;
+static thread_local bool layerTextPass;
+using ExtTextOutFn = decltype(&ExtTextOutW);
+static ExtTextOutFn originalExtTextOut;
+// Regiao logica que o trecho pode tocar. false: DC que o desenho fora dele nao reproduz.
+static bool LayerTextArea(HDC hdc, int x, int y, UINT options, const RECT* rect, LPCWSTR text,
+                          UINT count, const INT* dx, RECT& area) {
+    UINT align = GetTextAlign(hdc);
+    if (align & TA_UPDATECP) return false;
+    bool mirrored = (GetLayout(hdc) & LAYOUT_RTL) != 0;
+    int mapMode = GetMapMode(hdc);
+    if (mapMode != MM_TEXT) {
+        // DC espelhado usa MM_ANISOTROPIC internamente; escala de verdade fica de fora.
+        SIZE viewport{}, window{};
+        if (!mirrored || mapMode != MM_ANISOTROPIC || !GetViewportExtEx(hdc, &viewport) ||
+            !GetWindowExtEx(hdc, &window) || std::abs(viewport.cx) != std::abs(window.cx) ||
+            viewport.cy != window.cy) return false;
+    }
+    if (GetGraphicsMode(hdc) == GM_ADVANCED) {
+        // O DirectUI pinta em coordenadas locais do item por translacao: a area e o
+        // destino do blend sao logicos e acompanham. Escala ou rotacao ficam de fora.
+        XFORM form{};
+        if (!GetWorldTransform(hdc, &form) || form.eM11 != 1.f || form.eM12 != 0.f || form.eM21 != 0.f ||
+            form.eM22 != 1.f) return false;
+    }
+    TEXTMETRICW metrics{};
+    LOGFONTW font{};
+    if (!GetTextMetricsW(hdc, &metrics) ||
+        !GetObjectW(GetCurrentObject(hdc, OBJ_FONT), sizeof(font), &font) ||
+        font.lfEscapement || font.lfOrientation) return false;
+    SIZE size{};
+    BOOL measured = (options & ETO_GLYPH_INDEX)
+        ? GetTextExtentPointI(hdc, const_cast<LPWORD>(reinterpret_cast<const WORD*>(text)), count, &size)
+        : GetTextExtentPoint32W(hdc, text, count, &size);
+    if (!measured) return false;
+    LONG width = size.cx;
+    if (dx) {
+        LONG total = 0;
+        UINT step = (options & ETO_PDY) ? 2 : 1;
+        for (UINT i = 0; i < count; ++i) total += std::abs(dx[i * step]);
+        width = std::max(width, total);
+    }
+    LONG left = x, right = x + width, top = y;
+    // Com RTL, cobrir os dois lados do ponto: nem todo caminho de shaping foi medido.
+    if (mirrored || (options & ETO_RTLREADING) || (align & TA_RTLREADING)) left = x - width;
+    else if ((align & TA_CENTER) == TA_CENTER) { left = x - width / 2; right = left + width; }
+    else if (align & TA_RIGHT) { left = x - width; right = x; }
+    if ((align & TA_BASELINE) == TA_BASELINE) top -= metrics.tmAscent;
+    else if (align & TA_BOTTOM) top -= metrics.tmHeight;
+    // Saliencias dos glifos ficam fora da largura de avanco e da altura da celula.
+    LONG padX = metrics.tmHeight / 2 + 1, padY = metrics.tmHeight / 4 + 1;
+    area = {left - padX, top - padY, right + padX, top + metrics.tmHeight + padY};
+    if (rect && (options & ETO_CLIPPED)) IntersectRect(&area, &area, rect);
+    if (rect && (options & ETO_OPAQUE)) UnionRect(&area, &area, rect);
+    RECT clip{};
+    if (GetClipBox(hdc, &clip) == ERROR) return false;
+    IntersectRect(&area, &area, &clip);
+    return true;
+}
+// DC e DIB reaproveitados entre os trechos: criar os dois por chamada custava mais
+// que o proprio texto. Limitado em tamanho; maior que isso, ou em DC espelhado (que
+// espelha pela largura do bitmap), o trecho usa um bitmap so dele.
+constexpr int kLayerTextBufferW = 2048, kLayerTextBufferH = 512;
+static std::mutex layerTextBufferMutex;
+struct LayerTextBuffer { HDC dc; HBITMAP dib; HGDIOBJ oldBitmap; BYTE* bits; int pitch; };
+static LayerTextBuffer layerTextBuffer;
+static bool CreateLayerTextBuffer(HDC reference, int w, int h, LayerTextBuffer& buffer) {
+    BITMAPINFO bitmap{};
+    bitmap.bmiHeader.biSize = sizeof(bitmap.bmiHeader);
+    bitmap.bmiHeader.biWidth = w;
+    bitmap.bmiHeader.biHeight = -h;
+    bitmap.bmiHeader.biPlanes = 1;
+    bitmap.bmiHeader.biBitCount = 32;
+    void* bits = nullptr;
+    buffer = {};
+    buffer.dc = CreateCompatibleDC(reference);
+    buffer.dib = buffer.dc ? CreateDIBSection(nullptr, &bitmap, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+    if (!buffer.dib || !bits) {
+        if (buffer.dib) DeleteObject(buffer.dib);
+        if (buffer.dc) DeleteDC(buffer.dc);
+        buffer = {};
+        return false;
+    }
+    buffer.oldBitmap = SelectObject(buffer.dc, buffer.dib);
+    buffer.bits = static_cast<BYTE*>(bits);
+    buffer.pitch = w;
+    return true;
+}
+static void DestroyLayerTextBuffer(LayerTextBuffer& buffer) {
+    if (buffer.dc) {
+        SelectObject(buffer.dc, buffer.oldBitmap);
+        DeleteDC(buffer.dc);
+    }
+    if (buffer.dib) DeleteObject(buffer.dib);
+    buffer = {};
+}
+// Aproxima a cobertura neutra do peso percebido do ClearType, que varia com a cor do texto.
+constexpr double kDarkLayerTextGamma = 1.10, kLightLayerTextGamma = 0.95;
+constexpr int kLayerTextFringe = 8;
+struct LayerTextCurves { BYTE dark[256], light[256]; };
+static const LayerTextCurves& GetLayerTextCurves() {
+    static const LayerTextCurves curves = [] {
+        LayerTextCurves result{};
+        for (int i = 0; i < 256; ++i) {
+            result.dark[i] = BYTE(std::lround(255.0 * std::pow(i / 255.0, kDarkLayerTextGamma)));
+            result.light[i] = BYTE(std::lround(255.0 * std::pow(i / 255.0, kLightLayerTextGamma)));
+        }
+        return result;
+    }();
+    return curves;
+}
+// Desenha o trecho no buffer transparente; se o renderizador gravou alfa, usa direto.
+// Sem alfa, desenha de novo sobre branco: a diferenca entre os dois da a cobertura,
+// para qualquer cor e igual em layout ao GDI direto. Um canal de alfa nao comporta o
+// ClearType, que volta na devolucao ao GDI: o texto fica neutro na cor dele, sem franja
+// que dependa do fundo, com a cobertura pesada pela luminancia, como o olho percebe.
+// Fundo opaco nao e a cor do texto: esse trecho mantem o RGB desenhado.
+static bool DrawLayerTextInto(HDC hdc, LayerTextBuffer& buffer, const RECT& area, int x, int y, UINT options,
+                              const RECT* rect, LPCWSTR text, UINT count, const INT* dx) {
+    int w = area.right - area.left, h = area.bottom - area.top;
+    HDC mem = buffer.dc;
+    for (int row = 0; row < h; ++row) memset(buffer.bits + size_t(row) * buffer.pitch * 4, 0, size_t(w) * 4);
+    HGDIOBJ oldFont = SelectObject(mem, GetCurrentObject(hdc, OBJ_FONT));
+    SetLayout(mem, GetLayout(hdc));
+    SetGraphicsMode(mem, GetGraphicsMode(hdc));
+    SetTextColor(mem, GetTextColor(hdc));
+    SetBkColor(mem, GetBkColor(hdc));
+    SetBkMode(mem, GetBkMode(hdc));
+    SetTextAlign(mem, GetTextAlign(hdc));
+    SetTextCharacterExtra(mem, GetTextCharacterExtra(hdc));
+    bool previous = layerTextPass;
+    layerTextPass = true;
+    SetWindowOrgEx(mem, area.left, area.top, nullptr);
+    bool drawn = !!originalExtTextOut(mem, x, y, options, rect, text, count, dx);
+    GdiFlush();
+    bool hasAlpha = false;
+    for (int row = 0; row < h && !hasAlpha; ++row) {
+        const BYTE* line = buffer.bits + size_t(row) * buffer.pitch * 4;
+        for (int column = 0; column < w && !hasAlpha; ++column) hasAlpha = line[size_t(column) * 4 + 3] != 0;
+    }
+    if (drawn && !hasAlpha) {
+        SetWindowOrgEx(mem, area.left, area.top - h, nullptr);
+        PatBlt(mem, area.left, area.top, w, h, WHITENESS);
+        drawn = !!originalExtTextOut(mem, x, y, options, rect, text, count, dx);
+        GdiFlush();
+        COLORREF textColor = GetTextColor(hdc);
+        const int color[3] = {GetBValue(textColor), GetGValue(textColor), GetRValue(textColor)};
+        // Indice de paleta nao carrega a cor nos bytes baixos.
+        bool neutral = !(options & ETO_OPAQUE) && GetBkMode(hdc) != OPAQUE && (textColor >> 24) != 1;
+        const LayerTextCurves& curves = GetLayerTextCurves();
+        const BYTE* curve = (54 * color[2] + 183 * color[1] + 19 * color[0]) / 256 < 128 ? curves.dark : curves.light;
+        // Sem franja o texto ja esta em tons de cinza e a devolucao mantem esse peso:
+        // o RGB desenhado reproduz o GDI, sem nada do ClearType a imitar.
+        bool fringed = false;
+        for (int row = 0; neutral && row < h && !fringed; ++row) {
+            const BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
+            const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+            for (int column = 0; column < w && !fringed; ++column, black += 4, white += 4) {
+                int through[3];
+                for (int c = 0; c < 3; ++c) through[c] = int(white[c]) - int(black[c]);
+                fringed = std::max({through[0], through[1], through[2]}) - std::min({through[0], through[1], through[2]}) > kLayerTextFringe;
+            }
+        }
+        for (int row = 0; row < h; ++row) {
+            BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
+            const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+            for (int column = 0; column < w; ++column, black += 4, white += 4) {
+                int coverage[3];
+                for (int c = 0; c < 3; ++c) coverage[c] = 255 - std::clamp(int(white[c]) - int(black[c]), 0, 255);
+                if (fringed) {
+                    int alpha = curve[(54 * coverage[2] + 183 * coverage[1] + 19 * coverage[0] + 128) / 256];
+                    for (int c = 0; c < 3; ++c) black[c] = BYTE((alpha * color[c] + 127) / 255);
+                    black[3] = BYTE(alpha);
+                } else {
+                    int alpha = (coverage[0] + coverage[1] + coverage[2] + 1) / 3;
+                    for (int c = 0; c < 3; ++c) black[c] = BYTE(std::min<int>(black[c], alpha));
+                    black[3] = BYTE(alpha);
+                }
+            }
+        }
+    }
+    layerTextPass = previous;
+    if (drawn) {
+        SetWindowOrgEx(mem, area.left, area.top, nullptr);
+        BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        drawn = !!GdiAlphaBlend(hdc, area.left, area.top, w, h, mem, area.left, area.top, w, h, blend);
+    }
+    // O DC reaproveitado nao pode segurar a fonte do chamador nem o espelhamento.
+    SelectObject(mem, oldFont);
+    SetLayout(mem, 0);
+    return drawn;
+}
+static bool DrawLayerText(HDC hdc, int x, int y, UINT options, const RECT* rect, LPCWSTR text,
+                          UINT count, const INT* dx) {
+    RECT area{};
+    if (!LayerTextArea(hdc, x, y, options, rect, text, count, dx, area) || IsRectEmpty(&area)) return false;
+    int w = area.right - area.left, h = area.bottom - area.top;
+    if (w > 8192 || h > 2048) return false;
+    if (w > kLayerTextBufferW || h > kLayerTextBufferH || (GetLayout(hdc) & LAYOUT_RTL)) {
+        LayerTextBuffer own;
+        if (!CreateLayerTextBuffer(hdc, w, 2 * h, own)) return false;
+        bool drawn = DrawLayerTextInto(hdc, own, area, x, y, options, rect, text, count, dx);
+        DestroyLayerTextBuffer(own);
+        return drawn;
+    }
+    std::lock_guard<std::mutex> lock(layerTextBufferMutex);
+    if (!layerTextBuffer.dc && !CreateLayerTextBuffer(hdc, kLayerTextBufferW, 2 * kLayerTextBufferH, layerTextBuffer))
+        return false;
+    return DrawLayerTextInto(hdc, layerTextBuffer, area, x, y, options, rect, text, count, dx);
+}
+static BOOL WINAPI ExtTextOutHook(HDC hdc, int x, int y, UINT options, const RECT* rect, LPCWSTR text,
+                                  UINT count, const INT* dx) {
+    if (alphaPaintDepth && !layerTextPass && count && text &&
+        DrawLayerText(hdc, x, y, options, rect, text, count, dx)) return TRUE;
+    return originalExtTextOut(hdc, x, y, options, rect, text, count, dx);
+}
+// O uxtheme deriva o alfa de uma mascara propria desenhada com GDI: esse texto ja sai
+// em tons de cinza e com alfa, e alterar o desenho da mascara afina o resultado.
+using DrawTextWithGlowFn = HRESULT(WINAPI*)(HDC, LPCWSTR, UINT, RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL,
+                                            void*, LPARAM);
+static DrawTextWithGlowFn originalDrawTextWithGlow;
+static HRESULT WINAPI DrawTextWithGlowHook(HDC hdc, LPCWSTR text, UINT count, RECT* rect, DWORD flags, COLORREF color,
+                                           COLORREF glow, UINT radius, UINT intensity, BOOL premultiply, void* callback,
+                                           LPARAM param) {
+    bool previous = layerTextPass;
+    layerTextPass = true;
+    HRESULT result = originalDrawTextWithGlow(hdc, text, count, rect, flags, color, glow, radius, intensity,
+                                              premultiply, callback, param);
+    layerTextPass = previous;
+    return result;
+}
 static void STAGGER_MEMBER DrawFullHook(HANDLE node, NativePaintInfo* info) {
     if (!originalDrawFull) return;
     if (info && !info->drawingLayer && alphaPaintLive.load(std::memory_order_acquire) &&
@@ -1718,7 +1954,9 @@ static void STAGGER_MEMBER DrawFullHook(HANDLE node, NativePaintInfo* info) {
         local.useAlpha = TRUE;
         bool previous = inPaint;
         inPaint = true;
+        ++alphaPaintDepth;
         originalDrawFull(node, &local);
+        --alphaPaintDepth;
         inPaint = previous;
         return;
     }
@@ -1735,7 +1973,9 @@ static void STAGGER_MEMBER DrawFullHook(HANDLE node, NativePaintInfo* info) {
                 local.useAlpha = TRUE;
                 bool previous = inPaint;
                 inPaint = true;
+                ++alphaPaintDepth;
                 originalDrawFull(node, &local);
+                --alphaPaintDepth;
                 inPaint = previous;
                 return;
             }
@@ -3864,6 +4104,15 @@ static bool EnsureHooks() {
     if (!positionChanged ||
         !WindhawkUtils::SetFunctionHook(positionChanged, PositionChangedHook, &originalPositionChanged))
         Wh_Log(L"[STAGGER] BaseScrollBar::OnPositionChanged indisponivel; rolagem pela barra mantem as camadas");
+    // Opcional: sem ele, texto GDI escuro some nas camadas durante a animacao.
+    if (!WindhawkUtils::SetFunctionHook(ExtTextOutW, ExtTextOutHook, &originalExtTextOut))
+        Wh_Log(L"[STAGGER] hook de ExtTextOutW falhou; texto GDI das camadas fica sem alfa");
+    // Sem nome exportado: so o ordinal. Opcional, como o anterior: sem ele, o texto com
+    // brilho do uxtheme fica mais fino nas camadas.
+    HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+    auto drawTextWithGlow = uxtheme ? reinterpret_cast<DrawTextWithGlowFn>(GetProcAddress(uxtheme, MAKEINTRESOURCEA(126))) : nullptr;
+    if (!drawTextWithGlow || !WindhawkUtils::SetFunctionHook(drawTextWithGlow, DrawTextWithGlowHook, &originalDrawTextWithGlow))
+        Wh_Log(L"[STAGGER] hook de DrawTextWithGlow indisponivel");
     bool applied = Wh_ApplyHookOperations();
     if (!applied) ok = false;
     alphaPaintLive.store(ok && applied && alphaStaged && NativeCompositionAvailable(), std::memory_order_release);
@@ -4135,6 +4384,10 @@ static void BeforeUninit() {
     }
 }
 static void Uninit() {
+    {
+        std::lock_guard<std::mutex> lock(layerTextBufferMutex);
+        DestroyLayerTextBuffer(layerTextBuffer);
+    }
     Follow::Uninit();
     Removal::Uninit();
     if (duiModule && FreeLibrary(duiModule)) duiModule = nullptr;
