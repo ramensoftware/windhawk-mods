@@ -94,7 +94,7 @@ Brave's existing transparent-host path enables its compositor to preserve transp
 
 The webpage option clears the native backing during content-view updates and sets Chromium's persistent page-base color when a tab is attached. That value is also used by future renderers, so switching or restoring tabs does not bring the default white background back. Explicit website backgrounds remain visible unless a website-styling extension changes them.
 
-The full native path uses **36 functions**, of which **24 are private hooks**, and one immutable background-class vtable. Each feature has its own dependency set; unavailable features keep their native appearance. The implementation uses no sampled colors, private object-member offsets, guessed screen rectangles, screenshot polling, input forwarding, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies the backdrop. Acrylic can turn gray when inactive; choose a suitable blur mode in Translucent Windows for the main window if you prefer a persistent effect.
+The full native path uses **36 functions**, of which **24 are private hooks**, and one immutable background-class vtable. Each feature has its own dependency set. Features with missing dependencies keep their native appearance. The rounded webpage effect reads Chromium’s packed paint flags to distinguish the backing fill from the outline. Changes to that layout can affect the rounded webpage effect. The implementation uses no sampled colors, guessed screen rectangles, screenshot polling, input forwarding, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies the backdrop. Acrylic can turn gray when inactive. Choose a suitable blur mode in Translucent Windows for the main window if you prefer a persistent effect.
 
 ## Menus, popups and suggestions
 
@@ -156,6 +156,8 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
   $description: Blur address-bar suggestions below the input field. Typed text, result text and selection stay sharp.
 - popupOpacity: 62
   $name: Popup background opacity (%)
+  #! $min: 0
+  #! $max: 100
   $description: "Background tint for menus, native popups and search suggestions. 0 is transparent and 100 is opaque; text, icons and controls stay fully visible."
 - hideNativeCaptionButtons: true
   $name: Hide duplicate Windows buttons
