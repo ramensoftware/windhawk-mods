@@ -10,7 +10,7 @@
 // @include explorer.exe
 // @include StartMenuExperienceHost.exe
 // @architecture x86-64
-// @compilerOptions -lcomctl32 -lshell32 -lole32 -loleaut32 -lshlwapi -lruntimeobject -luuid -lgdi32 -luser32 -lcomdlg32 -ldwmapi
+// @compilerOptions -lcomctl32 -lshell32 -lole32 -loleaut32 -ladvapi32 -lshlwapi -lruntimeobject -luuid -lgdi32 -luser32 -lcomdlg32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -40,7 +40,8 @@ item appears without restarting Explorer.
 **Your layout lives in this mod.** The mod never writes to Windows' registry. It keeps the categories you
 choose in its own storage, and the part of the mod that runs inside the Start menu process gives Start your category
 when Start reads an app's category. If you disable or uninstall the mod, every category goes back to the one Windows
-chose, so keep the mod installed to keep your layout. **Export** saves a copy of it to a file.
+chose, so keep the mod installed to keep your layout. **Export** saves a copy of it to a file. The layout belongs to
+the Windows account that made it: other accounts on the same PC keep their own.
 
 **Known issue:** if you move every app out of the *Other* category, Windows 11 still shows an empty *Other* container
 in the Start menu. That is Start's own behavior. Please report it to Microsoft through the Feedback Hub.
@@ -206,6 +207,7 @@ update, search the Start menu DLL's symbols in Windhawk for that class and funct
 #include <windows.h>
 #include <commctrl.h>
 #include <tlhelp32.h>
+#include <sddl.h>
 #include <windhawk_utils.h>
 
 #undef GetCurrentTime
@@ -290,6 +292,7 @@ constexpr wchar_t kStartSettingsGlyph[] = L"\xE713";
 constexpr UINT WM_APP_SHOW = WM_APP + 2;
 constexpr UINT WM_APP_CONFIRM_DONE = WM_APP + 7;  // The confirmation dialog was answered.
 constexpr UINT_PTR kConfirmTimerId = 0x434F4E46;
+constexpr UINT_PTR kDpiRefreshTimerId = 0x44504952;
 constexpr UINT WM_APP_THEME_CHANGED = WM_APP + 6;  // The light / dark mode of Windows changed under an open manager.
 
 constexpr int kMaxScanDepth = 10;
@@ -459,7 +462,7 @@ std::wstring CategoryName(DWORD id, bool hasCategory) {
     return L"ID desconhecido (" + std::to_wstring(id) + L")";
 }
 
-// Name plus the raw ID, so the list shows exactly what is stored in the registry.
+// Name plus the raw ID, so the list shows exactly the number Start receives.
 std::wstring CategoryLabel(DWORD id, bool hasCategory) {
     const std::wstring name = CategoryName(id, hasCategory);
     if (!hasCategory) return name;
@@ -783,45 +786,70 @@ struct CaseInsensitiveLess {
 };
 using OverrideMap = std::map<std::wstring, DWORD, CaseInsensitiveLess>;
 
-constexpr wchar_t kOverridesValueName[] = L"overrides";
-constexpr size_t kOverridesBufferChars = 1u << 20;  // 2 MB of text: far more than any layout needs.
+// Windhawk's storage is shared by every Windows account on the PC, but the categories belong to one account (Start
+// keeps its own under that account's HKCU). So every storage name starts with the account's SID.
+// The overrides are stored as one value per override ("<SID>-override<n>", the text "<key><TAB><category id>") and a
+// count ("<SID>-overrideCount"): a portable Windhawk keeps its storage in an INI file, which cannot hold line breaks or
+// a very long string. A key is at most kMaxKeyChars characters, far below the 32,767 a string value can hold.
+constexpr size_t kMaxKeyChars = 2000;  // The longest key an import file may hold (see IsValidRelativeKey).
+
+// The SID of the account this process runs as, as text. Start's AppContainer token reports the account's SID too.
+// Empty if it cannot be read.
+const std::wstring& CurrentUserSid() {
+    static const std::wstring sid = []() {
+        std::wstring result;
+        HANDLE token = nullptr;
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return result;
+        alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD size = 0;
+        if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size)) {
+            PWSTR text = nullptr;
+            if (ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer)->User.Sid, &text)) {
+                result = text;
+                LocalFree(text);
+            }
+        }
+        CloseHandle(token);
+        return result;
+    }();
+    return sid;
+}
+
+std::wstring OverrideCountName() { return CurrentUserSid() + L"-overrideCount"; }
+std::wstring OverrideValueName(int n) { return CurrentUserSid() + L"-override" + std::to_wstring(n); }
 
 OverrideMap g_overrides;  // The manager's copy (Explorer): it works on this one and saves it.
 
-// One "<key><TAB><category id>" line per override.
-std::wstring SerializeOverrides(const OverrideMap& overrides) {
-    std::wstring text;
-    for (const auto& item : overrides) text += item.first + L"\t" + std::to_wstring(item.second) + L"\n";
-    return text;
+// Parses "<key><TAB><category id>". Returns false for a line that is not one.
+bool ParseOverrideLine(std::wstring line, std::wstring* key, DWORD* value) {
+    while (!line.empty() && (line.back() == L'\r' || line.back() == L' ')) line.pop_back();
+    const size_t tab = line.rfind(L'\t');
+    if (line.empty() || tab == std::wstring::npos || tab == 0) return false;
+    wchar_t* parseEnd = nullptr;
+    const unsigned long number = wcstoul(line.c_str() + tab + 1, &parseEnd, 10);
+    if (parseEnd == line.c_str() + tab + 1 || *parseEnd != L'\0') return false;
+    *key = line.substr(0, tab);
+    *value = static_cast<DWORD>(number);
+    return true;
 }
 
-void ParseOverrides(const std::wstring& text, OverrideMap& out) {
-    size_t pos = 0;
-    while (pos < text.size()) {
-        size_t end = text.find(L'\n', pos);
-        if (end == std::wstring::npos) end = text.size();
-        std::wstring line = text.substr(pos, end - pos);
-        pos = end + 1;
-        while (!line.empty() && (line.back() == L'\r' || line.back() == L' ')) line.pop_back();
-        const size_t tab = line.rfind(L'\t');
-        if (line.empty() || line[0] == L'#' || tab == std::wstring::npos || tab == 0) continue;
-        wchar_t* parseEnd = nullptr;
-        const unsigned long value = wcstoul(line.c_str() + tab + 1, &parseEnd, 10);
-        if (parseEnd == line.c_str() + tab + 1 || *parseEnd != L'\0') continue;
-        out[line.substr(0, tab)] = static_cast<DWORD>(value);
-    }
-}
-
-// Reads the overrides from the mod's storage. Both the manager (Explorer) and the Start menu process use this.
+// Reads this account's overrides from the mod's storage. Both the manager (Explorer) and the Start menu process use
+// this. Returns false when the account could not be identified (then no overrides are loaded).
 bool LoadOverridesFromStorage(OverrideMap& out) {
     out.clear();
-    std::vector<wchar_t> buffer(kOverridesBufferChars, L'\0');
-    Wh_GetStringValue(kOverridesValueName, buffer.data(), buffer.size());
-    if (wcsnlen(buffer.data(), buffer.size()) + 1 >= buffer.size()) {
-        Wh_Log(L"The saved category overrides are too long to read; none were loaded");
+    if (CurrentUserSid().empty()) {
+        Wh_Log(L"Could not identify the Windows account; no category overrides were loaded");
         return false;
     }
-    ParseOverrides(std::wstring(buffer.data()), out);
+    const int count = Wh_GetIntValue(OverrideCountName().c_str(), 0);
+    for (int n = 0; n < count; ++n) {
+        wchar_t buffer[kMaxKeyChars + 32];
+        buffer[0] = L'\0';
+        Wh_GetStringValue(OverrideValueName(n).c_str(), buffer, ARRAYSIZE(buffer));
+        std::wstring key;
+        DWORD value = 0;
+        if (ParseOverrideLine(buffer, &key, &value)) out[key] = value;
+    }
     return true;
 }
 
@@ -1142,10 +1170,27 @@ std::wstring ModStorageDirectory() {
 
 // Saves g_overrides to the mod's storage, where the copy of the mod inside Start reads it when Start starts.
 bool SaveOverrides() {
-    if (!Wh_SetStringValue(kOverridesValueName, SerializeOverrides(g_overrides).c_str())) {
+    if (CurrentUserSid().empty()) {
+        Wh_Log(L"Could not identify the Windows account; the category overrides were not saved");
+        return false;
+    }
+    const std::wstring countName = OverrideCountName();
+    const int oldCount = Wh_GetIntValue(countName.c_str(), 0);
+    int n = 0;
+    for (const auto& item : g_overrides) {
+        const std::wstring line = item.first + L"\t" + std::to_wstring(item.second);
+        if (!Wh_SetStringValue(OverrideValueName(n).c_str(), line.c_str())) {
+            Wh_Log(L"Could not save the category overrides");
+            return false;
+        }
+        ++n;
+    }
+    // The count goes last, so a save that stops halfway leaves the previous count in place.
+    if (!Wh_SetIntValue(countName.c_str(), n)) {
         Wh_Log(L"Could not save the category overrides");
         return false;
     }
+    for (int extra = n; extra < oldCount; ++extra) Wh_DeleteValue(OverrideValueName(extra).c_str());
     return true;
 }
 
@@ -1165,8 +1210,8 @@ WriteResult SetOverrideForKey(const std::wstring& regKey, LONG_PTR categoryValue
     return WriteResult::Changed;
 }
 
-// The app's main key and every other key it is known by get the same override, so they can never disagree. The main key
-// is created (empty) if Start has none yet. Nothing is saved here: ApplyCategoryToTargets saves once.
+// The app's main key and every other key it is known by get the same override, so they can never disagree. Nothing is
+// saved here: ApplyCategoryToTargets saves once.
 WriteResult WriteCategoryValueDual(const AppEntry& app, LONG_PTR categoryValue) {
     bool anyChanged = SetOverrideForKey(app.primaryRegistryKey, categoryValue) == WriteResult::Changed;
     for (const auto& alias : app.aliasRegistryKeys) {
@@ -1363,12 +1408,12 @@ std::wstring LayoutDirectory() { return ModStorageDirectory(); }
 
 // Writes the current layout to a text file (the same format Export uses) so a reset can be undone
 // with Import. Returns the file's path, or an empty string if it could not be written.
-// Keeps only the newest few Reset all backups, so they do not pile up.
+// Keeps only the newest few Reset all backups of this Windows account, so they do not pile up.
 void PruneLayoutBackups(const std::wstring& dir) {
     constexpr size_t kKeep = 5;
     std::vector<std::wstring> names;
     WIN32_FIND_DATAW fd{};
-    HANDLE find = FindFirstFileW((dir + L"\\backup-before-reset-*.txt").c_str(), &fd);
+    HANDLE find = FindFirstFileW((dir + L"\\backup-before-reset-" + CurrentUserSid() + L"-*.txt").c_str(), &fd);
     if (find == INVALID_HANDLE_VALUE) return;
     do {
         names.push_back(fd.cFileName);
@@ -1395,7 +1440,7 @@ std::wstring SaveLayoutBackup() {
     SYSTEMTIME now{};
     GetLocalTime(&now);
     auto two = [](int v) { return (v < 10 ? std::wstring(L"0") : std::wstring()) + std::to_wstring(v); };
-    const std::wstring file = dir + L"\\backup-before-reset-" + std::to_wstring(now.wYear) + two(now.wMonth) +
+    const std::wstring file = dir + L"\\backup-before-reset-" + CurrentUserSid() + L"-" + std::to_wstring(now.wYear) + two(now.wMonth) +
                               two(now.wDay) + L"-" + two(now.wHour) + two(now.wMinute) + two(now.wSecond) + L".txt";
 
     if (!WriteTextFile(file, LayoutFileText())) return std::wstring();
@@ -1480,7 +1525,7 @@ void ExportCategories(std::function<void()> onDone) {
 
 // A key path from an import file: non-empty segments separated by backslashes, no "." or ".." segments.
 bool IsValidRelativeKey(const std::wstring& key) {
-    if (key.empty() || key.size() > 2000 || key.front() == L'\\' || key.back() == L'\\') return false;
+    if (key.empty() || key.size() > kMaxKeyChars || key.front() == L'\\' || key.back() == L'\\') return false;
     size_t start = 0;
     while (start <= key.size()) {
         size_t end = key.find(L'\\', start);
@@ -3192,10 +3237,20 @@ void BuildXamlTree(wuxc::TreeView const& tree) {
             wuxc::TreeViewNode node;
             node.Content(rowGrid);
             CheckOf(node).Checked([index](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (index < g_apps.size()) g_apps[index].checked = true; UpdateXamlCheckAll();
+                try {
+                    if (index < g_apps.size()) g_apps[index].checked = true;
+                    UpdateXamlCheckAll();
+                } catch (...) {
+                    LogXamlHandlerFailure(L"app Checked");
+                }
             });
             CheckOf(node).Unchecked([index](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (index < g_apps.size()) g_apps[index].checked = false; UpdateXamlCheckAll();
+                try {
+                    if (index < g_apps.size()) g_apps[index].checked = false;
+                    UpdateXamlCheckAll();
+                } catch (...) {
+                    LogXamlHandlerFailure(L"app Unchecked");
+                }
             });
             tree.RootNodes().Append(node);
             continue;
@@ -3267,25 +3322,43 @@ void BuildXamlTree(wuxc::TreeView const& tree) {
         auto weakFolder = winrt::make_weak(folderNode);
         auto weakFolderCheck = winrt::make_weak(folderCheck);
         folderCheck.Checked([weakFolder, busy, indices](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-            if (auto node = weakFolder.get(); node && !*busy) SetFolderApps(node, true, busy, indices);
+            try {
+                if (auto node = weakFolder.get(); node && !*busy) SetFolderApps(node, true, busy, indices);
+            } catch (...) {
+                LogXamlHandlerFailure(L"folder Checked");
+            }
         });
         folderCheck.Unchecked([weakFolder, busy, indices](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-            if (auto node = weakFolder.get(); node && !*busy) SetFolderApps(node, false, busy, indices);
+            try {
+                if (auto node = weakFolder.get(); node && !*busy) SetFolderApps(node, false, busy, indices);
+            } catch (...) {
+                LogXamlHandlerFailure(L"folder Unchecked");
+            }
         });
         for (size_t n = 0; n < indices.size(); ++n) {
             const size_t index = indices[n];
             wuxc::TreeViewNode child = folderNode.Children().GetAt(static_cast<uint32_t>(n));
             CheckOf(child).Checked([weakFolder, weakFolderCheck, busy, index](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (index < g_apps.size()) g_apps[index].checked = true; UpdateXamlCheckAll();
-                auto node = weakFolder.get();
-                auto check = weakFolderCheck.get();
-                if (node && check) SyncFolderCheck(node, check, busy);
+                try {
+                    if (index < g_apps.size()) g_apps[index].checked = true;
+                    UpdateXamlCheckAll();
+                    auto node = weakFolder.get();
+                    auto check = weakFolderCheck.get();
+                    if (node && check) SyncFolderCheck(node, check, busy);
+                } catch (...) {
+                    LogXamlHandlerFailure(L"folder app Checked");
+                }
             });
             CheckOf(child).Unchecked([weakFolder, weakFolderCheck, busy, index](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (index < g_apps.size()) g_apps[index].checked = false; UpdateXamlCheckAll();
-                auto node = weakFolder.get();
-                auto check = weakFolderCheck.get();
-                if (node && check) SyncFolderCheck(node, check, busy);
+                try {
+                    if (index < g_apps.size()) g_apps[index].checked = false;
+                    UpdateXamlCheckAll();
+                    auto node = weakFolder.get();
+                    auto check = weakFolderCheck.get();
+                    if (node && check) SyncFolderCheck(node, check, busy);
+                } catch (...) {
+                    LogXamlHandlerFailure(L"folder app Unchecked");
+                }
             });
         }
 
@@ -3302,7 +3375,7 @@ void UpdateBulkPickerMark() {
     SetPickerValue(g_xamlBulkPicker, PickerTag(g_xamlBulkPicker));
 }
 
-// Rebuilds the tree from the manager's current data, after a change that touched the registry.
+// Rebuilds the tree from the manager's current data, after the categories changed.
 void RebuildXamlTree(wuxc::TreeView const& tree) {
     tree.RootNodes().Clear();
     BuildXamlTree(tree);
@@ -3331,39 +3404,47 @@ void ShowCustomIdInline(wuxc::TreeView const& tree, wuxc::Button const& picker, 
     // The box and the tree are reached through the event sender and a weak reference: capturing them strongly would
     // keep both alive for as long as the box exists.
     box.KeyDown([weakTree = winrt::make_weak(tree), indices, folders, done](wf::IInspectable const& sender, wux::Input::KeyRoutedEventArgs const& e) {
-        auto box = sender.as<wuxc::TextBox>();
-        auto tree = weakTree.get();
-        if (!tree) return;
-        if (e.Key() == winrt::Windows::System::VirtualKey::Escape) {
+        try {
+            auto box = sender.as<wuxc::TextBox>();
+            auto tree = weakTree.get();
+            if (!tree) return;
+            if (e.Key() == winrt::Windows::System::VirtualKey::Escape) {
+                e.Handled(true);
+                if (*done) return;
+                *done = true;
+                RebuildXamlTree(tree);
+                return;
+            }
+            if (e.Key() != winrt::Windows::System::VirtualKey::Enter) return;
             e.Handled(true);
             if (*done) return;
-            *done = true;
-            RebuildXamlTree(tree);
-            return;
-        }
-        if (e.Key() != winrt::Windows::System::VirtualKey::Enter) return;
-        e.Handled(true);
-        if (*done) return;
-        const std::wstring typed(box.Text().c_str());
-        wchar_t* end = nullptr;
-        const unsigned long id = wcstoul(typed.c_str(), &end, 10);
-        if (typed.empty() || (end && *end != L'\0') || id > kMaxCustomId) {
-            if (g_xamlStatus) {
-                g_xamlStatus.Text(IsPortuguese()
-                    ? L"Digite um n\u00famero inteiro de 0 a " + std::to_wstring(kMaxCustomId) + L"."
-                    : L"Type a whole number from 0 to " + std::to_wstring(kMaxCustomId) + L".");
+            const std::wstring typed(box.Text().c_str());
+            wchar_t* end = nullptr;
+            const unsigned long id = wcstoul(typed.c_str(), &end, 10);
+            if (typed.empty() || (end && *end != L'\0') || id > kMaxCustomId) {
+                if (g_xamlStatus) {
+                    g_xamlStatus.Text(IsPortuguese()
+                        ? L"Digite um n\u00famero inteiro de 0 a " + std::to_wstring(kMaxCustomId) + L"."
+                        : L"Type a whole number from 0 to " + std::to_wstring(kMaxCustomId) + L".");
+                }
+                return;
             }
-            return;
+            *done = true;
+            ApplyRowCategory(indices, static_cast<int>(id), folders);
+            RebuildXamlTree(tree);
+        } catch (...) {
+            LogXamlHandlerFailure(L"row ID box KeyDown");
         }
-        *done = true;
-        ApplyRowCategory(indices, static_cast<int>(id), folders);
-        RebuildXamlTree(tree);
     });
 
     box.LostFocus([weakTree = winrt::make_weak(tree), done](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-        if (*done) return;
-        *done = true;
-        if (auto strongTree = weakTree.get()) RebuildXamlTree(strongTree);
+        try {
+            if (*done) return;
+            *done = true;
+            if (auto strongTree = weakTree.get()) RebuildXamlTree(strongTree);
+        } catch (...) {
+            LogXamlHandlerFailure(L"row ID box LostFocus");
+        }
     });
 
     box.Focus(wux::FocusState::Programmatic);
@@ -4309,25 +4390,41 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 wuxc::Button applyButton;
                 applyButton.Content(winrt::box_value(std::wstring(Tr(L"Apply to ticked apps", L"Aplicar aos marcados"))));
                 applyButton.Click([tree](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    ApplyTickedFromXaml(tree);
+                    try {
+                        ApplyTickedFromXaml(tree);
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"apply Click");
+                    }
                 });
 
                 wuxc::Button resetButton;
                 resetButton.Content(winrt::box_value(std::wstring(Tr(L"Reset all", L"Redefinir tudo"))));
                 resetButton.Click([tree](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    ResetAllCategories([tree]() { RebuildXamlTree(tree); });
+                    try {
+                        ResetAllCategories([tree]() { RebuildXamlTree(tree); });
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"reset Click");
+                    }
                 });
 
                 wuxc::Button importButton;
                 importButton.Content(winrt::box_value(std::wstring(Tr(L"Import", L"Importar"))));
                 importButton.Click([tree](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    ImportCategories([tree]() { RebuildXamlTree(tree); });
+                    try {
+                        ImportCategories([tree]() { RebuildXamlTree(tree); });
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"import Click");
+                    }
                 });
 
                 wuxc::Button exportButton;
                 exportButton.Content(winrt::box_value(std::wstring(Tr(L"Export", L"Exportar"))));
                 exportButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    ExportCategories(nullptr);
+                    try {
+                        ExportCategories(nullptr);
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"export Click");
+                    }
                 });
 
                 g_xamlStatus = wuxc::TextBlock{};
@@ -4411,8 +4508,12 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 g_xamlFilter.MaxDropDownHeight(1000.0);
                 g_xamlFilter.VerticalAlignment(wux::VerticalAlignment::Center);
                 g_xamlFilter.SelectionChanged([tree](wf::IInspectable const&, wuxc::SelectionChangedEventArgs const&) {
-                    UpdateFilterForeground();
-                    if (!g_xamlBusy) RebuildXamlTree(tree);
+                    try {
+                        UpdateFilterForeground();
+                        if (!g_xamlBusy) RebuildXamlTree(tree);
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"filter SelectionChanged");
+                    }
                 });
                 AttachWheelCycle(g_xamlFilter);
                 PopulateXamlFilter();
@@ -4435,23 +4536,35 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 addSort(Tr(L"Sort: disagreeing keys first", L"Ordem: chaves divergentes primeiro"), kSortConflictsFirst);
                 g_xamlSort.SelectedIndex(0);
                 g_xamlSort.SelectionChanged([tree](wf::IInspectable const&, wuxc::SelectionChangedEventArgs const&) {
-                    if (!g_xamlBusy) RebuildXamlTree(tree);
+                    try {
+                        if (!g_xamlBusy) RebuildXamlTree(tree);
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"sort SelectionChanged");
+                    }
                 });
 
                 g_xamlCheckAll = wuxc::CheckBox{};
                 g_xamlCheckAll.Content(winrt::box_value(std::wstring(Tr(L"Check all", L"Marcar tudo"))));
                 g_xamlCheckAll.VerticalAlignment(wux::VerticalAlignment::Center);
                 g_xamlCheckAll.Click([tree](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    SetVisibleXamlChecks(tree, g_xamlCheckAll.IsChecked().Value());
-                    UpdateXamlCheckAll();
+                    try {
+                        SetVisibleXamlChecks(tree, g_xamlCheckAll.IsChecked().Value());
+                        UpdateXamlCheckAll();
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"check all Click");
+                    }
                 });
 
                 g_xamlExpand = wuxc::Button{};
                 g_xamlExpand.VerticalAlignment(wux::VerticalAlignment::Center);
                 g_xamlExpand.Content(winrt::box_value(std::wstring(Tr(L"Collapse all", L"Recolher tudo"))));
                 g_xamlExpand.Click([tree](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    SetXamlFoldersExpanded(tree, !g_xamlExpanded);
-                    RebuildXamlTree(tree);
+                    try {
+                        SetXamlFoldersExpanded(tree, !g_xamlExpanded);
+                        RebuildXamlTree(tree);
+                    } catch (...) {
+                        LogXamlHandlerFailure(L"expand Click");
+                    }
                 });
 
                 // The refresh button is an icon; its tooltip gives the name, as the user asked.
@@ -4610,9 +4723,26 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         case WM_APP_CONFIRM_DONE:
             FinishConfirm(hwnd);
             return 0;
+        case WM_DPICHANGED: {
+            // The window moved to a monitor with a different scaling. Windows resizes the window itself (the default
+            // handling applies the suggested rectangle). The list built under the old scaling can be left misplaced
+            // (its left edge cut off), so it is built again once XAML has taken the new scaling.
+            const LRESULT result = DefWindowProcW(hwnd, msg, wParam, lParam);
+            SetTimer(hwnd, kDpiRefreshTimerId, 200, nullptr);
+            return result;
+        }
         case WM_TIMER:
             if (wParam == kConfirmTimerId) {
                 RunConfirmedAction(hwnd);
+                return 0;
+            }
+            if (wParam == kDpiRefreshTimerId) {
+                KillTimer(hwnd, kDpiRefreshTimerId);
+                try {
+                    if (!g_xamlClosing && g_xamlTree) RebuildXamlTree(g_xamlTree);
+                } catch (...) {
+                    LogXamlHandlerFailure(L"DPI refresh");
+                }
                 return 0;
             }
             break;
@@ -4808,11 +4938,8 @@ void ApplyXamlWindowBackdrop(HWND hwnd) {
     }
 }
 
-// Centres the window on the work area of the primary monitor.
-void CentreXamlWindow(HWND hwnd, int width, int height) {
-    MONITORINFO info{sizeof(info)};
-    if (!GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &info)) return;
-    const RECT& work = info.rcWork;
+// Centres the window on the given work area.
+void CentreXamlWindow(HWND hwnd, const RECT& work, int width, int height) {
     const int x = work.left + (work.right - work.left - width) / 2;
     const int y = work.top + (work.bottom - work.top - height) / 2;
     SetWindowPos(hwnd, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
@@ -4887,8 +5014,18 @@ void OpenXamlTreeWindow() {
     const UINT sysDpi = GetDpiForSystem();
     const int width = MulDiv(1100, sysDpi, 96);
     const int height = MulDiv(640, sysDpi, 96);
+    // Open on the monitor the mouse is on, which is where the Start menu was when "Manage Categories" was clicked
+    // (the primary monitor if that cannot be found). The size is set again below, for that monitor's scaling.
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    {
+        POINT cursor{};
+        MONITORINFO info{sizeof(info)};
+        if (GetCursorPos(&cursor) &&
+            GetMonitorInfoW(MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY), &info)) {
+            work = info.rcWork;
+        }
+    }
     const int x = work.left + (work.right - work.left - width) / 2;
     const int y = work.top + (work.bottom - work.top - height) / 2;
     // No drawing surface of its own: the client area is only what XAML draws, so it can be transparent.
@@ -4912,16 +5049,19 @@ void OpenXamlTreeWindow() {
         DwmExtendFrameIntoClientArea(tree, &shadowMargins);
         SetWindowPos(tree, nullptr, 0, 0, 0, 0,
                      SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        int openWidth = width;
+        // The window was created on the chosen monitor, so its DPI is that monitor's.
+        const UINT windowDpi = GetDpiForWindow(tree);
+        int openWidth = MulDiv(1100, windowDpi, 96);
+        const int openHeight = (std::min)(MulDiv(640, windowDpi, 96), static_cast<int>(work.bottom - work.top));
         const double fitDip = ComputeToolbarFitWidth();
         if (fitDip > 0) {
-            const UINT dpi = GetDpiForWindow(tree);
+            const UINT dpi = windowDpi;
             // Two DIPs of slack, so a rounding difference cannot push the last button onto a second row.
             openWidth = static_cast<int>(std::ceil((fitDip + 2.0) * dpi / 96.0));
             openWidth = (std::max)(openWidth, MulDiv(kMinWindowWidth, dpi, 96));
             openWidth = (std::min)(openWidth, static_cast<int>(work.right - work.left));
         }
-        CentreXamlWindow(tree, openWidth, height);
+        CentreXamlWindow(tree, work, openWidth, openHeight);
         {
             RECT windowRect{}, clientRect{};
             GetWindowRect(tree, &windowRect);
