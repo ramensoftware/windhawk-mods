@@ -4,6 +4,7 @@
 // @description     A lightweight, animated radial application launcher for Windows.
 // @version         0.7.0
 // @author          Arihant Jain
+// @github          https://github.com/ArihantJain2008
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -ladvapi32
