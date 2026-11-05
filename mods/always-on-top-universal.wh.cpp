@@ -2,12 +2,15 @@
 // @id              always-on-top-universal
 // @name            Always on Top (Universal)
 // @description     Adds a customizable "Always on Top" option to window menus, plus a force-topmost process list.
-// @version         6.3
-// @author          You
+// @version         6.5
+// @author          gloobus1
 // @github          https://github.com/glooobus1
 // @include         *
-// @exclude         windhawk.exe;svchost.exe;conhost.exe;git.exe
-// @compilerOptions -luser32 -lpsapi
+// @exclude         windhawk.exe
+// @exclude         svchost.exe
+// @exclude         conhost.exe
+// @exclude         git.exe
+// @compilerOptions -luser32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -28,10 +31,7 @@ Examples:
 ## Force topmost list
 Processes listed in **Force topmost processes** (separated by `;`) will always have their
 windows kept above all others, regardless of the menu toggle. Example:
-`explorer.exe;cmd.exe`
-
-Note: for `explorer.exe` only the taskbar / desktop windows (Shell_TrayWnd, Progman, WorkerW)
-are forced on top, not regular folder windows.
+`notepad.exe;calc.exe`
 */
 // ==/WindhawkModReadme==
 
@@ -46,19 +46,19 @@ are forced on top, not regular folder windows.
 - baseText: "On Top"
   $name: Base text
   $description: Text substituted for %text% in the template.
-- forceTopmostList: "explorer.exe;cmd.exe"
+- forceTopmostList: ""
   $name: Force topmost processes
-  $description: Semicolon-separated process names (e.g. explorer.exe;cmd.exe). Their windows are always kept on top.
+  $description: Semicolon-separated process names (e.g. notepad.exe;calc.exe). Their windows are always kept on top.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <psapi.h>
 #include <string>
 #include <vector>
 #include <algorithm>
 
-#define IDM_TOPMOST 0x8001
+// Window menu IDs must be below 0xF000 with the low 4 bits clear.
+#define IDM_TOPMOST 0x8010
 
 struct {
     PCWSTR enabledPrefix;
@@ -67,7 +67,8 @@ struct {
     PCWSTR forceTopmostList;
 } settings;
 
-std::vector<std::wstring> g_forceTopmost;
+bool g_forceTopmostProcess = false;
+std::wstring g_currentProcessName;
 
 using DefWindowProcW_t = decltype(&DefWindowProcW);
 DefWindowProcW_t DefWindowProcW_Original;
@@ -87,75 +88,6 @@ static std::wstring Trim(const std::wstring& s) {
     if (a == std::wstring::npos) return L"";
     size_t b = s.find_last_not_of(L" \t\r\n");
     return s.substr(a, b - a + 1);
-}
-
-static void ParseForceList(PCWSTR list) {
-    g_forceTopmost.clear();
-    if (!list) return;
-    std::wstring str = list;
-    size_t pos = 0;
-    while (pos <= str.size()) {
-        size_t next = str.find(L';', pos);
-        std::wstring token = (next == std::wstring::npos)
-                                 ? str.substr(pos)
-                                 : str.substr(pos, next - pos);
-        token = Trim(token);
-        if (!token.empty()) {
-            g_forceTopmost.push_back(ToLower(token));
-        }
-        if (next == std::wstring::npos) break;
-        pos = next + 1;
-    }
-}
-
-static std::wstring GetProcessName(HWND hWnd) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (!pid) return L"";
-
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) return L"";
-
-    wchar_t path[MAX_PATH] = {};
-    DWORD size = MAX_PATH;
-    std::wstring result;
-    if (QueryFullProcessImageNameW(hProc, 0, path, &size)) {
-        std::wstring full = path;
-        size_t slash = full.find_last_of(L"\\/");
-        result = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
-    }
-    CloseHandle(hProc);
-    return ToLower(result);
-}
-
-// Для explorer.exe форсим только панель задач / рабочий стол,
-// чтобы не поднимать все окна папок.
-static bool IsShellSurfaceWindow(HWND hWnd) {
-    wchar_t cls[64] = {};
-    if (!GetClassNameW(hWnd, cls, 64)) return false;
-    std::wstring c = cls;
-    return c == L"Shell_TrayWnd" ||
-           c == L"Shell_SecondaryTrayWnd" ||
-           c == L"Progman" ||
-           c == L"WorkerW";
-}
-
-static bool IsForceTopmost(HWND hWnd) {
-    if (g_forceTopmost.empty()) return false;
-
-    std::wstring name = GetProcessName(hWnd);
-    if (name.empty()) return false;
-
-    for (const auto& p : g_forceTopmost) {
-        if (name == p) {
-            // Особая логика для explorer.exe: только shell-поверхности.
-            if (name == L"explorer.exe") {
-                return IsShellSurfaceWindow(hWnd);
-            }
-            return true;
-        }
-    }
-    return false;
 }
 
 static std::wstring ReplaceAll(std::wstring str, const std::wstring& from, const std::wstring& to) {
@@ -191,47 +123,15 @@ void ToggleTopmost(HWND hWnd) {
     DrawMenuBar(hWnd);
 }
 
-// Гарантирует, что окна из force-списка остаются поверх.
-void EnforceForceTopmost(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd)) return;
-    if (!IsForceTopmost(hWnd)) return;
-
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    if (!(exStyle & WS_EX_TOPMOST)) {
-        ApplyTopmost(hWnd, true);
-    }
-}
-
-void LoadSettings() {
-    settings.enabledPrefix = Wh_GetStringSetting(L"enabledPrefix");
-    settings.menuTemplate  = Wh_GetStringSetting(L"menuTemplate");
-    settings.baseText      = Wh_GetStringSetting(L"baseText");
-    settings.forceTopmostList = Wh_GetStringSetting(L"forceTopmostList");
-    ParseForceList(settings.forceTopmostList);
-}
-
-void FreeSettings() {
-    Wh_FreeStringSetting(settings.enabledPrefix);
-    Wh_FreeStringSetting(settings.menuTemplate);
-    Wh_FreeStringSetting(settings.baseText);
-    Wh_FreeStringSetting(settings.forceTopmostList);
-}
-
-void CleanUpMenu(HMENU hMenu) {
+// Возвращает true, если пункт был добавлен (или уже существовал)
+bool AddMenuItem(HWND hWnd, HMENU hMenu) {
+    // Проверяем, есть ли уже наш пункт
     int count = GetMenuItemCount(hMenu);
-    for (int i = count - 1; i >= 0; i--) {
-        UINT id = GetMenuItemID(hMenu, i);
-        if (id == IDM_TOPMOST) {
-            DeleteMenu(hMenu, i, MF_BYPOSITION);
-        }
-        else if (id == 0 && (GetMenuState(hMenu, i, MF_BYPOSITION) & MF_SEPARATOR)) {
-            DeleteMenu(hMenu, i, MF_BYPOSITION);
+    for (int i = 0; i < count; i++) {
+        if (GetMenuItemID(hMenu, i) == IDM_TOPMOST) {
+            return true; // Пункт уже есть, ничего не добавляем
         }
     }
-}
-
-void ModifyMenu(HWND hWnd, HMENU hMenu) {
-    CleanUpMenu(hMenu);
 
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     bool isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
@@ -241,68 +141,128 @@ void ModifyMenu(HWND hWnd, HMENU hMenu) {
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(hMenu, flags, IDM_TOPMOST, text.c_str());
+    return true;
+}
+
+void RemoveMenuItem(HMENU hMenu) {
+    int count = GetMenuItemCount(hMenu);
+    for (int i = count - 1; i >= 0; i--) {
+        if (GetMenuItemID(hMenu, i) == IDM_TOPMOST) {
+            DeleteMenu(hMenu, i, MF_BYPOSITION);
+            // Удаляем разделитель, который мы добавили (он будет на позиции i-1)
+            if (i > 0 && (GetMenuState(hMenu, i - 1, MF_BYPOSITION) & MF_SEPARATOR)) {
+                DeleteMenu(hMenu, i - 1, MF_BYPOSITION);
+            }
+            break;
+        }
+    }
+}
+
+void LoadSettings() {
+    settings.enabledPrefix = Wh_GetStringSetting(L"enabledPrefix");
+    settings.menuTemplate  = Wh_GetStringSetting(L"menuTemplate");
+    settings.baseText      = Wh_GetStringSetting(L"baseText");
+    settings.forceTopmostList = Wh_GetStringSetting(L"forceTopmostList");
+
+    wchar_t path[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, path, MAX_PATH)) {
+        std::wstring full = path;
+        size_t slash = full.find_last_of(L"\\/");
+        g_currentProcessName = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+        g_currentProcessName = ToLower(g_currentProcessName);
+    }
+
+    g_forceTopmostProcess = false;
+    if (settings.forceTopmostList && g_currentProcessName.length() > 0) {
+        std::wstring str = settings.forceTopmostList;
+        size_t pos = 0;
+        while (pos <= str.size()) {
+            size_t next = str.find(L';', pos);
+            std::wstring token = (next == std::wstring::npos) ? str.substr(pos) : str.substr(pos, next - pos);
+            token = ToLower(Trim(token));
+            if (!token.empty() && token == g_currentProcessName) {
+                g_forceTopmostProcess = true;
+                break;
+            }
+            if (next == std::wstring::npos) break;
+            pos = next + 1;
+        }
+    }
+}
+
+void FreeSettings() {
+    Wh_FreeStringSetting(settings.enabledPrefix);
+    Wh_FreeStringSetting(settings.menuTemplate);
+    Wh_FreeStringSetting(settings.baseText);
+    Wh_FreeStringSetting(settings.forceTopmostList);
+}
+
+void EnforceForceTopmost(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    if (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD) return;
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (!(exStyle & WS_EX_TOPMOST)) {
+        ApplyTopmost(hWnd, true);
+    }
 }
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    if (Msg == WM_INITMENUPOPUP) {
-        HMENU hMenu = (HMENU)wParam;
-        if (HIWORD(lParam) == 0) {
-            HMENU hSysMenu = GetSystemMenu(hWnd, FALSE);
-            if (hMenu == hSysMenu) {
-                ModifyMenu(hWnd, hMenu);
-            }
-        }
+    if (Msg == WM_INITMENUPOPUP && HIWORD(lParam)) {
+        AddMenuItem(hWnd, (HMENU)wParam);
+    } 
+    else if (Msg == WM_UNINITMENUPOPUP) {
+        RemoveMenuItem((HMENU)wParam);
     }
-
-    if (Msg == WM_SYSCOMMAND) {
+    else if (Msg == WM_SYSCOMMAND) {
         if ((wParam & 0xFFF0) == IDM_TOPMOST) {
             ToggleTopmost(hWnd);
             return 0;
         }
     }
 
-    // Не даём окну из force-списка потерять TOPMOST.
-    if (Msg == WM_WINDOWPOSCHANGED || Msg == WM_ACTIVATE || Msg == WM_SHOWWINDOW) {
-        EnforceForceTopmost(hWnd);
+    if (g_forceTopmostProcess) {
+        static thread_local bool inSetWindowPos = false;
+        if (!inSetWindowPos && (Msg == WM_WINDOWPOSCHANGED || Msg == WM_ACTIVATE || Msg == WM_SHOWWINDOW)) {
+            inSetWindowPos = true;
+            EnforceForceTopmost(hWnd);
+            inSetWindowPos = false;
+        }
     }
 
     return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
 }
 
+bool IsWindowMenu(HMENU hMenu) {
+    return GetMenuState(hMenu, SC_MINIMIZE, MF_BYCOMMAND) != -1 ||
+           GetMenuState(hMenu, SC_MAXIMIZE, MF_BYCOMMAND) != -1;
+}
+
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
-    bool isSystemMenu = false;
-
-    if (hWnd && IsWindow(hWnd)) {
-        if (GetMenuState(hMenu, SC_MINIMIZE, MF_BYCOMMAND) != -1 ||
-            GetMenuState(hMenu, SC_MAXIMIZE, MF_BYCOMMAND) != -1) {
-            isSystemMenu = true;
-            ModifyMenu(hWnd, hMenu);
-        }
-    }
-
-    if (isSystemMenu) {
-        uFlags |= TPM_RETURNCMD;
+    bool added = false;
+    
+    // Вмешиваемся ТОЛЬКО если вызывающий код сам запросил TPM_RETURNCMD
+    if ((uFlags & TPM_RETURNCMD) && hWnd && IsWindow(hWnd) && IsWindowMenu(hMenu)) {
+        // AddMenuItem вернет true, если пункт был добавлен (или уже был)
+        // Если пункт уже был добавлен через DefWindowProcW, мы это учтем
+        added = AddMenuItem(hWnd, hMenu);
     }
 
     BOOL result = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
 
-    if (isSystemMenu) {
+    if (added) {
+        RemoveMenuItem(hMenu); // Убираем за собой
         if (result == IDM_TOPMOST) {
             ToggleTopmost(hWnd);
-            return FALSE;
+            return 0;
         }
-        else if (result != 0) {
-            PostMessageW(hWnd, WM_SYSCOMMAND, result, 0);
-            return FALSE;
-        }
-        return FALSE;
     }
 
     return result;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init Always on Top Universal v6.3");
+    Wh_Log(L"Init Always on Top Universal v6.5");
     LoadSettings();
 
     Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
