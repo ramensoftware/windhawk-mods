@@ -28,6 +28,8 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 
 ![Logo menu](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/logo-menu.png)
 
+![Settings window](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png)
+
 ---
 
 ## Left side
@@ -67,7 +69,7 @@ Small glass pills drop from the bar for headphones, audio output, low battery, c
 
 ## Notifications
 
-Turn on **Pill - Windows notifications** in the mod's settings (off by default) and the bar shows your apps' notifications:
+Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Notice pills** (off by default) and the bar shows your apps' notifications:
 
 - in the pill and in the bell panel, grouped by app
 - **reply** to messages (like WhatsApp) right from the pill, when the app supports replies
@@ -84,7 +86,7 @@ Turn on **Pill - Windows notifications** in the mod's settings (off by default) 
 
 ## Settings
 
-Windhawk's settings page for the mod holds every option, applied live without restarting the bar. Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad for what has no place there: the panel glass, the weather place and widget, imported .ics files and the look of that window.
+Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics links.
 
 ## What changes Windows settings
 
@@ -104,7 +106,7 @@ The mod only goes online for features you set up yourself:
 
 - **Weather**, once you pick a place: the place search uses OpenStreetMap Nominatim or Open-Meteo, and the forecast comes from the service you choose (Open-Meteo, MET Norway or wttr.in) with the place's coordinates rounded to about 1 km. Turning the weather icon off stops all requests.
 - **.ics links** you add in Windhawk's settings, downloaded when you open the calendar, at most every 15 minutes. Local .ics files never use the network.
-- **App update count** (off by default): runs `winget upgrade`, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.
+- **App update count** (off by default, in Windhawk's settings): runs `winget upgrade`, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.
 
 ## Privacy
 
@@ -123,41 +125,9 @@ The "copied" pill skips anything an app marks as private (password managers do),
 
 // ==WindhawkModSettings==
 /*
-- language: auto
-  $name: Language
-  $name:pt-BR: Idioma
-  $description: Automatic follows the language of Windows
-  $description:pt-BR: Automático segue o idioma do Windows
-  $options:
-  - auto: Automatic (Windows)
-  - pt: Português
-  - en: English
-  - es: Español
-  - fr: Français
-  - de: Deutsch
-  - it: Italiano
-  - zh: 中文（简体）
-  $options:pt-BR:
-  - auto: Automático (Windows)
-  - pt: Português
-  - en: English
-  - es: Español
-  - fr: Français
-  - de: Deutsch
-  - it: Italiano
-  - zh: 中文（简体）
-- height: 28
-  $name: Bar height (px at 100% scale)
-  $name:pt-BR: Altura da barra (px em 100% de escala)
 - fontFamily: "Segoe UI Variable Text"
   $name: Font
   $name:pt-BR: Fonte
-- fontSize: 13
-  $name: Font size
-  $name:pt-BR: Tamanho da fonte
-- iconScale: 100
-  $name: Bar icon size (%)
-  $name:pt-BR: Tamanho dos ícones da barra (%)
 - theme: auto
   $name: Theme
   $name:pt-BR: Tema
@@ -186,132 +156,17 @@ The "copied" pill skips anything an app marks as private (password managers do),
 - tintLight: "#50F2F2F2"
   $name: Glass tint in the light theme (#AARRGGBB)
   $name:pt-BR: Tinta do vidro no tema claro (#AARRGGBB)
-- barStyle: transparent
-  $name: Bar background
-  $name:pt-BR: Fundo da barra
-  $options:
-  - glass: Glass (Windows blur)
-  - transparent: Fully transparent
-  - liquid: Liquid glass (experimental, translucent with a shadow)
-  $options:pt-BR:
-  - glass: Vidro (desfoque do Windows)
-  - transparent: Totalmente transparente
-  - liquid: Vidro líquido (experimental, translúcido e com sombra)
-- selectionBar: blue
-  $name: Selection color on the bar
-  $name:pt-BR: Cor da seleção na barra
-  $options:
-  - blue: Blue (macOS)
-  - purple: Purple
-  - pink: Pink
-  - red: Red
-  - orange: Orange
-  - yellow: Yellow
-  - green: Green
-  - graphite: Graphite
-  - frosted: Frosted
-  $options:pt-BR:
-  - blue: Azul (macOS)
-  - purple: Roxo
-  - pink: Rosa
-  - red: Vermelho
-  - orange: Laranja
-  - yellow: Amarelo
-  - green: Verde
-  - graphite: Grafite
-  - frosted: Fosca
-- selectionMenu: blue
-  $name: Selection color in menus
-  $name:pt-BR: Cor da seleção nos menus
-  $options:
-  - blue: Blue (macOS)
-  - purple: Purple
-  - pink: Pink
-  - red: Red
-  - orange: Orange
-  - yellow: Yellow
-  - green: Green
-  - graphite: Graphite
-  - frosted: Frosted
-  $options:pt-BR:
-  - blue: Azul (macOS)
-  - purple: Roxo
-  - pink: Rosa
-  - red: Vermelho
-  - orange: Laranja
-  - yellow: Amarelo
-  - green: Verde
-  - graphite: Grafite
-  - frosted: Fosca
-- menuGlass: glass
-  $name: Menu style
-  $name:pt-BR: Estilo dos menus
-  $description: The bar's menus and context menus. "Glass" is the classic frosted glass (independent of the Control Center). "Same as Control Center" uses the Control Center's glass settings (liquid, live, refraction...).
-  $description:pt-BR: Os menus da barra e de contexto. "Vidro" é o vidro fosco clássico (independente da Central de Controle). "Igual à Central" usa os ajustes de vidro da Central (líquido, ao vivo, refração...).
-  $options:
-  - glass: Glass
-  - central: Same as Control Center
-  $options:pt-BR:
-  - glass: Vidro
-  - central: Igual à Central de Controle
-- menuTransparency: 30
-  $name: Menu transparency in the Glass style (0 to 100)
-  $name:pt-BR: Transparência dos menus no estilo Vidro (0 a 100)
-- solidWhenMaximized: true
-  $name: Make the bar opaque when the active app is maximized
-  $name:pt-BR: Deixar a barra opaca quando o app ativo estiver maximizado
-- allMonitors: true
-  $name: Show on all monitors
-  $name:pt-BR: Mostrar em todos os monitores
-- autoHide: false
-  $name: Hide automatically (shows when the mouse touches the top)
-  $name:pt-BR: Ocultar automaticamente (aparece ao encostar o mouse no topo)
-- hideOnFullscreen: true
-  $name: Hide with full-screen apps
-  $name:pt-BR: Ocultar com apps em tela cheia
 - desktopName: "Finder"
   $name: Name shown for the desktop and File Explorer
   $name:pt-BR: Nome exibido para a área de trabalho e o Explorador de Arquivos
-- showGlobalMenu: true
-  $name: Show the active app's global menu
-  $name:pt-BR: Mostrar menu global do app ativo
 - genericMenus: true
   $name: Ready-made menus (by shortcuts) for apps without a menu bar
   $name:pt-BR: Menus genéricos (por atalhos) para apps sem barra de menus
-- showDisplay: true
-  $name: Show the display menu
-  $name:pt-BR: Mostrar menu de tela
-- showKeyboard: true
-  $name: Show the keyboard layout (if there is more than one)
-  $name:pt-BR: Mostrar layout de teclado (se houver mais de um)
-- showBattery: true
-  $name: Show battery
-  $name:pt-BR: Mostrar bateria
-- showBatteryPercent: true
-  $name: Show battery percentage
-  $name:pt-BR: Mostrar porcentagem da bateria
-- checkUpdates: true
-  $name: Show pending Windows updates in the logo menu
-  $name:pt-BR: Mostrar atualizações pendentes do Windows no menu do logo
-  $description: Counts the updates found by the last Windows Update check (offline, no network) and shows the number next to "System Settings".
-  $description:pt-BR: Conta as atualizações encontradas pela última verificação do Windows Update (offline, sem rede) e mostra o número ao lado de "Configurações do Sistema".
 - checkAppUpdates: false
   $name: Also count app updates with winget (uses the network)
   $name:pt-BR: Contar também as atualizações de apps pelo winget (usa a rede)
   $description: Runs "winget upgrade" hidden every 3 hours and shows the number next to "Microsoft Store". winget checks its sources online. It only works if you have already accepted winget's source agreements yourself (run "winget upgrade" once in a terminal); the mod never accepts them for you.
   $description:pt-BR: Roda "winget upgrade" escondido a cada 3 horas e mostra o número ao lado de "Microsoft Store". O winget consulta as fontes dele pela internet. Só funciona se você já tiver aceitado os termos das fontes do winget (rode "winget upgrade" uma vez num terminal); o mod nunca aceita por você.
-- showNetwork: true
-  $name: Show network / Wi-Fi
-  $name:pt-BR: Mostrar rede / Wi-Fi
-- showBluetooth: true
-  $name: Show Bluetooth
-  $name:pt-BR: Mostrar Bluetooth
-- showVolume: true
-  $name: Show volume
-  $name:pt-BR: Mostrar volume
-- showTray: true
-  $name: Show the system tray button (triangle)
-  $name:pt-BR: Mostrar botão da bandeja do sistema (triângulo)
 - openAnim: cascade
   $name: Animation when opening the Control Center, menus and tray
   $name:pt-BR: Animação ao abrir a central, os menus e a bandeja
@@ -323,172 +178,6 @@ The "copied" pill skips anything an app marks as private (password managers do),
   - cascade: Cascata (blocos aparecem linha a linha, crescendo)
   - fade: Só esmaecer
   - none: Nenhuma
-- ccDimScreen: false
-  $name: Blur and dim the screen when opening the Control Center
-  $name:pt-BR: Desfocar e escurecer o fundo da tela ao abrir a central de controle
-- showOsd: true
-  $name: Show the volume/brightness indicator below the bar
-  $name:pt-BR: Mostrar indicador de volume/brilho abaixo da barra
-- flyouts: true
-  $name: Floating pills for volume, brightness and Bluetooth
-  $name:pt-BR: Pílulas flutuantes no volume, brilho e Bluetooth
-  $description: Volume and display open the menu; clicking the slider in the menu opens the glass pill. Bluetooth opens the pill directly (right-click = full menu).
-  $description:pt-BR: Volume e tela abrem o menu; clicar no ajuste do menu abre a pílula de vidro. Bluetooth abre a pílula direto (clique direito = menu completo).
-- showControlCenter: true
-  $name: Show the Control Center button
-  $name:pt-BR: Mostrar botão da central de controle
-- showWeather: true
-  $name: Show the weather on the bar
-  $name:pt-BR: Mostrar a previsão do tempo na barra
-- showNowPlaying: true
-  $name: Now Playing on the bar (when music or video is playing)
-  $name:pt-BR: Tocando agora na barra (quando houver música ou vídeo)
-- showFocus: true
-  $name: Focus icon when Do Not Disturb is on
-  $name:pt-BR: Ícone de Foco quando o Não Perturbe estiver ligado
-- showSearch: true
-  $name: Search icon
-  $name:pt-BR: Ícone de busca
-- searchTarget: windows
-  $name: Search opens
-  $name:pt-BR: A busca abre
-  $description: Siri Plus Launchpad opens its default window (the Spotlight-style search). If it isn't running, Windows Search opens.
-  $description:pt-BR: Siri Plus Launchpad abre a janela padrão dele (a busca no estilo Spotlight). Se ele não estiver ativo, abre a pesquisa do Windows.
-  $options:
-  - windows: Windows Search
-  - siri: Siri Plus Launchpad
-  $options:pt-BR:
-  - windows: Pesquisa do Windows
-  - siri: Siri Plus Launchpad
-- showPrivacy: true
-  $name: Privacy indicator (microphone and camera in use)
-  $name:pt-BR: Indicador de privacidade (microfone e câmera em uso)
-- menuOverflow: true
-  $name: Collapse the icons that don't fit on the bar into an arrow
-  $name:pt-BR: Recolher numa seta os ícones que não cabem na barra
-- islandPills: true
-  $name: Notice pills (headphones, audio output, battery, charger, Focus)
-  $name:pt-BR: Avisos em pílula (fones, saída de áudio, bateria, carregador, Foco)
-- usbPills: true
-  $name: Pill when USB devices and drives connect and disconnect
-  $name:pt-BR: Aviso em pílula ao conectar e desconectar dispositivos USB e discos
-- downloadPills: true
-  $name: Pill when a download finishes (Downloads folder)
-  $name:pt-BR: Aviso em pílula quando um download termina (pasta Downloads)
-- clipPills: true
-  $name: Pill when copying (text, image or files)
-  $name:pt-BR: Aviso em pílula ao copiar (texto, imagem ou arquivos)
-- shotPills: true
-  $name: Pill for screenshots (Screenshots folder)
-  $name:pt-BR: Aviso em pílula de captura de tela (pasta Capturas de Tela)
-- winNotifs: false
-  $name: Pill - Windows notifications (experimental)
-  $name:pt-BR: Pílula - notificações do Windows (experimental)
-  $description: Shows app notifications in the pill (WhatsApp, email, Teams...). Windows must allow access to notifications; if it doesn't, a notice says so. To avoid seeing each notification twice, turn on "Only the bar shows notifications".
-  $description:pt-BR: Mostra na pílula as notificações dos apps (WhatsApp, e-mail, Teams...). O Windows precisa liberar o acesso às notificações; se não liberar, um aviso diz isso. Para não ver cada notificação duas vezes, ligue "Somente a barra mostra as notificações".
-- winNotifsOnly: false
-  $name: Only the bar shows notifications
-  $name:pt-BR: Somente a barra mostra as notificações
-  $description: Takes the Windows notification banners off the screen while the bar's pill shows them. Notifications stay in the Windows notification center and keep their sound. Calls, alarms and reminders (banners that wait for an action) come back. Nothing is changed in Windows' settings. Needs "Pill - Windows notifications" with access allowed by Windows.
-  $description:pt-BR: Tira da tela as faixas de notificação do Windows enquanto a pílula da barra mostra as notificações. Elas continuam na central de notificações do Windows e com o som. Chamadas, alarmes e lembretes (faixas que esperam uma ação) voltam. Nada é mudado nas configurações do Windows. Precisa de "Pílula - notificações do Windows" com o acesso liberado pelo Windows.
-- islFocus: true
-  $name: Pill - Focus (Do Not Disturb on/off)
-  $name:pt-BR: Pílula - Foco (Não Perturbe ligado/desligado)
-- islBattery: true
-  $name: Pill - low battery and charger
-  $name:pt-BR: Pílula - bateria fraca e carregador
-- islBluetooth: true
-  $name: Pill - Bluetooth devices
-  $name:pt-BR: Pílula - aparelhos Bluetooth
-- islAudio: true
-  $name: Pill - audio output change
-  $name:pt-BR: Pílula - troca da saída de áudio
-- islHistory: true
-  $name: Pill - keep a history (bell on the bar)
-  $name:pt-BR: Pílula - guardar histórico (sino na barra)
-- islHistNotices: true
-  $name: Notifications button - also show the pill notices (copied, downloads, USB...)
-  $name:pt-BR: Botão de Notificações - mostrar também os avisos da pílula (copiado, downloads, USB...)
-- islStyle: glass
-  $name: Pill - style
-  $name:pt-BR: Pílula - estilo
-  $options:
-  - glass: Glass
-  - liquid: Liquid glass (experimental)
-  - dark: Dark
-  $options:pt-BR:
-  - glass: Vidro
-  - liquid: Vidro líquido (experimental)
-  - dark: Escuro
-- islSize: 100
-  $name: Pill - size (%, 80 to 140)
-  $name:pt-BR: Pílula - tamanho (%, 80 a 140)
-- islDuration: 26
-  $name: Pill - time on screen (tenths of a second, 15 to 80)
-  $name:pt-BR: Pílula - duração na tela (décimos de segundo, 15 a 80)
-- islIn: expand
-  $name: Pill - how it appears
-  $name:pt-BR: Pílula - como aparece
-  $options:
-  - expand: Expand
-  - circle: Expanding circle
-  - drop: Drop from the bar
-  - fade: Fade
-  $options:pt-BR:
-  - expand: Expandir
-  - circle: Círculo que expande
-  - drop: Descer da barra
-  - fade: Esmaecer
-- islOut: shrink
-  $name: Pill - how it disappears
-  $name:pt-BR: Pílula - como some
-  $options:
-  - shrink: Shrink
-  - suck: Suck into the bar
-  - rise: Rise into the bar
-  - circle: Close in a circle
-  - fade: Fade
-  $options:pt-BR:
-  - shrink: Encolher
-  - suck: Sugar para a barra
-  - rise: Subir para a barra
-  - circle: Fechar em círculo
-  - fade: Esmaecer
-- npLayout: big
-  $name: Now Playing - panel layout
-  $name:pt-BR: Tocando agora - layout do painel
-  $options:
-  - big: Large cover
-  - compact: Compact
-  $options:pt-BR:
-  - big: Capa grande
-  - compact: Compacto
-- npBar: line
-  $name: Now Playing - progress bar
-  $name:pt-BR: Tocando agora - barra de progresso
-  $options:
-  - line: Line
-  - colored: Colored line
-  - wave: Wave
-  $options:pt-BR:
-  - line: Linha
-  - colored: Linha colorida
-  - wave: Onda
-- npSize: 300
-  $name: Now Playing - panel width (px, 240 to 440)
-  $name:pt-BR: Tocando agora - largura do painel (px, 240 a 440)
-- islPos: center
-  $name: Pill - position
-  $name:pt-BR: Pílula - posição
-  $options:
-  - center: Center
-  - right: Right
-  $options:pt-BR:
-  - center: Centro
-  - right: Direita
-- kbdNav: false
-  $name: Ctrl+F2 opens the bar for keyboard navigation (the arrows also go through the icons on the right)
-  $name:pt-BR: Ctrl+F2 abre a barra para navegar pelo teclado (as setas passam também pelos ícones da direita)
 - ccOnStyle: circle
   $name: Control Center - look of a tile that is on
   $name:pt-BR: Central de controle - aparência do bloco ligado
@@ -524,15 +213,6 @@ The "copied" pill skips anything an app marks as private (password managers do),
   $name:pt-BR: Calendários - arquivos .ics (ou links .ics)
   $description: You can also import .ics files from Menu Bar Settings → Calendar. Add as many as you like, with the list's add item button or several in the same field separated by semicolons (;). Each one can be the path of an .ics file (e.g. C:\\Users\\you\\calendar.ics) or the .ics link of a calendar (e.g. the "secret address in iCal format" from Google Calendar). Each calendar gets a color. The agenda shows when you click the clock.
   $description:pt-BR: Também dá para importar arquivos .ics em Ajustes da Barra de Menus → Calendário. Adicione quantos quiser, pelo botão de adicionar item da lista ou colocando vários no mesmo campo separados por ponto e vírgula (;). Cada um pode ser o caminho de um arquivo .ics (ex. C:\\Users\\voce\\agenda.ics) ou o link .ics de uma agenda (ex. o "endereço secreto no formato iCal" do Google Agenda). Cada calendário ganha uma cor. A agenda aparece ao clicar no relógio.
-- dateUpper: false
-  $name: Date in uppercase on the bar
-  $name:pt-BR: Data em maiúsculas na barra
-- dateFormat: "ddd d MMM"
-  $name: Date format (Windows pattern; empty to hide)
-  $name:pt-BR: Formato da data (padrão do Windows; vazio para ocultar)
-- timeFormat: "HH:mm"
-  $name: Time format (Windows pattern)
-  $name:pt-BR: Formato da hora (padrão do Windows)
 */
 // ==/WindhawkModSettings==
 
@@ -802,23 +482,111 @@ static float MenuGap() { return g_settings.menuGlass == 0 ? 0.0f : PanelGap(); }
 struct LiquidSurface;
 static void LqFree(LiquidSurface*& l);
 
-// As configurações valem só pela página do mod no Windhawk. Versões antigas
-// guardavam uma cópia (ui.<chave>) feita pela janela de Ajustes; é apagada
-// na primeira leitura.
-static void OvrForget(PCWSTR key) {
-    wchar_t name[80], buf[8] = {};
+// Ajustes da janela "Ajustes da Barra de Menus": ela é o único lugar deles
+// (não estão nas configurações do Windhawk). Ficam no armazenamento do mod,
+// em "ui.<chave>"; sem valor guardado, vale o padrão abaixo.
+struct UiDefault {
+    PCWSTR key;
+    PCWSTR def;
+};
+static const UiDefault kUiDefaults[] = {
+    {L"language", L"auto"},
+    {L"height", L"28"},
+    {L"fontSize", L"13"},
+    {L"iconScale", L"100"},
+    {L"barStyle", L"transparent"},
+    {L"selectionBar", L"blue"},
+    {L"selectionMenu", L"blue"},
+    {L"menuGlass", L"glass"},
+    {L"menuTransparency", L"30"},
+    {L"solidWhenMaximized", L"1"},
+    {L"allMonitors", L"1"},
+    {L"autoHide", L"0"},
+    {L"hideOnFullscreen", L"1"},
+    {L"showGlobalMenu", L"1"},
+    {L"showDisplay", L"1"},
+    {L"showKeyboard", L"1"},
+    {L"showBattery", L"1"},
+    {L"showBatteryPercent", L"1"},
+    {L"checkUpdates", L"1"},
+    {L"showNetwork", L"1"},
+    {L"showBluetooth", L"1"},
+    {L"showVolume", L"1"},
+    {L"showTray", L"1"},
+    {L"ccDimScreen", L"0"},
+    {L"showOsd", L"1"},
+    {L"flyouts", L"1"},
+    {L"showControlCenter", L"1"},
+    {L"showWeather", L"1"},
+    {L"showNowPlaying", L"1"},
+    {L"showFocus", L"1"},
+    {L"showSearch", L"1"},
+    {L"searchTarget", L"windows"},
+    {L"showPrivacy", L"1"},
+    {L"menuOverflow", L"1"},
+    {L"islandPills", L"1"},
+    {L"usbPills", L"1"},
+    {L"downloadPills", L"1"},
+    {L"clipPills", L"1"},
+    {L"shotPills", L"1"},
+    {L"winNotifs", L"0"},
+    {L"winNotifsOnly", L"0"},
+    {L"islFocus", L"1"},
+    {L"islBattery", L"1"},
+    {L"islBluetooth", L"1"},
+    {L"islAudio", L"1"},
+    {L"islHistory", L"1"},
+    {L"islHistNotices", L"1"},
+    {L"islStyle", L"glass"},
+    {L"islSize", L"100"},
+    {L"islDuration", L"26"},
+    {L"islIn", L"expand"},
+    {L"islOut", L"shrink"},
+    {L"npLayout", L"big"},
+    {L"npBar", L"line"},
+    {L"npSize", L"300"},
+    {L"islPos", L"center"},
+    {L"kbdNav", L"0"},
+    {L"dateUpper", L"0"},
+    {L"dateFormat", L"ddd d MMM"},
+    {L"timeFormat", L"HH:mm"},
+};
+static const UiDefault* UiDefFor(PCWSTR key) {
+    for (const auto& d : kUiDefaults)
+        if (wcscmp(d.key, key) == 0) return &d;
+    return nullptr;
+}
+// O valor guardado (versões de teste guardavam "valor|..." ou "valor\x1F...").
+static bool UiStored(PCWSTR key, std::wstring& out) {
+    wchar_t name[80], buf[256] = {};
     swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
-    if (Wh_GetStringValue(name, buf, ARRAYSIZE(buf)) || buf[0]) Wh_SetStringValue(name, L"");
+    Wh_GetStringValue(name, buf, ARRAYSIZE(buf));
+    if (!buf[0]) return false;
+    out = buf;
+    size_t cut = out.find(L'\x1F');
+    if (cut != std::wstring::npos) out.resize(cut);
+    return true;
 }
 static int OvrInt(PCWSTR key) {
-    OvrForget(key);
-    return WhInt(key);
+    const UiDefault* d = UiDefFor(key);
+    if (!d) return WhInt(key);
+    std::wstring v;
+    if (!UiStored(key, v)) v = d->def;
+    return _wtoi(v.c_str());  // "12|..." também lê 12
 }
 static std::wstring ReadStr(PCWSTR name);
 static std::wstring OvrStr(PCWSTR key) {
-    OvrForget(key);
-    return ReadStr(key);
+    const UiDefault* d = UiDefFor(key);
+    if (!d) return ReadStr(key);
+    std::wstring v;
+    return UiStored(key, v) ? v : std::wstring(d->def);
 }
+static void OvrSetStr(PCWSTR key, const std::wstring& v) {
+    wchar_t name[80];
+    swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
+    Wh_SetStringValue(name, v.c_str());
+}
+static void OvrSetInt(PCWSTR key, int v) { OvrSetStr(key, std::to_wstring(v)); }
 
 // ===========================================================================
 // Idiomas: português, inglês, espanhol, francês, alemão, italiano e chinês
@@ -2604,7 +2372,7 @@ enum {
     ID_DARK = 801, ID_TOPO_INTERNAL, ID_TOPO_CLONE, ID_TOPO_EXTEND, ID_TOPO_EXTERNAL,
     ID_NIGHTLIGHT, ID_DISPLAY_SETTINGS,
     ID_KBD_LIST = 900, ID_EMOJI = 950, ID_OSK, ID_KBD_SETTINGS,
-    ID_NOTIFY = 1101, ID_DATETIME,
+    ID_NOTIFY = 1101, ID_DATETIME, ID_DATE_UPPER,
     ID_KEYS = 1200, ID_GO = 1500,
     ID_SW_WIFI = 1980, ID_SW_BT, ID_SW_DARK, ID_SW_MUTE, ID_SW_NIGHT, ID_SLIDER_VOL = 1990, ID_SLIDER_BRIGHT, ID_SLIDER_GLASS, ID_SLIDER_REFRACT, ID_SLIDER_SOFT, ID_SLIDER_WXGLASS,
     ID_SW_GLASSCLEAR = 1970, ID_SW_LIQUID, ID_SW_LIVE, ID_BAR_SETTINGS = 1975,
@@ -3648,6 +3416,8 @@ static HMENU BuildClockMenu() {
     GetDateFormatEx(UiLocale(), DATE_LONGDATE, &st, nullptr, full, ARRAYSIZE(full), nullptr);
     AddHeader(m, full);
     AddSep(m);
+    AddItem(m, ID_DATE_UPPER, L"Data em maiúsculas", g_settings.dateUpper);
+    AddSep(m);
     AddItem(m, ID_NOTIFY, L"Central de notificações e calendário\tWin+N");
     AddItem(m, ID_DATETIME, L"Configurações de data e hora...");
     return m;
@@ -3752,6 +3522,12 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
     switch (cmd) {
         case ID_ABOUT: OpenUri(L"ms-settings:about"); break;
         case ID_BAR_SETTINGS: BsOpen(); break;
+        case ID_DATE_UPPER:
+            g_settings.dateUpper = !g_settings.dateUpper;
+            OvrSetInt(L"dateUpper", g_settings.dateUpper ? 1 : 0);
+            PollStatus(true);
+            RedrawAll();
+            break;
         case ID_SETTINGS: OpenUri(g_settings.checkUpdates && g_updWin > 0 ? L"ms-settings:windowsupdate" : L"ms-settings:"); break;
         case ID_STORE:
             OpenUri(g_settings.checkAppUpdates && g_updApps > 0 ? L"ms-windows-store://downloadsandupdates" : L"ms-windows-store:");
@@ -11189,9 +10965,9 @@ static bool AnyOtherPanelOpen(HWND closing) {
 // Uma janela de vidro no estilo dos Ajustes do Sistema do macOS 27: itens da
 // barra com caixa de seleção e ícone colorido, grupos com interruptores e
 // sliders. Abre pelo logo da barra ("Ajustes da Barra de Menus...").
-// Só guarda o que não existe nas configurações do Windhawk (vidro, previsão
-// do tempo, calendários importados, o vidro desta janela). O resto fica na
-// página do mod no Windhawk, a única fonte desses ajustes.
+// Esta janela é o único lugar desses ajustes (eles não estão na página do mod
+// no Windhawk): guardados pelo mod e aplicados na hora. Na página do Windhawk
+// ficam só os que a janela não tem (fonte, tintas, nome do Finder, links .ics...).
 // ===========================================================================
 
 static const wchar_t kBsClass[] = L"WhFinderTopBarSettings";
@@ -11218,18 +10994,85 @@ struct BsRowDef {
 };
 
 static const BsRowDef kBsRows[] = {
+    {BR_HEADER, BV_NONE, L"Itens da barra de menus", 0xE700, 0x8E8E93, L"O que aparece na barra, do lado direito e no menu do app"},
+    {BR_ITEM, BV_CLOCK, L"Relógio", 0xE823, 0x8E8E93, L"Fica sempre na barra; o botão escolhe o formato da data e da hora"},
+    {BR_ITEM, BV_GLOBALMENU, L"Menus do app", 0xE700, 0xFF9F0A, L"Arquivo, Editar, Exibir… do app em primeiro plano"},
+    {BR_ITEM, BV_NET, L"Wi-Fi e rede", 0xE701, 0x0A84FF},
+    {BR_ITEM, BV_BT, L"Bluetooth", 0xE702, 0x0A84FF},
+    {BR_ITEM, BV_BATT, L"Bateria", 0xE83F, 0x30D158},
+    {BR_ITEM, BV_DISPLAY, L"Tela", 0xE706, 0x0A84FF},
+    {BR_ITEM, BV_VOL, L"Som", 0xE767, 0xFF375F},
+    {BR_ITEM, BV_KBD, L"Entrada de texto", 0xE765, 0x8E8E93, L"Aparece quando há mais de um layout de teclado"},
+    {BR_ITEM, BV_TRAY, L"Bandeja do sistema", 0xE70D, 0x5E5CE6},
+    {BR_ITEM, BV_CC, L"Central de Controle", 0, 0x8E8E93},
+    {BR_ITEM, BV_WEATHER, L"Previsão do tempo", 0xE753, 0x5AC8FA},
+    {BR_ITEM, BV_NOW, L"Tocando agora", 0xEC4F, 0xFF375F},
+    {BR_ITEM, BV_FOCUS, L"Foco (quando ativo)", 0xE708, 0x5E5CE6},
+    {BR_ITEM, BV_SEARCH, L"Busca", 0xE721, 0x8E8E93},
+    {BR_CHOICE, BV_SEARCHTGT, L"A busca abre", 0, 0, L"Siri Plus: a janela padrão dele, no estilo Spotlight"},
+    {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Pontos laranja e verde quando um app usa o microfone ou a câmera"},
+    {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Fundo, cores de seleção, tamanho e quando a barra aparece"},
+    {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
+    {BR_CHOICE, BV_BARSTYLE, L"Fundo", 0, 0},
+    {BR_COLORS, BV_SELBAR, L"Seleção na barra", 0, 0},
+    {BR_COLORS, BV_SELMENU, L"Seleção nos menus", 0, 0},
+    {BR_GROUP, BV_NONE, L"Tamanho", 0, 0},
+    {BR_SLIDER, BV_HEIGHT, L"Altura da barra", 0, 0},
+    {BR_SLIDER, BV_FONT, L"Tamanho da fonte", 0, 0},
+    {BR_SLIDER, BV_ICONS, L"Tamanho dos ícones", 0, 0},
+    {BR_GROUP, BV_NONE, L"Comportamento", 0, 0},
+    {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
+    {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
+    {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
+    {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
+    {BR_SWITCH, BV_ALLMON, L"Mostrar em todos os monitores", 0, 0},
+    {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
+    {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Estilo dos menus, Tocando agora, pílulas de volume e brilho"},
+    {BR_CHOICE, BV_MENUGLASS, L"Estilo dos menus", 0, 0, L"Menus da barra, pílula do Bluetooth, Tocando agora e Notificações. A Central de Controle não muda"},
+    {BR_SLIDER, BV_MENUTRANSP, L"Transparência dos menus (Vidro)", 0, 0},
+    {BR_SWITCH, BV_UPDATES, L"Atualizações pendentes no menu do logo", 0, 0},
+    {BR_SWITCH, BV_KBDNAV, L"Ctrl+F2 navega a barra pelo teclado", 0, 0},
+    {BR_GROUP, BV_NONE, L"Tocando agora", 0, 0},
+    {BR_CHOICE, BV_NPLAYOUT, L"Painel", 0, 0},
+    {BR_SLIDER, BV_NPSIZE, L"Tamanho", 0, 0},
+    {BR_CHOICE, BV_NPBAR, L"Barra de progresso", 0, 0},
+    {BR_GROUP, BV_NONE, L"Volume, brilho e Central", 0, 0},
+    {BR_SWITCH, BV_FLYOUTS, L"Pílulas de vidro (volume, brilho, Bluetooth)", 0, 0},
+    {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
+    {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
     {BR_HEADER, BV_NONE, L"Vidro dos painéis", 0xE790, 0x5AC8FA, L"Do transparente ao tingido: o vidro dos menus, da Central e dos painéis"},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ tingido", 0, 0, L"À esquerda o vidro limpo; à direita, mais cor"},
     {BR_SWITCH, BV_G_LIQUID, L"Vidro líquido (experimental)", 0, 0, L"Refração nas bordas, como o Liquid Glass"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
-    {BR_NOTE, BV_NONE,
-     L"Os outros ajustes (itens da barra, aparência, menus, pílulas e notificações) ficam na página do mod no Windhawk: abra o Windhawk, escolha Mac OS 27 Finder Bar e a aba Configurações (Settings).", 0, 0},
     {BR_HEADER, BV_NONE, L"Pílulas de aviso", 0xEA8F, 0xFF375F, L"Avisos que descem da barra e o botão de Notificações"},
+    {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
+    {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
+    {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Líquido usa os ajustes de “Vidro dos painéis”"},
+    {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
+    {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0},
+    {BR_CHOICE, BV_ISLPOS, L"Posição", 0, 0},
+    {BR_CHOICE, BV_ISLIN, L"Como aparece", 0, 0},
+    {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
+    {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
+    {BR_SWITCH, BV_ISLHIST, L"Botão de Notificações na barra (sino)", 0, 0, L"Notificações agrupadas por app, em cartões de vidro"},
+    {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_ACTION, BV_ISLCLEAR, L"Limpar as notificações", 0, 0},
+    {BR_GROUP, BV_NONE, L"Avisar quando", 0, 0},
+    {BR_SWITCH, BV_WINNOTIF, L"Notificações do Windows (experimental)", 0, 0, L"WhatsApp, Discord, e-mail… Clicar abre o app"},
+    {BR_SWITCH, BV_WINONLY, L"Somente a barra mostra as notificações", 0, 0, L"Tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam"},
+    {BR_SWITCH, BV_CLIP, L"Texto, imagem ou arquivos copiados", 0, 0},
+    {BR_SWITCH, BV_SHOT, L"Capturas de tela", 0, 0, L"Clique na pílula para abrir a captura"},
+    {BR_SWITCH, BV_DLDONE, L"Downloads concluídos", 0, 0, L"Clique na pílula para abrir o arquivo"},
+    {BR_SWITCH, BV_USB, L"Dispositivos USB e discos", 0, 0},
+    {BR_SWITCH, BV_ISLBT, L"Aparelhos Bluetooth (fones, mouse...)", 0, 0},
+    {BR_SWITCH, BV_ISLAUDIO, L"Troca da saída de áudio", 0, 0},
+    {BR_SWITCH, BV_ISLBATT, L"Bateria fraca e carregador", 0, 0},
+    {BR_SWITCH, BV_ISLFOCUS, L"Foco (Não Perturbe)", 0, 0},
     {BR_HEADER, BV_NONE, L"Previsão do tempo", 0xE753, 0x5AC8FA, L"Lugar, serviço, unidade e aparência do widget"},
+    {BR_SWITCH, BV_WEATHER, L"Mostrar na barra", 0, 0},
     {BR_SWITCH, BV_WXTEMP, L"Temperatura ao lado do ícone", 0, 0},
     {BR_INPUT, BV_WXPLACE, L"Bairro", 0, 0},
     {BR_PLACE, BV_WXRESULT, L"", 0, 0},  // modelo das linhas de resultado (dinâmicas)
@@ -11255,6 +11098,60 @@ static const BsRowDef kBsRows[] = {
      0},
 };
 
+static bool BsRowDisabled(int rowIdx);
+
+struct BsBoolKey {
+    int val;
+    PCWSTR key;
+    bool Settings::*field;
+};
+static const BsBoolKey kBsKeys[] = {
+    {BV_GLOBALMENU, L"showGlobalMenu", &Settings::showGlobalMenu},
+    {BV_NET, L"showNetwork", &Settings::showNetwork},
+    {BV_BT, L"showBluetooth", &Settings::showBluetooth},
+    {BV_BATT, L"showBattery", &Settings::showBattery},
+    {BV_DISPLAY, L"showDisplay", &Settings::showDisplay},
+    {BV_VOL, L"showVolume", &Settings::showVolume},
+    {BV_KBD, L"showKeyboard", &Settings::showKeyboard},
+    {BV_TRAY, L"showTray", &Settings::showTray},
+    {BV_CC, L"showControlCenter", &Settings::showControlCenter},
+    {BV_WEATHER, L"showWeather", &Settings::showWeather},
+    {BV_NOW, L"showNowPlaying", &Settings::showNowPlaying},
+    {BV_FOCUS, L"showFocus", &Settings::showFocus},
+    {BV_SEARCH, L"showSearch", &Settings::showSearch},
+    {BV_PRIV, L"showPrivacy", &Settings::showPrivacy},
+    {BV_MORE, L"menuOverflow", &Settings::menuOverflow},
+    {BV_ISLAND, L"islandPills", &Settings::islandPills},
+    {BV_KBDNAV, L"kbdNav", &Settings::kbdNav},
+    {BV_USB, L"usbPills", &Settings::usbPills},
+    {BV_DLDONE, L"downloadPills", &Settings::downloadPills},
+    {BV_CLIP, L"clipPills", &Settings::clipPills},
+    {BV_SHOT, L"shotPills", &Settings::shotPills},
+    {BV_ISLFOCUS, L"islFocus", &Settings::islFocus},
+    {BV_WINNOTIF, L"winNotifs", &Settings::winNotifs},
+    {BV_WINONLY, L"winNotifsOnly", &Settings::winNotifsOnly},
+    {BV_ISLBATT, L"islBattery", &Settings::islBattery},
+    {BV_ISLBT, L"islBluetooth", &Settings::islBluetooth},
+    {BV_ISLAUDIO, L"islAudio", &Settings::islAudio},
+    {BV_ISLHIST, L"islHistory", &Settings::islHistory},
+    {BV_ISLHISTNOT, L"islHistNotices", &Settings::islHistNotices},
+    {BV_BATTPCT, L"showBatteryPercent", &Settings::showBatteryPercent},
+    {BV_UPDATES, L"checkUpdates", &Settings::checkUpdates},
+    {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
+    {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
+    {BV_SOLIDMAX, L"solidWhenMaximized", &Settings::solidWhenMaximized},
+    {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
+    {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
+    {BV_OSD, L"showOsd", &Settings::showOsd},
+    {BV_DIM, L"ccDimScreen", &Settings::bgBlur},
+};
+
+static const BsBoolKey* BsKeyFor(int val) {
+    for (auto& k : kBsKeys)
+        if (k.val == val) return &k;
+    return nullptr;
+}
+
 // Vidro só da janela de ajustes: 0 desfoque, 1 líquido, 2 transparente; e a transparência.
 static int g_bsStyle = -1, g_bsTransp = 80;
 static void BsOpenAt(const POINT* at, float scroll);
@@ -11267,18 +11164,38 @@ static void BsAction(int val);
 static const int* g_glassTranspSaved = nullptr;
 static int GlassTranspValue() { return g_glassTranspSaved ? *g_glassTranspSaved : g_glass.transparency; }
 static int BsGet(int val) {
+    if (const BsBoolKey* k = BsKeyFor(val)) return g_settings.*(k->field) ? 1 : 0;
     switch (val) {
         case BV_G_TINT: return 100 - GlassTranspValue();
+        case BV_SEARCHTGT: return g_settings.searchTarget;
+        case BV_LANG: return g_langChoice;
         case BV_G_TRANSP: return GlassTranspValue();
         case BV_G_REFRACT: return g_glass.refraction;
         case BV_G_BLUR: return g_glass.blur;
         case BV_G_CLEAR: return g_glass.clear;
         case BV_G_LIQUID: return g_glass.liquid;
         case BV_G_LIVE: return g_glass.live;
+        case BV_BARSTYLE: return g_settings.barStyle;
         case BV_BSSTYLE: return g_bsStyle;
+        case BV_ISLSTYLE: return g_settings.islStyle;
+        case BV_ISLSIZE: return std::clamp((g_settings.islSize - 80) * 100 / 60, 0, 100);
+        case BV_ISLDUR: return std::clamp((g_settings.islDur - 15) * 100 / 65, 0, 100);
+        case BV_ISLIN: return g_settings.islIn;
+        case BV_NPLAYOUT: return g_settings.npLayout;
+        case BV_NPBAR: return g_settings.npBar;
+        case BV_NPSIZE: return std::clamp((g_settings.npSize - 240) * 100 / 200, 0, 100);
+        case BV_ISLOUT: return g_settings.islOut;
+        case BV_ISLPOS: return g_settings.islPos;
         case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             return WxSettingGet(val);
+        case BV_SELBAR: return g_settings.selBar;
+        case BV_SELMENU: return g_settings.selMenu;
         case BV_BSTRANSP: return g_bsTransp;
+        case BV_MENUGLASS: return g_settings.menuGlass;
+        case BV_MENUTRANSP: return g_settings.menuTransp;
+        case BV_HEIGHT: return std::clamp((g_settings.height - 20) * 100 / 28, 0, 100);
+        case BV_FONT: return std::clamp((int)std::lround((g_settings.fontSize - 10) * 10), 0, 100);
+        case BV_ICONS: return std::clamp((int)std::lround((g_settings.iconScale * 100 - 70) * 100 / 90), 0, 100);
     }
     return 0;
 }
@@ -11310,10 +11227,99 @@ static void BsSaveLook() {
 static void BarsApplyLive(bool geometry);
 static void BarsRestyle();
 static void BsSet(int val, int v) {
+    if (const BsBoolKey* k = BsKeyFor(val)) {
+        bool on = v != 0;
+        if (g_settings.*(k->field) == on) return;
+        g_settings.*(k->field) = on;
+        OvrSetInt(k->key, on ? 1 : 0);
+        // Só "todos os monitores" e "ocultar automaticamente" precisam refazer as
+        // barras; o resto vale na hora, sem a barra piscar.
+        if (val == BV_ALLMON || val == BV_AUTOHIDE) {
+            if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+        } else {
+            BarsApplyLive(false);
+        }
+        return;
+    }
     switch (val) {
+        case BV_ISLSTYLE: {
+            static const PCWSTR k[] = {L"glass", L"liquid", L"dark"};
+            g_settings.islStyle = std::clamp(v, 0, 2);
+            OvrSetStr(L"islStyle", k[g_settings.islStyle]);
+            return;
+        }
+        case BV_ISLSIZE:
+            g_settings.islSize = 80 + (int)std::lround(std::clamp(v, 0, 100) * 60 / 100.0);
+            OvrSetInt(L"islSize", g_settings.islSize);
+            return;
+        case BV_ISLDUR:
+            g_settings.islDur = 15 + (int)std::lround(std::clamp(v, 0, 100) * 65 / 100.0);
+            OvrSetInt(L"islDuration", g_settings.islDur);
+            return;
+        case BV_ISLIN: {
+            static const PCWSTR k[] = {L"expand", L"circle", L"drop", L"fade"};
+            g_settings.islIn = std::clamp(v, 0, 3);
+            OvrSetStr(L"islIn", k[g_settings.islIn]);
+            return;
+        }
+        case BV_ISLOUT: {
+            static const PCWSTR k[] = {L"shrink", L"suck", L"rise", L"circle", L"fade"};
+            g_settings.islOut = std::clamp(v, 0, 4);
+            OvrSetStr(L"islOut", k[g_settings.islOut]);
+            return;
+        }
+        case BV_NPBAR: {
+            static const PCWSTR k[] = {L"line", L"colored", L"wave"};
+            g_settings.npBar = std::clamp(v, 0, 2);
+            OvrSetStr(L"npBar", k[g_settings.npBar]);
+            return;
+        }
+        case BV_NPLAYOUT:
+            g_settings.npLayout = v == 1 ? 1 : 0;
+            OvrSetStr(L"npLayout", g_settings.npLayout ? L"compact" : L"big");
+            return;
+        case BV_NPSIZE:
+            g_settings.npSize = 240 + (int)std::lround(std::clamp(v, 0, 100) * 200 / 100.0);
+            OvrSetInt(L"npSize", g_settings.npSize);
+            return;
+        case BV_ISLPOS:
+            g_settings.islPos = v == 1 ? 1 : 0;
+            OvrSetStr(L"islPos", g_settings.islPos ? L"right" : L"center");
+            return;
         case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             WxSettingSet(val, v);
             return;
+    }
+    if (val == BV_LANG) {
+        v = std::clamp(v, 0, (int)ARRAYSIZE(kLangCodes) - 1);
+        if (v == g_langChoice) return;
+        SetUiLangChoice(kLangCodes[v]);
+        OvrSetStr(L"language", kLangCodes[v]);
+        if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);  // barras e menus no idioma novo
+        return;
+    }
+    if (val == BV_SEARCHTGT) {
+        g_settings.searchTarget = v == 1 ? 1 : 0;
+        OvrSetStr(L"searchTarget", g_settings.searchTarget ? L"siri" : L"windows");
+        return;
+    }
+    if (val == BV_MENUGLASS) {
+        g_settings.menuGlass = v == 1 ? 1 : 0;
+        OvrSetStr(L"menuGlass", g_settings.menuGlass ? L"central" : L"glass");
+        return;
+    }
+    if (val == BV_MENUTRANSP) {
+        g_settings.menuTransp = std::clamp(v, 0, 100);
+        OvrSetInt(L"menuTransparency", g_settings.menuTransp);
+        return;
+    }
+    if (val == BV_SELBAR || val == BV_SELMENU) {
+        int idx = v < 0 || v >= kSelCount ? -1 : v;
+        (val == BV_SELBAR ? g_settings.selBar : g_settings.selMenu) = idx;
+        OvrSetStr(val == BV_SELBAR ? L"selectionBar" : L"selectionMenu",
+                  idx < 0 ? L"frosted" : kSelPalette[idx].key);
+        RedrawAll();
+        return;
     }
     if (val == BV_BSTRANSP) {
         g_bsTransp = std::clamp(v, 0, 100);
@@ -11326,6 +11332,32 @@ static void BsSet(int val, int v) {
         g_bsStyle = v;
         BsSaveLook();
         g_bsReopen = true;  // o vidro é criado com a janela: reabre no mesmo lugar
+        return;
+    }
+    if (val == BV_HEIGHT || val == BV_FONT || val == BV_ICONS) {
+        // As barras são refeitas ao soltar o slider (g_bsPendingReload).
+        v = std::clamp(v, 0, 100);
+        if (val == BV_HEIGHT) {
+            g_settings.height = 20 + (int)std::lround(v * 28 / 100.0);
+            OvrSetInt(L"height", g_settings.height);
+        } else if (val == BV_FONT) {
+            g_settings.fontSize = (float)(10 + (int)std::lround(v / 10.0));
+            OvrSetInt(L"fontSize", (int)g_settings.fontSize);
+        } else {
+            int pct = 70 + (int)std::lround(v * 90 / 100.0);
+            g_settings.iconScale = pct / 100.0f;
+            OvrSetInt(L"iconScale", pct);
+        }
+        g_bsPendingReload = true;
+        return;
+    }
+    if (val == BV_BARSTYLE) {
+        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid"};
+        v = std::clamp(v, 0, 2);
+        if (g_settings.barStyle == v) return;
+        g_settings.barStyle = v;
+        OvrSetStr(L"barStyle", kNames[v]);
+        BarsRestyle();  // troca o fundo na barra que já existe
         return;
     }
     v = std::clamp(v, 0, 100);
@@ -12236,7 +12268,16 @@ static void BsDrawWindow() {
         D2D1_RECT_F r = shift(row.r);
         if (r.bottom < g_bs.view.top || r.top > g_bs.view.bottom) continue;
         if (!(piece = BsPieceBegin(cardStart(cardOf(row.r.top + 1))))) continue;
+        ID2D1Layer* dimLayer = nullptr;
+        if (BsRowDisabled((int)i) && SUCCEEDED(rt->CreateLayer(&dimLayer)))
+            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                D2D1::IdentityMatrix(), 0.35f),
+                          dimLayer);
         BsDrawRow(i, row, oy);
+        if (dimLayer) {
+            rt->PopLayer();
+            dimLayer->Release();
+        }
         BsPieceEnd(piece);
     }
     if (g_bs.rows.empty() && !g_bs.query.empty())
@@ -12362,7 +12403,23 @@ static void BsRender() {
 }
 
 // O que está sob o ponto (coordenadas da janela). `part`: 1 = sobre o controle; 10+k = amostra de cor k.
+// Linha inativa (apagada e sem resposta): a transparência dos menus no estilo
+// "Igual à Central", em que os menus usam o vidro da Central.
+static bool BsRowDisabled(int rowIdx) {
+    if (rowIdx < 0 || rowIdx >= (int)g_bs.rows.size()) return false;
+    const BsRowDef& d = kBsRows[g_bs.rows[rowIdx].def];
+    return d.kind != BR_HEADER && d.val == BV_MENUTRANSP && g_settings.menuGlass == 1;
+}
+static int BsHitRaw(float x, float y, int* part);
 static int BsHit(float x, float y, int* part) {
+    int hit = BsHitRaw(x, y, part);
+    if (BsRowDisabled(hit)) {
+        *part = 0;
+        return -1;
+    }
+    return hit;
+}
+static int BsHitRaw(float x, float y, int* part) {
     *part = 0;
     auto in = [&](const D2D1_RECT_F& r) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; };
     if (in(g_bs.doneBtn)) return -2;
@@ -12399,6 +12456,55 @@ static void BsSliderFromX(int rowIdx, float x) {
     BsRender();
 }
 
+
+// Opções do relógio: formatos de data e hora, com o exemplo de agora.
+static void BsClockOptions() {
+    struct Opt {
+        PCWSTR fmt;
+        bool date;
+    };
+    static const Opt kOpts[] = {
+        {L"ddd d MMM", true}, {L"dddd, d 'de' MMMM", true}, {L"dd/MM", true}, {L"", true},
+        {L"HH:mm", false},    {L"HH:mm:ss", false},          {L"h:mm tt", false},
+    };
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    HMENU m = CreatePopupMenu();
+    AddHeader(m, L"Data");
+    for (int i = 0; i < (int)ARRAYSIZE(kOpts); i++) {
+        if (i == 4) {
+            AddSep(m);
+            AddHeader(m, L"Hora");
+        }
+        wchar_t buf[96] = L"";
+        if (!kOpts[i].fmt[0]) wcscpy(buf, L"Não mostrar");
+        else if (kOpts[i].date)
+            GetDateFormatEx(UiLocale(), 0, &st, T(kOpts[i].fmt), buf, ARRAYSIZE(buf), nullptr);
+        else
+            GetTimeFormatEx(UiLocale(), 0, &st, kOpts[i].fmt, buf, ARRAYSIZE(buf));
+        const std::wstring& cur = kOpts[i].date ? g_settings.dateFormat : g_settings.timeFormat;
+        AddItem(m, 1 + i, buf, cur == kOpts[i].fmt, false, true);
+    }
+    AddSep(m);
+    AddItem(m, 50, L"Data em maiúsculas", g_settings.dateUpper);
+    const D2D1_RECT_F& b = g_bs.clockBtn;
+    UINT cmd = GlassTrackMenu(m, g_bs.pos.x + (int)b.right, g_bs.pos.y + (int)b.bottom + 4, true,
+                              (UINT)std::lround(g_bs.s * 96));
+    DestroyMenu(m);
+    if (g_bs.hwnd) SetForegroundWindow(g_bs.hwnd);
+    if (cmd == 50) {
+        g_settings.dateUpper = !g_settings.dateUpper;
+        OvrSetInt(L"dateUpper", g_settings.dateUpper ? 1 : 0);
+        PollStatus(true);
+        RedrawAll();
+    }
+    if (cmd >= 1 && cmd <= ARRAYSIZE(kOpts)) {
+        const Opt& o = kOpts[cmd - 1];
+        (o.date ? g_settings.dateFormat : g_settings.timeFormat) = o.fmt;
+        OvrSetStr(o.date ? L"dateFormat" : L"timeFormat", o.fmt);
+        RedrawAll();
+    }
+}
 
 static void BsOpenAt(const POINT* at, float scroll);
 
@@ -12669,7 +12775,9 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
             } else if (hit >= 0) {
                 const BsRowDef& d = kBsRows[g_bs.rows[hit].def];
-                if (d.kind == BR_COLORS) {
+                if (d.kind == BR_ITEM && d.val == BV_CLOCK) {
+                    if (part == 1) BsClockOptions();
+                } else if (d.kind == BR_COLORS) {
                     if (part >= 10) {
                         BsSet(d.val, part - 11);  // 10 = fosca (-1)
                         BsRender();
@@ -21485,6 +21593,5 @@ const UiTr kUiTr[] = {
     {L"Resposta enviada", L"Reply sent", L"Respuesta enviada", L"Réponse envoyée", L"Antwort gesendet", L"Risposta inviata", L"回复已发送"},
     {L"Não deu para responder daqui", L"Couldn’t reply from here", L"No se pudo responder desde aquí", L"Impossible de répondre d’ici", L"Antworten von hier nicht möglich", L"Impossibile rispondere da qui", L"无法在此回复"},
     {L"Texto copiado: cole na conversa", L"Text copied: paste it in the chat", L"Texto copiado: pégalo en la conversación", L"Texte copié : collez-le dans la conversation", L"Text kopiert: im Chat einfügen", L"Testo copiato: incollalo nella chat", L"文本已复制: 请粘贴到对话中"},
-    {L"Os outros ajustes (itens da barra, aparência, menus, pílulas e notificações) ficam na página do mod no Windhawk: abra o Windhawk, escolha Mac OS 27 Finder Bar e a aba Configurações (Settings).", L"The other settings (bar items, look, menus, pills and notifications) are on the mod's page in Windhawk: open Windhawk, pick Mac OS 27 Finder Bar and the Settings tab.", L"Los demás ajustes (elementos de la barra, aspecto, menús, píldoras y notificaciones) están en la página del mod en Windhawk: abre Windhawk, elige Mac OS 27 Finder Bar y la pestaña Settings.", L"Les autres réglages (éléments de la barre, apparence, menus, pastilles et notifications) se trouvent sur la page du mod dans Windhawk : ouvrez Windhawk, choisissez Mac OS 27 Finder Bar puis l’onglet Settings.", L"Die übrigen Einstellungen (Leistenelemente, Aussehen, Menüs, Pillen und Mitteilungen) stehen auf der Seite der Mod in Windhawk: Windhawk öffnen, Mac OS 27 Finder Bar wählen und den Tab Settings.", L"Le altre impostazioni (elementi della barra, aspetto, menu, pillole e notifiche) sono nella pagina della mod in Windhawk: apri Windhawk, scegli Mac OS 27 Finder Bar e la scheda Settings.", L"其他设置 (菜单栏项目、外观、菜单、胶囊提示和通知) 位于 Windhawk 中此模组的页面: 打开 Windhawk, 选择 Mac OS 27 Finder Bar, 然后打开 Settings 选项卡。"},
 };
 const size_t kUiTrCount = ARRAYSIZE(kUiTr);
