@@ -15,7 +15,7 @@
 /*
 # Mac OS 27 Finder Bar
 
-A [Windhawk](https://windhawk.net) mod that adds a macOS 27-style menu bar to the top of the screen in Windows 11: the menus of the app in front on the left, and system status, Control Center and the clock on the right, all in live glass.
+A [Windhawk](https://windhawk.net) mod that adds a macOS 27-style menu bar to the top of the screen in Windows 11: the menus of the app in front on the left, and system status, Control Center, notifications and the clock on the right, all in live glass.
 
 Available in English, Português, Español, Français, Deutsch, Italiano and 中文（简体）. The language follows Windows automatically, or can be picked in the settings.
 
@@ -33,8 +33,8 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 
 ## Left side
 
-- **Logo menu**: About This PC, System Settings, Microsoft Store (with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and **Menu Bar Settings…**
-- **Active app name**: hide the app, hide others, open file location, close window, quit, force quit
+- **Logo menu**: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and **Menu Bar Settings…**
+- **Active app name** (shown as *Finder* for the desktop and File Explorer, a name you can change): hide the app, hide others, open file location, close window, quit, force quit
 - **Global menu**:
   - apps with a classic menu bar (Win32): the app's real menus
   - modern apps: the app's menu bar read through UI Automation when it exists
@@ -47,21 +47,45 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - **Display**: dark mode, night light, projection modes
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
-- **Now Playing**, **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), privacy dots (orange/green while the microphone or camera is in use), **Weather** and the **Notifications** button
-- **Clock**: the calendar, with your own .ics calendars
-- An arrow collapses the icons that don't fit
+- **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave
+- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), privacy dots (orange/green while the microphone or camera is in use), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
+- **Clock**: the calendar and your agenda from your own .ics files or links; .ics files can be imported right from the settings window. Date and time formats are configurable
+- An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
 ## Control Center
 
-Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound and audio output, plus tiles you can add: night light, airplane mode, screenshot, **screen recording**, **power mode** (Windows 11 modes and power plans), **energy saver** (one click turns it on and off), **magnifier**, lock screen, calculator, Task Manager, emoji and show desktop. **Edit Controls** lets you add, remove, move and resize tiles.
+Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound and audio output, plus tiles you can add: night light, airplane mode, screenshot, **screen recording**, **power mode**, **energy saver** (one click turns it on and off), **magnifier**, lock screen, calculator, Task Manager, emoji and show desktop.
+
+- **Edit Controls** lets you add, remove, move and resize tiles
+- Clicking **power mode** opens a box under Edit Controls, as wide as the panel, with the Windows 11 power modes and power plans (repeated plans are hidden)
+- Tile names that don't fit scroll when the mouse is over the tile
+- Tiles can be pills or rounded squares; a tile that is on shows a colored circle or turns into a whole white pill
+- Optional: blur and dim the screen while the Control Center is open; cascade or fade animation when it opens
 
 ## Notice pills
 
-Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, USB devices and drives, finished downloads, copied items, screenshots and (experimental) Windows notifications. The bell button keeps them grouped by app.
+Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, USB devices and drives, finished downloads, copied items and screenshots. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (glass, liquid glass or dark), size, position, duration and opening and closing animations are all configurable.
+
+## Notifications
+
+Turn on **Windows notifications** in the pill settings (off by default) and the bar shows your apps' notifications:
+
+- in the pill and in the bell panel, grouped by app
+- **reply** to messages (like WhatsApp) right from the pill, when the app supports replies
+- **drag** a notification aside in the panel to clear it
+- **Only the bar shows notifications**: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off
+
+## Bar and glass
+
+- Bar background: fully transparent (default), Windows blur glass, or liquid glass (experimental); opaque when the active app is maximized (optional)
+- **Live glass**: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)
+- Menus use their own frosted glass (with a transparency slider) or **the same glass as the Control Center**
+- Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height
+- Hides with full-screen apps, can hide automatically until the mouse touches the top, and shows on every monitor (each optional)
 
 ## Settings
 
-Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live. **Panel Glass** has a single *clear ↔ tinted* control, plus the experimental liquid glass with edge refraction.
+Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. Windhawk's settings page has the same options.
 
 ## Known limitations
 
@@ -69,6 +93,7 @@ Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus 
 - Bluetooth lists classic (non-BLE) devices and opens Settings to connect and disconnect.
 - Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.
 - Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.
+- Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.
 - With live glass (and the bar's liquid background), the bar and panels don't show up in screenshots.
 */
 // ==/WindhawkModReadme==
