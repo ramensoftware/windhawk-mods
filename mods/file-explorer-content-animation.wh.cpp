@@ -58,7 +58,7 @@ A smooth, WinUI-inspired page transition system for the File Explorer content ar
 - **Reverse Direction** - Slide down instead of up. Does not apply to property pages or horizontal transitions.
 - **Page Transitions** - Smart detection of back/forward navigation with distinct animations.
 - **Animate Nav Pane** - Slide the navigation tree in from the left.
-- **Styler text compatibility** - During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod. Optional even with the Styler active: only turn it on if you notice a difference in the text after the animation ends.
+- **Styler text compatibility** - During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod (curve from Styler 1.7.2). Optional even with the Styler active: only turn it on if you notice a difference in the text after the animation ends.
 - **Animate Property Pages** - Animates tab switching in Properties and Folder Options windows.
 - **Property Page Tab Transitions** - Directional animations when switching tabs in Properties windows. Tabs to the right slide forward, to the left slide back. Requires Animate Property Pages.
 - **First Open Delay** - Applies only when a new Explorer window is opened.
@@ -109,7 +109,7 @@ Uma animacao suave de transicao de pagina inspirada no WinUI para o Explorador d
 - **Direcao Reversa** - Faz o conteudo descer ao inves de subir. Nao se aplica a paginas de Propriedades nem a transicoes horizontais.
 - **Transicoes de Pagina** - Deteccao inteligente de navegacao voltar/avancar com animacoes distintas.
 - **Animar Painel de Navegacao** - Desliza a arvore de navegacao da esquerda.
-- **Compatibilidade com o texto do Styler** - Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler. Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao.
+- **Compatibilidade com o texto do Styler** - Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler (curva do Styler 1.7.2). Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao.
 - **Animar Paginas de Propriedades** - Anima a troca de abas em Propriedades e Opcoes de Pasta.
 - **Transicoes de Aba nas Propriedades** - Animacoes direcionais ao trocar abas nas janelas de Propriedades. Aba a direita desliza para frente, a esquerda para tras. Requer Animar Paginas de Propriedades ativo.
 - **Delay na Primeira Abertura** - Aplicado apenas ao abrir uma nova janela.
@@ -161,7 +161,7 @@ Una animacion suave de transicion de pagina inspirada en WinUI para el Explorado
 - **Direccion Inversa** - Desliza hacia abajo en lugar de hacia arriba. No se aplica a paginas de Propiedades ni a transiciones horizontales.
 - **Transiciones de Pagina** - Deteccion inteligente de navegacion atras/adelante con animaciones distintas.
 - **Animar Panel de Navegacion** - Desliza el arbol desde la izquierda.
-- **Compatibilidad con el texto del Styler** - Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler. Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion.
+- **Compatibilidad con el texto del Styler** - Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler (curva del Styler 1.7.2). Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion.
 - **Animar Paginas de Propiedades** - Anima el cambio de pestanas en Propiedades.
 - **Transiciones de Pestana en Propiedades** - Animaciones direccionales al cambiar pestanas en ventanas de Propiedades. Las pestanas a la derecha deslizan hacia adelante, a la izquierda hacia atras. Requiere Animar Paginas de Propiedades activado.
 - **Retraso en la Primera Apertura** - Solo al abrir una nueva ventana.
@@ -245,9 +245,9 @@ resuelto en builds recientes del canal Insider/Beta.
   $name: Styler text compatibility
   $name:pt: Compatibilidade com o texto do Styler
   $name:es: Compatibilidad con el texto del Styler
-  $description: "During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod. Optional even with the Styler active: only turn this on if you notice a difference in the text after the animation ends."
-  $description:pt: "Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler. Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao."
-  $description:es: "Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler. Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion."
+  $description: "During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod (curve from Styler 1.7.2). Optional even with the Styler active: only turn this on if you notice a difference in the text after the animation ends."
+  $description:pt: "Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler (curva do Styler 1.7.2). Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao."
+  $description:es: "Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler (curva del Styler 1.7.2). Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion."
 
 - propertyPages:
     - animate: false
@@ -832,7 +832,6 @@ struct DCompFadeAnim {
     // dentro dela, a copia que se move (pMove), recortada nas duas camadas.
     IDCompositionVisual2*     pParts[6] = {};
     IDCompositionVisual2*     pMove    = nullptr;
-    RECT                      scrollArea{};
     uint64_t                  generation = 0; // identifica instancia unica do fade
     int                       curtainHolders = 0; // > 0: cortina de devolucao ativa
     ULONGLONG                 curtainReadyAt = 0;
@@ -1025,7 +1024,6 @@ static bool BuildScrollCurtain(IDCompositionDesktopDevice* dev, DCompFadeAnim& a
         if (!IsRectEmpty(&strip) && !add(anim.pVisual, strip, true)) return false;
     IDCompositionVisual2* window = add(anim.pVisual, area, false);
     anim.pMove = window ? add(window, area, true) : nullptr;
-    anim.scrollArea = area;
     return anim.pMove != nullptr;
 }
 
@@ -1796,7 +1794,7 @@ static bool LayerTextArea(HDC hdc, int x, int y, UINT options, const RECT* rect,
 // DC e DIB reaproveitados entre os trechos: criar os dois por chamada custava mais
 // que o proprio texto. Limitado em tamanho; maior que isso, ou em DC espelhado (que
 // espelha pela largura do bitmap), o trecho usa um bitmap so dele.
-constexpr int kLayerTextBufferW = 2048, kLayerTextBufferH = 512;
+constexpr int kLayerTextBufferW = 1024, kLayerTextBufferH = 128;
 static std::mutex layerTextBufferMutex;
 struct LayerTextBuffer { HDC dc; HBITMAP dib; HGDIOBJ oldBitmap; BYTE* bits; int pitch; };
 static LayerTextBuffer layerTextBuffer;
