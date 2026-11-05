@@ -2,7 +2,7 @@
 // @id              always-on-top-universal
 // @name            Always on Top (Universal)
 // @description     Adds a customizable "Always on Top" option to window menus, plus a force-topmost process list.
-// @version         6.5
+// @version         1.0.0
 // @author          gloobus1
 // @github          https://github.com/glooobus1
 // @include         *
@@ -54,8 +54,8 @@ windows kept above all others, regardless of the menu toggle. Example:
 
 #include <windows.h>
 #include <string>
-#include <vector>
 #include <algorithm>
+#include <windhawk_utils.h>
 
 // Window menu IDs must be below 0xF000 with the low 4 bits clear.
 #define IDM_TOPMOST 0x8010
@@ -68,7 +68,6 @@ struct {
 } settings;
 
 bool g_forceTopmostProcess = false;
-std::wstring g_currentProcessName;
 
 using DefWindowProcW_t = decltype(&DefWindowProcW);
 DefWindowProcW_t DefWindowProcW_Original;
@@ -101,9 +100,9 @@ static std::wstring ReplaceAll(std::wstring str, const std::wstring& from, const
 }
 
 std::wstring BuildMenuText(bool isTopmost) {
-    std::wstring tpl = settings.menuTemplate ? settings.menuTemplate : L"%enabled%On Top";
+    std::wstring tpl = (settings.menuTemplate && settings.menuTemplate[0]) ? settings.menuTemplate : L"%enabled%%text%";
     std::wstring prefix = (isTopmost && settings.enabledPrefix) ? settings.enabledPrefix : L"";
-    std::wstring base = settings.baseText ? settings.baseText : L"On Top";
+    std::wstring base = (settings.baseText && settings.baseText[0]) ? settings.baseText : L"On Top";
 
     std::wstring result = ReplaceAll(tpl, L"%enabled%", prefix);
     result = ReplaceAll(result, L"%text%", base);
@@ -120,17 +119,12 @@ void ToggleTopmost(HWND hWnd) {
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     bool isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
     ApplyTopmost(hWnd, !isTopmost);
-    DrawMenuBar(hWnd);
 }
 
-// Возвращает true, если пункт был добавлен (или уже существовал)
+// Returns true only if this call added the item.
 bool AddMenuItem(HWND hWnd, HMENU hMenu) {
-    // Проверяем, есть ли уже наш пункт
-    int count = GetMenuItemCount(hMenu);
-    for (int i = 0; i < count; i++) {
-        if (GetMenuItemID(hMenu, i) == IDM_TOPMOST) {
-            return true; // Пункт уже есть, ничего не добавляем
-        }
+    if (GetMenuState(hMenu, IDM_TOPMOST, MF_BYCOMMAND) != (UINT)-1) {
+        return false;  // already there: ours, or the app's own
     }
 
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
@@ -149,7 +143,7 @@ void RemoveMenuItem(HMENU hMenu) {
     for (int i = count - 1; i >= 0; i--) {
         if (GetMenuItemID(hMenu, i) == IDM_TOPMOST) {
             DeleteMenu(hMenu, i, MF_BYPOSITION);
-            // Удаляем разделитель, который мы добавили (он будет на позиции i-1)
+            // Remove the separator we added (it will be at position i-1)
             if (i > 0 && (GetMenuState(hMenu, i - 1, MF_BYPOSITION) & MF_SEPARATOR)) {
                 DeleteMenu(hMenu, i - 1, MF_BYPOSITION);
             }
@@ -165,22 +159,23 @@ void LoadSettings() {
     settings.forceTopmostList = Wh_GetStringSetting(L"forceTopmostList");
 
     wchar_t path[MAX_PATH] = {};
+    std::wstring currentProcessName;
     if (GetModuleFileNameW(nullptr, path, MAX_PATH)) {
         std::wstring full = path;
         size_t slash = full.find_last_of(L"\\/");
-        g_currentProcessName = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
-        g_currentProcessName = ToLower(g_currentProcessName);
+        currentProcessName = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+        currentProcessName = ToLower(currentProcessName);
     }
 
     g_forceTopmostProcess = false;
-    if (settings.forceTopmostList && g_currentProcessName.length() > 0) {
+    if (settings.forceTopmostList && currentProcessName.length() > 0) {
         std::wstring str = settings.forceTopmostList;
         size_t pos = 0;
         while (pos <= str.size()) {
             size_t next = str.find(L';', pos);
             std::wstring token = (next == std::wstring::npos) ? str.substr(pos) : str.substr(pos, next - pos);
             token = ToLower(Trim(token));
-            if (!token.empty() && token == g_currentProcessName) {
+            if (!token.empty() && token == currentProcessName) {
                 g_forceTopmostProcess = true;
                 break;
             }
@@ -208,10 +203,10 @@ void EnforceForceTopmost(HWND hWnd) {
 }
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    if (Msg == WM_INITMENUPOPUP && HIWORD(lParam)) {
+    if (Msg == WM_INITMENUPOPUP && HIWORD(lParam) == MF_SYSMENU) {
         AddMenuItem(hWnd, (HMENU)wParam);
     } 
-    else if (Msg == WM_UNINITMENUPOPUP) {
+    else if (Msg == WM_UNINITMENUPOPUP && HIWORD(lParam) == MF_SYSMENU) {
         RemoveMenuItem((HMENU)wParam);
     }
     else if (Msg == WM_SYSCOMMAND) {
@@ -241,17 +236,14 @@ bool IsWindowMenu(HMENU hMenu) {
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
     bool added = false;
     
-    // Вмешиваемся ТОЛЬКО если вызывающий код сам запросил TPM_RETURNCMD
     if ((uFlags & TPM_RETURNCMD) && hWnd && IsWindow(hWnd) && IsWindowMenu(hMenu)) {
-        // AddMenuItem вернет true, если пункт был добавлен (или уже был)
-        // Если пункт уже был добавлен через DefWindowProcW, мы это учтем
         added = AddMenuItem(hWnd, hMenu);
     }
 
     BOOL result = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
 
     if (added) {
-        RemoveMenuItem(hMenu); // Убираем за собой
+        RemoveMenuItem(hMenu);
         if (result == IDM_TOPMOST) {
             ToggleTopmost(hWnd);
             return 0;
@@ -262,11 +254,11 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init Always on Top Universal v6.5");
+    Wh_Log(L"Init Always on Top Universal v%s", WH_MOD_VERSION);
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
-    Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&TrackPopupMenuEx_Original);
+    WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original);
+    WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook, &TrackPopupMenuEx_Original);
 
     return TRUE;
 }
@@ -276,8 +268,7 @@ void Wh_ModUninit() {
     FreeSettings();
 }
 
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
-    FreeSettings();
-    LoadSettings();
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = TRUE;
+    return TRUE;
 }
