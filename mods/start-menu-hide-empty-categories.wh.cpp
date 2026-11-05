@@ -7,7 +7,6 @@
 // @version 1.0.0
 // @author Feuer
 // @github https://github.com/feuerdraws
-// @twitter https://x.com/feuerdraws
 // @include explorer.exe
 // @include StartMenuExperienceHost.exe
 // @architecture x86-64
