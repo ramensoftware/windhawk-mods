@@ -7,7 +7,6 @@
 // @version 1.0.0
 // @author Feuer
 // @github https://github.com/feuerdraws
-// @twitter https://x.com/feuerdraws
 // @include explorer.exe
 // @include StartMenuExperienceHost.exe
 // @architecture x86-64
@@ -38,13 +37,10 @@ Whenever the mod is loaded (installed, updated, switched on again, or Explorer r
 process if that process started before the mod. The new process loads with the mod from its start, so the new menu
 item appears without restarting Explorer.
 
-**Your layout lives in this mod.** The mod does not rewrite Windows' own category data. It keeps the categories you
+**Your layout lives in this mod.** The mod never writes to Windows' registry. It keeps the categories you
 choose in its own storage, and the part of the mod that runs inside the Start menu process gives Start your category
 when Start reads an app's category. If you disable or uninstall the mod, every category goes back to the one Windows
 chose, so keep the mod installed to keep your layout. **Export** saves a copy of it to a file.
-
-The one thing the mod still writes under `TileProperties` is an empty key (no values) for an app that Start has no key
-for yet, so that Start lists the app. Those empty keys are harmless and stay when the mod is removed.
 
 **Known issue:** if you move every app out of the *Other* category, Windows 11 still shows an empty *Other* container
 in the Start menu. That is Start's own behavior. Please report it to Microsoft through the Feedback Hub.
@@ -67,7 +63,7 @@ to an app or to a whole Start menu folder.
 - Choosing **Windows default** removes the mod's change for the app, so it goes back to the category Windows chose.
 - Applying a change restarts StartMenuExperienceHost so it takes effect immediately.
 - Windows keeps its categories under `HKCU\Software\Microsoft\Windows\CurrentVersion\Start\TileProperties`. The mod
-  only reads that key (apart from the empty keys described above); its own changes are in the mod's storage.
+  only reads that key and never writes to it; its own changes are in the mod's storage.
 - Start sometimes keeps several keys for the same app (a `P~` and a `W~` twin, and one
   key per Start menu shortcut). The mod gives the app's main key and all of its other keys the same category,
   so they can never disagree. Apps whose keys currently disagree (Windows' own values, for apps you have not changed)
@@ -160,7 +156,7 @@ The mod makes no permanent change to Windows' own category values. When it is di
 Start menu process restarts and reads its own values again, so every category goes back to the one Windows chose. Your
 layout stays in the mod's storage while the mod is installed, so disabling and enabling the mod (or updating it) brings
 your categories back. Windhawk removes the storage together with the mod, so use **Export** first if you want to keep
-your layout. The empty keys the mod created (see above) stay; they hold no values.
+your layout.
 
 ## Tested on
 
@@ -1101,7 +1097,7 @@ void LoadEntries() {
 
 
 // How many apps each filter entry holds: All, Windows default, then one per kCategories entry.
-// Uses the same rule as MatchesCategoryFilter, so a count equals what the filter then shows.
+// Uses the same rule as XamlAppMatches, so a count equals what the filter then shows.
 std::vector<size_t> ComputeFilterCounts() {
     std::vector<size_t> counts(2 + ARRAYSIZE(kCategories), 0);
     counts[0] = g_apps.size();
@@ -1153,19 +1149,7 @@ bool SaveOverrides() {
     return true;
 }
 
-// Start only reads a key that exists. For an app it has no key for yet, an empty key (no values) is created, so Start
-// lists the app and asks for its category. This is the only thing the mod writes under TileProperties.
-bool EnsureKeyExists(const std::wstring& regKey) {
-    const std::wstring fullPath = std::wstring(kRegistryPath) + L"\\" + regKey;
-    HKEY key = nullptr;
-    const LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, fullPath.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
-                                           KEY_QUERY_VALUE, nullptr, &key, nullptr);
-    if (status != ERROR_SUCCESS) return false;
-    RegCloseKey(key);
-    return true;
-}
-
-enum class WriteResult { Failed, Unchanged, Changed };
+enum class WriteResult { Unchanged, Changed };
 
 // Sets the override of one key. categoryValue < 0 removes it, which gives the key back the category Windows chose.
 WriteResult SetOverrideForKey(const std::wstring& regKey, LONG_PTR categoryValue) {
@@ -1184,7 +1168,6 @@ WriteResult SetOverrideForKey(const std::wstring& regKey, LONG_PTR categoryValue
 // The app's main key and every other key it is known by get the same override, so they can never disagree. The main key
 // is created (empty) if Start has none yet. Nothing is saved here: ApplyCategoryToTargets saves once.
 WriteResult WriteCategoryValueDual(const AppEntry& app, LONG_PTR categoryValue) {
-    if (categoryValue >= 0 && !EnsureKeyExists(app.primaryRegistryKey)) return WriteResult::Failed;
     bool anyChanged = SetOverrideForKey(app.primaryRegistryKey, categoryValue) == WriteResult::Changed;
     for (const auto& alias : app.aliasRegistryKeys) {
         if (SetOverrideForKey(alias, categoryValue) == WriteResult::Changed) anyChanged = true;
@@ -1247,7 +1230,7 @@ StartModState ProcessModState(DWORD pid) {
     return state;
 }
 
-// Ends the Start menu process so it starts again with the new registry values. A process that started within the last
+// Ends the Start menu process so it starts again and reads its categories (with your overrides). A process that started within the last
 // second is left alone: it was started by an earlier restart, has not read the layout yet, and killing it again would
 // only make Start flap. Only the current session's Start process is touched. Calls from different threads run one
 // after the other, so a request that arrives during a restart is not lost.
@@ -1316,12 +1299,10 @@ void RestartStartMenuStartedBeforeMod() {
 std::wstring ApplyCategoryToTargets(const std::vector<size_t>& targets, const std::vector<std::wstring>& folders,
                                     LONG_PTR categoryValue, bool clearChecksOnSuccess) {
     const OverrideMap before = g_overrides;
-    size_t changed = 0, unchanged = 0, failed = 0;
+    size_t changed = 0, unchanged = 0;
     for (size_t appIndex : targets) {
         const WriteResult result = WriteCategoryValueDual(g_apps[appIndex], categoryValue);
-        if (result == WriteResult::Failed) {
-            ++failed;
-        } else if (result == WriteResult::Changed) {
+        if (result == WriteResult::Changed) {
             ++changed;
         } else {
             ++unchanged;
@@ -1356,13 +1337,11 @@ std::wstring ApplyCategoryToTargets(const std::vector<size_t>& targets, const st
         if (unchanged > 0) msg += L"; " + std::to_wstring(unchanged) + L" sem alteração";
         if (restarted) msg += L"; Menu Iniciar reiniciado";
         if (saveFailed) msg += L"; não foi possível salvar as alterações";
-        if (failed > 0) msg += L"; " + std::to_wstring(failed) + L" falha(s)";
     } else {
         msg = L"Updated " + std::to_wstring(saveFailed ? 0 : changed) + L" item(s)";
         if (unchanged > 0) msg += L"; " + std::to_wstring(unchanged) + L" already set";
         if (restarted) msg += L"; Start menu restarted";
         if (saveFailed) msg += L"; the changes could not be saved";
-        if (failed > 0) msg += L"; " + std::to_wstring(failed) + L" failed";
     }
     SetStatus(msg + L".");
     return msg + L".";
@@ -1547,16 +1526,6 @@ size_t ApplyLayoutText(const std::wstring& text, size_t* skipped) {
     return applied;
 }
 
-// Start only reads keys that exist, so an imported category needs the app's main key. Creates the (empty) ones that are
-// missing for installed apps.
-void EnsurePrimaryKeys() {
-    for (const auto& app : g_apps) {
-        if (!app.primaryRegistryKey.empty() && g_overrides.count(app.primaryRegistryKey)) {
-            EnsureKeyExists(app.primaryRegistryKey);
-        }
-    }
-}
-
 void ImportCategoriesNow() {
     HWND owner = g_xamlListWindow;
     wchar_t file[MAX_PATH]{};
@@ -1584,10 +1553,7 @@ void ImportCategoriesNow() {
                      L"Nada foi importado: não foi possível salvar o layout."));
         return;
     }
-    if (applied > 0) {
-        EnsurePrimaryKeys();
-        RestartStartMenuHost();
-    }
+    if (applied > 0) RestartStartMenuHost();
     LoadEntries();
     SetStatus(IsPortuguese()
         ? std::to_wstring(applied) + L" entradas importadas, " + std::to_wstring(skipped) + L" ignoradas" +
@@ -5632,9 +5598,9 @@ BOOL Wh_ModInit() {
         // Start reads each app's category through RegGetValueW. The overrides are loaded before the hook is installed.
         LoadOverridesFromStorage(g_startOverrides);
         Wh_Log(L"[start] %lu category override(s) loaded", static_cast<unsigned long>(g_startOverrides.size()));
-        void* regGetValueW = kernelBase ? reinterpret_cast<void*>(GetProcAddress(kernelBase, "RegGetValueW")) : nullptr;
-        if (regGetValueW && Wh_SetFunctionHook(regGetValueW, reinterpret_cast<void*>(RegGetValueW_Hook),
-                                               reinterpret_cast<void**>(&RegGetValueW_Original))) {
+        auto regGetValueW = kernelBase ? reinterpret_cast<RegGetValueW_t>(GetProcAddress(kernelBase, "RegGetValueW")) : nullptr;
+        if (regGetValueW &&
+            WindhawkUtils::SetFunctionHook(regGetValueW, RegGetValueW_Hook, &RegGetValueW_Original)) {
             Wh_Log(L"[start] RegGetValueW hook set");
         } else {
             Wh_Log(L"[start] Could not hook RegGetValueW; your categories will not be applied");
