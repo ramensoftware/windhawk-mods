@@ -1340,7 +1340,8 @@
     "github": "https://github.com/luizbizzio",
     "githubId": 73234672,
     "homepages": [
-      "https://github.com/luizbizzio/recycle-bin-file-preview"
+      "https://github.com/luizbizzio/recycle-bin-file-preview",
+      "https://github.com/luizbizzio/taskbar-zones"
     ]
   },
   "https://github.com/luizgununes": {
@@ -1405,6 +1406,12 @@
     "homepages": [
       "https://github.com/marco-kretz/win11-multi-dpi-cursor"
     ]
+  },
+  "https://github.com/marco00petrucci": {
+    "author": "Marco Petrucci",
+    "github": "https://github.com/marco00petrucci",
+    "githubId": 100141045,
+    "homepages": []
   },
   "https://github.com/mario0318": {
     "author": "mario0318",
@@ -2265,6 +2272,12 @@
     "author": "webberlv",
     "github": "https://github.com/webberLV",
     "githubId": 166926057,
+    "homepages": []
+  },
+  "https://github.com/wheatlay": {
+    "author": "Wheatlay",
+    "github": "https://github.com/Wheatlay",
+    "githubId": 80686272,
     "homepages": []
   },
   "https://github.com/wildstyle23": {

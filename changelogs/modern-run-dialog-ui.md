@@ -1,3 +1,9 @@
+## 4.0.101 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fee6d20e88618018c299d1d4bf18008a916798c8/mods/modern-run-dialog-ui.wh.cpp))
+
+* Added manual Run dialog size and font customization: adjust dialog width (`360`–`1200 px`), command bar/total height (`36`–`96 px` / `150`–`600 px`), and font size (`9`–`24 pt`) with live preview via inline `-` / `[value]` / `+` controls in the in-app `⚙️` quick settings menu or Windhawk settings.
+* Enhanced **Liquid Glass** optical rendering (3D Snell's-law edge refraction, chromatic dispersion, and adjustable tint from `-100` to `100`) and inline numeric controls in the `⚙️` quick settings menu.
+* Added instant web search prefixes (`ggsearch:` for Google in Chrome/default browser and `msesearch:` for Microsoft Edge) alongside real-time app suggestions and full 21-language localization across both the Run dialog and `⚙️` quick settings menu.
+
 ## 4.0.2 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a22894f34de93ae33481c9ca3f29cf294832a9d9/mods/modern-run-dialog-ui.wh.cpp))
 
 - Fixed the Run dialog not being intercepted on Windows 11 Build 26300.9818+ (#6712) by matching the Run dialog resource ID (`1003`) with a `shell32.dll` dialog procedure in `DialogBoxParamW` (supporting localized `.dll.mui` module handles) and a thread-safe `ShowWindow` fallback (no `shell32.pdb` download required).
