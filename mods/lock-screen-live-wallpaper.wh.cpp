@@ -9,7 +9,7 @@
 // @donateUrl         https://ko-fi.com/grn15rens
 // @license           GPL-3.0
 // @include           LogonUI.exe
-// @compilerOptions   -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid
+// @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
