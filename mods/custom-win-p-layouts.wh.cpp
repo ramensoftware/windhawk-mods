@@ -3,7 +3,7 @@
 // @name            Custom Win+P Layouts
 // @description     Replace the Win+P flyout with your own screen combinations for any multi-monitor setup
 // @version         1.0.0
-// @author          Hans
+// @author          harafuhub
 // @github          https://github.com/harafuhub
 // @include         explorer.exe
 // @architecture    x86-64
