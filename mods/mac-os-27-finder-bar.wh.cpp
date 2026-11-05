@@ -65,7 +65,7 @@ Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound an
 
 ## Notice pills
 
-Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, USB devices and drives, finished downloads, copied items and screenshots. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (glass, liquid glass or dark), size, position, duration and opening and closing animations are all configurable.
+Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (glass, liquid glass or dark), size, position, duration and opening and closing animations are all configurable.
 
 ## Notifications
 
@@ -110,7 +110,7 @@ The mod only goes online for features you set up yourself:
 
 ## Privacy
 
-The "copied" pill skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.
+The copy pill only says "Copied" or "Cut": it never shows what was copied, and it skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.
 
 ## Known limitations
 
@@ -329,7 +329,7 @@ struct Settings {
     bool showWeather;
     bool showNowPlaying, showFocus, showSearch, showPrivacy, menuOverflow, islandPills, kbdNav;
     bool usbPills, downloadPills, clipPills, shotPills;
-    bool islFocus, islBattery, islBluetooth, islAudio, islHistory, winNotifs, islHistNotices;
+    bool islFocus, islBattery, islBluetooth, islAudio, islHistory, winNotifs, islHistNotices, islCaps;
     bool winNotifsOnly;  // só a barra mostra as notificações (faixas do Windows desligadas)
     int islStyle, islSize, islDur, islIn, islOut, islPos;  // pílulas de aviso
     int npLayout, npSize;  // painel Tocando agora
@@ -537,6 +537,7 @@ static const UiDefault kUiDefaults[] = {
     {L"islAudio", L"1"},
     {L"islHistory", L"1"},
     {L"islHistNotices", L"1"},
+    {L"islCaps", L"1"},
     {L"islStyle", L"glass"},
     {L"islSize", L"100"},
     {L"islDuration", L"26"},
@@ -752,6 +753,7 @@ static void LoadSettings() {
     s.clipPills = OvrInt(L"clipPills") != 0;
     s.shotPills = OvrInt(L"shotPills") != 0;
     s.islFocus = OvrInt(L"islFocus") != 0;
+    s.islCaps = OvrInt(L"islCaps") != 0;
     s.winNotifs = OvrInt(L"winNotifs") != 0;
     s.winNotifsOnly = OvrInt(L"winNotifsOnly") != 0;
     s.islBattery = OvrInt(L"islBattery") != 0;
@@ -10976,7 +10978,7 @@ enum BsKind { BR_HEADER, BR_ITEM, BR_SWITCH, BR_SLIDER, BR_NOTE, BR_CHOICE, BR_C
 enum BsVal {
     BV_NONE, BV_CLOCK, BV_GLOBALMENU, BV_NET, BV_BT, BV_BATT, BV_DISPLAY, BV_VOL, BV_KBD, BV_TRAY, BV_CC,
     BV_NOW, BV_FOCUS, BV_SEARCH, BV_PRIV, BV_MORE, BV_ISLAND, BV_KBDNAV, BV_USB, BV_DLDONE, BV_CLIP, BV_SHOT,
-    BV_ISLFOCUS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
+    BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
@@ -11052,7 +11054,7 @@ static const BsRowDef kBsRows[] = {
     {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
     {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Líquido usa os ajustes de “Vidro dos painéis”"},
     {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
-    {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0},
+    {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0, L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais"},
     {BR_CHOICE, BV_ISLPOS, L"Posição", 0, 0},
     {BR_CHOICE, BV_ISLIN, L"Como aparece", 0, 0},
     {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
@@ -11064,13 +11066,14 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_WINNOTIF, L"Notificações do Windows (experimental)", 0, 0, L"WhatsApp, Discord, e-mail… Clicar abre o app"},
     {BR_SWITCH, BV_WINONLY, L"Somente a barra mostra as notificações", 0, 0, L"Tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam"},
     {BR_SWITCH, BV_CLIP, L"Texto, imagem ou arquivos copiados", 0, 0},
-    {BR_SWITCH, BV_SHOT, L"Capturas de tela", 0, 0, L"Clique na pílula para abrir a captura"},
+    {BR_SWITCH, BV_SHOT, L"Capturas e gravações de tela", 0, 0, L"Clique na pílula para abrir e editar"},
     {BR_SWITCH, BV_DLDONE, L"Downloads concluídos", 0, 0, L"Clique na pílula para abrir o arquivo"},
     {BR_SWITCH, BV_USB, L"Dispositivos USB e discos", 0, 0},
     {BR_SWITCH, BV_ISLBT, L"Aparelhos Bluetooth (fones, mouse...)", 0, 0},
     {BR_SWITCH, BV_ISLAUDIO, L"Troca da saída de áudio", 0, 0},
     {BR_SWITCH, BV_ISLBATT, L"Bateria fraca e carregador", 0, 0},
     {BR_SWITCH, BV_ISLFOCUS, L"Foco (Não Perturbe)", 0, 0},
+    {BR_SWITCH, BV_ISLCAPS, L"Caps Lock ligado e desligado", 0, 0},
     {BR_HEADER, BV_NONE, L"Previsão do tempo", 0xE753, 0x5AC8FA, L"Lugar, serviço, unidade e aparência do widget"},
     {BR_SWITCH, BV_WEATHER, L"Mostrar na barra", 0, 0},
     {BR_SWITCH, BV_WXTEMP, L"Temperatura ao lado do ícone", 0, 0},
@@ -11128,6 +11131,7 @@ static const BsBoolKey kBsKeys[] = {
     {BV_CLIP, L"clipPills", &Settings::clipPills},
     {BV_SHOT, L"shotPills", &Settings::shotPills},
     {BV_ISLFOCUS, L"islFocus", &Settings::islFocus},
+    {BV_ISLCAPS, L"islCaps", &Settings::islCaps},
     {BV_WINNOTIF, L"winNotifs", &Settings::winNotifs},
     {BV_WINONLY, L"winNotifsOnly", &Settings::winNotifsOnly},
     {BV_ISLBATT, L"islBattery", &Settings::islBattery},
@@ -16043,7 +16047,10 @@ struct IslandWnd {
 static IslandWnd& g_isl = *g_islStore;
 // Tempos: entrada, parada (ajuste) e saída.
 static double IslIn() { return g_settings.islIn == 1 ? 600 : g_settings.islIn == 3 ? 300 : 440; }
-static double IslHold() { return g_settings.islDur * 100.0; }
+// Avisos com algo a fazer (abrir a captura, responder a mensagem...) ficam 2,5
+// vezes mais na tela: dá tempo de clicar. "Copiado", Caps Lock e afins, não.
+static bool IslInteractive(const IslandNote& n) { return n.isNotif || !n.open.empty(); }
+static double IslHold() { return g_settings.islDur * 100.0 * (IslInteractive(g_isl.note) ? 2.5 : 1.0); }
 static double IslOut() { return g_settings.islOut == 3 ? 520 : g_settings.islOut == 1 ? 460 : 340; }
 #define kIslGrow IslIn()
 #define kIslHold IslHold()
@@ -16375,7 +16382,10 @@ static void NtfRefresh();
 static void IslandPush(const IslandNote& n, bool force) {
     if (!g_settings.islandPills && !force) return;
     bool isNotif = n.isNotif;
-    if (!force) {
+    // Vão para o painel de notificações só as notificações dos apps e os avisos
+    // com algo a fazer (abrir a captura, a gravação, o download...). "Copiado",
+    // Caps Lock e afins só aparecem na pílula.
+    if (!force && (isNotif || !n.open.empty())) {
         IslandHist h{n, {}};
         GetLocalTime(&h.at);
         g_islHist.push_back(h);
@@ -16851,7 +16861,8 @@ static bool IsTempDownload(const std::wstring& n) {
 
 #define WM_APP_SHOT (WM_APP + 11)
 
-static HANDLE g_shotThread = nullptr;
+static HANDLE g_shotThread = nullptr, g_recThread = nullptr;
+#define WM_APP_REC (WM_APP + 14)
 
 static bool IsImageFile(const std::wstring& n) {
     static const PCWSTR kExt[] = {L".png", L".jpg", L".jpeg", L".bmp", L".gif", L".webp"};
@@ -16862,12 +16873,32 @@ static bool IsImageFile(const std::wstring& n) {
     return false;
 }
 
+static bool IsVideoFile(const std::wstring& n) {
+    static const PCWSTR kExt[] = {L".mp4", L".mkv", L".webm"};
+    for (PCWSTR e : kExt) {
+        size_t l = wcslen(e);
+        if (n.size() > l && _wcsicmp(n.c_str() + n.size() - l, e) == 0) return true;
+    }
+    return false;
+}
+
+// A gravação terminou quando ninguém mais escreve no arquivo.
+static bool FileFinished(const std::wstring& path) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size{};
+    GetFileSizeEx(f, &size);
+    CloseHandle(f);
+    return size.QuadPart > 0;
+}
+
 // Observa uma pasta conhecida. 0 = Downloads (temporário -> nome final),
-// 1 = Capturas de Tela (imagem nova).
+// 1 = Capturas de Tela (imagem nova), 2 = Vídeos\Screen Recordings (gravação
+// da Ferramenta de Captura, avisada quando o arquivo fica pronto).
 static DWORD WINAPI DlThreadProc(LPVOID param) {
     int kind = (int)(INT_PTR)param;
     PWSTR dl = nullptr;
-    if (FAILED(SHGetKnownFolderPath(kind == 1 ? FOLDERID_Screenshots : FOLDERID_Downloads, 0,
+    if (FAILED(SHGetKnownFolderPath(kind == 1 ? FOLDERID_Screenshots : kind == 2 ? FOLDERID_Videos : FOLDERID_Downloads, 0,
                                     nullptr, &dl)) ||
         !dl)
         return 0;
@@ -16881,13 +16912,32 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
     std::wstring lastDone;
     ULONGLONG lastDoneTick = 0;
     bool oldWasTemp = false;
+    std::vector<std::pair<std::wstring, ULONGLONG>> recPending;  // gravação em andamento e desde quando
     for (;;) {
         OVERLAPPED ov{};
         ov.hEvent = ev;
         ResetEvent(ev);
-        if (!ReadDirectoryChangesW(h, buf, sizeof(buf), FALSE, FILE_NOTIFY_CHANGE_FILE_NAME, nullptr, &ov, nullptr)) break;
+        // Gravações: a subpasta (Screen Recordings) pode ser criada depois; observa Vídeos inteira.
+        if (!ReadDirectoryChangesW(h, buf, sizeof(buf), kind == 2, FILE_NOTIFY_CHANGE_FILE_NAME, nullptr, &ov, nullptr)) break;
         HANDLE hs[2] = {g_dlStop, ev};
-        DWORD r = WaitForMultipleObjects(2, hs, FALSE, INFINITE);
+        DWORD r;
+        for (;;) {
+            r = WaitForMultipleObjects(2, hs, FALSE, recPending.empty() ? INFINITE : 1000);
+            if (r != WAIT_TIMEOUT) break;
+            // A cada segundo: a gravação que ficou pronta ganha o aviso.
+            ULONGLONG now = GetTickCount64();
+            for (size_t i = 0; i < recPending.size();) {
+                if (FileFinished(recPending[i].first)) {
+                    auto* msg = new std::wstring(recPending[i].first);
+                    if (!g_worker || !PostMessageW(g_worker, WM_APP_REC, 0, (LPARAM)msg)) delete msg;
+                    recPending.erase(recPending.begin() + i);
+                } else if (now - recPending[i].second > 3 * 60 * 60 * 1000ULL) {
+                    recPending.erase(recPending.begin() + i);  // desiste depois de 3 horas
+                } else {
+                    i++;
+                }
+            }
+        }
         if (r != WAIT_OBJECT_0 + 1) {
             CancelIoEx(h, &ov);
             DWORD got;
@@ -16900,7 +16950,15 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
         for (;;) {
             auto* fi = (FILE_NOTIFY_INFORMATION*)p;
             std::wstring name(fi->FileName, fi->FileNameLength / sizeof(wchar_t));
-            if (kind == 1) {
+            if (kind == 2) {
+                if ((fi->Action == FILE_ACTION_ADDED || fi->Action == FILE_ACTION_RENAMED_NEW_NAME) &&
+                    _wcsnicmp(name.c_str(), L"Screen Recordings\\", 18) == 0 && IsVideoFile(name)) {
+                    std::wstring full = dir + L"\\" + name;
+                    bool known = false;
+                    for (auto& p : recPending) known |= p.first == full;
+                    if (!known && recPending.size() < 8) recPending.push_back({full, GetTickCount64()});
+                }
+            } else if (kind == 1) {
                 if ((fi->Action == FILE_ACTION_ADDED || fi->Action == FILE_ACTION_RENAMED_NEW_NAME) && IsImageFile(name)) {
                     std::wstring full = dir + L"\\" + name;
                     ULONGLONG now = GetTickCount64();
@@ -16940,6 +16998,7 @@ static void StartDlWatcher() {
     g_dlStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_dlThread = CreateThread(nullptr, 0, DlThreadProc, (LPVOID)0, 0, nullptr);
     g_shotThread = CreateThread(nullptr, 0, DlThreadProc, (LPVOID)1, 0, nullptr);
+    g_recThread = CreateThread(nullptr, 0, DlThreadProc, (LPVOID)2, 0, nullptr);
 }
 
 static void StopDlWatcher() {
@@ -16947,6 +17006,11 @@ static void StopDlWatcher() {
     SetEvent(g_dlStop);
     WaitForSingleObject(g_dlThread, INFINITE);
     CloseHandle(g_dlThread);
+    if (g_recThread) {
+        WaitForSingleObject(g_recThread, INFINITE);
+        CloseHandle(g_recThread);
+        g_recThread = nullptr;
+    }
     if (g_shotThread) {
         WaitForSingleObject(g_shotThread, INFINITE);
         CloseHandle(g_shotThread);
@@ -16990,37 +17054,37 @@ static bool ClipIsPrivate() {
     return priv;
 }
 
+// Recortar ou copiar? Arquivos: o Explorador marca "Preferred DropEffect" com
+// "mover" ao recortar. Texto: não há marca; vale o Ctrl+X apertado no momento
+// em que a área de transferência mudou (g_clipCutKeys).
+static bool g_clipCutKeys = false;
+static bool ClipIsCut(bool files) {
+    if (!files) return g_clipCutKeys;
+    static const UINT kEffect = RegisterClipboardFormatW(L"Preferred DropEffect");
+    if (!kEffect || !IsClipboardFormatAvailable(kEffect) || !ClipOpen()) return false;
+    bool cut = false;
+    if (HANDLE h = GetClipboardData(kEffect)) {
+        if (auto* p = (const DWORD*)GlobalLock(h)) {
+            cut = GlobalSize(h) >= sizeof(DWORD) && (*p & DROPEFFECT_MOVE);
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    return cut;
+}
+
+// Só avisa o comando ("Copiado" ou "Recortado"); o conteúdo nunca é lido.
 static void ClipOnUpdate() {
     if (!g_settings.clipPills && !g_settings.shotPills) return;
     ULONGLONG now = GetTickCount64();
     if (now - g_clipLastTick < 300) return;  // vários formatos de uma vez
     g_clipLastTick = now;
     if (ClipIsPrivate()) return;
-    if (IsClipboardFormatAvailable(CF_HDROP)) {
-        if (!g_settings.clipPills || !ClipOpen()) return;
-        UINT n = 0;
-        if (HANDLE h = GetClipboardData(CF_HDROP)) n = DragQueryFileW((HDROP)h, 0xFFFFFFFF, nullptr, 0);
-        CloseClipboard();
-        if (n) IslandShow(0xE8C8, 0x0A84FF, n == 1 ? T(L"1 arquivo copiado") : TF(L"%s arquivos copiados", {std::to_wstring(n)}));
-        return;
-    }
-    if (IsClipboardFormatAvailable(CF_UNICODETEXT)) {
-        if (!g_settings.clipPills || !ClipOpen()) return;
-        std::wstring t;
-        if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
-            if (auto* p = (const wchar_t*)GlobalLock(h)) {
-                size_t len = wcsnlen(p, 400);
-                t.assign(p, len);
-                GlobalUnlock(h);
-            }
-        }
-        CloseClipboard();
-        for (auto& c : t)
-            if (c == L'\r' || c == L'\n' || c == L'\t') c = L' ';
-        size_t a = t.find_first_not_of(L' ');
-        t = a == std::wstring::npos ? L"" : t.substr(a);
-        if (t.size() > 60) t = t.substr(0, 57) + L"...";
-        if (!t.empty()) IslandShow(0xE8C8, 0x0A84FF, L"Copiado", L"\u201C" + t + L"\u201D");
+    bool files = IsClipboardFormatAvailable(CF_HDROP) != FALSE;
+    if (files || IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+        if (!g_settings.clipPills) return;
+        if (ClipIsCut(files)) IslandShow(0xE8C6, 0x0A84FF, L"Recortado");
+        else IslandShow(0xE8C8, 0x0A84FF, L"Copiado");
         return;
     }
     if (IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_BITMAP)) g_clipImageTick = now;
@@ -17033,16 +17097,32 @@ static void ClipFlushPending() {
     if (now - g_clipImageTick < 1800) return;
     bool wasShot = g_shotTick && g_shotTick + 1000 >= g_clipImageTick && g_shotTick <= now;
     g_clipImageTick = 0;
-    if (!wasShot && g_settings.clipPills) IslandShow(0xEB9F, 0x0A84FF, L"Imagem copiada");
+    if (!wasShot && g_settings.clipPills) IslandShow(0xE8C8, 0x0A84FF, L"Copiado");
 }
 
 static void ShotOnSaved(std::wstring* path) {
     g_shotTick = GetTickCount64();
     if (g_settings.shotPills) {
         size_t k = path->find_last_of(L'\\');
-        IslandShow(0xE722, 0xBF5AF2, L"Captura de tela", L"Salva · clique para abrir", *path, false);
+        IslandShow(0xE722, 0xBF5AF2, L"Captura de tela", L"Salva · clique para abrir e editar", *path, false);
         (void)k;
     }
+    delete path;
+}
+
+// Caps Lock: a pílula avisa quando liga e desliga (lido a cada 200 ms).
+#define TIMER_CAPS 83
+static void CapsPoll() {
+    static int last = -1;
+    int cur = (GetKeyState(VK_CAPITAL) & 1) ? 1 : 0;
+    if (last >= 0 && cur != last && g_settings.islCaps)
+        IslandShow(0xE765, 0x0A84FF, cur ? L"Caps Lock ativado" : L"Caps Lock desativado");
+    last = cur;
+}
+
+static void RecOnSaved(std::wstring* path) {
+    if (g_settings.shotPills)
+        IslandShow(0xE714, 0xFF453A, L"Gravação de tela", L"Salva · clique para abrir e editar", *path, false);
     delete path;
 }
 
@@ -20467,6 +20547,10 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                 BarLiquidTick();
                 return 0;
             }
+            if (wp == TIMER_CAPS) {
+                CapsPoll();
+                return 0;
+            }
             if (wp == TIMER_STATUS) {
                 PollStatus(false);
                 ExtrasPoll();
@@ -20501,6 +20585,8 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             UsbOnDeviceChange(wp, lp);
             return TRUE;
         case WM_CLIPBOARDUPDATE:
+            // As teclas são lidas agora (daqui a pouco o Ctrl+X já foi solto).
+            g_clipCutKeys = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState('X') & 0x8000);
             SetTimer(hwnd, TIMER_CLIP, 150, nullptr);  // lê logo depois (o app pode ainda estar escrevendo)
             return 0;
         case WM_HOTKEY:
@@ -20679,6 +20765,9 @@ static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         case WM_APP_SHOT:
             ShotOnSaved((std::wstring*)lp);
+            return 0;
+        case WM_APP_REC:
+            RecOnSaved((std::wstring*)lp);
             return 0;
         case WM_APP_NOTIF:
             NotifOnMsg((NotifMsg*)lp);
@@ -20880,6 +20969,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     NotifApply();
     AddClipboardFormatListener(g_owner);
     SetTimer(g_owner, TIMER_STATUS, 1000, nullptr);
+    SetTimer(g_owner, TIMER_CAPS, 200, nullptr);
     WxLoad();
     WxRefresh();
     SetTimer(g_owner, TIMER_WEATHER, WxIntervalMs(), nullptr);
@@ -21593,5 +21683,13 @@ const UiTr kUiTr[] = {
     {L"Resposta enviada", L"Reply sent", L"Respuesta enviada", L"Réponse envoyée", L"Antwort gesendet", L"Risposta inviata", L"回复已发送"},
     {L"Não deu para responder daqui", L"Couldn’t reply from here", L"No se pudo responder desde aquí", L"Impossible de répondre d’ici", L"Antworten von hier nicht möglich", L"Impossibile rispondere da qui", L"无法在此回复"},
     {L"Texto copiado: cole na conversa", L"Text copied: paste it in the chat", L"Texto copiado: pégalo en la conversación", L"Texte copié : collez-le dans la conversation", L"Text kopiert: im Chat einfügen", L"Testo copiato: incollalo nella chat", L"文本已复制: 请粘贴到对话中"},
+    {L"Recortado", L"Cut", L"Cortado", L"Coupé", L"Ausgeschnitten", L"Tagliato", L"已剪切"},
+    {L"Caps Lock ativado", L"Caps Lock on", L"Bloq Mayús activado", L"Verr. Maj activé", L"Feststelltaste an", L"Bloc Maiusc attivo", L"大写锁定已开启"},
+    {L"Caps Lock desativado", L"Caps Lock off", L"Bloq Mayús desactivado", L"Verr. Maj désactivé", L"Feststelltaste aus", L"Bloc Maiusc disattivato", L"大写锁定已关闭"},
+    {L"Caps Lock ligado e desligado", L"Caps Lock on and off", L"Bloq Mayús activado y desactivado", L"Verr. Maj activé et désactivé", L"Feststelltaste an und aus", L"Bloc Maiusc attivato e disattivato", L"大写锁定开启和关闭"},
+    {L"Capturas e gravações de tela", L"Screenshots and screen recordings", L"Capturas y grabaciones de pantalla", L"Captures et enregistrements d’écran", L"Bildschirmfotos und -aufnahmen", L"Screenshot e registrazioni dello schermo", L"屏幕截图和屏幕录制"},
+    {L"Clique na pílula para abrir e editar", L"Click the pill to open and edit", L"Haz clic en la píldora para abrir y editar", L"Cliquez sur la pastille pour ouvrir et modifier", L"Auf die Pille klicken zum Öffnen und Bearbeiten", L"Fai clic sulla pillola per aprire e modificare", L"点击胶囊提示以打开和编辑"},
+    {L"Salva · clique para abrir e editar", L"Saved · click to open and edit", L"Guardada · haz clic para abrir y editar", L"Enregistrée · cliquez pour ouvrir et modifier", L"Gespeichert · zum Öffnen und Bearbeiten klicken", L"Salvata · fai clic per aprire e modificare", L"已保存 · 点击以打开和编辑"},
+    {L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais", L"Notices you can open or reply to stay 2.5 times longer", L"Los avisos que se pueden abrir o responder duran 2,5 veces más", L"Les avis qu’on peut ouvrir ou auxquels on peut répondre restent 2,5 fois plus longtemps", L"Hinweise, die man öffnen oder beantworten kann, bleiben 2,5-mal länger", L"Gli avvisi che si possono aprire o a cui rispondere restano 2,5 volte di più", L"可打开或回复的提示停留时间延长 2.5 倍"},
 };
 const size_t kUiTrCount = ARRAYSIZE(kUiTr);
