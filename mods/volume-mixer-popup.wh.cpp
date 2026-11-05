@@ -76,8 +76,11 @@ frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
   area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
   tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
   Windows itself; when Windows shows its flyout for one of them, the mod keeps that flyout invisible (it clips
-  Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step.
-  Brightness and other Windows indicators stay as they are. While the option is on, other tray apps and mods
+  Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step,
+  at 0 % and 100 % too. Only the very first flyout after Explorer starts can show for a moment, before the mod
+  knows its window. Brightness and other Windows indicators use the same window and stay visible; one that
+  appears right after an outside volume change, or while the volume is at 0 % or 100 %, can be hidden as well.
+  While the option is on, other tray apps and mods
   that react to the wheel in the notification area (for example Taskbar Volume Control with the tray area as its
   scroll area) don't get it. Volume indicators of manufacturer utilities (laptop or keyboard software) are
   separate programs and aren't affected.
@@ -6909,6 +6912,7 @@ void SyncPopupHookState() {
 HWINEVENTHOOK g_flyoutHook = nullptr;
 DWORD g_flyoutHookPid = 0;
 std::vector<HWND> g_clippedFlyouts;  // Explorer windows that carry the mod's empty region
+std::vector<HWND> g_knownFlyouts;    // Explorer windows that have shown a volume flyout
 HWND g_sysFlyoutPending = nullptr;   // shown before its volume change was seen
 DWORD g_sysFlyoutTick = 0;
 DWORD g_volumeChangeTick = 0;        // last master volume change made outside the mod
@@ -7028,9 +7032,14 @@ void ResyncMasterLevel() {
     ReadMasterChange(&v, &m);
 }
 
+static bool IsKnownFlyout(HWND hwnd) {
+    return std::find(g_knownFlyouts.begin(), g_knownFlyouts.end(), hwnd) != g_knownFlyouts.end();
+}
+
 static void ReplaceSystemFlyout(HWND hwnd) {
     ClipSystemFlyout(hwnd);
     ShowWindowAsync(hwnd, SW_HIDE);  // never waits for Explorer
+    if (!IsKnownFlyout(hwnd)) g_knownFlyouts.push_back(hwnd);
     g_sysFlyoutPending = nullptr;
     ShowMasterVolumeOsd();
 }
@@ -7038,14 +7047,25 @@ static void ReplaceSystemFlyout(HWND hwnd) {
 // Explorer changes the volume before it shows its flyout, so a level that
 // differs from the last read tells a volume flyout from a brightness one at
 // once, without waiting for the volume event. Changes made by the mod itself
-// never count.
-static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
-    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd || !IsSystemIndicatorWindow(hwnd)) return;
+// never count. At 0 % or 100 % a gesture or a key doesn't change the level,
+// and Windows still shows its flyout: a window that has shown a volume flyout
+// before is taken for one then too.
+static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD,
+                                        DWORD) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) return;
+    if (event == EVENT_OBJECT_HIDE) {
+        // Clipped again as soon as a brightness or another indicator is gone,
+        // so the next volume flyout doesn't show for a single frame.
+        if (IsKnownFlyout(hwnd)) ClipSystemFlyout(hwnd);
+        return;
+    }
+    if (!IsSystemIndicatorWindow(hwnd)) return;
     const DWORD now = GetTickCount();
     float v = 0.0f;
     bool m = false;
     const bool levelChanged = ReadMasterChange(&v, &m) && now - g_ownVolumeChangeTick > kOwnChangeMs;
-    if (levelChanged || g_externalVolumeChange || now - g_volumeChangeTick < kFlyoutMatchMs) {
+    const bool atLimit = IsKnownFlyout(hwnd) && (v <= 0.001f || v >= 0.999f);
+    if (levelChanged || atLimit || g_externalVolumeChange || now - g_volumeChangeTick < kFlyoutMatchMs) {
         ReplaceSystemFlyout(hwnd);
         return;
     }
@@ -7081,8 +7101,9 @@ void UpdateFlyoutHook() {
     if (pid == g_flyoutHookPid) return;
     if (g_flyoutHook) UnhookWinEvent(g_flyoutHook);
     UnclipAllSystemFlyouts();
+    g_knownFlyouts.clear();
     g_sysFlyoutPending = nullptr;
-    g_flyoutHook = pid ? SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, FlyoutWinEventProc, pid, 0,
+    g_flyoutHook = pid ? SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, nullptr, FlyoutWinEventProc, pid, 0,
                                          WINEVENT_OUTOFCONTEXT)
                        : nullptr;
     g_flyoutHookPid = g_flyoutHook ? pid : 0;
@@ -7096,6 +7117,7 @@ void StopFlyoutHook() {
     g_flyoutHookPid = 0;
     g_sysFlyoutPending = nullptr;
     UnclipAllSystemFlyouts();
+    g_knownFlyouts.clear();
 }
 
 // Hotkeys go through the keyboard hook (works in fullscreen games, no repeats
