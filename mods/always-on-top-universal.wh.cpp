@@ -2,7 +2,7 @@
 // @id              always-on-top-universal
 // @name            Always on Top (Universal)
 // @description     Adds a customizable "Always on Top" option to window menus, plus a force-topmost process list.
-// @version         1.0.0
+// @version         1.0.1
 // @author          gloobus1
 // @github          https://github.com/glooobus1
 // @include         *
@@ -31,24 +31,24 @@ Examples:
 ## Force topmost list
 Processes listed in **Force topmost processes** (separated by `;`) will always have their
 windows kept above all others, regardless of the menu toggle. Example:
-`notepad.exe;calc.exe`
+`cmd.exe;Taskmgr.exe;regedit.exe`
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabledPrefix: "✓ "
+- enabledPrefix: " "
   $name: Enabled prefix
   $description: Text substituted for %enabled% when the window is topmost. Leave empty for no prefix.
-- menuTemplate: "%enabled%On Top"
+- menuTemplate: "%enabled%%text%"
   $name: Menu template
   $description: Template for the menu item. Use %enabled% for the prefix and %text% for the base text.
 - baseText: "On Top"
   $name: Base text
   $description: Text substituted for %text% in the template.
-- forceTopmostList: ""
+- forceTopmostList: "cmd.exe;Taskmgr.exe;regedit.exe"
   $name: Force topmost processes
-  $description: Semicolon-separated process names (e.g. notepad.exe;calc.exe). Their windows are always kept on top.
+  $description: Semicolon-separated process names (e.g. cmd.exe;Taskmgr.exe;regedit.exe). Their windows are always kept on top.
 */
 // ==/WindhawkModSettings==
 
