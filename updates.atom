@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-05T05:01:50.000Z</updated>
+    <updated>2026-11-05T05:30:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#6f0737091288bb212c5ea3c6c18ee4cded0c39aa</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2026-11-05T05:30:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the vertical taskbar, where items span across multiple columns instead or multiple rows.</li>
+<li>Fixed compatibility with the Taskbar Labels for Windows 11 mod when used with high DPI.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Live HUD 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-live-hud-radar#08e84491fa69a919455b948e06fd1539ca6c8963</id>
@@ -976,59 +991,6 @@ that much longer to finish copying, and the window is briefly unresponsive
 while it does.</li>
 <li>A file being written by another program while it is read may be copied partially.
 That is a race no reader can win, and it is not worth a lock for this.</li>
-</ul>
-]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MMC Dark Mode 1.0]]></title>
-        <id>https://windhawk.net/mods/mmc-dark-mode#8bd77f398d1d27555aba6471b90a5034c0fd69e9</id>
-        <link href="https://windhawk.net/mods/mmc-dark-mode"/>
-        <updated>2026-11-04T01:04:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>MMC Dark Mode</h1>
-<p>A dark theme for the Microsoft Management Console: Device Manager, Services,
-Event Viewer, Task Scheduler, Disk Management and anything else hosted by
-<code>mmc.exe</code>.</p>
-<h2>Screenshots</h2>
-<p>Device Manager with the mod off:</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-before.png" alt="Device Manager with the mod off"></p>
-<p>Device Manager with the mod on:</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-after.png" alt="Device Manager with the mod on"></p>
-<h2>What it does</h2>
-<p>The mod themes MMC windows in the <code>mmc.exe</code> process, including common trees,
-list views, property sheets and chrome. It also contains targeted handling for
-Services, Event Viewer, Task Scheduler and Disk Management. Existing menus and
-toolbars remain available. Some embedded content draws itself and is not themed.</p>
-<p>Switching the mod off requests restoration of native styles, colours and
-painting. The system-wide colour table is not changed.</p>
-<h2>Known limits</h2>
-<ul>
-<li>MMC hosts many snap-ins and not every control or embedded page is covered.
-Layouts, visual styles and Windows builds may differ from those tested.</li>
-<li>The Actions pane caption adjustment is x64-only and uses private DirectUI
-interfaces. If the required interfaces or hooks are unavailable, the native
-appearance is retained. Other custom-drawn content may remain light.</li>
-<li>Disk Management's selected partition frame adjustment is x64-only and checks
-an exact native drawing-code signature. On an unknown or changed build it
-leaves that frame unchanged rather than guessing. The blue partition colour
-is adjusted only when the native renderer requests the observed stock navy.
-Any region or legend configured to that same navy will also be recoloured;
-other brush colours and native patterns are left unchanged.</li>
-<li>The mod checks high contrast at load and does not activate when it is already
-enabled. Switching high contrast while MMC is running is not guaranteed to
-update every themed control; restart the console or disable the mod.</li>
-<li>Some GDI brushes are deliberately retained until the MMC process exits because
-native controls may cache them. Repeatedly reloading the mod in the same
-process can increase GDI handle use.</li>
-<li>The property-sheet tab strip is custom-painted; other tab layouts keep their
-native drawing. Push buttons generally keep native visuals, with a scoped
-dark face for the Task Scheduler summary Refresh button.</li>
-<li>The maximized child window's menu-row buttons use scoped custom drawing.
-Other layouts may keep the native appearance. Restored child-window captions
-and their buttons can remain light.</li>
 </ul>
 ]]></content>
         <author>

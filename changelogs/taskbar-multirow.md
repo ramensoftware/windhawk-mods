@@ -1,3 +1,8 @@
+## 1.2 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f0737091288bb212c5ea3c6c18ee4cded0c39aa/mods/taskbar-multirow.wh.cpp))
+
+* Added support for the vertical taskbar, where items span across multiple columns instead or multiple rows.
+* Fixed compatibility with the Taskbar Labels for Windows 11 mod when used with high DPI.
+
 ## 1.1.4 ([Sep 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ef8d22d9212973de5786625aa010047192accd83/mods/taskbar-multirow.wh.cpp))
 
 * Improved thumbnail previews placement to stop covering the upper taskbar rows.
