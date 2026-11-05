@@ -58,6 +58,7 @@ A big part of the mod was rewritten for this version. The animations now use Dir
 - **Reverse Direction** - Slide down instead of up. Does not apply to property pages or horizontal transitions.
 - **Page Transitions** - Smart detection of back/forward navigation with distinct animations.
 - **Animate Nav Pane** - Slide the navigation tree in from the left.
+- **Styler text compatibility** - During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod. Optional even with the Styler active: only turn it on if you notice a difference in the text after the animation ends.
 - **Animate Property Pages** - Animates tab switching in Properties and Folder Options windows.
 - **Property Page Tab Transitions** - Directional animations when switching tabs in Properties windows. Tabs to the right slide forward, to the left slide back. Requires Animate Property Pages.
 - **First Open Delay** - Applies only when a new Explorer window is opened.
@@ -108,6 +109,7 @@ Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo
 - **Direcao Reversa** - Faz o conteudo descer ao inves de subir. Nao se aplica a paginas de Propriedades nem a transicoes horizontais.
 - **Transicoes de Pagina** - Deteccao inteligente de navegacao voltar/avancar com animacoes distintas.
 - **Animar Painel de Navegacao** - Desliza a arvore de navegacao da esquerda.
+- **Compatibilidade com o texto do Styler** - Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler. Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao.
 - **Animar Paginas de Propriedades** - Anima a troca de abas em Propriedades e Opcoes de Pasta.
 - **Transicoes de Aba nas Propriedades** - Animacoes direcionais ao trocar abas nas janelas de Propriedades. Aba a direita desliza para frente, a esquerda para tras. Requer Animar Paginas de Propriedades ativo.
 - **Delay na Primeira Abertura** - Aplicado apenas ao abrir uma nova janela.
@@ -159,6 +161,7 @@ Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el
 - **Direccion Inversa** - Desliza hacia abajo en lugar de hacia arriba. No se aplica a paginas de Propiedades ni a transiciones horizontales.
 - **Transiciones de Pagina** - Deteccion inteligente de navegacion atras/adelante con animaciones distintas.
 - **Animar Panel de Navegacion** - Desliza el arbol desde la izquierda.
+- **Compatibilidad con el texto del Styler** - Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler. Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion.
 - **Animar Paginas de Propiedades** - Anima el cambio de pestanas en Propiedades.
 - **Transiciones de Pestana en Propiedades** - Animaciones direccionales al cambiar pestanas en ventanas de Propiedades. Las pestanas a la derecha deslizan hacia adelante, a la izquierda hacia atras. Requiere Animar Paginas de Propiedades activado.
 - **Retraso en la Primera Apertura** - Solo al abrir una nueva ventana.
@@ -237,6 +240,14 @@ resuelto en builds recientes del canal Insider/Beta.
   $description: The navigation tree slides in from the left when opening Explorer or a new tab. In dark mode, a white background may briefly appear -- a Windows GDI limitation observed on stable builds. Appears resolved in recent Insider/Beta builds.
   $description:pt: A arvore de navegacao desliza da esquerda ao abrir o Explorer ou uma nova aba. No modo escuro, um fundo branco pode aparecer brevemente -- limitacao do GDI observada em builds estaveis. Parece resolvido em builds recentes do canal Insider/Beta.
   $description:es: El arbol de navegacion se desliza desde la izquierda al abrir el Explorador o una nueva pestana. En modo oscuro, puede aparecer brevemente un fondo blanco -- limitacion del GDI observada en builds estables. Parece resuelto en builds recientes del canal Insider/Beta.
+
+- stylerTextCompatibility: false
+  $name: Styler text compatibility
+  $name:pt: Compatibilidade com o texto do Styler
+  $name:es: Compatibilidad con el texto del Styler
+  $description: "During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod. Optional even with the Styler active: only turn this on if you notice a difference in the text after the animation ends."
+  $description:pt: "Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler. Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao."
+  $description:es: "Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler. Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion."
 
 - propertyPages:
     - animate: false
@@ -328,6 +339,7 @@ struct Settings {
     bool propPageTransitions;
     bool stagger = false;
     bool motion = true;
+    bool stylerTextCompatibility = false;
 };
 
 static Settings g_s{450, 140, 500, 140, false, false, false, false, false, false};
@@ -348,6 +360,7 @@ static void LoadSettings() {
     fresh.propPageTransitions  = !!Wh_GetIntSetting(L"propertyPages.tabTransitions");
     fresh.stagger              = !!Wh_GetIntSetting(L"stagger");
     fresh.motion               = !!Wh_GetIntSetting(L"motion");
+    fresh.stylerTextCompatibility = !!Wh_GetIntSetting(L"stylerTextCompatibility");
 
     AcquireSRWLockExclusive(&g_sLock);
     g_s = fresh;
@@ -1630,6 +1643,12 @@ static bool Enabled() {
     ReleaseSRWLockShared(&g_sLock);
     return enabled;
 }
+static bool StylerTextCurveEnabled() {
+    AcquireSRWLockShared(&g_sLock);
+    bool enabled = g_s.stylerTextCompatibility;
+    ReleaseSRWLockShared(&g_sLock);
+    return enabled;
+}
 static bool IsItemClass(PCWSTR name) {
     // Classes do UIFILE ExplorerFrame 40960, nao filhos checkbox/syncstatus
     // nem cabecalhos UIGroupItem, que usam item.general.grouped.
@@ -1814,17 +1833,70 @@ static void DestroyLayerTextBuffer(LayerTextBuffer& buffer) {
 // Aproxima a cobertura neutra do peso percebido do ClearType, que varia com a cor do texto.
 constexpr double kDarkLayerTextGamma = 1.10, kLightLayerTextGamma = 0.95;
 constexpr int kLayerTextFringe = 8;
-struct LayerTextCurves { BYTE dark[256], light[256]; };
+struct LayerTextCurves { BYTE dark[256], light[256], stylerDark[256], stylerLight[256]; };
 static const LayerTextCurves& GetLayerTextCurves() {
     static const LayerTextCurves curves = [] {
         LayerTextCurves result{};
         for (int i = 0; i < 256; ++i) {
             result.dark[i] = BYTE(std::lround(255.0 * std::pow(i / 255.0, kDarkLayerTextGamma)));
             result.light[i] = BYTE(std::lround(255.0 * std::pow(i / 255.0, kLightLayerTextGamma)));
+            // InitTextAlphaLuts do Windows 11 File Explorer Styler 1.7.2.
+            float a = i / 255.0f;
+            result.stylerDark[i] = BYTE(i * 0xE4 / 255);
+            result.stylerLight[i] = BYTE(std::pow(a, 1.0f / (1.2f + 0.3f * a)) * 255.0f + 0.5f);
         }
         return result;
     }();
     return curves;
+}
+// Sem franja o texto ja esta em tons de cinza e a devolucao mantem esse peso:
+// o RGB desenhado reproduz o GDI, sem nada do ClearType a imitar.
+static void ApplyLayerTextCoverage(LayerTextBuffer& buffer, int w, int h, const int color[3], bool neutral) {
+    const LayerTextCurves& curves = GetLayerTextCurves();
+    const BYTE* curve = (54 * color[2] + 183 * color[1] + 19 * color[0]) / 256 < 128 ? curves.dark : curves.light;
+    bool fringed = false;
+    for (int row = 0; neutral && row < h && !fringed; ++row) {
+        const BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
+        const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+        for (int column = 0; column < w && !fringed; ++column, black += 4, white += 4) {
+            int through[3];
+            for (int c = 0; c < 3; ++c) through[c] = int(white[c]) - int(black[c]);
+            fringed = std::max({through[0], through[1], through[2]}) - std::min({through[0], through[1], through[2]}) > kLayerTextFringe;
+        }
+    }
+    for (int row = 0; row < h; ++row) {
+        BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
+        const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+        for (int column = 0; column < w; ++column, black += 4, white += 4) {
+            int coverage[3];
+            for (int c = 0; c < 3; ++c) coverage[c] = 255 - std::clamp(int(white[c]) - int(black[c]), 0, 255);
+            if (fringed) {
+                int alpha = curve[(54 * coverage[2] + 183 * coverage[1] + 19 * coverage[0] + 128) / 256];
+                for (int c = 0; c < 3; ++c) black[c] = BYTE((alpha * color[c] + 127) / 255);
+                black[3] = BYTE(alpha);
+            } else {
+                int alpha = (coverage[0] + coverage[1] + coverage[2] + 1) / 3;
+                for (int c = 0; c < 3; ++c) black[c] = BYTE(std::min<int>(black[c], alpha));
+                black[3] = BYTE(alpha);
+            }
+        }
+    }
+}
+// Mesmo processo do ExtTextOutWithAlpha do Styler: mascara branca sobre preto, cobertura
+// e curva dele. A segunda metade do buffer guarda a mascara; a primeira recebe o resultado.
+static void ApplyStylerTextCurve(LayerTextBuffer& buffer, int w, int h, const int color[3]) {
+    const LayerTextCurves& curves = GetLayerTextCurves();
+    bool dark = color[2] * 299 + color[1] * 587 + color[0] * 114 < 128000;
+    const BYTE* curve = dark ? curves.stylerDark : curves.stylerLight;
+    for (int row = 0; row < h; ++row) {
+        BYTE* out = buffer.bits + size_t(row) * buffer.pitch * 4;
+        const BYTE* mask = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+        for (int column = 0; column < w; ++column, out += 4, mask += 4) {
+            int alpha = curve[(mask[0] + (mask[1] << 1) + mask[2]) >> 2];
+            for (int c = 0; c < 3; ++c) out[c] = BYTE((color[c] * alpha) >> 8);
+            out[3] = BYTE(alpha);
+        }
+    }
 }
 // Desenha o trecho no buffer transparente; se o renderizador gravou alfa, usa direto.
 // Sem alfa, desenha de novo sobre branco: a diferenca entre os dois da a cobertura,
@@ -1856,45 +1928,19 @@ static bool DrawLayerTextInto(HDC hdc, LayerTextBuffer& buffer, const RECT& area
         for (int column = 0; column < w && !hasAlpha; ++column) hasAlpha = line[size_t(column) * 4 + 3] != 0;
     }
     if (drawn && !hasAlpha) {
-        SetWindowOrgEx(mem, area.left, area.top - h, nullptr);
-        PatBlt(mem, area.left, area.top, w, h, WHITENESS);
-        drawn = !!originalExtTextOut(mem, x, y, options, rect, text, count, dx);
-        GdiFlush();
         COLORREF textColor = GetTextColor(hdc);
         const int color[3] = {GetBValue(textColor), GetGValue(textColor), GetRValue(textColor)};
         // Indice de paleta nao carrega a cor nos bytes baixos.
         bool neutral = !(options & ETO_OPAQUE) && GetBkMode(hdc) != OPAQUE && (textColor >> 24) != 1;
-        const LayerTextCurves& curves = GetLayerTextCurves();
-        const BYTE* curve = (54 * color[2] + 183 * color[1] + 19 * color[0]) / 256 < 128 ? curves.dark : curves.light;
-        // Sem franja o texto ja esta em tons de cinza e a devolucao mantem esse peso:
-        // o RGB desenhado reproduz o GDI, sem nada do ClearType a imitar.
-        bool fringed = false;
-        for (int row = 0; neutral && row < h && !fringed; ++row) {
-            const BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
-            const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
-            for (int column = 0; column < w && !fringed; ++column, black += 4, white += 4) {
-                int through[3];
-                for (int c = 0; c < 3; ++c) through[c] = int(white[c]) - int(black[c]);
-                fringed = std::max({through[0], through[1], through[2]}) - std::min({through[0], through[1], through[2]}) > kLayerTextFringe;
-            }
-        }
-        for (int row = 0; row < h; ++row) {
-            BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
-            const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
-            for (int column = 0; column < w; ++column, black += 4, white += 4) {
-                int coverage[3];
-                for (int c = 0; c < 3; ++c) coverage[c] = 255 - std::clamp(int(white[c]) - int(black[c]), 0, 255);
-                if (fringed) {
-                    int alpha = curve[(54 * coverage[2] + 183 * coverage[1] + 19 * coverage[0] + 128) / 256];
-                    for (int c = 0; c < 3; ++c) black[c] = BYTE((alpha * color[c] + 127) / 255);
-                    black[3] = BYTE(alpha);
-                } else {
-                    int alpha = (coverage[0] + coverage[1] + coverage[2] + 1) / 3;
-                    for (int c = 0; c < 3; ++c) black[c] = BYTE(std::min<int>(black[c], alpha));
-                    black[3] = BYTE(alpha);
-                }
-            }
-        }
+        // O Styler deixa o trecho sem opcoes para o GDI.
+        bool stylerCurve = neutral && options && StylerTextCurveEnabled();
+        SetWindowOrgEx(mem, area.left, area.top - h, nullptr);
+        PatBlt(mem, area.left, area.top, w, h, stylerCurve ? BLACKNESS : WHITENESS);
+        if (stylerCurve) SetTextColor(mem, RGB(255, 255, 255));
+        drawn = !!originalExtTextOut(mem, x, y, options, rect, text, count, dx);
+        GdiFlush();
+        if (stylerCurve) ApplyStylerTextCurve(buffer, w, h, color);
+        else ApplyLayerTextCoverage(buffer, w, h, color, neutral);
     }
     layerTextPass = previous;
     if (drawn) {
