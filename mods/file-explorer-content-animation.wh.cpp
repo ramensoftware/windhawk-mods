@@ -815,10 +815,24 @@ struct DCompFadeAnim {
     IDCompositionVisual2*     pVisual  = nullptr;
     IDCompositionSurface*     pSurface = nullptr;
     IDCompositionEffectGroup* pEffect  = nullptr;
+    // Cortina que acompanha a rolagem: faixas fixas em volta da area rolavel e,
+    // dentro dela, a copia que se move (pMove), recortada nas duas camadas.
+    IDCompositionVisual2*     pParts[6] = {};
+    IDCompositionVisual2*     pMove    = nullptr;
+    RECT                      scrollArea{};
     uint64_t                  generation = 0; // identifica instancia unica do fade
     int                       curtainHolders = 0; // > 0: cortina de devolucao ativa
     ULONGLONG                 curtainReadyAt = 0;
 };
+
+static void ReleaseFadeObjects(DCompFadeAnim& a) {
+    if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
+    if (a.pEffect)  a.pEffect->Release();
+    for (IDCompositionVisual2* part : a.pParts) if (part) part->Release();
+    if (a.pVisual)  a.pVisual->Release();
+    if (a.pSurface) a.pSurface->Release();
+    a = {};
+}
 
 static std::mutex                               g_dcFadeMtx;
 static std::unordered_map<HWND, DCompFadeAnim>  g_dcFades;
@@ -905,10 +919,7 @@ static void CleanupWorkerProc() {
                     it->second.generation == c.generation) {
                     DCompFadeAnim a = it->second;
                     g_dcFades.erase(it);
-                    if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-                    if (a.pEffect)  a.pEffect->Release();
-                    if (a.pVisual)  a.pVisual->Release();
-                    if (a.pSurface) a.pSurface->Release();
+                    ReleaseFadeObjects(a);
                     if (c.dev) { c.dev->Commit(); c.dev->Release(); }
                 } else {
                     // Fade cancelado por nova navegacao (geracao diferente ou
@@ -953,10 +964,7 @@ static void CleanupWorkerProc() {
                 it->second.generation == c.generation) {
                 DCompFadeAnim a = it->second;
                 g_dcFades.erase(it);
-                if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-                if (a.pEffect)  a.pEffect->Release();
-                if (a.pVisual)  a.pVisual->Release();
-                if (a.pSurface) a.pSurface->Release();
+                ReleaseFadeObjects(a);
                 if (c.dev) { c.dev->Commit(); c.dev->Release(); }
             } else {
                 // Fade cancelado por nova navegacao rapida (geracao diferente
@@ -980,9 +988,37 @@ static void CleanupWorkerProc() {
 // BrowseObject mantem FALSE para preservar o empilhamento das navegacoes.
 // Le os pixels direto do ecra (frame.ptScreen) para dentro da superficie
 // DComp num unico BitBlt -- sem HBITMAP intermediario.
+// Faixas fixas (cabecalho, barra de rolagem) em volta da area rolavel e, dentro
+// dela, uma janela recortada com a copia movel, recortada tambem nas proprias
+// coordenadas para a parte de fora da area nunca entrar com o deslocamento.
+static bool BuildScrollCurtain(IDCompositionDesktopDevice* dev, DCompFadeAnim& anim,
+                               const CapturedFrame& frame, RECT area) {
+    RECT full{0, 0, frame.w, frame.h};
+    if (!IntersectRect(&area, &area, &full)) return false;
+    const RECT strips[4] = {
+        {0, 0, frame.w, area.top}, {0, area.bottom, frame.w, frame.h},
+        {0, area.top, area.left, area.bottom}, {area.right, area.top, frame.w, area.bottom}};
+    int count = 0;
+    auto add = [&](IDCompositionVisual2* parent, const RECT& clip, bool content) -> IDCompositionVisual2* {
+        IDCompositionVisual2* visual = nullptr;
+        if (FAILED(dev->CreateVisual(&visual))) return nullptr;
+        anim.pParts[count++] = visual;
+        D2D_RECT_F rect{(float)clip.left, (float)clip.top, (float)clip.right, (float)clip.bottom};
+        if ((content && FAILED(visual->SetContent(anim.pSurface))) || FAILED(visual->SetClip(rect)) ||
+            FAILED(parent->AddVisual(visual, TRUE, nullptr))) return nullptr;
+        return visual;
+    };
+    for (const RECT& strip : strips)
+        if (!IsRectEmpty(&strip) && !add(anim.pVisual, strip, true)) return false;
+    IDCompositionVisual2* window = add(anim.pVisual, area, false);
+    anim.pMove = window ? add(window, area, true) : nullptr;
+    anim.scrollArea = area;
+    return anim.pMove != nullptr;
+}
+
 static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
                            int fadeMs, int startDelayMs,
-                           bool aboveChildWindows) {
+                           bool aboveChildWindows, const RECT* scrollArea = nullptr) {
     // Serializar TODAS as chamadas DComp no device e nos seus objectos.
     // DirectComposition nao e internamente thread-safe; sem este lock, o
     // cleanup worker pode chamar SetRoot/Release/Commit concorrentemente
@@ -1009,10 +1045,7 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
         if (it != g_dcFades.end()) {
             DCompFadeAnim prev = it->second;
             g_dcFades.erase(it);
-            if (prev.pTarget) { prev.pTarget->SetRoot(nullptr); prev.pTarget->Release(); }
-            if (prev.pEffect)  prev.pEffect->Release();
-            if (prev.pVisual)  prev.pVisual->Release();
-            if (prev.pSurface) prev.pSurface->Release();
+            ReleaseFadeObjects(prev);
             dcDev->Commit();
         }
     }
@@ -1065,16 +1098,19 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
     if (FAILED(hr)) {
         anim.pSurface->Release(); anim.pTarget->Release(); return false;
     }
-    anim.pVisual->SetContent(anim.pSurface);
+    if (!scrollArea) {
+        anim.pVisual->SetContent(anim.pSurface);
+    } else if (!BuildScrollCurtain(dcDev, anim, frame, *scrollArea)) {
+        ReleaseFadeObjects(anim);
+        return false;
+    }
     anim.pVisual->SetOffsetX((float)frame.ptInRoot.x);
     anim.pVisual->SetOffsetY((float)frame.ptInRoot.y);
 
     IDCompositionEffectGroup* pEffect = nullptr;
     hr = dcDev->CreateEffectGroup(&pEffect);
     if (FAILED(hr) || !pEffect) {
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
@@ -1082,9 +1118,7 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
     hr = dcDev->CreateAnimation(&pOpacity);
     if (FAILED(hr) || !pOpacity) {
         pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
@@ -1101,37 +1135,27 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
     pOpacity->Release();
     if (FAILED(hr)) {
         pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
     hr = anim.pVisual->SetEffect(pEffect);
     if (FAILED(hr)) {
         pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
     anim.pEffect = pEffect;
 
     hr = anim.pTarget->SetRoot(anim.pVisual);
     if (FAILED(hr)) {
-        anim.pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
     hr = dcDev->Commit();
     if (FAILED(hr)) {
-        if (anim.pEffect)  anim.pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
@@ -1174,10 +1198,7 @@ static constexpr int CURTAIN_FADE_MS   = 80;
 static constexpr int CURTAIN_SAFETY_MS = 600; // retirada automatica se o owner nao liberar
 
 static void DestroyFadeLocked(IDCompositionDesktopDevice* dcDev, DCompFadeAnim& a) {
-    if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-    if (a.pEffect)  a.pEffect->Release();
-    if (a.pVisual)  a.pVisual->Release();
-    if (a.pSurface) a.pSurface->Release();
+    ReleaseFadeObjects(a);
     if (dcDev) dcDev->Commit();
 }
 
@@ -1243,7 +1264,9 @@ static ULONGLONG CurtainSafetyAt(const DCompFadeAnim& a) {
 
 // Chamado no owner da view. Uma cortina ja levantada e compartilhada (contagem);
 // generation identifica a instancia que cada dono deve liberar.
-static bool RaiseCurtain(HWND view, ULONGLONG& readyAt, uint64_t& generation) {
+// scrollArea (coordenadas da view): a cortina nova pode acompanhar a rolagem.
+static bool RaiseCurtain(HWND view, ULONGLONG& readyAt, uint64_t& generation,
+                         const RECT* scrollArea = nullptr) {
     if (g_unloading.load(std::memory_order_acquire) || !IsWindowVisible(view)) return false;
     // A copia vem da tela: outra janela sobre o Explorer entraria nela.
     HWND root = GetAncestor(view, GA_ROOT);
@@ -1265,7 +1288,7 @@ static bool RaiseCurtain(HWND view, ULONGLONG& readyAt, uint64_t& generation) {
     if (PopupOverView(view, root)) return false;
     CapturedFrame frame;
     if (!CaptureContentFrame(view, view, frame) ||
-        !StartDCompFade(view, frame, CURTAIN_FADE_MS, CURTAIN_SAFETY_MS, true))
+        !StartDCompFade(view, frame, CURTAIN_FADE_MS, CURTAIN_SAFETY_MS, true, scrollArea))
         return false;
     std::lock_guard<std::mutex> lk(g_dcFadeMtx);
     auto it = g_dcFades.find(view);
@@ -1310,6 +1333,39 @@ static void LowerCurtain(HWND view, uint64_t generation) {
     g_cleanupQueue.push_back({view, dcDev,
         GetTickCount64() + (ULONGLONG)(CURTAIN_HOLD_MS + CURTAIN_FADE_MS + 50), a.generation});
     g_cleanupCv.notify_one();
+}
+
+// Cortina dessa geracao ainda na tela e capaz de acompanhar a rolagem.
+static bool CurtainFollowable(HWND view, uint64_t generation) {
+    std::lock_guard<std::mutex> lk(g_dcFadeMtx);
+    auto it = g_dcFades.find(view);
+    return it != g_dcFades.end() && it->second.generation == generation && it->second.pMove;
+}
+
+// Mais um dono para a cortina que acompanha a rolagem, se ela ainda cobrir a devolucao.
+static bool HoldCurtain(HWND view, uint64_t generation, ULONGLONG& readyAt) {
+    std::lock_guard<std::mutex> lk(g_dcFadeMtx);
+    auto it = g_dcFades.find(view);
+    if (it == g_dcFades.end() || it->second.generation != generation || !it->second.pMove ||
+        it->second.curtainHolders <= 0 ||
+        GetTickCount64() + CURTAIN_HOLD_MS + CURTAIN_FADE_MS + 100 >= CurtainSafetyAt(it->second))
+        return false;
+    ++it->second.curtainHolders;
+    readyAt = it->second.curtainReadyAt;
+    return true;
+}
+
+// Desloca a copia movel; dx/dy fora da area a escondem sem tirar as faixas fixas.
+static bool OffsetCurtain(HWND view, uint64_t generation, int dx, int dy) {
+    std::lock_guard<std::mutex> lk(g_dcFadeMtx);
+    auto it = g_dcFades.find(view);
+    IDCompositionDesktopDevice* dcDev = g_dcDevice.load(std::memory_order_acquire);
+    if (!dcDev || it == g_dcFades.end() || it->second.generation != generation || !it->second.pMove)
+        return false;
+    HRESULT hr = it->second.pMove->SetOffsetX((float)dx);
+    if (SUCCEEDED(hr)) hr = it->second.pMove->SetOffsetY((float)dy);
+    if (SUCCEEDED(hr)) hr = dcDev->Commit();
+    return SUCCEEDED(hr);
 }
 
 // Rolagem do conteudo (definida depois de ItemStagger).
@@ -1369,6 +1425,7 @@ using ParentFn = void*(STAGGER_MEMBER*)(void*);
 using AlphaGetFn = int(STAGGER_MEMBER*)(void*);
 using AlphaSetFn = HRESULT(STAGGER_MEMBER*)(void*, int);
 using IdFn = WORD(STAGGER_MEMBER*)(void*);
+using RootBoundsFn = HRESULT(STAGGER_MEMBER*)(void*, RECT*);
 using GetPairFn = BOOL(WINAPI*)(HANDLE, float*, float*);
 using SetPairFn = BOOL(WINAPI*)(HANDLE, float, float);
 using RotationFn = BOOL(WINAPI*)(HANDLE, float*);
@@ -1423,6 +1480,7 @@ static ParentFn getParent;
 static AlphaGetFn getAlpha;
 static AlphaSetFn setAlpha;
 static IdFn getId; // opcional: sem ele, pasta vazia espera o limite de conteudo
+static RootBoundsFn rootBounds; // opcional: sem ele, a rolagem cancela sem cortina
 static GetPairFn getScale, getCenter;
 static SetPairFn setScale, setCenter;
 static RotationFn getRotation;
@@ -1540,6 +1598,22 @@ struct Group {
 static Group groups[16];
 static SRWLOCK ownerLock = SRWLOCK_INIT;
 static std::atomic<int> busy{0};
+// Cortina que acompanha a rolagem (definida depois de Removal). A distancia
+// rolada vem dos proprios itens: a barra usa unidades por secao, e o container
+// do LineScroller salta em linhas inteiras.
+namespace Follow {
+struct Ref { void* element; void* identity; LONG left, top; };
+struct Setup { RECT area; Ref refs[4]; int count; };
+static bool Prepare(HWND view, Setup& setup);
+static bool Register(HWND view, uint64_t generation, const Setup& setup);
+static bool Follows(HWND view, uint64_t* generation = nullptr);
+static void Update();
+static void TrackPaint(void* element);
+static void Forget(void* element);
+static void ForgetThread();
+static void ClearTracked();
+static bool Any();
+}
 static thread_local bool inPaint;
 // Movimento DirectUI por composicao nativa; desligado, as paginas so usam o fade.
 static bool MotionEnabled() {
@@ -1609,7 +1683,8 @@ static void ReleaseLocked(Group& group) {
     group.action = nullptr;
     group.owner.store(0, std::memory_order_relaxed);
     group.state.store(Free, std::memory_order_seq_cst);
-    busy.fetch_sub(1, std::memory_order_acq_rel);
+    // Itens pintados so servem de referencia enquanto ha animacao.
+    if (busy.fetch_sub(1, std::memory_order_acq_rel) == 1) Follow::ClearTracked();
 }
 static void Release(Group& group) {
     AcquireSRWLockExclusive(&ownerLock);
@@ -2107,7 +2182,13 @@ static bool HandoffDue(Group& group) {
             !other.canceling && !other.repairing && !other.awaitingHandoff) return false;
     if (!group.handoffAt) {
         ULONGLONG readyAt = 0;
-        group.curtain = RaiseCurtain(group.view, readyAt, group.curtainGeneration);
+        // Com a area rolavel conhecida, uma rolagem durante a devolucao move a
+        // copia junto com o conteudo em vez de derruba-la.
+        Follow::Setup setup;
+        bool follow = Follow::Prepare(group.view, setup);
+        group.curtain = RaiseCurtain(group.view, readyAt, group.curtainGeneration,
+                                     follow ? &setup.area : nullptr);
+        if (group.curtain && follow) Follow::Register(group.view, group.curtainGeneration, setup);
         group.handoffAt = group.curtain ? readyAt : 1;
     }
     if (GetTickCount64() < group.handoffAt) return false;
@@ -2403,6 +2484,7 @@ static void WINAPI ActionProc(void* info) {
     }
 }
 static void ForgetElement(void* element) {
+    Follow::Forget(element);
     Removal::Destroy(element);
     if (busy.load(std::memory_order_acquire)) {
         for (Group& group : groups) if (Owned(group))
@@ -2418,15 +2500,17 @@ static void STAGGER_MEMBER DestroyHook(void* element) {
     originalDestroy(element);
 }
 static void AfterDeleteHandle() {
-    if (!busy.load(std::memory_order_acquire) && !Removal::Active()) return;
+    bool follow = Follow::Any();
+    if (!busy.load(std::memory_order_acquire) && !Removal::Active() && !follow) return;
     bool owned = false;
     for (Group& group : groups) owned = owned || Owned(group);
-    if (!owned && !Removal::Active()) return;
+    if (!owned && !Removal::Active() && !follow) return;
     DWORD error = GetLastError();
     SetLastError(ERROR_SUCCESS);
     createAction(nullptr);
     bool gone = GetLastError() == 0x80040014; // DU_E_NOCONTEXT
     if (gone) {
+        Follow::ForgetThread();
         Removal::ContextGone();
         for (Group& group : groups) if (Owned(group)) {
             // O contexto ja destruiu os gadgets: nao tocar neles nem HACTION.
@@ -2587,6 +2671,10 @@ static HRESULT WINAPI DisplayHook(HANDLE node, void* element, void* event) {
         return originalDisplay(node, element, event);
     bool previous = inPaint;
     inPaint = true;
+    // O layout da roda nativa so se aplica depois do OnPositionChanged: a
+    // pintura e o primeiro ponto com a posicao final dos itens.
+    Follow::Update();
+    if (busy.load(std::memory_order_acquire)) Follow::TrackPaint(element);
     Removal::ObservePaint(element);
     Group* waiting = PageAwaitingContent(element);
     unsigned serial = waiting ? waiting->serial : 0;
@@ -3282,6 +3370,358 @@ static void Uninit() {
     if (storageModule) {FreeLibrary(storageModule);storageModule=nullptr;}
 }
 } // namespace Removal
+namespace Follow {
+constexpr int kTracked = 48, kEntries = 8;
+// Itens pintados enquanto ha animacao: referencias da pagina sem escalonamento.
+struct Tracked { void* element; DWORD owner; };
+struct Entry {
+    HWND view; DWORD owner; uint64_t generation; Setup setup;
+    int dx, dy; bool lost; ULONGLONG expireAt; double checkedAt;
+};
+static Tracked tracked[kTracked];
+static int nextTracked;
+static Entry entries[kEntries];
+static std::mutex mutex;
+static std::atomic<bool> anyTracked{false};
+static std::atomic<int> liveEntries{0};
+static double Now() {
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    return counter.QuadPart * 1000.0 / frequency.QuadPart;
+}
+// O Explorer reaproveita elementos: um elemento que perde ou troca o item
+// nao mede mais o mesmo conteudo.
+static void* Identity(void* element) {
+    void* vtable = nullptr;
+    if (element) memcpy(&vtable, element, sizeof(vtable));
+    if (!element || !Removal::getItem || !nativeItemVtable || vtable != nativeItemVtable) return nullptr;
+    IUnknown* item = nullptr;
+    if (FAILED(Removal::getItem(element, &item)) || !item) return nullptr;
+    void* raw = item;
+    item->Release();
+    return raw;
+}
+static bool Bounds(void* element, RECT& rect) {
+    rect = {};
+    return rootBounds && element && SUCCEEDED(rootBounds(element, &rect));
+}
+static bool IsLineScroller(void* element) {
+    void* value = nullptr;
+    PCWSTR name = getClass(element, &value);
+    bool match = name && !wcscmp(name, L"LineScroller");
+    if (value) releaseValue(value);
+    return match;
+}
+static void ClearEntry(Entry& entry) {
+    if (entry.view) liveEntries.fetch_sub(1, std::memory_order_acq_rel);
+    entry = {};
+}
+// Roda em cada pintura durante a animacao: so leitura do vptr, sem Value.
+static void TrackPaint(void* element) {
+    if (!nativeItemVtable) return;
+    void* item = nullptr;
+    for (int depth = 0; element && depth < 8 && !item; ++depth, element = getParent(element)) {
+        void* vtable = nullptr;
+        memcpy(&vtable, element, sizeof(vtable));
+        if (vtable == nativeItemVtable) item = element;
+    }
+    if (!item) return;
+    DWORD self = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const Tracked& t : tracked) if (t.element == item) return;
+    tracked[nextTracked] = {item, self};
+    nextTracked = (nextTracked + 1) % kTracked;
+    anyTracked.store(true, std::memory_order_release);
+}
+static void Forget(void* element) {
+    if (!anyTracked.load(std::memory_order_acquire) && !liveEntries.load(std::memory_order_acquire)) return;
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) if (t.element == element) t = {};
+    for (Entry& entry : entries)
+        for (int i = 0; i < entry.setup.count; ++i)
+            if (entry.setup.refs[i].element == element) entry.setup.refs[i].element = nullptr;
+}
+static void ForgetThread() {
+    DWORD self = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) if (t.owner == self) t = {};
+    for (Entry& entry : entries) if (entry.view && entry.owner == self) ClearEntry(entry);
+}
+static void ClearTracked() {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) t = {};
+    anyTracked.store(false, std::memory_order_release);
+}
+static bool Any() {
+    if (anyTracked.load(std::memory_order_acquire)) return true;
+    if (!liveEntries.load(std::memory_order_acquire)) return false;
+    ULONGLONG now = GetTickCount64();
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Entry& entry : entries) if (entry.view && now >= entry.expireAt) ClearEntry(entry);
+    return liveEntries.load(std::memory_order_acquire) > 0;
+}
+// Area do LineScroller (fixa, abaixo do cabecalho) em coordenadas da view e ate
+// quatro itens visiveis espalhados, com a identidade de cada um.
+static bool Prepare(HWND view, Setup& setup) {
+    setup = {};
+    if (!rootBounds || !Removal::getItem || !nativeItemVtable || !getClass || !releaseValue || !getParent ||
+        !busy.load(std::memory_order_acquire)) return false;
+    DWORD self = GetCurrentThreadId();
+    void* page = nullptr;
+    void* candidates[kMembers + kTracked];
+    int count = 0, owned = 0;
+    for (Group& group : groups) {
+        if (!Owned(group) || group.view != view) continue;
+        if (group.pageMotion) {
+            if (group.count && group.members[0].element) page = group.members[0].element;
+            continue;
+        }
+        for (int i = 0; i < group.count && count < kMembers; ++i)
+            if (group.members[i].element) candidates[count++] = group.members[i].element;
+    }
+    owned = count;
+    {
+        // Itens de outras abas da mesma thread ficam fora: so os sob a pagina desta view.
+        std::lock_guard<std::mutex> lock(mutex);
+        if (page) for (const Tracked& t : tracked)
+            if (t.element && t.owner == self && count < (int)ARRAYSIZE(candidates)) candidates[count++] = t.element;
+    }
+    void* scroller = nullptr;
+    struct Candidate { void* element; RECT rect; };
+    Candidate visible[ARRAYSIZE(candidates)];
+    int found = 0;
+    for (int i = 0; i < count; ++i) {
+        void* element = candidates[i];
+        bool duplicate = false;
+        for (int j = 0; j < found; ++j) duplicate = duplicate || visible[j].element == element;
+        if (duplicate) continue;
+        void* line = nullptr;
+        bool underPage = false;
+        for (void* a = getParent(element); a; a = getParent(a)) {
+            if (!line && (scroller ? a == scroller : IsLineScroller(a))) line = a;
+            if (a == page) { underPage = true; break; }
+        }
+        if (!line || (i >= owned && !underPage)) continue;
+        if (!scroller) scroller = line;
+        RECT rect;
+        if (Bounds(element, rect)) visible[found++] = {element, rect};
+    }
+    RECT area;
+    if (!scroller || !found || !Bounds(scroller, area) || IsRectEmpty(&area)) return false;
+    int inside = 0;
+    for (int i = 0; i < found; ++i) {
+        RECT overlap;
+        if (IntersectRect(&overlap, &visible[i].rect, &area)) visible[inside++] = visible[i];
+    }
+    std::sort(visible, visible + inside, [](const Candidate& a, const Candidate& b) {
+        return a.rect.top != b.rect.top ? a.rect.top < b.rect.top : a.rect.left < b.rect.left;
+    });
+    // Espalhados pela area: o que sai primeiro de vista nao leva todas as referencias.
+    for (int slot = 0; slot < 4 && inside; ++slot) {
+        for (int k = 0; k < inside; ++k) {
+            const Candidate& c = visible[(inside * (2 * slot + 1) / 8 + k) % inside];
+            bool taken = false;
+            for (int j = 0; j < setup.count; ++j) taken = taken || setup.refs[j].element == c.element;
+            void* identity = taken ? nullptr : Identity(c.element);
+            if (!identity) continue;
+            setup.refs[setup.count++] = {c.element, identity, c.rect.left, c.rect.top};
+            break;
+        }
+    }
+    if (!setup.count) return false;
+    // Coordenadas da raiz DirectUI para a view, onde fica o alvo da cortina.
+    POINT origin{};
+    if (HWND host = FindFolderChild(view, L"DirectUIHWND")) MapWindowPoints(host, view, &origin, 1);
+    OffsetRect(&area, origin.x, origin.y);
+    setup.area = area;
+    return true;
+}
+static bool Register(HWND view, uint64_t generation, const Setup& setup) {
+    DWORD self = GetCurrentThreadId();
+    ULONGLONG now = GetTickCount64();
+    std::lock_guard<std::mutex> lock(mutex);
+    Entry* slot = nullptr;
+    for (Entry& entry : entries) {
+        if (entry.view == view && entry.generation == generation) return true;
+        if (entry.view && now >= entry.expireAt) ClearEntry(entry);
+    }
+    for (Entry& entry : entries) {
+        // Uma cortina por view: a nova substitui a anterior.
+        if (entry.view == view) ClearEntry(entry);
+        if (!slot && !entry.view) slot = &entry;
+    }
+    if (!slot) return false;
+    *slot = {view, self, generation, setup, 0, 0, false, now + CURTAIN_SAFETY_MS + 100, 0.};
+    liveEntries.fetch_add(1, std::memory_order_acq_rel);
+    return true;
+}
+static bool Follows(HWND view, uint64_t* generation) {
+    if (!liveEntries.load(std::memory_order_acquire)) return false;
+    DWORD self = GetCurrentThreadId();
+    uint64_t current = 0;
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (Entry& entry : entries)
+            if (entry.view == view && entry.owner == self && GetTickCount64() < entry.expireAt) {
+                current = entry.generation;
+                found = true;
+            }
+    }
+    if (!found || !CurtainFollowable(view, current)) return false;
+    if (generation) *generation = current;
+    return true;
+}
+// Consenso das referencias que ainda mostram o mesmo item. Sem consenso, a copia
+// movel sai de vista e ficam as faixas fixas ate a retirada normal.
+static void Update() {
+    if (!liveEntries.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire)) return;
+    DWORD self = GetCurrentThreadId();
+    double now = Now();
+    ULONGLONG tick = GetTickCount64();
+    Entry work[kEntries];
+    int index[kEntries], count = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (int i = 0; i < kEntries; ++i) {
+            Entry& entry = entries[i];
+            if (!entry.view || entry.owner != self) continue;
+            if (tick >= entry.expireAt) { ClearEntry(entry); continue; }
+            // Uma leitura por rajada de pintura basta: o layout ja esta aplicado.
+            if (entry.lost || now - entry.checkedAt < 1.5) continue;
+            entry.checkedAt = now;
+            work[count] = entry;
+            index[count++] = i;
+        }
+    }
+    for (int w = 0; w < count; ++w) {
+        Entry& entry = work[w];
+        int dxs[4], dys[4], valid = 0;
+        for (int i = 0; i < entry.setup.count; ++i) {
+            Ref& ref = entry.setup.refs[i];
+            RECT rect;
+            if (!ref.element) continue;
+            if (Identity(ref.element) != ref.identity || !Bounds(ref.element, rect)) { ref.element = nullptr; continue; }
+            dxs[valid] = rect.left - ref.left;
+            dys[valid++] = rect.top - ref.top;
+        }
+        int best = 0, dx = 0, dy = 0;
+        for (int i = 0; i < valid; ++i) {
+            int votes = 0;
+            for (int j = 0; j < valid; ++j) votes += dxs[j] == dxs[i] && dys[j] == dys[i];
+            if (votes > best) { best = votes; dx = dxs[i]; dy = dys[i]; }
+        }
+        bool agreed = valid && (best >= 2 || valid == 1);
+        bool alive = true;
+        if (!agreed) {
+            entry.lost = true;
+            alive = OffsetCurtain(entry.view, entry.generation, 0, 1 << 20);
+        } else if (dx != entry.dx || dy != entry.dy) {
+            entry.dx = dx;
+            entry.dy = dy;
+            alive = OffsetCurtain(entry.view, entry.generation, dx, dy);
+        }
+        std::lock_guard<std::mutex> lock(mutex);
+        Entry& stored = entries[index[w]];
+        if (stored.view != entry.view || stored.generation != entry.generation) continue;
+        if (!alive) { ClearEntry(stored); continue; }
+        // Forget pode ter zerado uma referencia enquanto a copia era medida.
+        for (int i = 0; i < entry.setup.count; ++i)
+            if (!stored.setup.refs[i].element) entry.setup.refs[i].element = nullptr;
+        stored.setup = entry.setup;
+        stored.dx = entry.dx;
+        stored.dy = entry.dy;
+        stored.lost = entry.lost;
+    }
+}
+static void Uninit() {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) t = {};
+    for (Entry& entry : entries) ClearEntry(entry);
+    anyTracked.store(false, std::memory_order_release);
+}
+} // namespace Follow
+// Antes da copia da cortina: camadas no estado final (escala e opacidade 100%,
+// pagina sem deslocamento), para a copia nao mostrar itens a meio caminho que o
+// fade parece terminar enquanto os itens novos da rolagem ja estao parados. O
+// BitBlt da tela espera um quadro novo do DWM, que ja inclui este commit.
+static void SnapToFinal(HWND view) {
+    IDCompositionDevice* devices[4]{};
+    int deviceCount = 0;
+    std::lock_guard<std::mutex> lock(compositionMutex);
+    for (Group& group : groups) {
+        if (!Owned(group) || group.view != view || group.canceling || group.repairing) continue;
+        for (int i = 0; i < group.count; ++i) {
+            CompositionState* state = group.members[i].composition;
+            if (!state || !state->device) continue;
+            HRESULT hr = S_OK;
+            if (group.pageMotion) {
+                if (state->bridge) hr = state->bridge->SetOffsetX(0.f);
+                if (SUCCEEDED(hr) && state->bridge) hr = state->bridge->SetOffsetY(0.f);
+            } else {
+                if (state->transform) hr = state->transform->SetScaleX(1.f);
+                if (SUCCEEDED(hr) && state->transform) hr = state->transform->SetScaleY(1.f);
+                if (SUCCEEDED(hr) && state->opacity) hr = state->opacity->SetOpacity(1.f);
+            }
+            if (FAILED(hr)) continue;
+            bool known = false;
+            for (int d = 0; d < deviceCount; ++d) known = known || devices[d] == state->device.Get();
+            if (!known && deviceCount < (int)ARRAYSIZE(devices)) devices[deviceCount++] = state->device.Get();
+        }
+    }
+    for (int d = 0; d < deviceCount; ++d) devices[d]->Commit();
+}
+// Rolagem com camadas na view: a cortina que acompanha o conteudo cobre a
+// devolucao, e os grupos despromovem na hora. Esperar a copia aparecer deixaria
+// o primeiro passo da rolagem mover dezenas de camadas (caro em pastas grandes);
+// o commit da cortina ja precede a liberacao, que o DirectUI so envia no
+// proximo render desta thread. Sem cortina possivel, cancela igual.
+static void ScrollHandoff(HWND view) {
+    Removal::CancelView(view);
+    if (!busy.load(std::memory_order_acquire)) return;
+    ULONGLONG readyAt = 0;
+    uint64_t generation = 0;
+    bool following = Follow::Follows(view, &generation);
+    // Todos seguram a cortina antes de qualquer cancelamento: um grupo sem
+    // repintura pendente e liberado na hora e comecaria a retirada sozinho.
+    // Os que ja estao sob uma cortina (a que acompanha segue cobrindo; uma
+    // parada ja saiu) tambem despromovem agora, antes do passo com camadas.
+    Group* active[ARRAYSIZE(groups)];
+    int count = 0, pending = 0;
+    for (Group& group : groups)
+        if (Owned(group) && group.view == view && !group.canceling && !group.repairing) {
+            active[count++] = &group;
+            if (!group.curtain) ++pending;
+        }
+    if (!count) return;
+    bool covered = false;
+    if (pending) {
+        covered = following && HoldCurtain(view, generation, readyAt);
+        if (!covered) {
+            Follow::Setup setup;
+            bool prepared = Follow::Prepare(view, setup);
+            if (prepared) SnapToFinal(view);
+            if (prepared && RaiseCurtain(view, readyAt, generation, &setup.area)) {
+                // Sem registro, ninguem a moveria: uma copia parada sobre o conteudo.
+                covered = CurtainFollowable(view, generation) && Follow::Register(view, generation, setup);
+                if (!covered) LowerCurtain(view, generation);
+            }
+        }
+    }
+    // O primeiro pendente usa o dono que a cortina acabou de ganhar.
+    bool first = true;
+    for (int i = 0; i < count; ++i) {
+        Group& group = *active[i];
+        if (group.curtain) continue;
+        bool held = covered && (first || HoldCurtain(view, generation, readyAt));
+        first = false;
+        if (!held) continue;
+        group.curtain = true;
+        group.curtainGeneration = generation;
+    }
+    for (int i = 0; i < count; ++i) Cancel(*active[i]);
+}
 // Views desta thread com camadas do mod (grupos ou cena de exclusao).
 static int ScrollViews(HWND* out, int max) {
     int n = Removal::Views(out, max);
@@ -3301,6 +3741,8 @@ static PositionChangedFn originalPositionChanged;
 static void STAGGER_MEMBER PositionChangedHook(void* bar, void* value) {
     if (!inPaint) HandleContentScroll();
     originalPositionChanged(bar, value);
+    // Rolagem suave: a posicao ja vem aplicada; a roda nativa as vezes a aplica aqui.
+    if (!inPaint) Follow::Update();
 }
 static bool EnsureHooks() {
     if (live.load(std::memory_order_acquire)) return true;
@@ -3323,6 +3765,8 @@ static bool EnsureHooks() {
     getAlpha = STAGGER_EXPORT(AlphaGetFn, "?GetAlpha@Element@DirectUI@@QEAAHXZ", "?GetAlpha@Element@DirectUI@@QAEHXZ");
     setAlpha = STAGGER_EXPORT(AlphaSetFn, "?SetAlpha@Element@DirectUI@@QEAAJH@Z", "?SetAlpha@Element@DirectUI@@QAEJH@Z");
     getId = STAGGER_EXPORT(IdFn, "?GetID@Element@DirectUI@@QEAAGXZ", "?GetID@Element@DirectUI@@QAEGXZ");
+    rootBounds = STAGGER_EXPORT(RootBoundsFn, "?GetRootRelativeBounds@Element@DirectUI@@QEAAJPEAUtagRECT@@@Z",
+        "?GetRootRelativeBounds@Element@DirectUI@@QAEJPAUtagRECT@@@Z");
     // Este helper e simbolo privado, nao export. Ele verifica a classe antes
     // de consultar o HWND; um UIItem comum nao possui HWND proprio.
     if (!getHwnd) {
@@ -3660,6 +4104,7 @@ static void BeforeUninit() {
     }
 }
 static void Uninit() {
+    Follow::Uninit();
     Removal::Uninit();
     if (duiModule && FreeLibrary(duiModule)) duiModule = nullptr;
     if (duserModule && FreeLibrary(duserModule)) duserModule = nullptr;
@@ -3809,15 +4254,17 @@ static std::shared_ptr<SlideAnimation> FindSlide(HWND hwnd) {
     return it != g_slides.end() ? it->second : nullptr;
 }
 
-// A rolagem move o conteudo sob a cortina congelada e sob camadas que nao recebem
-// o clip do viewport: retirar a cortina e devolver as camadas desta thread.
+// A rolagem move o conteudo sob camadas que nao recebem o clip do viewport:
+// devolver as camadas desta thread. Uma cortina parada ficaria por cima do
+// conteudo em movimento e sai; a que acompanha a rolagem continua cobrindo.
 static void HandleContentScroll() {
     if (g_unloading.load(std::memory_order_acquire)) return;
     HWND views[16], curtains[8];
     int curtainCount = CurtainViews(GetCurrentThreadId(), curtains, 8);
-    for (int i = 0; i < curtainCount; ++i) DropOverlay(curtains[i]);
+    for (int i = 0; i < curtainCount; ++i)
+        if (!ItemStagger::Follow::Follows(curtains[i])) DropOverlay(curtains[i]);
     int count = ItemStagger::ScrollViews(views, 16);
-    for (int i = 0; i < count; ++i) ItemStagger::CancelView(views[i]);
+    for (int i = 0; i < count; ++i) ItemStagger::ScrollHandoff(views[i]);
 }
 
 static LRESULT CALLBACK SlideSubclassProc(
@@ -3883,6 +4330,13 @@ static void FinishSlide(const std::shared_ptr<SlideAnimation>& s,
     g_animDoneCv.notify_all();
 }
 
+// Roda ou barra sobre a pagina: a rolagem devolve as camadas sob a cortina que
+// acompanha o conteudo. Antes do inicio ainda nao ha camadas e a pagina aparece.
+static void ScrollSlide(const std::shared_ptr<SlideAnimation>& s) {
+    if (!s->started || !s->info.nativePage) FinishSlide(s);
+    else ItemStagger::ScrollHandoff(s->hwnd);
+}
+
 static LRESULT CALLBACK PageInputSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR view) {
     auto s = FindSlide(reinterpret_cast<HWND>(view));
@@ -3890,12 +4344,13 @@ static LRESULT CALLBACK PageInputSubclassProc(
     // descartaria o staggering antes de seu primeiro frame.
     bool interrupt = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN ||
         msg == WM_XBUTTONDOWN || msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_CONTEXTMENU;
-    // Clique e tecla concluem as camadas rapido; a rolagem as devolve na hora.
+    bool scroll = msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL || msg == WM_VSCROLL || msg == WM_HSCROLL;
+    // Clique e tecla concluem as camadas rapido; a rolagem as devolve sob a cortina.
     if (s && interrupt && (s->accelerated || ItemStagger::Accelerate(s->hwnd))) {
         s->accelerated = true;
-    } else if (s && (interrupt || msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL ||
-        msg == WM_VSCROLL || msg == WM_HSCROLL ||
-        msg == WM_NCDESTROY || (msg == WM_SHOWWINDOW && !wp))) {
+    } else if (s && scroll) {
+        ScrollSlide(s);
+    } else if (s && (interrupt || msg == WM_NCDESTROY || (msg == WM_SHOWWINDOW && !wp))) {
         FinishSlide(s);
     }
     if (msg == WM_NCDESTROY) RemoveWindowSubclass(hwnd, PageInputSubclassProc, SLIDE_SUBCLASS_ID);
@@ -4059,7 +4514,8 @@ static LRESULT CALLBACK SlideSubclassProc(
         // A transformacao e somente visual: devolver a superficie nativa
         // antes de interagir, sem deslocar hit targets. Layout fica nativo.
         // Clique e tecla concluem as camadas rapido em vez de cortar no meio.
-        if (!wheel && (s->accelerated || ItemStagger::Accelerate(s->hwnd))) s->accelerated = true;
+        if (wheel) ScrollSlide(s);
+        else if (s->accelerated || ItemStagger::Accelerate(s->hwnd)) s->accelerated = true;
         else FinishSlide(s);
     } else if (msg == WM_WINDOWPOSCHANGING && s->applying) {
         // Consumir so a chamada propria; um layout reentrante continua nativo.
@@ -4932,12 +5388,7 @@ void Wh_ModUninit() {
     // Wh_ModBeforeUninit/Wh_ModUninit rodarem -- so bloqueia chamadas novas).
     {
         std::lock_guard<std::mutex> lkd(g_dcFadeMtx);
-        for (auto& [hwnd, a] : g_dcFades) {
-            if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-            if (a.pEffect)  a.pEffect->Release();
-            if (a.pVisual)  a.pVisual->Release();
-            if (a.pSurface) a.pSurface->Release();
-        }
+        for (auto& [hwnd, a] : g_dcFades) ReleaseFadeObjects(a);
         g_dcFades.clear();
         // Referencias enfileiradas depois do join do worker (ex.: cortina
         // levantada durante o unload) so podem ser liberadas aqui.
