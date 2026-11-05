@@ -13,14 +13,18 @@
 /*
 # Taskbar Left Speed Meter
 
-A lightweight, zero-hook network traffic monitor docked on the bottom-left corner of the Windows taskbar (ideal for centered Windows 11 taskbars).
+A lightweight network traffic monitor docked on the bottom-left corner of the Windows taskbar (specifically tailored for centered taskbars in Windows 11).
 
-### Why this mod?
-While mods like `net-speed-taskbar` exist, this mod is built for users who want:
-- **Zero API Hooking:** Built as a standalone, lightweight click-through layered overlay that avoids hooking Explorer internals, ensuring maximum stability.
-- **Deep Visual Customization:** Full control over arbitrary HEX text colors, custom font families (e.g. Segoe UI, Consolas, Arial), bold text styling, and custom font sizing directly from Settings.
-- **Fringe-Free Text:** Specially tuned anti-aliasing to prevent color-key halos and fringes across both Windows Light and Dark themes.
-- **DPI-Aware & Auto-Hide:** Automatically scales text and dimensions based on monitor DPI and hides itself during fullscreen games, videos, or when the taskbar auto-hides.
+### Features & Customization
+- **Tailored Left-Corner Docking:** Seamlessly positions network rates on the bottom-left of the taskbar.
+- **Deep Visual Styling:** Fully customizable via the Settings tab:
+  - Custom arbitrary text color (HEX code support).
+  - Custom font family (e.g. Segoe UI, Consolas, Arial, Tahoma).
+  - Toggleable bold text styling.
+  - Custom font size with automatic per-monitor DPI scaling.
+  - Horizontal margin offset adjustments.
+- **Auto-Hide Support:** Automatically hides when applications go fullscreen (videos, games) or when the taskbar is set to auto-hide.
+- **Click-Through:** Transparent overlay that does not block mouse clicks to underlying taskbar elements.
 
 ### Author
 Developed by **RAKIBUL ISLAM SANI**.
@@ -29,9 +33,9 @@ Developed by **RAKIBUL ISLAM SANI**.
 
 // ==WindhawkModSettings==
 /*
-- textColor: "#000000"
+- textColor: "#00FF7F"
   $name: Text Color (HEX)
-  $description: "HEX color code (e.g. #000000 for Black, #FFFFFF for White, #00FF7F for Neon Green, #00E5FF for Cyan)"
+  $description: "HEX color code (e.g. #00FF7F for Neon Green, #00E5FF for Cyan, #FFFFFF for White, #000000 for Black)"
 - fontName: "Segoe UI"
   $name: Font Name
   $description: "Font family name (e.g. Segoe UI, Consolas, Arial, Tahoma, Calibri)"
@@ -56,6 +60,7 @@ Developed by **RAKIBUL ISLAM SANI**.
 #include <stdio.h>
 
 #define TIMER_ID 1001
+#define WM_REFRESH_SETTINGS (WM_APP + 1)
 #define TRANSPARENT_COLOR RGB(255, 0, 255)
 
 HWND hOverlayWnd = NULL;
@@ -63,7 +68,7 @@ HANDLE hThread = NULL;
 DWORD dwThreadId = 0;
 BOOL bRunning = TRUE;
 
-COLORREF g_textColor = RGB(0, 0, 0);
+COLORREF g_textColor = RGB(0, 255, 127);
 wchar_t g_fontName[64] = L"Segoe UI";
 BOOL g_isBold = TRUE;
 int g_fontSize = 13;
@@ -73,7 +78,7 @@ BOOL g_hideOnFullscreen = TRUE;
 DWORD prevInBytes = 0, prevOutBytes = 0;
 wchar_t displayText[128] = L"▼ 0.0 KB/s\n▲ 0.0 KB/s";
 
-// মোডের নিজস্ব মডিউল হ্যান্ডেল নেওয়ার ফাংশন (Fix for Issue #2)
+// Retrieve the current module handle safely
 HINSTANCE GetCurrentModuleHandle() {
     HINSTANCE hInst = NULL;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -82,7 +87,7 @@ HINSTANCE GetCurrentModuleHandle() {
     return hInst;
 }
 
-// DPI নির্ণয় করার ফাংশন (Fix for Issue #5)
+// Get DPI for the given window with fallback
 UINT GetTaskbarDpi(HWND hWnd) {
     HMODULE hUser32 = GetModuleHandle(L"user32.dll");
     if (hUser32) {
@@ -99,14 +104,14 @@ UINT GetTaskbarDpi(HWND hWnd) {
 }
 
 COLORREF HexToColorRef(PCWSTR hexColor) {
-    if (!hexColor || wcslen(hexColor) < 6) return RGB(0, 0, 0);
+    if (!hexColor || wcslen(hexColor) < 6) return RGB(0, 255, 127);
     const wchar_t* p = hexColor;
     if (*p == L'#') p++;
     unsigned int r = 0, g = 0, b = 0;
     if (swscanf(p, L"%02x%02x%02x", &r, &g, &b) == 3) {
         return RGB(r, g, b);
     }
-    return RGB(0, 0, 0);
+    return RGB(0, 255, 127);
 }
 
 void LoadSettings() {
@@ -120,6 +125,8 @@ void LoadSettings() {
     if (fontStr && wcslen(fontStr) > 0) {
         wcsncpy_s(g_fontName, 64, fontStr, _TRUNCATE);
         Wh_FreeStringSetting(fontStr);
+    } else {
+        wcsncpy_s(g_fontName, 64, L"Segoe UI", _TRUNCATE);
     }
 
     g_isBold = Wh_GetIntSetting(L"isBold") != 0;
@@ -154,10 +161,9 @@ void FetchNetworkTraffic(DWORD *inBytes, DWORD *outBytes) {
     }
 }
 
-BOOL ShouldHideMeter() {
+BOOL ShouldHideMeter(HWND hTaskbar) {
     if (!g_hideOnFullscreen) return FALSE;
 
-    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     if (!hTaskbar || !IsWindowVisible(hTaskbar)) return TRUE;
 
     RECT rcTaskbar;
@@ -176,11 +182,7 @@ BOOL ShouldHideMeter() {
         if (hForeMon == hMon) {
             RECT rcFore;
             GetWindowRect(hFore, &rcFore);
-            if (rcFore.left <= mi.rcMonitor.left &&
-                rcFore.top <= mi.rcMonitor.top &&
-                rcFore.right >= mi.rcMonitor.right &&
-                rcFore.bottom >= mi.rcMonitor.bottom) {
-                
+            if (EqualRect(&rcFore, &mi.rcMonitor)) {
                 wchar_t className[256];
                 GetClassName(hFore, className, 256);
                 if (wcscmp(className, L"Progman") != 0 && wcscmp(className, L"WorkerW") != 0) {
@@ -193,9 +195,7 @@ BOOL ShouldHideMeter() {
     return FALSE;
 }
 
-// DPI অনুযায়ী অবস্থান ও সাইজ স্কেলিং (Fix for Issue #5)
-void UpdatePosition() {
-    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+void UpdatePosition(HWND hTaskbar) {
     if (!hTaskbar || !hOverlayWnd) return;
 
     RECT rcTaskbar;
@@ -213,6 +213,20 @@ void UpdatePosition() {
 }
 
 void RefreshSpeed() {
+    // Verify that the taskbar window exists and belongs to the current shell process
+    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+    DWORD taskbarPid = 0;
+    if (hTaskbar) {
+        GetWindowThreadProcessId(hTaskbar, &taskbarPid);
+    }
+
+    if (!hTaskbar || taskbarPid != GetCurrentProcessId()) {
+        if (IsWindowVisible(hOverlayWnd)) {
+            ShowWindow(hOverlayWnd, SW_HIDE);
+        }
+        return;
+    }
+
     DWORD curIn = 0, curOut = 0;
     FetchNetworkTraffic(&curIn, &curOut);
 
@@ -222,7 +236,7 @@ void RefreshSpeed() {
     prevInBytes = curIn;
     prevOutBytes = curOut;
 
-    if (ShouldHideMeter()) {
+    if (ShouldHideMeter(hTaskbar)) {
         if (IsWindowVisible(hOverlayWnd)) {
             ShowWindow(hOverlayWnd, SW_HIDE);
         }
@@ -246,7 +260,7 @@ void RefreshSpeed() {
 
     swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
 
-    UpdatePosition();
+    UpdatePosition(hTaskbar);
     InvalidateRect(hOverlayWnd, NULL, TRUE);
 }
 
@@ -256,6 +270,11 @@ LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             if (wParam == TIMER_ID) {
                 RefreshSpeed();
             }
+            return 0;
+
+        case WM_REFRESH_SETTINGS:
+            LoadSettings();
+            RefreshSpeed();
             return 0;
 
         case WM_PAINT: {
@@ -274,7 +293,7 @@ LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
             HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
             UINT dpi = GetTaskbarDpi(hTaskbar);
-            int scaledFontSize = MulDiv(g_fontSize, dpi, 96); // DPI Scaled Font
+            int scaledFontSize = MulDiv(g_fontSize, dpi, 96);
 
             int weight = g_isBold ? FW_BOLD : FW_NORMAL;
             HFONT hFont = CreateFont(scaledFontSize, 0, 0, 0, weight, FALSE, FALSE, FALSE,
@@ -302,7 +321,6 @@ LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     }
 }
 
-// ব্যাকগ্রাউন্ড থ্রেড (Fix for Issue #2: Stale Window Class crash)
 DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     HINSTANCE hInst = GetCurrentModuleHandle();
 
@@ -330,11 +348,12 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 
     if (hOverlayWnd) {
         SetLayeredWindowAttributes(hOverlayWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
-        ShowWindow(hOverlayWnd, SW_SHOWNOACTIVATE);
-        UpdateWindow(hOverlayWnd);
-
         FetchNetworkTraffic(&prevInBytes, &prevOutBytes);
-        UpdatePosition();
+
+        if (hTaskbar) {
+            UpdatePosition(hTaskbar);
+            ShowWindow(hOverlayWnd, SW_SHOWNOACTIVATE);
+        }
 
         SetTimer(hOverlayWnd, TIMER_ID, 1000, NULL);
     }
@@ -351,30 +370,11 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
         hOverlayWnd = NULL;
     }
 
-    // আনরেজিস্টার নিশ্চিত করা যাতে রিলোড বা আপডেটে ক্র্যাশ না করে
     UnregisterClass(wc.lpszClassName, hInst);
     return 0;
 }
 
-// শুধুমাত্র মূল Shell প্রসেসে লোড করা (Fix for Issue #4)
-BOOL IsShellProcess() {
-    HWND hShell = GetShellWindow();
-    if (!hShell) {
-        hShell = FindWindow(L"Shell_TrayWnd", NULL);
-    }
-    if (!hShell) return FALSE;
-
-    DWORD shellPid = 0;
-    GetWindowThreadProcessId(hShell, &shellPid);
-    return (shellPid == GetCurrentProcessId());
-}
-
 BOOL Wh_ModInit() {
-    // সেকেন্ডারি বা ফোল্ডার এক্সপ্লোরার প্রসেসে তৈরি হওয়া বন্ধ রাখা
-    if (!IsShellProcess()) {
-        return FALSE;
-    }
-
     LoadSettings();
     bRunning = TRUE;
     hThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &dwThreadId);
@@ -382,19 +382,11 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
     if (hOverlayWnd) {
-        if (ShouldHideMeter()) {
-            ShowWindow(hOverlayWnd, SW_HIDE);
-        } else {
-            ShowWindow(hOverlayWnd, SW_SHOWNOACTIVATE);
-            UpdatePosition();
-            InvalidateRect(hOverlayWnd, NULL, TRUE);
-        }
+        PostMessage(hOverlayWnd, WM_REFRESH_SETTINGS, 0, 0);
     }
 }
 
-// থ্রেড শেষ হওয়া নিশ্চিত করা (Fix for Issue #3: INFINITE wait)
 void Wh_ModUninit() {
     bRunning = FALSE;
     if (dwThreadId) {
