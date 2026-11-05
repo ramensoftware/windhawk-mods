@@ -191,10 +191,10 @@ same license.
     $description: Hex color (#RRGGBB).
   - offsetX: 0
     $name: Horizontal offset (px)
-    $description: Shifts the shadow like a CSS inset box-shadow - a positive value makes it thicker on the left edge and thinner on the right, a negative value the other way round.
+    $description: Shifts the shadow like a CSS inset box-shadow - a positive value makes it thicker on the left edge and thinner on the right, a negative value the other way round (-60 to 60).
   - offsetY: 0
     $name: Vertical offset (px)
-    $description: Positive values make the shadow thicker on the top edge and thinner on the bottom; negative values the other way round.
+    $description: Positive values make the shadow thicker on the top edge and thinner on the bottom; negative values the other way round (-60 to 60).
   $name: Inner shadow
 - scaleWithDpi: true
   $name: Scale sizes with the monitor DPI
@@ -854,8 +854,8 @@ void LoadSettings() {
     s.shadowOpacity = std::clamp(Wh_GetIntSetting(L"innerShadow.opacity"), 0, 100);
     auto shadowColor = WindhawkUtils::StringSetting::make(L"innerShadow.color");
     s.shadowColor = ParseHexColor(shadowColor.get(), RGB(0, 0, 0));
-    s.shadowOffsetX = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetX"), -400, 400);
-    s.shadowOffsetY = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetY"), -400, 400);
+    s.shadowOffsetX = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetX"), -60, 60);
+    s.shadowOffsetY = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetY"), -60, 60);
 
     s.reserveWorkArea = Wh_GetIntSetting(L"reserveWorkArea") != 0;
     s.workAreaInset = std::max(0, Wh_GetIntSetting(L"workAreaInset"));
@@ -996,12 +996,12 @@ LRESULT CALLBACK TaskbarCallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam)
             // change of a taskbar window is reported to the UI thread, which
             // puts the frame back under it if needed. Nothing is done here:
             // this thread must never wait on the UI thread.
-            if (!(pos->flags & SWP_NOZORDER) && g_overlaysAcrylic && !g_zOrderEventPending &&
+            if (!(pos->flags & SWP_NOZORDER) && g_overlaysAcrylic && !g_unloading &&
                 IsTaskbarWindow(cwp->hwnd)) {
-                if (HWND ctrl = g_ctrlWnd.load()) {
-                    if (PostMessageW(ctrl, kMsgTaskbarZOrder, 0, 0)) {
-                        g_zOrderEventPending = true;
-                    }
+                HWND ctrl = g_ctrlWnd.load();
+                if (ctrl && !g_zOrderEventPending.exchange(true) &&
+                    !PostMessageW(ctrl, kMsgTaskbarZOrder, 0, 0)) {
+                    g_zOrderEventPending = false;
                 }
             }
         }
@@ -3708,7 +3708,7 @@ wuc::CompositionSurfaceBrush SurfaceBrushFor(wuc::CompositionDrawingSurface cons
 
 // Builds (or rebuilds) the composition content from the rasterized frame:
 // the mask surface (the frame's coverage), the overlay surface (noise grain
-// under the ears), the effect brush, and the two sprites.
+// under the ears), the effect brush, and the sprites.
 bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
     Acrylic& ac = *overlay.acrylic;
     const Layout& layout = overlay.layout;
@@ -3775,9 +3775,13 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
     // blur the whole monitor whenever something behind it changes - but one
     // per band, each reaching far enough inwards for the blur at the band's
     // inner edge to be complete (the corner radius plus the kernel's reach).
-    // The mask is the one window-sized surface, offset into each band. The
-    // tint rides on the same sprites when the graph couldn't carry it; the
-    // overlay (ears, noise: no effect) is one window-sized sprite on top.
+    // Each sprite's blur input also extends past its band into the
+    // neighboring ones by that reach, and the sprite is clipped back to its
+    // band, so the blur on either side of a join is computed from the same
+    // content and the joins don't show. The mask is the one window-sized
+    // surface, offset into each sprite. The tint rides on the same sprites
+    // when the graph couldn't carry it; the overlay (ears, noise: no
+    // effect) is one window-sized sprite on top.
     wf::Numerics::float2 size{static_cast<float>(width), static_cast<float>(height)};
     ac.root.Children().RemoveAll();
     ac.root.Size(size);
@@ -3787,10 +3791,18 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
     RECT bands[4];
     int bandCount = BackdropBandRects(width, height, inner, reach, bands);
     for (int b = 0; b < bandCount; b++) {
-        wf::Numerics::float2 origin{static_cast<float>(bands[b].left),
-                                    static_cast<float>(bands[b].top)};
-        wf::Numerics::float2 extent{static_cast<float>(bands[b].right - bands[b].left),
-                                    static_cast<float>(bands[b].bottom - bands[b].top)};
+        const RECT& band = bands[b];
+        RECT input = band;  // the sprite: the band plus the blur's reach around it
+        InflateRect(&input, reach, reach);
+        RECT window{0, 0, width, height};
+        IntersectRect(&input, &input, &window);
+        wf::Numerics::float2 origin{static_cast<float>(input.left), static_cast<float>(input.top)};
+        wf::Numerics::float2 extent{static_cast<float>(input.right - input.left),
+                                    static_cast<float>(input.bottom - input.top)};
+        auto clip = g_compositor.CreateInsetClip(
+            static_cast<float>(band.left - input.left), static_cast<float>(band.top - input.top),
+            static_cast<float>(input.right - band.right),
+            static_cast<float>(input.bottom - band.bottom));
         auto maskBrush = g_compositor.CreateMaskBrush();
         auto maskSurfaceBrush = SurfaceBrushFor(ac.maskSurface);
         maskSurfaceBrush.Offset({-origin.x, -origin.y});
@@ -3799,6 +3811,7 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
         auto fill = g_compositor.CreateSpriteVisual();
         fill.Offset({origin.x, origin.y, 0.0f});
         fill.Size(extent);
+        fill.Clip(clip);
         fill.Brush(maskBrush);
         ac.root.Children().InsertAtTop(fill);
         if (level > 0 && g_settings.tintOpacity > 0) {
@@ -3812,6 +3825,10 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
             auto tint = g_compositor.CreateSpriteVisual();
             tint.Offset({origin.x, origin.y, 0.0f});
             tint.Size(extent);
+            tint.Clip(g_compositor.CreateInsetClip(
+                static_cast<float>(band.left - input.left), static_cast<float>(band.top - input.top),
+                static_cast<float>(input.right - band.right),
+                static_cast<float>(input.bottom - band.bottom)));
             tint.Brush(tintMask);
             ac.root.Children().InsertAtTop(tint);
         }
@@ -3860,9 +3877,9 @@ bool PresentFrame(HWND hwnd, HDC memDc, int width, int height, const RECT* rect,
 }
 
 // Pushes the frame's bitmap to the screen at its presentation alpha (an
-// acrylic frame is uncloaked or cloaked instead). Presents the frame and,
-// with it, its shadow window (built here if the layout calls for one and it
-// isn't yet). The caller holds g_revealMutex.
+// acrylic frame is uncloaked or cloaked instead), and with it the shadow
+// slices that have their pixels (built beforehand, see EnsureShadowSurfaces).
+// The caller holds g_revealMutex.
 bool PresentOverlayLocked(Overlay& overlay) {
     bool ok = true;
     if (overlay.acrylic) {
@@ -4618,6 +4635,9 @@ HWND FindTaskViewWindow() {
 // kMsgTaskbarMoving (from the taskbar thread's hook): the window just moved
 // or resized - the frame on that monitor goes away right now.
 void OnTaskbarMoving(LPARAM lParam) {
+    if (g_unloading || !g_overlays) {
+        return;
+    }
     HWND taskbar = reinterpret_cast<HWND>(lParam);
     ULONGLONG now = GetTickCount64();
     for (Overlay& overlay : *g_overlays) {
@@ -4632,6 +4652,9 @@ void OnTaskbarMoving(LPARAM lParam) {
 // right under its taskbar is put back there now.
 void OnTaskbarZOrder() {
     static ULONGLONG lastLogTick = 0;
+    if (g_unloading || !g_overlays) {
+        return;
+    }
     for (Overlay& overlay : *g_overlays) {
         if (!overlay.acrylic || !overlay.hwnd || !IsWindowVisible(overlay.hwnd)) {
             continue;
@@ -6335,11 +6358,13 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     // on every exit path) and a dispatcher queue for it.
     struct Apartment {
         bool entered = false;
-        Apartment() try {
-            winrt::init_apartment(winrt::apartment_type::single_threaded);
-            entered = true;
-        } catch (winrt::hresult_error const& e) {
-            Wh_Log(L"init_apartment threw %08X", e.code().value);
+        Apartment() {
+            try {
+                winrt::init_apartment(winrt::apartment_type::single_threaded);
+                entered = true;
+            } catch (winrt::hresult_error const& e) {
+                Wh_Log(L"init_apartment threw %08X", e.code().value);
+            }
         }
         ~Apartment() {
             if (entered) {
@@ -6490,9 +6515,9 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     // The frame windows go now, so no other thread can have a reason to
     // send to this one while it waits below.
     DestroyOverlays(*g_overlays);
-    g_overlays.reset();
     g_overlaysAcrylic = false;
     ShutdownComposition();
+    g_overlays.reset();  // after the pump above: nothing dispatched there can reach it any more
     g_xamlCornersOwned = false;
     ResetPassStates();
     // Only now the appbars: the appbar thread removes them (each removal is a
