@@ -1593,6 +1593,8 @@ struct Group {
     bool contentPainted = false;
     unsigned serial = 0;
     uint64_t curtainGeneration = 0;
+    // Pagina: container inteiro, se o LineScroller registrado nao puder ser promovido.
+    void* pageFallback = nullptr;
     Member members[kMembers];
 };
 static Group groups[16];
@@ -1679,6 +1681,7 @@ static void ReleaseLocked(Group& group) {
     group.handoffReady = false;
     group.awaitingHandoff = false;
     group.handoffAt = 0;
+    group.pageFallback = nullptr;
     group.view = nullptr;
     group.action = nullptr;
     group.owner.store(0, std::memory_order_relaxed);
@@ -2321,6 +2324,18 @@ static void UpdatePage(Group& group, bool restore, double now) {
         // A ponte nasce na posicao inicial: o conteudo que chegar pinta deslocado
         // e parado ate a curva comecar.
         if (!PrepareComposition(member, 1.f, 1.f, &group.pageOffset)) {
+            // LineScroller nao promovivel: o container inteiro, como antes, no proximo frame.
+            if (void* fallback = group.pageFallback) {
+                group.pageFallback = nullptr;
+                HANDLE node = member.done ? nullptr : getNode(fallback);
+                if (node) {
+                    member = {};
+                    member.element = fallback;
+                    member.node = node;
+                    member.repaintPending = true;
+                    return;
+                }
+            }
             Wh_Log(L"[PAGE] container DirectUI sem composicao elegivel; mantendo pagina estatica");
             Restore(member);
             return;
@@ -2487,12 +2502,14 @@ static void ForgetElement(void* element) {
     Follow::Forget(element);
     Removal::Destroy(element);
     if (busy.load(std::memory_order_acquire)) {
-        for (Group& group : groups) if (Owned(group))
+        for (Group& group : groups) if (Owned(group)) {
+            if (group.pageFallback == element) group.pageFallback = nullptr;
             for (int i = 0; i < group.count; ++i)
                 if (group.members[i].element == element) {
                     DetachComposition(group.members[i], true);
                     group.members[i] = {};
                 }
+        }
     }
 }
 static void STAGGER_MEMBER DestroyHook(void* element) {
@@ -2525,6 +2542,15 @@ static BOOL WINAPI DeleteHook(HANDLE handle) {
     AfterDeleteHandle();
     return result;
 }
+static void* EmptyFolderText(void* element);
+// Area rolavel das views de itens; a distancia da rolagem e a pagina partem dela.
+static bool IsLineScrollerElement(void* element) {
+    void* value = nullptr;
+    PCWSTR name = getClass(element, &value);
+    bool match = name && !wcscmp(name, L"LineScroller");
+    if (value) releaseValue(value);
+    return match;
+}
 static bool OnPagePaint(void* element) {
     if (!live.load(std::memory_order_acquire) || !busy.load(std::memory_order_acquire) ||
         stopping.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire)) return true;
@@ -2533,10 +2559,15 @@ static bool OnPagePaint(void* element) {
         interested = interested || (Owned(group) && group.pageMotion && !group.canceling && !group.repairing &&
             (!group.count || (group.members[0].element && !group.members[0].modified && !group.members[0].done)));
     if (!interested) return true;
-    // Filho comum abaixo do HWNDElement, nunca a raiz/background do host.
-    // Tambem funciona para pastas vazias, sem depender de um UIItem pintado.
+    // A pagina move a area rolavel (LineScroller), nao o cabecalho de colunas:
+    // a camada e pintada fora do BeginPaint e preserva alfa, e mods que
+    // estilizam o header pelo caminho GDI normal (Styler, Modernizer) mudariam
+    // a cor dele so durante a animacao. Sem LineScroller (pasta vazia em outra
+    // estrutura), o filho comum abaixo do HWNDElement, nunca a raiz/background.
     void* container = element;
+    void* scroller = nullptr;
     for (int depth = 0; container && depth < 64; ++depth) {
+        if (!scroller && IsLineScrollerElement(container)) scroller = container;
         void* parent = getParent(container);
         if (!parent || !getParent(parent)) break;
         container = parent;
@@ -2551,17 +2582,23 @@ static bool OnPagePaint(void* element) {
     for (Group& group : groups) if (Owned(group) && group.pageMotion && !group.canceling &&
         !group.repairing && (hwnd == group.view || IsChild(group.view, hwnd))) {
         if (group.count) {
+            // Segura so o que fica dentro da camada ate a ponte estar pronta.
             auto& member = group.members[0];
-            return member.element != container || member.modified || member.done;
+            bool inside = member.element == scroller || member.element == container;
+            return !inside || member.modified || member.done;
         }
         if (group.timeline.Now() > group.waitUntil) return true;
-        HANDLE node = getNode(container);
-        if (!node || !NativeIdentity(node) || getAlpha(container) != 255) return true;
+        // O cabecalho pinta antes da lista: espera um elemento da area rolavel.
+        void* page = scroller ? scroller : EmptyFolderText(element) ? container : nullptr;
+        if (!page) return true;
+        HANDLE node = getNode(page);
+        if (!node || !NativeIdentity(node) || getAlpha(page) != 255) return true;
         auto& member = group.members[0];
         member = {};
-        member.element = container;
+        member.element = page;
         member.node = node;
         member.repaintPending = true;
+        group.pageFallback = page == scroller ? container : nullptr;
         group.count = 1;
         // Somente registrar/gatear: promover e submeter curvas no proximo
         // frame do owner, nunca dentro do callback de pintura.
@@ -3406,13 +3443,6 @@ static bool Bounds(void* element, RECT& rect) {
     rect = {};
     return rootBounds && element && SUCCEEDED(rootBounds(element, &rect));
 }
-static bool IsLineScroller(void* element) {
-    void* value = nullptr;
-    PCWSTR name = getClass(element, &value);
-    bool match = name && !wcscmp(name, L"LineScroller");
-    if (value) releaseValue(value);
-    return match;
-}
 static void ClearEntry(Entry& entry) {
     if (entry.view) liveEntries.fetch_sub(1, std::memory_order_acq_rel);
     entry = {};
@@ -3499,7 +3529,7 @@ static bool Prepare(HWND view, Setup& setup) {
         void* line = nullptr;
         bool underPage = false;
         for (void* a = getParent(element); a; a = getParent(a)) {
-            if (!line && (scroller ? a == scroller : IsLineScroller(a))) line = a;
+            if (!line && (scroller ? a == scroller : IsLineScrollerElement(a))) line = a;
             if (a == page) { underPage = true; break; }
         }
         if (!line || (i >= owned && !underPage)) continue;
@@ -4065,6 +4095,7 @@ static ULONGLONG Arm(HWND view, ULONGLONG reveal, int totalMs, bool frameDriven 
         group.handoffReady = false;
         group.awaitingHandoff = false;
         group.handoffAt = 0;
+        group.pageFallback = nullptr;
         group.contentPainted = false;
         ++group.serial;
         ULONGLONG end = frameDriven ? group.waitUntil + group.collectMs + 16 + group.holdMs + group.maxDelay + group.growMs
