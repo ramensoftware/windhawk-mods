@@ -2,7 +2,7 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.3.0
+// @version         1.3.1
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin
@@ -823,6 +823,7 @@ static volatile LONG g_shutdownRequested = 0;
 
 // Solo input thread.
 static HHOOK g_mouseHook = nullptr;
+static HHOOK g_keyboardHook = nullptr;
 static HWND volatile g_inputControlWnd = nullptr;   // ventana message-only
 
 // Estado compartido entre hooks y UI.
@@ -6796,6 +6797,12 @@ static void InputHandleForwardedHotkey(WPARAM flags)
     if (InterlockedCompareExchange(&g_selectionTransitionActive, 0, 0) != 0)
         return;
 
+    static ULONGLONG s_lastHotkeyTime = 0;
+    ULONGLONG now = GetTickCount64();
+    if (now - s_lastHotkeyTime < 50)
+        return;
+    s_lastHotkeyTime = now;
+
     SyncInputSession();
     const bool shift = (flags & kHotkeyFlagBackwards) != 0;
 
@@ -6855,6 +6862,100 @@ static void InputPollModifierRelease(HWND control)
     KillTimer(control, kModifierReleasePollTimerId);
     SendAltMenuMaskIfNeeded();
     OnModifierReleased();
+}
+
+static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    if (nCode != HC_ACTION || !lParam)
+        return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+
+    const KBDLLHOOKSTRUCT* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+
+    const bool fakeAltGrCtrl = key->vkCode == VK_LCONTROL && key->scanCode == 0x21D;
+    if ((key->flags & LLKHF_INJECTED) != 0 && !fakeAltGrCtrl)
+        return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+
+    const bool down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+    const bool up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+    const DWORD vk = key->vkCode;
+
+    if (vk == VK_TAB)
+    {
+        if (down)
+        {
+            const bool altHeld = (key->flags & LLKHF_ALTDOWN) != 0 ||
+                                 ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+            const bool winHeld = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+                                 ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+
+            if (altHeld && !winHeld)
+            {
+                HWND control = g_inputControlWnd;
+                if (!control)
+                {
+                    control = FindWindowExW(HWND_MESSAGE, nullptr, kInputControlClass,
+                                            kInputControlTitleReady);
+                }
+
+                if (control && g_hotkeyMessage != 0)
+                {
+                    WPARAM flags = 0;
+                    if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0)
+                        flags |= kHotkeyFlagBackwards;
+                    if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
+                        flags |= kHotkeyFlagCtrl;
+
+                    PostMessageW(control, g_hotkeyMessage, flags, 0);
+                    return 1;
+                }
+            }
+        }
+        else if (up)
+        {
+            if (InputSessionActive())
+                return 1;
+        }
+    }
+
+    if (InputSessionActive())
+    {
+        if (vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU)
+        {
+            if (up)
+            {
+                InputSyncModifiersFromSystem();
+                if (SessionModifierReleased())
+                {
+                    if (g_modifierReleasePolling)
+                    {
+                        g_modifierReleasePolling = false;
+                        if (g_inputControlWnd)
+                            KillTimer(g_inputControlWnd, kModifierReleasePollTimerId);
+                    }
+                    SendAltMenuMaskIfNeeded();
+                    OnModifierReleased();
+                }
+            }
+        }
+        else if (vk == VK_ESCAPE && down)
+        {
+            InputEndSession(WM_UI_CANCEL);
+            return 1;
+        }
+        else if (vk == VK_RETURN && down)
+        {
+            InputEndSession(WM_UI_CONFIRM);
+            return 1;
+        }
+        else if (down && (vk == VK_LEFT || vk == VK_RIGHT))
+        {
+            PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
+                          static_cast<LPARAM>(vk == VK_LEFT ? -1 : 1));
+            return 1;
+        }
+    }
+
+    return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
 }
 
 static LRESULT CALLBACK InputControlProc(HWND hwnd, UINT message, WPARAM wParam,
@@ -6926,6 +7027,19 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     if (ok && control)
         SetWindowTextW(control, kInputControlTitleReady);
 
+    if (ok)
+    {
+        SetLastError(ERROR_SUCCESS);
+        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, g_hModule, 0);
+        if (!g_keyboardHook && GetLastError() == ERROR_MOD_NOT_FOUND)
+        {
+            SetLastError(ERROR_SUCCESS);
+            g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, nullptr, 0);
+        }
+        if (!g_keyboardHook)
+            Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %lu", GetLastError());
+    }
+
     InterlockedExchange(&g_inputInitOk, ok ? 1 : 0);
     SetEvent(g_inputReadyEvent);
 
@@ -6977,6 +7091,11 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     if (control)
         SetWindowTextW(control, kInputControlTitleIdle);
     g_modifierReleasePolling = false;
+    if (g_keyboardHook)
+    {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = nullptr;
+    }
     if (g_mouseHook)
     {
         UnhookWindowsHookEx(g_mouseHook);
