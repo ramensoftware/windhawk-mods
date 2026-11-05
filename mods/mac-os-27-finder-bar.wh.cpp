@@ -9909,7 +9909,7 @@ static void FlyRender() {
 // Posição: centralizada sob o ícone, logo abaixo da barra.
 static void FlyPlace() {
     Bar* b = g_fly.bar;
-    if (!b || !g_fly.hwnd) return;
+    if (!b) return;  // (roda antes de a janela existir: só calcula a posição)
     float s = g_fly.s;
     RECT wr;
     GetWindowRect(b->hwnd, &wr);
