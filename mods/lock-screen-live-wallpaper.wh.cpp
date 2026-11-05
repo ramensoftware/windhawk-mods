@@ -369,8 +369,6 @@ static void FileLog(const wchar_t* fmt, ...) {
     }
     ReleaseSRWLockExclusive(&g_logLock);
 }
-#undef Wh_Log
-#define Wh_Log(...) FileLog(__VA_ARGS__)
 
 static int kW = 960, kH = 540;
 static size_t g_frameBytes = 0;
@@ -518,7 +516,7 @@ void LoadColorSettings() {
         x = pow(x, 1.0 / gamma);
         g_lut[i] = (uint8_t)lround(x * 255.0);
     }
-    Wh_Log(L"Color: speed=%d hue=%d sat=%d bri=%d con=%d gamma=%d%s", g_speed,
+    FileLog(L"Color: speed=%d hue=%d sat=%d bri=%d con=%d gamma=%d%s", g_speed,
            g_hue, g_sat, g_bri, g_con, g_gam,
            g_identity ? L" (no effect)" : L"");
 }
@@ -555,7 +553,7 @@ bool IsVideoExt(const std::wstring& n) {
 std::wstring PickVideo(const std::wstring& path) {
     DWORD attr = GetFileAttributesW(path.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES) {
-        Wh_Log(L"Path not found: %s", path.c_str());
+        FileLog(L"Path not found: %s", path.c_str());
         return L"";
     }
     if (!(attr & FILE_ATTRIBUTE_DIRECTORY)) return path;
@@ -572,7 +570,7 @@ std::wstring PickVideo(const std::wstring& path) {
         FindClose(h);
     }
     if (files.empty()) {
-        Wh_Log(L"No video files in folder: %s", path.c_str());
+        FileLog(L"No video files in folder: %s", path.c_str());
         return L"";
     }
     return files[GetTickCount() % files.size()];
@@ -635,7 +633,7 @@ void SaveCache(const uint8_t* px) {
     HANDLE f = CreateFileW(g_cacheFile.c_str(), GENERIC_WRITE, 0, nullptr,
                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"Failed to save cache (error %u)", GetLastError());
+        FileLog(L"Failed to save cache (error %u)", GetLastError());
         return;
     }
     CacheHdr hd = { kMagic, (uint32_t)kW, (uint32_t)kH, 0 };
@@ -643,7 +641,7 @@ void SaveCache(const uint8_t* px) {
     WriteFile(f, &hd, sizeof(hd), &w, nullptr);
     WriteFile(f, px, (DWORD)g_frameBytes, &w, nullptr);
     CloseHandle(f);
-    Wh_Log(L"First frame cached: %s", g_cacheFile.c_str());
+    FileLog(L"First frame cached: %s", g_cacheFile.c_str());
     PruneCache();
 }
 
@@ -759,14 +757,14 @@ DWORD WINAPI AudioThread(LPVOID) {
         HRESULT hr = S_OK;
         const DWORD AS = (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM;
         if (FAILED(MFCreateSourceReaderFromURL(g_videoFile.c_str(), nullptr, &rd)) || !rd) {
-            Wh_Log(L"Audio: cannot open the file");
+            FileLog(L"Audio: cannot open the file");
             break;
         }
         rd->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE);
         IMFMediaType* nat = nullptr;
         if (FAILED(rd->SetStreamSelection(AS, TRUE)) ||
             FAILED(rd->GetNativeMediaType(AS, 0, &nat)) || !nat) {
-            Wh_Log(L"Audio: the video has no audio track");
+            FileLog(L"Audio: the video has no audio track");
             break;
         }
         UINT32 ch = MFGetAttributeUINT32(nat, MF_MT_AUDIO_NUM_CHANNELS, 2);
@@ -787,14 +785,14 @@ DWORD WINAPI AudioThread(LPVOID) {
         hr = rd->SetCurrentMediaType(AS, nullptr, mt);
         mt->Release();
         if (FAILED(hr)) {
-            Wh_Log(L"Audio: PCM float output not supported (hr=0x%08X)", (unsigned)hr);
+            FileLog(L"Audio: PCM float output not supported (hr=0x%08X)", (unsigned)hr);
             break;
         }
 
         if (FAILED(CoCreateInstance(kClsidMMDeviceEnumerator, nullptr, CLSCTX_ALL,
                                     __uuidof(IMMDeviceEnumerator), (void**)&en)) || !en) break;
         if (FAILED(en->GetDefaultAudioEndpoint(eRender, eConsole, &dev)) || !dev) {
-            Wh_Log(L"Audio: no output device");
+            FileLog(L"Audio: no output device");
             break;
         }
         if (FAILED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
@@ -811,13 +809,13 @@ DWORD WINAPI AudioThread(LPVOID) {
                                 AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
                             2000000, 0, &wf, nullptr);
         if (FAILED(hr)) {
-            Wh_Log(L"Audio: IAudioClient::Initialize failed (hr=0x%08X)", (unsigned)hr);
+            FileLog(L"Audio: IAudioClient::Initialize failed (hr=0x%08X)", (unsigned)hr);
             break;
         }
         UINT32 bufFrames = 0;
         ac->GetBufferSize(&bufFrames);
         if (FAILED(ac->GetService(__uuidof(IAudioRenderClient), (void**)&rc)) || !rc) break;
-        Wh_Log(L"Audio: started (%u ch, %u Hz)", ch, rate);
+        FileLog(L"Audio: started (%u ch, %u Hz)", ch, rate);
 
         std::vector<uint8_t> pend;
         size_t pos = 0;
@@ -902,7 +900,7 @@ DWORD WINAPI AudioThread(LPVOID) {
     SafeRelease(rd);
     if (mfOk) MFShutdown();
     if (coOk) CoUninitialize();
-    Wh_Log(L"Audio: stopped");
+    FileLog(L"Audio: stopped");
     return 0;
 }
 // ---------- Decoder (separate thread) ----------
@@ -921,7 +919,7 @@ static DWORD DecodeThreadImpl() {
     } coGuard{ SUCCEEDED(hrCo) };
     timeBeginPeriod(1);
     if (FAILED(MFStartup(MF_VERSION))) {
-        Wh_Log(L"MFStartup failed");
+        FileLog(L"MFStartup failed");
         timeEndPeriod(1);
         return 1;
     }
@@ -933,7 +931,7 @@ static DWORD DecodeThreadImpl() {
     HRESULT hr = MFCreateSourceReaderFromURL(g_videoFile.c_str(), at, &rd);
     if (at) at->Release();
     if (FAILED(hr) || !rd) {
-        Wh_Log(L"Failed to open video (hr=0x%08X): %s", (unsigned)hr,
+        FileLog(L"Failed to open video (hr=0x%08X): %s", (unsigned)hr,
                g_videoFile.c_str());
         MFShutdown();
         timeEndPeriod(1);
@@ -945,7 +943,7 @@ static DWORD DecodeThreadImpl() {
 
     IMFMediaType* mt = nullptr;
     if (FAILED(MFCreateMediaType(&mt)) || !mt) {
-        Wh_Log(L"MFCreateMediaType failed");
+        FileLog(L"MFCreateMediaType failed");
         rd->Release();
         MFShutdown();
         timeEndPeriod(1);
@@ -956,7 +954,7 @@ static DWORD DecodeThreadImpl() {
     hr = rd->SetCurrentMediaType(VS, nullptr, mt);
     mt->Release();
     if (FAILED(hr)) {
-        Wh_Log(L"Unsupported video format (hr=0x%08X)", (unsigned)hr);
+        FileLog(L"Unsupported video format (hr=0x%08X)", (unsigned)hr);
         rd->Release();
         MFShutdown();
         timeEndPeriod(1);
@@ -976,7 +974,7 @@ static DWORD DecodeThreadImpl() {
         }
     };
     readType();
-    Wh_Log(L"Video: %ux%u stride=%ld", sw, sh, stride);
+    FileLog(L"Video: %ux%u stride=%ld", sw, sh, stride);
     visH = sh;    
     if (!sw || !sh) { rd->Release(); MFShutdown(); timeEndPeriod(1); return 1; }
 
@@ -997,7 +995,7 @@ static DWORD DecodeThreadImpl() {
         IMFSample* sample = nullptr;
         hr = rd->ReadSample(VS, 0, &actual, &flags, &ts, &sample);
         if (FAILED(hr) || (flags & MF_SOURCE_READERF_ERROR)) {
-            Wh_Log(L"ReadSample error (hr=0x%08X)", (unsigned)hr);
+            FileLog(L"ReadSample error (hr=0x%08X)", (unsigned)hr);
             if (sample) sample->Release();
             break;
         }
@@ -1070,7 +1068,7 @@ static DWORD DecodeThreadImpl() {
         }
         if (GetTickCount64() - lastSave > 15000) { lastSave = GetTickCount64(); SaveLast(); }
         if (g_paused) {
-            Wh_Log(L"Pause: still frame shown");
+            FileLog(L"Pause: still frame shown");
             break;
         }
     }
@@ -1078,13 +1076,13 @@ static DWORD DecodeThreadImpl() {
     MFShutdown();
     timeEndPeriod(1);
     if (g_seq > 0) SaveLast();
-    Wh_Log(L"Decoder stopped");
+    FileLog(L"Decoder stopped");
     return 0;
 }
 
 DWORD WINAPI DecodeThread(LPVOID) {
     try { return DecodeThreadImpl(); }
-    catch (...) { Wh_Log(L"Decoder exception"); g_decodeDead = true; return 1; }
+    catch (...) { FileLog(L"Decoder exception"); g_decodeDead = true; return 1; }
 }
 
 // ---------- XAML side ----------
@@ -1116,7 +1114,7 @@ void EnsureBitmap() {
     g_pixels = p;
     g_wb = wb;
     g_wb.Invalidate();
-    Wh_Log(L"WriteableBitmap %dx%d created", kW, kH);
+    FileLog(L"WriteableBitmap %dx%d created", kW, kH);
 }
 
 void LogStats() {
@@ -1132,7 +1130,7 @@ void LogStats() {
         int st = g_stalls;
         double sm = g_stallMax;
         g_stalls = 0; g_stallMax = 0;
-        Wh_Log(L"CPU %.1f%% | frame=%ld | decode avg=%.1f ms max=%.1f ms | UI stalls>50ms: %d (worst %.0f ms)",
+        FileLog(L"CPU %.1f%% | frame=%ld | decode avg=%.1f ms max=%.1f ms | UI stalls>50ms: %d (worst %.0f ms)",
                100.0 * (double)(cpu - g_cpuPrev) / (double)(wall - g_wallPrev),
                g_seq, n ? sum / n : 0.0, mx, st, sm);
     }
@@ -1159,7 +1157,7 @@ void UpdateBrush(DependencyObject const& content) {
         static bool s_prevMsg = false;
         if (msg != s_prevMsg) {
             s_prevMsg = msg;
-            Wh_Log(L"Message scene %s (SM_SHUTTINGDOWN=%d, hideOnShutdown=%d)",
+            FileLog(L"Message scene %s (SM_SHUTTINGDOWN=%d, hideOnShutdown=%d)",
                    msg ? L"shown" : L"gone", GetSystemMetrics(SM_SHUTTINGDOWN),
                    g_hideOnShutdown ? 1 : 0);
         }
@@ -1183,11 +1181,11 @@ void UpdateBrush(DependencyObject const& content) {
         g.Background(b);
         g_rootGrid = g;
         g_brushOn = true;
-        Wh_Log(L"Message scene: video brush applied");
+        FileLog(L"Message scene: video brush applied");
     } else if (!msg && g_brushOn) {
         if (g_rootGrid) g_rootGrid.Background(g_origBrush);
         g_brushOn = false;
-        Wh_Log(L"Message scene gone: brush restored");
+        FileLog(L"Message scene gone: brush restored");
     }
 }
 
@@ -1202,7 +1200,7 @@ void UpdatePasswordScene(DependencyObject const& content) {
     bool pw = credVisible && lfe && lfe.Visibility() != Visibility::Visible;
     if (pw != g_pwScene) {
         g_pwScene = pw;
-        Wh_Log(L"Password screen %s", pw ? L"shown" : L"gone");
+        FileLog(L"Password screen %s", pw ? L"shown" : L"gone");
     }
 }
 // Returns true if the image Source really points to our bitmap.
@@ -1216,7 +1214,7 @@ bool Attach(Controls::Image const& im, bool isA) {
     im.Stretch(Media::Stretch::UniformToFill);
     auto after = im.Source();
     if (!(after && after == g_wb)) return false;
-    Wh_Log(L"Attached to %s (original source: %s)",
+    FileLog(L"Attached to %s (original source: %s)",
            isA ? L"LockLogonImage" : L"SwapLockLogonImage",
            cur ? winrt::get_class_name(cur).c_str() : L"(none)");
     return true;
@@ -1239,7 +1237,7 @@ static void RestoreImages() {
 
 // Called ONLY from the UI thread (inside GetMsgProc)
 void Teardown() {
-    Wh_Log(L"Teardown");
+    FileLog(L"Teardown");
     try {
         if (g_imgA && g_savedA && g_imgA.Source() == g_wb) {
             g_imgA.Source(g_origSrcA);
@@ -1272,7 +1270,7 @@ void Teardown() {
 //    is a pass-through.
 void TripFailSafe(const wchar_t* reason) {
     if (g_failed.exchange(true)) return;
-    Wh_Log(L"FAIL-SAFE TRIPPED: %s -> original wallpaper restored, mod stopped", reason);
+    FileLog(L"FAIL-SAFE TRIPPED: %s -> original wallpaper restored, mod stopped", reason);
     if (!g_tornDown) Teardown();
     g_stop = true;
 }
@@ -1289,7 +1287,7 @@ void OnStepError(const wchar_t* what) {
         g_errCount = 0;
     }
     g_errCount++;
-    Wh_Log(L"ERROR #%d: %s", g_errCount, what);
+    FileLog(L"ERROR #%d: %s", g_errCount, what);
     if (g_failSafe && g_errCount >= kMaxErrors)
         TripFailSafe(L"too many errors while manipulating the UI");
 }
@@ -1302,12 +1300,12 @@ void DumpTree(DependencyObject const& o, int d, int& c) {
     c++;
     std::wstring ind(d * 2, L' ');
     auto fe = o.try_as<FrameworkElement>();
-    Wh_Log(L"  %s%s [%s] %dx%d", ind.c_str(), winrt::get_class_name(o).c_str(),
+    FileLog(L"  %s%s [%s] %dx%d", ind.c_str(), winrt::get_class_name(o).c_str(),
            fe ? fe.Name().c_str() : L"", fe ? (int)fe.ActualWidth() : 0,
            fe ? (int)fe.ActualHeight() : 0);
     if (auto img = o.try_as<Controls::Image>()) {
         auto src = img.Source();
-        Wh_Log(L"  %s  -> Image source: %s", ind.c_str(),
+        FileLog(L"  %s  -> Image source: %s", ind.c_str(),
                src ? winrt::get_class_name(src).c_str() : L"(none)");
     }
     int n = Media::VisualTreeHelper::GetChildrenCount(o);
@@ -1338,11 +1336,11 @@ void LogScene() {
     }
     if (s != g_lastScene) {
         g_lastScene = s;
-        Wh_Log(L"SCENE (visibility/width, 0=Visible 1=Collapsed): %s", s.c_str());
+        FileLog(L"SCENE (visibility/width, 0=Visible 1=Collapsed): %s", s.c_str());
     }
     if (msgShown && !g_dumpedMsg) {
         g_dumpedMsg = true;
-        Wh_Log(L"DisplayMessage scene is visible, dumping tree:");
+        FileLog(L"DisplayMessage scene is visible, dumping tree:");
         int c = 0;
         DumpTree(content, 0, c);
     }
@@ -1431,7 +1429,7 @@ void Step() {
         bool hold = idle || hideNow || (!g_playOnPassword && g_pwScene);
         if (hold != g_idlePaused.load()) {
             g_idlePaused = hold;
-            Wh_Log(L"Playback hold %s (idle=%d hidden=%d)", hold ? L"ON" : L"OFF",
+            FileLog(L"Playback hold %s (idle=%d hidden=%d)", hold ? L"ON" : L"OFF",
                    idle ? 1 : 0, hideNow ? 1 : 0);
         }
 
@@ -1498,17 +1496,17 @@ DWORD WINAPI Worker(LPVOID) {
         if (g_wnd) break;
         Sleep(10);
     }
-    if (!g_wnd) { Wh_Log(L"LogonUI window not found"); return 0; }
+    if (!g_wnd) { FileLog(L"LogonUI window not found"); return 0; }
     DWORD tid = GetWindowThreadProcessId(g_wnd, nullptr);
     HHOOK hk = SetWindowsHookExW(WH_GETMESSAGE, GetMsgProc, nullptr, tid);
     g_hook = hk;
     if (!hk) {
-        Wh_Log(L"SetWindowsHookExW failed (error %lu), mod stopped", GetLastError());
+        FileLog(L"SetWindowsHookExW failed (error %lu), mod stopped", GetLastError());
         g_stop = true;
         g_wnd = nullptr;
         return 0;
     }    
-    Wh_Log(L"Window=%p thread=%u hook=%p", g_wnd, tid, hk);
+    FileLog(L"Window=%p thread=%u hook=%p", g_wnd, tid, hk);
     while (!g_stop && IsWindow(g_wnd)) {
         PostMessageW(g_wnd, WM_NULL, 0, 0);
         Sleep(((g_paused || g_bootStill || g_idlePaused.load()) && g_attached) ? 200 : 20);
@@ -1517,13 +1515,13 @@ DWORD WINAPI Worker(LPVOID) {
     // the UI thread has no more overhead.
     UnhookOnce();
     g_wnd = nullptr;
-    Wh_Log(L"Worker finished");
+    FileLog(L"Worker finished");
     return 0;
 }
 
 BOOL Wh_ModInit() {
     if (Wh_GetModStoragePath(kCacheDir, MAX_PATH) == 0) {
-        Wh_Log(L"Cannot get the mod storage folder, mod stopped");
+        FileLog(L"Cannot get the mod storage folder, mod stopped");
         return FALSE;
     }
     size_t dirLen = wcslen(kCacheDir);
@@ -1531,7 +1529,7 @@ BOOL Wh_ModInit() {
     wsprintfW(g_logPath, L"%s\\debug.log", kCacheDir);
     wsprintfW(kLastFile, L"%s\\last.bgra", kCacheDir);
     wsprintfW(kLastTmp, L"%s\\last.tmp", kCacheDir);
-    Wh_Log(L"Storage: %s", kCacheDir);    
+    FileLog(L"Storage: %s", kCacheDir);    
     {
         FILETIME cr, ex, kr, us, nw;
         GetProcessTimes(GetCurrentProcess(), &cr, &ex, &kr, &us);
@@ -1540,7 +1538,7 @@ BOOL Wh_ModInit() {
                       (((ULONGLONG)cr.dwHighDateTime << 32) | cr.dwLowDateTime);
         DWORD sid = 0;
         ProcessIdToSessionId(GetCurrentProcessId(), &sid);
-        Wh_Log(L"=== MOD INIT === LogonUI age=%llu ms, session=%lu", a / 10000, sid);
+        FileLog(L"=== MOD INIT === LogonUI age=%llu ms, session=%lu", a / 10000, sid);
     }
     PCWSTR p = Wh_GetStringSetting(L"videoPath");
     std::wstring path = Clean(p ? p : L"");
@@ -1572,11 +1570,11 @@ BOOL Wh_ModInit() {
     g_idleMs = (DWORD)ClampInt(Wh_GetIntSetting(L"power.idlePauseSeconds"), 0, 86400) * 1000u;
     g_hideOnShutdown = Wh_GetIntSetting(L"hideOnShutdown") != 0;
     g_playOnPassword = Wh_GetIntSetting(L"power.playOnPasswordScreen") != 0;
-    Wh_Log(L"Fit=%d audio=%d vol=%d idle=%lu ms hideOnShutdown=%d", g_fitMode,
+    FileLog(L"Fit=%d audio=%d vol=%d idle=%lu ms hideOnShutdown=%d", g_fitMode,
            g_audioWanted ? 1 : 0, g_audioVol, g_idleMs, g_hideOnShutdown ? 1 : 0);    
 
     g_initTick = GetTickCount();
-    Wh_Log(L"Fail-safe: %s, timeout %lu ms", g_failSafe ? L"ON" : L"OFF", g_failSafeMs);
+    FileLog(L"Fail-safe: %s, timeout %lu ms", g_failSafe ? L"ON" : L"OFF", g_failSafeMs);
 
     g_paused = Wh_GetIntSetting(L"power.paused") != 0;
     g_debug = Wh_GetIntSetting(L"debugLog") != 0;
@@ -1585,17 +1583,17 @@ BOOL Wh_ModInit() {
         bool still = !bm || wcscmp(bm, L"play") != 0;
         Wh_FreeStringSetting(bm);
         g_bootStill = still && GetTickCount64() < 180000ULL;
-        Wh_Log(L"Uptime %llu s, bootMode=%s", GetTickCount64() / 1000,
+        FileLog(L"Uptime %llu s, bootMode=%s", GetTickCount64() / 1000,
                still ? L"still" : L"play");
     }
 
     if (path.empty()) {
-        Wh_Log(L"videoPath is empty. Set it in the mod settings.");
+        FileLog(L"videoPath is empty. Set it in the mod settings.");
         return TRUE;
     }
     g_videoFile = PickVideo(path);
     if (g_videoFile.empty()) return TRUE;
-    Wh_Log(L"Video: %s (render %dx%d)%s", g_videoFile.c_str(), kW, kH,
+    FileLog(L"Video: %s (render %dx%d)%s", g_videoFile.c_str(), kW, kH,
            g_paused ? L" [PAUSE]" : L"");
 
     InitializeCriticalSection(&g_cs);
@@ -1603,16 +1601,16 @@ BOOL Wh_ModInit() {
     BuildCachePath();
     g_cacheHit = LoadCache();
     g_needSave = !g_cacheHit;
-    Wh_Log(L"First-frame cache: %s", g_cacheHit ? L"HIT (used directly)"
+    FileLog(L"First-frame cache: %s", g_cacheHit ? L"HIT (used directly)"
                                                    : L"none yet");
     if (g_bootStill) {
         if (LoadLast()) {
             g_cacheHit = true;
             g_needSave = false;
-            Wh_Log(L"Boot: showing last frame, decoder not started");
+            FileLog(L"Boot: showing last frame, decoder not started");
         } else {
             g_bootStill = false;
-            Wh_Log(L"Boot: no saved last frame, playing normally");
+            FileLog(L"Boot: no saved last frame, playing normally");
         }
     }
 
@@ -1623,13 +1621,13 @@ BOOL Wh_ModInit() {
     if (g_audioWanted && g_decThread && !g_paused && g_speed == 100)
         g_audioThread = CreateThread(nullptr, 0, AudioThread, nullptr, 0, nullptr);
     else if (g_audioWanted)
-        Wh_Log(L"Audio not started (needs 100%% speed, no pause / boot still frame)");
+        FileLog(L"Audio not started (needs 100%% speed, no pause / boot still frame)");
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"=== MOD UNINIT ===");
+    FileLog(L"=== MOD UNINIT ===");
     // 1) Ask the UI thread to restore the original images and release the XAML objects
     //    (if the fail-safe already ran, g_tornDown is true and this loop is skipped)
     g_teardown = true;
@@ -1642,7 +1640,7 @@ void Wh_ModUninit() {
     g_stop = true;
     if (g_thread) {
         if (WaitForSingleObject(g_thread, 3000) != WAIT_OBJECT_0) {
-            Wh_Log(L"Worker did not stop in time");
+            FileLog(L"Worker did not stop in time");
             PinModule();
         }
         CloseHandle(g_thread);
@@ -1650,7 +1648,7 @@ void Wh_ModUninit() {
     }
     if (g_audioThread) {
         if (WaitForSingleObject(g_audioThread, 5000) != WAIT_OBJECT_0) {
-            Wh_Log(L"Audio thread did not stop in time");
+            FileLog(L"Audio thread did not stop in time");
             PinModule();
         }
         CloseHandle(g_audioThread);
@@ -1658,7 +1656,7 @@ void Wh_ModUninit() {
     }
     if (g_decThread) {
         if (WaitForSingleObject(g_decThread, 10000) != WAIT_OBJECT_0) {
-            Wh_Log(L"Decoder did not stop in time");
+            FileLog(L"Decoder did not stop in time");
             PinModule();
         }
         CloseHandle(g_decThread);
