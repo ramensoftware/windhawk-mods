@@ -86,7 +86,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 
 ## Settings
 
-Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics links.
+Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics links, plus **Reset the bar's settings**, which puts the window's options back to their defaults if the bar ever doesn't show up.
 
 ## What changes Windows settings
 
@@ -162,6 +162,11 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
 - genericMenus: true
   $name: Ready-made menus (by shortcuts) for apps without a menu bar
   $name:pt-BR: Menus genéricos (por atalhos) para apps sem barra de menus
+- resetBarSettings: false
+  $name: Reset the bar's settings
+  $name:pt-BR: Restaurar os ajustes da barra
+  $description: Turn on and save to put every option of the bar's own "Menu Bar Settings…" window back to its default, for example if the bar doesn't show up. It happens once each time you turn this on; you can turn it off again afterwards.
+  $description:pt-BR: Ligue e salve para voltar ao padrão todas as opções da janela "Ajustes da Barra de Menus…" da própria barra, por exemplo se a barra não aparecer. Acontece uma vez a cada vez que você liga; depois pode desligar.
 - checkAppUpdates: false
   $name: Also count app updates with winget (uses the network)
   $name:pt-BR: Contar também as atualizações de apps pelo winget (usa a rede)
@@ -700,6 +705,19 @@ static float MarqueeOffset(float textW, float gap, float s, ULONGLONG start) {
 
 static void LoadSettings() {
     FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima
+    // "Restaurar os ajustes da barra" (no Windhawk): ao ser ligado, apaga uma vez
+    // os valores da janela de ajustes; volta a valer ao ser desligado e religado.
+    {
+        bool reset = WhInt(L"resetBarSettings") != 0;
+        int done = Wh_GetIntValue(L"resetDone", 0);
+        if (reset && !done) {
+            for (const auto& d : kUiDefaults) OvrSetStr(d.key, L"");
+            Wh_SetIntValue(L"resetDone", 1);
+            Wh_Log(L"Ajustes da barra restaurados ao padrão");
+        } else if (!reset && done) {
+            Wh_SetIntValue(L"resetDone", 0);
+        }
+    }
     LoadGlassPrefs();
     Settings& s = g_settings;
     s.height = OvrInt(L"height");
@@ -2463,14 +2481,12 @@ static int CountWindowsUpdates() {
         if (cb && SUCCEEDED(se->BeginSearch(q, cb, state, &job)) && job) {
             HANDLE hs[2] = {g_updStop, ev};
             bool aborted = false;
-            for (;;) {
-                DWORD r = WaitForMultipleObjects(2, hs, FALSE, 500);
-                VARIANT_BOOL done = VARIANT_FALSE;
-                if (r == WAIT_OBJECT_0 + 1 || (SUCCEEDED(job->get_IsCompleted(&done)) && done)) break;
-                if (r == WAIT_OBJECT_0 && !aborted) {
-                    job->RequestAbort();
-                    aborted = true;
-                }
+            // Espera o aviso de fim (ev). Com o pedido de parada, interrompe a
+            // busca e espera só o aviso: assim o retorno já rodou antes da limpeza.
+            if (WaitForMultipleObjects(2, hs, FALSE, INFINITE) == WAIT_OBJECT_0) {
+                job->RequestAbort();
+                aborted = true;
+                WaitForSingleObject(ev, INFINITE);
             }
             if (SUCCEEDED(se->EndSearch(job, &res)) && res && !aborted && SUCCEEDED(res->get_Updates(&col)) && col &&
                 SUCCEEDED(col->get_Count(&c)))
@@ -4186,12 +4202,21 @@ static int WlanRadio(int set) {
 }
 
 #if FTB_WINRT
+// Cancela e espera a operação sair de "em andamento": wait_for deixou um
+// tratador (código do mod) registrado nela, e ele precisa rodar antes de a DLL
+// poder sair. O cancelamento costuma terminar na hora. Lê só o estado, sem
+// registrar outro tratador.
+template <typename Op>
+static void WinrtCancelWait(Op const& op) {
+    op.Cancel();
+    while (op.Status() == winrt::Windows::Foundation::AsyncStatus::Started) Sleep(20);
+}
 // Espera uma operação assíncrona por no máximo `ms`; se passar, cancela e lança.
 // Assim a thread da Central sempre termina, mesmo com um app que não responde.
 template <typename Op>
 static auto CcAwait(Op const& op, DWORD ms = 3000) {
     if (op.wait_for(std::chrono::milliseconds(ms)) == winrt::Windows::Foundation::AsyncStatus::Started) {
-        op.Cancel();
+        WinrtCancelWait(op);
         throw winrt::hresult_canceled();
     }
     return op.GetResults();
@@ -16882,14 +16907,11 @@ static bool IsVideoFile(const std::wstring& n) {
     return false;
 }
 
-// A gravação terminou quando ninguém mais escreve no arquivo.
-static bool FileFinished(const std::wstring& path) {
-    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    LARGE_INTEGER size{};
-    GetFileSizeEx(f, &size);
-    CloseHandle(f);
-    return size.QuadPart > 0;
+// Tamanho do arquivo sem abri-lo (não atrapalha quem está gravando); -1 se sumiu.
+static LONGLONG FileSizeOf(const std::wstring& path) {
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa)) return -1;
+    return ((LONGLONG)fa.nFileSizeHigh << 32) | fa.nFileSizeLow;
 }
 
 // Observa uma pasta conhecida. 0 = Downloads (temporário -> nome final),
@@ -16912,7 +16934,15 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
     std::wstring lastDone;
     ULONGLONG lastDoneTick = 0;
     bool oldWasTemp = false;
-    std::vector<std::pair<std::wstring, ULONGLONG>> recPending;  // gravação em andamento e desde quando
+    // Gravação em andamento: caminho, desde quando, último tamanho e quantos
+    // segundos seguidos ele ficou igual (pronta depois de 4).
+    struct RecPending {
+        std::wstring path;
+        ULONGLONG since;
+        LONGLONG size = -2;
+        int stable = 0;
+    };
+    std::vector<RecPending> recPending;
     for (;;) {
         OVERLAPPED ov{};
         ov.hEvent = ev;
@@ -16927,11 +16957,17 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
             // A cada segundo: a gravação que ficou pronta ganha o aviso.
             ULONGLONG now = GetTickCount64();
             for (size_t i = 0; i < recPending.size();) {
-                if (FileFinished(recPending[i].first)) {
-                    auto* msg = new std::wstring(recPending[i].first);
+                RecPending& p = recPending[i];
+                LONGLONG sz = FileSizeOf(p.path);
+                p.stable = sz > 0 && sz == p.size ? p.stable + 1 : 0;
+                p.size = sz;
+                if (sz < 0) {
+                    recPending.erase(recPending.begin() + i);  // apagada ou renomeada
+                } else if (p.stable >= 4) {
+                    auto* msg = new std::wstring(p.path);
                     if (!g_worker || !PostMessageW(g_worker, WM_APP_REC, 0, (LPARAM)msg)) delete msg;
                     recPending.erase(recPending.begin() + i);
-                } else if (now - recPending[i].second > 3 * 60 * 60 * 1000ULL) {
+                } else if (now - p.since > 3 * 60 * 60 * 1000ULL) {
                     recPending.erase(recPending.begin() + i);  // desiste depois de 3 horas
                 } else {
                     i++;
@@ -16955,7 +16991,7 @@ static DWORD WINAPI DlThreadProc(LPVOID param) {
                     _wcsnicmp(name.c_str(), L"Screen Recordings\\", 18) == 0 && IsVideoFile(name)) {
                     std::wstring full = dir + L"\\" + name;
                     bool known = false;
-                    for (auto& p : recPending) known |= p.first == full;
+                    for (auto& p : recPending) known |= p.path == full;
                     if (!known && recPending.size() < 8) recPending.push_back({full, GetTickCount64()});
                 }
             } else if (kind == 1) {
@@ -17002,10 +17038,12 @@ static void StartDlWatcher() {
 }
 
 static void StopDlWatcher() {
-    if (!g_dlThread) return;
+    if (!g_dlStop) return;
     SetEvent(g_dlStop);
-    WaitForSingleObject(g_dlThread, INFINITE);
-    CloseHandle(g_dlThread);
+    if (g_dlThread) {
+        WaitForSingleObject(g_dlThread, INFINITE);
+        CloseHandle(g_dlThread);
+    }
     if (g_recThread) {
         WaitForSingleObject(g_recThread, INFINITE);
         CloseHandle(g_recThread);
@@ -17474,8 +17512,9 @@ static DWORD WINAPI NotifThreadProc(LPVOID) {
         UserNotificationListenerAccessStatus access = listener.GetAccessStatus();
         if (access != UserNotificationListenerAccessStatus::Allowed) {
             auto op = listener.RequestAccessAsync();
-            if (op.wait_for(std::chrono::seconds(6)) == AsyncStatus::Completed) access = op.GetResults();
-            else op.Cancel();
+            AsyncStatus st = op.wait_for(std::chrono::seconds(6));
+            if (st == AsyncStatus::Completed) access = op.GetResults();
+            else if (st == AsyncStatus::Started) WinrtCancelWait(op);
         }
         if (access != UserNotificationListenerAccessStatus::Allowed) {
             fail = 1;
@@ -17487,8 +17526,9 @@ static DWORD WINAPI NotifThreadProc(LPVOID) {
             bool first = true;
             while (WaitForSingleObject(g_notifStop, first ? 0 : 1500) == WAIT_TIMEOUT) {
                 auto op = listener.GetNotificationsAsync(NotificationKinds::Toast);
-                if (op.wait_for(std::chrono::seconds(4)) != AsyncStatus::Completed) {
-                    op.Cancel();
+                AsyncStatus st = op.wait_for(std::chrono::seconds(4));
+                if (st != AsyncStatus::Completed) {
+                    if (st == AsyncStatus::Started) WinrtCancelWait(op);
                     continue;
                 }
                 std::vector<uint32_t> now;
@@ -21045,7 +21085,21 @@ static DWORD WINAPI BarThread(LPVOID) {
     if (g_owner) RemoveClipboardFormatListener(g_owner);
     SafeRelease(g_wic);
     DestroyBars();
-    if (g_worker) { DestroyWindow(g_worker); g_worker = nullptr; }
+    if (g_worker) {
+        // Resultados que chegaram depois do fim do laço: libera sem processar.
+        MSG m;
+        while (PeekMessageW(&m, g_worker, WM_APP, WM_APP + 15, PM_REMOVE)) {
+            switch (m.message) {
+                case WM_APP_UIA: UiaJobRelease((UiaJob*)m.lParam); break;
+                case WM_APP_WEATHER: delete (WxJob*)m.lParam; break;
+                case WM_APP_ICS: delete (IcsJob*)m.lParam; break;
+                case WM_APP_NOTIF: delete (NotifMsg*)m.lParam; break;
+                case WM_APP_SHOT: case WM_APP_DLDONE: case WM_APP_REC: delete (std::wstring*)m.lParam; break;
+            }
+        }
+        DestroyWindow(g_worker);
+        g_worker = nullptr;
+    }
     if (g_owner) { DestroyWindow(g_owner); g_owner = nullptr; }
     for (PCWSTR cls : {kWorkerClass, kOsdClass, kFlyClass, kNpClass, kNtfClass, kBsClass, kWxClass, kShadowClass, kTipClass,
                        kIslClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kOwnerClass})
