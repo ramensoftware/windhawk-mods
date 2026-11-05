@@ -17111,6 +17111,31 @@ static bool ClipIsCut(bool files) {
     return cut;
 }
 
+// A Ferramenta de Captura põe a captura ou a gravação na área de transferência
+// sozinha. Isso não é um "Copiado" do usuário: vira o aviso da captura.
+static bool ClipFromSnipping() {
+    HWND owner = GetClipboardOwner();
+    DWORD pid = 0;
+    if (!owner || !GetWindowThreadProcessId(owner, &pid) || !pid) return false;
+    std::wstring p = GetProcessPath(pid);
+    size_t k = p.find_last_of(L'\\');
+    std::wstring exe = k == std::wstring::npos ? p : p.substr(k + 1);
+    return _wcsicmp(exe.c_str(), L"SnippingTool.exe") == 0 || _wcsicmp(exe.c_str(), L"ScreenClippingHost.exe") == 0;
+}
+// Primeiro arquivo da lista copiada (só o caminho, nunca o conteúdo).
+static std::wstring ClipFirstFile() {
+    std::wstring out;
+    if (!ClipOpen()) return out;
+    if (HANDLE h = GetClipboardData(CF_HDROP)) {
+        wchar_t buf[MAX_PATH * 2] = L"";
+        if (DragQueryFileW((HDROP)h, 0, buf, ARRAYSIZE(buf))) out = buf;
+    }
+    CloseClipboard();
+    return out;
+}
+static bool IsVideoFile(const std::wstring& n);
+static void RecShow(const std::wstring& path);
+
 // Só avisa o comando ("Copiado" ou "Recortado"); o conteúdo nunca é lido.
 static void ClipOnUpdate() {
     if (!g_settings.clipPills && !g_settings.shotPills) return;
@@ -17119,6 +17144,16 @@ static void ClipOnUpdate() {
     g_clipLastTick = now;
     if (ClipIsPrivate()) return;
     bool files = IsClipboardFormatAvailable(CF_HDROP) != FALSE;
+    if (ClipFromSnipping()) {
+        // Gravação: o aviso dela (abre o vídeo). Imagem: o aviso de captura vem
+        // da pasta Capturas de Tela; aqui só não mostra "Copiado".
+        if (files) {
+            std::wstring f = ClipFirstFile();
+            if (IsVideoFile(f)) RecShow(f);
+        }
+        if (IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_BITMAP)) g_shotTick = now;
+        return;
+    }
     if (files || IsClipboardFormatAvailable(CF_UNICODETEXT)) {
         if (!g_settings.clipPills) return;
         if (ClipIsCut(files)) IslandShow(0xE8C6, 0x0A84FF, L"Recortado");
@@ -17158,9 +17193,22 @@ static void CapsPoll() {
     last = cur;
 }
 
-static void RecOnSaved(std::wstring* path) {
+// A mesma gravação pode chegar duas vezes (área de transferência e pasta):
+// avisa uma vez só, pelo nome do arquivo.
+static void RecShow(const std::wstring& path) {
+    static std::wstring lastName;
+    static ULONGLONG lastTick = 0;
+    size_t k = path.find_last_of(L'\\');
+    std::wstring name = k == std::wstring::npos ? path : path.substr(k + 1);
+    ULONGLONG now = GetTickCount64();
+    if (_wcsicmp(name.c_str(), lastName.c_str()) == 0 && now - lastTick < 10 * 60 * 1000) return;
+    lastName = name;
+    lastTick = now;
     if (g_settings.shotPills)
-        IslandShow(0xE714, 0xFF453A, L"Gravação de tela", L"Salva · clique para abrir e editar", *path, false);
+        IslandShow(0xE714, 0xFF453A, L"Gravação de tela", L"Salva · clique para abrir e editar", path, false);
+}
+static void RecOnSaved(std::wstring* path) {
+    RecShow(*path);
     delete path;
 }
 
