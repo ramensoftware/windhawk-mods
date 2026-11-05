@@ -52,21 +52,21 @@ Hold **`Ctrl` + Right-Click** (or just **Right-Click**) and drag your mouse to s
 
 ---
 
-## 🛡️ Recommended Settings (Best Balance of Control & Safety)
+## 🛡️ Recommended Setup for Cruising & Out-of-Bounds (Best Balance of Control & Safety)
 
-For the most seamless, predictable, and conflict-free experience across all Windows applications, use this configuration:
+While **Continuous Cruising** and **Out-of-Bounds Dragging** are disabled by default to keep initial scrolling simple and predictable, enabling them together unlocks the full power of the mod. If you turn them on, here is the recommended configuration:
 
 * **Trigger Key Combination:** `Ctrl + Right-Click (Supports Cruising)` — Preserves native right-click dragging in File Explorer, browsers, and creative tools while unlocking hands-free cruising.
-* **Allow Out-of-Bounds Dragging:** `Enabled` (`true`) — Lets you drag and cruise comfortably without stopping when your cursor crosses window borders or reaches the edge of your monitor.
-* **Continuous Cruising (Hands-Free):** `Enabled` (`true`) — Glide through long articles, logs, and source code effortlessly.
-* **Cruising Anchor Key:** `Hold Right-Click (Release Ctrl)` — **Highly Recommended.**
+* **Allow Out-of-Bounds Dragging:** `Enabled` — Lets you drag and cruise comfortably without stopping when your cursor crosses window borders or reaches the edge of your monitor.
+* **Continuous Cruising (Hands-Free):** `Enabled` — Glide through long articles, logs, and source code effortlessly.
+* **Cruising Anchor Key:** `Hold Right-Click (Release Ctrl)` — **Recommended.**
 * **Dynamic Velocity Mode:** `Standard (Smooth & Controlled)` — Gives you 1:1 precision on slow movements with a gentle boost on quick flicks.
-* **Ultra-Smooth Scrolling:** `Enabled` (`true`) — Delivers fluid, trackpad-grade scrolling increments (`15` delta chunks).
+* **Ultra-Smooth Scrolling:** `Enabled` — Delivers fluid, trackpad-style scrolling increments.
 
 > 💡 **Why choose "Hold Right-Click" as your Cruising Anchor?**
-> When you keep the Right Mouse Button held down to cruise (releasing `Ctrl`), Windows maintains strict kernel-level mouse capture (`SetCapture`) on the scrolling window. This gives you two major advantages over the `Hold Ctrl` anchor when Out-of-Bounds dragging is enabled:
-> 1. **100% Leak-Proof Safety:** Stopping the glide (by releasing Right-Click or clicking another mouse button) will **never** accidentally click, focus, or trigger context menus on background windows—even if your cursor is hovering over Administrator-elevated apps (like Task Manager), modern UWP/system surfaces (Start Menu, Settings, Calculator), or excluded processes (`conhost.exe`).
-> 2. **Global Custom Cursor:** Because a physical mouse button remains held, Windows keeps the custom high-contrast cruising cursor visible across the entire screen instead of reverting to the standard arrow outside the window.
+> When you keep the Right Mouse Button held down to cruise (releasing `Ctrl`), the scrolling window retains mouse capture (`SetCapture`). Compared to the `Hold Ctrl` anchor during out-of-bounds dragging, this gives you two practical benefits:
+> 1. **Safer Stop Clicks:** Because the scrolling window keeps mouse capture while Right-Click is held, the button release and other clicks go to the scrolling window, so they don't reach the windows behind it—even when your cursor is over Administrator-elevated apps (like Task Manager), modern UWP/system surfaces (Start Menu, Settings, Calculator), or excluded processes (`conhost.exe`).
+> 2. **Consistent Custom Cursor:** Because a physical mouse button remains held, Windows keeps the custom high-contrast cruising cursor visible across the screen instead of reverting to the standard arrow outside the window.
 
 ---
 
@@ -256,11 +256,11 @@ struct SettingsManager {
         enable_cruising.store(Wh_GetIntSetting(L"enable_cruising") != 0,
                               std::memory_order_relaxed);
 
-        // Parse cruising anchor mode
+        // Parse cruising anchor mode ("RMB" is the default)
         int parsedAnchor = 1;
         auto anchorStr = WindhawkUtils::StringSetting::make(L"cruise_anchor");
-        if (wcscmp(anchorStr.get(), L"RMB") == 0) {
-            parsedAnchor = 1;
+        if (wcscmp(anchorStr.get(), L"Ctrl") == 0) {
+            parsedAnchor = 0;
         } else if (wcscmp(anchorStr.get(), L"Either") == 0) {
             parsedAnchor = 2;
         }
