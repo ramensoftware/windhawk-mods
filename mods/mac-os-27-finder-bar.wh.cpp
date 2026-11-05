@@ -50,7 +50,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
 - **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave
 - **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), privacy dots (orange/green while the microphone or camera is in use), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
-- **Clock**: the calendar and your agenda from your own .ics files or links; .ics files can be imported right from the settings window. Date and time formats are configurable
+- **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
 ## Control Center
@@ -86,7 +86,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 
 ## Settings
 
-Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics links, plus **Reset the bar's settings**, which puts the window's options back to their defaults if the bar ever doesn't show up.
+Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics file paths, plus **Reset the bar's settings**, which puts the window's options back to their defaults if the bar ever doesn't show up.
 
 ## What changes Windows settings
 
@@ -102,10 +102,9 @@ Nothing is changed unless you click the matching tile or item.
 
 ## Network use
 
-The mod only goes online for features you set up yourself:
+The mod only goes online for features you set up yourself (the calendar reads local .ics files only, never the network):
 
 - **Weather**, once you pick a place: the place search uses OpenStreetMap Nominatim or Open-Meteo, and the forecast comes from the service you choose (Open-Meteo, MET Norway or wttr.in) with the place's coordinates rounded to about 1 km. Turning the weather icon off stops all requests.
-- **.ics links** you add in Windhawk's settings, downloaded when you open the calendar, at most every 15 minutes. Local .ics files never use the network.
 - **App update count** (off by default, in Windhawk's settings): runs `winget upgrade`, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.
 
 ## Privacy
@@ -214,10 +213,10 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
   - single: Clique simples
   - double: Clique duplo (para apps antigos que só abrem assim)
 - icsFiles: [""]
-  $name: Calendars - .ics files (or .ics links)
-  $name:pt-BR: Calendários - arquivos .ics (ou links .ics)
-  $description: You can also import .ics files from Menu Bar Settings → Calendar. Add as many as you like, with the list's add item button or several in the same field separated by semicolons (;). Each one can be the path of an .ics file (e.g. C:\\Users\\you\\calendar.ics) or the .ics link of a calendar (e.g. the "secret address in iCal format" from Google Calendar). Each calendar gets a color. The agenda shows when you click the clock.
-  $description:pt-BR: Também dá para importar arquivos .ics em Ajustes da Barra de Menus → Calendário. Adicione quantos quiser, pelo botão de adicionar item da lista ou colocando vários no mesmo campo separados por ponto e vírgula (;). Cada um pode ser o caminho de um arquivo .ics (ex. C:\\Users\\voce\\agenda.ics) ou o link .ics de uma agenda (ex. o "endereço secreto no formato iCal" do Google Agenda). Cada calendário ganha uma cor. A agenda aparece ao clicar no relógio.
+  $name: Calendars - .ics files
+  $name:pt-BR: Calendários - arquivos .ics
+  $description: You can also import .ics files from Menu Bar Settings → Calendar. Add as many as you like, with the list's add item button or several in the same field separated by semicolons (;). Each one is the path of an .ics file on this PC (e.g. C:\\Users\\you\\calendar.ics); the mod never downloads calendars. Changes to the file show up in the agenda. Each calendar gets a color. The agenda shows when you click the clock.
+  $description:pt-BR: Também dá para importar arquivos .ics em Ajustes da Barra de Menus → Calendário. Adicione quantos quiser, pelo botão de adicionar item da lista ou colocando vários no mesmo campo separados por ponto e vírgula (;). Cada um é o caminho de um arquivo .ics neste PC (ex. C:\\Users\\voce\\agenda.ics); o mod nunca baixa calendários. Mudanças no arquivo aparecem na agenda. Cada calendário ganha uma cor. A agenda aparece ao clicar no relógio.
 */
 // ==/WindhawkModSettings==
 
@@ -10994,7 +10993,7 @@ static bool AnyOtherPanelOpen(HWND closing) {
 // sliders. Abre pelo logo da barra ("Ajustes da Barra de Menus...").
 // Esta janela é o único lugar desses ajustes (eles não estão na página do mod
 // no Windhawk): guardados pelo mod e aplicados na hora. Na página do Windhawk
-// ficam só os que a janela não tem (fonte, tintas, nome do Finder, links .ics...).
+// ficam só os que a janela não tem (fonte, tintas, nome do Finder, arquivos .ics...).
 // ===========================================================================
 
 static const wchar_t kBsClass[] = L"WhFinderTopBarSettings";
@@ -11117,7 +11116,6 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Calendário", 0xE787, 0xFF453A, L"A agenda que aparece ao clicar no relógio"},
     {BR_ACTION, BV_ICSADD, L"Importar arquivo .ics", 0, 0, L"O arquivo fica onde está; mudanças nele aparecem na agenda"},
     {BR_ACTION, BV_ICSCLEAR, L"Remover os calendários importados", 0, 0},
-    {BR_NOTE, BV_NONE, L"Links .ics (como o endereço secreto do Google Agenda) ficam nas configurações do mod no Windhawk.", 0, 0},
     {BR_HEADER, BV_NONE, L"Esta janela", 0xE713, 0x8E8E93, L"O vidro desta janela de Ajustes"},
     {BR_CHOICE, BV_BSSTYLE, L"Vidro", 0, 0},
     {BR_SLIDER, BV_BSTRANSP, L"Transparência", 0, 0},
@@ -14771,12 +14769,11 @@ static std::wstring WxBarText() { return g_wx.data.ok && g_wx.showTemp ? WxTemp(
 //
 // Clicar no relógio abre um calendário de vidro: mês com setas, hoje em
 // destaque, pontinhos nos dias com eventos e, embaixo, a agenda do dia
-// escolhido. Os eventos vêm de um arquivo .ics (ou de um link .ics, como o
-// endereço secreto do Google Agenda) indicado nas configurações do mod.
+// escolhido. Os eventos vêm de arquivos .ics deste PC (importados nos ajustes
+// ou indicados nas configurações do mod). Nada é baixado da internet.
 // ===========================================================================
 
 static const wchar_t kCalClass[] = L"WhFinderTopBarCalendar";
-#define WM_APP_ICS (WM_APP + 9)
 
 // Dias desde 1970-01-01 (calendário civil).
 static int64_t CalDays(int y, int m, int d) {
@@ -14818,8 +14815,7 @@ struct CalEvent {
 
 // Um calendário (.ics) configurado.
 struct CalSrc {
-    std::wstring src;  // caminho ou link
-    bool url = false;
+    std::wstring src;  // caminho do arquivo
     std::vector<CalEvent> events;
     FILETIME mtime{};
     ULONGLONG fetched = 0;
@@ -14831,7 +14827,7 @@ struct CalState {
     std::vector<CalSrc> srcs;
     UINT gen = 0;  // muda a cada nova junção dos eventos
     std::vector<CalEvent> events;  // todos os calendários juntos
-    std::wstring source;  // arquivo ou link carregado
+    std::wstring source;  // arquivos carregados
     FILETIME mtime{};
     ULONGLONG fetched = 0;
     bool loading = false;
@@ -15097,7 +15093,8 @@ static std::vector<std::wstring> CalSources() {
             start = end + 1;
             while (!src.empty() && (src.front() == L'"' || iswspace(src.front()))) src.erase(0, 1);
             while (!src.empty() && (src.back() == L'"' || iswspace(src.back()))) src.pop_back();
-            if (_wcsnicmp(src.c_str(), L"webcal", 6) == 0) src = L"https" + src.substr(6);
+            // Só arquivos locais: links (http, https, webcal) são ignorados.
+            if (src.find(L"://") != std::wstring::npos) continue;
             if (!src.empty() && std::find(v.begin(), v.end(), src) == v.end()) v.push_back(src);
         }
     }
@@ -15144,20 +15141,7 @@ static void CalMerge() {
     g_cal.gen++;
 }
 
-struct IcsJob {
-    std::wstring url;
-    std::string body;
-    bool ok = false;
-};
-
-static DWORD WINAPI IcsThread(LPVOID p) {
-    IcsJob* j = (IcsJob*)p;
-    j->ok = HttpGet(j->url, j->body);
-    if (!g_worker || !PostMessageW(g_worker, WM_APP_ICS, 0, (LPARAM)j)) delete j;
-    return 0;
-}
-
-// Carrega (ou recarrega) cada calendário: arquivos quando mudam, links a cada 15 minutos.
+// Carrega (ou recarrega) cada calendário quando o arquivo muda.
 static void CalEnsureLoaded() {
     std::vector<std::wstring> list = CalSources();
     bool changed = list.size() != g_cal.srcs.size();
@@ -15170,7 +15154,6 @@ static void CalEnsureLoaded() {
         } else {
             CalSrc c;
             c.src = list[i];
-            c.url = _wcsnicmp(c.src.c_str(), L"http", 4) == 0;
             next.push_back(std::move(c));
             changed = true;
         }
@@ -15178,15 +15161,6 @@ static void CalEnsureLoaded() {
     g_cal.srcs = std::move(next);
     ULONGLONG now = GetTickCount64();
     for (CalSrc& c : g_cal.srcs) {
-        if (c.url) {
-            if (c.loading || (c.fetched && now - c.fetched < 15 * 60 * 1000)) continue;
-            c.loading = true;
-            changed = true;
-            IcsJob* j = new IcsJob();
-            j->url = c.src;
-            if (!StartJobThread(IcsThread, j)) { delete j; c.loading = false; c.fetched = now; c.error = TF(L"Não foi possível baixar %s", {CalShortName(c.src)}); }
-            continue;
-        }
         WIN32_FILE_ATTRIBUTE_DATA fa{};
         if (!GetFileAttributesExW(c.src.c_str(), GetFileExInfoStandard, &fa)) {
             std::wstring e = TF(L"Arquivo não encontrado: %s", {CalShortName(c.src)});
@@ -15466,8 +15440,7 @@ static void CalRender() {
     rt->CreateLayer(&clipLayer);
     if (clipLayer) rt->PushLayer(D2D1::LayerParameters(listR), clipLayer);
     if (g_cal.source.empty()) {
-        text(L"Para ver a agenda, coloque o caminho de um arquivo .ics (ou um link .ics) em "
-             L"\"Calendários - arquivos .ics\" nas configurações do mod no Windhawk (pode adicionar vários).",
+        text(L"Para ver a agenda, importe um arquivo .ics em Ajustes da Barra de Menus → Calendário (pode importar vários).",
              g_calw.fSmall, D2D1::RectF(P.left + 18 * s, ly, P.right - 18 * s, ly + 60 * s), dim);
     } else if (!g_cal.error.empty()) {
         text(g_cal.error, g_calw.fSmall, D2D1::RectF(P.left + 18 * s, ly, P.right - 18 * s, ly + 22 * s), dim);
@@ -15693,25 +15666,6 @@ static void CalOpen(Bar* b, int idx) {
     b->open = idx;
     InvalidateRect(b->hwnd, nullptr, FALSE);
     if (g_settings.openAnim != 0) SetTimer(g_calw.hwnd, 1, 10, nullptr);
-}
-
-static void CalOnIcs(IcsJob* j) {
-    for (CalSrc& c : g_cal.srcs) {
-        if (c.src != j->url) continue;
-        c.loading = false;
-        c.fetched = GetTickCount64();
-        if (j->ok) {
-            c.events.clear();
-            c.error.clear();
-            IcsParse(j->body, c.events);
-            c.loaded = true;
-        } else {
-            c.error = TF(L"Não foi possível baixar %s", {CalShortName(c.src)});
-        }
-    }
-    CalMerge();
-    delete j;
-    if (g_calw.hwnd) CalRender();
 }
 
 // ===========================================================================
@@ -20860,9 +20814,6 @@ static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case WM_APP_NOTIF:
             NotifOnMsg((NotifMsg*)lp);
             return 0;
-        case WM_APP_ICS:
-            CalOnIcs((IcsJob*)lp);
-            return 0;
         case WM_APP_WEATHER:
             WxOnResult((WxJob*)lp);
             return 0;
@@ -21140,7 +21091,6 @@ static DWORD WINAPI BarThread(LPVOID) {
             switch (m.message) {
                 case WM_APP_UIA: UiaJobRelease((UiaJob*)m.lParam); break;
                 case WM_APP_WEATHER: delete (WxJob*)m.lParam; break;
-                case WM_APP_ICS: delete (IcsJob*)m.lParam; break;
                 case WM_APP_NOTIF: delete (NotifMsg*)m.lParam; break;
                 case WM_APP_SHOT: case WM_APP_DLDONE: case WM_APP_REC: delete (std::wstring*)m.lParam; break;
             }
@@ -21760,7 +21710,7 @@ const UiTr kUiTr[] = {
     {L"Mostrar todos os ícones", L"Show All Icons", L"Mostrar todos los iconos", L"Afficher toutes les icônes", L"Alle Symbole anzeigen", L"Mostra tutte le icone", L"显示所有图标"},
     {L"Notificações (%s novas)", L"Notifications (%s new)", L"Notificaciones (%s nuevas)", L"Notifications (%s nouvelles)", L"Mitteilungen (%s neu)", L"Notifiche (%s nuove)", L"通知 (%s 条新通知)"},
     {L"Tempo em %s", L"Weather in %s", L"El tiempo en %s", L"Météo à %s", L"Wetter in %s", L"Meteo a %s", L"%s 天气"},
-    {L"Para ver a agenda, coloque o caminho de um arquivo .ics (ou um link .ics) em \"Calendários - arquivos .ics\" nas configurações do mod no Windhawk (pode adicionar vários).", L"To see your agenda, put the path of an .ics file (or an .ics link) in \"Calendars - .ics files\" in the mod's settings in Windhawk (you can add several).", L"Para ver la agenda, pon la ruta de un archivo .ics (o un enlace .ics) en \"Calendars - .ics files\" en la configuración del mod en Windhawk (puedes añadir varios).", L"Pour voir l’agenda, indiquez le chemin d’un fichier .ics (ou un lien .ics) dans « Calendars - .ics files » dans les paramètres du mod dans Windhawk (vous pouvez en ajouter plusieurs).", L"Um Termine zu sehen, trage den Pfad einer .ics-Datei (oder einen .ics-Link) unter „Calendars - .ics files“ in den Mod-Einstellungen in Windhawk ein (mehrere möglich).", L"Per vedere l’agenda, inserisci il percorso di un file .ics (o un link .ics) in \"Calendars - .ics files\" nelle impostazioni della mod in Windhawk (puoi aggiungerne più di uno).", L"要查看日程, 请在 Windhawk 中此模组的设置里的 \"Calendars - .ics files\" 填入 .ics 文件路径 (或 .ics 链接) (可添加多个)。"},
+    {L"Para ver a agenda, importe um arquivo .ics em Ajustes da Barra de Menus → Calendário (pode importar vários).", L"To see your agenda, import an .ics file in Menu Bar Settings → Calendar (you can import several).", L"Para ver la agenda, importa un archivo .ics en Ajustes de la barra de menús → Calendario (puedes importar varios).", L"Pour voir l’agenda, importez un fichier .ics dans Réglages de la barre des menus → Calendrier (vous pouvez en importer plusieurs).", L"Um Termine zu sehen, importiere eine .ics-Datei unter Menüleisteneinstellungen → Kalender (mehrere möglich).", L"Per vedere l’agenda, importa un file .ics in Impostazioni barra dei menu → Calendario (puoi importarne più di uno).", L"要查看日程, 请在“菜单栏设置” → “日历”中导入 .ics 文件 (可导入多个)。"},
     {L"A agenda que aparece ao clicar no relógio", L"The agenda that shows when you click the clock", L"La agenda que aparece al hacer clic en el reloj", L"L’agenda qui s’affiche en cliquant sur l’horloge", L"Die Termine, die beim Klick auf die Uhr erscheinen", L"L’agenda che compare facendo clic sull’orologio", L"点击时钟时显示的日程"},
     {L"O arquivo fica onde está; mudanças nele aparecem na agenda", L"The file stays where it is; changes to it show up in the agenda", L"El archivo se queda donde está; sus cambios aparecen en la agenda", L"Le fichier reste à sa place ; ses modifications apparaissent dans l’agenda", L"Die Datei bleibt, wo sie ist; Änderungen erscheinen in den Terminen", L"Il file resta dov’è; le sue modifiche compaiono nell’agenda", L"文件保留在原位置; 其更改会显示在日程中"},
     {L"Importar…", L"Import…", L"Importar…", L"Importer…", L"Importieren…", L"Importa…", L"导入…"},
