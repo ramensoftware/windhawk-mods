@@ -42,7 +42,7 @@ and then try again."* It doesn't say which program is using the drive.
 
 | Before | After |
 | --- | --- |
-| ![Before](https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-before.png) | ![After](https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-after.png) |
+| ![Before](https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-before.png) | ![After](https://raw.githubusercontent.com/EnderDragonEP/asset/e826e35bed4c5f0b2a36bec47168b76a7d263676/windhawk-mods/better-eject-dialog/preview-after.png) |
 
 This mod replaces that message with a dialog that:
 
