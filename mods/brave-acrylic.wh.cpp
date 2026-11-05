@@ -17,7 +17,7 @@
 
 > **Very important — Symbol cache:** Controlled and maintained by **bardelyne**, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. Windhawk downloads the matching file for your installed Brave build and caches it locally. The large symbol files are processed by the workflow; your PC receives only the small compatibility data.
 
-> **Blur missing after a Brave update?** The workflow checks for compatibility every hour. Give it about an hour, then fully exit and reopen Brave so Windhawk can fetch the matching cache. GitHub can delay scheduled runs.
+> **If the mod isn’t working after a Brave update** The workflow checks for compatibility every hour. Give it about an hour, then fully exit and reopen Brave so Windhawk can fetch the matching cache. GitHub can delay scheduled runs.
 
 ![Brave Acrylic](https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png)
 
