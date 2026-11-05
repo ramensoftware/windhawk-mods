@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              round-everything
 // @name            Round Everything
-// @description     Turns the taskbar into a frame around a rounded screen, rounds the monitor corners, and gives every window - maximized included - one corner radius
-// @version         1.0.0
+// @description     Turns the taskbar into an acrylic (or solid) frame around a rounded screen, rounds the monitor corners, and gives every window - maximized included - one corner radius
+// @version         2.0.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
 // @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -lgdiplus -lgdi32 -lshell32 -lshcore -ldwmapi -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lgdiplus -lgdi32 -lshell32 -lshcore -ldwmapi -lole32 -loleaut32 -lruntimeobject -ld3d11
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -18,7 +18,8 @@
 
 Turns the taskbar into a frame around the whole screen. The taskbar keeps its
 rectangular shape, and the other three screen edges get a band of the same
-color, pushed inwards by a configurable offset. The visible "screen" becomes a
+look - acrylic (a live blur of what is behind, tinted) or a solid color -
+pushed inwards by a configurable offset. The visible "screen" becomes a
 rounded rectangle that sits flush against the taskbar, with one configurable
 corner radius.
 
@@ -30,20 +31,30 @@ gets the frame on all four edges.
 
 ## How it works
 
-The mod runs inside the taskbar's `explorer.exe` and creates one layered,
-always-on-top window per monitor covering the area next to the taskbar:
-three bands of the configured offset with the rounded corners. The taskbar
-itself, its background painted in the frame color, is the fourth side. The
-frame shape is drawn with GDI+ (anti-aliased); the inner area is fully
-transparent and lets the mouse through, while the painted frame is solid to
-the mouse, like the taskbar. No explorer function is hooked: the taskbar's
-XAML tree is reached through a few `taskbar.dll` symbol lookups (no XAML
-diagnostics, so it coexists with Taskbar Styler).
+The mod runs inside the taskbar's `explorer.exe` and creates one always-on-top
+window per monitor: the frame shape - three bands of the configured offset
+with the rounded corners - is drawn with GDI+ (anti-aliased); the inner area
+is fully transparent and lets the mouse through, while the painted frame is
+solid to the mouse, like the taskbar. No explorer function is hooked: the
+taskbar's XAML tree is reached through a few `taskbar.dll` symbol lookups (no
+XAML diagnostics, so it coexists with Taskbar Styler).
 
-* **Color** – the frame has one color of your choice, and the taskbar's own
-  background (`Taskbar.TaskbarBackground`) is painted with it at the same
-  opacity, so the taskbar and the frame are one surface. The taskbar's own
-  background is restored when the mod is turned off.
+* **Fill** – *Acrylic* (the default) makes the frame and the taskbar one live
+  acrylic surface: whatever is behind them - wallpaper, live wallpaper,
+  windows - is blurred by DWM in real time (the `HostBackdropBrush` of
+  Windows' own flyouts), optionally saturated, then tinted with the frame
+  color. *Tint opacity* lays the color over the blur; *Luminosity opacity*
+  makes the color's brightness replace the content's while its hues stay
+  (Windows' acrylic uses 85-96 here, which keeps the surface readable over
+  any wallpaper); a fine *noise* grain finishes it. The acrylic frame lies
+  under the taskbar too, whose own background (`Taskbar.TaskbarBackground`)
+  is made transparent, so the four sides are one surface without a seam. It
+  stops one pixel short of the monitor edges (a topmost window covering a
+  whole monitor is a full-screen app to the shell, which would lower the
+  taskbar); that one-pixel ring is the bezel line. *Solid* is the plain
+  frame color at the chosen opacity, with the taskbar's background painted
+  in it at the same opacity. The taskbar's own background is restored when
+  the mod is turned off.
 * Frame and taskbar come and go together. When the mod starts, the frame
   appears in the same instant as the taskbar's new look. When the
   taskbar moves, resizes or rebuilds (changing its position, a taskbar mod
@@ -72,17 +83,29 @@ diagnostics, so it coexists with Taskbar Styler).
   work-area inset* shrinks it further, on all four sides, so a strip of
   wallpaper stays visible between the frame/taskbar and your windows.
 * **Monitor corners** – the four outer corners of each monitor are rounded
-  too, so the whole screen reads as a rounded panel: the sliver outside a
-  quarter circle is painted in the *Monitor corner color* (black by default).
-  The two corners away from the taskbar are part of the frame itself; the
-  two on the taskbar are XAML shapes added inside the taskbar (no extra
-  windows, so nothing to fight over z-order with), click-through, removed
-  when the mod is disabled.
+  too, and a one-pixel black line runs along all four screen edges, so the
+  whole screen reads as a rounded panel with a bezel: the sliver outside a
+  quarter circle, tangent to that line, is painted black. The two corners
+  away from the taskbar (and the line on those edges) are part of the frame
+  itself; the two on the taskbar, and the line along it, are XAML shapes
+  added inside the taskbar (no extra windows, so nothing to fight over
+  z-order with), click-through, removed when the mod is disabled.
+* **Inner shadow** – the frame and the taskbar can cast a soft shadow onto
+  the screen content along all four edges of the rounded screen, following
+  its corners, so the screen reads as recessed behind the frame. Blur, color,
+  opacity and offset are configurable (the offset works like a CSS inset
+  box-shadow: a positive horizontal offset thickens the shadow on the left
+  edge, a positive vertical one on the top edge). The shadow is a
+  click-through layer right next to the frame (behind the solid one, in
+  front of the acrylic one, which must not blur it), never over the
+  taskbar.
 * **Taskbar border line** – the taskbar draws a 1px line along its inner edge
   (`BackgroundStroke`), which shows up as a seam between the taskbar and the
   frame. The mod sets that line's opacity to 0 and restores it when disabled.
-* Offsets and radii are in pixels at 100% scaling and scaled per monitor
-  (configurable).
+* Offsets, radii and the blur are in pixels at 100% scaling and scaled per
+  monitor (configurable).
+* The acrylic fill is rendered by DWM through Windows.UI.Composition; if that
+  can't be set up on a machine, the mod logs why and uses the solid fill.
 
 ## Window corners (dwm.exe)
 
@@ -136,7 +159,7 @@ same license.
 
 // ==WindhawkModSettings==
 /*
-- offset: 8
+- offset: 12
   $name: Inward offset
   $description: How far (in pixels) the frame extends inwards from the three screen edges that don't carry the taskbar. The taskbar edge gets no offset, so the rounded screen sits flush against the taskbar.
 - edgeOffsets: "-1,-1,-1,-1"
@@ -151,18 +174,61 @@ same license.
     $description: Paint the four outer corners of each monitor (over the taskbar as well) so the whole screen looks like a rounded panel.
   - radius: 16
     $name: Monitor corner radius (px)
-  - color: "#000000"
-    $name: Monitor corner color
-    $description: Hex color (#RRGGBB) painted outside the rounded monitor corners.
   $name: Monitor corners
+- innerShadow:
+  - enabled: true
+    $name: Inner shadow
+    $description: A soft shadow cast by the frame and the taskbar onto the screen content, along all four edges of the rounded screen.
+  - blur: 24
+    $name: Blur (px)
+    $description: How far the shadow fades into the screen. 0 turns it off.
+  - opacity: 35
+    $name: Opacity (%)
+  - color: "#000000"
+    $name: Color
+    $description: Hex color (#RRGGBB).
+  - offsetX: 0
+    $name: Horizontal offset (px)
+    $description: Shifts the shadow like a CSS inset box-shadow - a positive value makes it thicker on the left edge and thinner on the right, a negative value the other way round.
+  - offsetY: 0
+    $name: Vertical offset (px)
+    $description: Positive values make the shadow thicker on the top edge and thinner on the bottom; negative values the other way round.
+  $name: Inner shadow
 - scaleWithDpi: true
   $name: Scale sizes with the monitor DPI
-  $description: Treat offsets and radii as values at 100% scaling and scale them for each monitor.
-- customColor: "#585858"
+  $description: Treat offsets, radii and the blur as values at 100% scaling and scale them for each monitor.
+- customColor: "#202020"
   $name: Frame color
-  $description: Hex color (#RRGGBB) of the frame and of the taskbar's background, which is painted with it at the same opacity so the two are one surface.
+  $description: Hex color (#RRGGBB) of the frame - the acrylic's tint, or the solid fill. With the solid fill the taskbar's background is painted with it too, so the two are one surface.
 - opacity: 100
   $name: Opacity (%)
+  $description: Solid fill only - opacity of the frame and of the taskbar's background painted with it.
+- backdrop:
+  - mode: acrylic
+    $name: Fill
+    $description: What the frame (and, with it, the taskbar's background) is filled with.
+    $options:
+    - acrylic: Acrylic - a live blur of whatever is behind the frame and the taskbar, tinted with the frame color
+    - solid: Solid - the frame color at the opacity above
+  - blur: 30
+    $name: Blur (px)
+    $description: How strongly what is behind the frame is blurred (Gaussian standard deviation). Windows' own acrylic uses 30.
+  - tintOpacity: 40
+    $name: Tint opacity (%)
+    $description: How much of the frame color is laid over the blurred content. 0 shows the blur as it is, 100 hides it under the color.
+  - luminosityOpacity: 90
+    $name: Luminosity opacity (%)
+    $description: How much the frame color's brightness replaces the brightness of the blurred content while its hues stay - what keeps Windows' acrylic readable over any wallpaper (it uses 85-96). 0 leaves the content's brightness alone.
+  - saturation: 100
+    $name: Saturation (%)
+    $description: Saturation of the blurred content before it is tinted. 100 leaves it alone; Windows' acrylic boosts it to 125.
+  - noiseOpacity: 2
+    $name: Noise opacity (%)
+    $description: Strength of the fine grain laid over the surface (Windows' acrylic uses 2). 0 turns it off.
+  - noiseDensity: 100
+    $name: Noise density (%)
+    $description: Share of the pixels that carry a grain.
+  $name: Backdrop
 - reserveWorkArea: true
   $name: Shrink the work area to the rounded screen
   $description: Also push the work area inwards so maximized and snapped windows stay inside the frame instead of being covered by it. Done with invisible appbars, one per frame edge; removed when the option or the mod is turned off.
@@ -193,11 +259,18 @@ same license.
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #include <gdiplus.h>
+#include <inspectable.h>
+#include <d3d11.h>
+#include <d2d1_1.h>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.DirectX.h>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.UI.Composition.Desktop.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
@@ -207,8 +280,12 @@ same license.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <cwchar>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -218,7 +295,12 @@ same license.
 #include <utility>
 #include <vector>
 
+namespace wf = winrt::Windows::Foundation;
+namespace wgd = winrt::Windows::Graphics::DirectX;
+namespace wge = winrt::Windows::Graphics::Effects;
 namespace wu = winrt::Windows::UI;
+namespace wuc = winrt::Windows::UI::Composition;
+namespace wucd = winrt::Windows::UI::Composition::Desktop;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
@@ -232,10 +314,13 @@ int DetectEdge(const RECT& taskbar, const RECT& monitor);  // defined with the l
 enum Corner : int { kCornerTL = 0, kCornerTR = 1, kCornerBR = 2, kCornerBL = 3 };
 
 constexpr WCHAR kFrameClassName[] = L"RoundEverything_Frame";
+// The monitor corner ears and the bezel ring: black, like a panel's bezel.
+constexpr COLORREF kMonitorCornerColor = RGB(0, 0, 0);
 constexpr WCHAR kCtrlClassName[] = L"RoundEverything_Ctrl";
 constexpr WCHAR kAppBarClassName[] = L"RoundEverything_AppBar";
 // Messages to the mod's control window (all handled on the mod's UI thread).
-constexpr UINT kMsgReload = WM_APP + 1;            // settings changed
+constexpr UINT kMsgReload = WM_APP + 1;            // settings changed (or anything else
+                                                   // that wants a tick now)
 constexpr UINT kMsgAppBarCallback = WM_APP + 2;    // ABN_* notifications to the appbar windows
 constexpr UINT kMsgTaskbarEvent = WM_APP + 3;      // a taskbar / Task View window showed, hid or
                                                    // moved, or the foreground changed
@@ -280,27 +365,42 @@ constexpr ULONGLONG kWorkAreaRetryMs = 1000;
 constexpr ULONGLONG kTaskbarXamlRetryMs = 2000;  // stroke, fill and corner ears
 
 struct Settings {
-    int offset = 8;
+    int offset = 12;
     int edgeOffset[4] = {-1, -1, -1, -1};  // left, top, right, bottom
     int radius = 20;
     bool monitorCorners = true;
     int monitorCornerRadius = 16;
-    COLORREF monitorCornerColor = RGB(0, 0, 0);
     bool scaleWithDpi = true;
-    COLORREF customColor = RGB(0x58, 0x58, 0x58);
+    COLORREF customColor = RGB(0x20, 0x20, 0x20);
     int opacity = 100;
+    bool acrylic = true;         // backdrop.mode
+    int backdropBlur = 30;       // px at 100%
+    int tintOpacity = 40;        // %
+    int luminosityOpacity = 90;  // %
+    int saturation = 100;        // %
+    int noiseOpacity = 2;        // %
+    int noiseDensity = 100;      // %
+    bool shadow = true;
+    int shadowBlur = 24;
+    int shadowOpacity = 35;
+    COLORREF shadowColor = RGB(0, 0, 0);
+    int shadowOffsetX = 0;
+    int shadowOffsetY = 0;
     bool reserveWorkArea = true;
     int workAreaInset = 12;
     bool primaryOnly = false;
 };
 
-// The frame is one always-on-top window per monitor along the three edges
-// next to the taskbar; the taskbar itself, with its background painted in
-// the frame color, is the fourth side. The two are shown and hidden
-// together: the frame waits for the taskbar's tree to be whole and rendered
-// (and the taskbar to be uncloaked by the shell) before it appears, and
-// goes away the moment the taskbar starts moving or is cloaked. A monitor
-// without a taskbar gets the frame on all four edges.
+// The frame is one always-on-top window per monitor. With the solid fill
+// it is a layered window along the three edges next to the taskbar, and
+// the taskbar itself, with its background painted in the frame color, is
+// the fourth side; with the acrylic fill it is a composition window that
+// lies under the taskbar as well, whose background is then transparent (see
+// the Acrylic section). The two are shown and hidden together: the frame
+// waits for the taskbar's tree to be whole and rendered (and the taskbar to
+// be uncloaked by the shell) before it appears, and goes away the moment
+// the taskbar starts moving or is cloaked. A monitor without a taskbar gets
+// the frame on all four edges.
 struct Layout {
     HMONITOR monitor = nullptr;
     HWND taskbar = nullptr;  // null on a monitor without a (live) taskbar window
@@ -315,6 +415,11 @@ struct Layout {
     int radius = 0;                // rounded-screen corner radius (scaled px)
     int workAreaInset = 0;         // extra work-area shrink beyond the frame (scaled px)
     int monitorCornerRadius = 0;   // outer monitor corner radius (scaled px), 0 = off
+    int shadowBlur = 0;            // inner shadow blur (scaled px), 0 = off
+    int shadowOffsetX = 0;         // inner shadow offset (scaled px)
+    int shadowOffsetY = 0;
+    float backdropBlur = 0.0f;     // acrylic blur (scaled px)
+    bool acrylic = false;          // the frame is an acrylic window (one pixel in from the monitor)
     std::wstring signature;        // this monitor's part of the layout signature
 };
 
@@ -352,10 +457,34 @@ struct FrameSurface {
     }
 };
 
+// The composition side of an acrylic frame (see the Acrylic section).
+struct Acrylic {
+    HWND owner = nullptr;  // hidden; an owned window may be topmost while (almost) covering a monitor
+    HWND strips[4] = {};   // the one-pixel bezel ring the frame leaves uncovered
+    wucd::DesktopWindowTarget target{nullptr};
+    wuc::ContainerVisual root{nullptr};
+    wuc::CompositionMaskBrush maskBrush{nullptr};        // source: the effect brush; mask: the shape
+    wuc::CompositionEffectBrush effectBrush{nullptr};    // backdrop -> blur -> ... -> tint
+    wuc::CompositionDrawingSurface maskSurface{nullptr};
+    wuc::CompositionDrawingSurface overlaySurface{nullptr};  // ears and noise
+    bool built = false;  // surfaces and sprites are in place for the current layout
+};
+
 struct Overlay {
     Layout layout;
     HWND hwnd = nullptr;
+    // Set for an acrylic frame: hwnd is then a composition window (owned,
+    // one pixel short of the monitor, under the taskbar) and the shadow
+    // window sits above it rather than below.
+    std::unique_ptr<Acrylic> acrylic;
     std::unique_ptr<FrameSurface> surface;
+    // The inner shadow: a second, click-through layered window covering the
+    // rounded screen, kept right behind the frame in z-order and shown,
+    // hidden and revealed with it. Separate because a layered window's
+    // painted pixels catch the mouse, and the shadow lies over the screen
+    // content (and over maximized windows' edges).
+    HWND shadowHwnd = nullptr;
+    std::unique_ptr<FrameSurface> shadowSurface;  // color-independent; built once per layout
     bool shown = false;
     // Waiting for the taskbar: the frame stays off the screen from the
     // moment its taskbar changes (moves, is cloaked, is new) until the
@@ -378,9 +507,14 @@ struct Overlay {
     int fullscreenTicks = 0;  // consecutive ticks the monitor looked full-screen
     bool painted = false;
     COLORREF paintedColor = 0;  // what is on screen right now
-    // Presentation alpha (UpdateLayeredWindow's constant alpha): 0 takes
-    // the frame off the screen before its window is hidden or destroyed.
+    // Presentation alpha (UpdateLayeredWindow's constant alpha; cloaked or
+    // not for an acrylic frame): 0 takes the frame off the screen before
+    // its window is hidden or destroyed.
     BYTE presentAlpha = 255;
+    // The taskbar background last asked for on this monitor (a change is
+    // applied at once).
+    bool fillAsked = false;
+    DWORD lastFillArgb = 0;
 };
 
 // The appbars reserving the work area on one monitor.
@@ -500,6 +634,14 @@ struct Reveal {
     HDC memDc = nullptr;
     int width = 0;
     int height = 0;
+    HWND shadow = nullptr;  // the shadow window, if any (same treatment)
+    HDC shadowDc = nullptr;
+    int shadowWidth = 0;
+    int shadowHeight = 0;
+    // An acrylic frame is revealed by uncloaking it (and its bezel ring)
+    // instead of a layered-window update.
+    bool composition = false;
+    HWND strips[4] = {};
 };
 std::mutex g_revealMutex;
 std::unordered_map<HWND, Reveal> g_reveals;
@@ -517,7 +659,18 @@ bool g_taskbarEventPending = false;  // a kMsgTaskbarEvent is queued
 ULONGLONG g_lastTickTime = 0;        // when the last tick ran (throttles event-driven ticks)
 ULONGLONG g_threadStartTick = 0;
 bool g_xamlCornersOwned = false;  // corner ears were added to at least one taskbar
-DWORD g_lastFillArgb = 0;         // the brush last asked for (a change is applied at once)
+
+// Composition (acrylic fill), owned by the mod's UI thread; null when the
+// composition couldn't be set up, which leaves the solid fill.
+wuc::Compositor g_compositor{nullptr};
+wuc::CompositionGraphicsDevice g_graphicsDevice{nullptr};
+bool g_overlaysAcrylic = false;  // the frames in g_overlays are acrylic ones
+std::atomic<bool> g_acrylicUnavailable{false};  // building an acrylic frame failed: solid fill
+
+// Whether frames are built as acrylic (composition) windows.
+bool UsesAcrylic() {
+    return g_settings.acrylic && g_compositor && g_graphicsDevice && !g_acrylicUnavailable;
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -651,15 +804,30 @@ void LoadSettings() {
 
     s.monitorCorners = Wh_GetIntSetting(L"monitorCorners.enabled") != 0;
     s.monitorCornerRadius = std::max(0, Wh_GetIntSetting(L"monitorCorners.radius"));
-    auto monitorCornerColor = WindhawkUtils::StringSetting::make(L"monitorCorners.color");
-    s.monitorCornerColor = ParseHexColor(monitorCornerColor.get(), RGB(0, 0, 0));
 
     s.scaleWithDpi = Wh_GetIntSetting(L"scaleWithDpi") != 0;
 
     auto customColor = WindhawkUtils::StringSetting::make(L"customColor");
-    s.customColor = ParseHexColor(customColor.get(), RGB(0x58, 0x58, 0x58));
+    s.customColor = ParseHexColor(customColor.get(), RGB(0x20, 0x20, 0x20));
 
     s.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
+
+    auto backdropMode = WindhawkUtils::StringSetting::make(L"backdrop.mode");
+    s.acrylic = wcscmp(backdropMode.get(), L"solid") != 0;
+    s.backdropBlur = std::clamp(Wh_GetIntSetting(L"backdrop.blur"), 0, 250);
+    s.tintOpacity = std::clamp(Wh_GetIntSetting(L"backdrop.tintOpacity"), 0, 100);
+    s.luminosityOpacity = std::clamp(Wh_GetIntSetting(L"backdrop.luminosityOpacity"), 0, 100);
+    s.saturation = std::clamp(Wh_GetIntSetting(L"backdrop.saturation"), 0, 300);
+    s.noiseOpacity = std::clamp(Wh_GetIntSetting(L"backdrop.noiseOpacity"), 0, 100);
+    s.noiseDensity = std::clamp(Wh_GetIntSetting(L"backdrop.noiseDensity"), 0, 100);
+
+    s.shadow = Wh_GetIntSetting(L"innerShadow.enabled") != 0;
+    s.shadowBlur = std::clamp(Wh_GetIntSetting(L"innerShadow.blur"), 0, 400);
+    s.shadowOpacity = std::clamp(Wh_GetIntSetting(L"innerShadow.opacity"), 0, 100);
+    auto shadowColor = WindhawkUtils::StringSetting::make(L"innerShadow.color");
+    s.shadowColor = ParseHexColor(shadowColor.get(), RGB(0, 0, 0));
+    s.shadowOffsetX = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetX"), -400, 400);
+    s.shadowOffsetY = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetY"), -400, 400);
 
     s.reserveWorkArea = Wh_GetIntSetting(L"reserveWorkArea") != 0;
     s.workAreaInset = std::max(0, Wh_GetIntSetting(L"workAreaInset"));
@@ -668,6 +836,7 @@ void LoadSettings() {
     s.primaryOnly = wcscmp(monitors.get(), L"primary") == 0;
 
     g_settings = s;
+    g_acrylicUnavailable = false;  // a new configuration gets a new try
 }
 
 // ---------------------------------------------------------------------------
@@ -783,14 +952,21 @@ std::unordered_map<DWORD, ThreadHooks> g_asyncHooks;  // thread id -> hooks
 
 // Defined with the taskbar-side code: a taskbar window just moved/resized.
 void OnTaskbarWindowPosChanged(HWND hwnd, const WINDOWPOS* pos);
+// Defined with the acrylic code: a taskbar window just changed its z-order.
+void FollowTaskbarZOrder(HWND taskbar);
+void ClearFollow();
 
 LRESULT CALLBACK TaskbarCallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
         if (cwp->message == WM_WINDOWPOSCHANGED && cwp->lParam) {
+            auto* pos = reinterpret_cast<const WINDOWPOS*>(cwp->lParam);
             try {
-                OnTaskbarWindowPosChanged(cwp->hwnd, reinterpret_cast<const WINDOWPOS*>(cwp->lParam));
+                OnTaskbarWindowPosChanged(cwp->hwnd, pos);
             } catch (...) {
+            }
+            if (!(pos->flags & SWP_NOZORDER)) {
+                FollowTaskbarZOrder(cwp->hwnd);
             }
         }
     }
@@ -813,6 +989,34 @@ LRESULT CALLBACK AsyncGetMessageHook(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+// Installs the two hooks on a window's thread once (both stay until unload).
+bool EnsureThreadHooks(DWORD threadId) {
+    std::lock_guard<std::mutex> lock(g_asyncHookMutex);
+    if (g_asyncHooks.find(threadId) != g_asyncHooks.end()) {
+        return true;
+    }
+    ThreadHooks hooks;
+    hooks.getMessage = SetWindowsHookEx(WH_GETMESSAGE, AsyncGetMessageHook, nullptr, threadId);
+    if (!hooks.getMessage) {
+        Wh_Log(L"SetWindowsHookEx (WH_GETMESSAGE) failed: %u", GetLastError());
+        return false;
+    }
+    hooks.callWndProc = SetWindowsHookEx(WH_CALLWNDPROC, TaskbarCallWndProcHook, nullptr, threadId);
+    if (!hooks.callWndProc) {
+        Wh_Log(L"SetWindowsHookEx (WH_CALLWNDPROC) failed: %u", GetLastError());
+    }
+    g_asyncHooks[threadId] = hooks;
+    return true;
+}
+
+// The acrylic frame needs the z-order hook on its taskbar's thread even when
+// nothing is posted there.
+void EnsureTaskbarHooks(HWND taskbar) {
+    if (DWORD threadId = taskbar ? GetWindowThreadProcessId(taskbar, nullptr) : 0) {
+        EnsureThreadHooks(threadId);
+    }
+}
+
 bool PostToWindowThread(HWND hWnd, std::function<void()> fn) {
     if (!g_asyncMsg) {
         g_asyncMsg = RegisterWindowMessage(L"Windhawk_PostToWindowThread_" WH_MOD_ID);
@@ -825,22 +1029,8 @@ bool PostToWindowThread(HWND hWnd, std::function<void()> fn) {
         fn();
         return true;
     }
-    {
-        std::lock_guard<std::mutex> lock(g_asyncHookMutex);
-        if (g_asyncHooks.find(threadId) == g_asyncHooks.end()) {
-            ThreadHooks hooks;
-            hooks.getMessage = SetWindowsHookEx(WH_GETMESSAGE, AsyncGetMessageHook, nullptr, threadId);
-            if (!hooks.getMessage) {
-                Wh_Log(L"SetWindowsHookEx (WH_GETMESSAGE) failed: %u", GetLastError());
-                return false;
-            }
-            hooks.callWndProc =
-                SetWindowsHookEx(WH_CALLWNDPROC, TaskbarCallWndProcHook, nullptr, threadId);
-            if (!hooks.callWndProc) {
-                Wh_Log(L"SetWindowsHookEx (WH_CALLWNDPROC) failed: %u", GetLastError());
-            }
-            g_asyncHooks[threadId] = hooks;
-        }
+    if (!EnsureThreadHooks(threadId)) {
+        return false;
     }
     auto* call = new AsyncCall{std::move(fn)};
     if (!PostMessageW(hWnd, g_asyncMsg, 0, reinterpret_cast<LPARAM>(call))) {
@@ -851,6 +1041,7 @@ bool PostToWindowThread(HWND hWnd, std::function<void()> fn) {
 }
 
 void RemoveAsyncHooks() {
+    ClearFollow();  // nothing for the z-order hook to touch from here on
     std::lock_guard<std::mutex> lock(g_asyncHookMutex);
     for (auto& entry : g_asyncHooks) {
         if (entry.second.getMessage) {
@@ -1120,6 +1311,7 @@ struct TaskbarWants {
     bool ears = false;
     int edge = kEdgeNone;
     float radiusDips = 0.0f;
+    float earInsetDips = 0.0f;  // the bezel ring the arcs start from (acrylic)
     DWORD earRgb = 0;
     bool lastReady = false;  // everything wanted was in place at the last check
     // The background is kept transparent - from the start, and again from
@@ -1416,8 +1608,10 @@ void WINAPI RestoreFillsOnTaskbarThread(void*) try {
 struct XamlCornerState {
     winrt::weak_ref<wuxc::Grid> host;
     wuxs::Path ear[2]{nullptr, nullptr};
+    wuxs::Rectangle line{nullptr};  // the bezel ring's row along the taskbar's outer edge
     int edge = -1;             // what the ears are configured for
     float radiusDips = 0.0f;
+    float insetDips = 0.0f;
     wu::Color color{0, 0, 0, 0};
     bool placed = true;        // host laid out at the window's size (for the log)
 };
@@ -1489,24 +1683,29 @@ wuxc::Grid FindCornerHost(HWND taskbar) {
 
 // Ear shape in DIPs: an r x r square minus a circle of radius r centered on
 // the square's inner corner (the one pointing into the screen).
-void ConfigureEar(wuxs::Path const& ear, int corner, float r) {
+// An ear: the square at the corner minus the quarter circle of radius `r`
+// whose arc is tangent to the edges `inset` in from the window's corner -
+// the inner edge of the one-pixel bezel ring, where the frame's own ears'
+// arcs start too.
+void ConfigureEar(wuxs::Path const& ear, int corner, float r, float inset) {
     bool left = corner == kCornerTL || corner == kCornerBL;
     bool top = corner == kCornerTL || corner == kCornerTR;
+    float size = r + inset;
 
     wuxm::GeometryGroup group;
     group.FillRule(wuxm::FillRule::EvenOdd);
     wuxm::RectangleGeometry square;
-    square.Rect(winrt::Windows::Foundation::Rect{0.0f, 0.0f, r, r});
+    square.Rect(winrt::Windows::Foundation::Rect{0.0f, 0.0f, size, size});
     wuxm::EllipseGeometry circle;
-    circle.Center(winrt::Windows::Foundation::Point{left ? r : 0.0f, top ? r : 0.0f});
+    circle.Center(winrt::Windows::Foundation::Point{left ? size : 0.0f, top ? size : 0.0f});
     circle.RadiusX(r);
     circle.RadiusY(r);
     group.Children().Append(square);
     group.Children().Append(circle);
 
     ear.Data(group);
-    ear.Width(r);
-    ear.Height(r);
+    ear.Width(size);
+    ear.Height(size);
     ear.HorizontalAlignment(left ? wux::HorizontalAlignment::Left
                                  : wux::HorizontalAlignment::Right);
     ear.VerticalAlignment(top ? wux::VerticalAlignment::Top : wux::VerticalAlignment::Bottom);
@@ -1515,7 +1714,25 @@ void ConfigureEar(wuxs::Path const& ear, int corner, float r) {
     wuxc::Canvas::SetZIndex(ear, 10000);
 }
 
-void SetEarColor(wuxs::Path const& ear, wu::Color color) {
+// The bezel ring's row on the taskbar's outer edge: a line `thickness`
+// DIPs (one device pixel) thick along the whole edge.
+void ConfigureBezelLine(wuxs::Rectangle const& line, int edge, float thickness) {
+    double automatic = std::numeric_limits<double>::quiet_NaN();
+    bool horizontal = edge == kEdgeTop || edge == kEdgeBottom;
+    line.Width(horizontal ? automatic : thickness);
+    line.Height(horizontal ? thickness : automatic);
+    line.HorizontalAlignment(horizontal ? wux::HorizontalAlignment::Stretch
+                             : edge == kEdgeLeft ? wux::HorizontalAlignment::Left
+                                                 : wux::HorizontalAlignment::Right);
+    line.VerticalAlignment(!horizontal ? wux::VerticalAlignment::Stretch
+                           : edge == kEdgeTop ? wux::VerticalAlignment::Top
+                                              : wux::VerticalAlignment::Bottom);
+    line.Margin(wux::Thickness{0, 0, 0, 0});
+    line.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(line, 10000);
+}
+
+void SetEarColor(wuxs::Shape const& ear, wu::Color color) {
     auto brush = ear.Fill() ? ear.Fill().try_as<wuxm::SolidColorBrush>() : nullptr;
     if (brush) {
         brush.Color(color);
@@ -1528,6 +1745,7 @@ struct XamlCornerOp {
     HWND taskbar;
     int edge;
     float radiusDips;  // 0 = remove
+    float insetDips;
     DWORD rgb;         // COLORREF
     bool found;        // out
     bool changed;      // out: ears were added or reconfigured
@@ -1536,17 +1754,23 @@ struct XamlCornerOp {
 
 void RemoveEars(XamlCornerState& state) {
     auto host = state.host.get();
-    for (auto& ear : state.ear) {
-        if (!ear) {
-            continue;
-        }
+    auto remove = [&](wux::UIElement const& element) {
         if (host) {
             uint32_t index = 0;
-            if (host.Children().IndexOf(ear, index)) {
+            if (host.Children().IndexOf(element, index)) {
                 host.Children().RemoveAt(index);
             }
         }
-        ear = nullptr;
+    };
+    for (auto& ear : state.ear) {
+        if (ear) {
+            remove(ear);
+            ear = nullptr;
+        }
+    }
+    if (state.line) {
+        remove(state.line);
+        state.line = nullptr;
     }
 }
 
@@ -1592,6 +1816,10 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
             host.Children().Append(ear);
             state.ear[i] = ear;
         }
+        wuxs::Rectangle line;
+        line.Name(L"RoundEverythingBezel");
+        host.Children().Append(line);
+        state.line = line;
         it = corners.insert_or_assign(op->taskbar, state).first;
         op->changed = true;
         Wh_Log(L"taskbar %p: corner ears added to %s", op->taskbar,
@@ -1602,17 +1830,20 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
     // every couple of seconds and on every layout pass of the taskbar.
     XamlCornerState& state = it->second;
     int edge = LiveTaskbarEdge(op->taskbar, op->edge);
-    if (state.edge != edge || state.radiusDips != op->radiusDips) {
+    if (state.edge != edge || state.radiusDips != op->radiusDips ||
+        state.insetDips != op->insetDips) {
         int edgeCorners[2];
         TaskbarEdgeCorners(edge, edgeCorners);
         for (int i = 0; i < 2; i++) {
-            ConfigureEar(state.ear[i], edgeCorners[i], op->radiusDips);
+            ConfigureEar(state.ear[i], edgeCorners[i], op->radiusDips, op->insetDips);
         }
+        ConfigureBezelLine(state.line, edge, op->insetDips);
         if (state.edge != edge) {
             Wh_Log(L"taskbar %p: corner ears configured for edge %d", op->taskbar, edge);
         }
         state.edge = edge;
         state.radiusDips = op->radiusDips;
+        state.insetDips = op->insetDips;
         op->changed = true;
     }
     wu::Color color{255, GetRValue(op->rgb), GetGValue(op->rgb), GetBValue(op->rgb)};
@@ -1620,6 +1851,7 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
         for (auto const& ear : state.ear) {
             SetEarColor(ear, color);
         }
+        SetEarColor(state.line, color);
         state.color = color;
         op->changed = true;
     }
@@ -1925,7 +2157,18 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
             }
         }
 
+        // The acrylic frame lies under the taskbar as well (one surface, no
+        // seam) and stops one pixel short of every monitor edge: a topmost
+        // window whose rectangle contains the monitor is a full-screen app
+        // to the shell. The ring left over is painted by the bezel windows.
+        bool acrylic = UsesAcrylic();
+        if (acrylic) {
+            overlayRect = mon.rect;
+            InflateRect(&overlayRect, -1, -1);
+        }
+
         Layout layout;
+        layout.acrylic = acrylic;
         layout.monitor = mon.handle;
         layout.taskbar = taskbar;
         layout.monitorRect = mon.rect;
@@ -1957,6 +2200,12 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
                 ? std::clamp(ScaleForDpi(g_settings.monitorCornerRadius, layout.dpi), 0,
                              maxCornerRadius)
                 : 0;
+        if (g_settings.shadow && g_settings.shadowBlur > 0 && g_settings.shadowOpacity > 0) {
+            layout.shadowBlur = std::max(1, ScaleForDpi(g_settings.shadowBlur, layout.dpi));
+            layout.shadowOffsetX = ScaleForDpi(g_settings.shadowOffsetX, layout.dpi);
+            layout.shadowOffsetY = ScaleForDpi(g_settings.shadowOffsetY, layout.dpi);
+        }
+        layout.backdropBlur = static_cast<float>(ScaleForDpi(g_settings.backdropBlur, layout.dpi));
 
         RECT inner = base;
         inner.left += layout.offset[kEdgeLeft];
@@ -2078,25 +2327,69 @@ void DrawMonitorEars(Gdiplus::Graphics& graphics, const RECT& rect, const Layout
     auto closeTo = [](LONG a, LONG b) { return a - b <= 1 && b - a <= 1; };
     bool atLeft = closeTo(rect.left, m.left), atRight = closeTo(rect.right, m.right);
     bool atTop = closeTo(rect.top, m.top), atBottom = closeTo(rect.bottom, m.bottom);
-    Gdiplus::SolidBrush cornerBrush(Gdiplus::Color(255, GetRValue(g_settings.monitorCornerColor),
-                                                   GetGValue(g_settings.monitorCornerColor),
-                                                   GetBValue(g_settings.monitorCornerColor)));
+    Gdiplus::SolidBrush cornerBrush(Gdiplus::Color(255, GetRValue(kMonitorCornerColor),
+                                                   GetGValue(kMonitorCornerColor),
+                                                   GetBValue(kMonitorCornerColor)));
+    // The two corners on the taskbar's edge belong to the XAML ears inside
+    // the taskbar (the acrylic frame reaches those corners too, under the
+    // taskbar; a second arc there, a pixel off the XAML one, would show
+    // through the transparent background as a jagged edge).
+    // (An auto-hide taskbar takes its ears away with it, so with one the
+    // frame keeps painting those corners.)
+    int taskbarCorners[2] = {-1, -1};
+    if (layout.edge != kEdgeNone && !IsRectEmpty(&layout.taskbarRect)) {
+        TaskbarEdgeCorners(layout.edge, taskbarCorners);
+    }
+    // The arc is tangent to the inner edge of the one-pixel bezel ring, not
+    // to the monitor's edge: the acrylic window already lies a pixel in (the
+    // ring is its own windows); the solid frame paints the ring itself and
+    // starts the arc a pixel in.
+    int inset = layout.acrylic ? 0 : 1;
+    int size = cr + inset;
     for (int corner = 0; corner < 4; corner++) {
         bool left = corner == kCornerTL || corner == kCornerBL;
         bool top = corner == kCornerTL || corner == kCornerTR;
         if (!((left ? atLeft : atRight) && (top ? atTop : atBottom))) {
             continue;
         }
-        int x = left ? 0 : width - cr;
-        int y = top ? 0 : height - cr;
-        int cx = left ? x + cr : x;  // circle center = the inner corner
-        int cy = top ? y + cr : y;
+        if (corner == taskbarCorners[0] || corner == taskbarCorners[1]) {
+            continue;
+        }
+        int x = left ? 0 : width - size;
+        int y = top ? 0 : height - size;
+        int cx = left ? x + size : x;  // circle center: `inset` + radius in from the corner
+        int cy = top ? y + size : y;
         Gdiplus::GraphicsPath ear(Gdiplus::FillModeAlternate);
-        ear.AddRectangle(Gdiplus::Rect(x - 1, y - 1, cr + 2, cr + 2));
+        ear.AddRectangle(Gdiplus::Rect(x - 1, y - 1, size + 2, size + 2));
         ear.AddEllipse(Gdiplus::Rect(cx - cr, cy - cr, 2 * cr, 2 * cr));
-        graphics.SetClip(Gdiplus::Rect(x, y, cr, cr));
+        graphics.SetClip(Gdiplus::Rect(x, y, size, size));
         graphics.FillPath(&cornerBrush, &ear);
         graphics.ResetClip();
+    }
+}
+
+// The bezel ring of the solid frame: one pixel of black along each of the
+// window's edges that lies on a monitor edge (the taskbar's edge gets its
+// line inside the taskbar, see ConfigureBezelLine). The acrylic frame can't
+// reach the monitor's edges; its ring is four windows of its own.
+void DrawBezelRing(Gdiplus::Graphics& graphics, const RECT& rect, const Layout& layout) {
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    const RECT& m = layout.monitorRect;
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(kMonitorCornerColor),
+                                             GetGValue(kMonitorCornerColor),
+                                             GetBValue(kMonitorCornerColor)));
+    if (rect.top == m.top) {
+        graphics.FillRectangle(&brush, 0, 0, width, 1);
+    }
+    if (rect.bottom == m.bottom) {
+        graphics.FillRectangle(&brush, 0, height - 1, width, 1);
+    }
+    if (rect.left == m.left) {
+        graphics.FillRectangle(&brush, 0, 0, 1, height);
+    }
+    if (rect.right == m.right) {
+        graphics.FillRectangle(&brush, width - 1, 0, 1, height);
     }
 }
 
@@ -2126,13 +2419,46 @@ void DrawStaticLayer(Gdiplus::Graphics& graphics, const Layout& layout) {
     }
 
     // Monitor corners that coincide with this window's corners (the two
-    // away from the taskbar; all four without one).
+    // away from the taskbar; all four without one), and the bezel ring.
     DrawMonitorEars(graphics, layout.overlayRect, layout);
+    if (!layout.acrylic) {
+        DrawBezelRing(graphics, layout.overlayRect, layout);
+    }
 }
 
-// Rasterizes the frame's shape and static layer once and allocates the
-// persistent DIB the window is updated from.
-std::unique_ptr<FrameSurface> BuildFrameSurface(const Layout& layout) {
+// Allocates the persistent top-down 32-bit DIB a layered window is updated
+// from.
+bool AllocateSurfaceBitmap(FrameSurface& surface) {
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = surface.width;
+    bmi.bmiHeader.biHeight = -surface.height;  // top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    surface.dib = CreateDIBSection(screenDc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (surface.dib && bits) {
+        surface.memDc = CreateCompatibleDC(screenDc);
+        surface.oldBitmap = SelectObject(surface.memDc, surface.dib);
+        surface.pixels = static_cast<DWORD*>(bits);
+    }
+    ReleaseDC(nullptr, screenDc);
+    if (!surface.memDc) {
+        Wh_Log(L"CreateDIBSection failed: %u", GetLastError());
+        return false;
+    }
+    return true;
+}
+
+// Rasterizes the frame's shape and static layer once and, for a layered
+// frame, allocates the persistent DIB the window is updated from (the
+// acrylic frame uploads the shape to composition surfaces instead).
+std::unique_ptr<FrameSurface> BuildFrameSurface(const Layout& layout, bool withBitmap) {
     const RECT& rect = layout.overlayRect;
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
@@ -2155,28 +2481,142 @@ std::unique_ptr<FrameSurface> BuildFrameSurface(const Layout& layout) {
         surface->coverage[i] = static_cast<BYTE>(shapePixels[i] >> 24);
     }
 
-    HDC screenDc = GetDC(nullptr);
-    if (!screenDc) {
+    if (withBitmap && !AllocateSurfaceBitmap(*surface)) {
         return nullptr;
     }
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height;  // top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    surface->dib = CreateDIBSection(screenDc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (surface->dib && bits) {
-        surface->memDc = CreateCompatibleDC(screenDc);
-        surface->oldBitmap = SelectObject(surface->memDc, surface->dib);
-        surface->pixels = static_cast<DWORD*>(bits);
-    }
-    ReleaseDC(nullptr, screenDc);
-    if (!surface->memDc) {
-        Wh_Log(L"CreateDIBSection failed: %u", GetLastError());
+    return surface;
+}
+
+// ---- Inner shadow -----------------------------------------------------------
+// The shadow is a Gaussian blur of everything outside the rounded screen
+// (shifted by the offset), kept inside the rounded screen - a CSS inset
+// box-shadow. The mask is a rounded rectangle, so its horizontal blur has a
+// closed form per row (the kernel's cumulative sum over the row's inside
+// interval); only the vertical pass sums taps, and only over the band along
+// the edges where the shadow is non-zero.
+
+// The rounded screen in the shadow bitmap's own coordinates, opaque white:
+// its alpha is the anti-aliased "inside" coverage the shadow is clipped to.
+void DrawInnerMask(Gdiplus::Graphics& graphics, const Layout& layout) {
+    RECT inner = layout.innerRect;
+    OffsetRect(&inner, -layout.innerRect.left, -layout.innerRect.top);
+    Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+    AddRoundedRectPath(path, inner, layout.radius);
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, 255, 255, 255));
+    graphics.FillPath(&brush, &path);
+}
+
+std::unique_ptr<FrameSurface> BuildShadowSurface(const Layout& layout) {
+    int width = layout.innerRect.right - layout.innerRect.left;
+    int height = layout.innerRect.bottom - layout.innerRect.top;
+    if (width <= 0 || height <= 0 || layout.shadowBlur <= 0) {
         return nullptr;
+    }
+
+    std::vector<DWORD> inside;
+    if (!RenderToPixels(width, height, inside, DrawInnerMask, layout)) {
+        Wh_Log(L"shadow rasterization failed");
+        return nullptr;
+    }
+
+    // Gaussian kernel: the blur setting is the visible extent (~2 sigma).
+    double sigma = layout.shadowBlur / 2.0;
+    int kr = static_cast<int>(std::ceil(3.0 * sigma));
+    std::vector<float> kernel(2 * kr + 1);
+    double sum = 0.0;
+    for (int k = -kr; k <= kr; k++) {
+        double v = std::exp(-(k * k) / (2.0 * sigma * sigma));
+        kernel[k + kr] = static_cast<float>(v);
+        sum += v;
+    }
+    std::vector<float> cumulative(kernel.size() + 1, 0.0f);  // cumulative[i] = sum of kernel[0..i)
+    for (size_t i = 0; i < kernel.size(); i++) {
+        kernel[i] = static_cast<float>(kernel[i] / sum);
+        cumulative[i + 1] = cumulative[i] + kernel[i];
+    }
+
+    // The occluder: everything outside the rounded screen shifted by the
+    // offset. Its horizontal blur at pixel x of row y is 1 minus the kernel
+    // mass that falls inside the row's inside interval [xl, xr).
+    double left = layout.shadowOffsetX, top = layout.shadowOffsetY;
+    double right = left + width, bottom = top + height;
+    double r = layout.radius;
+    auto blurredRow = [&](int y, int x) -> float {
+        double yc = y + 0.5;
+        if (yc < top || yc >= bottom) {
+            return 1.0f;  // the row lies entirely outside: all occluder
+        }
+        double inset = 0.0;
+        if (r > 0.0) {
+            double t = yc < top + r ? top + r - yc : (yc > bottom - r ? yc - (bottom - r) : 0.0);
+            if (t > 0.0) {
+                inset = r - std::sqrt(std::max(r * r - t * t, 0.0));
+            }
+        }
+        double xl = left + inset, xr = right - inset;
+        // Taps k with x + k + 0.5 in [xl, xr): k in [ceil(xl - 0.5 - x), ceil(xr - 0.5 - x))
+        int ka = std::clamp(static_cast<int>(std::ceil(xl - 0.5 - x)) + kr, 0, 2 * kr + 1);
+        int kb = std::clamp(static_cast<int>(std::ceil(xr - 0.5 - x)) + kr, 0, 2 * kr + 1);
+        return 1.0f - (kb > ka ? cumulative[kb] - cumulative[ka] : 0.0f);
+    };
+
+    // The band along the edges where the shadow can be non-zero.
+    int band = kr + std::max(std::abs(layout.shadowOffsetX), std::abs(layout.shadowOffsetY)) +
+               layout.radius + 2;
+    std::vector<float> shadow(static_cast<size_t>(width) * height, 0.0f);
+    auto blurStrip = [&](int sx0, int sy0, int sx1, int sy1) {
+        if (sx1 <= sx0 || sy1 <= sy0) {
+            return;
+        }
+        int sw = sx1 - sx0, sh = sy1 - sy0;
+        std::vector<float> rows(static_cast<size_t>(sh + 2 * kr) * sw);
+        for (int yy = 0; yy < sh + 2 * kr; yy++) {
+            int y = sy0 - kr + yy;
+            float* row = &rows[static_cast<size_t>(yy) * sw];
+            for (int xx = 0; xx < sw; xx++) {
+                row[xx] = blurredRow(y, sx0 + xx);
+            }
+        }
+        for (int yy = 0; yy < sh; yy++) {
+            float* out = &shadow[static_cast<size_t>(sy0 + yy) * width + sx0];
+            for (int xx = 0; xx < sw; xx++) {
+                float acc = 0.0f;
+                for (int k = 0; k <= 2 * kr; k++) {
+                    acc += kernel[k] * rows[static_cast<size_t>(yy + k) * sw + xx];
+                }
+                out[xx] = acc;
+            }
+        }
+    };
+    if (2 * band >= height || 2 * band >= width) {
+        blurStrip(0, 0, width, height);  // tiny screen: the band is everything
+    } else {
+        blurStrip(0, 0, width, band);                   // top
+        blurStrip(0, height - band, width, height);     // bottom
+        blurStrip(0, band, band, height - band);        // left
+        blurStrip(width - band, band, width, height - band);  // right
+    }
+
+    auto surface = std::make_unique<FrameSurface>();
+    surface->width = width;
+    surface->height = height;
+    if (!AllocateSurfaceBitmap(*surface)) {
+        return nullptr;
+    }
+    COLORREF rgb = g_settings.shadowColor;
+    double opacity = g_settings.shadowOpacity / 100.0;
+    for (size_t i = 0; i < shadow.size(); i++) {
+        double a = std::clamp(static_cast<double>(shadow[i]), 0.0, 1.0) * opacity *
+                   (inside[i] >> 24) / 255.0;
+        unsigned alpha = static_cast<unsigned>(a * 255.0 + 0.5);
+        if (alpha == 0) {
+            surface->pixels[i] = 0;
+            continue;
+        }
+        unsigned pr = GetRValue(rgb) * alpha / 255;
+        unsigned pg = GetGValue(rgb) * alpha / 255;
+        unsigned pb = GetBValue(rgb) * alpha / 255;
+        surface->pixels[i] = (alpha << 24) | (pr << 16) | (pg << 8) | pb;
     }
     return surface;
 }
@@ -2189,6 +2629,1101 @@ inline DWORD BlendOver(DWORD top, DWORD bottom) {
     DWORD rb = (((bottom & 0x00FF00FF) * inv) >> 8) & 0x00FF00FF;
     DWORD ag = ((((bottom >> 8) & 0x00FF00FF) * inv) >> 8) & 0x00FF00FF;
     return top + (rb | (ag << 8));
+}
+
+// ---------------------------------------------------------------------------
+// Acrylic: the frame as a composition window
+// ---------------------------------------------------------------------------
+// With the acrylic fill the frame on each monitor is a Windows.UI.Composition
+// window (WS_EX_NOREDIRECTIONBITMAP) rather than a layered bitmap. It lies
+// under the taskbar as well - the taskbar's own background is made
+// transparent, so the frame's surface shows through it and the four sides
+// are one surface without a seam - and shows, through a mask of the frame's
+// shape, a HostBackdropBrush: what is behind the window, blurred live by
+// DWM, then saturated and tinted. A second sprite holds what doesn't follow
+// the backdrop (the monitor corner ears, the noise grain), rasterized by the
+// same code as the solid frame, so both fills have the same geometry. The
+// inner shadow stays the layered window it is with the solid fill, placed
+// right above the frame so the backdrop never samples it.
+//
+// Two rules of the window manager shape the windows (found while
+// prototyping this):
+// - a topmost window whose rectangle contains a whole monitor is a
+//   full-screen app to the shell, which then lowers the taskbar under it.
+//   So the frame stops one pixel short of every monitor edge, and four
+//   one-pixel windows paint that ring in the monitor-corner color, like
+//   the bezel (the same on every monitor, with or without a taskbar).
+// - an unowned window covering (almost) a monitor is refused the topmost
+//   bit while it isn't in the foreground; an owned one isn't. So each frame
+//   has a hidden owner window.
+// The taskbar has to stay right above the frame: the frame is made topmost
+// and the taskbar then raised to the top of the topmost band (the window
+// manager doesn't honor inserting a window after the primary taskbar); a
+// hook on the taskbar thread puts the frame back under the taskbar the
+// moment the taskbar's z-order changes, and the tick checks. The taskbar is
+// never *made* topmost: the shell lowers it under full-screen apps on
+// purpose. Cloaking (DWM) takes the place of alpha 0 in the reveal
+// handshake: a cloaked window keeps its place in the z-order, and
+// uncloaking is instant.
+
+// The composition window's constant alpha (it is layered as well, which is
+// what keeps a monitor-sized borderless popup from being taken for a
+// full-screen app). 254 is what the prototype ran on; 255 was never tested.
+constexpr BYTE kAcrylicWindowAlpha = 254;
+
+// GUIDs spelled out: uuid.lib isn't linked, and the composition interop
+// header isn't used (its interfaces are declared below, ABI only).
+constexpr GUID kIidIUnknown = {
+    0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+constexpr GUID kIidIInspectable = {
+    0xAF86E2E0, 0xB12D, 0x4C6A, {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}};
+constexpr GUID kIidIGraphicsEffect = {
+    0xCB51C0CE, 0x8FE6, 0x4636, {0xB2, 0x02, 0x86, 0x1F, 0xAA, 0x07, 0xD8, 0xF3}};
+constexpr GUID kIidIGraphicsEffectSource = {
+    0x2D8F9DDC, 0x4339, 0x4EB9, {0x92, 0x16, 0xF9, 0xDE, 0xB7, 0x56, 0x58, 0xA2}};
+constexpr GUID kIidIGraphicsEffectD2D1Interop = {
+    0x2FC57384, 0xA068, 0x44D7, {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
+constexpr GUID kIidIPropertyValue = {
+    0x4BD682DD, 0x7554, 0x40E9, {0x9A, 0x9B, 0x82, 0x65, 0x4E, 0xDE, 0x7E, 0x62}};
+constexpr GUID kIidICompositorDesktopInterop = {
+    0x29E691FA, 0x4567, 0x4DCA, {0xB3, 0x19, 0xD0, 0xF2, 0x07, 0xEB, 0x68, 0x07}};
+constexpr GUID kIidICompositorInterop = {
+    0x25297D5C, 0x3AD4, 0x4C9C, {0xB5, 0xCF, 0xE3, 0x6A, 0x38, 0x51, 0x23, 0x30}};
+constexpr GUID kIidICompositionDrawingSurfaceInterop = {
+    0xFD04E6E3, 0xFE0C, 0x4C3C, {0xAB, 0x19, 0xA0, 0x76, 0x01, 0xA5, 0x76, 0xEE}};
+constexpr GUID kIidIDXGIDevice = {
+    0x54EC77FA, 0x1377, 0x44E6, {0x8C, 0x32, 0x88, 0xFD, 0x5F, 0x44, 0xC8, 0x4C}};
+constexpr GUID kIidID2D1DeviceContext = {
+    0xE8F7FE7A, 0x191C, 0x466D, {0xAD, 0x95, 0x97, 0x56, 0x78, 0xBD, 0xA9, 0x98}};
+// Direct2D effects (d2d1effects.h). Property indices and types are the
+// effects' own; blend and composite modes are the D2D1_BLEND_MODE /
+// D2D1_COMPOSITE_MODE values.
+constexpr GUID kClsidD2D1GaussianBlur = {
+    0x1FEB6D69, 0x2FE6, 0x4AC9, {0x8C, 0x58, 0x1D, 0x7F, 0x93, 0xE7, 0xA6, 0xA5}};
+constexpr GUID kClsidD2D1Saturation = {
+    0x5CB2D9CF, 0x327D, 0x459F, {0xA0, 0xCE, 0x40, 0xC0, 0xB2, 0x08, 0x6B, 0xF7}};
+constexpr GUID kClsidD2D1Flood = {
+    0x61C23C20, 0xAE69, 0x4D8E, {0x94, 0xCF, 0x50, 0x07, 0x8D, 0xF6, 0x38, 0xF2}};
+constexpr GUID kClsidD2D1Blend = {
+    0x81C5B77B, 0x13F8, 0x4CDD, {0xAD, 0x20, 0xC8, 0x90, 0x54, 0x7A, 0xC6, 0x5D}};
+constexpr GUID kClsidD2D1Composite = {
+    0x48FC9F51, 0xF6AC, 0x48F1, {0x8B, 0x58, 0x3B, 0x28, 0xAC, 0x46, 0xF7, 0x6D}};
+constexpr UINT32 kBlendModeLuminosity = 23;
+constexpr UINT32 kCompositeModeSourceOver = 0;
+constexpr UINT32 kGaussianBlurOptimizationBalanced = 1;
+constexpr UINT32 kBorderModeHard = 1;
+
+enum GraphicsEffectPropertyMapping {
+    kMappingUnknown = 0,
+    kMappingDirect = 1,
+};
+
+struct IGraphicsEffectAbi : ::IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_Name(HSTRING* name) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_Name(HSTRING name) = 0;
+};
+struct IGraphicsEffectSourceAbi : ::IInspectable {};
+struct IGraphicsEffectD2D1InteropAbi : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
+        LPCWSTR name, UINT* index, GraphicsEffectPropertyMapping* mapping) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) = 0;  // IPropertyValue*
+    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** source) = 0;  // IGraphicsEffectSource*
+    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) = 0;
+};
+struct ICompositorDesktopInteropAbi : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE CreateDesktopWindowTarget(HWND hwnd, BOOL isTopmost,
+                                                                void** result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnsureOnThread(DWORD threadId) = 0;
+};
+struct ICompositorInteropAbi : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE CreateCompositionSurfaceForHandle(HANDLE swapChain,
+                                                                        void** result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateCompositionSurfaceForSwapChain(::IUnknown* swapChain,
+                                                                           void** result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateGraphicsDevice(::IUnknown* renderingDevice,
+                                                           void** result) = 0;
+};
+struct ICompositionDrawingSurfaceInteropAbi : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE BeginDraw(const RECT* updateRect, REFIID iid,
+                                                void** updateObject, POINT* updateOffset) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EndDraw() = 0;
+    virtual HRESULT STDMETHODCALLTYPE Resize(SIZE sizePixels) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Scroll(const RECT* scrollRect, const RECT* clipRect,
+                                             int offsetX, int offsetY) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ResumeDraw() = 0;
+    virtual HRESULT STDMETHODCALLTYPE SuspendDraw() = 0;
+};
+
+struct DispatcherQueueOptionsAbi {
+    DWORD dwSize;
+    int threadType;     // DQTYPE_THREAD_CURRENT = 2
+    int apartmentType;  // DQTAT_COM_NONE = 0
+};
+using CreateDispatcherQueueController_t = HRESULT(WINAPI*)(DispatcherQueueOptionsAbi,
+                                                           void** controller);
+// d2d1.dll's D2D1CreateDevice (not declared by every d2d1_1.h).
+using D2D1CreateDevice_t = HRESULT(WINAPI*)(IDXGIDevice* dxgiDevice,
+                                            const void* creationProperties,  // D2D1_CREATION_PROPERTIES, unused
+                                            ID2D1Device** d2dDevice);
+
+#ifndef DWMWA_USE_HOSTBACKDROPBRUSH
+#define DWMWA_USE_HOSTBACKDROPBRUSH 17
+#endif
+
+bool SameGuid(REFIID a, REFIID b) {
+    return memcmp(&a, &b, sizeof(GUID)) == 0;
+}
+
+// ---- Effect graph ------------------------------------------------------------
+// One Direct2D effect in a composition effect graph, described through the
+// IGraphicsEffectD2D1Interop ABI (what Win2D's effect classes do, without
+// Win2D). Properties are given in the effect's own order and types; sources
+// are other effects or the backdrop parameter. Nothing is animated by name,
+// so the graph is rebuilt when a setting changes.
+struct EffectValue {
+    enum Kind { kFloat, kUInt, kFloat4 };
+    Kind kind;
+    float f;
+    UINT32 u;
+    float v[4];
+};
+
+EffectValue EffectFloat(float f) {
+    return {EffectValue::kFloat, f, 0, {}};
+}
+
+EffectValue EffectUInt(UINT32 u) {
+    return {EffectValue::kUInt, 0.0f, u, {}};
+}
+
+// A color as the float4 (straight alpha) the Flood effect takes.
+EffectValue EffectColor(COLORREF rgb, float alpha) {
+    return {EffectValue::kFloat4,
+            0.0f,
+            0,
+            {GetRValue(rgb) / 255.0f, GetGValue(rgb) / 255.0f, GetBValue(rgb) / 255.0f, alpha}};
+}
+
+struct D2DEffect final : IGraphicsEffectAbi,
+                         IGraphicsEffectSourceAbi,
+                         IGraphicsEffectD2D1InteropAbi {
+    std::atomic<ULONG> refs{1};
+    GUID clsid;
+    winrt::hstring name;
+    std::vector<EffectValue> properties;
+    std::vector<wge::IGraphicsEffectSource> sources;
+
+    D2DEffect(const GUID& id, PCWSTR effectName, std::vector<EffectValue> props,
+              std::vector<wge::IGraphicsEffectSource> srcs)
+        : clsid(id), name(effectName), properties(std::move(props)), sources(std::move(srcs)) {}
+
+    // IUnknown
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) {
+            return E_POINTER;
+        }
+        if (SameGuid(riid, kIidIUnknown) || SameGuid(riid, kIidIInspectable) ||
+            SameGuid(riid, kIidIGraphicsEffect)) {
+            *ppv = static_cast<IGraphicsEffectAbi*>(this);
+        } else if (SameGuid(riid, kIidIGraphicsEffectSource)) {
+            *ppv = static_cast<IGraphicsEffectSourceAbi*>(this);
+        } else if (SameGuid(riid, kIidIGraphicsEffectD2D1Interop)) {
+            *ppv = static_cast<IGraphicsEffectD2D1InteropAbi*>(this);
+        } else {
+            *ppv = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG left = --refs;
+        if (left == 0) {
+            delete this;
+        }
+        return left;
+    }
+
+    // IInspectable
+    HRESULT STDMETHODCALLTYPE GetIids(ULONG* count, IID** iids) override {
+        *count = 0;
+        *iids = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetRuntimeClassName(HSTRING* className) override {
+        *className =
+            static_cast<HSTRING>(winrt::detach_abi(winrt::hstring(L"RoundEverything.Effect")));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetTrustLevel(TrustLevel* level) override {
+        *level = BaseTrust;
+        return S_OK;
+    }
+
+    // IGraphicsEffect
+    HRESULT STDMETHODCALLTYPE get_Name(HSTRING* out) override try {
+        winrt::copy_to_abi(name, *reinterpret_cast<void**>(out));
+        return S_OK;
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+    HRESULT STDMETHODCALLTYPE put_Name(HSTRING in) override try {
+        winrt::copy_from_abi(name, in);
+        return S_OK;
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+
+    // IGraphicsEffectD2D1Interop
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) override {
+        *id = clsid;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*,
+                                                      GraphicsEffectPropertyMapping*) override {
+        return E_INVALIDARG;  // no property is animated by name
+    }
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) override {
+        *count = static_cast<UINT>(properties.size());
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) override try {
+        if (index >= properties.size()) {
+            return E_INVALIDARG;
+        }
+        const EffectValue& p = properties[index];
+        wf::IInspectable boxed = nullptr;
+        switch (p.kind) {
+            case EffectValue::kFloat:
+                boxed = wf::PropertyValue::CreateSingle(p.f);
+                break;
+            case EffectValue::kUInt:
+                boxed = wf::PropertyValue::CreateUInt32(p.u);
+                break;
+            default:
+                boxed = wf::PropertyValue::CreateSingleArray(
+                    winrt::array_view<float const>(p.v, p.v + 4));
+                break;
+        }
+        return winrt::get_unknown(boxed)->QueryInterface(kIidIPropertyValue, value);
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** out) override try {
+        if (index >= sources.size()) {
+            return E_INVALIDARG;
+        }
+        winrt::copy_to_abi(sources[index], *out);
+        return S_OK;
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) override {
+        *count = static_cast<UINT>(sources.size());
+        return S_OK;
+    }
+};
+
+wge::IGraphicsEffectSource MakeEffect(const GUID& clsid, PCWSTR name,
+                                      std::vector<EffectValue> properties,
+                                      std::vector<wge::IGraphicsEffectSource> sources) {
+    auto* effect = new D2DEffect(clsid, name, std::move(properties), std::move(sources));
+    return wge::IGraphicsEffectSource{static_cast<IGraphicsEffectSourceAbi*>(effect),
+                                      winrt::take_ownership_from_abi};
+}
+
+// ---- Composition plumbing (mod UI thread) ------------------------------------
+
+::IUnknown* g_dispatcherController = nullptr;
+winrt::event_token g_deviceReplacedToken{};
+std::atomic<bool> g_surfacesLost{false};  // the rendering device was replaced: redraw
+
+// A Compositor needs a DispatcherQueue on its thread.
+::IUnknown* CreateDispatcherQueueOnThisThread() {
+    HMODULE coreMessaging =
+        LoadLibraryExW(L"CoreMessaging.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    auto create = coreMessaging
+                      ? reinterpret_cast<CreateDispatcherQueueController_t>(
+                            GetProcAddress(coreMessaging, "CreateDispatcherQueueController"))
+                      : nullptr;
+    if (!create) {
+        Wh_Log(L"CreateDispatcherQueueController not found");
+        return nullptr;
+    }
+    DispatcherQueueOptionsAbi options{sizeof(options), 2 /* DQTYPE_THREAD_CURRENT */,
+                                      0 /* DQTAT_COM_NONE */};
+    void* controller = nullptr;
+    HRESULT hr = create(options, &controller);
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateDispatcherQueueController failed: %08X", hr);
+        return nullptr;
+    }
+    return static_cast<::IUnknown*>(controller);
+}
+
+// The Direct2D-backed composition graphics device the mask and overlay
+// surfaces are drawn through (the pixels come from the CPU rasterization;
+// Direct2D only uploads them).
+bool CreateGraphicsDevice() {
+    ID3D11Device* d3d = nullptr;
+    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                                   D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
+                                   D3D11_SDK_VERSION, &d3d, nullptr, nullptr);
+    if (FAILED(hr)) {
+        Wh_Log(L"D3D11CreateDevice (hardware) failed: %08X, trying WARP", hr);
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
+                               D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION,
+                               &d3d, nullptr, nullptr);
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"D3D11CreateDevice failed: %08X", hr);
+        return false;
+    }
+    void* dxgiRaw = nullptr;
+    ID2D1Device* d2d = nullptr;
+    void* interopRaw = nullptr;
+    void* deviceRaw = nullptr;
+    PCWSTR step = L"IDXGIDevice";
+    hr = d3d->QueryInterface(kIidIDXGIDevice, &dxgiRaw);
+    if (SUCCEEDED(hr)) {
+        step = L"D2D1CreateDevice";
+        HMODULE d2dModule = LoadLibraryExW(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        auto createDevice = d2dModule ? reinterpret_cast<D2D1CreateDevice_t>(
+                                            GetProcAddress(d2dModule, "D2D1CreateDevice"))
+                                      : nullptr;
+        hr = createDevice ? createDevice(static_cast<IDXGIDevice*>(dxgiRaw), nullptr, &d2d)
+                          : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+    }
+    if (SUCCEEDED(hr)) {
+        step = L"ICompositorInterop";
+        hr = winrt::get_unknown(g_compositor)->QueryInterface(kIidICompositorInterop, &interopRaw);
+    }
+    if (SUCCEEDED(hr)) {
+        step = L"CreateGraphicsDevice";
+        hr = static_cast<ICompositorInteropAbi*>(interopRaw)->CreateGraphicsDevice(d2d, &deviceRaw);
+    }
+    if (SUCCEEDED(hr)) {
+        g_graphicsDevice = wuc::CompositionGraphicsDevice{deviceRaw, winrt::take_ownership_from_abi};
+    }
+    if (interopRaw) {
+        static_cast<::IUnknown*>(interopRaw)->Release();
+    }
+    if (d2d) {
+        d2d->Release();
+    }
+    if (dxgiRaw) {
+        static_cast<::IUnknown*>(dxgiRaw)->Release();
+    }
+    d3d->Release();
+    if (FAILED(hr)) {
+        Wh_Log(L"%s failed: %08X", step, hr);
+        return false;
+    }
+    // A lost device (driver update, GPU reset) empties the surfaces; they
+    // are drawn again on the next tick.
+    try {
+        g_deviceReplacedToken = g_graphicsDevice.RenderingDeviceReplaced(
+            [](wuc::CompositionGraphicsDevice const&,
+               wuc::RenderingDeviceReplacedEventArgs const&) {
+                Wh_Log(L"rendering device replaced: acrylic surfaces will be redrawn");
+                g_surfacesLost = true;
+                if (HWND ctrl = g_ctrlWnd.load()) {
+                    PostMessageW(ctrl, kMsgReload, 0, 0);
+                }
+            });
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"RenderingDeviceReplaced subscription threw %08X", e.code().value);
+    }
+    return true;
+}
+
+void InitComposition() {
+    g_dispatcherController = CreateDispatcherQueueOnThisThread();
+    if (!g_dispatcherController) {
+        return;
+    }
+    try {
+        g_compositor = wuc::Compositor();
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Compositor creation threw %08X: %s", e.code().value, e.message().c_str());
+        g_compositor = nullptr;
+        return;
+    }
+    if (!CreateGraphicsDevice()) {
+        g_compositor = nullptr;
+        return;
+    }
+    Wh_Log(L"composition ready (acrylic fill available)");
+}
+
+// Everything of the composition must be released on this thread before the
+// image goes away: the effect objects' vtables live in it.
+void ShutdownComposition(HWND ctrl) {
+    if (g_graphicsDevice) {
+        try {
+            if (g_deviceReplacedToken) {
+                g_graphicsDevice.RenderingDeviceReplaced(g_deviceReplacedToken);
+            }
+        } catch (...) {
+        }
+        g_deviceReplacedToken = {};
+        g_graphicsDevice = nullptr;
+    }
+    g_compositor = nullptr;
+    // Let the dispatcher queue drain the compositor's shutdown work (the
+    // control window's own queued messages are dropped: no more ticks).
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        if (msg.hwnd && msg.hwnd == ctrl) {
+            continue;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    if (g_dispatcherController) {
+        g_dispatcherController->Release();
+        g_dispatcherController = nullptr;
+    }
+}
+
+// Uploads premultiplied BGRA pixels into a drawing surface of the same size.
+bool UploadPixels(wuc::CompositionDrawingSurface const& surface, int width, int height,
+                  const DWORD* pixels, PCWSTR what) {
+    void* interopRaw = nullptr;
+    HRESULT hr = winrt::get_unknown(surface)->QueryInterface(kIidICompositionDrawingSurfaceInterop,
+                                                             &interopRaw);
+    if (FAILED(hr)) {
+        Wh_Log(L"%s surface: ICompositionDrawingSurfaceInterop %08X", what, hr);
+        return false;
+    }
+    auto* interop = static_cast<ICompositionDrawingSurfaceInteropAbi*>(interopRaw);
+    void* dcRaw = nullptr;
+    POINT offset{};
+    hr = interop->BeginDraw(nullptr, kIidID2D1DeviceContext, &dcRaw, &offset);
+    if (FAILED(hr)) {
+        Wh_Log(L"%s surface: BeginDraw %08X", what, hr);
+        interop->Release();
+        return false;
+    }
+    auto* dc = static_cast<ID2D1DeviceContext*>(dcRaw);
+    D2D1_BITMAP_PROPERTIES1 props{};
+    props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    props.dpiX = 96.0f;
+    props.dpiY = 96.0f;
+    props.bitmapOptions = D2D1_BITMAP_OPTIONS_NONE;
+    props.colorContext = nullptr;
+    D2D1_SIZE_U size{static_cast<UINT32>(width), static_cast<UINT32>(height)};
+    ID2D1Bitmap1* bitmap = nullptr;
+    hr = dc->CreateBitmap(size, pixels, static_cast<UINT32>(width) * 4, &props, &bitmap);
+    if (SUCCEEDED(hr)) {
+        D2D1_COLOR_F clear{0.0f, 0.0f, 0.0f, 0.0f};
+        dc->Clear(&clear);
+        D2D1_POINT_2F target{static_cast<float>(offset.x), static_cast<float>(offset.y)};
+        dc->DrawImage(bitmap, &target, nullptr, D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                      D2D1_COMPOSITE_MODE_SOURCE_COPY);
+        bitmap->Release();
+    } else {
+        Wh_Log(L"%s surface: CreateBitmap %08X", what, hr);
+    }
+    HRESULT hrEnd = interop->EndDraw();
+    dc->Release();
+    interop->Release();
+    if (FAILED(hrEnd)) {
+        Wh_Log(L"%s surface: EndDraw %08X", what, hrEnd);
+        return false;
+    }
+    return SUCCEEDED(hr);
+}
+
+wuc::CompositionDrawingSurface CreateSurface(int width, int height, const DWORD* pixels,
+                                             PCWSTR what) {
+    try {
+        auto surface = g_graphicsDevice.CreateDrawingSurface(
+            {static_cast<float>(width), static_cast<float>(height)},
+            wgd::DirectXPixelFormat::B8G8R8A8UIntNormalized, wgd::DirectXAlphaMode::Premultiplied);
+        if (!UploadPixels(surface, width, height, pixels, what)) {
+            return nullptr;
+        }
+        return surface;
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"%s surface (%dx%d) threw %08X: %s", what, width, height, e.code().value,
+               e.message().c_str());
+        return nullptr;
+    }
+}
+
+// ---- Z-order -----------------------------------------------------------------
+// The windows the taskbar thread's hook keeps under their taskbar. Written
+// by the UI thread, read by the hook; guarded.
+struct FollowEntry {
+    HWND taskbar = nullptr;
+    HWND frame = nullptr;
+    HWND shadow = nullptr;
+    HWND strips[4] = {};
+};
+std::mutex g_followMutex;
+std::vector<FollowEntry> g_follow;
+std::atomic<unsigned> g_followCount{0};
+thread_local bool t_inFollow = false;
+
+bool IsTopmost(HWND hwnd) {
+    return (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+}
+
+// Whether `above` precedes `below` in the z-order.
+bool WindowAbove(HWND above, HWND below) {
+    for (HWND h = GetWindow(above, GW_HWNDNEXT); h; h = GetWindow(h, GW_HWNDNEXT)) {
+        if (h == below) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Frame topmost, the shadow right above it, the bezel ring right below it,
+// and the taskbar - when it is topmost; it is never made so here - on top
+// of them all.
+void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
+    SetWindowPos(e.frame, HWND_TOPMOST, 0, 0, 0, 0, flags);
+    if (e.shadow) {
+        SetWindowPos(e.shadow, HWND_TOPMOST, 0, 0, 0, 0, flags);
+    }
+    for (HWND strip : e.strips) {
+        if (strip) {
+            SetWindowPos(strip, e.frame, 0, 0, 0, 0, flags);
+        }
+    }
+    if (e.taskbar && IsTopmost(e.taskbar)) {
+        SetWindowPos(e.taskbar, HWND_TOP, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+    }
+}
+
+// The frame lost its topmost bit, got above its (topmost) taskbar, or got
+// above its shadow.
+bool AcrylicOrderBroken(const FollowEntry& e) {
+    if (!IsTopmost(e.frame)) {
+        return true;
+    }
+    if (e.taskbar && IsTopmost(e.taskbar) && WindowAbove(e.frame, e.taskbar)) {
+        return true;
+    }
+    if (e.shadow && IsWindowVisible(e.shadow) && !WindowAbove(e.shadow, e.frame)) {
+        return true;
+    }
+    return false;
+}
+
+FollowEntry FollowEntryFor(const Overlay& overlay) {
+    FollowEntry e;
+    e.taskbar = overlay.layout.taskbar;
+    e.frame = overlay.hwnd;
+    e.shadow = overlay.shadowHwnd;
+    if (overlay.acrylic) {
+        for (int i = 0; i < 4; i++) {
+            e.strips[i] = overlay.acrylic->strips[i];
+        }
+    }
+    return e;
+}
+
+void RemoveFollowLocked(HWND frame) {
+    g_follow.erase(std::remove_if(g_follow.begin(), g_follow.end(),
+                                  [frame](const FollowEntry& e) { return e.frame == frame; }),
+                   g_follow.end());
+}
+
+// UI thread: (re)registers an acrylic frame with the hook, or takes a frame
+// out when it isn't acrylic.
+void UpdateFollow(const Overlay& overlay) {
+    std::lock_guard<std::mutex> lock(g_followMutex);
+    RemoveFollowLocked(overlay.hwnd);
+    if (overlay.acrylic && overlay.hwnd && overlay.layout.taskbar) {
+        g_follow.push_back(FollowEntryFor(overlay));
+    }
+}
+
+// UI thread: a frame is going away.
+void RemoveFollow(HWND frame) {
+    std::lock_guard<std::mutex> lock(g_followMutex);
+    RemoveFollowLocked(frame);
+}
+
+void ClearFollow() {
+    std::lock_guard<std::mutex> lock(g_followMutex);
+    g_follow.clear();
+}
+
+// On the taskbar thread, inside the taskbar window's WM_WINDOWPOSCHANGED
+// (WH_CALLWNDPROC hook): the taskbar just changed its place in the z-order.
+// If the frame ended up above it (or lost its topmost bit), put it back
+// under, in the same call, so no composed frame ever shows the acrylic over
+// the taskbar. At most a few follows per second: our own SetWindowPos calls
+// come back through this hook.
+void FollowTaskbarZOrder(HWND taskbar) {
+    if (t_inFollow || g_unloading) {
+        return;
+    }
+    FollowEntry entry;
+    {
+        std::lock_guard<std::mutex> lock(g_followMutex);
+        for (const FollowEntry& e : g_follow) {
+            if (e.taskbar == taskbar) {
+                entry = e;
+                break;
+            }
+        }
+    }
+    if (!entry.frame || !IsWindowVisible(entry.frame) || !AcrylicOrderBroken(entry)) {
+        return;
+    }
+    static ULONGLONG windowStart = 0;
+    static int followsInWindow = 0;
+    ULONGLONG now = GetTickCount64();
+    if (now - windowStart >= 1000) {
+        windowStart = now;
+        followsInWindow = 0;
+    }
+    if (followsInWindow >= 5) {
+        return;
+    }
+    followsInWindow++;
+    t_inFollow = true;
+    PlaceAcrylicOrder(entry, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+    t_inFollow = false;
+    g_followCount++;
+}
+
+// ---- Windows -----------------------------------------------------------------
+
+bool PresentFrame(HWND hwnd, HDC memDc, int width, int height, const RECT* rect,
+                  BYTE alpha);  // defined with the painting code below
+void ApplyFrameMouseStyle(HWND hwnd);  // defined with the overlay code
+
+// One row or column of the bezel ring: a layered window painted opaque in
+// the monitor-corner color, click-through (on the taskbar's edge that row
+// is the taskbar's own outermost pixel row), cloaked until the frame shows.
+HWND CreateBezelStrip(HWND owner, const RECT& rc, COLORREF color) {
+    int width = rc.right - rc.left, height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    HWND hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+                                    WS_EX_NOACTIVATE,
+                                kFrameClassName, L"Round Everything Bezel", WS_POPUP, rc.left,
+                                rc.top, width, height, owner, nullptr, g_module, nullptr);
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowExW (bezel) failed: %u", GetLastError());
+        return nullptr;
+    }
+    BOOL excludedFromPeek = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludedFromPeek,
+                          sizeof(excludedFromPeek));
+    BOOL noTransitions = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions,
+                          sizeof(noTransitions));
+    CloakWindow(hwnd, true);
+    FrameSurface pixels;
+    pixels.width = width;
+    pixels.height = height;
+    if (AllocateSurfaceBitmap(pixels)) {
+        DWORD opaque = 0xFF000000u | (static_cast<DWORD>(GetRValue(color)) << 16) |
+                       (static_cast<DWORD>(GetGValue(color)) << 8) | GetBValue(color);
+        for (int i = 0; i < width * height; i++) {
+            pixels.pixels[i] = opaque;
+        }
+        PresentFrame(hwnd, pixels.memDc, width, height, &rc, 255);
+    }
+    return hwnd;
+}
+
+void DestroyBezelStrips(Acrylic& ac) {
+    for (HWND& strip : ac.strips) {
+        if (strip) {
+            DestroyWindow(strip);
+            strip = nullptr;
+        }
+    }
+}
+
+// The ring: top and bottom rows across the whole monitor, left and right
+// columns between them. One window per side - a single ring-shaped window
+// would have a monitor-sized rectangle and count as full-screen.
+void CreateBezelStrips(Overlay& overlay) {
+    Acrylic& ac = *overlay.acrylic;
+    DestroyBezelStrips(ac);
+    const RECT& m = overlay.layout.monitorRect;
+    RECT rows[4] = {
+        {m.left, m.top, m.right, m.top + 1},
+        {m.left, m.bottom - 1, m.right, m.bottom},
+        {m.left, m.top + 1, m.left + 1, m.bottom - 1},
+        {m.right - 1, m.top + 1, m.right, m.bottom - 1},
+    };
+    for (int i = 0; i < 4; i++) {
+        ac.strips[i] = CreateBezelStrip(ac.owner, rows[i], kMonitorCornerColor);
+    }
+}
+
+// Hit-test (and DWM clip) region from the frame's rasterized shape: every
+// pixel the solid frame would paint - its anti-aliased coverage plus the
+// static layer (ears, the hit-testable work-area inset strip) - so the mouse
+// meets the acrylic frame exactly where it meets the solid one.
+HRGN RegionFromSurface(const FrameSurface& surface) {
+    int width = surface.width, height = surface.height;
+    std::vector<RECT> rects;
+    for (int y = 0; y < height; y++) {
+        const BYTE* coverage = &surface.coverage[static_cast<size_t>(y) * width];
+        const DWORD* fixed = &surface.staticLayer[static_cast<size_t>(y) * width];
+        int runStart = -1;
+        for (int x = 0; x <= width; x++) {
+            bool on = x < width && (coverage[x] != 0 || (fixed[x] >> 24) != 0);
+            if (on && runStart < 0) {
+                runStart = x;
+            } else if (!on && runStart >= 0) {
+                rects.push_back({runStart, y, x, y + 1});
+                runStart = -1;
+            }
+        }
+    }
+    if (rects.empty()) {
+        return CreateRectRgn(0, 0, 0, 0);
+    }
+    std::vector<BYTE> data(sizeof(RGNDATAHEADER) + rects.size() * sizeof(RECT));
+    auto* header = reinterpret_cast<RGNDATAHEADER*>(data.data());
+    header->dwSize = sizeof(RGNDATAHEADER);
+    header->iType = RDH_RECTANGLES;
+    header->nCount = static_cast<DWORD>(rects.size());
+    header->nRgnSize = 0;
+    header->rcBound = RECT{0, 0, width, height};
+    memcpy(data.data() + sizeof(RGNDATAHEADER), rects.data(), rects.size() * sizeof(RECT));
+    HRGN region = ExtCreateRegion(nullptr, static_cast<DWORD>(data.size()),
+                                  reinterpret_cast<RGNDATA*>(data.data()));
+    if (!region) {
+        Wh_Log(L"ExtCreateRegion (%zu rects) failed: %u", rects.size(), GetLastError());
+        region = CreateRectRgn(0, 0, width, height);
+    }
+    return region;
+}
+
+void ApplyAcrylicRegion(Overlay& overlay) {
+    HRGN region = RegionFromSurface(*overlay.surface);
+    SetWindowRgn(overlay.hwnd, region, FALSE);  // the system owns the region now
+}
+
+// Creates the acrylic frame's windows (owner, frame, bezel ring) and its
+// composition target. The frame is created hidden and cloaked; its content
+// is built by PaintOverlay.
+bool CreateAcrylicFrame(Overlay& overlay) {
+    auto ac = std::make_unique<Acrylic>();
+    ac->owner = CreateWindowExW(WS_EX_TOOLWINDOW, kFrameClassName, L"", WS_POPUP, 0, 0, 0, 0,
+                                nullptr, nullptr, g_module, nullptr);
+    if (!ac->owner) {
+        Wh_Log(L"CreateWindowExW (owner) failed: %u", GetLastError());
+        return false;
+    }
+    const RECT& rc = overlay.layout.overlayRect;
+    DWORD exStyle = WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+    HWND hwnd = CreateWindowExW(exStyle, kFrameClassName, L"Round Everything", WS_POPUP, rc.left,
+                                rc.top, rc.right - rc.left, rc.bottom - rc.top, ac->owner, nullptr,
+                                g_module, nullptr);
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowExW (acrylic frame) failed: %u", GetLastError());
+        DestroyWindow(ac->owner);
+        return false;
+    }
+    SetLayeredWindowAttributes(hwnd, 0, kAcrylicWindowAlpha, LWA_ALPHA);
+    BOOL on = TRUE;
+    HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &on, sizeof(on));
+    if (FAILED(hr)) {
+        Wh_Log(L"DWMWA_USE_HOSTBACKDROPBRUSH: %08X", hr);
+    }
+    BOOL excludedFromPeek = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludedFromPeek,
+                          sizeof(excludedFromPeek));
+    BOOL noTransitions = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions,
+                          sizeof(noTransitions));
+    CloakWindow(hwnd, true);
+    ApplyFrameMouseStyle(hwnd);
+
+    void* interopRaw = nullptr;
+    hr = winrt::get_unknown(g_compositor)->QueryInterface(kIidICompositorDesktopInterop,
+                                                          &interopRaw);
+    void* targetRaw = nullptr;
+    if (SUCCEEDED(hr)) {
+        hr = static_cast<ICompositorDesktopInteropAbi*>(interopRaw)->CreateDesktopWindowTarget(
+            hwnd, FALSE, &targetRaw);
+        static_cast<::IUnknown*>(interopRaw)->Release();
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateDesktopWindowTarget: %08X", hr);
+        DestroyWindow(hwnd);
+        DestroyWindow(ac->owner);
+        return false;
+    }
+    try {
+        ac->target = wucd::DesktopWindowTarget{targetRaw, winrt::take_ownership_from_abi};
+        ac->root = g_compositor.CreateContainerVisual();
+        ac->target.Root(ac->root);
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"composition target setup threw %08X: %s", e.code().value, e.message().c_str());
+        ac->root = nullptr;
+        ac->target = nullptr;
+        DestroyWindow(hwnd);
+        DestroyWindow(ac->owner);
+        return false;
+    }
+    overlay.hwnd = hwnd;
+    overlay.acrylic = std::move(ac);
+    CreateBezelStrips(overlay);
+    Wh_Log(L"monitor %p: acrylic frame %p (%ld,%ld,%ld,%ld), owner %p", overlay.layout.monitor,
+           hwnd, rc.left, rc.top, rc.right, rc.bottom, overlay.acrylic->owner);
+    return true;
+}
+
+// Moves a re-shaped acrylic frame to its new rectangle (the content is
+// rebuilt by the next PaintOverlay) and rebuilds the bezel ring.
+void PlaceAcrylicFrame(Overlay& overlay) {
+    const RECT& rc = overlay.layout.overlayRect;
+    SetWindowPos(overlay.hwnd, nullptr, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    overlay.acrylic->built = false;
+    CreateBezelStrips(overlay);
+}
+
+void DestroyAcrylic(Overlay& overlay) {
+    Acrylic& ac = *overlay.acrylic;
+    try {
+        if (ac.target) {
+            ac.target.Root(nullptr);
+        }
+    } catch (...) {
+    }
+    ac.maskBrush = nullptr;
+    ac.effectBrush = nullptr;
+    ac.maskSurface = nullptr;
+    ac.overlaySurface = nullptr;
+    ac.root = nullptr;
+    ac.target = nullptr;
+    DestroyBezelStrips(ac);
+    if (overlay.hwnd) {
+        DestroyWindow(overlay.hwnd);
+        overlay.hwnd = nullptr;
+    }
+    if (ac.owner) {
+        DestroyWindow(ac.owner);
+        ac.owner = nullptr;
+    }
+    overlay.acrylic.reset();
+}
+
+// Cloaked = off the screen (alpha 0's counterpart for the composition
+// window and its ring). Uncloaking from the taskbar thread is what reveals
+// the frame in the handshake.
+void SetAcrylicCloaked(const Overlay& overlay, bool cloak) {
+    if (!cloak) {
+        for (HWND strip : overlay.acrylic->strips) {
+            if (strip) {
+                CloakWindow(strip, false);
+            }
+        }
+    }
+    CloakWindow(overlay.hwnd, cloak);
+    if (cloak) {
+        for (HWND strip : overlay.acrylic->strips) {
+            if (strip) {
+                CloakWindow(strip, true);
+            }
+        }
+    }
+}
+
+// ---- Content -----------------------------------------------------------------
+
+// The effect graph behind the mask: backdrop -> blur -> saturation ->
+// luminosity blend with the frame color -> the frame color laid over it.
+// Returns the level built: 0 that graph; 1 the blur alone (the graph the
+// prototype ran on - tried when the composition engine rejects the full
+// one), with the tint then laid over it as a color sprite; -1 nothing.
+int BuildAcrylicBrush(Overlay& overlay, COLORREF rgb) {
+    Acrylic& ac = *overlay.acrylic;
+    const Layout& layout = overlay.layout;
+    for (int level = 0; level < 2; level++) {
+        try {
+            auto backdrop = wuc::CompositionEffectSourceParameter(L"backdrop");
+            wge::IGraphicsEffectSource chain = MakeEffect(
+                kClsidD2D1GaussianBlur, L"Blur",
+                {EffectFloat(layout.backdropBlur), EffectUInt(kGaussianBlurOptimizationBalanced),
+                 EffectUInt(kBorderModeHard)},
+                {backdrop});
+            if (level == 0) {
+                if (g_settings.saturation != 100) {
+                    chain = MakeEffect(kClsidD2D1Saturation, L"Saturation",
+                                       {EffectFloat(g_settings.saturation / 100.0f)}, {chain});
+                }
+                if (g_settings.luminosityOpacity > 0) {
+                    // Luminosity blend: the frame color's brightness with
+                    // the blurred content's hue and saturation. Direct2D's
+                    // blend effect takes the *source* (whose luminosity is
+                    // used) as input 0 and the backdrop (whose hue and
+                    // saturation survive) as input 1 - the other way round
+                    // from what the names in Win2D/WinUI suggest, which is
+                    // why WinUI's acrylic code flips them too.
+                    auto color = MakeEffect(
+                        kClsidD2D1Flood, L"LuminosityColor",
+                        {EffectColor(rgb, g_settings.luminosityOpacity / 100.0f)}, {});
+                    chain = MakeEffect(kClsidD2D1Blend, L"Luminosity",
+                                       {EffectUInt(kBlendModeLuminosity)}, {color, chain});
+                }
+                if (g_settings.tintOpacity > 0) {
+                    auto color = MakeEffect(kClsidD2D1Flood, L"TintColor",
+                                            {EffectColor(rgb, g_settings.tintOpacity / 100.0f)},
+                                            {});
+                    chain = MakeEffect(kClsidD2D1Composite, L"Tint",
+                                       {EffectUInt(kCompositeModeSourceOver)}, {chain, color});
+                }
+            }
+            auto factory = g_compositor.CreateEffectFactory(chain.as<wge::IGraphicsEffect>());
+            // The graph loads asynchronously: Pending is the usual answer
+            // here, not a failure.
+            auto status = factory.LoadStatus();
+            if (status == wuc::CompositionEffectFactoryLoadStatus::EffectTooComplex ||
+                status == wuc::CompositionEffectFactoryLoadStatus::Other) {
+                Wh_Log(L"monitor %p: effect graph (level %d) rejected: status %d, error %08X",
+                       layout.monitor, level, static_cast<int>(status),
+                       factory.ExtendedError().value);
+                continue;
+            }
+            auto brush = factory.CreateBrush();
+            brush.SetSourceParameter(L"backdrop", g_compositor.CreateHostBackdropBrush());
+            ac.effectBrush = brush;
+            if (level > 0) {
+                Wh_Log(L"monitor %p: acrylic reduced to blur and tint (full graph rejected)",
+                       layout.monitor);
+            }
+            return level;
+        } catch (winrt::hresult_error const& e) {
+            Wh_Log(L"monitor %p: effect graph (level %d) threw %08X: %s", layout.monitor, level,
+                   e.code().value, e.message().c_str());
+        }
+    }
+    return -1;
+}
+
+wuc::CompositionSurfaceBrush SurfaceBrushFor(wuc::CompositionDrawingSurface const& surface) {
+    auto brush = g_compositor.CreateSurfaceBrush(surface);
+    brush.Stretch(wuc::CompositionStretch::None);
+    brush.HorizontalAlignmentRatio(0.0f);
+    brush.VerticalAlignmentRatio(0.0f);
+    return brush;
+}
+
+// Builds (or rebuilds) the composition content from the rasterized frame:
+// the mask surface (the frame's coverage), the overlay surface (noise grain
+// under the ears), the effect brush, and the two sprites.
+bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
+    Acrylic& ac = *overlay.acrylic;
+    const Layout& layout = overlay.layout;
+    const FrameSurface& surface = *overlay.surface;
+    int width = surface.width, height = surface.height;
+    size_t count = surface.coverage.size();
+
+    if (!ac.built) {
+        std::vector<DWORD> mask(count);
+        for (size_t i = 0; i < count; i++) {
+            DWORD c = surface.coverage[i];
+            mask[i] = (c << 24) | (c << 16) | (c << 8) | c;  // premultiplied white
+        }
+
+        std::vector<DWORD> over(count, 0);
+        unsigned density = static_cast<unsigned>(g_settings.noiseDensity);
+        unsigned opacity = static_cast<unsigned>(g_settings.noiseOpacity);
+        if (density > 0 && opacity > 0) {
+            // Grey grain over the frame (the taskbar's part included), the
+            // same from one build to the next so a recolor doesn't shimmer.
+            uint32_t state = 0x9E3779B9u ^
+                             static_cast<uint32_t>(reinterpret_cast<ULONG_PTR>(layout.monitor));
+            if (!state) {
+                state = 1;
+            }
+            for (size_t i = 0; i < count; i++) {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                unsigned c = surface.coverage[i];
+                if (!c || (state % 100) >= density) {
+                    continue;
+                }
+                unsigned a = c * opacity / 100;
+                if (!a) {
+                    continue;
+                }
+                unsigned grey = ((state >> 8) & 0xFF) * a / 255;
+                over[i] = (a << 24) | (grey << 16) | (grey << 8) | grey;
+            }
+        }
+        for (size_t i = 0; i < count; i++) {
+            DWORD fixed = surface.staticLayer[i];
+            if (fixed) {
+                over[i] = BlendOver(fixed, over[i]);
+            }
+        }
+
+        ac.maskSurface = CreateSurface(width, height, mask.data(), L"mask");
+        ac.overlaySurface = CreateSurface(width, height, over.data(), L"overlay");
+        if (!ac.maskSurface || !ac.overlaySurface) {
+            return false;
+        }
+        ApplyAcrylicRegion(overlay);
+        ac.built = true;
+    }
+
+    int level = BuildAcrylicBrush(overlay, rgb);
+    if (level < 0) {
+        return false;
+    }
+
+    // The sprites, window-sized: the backdrop through the mask, the tint
+    // over it when the graph couldn't carry it, and the overlay on top.
+    wf::Numerics::float2 size{static_cast<float>(width), static_cast<float>(height)};
+    ac.root.Children().RemoveAll();
+    ac.root.Size(size);
+    ac.maskBrush = g_compositor.CreateMaskBrush();
+    ac.maskBrush.Mask(SurfaceBrushFor(ac.maskSurface));
+    ac.maskBrush.Source(ac.effectBrush);
+    auto fill = g_compositor.CreateSpriteVisual();
+    fill.Size(size);
+    fill.Brush(ac.maskBrush);
+    ac.root.Children().InsertAtTop(fill);
+    if (level > 0 && g_settings.tintOpacity > 0) {
+        auto tintMask = g_compositor.CreateMaskBrush();
+        tintMask.Mask(SurfaceBrushFor(ac.maskSurface));
+        tintMask.Source(g_compositor.CreateColorBrush(
+            wu::Color{static_cast<uint8_t>(g_settings.tintOpacity * 255 / 100), GetRValue(rgb),
+                      GetGValue(rgb), GetBValue(rgb)}));
+        auto tint = g_compositor.CreateSpriteVisual();
+        tint.Size(size);
+        tint.Brush(tintMask);
+        ac.root.Children().InsertAtTop(tint);
+    }
+    auto top = g_compositor.CreateSpriteVisual();
+    top.Size(size);
+    top.Brush(SurfaceBrushFor(ac.overlaySurface));
+    ac.root.Children().InsertAtTop(top);
+    Wh_Log(L"monitor %p: acrylic content %dx%d (graph level %d; blur %.1f, tint #%02X%02X%02X at "
+           L"%d%%, luminosity %d%%, saturation %d%%, noise %d%% at %d%%)",
+           layout.monitor, width, height, level, layout.backdropBlur, GetRValue(rgb),
+           GetGValue(rgb), GetBValue(rgb), g_settings.tintOpacity, g_settings.luminosityOpacity,
+           g_settings.saturation, g_settings.noiseOpacity, g_settings.noiseDensity);
+    return true;
+} catch (winrt::hresult_error const& e) {
+    Wh_Log(L"monitor %p: acrylic content threw %08X: %s", overlay.layout.monitor, e.code().value,
+           e.message().c_str());
+    return false;
 }
 
 // Pushes a frame bitmap to its window at a constant alpha (255 to show, 0
@@ -2218,15 +3753,38 @@ bool PresentFrame(HWND hwnd, HDC memDc, int width, int height, const RECT* rect,
     return ok != FALSE;
 }
 
-// Pushes the frame's bitmap to the screen at its presentation alpha.
+// Pushes the frame's bitmap to the screen at its presentation alpha (an
+// acrylic frame is uncloaked or cloaked instead). Presents the frame and,
+// with it, its shadow window (built here if the layout calls for one and it
+// isn't yet). The caller holds g_revealMutex.
+bool PresentOverlayLocked(Overlay& overlay) {
+    bool ok = true;
+    if (overlay.acrylic) {
+        SetAcrylicCloaked(overlay, overlay.presentAlpha == 0);
+    } else {
+        const FrameSurface& surface = *overlay.surface;
+        ok = PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
+                          &overlay.layout.overlayRect, overlay.presentAlpha);
+    }
+    if (overlay.shadowHwnd) {
+        if (!overlay.shadowSurface) {
+            overlay.shadowSurface = BuildShadowSurface(overlay.layout);
+        }
+        if (overlay.shadowSurface) {
+            const FrameSurface& shadow = *overlay.shadowSurface;
+            PresentFrame(overlay.shadowHwnd, shadow.memDc, shadow.width, shadow.height,
+                         &overlay.layout.innerRect, overlay.presentAlpha);
+        }
+    }
+    return ok;
+}
+
 bool PresentOverlay(Overlay& overlay) {
-    if (!overlay.hwnd || !overlay.surface) {
+    if (!overlay.hwnd || (!overlay.surface && !overlay.acrylic)) {
         return false;
     }
     std::lock_guard<std::mutex> lock(g_revealMutex);
-    const FrameSurface& surface = *overlay.surface;
-    return PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
-                        &overlay.layout.overlayRect, overlay.presentAlpha);
+    return PresentOverlayLocked(overlay);
 }
 
 // Colors the cached shape (one table lookup per pixel) and pushes it to the
@@ -2237,10 +3795,27 @@ bool PaintOverlay(Overlay& overlay, COLORREF rgb) {
         return false;
     }
     if (!overlay.surface) {
-        overlay.surface = BuildFrameSurface(layout);
+        overlay.surface = BuildFrameSurface(layout, !overlay.acrylic);
         if (!overlay.surface) {
             return false;
         }
+    }
+    if (overlay.acrylic) {
+        // The shape goes to the composition surfaces; the color into the
+        // effect graph. The taskbar thread never touches either.
+        if (!BuildAcrylicContent(overlay, rgb)) {
+            if (!g_acrylicUnavailable.exchange(true)) {
+                Wh_Log(L"acrylic frame can't be built here - falling back to the solid fill");
+                if (HWND ctrl = g_ctrlWnd.load()) {
+                    PostMessageW(ctrl, kMsgReload, 0, 0);
+                }
+            }
+            return false;
+        }
+        overlay.painted = true;
+        overlay.paintedColor = rgb;
+        std::lock_guard<std::mutex> lock(g_revealMutex);
+        return PresentOverlayLocked(overlay);
     }
     std::lock_guard<std::mutex> lock(g_revealMutex);
 
@@ -2272,8 +3847,7 @@ bool PaintOverlay(Overlay& overlay, COLORREF rgb) {
 
     overlay.painted = true;
     overlay.paintedColor = rgb;
-    return PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
-                        &layout.overlayRect, overlay.presentAlpha);
+    return PresentOverlayLocked(overlay);
 }
 
 // ---------------------------------------------------------------------------
@@ -2422,17 +3996,37 @@ void HideFrame(Overlay& overlay) {
         overlay.presentAlpha = 0;
         PresentOverlay(overlay);  // a no-op without a surface
         ShowWindow(overlay.hwnd, SW_HIDE);
+        if (overlay.shadowHwnd) {
+            ShowWindow(overlay.shadowHwnd, SW_HIDE);
+        }
+        if (overlay.acrylic) {
+            for (HWND strip : overlay.acrylic->strips) {
+                if (strip) {
+                    ShowWindow(strip, SW_HIDE);
+                }
+            }
+        }
     }
     overlay.shown = false;
 }
 
-// Removes a frame on the spot.
+// Removes a frame (and its shadow) on the spot.
 void DestroyOverlay(Overlay& overlay) {
     if (overlay.hwnd) {
         HideFrame(overlay);
-        DestroyWindow(overlay.hwnd);
-        overlay.hwnd = nullptr;
+        RemoveFollow(overlay.hwnd);
+        if (overlay.acrylic) {
+            DestroyAcrylic(overlay);
+        } else {
+            DestroyWindow(overlay.hwnd);
+            overlay.hwnd = nullptr;
+        }
     }
+    if (overlay.shadowHwnd) {
+        DestroyWindow(overlay.shadowHwnd);
+        overlay.shadowHwnd = nullptr;
+    }
+    overlay.shadowSurface.reset();
 }
 
 // Takes every frame off the screen on the spot, leaving the windows to be
@@ -2461,10 +4055,10 @@ Overlay* FindOverlay(HMONITOR monitor) {
 
 // With the work area reserved the frame is solid to the mouse where it is
 // painted, like the taskbar (the layered window passes the mouse through
-// wherever its pixels have zero alpha anyway): nothing that needs clicks is
-// under it, and the resize borders of maximized windows stay unreachable.
-// Without the work area the frame overlaps windows, so it lets the mouse
-// through everywhere.
+// wherever its pixels have zero alpha anyway; the acrylic window's region
+// is its painted shape): nothing that needs clicks is under it, and the
+// resize borders of maximized windows stay unreachable. Without the work
+// area the frame overlaps windows, so it lets the mouse through everywhere.
 void ApplyFrameMouseStyle(HWND hwnd) {
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     LONG_PTR wanted = g_settings.reserveWorkArea ? (exStyle & ~WS_EX_TRANSPARENT)
@@ -2474,6 +4068,7 @@ void ApplyFrameMouseStyle(HWND hwnd) {
     }
 }
 
+// The solid frame: a layered window updated from its bitmap.
 HWND CreateFrameWindow(const RECT& rect) {
     DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
     HWND hwnd = CreateWindowExW(exStyle, kFrameClassName, L"Round Everything", WS_POPUP,
@@ -2498,12 +4093,50 @@ HWND CreateFrameWindow(const RECT& rect) {
     return hwnd;
 }
 
+// The shadow window: like the frame, but always click-through (its pixels
+// lie over the screen content). Created hidden; shown with the frame.
+HWND CreateShadowWindow(const RECT& rect) {
+    DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+                    WS_EX_TOPMOST;
+    HWND hwnd = CreateWindowExW(exStyle, kFrameClassName, L"Round Everything Shadow", WS_POPUP,
+                                rect.left, rect.top, rect.right - rect.left,
+                                rect.bottom - rect.top, nullptr, nullptr, g_module, nullptr);
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowExW (shadow) failed: %u", GetLastError());
+        return nullptr;
+    }
+    BOOL excludedFromPeek = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludedFromPeek,
+                          sizeof(excludedFromPeek));
+    BOOL noTransitions = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions,
+                          sizeof(noTransitions));
+    return hwnd;
+}
+
+// Creates or removes a frame's shadow window to match its layout. Returns
+// whether a window was created (it is still hidden then).
+bool SyncShadowWindow(Overlay& overlay) {
+    bool wanted = overlay.layout.shadowBlur > 0;
+    if (wanted && !overlay.shadowHwnd) {
+        overlay.shadowHwnd = CreateShadowWindow(overlay.layout.innerRect);
+        return overlay.shadowHwnd != nullptr;
+    }
+    if (!wanted && overlay.shadowHwnd) {
+        DestroyWindow(overlay.shadowHwnd);
+        overlay.shadowHwnd = nullptr;
+        overlay.shadowSurface.reset();
+    }
+    return false;
+}
+
 // Brings the frames in line with the layouts: one persistent frame window per
 // monitor. A monitor whose layout changed (the taskbar moved, resized, came
 // or went) keeps its window and gets a new shape; with a taskbar it is then
 // shown again together with it. New monitors get a new frame, vanished
 // monitors lose theirs.
 void WaitForTaskbar(Overlay& overlay, ULONGLONG now, PCWSTR why);  // defined with the visibility code
+void RaiseFrame(Overlay& overlay, bool show);
 
 void SyncOverlays(const std::vector<Layout>& layouts) {
     // Frames of monitors that are gone.
@@ -2534,7 +4167,14 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             }
             existing->layout = layout;
             existing->surface.reset();  // rebuilt by the paint below
+            existing->shadowSurface.reset();
+            bool shadowCreated = SyncShadowWindow(*existing);
             ApplyFrameMouseStyle(existing->hwnd);
+            if (existing->acrylic) {
+                PlaceAcrylicFrame(*existing);  // moved now; content rebuilt by the paint
+                EnsureTaskbarHooks(layout.taskbar);
+            }
+            UpdateFollow(*existing);
             if (layout.taskbar && taskbarChanged) {
                 // Shown again together with the taskbar once it is whole
                 // (a change of settings alone re-shapes on the spot).
@@ -2542,15 +4182,26 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             }
             if (existing->shown) {
                 // Re-shape in place; UpdateLayeredWindow moves and resizes
-                // the window along with the new bitmap.
+                // the windows along with the new bitmaps.
                 PaintOverlay(*existing, existing->painted ? existing->paintedColor
                                                           : g_settings.customColor);
+                if (shadowCreated || existing->acrylic) {
+                    RaiseFrame(*existing, true);  // new shadow / bezel windows are still hidden
+                }
             } else {
-                SetWindowPos(existing->hwnd, nullptr, layout.overlayRect.left,
-                             layout.overlayRect.top,
-                             layout.overlayRect.right - layout.overlayRect.left,
-                             layout.overlayRect.bottom - layout.overlayRect.top,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
+                if (!existing->acrylic) {
+                    SetWindowPos(existing->hwnd, nullptr, layout.overlayRect.left,
+                                 layout.overlayRect.top,
+                                 layout.overlayRect.right - layout.overlayRect.left,
+                                 layout.overlayRect.bottom - layout.overlayRect.top,
+                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                if (existing->shadowHwnd) {
+                    SetWindowPos(existing->shadowHwnd, nullptr, layout.innerRect.left,
+                                 layout.innerRect.top, layout.innerRect.right - layout.innerRect.left,
+                                 layout.innerRect.bottom - layout.innerRect.top,
+                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                }
                 existing->painted = false;
             }
             Wh_Log(L"monitor %p: frame re-shaped (taskbar %p, edge %d)", layout.monitor,
@@ -2560,10 +4211,19 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
 
         Overlay overlay;
         overlay.layout = layout;
-        overlay.hwnd = CreateFrameWindow(layout.overlayRect);
-        if (!overlay.hwnd) {
-            continue;
+        if (UsesAcrylic()) {
+            if (!CreateAcrylicFrame(overlay)) {
+                continue;
+            }
+            EnsureTaskbarHooks(layout.taskbar);
+        } else {
+            overlay.hwnd = CreateFrameWindow(layout.overlayRect);
+            if (!overlay.hwnd) {
+                continue;
+            }
         }
+        SyncShadowWindow(overlay);
+        UpdateFollow(overlay);
         if (layout.taskbar) {
             overlay.waiting = true;  // appears together with the taskbar
             overlay.waitSince = GetTickCount64();
@@ -2577,6 +4237,9 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
 // topmost bit, or a visible non-topmost window precedes it in z-order over
 // the frame's area.
 bool FrameNeedsRaise(const Overlay& overlay) {
+    if (overlay.acrylic) {
+        return AcrylicOrderBroken(FollowEntryFor(overlay));
+    }
     if (!(GetWindowLongPtrW(overlay.hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
         return true;
     }
@@ -2604,9 +4267,20 @@ bool FrameNeedsRaise(const Overlay& overlay) {
     return false;
 }
 
+// Puts the frame on top and its shadow right behind it (the shadow inherits
+// the frame's place in the z-order: topmost, just below it). An acrylic
+// frame goes under its taskbar instead, its shadow right above it and the
+// bezel ring right below.
 void RaiseFrame(Overlay& overlay, bool show) {
-    SetWindowPos(overlay.hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | (show ? SWP_SHOWWINDOW : 0));
+    UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | (show ? SWP_SHOWWINDOW : 0);
+    if (overlay.acrylic) {
+        PlaceAcrylicOrder(FollowEntryFor(overlay), flags);
+        return;
+    }
+    SetWindowPos(overlay.hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
+    if (overlay.shadowHwnd) {
+        SetWindowPos(overlay.shadowHwnd, overlay.hwnd, 0, 0, 0, 0, flags);
+    }
 }
 
 // Takes a frame off the screen on the spot and starts waiting for its
@@ -2668,7 +4342,20 @@ UINT BeginReveal(Overlay& overlay) {
     if (overlay.surface) {
         std::lock_guard<std::mutex> lock(g_revealMutex);
         const FrameSurface& surface = *overlay.surface;
-        g_reveals[taskbar] = {serial, overlay.hwnd, surface.memDc, surface.width, surface.height};
+        Reveal reveal{serial, overlay.hwnd, surface.memDc, surface.width, surface.height};
+        if (overlay.acrylic) {
+            reveal.composition = true;
+            for (int i = 0; i < 4; i++) {
+                reveal.strips[i] = overlay.acrylic->strips[i];
+            }
+        }
+        if (overlay.shadowHwnd && overlay.shadowSurface) {
+            reveal.shadow = overlay.shadowHwnd;
+            reveal.shadowDc = overlay.shadowSurface->memDc;
+            reveal.shadowWidth = overlay.shadowSurface->width;
+            reveal.shadowHeight = overlay.shadowSurface->height;
+        }
+        g_reveals[taskbar] = reveal;
         overlay.revealPending = true;
     }
     RequestTaskbarRecolor(taskbar, serial);
@@ -2759,18 +4446,46 @@ bool SpansItsMonitor(HWND hwnd) {
            RectContains(rect, mi.rcMonitor);
 }
 
-// A visible, monitor-sized window of the Task View classes that is in the
-// foreground or titled "Task View" (the title is there from the moment the
-// window shows, before the foreground has moved to it).
+// A visible, monitor-sized window of the Task View classes that carries a
+// title - "Task View" (localized elsewhere), there from the moment the
+// window shows, before the foreground has moved to it - and is either
+// titled exactly that or in the foreground. The taskbar's thumbnail flyout
+// is the same kind of window and is activated by a click on a grouped
+// button, but it has no title, so it never passes.
 bool IsTaskViewWindow(HWND hwnd) {
     if (!IsWindowVisible(hwnd) || IsWindowCloaked(hwnd) || !SpansItsMonitor(hwnd)) {
         return false;
     }
-    if (hwnd == GetForegroundWindow()) {
-        return true;
-    }
     WCHAR title[64];
-    return GetWindowTextW(hwnd, title, ARRAYSIZE(title)) > 0 && wcscmp(title, L"Task View") == 0;
+    if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0) {
+        return false;
+    }
+    return wcscmp(title, L"Task View") == 0 || hwnd == GetForegroundWindow();
+}
+
+// Diagnostics: every window of the Task View classes, as it is right now.
+void LogTaskViewCandidates(PCWSTR why) {
+    static const PCWSTR kClasses[] = {L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame"};
+    HWND foreground = GetForegroundWindow();
+    for (PCWSTR cls : kClasses) {
+        for (HWND hwnd = FindWindowExW(nullptr, nullptr, cls, nullptr); hwnd;
+             hwnd = FindWindowExW(nullptr, hwnd, cls, nullptr)) {
+            if (!IsWindowVisible(hwnd)) {
+                continue;
+            }
+            WCHAR title[64] = L"";
+            GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+            RECT rc{};
+            GetWindowRect(hwnd, &rc);
+            Wh_Log(L"%s: %s %p \"%s\" (%ld,%ld,%ld,%ld) spans monitor %d, cloaked %d, foreground "
+                   L"%d, owner %p, style %08X exstyle %08X",
+                   why, cls, hwnd, title, rc.left, rc.top, rc.right, rc.bottom,
+                   SpansItsMonitor(hwnd) ? 1 : 0, IsWindowCloaked(hwnd) ? 1 : 0,
+                   hwnd == foreground ? 1 : 0, GetWindow(hwnd, GW_OWNER),
+                   static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE)),
+                   static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)));
+        }
+    }
 }
 
 // The open Task View window, or null.
@@ -2804,6 +4519,18 @@ void UpdateVisibility() {
     ULONGLONG now = GetTickCount64();
     HWND taskViewWnd = FindTaskViewWindow();
     bool taskView = taskViewWnd != nullptr;
+    // Diagnostics: a monitor-sized island window in the foreground that was
+    // *not* taken for Task View (a clicked thumbnail flyout, say) - logged
+    // once per window, with what it looks like.
+    if (!taskView) {
+        static HWND lastRejected = nullptr;
+        HWND foreground = GetForegroundWindow();
+        if (foreground && foreground != lastRejected && IsTaskViewWindowClass(foreground) &&
+            SpansItsMonitor(foreground)) {
+            lastRejected = foreground;
+            LogTaskViewCandidates(L"foreground island not taken for Task View");
+        }
+    }
 
     for (Overlay& overlay : g_overlays) {
         HWND fullscreenWnd = nullptr;
@@ -2852,6 +4579,7 @@ void UpdateVisibility() {
             Wh_Log(L"monitor %p: Task View open (%p \"%s\"%s), frame off and taskbar transparent",
                    overlay.layout.monitor, taskViewWnd, title,
                    taskViewWnd == GetForegroundWindow() ? L", foreground" : L"");
+            LogTaskViewCandidates(L"Task View candidates");
         }
         bool taskViewHolds = false;
         if (!taskView && overlay.taskViewHidden) {
@@ -3452,6 +5180,9 @@ void SetEarsHidden(HWND taskbar, bool hidden) {
             ear.Opacity(hidden ? 0.0 : 1.0);
         }
     }
+    if (corner->second.line) {
+        corner->second.line.Opacity(hidden ? 0.0 : 1.0);
+    }
 }
 
 void QueueRecolor(std::vector<PendingRecolor>& list, HWND taskbar, UINT serial) {
@@ -3523,7 +5254,23 @@ void ApplyRecolorsInRenderingTick() {
                 // resized under us, say): the UI thread then presents it
                 // itself instead of counting it as revealed.
                 const Reveal& r = reveal->second;
-                if (PresentFrame(r.frame, r.memDc, r.width, r.height, nullptr, 255)) {
+                if (r.shadow) {
+                    PresentFrame(r.shadow, r.shadowDc, r.shadowWidth, r.shadowHeight, nullptr, 255);
+                }
+                bool presented;
+                if (r.composition) {
+                    BOOL off = FALSE;
+                    for (HWND strip : r.strips) {
+                        if (strip) {
+                            DwmSetWindowAttribute(strip, DWMWA_CLOAK, &off, sizeof(off));
+                        }
+                    }
+                    presented =
+                        SUCCEEDED(DwmSetWindowAttribute(r.frame, DWMWA_CLOAK, &off, sizeof(off)));
+                } else {
+                    presented = PresentFrame(r.frame, r.memDc, r.width, r.height, nullptr, 255);
+                }
+                if (presented) {
                     g_reveals.erase(reveal);
                 }
             }
@@ -3617,7 +5364,8 @@ bool ReapplyWants(HWND taskbar, bool requested) try {
         clean = clean && !op.changed;
     }
     if (wants.ears) {
-        XamlCornerOp op{taskbar, wants.edge, wants.radiusDips, wants.earRgb, false, false, false};
+        XamlCornerOp op{taskbar,      wants.edge, wants.radiusDips, wants.earInsetDips,
+                        wants.earRgb, false,      false,            false};
         ApplyXamlCornersOnTaskbarThread(&op);
         found = found && op.found;
         clean = clean && !op.changed;
@@ -4013,17 +5761,31 @@ DWORD CustomColorArgb() {
            (static_cast<DWORD>(GetGValue(rgb)) << 8) | GetBValue(rgb);
 }
 
-void ApplyFills(DWORD argb, ULONGLONG now) {
+// What the taskbar on a monitor is painted with: the frame color (solid
+// fill), or transparent, so that the acrylic frame under it shows through
+// (whenever the frame is off - Task View, a full-screen window - the
+// taskbar is transparent as well, as it is in Task View with either fill).
+DWORD FillArgbFor(const Overlay& overlay) {
+    DWORD argb = CustomColorArgb();
+    if (overlay.acrylic) {
+        argb &= 0x00FFFFFF;
+    }
+    return argb;
+}
+
+void ApplyFills(ULONGLONG now) {
     if (!g_taskbarXamlAvailable) {
         return;
     }
-    bool force = argb != g_lastFillArgb;  // a new color is applied at once
-    g_lastFillArgb = argb;
-    for (const Overlay& overlay : g_overlays) {
+    for (Overlay& overlay : g_overlays) {
         HWND taskbar = overlay.layout.taskbar;
         if (!taskbar) {
             continue;
         }
+        DWORD argb = FillArgbFor(overlay);
+        bool force = !overlay.fillAsked || argb != overlay.lastFillArgb;  // a new color is applied at once
+        overlay.fillAsked = true;
+        overlay.lastFillArgb = argb;
         RequestPass(kPassFill, taskbar, now, force, [taskbar, argb] {
             TaskbarWants& wants = (*g_wants)[taskbar];
             wants.fill = true;
@@ -4061,16 +5823,20 @@ void ApplyXamlCorners(ULONGLONG now) {
         }
         int edge = layout.edge;
         float radius = XamlCornerRadiusDips(layout);
-        DWORD rgb = g_settings.monitorCornerColor;
-        RequestPass(kPassCorners, taskbar, now, false, [taskbar, edge, radius, rgb] {
+        // One device pixel: the bezel ring's thickness, where the arcs
+        // start (like the frame's own ears).
+        float inset = 96.0f / static_cast<float>(layout.dpi);
+        DWORD rgb = kMonitorCornerColor;
+        RequestPass(kPassCorners, taskbar, now, false, [taskbar, edge, radius, inset, rgb] {
             TaskbarWants& wants = (*g_wants)[taskbar];
             wants.ears = radius > 0.0f;
             wants.edge = edge;
             wants.radiusDips = radius;
+            wants.earInsetDips = inset;
             wants.earRgb = rgb;
             WatchTaskbarRoot(taskbar);
             WatchTaskbarLayout(taskbar);
-            XamlCornerOp op{taskbar, edge, radius, rgb, false, false, false};
+            XamlCornerOp op{taskbar, edge, radius, inset, rgb, false, false, false};
             ApplyXamlCornersOnTaskbarThread(&op);
             ReapplyWants(taskbar, true);
             return op.found;
@@ -4087,7 +5853,7 @@ void RemoveXamlCorners() {
 // ---------------------------------------------------------------------------
 
 void Tick(bool forceRebuild) {
-    if (g_inTick) {
+    if (g_inTick || g_unloading) {
         return;
     }
     g_inTick = true;
@@ -4102,6 +5868,24 @@ void Tick(bool forceRebuild) {
     if (g_reloadRequested.exchange(false)) {
         LoadSettings();
         forceRebuild = true;
+    }
+
+    // A change of fill (settings, or acrylic turning out unavailable) means
+    // different windows: every frame is rebuilt from scratch.
+    bool acrylic = UsesAcrylic();
+    if (acrylic != g_overlaysAcrylic) {
+        Wh_Log(L"fill: %s", acrylic ? L"acrylic" : L"solid");
+        DestroyOverlays(g_overlays);
+        g_overlaysAcrylic = acrylic;
+        forceRebuild = true;
+    }
+    if (g_surfacesLost.exchange(false)) {
+        for (Overlay& overlay : g_overlays) {
+            if (overlay.acrylic) {
+                overlay.acrylic->built = false;  // drawn again by the paint below
+                overlay.painted = false;
+            }
+        }
     }
 
     std::vector<Layout> layouts;
@@ -4139,7 +5923,7 @@ void Tick(bool forceRebuild) {
         RemoveXamlCorners();
     }
 
-    ApplyFills(CustomColorArgb(), now);
+    ApplyFills(now);
 
     UpdateVisibility();
 
@@ -4416,6 +6200,15 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 
     SetThreadPerMonitorDpiAware();
     g_threadStartTick = GetTickCount64();
+    // The composition (acrylic fill) lives on this thread: an apartment and
+    // a dispatcher queue for it.
+    bool apartment = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::single_threaded);
+        apartment = true;
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"init_apartment threw %08X", e.code().value);
+    }
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
     ULONG_PTR gdiplusToken = 0;
@@ -4440,6 +6233,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
         return 0;
     }
     g_ctrlWnd = ctrl;
+    InitComposition();
 
     // The appbar thread; its first shell state is waited for briefly so the
     // first layouts know about auto-hide and the primary taskbar's edge.
@@ -4558,6 +6352,11 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     // The frame windows go now, so no other thread can have a reason to
     // send to this one while it waits below.
     DestroyOverlays(g_overlays);
+    g_overlaysAcrylic = false;
+    if (unsigned follows = g_followCount.load()) {
+        Wh_Log(L"the z-order hook put the frame back under the taskbar %u times", follows);
+    }
+    ShutdownComposition(ctrl);
     g_xamlCornersOwned = false;
     ResetPassStates();
     // Only now the appbars: the appbar thread removes them (each removal is a
@@ -4609,6 +6408,9 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     UnregisterClassW(kCtrlClassName, g_module);
     UnregisterClassW(kAppBarClassName, g_module);
     Gdiplus::GdiplusShutdown(gdiplusToken);
+    if (apartment) {
+        winrt::uninit_apartment();
+    }
     return 0;
 }
 
