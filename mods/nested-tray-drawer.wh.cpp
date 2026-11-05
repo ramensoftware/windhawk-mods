@@ -20,7 +20,8 @@ icon onto the added chevron to collect it, then click the chevron to open the
 second drawer. Both drawers can remain visible together. Icons retain their
 native templates, input handlers and app context menus. The footer is 40 DIP high.
 
-Opening the second drawer puts keyboard focus on its first available icon.
+Opening the second drawer focuses its first available icon, preserving whether
+the chevron was invoked with the pointer or keyboard.
 Use the arrow keys to move between its icons. Escape closes only that drawer
 and returns focus to the last focused outer icon (or the first available outer
 icon; if all icons are collected, focus returns to the chevron).
@@ -1163,6 +1164,8 @@ struct DrawerState {
     unsigned layoutReports{};
     bool open{};
     bool innerFocusPending{};
+    FocusState innerFocusState{FocusState::Pointer};
+    unsigned innerFocusAttempts{};
     bool returnOuterFocus{};
     bool changing{};
     bool closing{};
@@ -1300,7 +1303,8 @@ bool IsWithinFocusScope(DependencyObject element, DependencyObject const& root) 
     return false;
 }
 
-bool FocusTrayItems(ItemsControl const& items, IInspectable const& preferred = nullptr) {
+bool FocusTrayItems(ItemsControl const& items, FocusState how = FocusState::Keyboard,
+                    IInspectable const& preferred = nullptr) {
     if (!items || !items.IsLoaded())
         return false;
     DependencyObject scope = items;
@@ -1314,11 +1318,11 @@ bool FocusTrayItems(ItemsControl const& items, IInspectable const& preferred = n
     auto target = scope != items ? scope.try_as<Controls::Control>() : Controls::Control{nullptr};
     if (!target || !target.IsTabStop() || !target.IsEnabled())
         target = Input::FocusManager::FindFirstFocusableElement(scope).try_as<Controls::Control>();
-    if (target && target.Focus(FocusState::Keyboard))
+    if (target && target.Focus(how))
         return true;
     if (scope != items) {
         target = Input::FocusManager::FindFirstFocusableElement(items).try_as<Controls::Control>();
-        return target && target.Focus(FocusState::Keyboard);
+        return target && target.Focus(how);
     }
     return false;
 }
@@ -1340,6 +1344,26 @@ bool MoveTrayFocus(ItemsControl const& items, FocusNavigationDirection direction
     return control && control.Focus(FocusState::Keyboard);
 }
 
+constexpr unsigned kInitialFocusAttempts = 8;
+bool TryInitialTrayFocus(ItemsControl const& items, FocusState how, unsigned& attempts) {
+    if (!attempts || !items || !items.IsLoaded())
+        return false;
+    if (attempts < kInitialFocusAttempts) {
+        auto focused = Input::FocusManager::GetFocusedElement(items.XamlRoot())
+                           .try_as<DependencyObject>();
+        if (focused != items && IsWithinFocusScope(focused, items)) {
+            attempts = 0;  // User/native code already chose an icon; do not steal focus.
+            return true;
+        }
+    }
+    --attempts;
+    if (FocusTrayItems(items, how)) {
+        attempts = 0;
+        return true;
+    }
+    return false;
+}
+
 void CloseTrayFlyout(Controls::Flyout const& flyout, HWND window, UINT restoreMessage) {
     flyout.Hide();
     // Hide releases popup focus before the native Closed notification is
@@ -1351,11 +1375,18 @@ void CloseTrayFlyout(Controls::Flyout const& flyout, HWND window, UINT restoreMe
 void CompleteInnerFocus(DrawerState& state) {
     if (!state.innerFocusPending || !state.open || state.changing || state.closing)
         return;
+    if (state.menuHold.armed) {
+        state.innerFocusPending = false;
+        return;
+    }
     // Generated native icon controls may not exist until the first layout.
     // Stop after success; later layouts must not steal focus from an app menu.
-    if (FocusTrayItems(state.innerItems)) {
+    if (TryInitialTrayFocus(state.innerItems, state.innerFocusState, state.innerFocusAttempts)) {
         state.innerFocusPending = false;
-        Wh_Log(L"Keyboard focus entered inner tray icons");
+        Wh_Log(L"Initial focus entered inner tray icons");
+    } else if (!state.innerFocusAttempts) {
+        state.innerFocusPending = false;
+        Wh_Log(L"Initial inner focus retry limit reached");
     }
 }
 
@@ -1513,6 +1544,9 @@ void RefreshClassification(DrawerState& state) {
                 winrt::single_threaded_observable_vector<IInspectable>(std::move(rare)));
         }
         state.selectedModels = std::move(selected);
+        uint32_t focusIndex{};
+        if (state.outerFocusModel && !state.nativeItems.Items().IndexOf(state.outerFocusModel, focusIndex))
+            state.outerFocusModel = nullptr;
         state.sourceSnapshot = std::move(all);
         state.partitioned = !state.selectedModels.empty();
         state.expectedSource = state.nativeItems.ItemsSource();
@@ -1810,7 +1844,6 @@ void InstallDrawer(Grid const& root) {
     state->innerItems.MinWidth(40);
     state->innerItems.MinHeight(40);
     state->innerItems.IsTabStop(false);  // Tab stops belong to the native icons.
-    state->innerItems.XYFocusKeyboardNavigation(Input::XYFocusKeyboardNavigationMode::Enabled);
     state->innerItems.TabFocusNavigation(Input::KeyboardNavigationMode::Cycle);
     state->inner.Content(state->innerItems);
 
@@ -1856,6 +1889,10 @@ void InstallDrawer(Grid const& root) {
             if (state.open)
                 state.inner.Hide();
             else {
+                auto how = state.chevron.FocusState();
+                // Programmatic/automation invocation follows XAML's last input device.
+                state.innerFocusState = how == FocusState::Keyboard || how == FocusState::Pointer
+                                            ? how : FocusState::Programmatic;
                 state.inner.XamlRoot(state.root.XamlRoot());
                 // Anchor to the entire outer surface, not the footer button:
                 // native Top placement must clear all of the outer drawer.
@@ -1886,6 +1923,7 @@ void InstallDrawer(Grid const& root) {
                 g_drawer->open = true;
                 g_drawer->returnOuterFocus = false;
                 g_drawer->innerFocusPending = true;
+                g_drawer->innerFocusAttempts = kInitialFocusAttempts;
                 CompleteInnerFocus(*g_drawer);
                 Wh_Log(L"Inner drawer opened; outerWindowVisible=%d",
                        IsWindowVisible(g_drawer->outerWindow));
@@ -2105,7 +2143,7 @@ LRESULT CALLBACK UiWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM l
     // Cleanup messages deliberately stay outside this scope.
     std::optional<UiCallbackScope> work;
     if (message == kRefreshAppearanceMessage || message == kRefreshCollectionMessage ||
-        message == kCollectDroppedIconMessage)
+        message == kCollectDroppedIconMessage || message == kRestoreTrayFocusMessage)
         work.emplace();
     if (message == kRefreshAppearanceMessage) {
         if (!g_unloading && g_runtimeAvailable && g_drawer && !g_drawer->closing) {
@@ -2135,7 +2173,7 @@ LRESULT CALLBACK UiWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM l
                 IsWindowVisible(state.outerWindow) &&
                 (ownedForeground ||
                  GetWindowThreadProcessId(foreground, nullptr) == GetCurrentThreadId())) {
-                if (!FocusTrayItems(state.nativeItems, state.outerFocusModel))
+                if (!FocusTrayItems(state.nativeItems, FocusState::Keyboard, state.outerFocusModel))
                     state.chevron.Focus(FocusState::Keyboard);  // All icons collected.
                 Wh_Log(L"Escape returned keyboard focus to outer tray");
             }
