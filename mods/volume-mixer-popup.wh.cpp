@@ -23,6 +23,10 @@ A fast, lightweight per-app volume mixer for Windows 11 and 10. It runs in its o
 process, not inside Explorer, and opens on top of any window — including borderless and fullscreen games — without
 taking the keyboard focus, so games are never minimized.
 
+![Mixer popup (Fluent Flyout layout)](https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/mixer.png)
+
+![Volume OSD (Windows 11 capsule style)](https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/osd.png)
+
 ## ✨ Highlights
 - **Per-app volume and mute** for every output device, with live VU meters (up to 60 FPS while open).
 - **Per-app audio routing** – send any app to another output device with the ⇄ button or a right-click.
