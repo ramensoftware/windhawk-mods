@@ -3808,13 +3808,32 @@ std::wstring UserValueName(const wchar_t* base) {
     return std::wstring(base) + L"_" + s_sid;
 }
 
+// A stored value has to fit on one line: portable Windhawk keeps the storage in
+// an INI file. Records are separated by '*' and fields by '|', and neither can
+// be part of a path, a process name or a device ID. Line breaks and tabs that
+// earlier builds wrote still load.
+constexpr wchar_t kRecordSep = L'*';
+constexpr wchar_t kFieldSep = L'|';
+
+static std::vector<std::wstring> SplitStored(const std::wstring& s, const wchar_t* seps) {
+    std::vector<std::wstring> out;
+    size_t pos = 0;
+    while (pos <= s.size()) {
+        size_t end = s.find_first_of(seps, pos);
+        if (end == std::wstring::npos) end = s.size();
+        out.push_back(s.substr(pos, end - pos));
+        pos = end + 1;
+    }
+    return out;
+}
+
 void PersistLockedVolumes() {
     std::wstring s;
     for (const auto& p : g_lockedVolumes) {
+        if (!s.empty()) s += kRecordSep;
         s += p.first;
-        s += L'|';
+        s += kFieldSep;
         s += std::to_wstring((int)std::lround(p.second * 1000.0f));
-        s += L'\n';
     }
     Wh_SetStringValue(UserValueName(L"lockedVolumes").c_str(), s.c_str());
     g_locksDirty = false;
@@ -3824,18 +3843,12 @@ void LoadLockedVolumes() {
     g_lockedVolumes.clear();
     std::vector<WCHAR> buf(32768, 0);
     if (Wh_GetStringValue(UserValueName(L"lockedVolumes").c_str(), buf.data(), buf.size()) == 0) return;
-    const std::wstring s = buf.data();
-    size_t pos = 0;
-    while (pos < s.size()) {
-        size_t nl = s.find(L'\n', pos);
-        if (nl == std::wstring::npos) nl = s.size();
-        const std::wstring line = s.substr(pos, nl - pos);
-        const size_t bar = line.rfind(L'|');
+    for (const std::wstring& line : SplitStored(buf.data(), L"*\n")) {
+        const size_t bar = line.rfind(kFieldSep);
         if (bar != std::wstring::npos && bar > 0) {
             const int v = _wtoi(line.c_str() + bar + 1);
             g_lockedVolumes[line.substr(0, bar)] = std::clamp(v / 1000.0f, 0.0f, 1.0f);
         }
-        pos = nl + 1;
     }
 }
 
@@ -4186,17 +4199,17 @@ static DWORD DayNumber() {
     return (DWORD)(t / (10000000ULL * 60 * 60 * 24));
 }
 
-// One line per app: "key|deviceId<TAB>volume x1000<TAB>mute<TAB>ducked<TAB>day".
+// One record per app: "key|deviceId|volume x1000|mute|ducked|day".
 static std::wstring SerializeDeafen(const std::map<std::wstring, DeafenSavedState>& states) {
     std::wstring s;
     for (const auto& p : states) {
+        if (!s.empty()) s += kRecordSep;
         s += p.first;
-        s += L'\t';
+        s += kFieldSep;
         s += std::to_wstring((int)std::lround(p.second.originalVol * 1000.0f));
-        s += p.second.originalMute ? L"\t1" : L"\t0";
-        s += p.second.ducked ? L"\t1\t" : L"\t0\t";
+        s += p.second.originalMute ? L"|1" : L"|0";
+        s += p.second.ducked ? L"|1|" : L"|0|";
         s += std::to_wstring(p.second.day);
-        s += L'\n';
     }
     return s;
 }
@@ -4205,24 +4218,16 @@ static std::wstring SerializeDeafen(const std::map<std::wstring, DeafenSavedStat
 static void LoadDeafenStates(const wchar_t* name, std::map<std::wstring, DeafenSavedState>& out) {
     std::vector<WCHAR> buf(65536, 0);
     if (Wh_GetStringValue(UserValueName(name).c_str(), buf.data(), buf.size()) == 0) return;
-    const std::wstring s = buf.data();
-    size_t start = 0;
-    while (start < s.size()) {
-        size_t nl = s.find(L'\n', start);
-        if (nl == std::wstring::npos) nl = s.size();
-        const std::wstring line = s.substr(start, nl - start);
-        start = nl + 1;
-        const size_t t1 = line.find(L'\t');
-        const size_t t2 = t1 == std::wstring::npos ? std::wstring::npos : line.find(L'\t', t1 + 1);
-        const size_t t3 = t2 == std::wstring::npos ? std::wstring::npos : line.find(L'\t', t2 + 1);
-        if (t3 == std::wstring::npos) continue;
+    for (const std::wstring& line : SplitStored(buf.data(), L"*\n")) {
+        // key, deviceId, volume, mute, ducked and (missing in old records) day
+        const std::vector<std::wstring> f = SplitStored(line, L"|\t");
+        if (f.size() != 5 && f.size() != 6) continue;
         DeafenSavedState ds;
-        ds.originalVol = std::clamp(_wtoi(line.c_str() + t1 + 1) / 1000.0f, 0.0f, 1.0f);
-        ds.originalMute = line.compare(t2 + 1, 1, L"1") == 0;
-        ds.ducked = line.compare(t3 + 1, 1, L"1") == 0;
-        const size_t t4 = line.find(L'\t', t3 + 1);
-        ds.day = t4 == std::wstring::npos ? DayNumber() : (DWORD)wcstoul(line.c_str() + t4 + 1, nullptr, 10);
-        out.emplace(line.substr(0, t1), ds);
+        ds.originalVol = std::clamp(_wtoi(f[2].c_str()) / 1000.0f, 0.0f, 1.0f);
+        ds.originalMute = f[3] == L"1";
+        ds.ducked = f[4] == L"1";
+        ds.day = f.size() == 6 ? (DWORD)wcstoul(f[5].c_str(), nullptr, 10) : DayNumber();
+        out.emplace(f[0] + kFieldSep + f[1], ds);
     }
 }
 
@@ -6006,9 +6011,9 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_osdDragging = false;
             ReleaseCapture();
             g_hasCustomOsdPos = true;
-            Wh_SetIntValue(L"osdCustomX", g_customOsdX);
-            Wh_SetIntValue(L"osdCustomY", g_customOsdY);
-            Wh_SetIntValue(L"hasCustomOsdPos", 1);
+            Wh_SetIntValue(UserValueName(L"osdCustomX").c_str(), g_customOsdX);
+            Wh_SetIntValue(UserValueName(L"osdCustomY").c_str(), g_customOsdY);
+            Wh_SetIntValue(UserValueName(L"hasCustomOsdPos").c_str(), 1);
             g_osdHideTick = GetTickCount() + 2500;
         }
         return 0;
@@ -7618,8 +7623,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     g_customPosX = g_pos.x;
                     g_customPosY = g_pos.y;
                     g_hasCustomPos = true;
-                    Wh_SetIntValue(L"customPosX", g_pos.x);
-                    Wh_SetIntValue(L"customPosY", g_pos.y);
+                    Wh_SetIntValue(UserValueName(L"customPosX").c_str(), g_pos.x);
+                    Wh_SetIntValue(UserValueName(L"customPosY").c_str(), g_pos.y);
                 }
                 return 0;
             }
@@ -7743,12 +7748,12 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         LoadConfig();
         g_theme = MakeTheme(g_cfg.theme);
 
-        g_customPosX = Wh_GetIntValue(L"customPosX", -9999);
-        g_customPosY = Wh_GetIntValue(L"customPosY", -9999);
+        g_customPosX = Wh_GetIntValue(UserValueName(L"customPosX").c_str(), -9999);
+        g_customPosY = Wh_GetIntValue(UserValueName(L"customPosY").c_str(), -9999);
         g_hasCustomPos = (g_customPosX != -9999 && g_customPosY != -9999);
-        g_customOsdX = Wh_GetIntValue(L"osdCustomX", 0);
-        g_customOsdY = Wh_GetIntValue(L"osdCustomY", 0);
-        g_hasCustomOsdPos = (Wh_GetIntValue(L"hasCustomOsdPos", 0) != 0);
+        g_customOsdX = Wh_GetIntValue(UserValueName(L"osdCustomX").c_str(), 0);
+        g_customOsdY = Wh_GetIntValue(UserValueName(L"osdCustomY").c_str(), 0);
+        g_hasCustomOsdPos = (Wh_GetIntValue(UserValueName(L"hasCustomOsdPos").c_str(), 0) != 0);
         LoadLockedVolumes();
 
         ApplyOsdWindowStyle();
