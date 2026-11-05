@@ -123,10 +123,13 @@ was selected.
   no temporary file is created.
 * When the mod is turned off, it asks open menus and its prompts to close and
   waits for tracked hook calls to finish. A menu or prompt that does not close
-  may need to be closed manually. A stalled file read cannot be interrupted and
-  may leave Windhawk uninitializing indefinitely; the Explorer window can remain
-  unresponsive. A dialog opened by another Explorer shortcut, or another mod's
-  hook, may also delay uninitialization until it closes or returns. Other mod
+  may need to be closed manually. The mod attempts to cancel its pending file
+  operations when unloading, but cancellation is not guaranteed. A stalled
+  operation may still leave Windhawk uninitializing indefinitely; the Explorer
+  window can remain unresponsive. Cancellation targets a thread, so unrelated
+  I/O reentered on that thread during a mod file call could also be canceled.
+  A dialog opened by another Explorer shortcut, or another mod's hook, may also
+  delay uninitialization until it closes or returns. Other mod
   updates in the process may have to wait. The delay between separate clipboard
   items ends early when unloading starts.
 * With separate clipboard items turned on, Ctrl+V pastes only the last file. The
@@ -431,6 +434,98 @@ bool TooBigForHistory(const std::wstring& text) {
     return text.size() > kHistoryMaxChars;
 }
 
+// Each file operation is registered only around the system call itself. The
+// unload thread holds this lock while it requests cancellation; a returning
+// operation must acquire it before continuing, so a stale registration cannot
+// cancel a later, unrelated Explorer operation after this call returns.
+struct IoOperation;
+SRWLOCK g_ioLock = SRWLOCK_INIT;
+IoOperation* g_ioOperations = nullptr;
+
+struct IoOperation {
+    HANDLE thread = nullptr;
+    IoOperation* next = nullptr;
+    bool allowed = false;
+
+    IoOperation() {
+        HANDLE copy = nullptr;
+        DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                        GetCurrentProcess(), &copy, THREAD_TERMINATE, FALSE, 0);
+        AcquireSRWLockExclusive(&g_ioLock);
+        if (!g_unloading) {
+            allowed = true;
+            thread = copy;
+            if (thread) {
+                next = g_ioOperations;
+                g_ioOperations = this;
+                copy = nullptr;
+            }
+        }
+        ReleaseSRWLockExclusive(&g_ioLock);
+        if (copy) CloseHandle(copy);
+    }
+
+    ~IoOperation() {
+        // Neither lock/handle cleanup nor a cancellation request should change
+        // the result a caller sees from the underlying Windows API.
+        DWORD error = GetLastError();
+        if (thread) {
+            AcquireSRWLockExclusive(&g_ioLock);
+            IoOperation** link = &g_ioOperations;
+            while (*link && *link != this) link = &(*link)->next;
+            if (*link == this) *link = next;
+            CloseHandle(thread);
+            ReleaseSRWLockExclusive(&g_ioLock);
+        }
+        SetLastError(error);
+    }
+
+    IoOperation(const IoOperation&) = delete;
+    IoOperation& operator=(const IoOperation&) = delete;
+};
+
+template <typename Function, typename Result>
+Result CancelableFileCall(Function function, Result aborted) {
+    IoOperation operation;
+    if (!operation.allowed || g_unloading) {
+        SetLastError(ERROR_OPERATION_ABORTED);
+        return aborted;
+    }
+    return function();
+}
+
+HANDLE OpenFileForRead(const std::wstring& path) {
+    return CancelableFileCall([&] {
+        return CreateFileW(path.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    }, INVALID_HANDLE_VALUE);
+}
+DWORD ReadFileAttributes(const std::wstring& path) {
+    return CancelableFileCall([&] { return GetFileAttributesW(path.c_str()); },
+                              static_cast<DWORD>(INVALID_FILE_ATTRIBUTES));
+}
+BOOL QueryFileSize(HANDLE file, LARGE_INTEGER* size) {
+    return CancelableFileCall([&] { return GetFileSizeEx(file, size); }, FALSE);
+}
+BOOL ReadFileChunk(HANDLE file, void* buffer, DWORD want, DWORD* read) {
+    return CancelableFileCall(
+        [&] { return ReadFile(file, buffer, want, read, nullptr); }, FALSE);
+}
+UINT QueryDriveType(const wchar_t* root) {
+    return CancelableFileCall([&] { return GetDriveTypeW(root); },
+                              static_cast<UINT>(DRIVE_UNKNOWN));
+}
+
+void CancelActiveIo() {
+    AcquireSRWLockExclusive(&g_ioLock);
+    for (IoOperation* operation = g_ioOperations; operation;
+         operation = operation->next) {
+        CancelSynchronousIo(operation->thread);
+    }
+    ReleaseSRWLockExclusive(&g_ioLock);
+}
+
 // ---------------------------------------------------------------------------
 // The selection
 //
@@ -547,7 +642,7 @@ std::vector<std::wstring> GetSelectedPaths(HWND hWnd) {
 }
 
 bool IsDirectory(const std::wstring& path) {
-    const DWORD attributes = GetFileAttributesW(path.c_str());
+    const DWORD attributes = ReadFileAttributes(path);
     return attributes != INVALID_FILE_ATTRIBUTES &&
            (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
@@ -674,11 +769,7 @@ bool HasUtf16Null(const unsigned char* data, size_t size) {
 
 // A mark is the file saying what it is, and it is never overruled.
 ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
-                                    FILE_SHARE_READ | FILE_SHARE_WRITE |
-                                        FILE_SHARE_DELETE,
-                                    nullptr, OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    const HANDLE file = OpenFileForRead(path);
     if (file == INVALID_HANDLE_VALUE) {
         return ReadResult::Unreadable;
     }
@@ -694,7 +785,7 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
     } guard{file};
 
     LARGE_INTEGER size = {};
-    if (!GetFileSizeEx(file, &size) || size.QuadPart < 0) {
+    if (!QueryFileSize(file, &size) || size.QuadPart < 0) {
         guard.Close();
         return ReadResult::Unreadable;
     }
@@ -715,7 +806,7 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
             (static_cast<size_t>(size.QuadPart) - read) > 0x10000
                 ? 0x10000
                 : (static_cast<size_t>(size.QuadPart) - read));
-        if (!ReadFile(file, bytes.data() + read, want, &chunk, nullptr) ||
+        if (!ReadFileChunk(file, bytes.data() + read, want, &chunk) ||
             chunk == 0) {
             break;
         }
@@ -824,7 +915,7 @@ constexpr int kSniffFiles = 16;
 constexpr size_t kSniffBytes = 4096;
 
 bool IsRemoteOrSparse(const std::wstring& path) {
-    const DWORD attributes = GetFileAttributesW(path.c_str());
+    const DWORD attributes = ReadFileAttributes(path);
     if (attributes == INVALID_FILE_ATTRIBUTES) {
         return false;
     }
@@ -841,7 +932,7 @@ bool IsRemoteOrSparse(const std::wstring& path) {
     // as a UNC path, and reading from a share that has gone away blocks.
     if (path.size() >= 3 && path[1] == L':' && (path[2] == L'\\' || path[2] == L'/')) {
         const wchar_t root[4] = {path[0], L':', L'\\', 0};
-        return GetDriveTypeW(root) == DRIVE_REMOTE;
+        return QueryDriveType(root) == DRIVE_REMOTE;
     }
     return false;
 }
@@ -872,22 +963,18 @@ bool SniffIsText(const unsigned char* data, size_t size) {
 
 bool LooksCopyable(const std::wstring& path) {
     LARGE_INTEGER size = {};
-    const HANDLE probe = CreateFileW(path.c_str(), GENERIC_READ,
-                                     FILE_SHARE_READ | FILE_SHARE_WRITE |
-                                         FILE_SHARE_DELETE,
-                                     nullptr, OPEN_EXISTING,
-                                     FILE_ATTRIBUTE_NORMAL, nullptr);
+    const HANDLE probe = OpenFileForRead(path);
     if (probe == INVALID_HANDLE_VALUE) {
         return false;
     }
-    if (!GetFileSizeEx(probe, &size) || size.QuadPart < 0 ||
+    if (!QueryFileSize(probe, &size) || size.QuadPart < 0 ||
         size.QuadPart > SizeLimitBytes()) {
         CloseHandle(probe);
         return false;
     }
     unsigned char buffer[kSniffBytes];
     DWORD read = 0;
-    const bool ok = ReadFile(probe, buffer, sizeof(buffer), &read, nullptr) != 0;
+    const bool ok = ReadFileChunk(probe, buffer, sizeof(buffer), &read) != 0;
     CloseHandle(probe);
     return ok && SniffIsText(buffer, read);
 }
@@ -895,17 +982,13 @@ bool LooksCopyable(const std::wstring& path) {
 // Check a bounded local prefix before offering Notepad for a size refusal.
 // The remaining file may still be binary; this is a heuristic, not a guarantee.
 bool LooksLikeTextPrefix(const std::wstring& path) {
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
-                                    FILE_SHARE_READ | FILE_SHARE_WRITE |
-                                        FILE_SHARE_DELETE,
-                                    nullptr, OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    const HANDLE file = OpenFileForRead(path);
     if (file == INVALID_HANDLE_VALUE) {
         return false;
     }
     unsigned char buffer[kSniffBytes];
     DWORD read = 0;
-    const bool ok = ReadFile(file, buffer, sizeof(buffer), &read, nullptr) != 0;
+    const bool ok = ReadFileChunk(file, buffer, sizeof(buffer), &read) != 0;
     CloseHandle(file);
     return ok && SniffIsText(buffer, read);
 }
@@ -1001,11 +1084,7 @@ std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
     // cleanup guard below must run before the vectors are destroyed.
     std::vector<unsigned char> object;
     std::vector<unsigned char> digest;
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
-                                    FILE_SHARE_READ | FILE_SHARE_WRITE |
-                                        FILE_SHARE_DELETE,
-                                    nullptr, OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    const HANDLE file = OpenFileForRead(path);
     if (file == INVALID_HANDLE_VALUE) {
         return std::wstring();
     }
@@ -1045,9 +1124,8 @@ std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
                     break;
                 }
                 DWORD read = 0;
-                if (!ReadFile(file, buffer.data(),
-                              static_cast<DWORD>(buffer.size()), &read,
-                              nullptr)) {
+                if (!ReadFileChunk(file, buffer.data(),
+                                   static_cast<DWORD>(buffer.size()), &read)) {
                     success = false;
                     break;
                 }
@@ -1083,16 +1161,12 @@ std::wstring Sha256OfFile(const std::wstring& path, bool* ok) {
 
 // The size without reading anything, so an oversized file costs nothing.
 long long FileSizeBytes(const std::wstring& path) {
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
-                                    FILE_SHARE_READ | FILE_SHARE_WRITE |
-                                        FILE_SHARE_DELETE,
-                                    nullptr, OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    const HANDLE file = OpenFileForRead(path);
     if (file == INVALID_HANDLE_VALUE) {
         return -1;
     }
     LARGE_INTEGER size = {};
-    const bool ok = GetFileSizeEx(file, &size) != 0;
+    const bool ok = QueryFileSize(file, &size) != 0;
     CloseHandle(file);
     return ok ? size.QuadPart : -1;
 }
@@ -1829,6 +1903,7 @@ BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
 }
 
 void CancelActiveWork() {
+    CancelActiveIo();
     HWND owners[kMaxOwners];
     DWORD threads[kMaxOwners];
     // Take a paired snapshot; do not hold the lock while calling window APIs.
