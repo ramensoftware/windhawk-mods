@@ -147,6 +147,7 @@ constexpr DWORD kIdleWatchdogMs = 5 * 60 * 1000;  // safety net while idle
 constexpr ULONGLONG kProcessCacheMs = 3000;
 constexpr float kUserChangeTolerance = 0.02f;
 constexpr size_t kMaxDuckEntries = 64;
+constexpr size_t kMaxStoredChars = 30000;  // size of the persisted record line
 constexpr size_t kMaxWatchedSessions = 256;
 constexpr UINT kMaxDevices = 16;
 
@@ -486,6 +487,56 @@ std::wstring StoreValueName() {
     return name;
 }
 
+// Escapes everything except a safe set of characters as %XXXX (UTF-16 unit), so
+// the field can't contain separators, newlines or other special characters.
+std::wstring EscapeField(const std::wstring& s) {
+    std::wstring out;
+    for (wchar_t c : s) {
+        bool plain = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'z') ||
+                     (c >= L'A' && c <= L'Z') ||
+                     (c != 0 && wcschr(L" _.{}()-:@", c) != nullptr);
+        if (plain) {
+            out += c;
+        } else {
+            wchar_t esc[8];
+            swprintf_s(esc, L"%%%04X", (unsigned)c);
+            out += esc;
+        }
+    }
+    return out;
+}
+
+bool UnescapeField(const std::wstring& s, std::wstring& out) {
+    out.clear();
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] != L'%') {
+            out += s[i];
+            continue;
+        }
+        if (i + 4 >= s.size()) {
+            return false;  // truncated escape
+        }
+        unsigned value = 0;
+        for (size_t j = 1; j <= 4; j++) {
+            wchar_t h = s[i + j];
+            unsigned d;
+            if (h >= L'0' && h <= L'9') {
+                d = h - L'0';
+            } else if (h >= L'A' && h <= L'F') {
+                d = h - L'A' + 10;
+            } else if (h >= L'a' && h <= L'f') {
+                d = h - L'a' + 10;
+            } else {
+                return false;
+            }
+            value = value * 16 + d;
+        }
+        out += (wchar_t)value;
+        i += 4;
+    }
+    return true;
+}
+
 // Mirror of g_duck in Windhawk storage, so a ducked volume that Windows saved
 // can be restored after the mod (or the app) restarted.
 void SavePersisted() {
@@ -497,13 +548,21 @@ void SavePersisted() {
         Wh_DeleteValue(g_storeName.c_str());
         return;
     }
+    // One line only (portable storage can't hold newlines): records are
+    // "original,ducked,key" separated by ';', with the key escaped.
     std::wstring out;
     for (const auto& [key, st] : g_duck) {
         wchar_t nums[64];
-        swprintf_s(nums, L"%.4f\t%.4f\t", st.original, st.duckedLevel);
-        out += nums;
-        out += key;
-        out += L'\n';
+        swprintf_s(nums, L"%.4f,%.4f,", st.original, st.duckedLevel);
+        std::wstring record = nums + EscapeField(key);
+        // Stay below the buffer that LoadPersisted reads back.
+        if (out.size() + record.size() + 1 > kMaxStoredChars) {
+            break;
+        }
+        if (!out.empty()) {
+            out += L';';
+        }
+        out += record;
     }
     Wh_SetStringValue(g_storeName.c_str(), out.c_str());
 }
@@ -514,27 +573,29 @@ void LoadPersisted() {
         Wh_Log(L"Could not determine the user SID, volumes are not persisted");
         return;
     }
-    std::wstring buf(32768, L'\0');
-    buf.resize(Wh_GetStringValue(g_storeName.c_str(), buf.data(), buf.size()));
+    std::wstring buf(kMaxStoredChars + 1, L'\0');
+    buf.resize(std::min(Wh_GetStringValue(g_storeName.c_str(), buf.data(), buf.size()),
+                        (size_t)kMaxStoredChars));
 
     size_t pos = 0;
     while (pos < buf.size() && g_duck.size() < kMaxDuckEntries) {
-        size_t end = buf.find(L'\n', pos);
+        size_t end = buf.find(L';', pos);
         if (end == std::wstring::npos) {
             end = buf.size();
         }
-        std::wstring line = buf.substr(pos, end - pos);
+        std::wstring record = buf.substr(pos, end - pos);
         pos = end + 1;
 
-        size_t t1 = line.find(L'\t');
-        size_t t2 = t1 == std::wstring::npos ? t1 : line.find(L'\t', t1 + 1);
-        if (t2 == std::wstring::npos) {
+        size_t c1 = record.find(L',');
+        size_t c2 = c1 == std::wstring::npos ? c1 : record.find(L',', c1 + 1);
+        if (c2 == std::wstring::npos) {
             continue;
         }
-        float original = wcstof(line.substr(0, t1).c_str(), nullptr);
-        float ducked = wcstof(line.substr(t1 + 1, t2 - t1 - 1).c_str(), nullptr);
-        std::wstring key = line.substr(t2 + 1);
-        if (!(original >= 0 && original <= 1 && ducked >= 0 && ducked <= 1) ||
+        float original = wcstof(record.substr(0, c1).c_str(), nullptr);
+        float ducked = wcstof(record.substr(c1 + 1, c2 - c1 - 1).c_str(), nullptr);
+        std::wstring key;
+        if (!UnescapeField(record.substr(c2 + 1), key) ||
+            !(original >= 0 && original <= 1 && ducked >= 0 && ducked <= 1) ||
             key.empty() || key.size() > 1024) {
             continue;
         }
