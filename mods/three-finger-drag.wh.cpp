@@ -261,10 +261,10 @@ itself runs. Both mods are under the GPL v3.
 // Without an answer, e.g. from a thread which stopped responding, the window
 // is moved directly.
 //
-// The Windows swipe settings are read from the registry, which the Settings app
-// writes them to, and watched for changes. There's no API to change them, and
-// the registry alone is only read at sign in, so a conflict is pointed out
-// rather than fixed.
+// The Windows touchpad settings, the swipes and the cursor speed, are read from
+// the registry, which the Settings app writes them to, and watched for
+// changes. There's no API to change the swipes, and the registry alone is only
+// read at sign in, so a conflict is pointed out rather than fixed.
 //
 // All coordinates are physical: the worker thread is per monitor DPI aware.
 
@@ -658,8 +658,10 @@ struct {
     // Drag mode: the left button is held.
     bool buttonDown;
     // Where the cursor is being taken. Tracked here rather than read back,
-    // SendInput being processed asynchronously.
+    // SendInput being processed asynchronously. And where it was last sent,
+    // which differs while a position is held back for a slow loop.
     POINT cursor;
+    POINT cursorSent;
     double fracX;
     double fracY;
     // Move mode: the window being moved or resized, the helper of its
@@ -897,6 +899,7 @@ HWND ForegroundHelper() {
 }
 
 void MoveCursorTo(POINT pt) {
+    g_state.cursorSent = pt;
     HWND hHelperWnd = ForegroundHelper();
     if (hHelperWnd && PostMessage(hHelperWnd, g_helperCursorMessage, 0,
                                   PackPair(pt.x, pt.y))) {
@@ -951,7 +954,7 @@ bool AreSwipesOn(HKEY key, PCWSTR fingers) {
 }
 
 // Reads the settings and asks to be told of the next change.
-void ReadWindowsSwipes() {
+void ReadTouchpadSettings() {
     if (!g_touchpadKey) {
         g_windowsSwipes = {};
         return;
@@ -992,7 +995,7 @@ void OpenTouchpadSettings() {
         Wh_Log(L"Can't watch the touchpad settings");
     }
 
-    ReadWindowsSwipes();
+    ReadTouchpadSettings();
 }
 
 void CloseTouchpadSettings() {
@@ -2541,6 +2544,30 @@ void OnFingers(double u, double v, DWORD idsKey) {
     UpdatePreview();
 }
 
+// Fewer fingers may have moved the cursor before they were told apart, with
+// the button still held: Windows moves it for one finger, and the window, or
+// what a drag mode press holds, goes along. It's dropped where the drag's
+// fingers left it instead, e.g. so that a file doesn't land on the item next
+// to it, and the cursor then goes back to where the finger took it.
+void EndDragWhereLeft() {
+    // By the time fewer fingers are told apart, the cursor is where it was
+    // last sent, unless something else moved it.
+    POINT finger;
+    POINT sent = g_state.cursorSent;
+    bool moved = (g_state.native || g_state.buttonDown) &&
+                 GetCursorPos(&finger) &&
+                 (finger.x != sent.x || finger.y != sent.y);
+    if (moved) {
+        MoveCursorTo(g_state.cursor);
+    }
+
+    EndDrag();
+
+    if (moved) {
+        MoveCursorTo(finger);
+    }
+}
+
 // Within the release delay, the drag only waits for the fingers coming back:
 // fewer fingers used meanwhile, e.g. one to move the cursor or two to scroll,
 // drop the window at once, as they would with no delay. The fingers of a
@@ -2552,7 +2579,7 @@ void OnFewerFingersInRelease(int count, DWORD idsKey, double u, double v) {
     if (!count) {
         if (g_state.releaseLanding) {
             Wh_Log(L"Fewer fingers tapped, releasing");
-            EndDrag();
+            EndDragWhereLeft();
             return;
         }
 
@@ -2581,7 +2608,7 @@ void OnFewerFingersInRelease(int count, DWORD idsKey, double u, double v) {
                     PixelScale();
     if (travel >= g_settings.startDistance) {
         Wh_Log(L"Fewer fingers moved, releasing");
-        EndDrag();
+        EndDragWhereLeft();
     }
 }
 
@@ -2614,7 +2641,9 @@ void OnOtherFingerCount(int count, int fingers, DWORD idsKey, double u,
     g_state.releasePending = true;
     g_state.releaseLifted = !count;
     g_state.releaseLanding = false;
-    g_state.releaseIdsKey = idsKey;
+    // Fingers landing next may get the ids of those which came up, see
+    // OnFewerFingersInRelease.
+    g_state.releaseIdsKey = count ? idsKey : kNoIdsKey;
     g_state.releaseStartX = u;
     g_state.releaseStartY = v;
     SetTimer(g_hWnd, kReleaseTimerId, delay, nullptr);
@@ -2961,7 +2990,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             if (wParam == kReleaseTimerId) {
                 KillTimer(hWnd, kReleaseTimerId);
-                if (g_state.releasePending) {
+                if (g_state.releasePending && g_state.releaseLanding) {
+                    Wh_Log(L"Fewer fingers landed, releasing");
+                    EndDragWhereLeft();
+                } else if (g_state.releasePending) {
                     EndDrag();
                 }
                 return 0;
@@ -3003,7 +3035,7 @@ void RunMessageLoop() {
         }
 
         if (count == 2 && result == WAIT_OBJECT_0 + 1) {
-            ReadWindowsSwipes();
+            ReadTouchpadSettings();
             continue;
         }
 
@@ -3163,6 +3195,9 @@ thread_local ULONGLONG g_pressOverlayTime;
 // is already showing, e.g. the XAML content of Windows Terminal, which kept
 // the drag's cursor until the pointer moved over something else.
 thread_local HCURSOR g_cursorBefore;
+// The window it showed over, the only one it's given back over: elsewhere,
+// e.g. after a snap or a prepare taken late, it may not be that window's.
+thread_local HWND g_cursorBeforeWnd;
 
 // The press the main part announced, and when, and whether a press carrying
 // the mark was ever seen on this thread, see IsOwnPress.
@@ -3339,15 +3374,17 @@ void NotifyMain(UINT message, HWND hWnd, LPARAM lParam) {
     PostMessage(g_mainWnd, message, (WPARAM)(DWORD)HandleToLong(hWnd), lParam);
 }
 
-// Only over a window of this thread: elsewhere, the cursor is another's to
-// set, and the mouse is past the drag's spot anyway.
+// Only over the window it showed over, which is this thread's: elsewhere, the
+// cursor is another's to set.
 void RestoreCursor() {
     HCURSOR cursor = g_cursorBefore;
+    HWND hCursorWnd = g_cursorBeforeWnd;
     g_cursorBefore = nullptr;
+    g_cursorBeforeWnd = nullptr;
     POINT pt;
-    HWND hWnd = cursor && GetCursorPos(&pt) ? WindowFromPoint(pt) : nullptr;
-    if (hWnd &&
-        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
+    if (cursor && GetCursorPos(&pt) && WindowFromPoint(pt) == hCursorWnd &&
+        GetWindowThreadProcessId(hCursorWnd, nullptr) ==
+            GetCurrentThreadId()) {
         SetCursor(cursor);
     }
 }
@@ -3433,13 +3470,16 @@ void OnPrepareRequest(MSG* msg) {
     // A request renewed while the overlay is up finds the drag's cursor.
     if (!g_pressOverlayWnd) {
         CURSORINFO info{.cbSize = sizeof(info)};
-        g_cursorBefore = GetCursorInfo(&info) && (info.flags & CURSOR_SHOWING)
-                             ? info.hCursor
-                             : nullptr;
+        bool showing =
+            GetCursorInfo(&info) && (info.flags & CURSOR_SHOWING);
+        g_cursorBefore = showing ? info.hCursor : nullptr;
+        g_cursorBeforeWnd = showing ? WindowFromPoint(info.ptScreenPos)
+                                    : nullptr;
     }
 
     if (!ShowPressOverlay(pt, CursorOfCommand(command))) {
         g_cursorBefore = nullptr;
+        g_cursorBeforeWnd = nullptr;
         return;
     }
 
