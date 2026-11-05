@@ -14,34 +14,34 @@
 /*
 # Window Centralizer
 
-New dialogs and small windows open centered to the one they came from, or the mouse cursor, instead of randomly around the screen.
+New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.
 
 The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.
 
 ## Modes
 
-- **Parent window / monitor**: centered on the window it came from: the window that owns it, otherwise the active or topmost window of the same program (including another instance of it, as with File Explorer folder windows). Windows with none of these, such as the Run dialog or a program just launched, open centered on the monitor with the mouse cursor.
-- **Parent monitor only**: centered on the monitor of the window it came from, found the same way, or on the monitor with the mouse cursor when there is none. With the maximum window size at 100%, every window opens at the center of the screen.
+- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Oprhan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.
+- **Parent monitor only**: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.
 - **Mouse cursor**: centered on the mouse cursor.
 
 In every mode the window is kept inside the monitor's work area.
 
 ## Which windows are moved
 
-- Only windows with a title bar that are smaller than the **maximum window size** setting (a percentage of the monitor's work area). Large main windows keep their own position.
+- Only windows with a title bar that are smaller than the **window size limit to target** setting (a percentage of the monitor's work area). Large main windows keep their assigned position.
 - Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.
-- Windows of UWP apps such as Calculator and Clock are centered on the monitor with the mouse cursor (or on the cursor, in that mode) the first time they get focus, so they may move slightly after appearing. Later they stay where the user puts them.
+- Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, so they can be seen jumping after appearing.
 - Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.
 - A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.
-- Some programs move their window again right after showing it, to restore a saved position. For a moment after a window is centered, such moves by the window's own program are sent back to the center. Moves by other tools, and the user's own dragging, are left alone.
+- Some programs move their window again right after showing it (Firefox). The mod takes care of that. Initial moves by other tools (FancyZones), and the user's own dragging, are left alone.
 
 ## Ignoring windows
 
-Press **Win+Alt+I** while a window is active to stop centering that kind of window, and press it again on it to undo. A short notification confirms the change.
+Press **Win+Alt+I** while a window is active to stop centering that kind of window. Press it again to undo. A short notification confirms the option.
 
-A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.
+It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.
 
-The **Ignored windows** list opens with **Win+Ctrl+Alt+I**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
+The **Ignored windows** list opens with **Win+Ctrl+Alt+I**, and entries can be managed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
 Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.
 
@@ -60,21 +60,14 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
     - monitor: Parent monitor only
     - mouse: Mouse cursor
 - maxAreaPercent: 10
-  $name: Maximum window size (% of the monitor)
-  $description: >-
-    Windows larger than this share of the monitor's work area keep their own
-    position. Standard Windows dialogs are centered regardless of size.
+  $name: Window size limit to target — % of the monitor area
+  $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
 - ignoreHotkey: Win+Alt+I
   $name: Ignore hotkey
-  $description: >-
-    Add / remove the active window to the ignored list. Modifiers
-    (Ctrl, Alt, Shift, Win) and one key, joined with +. Leave empty for no
-    hotkey.
+  $description: Add/remove the active window to the list. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Alt+I). Leave empty for no hotkey.
 - listHotkey: Win+Ctrl+Alt+I
-  $name: Ignored windows hotkey
-  $description: >-
-    Opens the list of ignored windows, same format as above. If empty, the
-    list opens whenever these settings are saved.
+  $name: Ignored list hotkey
+  $description: Opens the list of ignored windows, same format as above. If empty, the list opens whenever these settings are saved.
 */
 // ==/WindhawkModSettings==
 
@@ -940,7 +933,7 @@ void StopUwpCentering() {
 
 // ── Notification ──
 
-void ShowToast(const wchar_t* title, const wchar_t* detail);
+void ShowToast(HWND target, const wchar_t* title, const wchar_t* detail);
 
 void ToggleIgnoreActive() {
     HWND hwnd = GetForegroundWindow();
@@ -978,7 +971,7 @@ void ToggleIgnoreActive() {
 
     wchar_t detail[512];
     swprintf_s(detail, L"%s [%s]", process, cls);
-    ShowToast(nowIgnored ? L"Ignored by Window Centralizer" : L"Centered by Window Centralizer", detail);
+    ShowToast(hwnd, nowIgnored ? L"Ignored by Window Centralizer" : L"Centered by Window Centralizer", detail);
     if (g_hwndList)
         PostMessageW(g_hwndList, WM_APP_RELOAD, 0, 0);
 }
@@ -1035,28 +1028,43 @@ LRESULT CALLBACK ToastProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-void ShowToast(const wchar_t* title, const wchar_t* detail) {
+/// Shows the notification just below the title bar of target, centered on it; at the cursor if target is gone.
+void ShowToast(HWND target, const wchar_t* title, const wchar_t* detail) {
     wcsncpy_s(g_toastTitle, title, _TRUNCATE);
     wcsncpy_s(g_toastDetail, detail, _TRUNCATE);
     if (g_hwndToast)
         DestroyWindow(g_hwndToast);
-    POINT pt;
-    GetCursorPos(&pt);
-    HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    RECT rc;
+    bool onWindow = target && IsWindow(target) && !IsIconic(target) && GetWindowRect(target, &rc);
+    POINT anchor;
+    if (onWindow)
+        anchor = {(rc.left + rc.right) / 2, rc.top};
+    else
+        GetCursorPos(&anchor);
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(mon, &mi);
+    GetMonitorInfoW(MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST), &mi);
+    // Created at the anchor first, so GetDpiForWindow reports the DPI of the monitor it will appear on.
     g_hwndToast = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, kToastClass,
-                                  L"", WS_POPUP, pt.x, pt.y, 1, 1, nullptr, nullptr, ModInstance(), nullptr);
+                                  L"", WS_POPUP, anchor.x, anchor.y, 1, 1, nullptr, nullptr, ModInstance(), nullptr);
     if (!g_hwndToast)
         return;
     UINT dpi = GetDpiForWindow(g_hwndToast);
-    int w = MulDiv(372, (int)dpi, 96), h = MulDiv(58, (int)dpi, 96), off = MulDiv(16, (int)dpi, 96);
-    int x = pt.x + off, y = pt.y + off;
-    if (x + w > mi.rcWork.right)
-        x = mi.rcWork.right - w;
-    if (y + h > mi.rcWork.bottom)
-        y = mi.rcWork.bottom - h;
+    int w = MulDiv(372, (int)dpi, 96), h = MulDiv(65, (int)dpi, 96), off = MulDiv(16, (int)dpi, 96);
+    int x, y;
+    if (onWindow) {
+        int titleBar = GetSystemMetricsForDpi(SM_CYCAPTION, dpi) + GetSystemMetricsForDpi(SM_CYFRAME, dpi) +
+                       GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        x = anchor.x - w / 2;
+        y = anchor.y + titleBar + off / 2;
+    } else {
+        x = anchor.x + off;
+        y = anchor.y + off;
+    }
+    x = x + w > mi.rcWork.right ? mi.rcWork.right - w : x;
+    y = y + h > mi.rcWork.bottom ? mi.rcWork.bottom - h : y;
+    x = x < mi.rcWork.left ? mi.rcWork.left : x;
+    y = y < mi.rcWork.top ? mi.rcWork.top : y;
     SetWindowPos(g_hwndToast, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     SetTimer(g_hwndToast, TIMER_TOAST, 3000, nullptr);
 }
