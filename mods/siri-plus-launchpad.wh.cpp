@@ -4788,20 +4788,42 @@ bool g_dialogOpen;
 void DialogBegin(bool hide);
 void DialogEnd();
 
+// The list is kept in several values ("customIcons", "customIcons2", ...), each under 30,000 characters: portable Windhawk
+// reads a longer value back wrongly. Records are never split between values.
+std::wstring CustomIconsKey(int part) { return part == 0 ? std::wstring(kIconsKey) : std::wstring(kIconsKey) + std::to_wstring(part + 1); }
+constexpr int kMaxIconParts = 60;
 void SaveCustomIcons() {
-    std::wstring data;
-    for (auto& [target, path] : g_customIcons) { data += Clean(target); data += L'\t'; data += Clean(path); data += kRecSep; }
-    Wh_SetStringValue(kIconsKey, data.c_str());
+    std::vector<std::wstring> parts(1);
+    for (auto& [target, path] : g_customIcons) {
+        std::wstring record = Clean(target) + L"\t" + Clean(path) + kRecSep;
+        if (!parts.back().empty() && parts.back().size() + record.size() > 30000) {
+            if ((int)parts.size() >= kMaxIconParts) break;
+            parts.emplace_back();
+        }
+        parts.back() += record;
+    }
+    for (int i = 0; i < (int)parts.size(); i++) Wh_SetStringValue(CustomIconsKey(i).c_str(), parts[i].c_str());
+    for (int i = (int)parts.size(); i < kMaxIconParts; i++) {   // parts left from a longer list
+        WCHAR probe[2] = {};
+        std::wstring key = CustomIconsKey(i);
+        if (!Wh_GetStringValue(key.c_str(), probe, ARRAYSIZE(probe))) break;
+        Wh_SetStringValue(key.c_str(), L"");
+    }
 }
 
 void LoadCustomIcons() {
-    std::vector<WCHAR> buf(1 << 17, 0);
-    Wh_GetStringValue(kIconsKey, buf.data(), buf.size());
-    buf.back() = 0;
     g_customIcons.clear();
-    for (const auto& line : SplitRecords(buf.data())) {
-        auto f = Split(line, L'\t');
-        if (f.size() == 2 && !f[0].empty() && !f[1].empty()) g_customIcons[f[0]] = f[1];
+    std::vector<WCHAR> buf(32768, 0);
+    for (int part = 0; part < kMaxIconParts; part++) {
+        std::wstring key = CustomIconsKey(part);
+        buf[0] = 0;
+        Wh_GetStringValue(key.c_str(), buf.data(), (int)buf.size());
+        buf.back() = 0;
+        if (!buf[0]) break;
+        for (const auto& line : SplitRecords(buf.data())) {
+            auto f = Split(line, L'\t');
+            if (f.size() == 2 && !f[0].empty() && !f[1].empty()) g_customIcons[f[0]] = f[1];
+        }
     }
 }
 
@@ -6820,7 +6842,7 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
 
 // What the launcher already drew under a context menu, blurred inside the menu's shape (the live blur only reaches
 // the desktop behind the window, not the launcher's own icons)
-[[clang::no_destroy]] ComPtr<ID2D1Effect> g_menuBlur;   // the blur behind menus (see ResetGlobals at shutdown)
+[[clang::no_destroy]] ComPtr<ID2D1Effect> g_menuBlur;   // the blur behind menus (released in StartThread's teardown)
 unsigned g_menuBlurGeneration = ~0u;
 void DrawMenuBackdropBlur(const D2D1_RECT_F& r, float rad, float alpha) {
     ComPtr<ID2D1DeviceContext> dc;
@@ -11627,10 +11649,11 @@ void DrawCfgBehind() { DrawCfgPlain(); }
 void CfgApplySettings() {
     LoadSettings();
     // A new mode is used the next time the launcher opens: until the settings close, they keep the current one
-    bool modeChanged = g_settings.siri != g_cfg.siriMode || g_settings.siriOriginal != g_cfg.siriOriginal || g_settings.fullscreen != g_cfg.fullscreen;
+    // (only while the settings window is open: closed meanwhile, there is no mode to hold back)
+    bool modeChanged = g_cfg.active && (g_settings.siri != g_cfg.siriMode || g_settings.siriOriginal != g_cfg.siriOriginal || g_settings.fullscreen != g_cfg.fullscreen);
     // What would add or remove pieces around the bar (the floating power button) also waits for the next opening:
     // the launcher closes the way it was opened
-    bool buttonChanged = g_settings.siriPowerButton != g_cfg.powerButton || g_settings.siriPowerLeft != g_cfg.powerLeft;
+    bool buttonChanged = g_cfg.active && (g_settings.siriPowerButton != g_cfg.powerButton || g_settings.siriPowerLeft != g_cfg.powerLeft);
     if (buttonChanged) { g_settings.siriPowerButton = g_cfg.powerButton; g_settings.siriPowerLeft = g_cfg.powerLeft; }
     g_cfg.pendingReload = modeChanged || buttonChanged;
     if (modeChanged) {
