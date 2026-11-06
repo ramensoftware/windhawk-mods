@@ -7687,6 +7687,7 @@ std::atomic<HMONITOR> g_urgentMonitor2{nullptr};  // a window moved: both monito
 void DecorPass(HMONITOR urgent) {
     ULONGLONG now = GetTickCount64();
     struct Refresh {
+        HWND hwnd;
         BorderRecord record;
         Decision decision;
     };
@@ -7742,10 +7743,22 @@ void DecorPass(HMONITOR urgent) {
                 record.color = d.color;
             }
             record.active = d.active;
-            refreshes.push_back({record, d});
+            refreshes.push_back({hwnd, record, d});
         }
     }
     for (const Refresh& r : refreshes) {
+        // One visual update can lead DWM to destroy another window's
+        // objects; the destructor hooks drop that record from the map, not
+        // from this copy. So each record is looked up again right before
+        // its call and skipped if it is gone or now holds other objects.
+        {
+            std::lock_guard<std::mutex> lock(g_borderStateMutex);
+            auto it = g_borderRecords.find(r.hwnd);
+            if (it == g_borderRecords.end() || it->second.window != r.record.window ||
+                it->second.border != r.record.border) {
+                continue;
+            }
+        }
         RefreshWindow(r.record, r.decision);
     }
 }
