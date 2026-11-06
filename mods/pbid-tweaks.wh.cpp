@@ -3,7 +3,7 @@
 // @name            Skins & Tools for Power BI
 // @description     Skins for the Power BI Desktop window, plus layout, filter, theme, interaction, color and mock-up tools, injected from inside Power BI with no extra programs
 // @version         1.0.2
-// @author          Reid Havens
+// @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         PBIDesktop.exe
 // @license         CC-BY-ND-4.0
