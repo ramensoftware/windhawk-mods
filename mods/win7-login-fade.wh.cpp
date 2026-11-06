@@ -1177,7 +1177,8 @@ BOOL Wh_ModInit() {
 #if defined(_M_X64)
         hDispBrokerDesktop = LoadLibraryExW(L"DispBroker.Desktop.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hDispBrokerDesktop) {
-            WindhawkUtils::SYMBOL_HOOK dispBrokerDesktopDllHooks[] = {
+            // DispBroker.Desktop.dll
+            WindhawkUtils::SYMBOL_HOOK dispBrokerHooks[] = {
                 {
                     {
                         L"public: __cdecl Microsoft::Windows::ColorManagement::ColorManagementRpcServer::ColorManagementRpcServerImpl::ColorManagementRpcServerImpl(class std::shared_ptr<class Microsoft::Windows::ColorManagement::ColorManagementRpcServer::ColorManagementRpcServerPolicy> const &,bool)",
@@ -1195,7 +1196,7 @@ BOOL Wh_ModInit() {
                     TRUE
                 }
             };
-            if (!WindhawkUtils::HookSymbols(hDispBrokerDesktop, dispBrokerDesktopDllHooks, ARRAYSIZE(dispBrokerDesktopDllHooks))) {
+            if (!WindhawkUtils::HookSymbols(hDispBrokerDesktop, dispBrokerHooks, ARRAYSIZE(dispBrokerHooks))) {
                 Wh_Log(L"HookSymbols ColorManagementRpcServerImpl failed");
             } else {
                 Wh_Log(L"HookSymbols ColorManagementRpcServerImpl OK");
