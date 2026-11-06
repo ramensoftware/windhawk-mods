@@ -10,7 +10,7 @@
 // @license           GPL-3.0
 // @include           LogonUI.exe
 // @architecture      x86-64
-// @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid
+// @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid -ld3d11
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,6 +48,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 | Formats | `mp4`, `m4v`, `mov`, `wmv`, `avi`, `mkv` (anything Media Foundation can decode on your system; H.264 MP4 is recommended) |
 | Fit modes | Cover, fill, fit (letterbox), center |
 | Playback speed | 25% to 400% |
+| Hardware decoding | Decodes on the GPU (D3D11/DXVA) when possible, with automatic fallback to software decoding |
 | Color adjustments | Hue, saturation, brightness, contrast, gamma |
 | Audio | Plays the video's audio track when the volume is above 0 |
 | Power saving | Still-frame mode, pause when idle, and optional pause on the password screen |
@@ -59,6 +60,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 ## 📝 Notes on some settings
 
 - **Render width**: internal canvas width (320 to 1920). The height follows your screen's aspect ratio. This is the biggest CPU lever.
+- **Hardware video decoding**: on (default) decodes with the GPU when possible, which greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. If the GPU path cannot produce a frame, the mod falls back to software decoding by itself. Changing this setting also re-enables playback if the crash guard turned it off.
 - **Behavior right after boot**: with `still`, the first 3 minutes after boot show the last saved frame without decoding. Needs at least one earlier session where the video was playing.
 - **Audio volume**: 0 means muted. Above 0, audio only plays at 100% speed while the video is playing (not paused, idle-paused, or showing the boot still frame).
 - **Pause when idle**: freezes the video and mutes the audio after the chosen time without input, and resumes on the next input.
@@ -69,7 +71,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 ## 📈 Performance tips
 
 - Lower **Render width** (the default is 1920; for example try 1280 or 960).
-- Videos at 4K or 60 fps are decoded on the CPU and can use several cores. For lower CPU use, prefer 1080p at 30 fps.
+- Videos at 4K or 60 fps are decoded on the GPU when **Hardware video decoding** is on (the default). With it off they are decoded on the CPU and can use several cores; prefer 1080p at 30 fps then.
 - Use **Pause** if you only want a still image.
 - Keep **Pause when idle** enabled so nothing is decoded while nobody is at the PC.
 - If the video stutters while you type your password, turn off **Play video on the password screen**.
@@ -160,6 +162,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 | Format | `mp4`, `m4v`, `mov`, `wmv`, `avi`, `mkv` (apa pun yang bisa di-decode Media Foundation di sistemmu; MP4 H.264 disarankan) |
 | Mode fit | Cover, fill, fit (letterbox), center |
 | Kecepatan putar | 25% sampai 400% |
+| Decoding hardware | Men-decode di GPU (D3D11/DXVA) jika memungkinkan, dengan fallback otomatis ke decoding software |
 | Penyesuaian warna | Hue, saturasi, kecerahan, kontras, gamma |
 | Audio | Memutar audio video jika volume di atas 0 |
 | Hemat daya | Mode gambar diam, jeda saat idle, dan opsi jeda di layar password |
@@ -171,6 +174,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 ## 📝 Catatan beberapa pengaturan
 
 - **Render width**: lebar kanvas internal (320 sampai 1920). Tinggi mengikuti rasio aspek layarmu. Ini pengaturan yang paling berpengaruh pada CPU.
+- **Hardware video decoding**: aktif (default) berarti video di-decode oleh GPU jika memungkinkan, sehingga pemakaian CPU turun jauh untuk video 4K atau 60 fps. Matikan jika pemutaran bermasalah atau layar sign-in bermasalah. Jika jalur GPU gagal menghasilkan frame, mod otomatis beralih ke decoding software. Mengubah setting ini juga menyalakan kembali pemutaran jika crash guard sempat mematikannya.
 - **Behavior right after boot**: dengan `still`, 3 menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Butuh minimal satu sesi sebelumnya di mana video sempat diputar.
 - **Audio volume**: 0 berarti senyap. Di atas 0, audio hanya diputar pada kecepatan 100% dan hanya saat video benar-benar berjalan (bukan saat dijeda, dijeda karena idle, atau menampilkan frame diam setelah boot).
 - **Pause when idle**: membekukan video dan membisukan audio setelah waktu tertentu tanpa input, lalu lanjut saat ada input berikutnya.
@@ -181,7 +185,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 ## 📈 Tips performa
 
 - Turunkan **Render width** (defaultnya 1920; misalnya coba 1280 atau 960).
-- Video 4K atau 60 fps di-decode oleh CPU dan bisa memakai beberapa core. Untuk pemakaian CPU lebih rendah, pilih 1080p dengan 30 fps.
+- Video 4K atau 60 fps di-decode oleh GPU saat **Hardware video decoding** aktif (default). Jika dimatikan, video di-decode oleh CPU dan bisa memakai beberapa core; pilih 1080p dengan 30 fps.
 - Gunakan **Pause** jika kamu hanya ingin gambar diam.
 - Biarkan **Pause when idle** aktif agar tidak ada decoding saat tidak ada orang di depan PC.
 - Jika video patah-patah saat mengetik password, matikan **Play video on the password screen**.
@@ -261,6 +265,9 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
 - speed: 100
   $name: Video speed (%)
   $description: 25 to 400. 100 = normal speed.
+- hwDecode: true
+  $name: Hardware video decoding
+  $description: Decode the video on the GPU (D3D11/DXVA) when possible. This greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. Falls back to software decoding automatically if the GPU cannot decode the video.  
 - colorAdjustments:
   - hue: 0
     $name: Hue shift (degrees)
@@ -314,6 +321,7 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
 #include <mmreg.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
+#include <d3d11_4.h>
 
 #include <algorithm>
 #include <atomic>
@@ -745,7 +753,9 @@ static const CLSID kClsidMMDeviceEnumerator =
 
 // Crash guard: the pendingStarts counter is cleared only after the first video frame
 // AND (if audio is used) the first audio buffer were produced.
-static std::atomic<bool> g_frameDone{false}, g_audioDone{true}, g_pendingCleared{false};
+static std::atomic<bool> g_frameDone{false}, g_audioDone{true}, g_pendingCleared{false},
+                         g_decPublished{false}, g_gpuActive{false};
+static bool g_hwDecode = true;
 static void TryClearPending() {
     if (g_frameDone && g_audioDone && !g_pendingCleared.exchange(true))
         Wh_SetIntValue(L"pendingStarts", 0);
@@ -835,7 +845,7 @@ DWORD WINAPI AudioThread(LPVOID) {
         const UINT32 frameBytes = ch * 4;
         while (!g_stop && !g_decoderDone) {
             // Playback hold (idle or hidden): stop the stream and wait.
-            if (g_idlePaused.load()) {
+            if (g_idlePaused.load() && g_audioDone) {
                 if (running) { ac->Stop(); running = false; }
                 Sleep(100);
                 continue;
@@ -874,6 +884,7 @@ DWORD WINAPI AudioThread(LPVOID) {
                         DWORD cur = 0;
                         if (SUCCEEDED(b->Lock(&d, nullptr, &cur)) && d) {
                             pend.assign(d, d + cur);
+                            if (!g_audioDone) { g_audioDone = true; TryClearPending(); }                            
                             b->Unlock();
                         }
                         b->Release();
@@ -881,6 +892,7 @@ DWORD WINAPI AudioThread(LPVOID) {
                     s->Release();
                 }
             }
+            if (g_idlePaused.load()) { Sleep(10); continue; }  // decoded, but don't play while held            
             // Write what fits into the WASAPI buffer, scaled by our own volume.
             UINT32 padding = 0;
             if (FAILED(ac->GetCurrentPadding(&padding))) break;
@@ -917,13 +929,108 @@ DWORD WINAPI AudioThread(LPVOID) {
     FileLog(L"Audio: stopped");
     return 0;
 }
+// ---------- Hardware decoding (D3D11 device shared with Media Foundation) ----------
+// Used only by the decoder thread. The destructor releases everything.
+struct GpuState {
+    ID3D11Device* dev = nullptr;
+    ID3D11DeviceContext* ctx = nullptr;
+    IMFDXGIDeviceManager* mgr = nullptr;
+    ID3D11Texture2D* staging = nullptr;
+    UINT stW = 0, stH = 0;
+    DXGI_FORMAT stFmt = DXGI_FORMAT_UNKNOWN;
+
+    bool Init() {
+        D3D_FEATURE_LEVEL fl;
+        UINT flags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+                                       nullptr, 0, D3D11_SDK_VERSION, &dev, &fl, &ctx);
+        if (FAILED(hr) || !dev || !ctx) {
+            FileLog(L"GPU: D3D11CreateDevice failed (hr=0x%08X)", (unsigned)hr);
+            return false;
+        }
+        ID3D11Multithread* mtp = nullptr;
+        if (SUCCEEDED(dev->QueryInterface(__uuidof(ID3D11Multithread), (void**)&mtp)) && mtp) {
+            mtp->SetMultithreadProtected(TRUE);
+            mtp->Release();
+        }
+        UINT token = 0;
+        hr = MFCreateDXGIDeviceManager(&token, &mgr);
+        if (FAILED(hr) || !mgr) {
+            FileLog(L"GPU: MFCreateDXGIDeviceManager failed (hr=0x%08X)", (unsigned)hr);
+            return false;
+        }
+        hr = mgr->ResetDevice(dev, token);
+        if (FAILED(hr)) {
+            FileLog(L"GPU: ResetDevice failed (hr=0x%08X)", (unsigned)hr);
+            return false;
+        }
+        return true;
+    }
+
+    // Copies the GPU frame of a sample into a CPU-readable staging texture and
+    // maps it. On success call Unmap() when done with m.pData.
+    bool Map(IMFSample* s, D3D11_MAPPED_SUBRESOURCE& m, UINT& w, UINT& h) {
+        IMFMediaBuffer* b = nullptr;
+        if (FAILED(s->GetBufferByIndex(0, &b)) || !b) return false;
+        bool ok = false;
+        IMFDXGIBuffer* db = nullptr;
+        if (SUCCEEDED(b->QueryInterface(__uuidof(IMFDXGIBuffer), (void**)&db)) && db) {
+            ID3D11Texture2D* tex = nullptr;
+            if (SUCCEEDED(db->GetResource(__uuidof(ID3D11Texture2D), (void**)&tex)) && tex) {
+                UINT sub = 0;
+                db->GetSubresourceIndex(&sub);
+                D3D11_TEXTURE2D_DESC d;
+                tex->GetDesc(&d);
+                if (!staging || stW != d.Width || stH != d.Height || stFmt != d.Format) {
+                    SafeRelease(staging);
+                    D3D11_TEXTURE2D_DESC sd = d;
+                    sd.Usage = D3D11_USAGE_STAGING;
+                    sd.BindFlags = 0;
+                    sd.MiscFlags = 0;
+                    sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                    sd.ArraySize = 1;
+                    sd.MipLevels = 1;
+                    if (SUCCEEDED(dev->CreateTexture2D(&sd, nullptr, &staging))) {
+                        stW = d.Width; stH = d.Height; stFmt = d.Format;
+                    }
+                }
+                if (staging) {
+                    ctx->CopySubresourceRegion(staging, 0, 0, 0, 0, tex, sub, nullptr);
+                    if (SUCCEEDED(ctx->Map(staging, 0, D3D11_MAP_READ, 0, &m))) {
+                        w = d.Width;
+                        h = d.Height;
+                        ok = true;
+                    }
+                }
+                tex->Release();
+            }
+            db->Release();
+        }
+        b->Release();
+        return ok;
+    }
+
+    void Unmap() { if (ctx && staging) ctx->Unmap(staging, 0); }
+
+    ~GpuState() {
+        SafeRelease(staging);
+        SafeRelease(mgr);
+        SafeRelease(ctx);
+        SafeRelease(dev);
+    }
+};
 // ---------- Decoder (separate thread) ----------
-static DWORD DecodeThreadImpl() {
+static DWORD DecodeRun(bool gpu) {
     // Whatever the reason the decoder exits (file won't open, unsupported codec, etc.),
     // if no frame was ever produced, tell the UI thread so the original wallpaper
     // is not replaced by a black bitmap and the fail-safe can trip.
     struct ExitGuard {
-        ~ExitGuard() { if (g_seq == 0) g_decodeDead = true; g_decoderDone = true; Wh_SetIntValue(L"pendingStarts", 0); }
+        ~ExitGuard() {
+            if (g_gpuActive && !g_decPublished && !g_stop) return;  // software retry follows
+            if (g_seq == 0) g_decodeDead = true;
+            g_decoderDone = true;
+            Wh_SetIntValue(L"pendingStarts", 0);
+        }
     } exitGuard;
 
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -940,6 +1047,18 @@ static DWORD DecodeThreadImpl() {
     IMFAttributes* at = nullptr;
     MFCreateAttributes(&at, 1);
     if (at) at->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
+    GpuState gs;
+    g_gpuActive = false;
+    if (gpu) {
+        if (at && gs.Init()) {
+            at->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, gs.mgr);
+            at->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+            g_gpuActive = true;
+        } else {
+            FileLog(L"Hardware decoding unavailable, using software decoding");
+            gpu = false;
+        }
+    }    
 
     IMFSourceReader* rd = nullptr;
     HRESULT hr = MFCreateSourceReaderFromURL(g_videoFile.c_str(), at, &rd);
@@ -964,7 +1083,7 @@ static DWORD DecodeThreadImpl() {
         return 1;
     }
     mt->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-    mt->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+    mt->SetGUID(MF_MT_SUBTYPE, gpu ? MFVideoFormat_ARGB32 : MFVideoFormat_RGB32);
     {
         // Let Media Foundation scale big videos down: converting and copying
         // a 4K frame as RGB32 on the CPU costs far more than at canvas size.
@@ -1029,11 +1148,12 @@ static DWORD DecodeThreadImpl() {
     ULONGLONG startTick = GetTickCount64();
     ULONGLONG t0 = startTick;
     LONG seqAtRewind = -1;
-    bool firstPublished = false, savedOnce = false;    
+    bool firstPublished = false, savedOnce = false;
+    int gpuMiss = 0;
     while (!g_stop) {
         // Playback hold (idle or hidden): park without decoding. On resume the
         // pacing code below re-syncs t0 by itself because the first frame is late.
-        if (g_idlePaused.load()) { Sleep(100); continue; }        
+        if (g_idlePaused.load() && firstPublished) { Sleep(100); continue; }       
         double tA = NowMs();
         DWORD actual = 0, flags = 0;
         LONGLONG ts = 0;
@@ -1062,8 +1182,20 @@ static DWORD DecodeThreadImpl() {
         if (!sample) continue;
         // 1) Convert into a temporary buffer first
         bool have = false;
+        if (gpu) {
+            D3D11_MAPPED_SUBRESOURCE mp = {};
+            UINT tw = 0, th = 0;
+            if (gs.Map(sample, mp, tw, th)) {
+                if (mp.pData && mp.RowPitch >= sw * 4 && th > 0) {
+                    have = RenderFrame((const BYTE*)mp.pData, (size_t)mp.RowPitch, false,
+                                       (int)sw, (int)std::min<UINT>(sh, th),
+                                       tmp.data(), xmap);
+                }
+                gs.Unmap();
+            }
+        }        
         IMFMediaBuffer* buf = nullptr;
-        if (SUCCEEDED(sample->ConvertToContiguousBuffer(&buf)) && buf) {
+        if (!gpu && SUCCEEDED(sample->ConvertToContiguousBuffer(&buf)) && buf) {
             BYTE* data = nullptr;
             DWORD maxLen = 0, curLen = 0;
             if (SUCCEEDED(buf->Lock(&data, &maxLen, &curLen)) && data) {
@@ -1078,7 +1210,13 @@ static DWORD DecodeThreadImpl() {
             buf->Release();
         }
         sample->Release();
-        if (!have) continue;
+        if (!have) {
+            if (gpu && !firstPublished && ++gpuMiss >= 10) {
+                FileLog(L"GPU: no readable frame after 10 samples, giving up");
+                break;
+            }
+            continue;
+        }
 
         double dec = NowMs() - tA;
         g_decMsSum += dec;
@@ -1108,7 +1246,13 @@ static DWORD DecodeThreadImpl() {
         LeaveCriticalSection(&g_cs);
         HWND w = g_wnd;
         if (w) PostMessageW(w, WM_NULL, 0, 0);
-        if (!firstPublished) { firstPublished = true; g_frameDone = true; TryClearPending(); }
+        if (!firstPublished) {
+            firstPublished = true;
+            g_decPublished = true;
+            g_frameDone = true;
+            TryClearPending();
+            FileLog(gpu ? L"Decoder: hardware (D3D11) path active" : L"Decoder: software path active");
+        }
 
         if (g_needSave) {
             g_needSave = false;
@@ -1129,7 +1273,15 @@ static DWORD DecodeThreadImpl() {
 }
 
 DWORD WINAPI DecodeThread(LPVOID) {
-    try { return DecodeThreadImpl(); }
+    try {
+        DWORD r = DecodeRun(g_hwDecode);
+        if (g_hwDecode && g_gpuActive && !g_decPublished && !g_stop) {
+            FileLog(L"Hardware decoding produced no frame, retrying with software decoding");
+            g_gpuActive = false;
+            r = DecodeRun(false);
+        }
+        return r;
+    }
     catch (...) { FileLog(L"Decoder exception"); g_decodeDead = true; return 1; }
 }
 
@@ -1648,6 +1800,7 @@ BOOL Wh_ModInit() {
     g_idleMs = (DWORD)ClampInt(Wh_GetIntSetting(L"power.idlePauseSeconds"), 0, 86400) * 1000u;
     g_hideOnShutdown = Wh_GetIntSetting(L"hideOnShutdown") != 0;
     g_playOnPassword = Wh_GetIntSetting(L"power.playOnPasswordScreen") != 0;
+    g_hwDecode = Wh_GetIntSetting(L"hwDecode") != 0;    
     FileLog(L"Fit=%d audio=%d vol=%d idle=%lu ms hideOnShutdown=%d", g_fitMode,
            g_audioWanted ? 1 : 0, g_audioVol, g_idleMs, g_hideOnShutdown ? 1 : 0);    
 
@@ -1694,7 +1847,8 @@ BOOL Wh_ModInit() {
     }
     if (!(g_paused && g_cacheHit) && !g_bootStill) {
         uint64_t fp = Fnv(path + L"|" + std::to_wstring(kW) + L"|" +
-                          std::to_wstring(g_fitMode));
+                          std::to_wstring(g_fitMode) + L"|" +
+                          std::to_wstring(g_hwDecode ? 1 : 0));
         int key = (int)(fp ^ (fp >> 32));
         if (Wh_GetIntValue(L"pendingKey", 0) != key) {
             Wh_SetIntValue(L"pendingKey", key);
