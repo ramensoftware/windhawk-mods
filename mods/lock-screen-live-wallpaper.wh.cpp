@@ -439,7 +439,7 @@ static const DWORD kErrWindowMs = 30000;
 static const DWORD kErrThrottleMs = 500;       // errors closer than this count as one
 
 // Diagnostics
-static double g_decMsSum = 0, g_decMsMax = 0;
+static double g_decMsSum = 0, g_decMsMax = 0, g_readMsSum = 0;
 static int g_decN = 0;
 static double g_lastStepMs = 0, g_stallMax = 0;
 static int g_stalls = 0;
@@ -936,7 +936,7 @@ static DWORD DecodeThreadImpl() {
     }
     IMFAttributes* at = nullptr;
     MFCreateAttributes(&at, 1);
-    if (at) at->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+    if (at) at->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
 
     IMFSourceReader* rd = nullptr;
     HRESULT hr = MFCreateSourceReaderFromURL(g_videoFile.c_str(), at, &rd);
@@ -962,7 +962,38 @@ static DWORD DecodeThreadImpl() {
     }
     mt->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     mt->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+    {
+        // Let Media Foundation scale big videos down: converting and copying
+        // a 4K frame as RGB32 on the CPU costs far more than at canvas size.
+        IMFMediaType* nat = nullptr;
+        UINT32 nw = 0, nh = 0;
+        if (SUCCEEDED(rd->GetNativeMediaType(VS, 0, &nat)) && nat) {
+            MFGetAttributeSize(nat, MF_MT_FRAME_SIZE, &nw, &nh);
+            nat->Release();
+        }
+        if (nw > 0 && nh > 0) {
+            float sc;
+            switch (g_fitMode) {
+            case kFitFit:    sc = std::min((float)kW / nw, (float)kH / nh); break;
+            case kFitCenter: sc = (float)kW / (float)g_screenW; break;
+            default:         sc = std::max((float)kW / nw, (float)kH / nh); break;
+            }
+            if (sc < 0.98f) {
+                UINT32 tw = ((UINT32)(nw * sc + 0.5f) + 1) & ~1u;
+                UINT32 th = ((UINT32)(nh * sc + 0.5f) + 1) & ~1u;
+                if (tw >= 2 && th >= 2) {
+                    MFSetAttributeSize(mt, MF_MT_FRAME_SIZE, tw, th);
+                    FileLog(L"Native %ux%u -> MF output %ux%u", nw, nh, tw, th);
+                }
+            }
+        }
+    }    
     hr = rd->SetCurrentMediaType(VS, nullptr, mt);
+    if (FAILED(hr)) {
+        FileLog(L"Scaled output type rejected (hr=0x%08X), using native size", (unsigned)hr);
+        mt->DeleteItem(MF_MT_FRAME_SIZE);
+        hr = rd->SetCurrentMediaType(VS, nullptr, mt);
+    }
     mt->Release();
     if (FAILED(hr)) {
         FileLog(L"Unsupported video format (hr=0x%08X)", (unsigned)hr);
@@ -1005,6 +1036,7 @@ static DWORD DecodeThreadImpl() {
         LONGLONG ts = 0;
         IMFSample* sample = nullptr;
         hr = rd->ReadSample(VS, 0, &actual, &flags, &ts, &sample);
+        double tRead = NowMs() - tA;        
         if (FAILED(hr) || (flags & MF_SOURCE_READERF_ERROR)) {
             FileLog(L"ReadSample error (hr=0x%08X)", (unsigned)hr);
             if (sample) sample->Release();
@@ -1047,6 +1079,7 @@ static DWORD DecodeThreadImpl() {
 
         double dec = NowMs() - tA;
         g_decMsSum += dec;
+        g_readMsSum += tRead;        
         g_decN++;
         if (dec > g_decMsMax) g_decMsMax = dec;
 
@@ -1160,10 +1193,12 @@ void LogStats() {
     if (g_wallPrev) {
         int n = g_decN;
         double sum = g_decMsSum, mx = g_decMsMax;
-        g_decN = 0; g_decMsSum = 0; g_decMsMax = 0;
+        double rsum = g_readMsSum;
+        g_decN = 0; g_decMsSum = 0; g_decMsMax = 0; g_readMsSum = 0;
         int st = g_stalls;
         double sm = g_stallMax;
         g_stalls = 0; g_stallMax = 0;
+        FileLog(L"ReadSample avg=%.1f ms (decode + convert + MF scaling)", n ? rsum / n : 0.0);
         FileLog(L"CPU %.1f%% | frame=%ld | decode avg=%.1f ms max=%.1f ms | UI stalls>50ms: %d (worst %.0f ms)",
                100.0 * (double)(cpu - g_cpuPrev) / (double)(wall - g_wallPrev),
                g_seq, n ? sum / n : 0.0, mx, st, sm);
