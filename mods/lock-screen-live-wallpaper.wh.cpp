@@ -69,6 +69,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 ## 📈 Performance tips
 
 - Lower **Render width** (the default is 1920; for example try 1280 or 960).
+- Videos at 4K or 60 fps are decoded on the CPU and can use several cores. For lower CPU use, prefer 1080p at 30 fps.
 - Use **Pause** if you only want a still image.
 - Keep **Pause when idle** enabled so nothing is decoded while nobody is at the PC.
 - If the video stutters while you type your password, turn off **Play video on the password screen**.
@@ -180,6 +181,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 ## 📈 Tips performa
 
 - Turunkan **Render width** (defaultnya 1920; misalnya coba 1280 atau 960).
+- Video 4K atau 60 fps di-decode oleh CPU dan bisa memakai beberapa core. Untuk pemakaian CPU lebih rendah, pilih 1080p dengan 30 fps.
 - Gunakan **Pause** jika kamu hanya ingin gambar diam.
 - Biarkan **Pause when idle** aktif agar tidak ada decoding saat tidak ada orang di depan PC.
 - Jika video patah-patah saat mengetik password, matikan **Play video on the password screen**.
@@ -417,6 +419,7 @@ static DWORD g_lastInput = 0;                  // UI thread only
 static bool g_hideOnShutdown = false;
 static bool g_playOnPassword = true;
 static bool g_pwScene = false;                 // UI thread only
+static DWORD g_pwGoneTick = 0;                 // UI thread only: when the password screen last closed
 static bool g_msgSceneUp = false;              // UI thread only
 
 // ---------- Fail-safe ----------
@@ -1265,6 +1268,7 @@ void UpdatePasswordScene(DependencyObject const& o, DependencyObject const& l) {
     // Password screen = credential UI visible while the lock screen UI is collapsed.
     bool pw = credVisible && lfe && lfe.Visibility() != Visibility::Visible;
     if (pw != g_pwScene) {
+        if (g_pwScene && !pw) g_pwGoneTick = GetTickCount();
         g_pwScene = pw;
         FileLog(L"Password screen %s", pw ? L"shown" : L"gone");
     }
@@ -1346,6 +1350,9 @@ void TripFailSafe(const wchar_t* reason) {
 // 30 seconds -> fail-safe.
 void OnStepError(const wchar_t* what) {
     DWORD now = GetTickCount();
+    // Right after the password screen closes (sign-in), the lock UI is being torn
+    // down, so errors from it are expected and must not trip the fail-safe.
+    if (g_pwGoneTick && now - g_pwGoneTick < 10000) return;
     if (g_lastErrTick && now - g_lastErrTick < kErrThrottleMs) return;
     g_lastErrTick = now;
     if (g_errCount == 0 || now - g_errWindowStart > kErrWindowMs) {
