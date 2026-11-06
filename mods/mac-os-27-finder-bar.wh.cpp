@@ -164,8 +164,8 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
 - resetBarSettings: false
   $name: Reset the bar's settings
   $name:pt-BR: Restaurar os ajustes da barra
-  $description: Turn on and save to put every option of the bar's own "Menu Bar Settings…" window back to its default, for example if the bar doesn't show up. It happens once each time you turn this on; you can turn it off again afterwards.
-  $description:pt-BR: Ligue e salve para voltar ao padrão todas as opções da janela "Ajustes da Barra de Menus…" da própria barra, por exemplo se a barra não aparecer. Acontece uma vez a cada vez que você liga; depois pode desligar.
+  $description: Turn on and save to put the options of the bar's own "Menu Bar Settings…" window back to their defaults (including the glass, icon order and weather options), for example if the bar doesn't show up. The weather place, imported calendars and Control Center tiles are kept. It happens once each time you turn this on; you can turn it off again afterwards.
+  $description:pt-BR: Ligue e salve para voltar ao padrão as opções da janela "Ajustes da Barra de Menus…" da própria barra (inclusive o vidro, a ordem dos ícones e as opções da previsão do tempo), por exemplo se a barra não aparecer. O lugar da previsão, os calendários importados e os blocos da Central ficam. Acontece uma vez a cada vez que você liga; depois pode desligar.
 - checkAppUpdates: false
   $name: Also count app updates with winget (uses the network)
   $name:pt-BR: Contar também as atualizações de apps pelo winget (usa a rede)
@@ -711,6 +711,11 @@ static void LoadSettings() {
         int done = Wh_GetIntValue(L"resetDone", 0);
         if (reset && !done) {
             for (const auto& d : kUiDefaults) OvrSetStr(d.key, L"");
+            // Também o vidro, a ordem dos ícones, o vidro desta janela e as opções
+            // da previsão. Ficam: o lugar da previsão, os calendários importados e
+            // os blocos da Central (são dados do usuário, não aparência).
+            for (PCWSTR k : {L"glass", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts", L"weatherStyle"})
+                Wh_SetStringValue(k, L"");
             Wh_SetIntValue(L"resetDone", 1);
             Wh_Log(L"Ajustes da barra restaurados ao padrão");
         } else if (!reset && done) {
