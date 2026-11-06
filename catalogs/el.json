@@ -7610,7 +7610,7 @@
         "ratingUsers": 383,
         "reviews": 1,
         "trendingSorting": 0.8105592108414065,
-        "updated": 1793296960000,
+        "updated": 1793998915000,
         "users": 28405
       },
       "metadata": {
@@ -7626,7 +7626,7 @@
         ],
         "license": "MIT",
         "name": "File Explorer WinUI-Like Content Animation",
-        "version": "1.0.2"
+        "version": "1.0.3"
       }
     },
     "file-explorer-details-autofit-columns": {
@@ -18078,7 +18078,7 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 10.6,
-        "updated": 1793858596000,
+        "updated": 1793998910000,
         "users": 106
       },
       "metadata": {
@@ -18086,8 +18086,8 @@
           "x86-64"
         ],
         "author": "Marco Petrucci",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -luser32",
-        "description": "Native XAML taskbar tools: Restart Explorer, Clean Temp, Flush DNS, Reset GPU and Get Local IP.",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -lwininet -luser32",
+        "description": "Native XAML taskbar tools: Restart Explorer, Clean Temp, Reduce Memory, Reset GPU, Get IP, Rebuild Cache and Flush DNS.",
         "donateUrl": "https://www.paypal.me/marco00petrucci",
         "github": "https://github.com/marco00petrucci",
         "include": [
@@ -18095,7 +18095,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar System Utilities",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "taskbar-thumbnail-hover-fix": {

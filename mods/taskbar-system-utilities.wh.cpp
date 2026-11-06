@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              taskbar-system-utilities
 // @name            Taskbar System Utilities
-// @description     Native XAML taskbar tools: Restart Explorer, Clean Temp, Flush DNS, Reset GPU and Get Local IP.
-// @version         1.0
+// @description     Native XAML taskbar tools: Restart Explorer, Clean Temp, Reduce Memory, Reset GPU, Get IP, Rebuild Cache and Flush DNS.
+// @version         1.1
 // @author          Marco Petrucci
 // @github          https://github.com/marco00petrucci
 // @donateUrl       https://www.paypal.me/marco00petrucci
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -luser32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -lwininet -luser32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -17,25 +17,31 @@
 # Taskbar System Utilities
 
 System utilities integrated into the Windows 11 Taskbar XAML context menu with
-**native XAML flyout cards**, **synchronous UI thread safety**, and **zero UAC
-prompts**.
+**native XAML flyout cards** and **zero UAC prompts**.
 
-![Taskbar System Utilities Screenshot](https://i.imgur.com/RquNZCE.gif)
+![Taskbar System Utilities Screenshot](https://i.imgur.com/c9MhpB0.gif)
 
 ## Features
-- **Restart Explorer**: Instantly restarts the `explorer.exe` shell process from the
-  taskbar context menu.
+- **Restart Explorer**: Instantly restarts the `explorer.exe` shell process from
+  the taskbar context menu.
 - **Clean Temp**: Comprehensive temporary file cleaner for `%TEMP%` and
   accessible files in `%WINDIR%\Temp`. Deletes all unlocked temporary files
-  regardless of age (relying on Windows file sharing locks to protect actively
-  opened files) and displays a XAML summary card.
-- **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
-  `dnsapi.dll!DnsFlushResolverCache`.
+  regardless of age (files currently locked by active processes are skipped) and
+  displays a XAML summary card.
+- **Reduce Memory**: Trims the working sets of your own non-elevated running
+  processes via `EmptyWorkingSet` to reclaim RAM, displaying a XAML summary card
+  with the number of processes optimized and memory freed.
 - **Restart Graphics Driver**: Triggers the `Win + Ctrl + Shift + B` display
   driver reset shortcut.
-- **Get Local IP**: Lists active local IPv4 and IPv6 addresses across network
-  adapters using `GetAdaptersAddresses` (`iphlpapi.dll`) with optional clipboard
-  copy.
+- **Get IP Addresses**: Lists active local IPv4 and IPv6 addresses across
+  network adapters. Optionally queries public IP via `api.ipify.org` if enabled
+  in settings (disabled by default for privacy). Includes clipboard copy.
+- **Rebuild Icon & Thumbnail Cache**: Deletes unlocked thumbnail cache files
+from
+  `%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db` and rebuilds the
+  Windows icon cache via `ie4uinit.exe -show`, without restarting Explorer.
+- **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
+  `dnsapi.dll!DnsFlushResolverCache`.
 
 ## Credits & Licensing
 Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
@@ -45,48 +51,76 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 
 // ==WindhawkModSettings==
 /*
-- showRestartExplorer: true
-  $name: Enable Restart Explorer
-  $description: Show Restart Explorer in taskbar menu.
-- textRestartExplorer: Restart Explorer
-  $name: Restart Explorer Label
-  $description: Custom text for Restart Explorer.
-- showCleanTemp: true
-  $name: Enable Clean Temp
-  $description: Show Clean Temp in taskbar menu.
-- textCleanTemp: Clean Temp
-  $name: Clean Temp Label
-  $description: Custom text for Clean Temp.
-- cleanRecycleBin: false
-  $name: Empty Recycle Bin on Clean Temp
-  $description: Permanently empty Recycle Bin on all drives.
-- notifyCleanTemp: true
-  $name: Show Card after Clean Temp
-  $description: Show XAML summary card after cleaning.
-- showFlushDns: true
-  $name: Enable Clean DNS Cache
-  $description: Show Clean DNS Cache in taskbar menu.
-- textFlushDns: Clean DNS Cache
-  $name: Clean DNS Cache Label
-  $description: Custom text for Clean DNS Cache.
-- notifyFlushDns: true
-  $name: Show Card after Clean DNS
-  $description: Show XAML card when DNS cache is flushed.
-- showRestartGpu: true
-  $name: Enable Restart Graphics Driver
-  $description: Show Restart Graphics Driver in taskbar menu.
-- textRestartGpu: Restart Graphics Driver
-  $name: Restart Graphics Driver Label
-  $description: Custom text for Restart Graphics Driver.
-- showGetIp: true
-  $name: Enable Get Local IP
-  $description: Show Get Local IP in taskbar menu.
-- textGetIp: Get Local IP
-  $name: Get Local IP Label
-  $description: Custom text for Get Local IP.
-- copyIpToClipboard: false
-  $name: Auto-Copy IP to Clipboard
-  $description: Copy detected local IPs to clipboard.
+- restartExplorer:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Restart Explorer
+    $name: Menu item label
+  $name: Restart Explorer
+  $description: Configure the Restart Explorer shortcut.
+- cleanTemp:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Clean Temp
+    $name: Menu item label
+  - cleanRecycleBin: false
+    $name: Empty Recycle Bin
+    $description: Permanently empty Recycle Bin on all drives.
+  - showCard: true
+    $name: Show summary card
+    $description: Display XAML card with cleanup statistics.
+  $name: Clean Temp
+  $description: Configure the temporary files cleaner.
+- reduceMemory:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Reduce Memory
+    $name: Menu item label
+  - showCard: true
+    $name: Show summary card
+    $description: Display XAML card with freed RAM statistics.
+  $name: Reduce Memory
+  $description: Trim working sets of running processes to free up RAM.
+- restartGpu:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Restart Graphics Driver
+    $name: Menu item label
+  $name: Restart Graphics Driver
+  $description: Configure the graphics subsystem reset shortcut.
+- getIp:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Get IP Address
+    $name: Menu item label
+  - queryPublicIp: false
+    $name: Query Public IP (External)
+    $description: Contacts api.ipify.org via HTTPS. Off by default.
+  - copyToClipboard: false
+    $name: Auto-copy to clipboard
+    $description: Automatically copy detected IPs to clipboard.
+  $name: Get IP Address
+  $description: Configure local and public IP detection.
+- rebuildCache:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Rebuild Icon & Thumbnail Cache
+    $name: Menu item label
+  - showCard: true
+    $name: Show summary card
+    $description: Display XAML card with cache rebuild statistics.
+  $name: Rebuild Icon & Thumbnail Cache
+  $description: Delete thumbnail cache and rebuild Windows icon cache.
+- flushDns:
+  - enabled: true
+    $name: Enable in taskbar menu
+  - label: Clean DNS Cache
+    $name: Menu item label
+  - showCard: true
+    $name: Show confirmation card
+    $description: Display XAML card when DNS cache is flushed.
+  $name: Clean DNS Cache
+  $description: Configure the DNS resolver cache cleaner.
 */
 // ==/WindhawkModSettings==
 
@@ -95,7 +129,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <psapi.h>
 #include <shellapi.h>
+#include <wininet.h>
 // clang-format on
 
 #include <windhawk_utils.h>
@@ -114,6 +150,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 #include <winrt/base.h>
 
 #include <atomic>
+#include <cctype>
 #include <cwchar>
 #include <functional>
 #include <memory>
@@ -145,16 +182,25 @@ struct ModSettings {
     bool cleanRecycleBin = false;
     bool notifyCleanTemp = true;
 
-    bool showFlushDns = true;
-    std::wstring textFlushDns = L"Clean DNS Cache";
-    bool notifyFlushDns = true;
+    bool showReduceMemory = true;
+    std::wstring textReduceMemory = L"Reduce Memory";
+    bool notifyReduceMemory = true;
 
     bool showRestartGpu = true;
     std::wstring textRestartGpu = L"Restart Graphics Driver";
 
     bool showGetIp = true;
-    std::wstring textGetIp = L"Get Local IP";
+    std::wstring textGetIp = L"Get IP Address";
+    bool queryPublicIp = false;
     bool copyIpToClipboard = false;
+
+    bool showRebuildCache = true;
+    std::wstring textRebuildCache = L"Rebuild Icon & Thumbnail Cache";
+    bool notifyRebuildCache = true;
+
+    bool showFlushDns = true;
+    std::wstring textFlushDns = L"Clean DNS Cache";
+    bool notifyFlushDns = true;
 };
 
 std::mutex g_settingsMutex;
@@ -177,6 +223,7 @@ winrt::event_token g_activeOkClickToken{};
 
 std::mutex g_threadsMutex;
 std::vector<HANDLE> g_threads;
+std::mutex g_dispatchMutex;
 
 ModSettings GetSettingsSnapshot() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -203,9 +250,6 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-const UINT g_runFromWindowThreadMsg =
-    RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
 bool RunFromWindowThread(HWND hWnd, std::function<void()> proc) {
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (!dwThreadId) {
@@ -217,6 +261,9 @@ bool RunFromWindowThread(HWND hWnd, std::function<void()> proc) {
         return true;
     }
 
+    static const UINT runMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
     struct CallWndProcParam {
         std::function<void()>* proc;
     };
@@ -227,7 +274,7 @@ bool RunFromWindowThread(HWND hWnd, std::function<void()> proc) {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp =
                     reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (cwp->message == g_runFromWindowThreadMsg) {
+                if (cwp->message == runMsg) {
                     auto* param =
                         reinterpret_cast<CallWndProcParam*>(cwp->lParam);
                     (*param->proc)();
@@ -241,8 +288,7 @@ bool RunFromWindowThread(HWND hWnd, std::function<void()> proc) {
     }
 
     CallWndProcParam param{&proc};
-    SendMessageW(hWnd, g_runFromWindowThreadMsg, 0,
-                 reinterpret_cast<LPARAM>(&param));
+    SendMessageW(hWnd, runMsg, 0, reinterpret_cast<LPARAM>(&param));
     UnhookWindowsHookEx(hook);
     return true;
 }
@@ -517,6 +563,7 @@ void DispatchXAMLCardSync(const std::wstring& titleText,
                           const wchar_t* glyphIcon,
                           const std::vector<DialogRow>& rows,
                           const std::wstring& footerNote = L"") {
+    std::lock_guard<std::mutex> lock(g_dispatchMutex);
     if (g_unloading.load()) {
         return;
     }
@@ -578,7 +625,7 @@ bool CopyTextToClipboard(const std::wstring& text) {
 // Native Action Implementations
 // ============================================================================
 
-// Restart Explorer
+// 1. Restart Explorer
 void OnRestartExplorerClick(wf::IInspectable const&,
                             wux::RoutedEventArgs const&) {
     if (g_restartStarted.exchange(true)) {
@@ -612,7 +659,7 @@ void OnRestartExplorerClick(wf::IInspectable const&,
     }
 }
 
-// Clean Temp (Deletes all unlocked temporary files immediately)
+// 2. Clean Temp
 struct CleanStats {
     DWORD filesDeleted = 0;
     DWORD filesSkipped = 0;
@@ -748,34 +795,84 @@ void OnCleanTempClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     });
 }
 
-// Clean DNS Cache
-using DnsFlushResolverCache_t = BOOL(WINAPI*)();
+// 3. Reduce Memory
+void OnReduceMemoryClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
+    RunAsyncTracked([]() {
+        auto cfg = GetSettingsSnapshot();
 
-void OnFlushDnsClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
-    BOOL flushed = FALSE;
-    if (HMODULE hDnsApi = LoadLibraryExW(L"dnsapi.dll", nullptr,
-                                         LOAD_LIBRARY_SEARCH_SYSTEM32)) {
-        auto pFlush = reinterpret_cast<DnsFlushResolverCache_t>(
-            GetProcAddress(hDnsApi, "DnsFlushResolverCache"));
-        if (pFlush) {
-            flushed = pFlush();
+        MEMORYSTATUSEX memBefore = {sizeof(memBefore)};
+        GlobalMemoryStatusEx(&memBefore);
+
+        std::vector<DWORD> pids(1024);
+        DWORD bytesReturned = 0;
+        while (K32EnumProcesses(pids.data(),
+                                static_cast<DWORD>(pids.size() * sizeof(DWORD)),
+                                &bytesReturned)) {
+            if (bytesReturned < pids.size() * sizeof(DWORD)) {
+                break;
+            }
+            pids.resize(pids.size() * 2);
         }
-        FreeLibrary(hDnsApi);
-    }
 
-    auto cfg = GetSettingsSnapshot();
-    if (cfg.notifyFlushDns) {
-        std::vector<DialogRow> rows = {
-            {L"Resolver Cache", flushed ? L"Flushed" : L"Failed"},
-            {L"Method", L"dnsapi.dll (In-Memory)"},
-        };
-        ShowModernXAMLCardOnUIThread(
-            L"DNS Cache", L"\xE774", rows,
-            flushed ? L"Cache cleared successfully" : L"Error flushing cache");
-    }
+        DWORD currentPid = GetCurrentProcessId();
+        DWORD count = bytesReturned / sizeof(DWORD);
+        DWORD trimmedCount = 0;
+        DWORD skippedCount = 0;
+
+        for (DWORD i = 0; i < count && !g_unloading.load(); ++i) {
+            if (pids[i] == 0 || pids[i] == 4 || pids[i] == currentPid) {
+                continue;
+            }
+
+            HANDLE hProc = OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA, FALSE,
+                pids[i]);
+            if (hProc) {
+                if (K32EmptyWorkingSet(hProc)) {
+                    trimmedCount++;
+                } else {
+                    skippedCount++;
+                }
+                CloseHandle(hProc);
+            } else {
+                skippedCount++;
+            }
+        }
+
+        if (cfg.notifyReduceMemory && !g_unloading.load()) {
+            MEMORYSTATUSEX memAfter = {sizeof(memAfter)};
+            GlobalMemoryStatusEx(&memAfter);
+
+            double freedMb = 0.0;
+            if (memAfter.ullAvailPhys > memBefore.ullAvailPhys) {
+                freedMb = static_cast<double>(memAfter.ullAvailPhys -
+                                              memBefore.ullAvailPhys) /
+                          (1024.0 * 1024.0);
+            }
+            double availGb = static_cast<double>(memAfter.ullAvailPhys) /
+                             (1024.0 * 1024.0 * 1024.0);
+
+            wchar_t freedBuf[64] = {};
+            swprintf_s(freedBuf, L"%.1f MB", freedMb);
+
+            wchar_t availBuf[64] = {};
+            swprintf_s(availBuf, L"%.2f GB (%lu%% used)", availGb,
+                       memAfter.dwMemoryLoad);
+
+            std::vector<DialogRow> rows = {
+                {L"Processes optimized", std::to_wstring(trimmedCount)},
+                {L"Processes skipped", std::to_wstring(skippedCount)},
+                {L"RAM recovered", freedBuf},
+                {L"Available RAM", availBuf},
+            };
+
+            DispatchXAMLCardSync(L"Memory Optimized", L"\xE950", rows,
+                                 L"Working sets trimmed");
+        }
+    });
 }
 
-// Restart Graphics Driver
+// 4. Restart Graphics Driver
 void OnRestartGpuClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     RunAsyncTracked([]() {
         Sleep(150);
@@ -802,7 +899,7 @@ void OnRestartGpuClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     });
 }
 
-// Get Local IP via GetAdaptersAddresses
+// 5. Get IP (Preferred Local Adapters + Optional Public IP)
 std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
     std::vector<DialogRow> rows;
     clipboardText.clear();
@@ -834,23 +931,43 @@ std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
             continue;
         }
 
+        bool hasIpv4 = false;
+        bool hasIpv6 = false;
+
         for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr;
              unicast = unicast->Next) {
+            if (unicast->DadState != IpDadStatePreferred) {
+                continue;
+            }
+
             SOCKADDR* addr = unicast->Address.lpSockaddr;
             if (!addr) {
                 continue;
             }
 
             wchar_t ipStr[INET6_ADDRSTRLEN] = {};
-            if (addr->sa_family == AF_INET) {
+            if (addr->sa_family == AF_INET && !hasIpv4) {
                 auto* sa4 = reinterpret_cast<sockaddr_in*>(addr);
-                InetNtopW(AF_INET, &sa4->sin_addr, ipStr, ARRAYSIZE(ipStr));
-            } else if (addr->sa_family == AF_INET6) {
+                const auto* bytes =
+                    reinterpret_cast<const uint8_t*>(&sa4->sin_addr);
+                // Skip addresses APIPA 169.254.0.0/16
+                if (bytes[0] == 169 && bytes[1] == 254) {
+                    continue;
+                }
+                if (InetNtopW(AF_INET, &sa4->sin_addr, ipStr,
+                              ARRAYSIZE(ipStr))) {
+                    hasIpv4 = true;
+                }
+            } else if (addr->sa_family == AF_INET6 && !hasIpv6) {
                 auto* sa6 = reinterpret_cast<sockaddr_in6*>(addr);
+                // Skip link-local addresses (fe80::/10)
                 if (IN6_IS_ADDR_LINKLOCAL(&sa6->sin6_addr)) {
                     continue;
                 }
-                InetNtopW(AF_INET6, &sa6->sin6_addr, ipStr, ARRAYSIZE(ipStr));
+                if (InetNtopW(AF_INET6, &sa6->sin6_addr, ipStr,
+                              ARRAYSIZE(ipStr))) {
+                    hasIpv6 = true;
+                }
             }
 
             if (ipStr[0] != L'\0') {
@@ -875,12 +992,99 @@ std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
     return rows;
 }
 
+std::mutex g_inetMutex;
+HINTERNET g_activeInternet = nullptr;
+
+void CancelActivePublicIpRequest() {
+    std::lock_guard<std::mutex> lock(g_inetMutex);
+    if (g_activeInternet) {
+        InternetCloseHandle(g_activeInternet);
+        g_activeInternet = nullptr;
+    }
+}
+
+std::wstring GetPublicIP() {
+    std::wstring result = L"Unavailable";
+    HINTERNET hInternet =
+        InternetOpenW(L"WindhawkSystemUtilities/" WH_MOD_VERSION,
+                      INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hInternet) {
+        return result;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_inetMutex);
+        if (g_unloading.load()) {
+            InternetCloseHandle(hInternet);
+            return result;
+        }
+        g_activeInternet = hInternet;
+    }
+
+    DWORD timeout = 2500;
+    InternetSetOptionW(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout,
+                       sizeof(timeout));
+    InternetSetOptionW(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout,
+                       sizeof(timeout));
+
+    HINTERNET hConnect =
+        InternetOpenUrlW(hInternet, L"https://api.ipify.org", nullptr, 0,
+                         INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE |
+                             INTERNET_FLAG_SECURE,
+                         0);
+    if (hConnect) {
+        char buffer[64] = {};
+        DWORD bytesRead = 0;
+        if (!g_unloading.load() &&
+            InternetReadFile(hConnect, buffer, sizeof(buffer) - 1,
+                             &bytesRead) &&
+            bytesRead > 0) {
+            buffer[bytesRead] = '\0';
+            std::string raw(buffer);
+            while (!raw.empty() &&
+                   std::isspace(static_cast<unsigned char>(raw.back()))) {
+                raw.pop_back();
+            }
+
+            in_addr addr4;
+            in6_addr addr6;
+            if (InetPtonA(AF_INET, raw.c_str(), &addr4) == 1 ||
+                InetPtonA(AF_INET6, raw.c_str(), &addr6) == 1) {
+                wchar_t wbuffer[64] = {};
+                MultiByteToWideChar(CP_UTF8, 0, raw.c_str(), -1, wbuffer, 64);
+                result = wbuffer;
+            }
+        }
+        InternetCloseHandle(hConnect);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_inetMutex);
+        if (g_activeInternet == hInternet) {
+            g_activeInternet = nullptr;
+            InternetCloseHandle(hInternet);
+        }
+    }
+    return result;
+}
+
 void OnGetIpClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     RunAsyncTracked([]() {
         auto cfg = GetSettingsSnapshot();
 
         std::wstring clipboardText;
         std::vector<DialogRow> rows = GetLocalAdapterIPs(clipboardText);
+
+        if (cfg.queryPublicIp && !g_unloading.load()) {
+            std::wstring publicIp = GetPublicIP();
+            rows.insert(rows.begin(), {L"Public IP", publicIp});
+            if (!clipboardText.empty()) {
+                clipboardText =
+                    L"Public IP: " + publicIp + L"\r\n" + clipboardText;
+            } else {
+                clipboardText = L"Public IP: " + publicIp;
+            }
+        }
 
         if (g_unloading.load()) {
             return;
@@ -893,8 +1097,138 @@ void OnGetIpClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
             }
         }
 
-        DispatchXAMLCardSync(L"Local Network Addresses", L"\xE968", rows,
-                             footer);
+        DispatchXAMLCardSync(L"Network IP Addresses", L"\xE968", rows, footer);
+    });
+}
+
+// 6. Rebuild Icon & Thumbnail Cache
+void OnRebuildCacheClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
+    RunAsyncTracked([]() {
+        auto cfg = GetSettingsSnapshot();
+
+        DWORD thumbsDeleted = 0;
+        DWORD thumbsSkipped = 0;
+        ULONGLONG bytesFreed = 0;
+
+        // Best-effort delete of thumbnail cache files.
+        wchar_t localAppData[MAX_PATH] = {};
+        DWORD localLen =
+            GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
+        if (localLen > 0 && localLen < MAX_PATH) {
+            std::wstring explorerDir =
+                std::wstring(localAppData) + L"\\Microsoft\\Windows\\Explorer";
+
+            std::wstring searchMask = explorerDir + L"\\thumbcache_*.db";
+            WIN32_FIND_DATAW fd;
+            HANDLE hFind = FindFirstFileW(searchMask.c_str(), &fd);
+            if (hFind != INVALID_HANDLE_VALUE) {
+                do {
+                    if (g_unloading.load()) {
+                        break;
+                    }
+                    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                        continue;
+                    }
+
+                    std::wstring fullPath = explorerDir + L"\\" + fd.cFileName;
+                    ULONGLONG fileSize =
+                        (static_cast<ULONGLONG>(fd.nFileSizeHigh) << 32) |
+                        fd.nFileSizeLow;
+
+                    if (DeleteFileW(ToExtendedPath(fullPath).c_str())) {
+                        thumbsDeleted++;
+                        bytesFreed += fileSize;
+                    } else {
+                        thumbsSkipped++;
+                    }
+                } while (FindNextFileW(hFind, &fd));
+                FindClose(hFind);
+            }
+        }
+
+        // Rebuild icon cache without restarting Explorer via ie4uinit.exe
+        // -show.
+        bool iconsRebuilt = false;
+        if (!g_unloading.load()) {
+            wchar_t sysDir[MAX_PATH] = {};
+            DWORD sysLen = GetSystemDirectoryW(sysDir, MAX_PATH);
+            if (sysLen > 0 && sysLen < MAX_PATH) {
+                std::wstring exePath = std::wstring(sysDir) + L"\\ie4uinit.exe";
+
+                STARTUPINFOW si = {};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+                PROCESS_INFORMATION pi = {};
+
+                wchar_t cmdLine[] = L"ie4uinit.exe -show";
+                if (CreateProcessW(exePath.c_str(), cmdLine, nullptr, nullptr,
+                                   FALSE, CREATE_NO_WINDOW, nullptr, nullptr,
+                                   &si, &pi)) {
+                    DWORD waitRes = WaitForSingleObject(pi.hProcess, 5000);
+                    DWORD exitCode = 1;
+                    GetExitCodeProcess(pi.hProcess, &exitCode);
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                    iconsRebuilt = (waitRes == WAIT_OBJECT_0 && exitCode == 0);
+                } else {
+                    Wh_Log(L"ie4uinit.exe launch failed: %lu", GetLastError());
+                }
+            }
+        }
+
+        if (cfg.notifyRebuildCache && !g_unloading.load()) {
+            double mbFreed =
+                static_cast<double>(bytesFreed) / (1024.0 * 1024.0);
+            wchar_t mbBuf[64] = {};
+            swprintf_s(mbBuf, L"%.2f MB", mbFreed);
+
+            std::vector<DialogRow> rows = {
+                {L"Thumbnail files deleted", std::to_wstring(thumbsDeleted)},
+                {L"Locked / skipped", std::to_wstring(thumbsSkipped)},
+                {L"Space recovered", mbBuf},
+                {L"Icon cache", iconsRebuilt ? L"Rebuilt" : L"Failed"},
+            };
+
+            std::wstring footer;
+            if (!iconsRebuilt) {
+                footer = L"Icon rebuild failed";
+            } else if (thumbsSkipped > 0) {
+                footer = L"Some thumbnails locked by Explorer";
+            } else {
+                footer = L"Cache rebuilt successfully";
+            }
+
+            DispatchXAMLCardSync(L"Cache Rebuilt", L"\xE8B9", rows, footer);
+        }
+    });
+}
+
+// 7. Clean DNS Cache
+using DnsFlushResolverCache_t = BOOL(WINAPI*)();
+
+void OnFlushDnsClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
+    RunAsyncTracked([]() {
+        BOOL flushed = FALSE;
+        if (HMODULE hDnsApi = LoadLibraryExW(L"dnsapi.dll", nullptr,
+                                             LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+            auto pFlush = reinterpret_cast<DnsFlushResolverCache_t>(
+                GetProcAddress(hDnsApi, "DnsFlushResolverCache"));
+            if (pFlush)
+                flushed = pFlush();
+            FreeLibrary(hDnsApi);
+        }
+
+        auto cfg = GetSettingsSnapshot();
+        if (cfg.notifyFlushDns && !g_unloading.load()) {
+            std::vector<DialogRow> rows = {
+                {L"Resolver Cache", flushed ? L"Flushed" : L"Failed"},
+                {L"Method", L"dnsapi.dll (In-Memory)"},
+            };
+            DispatchXAMLCardSync(L"DNS Cache", L"\xE774", rows,
+                                 flushed ? L"Cache cleared successfully"
+                                         : L"Error flushing cache");
+        }
     });
 }
 
@@ -943,9 +1277,13 @@ void AppendInjectedItems(void* vectorThis) {
         {cfg.showRestartExplorer, cfg.textRestartExplorer, L"\xE72C",
          &OnRestartExplorerClick},
         {cfg.showCleanTemp, cfg.textCleanTemp, L"\xE74D", &OnCleanTempClick},
-        {cfg.showFlushDns, cfg.textFlushDns, L"\xE774", &OnFlushDnsClick},
+        {cfg.showReduceMemory, cfg.textReduceMemory, L"\xE950",
+         &OnReduceMemoryClick},
         {cfg.showRestartGpu, cfg.textRestartGpu, L"\xE7F4", &OnRestartGpuClick},
         {cfg.showGetIp, cfg.textGetIp, L"\xE968", &OnGetIpClick},
+        {cfg.showRebuildCache, cfg.textRebuildCache, L"\xE8B9",
+         &OnRebuildCacheClick},
+        {cfg.showFlushDns, cfg.textFlushDns, L"\xE774", &OnFlushDnsClick},
     };
 
     bool anyInjected = false;
@@ -1126,26 +1464,38 @@ std::wstring LoadStringSetting(const wchar_t* name,
 
 void LoadSettings() {
     ModSettings fresh;
-    fresh.showRestartExplorer = Wh_GetIntSetting(L"showRestartExplorer");
+    fresh.showRestartExplorer = Wh_GetIntSetting(L"restartExplorer.enabled");
     fresh.textRestartExplorer =
-        LoadStringSetting(L"textRestartExplorer", L"Restart Explorer");
+        LoadStringSetting(L"restartExplorer.label", L"Restart Explorer");
 
-    fresh.showCleanTemp = Wh_GetIntSetting(L"showCleanTemp");
-    fresh.textCleanTemp = LoadStringSetting(L"textCleanTemp", L"Clean Temp");
-    fresh.cleanRecycleBin = Wh_GetIntSetting(L"cleanRecycleBin");
-    fresh.notifyCleanTemp = Wh_GetIntSetting(L"notifyCleanTemp");
+    fresh.showCleanTemp = Wh_GetIntSetting(L"cleanTemp.enabled");
+    fresh.textCleanTemp = LoadStringSetting(L"cleanTemp.label", L"Clean Temp");
+    fresh.cleanRecycleBin = Wh_GetIntSetting(L"cleanTemp.cleanRecycleBin");
+    fresh.notifyCleanTemp = Wh_GetIntSetting(L"cleanTemp.showCard");
 
-    fresh.showFlushDns = Wh_GetIntSetting(L"showFlushDns");
-    fresh.textFlushDns = LoadStringSetting(L"textFlushDns", L"Clean DNS Cache");
-    fresh.notifyFlushDns = Wh_GetIntSetting(L"notifyFlushDns");
+    fresh.showReduceMemory = Wh_GetIntSetting(L"reduceMemory.enabled");
+    fresh.textReduceMemory =
+        LoadStringSetting(L"reduceMemory.label", L"Reduce Memory");
+    fresh.notifyReduceMemory = Wh_GetIntSetting(L"reduceMemory.showCard");
 
-    fresh.showRestartGpu = Wh_GetIntSetting(L"showRestartGpu");
+    fresh.showRestartGpu = Wh_GetIntSetting(L"restartGpu.enabled");
     fresh.textRestartGpu =
-        LoadStringSetting(L"textRestartGpu", L"Restart Graphics Driver");
+        LoadStringSetting(L"restartGpu.label", L"Restart Graphics Driver");
 
-    fresh.showGetIp = Wh_GetIntSetting(L"showGetIp");
-    fresh.textGetIp = LoadStringSetting(L"textGetIp", L"Get Local IP");
-    fresh.copyIpToClipboard = Wh_GetIntSetting(L"copyIpToClipboard");
+    fresh.showGetIp = Wh_GetIntSetting(L"getIp.enabled");
+    fresh.textGetIp = LoadStringSetting(L"getIp.label", L"Get IP Address");
+    fresh.queryPublicIp = Wh_GetIntSetting(L"getIp.queryPublicIp");
+    fresh.copyIpToClipboard = Wh_GetIntSetting(L"getIp.copyToClipboard");
+
+    fresh.showRebuildCache = Wh_GetIntSetting(L"rebuildCache.enabled");
+    fresh.textRebuildCache = LoadStringSetting(
+        L"rebuildCache.label", L"Rebuild Icon & Thumbnail Cache");
+    fresh.notifyRebuildCache = Wh_GetIntSetting(L"rebuildCache.showCard");
+
+    fresh.showFlushDns = Wh_GetIntSetting(L"flushDns.enabled");
+    fresh.textFlushDns =
+        LoadStringSetting(L"flushDns.label", L"Clean DNS Cache");
+    fresh.notifyFlushDns = Wh_GetIntSetting(L"flushDns.showCard");
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(fresh);
@@ -1200,6 +1550,8 @@ void Wh_ModUninit() {
         g_unloading.store(true);
         threads.swap(g_threads);
     }
+
+    CancelActivePublicIpRequest();
 
     for (HANDLE thread : threads) {
         WaitForSingleObject(thread, INFINITE);

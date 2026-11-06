@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-06T20:00:32.000Z</updated>
+    <updated>2026-11-06T21:01:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0.3]]></title>
+        <id>https://windhawk.net/mods/file-explorer-content-animation#9b70a24771cfbad240c70881b7b1e97baf57b20a</id>
+        <link href="https://windhawk.net/mods/file-explorer-content-animation"/>
+        <updated>2026-11-06T21:01:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Keep DirectUI text visible during animations: in light mode it could vanish or turn into faint white artifacts until the animation ended.</li>
+<li>Move only the scrollable area on page entrance, so the column header no longer turns opaque or changes color during the animation with translucent backgrounds.</li>
+<li>Hand the content back under a copy that follows the scroll when scrolling during an animation, so it no longer flashes empty, also with smooth scrolling mods.</li>
+<li>Add an optional Styler text compatibility setting, off by default. It's only needed if the text changes after the animation ends with the entire-window effect of Windows 11 File Explorer Styler.</li>
+</ul>
+]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Utilities 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-utilities#86a896f7ddd20f2bf60d0798e487701f009f6595</id>
+        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
+        <updated>2026-11-06T21:01:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <strong>Reduce Memory</strong> tool to trim working sets of non-elevated processes.</li>
+<li>Added <strong>Rebuild Icon &amp; Thumbnail Cache</strong> tool (<code>thumbcache_*.db</code> cleanup + <code>ie4uinit.exe -show</code>).</li>
+<li>Added optional <strong>Public IP</strong> lookup in Get IP Address (<code>getIp.queryPublicIp</code>, disabled by default for privacy).</li>
+<li>Reorganized settings into structured groups for better UX (<strong>Note:</strong> existing settings are reset to defaults due to the new grouped key structure and need to be reconfigured).</li>
+<li>Filtered out non-preferred and APIPA (<code>169.254.x.x</code>) local network addresses.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Marco Petrucci</name>
+            <uri>https://github.com/marco00petrucci</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.2]]></title>
         <id>https://windhawk.net/mods/start-everything#1e59c5e80950f4b2f82b43edcb31e3eedf6c592a</id>
@@ -795,135 +830,6 @@ to open the hidden Apps icons.</p>
         <author>
             <name>Cougar16</name>
             <uri>https://github.com/Cougar16</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win Duo Bar 1.1.4]]></title>
-        <id>https://windhawk.net/mods/win-duo-bar#8547431ba5abfd36a44820fed01031f532886fd8</id>
-        <link href="https://windhawk.net/mods/win-duo-bar"/>
-        <updated>2026-11-05T05:01:39.000Z</updated>
-        <content type="html"><![CDATA[<h1>Win Duo Bar</h1>
-<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/hero.png" alt="Win Duo Bar in the notification area"></p>
-<p>A compact, minimal ring widget that replaces the Windows 11 notification-area
-clock. It shows the device status at a glance:</p>
-<ul>
-<li><strong>Battery ring</strong> - a 263 degree gauge with round caps and a translucent track.
-The filled part follows the battery level; the ring is green while plugged in,
-red when the battery is low (20% or less), yellow in battery saver mode and
-uses the taskbar text colour otherwise.</li>
-<li><strong>Wi-Fi symbol</strong> in the middle - two thick rounded arcs plus a solid dot,
-traced from the original 09 Wi-Fi icon. It switches to the wired/VPN icon
-when the active connection is not wireless and dims when offline.</li>
-<li><strong>Time and date</strong> - two rows of four bold digits (<code>1427</code> = 14:27, <code>1102</code> =
-November 2nd), no separators.</li>
-<li><strong>Charging animation</strong> - a notch opens at the top of the ring, a white bolt
-grows out of it, the Wi-Fi symbol slides down a little and the colours
-cross-fade (about 0.5 s, 60 fps).</li>
-<li><strong>One widget per taskbar</strong> - every taskbar clock gets its own widget, so
-multi-monitor setups keep a clock on every taskbar.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/states.png" alt="Win Duo Bar states"></p>
-<p>Every visual parameter (ring diameter/thickness/gauge span/track opacity/notch
-angle/bolt size, Wi-Fi size/thickness/opening/position, digits size and row
-positions) can be adjusted in the mod settings. The settings are localized
-(English and Simplified Chinese).</p>
-<p>The widget is 38 DIP by default. The DIP geometry values below are relative to
-that default size and scale together with the &quot;Widget size&quot; setting.</p>
-<p>This mod replaces the clock only. To hide the system battery and network tray
-icons, which the widget makes redundant, use the
-<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
-mod instead.</p>
-<p>Only Windows 11 is supported.</p>
-<h1>中文说明</h1>
-<p>Win Duo Bar 是一个替换 Windows 11 通知区域时钟的圆环小组件：</p>
-<ul>
-<li><strong>电量圆环</strong>：263° 圆环，圆头、带半透明轨道；电量部分随电量变化，插电时绿色、
-低电量（≤20%）红色、节电模式黄色，其他情况跟随任务栏文字颜色。</li>
-<li><strong>Wi-Fi 图标</strong>：中间两条粗圆头弧线 + 实心圆点（按原版 09 图标描出）；当前连接
-不是无线时显示有线/VPN 图标，断网时变暗。</li>
-<li><strong>时间日期</strong>：下方两行四位数字（<code>1427</code>=14:27、<code>1102</code>=11月2日），无分隔符。</li>
-<li><strong>充电动画</strong>：充电时顶部张开豁口、白色闪电长出、Wi-Fi 图标下移、颜色渐变，
-约 0.5 秒 60fps。</li>
-<li><strong>每个任务栏一个小组件</strong>：每个任务栏时钟都有独立的小组件，多显示器任务栏
-都会显示。</li>
-</ul>
-<p>所有视觉参数（圆环外径/粗细/弧度范围/轨道透明度/豁口角度/闪电大小、Wi-Fi 尺寸/
-粗细/开口/位置、数字字号和两行位置）都能在设置里调整，设置项已本地化
-（英文/简体中文）。</p>
-<p>小组件默认 38 DIP；下面的 DIP 几何参数以该默认尺寸为基准，并随「小组件尺寸」
-设置一起缩放。</p>
-<p>本模组只替换时钟。如需隐藏系统托盘的电量和网络图标（小组件已替代它们），
-请使用
-<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
-模组。</p>
-<p>仅支持 Windows 11。</p>
-<h2>Credits / 致谢</h2>
-<p>The taskbar XAML access code (XamlRoot lookup, symbol hooks, running code on the
-taskbar thread) is derived from the Windhawk mods by
-<a href="https://m417z.com/">m417z</a> (GPLv3), including the
-<a href="https://github.com/m417z/my-windhawk-mods">Taskbar tray system icon tweaks</a>
-mod. The Wi-Fi symbol geometry is traced from a &quot;09&quot;-style Wi-Fi icon reference.</p>
-<p>任务栏 XAML 访问代码（XamlRoot 获取、符号挂钩、任务栏线程执行）派生自
-<a href="https://m417z.com/">m417z</a> 的 Windhawk 模组（GPLv3）。Wi-Fi 图标几何按 09 风格
-参考图标描出。</p>
-]]></content>
-        <author>
-            <name>Felinyu</name>
-            <uri>https://github.com/Felinyu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Outlook Refined 0.6]]></title>
-        <id>https://windhawk.net/mods/outlook-refined#990c27e145efb3be3be4a934663578ea209ed651</id>
-        <link href="https://windhawk.net/mods/outlook-refined"/>
-        <updated>2026-11-05T05:01:34.000Z</updated>
-        <content type="html"><![CDATA[<h1>Outlook Refined</h1>
-<p>Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
-adds one script to each Outlook window when the window is created, and the
-script stops at once unless the page is one of Outlook's own. It opens no ports
-and brings nothing of its own down from the network: every asset it draws with
-is in this file. It reads your account addresses from Outlook's own storage, to
-label the folder tree, and with the agenda, month grid or Other card on it calls
-Outlook's mail service as described below.</p>
-<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/folder-pane.png" alt="Folder pane"></p>
-<p>Restart Outlook after enabling the mod or changing a setting.</p>
-<p><strong>What it asks Outlook for.</strong> The agenda, month grid and Other inbox card read
-your calendar and inbox through Outlook's own mail service, from inside its
-page, signed with the session Outlook already holds: the mod keeps the request
-headers Outlook sets, in memory, and reuses them. Those features refresh every
-few minutes while they are on, and each is off until you turn it on. Nothing is
-stored, logged or sent anywhere else, and no credential is written down.</p>
-<p><strong>Where your edits are kept.</strong> Groups, renames, folds, account order and the
-pane and card sizes are saved in Windhawk's own storage for this mod, so they
-leave when the mod does. State an earlier version wrote into Outlook's own local
-storage is moved across the first time this one runs. Other Outlook windows
-that are already open pick up a change as soon as you move into them.</p>
-<p><strong>Folder pane:</strong> Favorites in groups that fold (right-click a group header for
-its menu, drag a favorite to move it, Shift+right-click it to rename or move
-it), per-account compose buttons, a resizable pane, account trees under one
-foldable heading, accounts reordered by dragging.</p>
-<p><strong>Agenda:</strong> today and the next days from every account's calendar at the bottom
-of the folder pane, with a join button for online meetings, under a month grid
-shaded by booked hours. <strong>Other inbox:</strong> the newest Other conversations below
-the Focused list.</p>
-<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/other-inbox.png" alt="Agenda and the Other inbox card"></p>
-<p><strong>Calendar:</strong> one row per account, compact time zones, start and end times on
-event tiles, overlapping events cascaded or merged.</p>
-<p><strong>Reading pane:</strong> To and Cc on one line, a compact blocked-content bar, a
-readable body width. <strong>Ribbon:</strong> the group-name row under the buttons goes.</p>
-<p><strong>Print:</strong> printing a message prints the message, not the whole window: the
-panes, ribbon and buttons go, panes that scroll are released so nothing is cut
-off, quoted replies can be lightened or dropped, pictures and tables are kept
-whole, and anything too wide for the page is scaled down to fit.</p>
-<p><strong>Known limits.</strong> Most features find Outlook's own elements by English labels
-(&quot;Focused&quot;, &quot;Other&quot;, &quot;Navigation pane&quot;, &quot;Reading Pane&quot;) and read times written
-as 1:30 PM, so in another display language, or with a 24-hour clock, those
-parts quietly do nothing. The folder pane, the agenda and the print layout are
-the parts that depend on this most.</p>
-]]></content>
-        <author>
-            <name>Analytic Endeavors</name>
-            <uri>https://github.com/ae-reid-havens</uri>
         </author>
     </entry>
 </feed>

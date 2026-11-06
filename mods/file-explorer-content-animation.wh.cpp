@@ -6,7 +6,7 @@
 // @description     Smooth WinUI-like page transition animations for the File Explorer content area.
 // @description:pt  Animações suaves de transição de página inspiradas no WinUI para a área de conteúdo do Explorador de Arquivos.
 // @description:es  Animaciones suaves de transición de página inspiradas en WinUI para el área de contenido del Explorador de Archivos.
-// @version         1.0.2
+// @version         1.0.3
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -26,16 +26,12 @@
 
 A smooth, WinUI-inspired page transition system for the File Explorer content area on Windows 11.
 
-### What's new in 1.0.2
+### What's new in 1.0.3
 
-A big part of the mod was rewritten for this version. The animations now use DirectUI's own standard layer mechanism, so the motion and the item effects run on the system compositor instead of Explorer's UI thread: they stay smooth even while thumbnails and large folders are still loading. On builds where this isn't available, the mod keeps Explorer's native layout and the fade.
-
-- **Smoother page transitions** - The folder content itself moves, without moving Explorer's windows. The defaults now follow WinUI: 450 ms (a 150 ms hold plus 300 ms of motion) and a 140 DIP entrance. Opening a folder uses the same entrance animation.
-- **Staggered item reveal (optional)** - Items grow and fade in one after another, with the same curves as WinUI's AddDelete transition. On supported builds, deleted items also leave with a short animation.
-- **Waits for your files** - In slow folders the page waits for the first files to show up before moving, instead of animating an empty view.
-- **No more flashes** - The end of each animation is covered, so the content no longer flashes empty or shows duplicated text.
-- **Responds to you** - Clicking or pressing a key during an animation finishes it quickly, and scrolling hands the content back right away, also with smooth scrolling mods.
-- Requires symbol resolution on explorerframe.dll, dui70.dll and duser.dll, plus windows.storage.dll for deletions (handled automatically by Windhawk). The new **Motion animations** option can be turned off if a Windows update breaks the symbols.
+- **Text stays visible during animations** - In light mode, text could vanish or turn into faint white artifacts until the animation ended; a mod that replaces the text renderer could hide this. Text now stays visible in light and dark mode, with neutral smoothing close in weight to ClearType until the animation ends.
+- **The column header stays in place** - Only the scrollable area moves now, so the header no longer turns opaque or changes color during the animation with translucent backgrounds.
+- **Scrolling during an animation** - The content is handed back under a copy that follows the scroll, so it no longer flashes empty, also with smooth scrolling mods.
+- **New Styler text compatibility option** - Optional even with the Windows 11 File Explorer Styler active: only turn it on if you notice a difference in the text after the animation ends.
 
 ### Features
 
@@ -46,7 +42,11 @@ A big part of the mod was rewritten for this version. The animations now use Dir
 - Per-window first open delay (optional)
 - Navigation delay to hide the "Working on it..." message
 - Zero flicker / no black flashes
+- Runs on the system compositor, staying smooth while thumbnails and large folders load; on builds where this isn't available, the mod keeps Explorer's native layout and the fade
+- Waits for the first files in slow folders before moving
+- Clicking or pressing a key during an animation finishes it quickly
 - Compatible with the Translucent Windows mod
+- Requires symbol resolution on explorerframe.dll, dui70.dll and duser.dll, plus windows.storage.dll for deletions (handled automatically by Windhawk)
 
 ### Settings
 
@@ -58,6 +58,7 @@ A big part of the mod was rewritten for this version. The animations now use Dir
 - **Reverse Direction** - Slide down instead of up. Does not apply to property pages or horizontal transitions.
 - **Page Transitions** - Smart detection of back/forward navigation with distinct animations.
 - **Animate Nav Pane** - Slide the navigation tree in from the left.
+- **Styler text compatibility** - During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod (curve from Styler 1.7.2). Optional even with the Styler active: only turn it on if you notice a difference in the text after the animation ends.
 - **Animate Property Pages** - Animates tab switching in Properties and Folder Options windows.
 - **Property Page Tab Transitions** - Directional animations when switching tabs in Properties windows. Tabs to the right slide forward, to the left slide back. Requires Animate Property Pages.
 - **First Open Delay** - Applies only when a new Explorer window is opened.
@@ -76,16 +77,12 @@ observed on stable Windows 11 builds; it appears to be resolved in recent Inside
 
 Uma animacao suave de transicao de pagina inspirada no WinUI para o Explorador de Arquivos no Windows 11.
 
-### Novidades na 1.0.2
+### Novidades na 1.0.3
 
-Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo padrao de camadas da propria DirectUI, entao o movimento e os efeitos dos itens rodam no compositor do sistema, e nao na thread de interface do Explorer: continuam suaves mesmo enquanto miniaturas e pastas grandes ainda estao carregando. Nas builds em que isso nao estiver disponivel, o mod mantem o layout nativo do Explorer e o fade.
-
-- **Transicoes de pagina mais suaves** - O proprio conteudo da pasta se move, sem mover as janelas do Explorer. Os padroes agora seguem o WinUI: 450 ms (150 ms de espera mais 300 ms de movimento) e entrada de 140 DIPs. Abrir uma pasta usa a mesma animacao de entrada.
-- **Revelacao escalonada dos itens (opcional)** - Os itens crescem e aparecem um depois do outro, com as mesmas curvas da transicao AddDelete do WinUI. Nas builds suportadas, itens excluidos tambem saem com uma animacao curta.
-- **Espera pelos seus arquivos** - Em pastas lentas a pagina espera os primeiros arquivos aparecerem antes de se mover, em vez de animar uma view vazia.
-- **Sem flashes** - O fim de cada animacao fica coberto, e o conteudo nao pisca mais vazio nem mostra texto duplicado.
-- **Responde a voce** - Clicar ou pressionar uma tecla durante a animacao a conclui rapido, e a rolagem devolve o conteudo na hora, inclusive com mods de rolagem suave.
-- Requer resolucao de simbolos no explorerframe.dll, dui70.dll e duser.dll, e tambem windows.storage.dll para as exclusoes (feito automaticamente pelo Windhawk). A nova opcao **Animacoes de movimento** pode ser desativada se uma atualizacao do Windows quebrar os simbolos.
+- **O texto continua visivel durante as animacoes** - No modo claro, o texto podia sumir ou virar artefatos brancos fracos ate o fim da animacao; um mod que troca o renderizador de texto podia esconder isso. Agora o texto continua visivel nos modos claro e escuro, com suavizacao neutra de peso proximo ao ClearType ate o fim da animacao.
+- **O cabecalho de colunas fica parado** - Agora so a area rolavel se move, entao o cabecalho nao fica mais opaco nem muda de cor durante a animacao com fundos translucidos.
+- **Rolagem durante a animacao** - O conteudo e devolvido sob uma copia que acompanha a rolagem, e nao pisca mais vazio, inclusive com mods de rolagem suave.
+- **Nova opcao de compatibilidade com o texto do Styler** - Opcional mesmo com o Windows 11 File Explorer Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao.
 
 ### Recursos
 
@@ -96,7 +93,11 @@ Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo
 - Delay opcional na primeira abertura
 - Delay de navegacao para esconder o "Trabalhando nisso..."
 - Sem flicker / sem flashes pretos
+- Roda no compositor do sistema e continua suave enquanto miniaturas e pastas grandes carregam; nas builds em que isso nao estiver disponivel, o mod mantem o layout nativo do Explorer e o fade
+- Espera os primeiros arquivos em pastas lentas antes de se mover
+- Clicar ou pressionar uma tecla durante a animacao a conclui rapido
 - Compativel com o mod Translucent Windows
+- Requer resolucao de simbolos no explorerframe.dll, dui70.dll e duser.dll, e tambem windows.storage.dll para as exclusoes (feito automaticamente pelo Windhawk)
 
 ### Configuracoes
 
@@ -108,6 +109,7 @@ Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo
 - **Direcao Reversa** - Faz o conteudo descer ao inves de subir. Nao se aplica a paginas de Propriedades nem a transicoes horizontais.
 - **Transicoes de Pagina** - Deteccao inteligente de navegacao voltar/avancar com animacoes distintas.
 - **Animar Painel de Navegacao** - Desliza a arvore de navegacao da esquerda.
+- **Compatibilidade com o texto do Styler** - Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler (curva do Styler 1.7.2). Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao.
 - **Animar Paginas de Propriedades** - Anima a troca de abas em Propriedades e Opcoes de Pasta.
 - **Transicoes de Aba nas Propriedades** - Animacoes direcionais ao trocar abas nas janelas de Propriedades. Aba a direita desliza para frente, a esquerda para tras. Requer Animar Paginas de Propriedades ativo.
 - **Delay na Primeira Abertura** - Aplicado apenas ao abrir uma nova janela.
@@ -127,16 +129,12 @@ builds recentes do canal Insider/Beta.
 
 Una animacion suave de transicion de pagina inspirada en WinUI para el Explorador de Archivos en Windows 11.
 
-### Novedades en 1.0.2
+### Novedades en 1.0.3
 
-Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el mecanismo estandar de capas de la propia DirectUI, asi que el movimiento y los efectos de los elementos se ejecutan en el compositor del sistema y no en el hilo de interfaz del Explorador: siguen fluidos incluso mientras las miniaturas y las carpetas grandes todavia se estan cargando. En las versiones donde esto no esta disponible, el mod conserva la distribucion nativa del Explorador y el fundido.
-
-- **Transiciones de pagina mas fluidas** - El propio contenido de la carpeta se mueve, sin mover las ventanas del Explorador. Los valores predeterminados ahora siguen WinUI: 450 ms (150 ms de espera mas 300 ms de movimiento) y una entrada de 140 DIPs. Abrir una carpeta usa la misma animacion de entrada.
-- **Aparicion escalonada de elementos (opcional)** - Los elementos crecen y aparecen uno tras otro, con las mismas curvas de la transicion AddDelete de WinUI. En las versiones compatibles, los elementos eliminados tambien salen con una animacion corta.
-- **Espera a tus archivos** - En carpetas lentas la pagina espera a que aparezcan los primeros archivos antes de moverse, en lugar de animar una vista vacia.
-- **Sin destellos** - El final de cada animacion queda cubierto, y el contenido ya no parpadea vacio ni muestra texto duplicado.
-- **Responde a ti** - Hacer clic o pulsar una tecla durante la animacion la termina rapido, y el desplazamiento devuelve el contenido al instante, tambien con mods de desplazamiento suave.
-- Requiere resolucion de simbolos en explorerframe.dll, dui70.dll y duser.dll, y tambien windows.storage.dll para las eliminaciones (manejado automaticamente por Windhawk). La nueva opcion **Animaciones de movimiento** puede desactivarse si una actualizacion de Windows rompe los simbolos.
+- **El texto sigue visible durante las animaciones** - En modo claro, el texto podia desaparecer o convertirse en artefactos blancos tenues hasta el final de la animacion; un mod que cambia el renderizador de texto podia ocultarlo. Ahora el texto sigue visible en modo claro y oscuro, con suavizado neutro de peso cercano a ClearType hasta el final de la animacion.
+- **El encabezado de columnas se queda quieto** - Ahora solo se mueve el area desplazable, asi que el encabezado ya no se vuelve opaco ni cambia de color durante la animacion con fondos translucidos.
+- **Desplazamiento durante la animacion** - El contenido se devuelve bajo una copia que sigue el desplazamiento, y ya no parpadea vacio, tambien con mods de desplazamiento suave.
+- **Nueva opcion de compatibilidad con el texto del Styler** - Opcional incluso con el Windows 11 File Explorer Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion.
 
 ### Caracteristicas
 
@@ -147,7 +145,11 @@ Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el
 - Retraso opcional en la primera apertura
 - Retraso de navegacion para ocultar el texto de carga
 - Sin parpadeo / sin destellos negros
+- Se ejecuta en el compositor del sistema y sigue fluida mientras se cargan miniaturas y carpetas grandes; en las versiones donde esto no esta disponible, el mod conserva la distribucion nativa del Explorador y el fundido
+- Espera a los primeros archivos en carpetas lentas antes de moverse
+- Hacer clic o pulsar una tecla durante la animacion la termina rapido
 - Compatible con el mod Translucent Windows
+- Requiere resolucion de simbolos en explorerframe.dll, dui70.dll y duser.dll, y tambien windows.storage.dll para las eliminaciones (manejado automaticamente por Windhawk)
 
 ### Configuracion
 
@@ -159,6 +161,7 @@ Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el
 - **Direccion Inversa** - Desliza hacia abajo en lugar de hacia arriba. No se aplica a paginas de Propiedades ni a transiciones horizontales.
 - **Transiciones de Pagina** - Deteccion inteligente de navegacion atras/adelante con animaciones distintas.
 - **Animar Panel de Navegacion** - Desliza el arbol desde la izquierda.
+- **Compatibilidad con el texto del Styler** - Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler (curva del Styler 1.7.2). Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion.
 - **Animar Paginas de Propiedades** - Anima el cambio de pestanas en Propiedades.
 - **Transiciones de Pestana en Propiedades** - Animaciones direccionales al cambiar pestanas en ventanas de Propiedades. Las pestanas a la derecha deslizan hacia adelante, a la izquierda hacia atras. Requiere Animar Paginas de Propiedades activado.
 - **Retraso en la Primera Apertura** - Solo al abrir una nueva ventana.
@@ -237,6 +240,14 @@ resuelto en builds recientes del canal Insider/Beta.
   $description: The navigation tree slides in from the left when opening Explorer or a new tab. In dark mode, a white background may briefly appear -- a Windows GDI limitation observed on stable builds. Appears resolved in recent Insider/Beta builds.
   $description:pt: A arvore de navegacao desliza da esquerda ao abrir o Explorer ou uma nova aba. No modo escuro, um fundo branco pode aparecer brevemente -- limitacao do GDI observada em builds estaveis. Parece resolvido em builds recentes do canal Insider/Beta.
   $description:es: El arbol de navegacion se desliza desde la izquierda al abrir el Explorador o una nueva pestana. En modo oscuro, puede aparecer brevemente un fondo blanco -- limitacion del GDI observada en builds estables. Parece resuelto en builds recientes del canal Insider/Beta.
+
+- stylerTextCompatibility: false
+  $name: Styler text compatibility
+  $name:pt: Compatibilidade com o texto do Styler
+  $name:es: Compatibilidad con el texto del Styler
+  $description: "During the animation, draws the text with the same curve as the entire-window translucent effect of the Windows 11 File Explorer Styler mod (curve from Styler 1.7.2). Optional even with the Styler active: only turn this on if you notice a difference in the text after the animation ends."
+  $description:pt: "Durante a animacao, desenha o texto com a mesma curva do efeito translucido de janela inteira do mod Windows 11 File Explorer Styler (curva do Styler 1.7.2). Opcional mesmo com o Styler ativo: so precisa ser ativada se voce notar diferenca no texto apos o fim da animacao."
+  $description:es: "Durante la animacion, dibuja el texto con la misma curva del efecto translucido de ventana completa del mod Windows 11 File Explorer Styler (curva del Styler 1.7.2). Opcional incluso con el Styler activo: solo hace falta activarla si notas una diferencia en el texto despues de que termine la animacion."
 
 - propertyPages:
     - animate: false
@@ -328,6 +339,7 @@ struct Settings {
     bool propPageTransitions;
     bool stagger = false;
     bool motion = true;
+    bool stylerTextCompatibility = false;
 };
 
 static Settings g_s{450, 140, 500, 140, false, false, false, false, false, false};
@@ -348,6 +360,7 @@ static void LoadSettings() {
     fresh.propPageTransitions  = !!Wh_GetIntSetting(L"propertyPages.tabTransitions");
     fresh.stagger              = !!Wh_GetIntSetting(L"stagger");
     fresh.motion               = !!Wh_GetIntSetting(L"motion");
+    fresh.stylerTextCompatibility = !!Wh_GetIntSetting(L"stylerTextCompatibility");
 
     AcquireSRWLockExclusive(&g_sLock);
     g_s = fresh;
@@ -815,10 +828,23 @@ struct DCompFadeAnim {
     IDCompositionVisual2*     pVisual  = nullptr;
     IDCompositionSurface*     pSurface = nullptr;
     IDCompositionEffectGroup* pEffect  = nullptr;
+    // Cortina que acompanha a rolagem: faixas fixas em volta da area rolavel e,
+    // dentro dela, a copia que se move (pMove), recortada nas duas camadas.
+    IDCompositionVisual2*     pParts[6] = {};
+    IDCompositionVisual2*     pMove    = nullptr;
     uint64_t                  generation = 0; // identifica instancia unica do fade
     int                       curtainHolders = 0; // > 0: cortina de devolucao ativa
     ULONGLONG                 curtainReadyAt = 0;
 };
+
+static void ReleaseFadeObjects(DCompFadeAnim& a) {
+    if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
+    if (a.pEffect)  a.pEffect->Release();
+    for (IDCompositionVisual2* part : a.pParts) if (part) part->Release();
+    if (a.pVisual)  a.pVisual->Release();
+    if (a.pSurface) a.pSurface->Release();
+    a = {};
+}
 
 static std::mutex                               g_dcFadeMtx;
 static std::unordered_map<HWND, DCompFadeAnim>  g_dcFades;
@@ -905,10 +931,7 @@ static void CleanupWorkerProc() {
                     it->second.generation == c.generation) {
                     DCompFadeAnim a = it->second;
                     g_dcFades.erase(it);
-                    if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-                    if (a.pEffect)  a.pEffect->Release();
-                    if (a.pVisual)  a.pVisual->Release();
-                    if (a.pSurface) a.pSurface->Release();
+                    ReleaseFadeObjects(a);
                     if (c.dev) { c.dev->Commit(); c.dev->Release(); }
                 } else {
                     // Fade cancelado por nova navegacao (geracao diferente ou
@@ -953,10 +976,7 @@ static void CleanupWorkerProc() {
                 it->second.generation == c.generation) {
                 DCompFadeAnim a = it->second;
                 g_dcFades.erase(it);
-                if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-                if (a.pEffect)  a.pEffect->Release();
-                if (a.pVisual)  a.pVisual->Release();
-                if (a.pSurface) a.pSurface->Release();
+                ReleaseFadeObjects(a);
                 if (c.dev) { c.dev->Commit(); c.dev->Release(); }
             } else {
                 // Fade cancelado por nova navegacao rapida (geracao diferente
@@ -980,9 +1000,36 @@ static void CleanupWorkerProc() {
 // BrowseObject mantem FALSE para preservar o empilhamento das navegacoes.
 // Le os pixels direto do ecra (frame.ptScreen) para dentro da superficie
 // DComp num unico BitBlt -- sem HBITMAP intermediario.
+// Faixas fixas (cabecalho, barra de rolagem) em volta da area rolavel e, dentro
+// dela, uma janela recortada com a copia movel, recortada tambem nas proprias
+// coordenadas para a parte de fora da area nunca entrar com o deslocamento.
+static bool BuildScrollCurtain(IDCompositionDesktopDevice* dev, DCompFadeAnim& anim,
+                               const CapturedFrame& frame, RECT area) {
+    RECT full{0, 0, frame.w, frame.h};
+    if (!IntersectRect(&area, &area, &full)) return false;
+    const RECT strips[4] = {
+        {0, 0, frame.w, area.top}, {0, area.bottom, frame.w, frame.h},
+        {0, area.top, area.left, area.bottom}, {area.right, area.top, frame.w, area.bottom}};
+    int count = 0;
+    auto add = [&](IDCompositionVisual2* parent, const RECT& clip, bool content) -> IDCompositionVisual2* {
+        IDCompositionVisual2* visual = nullptr;
+        if (FAILED(dev->CreateVisual(&visual))) return nullptr;
+        anim.pParts[count++] = visual;
+        D2D_RECT_F rect{(float)clip.left, (float)clip.top, (float)clip.right, (float)clip.bottom};
+        if ((content && FAILED(visual->SetContent(anim.pSurface))) || FAILED(visual->SetClip(rect)) ||
+            FAILED(parent->AddVisual(visual, TRUE, nullptr))) return nullptr;
+        return visual;
+    };
+    for (const RECT& strip : strips)
+        if (!IsRectEmpty(&strip) && !add(anim.pVisual, strip, true)) return false;
+    IDCompositionVisual2* window = add(anim.pVisual, area, false);
+    anim.pMove = window ? add(window, area, true) : nullptr;
+    return anim.pMove != nullptr;
+}
+
 static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
                            int fadeMs, int startDelayMs,
-                           bool aboveChildWindows) {
+                           bool aboveChildWindows, const RECT* scrollArea = nullptr) {
     // Serializar TODAS as chamadas DComp no device e nos seus objectos.
     // DirectComposition nao e internamente thread-safe; sem este lock, o
     // cleanup worker pode chamar SetRoot/Release/Commit concorrentemente
@@ -1009,10 +1056,7 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
         if (it != g_dcFades.end()) {
             DCompFadeAnim prev = it->second;
             g_dcFades.erase(it);
-            if (prev.pTarget) { prev.pTarget->SetRoot(nullptr); prev.pTarget->Release(); }
-            if (prev.pEffect)  prev.pEffect->Release();
-            if (prev.pVisual)  prev.pVisual->Release();
-            if (prev.pSurface) prev.pSurface->Release();
+            ReleaseFadeObjects(prev);
             dcDev->Commit();
         }
     }
@@ -1065,16 +1109,19 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
     if (FAILED(hr)) {
         anim.pSurface->Release(); anim.pTarget->Release(); return false;
     }
-    anim.pVisual->SetContent(anim.pSurface);
+    if (!scrollArea) {
+        anim.pVisual->SetContent(anim.pSurface);
+    } else if (!BuildScrollCurtain(dcDev, anim, frame, *scrollArea)) {
+        ReleaseFadeObjects(anim);
+        return false;
+    }
     anim.pVisual->SetOffsetX((float)frame.ptInRoot.x);
     anim.pVisual->SetOffsetY((float)frame.ptInRoot.y);
 
     IDCompositionEffectGroup* pEffect = nullptr;
     hr = dcDev->CreateEffectGroup(&pEffect);
     if (FAILED(hr) || !pEffect) {
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
@@ -1082,9 +1129,7 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
     hr = dcDev->CreateAnimation(&pOpacity);
     if (FAILED(hr) || !pOpacity) {
         pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
@@ -1101,37 +1146,27 @@ static bool StartDCompFade(HWND hwndRoot, CapturedFrame frame,
     pOpacity->Release();
     if (FAILED(hr)) {
         pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
     hr = anim.pVisual->SetEffect(pEffect);
     if (FAILED(hr)) {
         pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
     anim.pEffect = pEffect;
 
     hr = anim.pTarget->SetRoot(anim.pVisual);
     if (FAILED(hr)) {
-        anim.pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
     hr = dcDev->Commit();
     if (FAILED(hr)) {
-        if (anim.pEffect)  anim.pEffect->Release();
-        anim.pVisual->Release();
-        anim.pSurface->Release();
-        anim.pTarget->Release();
+        ReleaseFadeObjects(anim);
         return false;
     }
 
@@ -1174,10 +1209,7 @@ static constexpr int CURTAIN_FADE_MS   = 80;
 static constexpr int CURTAIN_SAFETY_MS = 600; // retirada automatica se o owner nao liberar
 
 static void DestroyFadeLocked(IDCompositionDesktopDevice* dcDev, DCompFadeAnim& a) {
-    if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-    if (a.pEffect)  a.pEffect->Release();
-    if (a.pVisual)  a.pVisual->Release();
-    if (a.pSurface) a.pSurface->Release();
+    ReleaseFadeObjects(a);
     if (dcDev) dcDev->Commit();
 }
 
@@ -1243,7 +1275,9 @@ static ULONGLONG CurtainSafetyAt(const DCompFadeAnim& a) {
 
 // Chamado no owner da view. Uma cortina ja levantada e compartilhada (contagem);
 // generation identifica a instancia que cada dono deve liberar.
-static bool RaiseCurtain(HWND view, ULONGLONG& readyAt, uint64_t& generation) {
+// scrollArea (coordenadas da view): a cortina nova pode acompanhar a rolagem.
+static bool RaiseCurtain(HWND view, ULONGLONG& readyAt, uint64_t& generation,
+                         const RECT* scrollArea = nullptr) {
     if (g_unloading.load(std::memory_order_acquire) || !IsWindowVisible(view)) return false;
     // A copia vem da tela: outra janela sobre o Explorer entraria nela.
     HWND root = GetAncestor(view, GA_ROOT);
@@ -1265,7 +1299,7 @@ static bool RaiseCurtain(HWND view, ULONGLONG& readyAt, uint64_t& generation) {
     if (PopupOverView(view, root)) return false;
     CapturedFrame frame;
     if (!CaptureContentFrame(view, view, frame) ||
-        !StartDCompFade(view, frame, CURTAIN_FADE_MS, CURTAIN_SAFETY_MS, true))
+        !StartDCompFade(view, frame, CURTAIN_FADE_MS, CURTAIN_SAFETY_MS, true, scrollArea))
         return false;
     std::lock_guard<std::mutex> lk(g_dcFadeMtx);
     auto it = g_dcFades.find(view);
@@ -1310,6 +1344,39 @@ static void LowerCurtain(HWND view, uint64_t generation) {
     g_cleanupQueue.push_back({view, dcDev,
         GetTickCount64() + (ULONGLONG)(CURTAIN_HOLD_MS + CURTAIN_FADE_MS + 50), a.generation});
     g_cleanupCv.notify_one();
+}
+
+// Cortina dessa geracao ainda na tela e capaz de acompanhar a rolagem.
+static bool CurtainFollowable(HWND view, uint64_t generation) {
+    std::lock_guard<std::mutex> lk(g_dcFadeMtx);
+    auto it = g_dcFades.find(view);
+    return it != g_dcFades.end() && it->second.generation == generation && it->second.pMove;
+}
+
+// Mais um dono para a cortina que acompanha a rolagem, se ela ainda cobrir a devolucao.
+static bool HoldCurtain(HWND view, uint64_t generation, ULONGLONG& readyAt) {
+    std::lock_guard<std::mutex> lk(g_dcFadeMtx);
+    auto it = g_dcFades.find(view);
+    if (it == g_dcFades.end() || it->second.generation != generation || !it->second.pMove ||
+        it->second.curtainHolders <= 0 ||
+        GetTickCount64() + CURTAIN_HOLD_MS + CURTAIN_FADE_MS + 100 >= CurtainSafetyAt(it->second))
+        return false;
+    ++it->second.curtainHolders;
+    readyAt = it->second.curtainReadyAt;
+    return true;
+}
+
+// Desloca a copia movel; dx/dy fora da area a escondem sem tirar as faixas fixas.
+static bool OffsetCurtain(HWND view, uint64_t generation, int dx, int dy) {
+    std::lock_guard<std::mutex> lk(g_dcFadeMtx);
+    auto it = g_dcFades.find(view);
+    IDCompositionDesktopDevice* dcDev = g_dcDevice.load(std::memory_order_acquire);
+    if (!dcDev || it == g_dcFades.end() || it->second.generation != generation || !it->second.pMove)
+        return false;
+    HRESULT hr = it->second.pMove->SetOffsetX((float)dx);
+    if (SUCCEEDED(hr)) hr = it->second.pMove->SetOffsetY((float)dy);
+    if (SUCCEEDED(hr)) hr = dcDev->Commit();
+    return SUCCEEDED(hr);
 }
 
 // Rolagem do conteudo (definida depois de ItemStagger).
@@ -1369,6 +1436,7 @@ using ParentFn = void*(STAGGER_MEMBER*)(void*);
 using AlphaGetFn = int(STAGGER_MEMBER*)(void*);
 using AlphaSetFn = HRESULT(STAGGER_MEMBER*)(void*, int);
 using IdFn = WORD(STAGGER_MEMBER*)(void*);
+using RootBoundsFn = HRESULT(STAGGER_MEMBER*)(void*, RECT*);
 using GetPairFn = BOOL(WINAPI*)(HANDLE, float*, float*);
 using SetPairFn = BOOL(WINAPI*)(HANDLE, float, float);
 using RotationFn = BOOL(WINAPI*)(HANDLE, float*);
@@ -1423,6 +1491,7 @@ static ParentFn getParent;
 static AlphaGetFn getAlpha;
 static AlphaSetFn setAlpha;
 static IdFn getId; // opcional: sem ele, pasta vazia espera o limite de conteudo
+static RootBoundsFn rootBounds; // opcional: sem ele, a rolagem cancela sem cortina
 static GetPairFn getScale, getCenter;
 static SetPairFn setScale, setCenter;
 static RotationFn getRotation;
@@ -1535,11 +1604,29 @@ struct Group {
     bool contentPainted = false;
     unsigned serial = 0;
     uint64_t curtainGeneration = 0;
+    // Pagina: container inteiro, se o LineScroller registrado nao puder ser promovido.
+    void* pageFallback = nullptr;
     Member members[kMembers];
 };
 static Group groups[16];
 static SRWLOCK ownerLock = SRWLOCK_INIT;
 static std::atomic<int> busy{0};
+// Cortina que acompanha a rolagem (definida depois de Removal). A distancia
+// rolada vem dos proprios itens: a barra usa unidades por secao, e o container
+// do LineScroller salta em linhas inteiras.
+namespace Follow {
+struct Ref { void* element; void* identity; LONG left, top; };
+struct Setup { RECT area; Ref refs[4]; int count; };
+static bool Prepare(HWND view, Setup& setup);
+static bool Register(HWND view, uint64_t generation, const Setup& setup);
+static bool Follows(HWND view, uint64_t* generation = nullptr);
+static void Update();
+static void TrackPaint(void* element);
+static void Forget(void* element);
+static void ForgetThread();
+static void ClearTracked();
+static bool Any();
+}
 static thread_local bool inPaint;
 // Movimento DirectUI por composicao nativa; desligado, as paginas so usam o fade.
 static bool MotionEnabled() {
@@ -1551,6 +1638,12 @@ static bool MotionEnabled() {
 static bool Enabled() {
     AcquireSRWLockShared(&g_sLock);
     bool enabled = g_s.stagger && g_s.motion;
+    ReleaseSRWLockShared(&g_sLock);
+    return enabled;
+}
+static bool StylerTextCurveEnabled() {
+    AcquireSRWLockShared(&g_sLock);
+    bool enabled = g_s.stylerTextCompatibility;
     ReleaseSRWLockShared(&g_sLock);
     return enabled;
 }
@@ -1605,11 +1698,13 @@ static void ReleaseLocked(Group& group) {
     group.handoffReady = false;
     group.awaitingHandoff = false;
     group.handoffAt = 0;
+    group.pageFallback = nullptr;
     group.view = nullptr;
     group.action = nullptr;
     group.owner.store(0, std::memory_order_relaxed);
     group.state.store(Free, std::memory_order_seq_cst);
-    busy.fetch_sub(1, std::memory_order_acq_rel);
+    // Itens pintados so servem de referencia enquanto ha animacao.
+    if (busy.fetch_sub(1, std::memory_order_acq_rel) == 1) Follow::ClearTracked();
 }
 static void Release(Group& group) {
     AcquireSRWLockExclusive(&ownerLock);
@@ -1632,6 +1727,269 @@ static bool Owned(const Group& group) {
     return group.state.load(std::memory_order_acquire) == Busy &&
         group.owner.load(std::memory_order_relaxed) == GetCurrentThreadId();
 }
+// Texto GDI na pintura com alfa forcado: o GDI grava a cor e deixa o alfa como
+// estava, e a superficie premultiplicada soma essa cor ao que esta atras. Texto
+// preto some, cinza vira marcas claras no modo claro e, no escuro, o texto sai
+// mais claro. O DWrite de outros mods nao passa por aqui e fica intacto; a
+// superficie DComp nao expoe bits, entao DTT_COMPOSITED tambem nao grava alfa nela.
+static thread_local int alphaPaintDepth;
+static thread_local bool layerTextPass;
+using ExtTextOutFn = decltype(&ExtTextOutW);
+static ExtTextOutFn originalExtTextOut;
+// Regiao logica que o trecho pode tocar. false: DC que o desenho fora dele nao reproduz.
+static bool LayerTextArea(HDC hdc, int x, int y, UINT options, const RECT* rect, LPCWSTR text,
+                          UINT count, const INT* dx, RECT& area) {
+    UINT align = GetTextAlign(hdc);
+    if (align & TA_UPDATECP) return false;
+    bool mirrored = (GetLayout(hdc) & LAYOUT_RTL) != 0;
+    int mapMode = GetMapMode(hdc);
+    if (mapMode != MM_TEXT) {
+        // DC espelhado usa MM_ANISOTROPIC internamente; escala de verdade fica de fora.
+        SIZE viewport{}, window{};
+        if (!mirrored || mapMode != MM_ANISOTROPIC || !GetViewportExtEx(hdc, &viewport) ||
+            !GetWindowExtEx(hdc, &window) || std::abs(viewport.cx) != std::abs(window.cx) ||
+            viewport.cy != window.cy) return false;
+    }
+    if (GetGraphicsMode(hdc) == GM_ADVANCED) {
+        // O DirectUI pinta em coordenadas locais do item por translacao: a area e o
+        // destino do blend sao logicos e acompanham. Escala ou rotacao ficam de fora.
+        XFORM form{};
+        if (!GetWorldTransform(hdc, &form) || form.eM11 != 1.f || form.eM12 != 0.f || form.eM21 != 0.f ||
+            form.eM22 != 1.f) return false;
+    }
+    TEXTMETRICW metrics{};
+    LOGFONTW font{};
+    if (!GetTextMetricsW(hdc, &metrics) ||
+        !GetObjectW(GetCurrentObject(hdc, OBJ_FONT), sizeof(font), &font) ||
+        font.lfEscapement || font.lfOrientation) return false;
+    SIZE size{};
+    BOOL measured = (options & ETO_GLYPH_INDEX)
+        ? GetTextExtentPointI(hdc, const_cast<LPWORD>(reinterpret_cast<const WORD*>(text)), count, &size)
+        : GetTextExtentPoint32W(hdc, text, count, &size);
+    if (!measured) return false;
+    LONG width = size.cx;
+    if (dx) {
+        LONG total = 0;
+        UINT step = (options & ETO_PDY) ? 2 : 1;
+        for (UINT i = 0; i < count; ++i) total += std::abs(dx[i * step]);
+        width = std::max(width, total);
+    }
+    LONG left = x, right = x + width, top = y;
+    // Com RTL, cobrir os dois lados do ponto: nem todo caminho de shaping foi medido.
+    if (mirrored || (options & ETO_RTLREADING) || (align & TA_RTLREADING)) left = x - width;
+    else if ((align & TA_CENTER) == TA_CENTER) { left = x - width / 2; right = left + width; }
+    else if (align & TA_RIGHT) { left = x - width; right = x; }
+    if ((align & TA_BASELINE) == TA_BASELINE) top -= metrics.tmAscent;
+    else if (align & TA_BOTTOM) top -= metrics.tmHeight;
+    // Saliencias dos glifos ficam fora da largura de avanco e da altura da celula.
+    LONG padX = metrics.tmHeight / 2 + 1, padY = metrics.tmHeight / 4 + 1;
+    area = {left - padX, top - padY, right + padX, top + metrics.tmHeight + padY};
+    if (rect && (options & ETO_CLIPPED)) IntersectRect(&area, &area, rect);
+    if (rect && (options & ETO_OPAQUE)) UnionRect(&area, &area, rect);
+    RECT clip{};
+    if (GetClipBox(hdc, &clip) == ERROR) return false;
+    IntersectRect(&area, &area, &clip);
+    return true;
+}
+// DC e DIB reaproveitados entre os trechos: criar os dois por chamada custava mais
+// que o proprio texto. Limitado em tamanho; maior que isso, ou em DC espelhado (que
+// espelha pela largura do bitmap), o trecho usa um bitmap so dele.
+constexpr int kLayerTextBufferW = 1024, kLayerTextBufferH = 128;
+static std::mutex layerTextBufferMutex;
+struct LayerTextBuffer { HDC dc; HBITMAP dib; HGDIOBJ oldBitmap; BYTE* bits; int pitch; };
+static LayerTextBuffer layerTextBuffer;
+static bool CreateLayerTextBuffer(HDC reference, int w, int h, LayerTextBuffer& buffer) {
+    BITMAPINFO bitmap{};
+    bitmap.bmiHeader.biSize = sizeof(bitmap.bmiHeader);
+    bitmap.bmiHeader.biWidth = w;
+    bitmap.bmiHeader.biHeight = -h;
+    bitmap.bmiHeader.biPlanes = 1;
+    bitmap.bmiHeader.biBitCount = 32;
+    void* bits = nullptr;
+    buffer = {};
+    buffer.dc = CreateCompatibleDC(reference);
+    buffer.dib = buffer.dc ? CreateDIBSection(nullptr, &bitmap, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+    if (!buffer.dib || !bits) {
+        if (buffer.dib) DeleteObject(buffer.dib);
+        if (buffer.dc) DeleteDC(buffer.dc);
+        buffer = {};
+        return false;
+    }
+    buffer.oldBitmap = SelectObject(buffer.dc, buffer.dib);
+    buffer.bits = static_cast<BYTE*>(bits);
+    buffer.pitch = w;
+    return true;
+}
+static void DestroyLayerTextBuffer(LayerTextBuffer& buffer) {
+    if (buffer.dc) {
+        SelectObject(buffer.dc, buffer.oldBitmap);
+        DeleteDC(buffer.dc);
+    }
+    if (buffer.dib) DeleteObject(buffer.dib);
+    buffer = {};
+}
+// Aproxima a cobertura neutra do peso percebido do ClearType, que varia com a cor do texto.
+constexpr double kDarkLayerTextGamma = 1.10, kLightLayerTextGamma = 0.95;
+constexpr int kLayerTextFringe = 8;
+struct LayerTextCurves { BYTE dark[256], light[256], stylerDark[256], stylerLight[256]; };
+static const LayerTextCurves& GetLayerTextCurves() {
+    static const LayerTextCurves curves = [] {
+        LayerTextCurves result{};
+        for (int i = 0; i < 256; ++i) {
+            result.dark[i] = BYTE(std::lround(255.0 * std::pow(i / 255.0, kDarkLayerTextGamma)));
+            result.light[i] = BYTE(std::lround(255.0 * std::pow(i / 255.0, kLightLayerTextGamma)));
+            // InitTextAlphaLuts do Windows 11 File Explorer Styler 1.7.2.
+            float a = i / 255.0f;
+            result.stylerDark[i] = BYTE(i * 0xE4 / 255);
+            result.stylerLight[i] = BYTE(std::pow(a, 1.0f / (1.2f + 0.3f * a)) * 255.0f + 0.5f);
+        }
+        return result;
+    }();
+    return curves;
+}
+// Sem franja o texto ja esta em tons de cinza e a devolucao mantem esse peso:
+// o RGB desenhado reproduz o GDI, sem nada do ClearType a imitar.
+static void ApplyLayerTextCoverage(LayerTextBuffer& buffer, int w, int h, const int color[3], bool neutral) {
+    const LayerTextCurves& curves = GetLayerTextCurves();
+    const BYTE* curve = (54 * color[2] + 183 * color[1] + 19 * color[0]) / 256 < 128 ? curves.dark : curves.light;
+    bool fringed = false;
+    for (int row = 0; neutral && row < h && !fringed; ++row) {
+        const BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
+        const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+        for (int column = 0; column < w && !fringed; ++column, black += 4, white += 4) {
+            int through[3];
+            for (int c = 0; c < 3; ++c) through[c] = int(white[c]) - int(black[c]);
+            fringed = std::max({through[0], through[1], through[2]}) - std::min({through[0], through[1], through[2]}) > kLayerTextFringe;
+        }
+    }
+    for (int row = 0; row < h; ++row) {
+        BYTE* black = buffer.bits + size_t(row) * buffer.pitch * 4;
+        const BYTE* white = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+        for (int column = 0; column < w; ++column, black += 4, white += 4) {
+            int coverage[3];
+            for (int c = 0; c < 3; ++c) coverage[c] = 255 - std::clamp(int(white[c]) - int(black[c]), 0, 255);
+            if (fringed) {
+                int alpha = curve[(54 * coverage[2] + 183 * coverage[1] + 19 * coverage[0] + 128) / 256];
+                for (int c = 0; c < 3; ++c) black[c] = BYTE((alpha * color[c] + 127) / 255);
+                black[3] = BYTE(alpha);
+            } else {
+                int alpha = (coverage[0] + coverage[1] + coverage[2] + 1) / 3;
+                for (int c = 0; c < 3; ++c) black[c] = BYTE(std::min<int>(black[c], alpha));
+                black[3] = BYTE(alpha);
+            }
+        }
+    }
+}
+// Mesmo processo do ExtTextOutWithAlpha do Styler: mascara branca sobre preto, cobertura
+// e curva dele. A segunda metade do buffer guarda a mascara; a primeira recebe o resultado.
+static void ApplyStylerTextCurve(LayerTextBuffer& buffer, int w, int h, const int color[3]) {
+    const LayerTextCurves& curves = GetLayerTextCurves();
+    bool dark = color[2] * 299 + color[1] * 587 + color[0] * 114 < 128000;
+    const BYTE* curve = dark ? curves.stylerDark : curves.stylerLight;
+    for (int row = 0; row < h; ++row) {
+        BYTE* out = buffer.bits + size_t(row) * buffer.pitch * 4;
+        const BYTE* mask = buffer.bits + size_t(row + h) * buffer.pitch * 4;
+        for (int column = 0; column < w; ++column, out += 4, mask += 4) {
+            int alpha = curve[(mask[0] + (mask[1] << 1) + mask[2]) >> 2];
+            for (int c = 0; c < 3; ++c) out[c] = BYTE((color[c] * alpha) >> 8);
+            out[3] = BYTE(alpha);
+        }
+    }
+}
+// Desenha o trecho no buffer transparente; se o renderizador gravou alfa, usa direto.
+// Sem alfa, desenha de novo sobre branco: a diferenca entre os dois da a cobertura,
+// para qualquer cor e igual em layout ao GDI direto. Um canal de alfa nao comporta o
+// ClearType, que volta na devolucao ao GDI: o texto fica neutro na cor dele, sem franja
+// que dependa do fundo, com a cobertura pesada pela luminancia, como o olho percebe.
+// Fundo opaco nao e a cor do texto: esse trecho mantem o RGB desenhado.
+static bool DrawLayerTextInto(HDC hdc, LayerTextBuffer& buffer, const RECT& area, int x, int y, UINT options,
+                              const RECT* rect, LPCWSTR text, UINT count, const INT* dx) {
+    int w = area.right - area.left, h = area.bottom - area.top;
+    HDC mem = buffer.dc;
+    for (int row = 0; row < h; ++row) memset(buffer.bits + size_t(row) * buffer.pitch * 4, 0, size_t(w) * 4);
+    HGDIOBJ oldFont = SelectObject(mem, GetCurrentObject(hdc, OBJ_FONT));
+    SetLayout(mem, GetLayout(hdc));
+    SetGraphicsMode(mem, GetGraphicsMode(hdc));
+    SetTextColor(mem, GetTextColor(hdc));
+    SetBkColor(mem, GetBkColor(hdc));
+    SetBkMode(mem, GetBkMode(hdc));
+    SetTextAlign(mem, GetTextAlign(hdc));
+    SetTextCharacterExtra(mem, GetTextCharacterExtra(hdc));
+    bool previous = layerTextPass;
+    layerTextPass = true;
+    SetWindowOrgEx(mem, area.left, area.top, nullptr);
+    bool drawn = !!originalExtTextOut(mem, x, y, options, rect, text, count, dx);
+    GdiFlush();
+    bool hasAlpha = false;
+    for (int row = 0; row < h && !hasAlpha; ++row) {
+        const BYTE* line = buffer.bits + size_t(row) * buffer.pitch * 4;
+        for (int column = 0; column < w && !hasAlpha; ++column) hasAlpha = line[size_t(column) * 4 + 3] != 0;
+    }
+    if (drawn && !hasAlpha) {
+        COLORREF textColor = GetTextColor(hdc);
+        const int color[3] = {GetBValue(textColor), GetGValue(textColor), GetRValue(textColor)};
+        // Indice de paleta nao carrega a cor nos bytes baixos.
+        bool neutral = !(options & ETO_OPAQUE) && GetBkMode(hdc) != OPAQUE && (textColor >> 24) != 1;
+        // O Styler deixa o trecho sem opcoes para o GDI.
+        bool stylerCurve = neutral && options && StylerTextCurveEnabled();
+        SetWindowOrgEx(mem, area.left, area.top - h, nullptr);
+        PatBlt(mem, area.left, area.top, w, h, stylerCurve ? BLACKNESS : WHITENESS);
+        if (stylerCurve) SetTextColor(mem, RGB(255, 255, 255));
+        drawn = !!originalExtTextOut(mem, x, y, options, rect, text, count, dx);
+        GdiFlush();
+        if (stylerCurve) ApplyStylerTextCurve(buffer, w, h, color);
+        else ApplyLayerTextCoverage(buffer, w, h, color, neutral);
+    }
+    layerTextPass = previous;
+    if (drawn) {
+        SetWindowOrgEx(mem, area.left, area.top, nullptr);
+        BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        drawn = !!GdiAlphaBlend(hdc, area.left, area.top, w, h, mem, area.left, area.top, w, h, blend);
+    }
+    // O DC reaproveitado nao pode segurar a fonte do chamador nem o espelhamento.
+    SelectObject(mem, oldFont);
+    SetLayout(mem, 0);
+    return drawn;
+}
+static bool DrawLayerText(HDC hdc, int x, int y, UINT options, const RECT* rect, LPCWSTR text,
+                          UINT count, const INT* dx) {
+    RECT area{};
+    if (!LayerTextArea(hdc, x, y, options, rect, text, count, dx, area) || IsRectEmpty(&area)) return false;
+    int w = area.right - area.left, h = area.bottom - area.top;
+    if (w > 8192 || h > 2048) return false;
+    if (w > kLayerTextBufferW || h > kLayerTextBufferH || (GetLayout(hdc) & LAYOUT_RTL)) {
+        LayerTextBuffer own;
+        if (!CreateLayerTextBuffer(hdc, w, 2 * h, own)) return false;
+        bool drawn = DrawLayerTextInto(hdc, own, area, x, y, options, rect, text, count, dx);
+        DestroyLayerTextBuffer(own);
+        return drawn;
+    }
+    std::lock_guard<std::mutex> lock(layerTextBufferMutex);
+    if (!layerTextBuffer.dc && !CreateLayerTextBuffer(hdc, kLayerTextBufferW, 2 * kLayerTextBufferH, layerTextBuffer))
+        return false;
+    return DrawLayerTextInto(hdc, layerTextBuffer, area, x, y, options, rect, text, count, dx);
+}
+static BOOL WINAPI ExtTextOutHook(HDC hdc, int x, int y, UINT options, const RECT* rect, LPCWSTR text,
+                                  UINT count, const INT* dx) {
+    if (alphaPaintDepth && !layerTextPass && count && text &&
+        DrawLayerText(hdc, x, y, options, rect, text, count, dx)) return TRUE;
+    return originalExtTextOut(hdc, x, y, options, rect, text, count, dx);
+}
+// O uxtheme deriva o alfa de uma mascara propria desenhada com GDI: esse texto ja sai
+// em tons de cinza e com alfa, e alterar o desenho da mascara afina o resultado.
+using DrawTextWithGlowFn = HRESULT(WINAPI*)(HDC, LPCWSTR, UINT, RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL,
+                                            void*, LPARAM);
+static DrawTextWithGlowFn originalDrawTextWithGlow;
+static HRESULT WINAPI DrawTextWithGlowHook(HDC hdc, LPCWSTR text, UINT count, RECT* rect, DWORD flags, COLORREF color,
+                                           COLORREF glow, UINT radius, UINT intensity, BOOL premultiply, void* callback,
+                                           LPARAM param) {
+    bool previous = layerTextPass;
+    layerTextPass = true;
+    HRESULT result = originalDrawTextWithGlow(hdc, text, count, rect, flags, color, glow, radius, intensity,
+                                              premultiply, callback, param);
+    layerTextPass = previous;
+    return result;
+}
 static void STAGGER_MEMBER DrawFullHook(HANDLE node, NativePaintInfo* info) {
     if (!originalDrawFull) return;
     if (info && !info->drawingLayer && alphaPaintLive.load(std::memory_order_acquire) &&
@@ -1640,7 +1998,9 @@ static void STAGGER_MEMBER DrawFullHook(HANDLE node, NativePaintInfo* info) {
         local.useAlpha = TRUE;
         bool previous = inPaint;
         inPaint = true;
+        ++alphaPaintDepth;
         originalDrawFull(node, &local);
+        --alphaPaintDepth;
         inPaint = previous;
         return;
     }
@@ -1657,7 +2017,9 @@ static void STAGGER_MEMBER DrawFullHook(HANDLE node, NativePaintInfo* info) {
                 local.useAlpha = TRUE;
                 bool previous = inPaint;
                 inPaint = true;
+                ++alphaPaintDepth;
                 originalDrawFull(node, &local);
+                --alphaPaintDepth;
                 inPaint = previous;
                 return;
             }
@@ -2107,7 +2469,13 @@ static bool HandoffDue(Group& group) {
             !other.canceling && !other.repairing && !other.awaitingHandoff) return false;
     if (!group.handoffAt) {
         ULONGLONG readyAt = 0;
-        group.curtain = RaiseCurtain(group.view, readyAt, group.curtainGeneration);
+        // Com a area rolavel conhecida, uma rolagem durante a devolucao move a
+        // copia junto com o conteudo em vez de derruba-la.
+        Follow::Setup setup;
+        bool follow = Follow::Prepare(group.view, setup);
+        group.curtain = RaiseCurtain(group.view, readyAt, group.curtainGeneration,
+                                     follow ? &setup.area : nullptr);
+        if (group.curtain && follow) Follow::Register(group.view, group.curtainGeneration, setup);
         group.handoffAt = group.curtain ? readyAt : 1;
     }
     if (GetTickCount64() < group.handoffAt) return false;
@@ -2240,6 +2608,18 @@ static void UpdatePage(Group& group, bool restore, double now) {
         // A ponte nasce na posicao inicial: o conteudo que chegar pinta deslocado
         // e parado ate a curva comecar.
         if (!PrepareComposition(member, 1.f, 1.f, &group.pageOffset)) {
+            // LineScroller nao promovivel: o container inteiro, como antes, no proximo frame.
+            if (void* fallback = group.pageFallback) {
+                group.pageFallback = nullptr;
+                HANDLE node = member.done ? nullptr : getNode(fallback);
+                if (node) {
+                    member = {};
+                    member.element = fallback;
+                    member.node = node;
+                    member.repaintPending = true;
+                    return;
+                }
+            }
             Wh_Log(L"[PAGE] container DirectUI sem composicao elegivel; mantendo pagina estatica");
             Restore(member);
             return;
@@ -2403,14 +2783,17 @@ static void WINAPI ActionProc(void* info) {
     }
 }
 static void ForgetElement(void* element) {
+    Follow::Forget(element);
     Removal::Destroy(element);
     if (busy.load(std::memory_order_acquire)) {
-        for (Group& group : groups) if (Owned(group))
+        for (Group& group : groups) if (Owned(group)) {
+            if (group.pageFallback == element) group.pageFallback = nullptr;
             for (int i = 0; i < group.count; ++i)
                 if (group.members[i].element == element) {
                     DetachComposition(group.members[i], true);
                     group.members[i] = {};
                 }
+        }
     }
 }
 static void STAGGER_MEMBER DestroyHook(void* element) {
@@ -2418,15 +2801,17 @@ static void STAGGER_MEMBER DestroyHook(void* element) {
     originalDestroy(element);
 }
 static void AfterDeleteHandle() {
-    if (!busy.load(std::memory_order_acquire) && !Removal::Active()) return;
+    bool follow = Follow::Any();
+    if (!busy.load(std::memory_order_acquire) && !Removal::Active() && !follow) return;
     bool owned = false;
     for (Group& group : groups) owned = owned || Owned(group);
-    if (!owned && !Removal::Active()) return;
+    if (!owned && !Removal::Active() && !follow) return;
     DWORD error = GetLastError();
     SetLastError(ERROR_SUCCESS);
     createAction(nullptr);
     bool gone = GetLastError() == 0x80040014; // DU_E_NOCONTEXT
     if (gone) {
+        Follow::ForgetThread();
         Removal::ContextGone();
         for (Group& group : groups) if (Owned(group)) {
             // O contexto ja destruiu os gadgets: nao tocar neles nem HACTION.
@@ -2441,6 +2826,15 @@ static BOOL WINAPI DeleteHook(HANDLE handle) {
     AfterDeleteHandle();
     return result;
 }
+static void* EmptyFolderText(void* element);
+// Area rolavel das views de itens; a distancia da rolagem e a pagina partem dela.
+static bool IsLineScrollerElement(void* element) {
+    void* value = nullptr;
+    PCWSTR name = getClass(element, &value);
+    bool match = name && !wcscmp(name, L"LineScroller");
+    if (value) releaseValue(value);
+    return match;
+}
 static bool OnPagePaint(void* element) {
     if (!live.load(std::memory_order_acquire) || !busy.load(std::memory_order_acquire) ||
         stopping.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire)) return true;
@@ -2449,10 +2843,15 @@ static bool OnPagePaint(void* element) {
         interested = interested || (Owned(group) && group.pageMotion && !group.canceling && !group.repairing &&
             (!group.count || (group.members[0].element && !group.members[0].modified && !group.members[0].done)));
     if (!interested) return true;
-    // Filho comum abaixo do HWNDElement, nunca a raiz/background do host.
-    // Tambem funciona para pastas vazias, sem depender de um UIItem pintado.
+    // A pagina move a area rolavel (LineScroller), nao o cabecalho de colunas:
+    // a camada e pintada fora do BeginPaint e preserva alfa, e mods que
+    // estilizam o header pelo caminho GDI normal (Styler, Modernizer) mudariam
+    // a cor dele so durante a animacao. Sem LineScroller (pasta vazia em outra
+    // estrutura), o filho comum abaixo do HWNDElement, nunca a raiz/background.
     void* container = element;
+    void* scroller = nullptr;
     for (int depth = 0; container && depth < 64; ++depth) {
+        if (!scroller && IsLineScrollerElement(container)) scroller = container;
         void* parent = getParent(container);
         if (!parent || !getParent(parent)) break;
         container = parent;
@@ -2467,17 +2866,23 @@ static bool OnPagePaint(void* element) {
     for (Group& group : groups) if (Owned(group) && group.pageMotion && !group.canceling &&
         !group.repairing && (hwnd == group.view || IsChild(group.view, hwnd))) {
         if (group.count) {
+            // Segura so o que fica dentro da camada ate a ponte estar pronta.
             auto& member = group.members[0];
-            return member.element != container || member.modified || member.done;
+            bool inside = member.element == scroller || member.element == container;
+            return !inside || member.modified || member.done;
         }
         if (group.timeline.Now() > group.waitUntil) return true;
-        HANDLE node = getNode(container);
-        if (!node || !NativeIdentity(node) || getAlpha(container) != 255) return true;
+        // O cabecalho pinta antes da lista: espera um elemento da area rolavel.
+        void* page = scroller ? scroller : EmptyFolderText(element) ? container : nullptr;
+        if (!page) return true;
+        HANDLE node = getNode(page);
+        if (!node || !NativeIdentity(node) || getAlpha(page) != 255) return true;
         auto& member = group.members[0];
         member = {};
-        member.element = container;
+        member.element = page;
         member.node = node;
         member.repaintPending = true;
+        group.pageFallback = page == scroller ? container : nullptr;
         group.count = 1;
         // Somente registrar/gatear: promover e submeter curvas no proximo
         // frame do owner, nunca dentro do callback de pintura.
@@ -2587,6 +2992,10 @@ static HRESULT WINAPI DisplayHook(HANDLE node, void* element, void* event) {
         return originalDisplay(node, element, event);
     bool previous = inPaint;
     inPaint = true;
+    // O layout da roda nativa so se aplica depois do OnPositionChanged: a
+    // pintura e o primeiro ponto com a posicao final dos itens.
+    Follow::Update();
+    if (busy.load(std::memory_order_acquire)) Follow::TrackPaint(element);
     Removal::ObservePaint(element);
     Group* waiting = PageAwaitingContent(element);
     unsigned serial = waiting ? waiting->serial : 0;
@@ -3282,6 +3691,351 @@ static void Uninit() {
     if (storageModule) {FreeLibrary(storageModule);storageModule=nullptr;}
 }
 } // namespace Removal
+namespace Follow {
+constexpr int kTracked = 48, kEntries = 8;
+// Itens pintados enquanto ha animacao: referencias da pagina sem escalonamento.
+struct Tracked { void* element; DWORD owner; };
+struct Entry {
+    HWND view; DWORD owner; uint64_t generation; Setup setup;
+    int dx, dy; bool lost; ULONGLONG expireAt; double checkedAt;
+};
+static Tracked tracked[kTracked];
+static int nextTracked;
+static Entry entries[kEntries];
+static std::mutex mutex;
+static std::atomic<bool> anyTracked{false};
+static std::atomic<int> liveEntries{0};
+static double Now() {
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    return counter.QuadPart * 1000.0 / frequency.QuadPart;
+}
+// O Explorer reaproveita elementos: um elemento que perde ou troca o item
+// nao mede mais o mesmo conteudo.
+static void* Identity(void* element) {
+    void* vtable = nullptr;
+    if (element) memcpy(&vtable, element, sizeof(vtable));
+    if (!element || !Removal::getItem || !nativeItemVtable || vtable != nativeItemVtable) return nullptr;
+    IUnknown* item = nullptr;
+    if (FAILED(Removal::getItem(element, &item)) || !item) return nullptr;
+    void* raw = item;
+    item->Release();
+    return raw;
+}
+static bool Bounds(void* element, RECT& rect) {
+    rect = {};
+    return rootBounds && element && SUCCEEDED(rootBounds(element, &rect));
+}
+static void ClearEntry(Entry& entry) {
+    if (entry.view) liveEntries.fetch_sub(1, std::memory_order_acq_rel);
+    entry = {};
+}
+// Roda em cada pintura durante a animacao: so leitura do vptr, sem Value.
+static void TrackPaint(void* element) {
+    if (!nativeItemVtable) return;
+    void* item = nullptr;
+    for (int depth = 0; element && depth < 8 && !item; ++depth, element = getParent(element)) {
+        void* vtable = nullptr;
+        memcpy(&vtable, element, sizeof(vtable));
+        if (vtable == nativeItemVtable) item = element;
+    }
+    if (!item) return;
+    DWORD self = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const Tracked& t : tracked) if (t.element == item) return;
+    tracked[nextTracked] = {item, self};
+    nextTracked = (nextTracked + 1) % kTracked;
+    anyTracked.store(true, std::memory_order_release);
+}
+static void Forget(void* element) {
+    if (!anyTracked.load(std::memory_order_acquire) && !liveEntries.load(std::memory_order_acquire)) return;
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) if (t.element == element) t = {};
+    for (Entry& entry : entries)
+        for (int i = 0; i < entry.setup.count; ++i)
+            if (entry.setup.refs[i].element == element) entry.setup.refs[i].element = nullptr;
+}
+static void ForgetThread() {
+    DWORD self = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) if (t.owner == self) t = {};
+    for (Entry& entry : entries) if (entry.view && entry.owner == self) ClearEntry(entry);
+}
+static void ClearTracked() {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) t = {};
+    anyTracked.store(false, std::memory_order_release);
+}
+static bool Any() {
+    if (anyTracked.load(std::memory_order_acquire)) return true;
+    if (!liveEntries.load(std::memory_order_acquire)) return false;
+    ULONGLONG now = GetTickCount64();
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Entry& entry : entries) if (entry.view && now >= entry.expireAt) ClearEntry(entry);
+    return liveEntries.load(std::memory_order_acquire) > 0;
+}
+// Area do LineScroller (fixa, abaixo do cabecalho) em coordenadas da view e ate
+// quatro itens visiveis espalhados, com a identidade de cada um.
+static bool Prepare(HWND view, Setup& setup) {
+    setup = {};
+    if (!rootBounds || !Removal::getItem || !nativeItemVtable || !getClass || !releaseValue || !getParent ||
+        !busy.load(std::memory_order_acquire)) return false;
+    DWORD self = GetCurrentThreadId();
+    void* page = nullptr;
+    void* candidates[kMembers + kTracked];
+    int count = 0, owned = 0;
+    for (Group& group : groups) {
+        if (!Owned(group) || group.view != view) continue;
+        if (group.pageMotion) {
+            if (group.count && group.members[0].element) page = group.members[0].element;
+            continue;
+        }
+        for (int i = 0; i < group.count && count < kMembers; ++i)
+            if (group.members[i].element) candidates[count++] = group.members[i].element;
+    }
+    owned = count;
+    {
+        // Itens de outras abas da mesma thread ficam fora: so os sob a pagina desta view.
+        std::lock_guard<std::mutex> lock(mutex);
+        if (page) for (const Tracked& t : tracked)
+            if (t.element && t.owner == self && count < (int)ARRAYSIZE(candidates)) candidates[count++] = t.element;
+    }
+    void* scroller = nullptr;
+    struct Candidate { void* element; RECT rect; };
+    Candidate visible[ARRAYSIZE(candidates)];
+    int found = 0;
+    for (int i = 0; i < count; ++i) {
+        void* element = candidates[i];
+        bool duplicate = false;
+        for (int j = 0; j < found; ++j) duplicate = duplicate || visible[j].element == element;
+        if (duplicate) continue;
+        void* line = nullptr;
+        bool underPage = false;
+        for (void* a = getParent(element); a; a = getParent(a)) {
+            if (!line && (scroller ? a == scroller : IsLineScrollerElement(a))) line = a;
+            if (a == page) { underPage = true; break; }
+        }
+        if (!line || (i >= owned && !underPage)) continue;
+        if (!scroller) scroller = line;
+        RECT rect;
+        if (Bounds(element, rect)) visible[found++] = {element, rect};
+    }
+    RECT area;
+    if (!scroller || !found || !Bounds(scroller, area) || IsRectEmpty(&area)) return false;
+    int inside = 0;
+    for (int i = 0; i < found; ++i) {
+        RECT overlap;
+        if (IntersectRect(&overlap, &visible[i].rect, &area)) visible[inside++] = visible[i];
+    }
+    std::sort(visible, visible + inside, [](const Candidate& a, const Candidate& b) {
+        return a.rect.top != b.rect.top ? a.rect.top < b.rect.top : a.rect.left < b.rect.left;
+    });
+    // Espalhados pela area: o que sai primeiro de vista nao leva todas as referencias.
+    for (int slot = 0; slot < 4 && inside; ++slot) {
+        for (int k = 0; k < inside; ++k) {
+            const Candidate& c = visible[(inside * (2 * slot + 1) / 8 + k) % inside];
+            bool taken = false;
+            for (int j = 0; j < setup.count; ++j) taken = taken || setup.refs[j].element == c.element;
+            void* identity = taken ? nullptr : Identity(c.element);
+            if (!identity) continue;
+            setup.refs[setup.count++] = {c.element, identity, c.rect.left, c.rect.top};
+            break;
+        }
+    }
+    if (!setup.count) return false;
+    // Coordenadas da raiz DirectUI para a view, onde fica o alvo da cortina.
+    POINT origin{};
+    if (HWND host = FindFolderChild(view, L"DirectUIHWND")) MapWindowPoints(host, view, &origin, 1);
+    OffsetRect(&area, origin.x, origin.y);
+    setup.area = area;
+    return true;
+}
+static bool Register(HWND view, uint64_t generation, const Setup& setup) {
+    DWORD self = GetCurrentThreadId();
+    ULONGLONG now = GetTickCount64();
+    std::lock_guard<std::mutex> lock(mutex);
+    Entry* slot = nullptr;
+    for (Entry& entry : entries) {
+        if (entry.view == view && entry.generation == generation) return true;
+        if (entry.view && now >= entry.expireAt) ClearEntry(entry);
+    }
+    for (Entry& entry : entries) {
+        // Uma cortina por view: a nova substitui a anterior.
+        if (entry.view == view) ClearEntry(entry);
+        if (!slot && !entry.view) slot = &entry;
+    }
+    if (!slot) return false;
+    *slot = {view, self, generation, setup, 0, 0, false, now + CURTAIN_SAFETY_MS + 100, 0.};
+    liveEntries.fetch_add(1, std::memory_order_acq_rel);
+    return true;
+}
+static bool Follows(HWND view, uint64_t* generation) {
+    if (!liveEntries.load(std::memory_order_acquire)) return false;
+    DWORD self = GetCurrentThreadId();
+    uint64_t current = 0;
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (Entry& entry : entries)
+            if (entry.view == view && entry.owner == self && GetTickCount64() < entry.expireAt) {
+                current = entry.generation;
+                found = true;
+            }
+    }
+    if (!found || !CurtainFollowable(view, current)) return false;
+    if (generation) *generation = current;
+    return true;
+}
+// Consenso das referencias que ainda mostram o mesmo item. Sem consenso, a copia
+// movel sai de vista e ficam as faixas fixas ate a retirada normal.
+static void Update() {
+    if (!liveEntries.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire)) return;
+    DWORD self = GetCurrentThreadId();
+    double now = Now();
+    ULONGLONG tick = GetTickCount64();
+    Entry work[kEntries];
+    int index[kEntries], count = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (int i = 0; i < kEntries; ++i) {
+            Entry& entry = entries[i];
+            if (!entry.view || entry.owner != self) continue;
+            if (tick >= entry.expireAt) { ClearEntry(entry); continue; }
+            // Uma leitura por rajada de pintura basta: o layout ja esta aplicado.
+            if (entry.lost || now - entry.checkedAt < 1.5) continue;
+            entry.checkedAt = now;
+            work[count] = entry;
+            index[count++] = i;
+        }
+    }
+    for (int w = 0; w < count; ++w) {
+        Entry& entry = work[w];
+        int dxs[4], dys[4], valid = 0;
+        for (int i = 0; i < entry.setup.count; ++i) {
+            Ref& ref = entry.setup.refs[i];
+            RECT rect;
+            if (!ref.element) continue;
+            if (Identity(ref.element) != ref.identity || !Bounds(ref.element, rect)) { ref.element = nullptr; continue; }
+            dxs[valid] = rect.left - ref.left;
+            dys[valid++] = rect.top - ref.top;
+        }
+        int best = 0, dx = 0, dy = 0;
+        for (int i = 0; i < valid; ++i) {
+            int votes = 0;
+            for (int j = 0; j < valid; ++j) votes += dxs[j] == dxs[i] && dys[j] == dys[i];
+            if (votes > best) { best = votes; dx = dxs[i]; dy = dys[i]; }
+        }
+        bool agreed = valid && (best >= 2 || valid == 1);
+        bool alive = true;
+        if (!agreed) {
+            entry.lost = true;
+            alive = OffsetCurtain(entry.view, entry.generation, 0, 1 << 20);
+        } else if (dx != entry.dx || dy != entry.dy) {
+            entry.dx = dx;
+            entry.dy = dy;
+            alive = OffsetCurtain(entry.view, entry.generation, dx, dy);
+        }
+        std::lock_guard<std::mutex> lock(mutex);
+        Entry& stored = entries[index[w]];
+        if (stored.view != entry.view || stored.generation != entry.generation) continue;
+        if (!alive) { ClearEntry(stored); continue; }
+        // Forget pode ter zerado uma referencia enquanto a copia era medida.
+        for (int i = 0; i < entry.setup.count; ++i)
+            if (!stored.setup.refs[i].element) entry.setup.refs[i].element = nullptr;
+        stored.setup = entry.setup;
+        stored.dx = entry.dx;
+        stored.dy = entry.dy;
+        stored.lost = entry.lost;
+    }
+}
+static void Uninit() {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (Tracked& t : tracked) t = {};
+    for (Entry& entry : entries) ClearEntry(entry);
+    anyTracked.store(false, std::memory_order_release);
+}
+} // namespace Follow
+// Antes da copia da cortina: camadas no estado final (escala e opacidade 100%,
+// pagina sem deslocamento), para a copia nao mostrar itens a meio caminho que o
+// fade parece terminar enquanto os itens novos da rolagem ja estao parados. O
+// BitBlt da tela espera um quadro novo do DWM, que ja inclui este commit.
+static void SnapToFinal(HWND view) {
+    IDCompositionDevice* devices[4]{};
+    int deviceCount = 0;
+    std::lock_guard<std::mutex> lock(compositionMutex);
+    for (Group& group : groups) {
+        if (!Owned(group) || group.view != view || group.canceling || group.repairing) continue;
+        for (int i = 0; i < group.count; ++i) {
+            CompositionState* state = group.members[i].composition;
+            if (!state || !state->device) continue;
+            HRESULT hr = S_OK;
+            if (group.pageMotion) {
+                if (state->bridge) hr = state->bridge->SetOffsetX(0.f);
+                if (SUCCEEDED(hr) && state->bridge) hr = state->bridge->SetOffsetY(0.f);
+            } else {
+                if (state->transform) hr = state->transform->SetScaleX(1.f);
+                if (SUCCEEDED(hr) && state->transform) hr = state->transform->SetScaleY(1.f);
+                if (SUCCEEDED(hr) && state->opacity) hr = state->opacity->SetOpacity(1.f);
+            }
+            if (FAILED(hr)) continue;
+            bool known = false;
+            for (int d = 0; d < deviceCount; ++d) known = known || devices[d] == state->device.Get();
+            if (!known && deviceCount < (int)ARRAYSIZE(devices)) devices[deviceCount++] = state->device.Get();
+        }
+    }
+    for (int d = 0; d < deviceCount; ++d) devices[d]->Commit();
+}
+// Rolagem com camadas na view: a cortina que acompanha o conteudo cobre a
+// devolucao, e os grupos despromovem na hora. Esperar a copia aparecer deixaria
+// o primeiro passo da rolagem mover dezenas de camadas (caro em pastas grandes);
+// o commit da cortina ja precede a liberacao, que o DirectUI so envia no
+// proximo render desta thread. Sem cortina possivel, cancela igual.
+static void ScrollHandoff(HWND view) {
+    Removal::CancelView(view);
+    if (!busy.load(std::memory_order_acquire)) return;
+    ULONGLONG readyAt = 0;
+    uint64_t generation = 0;
+    bool following = Follow::Follows(view, &generation);
+    // Todos seguram a cortina antes de qualquer cancelamento: um grupo sem
+    // repintura pendente e liberado na hora e comecaria a retirada sozinho.
+    // Os que ja estao sob uma cortina (a que acompanha segue cobrindo; uma
+    // parada ja saiu) tambem despromovem agora, antes do passo com camadas.
+    Group* active[ARRAYSIZE(groups)];
+    int count = 0, pending = 0;
+    for (Group& group : groups)
+        if (Owned(group) && group.view == view && !group.canceling && !group.repairing) {
+            active[count++] = &group;
+            if (!group.curtain) ++pending;
+        }
+    if (!count) return;
+    bool covered = false;
+    if (pending) {
+        covered = following && HoldCurtain(view, generation, readyAt);
+        if (!covered) {
+            Follow::Setup setup;
+            bool prepared = Follow::Prepare(view, setup);
+            if (prepared) SnapToFinal(view);
+            if (prepared && RaiseCurtain(view, readyAt, generation, &setup.area)) {
+                // Sem registro, ninguem a moveria: uma copia parada sobre o conteudo.
+                covered = CurtainFollowable(view, generation) && Follow::Register(view, generation, setup);
+                if (!covered) LowerCurtain(view, generation);
+            }
+        }
+    }
+    // O primeiro pendente usa o dono que a cortina acabou de ganhar.
+    bool first = true;
+    for (int i = 0; i < count; ++i) {
+        Group& group = *active[i];
+        if (group.curtain) continue;
+        bool held = covered && (first || HoldCurtain(view, generation, readyAt));
+        first = false;
+        if (!held) continue;
+        group.curtain = true;
+        group.curtainGeneration = generation;
+    }
+    for (int i = 0; i < count; ++i) Cancel(*active[i]);
+}
 // Views desta thread com camadas do mod (grupos ou cena de exclusao).
 static int ScrollViews(HWND* out, int max) {
     int n = Removal::Views(out, max);
@@ -3301,6 +4055,8 @@ static PositionChangedFn originalPositionChanged;
 static void STAGGER_MEMBER PositionChangedHook(void* bar, void* value) {
     if (!inPaint) HandleContentScroll();
     originalPositionChanged(bar, value);
+    // Rolagem suave: a posicao ja vem aplicada; a roda nativa as vezes a aplica aqui.
+    if (!inPaint) Follow::Update();
 }
 static bool EnsureHooks() {
     if (live.load(std::memory_order_acquire)) return true;
@@ -3323,6 +4079,8 @@ static bool EnsureHooks() {
     getAlpha = STAGGER_EXPORT(AlphaGetFn, "?GetAlpha@Element@DirectUI@@QEAAHXZ", "?GetAlpha@Element@DirectUI@@QAEHXZ");
     setAlpha = STAGGER_EXPORT(AlphaSetFn, "?SetAlpha@Element@DirectUI@@QEAAJH@Z", "?SetAlpha@Element@DirectUI@@QAEJH@Z");
     getId = STAGGER_EXPORT(IdFn, "?GetID@Element@DirectUI@@QEAAGXZ", "?GetID@Element@DirectUI@@QAEGXZ");
+    rootBounds = STAGGER_EXPORT(RootBoundsFn, "?GetRootRelativeBounds@Element@DirectUI@@QEAAJPEAUtagRECT@@@Z",
+        "?GetRootRelativeBounds@Element@DirectUI@@QAEJPAUtagRECT@@@Z");
     // Este helper e simbolo privado, nao export. Ele verifica a classe antes
     // de consultar o HWND; um UIItem comum nao possui HWND proprio.
     if (!getHwnd) {
@@ -3390,6 +4148,15 @@ static bool EnsureHooks() {
     if (!positionChanged ||
         !WindhawkUtils::SetFunctionHook(positionChanged, PositionChangedHook, &originalPositionChanged))
         Wh_Log(L"[STAGGER] BaseScrollBar::OnPositionChanged indisponivel; rolagem pela barra mantem as camadas");
+    // Opcional: sem ele, texto GDI escuro some nas camadas durante a animacao.
+    if (!WindhawkUtils::SetFunctionHook(ExtTextOutW, ExtTextOutHook, &originalExtTextOut))
+        Wh_Log(L"[STAGGER] hook de ExtTextOutW falhou; texto GDI das camadas fica sem alfa");
+    // Sem nome exportado: so o ordinal. Opcional, como o anterior: sem ele, o texto com
+    // brilho do uxtheme fica mais fino nas camadas.
+    HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+    auto drawTextWithGlow = uxtheme ? reinterpret_cast<DrawTextWithGlowFn>(GetProcAddress(uxtheme, MAKEINTRESOURCEA(126))) : nullptr;
+    if (!drawTextWithGlow || !WindhawkUtils::SetFunctionHook(drawTextWithGlow, DrawTextWithGlowHook, &originalDrawTextWithGlow))
+        Wh_Log(L"[STAGGER] hook de DrawTextWithGlow indisponivel");
     bool applied = Wh_ApplyHookOperations();
     if (!applied) ok = false;
     alphaPaintLive.store(ok && applied && alphaStaged && NativeCompositionAvailable(), std::memory_order_release);
@@ -3621,6 +4388,7 @@ static ULONGLONG Arm(HWND view, ULONGLONG reveal, int totalMs, bool frameDriven 
         group.handoffReady = false;
         group.awaitingHandoff = false;
         group.handoffAt = 0;
+        group.pageFallback = nullptr;
         group.contentPainted = false;
         ++group.serial;
         ULONGLONG end = frameDriven ? group.waitUntil + group.collectMs + 16 + group.holdMs + group.maxDelay + group.growMs
@@ -3660,6 +4428,11 @@ static void BeforeUninit() {
     }
 }
 static void Uninit() {
+    {
+        std::lock_guard<std::mutex> lock(layerTextBufferMutex);
+        DestroyLayerTextBuffer(layerTextBuffer);
+    }
+    Follow::Uninit();
     Removal::Uninit();
     if (duiModule && FreeLibrary(duiModule)) duiModule = nullptr;
     if (duserModule && FreeLibrary(duserModule)) duserModule = nullptr;
@@ -3809,15 +4582,17 @@ static std::shared_ptr<SlideAnimation> FindSlide(HWND hwnd) {
     return it != g_slides.end() ? it->second : nullptr;
 }
 
-// A rolagem move o conteudo sob a cortina congelada e sob camadas que nao recebem
-// o clip do viewport: retirar a cortina e devolver as camadas desta thread.
+// A rolagem move o conteudo sob camadas que nao recebem o clip do viewport:
+// devolver as camadas desta thread. Uma cortina parada ficaria por cima do
+// conteudo em movimento e sai; a que acompanha a rolagem continua cobrindo.
 static void HandleContentScroll() {
     if (g_unloading.load(std::memory_order_acquire)) return;
     HWND views[16], curtains[8];
     int curtainCount = CurtainViews(GetCurrentThreadId(), curtains, 8);
-    for (int i = 0; i < curtainCount; ++i) DropOverlay(curtains[i]);
+    for (int i = 0; i < curtainCount; ++i)
+        if (!ItemStagger::Follow::Follows(curtains[i])) DropOverlay(curtains[i]);
     int count = ItemStagger::ScrollViews(views, 16);
-    for (int i = 0; i < count; ++i) ItemStagger::CancelView(views[i]);
+    for (int i = 0; i < count; ++i) ItemStagger::ScrollHandoff(views[i]);
 }
 
 static LRESULT CALLBACK SlideSubclassProc(
@@ -3883,6 +4658,13 @@ static void FinishSlide(const std::shared_ptr<SlideAnimation>& s,
     g_animDoneCv.notify_all();
 }
 
+// Roda ou barra sobre a pagina: a rolagem devolve as camadas sob a cortina que
+// acompanha o conteudo. Antes do inicio ainda nao ha camadas e a pagina aparece.
+static void ScrollSlide(const std::shared_ptr<SlideAnimation>& s) {
+    if (!s->started || !s->info.nativePage) FinishSlide(s);
+    else ItemStagger::ScrollHandoff(s->hwnd);
+}
+
 static LRESULT CALLBACK PageInputSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR view) {
     auto s = FindSlide(reinterpret_cast<HWND>(view));
@@ -3890,12 +4672,13 @@ static LRESULT CALLBACK PageInputSubclassProc(
     // descartaria o staggering antes de seu primeiro frame.
     bool interrupt = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN ||
         msg == WM_XBUTTONDOWN || msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_CONTEXTMENU;
-    // Clique e tecla concluem as camadas rapido; a rolagem as devolve na hora.
+    bool scroll = msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL || msg == WM_VSCROLL || msg == WM_HSCROLL;
+    // Clique e tecla concluem as camadas rapido; a rolagem as devolve sob a cortina.
     if (s && interrupt && (s->accelerated || ItemStagger::Accelerate(s->hwnd))) {
         s->accelerated = true;
-    } else if (s && (interrupt || msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL ||
-        msg == WM_VSCROLL || msg == WM_HSCROLL ||
-        msg == WM_NCDESTROY || (msg == WM_SHOWWINDOW && !wp))) {
+    } else if (s && scroll) {
+        ScrollSlide(s);
+    } else if (s && (interrupt || msg == WM_NCDESTROY || (msg == WM_SHOWWINDOW && !wp))) {
         FinishSlide(s);
     }
     if (msg == WM_NCDESTROY) RemoveWindowSubclass(hwnd, PageInputSubclassProc, SLIDE_SUBCLASS_ID);
@@ -4059,7 +4842,8 @@ static LRESULT CALLBACK SlideSubclassProc(
         // A transformacao e somente visual: devolver a superficie nativa
         // antes de interagir, sem deslocar hit targets. Layout fica nativo.
         // Clique e tecla concluem as camadas rapido em vez de cortar no meio.
-        if (!wheel && (s->accelerated || ItemStagger::Accelerate(s->hwnd))) s->accelerated = true;
+        if (wheel) ScrollSlide(s);
+        else if (s->accelerated || ItemStagger::Accelerate(s->hwnd)) s->accelerated = true;
         else FinishSlide(s);
     } else if (msg == WM_WINDOWPOSCHANGING && s->applying) {
         // Consumir so a chamada propria; um layout reentrante continua nativo.
@@ -4932,12 +5716,7 @@ void Wh_ModUninit() {
     // Wh_ModBeforeUninit/Wh_ModUninit rodarem -- so bloqueia chamadas novas).
     {
         std::lock_guard<std::mutex> lkd(g_dcFadeMtx);
-        for (auto& [hwnd, a] : g_dcFades) {
-            if (a.pTarget) { a.pTarget->SetRoot(nullptr); a.pTarget->Release(); }
-            if (a.pEffect)  a.pEffect->Release();
-            if (a.pVisual)  a.pVisual->Release();
-            if (a.pSurface) a.pSurface->Release();
-        }
+        for (auto& [hwnd, a] : g_dcFades) ReleaseFadeObjects(a);
         g_dcFades.clear();
         // Referencias enfileiradas depois do join do worker (ex.: cortina
         // levantada durante o unload) so podem ser liberadas aqui.

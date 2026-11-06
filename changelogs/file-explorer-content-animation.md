@@ -1,3 +1,10 @@
+## 1.0.3 ([Nov 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9b70a24771cfbad240c70881b7b1e97baf57b20a/mods/file-explorer-content-animation.wh.cpp))
+
+- Keep DirectUI text visible during animations: in light mode it could vanish or turn into faint white artifacts until the animation ended.
+- Move only the scrollable area on page entrance, so the column header no longer turns opaque or changes color during the animation with translucent backgrounds.
+- Hand the content back under a copy that follows the scroll when scrolling during an animation, so it no longer flashes empty, also with smooth scrolling mods.
+- Add an optional Styler text compatibility setting, off by default. It's only needed if the text changes after the animation ends with the entire-window effect of Windows 11 File Explorer Styler.
+
 ## 1.0.2 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a0fb63a19b61b5169b38433d5b72357cd84d9f3e/mods/file-explorer-content-animation.wh.cpp))
 
 - Rewrote most of the mod: DirectUI pages now animate through DirectUI's standard layer mechanism and run on the compositor, staying smooth while thumbnails and large folders load.
