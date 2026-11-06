@@ -2,7 +2,7 @@
 // @id              outlook-refined
 // @name            Outlook Refined
 // @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.6
+// @version         0.6.1
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
@@ -591,14 +591,36 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   // matches (for example each account's Drafts), labeled by account. Computed on
   // every render, never saved, so Outlook renaming "Sent Items" to
   // "Sent Items (account)" when a second one is added needs no config change.
-  function accountOf(name) {
+  // A favorite's name carries its address only while another account has a favorite
+  // of the same name, so a lone one is read from the mailbox its row was drawn for.
+  // Only the row and the component just above it: further up sits the Favorites
+  // root, whose mailbox is some other account's. A node kept from an earlier render
+  // can still point at the older fiber, so only the one drawn with this name counts.
+  function rowAccount(el) {
+    try {
+      const key = Object.keys(el).find(k => k.startsWith('__reactFiber$'));
+      const name = el.getAttribute('data-folder-name');
+      const drawn = f => f && f.memoizedProps && f.memoizedProps['data-folder-name'] === name;
+      let f = key && el[key];
+      if (!drawn(f)) f = f && f.alternate;
+      if (!drawn(f)) return '';
+      for (let i = 0; f && i < 2; f = f.return, i++) {
+        const box = f.memoizedProps && f.memoizedProps.mailboxInfo;
+        if (box && typeof box.mailboxSmtpAddress === 'string') return lower(box.mailboxSmtpAddress);
+      }
+    } catch {}
+    return '';
+  }
+  function accountOf(name, el) {
     const m = /\(([^()]+@[^()]+)\)$/.exec(name);
-    return (m ? m[1] : primary()).toLowerCase();
+    return (m ? m[1] : rowAccount(el) || primary()).toLowerCase();
+  }
+  function favoriteRows() {
+    const list = favoritesList();
+    return list ? [...list.querySelectorAll(':scope > div > [role="treeitem"]')] : [];
   }
   function favoriteNames() {
-    const list = favoritesList();
-    if (!list) return [];
-    return [...list.querySelectorAll(':scope > div > [role="treeitem"]')].map(t => t.getAttribute('data-folder-name')).filter(Boolean);
+    return favoriteRows().map(t => t.getAttribute('data-folder-name')).filter(Boolean);
   }
   // Group patterns, compiled once per pattern string. A pattern that does not compile
   // matches nothing (one console warning) instead of stopping every tweak.
@@ -620,10 +642,11 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const re = pattern(group.match);
     const hidden = new Set(cfg.hide);
     const accountKeys = Object.keys(cfg.accounts || {}); // current, so a drag reorders these too
-    return favoriteNames()
-      .filter(name => re.test(name) && !hidden.has(name) && !findFolder(name))
-      .map(name => {
-        const acct = accountOf(name);
+    return favoriteRows()
+      .map(el => ({ el, name: el.getAttribute('data-folder-name') }))
+      .filter(({ name }) => name && re.test(name) && !hidden.has(name) && !findFolder(name))
+      .map(({ el, name }) => {
+        const acct = accountOf(name, el);
         return { name, rank: accountKeys.indexOf(acct), label: group.autoLabel ? (cfg.accounts[acct] || acct || name) : undefined };
       })
       .sort((a, b) => (a.rank < 0 ? 99 : a.rank) - (b.rank < 0 ? 99 : b.rank));
