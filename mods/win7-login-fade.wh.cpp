@@ -134,7 +134,6 @@
 #include <regex>
 #include <sddl.h>
 
-#define WM_MONOFFTASK (WM_USER + 1)
 #define OVERLAY_WIN_CLASS L"LogonSleepFadeOverlay"
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
@@ -168,6 +167,7 @@ std::atomic<bool> g_isFadeInProgress = false;
 std::atomic<bool> g_isExiting = false;
 std::atomic<HANDLE> g_monitorOffThread = NULL;
 std::atomic<HANDLE> g_asyncFadeThread = NULL;
+UINT g_monitorOffTaskMsg = 0;
 
 typedef struct _MONITOR_INFO {
     HDC hDC = NULL;
@@ -471,53 +471,58 @@ void RestoreGammaAndMonitorOff() {
 }
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == g_monitorOffTaskMsg) {
+        Wh_Log(L"OverlayWndProc g_monitorOffTaskMsg");
+        if (g_isWinlogon && !BeginFade(100)) {
+            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            return 1;
+        }
+
+        MSG m;
+        int refreshRate = GetDeviceRefreshRate();
+        if (!GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
+            while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
+            EndFade();
+            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            return 1;
+        }
+
+        FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
+
+        // Show the overlay after the fade, and schedule it to hide after 1.5 seconds
+        SetWindowPos(
+            hWnd,
+            HWND_TOPMOST,
+            GetSystemMetrics(SM_XVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            SWP_SHOWWINDOW
+        );
+
+        if (!SetTimer(hWnd, 1, 1500, NULL)) {
+            Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
+            RestoreGammaAndMonitorOff();
+            while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
+            EndFade();
+            g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
+            return 1;
+        }
+
+        Sleep(100); // Needed to prevent flashing when monitor fade is started multiple times in the same process
+        RestoreGammaAndMonitorOff();
+        while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
+        EndFade();
+        return 0;
+    }
+
     switch (uMsg) {
         case WM_CREATE:
             Wh_Log(L"OverlayWndProc WM_CREATE");
-            if (!ChangeWindowMessageFilterEx(hWnd, WM_MONOFFTASK, MSGFLT_ALLOW, NULL)) {
+            if (!ChangeWindowMessageFilterEx(hWnd, g_monitorOffTaskMsg, MSGFLT_ALLOW, NULL)) {
                 Wh_Log(L"ChangeWindowMessageFilterEx failed, GLE=%d", GetLastError());
             }
             return 0;
-        case WM_MONOFFTASK: {
-            Wh_Log(L"OverlayWndProc WM_MONOFFTASK");
-            if (g_isWinlogon && !BeginFade(100)) {
-                NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-                return 1;
-            }
-
-            int refreshRate = GetDeviceRefreshRate();
-            if (!GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
-                EndFade();
-                NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-                return 1;
-            }
-
-            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
-
-            // Show the overlay after the fade, and schedule it to hide after 1.5 seconds
-            SetWindowPos(
-                hWnd,
-                HWND_TOPMOST,
-                GetSystemMetrics(SM_XVIRTUALSCREEN),
-                GetSystemMetrics(SM_YVIRTUALSCREEN),
-                GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                GetSystemMetrics(SM_CYVIRTUALSCREEN),
-                SWP_SHOWWINDOW
-            );
-
-            if (!SetTimer(hWnd, 1, 1500, NULL)) {
-                Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
-                RestoreGammaAndMonitorOff();
-                EndFade();
-                g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
-                return 1;
-            }
-
-            Sleep(100); // Needed to prevent flashing when monitor fade is started multiple times in the same process
-            RestoreGammaAndMonitorOff();
-            EndFade();
-            return 0;
-        }
         case WM_LBUTTONDOWN:
             Wh_Log(L"OverlayWndProc WM_LBUTTONDOWN");
             ShowWindow(hWnd, SW_HIDE);
@@ -639,7 +644,7 @@ DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
 
         HWND overlayWnd = CreateOverlayWindow();
         if (overlayWnd) {
-            PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0);
+            PostMessageW(overlayWnd, g_monitorOffTaskMsg, 0, 0);
 
             // I don't want extra hassle of managing another thread for the overlay window lol; just make sure the following order of operations is correct:
             // Fade out -> Show overlay -> Restore gamma -> Monitor off -> Wait for monitor off with arbitrary delay -> Hide overlay
@@ -722,7 +727,7 @@ bool RequestFade() {
     if (g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
         HWND overlayWnd = FindWindowW(OVERLAY_WIN_CLASS, NULL);
         if (overlayWnd) {
-            if (!PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0)) {
+            if (!PostMessageW(overlayWnd, g_monitorOffTaskMsg, 0, 0)) {
                 Wh_Log(L"PostMessageW failed, GLE=%d", GetLastError());
                 return false;
             }
@@ -949,7 +954,7 @@ bool FindRangeVariable() {
         }
         Wh_Log(L"[%p] mov rcx, HKEY_LOCAL_MACHINE ; hkey", movHklm);
 
-        targetRegex = R"(H\x8d\x05.?.?.?.?H\x89D\x24\x28)";
+        targetRegex = R"(H\x8d\x05[\s\S]{4}H\x89D\x24\x28)";
         char* leaPvData = FindMemory(movHklm - 60, 60, targetRegex);
         if (!leaPvData) {
             Wh_Log(L"lea pvData not found");
@@ -977,20 +982,23 @@ bool FindRangeVariable() {
 using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_original;
 LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
+    DWORD cbIn = pcbData ? *pcbData : 0;
     LONG ret = RegGetValueW_original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-    if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData && ret == ERROR_SUCCESS) {
+    if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData && cbIn >= sizeof(DWORD) && (ret == ERROR_SUCCESS || ret == ERROR_FILE_NOT_FOUND)) {
         if (_wcsicmp(lpSubKey, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ICM") == 0 && _wcsicmp(lpValue, L"GdiIcmGammaRange") == 0) {
             Wh_Log(L"Hooked DWM GdiIcmGammaRange, pvData=%p", pvData);
-            *pcbData = sizeof(DWORD);
-            if (pdwType) *pdwType = REG_DWORD;
 #if not defined(_M_X64)
             HMODULE hDispBrokerDesktop = GetModuleHandleW(L"DispBroker.Desktop.dll");
             if (hDispBrokerDesktop && !p_g_gammaRange && !p_g_GdiRampLimit && IsInModule(hDispBrokerDesktop, pvData, sizeof(DWORD))) {
                 p_g_gammaRange = (DWORD*)pvData;
             }
 #endif
-            g_origGammaRange = *(DWORD*)pvData;
+            if (ret == ERROR_SUCCESS) {
+                g_origGammaRange = *(DWORD*)pvData;
+            }
             *(DWORD*)pvData = 256;
+            *pcbData = sizeof(DWORD);
+            if (pdwType) *pdwType = REG_DWORD;
             return ERROR_SUCCESS;
         }
     }
@@ -1227,6 +1235,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     } else if (!g_settings.sleepFadeEnabled) {
         Wh_Log(L"Sleep fade is disabled and not running in winlogon.exe, unloading...");
+        return FALSE;
+    }
+
+    g_monitorOffTaskMsg = RegisterWindowMessageW(L"LogonSleepFadeMonitorOffTask");
+    if (!g_monitorOffTaskMsg) {
+        Wh_Log(L"RegisterWindowMessageW failed, GLE=%d", GetLastError());
         return FALSE;
     }
 
