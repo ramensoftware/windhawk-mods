@@ -3,7 +3,7 @@
 // @name            Logitech Battery Tray
 // @description     Native taskbar battery indicators for Logitech G HUB and HID++ devices.
 // @description:ru  Индикаторы заряда устройств Logitech через G HUB и HID++ в панели задач.
-// @version         0.1.1
+// @version         0.1.2
 // @author          uMk0
 // @github          https://github.com/umk0
 // @license         GPL-3.0-or-later
@@ -91,12 +91,16 @@ These windows absorb temporary failures, not indefinitely cache charging state.
 Provider requests run outside the taskbar UI thread. Reconnection is automatic.
 Windows HID arrival/removal and receiver notifications trigger rediscovery;
 three-minute scanning also handles devices that do not send connection events.
+An already-open device that missed its initial probe is retried separately,
+with increasing delays up to 60 seconds, without rescanning every HID interface.
 Event-capable HID++ features use the configured fallback interval. ADC (0x1F20)
 and legacy register devices use a two-second poll because they may lack events.
 Presence confirmation temporarily uses a short interval to avoid delayed recovery.
 The XAML UI updates on data, size and theme changes, without a periodic repaint.
 In Auto mode, a transient XAML failure must last 30 seconds before notification
 icons appear; missing taskbar symbols select the compatibility backend immediately.
+While the native fallback is active, unsuccessful XAML attachment attempts back
+off up to 60 seconds. Layout, DPI and theme changes trigger an immediate retry.
 On supported left/right taskbars, indicators are stacked vertically and the
 percentage is placed below the icons. Button width follows the taskbar width;
 the configured button width applies to horizontal taskbars only.
@@ -939,9 +943,10 @@ static DWORD HidPollDelay(unsigned feature, bool confirming, DWORD fallback) {
 }
 
 struct RetryBackoff {
-    DWORD delay = 1000;
+    DWORD initial, delay;
+    explicit RetryBackoff(DWORD first = 1000) : initial(first), delay(first) {}
     DWORD Failed() { DWORD result = delay; delay = std::min<DWORD>(delay * 2, 60000); return result; }
-    void Reset() { delay = 1000; }
+    void Reset() { delay = initial; }
 };
 
 static bool HidAddressMatches(BYTE expected, BYTE actual, bool directHeadset) {
@@ -969,7 +974,10 @@ static bool IsConfirmedHidAbsence(unsigned feature, const std::vector<BYTE>& pay
 }
 
 static void UpdateHidPresence(DeviceBattery& device, const DeviceBattery* reading,
-                              HidPresence& presence, ULONGLONG now, bool confirmedUnavailable = true) {
+                              HidPresence& presence, ULONGLONG now, bool confirmedUnavailable = true,
+                              bool freshInputDuringRequest = false) {
+    // A timed-out request must not cancel a valid battery event received while waiting.
+    if (!reading && freshInputDuringRequest) return;
     if (reading && DeviceShouldBeShown(*reading)) {
         presence.unavailableSince = presence.disconnectedSince = 0;
         if (!DeviceShouldBeShown(device)) {
@@ -1004,10 +1012,14 @@ class HidChannel {
         bool discoverAgain = false;
         HidPresence presence;
         ULONGLONG nextPoll = 0;
+        ULONGLONG inputRevision = 0;
+        unsigned missingReplies = 0;
         DeviceBattery device;
     };
     std::vector<Slot> slots;
     bool discoveryRequested = false;
+    RetryBackoff discoveryRetry{2000};
+    ULONGLONG retryDiscoveryAt = std::numeric_limits<ULONGLONG>::max();
     void Notification(const std::vector<BYTE>& packet) {
         if (packet.size() < 7 || (packet[0] != 0x10 && packet[0] != 0x11)) return;
         if (packet[0] == 0x10 && packet[2] == 0x41) {
@@ -1023,6 +1035,7 @@ class HidChannel {
             auto reading = slot.device;
             std::vector<BYTE> payload(packet.begin() + 4, packet.end());
             bool valid = DecodeHidBattery(reading, slot.feature, payload);
+            if (valid) ++slot.inputRevision;
             if (valid || IsConfirmedHidAbsence(slot.feature, payload)) {
                 UpdateHidPresence(slot.device, valid ? &reading : nullptr, slot.presence, GetTickCount64());
                 if ((DeviceShouldBeShown(slot.device) && slot.presence.unavailableSince) ||
@@ -1036,6 +1049,7 @@ public:
     HidCollection collection;
     std::function<void()> changed;
     BYTE lastError = 0;
+    bool lastReplyReceived = false;
     bool NeedsDiscovery() const { return discoveryRequested; }
     bool Healthy() const { return longEndpoint && !longEndpoint->failed && (!shortEndpoint || !shortEndpoint->failed); }
     void AppendWaitHandles(std::vector<HANDLE>& events) const {
@@ -1055,6 +1069,7 @@ public:
     std::vector<BYTE> Request(BYTE slot, BYTE feature, BYTE function, const std::vector<BYTE>& params = {},
                               bool legacy = false, unsigned batteryFeature = 0) {
         lastError = 0;
+        lastReplyReceived = false;
         if (WaitForSingleObject(cancel, 0) == WAIT_OBJECT_0) return {};
         software = software >= 15 ? 10 : software + 1;
         BYTE address = legacy ? function : static_cast<BYTE>((function << 4) | software);
@@ -1079,8 +1094,9 @@ public:
             if (reply.size() < 4 || (reply[0] != 0x10 && reply[0] != 0x11)) continue;
             if (HidAddressMatches(slot, reply[1], collection.headset && !collection.receiver)) {
                 if (reply.size() >= 6 && ((reply[0] == 0x10 && reply[2] == 0x8F) || (reply[0] == 0x11 && reply[2] == 0xFF)) &&
-                    reply[3] == feature && reply[4] == address) { lastError = reply[5]; return {}; }
+                    reply[3] == feature && reply[4] == address) { lastReplyReceived = true; lastError = reply[5]; return {}; }
                 if (reply[2] == feature && reply[3] == address) {
+                    lastReplyReceived = true;
                     std::vector<BYTE> payload(reply.begin() + 4, reply.end());
                     if (AcceptBatteryReply(batteryFeature, payload)) return payload;
                     // Some headsets send a zero ADC response followed by real data
@@ -1099,6 +1115,7 @@ public:
     }
     void Discover() {
         discoveryRequested = false;
+        bool probeFailed = false;
         for (int number = collection.receiver ? 1 : 255; number <= (collection.receiver ? 6 : 255); ++number) {
             if (WaitForSingleObject(cancel, 0) == WAIT_OBJECT_0) break;
             BYTE slotNumber = static_cast<BYTE>(number);
@@ -1108,7 +1125,10 @@ public:
             }
             auto ping = Request(slotNumber, 0, 1, {0, 0, 0xA5});
             bool legacy = ping.empty() && lastError == 1;
-            if (ping.empty() && !legacy) continue;
+            if (ping.empty() && !legacy) {
+                if (!collection.receiver || existing != slots.end()) probeFailed = true;
+                continue;
+            }
             Slot slot;
             slot.slot = slotNumber;
             slot.device.fromHidpp = true;
@@ -1125,6 +1145,7 @@ public:
             } else {
                 for (unsigned feature : {0x1004U, 0x1000U, 0x1001U, 0x1F20U}) {
                     BYTE index = Feature(slotNumber, feature);
+                    if (!lastReplyReceived) probeFailed = true;
                     if (!index) continue;
                     auto answer = Request(slotNumber, index, feature == 0x1004 ? 1 : 0, {}, false, feature);
                     auto reading = slot.device;
@@ -1165,6 +1186,8 @@ public:
                 }
             }
             if (slot.feature) {
+                Wh_Log(L"HID++ battery endpoint: %s, feature=0x%04X, index=%u",
+                       slot.device.name.c_str(), slot.feature, slot.index);
                 auto reading = slot.device;
                 if (existing != slots.end()) {
                     // A failed probe must never erase the last working device.
@@ -1181,21 +1204,42 @@ public:
                 if (changed) changed();
             }
         }
+        // Retry only this already-open channel, not the complete HID interface scan.
+        // Empty receiver slots are normal and must not cause repeated radio probing.
+        bool pending = probeFailed ||
+            std::any_of(slots.begin(), slots.end(), [](auto& slot) { return slot.discoverAgain; });
+        retryDiscoveryAt = pending ? GetTickCount64() + discoveryRetry.Failed()
+                                   : std::numeric_limits<ULONGLONG>::max();
+        if (!pending) discoveryRetry.Reset();
     }
     void Poll(DWORD fallback = 30000, bool force = false) {
+        if (GetTickCount64() >= retryDiscoveryAt) Discover();
         for (auto& slot : slots) {
             if (!force && GetTickCount64() < slot.nextPoll) continue;
             auto previous = slot.device;
+            auto inputRevision = slot.inputRevision;
             auto answer = slot.feature < 0x1000 ? Request(slot.slot, 0x81, static_cast<BYTE>(slot.feature), {}, true)
                 : Request(slot.slot, slot.index, slot.feature == 0x1004 ? 1 : 0, {}, false, slot.feature);
             if (slot.feature == 0x1F20 && answer.empty() && !lastError && Healthy())
                 answer = Request(slot.slot, slot.index, 0, {}, false, slot.feature);
             auto reading = slot.device;
             bool valid = DecodeHidBattery(reading, slot.feature, answer);
+            bool freshInput = inputRevision != slot.inputRevision;
+            if (valid || freshInput) {
+                if (slot.missingReplies >= 3) Wh_Log(L"HID++ battery replies resumed: %s", slot.device.name.c_str());
+                slot.missingReplies = 0;
+            } else if (++slot.missingReplies == 3 || slot.missingReplies % 30 == 0) {
+                Wh_Log(L"HID++ battery unavailable: %s, feature=0x%04X, protocol error=%u, empty=%d",
+                       slot.device.name.c_str(), slot.feature, lastError, answer.empty());
+            }
             UpdateHidPresence(slot.device, valid ? &reading : nullptr, slot.presence, GetTickCount64(),
-                              IsConfirmedHidAbsence(slot.feature, answer));
+                              IsConfirmedHidAbsence(slot.feature, answer), freshInput);
             if (!valid) {
-                if (lastError && lastError != 4 && lastError != 9) slot.discoverAgain = true;
+                if (lastError && lastError != 4 && lastError != 9) {
+                    slot.discoverAgain = true;
+                    if (retryDiscoveryAt == std::numeric_limits<ULONGLONG>::max())
+                        retryDiscoveryAt = GetTickCount64() + discoveryRetry.Failed();
+                }
             }
             slot.nextPoll = GetTickCount64() + HidPollDelay(slot.feature,
                 (DeviceShouldBeShown(slot.device) && slot.presence.unavailableSince) ||
@@ -1204,7 +1248,7 @@ public:
         }
     }
     ULONGLONG NextPoll() const {
-        ULONGLONG due = std::numeric_limits<ULONGLONG>::max();
+        ULONGLONG due = retryDiscoveryAt;
         for (auto& slot : slots) due = std::min(due, slot.nextPoll);
         return due;
     }
@@ -1294,7 +1338,7 @@ static BatterySnapshot CombineLogitechProviders(BatterySnapshot hub, const std::
     for (const auto& device : hid) {
         auto same = std::find_if(hub.devices.begin(), hub.devices.end(), [&](auto& d) { return SameLogitechDevice(d, device); });
         if (same == hub.devices.end()) hub.devices.push_back(device);
-        else if ((!hub.hubAvailable || (!same->online && !same->charging)) && device.online) {
+        else if ((!hub.hubAvailable || !DeviceShouldBeShown(*same)) && DeviceShouldBeShown(device)) {
             auto key = same->key, model = same->model;
             *same = device;
             same->key = key;
@@ -1504,6 +1548,9 @@ static winrt::event_token g_unloadedToken{}, g_sizeToken{}, g_themeToken{};
 static std::vector<DeviceBattery> g_renderedDevices;
 static double g_renderedWidth = -1, g_renderedHeight = -1;
 static ElementTheme g_renderedTheme = ElementTheme::Default;
+static RetryBackoff g_uiRetry{5000};
+static ULONGLONG g_uiRetryAt = 0;
+static Color g_renderedForeground{};
 
 struct TrayPalette {
     Brush foreground{nullptr}, transparent{nullptr}, hover{nullptr}, pressed{nullptr},
@@ -1921,13 +1968,13 @@ static void UpdateUI() {
             g_sizeToken = g_parent.SizeChanged([](auto&, auto&) {
                 if (g_unloading) return;
                 g_visualDirty = true;
-                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 0, 0);
+                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 3, 0);
             });
             g_themeToken = g_parent.ActualThemeChanged([](auto&, auto&) {
                 if (g_unloading) return;
                 g_palette.reset();
                 g_visualDirty = true;
-                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 0, 0);
+                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 3, 0);
             });
         }
         BatterySnapshot snapshot;
@@ -1956,11 +2003,17 @@ static void UpdateUI() {
                 g_group.Children().Append(g_views->back().button);
             }
         }
-        if (!g_palette || theme != g_renderedTheme) {
+        // Stylers can replace or mutate a brush without changing ActualTheme.
+        // This path runs only after a visible data or layout change, not on a timer.
+        auto currentForeground = NativeForeground(parent);
+        auto solidForeground = currentForeground.try_as<SolidColorBrush>();
+        Color currentColor = solidForeground ? solidForeground.Color() : Color{255, 245, 245, 245};
+        if (!g_palette || theme != g_renderedTheme || g_palette->foreground != currentForeground ||
+            g_renderedForeground.A != currentColor.A || g_renderedForeground.R != currentColor.R ||
+            g_renderedForeground.G != currentColor.G || g_renderedForeground.B != currentColor.B) {
             TrayPalette palette;
-            palette.foreground = NativeForeground(parent);
-            auto solid = palette.foreground.try_as<SolidColorBrush>();
-            Color color = solid ? solid.Color() : Color{255, 245, 245, 245};
+            palette.foreground = currentForeground;
+            Color color = currentColor;
             bool dark = int(color.R) + color.G + color.B > 384;
             palette.transparent = BrushFromColor(0, 0, 0, 0);
             palette.hover = dark ? BrushFromColor(18, 255, 255, 255) : BrushFromColor(12, 0, 0, 0);
@@ -1969,6 +2022,7 @@ static void UpdateUI() {
             palette.critical = dark ? BrushFromColor(255, 255, 153, 164) : BrushFromColor(255, 196, 43, 28);
             palette.low = dark ? BrushFromColor(255, 252, 225, 0) : BrushFromColor(255, 157, 93, 0);
             g_palette = std::move(palette);
+            g_renderedForeground = currentColor;
         }
         const auto& [foreground, transparent, hover, pressed, green, critical, low] = *g_palette;
         auto placement = Primitives::PlacementMode::Top;
@@ -2230,6 +2284,7 @@ static LRESULT CALLBACK NativeTrayProc(HWND window, UINT message, WPARAM wParam,
     } else if (state && message == state->taskbarCreated) {
         state->devices.clear();
         RequestDeviceRefresh();
+        if (auto taskbar = g_taskbar.load()) PostMessageW(taskbar, g_uiMessage, 3, 0);
         if (g_nativeRefresh) SetEvent(g_nativeRefresh);
     } else if (message == WM_SETTINGCHANGE || message == WM_DISPLAYCHANGE || message == WM_DPICHANGED) {
         if (g_nativeRefresh) SetEvent(g_nativeRefresh);
@@ -2297,13 +2352,19 @@ static DWORD WINAPI NativeTrayWorker(void*) {
     return window ? 0 : 2;
 }
 
-static void UpdateUIAndRetry(HWND window) {
+static void UpdateUIAndRetry(HWND window, bool immediate = false) {
+    if (immediate) { g_uiRetry.Reset(); g_uiRetryAt = 0; }
+    if (!g_modernAttached && g_timerId && GetTickCount64() < g_uiRetryAt) return;
     UpdateUI();
     if (g_timerId) KillTimer(window, g_timerId);
     g_timerId = 0;
     // Once attached, XAML events and provider changes are the only update sources.
-    if (!g_modernAttached && !g_unloading)
-        g_timerId = SetTimer(window, reinterpret_cast<UINT_PTR>(&g_timerId), 5000, nullptr);
+    if (!g_modernAttached && !g_unloading) {
+        bool fallback = !NativeFallbackDelay(true, false, g_detachedSince.load(), GetTickCount64());
+        DWORD delay = fallback ? g_uiRetry.Failed() : 5000;
+        g_uiRetryAt = GetTickCount64() + delay;
+        g_timerId = SetTimer(window, reinterpret_cast<UINT_PTR>(&g_timerId), delay, nullptr);
+    } else { g_uiRetry.Reset(); g_uiRetryAt = 0; }
 }
 
 static LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message,
@@ -2315,7 +2376,7 @@ static LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message,
             RemoveGroup();
         } else if (!g_unloading) {
             if (wParam == 2) RemoveGroup();
-            UpdateUIAndRetry(window);
+            UpdateUIAndRetry(window, wParam == 2 || wParam == 3);
         }
         return 0;
     }
@@ -2326,7 +2387,7 @@ static LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message,
     if (!g_unloading && (message == WM_SIZE || message == WM_DPICHANGED || message == WM_THEMECHANGED)) {
         g_visualDirty = true;
         if (message == WM_THEMECHANGED) g_palette.reset();
-        PostMessageW(window, g_uiMessage, 0, 0);
+        PostMessageW(window, g_uiMessage, 3, 0);
         if (g_nativeRefresh) SetEvent(g_nativeRefresh);
     }
     if (message == WM_NCDESTROY) {
@@ -2501,13 +2562,21 @@ static void CloseWorkerEvents() {
     }
 }
 
-static void StartWorker() {
+static bool CreateWorkerEvents() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hubRefresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_hidRefresh = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_eventRefresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_nativeRefresh = CreateEventW(nullptr, FALSE, TRUE, nullptr);
-    if (!g_stopEvent || !g_hubRefresh || !g_hidRefresh || !g_eventRefresh || !g_nativeRefresh) { StopWorker(); return; }
+    if (!g_stopEvent || !g_hubRefresh || !g_hidRefresh || !g_eventRefresh || !g_nativeRefresh) {
+        CloseWorkerEvents();
+        Wh_Log(L"Failed to create worker events");
+        return false;
+    }
+    return true;
+}
+
+static void StartWorker() {
     g_worker = CreateThread(nullptr, 0, BatteryWorker, nullptr, 0, nullptr);
     g_eventWorker = CreateThread(nullptr, 0, GHubEventWorker, nullptr, 0, nullptr);
     if (g_settings.directHidpp) g_hidWorker = CreateThread(nullptr, 0, HidBatteryWorker, nullptr, 0, nullptr);
@@ -2548,6 +2617,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (!CreateWorkerEvents()) return;
     g_detachedSince = GetTickCount64();
     HWND window = FindTaskbar();
     if (g_taskbarModule && window && WindhawkUtils::SetWindowSubclassFromAnyThread(window, TaskbarSubclass, 0)) {
