@@ -4,13 +4,13 @@
 // @name:it         Gruppi di cartelle sul desktop
 // @description     Browse desktop folders in an anchored hover panel with view buttons, drag-out and native context menus.
 // @description:it  Esplora le cartelle del desktop in un pannello al passaggio del mouse, con viste, trascinamento e menu contestuali.
-// @version         0.10.0
+// @version         0.11.0
 // @author          Shjne
 // @github          https://github.com/Shjne
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @license         MIT
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -ladvapi32 -ldwmapi -luxtheme
+// @compilerOptions -lcomctl32 -lole32 -lshell32 -lshlwapi -luuid -lgdi32 -ladvapi32 -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,6 +19,16 @@
 
 Hover over a real folder on the Windows desktop to browse its contents in an
 anchored panel. Use any folder name; no group configuration is needed.
+
+## Screenshots
+
+Medium icons (Italian interface):
+
+![Medium icons in three columns](https://raw.githubusercontent.com/Shjne/windhawk-mods/screenshots/desktop-folder-groups-medium.png)
+
+List view:
+
+![Desktop folder in List view](https://raw.githubusercontent.com/Shjne/windhawk-mods/screenshots/desktop-folder-groups-list.png)
 
 ## Usage
 
@@ -34,6 +44,14 @@ anchored panel. Use any folder name; no group configuration is needed.
   not only shortcuts, can be moved by these actions.
 - Move away to close the panel, or press Esc. Double-clicking the original
   desktop folder still opens it normally in Explorer.
+
+## Related mod
+
+[Folder Hover Menu](https://windhawk.net/mods/explorer-folder-hover-menu) adds an
+expand button and cascading folder menus in Explorer, file dialogs and on the
+desktop. Desktop Folder Groups focuses on an automatically opening desktop panel
+with icon/list views, drag-out and per-item context menus. Both can react to the
+same desktop hover; choose the behavior you prefer or disable one if they overlap.
 
 The initial view comes from settings. Quick-button choices last until the mod
 reloads. The panel refreshes its contents when reopened or after a context-menu
@@ -51,24 +69,22 @@ English and Italian interface text follows the Windows UI language.
 
 ## Requirements and limitations
 
-- Windows 11, x64 Explorer with the standard SysListView32 desktop. Development
-  testing used Windows 11 Pro 26H2, build 26300.9818. Other builds, ARM64 and
-  replacement desktop shells have not been validated.
+- Windows 11 with the standard Explorer SysListView32 desktop. The mod targets
+  x64 and native ARM64 Explorer. Replacement desktop shells are not supported.
 - Local fixed-drive folders only. Virtual desktop items, folder shortcuts,
   network/removable locations and reparse-point folders are excluded, including
   some OneDrive configurations.
 - Up to 100 non-hidden, non-system items are shown. One item can be dragged or
   operated on at a time. Drops into this panel and background context menus
   are not implemented; use the real folder in Explorer to add items.
-- Shell icon extraction and commands run on a dedicated STA thread. Slow icon
-  targets or Shell extensions can delay the panel and mod unloading. Active
-  file operations and Shell calls are allowed to finish before unloading.
+- Slow icon targets or Shell extensions can delay opening or closing the
+  panel. An active Windows file operation may need to finish before unloading.
 - Icon quality depends on each application's resources and the Windows icon
   cache. Recreate stale packaged-app shortcuts from shell:AppsFolder if their
   package updates leave generic icons.
-- The submitter reports successful desktop testing of version 0.10.0 on their
-  Windows 11 PC. Mixed-DPI monitors, high contrast, other Windows builds and
-  third-party Shell extensions have not been individually verified.
+- When moving between monitors, the panel uses the display DPI in addition to
+  the user scale setting. Set the panel scale to 100% for the normal Windows
+  display scale; increase it only if you want a larger panel.
 
 Disabling the mod restores the regular desktop UI. File operations explicitly
 chosen in the panel are real Windows file operations and are not reversed by
@@ -176,7 +192,8 @@ HIMAGELIST icons = nullptr;
 HBRUSH panelBrush = nullptr;
 bool themeInitialized = false, themeApplying = false, themeDark = false, themeHighContrast = false;
 COLORREF themeBackground = CLR_INVALID, themeForeground = CLR_INVALID;
-ULONGLONG themeCheckAt = 0;
+UINT contentDpi = 96;
+bool positioningPanel = false;
 std::vector<std::wstring> targets;
 std::wstring candidate, opened, dismissedFolder;
 RECT anchor{};
@@ -211,6 +228,49 @@ void SuppressDesktopTooltip() {
     SendMessageW(tooltip, TTM_ACTIVATE, FALSE, 0);
     SendMessageW(tooltip, TTM_POP, 0, 0);
 }
+int modalDepth = 0;
+void BeginModal() {
+    if (modalDepth++ == 0 && panel && !SetTimer(panel, ShutdownTimer, 100, nullptr))
+        Wh_Log(L"Could not create modal-loop shutdown timer (%lu)", GetLastError());
+}
+void EndModal() {
+    if (modalDepth > 0 && --modalDepth == 0 && panel) KillTimer(panel, ShutdownTimer);
+}
+class ModalScope {
+public:
+    ModalScope() { BeginModal(); }
+    ~ModalScope() { EndModal(); }
+    ModalScope(const ModalScope&) = delete;
+    ModalScope& operator=(const ModalScope&) = delete;
+};
+BOOL CALLBACK CloseOwnedDialog(HWND window, LPARAM owner) {
+    wchar_t cls[32]{};
+    GetClassNameW(window, cls, ARRAYSIZE(cls));
+    if (GetWindow(window, GW_OWNER) == (HWND)owner && wcscmp(cls, L"#32770") == 0)
+        PostMessageW(window, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+struct PanelMetrics { int width; int height; double scale; };
+PanelMetrics CalculatePanelMetrics(UINT dpi, int percent, const RECT& workArea) {
+    double scale = std::min({percent / 100.0 * dpi / 96.0,
+        (workArea.right - workArea.left) / 400.0,
+        (workArea.bottom - workArea.top) / 600.0});
+    int unit = std::max(1, (int)(100 * scale));
+    return {4 * unit, 6 * unit, unit / 100.0};
+}
+DWORD PollInterval() {
+    if (!opened.empty()) return 80;
+    POINT mouse{};
+    if (desktopList && GetCursorPos(&mouse) && WindowFromPoint(mouse) == desktopList) return 80;
+    return 500;
+}
+class ThreadDpiScope {
+    DPI_AWARENESS_CONTEXT previous;
+public:
+    ThreadDpiScope() : previous(SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {}
+    ~ThreadDpiScope() { if (previous) SetThreadDpiAwarenessContext(previous); }
+};
+
 enum class ViewMode { List, Small, Medium, Large, ExtraLarge };
 ViewMode viewMode = ViewMode::List;
 bool IconGrid() {
@@ -230,7 +290,7 @@ int GridCellWidth() {
     GetClientRect(panel, &client);
     int columns = viewMode == ViewMode::Medium ? 3 : (viewMode == ViewMode::Large ? 2 : 1);
     // Reserve vertical-scrollbar space consistently, even for short folders.
-    int available = std::max(12, (int)client.right - GetSystemMetrics(SM_CXVSCROLL) - 4);
+    int available = std::max(12, (int)client.right - GetSystemMetricsForDpi(SM_CXVSCROLL, contentDpi) - 4);
     if (viewMode == ViewMode::Medium || viewMode == ViewMode::Large)
         return std::max(4, available / columns);
     return std::max(iconPixels + (int)(24 * contentScale), (int)(132 * contentScale));
@@ -266,7 +326,7 @@ void ApplyWindowsTheme(bool force = false) {
     BOOL darkTitle = dark;
     // DWMWA_USE_IMMERSIVE_DARK_MODE (Windows 11). No process-wide theme changes:
     // this code runs inside Explorer and only styles its own popup.
-    DwmSetWindowAttribute(panel, 20, &darkTitle, sizeof(darkTitle));
+    DwmSetWindowAttribute(panel, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkTitle, sizeof(darkTitle));
     // Classic drawing in dark/high-contrast mode respects explicit list colors.
     // Native scrollbar/title-bar details remain under Windows control.
     SetWindowTheme(entries, dark || highContrast ? L"" : L"Explorer", nullptr);
@@ -346,14 +406,17 @@ std::wstring FolderUnderMouse(POINT screen, RECT& bounds) {
     PITEMID_CHILD item = nullptr;
     if (FAILED(folderView->Item(hit.iItem, &item))) return {};
     STRRET name{};
-    wchar_t path[32768]{};
+    PWSTR parsedPath = nullptr;
     HRESULT hr = desktopFolder->GetDisplayNameOf(item, SHGDN_FORPARSING, &name);
-    if (SUCCEEDED(hr)) hr = StrRetToBufW(&name, item, path, ARRAYSIZE(path));
+    if (SUCCEEDED(hr)) hr = StrRetToStrW(&name, item, &parsedPath);
     CoTaskMemFree(item);
-    if (FAILED(hr)) return {};
+    if (FAILED(hr) || !parsedPath) return {};
+    std::wstring path = parsedPath;
+    CoTaskMemFree(parsedPath);
+    if (path.size() < 3) return {};
     // Only local fixed-drive filesystem folders are supported.
-    if (path[1] != L':' || GetDriveTypeW((std::wstring(path, 3)).c_str()) != DRIVE_FIXED) return {};
-    DWORD attributes = GetFileAttributesW(path);
+    if (path[1] != L':' || GetDriveTypeW((path.substr(0, 3)).c_str()) != DRIVE_FIXED) return {};
+    DWORD attributes = GetFileAttributesW(path.c_str());
     if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY) ||
         (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return {};
     bounds = {LVIR_BOUNDS, 0, 0, 0};
@@ -377,6 +440,7 @@ void DismissPanel() {
 void Launch(int index) {
     if (dragging || contextMenuOpen || renaming || GetTickCount64() < ignoreClickUntil) return;
     if (index < 0 || index >= (int)targets.size()) return;
+    ModalScope modal;
     // Copy before hiding. ShellExecuteEx opens .lnk/.url through Windows associations.
     std::wstring target = targets[index];
     HidePanel();
@@ -562,15 +626,23 @@ bool ShowFolder(const std::wstring& path, RECT bounds) {
     ListView_DeleteAllItems(entries);
     targets.clear();
     MONITORINFO monitor{sizeof(monitor)};
-    if (!GetMonitorInfoW(MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST), &monitor)) return false;
+    HMONITOR targetMonitor = MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST);
+    if (!GetMonitorInfoW(targetMonitor, &monitor)) return false;
     const RECT& area = monitor.rcWork;
     // Fit using a single factor, never clamp width and height independently.
-    double scale = std::min({panelScale / 100.0,
-        (area.right - area.left) / 400.0, (area.bottom - area.top) / 600.0});
-    // Exact 2:3 width:height ratio, also after fitting to a small work area.
-    int unit = std::max(1, (int)(100 * scale));
-    int width = 4 * unit, height = 6 * unit;
-    scale = unit / 100.0;
+    // Query the popup's DPI on the destination monitor. Avoid GetDpiForMonitor,
+    // which Microsoft advises against on per-monitor-aware threads.
+    if (MonitorFromWindow(panel, MONITOR_DEFAULTTONEAREST) != targetMonitor) {
+        positioningPanel = true;
+        SetWindowPos(panel, nullptr, area.left, area.top, 0, 0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        positioningPanel = false;
+    }
+    contentDpi = GetDpiForWindow(panel);
+    if (!contentDpi) contentDpi = 96;
+    PanelMetrics metrics = CalculatePanelMetrics(contentDpi, panelScale, area);
+    int width = metrics.width, height = metrics.height;
+    double scale = metrics.scale;
     // Establish the actual client width before allocating/scaling icons.
     SetWindowPos(panel, nullptr, 0, 0, width, height,
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -693,6 +765,7 @@ void BeginEntryDrag(int index) {
             if (FAILED(data->SetData(&format, &medium, TRUE))) GlobalFree(preferred);
         } else GlobalFree(preferred);
     }
+    ModalScope modal;
     dragging = true;
     HidePanel();
     candidate.clear();
@@ -731,7 +804,7 @@ void ResizeEntries(int width, int height) {
     // horizontal scrollbar when the vertical scrollbar appears later.
     if (viewMode == ViewMode::List)
         ListView_SetColumnWidth(entries, 0,
-            std::max(1, width - GetSystemMetrics(SM_CXVSCROLL) - 4));
+            std::max(1, width - GetSystemMetricsForDpi(SM_CXVSCROLL, contentDpi) - 4));
 }
 
 ViewMode QuickMode(int index) {
@@ -794,10 +867,6 @@ bool DrawQuickButton(DRAWITEMSTRUCT* item) {
 void Tick() {
     if (dragging || contextMenuOpen || renaming) return;
     ULONGLONG now = GetTickCount64();
-    if (now >= themeCheckAt) {
-        ApplyWindowsTheme();
-        themeCheckAt = now + 1000;
-    }
     POINT mouse{};
     GetCursorPos(&mouse);
     bool escapeDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
@@ -839,6 +908,7 @@ void Tick() {
 
 void ShowEntryContextMenu(int index, POINT point) {
     if (dragging || contextMenuOpen || renaming || index < 0 || index >= (int)targets.size()) return;
+    ModalScope modal;
     std::wstring target = targets[index];
     std::wstring folder = opened;
     RECT bounds = anchor;
@@ -900,7 +970,8 @@ void ShowEntryContextMenu(int index, POINT point) {
     contextMenuOpen = false;
     outsideSince = 0;
     ignoreClickUntil = GetTickCount64() + 350;
-    if (FAILED(hr)) {
+    if (FAILED(hr) && hr != E_ABORT && hr != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+        ModalScope errorDialog;
         Wh_Log(L"Context menu failed: 0x%08X", (unsigned)hr);
         MessageBoxW(panel, Text(L"Windows could not complete this operation.", L"Windows non ha potuto completare questa operazione."),
             L"Desktop Folder Groups", MB_OK | MB_ICONWARNING);
@@ -914,6 +985,8 @@ void ShowEntryContextMenu(int index, POINT point) {
 }
 
 bool EndEntryRename(NMLVDISPINFOW* change) {
+    ModalScope action;
+    if (renaming) { renaming = false; EndModal(); }
     bool renamed = false;
     int index = change->item.iItem;
     if (change->item.pszText && change->item.pszText[0] && index >= 0 && index < (int)targets.size()) {
@@ -961,6 +1034,7 @@ LRESULT CALLBACK PanelProc(HWND window, UINT message, WPARAM wParam, LPARAM lPar
                 WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
                 // OLE and popup menus run nested message loops. Give those
                 // loops a cancellation path before waiting for the STA to exit.
+                EnumThreadWindows(GetCurrentThreadId(), CloseOwnedDialog, (LPARAM)panel);
                 if (contextMenuOpen) EndMenu();
                 if (renaming) SendMessageW(entries, LVM_CANCELEDITLABEL, 0, 0);
                 if (dragging) PostMessageW(entries, WM_KEYDOWN, VK_ESCAPE, 0);
@@ -1015,6 +1089,12 @@ LRESULT CALLBACK PanelProc(HWND window, UINT message, WPARAM wParam, LPARAM lPar
             return 0;
         case WM_CLOSE: DismissPanel(); return 0;
         case WM_DISPLAYCHANGE: HidePanel(); return 0;
+        case WM_DPICHANGED:
+            contentDpi = HIWORD(wParam);
+            // ShowFolder handles cross-monitor placement before calculating size.
+            // Other DPI changes dismiss the anchored panel; next hover rebuilds it.
+            if (!positioningPanel) HidePanel();
+            return 0;
         case WM_NOTIFY: {
             auto header = (NMHDR*)lParam;
             if (header->hwndFrom == entries && header->code == NM_RCLICK) {
@@ -1027,6 +1107,7 @@ LRESULT CALLBACK PanelProc(HWND window, UINT message, WPARAM wParam, LPARAM lPar
             if (header->hwndFrom == entries && header->code == LVN_BEGINLABELEDITW) {
                 if (dragging || contextMenuOpen) return TRUE;
                 renaming = true;
+                BeginModal();
                 return FALSE;
             }
             if (header->hwndFrom == entries && header->code == LVN_ENDLABELEDITW) {
@@ -1052,6 +1133,7 @@ LRESULT CALLBACK PanelProc(HWND window, UINT message, WPARAM wParam, LPARAM lPar
 }
 
 DWORD WINAPI Run(void*) {
+    ThreadDpiScope dpiScope;
     HRESULT com = OleInitialize(nullptr);
     if (FAILED(com)) { Wh_Log(L"OLE initialization failed"); return 1; }
     HINSTANCE instance = nullptr;
@@ -1074,9 +1156,6 @@ DWORD WINAPI Run(void*) {
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | viewStyle | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_EDITLABELS,
         0, 0, 0, 0, panel, (HMENU)1, instance, nullptr);
     if (entries) {
-        if (!SetTimer(panel, ShutdownTimer, 100, nullptr)) {
-            Wh_Log(L"Could not create modal-loop shutdown timer (%lu)", GetLastError());
-        }
         ApplyWindowsTheme();
         const wchar_t* labels[] = {Text(L"Large icons", L"Icone grandi"), Text(L"Medium icons", L"Icone medie"), Text(L"List", L"Elenco")};
         for (int i = 0; i < 3; i++) {
@@ -1099,7 +1178,7 @@ DWORD WINAPI Run(void*) {
         ConnectDesktop();
         // A waitable stop event ensures unloading wakes the UI thread without posting callbacks.
         while (true) {
-            DWORD wait = MsgWaitForMultipleObjects(1, &stopEvent, FALSE, 80, QS_ALLINPUT);
+            DWORD wait = MsgWaitForMultipleObjects(1, &stopEvent, FALSE, PollInterval(), QS_ALLINPUT);
             if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
             MSG msg;
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
