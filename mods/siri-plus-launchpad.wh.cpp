@@ -27,9 +27,10 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 ## Highlights
 
 - **Four modes**: Original Siri (default), Floating, Window and Fullscreen
-- **Live glass**: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus an experimental liquid glass with refraction in the Siri modes
+- **Live glass**: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus a liquid glass with refraction in the Siri modes
 - **Search everything at once**: type in the bar and apps, actions, folders and files show up together in one list, like Spotlight or Flow Launcher, or pick a category (Apps, Files, Actions, Clipboard) to search only there
 - **Calculator**: type a calculation and its result shows first; Enter copies it
+- **Windows Settings**: type *display*, *startup apps*, *update*, *wi-fi*... and the matching Settings page opens
 - **App tabs**: All, automatic categories and up to 6 tabs of your own
 - **Recent apps row**: recently opened or installed apps (or the most used ones) on top
 - **Power options**: type *shut down*, *restart*, *sleep*, *lock* or *sign out*, or the floating power button (off by default; turn it on in *Siri bar*)
@@ -104,6 +105,8 @@ A search bar in the macOS 27 style.
   - Then up to **6 tabs of your own**, for example "Games".
 - **First row**: recently opened or installed apps, or the most used ones (configurable), separated from the rest by a thin line.
 - **Actions**: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin. Shut down works like Windows' own (fast startup when it is on) and warns before signing off other users who are still signed in.
+- **Windows Settings**: in the general search, about 60 Settings pages (Display, Startup apps, Personalization, Windows Update, Wi-Fi, Bluetooth, Privacy, Accessibility...) are found by name or by what you would type to look for them (*screen*, *wallpaper*, *boot*...), in English or in Portuguese, and open with Enter. They show under their own title, up to 4 at a time, and follow the **Actions** tab being on.
+- **Open file location**: right-click a file or folder found by the search and choose *Open file location* to see it in File Explorer, already selected.
 
 ### Floating
 The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble. Hover the category icon at the start of the bar and it turns into a back arrow, as in Original Siri: a click clears the search, goes back to Applications and closes the results panel.
@@ -148,7 +151,7 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 
 ## Settings panel
 - Click the **⋯** button at the end of the bar (every mode). A window in the style of macOS System Settings grows out of the bar: the sections on the left, with a search field on top, and the settings of the chosen section on the right. Every change applies at once.
-- Sections: **General**, **Appearance**, **Custom theme**, **Search** (search everything, Files and Clipboard), **Siri bar**, **Results size**, **Window and Fullscreen**, **Animations**, **Keyboard shortcuts**, **Apps and icons**, **Performance** and **Backup and defaults**. Every setting has a short line saying what it does, and the ones the chosen mode doesn't use are dimmed with a note.
+- Sections: **General**, **Appearance**, **Custom theme**, **Search** (search everything, Files and Clipboard), **Siri bar**, **Results size**, **Window and Fullscreen**, **Animations**, **Keyboard shortcuts**, **Apps and icons**, **Performance** and **Backup and defaults**. Every setting has a short line saying what it does, and the ones that don't apply to what you chose (the mode, the theme, the glass style or a switch they depend on) are dimmed, say why and can't be changed until they do.
 - Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.
 - **Theme defaults** (Appearance) brings back the chosen theme's own look. **Restore all defaults** puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.
 - **Back up** saves everything to a `.siribackup` file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. **Restore a backup** brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.
@@ -169,8 +172,8 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 | ① Mode | Original Siri (default), Floating, Window, Fullscreen |
 | ② Theme | Clear glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom |
 | Language | Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano, 中文（简体） |
-| Performance | **Light (faster)** turns off liquid glass, the blur behind menus and the shadows and keeps it to 60 frames per second, for laptops and slower PCs; a frame rate limit (automatic, 120, 60 or 30); and *Draw with*: the graphics card (default) or the processor (experimental, for laptops with two graphics cards) |
-| ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
+| Performance | **Light (faster)** works with any theme and is made so slower PCs can enjoy the mod smoothly: it turns off liquid glass, the live blur, the blur behind menus and the shadows, keeps it to 60 frames per second and calms the animations; a frame rate limit (automatic, 120, 60 or 30); and *Draw with*: the graphics card (default) or the processor (experimental, for laptops with two graphics cards) |
+| ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), glass style (translucent glass with a live blur, or liquid glass for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
 | ④ Custom theme | Color, opacity, dark-to-light gradient, border width, color and opacity |
 | ⑤ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
 | ⑥ Floating and Original Siri | Bar size (96 px tall by default), results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, search everything when typing, power options when typing, floating power button (off by default) and its side (left or right of the bar), first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
@@ -295,8 +298,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
 - performance: normal
   $name: Performance
   $name:pt-BR: Desempenho
-  $description: "Light: no liquid glass, no blur behind menus, no shadows, and at most 60 frames per second. For laptops and slower PCs"
-  $description:pt-BR: "Leve: sem vidro líquido, sem desfoque atrás dos menus, sem sombras e no máximo 60 quadros por segundo. Para notebooks e PCs mais lentos"
+  $description: "Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations"
+  $description:pt-BR: "O modo Leve funciona com qualquer tema e foi feito para que PCs menos potentes aproveitem o mod com fluidez: sem vidro líquido, sem desfoque ao vivo, sem desfoque atrás dos menus, sem sombras, no máximo 60 quadros por segundo e animações mais calmas"
   $options:
   - normal: Normal
   - light: Light (faster)
@@ -385,11 +388,11 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name: "Clear glass and Siri themes: glass style"
     $name:pt-BR: "Temas Vidro transparente e Siri: estilo do vidro"
     $options:
-    - frosted: Frosted (live blur)
-    - liquid: Liquid (refraction at the edges, experimental; Floating and Original Siri only)
+    - frosted: Translucent glass
+    - liquid: Liquid glass (refraction at the edges; Floating and Original Siri only)
     $options:pt-BR:
-    - frosted: Fosco (desfoque ao vivo)
-    - liquid: Líquido (refração nas bordas, experimental; só Flutuante e Siri original)
+    - frosted: Vidro translúcido
+    - liquid: Vidro líquido (refração nas bordas; só Flutuante e Siri original)
   - refraction: 60
     $name: "Liquid glass: refraction at the edges (%)"
     $name:pt-BR: "Vidro líquido: refração nas bordas (%)"
@@ -873,6 +876,7 @@ const UiTranslation kUiTranslations[] = {
     {L"Change icon...", L"Alterar ícone...", L"Cambiar icono...", L"Changer l’icône...", L"Symbol ändern...", L"Cambia icona..."},
     {L"Reset icon", L"Redefinir ícone", L"Restablecer icono", L"Réinitialiser l’icône", L"Symbol zurücksetzen", L"Reimposta icona"},
     {L"Uninstall", L"Desinstalar", L"Desinstalar", L"Désinstaller", L"Deinstallieren", L"Disinstalla"},
+    {L"Open file location", L"Abrir local do arquivo", L"Abrir ubicación del archivo", L"Ouvrir l’emplacement du fichier", L"Dateispeicherort öffnen", L"Apri percorso file"},
     {L"Remove from history", L"Remover do histórico", L"Quitar del historial", L"Retirer de l’historique", L"Aus Verlauf entfernen", L"Rimuovi dalla cronologia"},
     {L"Remove this item", L"Remover este item", L"Quitar este elemento", L"Retirer cet élément", L"Dieses Element entfernen", L"Rimuovi questo elemento"},
     {L"Clear clipboard", L"Limpar área de transferência", L"Borrar portapapeles", L"Vider le presse-papiers", L"Zwischenablage leeren", L"Svuota appunti"},
@@ -973,6 +977,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Change icon...", L"更改图标..."},
     {L"Reset icon", L"恢复图标"},
     {L"Uninstall", L"卸载"},
+    {L"Open file location", L"打开文件所在的位置"},
     {L"Remove from history", L"从历史记录中删除"},
     {L"Remove this item", L"删除此项"},
     {L"Clear clipboard", L"清空剪贴板"},
@@ -1022,6 +1027,57 @@ const ZhTranslation kZhTranslations[] = {
     {L"Hold an app to select it", L"按住一个应用以选择它"},
     {L"Everything did not reply", L"Everything 没有响应"},
     {L"Calculator", L"计算器"},
+    {L"Windows Settings", L"Windows 设置"},
+    {L"Display", L"显示"},
+    {L"Night light", L"夜间模式"},
+    {L"Sound", L"声音"},
+    {L"Notifications", L"通知"},
+    {L"Power & battery", L"电源和电池"},
+    {L"Storage", L"存储"},
+    {L"Multitasking", L"多任务处理"},
+    {L"About this PC", L"关于"},
+    {L"Troubleshoot", L"疑难解答"},
+    {L"Recovery", L"恢复"},
+    {L"Activation", L"激活"},
+    {L"Remote Desktop", L"远程桌面"},
+    {L"Bluetooth & devices", L"蓝牙和设备"},
+    {L"Printers & scanners", L"打印机和扫描仪"},
+    {L"Typing", L"键入"},
+    {L"AutoPlay", L"自动播放"},
+    {L"Network & internet", L"网络和 Internet"},
+    {L"Airplane mode", L"飞行模式"},
+    {L"Mobile hotspot", L"移动热点"},
+    {L"Personalization", L"个性化"},
+    {L"Background", L"背景"},
+    {L"Colors", L"颜色"},
+    {L"Themes", L"主题"},
+    {L"Lock screen", L"锁屏界面"},
+    {L"Taskbar", L"任务栏"},
+    {L"Start", L"开始"},
+    {L"Fonts", L"字体"},
+    {L"Installed apps", L"已安装的应用"},
+    {L"Default apps", L"默认应用"},
+    {L"Startup apps", L"启动应用"},
+    {L"Optional features", L"可选功能"},
+    {L"Your account", L"你的账户"},
+    {L"Sign-in options", L"登录选项"},
+    {L"Date & time", L"日期和时间"},
+    {L"Language & region", L"语言和区域"},
+    {L"Speech", L"语音"},
+    {L"Game Bar", L"游戏栏"},
+    {L"Game Mode", L"游戏模式"},
+    {L"Accessibility", L"辅助功能"},
+    {L"Narrator", L"讲述人"},
+    {L"Magnifier", L"放大镜"},
+    {L"Privacy & security", L"隐私和安全性"},
+    {L"Camera privacy", L"相机隐私"},
+    {L"Microphone privacy", L"麦克风隐私"},
+    {L"Location privacy", L"位置隐私"},
+    {L"Windows Security", L"Windows 安全中心"},
+    {L"Find my device", L"查找我的设备"},
+    {L"For developers", L"开发者选项"},
+    {L"Update history", L"更新历史记录"},
+    {L"Delivery Optimization", L"传递优化"},
     {L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)", L"输入算式（2+2、15% * 80、(3+4)^2），结果会显示在最前面；按 Enter 复制。以 = 或 calc 开头可始终进行计算（=5-3）"},
     {L"Enter copies the result", L"按 Enter 复制结果"},
     {L"How the launcher looks. Original Siri: a bar with a categories menu. Floating: a bar with a results box. Window and Fullscreen: a grid of apps, like Launchpad. Used the next time it opens", L"启动器的外观。原版 Siri：带分类菜单的搜索栏。浮动：带结果框的搜索栏。窗口和全屏：像 Launchpad 一样的应用网格。下次打开时生效"},
@@ -1036,7 +1092,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Menus", L"菜单"},
     {L"How the item under the mouse is highlighted (Clear glass theme). Colored is like macOS; Frosted lets the glass show through", L"鼠标所指项目的高亮方式（透明玻璃主题）。彩色与 macOS 相同；磨砂会透出玻璃"},
     {L"How blurred the icons behind a right-click menu look, so its text is easy to read. 100 = default, 0 = none", L"右键菜单背后图标的模糊程度，让菜单文字更易阅读。100 = 默认，0 = 无"},
-    {L"Frosted: a soft blur. Liquid: the background bends at the edges, like macOS 26 (heavier). Clear glass and Siri themes. Used the next time it opens", L"磨砂：柔和的模糊。液态：背景在边缘弯曲，像 macOS 26（更耗性能）。适用于透明玻璃和 Siri 主题。下次打开时生效"},
+    {L"Translucent glass: flat glass with a soft live blur. Liquid glass: the background bends at the edges, like macOS 26 (heavier). For the Clear glass and Siri themes; applies the next time it opens", L"半透明玻璃：平直的玻璃，带柔和的实时模糊。液态玻璃：背景在边缘弯曲，像 macOS 26（更耗性能）。适用于透明玻璃和 Siri 主题；下次打开时生效"},
     {L"How much the liquid glass bends what is behind it", L"液态玻璃对背后内容的弯曲程度"},
     {L"Videos move inside the glass, but the launcher no longer shows in screenshots and recordings. Used the next time it opens", L"视频会在玻璃中流动，但启动器将不再出现在截图和录屏中。下次打开时生效"},
     {L"The color of the glass", L"玻璃的颜色"},
@@ -1097,7 +1153,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Backup and defaults", L"备份和默认设置"},
     {L"Save everything to a file, bring it back, or start over", L"把所有内容保存到文件、恢复，或从头开始"},
     {L"Performance", L"性能"},
-    {L"Light: no liquid glass, no blur behind menus, no shadows, at most 60 frames per second", L"轻量：无液态玻璃、菜单后无模糊、无阴影，最多每秒 60 帧"},
+    {L"Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations", L"轻量模式适用于任何主题，专为配置较低的电脑设计，让它们也能流畅使用本模组：无液态玻璃、无实时模糊、菜单后无模糊、无阴影，最多每秒 60 帧，动画更平缓"},
     {L"Normal", L"正常"},
     {L"Light (faster)", L"轻量（更快）"},
     {L"Frame rate limit", L"帧率限制"},
@@ -1215,8 +1271,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Dark", L"深色"},
     {L"OLED (deep black)", L"OLED（纯黑）"},
     {L"Custom", L"自定义"},
-    {L"Frosted (live blur)", L"磨砂（实时模糊）"},
-    {L"Liquid (experimental)", L"液态（实验性）"},
+    {L"Translucent glass", L"半透明玻璃"},
     {L"Until Windows restarts", L"直到 Windows 重启"},
     {L"15 minutes", L"15 分钟"},
     {L"1 hour", L"1 小时"},
@@ -1326,6 +1381,20 @@ const ZhTranslation kZhTranslations[] = {
     {L"Language", L"语言"},
     {L"Automatic follows the language of Windows", L"自动跟随 Windows 的语言"},
     {L"Automatic (Windows)", L"自动（Windows）"},
+    {L"Not used by the Custom theme", L"自定义主题不使用"},
+    {L"Turned off by Light performance mode", L"已被轻量性能模式关闭"},
+    {L"Only for the Clear glass theme", L"仅适用于透明玻璃主题"},
+    {L"Only with the Colored or Frosted color selection", L"仅适用于彩色或磨砂色选中效果"},
+    {L"Needs a theme with glass: Clear glass, Siri gradient, or Light, Dark and OLED with the glass effect", L"需要带玻璃的主题：透明玻璃、Siri 渐变，或启用玻璃效果的浅色、深色和 OLED"},
+    {L"Only with the Liquid glass style", L"仅适用于液态玻璃样式"},
+    {L"Only for the Light, Dark and OLED themes", L"仅适用于浅色、深色和 OLED 主题"},
+    {L"Turn on the floating power button first", L"请先开启浮动电源按钮"},
+    {L"Turn on Show power button first", L"请先开启“显示电源按钮”"},
+    {L"Turn on the Files category first", L"请先开启文件分类"},
+    {L"Turn on the Clipboard category first", L"请先开启剪贴板分类"},
+    {L"Only used when the theme is Custom", L"仅在主题为自定义时使用"},
+    {L"Flat glass with a soft live blur behind it. Light on the PC. Applies the next time it opens", L"平直的玻璃，背后带柔和的实时模糊。对电脑负担小。下次打开时生效"},
+    {L"The background bends at the edges, like macOS 26. Heavier on the PC; Floating and Original Siri modes. Applies the next time it opens", L"背景在边缘弯曲，像 macOS 26。对电脑负担较大；适用于浮动和原版 Siri 模式。下次打开时生效"},
 };
 PCWSTR ZhText(PCWSTR en) {
     static const std::unordered_map<std::wstring_view, PCWSTR> byEnglish = [] {   // built once, thread-safely
@@ -1396,7 +1465,7 @@ enum { kMenuRename = 1, kMenuUndoFolder, kMenuNewFolder, kMenuSelect, kMenuSelec
        kMenuLock, kMenuSleep, kMenuRestart, kMenuShutdown, kMenuSignOut,
        kMenuHistRemove, kMenuHistClear, kMenuTabApps, kMenuTabFiles, kMenuTabClipboard, kMenuTabActions,
        kMenuNewTab, kMenuAddApps, kMenuRenameTab, kMenuDeleteTab, kMenuRemoveFromTab, kMenuRestoreTabs,
-       kMenuTextCut, kMenuTextCopy, kMenuTextPaste, kMenuTextDeleteAll, kMenuTextSelectAll, kMenuClipRemove, kMenuClipClear, kMenuGhIcon, kMenuBarCenter };
+       kMenuTextCut, kMenuTextCopy, kMenuTextPaste, kMenuTextDeleteAll, kMenuTextSelectAll, kMenuClipRemove, kMenuClipClear, kMenuGhIcon, kMenuBarCenter, kMenuOpenLocation };
 constexpr int kMenuAddToTab = 300;   // + user tab index
 
 constexpr GUID kBhidEnumItems = {0x94f60519, 0x2850, 0x4924, {0xaa, 0x5a, 0xd1, 0x5e, 0x84, 0x86, 0x80, 0x39}};
@@ -1442,7 +1511,7 @@ struct Settings {
     bool glassLiquid = false;      // Clear glass theme: refraction (liquid glass) instead of the live blur
     int refraction = 60;          // liquid glass: how far the edges bend the background (%)
     bool liveGlass = false;       // liquid glass: picture retaken while open (hides the launcher from captures)
-    bool light = false;           // light mode: no liquid glass, no blur behind menus, no shadows, at most 60 fps
+    bool light = false;           // light mode (any theme): no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 fps
     int maxFps = 0;               // frame rate limit (0 = the monitor's)
     bool cpuDraw = false;         // draw with the processor (no graphics card)
     bool glassEffect = true;      // Light, Dark and OLED themes: glass optics (sheen, edge thickness, beveled rim)
@@ -1607,6 +1676,57 @@ struct CfgSection { PCWSTR en, pt, descEn, descPt, glyph; UINT32 color; };
 struct CfgTranslation { PCWSTR en, es, fr, de, it; };
 const CfgTranslation kCfgTranslations[] = {
     {L"Calculator", L"Calculadora", L"Calculatrice", L"Rechner", L"Calcolatrice"},
+    {L"Windows Settings", L"Configuración de Windows", L"Paramètres Windows", L"Windows-Einstellungen", L"Impostazioni di Windows"},
+    {L"Display", L"Pantalla", L"Affichage", L"Anzeige", L"Schermo"},
+    {L"Night light", L"Luz nocturna", L"Éclairage nocturne", L"Nachtmodus", L"Luce notturna"},
+    {L"Sound", L"Sonido", L"Son", L"Sound", L"Suoni"},
+    {L"Notifications", L"Notificaciones", L"Notifications", L"Benachrichtigungen", L"Notifiche"},
+    {L"Power & battery", L"Energía y batería", L"Alimentation et batterie", L"Netz- & Schlafmodus", L"Alimentazione e batteria"},
+    {L"Storage", L"Almacenamiento", L"Stockage", L"Speicher", L"Archiviazione"},
+    {L"Multitasking", L"Multitarea", L"Multitâche", L"Multitasking", L"Multitasking"},
+    {L"About this PC", L"Acerca de", L"À propos", L"Info", L"Informazioni"},
+    {L"Troubleshoot", L"Solucionar problemas", L"Résolution des problèmes", L"Problembehandlung", L"Risoluzione dei problemi"},
+    {L"Recovery", L"Recuperación", L"Récupération", L"Wiederherstellung", L"Ripristino"},
+    {L"Activation", L"Activación", L"Activation", L"Aktivierung", L"Attivazione"},
+    {L"Remote Desktop", L"Escritorio remoto", L"Bureau à distance", L"Remotedesktop", L"Desktop remoto"},
+    {L"Bluetooth & devices", L"Bluetooth y dispositivos", L"Bluetooth et appareils", L"Bluetooth & Geräte", L"Bluetooth e dispositivi"},
+    {L"Printers & scanners", L"Impresoras y escáneres", L"Imprimantes et scanners", L"Drucker & Scanner", L"Stampanti e scanner"},
+    {L"Typing", L"Escritura", L"Saisie", L"Eingabe", L"Digitazione"},
+    {L"AutoPlay", L"Reproducción automática", L"Exécution automatique", L"Automatische Wiedergabe", L"Riproduzione automatica"},
+    {L"Network & internet", L"Red e Internet", L"Réseau et Internet", L"Netzwerk & Internet", L"Rete e Internet"},
+    {L"Airplane mode", L"Modo avión", L"Mode avion", L"Flugzeugmodus", L"Modalità aereo"},
+    {L"Mobile hotspot", L"Zona con cobertura inalámbrica", L"Point d'accès mobile", L"Mobiler Hotspot", L"Hotspot mobile"},
+    {L"Personalization", L"Personalización", L"Personnalisation", L"Personalisierung", L"Personalizzazione"},
+    {L"Background", L"Fondo", L"Arrière-plan", L"Hintergrund", L"Sfondo"},
+    {L"Colors", L"Colores", L"Couleurs", L"Farben", L"Colori"},
+    {L"Themes", L"Temas", L"Thèmes", L"Designs", L"Temi"},
+    {L"Lock screen", L"Pantalla de bloqueo", L"Écran de verrouillage", L"Sperrbildschirm", L"Schermata di blocco"},
+    {L"Taskbar", L"Barra de tareas", L"Barre des tâches", L"Taskleiste", L"Barra delle applicazioni"},
+    {L"Start", L"Inicio", L"Démarrer", L"Start", L"Start"},
+    {L"Fonts", L"Fuentes", L"Polices", L"Schriftarten", L"Caratteri"},
+    {L"Installed apps", L"Aplicaciones instaladas", L"Applications installées", L"Installierte Apps", L"App installate"},
+    {L"Default apps", L"Aplicaciones predeterminadas", L"Applications par défaut", L"Standard-Apps", L"App predefinite"},
+    {L"Startup apps", L"Aplicaciones de inicio", L"Applications au démarrage", L"Autostart-Apps", L"App di avvio"},
+    {L"Optional features", L"Características opcionales", L"Fonctionnalités facultatives", L"Optionale Features", L"Funzionalità facoltative"},
+    {L"Your account", L"Tu cuenta", L"Votre compte", L"Ihr Konto", L"Il tuo account"},
+    {L"Sign-in options", L"Opciones de inicio de sesión", L"Options de connexion", L"Anmeldeoptionen", L"Opzioni di accesso"},
+    {L"Date & time", L"Fecha y hora", L"Date et heure", L"Datum & Uhrzeit", L"Data e ora"},
+    {L"Language & region", L"Idioma y región", L"Langue et région", L"Sprache & Region", L"Lingua e area geografica"},
+    {L"Speech", L"Voz", L"Voix", L"Sprache", L"Voce"},
+    {L"Game Bar", L"Barra de juegos", L"Barre de jeu", L"Xbox Game Bar", L"Barra di gioco"},
+    {L"Game Mode", L"Modo de juego", L"Mode Jeu", L"Spielmodus", L"Modalità gioco"},
+    {L"Accessibility", L"Accesibilidad", L"Accessibilité", L"Barrierefreiheit", L"Accessibilità"},
+    {L"Narrator", L"Narrador", L"Narrateur", L"Sprachausgabe", L"Assistente vocale"},
+    {L"Magnifier", L"Lupa", L"Loupe", L"Bildschirmlupe", L"Lente di ingrandimento"},
+    {L"Privacy & security", L"Privacidad y seguridad", L"Confidentialité et sécurité", L"Datenschutz & Sicherheit", L"Privacy e sicurezza"},
+    {L"Camera privacy", L"Privacidad de la cámara", L"Confidentialité de la caméra", L"Datenschutz Kamera", L"Privacy fotocamera"},
+    {L"Microphone privacy", L"Privacidad del micrófono", L"Confidentialité du microphone", L"Datenschutz Mikrofon", L"Privacy microfono"},
+    {L"Location privacy", L"Privacidad de la ubicación", L"Confidentialité de la position", L"Datenschutz Standort", L"Privacy posizione"},
+    {L"Windows Security", L"Seguridad de Windows", L"Sécurité Windows", L"Windows-Sicherheit", L"Sicurezza di Windows"},
+    {L"Find my device", L"Encontrar mi dispositivo", L"Localiser mon appareil", L"Mein Gerät suchen", L"Trova il mio dispositivo"},
+    {L"For developers", L"Para programadores", L"Pour les développeurs", L"Für Entwickler", L"Per sviluppatori"},
+    {L"Update history", L"Historial de actualizaciones", L"Historique des mises à jour", L"Updateverlauf", L"Cronologia aggiornamenti"},
+    {L"Delivery Optimization", L"Optimización de distribución", L"Optimisation de la distribution", L"Übermittlungsoptimierung", L"Ottimizzazione recapito"},
     {L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)",
      L"Escribe una cuenta (2+2, 15% * 80, (3+4)^2) y su resultado aparece primero; Enter lo copia. Empieza con = o calc para calcular siempre (=5-3)",
      L"Tapez un calcul (2+2, 15% * 80, (3+4)^2) et son résultat s’affiche en premier ; Entrée le copie. Commencez par = ou calc pour toujours calculer (=5-3)",
@@ -1673,11 +1793,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Le flou des icônes derrière un menu contextuel, pour que son texte se lise bien. 100 = par défaut, 0 = aucun",
      L"Wie unscharf die Symbole hinter einem Kontextmenü sind, damit sein Text gut lesbar ist. 100 = Standard, 0 = keine",
      L"Quanto appaiono sfocate le icone dietro un menu contestuale, perché il testo si legga bene. 100 = predefinito, 0 = nessuna"},
-    {L"Frosted: a soft blur. Liquid: the background bends at the edges, like macOS 26 (heavier). Clear glass and Siri themes. Used the next time it opens",
-     L"Esmerilado: un desenfoque suave. Líquido: el fondo se curva en los bordes, como en macOS 26 (más pesado). Temas Cristal transparente y Siri. Se usa la próxima vez que se abra",
-     L"Givré : un flou doux. Liquide : le fond se courbe sur les bords, comme sur macOS 26 (plus lourd). Thèmes Verre transparent et Siri. Appliqué à la prochaine ouverture",
-     L"Mattiert: eine weiche Unschärfe. Flüssig: Der Hintergrund biegt sich an den Rändern, wie bei macOS 26 (aufwendiger). Designs Klares Glas und Siri. Gilt beim nächsten Öffnen",
-     L"Satinato: una sfocatura morbida. Liquido: lo sfondo si curva ai bordi, come su macOS 26 (più pesante). Temi Vetro trasparente e Siri. Vale alla prossima apertura"},
+    {L"Translucent glass: flat glass with a soft live blur. Liquid glass: the background bends at the edges, like macOS 26 (heavier). For the Clear glass and Siri themes; applies the next time it opens",
+     L"Cristal translúcido: cristal plano con un desenfoque suave en vivo. Cristal líquido: el fondo se curva en los bordes, como en macOS 26 (más pesado). Para los temas Cristal transparente y Siri; se aplica la próxima vez que se abra",
+     L"Verre translucide : verre plat avec un flou doux en direct. Verre liquide : le fond se courbe sur les bords, comme sur macOS 26 (plus lourd). Pour les thèmes Verre transparent et Siri ; appliqué à la prochaine ouverture",
+     L"Transluzentes Glas: flaches Glas mit weicher Live-Unschärfe. Flüssigglas: Der Hintergrund biegt sich an den Rändern, wie bei macOS 26 (aufwendiger). Für die Designs Klares Glas und Siri; gilt beim nächsten Öffnen",
+     L"Vetro traslucido: vetro piatto con una sfocatura morbida dal vivo. Vetro liquido: lo sfondo si curva ai bordi, come su macOS 26 (più pesante). Per i temi Vetro trasparente e Siri; vale alla prossima apertura"},
     {L"How much the liquid glass bends what is behind it",
      L"Cuánto curva el cristal líquido lo que hay detrás",
      L"À quel point le verre liquide courbe ce qui est derrière",
@@ -1979,11 +2099,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Alles in einer Datei sichern, zurückholen oder neu anfangen",
      L"Salvare tutto in un file, ripristinarlo o ricominciare da capo"},
     {L"Performance", L"Rendimiento", L"Performances", L"Leistung", L"Prestazioni"},
-    {L"Light: no liquid glass, no blur behind menus, no shadows, at most 60 frames per second",
-     L"Ligero: sin cristal líquido, sin desenfoque tras los menús, sin sombras, como máximo 60 fotogramas por segundo",
-     L"Léger : sans verre liquide, sans flou derrière les menus, sans ombres, 60 images par seconde au plus",
-     L"Leicht: kein Flüssigglas, keine Unschärfe hinter Menüs, keine Schatten, höchstens 60 Bilder pro Sekunde",
-     L"Leggero: niente vetro liquido, niente sfocatura dietro i menu, niente ombre, al massimo 60 fotogrammi al secondo"},
+    {L"Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations",
+     L"El modo Ligero funciona con cualquier tema y está hecho para que los PC menos potentes disfruten del mod con fluidez: sin cristal líquido, sin desenfoque en vivo, sin desenfoque tras los menús, sin sombras, como máximo 60 fotogramas por segundo y animaciones más sencillas",
+     L"Le mode Léger fonctionne avec tous les thèmes et permet aux PC moins puissants de profiter du mod avec fluidité : sans verre liquide, sans flou en direct, sans flou derrière les menus, sans ombres, 60 images par seconde au plus et animations plus sobres",
+     L"Der Leicht-Modus funktioniert mit jedem Design und ist dafür gemacht, dass auch schwächere PCs den Mod flüssig erleben: kein Flüssigglas, keine Live-Unschärfe, keine Unschärfe hinter Menüs, keine Schatten, höchstens 60 Bilder pro Sekunde und ruhigere Animationen",
+     L"La modalità Leggero funziona con qualsiasi tema ed è pensata perché anche i PC meno potenti godano del mod con fluidità: niente vetro liquido, niente sfocatura dal vivo, niente sfocatura dietro i menu, niente ombre, al massimo 60 fotogrammi al secondo e animazioni più sobrie"},
     {L"Normal", L"Normal", L"Normal", L"Normal", L"Normale"},
     {L"Light (faster)", L"Ligero (más rápido)", L"Léger (plus rapide)", L"Leicht (schneller)", L"Leggero (più veloce)"},
     {L"Frame rate limit", L"Límite de fotogramas por segundo", L"Limite d’images par seconde", L"Bildratenbegrenzung", L"Limite di fotogrammi al secondo"},
@@ -2507,16 +2627,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Personnalisé",
      L"Eigenes",
      L"Personalizzato"},
-    {L"Frosted (live blur)",
-     L"Esmerilado (desenfoque en vivo)",
-     L"Givré (flou en direct)",
-     L"Milchglas (Live-Unschärfe)",
-     L"Smerigliato (sfocatura dal vivo)"},
-    {L"Liquid (experimental)",
-     L"Líquido (experimental)",
-     L"Liquide (expérimental)",
-     L"Flüssig (experimentell)",
-     L"Liquido (sperimentale)"},
+    {L"Translucent glass",
+     L"Cristal translúcido",
+     L"Verre translucide",
+     L"Transluzentes Glas",
+     L"Vetro traslucido"},
     {L"Until Windows restarts",
      L"Hasta reiniciar Windows",
      L"Jusqu’au redémarrage de Windows",
@@ -3067,6 +3182,76 @@ const CfgTranslation kCfgTranslations[] = {
      L"Automatique (Windows)",
      L"Automatisch (Windows)",
      L"Automatico (Windows)"},
+    {L"Not used by the Custom theme",
+     L"No lo usa el tema Personalizado",
+     L"Non utilisé par le thème Personnalisé",
+     L"Wird vom eigenen Design nicht verwendet",
+     L"Non usato dal tema Personalizzato"},
+    {L"Turned off by Light performance mode",
+     L"Desactivado por el modo de rendimiento Ligero",
+     L"Désactivé par le mode de performances Léger",
+     L"Vom Leistungsmodus „Leicht“ ausgeschaltet",
+     L"Disattivato dalla modalità prestazioni Leggero"},
+    {L"Only for the Clear glass theme",
+     L"Solo para el tema Cristal transparente",
+     L"Seulement pour le thème Verre transparent",
+     L"Nur für das Design Klares Glas",
+     L"Solo per il tema Vetro trasparente"},
+    {L"Only with the Colored or Frosted color selection",
+     L"Solo con la selección Coloreada o Color esmerilado",
+     L"Seulement avec la sélection Colorée ou Couleur givrée",
+     L"Nur mit der Auswahl Farbig oder Mattierte Farbe",
+     L"Solo con la selezione Colorata o Colore satinato"},
+    {L"Needs a theme with glass: Clear glass, Siri gradient, or Light, Dark and OLED with the glass effect",
+     L"Necesita un tema con cristal: Cristal transparente, Degradado Siri, o Claro, Oscuro y OLED con el efecto cristal",
+     L"Nécessite un thème avec du verre : Verre transparent, Dégradé Siri, ou Clair, Sombre et OLED avec l’effet verre",
+     L"Braucht ein Design mit Glas: Klares Glas, Siri-Verlauf oder Hell, Dunkel und OLED mit Glaseffekt",
+     L"Richiede un tema con vetro: Vetro trasparente, Sfumatura Siri, o Chiaro, Scuro e OLED con l’effetto vetro"},
+    {L"Only with the Liquid glass style",
+     L"Solo con el estilo Cristal líquido",
+     L"Seulement avec le style Verre liquide",
+     L"Nur mit dem Stil Flüssigglas",
+     L"Solo con lo stile Vetro liquido"},
+    {L"Only for the Light, Dark and OLED themes",
+     L"Solo para los temas Claro, Oscuro y OLED",
+     L"Seulement pour les thèmes Clair, Sombre et OLED",
+     L"Nur für die Designs Hell, Dunkel und OLED",
+     L"Solo per i temi Chiaro, Scuro e OLED"},
+    {L"Turn on the floating power button first",
+     L"Activa primero el botón de encendido flotante",
+     L"Activez d’abord le bouton d’alimentation flottant",
+     L"Schalte zuerst die schwebende Ein/Aus-Taste ein",
+     L"Attiva prima il pulsante di alimentazione fluttuante"},
+    {L"Turn on Show power button first",
+     L"Activa primero Mostrar botón de encendido",
+     L"Activez d’abord Afficher le bouton d’alimentation",
+     L"Schalte zuerst Ein/Aus-Taste anzeigen ein",
+     L"Attiva prima Mostra il pulsante di alimentazione"},
+    {L"Turn on the Files category first",
+     L"Activa primero la categoría Archivos",
+     L"Activez d’abord la catégorie Fichiers",
+     L"Schalte zuerst die Kategorie Dateien ein",
+     L"Attiva prima la categoria File"},
+    {L"Turn on the Clipboard category first",
+     L"Activa primero la categoría Portapapeles",
+     L"Activez d’abord la catégorie Presse-papiers",
+     L"Schalte zuerst die Kategorie Zwischenablage ein",
+     L"Attiva prima la categoria Appunti"},
+    {L"Only used when the theme is Custom",
+     L"Solo se usa cuando el tema es Personalizado",
+     L"Utilisé seulement quand le thème est Personnalisé",
+     L"Wird nur verwendet, wenn das Design Eigenes gewählt ist",
+     L"Usato solo quando il tema è Personalizzato"},
+    {L"Flat glass with a soft live blur behind it. Light on the PC. Applies the next time it opens",
+     L"Cristal plano con un desenfoque suave en vivo detrás. Ligero para el PC. Se aplica la próxima vez que se abra",
+     L"Verre plat avec un flou doux en direct derrière. Léger pour le PC. Appliqué à la prochaine ouverture",
+     L"Flaches Glas mit weicher Live-Unschärfe dahinter. Schont den PC. Gilt beim nächsten Öffnen",
+     L"Vetro piatto con una sfocatura morbida dal vivo dietro. Leggero per il PC. Vale alla prossima apertura"},
+    {L"The background bends at the edges, like macOS 26. Heavier on the PC; Floating and Original Siri modes. Applies the next time it opens",
+     L"El fondo se curva en los bordes, como en macOS 26. Más pesado para el PC; modos Flotante y Siri original. Se aplica la próxima vez que se abra",
+     L"Le fond se courbe sur les bords, comme sur macOS 26. Plus lourd pour le PC ; modes Flottant et Siri d’origine. Appliqué à la prochaine ouverture",
+     L"Der Hintergrund biegt sich an den Rändern, wie bei macOS 26. Belastet den PC stärker; Modi Schwebend und Original-Siri. Gilt beim nächsten Öffnen",
+     L"Lo sfondo si curva ai bordi, come su macOS 26. Più pesante per il PC; modalità Fluttuante e Siri originale. Vale alla prossima apertura"},
 };
 
 PCWSTR CfgT(PCWSTR en, PCWSTR pt) {
@@ -3123,7 +3308,7 @@ const CfgOpt kOptMode[] = {{L"siriOriginal", L"Original Siri", L"Siri original"}
 const CfgOpt kOptTheme[] = {{L"glass", L"Clear glass", L"Vidro transparente"}, {L"light", L"Light", L"Claro"},
                             {L"siri", L"Siri gradient", L"Degradê Siri"}, {L"dark", L"Dark", L"Escuro"},
                             {L"oled", L"OLED (deep black)", L"OLED (preto profundo)"}, {L"custom", L"Custom", L"Personalizado"}};
-const CfgOpt kOptGlass[] = {{L"frosted", L"Frosted (live blur)", L"Fosco (desfoque ao vivo)"}, {L"liquid", L"Liquid (experimental)", L"Líquido (experimental)"}};
+const CfgOpt kOptGlass[] = {{L"frosted", L"Translucent glass", L"Vidro translúcido"}, {L"liquid", L"Liquid glass", L"Vidro líquido"}};
 const CfgOpt kOptClipKeep[] = {{L"always", L"Until Windows restarts", L"Até o Windows reiniciar"}, {L"15m", L"15 minutes", L"15 minutos"},
                                {L"1h", L"1 hour", L"1 hora"}, {L"8h", L"8 hours", L"8 horas"}, {L"24h", L"1 day", L"1 dia"}, {L"7d", L"7 days", L"7 dias"}};
 const CfgOpt kOptSearch[] = {{L"bar", L"Top bar", L"Barra superior"}, {L"box", L"Centered box", L"Caixa centralizada"}};
@@ -3193,8 +3378,8 @@ const CfgItem kCfgItems[] = {
      L"Quão embaçados ficam os ícones atrás de um menu de clique direito, para o texto dele ficar fácil de ler. 100 = padrão, 0 = nenhum", 0, 200, 5, L"%", nullptr, 0},
     {1, kCfgGroup, L"#g.glass", L"Glass", L"Vidro", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgChoice, L"appearance.glassStyle", L"Clear glass style", L"Estilo do vidro transparente",
-     L"Frosted: a soft blur. Liquid: the background bends at the edges, like macOS 26 (heavier). Clear glass and Siri themes. Used the next time it opens",
-     L"Fosco: um desfoque suave. Líquido: o fundo se curva nas bordas, como no macOS 26 (mais pesado). Temas Vidro transparente e Siri. Vale na próxima vez que abrir",
+     L"Translucent glass: flat glass with a soft live blur. Liquid glass: the background bends at the edges, like macOS 26 (heavier). For the Clear glass and Siri themes; applies the next time it opens",
+     L"Vidro translúcido: vidro reto com desfoque suave ao vivo. Vidro líquido: o fundo se curva nas bordas, como no macOS 26 (mais pesado). Para os temas Vidro transparente e Siri; vale na próxima vez que abrir",
      0, 0, 0, nullptr, CFG_OPTS(kOptGlass)},
     {1, kCfgSlider, L"appearance.refraction", L"Refraction at the edges", L"Refração nas bordas",
      L"How much the liquid glass bends what is behind it", L"Quanto o vidro líquido curva o que está atrás dele", 0, 100, 1, L"%", nullptr, 0},
@@ -3344,8 +3529,8 @@ const CfgItem kCfgItems[] = {
     {9, kCfgButton, L"#iconsFolderPick", L"Choose the gallery folder", L"Escolher a pasta da galeria", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     // 10 Performance
     {10, kCfgChoice, L"performance", L"Performance", L"Desempenho",
-     L"Light: no liquid glass, no blur behind menus, no shadows, at most 60 frames per second",
-     L"Leve: sem vidro líquido, sem desfoque atrás dos menus, sem sombras, no máximo 60 quadros por segundo",
+     L"Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations",
+     L"O modo Leve funciona com qualquer tema e foi feito para que PCs menos potentes aproveitem o mod com fluidez: sem vidro líquido, sem desfoque ao vivo, sem desfoque atrás dos menus, sem sombras, no máximo 60 quadros por segundo e animações mais calmas",
      0, 0, 0, nullptr, CFG_OPTS(kOptPerformance)},
     {10, kCfgChoice, L"frameRate", L"Frame rate limit", L"Limite de quadros por segundo",
      L"Fewer frames use less power", L"Menos quadros gastam menos energia", 0, 0, 0, nullptr, CFG_OPTS(kOptFrameRate)},
@@ -5141,6 +5326,77 @@ const std::pair<PCWSTR, PCWSTR> kActions[] = {
 };
 constexpr int kGeneralApps = 6, kGeneralActions = 3, kGeneralFolders = 5, kGeneralFiles = 8;
 
+// Windows Settings pages (ms-settings: links), found by name or by what people type to look for them
+struct SettingsPage { PCWSTR uri, en, pt, words, glyph; };
+const SettingsPage kSettingsPages[] = {
+    {L"display", L"Display", L"Tela", L"screen monitor resolution brightness scale tela monitor resolucao brilho escala", L""},
+    {L"nightlight", L"Night light", L"Luz noturna", L"blue light eyes luz azul", L""},
+    {L"sound", L"Sound", L"Som", L"volume audio speakers microphone som audio alto-falante", L""},
+    {L"notifications", L"Notifications", L"Notificações", L"alerts focus notificacoes avisos", L""},
+    {L"powersleep", L"Power & battery", L"Energia e bateria", L"sleep power saver energy energia suspensao economia", L""},
+    {L"storagesense", L"Storage", L"Armazenamento", L"disk space cleanup disco espaco limpeza", L""},
+    {L"multitasking", L"Multitasking", L"Multitarefa", L"snap windows desktops", L""},
+    {L"clipboard", L"Clipboard", L"Área de transferência", L"copy paste history copiar colar historico", L""},
+    {L"about", L"About this PC", L"Sobre", L"device name specs version processor ram nome do computador especificacoes", L""},
+    {L"troubleshoot", L"Troubleshoot", L"Solução de problemas", L"fix problems solucionar resolver", L""},
+    {L"recovery", L"Recovery", L"Recuperação", L"reset this pc restaurar redefinir formatar", L""},
+    {L"activation", L"Activation", L"Ativação", L"license product key licenca chave", L""},
+    {L"remotedesktop", L"Remote Desktop", L"Área de Trabalho Remota", L"rdp remote acesso remoto", L""},
+    {L"bluetooth", L"Bluetooth & devices", L"Bluetooth e dispositivos", L"pair connect devices dispositivos parear", L""},
+    {L"printers", L"Printers & scanners", L"Impressoras e scanners", L"print impressora imprimir", L""},
+    {L"mousetouchpad", L"Mouse", L"Mouse", L"pointer cursor speed scroll ponteiro velocidade", L""},
+    {L"devices-touchpad", L"Touchpad", L"Touchpad", L"gestures laptop gestos", L""},
+    {L"typing", L"Typing", L"Digitação", L"keyboard autocorrect teclado", L""},
+    {L"autoplay", L"AutoPlay", L"Reprodução Automática", L"usb drives removable", L""},
+    {L"usb", L"USB", L"USB", L"usb devices dispositivos", L""},
+    {L"network", L"Network & internet", L"Rede e Internet", L"connection status conexao rede", L""},
+    {L"network-wifi", L"Wi-Fi", L"Wi-Fi", L"wireless wifi network sem fio", L""},
+    {L"network-ethernet", L"Ethernet", L"Ethernet", L"cable wired cabo", L""},
+    {L"network-vpn", L"VPN", L"VPN", L"virtual private network", L""},
+    {L"network-airplanemode", L"Airplane mode", L"Modo avião", L"flight aviao", L""},
+    {L"network-mobilehotspot", L"Mobile hotspot", L"Hotspot móvel", L"share internet compartilhar zona wifi", L""},
+    {L"network-proxy", L"Proxy", L"Proxy", L"proxy server servidor", L""},
+    {L"personalization", L"Personalization", L"Personalização", L"customize customizar personalizar", L""},
+    {L"personalization-background", L"Background", L"Plano de fundo", L"wallpaper desktop picture papel de parede imagem", L""},
+    {L"colors", L"Colors", L"Cores", L"accent dark mode light theme cor destaque modo escuro claro", L""},
+    {L"themes", L"Themes", L"Temas", L"theme appearance aparencia", L""},
+    {L"lockscreen", L"Lock screen", L"Tela de bloqueio", L"lock screen wallpaper bloqueio", L""},
+    {L"taskbar", L"Taskbar", L"Barra de tarefas", L"icons tray alignment barra icones", L""},
+    {L"personalization-start", L"Start", L"Iniciar", L"start menu pinned recommended menu iniciar", L""},
+    {L"fonts", L"Fonts", L"Fontes", L"typeface letras", L""},
+    {L"appsfeatures", L"Installed apps", L"Aplicativos instalados", L"apps features uninstall programs desinstalar programas aplicativos", L""},
+    {L"defaultapps", L"Default apps", L"Aplicativos padrão", L"default browser open with navegador padrao abrir com", L""},
+    {L"startupapps", L"Startup apps", L"Aplicativos de inicialização", L"startup boot autostart run at login inicializacao iniciar com o windows", L""},
+    {L"optionalfeatures", L"Optional features", L"Recursos opcionais", L"features opcionais recursos", L""},
+    {L"yourinfo", L"Your account", L"Sua conta", L"accounts profile user conta perfil usuario", L""},
+    {L"signinoptions", L"Sign-in options", L"Opções de entrada", L"password pin hello fingerprint senha biometria login", L""},
+    {L"dateandtime", L"Date & time", L"Data e hora", L"clock time zone relogio fuso horario", L""},
+    {L"regionlanguage", L"Language & region", L"Idioma e região", L"language region keyboard layout idioma regiao teclado", L""},
+    {L"speech", L"Speech", L"Fala", L"voice microphone voz", L""},
+    {L"gaming-gamebar", L"Game Bar", L"Barra de Jogos", L"xbox gaming jogos capture", L""},
+    {L"gaming-gamemode", L"Game Mode", L"Modo de Jogo", L"gaming performance jogos desempenho", L""},
+    {L"easeofaccess", L"Accessibility", L"Acessibilidade", L"ease of access text size contrast tamanho do texto contraste", L""},
+    {L"easeofaccess-narrator", L"Narrator", L"Narrador", L"screen reader leitor de tela", L""},
+    {L"easeofaccess-magnifier", L"Magnifier", L"Lupa", L"zoom ampliar", L""},
+    {L"privacy", L"Privacy & security", L"Privacidade e segurança", L"permissions permissoes privacidade", L""},
+    {L"privacy-webcam", L"Camera privacy", L"Privacidade da câmera", L"webcam camera permissions", L""},
+    {L"privacy-microphone", L"Microphone privacy", L"Privacidade do microfone", L"mic permissions permissoes", L""},
+    {L"privacy-location", L"Location privacy", L"Privacidade da localização", L"gps localizacao", L""},
+    {L"windowsdefender", L"Windows Security", L"Segurança do Windows", L"antivirus defender firewall virus seguranca", L""},
+    {L"findmydevice", L"Find my device", L"Localizar meu dispositivo", L"locate lost localizar", L""},
+    {L"backup", L"Backup", L"Backup", L"backup onedrive files arquivos copia", L""},
+    {L"developers", L"For developers", L"Para desenvolvedores", L"developer mode dev modo desenvolvedor", L""},
+    {L"windowsupdate", L"Windows Update", L"Windows Update", L"update upgrade patches check for updates atualizar atualizacao", L""},
+    {L"windowsupdate-history", L"Update history", L"Histórico de atualizações", L"installed updates uninstall historico", L""},
+    {L"delivery-optimization", L"Delivery Optimization", L"Otimização de Entrega", L"update downloads bandwidth", L""},
+};
+constexpr int kGeneralSettings = 4;
+std::wstring SettingsUri(const SettingsPage& p) { return std::wstring(L"ms-settings:") + p.uri; }
+PCWSTR SettingsGlyph(const std::wstring& target) {
+    for (const SettingsPage& p : kSettingsPages) if (target == SettingsUri(p)) return p.glyph;
+    return L"";
+}
+
 // How well a name matches what was typed: 4 starts with it, 3 a word starts with it, 2 the initials, 1 anywhere, 0 no
 int MatchScore(const std::wstring& name, const std::wstring& q) {
     if (q.empty()) return 0;
@@ -5196,6 +5452,24 @@ void BuildGeneralResults(AppList& out) {
     if (!actions.empty() && TabEnabled(3)) {
         title(CfgT(L"Actions", L"Ações"), 3, (int)actions.size(), kGeneralActions);
         for (int i = 0; i < (int)actions.size() && i < kGeneralActions; i++) out.push_back(actions[i].second);
+    }
+    // Windows Settings pages (name first, then the words people use to look for them)
+    if (TabEnabled(3)) {
+        std::vector<std::pair<int, std::shared_ptr<App>>> pages;
+        for (const SettingsPage& p : kSettingsPages) {
+            PCWSTR shown = CfgT(p.en, p.pt);
+            int m = std::max({MatchScore(shown, q), MatchScore(p.en, q), MatchScore(p.pt, q)}) * 2;
+            if (q.size() >= 2) m = std::max(m, std::min(MatchScore(p.words, q), 3));   // a keyword never beats a name
+            if (m <= 0) continue;
+            auto a = std::make_shared<App>();
+            a->kind = 4; a->name = shown; a->target = SettingsUri(p);
+            pages.push_back({m, std::move(a)});
+        }
+        std::stable_sort(pages.begin(), pages.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+        if (!pages.empty()) {
+            title(CfgT(L"Windows Settings", L"Configurações do Windows"), -1, (int)pages.size(), kGeneralSettings);
+            for (int i = 0; i < (int)pages.size() && i < kGeneralSettings; i++) out.push_back(pages[i].second);
+        }
     }
     // Folders, then documents and files (they arrive a moment later, below everything else, so nothing above moves)
     if (!g_settings.filesEnabled || !TabEnabled(1) || q.size() < 2) return;
@@ -5380,8 +5654,8 @@ bool TransparencyEffectsOn();
 bool g_transparencyOn = true;   // Windows' transparency effects (its blur needs them), read when opening
 bool LiquidWanted();
 bool LiquidActive();
-int BlurStrength() { return g_settings.liveBackground || (g_glassOk && g_transparencyOn) || LiquidWanted() ? 0 : g_settings.blurAmount; }
-bool LiveBlurOn() { return g_glassOk && g_transparencyOn && !g_settings.liveBackground && !LiquidActive() &&
+int BlurStrength() { return g_settings.light || g_settings.liveBackground || (g_glassOk && g_transparencyOn) || LiquidWanted() ? 0 : g_settings.blurAmount; }
+bool LiveBlurOn() { return !g_settings.light && g_glassOk && g_transparencyOn && !g_settings.liveBackground && !LiquidActive() &&
                           (ActiveTheme() != Theme::Oled || g_settings.glassEffect); }
 
 // Margin the window keeps around themed shapes so their shadow is not cut
@@ -5872,6 +6146,7 @@ PCWSTR ActionGlyph(const std::wstring& id) {
     if (id == L"shutdown") return L"\uE7E8";
     if (id == L"signout") return L"\uF3B1";
     if (id == L"settings") return L"\uE713";
+    if (id.rfind(L"ms-settings:", 0) == 0) return SettingsGlyph(id);
     if (id == L"taskmgr") return L"\uE9D9";
     if (id == L"explorer") return L"\uEC50";
     if (id == L"control") return L"\uE80F";
@@ -6545,11 +6820,18 @@ void DrawMenuBackdropBlur(const D2D1_RECT_F& r, float rad, float alpha) {
     D2D1_POINT_2U at = D2D1::Point2U(0, 0);
     D2D1_RECT_U from = D2D1::RectU(left, top, right, bottom);
     if (FAILED(copy->CopyFromRenderTarget(&at, g_target.Get(), &from))) return;
-    ComPtr<ID2D1Effect> blur;
-    if (FAILED(dc->CreateEffect(kClsidGaussianBlur, &blur))) return;
+    // The effect is kept between frames (it belongs to the target: dropped with it)
+    static ComPtr<ID2D1Effect> menuBlur;
+    static unsigned menuBlurGeneration = ~0u;
+    if (!menuBlur || menuBlurGeneration != g_targetGeneration) {
+        menuBlur.Reset();
+        if (FAILED(dc->CreateEffect(kClsidGaussianBlur, &menuBlur))) return;
+        menuBlur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
+        menuBlurGeneration = g_targetGeneration;
+    }
+    ComPtr<ID2D1Effect> blur = menuBlur;
     blur->SetInput(0, copy.Get());
     blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
-    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
     ComPtr<ID2D1RoundedRectangleGeometry> clip;
     if (FAILED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, rad, rad), &clip))) return;
     g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), alpha), nullptr);
@@ -7863,9 +8145,12 @@ void DrawLiquidShape(const D2D1_RECT_F& r, float radius, bool shadow) {
 // Siri (macOS 27): smoky glass, dark at the top fading to clear at the bottom, thin light rim.
 void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow) {
     const Layout& L = g_layout;
-    const int transparency = std::min(g_settings.glassTransparency, g_surfaceMaxTransparency);
-    float s = L.scale, h = r.bottom - r.top;
     Theme theme = ActiveTheme();
+    // Light mode: "acrylic". No blur, no liquid and no window behind: a firmer tint (the glass can't be see-through
+    // without a blur, or the page behind would show through sharp) with a soft sheen, so it still reads as glass
+    const bool acrylic = g_settings.light && theme == Theme::Glass;
+    const int transparency = std::min({g_settings.glassTransparency, g_surfaceMaxTransparency, acrylic ? 40 : 100});
+    float s = L.scale, h = r.bottom - r.top;
     if (h < 1 || r.right - r.left < 1) return;
     if (theme == Theme::Glass && LiquidActive() && g_surfaceMaxTransparency >= 100) { DrawLiquidShape(r, radius, shadow); return; }
     if (shadow) {
@@ -7918,6 +8203,9 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
                                    : theme == Theme::Oled ? oledBody : siriBody;
     if (auto brush = MakeGradient(body, 3, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom)))
         g_target->FillRectangle(r, brush.Get());
+    // A fully clear glass would let the mouse fall through to what is behind (pixels with no alpha are not hit)
+    g_brush->SetColor(D2D1::ColorF(0, 0, 0, 1 / 255.0f));
+    g_target->FillRectangle(r, g_brush.Get());
     const bool optics = theme == Theme::Siri || (g_settings.glassEffect && (theme == Theme::Light || theme == Theme::Dark || theme == Theme::Oled));
     // How strong the glass light is: softer on the light theme (white on white) and on OLED (keeps the black deep)
     const float ok = theme == Theme::Light ? 0.7f : theme == Theme::Oled ? 0.6f : 1.0f;
@@ -7942,6 +8230,11 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         D2D1_GRADIENT_STOP glow[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.06f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
         if (auto top = MakeGradient(glow, 2, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.top + glowH)))
             g_target->FillRectangle(D2D1::RectF(r.left, r.top, r.right, r.top + glowH), top.Get());
+    }
+    if (acrylic) {
+        D2D1_GRADIENT_STOP veil[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.10f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.02f)}};
+        if (auto sheen = MakeGradient(veil, 2, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom)))
+            g_target->FillRectangle(r, sheen.Get());
     }
     if (theme == Theme::Light || theme == Theme::Glass) {
         // Specular glow along the top edge
@@ -8346,7 +8639,10 @@ bool TransparencyEffectsOn() {
     return value != 0;
 }
 
+bool g_glassFresh = true;   // the compositor visuals are new: nothing has been sent to them yet
+
 bool BuildGlassComposition() {
+    g_glassFresh = true;
     struct QueueOptions { DWORD size; int threadType; int apartmentType; };
     using CreateQueue_t = HRESULT(WINAPI*)(QueueOptions, IUnknown**);
     using Activate_t = HRESULT(WINAPI*)(HSTRING, IInspectable**);
@@ -8407,6 +8703,7 @@ bool BuildGlassComposition() {
 }
 
 void ReleaseGlassComposition() {
+    g_glassFresh = true;
     for (int i = 0; i < kGlassPieces; i++) { g_glass.visual[i].Reset(); g_glass.shape[i].Reset(); }
     g_glass.backdrop.Reset(); g_glass.target.Reset(); g_glass.compositor.Reset();
     // The queue is shut down before it goes: its last messages are pumped here (briefly)
@@ -8498,18 +8795,27 @@ void UpdateGlass(const Layout& L, const D2D1::Matrix3x2F& m, float windowAlpha) 
     CollectGlassPieces(L, m, pieces, alpha);
     alpha *= windowAlpha * (0.35f + 0.65f * g_settings.blurAmount / 100.0f);   // weaker blur = more of the sharp background
     comp::Vec2 whole{(float)L.width, (float)(L.height + L.extraBottom)};
+    // Each property is a call into the compositor: only what changed since the last frame is sent
+    struct Sent { bool visible = false; float x = -1, y = -1, w = -1, h = -1, radius = -1, opacity = -1, vw = -1, vh = -1; };
+    static Sent sent[kGlassPieces];
+    if (g_glassFresh) { for (Sent& s : sent) s = Sent{}; g_glassFresh = false; }
     for (int i = 0; i < kGlassPieces; i++) {
         comp::IVisual* visual = g_glass.visual[i].Get();
-        if (i >= (int)pieces.size() || alpha <= 0.01f) { visual->put_IsVisible(0); continue; }
+        Sent& s = sent[i];
+        if (i >= (int)pieces.size() || alpha <= 0.01f) {
+            if (s.visible) { visual->put_IsVisible(0); s.visible = false; }
+            continue;
+        }
         const GlassPiece& p = pieces[i];
         float w = std::max(0.0f, p.r.right - p.r.left), h = std::max(0.0f, p.r.bottom - p.r.top);
         float radius = std::min(p.radius, std::min(w, h) / 2);
-        g_glass.shape[i]->put_Offset({p.r.left, p.r.top});
-        g_glass.shape[i]->put_Size({w, h});
-        g_glass.shape[i]->put_CornerRadius({radius, radius});
-        visual->put_Size(whole);
-        visual->put_Opacity(std::clamp(alpha, 0.0f, 1.0f));
-        visual->put_IsVisible(1);
+        float opacity = std::clamp(alpha, 0.0f, 1.0f);
+        if (s.x != p.r.left || s.y != p.r.top) { g_glass.shape[i]->put_Offset({p.r.left, p.r.top}); s.x = p.r.left; s.y = p.r.top; }
+        if (s.w != w || s.h != h) { g_glass.shape[i]->put_Size({w, h}); s.w = w; s.h = h; }
+        if (s.radius != radius) { g_glass.shape[i]->put_CornerRadius({radius, radius}); s.radius = radius; }
+        if (s.vw != whole.X || s.vh != whole.Y) { visual->put_Size(whole); s.vw = whole.X; s.vh = whole.Y; }
+        if (std::fabs(s.opacity - opacity) > 0.002f) { visual->put_Opacity(opacity); s.opacity = opacity; }
+        if (!s.visible) { visual->put_IsVisible(1); s.visible = true; }
     }
     RECT place{L.area.left, L.area.top, L.area.left + L.width, L.area.top + L.height + L.extraBottom};
     if (!EqualRect(&place, &g_glassPlaced) || !IsWindowVisible(g_glassWnd)) {
@@ -9203,6 +9509,10 @@ void RunAction(const std::wstring& id) {
     Close();
     AllowSetForegroundWindow(ASFW_ANY);
     if (id == L"recycle") { SHEmptyRecycleBinW(nullptr, nullptr, 0); return; }
+    if (id.rfind(L"ms-settings:", 0) == 0) {   // a Windows Settings page
+        ShellExecuteW(nullptr, L"open", id.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
     PCWSTR file = id == L"settings" ? L"ms-settings:" : id == L"taskmgr" ? L"taskmgr.exe" : id == L"explorer" ? L"explorer.exe"
                 : id == L"control" ? L"control.exe" : L"ms-screenclip:";
     ShellExecuteW(nullptr, L"open", file, nullptr, nullptr, SW_SHOWNORMAL);
@@ -10323,6 +10633,15 @@ void ExecuteMenu(int id) {
                     SaveSearchHistory(); RefreshTabItems(false);
                 }
             break;
+        case kMenuOpenLocation:
+            if (histIdx >= 0 && histIdx < (int)g_layoutItems.size())
+                if (App* f = ResolveApp(g_layoutItems[histIdx]); f && f->kind == 1) {
+                    std::wstring args = L"/select,\"" + f->target + L"\"";
+                    Close();
+                    AllowSetForegroundWindow(ASFW_ANY);
+                    ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+                }
+            break;
         case kMenuClipRemove:
             if (histIdx >= 0 && histIdx < (int)g_layoutItems.size())
                 if (App* h = ResolveApp(g_layoutItems[histIdx]); h && h->kind == 2) RemoveClipItem(h->target);
@@ -10402,7 +10721,8 @@ void OnCategoryShortcut(int tab) {
 
 
 D2D1_COLOR_F CfgRgb(UINT32 rgb, float a = 1.0f) { return D2D1::ColorF(rgb, a); }   // 0xRRGGBB
-D2D1_COLOR_F CfgAccent() { return CfgRgb(g_settings.darkText ? 0x007AFF : 0x0A84FF); }
+bool g_cfgDrawLocked = false;   // the control being drawn belongs to a setting that can't be used now: gray instead of blue
+D2D1_COLOR_F CfgAccent() { return g_cfgDrawLocked ? Fg(0.30f) : CfgRgb(g_settings.darkText ? 0x007AFF : 0x0A84FF); }
 
 [[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_cfgTitle, g_cfgHead, g_cfgBody, g_cfgDesc, g_cfgHeadDesc, g_cfgValue, g_cfgCaption,
     g_cfgBar, g_cfgButton, g_cfgGlyphS, g_cfgGlyphM, g_cfgGlyphL, g_cfgGlyphXS;
@@ -10565,19 +10885,87 @@ std::wstring CfgModeNote(int modes) {
     swprintf(note, ARRAYSIZE(note), CfgT(L"Not used by the mode you chose (%ls)", L"Não é usado pelo modo escolhido (%ls)"), modeName);
     return note;
 }
-// A section's description, plus that note when the chosen mode doesn't use the section
+// What a setting has in the panel right now (before it is applied anywhere else)
+std::wstring CfgNow(PCWSTR key) {
+    if (const CfgItem* item = CfgFind(key)) {
+        const std::wstring& v = CfgValue(*item);
+        if (!v.empty()) return v;
+        if (CfgIsInt(*item)) return std::to_wstring(CfgInt(key));
+    }
+    return CfgStr(key);
+}
+bool CfgNowOn(PCWSTR key) { return _wtoi(CfgNow(key).c_str()) != 0; }
+
+// Why a setting can't be used with what is chosen right now (theme, glass style, performance mode, a switch it depends on);
+// empty when it can. Those settings are dimmed, say why, and don't react to the mouse
+std::wstring CfgLockReason(const CfgItem& it) {
+    if (it.type == kCfgGroup) return {};
+    const std::wstring k = it.key;
+    auto note = [](PCWSTR en, PCWSTR pt) { return std::wstring(CfgT(en, pt)); };
+    const std::wstring theme = CfgNow(L"theme");
+    const bool light = CfgNow(L"performance") == L"light";
+    const bool lightDarkOled = theme == L"light" || theme == L"dark" || theme == L"oled";
+    if (k == L"appearance.transparency" && theme == L"custom") return note(L"Not used by the Custom theme", L"Não é usado pelo tema Personalizado");
+    if ((k == L"appearance.blur" || k == L"appearance.menuBlur") && light)
+        return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
+    if (k == L"appearance.menuSelection" || k == L"appearance.menuSelectionColor") {
+        if (theme != L"glass") return note(L"Only for the Clear glass theme", L"Só para o tema Vidro transparente");
+        if (k == L"appearance.menuSelectionColor" && CfgNow(L"appearance.menuSelection") == L"glass")
+            return note(L"Only with the Colored or Frosted color selection", L"Só com a seleção Colorida ou Cor fosca");
+    }
+    if (k == L"appearance.glassEffect" && !lightDarkOled)
+        return note(L"Only for the Light, Dark and OLED themes", L"Só para os temas Claro, Escuro e OLED");
+    if (k == L"appearance.glassStyle" || k == L"appearance.refraction" || k == L"appearance.liveGlass") {
+        if (light) return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
+        const bool glassy = theme == L"glass" || theme == L"siri" || (lightDarkOled && CfgNowOn(L"appearance.glassEffect"));
+        if (!glassy)
+            return note(L"Needs a theme with glass: Clear glass, Siri gradient, or Light, Dark and OLED with the glass effect",
+                        L"Precisa de um tema com vidro: Vidro transparente, Degradê Siri, ou Claro, Escuro e OLED com o efeito vidro");
+        if (k != L"appearance.glassStyle" && CfgNow(L"appearance.glassStyle") != L"liquid")
+            return note(L"Only with the Liquid glass style", L"Só com o estilo Vidro líquido");
+    }
+    if (k == L"siri.powerButtonSide" && !CfgNowOn(L"siri.powerButton"))
+        return note(L"Turn on the floating power button first", L"Ative o botão de energia flutuante primeiro");
+    if (k == L"window.powerButtonPosition" && !CfgNowOn(L"window.showPowerButton"))
+        return note(L"Turn on Show power button first", L"Ative Mostrar botão de energia primeiro");
+    if ((k == L"files.history" || k == L"files.view" || k == L"files.indexer" || k == L"files.maxResults") && !CfgNowOn(L"files.enabled"))
+        return note(L"Turn on the Files category first", L"Ative a categoria Arquivos primeiro");
+    if ((k == L"clipboard.size" || k == L"clipboard.keep") && !CfgNowOn(L"clipboard.enabled"))
+        return note(L"Turn on the Clipboard category first", L"Ative a categoria Área de transferência primeiro");
+    return {};
+}
+// The same for a whole section (Custom theme: only when that theme is chosen)
+std::wstring CfgSectionLock(int section) {
+    if (section == 2 && CfgNow(L"theme") != L"custom")
+        return CfgT(L"Only used when the theme is Custom", L"Só é usado quando o tema é Personalizado");
+    return {};
+}
+// A section's description, plus the note when the chosen mode or theme doesn't use the section
 std::wstring CfgSectionDesc(int section) {
     const CfgSection& sec = kCfgSections[section];
     std::wstring desc = CfgT(sec.descEn, sec.descPt), note = CfgModeNote(CfgSectionModes(section));
+    if (note.empty()) note = CfgSectionLock(section);
     return note.empty() ? desc : desc + L"\n" + note;
 }
-// A setting's own note (only when its section as a whole is used: otherwise the section already says so)
+// A setting's own note (only when its section as a whole is unused: otherwise the section already says so)
 std::wstring CfgItemNote(const CfgItem& it) {
-    if (it.type == kCfgGroup || !CfgModeNote(CfgSectionModes(it.section)).empty()) return {};
-    return CfgModeNote(CfgItemModes(it));
+    if (it.type == kCfgGroup || !CfgModeNote(CfgSectionModes(it.section)).empty() || !CfgSectionLock(it.section).empty()) return {};
+    std::wstring note = CfgModeNote(CfgItemModes(it));
+    return note.empty() ? CfgLockReason(it) : note;
+}
+// Dimmed and not clickable: the mode, theme, style or a switch it depends on leaves it out
+bool CfgItemLocked(const CfgItem& it) {
+    return it.type != kCfgGroup && (!CfgItemNote(it).empty() || !CfgModeNote(CfgSectionModes(it.section)).empty() || !CfgSectionLock(it.section).empty());
 }
 std::wstring CfgItemDesc(const CfgItem& it) {
     PCWSTR d = CfgT(it.descEn, it.descPt);
+    if (!wcscmp(it.key, L"appearance.glassStyle")) {   // says what the chosen style is
+        d = CfgNow(L"appearance.glassStyle") == L"liquid"
+            ? CfgT(L"The background bends at the edges, like macOS 26. Heavier on the PC; Floating and Original Siri modes. Applies the next time it opens",
+                   L"O fundo se curva nas bordas, como no macOS 26. Mais pesado para o PC; modos Flutuante e Siri original. Vale na próxima vez que abrir")
+            : CfgT(L"Flat glass with a soft live blur behind it. Light on the PC. Applies the next time it opens",
+                   L"Vidro reto com um desfoque suave ao vivo por trás. Leve para o PC. Vale na próxima vez que abrir");
+    }
     std::wstring desc = d ? d : L"", note = CfgItemNote(it);
     if (note.empty()) return desc;
     return desc.empty() ? note : desc + L"\n" + note;
@@ -10619,7 +11007,6 @@ void CfgBuild() {
     float startY = y;
     g_cfgHeader = D2D1::RectF(0, 0, 0, 0);
     if (g_cfg.search.empty()) {
-        const CfgSection& sec = kCfgSections[g_cfg.section];
         float textW = cardR - cardL - in - std::round(56 * s) - in;
         float dh = CfgTextHeight(CfgSectionDesc(g_cfg.section).c_str(), g_cfgHeadDesc.Get(), textW);
         float h = std::max(std::round(68 * s), std::round(16 * s) + std::round(20 * s) + dh + std::round(16 * s));
@@ -10820,7 +11207,7 @@ void DrawCfgToggle(const D2D1_RECT_F& c, bool on) {
     float d = h - 4 * g_layout.scale, cx = on ? c.right - 2 * g_layout.scale - d / 2 : c.left + 2 * g_layout.scale + d / 2, cy = (c.top + c.bottom) / 2;
     g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));
     g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy + 0.8f * g_layout.scale), d / 2, d / 2), g_brush.Get());
-    g_brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+    g_brush->SetColor(D2D1::ColorF(1, 1, 1, g_cfgDrawLocked ? 0.60f : 1.0f));
     g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), d / 2, d / 2), g_brush.Get());
 }
 
@@ -10841,19 +11228,19 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
             int value = std::clamp(_wtoi(v.c_str()), it.min, it.max);
             D2D1_RECT_F tr = CfgSliderTrack(c);
             float k = it.max > it.min ? (float)(value - it.min) / (it.max - it.min) : 0, x = Lerp(tr.left, tr.right, k);
-            CfgText(CfgSliderText(it, value), g_cfgValue.Get(), D2D1::RectF(c.left, c.top, tr.left - 12 * s, c.bottom), Fg(0.60f));
+            CfgText(CfgSliderText(it, value), g_cfgValue.Get(), D2D1::RectF(c.left, c.top, tr.left - 12 * s, c.bottom), Fg(g_cfgDrawLocked ? 0.35f : 0.60f));
             Fill(tr, Fg(0.18f), 2 * s);
             Fill(D2D1::RectF(tr.left, tr.top, x, tr.bottom), CfgAccent(), 2 * s);
             float kr = (row.item == g_cfg.drag ? 10.0f : 9.0f) * s, cy = (tr.top + tr.bottom) / 2;
             g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.22f));
             g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cy + 1 * s), kr, kr), g_brush.Get());
-            g_brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+            g_brush->SetColor(D2D1::ColorF(1, 1, 1, g_cfgDrawLocked ? 0.55f : 1.0f));
             g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cy), kr, kr), g_brush.Get());
             break;
         }
         case kCfgChoice: {
             Fill(c, Fg(hover ? 0.16f : 0.10f), 7 * s);
-            CfgText(CfgOptionLabel(it, v), g_cfgBody.Get(), D2D1::RectF(c.left + 10 * s, c.top, c.right - 26 * s, c.bottom), Fg(0.92f));
+            CfgText(CfgOptionLabel(it, v), g_cfgBody.Get(), D2D1::RectF(c.left + 10 * s, c.top, c.right - 26 * s, c.bottom), Fg(g_cfgDrawLocked ? 0.40f : 0.92f));
             CfgText(L"", g_cfgGlyphXS.Get(), D2D1::RectF(c.right - 24 * s, c.top, c.right - 6 * s, c.bottom), Fg(0.70f));
             break;
         }
@@ -10874,7 +11261,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
             }
             std::wstring text = editing ? g_cfg.editText : v;
             D2D1_RECT_F tr = D2D1::RectF(box.left + 10 * s, box.top, box.right - 8 * s, box.bottom);
-            CfgText(text, g_cfgBody.Get(), tr, Fg(0.92f));
+            CfgText(text, g_cfgBody.Get(), tr, Fg(g_cfgDrawLocked ? 0.40f : 0.92f));
             if (editing) {
                 float x = tr.left + CfgTextWidth(text, g_cfgBody.Get()) + 1 * s;
                 g_brush->SetColor(Fg(0.9f));
@@ -11002,14 +11389,16 @@ void DrawCfgPanelContent() {
         }
         std::wstring descText = CfgItemDesc(it);
         PCWSTR desc = descText.empty() ? nullptr : descText.c_str();
-        bool unused = !CfgItemNote(it).empty() || !CfgModeNote(CfgSectionModes(it.section)).empty();   // dimmed: this mode doesn't use it
+        bool unused = CfgItemLocked(it);   // dimmed: the chosen mode, theme or style doesn't use it
         float block = row.labelH + (desc ? std::round(2 * s) + row.descH : 0);
         float top = (row.r.top + row.r.bottom) / 2 - block / 2;
         float labelRight = row.ctl.left - std::round(16 * s);
         CfgText(CfgT(it.en, it.pt), g_cfgBody.Get(), D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), Fg(unused ? 0.55f : 0.94f));
         if (desc)
             CfgText(desc, g_cfgDesc.Get(), D2D1::RectF(row.r.left + in, top + row.labelH + std::round(2 * s), labelRight, top + block + 4 * s), Fg(unused ? 0.42f : 0.55f));
+        g_cfgDrawLocked = unused;
         DrawCfgControl(row, (int)i == g_cfg.hover);
+        g_cfgDrawLocked = false;
         pieceEnd();
     }
     if (g_cfgNothing)
@@ -11776,6 +12165,7 @@ int CfgRowAt(float x, float y) {
 bool CfgOnControl(int row, float x, float y) {
     if (row < 0) return false;
     const CfgRow& r = g_cfgRows[row];
+    if (CfgItemLocked(kCfgItems[r.item])) return false;   // dimmed: nothing to press
     if (kCfgItems[r.item].type == kCfgToggle) return true;   // the whole row switches it
     float m = 4 * g_layout.scale;
     return InRect(D2D1::RectF(r.ctl.left - m, r.ctl.top - m, r.ctl.right + m, r.ctl.bottom + m), x, y);
@@ -13157,6 +13547,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_siriTab != 0) {
                 int idx = ItemAt(x, y);
                 App* a = idx >= 0 ? ResolveApp(g_layoutItems[idx]) : nullptr;
+                if (a && a->kind == 1) {   // a file or folder found: show it in File Explorer
+                    g_menu.open = false; g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
+                    g_menu.appIdx = idx;
+                    OpenMenu((float)x, (float)y, std::vector<MenuItem>{{Tr(L"Open file location"), kMenuOpenLocation}});
+                    return 0;
+                }
                 if (g_siriTab != 1 || !g_query.empty() || !g_historyEnabled || g_searchHistory.empty()) return 0;
                 g_menu.open = false; g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
                 std::vector<MenuItem> hist;
