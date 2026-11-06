@@ -1853,6 +1853,7 @@ const UINT_PTR TIMER_DESKTOP_PEEK = 15;
 const UINT_PTR TIMER_ACTIVATE_RETRY = 16, TIMER_DRAG_ACTIVATE = 17, TIMER_PREVIEW_ANIM=18;
 const UINT_PTR TIMER_BATTERY_SLIDE = 19, TIMER_RESOURCE_RELOAD = 20, TIMER_CLASSIC_POSITION_NOTIFY = 21, TIMER_APPBAR_NOTIFY=22, TIMER_APPBAR_VERIFY=23, TIMER_NETWORK_POSITION=24, TIMER_VOLUME_POSITION=25, TIMER_ACTION_POSITION=26;
 const UINT_PTR TIMER_ATTENTION=27, TIMER_BUTTON_TRANSITION=28, TIMER_LANGUAGE_REFRESH=29, TIMER_WIN7_PREVIEW_CLOSE=30;
+const UINT_PTR TIMER_OPENSHELL_VERIFY=31;
 const UINT WM_T81_APPBAR=WM_APP+452;
 const wchar_t kNativeControlOverlayClass[] = L"WH_Taskbar81NativeControlOverlay";
 const wchar_t kPreviewClass[] = L"WH_Taskbar81SuperbarPreview";
@@ -1991,7 +1992,10 @@ struct State {
     int overflowScroll=0, overflowHot=-1, overflowMouseMask=0; bool overflowFooterHot=false;
     std::wstring overflowTooltipText;
     Gdiplus::Image* overflowHoverImage=nullptr; IStream* overflowHoverStream=nullptr; bool overflowImageTried=false;
+    int openShellRetries=0;
     bool privateActive=false, nativeWasVisible=false, nativeHiddenByUs=false;
+    bool nativeRecoveryPending=false; ULONGLONG nativeRecoveryRetryAt=0;
+    bool privateGeometryApplied=false;
     bool verticalActive=false; int verticalSide=0, verticalOffset=0, verticalPressed=HIT_NONE;
     std::vector<PrivateIcon> trayIcons;
     // CNI-only registrations: owned HICON copies remain alive across callbacks,
@@ -2088,6 +2092,7 @@ struct State {
     bool toolbarTimedOut = false;
     DWORD lastSndvolTick = 0, volumeLaunchPid=0;
     int networkPositionAttempts=0,volumePositionAttempts=0,actionPositionAttempts=0;
+    HWINEVENTHOOK volumeShowHook=nullptr;
     RECT networkAnchor{},volumeAnchor{},actionAnchor{};
     DWORD favoritesVersion = 0;
     bool favoritesVersionKnown = false;
@@ -3915,6 +3920,13 @@ bool IsTaskWindow(HWND hwnd) {
     if(!wcscmp(className,L"Shell_CharmWindow"))return false;
     if(!HasTaskbarExtendedStyle(hwnd))return false;
     if(IsCloakedTaskWindow(hwnd))return false;
+    // ManagedShell ApplicationWindow.IsImmersiveShellWindow (Apache-2.0):
+    // exclude these shell-like surfaces only when WS_EX_WINDOWEDGE is absent.
+    bool immersiveClass=!wcscmp(className,L"ApplicationFrameWindow") ||
+        !wcscmp(className,L"Windows.UI.Core.CoreWindow") ||
+        !wcscmp(className,L"StartMenuSizingFrame") ||
+        !wcscmp(className,L"Shell_LightDismissOverlay");
+    if(immersiveClass && !(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_WINDOWEDGE)) return false;
     if(IsNotificationShellSurface(hwnd,className))return false;
     return true;
 }
@@ -5107,6 +5119,7 @@ static void ShowGroupWindowMenu(POINT screen,const Group& group) {
 // an internal, version-dependent protocol, not a public Windows API. Only
 // accept a window in the current Explorer process; otherwise fall back to Win.
 static bool ToggleCompanionStart() {
+    try {
     HWND h=nullptr;
     for(int i=0;i<32 && (h=FindWindowExW(nullptr,h,L"Win8StartScreenMod8045",nullptr));++i) {
         DWORD pid=0; GetWindowThreadProcessId(h,&pid);
@@ -5119,9 +5132,120 @@ static bool ToggleCompanionStart() {
         Wh_Log(L"[T81-DIAG] Start: companion post failed, error %lu",GetLastError());
     }
     return false;
+    } catch(...) {
+        Wh_Log(L"[T81-DIAG] companion Start C++ exception; using other Start routes");
+        return false;
+    }
+}
+// RetroBar falls back to simulated Win input for Open-Shell. Prefer its
+// MSG_OPEN/MSG_TOGGLE protocol when available: MSG_OPEN is idempotent, unlike
+// replaying Win, so a delayed response cannot immediately close the menu.
+static HWND StartDesktopWindow() {
+    HWND desktop=FindWindowW(L"Progman",nullptr); DWORD pid=0;
+    if(desktop) GetWindowThreadProcessId(desktop,&pid);
+    return pid==GetCurrentProcessId()?desktop:nullptr;
+}
+static bool OpenShellMenuVisible() {
+    HWND h=nullptr;
+    while((h=FindWindowExW(nullptr,h,L"OpenShell.CMenuContainer",nullptr))!=nullptr) {
+        DWORD pid=0;GetWindowThreadProcessId(h,&pid);
+        if(pid==GetCurrentProcessId() && IsWindowVisible(h)) return true;
+    }
+    return false;
+}
+static bool PostOpenShellRequest(WPARAM operation) {
+    HMODULE module=nullptr;
+    if(GetModuleHandleExW(0,L"StartMenuDLL.dll",&module)) {
+        auto symbol=GetProcAddress(module,"?g_TaskBar@@3PEAUHWND__@@EA");
+        HWND target=nullptr; SIZE_T bytes=0; DWORD pid=0;
+        bool read=symbol && ReadProcessMemory(GetCurrentProcess(),
+            reinterpret_cast<const void*>(symbol),&target,sizeof(HWND),&bytes) && bytes==sizeof(HWND);
+        DWORD tid=read && target?GetWindowThreadProcessId(target,&pid):0;
+        wchar_t cls[64]{};
+        bool valid=s && tid && pid==GetCurrentProcessId() && target!=s->privateHost &&
+            GetClassNameW(target,cls,(int)std::size(cls)) && !wcscmp(cls,L"Shell_TrayWnd");
+        UINT message=valid?RegisterWindowMessageW(L"OpenShellMenu.StartMenuMsg"):0;
+        bool posted=message && PostMessageW(target,message,operation,0);
+        Wh_Log(L"[T81-DIAG] Open-Shell request=%llu target=%p tid=%lu valid=%d posted=%d",
+               (unsigned long long)operation,target,tid,valid?1:0,posted?1:0);
+        FreeLibrary(module);
+        if(posted) return true;
+    }
+    // This is Open-Shell's own helper window path; WM_USER+10 is private.
+    HWND helper=FindWindowW(L"OpenShellMenu.CStartHookWindow",L"StartHookWindow");
+    if(helper && PostMessageW(helper,WM_USER+10,operation,0)) {
+        Wh_Log(L"[T81-DIAG] Open-Shell helper request=%llu posted (not confirmed)",
+               (unsigned long long)operation);
+        return true;
+    }
+    return false;
+}
+static bool ToggleOpenShellStart() {
+    if(!s || !s->bar) return false;
+    HWND helper=FindWindowW(L"OpenShellMenu.CStartHookWindow",L"StartHookWindow");
+    HWND owner=FindWindowW(L"OpenShell.COwnerWindow",nullptr);
+    if(!helper && !owner) return false;
+    KillTimer(s->bar,TIMER_OPENSHELL_VERIFY);s->openShellRetries=0;
+    PeekOff(false);
+    if(OpenShellMenuVisible()) {
+        if(!PostOpenShellRequest(0)) Wh_Log(L"[T81-DIAG] Open-Shell close request failed");
+        return true;
+    }
+    if(PostOpenShellRequest(2)) { // MSG_OPEN: only opens if currently closed
+        s->openShellRetries=3;
+        if(!SetTimer(s->bar,TIMER_OPENSHELL_VERIFY,700,nullptr)) {
+            s->openShellRetries=0;
+            Wh_Log(L"[T81-DIAG] Open-Shell verification timer unavailable");
+        }
+        return true;
+    }
+    // ManagedShell ShellHelper.ShellKeyCombo (Apache-2.0), as used by RetroBar.
+    INPUT keys[4]{};
+    for(int i=0;i<4;++i) {
+        keys[i].type=INPUT_KEYBOARD;
+        keys[i].ki.wVk=VK_LWIN;
+        keys[i].ki.dwExtraInfo=GetMessageExtraInfo();
+        if(i>=2) keys[i].ki.dwFlags=KEYEVENTF_KEYUP;
+    }
+    UINT sent=SendInput(4,keys,sizeof(INPUT));
+    Wh_Log(L"[T81-DIAG] Open-Shell Win fallback sent=%u/4 (menu not confirmed)",sent);
+    return true;
+}
+static void VerifyOpenShellRequest() {
+    if(!s || !s->bar) return;
+    if(OpenShellMenuVisible()) {
+        KillTimer(s->bar,TIMER_OPENSHELL_VERIFY);s->openShellRetries=0;
+        Wh_Log(L"[T81-DIAG] Open-Shell menu visible");return;
+    }
+    if(s->openShellRetries<=0 || !PostOpenShellRequest(2)) {
+        KillTimer(s->bar,TIMER_OPENSHELL_VERIFY);s->openShellRetries=0;
+        Wh_Log(L"[T81-DIAG] Open-Shell menu not confirmed; no native toggle sent");return;
+    }
+    --s->openShellRetries;
+}
+static bool ForegroundProcessElevated() {
+    HWND foreground=GetForegroundWindow();DWORD pid=0;
+    if(!foreground || !GetWindowThreadProcessId(foreground,&pid) || !pid) return false;
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
+    if(!process) return false;
+    HANDLE token=nullptr; TOKEN_ELEVATION elevation{};DWORD size=0;
+    bool elevated=OpenProcessToken(process,TOKEN_QUERY,&token) &&
+        GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&size) && elevation.TokenIsElevated;
+    if(token)CloseHandle(token);
+    CloseHandle(process);
+    return elevated;
 }
 void SendWin(WORD extra) {
+    if(!extra && ToggleOpenShellStart()) return;
     if(!extra && ToggleCompanionStart()) return;
+    if(!extra && ForegroundProcessElevated()) {
+        HWND desktop=StartDesktopWindow();
+        if(desktop && PostMessageW(desktop,WM_SYSCOMMAND,SC_TASKLIST,0)) {
+            Wh_Log(L"[T81-DIAG] Start: system tasklist posted for elevated foreground (not confirmed)");
+            return;
+        }
+        Wh_Log(L"[T81-DIAG] Start: tasklist post unavailable; trying SendInput");
+    }
     INPUT a[4] = {}; int n = 0;
     a[n].type=INPUT_KEYBOARD; a[n++].ki.wVk=VK_LWIN;
     if (extra) {
@@ -5146,6 +5270,123 @@ static HFONT CreateTaskbarFont(int dpi,bool perPixel) {
     return CreateFontW(-MulDiv(9,dpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
                        DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,
                        perPixel?ANTIALIASED_QUALITY:DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+}
+
+/* ---------------------------------------------------------------------------
+ * Clock text.
+ *
+ * The reconstructed Windows 7 bar called GetTimeFormatW(..., TIME_NOSECONDS,
+ * ...), which removes the seconds field from the string even when the user
+ * enabled seconds in the Windows clock, so the private clock never matched the
+ * stock one. Windows keeps that preference in two places:
+ *   - Explorer\Advanced\ShowSecondsInSystemClock (DWORD, older builds),
+ *   - the user's own short-time picture string (sShortTime), which the
+ *     Settings toggle rewrites so that it contains "ss" (Windows 10/11).
+ * Both are read at most every few seconds, so an idle bar never touches the
+ * registry while it repaints.
+ * ------------------------------------------------------------------------ */
+static bool ClockSecondsPreferenceInRegistry() {
+    DWORD data=0,size=sizeof(data);
+    LSTATUS status=RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        L"ShowSecondsInSystemClock",RRF_RT_REG_DWORD,nullptr,&data,&size);
+    return status==ERROR_SUCCESS && data!=0;
+}
+// A picture string ("HH:mm:ss", "h:mm:ss tt") carries seconds when an unquoted
+// s appears; quoted text is a literal and is skipped.
+static bool ClockPictureHasSeconds(const wchar_t* picture) {
+    if(!picture)return false;
+    bool quoted=false;
+    for(const wchar_t* p=picture;*p;++p) {
+        if(*p==L'\'') {quoted=!quoted;continue;}
+        if(quoted)continue;
+        if(*p==L's' || *p==L'S')return true;
+    }
+    return false;
+}
+static bool QueryClockSecondsPreference() {
+    if(ClockSecondsPreferenceInRegistry())return true;
+    wchar_t picture[128]{};
+    if(GetLocaleInfoW(LOCALE_USER_DEFAULT,LOCALE_SSHORTTIME,picture,(int)std::size(picture)) ||
+       GetLocaleInfoW(LOCALE_USER_DEFAULT,LOCALE_STIMEFORMAT,picture,(int)std::size(picture)))
+        return ClockPictureHasSeconds(picture);
+    return false;
+}
+enum class ClockTimeMode { NoSeconds,UserFormat,UserFormatWithSeconds };
+// Deliberately a plain struct with a fixed buffer: the bar keeps no
+// destructible globals, so nothing runs at DLL unload time.
+struct ClockTimeFormat {
+    ClockTimeMode mode=ClockTimeMode::NoSeconds;
+    wchar_t picture[160]{};    // used only by UserFormatWithSeconds
+    int skin=-1;
+    ULONGLONG checkedAt=0;
+};
+static ClockTimeFormat g_clockTimeFormat;
+static const ClockTimeFormat& ResolveClockTimeFormat() {
+    const int skin=taskbarSkin.load();
+    const ULONGLONG now=GetTickCount64();
+    if(g_clockTimeFormat.checkedAt && g_clockTimeFormat.skin==skin &&
+       now>=g_clockTimeFormat.checkedAt && now-g_clockTimeFormat.checkedAt<3000)
+        return g_clockTimeFormat;
+    g_clockTimeFormat.checkedAt=now?now:1;
+    g_clockTimeFormat.skin=skin;
+    g_clockTimeFormat.picture[0]=0;
+    g_clockTimeFormat.mode=ClockTimeMode::NoSeconds;
+    // Scoped to the Windows 7 skin on purpose: the other skins keep the clock
+    // they had. Remove the skin test to honour the preference on every skin.
+    if(skin==1 && QueryClockSecondsPreference()) {
+        wchar_t plain[80]{},noSeconds[80]{};
+        GetTimeFormatW(LOCALE_USER_DEFAULT,0,nullptr,nullptr,plain,(int)std::size(plain));
+        GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,noSeconds,(int)std::size(noSeconds));
+        if(plain[0] && wcscmp(plain,noSeconds))
+            g_clockTimeFormat.mode=ClockTimeMode::UserFormat;
+        else {
+            // The preference is on but the picture cannot express seconds
+            // (older Windows 10 builds): insert an ss field before the time
+            // marker, or after the minutes when the picture has none.
+            wchar_t picture[128]{},separator[8]{};
+            if(!GetLocaleInfoW(LOCALE_USER_DEFAULT,LOCALE_SSHORTTIME,picture,(int)std::size(picture)))
+                GetLocaleInfoW(LOCALE_USER_DEFAULT,LOCALE_STIMEFORMAT,picture,(int)std::size(picture));
+            if(!GetLocaleInfoW(LOCALE_USER_DEFAULT,LOCALE_STIME,separator,(int)std::size(separator)))
+                wcscpy(separator,L":");
+            const int length=(int)wcslen(picture);
+            int head=length;
+            bool quoted=false;
+            for(int i=0;i<length;++i) {
+                if(picture[i]==L'\'') {quoted=!quoted;continue;}
+                if(quoted)continue;
+                if(picture[i]==L't' || picture[i]==L'T') {head=i;break;}
+            }
+            while(head>0 && picture[head-1]==L' ')--head;
+            std::wstring composed(picture,picture+head);
+            composed+=separator;
+            composed+=L"ss";
+            composed.append(picture+head,picture+length);
+            if(!composed.empty() && composed.size()<std::size(g_clockTimeFormat.picture)) {
+                wcscpy(g_clockTimeFormat.picture,composed.c_str());
+                g_clockTimeFormat.mode=ClockTimeMode::UserFormatWithSeconds;
+            }
+        }
+    }
+    return g_clockTimeFormat;
+}
+static void InvalidateClockTimeFormat() {g_clockTimeFormat=ClockTimeFormat{};}
+// Mirrors what the stock clock shows. allowSeconds=false forces the classic
+// short time for cells that cannot fit the seconds (upright bar).
+static void FormatBarClockTime(wchar_t* buffer,size_t count,bool allowSeconds=true) {
+    if(!buffer || !count)return;
+    buffer[0]=0;
+    if(allowSeconds) {
+        const ClockTimeFormat& format=ResolveClockTimeFormat();
+        if(format.mode==ClockTimeMode::UserFormat) {
+            GetTimeFormatW(LOCALE_USER_DEFAULT,0,nullptr,nullptr,buffer,(int)count);
+            if(buffer[0])return;
+        } else if(format.mode==ClockTimeMode::UserFormatWithSeconds && format.picture[0]) {
+            GetTimeFormatW(LOCALE_USER_DEFAULT,0,nullptr,format.picture,buffer,(int)count);
+            if(buffer[0])return;
+        }
+    }
+    GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,buffer,(int)count);
 }
 struct ClockTextRows { RECT time{}, date{}; bool showDate=false; };
 static ClockTextRows GetClockTextRows(RECT clock,int height,int dpi) {
@@ -6135,7 +6376,8 @@ static bool StartPrivateTray() {
 // Only hide a top-level Explorer Start candidate overlapping the primary bar.
 static BOOL CALLBACK HideOwnedStart(HWND h, LPARAM) {
     try {
-    if(!s || h==s->bar || h==s->native || h==s->privateHost || !IsWindowVisible(h)) return TRUE;
+    if(!s || h==s->bar || h==s->native || h==s->privateHost || !IsWindowVisible(h) ||
+       GetAncestor(h,GA_ROOT)!=h) return TRUE;
     DWORD pid=0; DWORD tid=GetWindowThreadProcessId(h,&pid);
     if(pid!=GetCurrentProcessId()) return TRUE;
     wchar_t cls[128]={}; GetClassNameW(h,cls,128);
@@ -6157,6 +6399,8 @@ static BOOL CALLBACK HideOwnedStart(HWND h, LPARAM) {
         Wh_Log(L"[T81-DIAG] hiding-start hwnd=%p class=%ls pid=%lu rect=%ld,%ld,%ld,%ld",h,cls,pid,r.left,r.top,r.right,r.bottom);
         it->lastLogged=now;
     }
+    // Both asynchronous requests avoid blocking Explorer's taskbar thread.
+    ShowWindowAsync(h,SW_HIDE);
     SetWindowPos(h,HWND_BOTTOM,0,0,0,0,SWP_HIDEWINDOW|SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS);
     return TRUE;
     } catch(...) {Wh_Log(L"[T81-DIAG] Start guard C++ exception");return FALSE;}
@@ -6172,6 +6416,7 @@ static void RestoreHiddenStarts() {
 }
 static void CancelTrayDrag();
 static void RemoveWorkAreaAppBar();
+static bool IsExpectedNativeTray(HWND h);
 static void StopPrivateTray() {
     if(!s) return;
     DestroyLanguageFlyout();
@@ -6199,7 +6444,7 @@ static void StopPrivateTray() {
         s->cniSystemNid[slot]=NOTIFYICONDATAW{};
         s->cniSystemRegistered[slot]=false;
     }
-    if(s->nativeHiddenByUs && s->nativeWasVisible && s->native && IsWindow(s->native)) {
+    if(s->nativeHiddenByUs && s->nativeWasVisible && IsExpectedNativeTray(s->native)) {
         ShowWindowAsync(s->native,SW_SHOWNA);
         SetWindowPos(s->native,s->nativeWasTopmost?HWND_TOPMOST:HWND_NOTOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW|SWP_ASYNCWINDOWPOS);
     }
@@ -6207,11 +6452,18 @@ static void StopPrivateTray() {
     RestoreHiddenStarts();
     if(active) SendTaskbarCreated();
 }
-static void GuardPrivateTray() {
-    if(!s || !s->privateActive) return;
-    if(!s->privateHost || !IsWindow(s->privateHost) || !s->bar || !IsWindow(s->bar)) { StopPrivateTray(); return; }
-    SetWindowPos(s->privateHost,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
-    if(s->native && IsWindow(s->native) && IsWindowVisible(s->native)) {
+static void SyncPrivateHostGeometry();
+static bool IsExpectedNativeTray(HWND h) {
+    if(!h || !IsWindow(h) || (s && h==s->privateHost)) return false;
+    DWORD pid=0;GetWindowThreadProcessId(h,&pid);
+    wchar_t cls[64]{};
+    return pid==GetCurrentProcessId() && GetClassNameW(h,cls,(int)std::size(cls)) &&
+        !wcscmp(cls,L"Shell_TrayWnd");
+}
+static void HideNativeTrayIfVisible() {
+    if(!s || !s->privateActive || !s->bar || !IsWindow(s->bar) ||
+       !s->privateHost || !IsWindow(s->privateHost)) return;
+    if(IsExpectedNativeTray(s->native) && IsWindowVisible(s->native)) {
         ULONGLONG now=GetTickCount64();
         if(!s->nativeHideLastLogged || now-s->nativeHideLastLogged>=10000) {
             Wh_Log(L"[T81-DIAG] hiding-native hwnd=%p",s->native); s->nativeHideLastLogged=now;
@@ -6220,11 +6472,19 @@ static void GuardPrivateTray() {
         ShowWindowAsync(s->native,SW_HIDE);
         SetWindowPos(s->native,HWND_BOTTOM,0,0,0,0,SWP_HIDEWINDOW|SWP_ASYNCWINDOWPOS|SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
     }
+}
+static void GuardPrivateTray() {
+    if(!s || !s->privateActive) return;
+    if(!s->privateHost || !IsWindow(s->privateHost) || !s->bar || !IsWindow(s->bar)) { StopPrivateTray(); return; }
+    SetWindowPos(s->privateHost,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+    SyncPrivateHostGeometry();
+    HideNativeTrayIfVisible();
     EnumWindows(HideOwnedStart,0);
 }
 // Event-based repair reduces the interval in which Explorer's own bar can
 // reappear after a balloon/notification. A periodic guard remains as backup.
 static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LONG object,LONG child,DWORD,DWORD) {
+    try {
     if(!s || !hwnd || object!=OBJID_WINDOW || child!=CHILDID_SELF) return;
     DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);if(pid!=GetCurrentProcessId())return;
     if(event==EVENT_OBJECT_SHOW && s->peekOn) {
@@ -6236,11 +6496,20 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LO
     if(event==EVENT_OBJECT_SHOW && s->privateActive && hwnd==s->native) {
         Wh_Log(L"[T81-DIAG] native bar shown: event-driven rehide");GuardPrivateTray();return;
     }
+    // ExplorerPatcher and similar taskbars may expose a separate top-level
+    // Start button. Apply the same ownership, class and geometry checks as
+    // the periodic scan as soon as that window appears.
+    if(event==EVENT_OBJECT_SHOW && s->privateActive && s->bar && IsWindowVisible(s->bar) &&
+       s->privateHost && IsWindow(s->privateHost) && hwnd!=s->native && hwnd!=s->privateHost)
+        HideOwnedStart(hwnd,0);
     if(event==EVENT_OBJECT_CREATE || event==EVENT_OBJECT_SHOW) {
         wchar_t cls[64]{};if(GetClassNameW(hwnd,cls,64) && !wcscmp(cls,L"ClockFlyoutWindow")) {
             BOOL disabled=TRUE;HRESULT hr=DwmSetWindowAttribute(hwnd,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled));
             Wh_Log(L"[T81-DIAG] clock transition disable event=%lu hr=0x%08lx",event,(unsigned long)hr);
         }
+    }
+    } catch(...) {
+        Wh_Log(L"[T81-DIAG] shell visibility event C++ exception; periodic guard remains active");
     }
 }
 static void QueueActionFlyoutPosition(int index,POINT screen);
@@ -6264,7 +6533,7 @@ struct VerticalLayout {RECT start{},clock{},language{},desktop{},arrow{},icons{}
      int first=0, step=0, count=0, offset=0;
     };
 static int VerticalClockHeight() {
-    wchar_t time[64]{};GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,time,64);
+    wchar_t time[64]{};FormatBarClockTime(time,std::size(time));
     // Reserve a fourth line for localized time markers such as AM/PM.
     return Px(wcslen(time)>5?72:55);
 }
@@ -9358,6 +9627,27 @@ static BOOL CALLBACK FindVolumePopupProc(HWND h,LPARAM l) {
     if(width<Px(35) || width>Px(250) || height<Px(100) || height>Px(700))return TRUE;
     c->found=h;return FALSE;
 }
+// Observe only the newly launched SndVol process. This out-of-context event
+// is delivered on the registering UI thread after the show, not before paint.
+static void CALLBACK VolumeShowEvent(HWINEVENTHOOK hook,DWORD event,HWND hwnd,LONG object,LONG child,DWORD,DWORD) {
+    try {
+        if(!s || hook!=s->volumeShowHook || event!=EVENT_OBJECT_SHOW ||
+           object!=OBJID_WINDOW || child!=CHILDID_SELF || !s->volumeLaunchPid ||
+           !s->bar || !IsWindow(s->bar) || IsRectEmpty(&s->volumeAnchor)) return;
+        FindVolumePopupContext c{s->volumeLaunchPid,nullptr};
+        FindVolumePopupProc(hwnd,(LPARAM)&c);
+        if(c.found) {
+            Wh_Log(L"[T81-DIAG] volume popup show event; positioning early");
+            PlaceFlyoutAtVisualBar(c.found,s->volumeAnchor);
+        }
+    } catch(...) {Wh_Log(L"[T81-DIAG] volume show event C++ exception; timer remains active");}
+}
+static void StopVolumePositionWatch() {
+    if(!s) return;
+    if(s->bar) KillTimer(s->bar,TIMER_VOLUME_POSITION);
+    if(s->volumeShowHook) {UnhookWinEvent(s->volumeShowHook);s->volumeShowHook=nullptr;}
+    s->volumePositionAttempts=0;s->volumeLaunchPid=0;
+}
 // Based on the launch technique in "Legacy (Win32) sound volume flyout"
 // 2.0.0 by Anixx: SndVol -f, packed screen point, CreateProcessW and
 // STARTF_FORCEOFFFEEDBACK. The -f coordinate contract is undocumented.
@@ -9397,12 +9687,21 @@ static bool LaunchSndvolAt(POINT pt,const wchar_t* source,const RECT* iconAnchor
         Wh_Log(L"[T81-DIAG] volume CreateProcess failed error=%lu",GetLastError());return false;
     }
     if(pi.hThread)CloseHandle(pi.hThread);if(pi.hProcess)CloseHandle(pi.hProcess);
+    StopVolumePositionWatch();
     s->lastSndvolTick=tick;s->volumeLaunchPid=pi.dwProcessId;
     s->volumeAnchor=iconAnchor && !IsRectEmpty(iconAnchor) ? *iconAnchor : RECT{pt.x,pt.y,pt.x+1,pt.y+1};
-    s->volumePositionAttempts=30;
+    s->volumePositionAttempts=120;
+    if(pi.dwProcessId) {
+        s->volumeShowHook=SetWinEventHook(EVENT_OBJECT_SHOW,EVENT_OBJECT_SHOW,nullptr,
+                                          VolumeShowEvent,pi.dwProcessId,0,WINEVENT_OUTOFCONTEXT);
+        if(!s->volumeShowHook) Wh_Log(L"[T81-DIAG] volume show hook unavailable error=%lu; timer fallback",GetLastError());
+    }
     Wh_Log(L"[T81-DIAG] volume visual anchor=%ld,%ld,%ld,%ld",
            s->volumeAnchor.left,s->volumeAnchor.top,s->volumeAnchor.right,s->volumeAnchor.bottom);
-    if(s->bar && pi.dwProcessId)SetTimer(s->bar,TIMER_VOLUME_POSITION,100,nullptr);
+    if(s->bar && pi.dwProcessId && !SetTimer(s->bar,TIMER_VOLUME_POSITION,25,nullptr)) {
+        Wh_Log(L"[T81-DIAG] volume position timer unavailable error=%lu",GetLastError());
+        StopVolumePositionWatch();
+    }
     Wh_Log(L"[T81-DIAG] volume process accepted pid=%lu (not confirmation of position)",pi.dwProcessId);return true;
 }
 static bool LaunchPrivateVolume(const POINT* click) {
@@ -10293,9 +10592,73 @@ static bool DrawBetaTaskState(Graphics& g,const RECT& cell,bool running,bool act
     }
     return true;
 }
-// Approximation of Windows 7/8 color hot-track: sample the running app's
+// Approximation of the Windows 7/8 color hot-track: sample the running app's
 // icon once when the hovered group/icon changes; ignore neutral pixels.
-// The light follows the pointer and is clipped to the task button.
+//
+// The sample has to follow the icon's AREA, not its most saturated pixels. The
+// previous implementation scored every pixel by its chroma inside coarse RGB
+// buckets, so a small but very saturated accent - the yellow ring of the
+// Internet Explorer logo, for example - could outvote the icon's blue body and
+// paint a yellow glow on an almost entirely blue icon. Bucket splitting made
+// that worse: a shaded blue body scattered over many buckets, the flat yellow
+// ring stayed in one. This version builds a hue histogram weighted by pixel
+// area with only a mild saturation term, smooths it, averages the winning
+// neighbourhood and lifts the result to a lit glow.
+static Color DominantIconColor(Gdiplus::Bitmap& image) {
+    constexpr int kBins=36;                 // 10 degrees per bin
+    double weight[kBins]{},sumR[kBins]{},sumG[kBins]{},sumB[kBins]{};
+    const UINT w=image.GetWidth(),h=image.GetHeight();
+    if(!w || !h)return Color(255,85,165,235);
+    const UINT stepX=std::max(1u,w/64),stepY=std::max(1u,h/64);
+    for(UINT y=0;y<h;y+=stepY)for(UINT x=0;x<w;x+=stepX) {
+        Color c;
+        if(image.GetPixel(x,y,&c)!=Ok || c.GetA()<96)continue;
+        const int r=c.GetR(),g=c.GetG(),b=c.GetB();
+        const int high=std::max({r,g,b}),low=std::min({r,g,b}),chroma=high-low;
+        if(chroma<28)continue;              // shading, greys, white glass
+        if(high<56)continue;                // near-black outline
+        if(low>232)continue;                // near-white specular highlight
+        double hue=0.0;
+        if(high==r)hue=60.0*((double)(g-b)/chroma);
+        else if(high==g)hue=60.0*(2.0+(double)(b-r)/chroma);
+        else hue=60.0*(4.0+(double)(r-g)/chroma);
+        if(hue<0.0)hue+=360.0;
+        const int bin=((int)(hue/360.0*kBins))%kBins;
+        const double saturation=(double)chroma/255.0;
+        // Area dominates; saturation only breaks ties between two colours of a
+        // comparable size (factor 0.5 .. 1.0).
+        const double score=(double)c.GetA()*(0.5+0.5*saturation);
+        weight[bin]+=score;sumR[bin]+=score*r;sumG[bin]+=score*g;sumB[bin]+=score*b;
+    }
+    // Circular smoothing tolerates antialiased edges and gradients.
+    double smooth[kBins]{};
+    for(int i=0;i<kBins;++i)
+        smooth[i]=weight[i]*2.0+weight[(i+kBins-1)%kBins]+weight[(i+1)%kBins];
+    int best=-1;double bestWeight=0.0;
+    for(int i=0;i<kBins;++i)if(smooth[i]>bestWeight) {bestWeight=smooth[i];best=i;}
+    if(best<0 || bestWeight<=0.0)return Color(255,85,165,235);
+    // Average the winning bin together with its two neighbours.
+    double total=0.0,red=0.0,green=0.0,blue=0.0;
+    for(int offset=-1;offset<=1;++offset) {
+        const int bin=(best+offset+kBins)%kBins;
+        total+=weight[bin];red+=sumR[bin];green+=sumG[bin];blue+=sumB[bin];
+    }
+    if(total<=0.0)return Color(255,85,165,235);
+    double r=red/total,g=green/total,b=blue/total;
+    // Keep the hue, raise the value and give the colour a little more punch so
+    // the result reads as light rather than as paint.
+    const double high=std::max({r,g,b}),low=std::min({r,g,b});
+    double value=high/255.0,saturation=high>0.0?(high-low)/high:0.0;
+    value=std::max(value,0.86);
+    saturation=std::min(0.92,std::max(0.42,saturation*1.15+0.10));
+    const double base=value*255.0,floorValue=base*(1.0-saturation);
+    if(high-low>0.001) {
+        const double scale=(base-floorValue)/(high-low);
+        r=floorValue+(r-low)*scale;g=floorValue+(g-low)*scale;b=floorValue+(b-low)*scale;
+    } else r=g=b=base;
+    const auto channel=[](double v) {return (BYTE)std::lround(std::max(0.0,std::min(255.0,v)));};
+    return Color(255,channel(r),channel(g),channel(b));
+}
 static Color BetaHotTrackColor(size_t index) {
     if(!s || index>=s->groups.size())return Color(255,85,165,235);
     HICON icon=GroupIcon(index);static HICON lastIcon=nullptr;
@@ -10305,40 +10668,44 @@ static Color BetaHotTrackColor(size_t index) {
     if(!icon)return cached;
     std::unique_ptr<Gdiplus::Bitmap> image(Gdiplus::Bitmap::FromHICON(icon));
     if(!image || image->GetLastStatus()!=Ok)return cached;
-    unsigned long long weight[64]{},rs[64]{},gs[64]{},bs[64]{};
-    UINT w=image->GetWidth(),h=image->GetHeight();if(!w || !h)return cached;
-    for(UINT y=0;y<h;y+=std::max(1u,h/24))for(UINT x=0;x<w;x+=std::max(1u,w/24)) {
-        Color c;if(image->GetPixel(x,y,&c)!=Ok || c.GetA()<80)continue;
-        int r=c.GetR(),green=c.GetG(),b=c.GetB();
-        int high=std::max({r,green,b}),low=std::min({r,green,b});
-        if(high-low<30 || high<45 || low>235)continue;
-        int bucket=(r/64)*16+(green/64)*4+(b/64);
-        unsigned q=(unsigned)c.GetA()*(unsigned)(high-low);
-        weight[bucket]+=q;rs[bucket]+=(unsigned long long)q*r;
-        gs[bucket]+=(unsigned long long)q*green;bs[bucket]+=(unsigned long long)q*b;
-    }
-    int best=0;for(int i=1;i<64;i++)if(weight[i]>weight[best])best=i;
-    if(weight[best])cached=Color(255,(BYTE)(rs[best]/weight[best]),
-        (BYTE)(gs[best]/weight[best]),(BYTE)(bs[best]/weight[best]));
+    cached=DominantIconColor(*image);
     return cached;
 }
-static void DrawBetaHotTrack(Graphics& g,const RECT& cell,int index,float fade) {
-    if(!BetaTextureAvailable(2) || !s || index<0 || (size_t)index>=s->groups.size() ||
+// Shared icon-tinted highlight, used by the hover state only: the pointer
+// follows the cursor and the light is clipped to the task button. Two layers
+// are composited - a wide halo and a brighter core - because a single gradient
+// ellipse read as too faint next to the reference highlight.
+static void DrawIconHotGlow(Graphics& g,const RECT& cell,int index,float fade,POINT pointer) {
+    if(!s || index<0 || (size_t)index>=s->groups.size() ||
        s->groups[index].tasks.empty() || fade<=0.001f || IsRectEmpty(&cell))return;
-    POINT p{};if(!GetCursorPos(&p) || !ScreenToClient(s->bar,&p))return;
-    float x=(float)std::max(cell.left,std::min(cell.right-1,p.x));
-    float y=(float)std::max(cell.top,std::min(cell.bottom-1,p.y));
+    const float x=(float)std::max(cell.left,std::min(cell.right-1,pointer.x));
+    const float y=(float)std::max(cell.top,std::min(cell.bottom-1,pointer.y));
     float w=(float)(cell.right-cell.left),h=(float)(cell.bottom-cell.top);
     Color tint=BetaHotTrackColor((size_t)index);
-    GraphicsPath path;path.AddEllipse(x-w*.70f,y-h*.80f,w*1.40f,h*1.60f);
-    PathGradientBrush glow(&path);glow.SetCenterPoint(PointF(x,y));
-    glow.SetCenterColor(Color((BYTE)std::lround(125*std::min(1.f,fade)),tint.GetR(),tint.GetG(),tint.GetB()));
-    Color edge(0,tint.GetR(),tint.GetG(),tint.GetB());INT count=1;glow.SetSurroundColors(&edge,&count);
+    const float strength=std::min(1.f,fade);
+    // Half-extents relative to the button, and the centre alpha of each layer.
+    struct HotLayer {float halfWidth,halfHeight;int alpha;};
+    const HotLayer layers[]={{0.72f,0.82f,132},{0.46f,0.53f,120}};
     // Keep the dark and light frame pixels intact as the pointer moves.
     int inset=std::min(std::max(1,Px(2)),std::min((int)w,(int)h)/4);
     auto saved=g.Save();g.SetClip(Rect((int)cell.left+inset,(int)cell.top+inset,
         std::max(0,(int)w-2*inset),std::max(0,(int)h-2*inset)),CombineModeIntersect);
-    g.FillPath(&glow,&path);g.Restore(saved);
+    for(const auto& layer:layers) {
+        GraphicsPath path;path.AddEllipse(x-w*layer.halfWidth,y-h*layer.halfHeight,
+            w*2.f*layer.halfWidth,h*2.f*layer.halfHeight);
+        PathGradientBrush glow(&path);glow.SetCenterPoint(PointF(x,y));
+        glow.SetCenterColor(Color((BYTE)std::lround(layer.alpha*strength),
+            tint.GetR(),tint.GetG(),tint.GetB()));
+        Color edge(0,tint.GetR(),tint.GetG(),tint.GetB());INT count=1;
+        glow.SetSurroundColors(&edge,&count);
+        g.FillPath(&glow,&path);
+    }
+    g.Restore(saved);
+}
+static void DrawBetaHotTrack(Graphics& g,const RECT& cell,int index,float fade) {
+    if(!BetaTextureAvailable(2) || !s)return;
+    POINT p{};if(!GetCursorPos(&p) || !ScreenToClient(s->bar,&p))return;
+    DrawIconHotGlow(g,cell,index,fade,p);
 }
 static int TaskTileLayers(size_t windows) {return (int)std::min<size_t>(windows,3);}
 static void DrawTaskTileStack(Graphics& g,int x,int width,int height,int layers,bool active,float fade) {
@@ -10627,7 +10994,7 @@ void Paint(HWND hwnd) {
     RECT r{}; GetClientRect(hwnd,&r); int w=r.right,h=r.bottom;
     if(w<=0 || h<=0 || w>32768 || h>4096) { return; }
     wchar_t time[64]={},date[64]={};
-    GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,time,64);
+    FormatBarClockTime(time,std::size(time));
     GetDateFormatW(LOCALE_USER_DEFAULT,DATE_SHORTDATE,nullptr,nullptr,date,64);
     bool clockWidthChanged=UpdateClockMetrics(dc,time,date);
     if(clockWidthChanged)BuildGroups();
@@ -12301,11 +12668,7 @@ void UpdatePlacement() {
         s->barEdgeOverride=0;if(s->edgeSourcesInitialized)SaveBarEdgePreference();
     }
     HWND native=s->privateActive?s->native:FindOwnedNativeTaskbar();
-    if(native) {
-        DWORD pid=0;
-        GetWindowThreadProcessId(native,&pid);
-        if(pid!=GetCurrentProcessId()) native=nullptr;
-    }
+    if(native && !IsExpectedNativeTray(native)) native=nullptr;
     if(native!=s->native) {
         s->native=native;
         s->rectValid=false;
@@ -12318,6 +12681,9 @@ void UpdatePlacement() {
         // actual Explorer taskbar can be rediscovered by FindWindow.
         StopPrivateTray();
         s->native=nullptr; s->rectValid=false; nativeWindow.store(nullptr);
+        s->nativeRecoveryPending=true;
+        s->nativeRecoveryRetryAt=GetTickCount64()+2000;
+        Wh_Log(L"[T81-DIAG] native taskbar lost; waiting before recovery");
         return;
     }
     RECT full{};
@@ -14139,11 +14505,18 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
         RECT r=entry.first;if(!IsRectEmpty(&r))DrawTextW(dc,entry.second,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
     }
     wchar_t time[64]{},date[64]{};
-        GetTimeFormatW(LOCALE_USER_DEFAULT,TIME_NOSECONDS,nullptr,nullptr,time,64);
+        FormatBarClockTime(time,std::size(time));
         GetDateFormatW(LOCALE_USER_DEFAULT,DATE_SHORTDATE,nullptr,nullptr,date,64);
     std::wstring firstTime=time,timeMarker,firstDate=date,year;
     SIZE timeSize{},dateSize{};
     GetTextExtentPoint32W(dc,time,(int)wcslen(time),&timeSize);GetTextExtentPoint32W(dc,date,(int)wcslen(date),&dateSize);
+    if(timeSize.cx>v.clock.right-v.clock.left-Px(4) &&
+       ResolveClockTimeFormat().mode!=ClockTimeMode::NoSeconds) {
+        // The upright bar is narrow: show the seconds only while they fit, and
+        // fall back to the classic short time instead of an ellipsis.
+        FormatBarClockTime(time,std::size(time),false);
+        GetTextExtentPoint32W(dc,time,(int)wcslen(time),&timeSize);
+    }
     if(timeSize.cx>v.clock.right-v.clock.left-Px(4)) {
         size_t separator=firstTime.find_last_of(L" ");
         if(separator!=std::wstring::npos && separator>0 && separator+1<firstTime.size()) {
@@ -14385,6 +14758,95 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// Shell integration compatibility.
+//
+// The private tray host is the discoverable "Shell_TrayWnd" of this process, but
+// it is deliberately a hidden 1x1 popup. Shell mods that locate the taskbar by
+// class name (Taskbar Volume Control does exactly that: it stores the window it
+// finds, subclasses it and hit-tests the cursor against GetWindowRect of it)
+// therefore measured an empty rectangle and stopped responding. Keep the host's
+// rectangle equal to the visible bar and its TrayNotifyWnd equal to the tray
+// area: geometry only, the host stays hidden and keeps receiving no input.
+static void SyncPrivateHostGeometry() {
+    if(!s || !s->privateHost || !IsWindow(s->privateHost))return;
+    RECT host{};
+    if(!s->bar || !IsWindow(s->bar) || !GetWindowRect(s->bar,&host) || IsRectEmpty(&host)) {
+        if(IsRectEmpty(&s->nativeRect))return;
+        host=s->nativeRect;
+    }
+    RECT notify=host;
+    if(s->bar && IsWindow(s->bar)) {
+        RECT client{};GetClientRect(s->bar,&client);
+        RECT tray{};
+        if(s->verticalActive) {
+            VerticalLayout v=GetVerticalLayout(client.right,client.bottom);
+            tray=RECT{0,v.arrow.top,client.right,v.clock.top};
+        } else {
+            Layout l=GetLayout(client.right,client.bottom);
+            tray=l.tray;
+        }
+        if(!IsRectEmpty(&tray)) {
+            MapWindowPoints(s->bar,nullptr,(POINT*)&tray,2);
+            notify=tray;
+        }
+    }
+    static RECT lastHost{},lastNotify{};
+    if(s->privateGeometryApplied && EqualRect(&lastHost,&host) && EqualRect(&lastNotify,&notify))return;
+    SetWindowPos(s->privateHost,nullptr,host.left,host.top,host.right-host.left,host.bottom-host.top,
+                 SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|SWP_ASYNCWINDOWPOS);
+    if(s->privateNotify && IsWindow(s->privateNotify))
+        SetWindowPos(s->privateNotify,nullptr,notify.left-host.left,notify.top-host.top,
+                     std::max(1,(int)(notify.right-notify.left)),std::max(1,(int)(notify.bottom-notify.top)),
+                     SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|SWP_ASYNCWINDOWPOS);
+    lastHost=host;lastNotify=notify;s->privateGeometryApplied=true;
+    Wh_Log(L"[T81-DIAG] private host geometry hwnd=%p rect=%ld,%ld,%ld,%ld",
+           s->privateHost,host.left,host.top,host.right,host.bottom);
+}
+static bool MasterVolumeSnapshot(float* level,bool* muted) {
+    if(!s)return false;
+    if(!s->endpoint)EnsureEndpoint();
+    if(!s->endpoint)return false;
+    float value=0.f;BOOL mute=FALSE;
+    if(FAILED(s->endpoint->GetMasterVolumeLevelScalar(&value)) || FAILED(s->endpoint->GetMute(&mute)))return false;
+    if(level)*level=value;
+    if(muted)*muted=mute!=FALSE;
+    return true;
+}
+// A shell integration reacts to wheel notches that are delivered to the shell
+// taskbar window, and it derives the "is the pointer on the scroll area" answer
+// from the cursor position in the message. The reconstructed bar is a separate
+// window, so the notch never reaches it; hand the message over instead. It is
+// delivered at most once: if the master volume changed after the first target
+// the notch is consumed and the second taskbar window does not get it too.
+static bool ForwardShellWheel(WPARAM wp,LPARAM lp) {
+    if(!s || !s->bar)return false;
+    static bool busy=false;
+    if(busy)return false;
+    HWND targets[2]={nullptr,nullptr};
+    HWND primary=FindWindowW(L"Shell_TrayWnd",nullptr);
+    if(primary && primary!=s->bar)targets[0]=primary;
+    if(s->native && IsWindow(s->native) && s->native!=targets[0])targets[1]=s->native;
+    if(!targets[0] && !targets[1])return false;
+    float level=0.f;bool muted=false;
+    const bool measured=MasterVolumeSnapshot(&level,&muted);
+    bool forwarded=false;
+    busy=true;
+    for(int index=0;index<2;++index) {
+        HWND target=targets[index];
+        if(!target)continue;
+        DWORD_PTR result=0;
+        SendMessageTimeoutW(target,WM_MOUSEWHEEL,wp,lp,SMTO_ABORTIFHUNG|SMTO_BLOCK,300,&result);
+        forwarded=true;
+        if(index==0 && measured) {
+            float nowLevel=0.f;bool nowMuted=false;
+            if(MasterVolumeSnapshot(&nowLevel,&nowMuted) &&
+               (nowMuted!=muted || std::fabs(nowLevel-level)>0.0005f))break;   // already handled
+        }
+    }
+    busy=false;
+    return forwarded;
+}
 LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
     if(s && m==WM_LBUTTONDOWN)s->suppressTrayRelease=false;
     if(s && m==WM_LBUTTONUP && s->suppressTrayRelease && !s->trayDrag.capture) {
@@ -14444,11 +14906,11 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         if(wp==TIMER_VOLUME_POSITION) {
             FindVolumePopupContext c{s->volumeLaunchPid,nullptr};if(c.pid)EnumWindows(FindVolumePopupProc,(LPARAM)&c);
             if(c.found && FlyoutAtVisualTarget(c.found,s->volumeAnchor)) {
-                KillTimer(h,TIMER_VOLUME_POSITION);s->volumePositionAttempts=0;
+                StopVolumePositionWatch();
                 Wh_Log(L"[T81-DIAG] volume popup target rectangle observed");
             } else {
                 if(c.found) PlaceFlyoutAtVisualBar(c.found,s->volumeAnchor);
-                if(--s->volumePositionAttempts<=0) {KillTimer(h,TIMER_VOLUME_POSITION);Wh_Log(L"[T81-DIAG] volume popup target not observed in launched PID");}
+                if(--s->volumePositionAttempts<=0) {StopVolumePositionWatch();Wh_Log(L"[T81-DIAG] volume popup target not observed in launched PID");}
             }
             return 0;
         }
@@ -14480,6 +14942,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
                     Wh_Log(L"[T81-DIAG] deferred classic native setting message timed out/failed error=%lu",GetLastError());
             }return 0;
         }
+        if(wp==TIMER_OPENSHELL_VERIFY) {VerifyOpenShellRequest();return 0;}
         if(wp==TIMER_RESOURCE_RELOAD) {KillTimer(h,TIMER_RESOURCE_RELOAD);LoadLegacyImages();return 0;}
         if(wp==TIMER_BATTERY_SLIDE) {TickBatterySlide();return 0;}
         if(wp==TIMER_ACTIVATE_RETRY) {TickActivateRetry();return 0;}
@@ -14492,6 +14955,21 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
             static ULONGLONG lastPrivateGuard=0;
             ULONGLONG now=GetTickCount64();
             if(now-lastPrivateGuard>=1000) {lastPrivateGuard=now;GuardPrivateTray();}
+            else {
+                HideNativeTrayIfVisible();
+                // Fast, bounded recheck of Start windows already hidden by us;
+                // discovery of new candidates remains in the periodic scan.
+                if(s->privateActive && s->bar && IsWindowVisible(s->bar) &&
+                   s->privateHost && IsWindow(s->privateHost)) {
+                    for(size_t i=0;i<s->hiddenStarts.size();++i) {
+                        auto item=s->hiddenStarts[i]; DWORD pid=0;
+                        DWORD tid=GetWindowThreadProcessId(item.hwnd,&pid);
+                        if(tid==item.tid && pid==item.pid && IsWindowVisible(item.hwnd) &&
+                           (ATOM)GetClassLongPtrW(item.hwnd,GCW_ATOM)==item.cls)
+                            HideOwnedStart(item.hwnd,0);
+                    }
+                }
+            }
             GuardOverlayZOrder(); TickTrayDrag(); DismissOverflowOnOutsideClick(); }
         if(wp==TIMER_BUTTON_TRANSITION) {TickButtonTransitions();return 0;}
         if(wp==TIMER_ANIMATION || wp==TIMER_FADE) InvalidateRect(h,nullptr,FALSE);
@@ -14519,6 +14997,25 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
             }
             if(s->peekOn && !s->peekDesktop && (!s->peekTarget || !IsWindow(s->peekTarget))) PeekOff(false);
             UpdatePlacement(); Refresh();
+            if(s->nativeRecoveryPending && !s->privateActive && enablePrivateTray.load() &&
+               !quitting.load() && GetTickCount64()>=s->nativeRecoveryRetryAt &&
+               IsExpectedNativeTray(s->native) && IsWindowVisible(s->native) &&
+               IsWindowVisible(s->bar) && (s->perPixelBar?s->perPixelFrame:s->legacyAlphaReady)) {
+                s->nativeRecoveryRetryAt=GetTickCount64()+5000;
+                try {
+                    if(StartPrivateTray()) {
+                        s->nativeRecoveryPending=false;
+                        StartResourceWorker(); RefreshVolume(); RefreshBattery();
+                        PublishCniSystemIcon(HIT_VOLUME); PublishCniSystemIcon(HIT_BATTERY);
+                        s->netKind=QueryNetworkKind(); PublishCniSystemIcon(HIT_NETWORK);
+                        UpdatePlacement(); GuardPrivateTray(); InvalidateRect(s->bar,nullptr,FALSE);
+                        Wh_Log(L"[T81-DIAG] private tray recovered after native taskbar replacement");
+                    } else Wh_Log(L"[T81-DIAG] private tray recovery deferred; native taskbar retained");
+                } catch(...) {
+                    Wh_Log(L"[T81-DIAG] private tray recovery C++ exception; restoring native taskbar");
+                    try { StopPrivateTray(); } catch(...) { Wh_Log(L"[T81-DIAG] recovery cleanup C++ exception"); }
+                }
+            }
         }
         if(wp==TIMER_DESKTOP_PEEK) { KillTimer(h,TIMER_DESKTOP_PEEK);
              POINT p{};
@@ -14580,6 +15077,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
          if(s->overflowPanel) InvalidateRect(s->overflowPanel,nullptr,FALSE);
          HidePreview();
          s->clockMetricsDpi=0;
+        InvalidateClockTimeFormat();
         s->languageMetricsDpi=0;
         if(s->privateActive)RefreshLanguageIndicator();
          if(!aeroPeek.load()) PeekOff(false);
@@ -14594,6 +15092,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
          return 0;
     case WM_DISPLAYCHANGE: case WM_SETTINGCHANGE: case WM_DPICHANGED:
         s->buttonTransitions.clear();KillTimer(h,TIMER_BUTTON_TRANSITION);
+        InvalidateClockTimeFormat();
         if(m!=WM_SETTINGCHANGE || taskbarPlacementMode.load()!=3)CancelBarEdgeDrag(true);
         if(s->appbarRegistered)s->appbarDirty=true;
         if(m==WM_DPICHANGED && !s->resourceDir.empty()) LoadLegacyImages();
@@ -14926,9 +15425,21 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         return MAKELPARAM((r.left+r.right)/2,(r.top+r.bottom)/2);
     }
 #endif
+    case 0x024E: { // WM_POINTERWHEEL: precision touchpads report the wheel here
+        POINT p{};
+        if(!GetCursorPos(&p))break;
+        POINT local=p;
+        const int delta=(short)HIWORD(wp);
+        if(volumeWheel.load() && ScreenToClient(h,&local) && Hit(local.x,local.y)==HIT_VOLUME) {AdjustVolumeWheel(delta);return 0;}
+        if(ForwardShellWheel(MAKEWPARAM(0,delta),MAKELPARAM(p.x,p.y)))return 0;
+        break;
+    }
     case WM_MOUSEWHEEL: {
         POINT p{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
         if(volumeWheel.load() && ScreenToClient(h,&p) && Hit(p.x,p.y)==HIT_VOLUME) {AdjustVolumeWheel(GET_WHEEL_DELTA_WPARAM(wp));return 0;}
+        // Nothing local claimed this notch: let a shell integration (for
+        // example Taskbar Volume Control) see it on the real taskbar window.
+        if(ForwardShellWheel(wp,lp))return 0;
         break;
     }
     case WM_MBUTTONDOWN: { int hit=Hit(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));
@@ -14989,7 +15500,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         KillTimer(h,TIMER_BUTTON_TRANSITION);
         StopAttentionHook(h);
         KillTimer(h,TIMER_NETWORK_POSITION);
-         KillTimer(h,TIMER_VOLUME_POSITION);
+         StopVolumePositionWatch();
          KillTimer(h,TIMER_ACTION_POSITION);
          CancelBarEdgeDrag(false);
          RemoveWorkAreaAppBar();
@@ -15038,6 +15549,15 @@ DWORD WINAPI UIThread(LPVOID) {
     }
     if(quitting.load() || !ownedTray) {
         Wh_Log(L"No taskbar owned by this Explorer process; no UI created"); return 0;
+    }
+    // Let ExplorerPatcher finish creating its taskbar before taking it over.
+    if(GetModuleHandleW(L"ExplorerPatcher.amd64.dll") || GetModuleHandleW(L"ExplorerPatcher.arm64.dll") || GetModuleHandleW(L"ExplorerPatcher.dll") ||
+       GetModuleHandleW(L"ep_taskbar.dll") || GetModuleHandleW(L"ep_extra.dll")) {
+        Wh_Log(L"[T81-DIAG] ExplorerPatcher detected! Giving its taskbar a moment to get ready.");
+        for(int i=0;i<15 && !quitting.load();++i) Sleep(100);
+        if(quitting.load()) return 0;
+        ownedTray=FindOwnedNativeTaskbar();
+        if(!ownedTray) { Wh_Log(L"[T81-DIAG] ExplorerPatcher taskbar is not ready yet! Leaving the native shell alone."); return 0; }
     }
     // Limit DPI-awareness change to our UI thread, never the Explorer process.
     using DpiCtxFn=DPI_AWARENESS_CONTEXT (WINAPI*)(DPI_AWARENESS_CONTEXT);
@@ -15109,6 +15629,7 @@ DWORD WINAPI UIThread(LPVOID) {
             } else if(!local.bar) Wh_Log(L"Failed to create bar window, native bar was not hidden");
         } else if(!registered) Wh_Log(L"Failed to register bar window class");
         if(local.visibilityHook) {UnhookWinEvent(local.visibilityHook);local.visibilityHook=nullptr;}
+        StopVolumePositionWatch();
         CancelBatterySlide(); CleanupBatteryFrame();
         StopResourceWorker();
         DestroyDesktopPopup(); DestroyAddressBand(); CloseJumpPopup(); UnregisterClassW(kJumpClass,GetModuleHandleW(nullptr));
@@ -15138,6 +15659,7 @@ DWORD WINAPI UIThread(LPVOID) {
         // attempt to restore the native taskbar. Fatal SEH is not intercepted.
         auto cleanup=[](auto fn) noexcept {try {fn();} catch(...) {Wh_Log(L"[T81-DIAG] C++ exception during cleanup");}};
         if(s) {
+            cleanup([&]{StopVolumePositionWatch();});
             cleanup([&]{StopAttentionHook(local.bar);});
             cleanup([&]{if(local.visibilityHook){UnhookWinEvent(local.visibilityHook);local.visibilityHook=nullptr;}});
             cleanup([&]{CancelBatterySlide();CleanupBatteryFrame();});
