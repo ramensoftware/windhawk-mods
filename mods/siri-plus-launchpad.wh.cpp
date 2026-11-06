@@ -4142,6 +4142,7 @@ AppList* EnumerateApps(int iconPixels) {
 struct AppsJob { int iconPixels; std::unordered_map<std::wstring, std::wstring> customIcons; };
 bool LoadImageFile(const std::wstring& path, int size, App& app);
 extern std::unordered_map<std::wstring, std::wstring> g_customIcons;
+std::unordered_map<std::wstring, std::wstring> g_appsJobIcons;   // the custom icons the list being loaded was built with
 
 DWORD WINAPI LoadAppsThread(void* param) {
     std::unique_ptr<AppsJob> job(static_cast<AppsJob*>(param));
@@ -4182,6 +4183,7 @@ void StartLoadingApps() {
     if (WorkerBusy()) return;   // a list is already on its way
     if (g_worker) CloseHandle(std::exchange(g_worker, nullptr));
     auto job = std::make_unique<AppsJob>(AppsJob{IconPixels(), g_customIcons});
+    g_appsJobIcons = g_customIcons;
     g_appsTime = Now();
     g_worker = CreateThread(nullptr, 0, LoadAppsThread, job.get(), 0, nullptr);
     if (g_worker) {
@@ -10268,6 +10270,15 @@ void OnAppsLoaded(AppList* list, int iconPixels) {
     if (!list->empty()) ReconcileFolders(*list);
     g_apps = std::move(*list); delete list;
     g_appsLoaded = true; g_appsIconPixels = iconPixels;
+    // An icon picked or reset while the list was loading: the list has the old one
+    auto syncIcon = [&](App& a) {
+        auto now = g_customIcons.find(a.target), was = g_appsJobIcons.find(a.target);
+        bool hasNow = now != g_customIcons.end(), had = was != g_appsJobIcons.end();
+        if (hasNow && (!had || was->second != now->second)) { if (LoadImageFile(now->second, iconPixels, a)) { a.bitmap.Reset(); a.generation = 0; } }
+        else if (!hasNow && had) ResetAppIcon(a);
+    };
+    for (auto& a : g_apps) syncIcon(*a);
+    for (auto& f : g_folders) for (auto& a : f.apps) syncIcon(*a);
     if (g_shown) {
         if (g_openFolderIndex >= 0) BuildMainItems(g_mainItems);
         RebuildLayout(); ComputeLayout(); Render();
@@ -12589,9 +12600,10 @@ void GhSaveColors() {
 }
 
 // Reads the folder (and its subfolders) on its own thread: every image, by relative path
-struct GhListJob { std::wstring key; };
-void GhScanFolder(const std::wstring& dir, const std::wstring& rel, int depth, std::vector<std::wstring>& out) {
-    if (g_ghStop || depth > kGhMaxDepth || (int)out.size() >= kGhMaxImages) return;
+struct GhListJob { std::wstring key; unsigned gen; };
+std::atomic<unsigned> g_ghScanGen;   // bumped to make a scan in progress stop (another folder was chosen)
+void GhScanFolder(const std::wstring& dir, const std::wstring& rel, int depth, std::vector<std::wstring>& out, unsigned gen) {
+    if (g_ghStop || g_ghScanGen.load() != gen || depth > kGhMaxDepth || (int)out.size() >= kGhMaxImages) return;
     WIN32_FIND_DATAW fd;
     HANDLE find = FindFirstFileExW((dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
     if (find == INVALID_HANDLE_VALUE) return;
@@ -12600,9 +12612,9 @@ void GhScanFolder(const std::wstring& dir, const std::wstring& rel, int depth, s
         if (name == L"." || name == L".." || (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) continue;
         std::wstring relPath = rel.empty() ? name : rel + L"\\" + name;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) GhScanFolder(dir + L"\\" + name, relPath, depth + 1, out);   // no links (loops)
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) GhScanFolder(dir + L"\\" + name, relPath, depth + 1, out, gen);   // no links (loops)
         } else if (GhImagePath(name)) out.push_back(relPath);
-    } while (!g_ghStop && (int)out.size() < kGhMaxImages && FindNextFileW(find, &fd));
+    } while (!g_ghStop && g_ghScanGen.load() == gen && (int)out.size() < kGhMaxImages && FindNextFileW(find, &fd));
     FindClose(find);
 }
 
@@ -12611,11 +12623,11 @@ DWORD WINAPI GhListThread(void* param) {
     auto* result = new GhListResult{job->key, {}, {}};
     if (!GhFolderExists(job->key)) result->error = CfgT(L"Folder not found", L"Pasta não encontrada");
     else {
-        GhScanFolder(job->key, L"", 0, result->paths);
+        GhScanFolder(job->key, L"", 0, result->paths, job->gen);
         std::stable_sort(result->paths.begin(), result->paths.end(), [](const std::wstring& a, const std::wstring& b) { return NameLess(a, b); });
     }
     HWND launcher = g_wnd;
-    if (g_ghStop || !launcher || !PostMessageW(launcher, WM_APP_GHLIST, 0, (LPARAM)result)) delete result;
+    if (g_ghStop || g_ghScanGen.load() != job->gen || !launcher || !PostMessageW(launcher, WM_APP_GHLIST, 0, (LPARAM)result)) delete result;
     return 0;
 }
 
@@ -12813,6 +12825,7 @@ void GhOpen(App* app) {
         g_gh.paths.clear(); g_gh.error.clear(); g_ghItems.clear(); g_ghColors.clear();
         g_gh.colorFilter = -1; g_gh.byColor = false;
         g_gh.key = folder;
+        ++g_ghScanGen;   // a scan of the old folder stops now instead of being waited for
         g_gh.loading = g_gh.refreshing = false;
         g_gh.listTime = -1000;
     }
@@ -12829,7 +12842,7 @@ void GhOpen(App* app) {
     if (!g_gh.refreshing && (g_gh.paths.empty() || Now() - g_gh.listTime > kGhListRefresh)) {
         if (g_ghListThread) { WaitForSingleObject(g_ghListThread, INFINITE); CloseHandle(g_ghListThread); g_ghListThread = nullptr; }
         g_gh.loading = g_gh.paths.empty(); g_gh.refreshing = true; g_gh.error.clear();
-        g_ghListThread = CreateThread(nullptr, 0, GhListThread, new GhListJob{g_gh.key}, 0, nullptr);
+        g_ghListThread = CreateThread(nullptr, 0, GhListThread, new GhListJob{g_gh.key, g_ghScanGen.load()}, 0, nullptr);
         if (!g_ghListThread) {
             g_gh.loading = g_gh.refreshing = false;
             if (g_gh.paths.empty()) g_gh.error = CfgT(L"Could not read the folder", L"Não foi possível ler a pasta");
