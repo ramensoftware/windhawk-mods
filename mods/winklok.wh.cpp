@@ -13318,7 +13318,14 @@ namespace ui
                 WideCharToMultiByte(CP_UTF8, 0, dst.c_str(), -1, &s[0], n, nullptr, nullptr);
                 return s;
             }();
-            { OwnerOnly a; HANDLE h = CreateFileW((dst + L"-shm").c_str(), GENERIC_WRITE, 0, a.Get(), CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr); if (h != INVALID_HANDLE_VALUE) CloseHandle(h); }
+            {
+                OwnerOnly a;
+                HANDLE h = CreateFileW(
+                    (dst + L"-shm").c_str(), GENERIC_WRITE, 0, a.Get(),
+                    CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+                if (h != INVALID_HANDLE_VALUE)
+                    CloseHandle(h);
+            }
             void *db = nullptr;
             bool ok = false;
             if (g_sql.open_v2(path.c_str(), &db, 2 /*SQLITE_OPEN_READWRITE: our private copy*/, nullptr) == 0 && db)
