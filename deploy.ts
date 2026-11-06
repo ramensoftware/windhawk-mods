@@ -5,7 +5,7 @@ import * as path from 'path';
 import ModSourceUtils from './modSourceUtils.js';
 import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
-import showdown from 'showdown';
+import MarkdownIt from 'markdown-it';
 
 // Author name variations of the same github account. The first item of each
 // pair is the canonical name.
@@ -21,6 +21,7 @@ const allowedAuthorNamePairs = [
 const allowedAuthorGithubPairs = [
     ['https://github.com/meteoni', 'https://github.com/meteony'],
     ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
+    ['https://github.com/sharexza', 'https://github.com/raviadityasetiawan-oss'],
 ];
 
 type ModAuthorData = {
@@ -157,7 +158,14 @@ function JSONcompactNumberArrays(json: string) {
 }
 
 function gitExec(args: string[]) {
-    const result = child_process.spawnSync('git', args, { encoding: 'utf8' });
+    const result = child_process.spawnSync('git', args, {
+        encoding: 'utf8',
+        maxBuffer: 512 * 1024 * 1024,
+    });
+    if (result.error) {
+        throw new Error('git ' + args.join(' ') + ' failed: ' + result.error.message);
+    }
+
     if (result.status !== 0) {
         throw new Error('git ' + args.join(' ') + ' failed with status ' + result.status + ' and stderr ' + result.stderr);
     }
@@ -806,6 +814,7 @@ function enrichCatalog(
                 published: modTimes[id].published,
                 updated: modTimes[id].updated,
                 defaultSorting: 0,
+                trendingSorting: 0,
                 rating: 0,
                 users: 0,
                 ratingUsers: 0,
@@ -999,22 +1008,16 @@ function generateRssFeed(feedType: 'updates' | 'releases', cache: GitCache) {
         updated: feedItems[0].date,
     });
 
-    const showdownConverter = new showdown.Converter();
-
-    const markdownToHtml = (markdown: string) => {
-        // Showdown doesn't support trailing backslashes as newlines. Use double
-        // spaces instead. https://github.com/showdownjs/showdown/issues/394
-        markdown = markdown.replace(/\\\n/g, '  \n');
-
-        return showdownConverter.makeHtml(markdown);
-    }
+    // Feed content is written by mod authors, so raw HTML is escaped rather than
+    // passed on to feed readers.
+    const markdown = new MarkdownIt({ html: false });
 
     for (const feedItem of feedItems) {
         feed.addItem({
             title: feedItem.title,
             id: feedItem.url + '#' + feedItem.commit,
             link: feedItem.url,
-            content: markdownToHtml(feedItem.content),
+            content: markdown.render(feedItem.content),
             date: feedItem.date,
             author: [feedItem.author],
         });

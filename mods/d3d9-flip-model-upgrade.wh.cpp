@@ -2,7 +2,7 @@
 // @id              d3d9-flip-model-upgrade
 // @name            D3D9 Flip Model Upgrade
 // @description     Upgrades Direct3D 9 games to D3D9Ex with a FLIPEX swap chain so windowed/borderless games can reach Independent Flip
-// @version         1.0
+// @version         1.1
 // @author          tria
 // @github          https://github.com/triatomic
 // ==/WindhawkMod==
@@ -80,6 +80,15 @@ instead.
   bound again.
 - The flip model can only present to the device window. Games that present the
   same swap chain to several windows will only draw to one of them.
+- The flip model needs the game window for itself. An in-game overlay that
+  creates its own Direct3D device for the same window, such as the Steam
+  overlay, keeps working, but it draws on top of the game and that prevents
+  Independent Flip. Turn the overlay off to get the full effect.
+- Games that create their device with mixed vertex processing aren't upgraded,
+  as their managed vertex buffers can't be emulated.
+- Some games with anti-tamper protection hang or close with the mod enabled.
+  Turn on **SafeHook** for them, so that the mod doesn't hook `LoadLibraryExW`
+  in `kernelbase.dll`. It hooks `d3d9.dll` either way.
 - No guarantees of anti-cheat compatibility.
 
 Enable the mod's logging (Advanced → Debug logging) to see exactly what was
@@ -120,6 +129,17 @@ changed and any failure codes.
   $description: >-
     If the game requests a multisampled back buffer, skip the upgrade instead of
     dropping the multisampling.
+- safeHook: false
+  $name: SafeHook
+  $description: >-
+    For games whose anti-tamper protection hangs or closes them with the mod
+    enabled. Off: if d3d9.dll isn't loaded yet when the mod starts, its loading
+    is noticed by hooking LoadLibraryExW in kernelbase.dll, so the mod's hooks
+    are in place before the game can use it. On: a Windows DLL load
+    notification is used instead, and kernelbase.dll isn't hooked. d3d9.dll is
+    hooked either way. The hooks are installed a moment after d3d9.dll loads,
+    so a game that uses it right away may start without the upgrade. Applies the
+    next time the game starts.
 */
 // ==/WindhawkModSettings==
 
@@ -160,6 +180,7 @@ enum {
     kSlotCreateDevice = 16,
     kSlotCreateDeviceEx = 20,
     kSlotDeviceQueryInterface = 0,
+    kSlotDeviceRelease = 2,
     kSlotReset = 16,
     kSlotPresent = 17,
     kSlotSetTexture = 65,
@@ -188,14 +209,16 @@ struct {
     int maxFrameLatency;
     bool keepMsaa;
     bool flipModel;
+    bool safeHook;
 } g_settings;
 
 std::mutex g_hookMutex;
 std::atomic<bool> g_exportsHooked;
 bool g_deviceHooked;
 
-// Devices are not removed when released, an entry is overwritten once a new
-// device shows up at the same address.
+// Devices are removed when they're destroyed, see DeviceRelease_Hook. A device
+// of an unexpected implementation is overwritten once a new device shows up at
+// the same address.
 struct DeviceSet {
     SRWLOCK lock = SRWLOCK_INIT;
     std::vector<IDirect3DDevice9*> devices;
@@ -228,6 +251,49 @@ DeviceSet g_upgradedDevices;
 // Set once the managed pool emulation is in use.
 std::atomic<bool> g_emulatedTexturesUsed;
 
+// The flip model requires exclusive use of the window. A window belongs to the
+// device presenting to it with FLIPEX, until that device stops using FLIPEX or
+// is destroyed. Other devices on it, such as the ones of in-game overlays, keep
+// the swap effect they asked for.
+struct FlipWindow {
+    HWND hWnd;
+    IDirect3DDevice9* device;  // For comparing only.
+};
+SRWLOCK g_flipWindowsLock = SRWLOCK_INIT;
+std::vector<FlipWindow> g_flipWindows;
+
+// Whether dev may use the flip model on hWnd. dev is nullptr for a device which
+// is being created.
+bool IsFlipWindowAvailable(HWND hWnd, IDirect3DDevice9* dev) {
+    if (!hWnd) {
+        return false;
+    }
+
+    AcquireSRWLockShared(&g_flipWindowsLock);
+    bool available = true;
+    for (const FlipWindow& flipWindow : g_flipWindows) {
+        if (flipWindow.hWnd == hWnd) {
+            available = flipWindow.device == dev;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_flipWindowsLock);
+    return available;
+}
+
+// Records that dev presents to hWnd with FLIPEX, or that it no longer presents
+// to any window with FLIPEX.
+void SetFlipWindow(HWND hWnd, IDirect3DDevice9* dev, bool flip) {
+    AcquireSRWLockExclusive(&g_flipWindowsLock);
+    std::erase_if(g_flipWindows, [&](const FlipWindow& flipWindow) {
+        return flipWindow.device == dev || (flip && flipWindow.hWnd == hWnd);
+    });
+    if (flip && hWnd) {
+        g_flipWindows.push_back({hWnd, dev});
+    }
+    ReleaseSRWLockExclusive(&g_flipWindowsLock);
+}
+
 HMODULE g_d3d9Module;
 
 thread_local bool g_inCreateDevice;
@@ -241,8 +307,10 @@ void** GetVtbl(void* obj) {
     return *reinterpret_cast<void***>(obj);
 }
 
-void SetFlipDevice(IDirect3DDevice9* dev, bool flip) {
+// hWnd is the window dev presents to, nullptr if unknown.
+void SetFlipDevice(IDirect3DDevice9* dev, HWND hWnd, bool flip) {
     g_flipDevices.Set(dev, flip);
+    SetFlipWindow(hWnd, dev, flip);
 }
 
 bool IsFlipDevice(IDirect3DDevice9* dev) {
@@ -263,8 +331,13 @@ bool IsExDevice(IDirect3DDevice9* dev) {
     return true;
 }
 
-bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp) {
+bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp, HWND focusWindow) {
     if (!pp) {
+        return false;
+    }
+    // Without a window it's impossible to tell whether another device already
+    // uses the flip model for it. Overlays create such devices.
+    if (!pp->hDeviceWindow && !focusWindow) {
         return false;
     }
     if (!pp->Windowed && !g_settings.forceBorderless) {
@@ -278,8 +351,8 @@ bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp) {
 
 // Returns false if the params are left alone. Whether the flip model was
 // applied is reflected by pp->SwapEffect.
-bool AdjustPresentParams(D3DPRESENT_PARAMETERS* pp) {
-    if (!ShouldUpgrade(pp)) {
+bool AdjustPresentParams(D3DPRESENT_PARAMETERS* pp, HWND focusWindow) {
+    if (!ShouldUpgrade(pp, focusWindow)) {
         return false;
     }
 
@@ -358,8 +431,13 @@ void WriteBackPresentParams(D3DPRESENT_PARAMETERS* gamePp,
     }
 }
 
-void MakeBorderless(HWND hWnd) {
-    if (!g_settings.forceBorderless || !hWnd || !IsWindow(hWnd)) {
+// Borderless, covering the monitor. Changing the style sends WM_STYLECHANGING
+// and WM_STYLECHANGED to the window's thread and waits for it, which may in turn
+// wait for the calling thread, e.g. for a render thread to finish resetting the
+// device. So a window of another thread is changed by the borderless thread,
+// which nothing waits for.
+void ApplyBorderless(HWND hWnd) {
+    if (!IsWindow(hWnd)) {
         return;
     }
 
@@ -370,25 +448,99 @@ void MakeBorderless(HWND hWnd) {
     }
 
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-    style &= ~(WS_OVERLAPPEDWINDOW | WS_DLGFRAME | WS_BORDER);
-    style |= WS_POPUP;
-    SetWindowLongPtrW(hWnd, GWL_STYLE, style);
+    LONG_PTR newStyle =
+        (style & ~(WS_OVERLAPPEDWINDOW | WS_DLGFRAME | WS_BORDER)) | WS_POPUP;
 
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    exStyle &= ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE | WS_EX_DLGMODALFRAME |
-                 WS_EX_STATICEDGE);
-    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+    LONG_PTR newExStyle =
+        exStyle & ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE |
+                    WS_EX_DLGMODALFRAME | WS_EX_STATICEDGE);
+
+    bool otherThread =
+        GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId();
+
+    UINT flags = SWP_NOACTIVATE;
+    if (newStyle != style || newExStyle != exStyle) {
+        SetWindowLongPtrW(hWnd, GWL_STYLE, newStyle);
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, newExStyle);
+        flags |= SWP_FRAMECHANGED;
+    }
 
     const RECT& rc = mi.rcMonitor;
-    // The window may belong to a thread that is waiting for this one.
-    UINT flags = SWP_FRAMECHANGED | SWP_NOACTIVATE;
-    if (GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId()) {
+    if (otherThread) {
         flags |= SWP_ASYNCWINDOWPOS;
     }
     SetWindowPos(hWnd, HWND_TOP, rc.left, rc.top, rc.right - rc.left,
                  rc.bottom - rc.top, flags);
     Wh_Log(L"Made window %p borderless: %dx%d", hWnd, rc.right - rc.left,
            rc.bottom - rc.top);
+}
+
+constexpr UINT kMakeBorderlessMessage = WM_APP + 1;
+
+std::mutex g_borderlessThreadMutex;
+HANDLE g_borderlessThread;
+DWORD g_borderlessThreadId;
+
+DWORD WINAPI BorderlessThreadProc(void* parameter) {
+    // Creates the message queue before anyone posts to it.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent((HANDLE)parameter);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == kMakeBorderlessMessage) {
+            ApplyBorderless((HWND)msg.wParam);
+        }
+    }
+    return 0;
+}
+
+bool EnsureBorderlessThread() {
+    std::lock_guard<std::mutex> guard(g_borderlessThreadMutex);
+    if (g_borderlessThread) {
+        return true;
+    }
+
+    HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ready) {
+        return false;
+    }
+    g_borderlessThread = CreateThread(nullptr, 0, BorderlessThreadProc, ready,
+                                      0, &g_borderlessThreadId);
+    if (g_borderlessThread) {
+        WaitForSingleObject(ready, INFINITE);
+    }
+    CloseHandle(ready);
+    return g_borderlessThread != nullptr;
+}
+
+void StopBorderlessThread() {
+    std::lock_guard<std::mutex> guard(g_borderlessThreadMutex);
+    if (!g_borderlessThread) {
+        return;
+    }
+    PostThreadMessageW(g_borderlessThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_borderlessThread, INFINITE);
+    CloseHandle(g_borderlessThread);
+    g_borderlessThread = nullptr;
+}
+
+void MakeBorderless(HWND hWnd) {
+    if (!g_settings.forceBorderless || !hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    if (GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
+        ApplyBorderless(hWnd);
+        return;
+    }
+
+    if (!EnsureBorderlessThread() ||
+        !PostThreadMessageW(g_borderlessThreadId, kMakeBorderlessMessage,
+                            (WPARAM)hWnd, 0)) {
+        Wh_Log(L"Making window %p borderless failed", hWnd);
+    }
 }
 
 HWND GetDeviceWindow(IDirect3DDevice9* dev, const D3DPRESENT_PARAMETERS* pp) {
@@ -442,7 +594,13 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     ClearBoundTextures(dev);
 
     D3DPRESENT_PARAMETERS local = *pp;
-    bool adjusted = AdjustPresentParams(&local);
+    bool adjusted = false;
+    HWND window = GetDeviceWindow(dev, &local);
+    if (window && IsFlipWindowAvailable(window, dev)) {
+        adjusted = AdjustPresentParams(&local, window);
+    } else {
+        Wh_Log(L"Window %p has another device, not upgrading", window);
+    }
 
     HRESULT hr = E_FAIL;
     if (adjusted) {
@@ -457,7 +615,8 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     IDirect3DDevice9Ex* devEx = (IDirect3DDevice9Ex*)dev;
 
     if (SUCCEEDED(hr)) {
-        SetFlipDevice(dev, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        SetFlipDevice(dev, GetDeviceWindow(dev, &local),
+                      local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
         ApplyFrameLatency(devEx);
         MakeBorderless(GetDeviceWindow(dev, &local));
@@ -469,7 +628,8 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     g_inReset = false;
     Wh_Log(L"Reset%s with the game's params: 0x%08X", useEx ? L"Ex" : L"", hr);
     if (SUCCEEDED(hr)) {
-        SetFlipDevice(dev, pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        SetFlipDevice(dev, GetDeviceWindow(dev, pp),
+                      pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
         ApplyFrameLatency(devEx);
         if (pp->Windowed) {
             MakeBorderless(GetDeviceWindow(dev, pp));
@@ -591,6 +751,24 @@ static const GUID kShadowTextureGuid = {
     0x3C7A,
     0x4D0B,
     {0x9B, 0x0D, 0x4A, 0x1E, 0x6B, 0x7F, 0x21, 0xC3}};
+
+bool ConvertManagedPool(IDirect3DDevice9* dev, D3DPOOL* pool);
+
+// A managed buffer works with both hardware and software vertex processing. A
+// default pool buffer only works with software vertex processing if it's
+// created for it. Devices with mixed vertex processing aren't upgraded, as
+// there's no default pool buffer which works with both.
+void ConvertManagedBuffer(IDirect3DDevice9* dev, D3DPOOL* pool, DWORD* usage) {
+    if (!ConvertManagedPool(dev, pool)) {
+        return;
+    }
+
+    D3DDEVICE_CREATION_PARAMETERS cp = {};
+    if (SUCCEEDED(dev->GetCreationParameters(&cp)) &&
+        (cp.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING)) {
+        *usage |= D3DUSAGE_SOFTWAREPROCESSING;
+    }
+}
 
 bool ConvertManagedPool(IDirect3DDevice9* dev, D3DPOOL* pool) {
     if (*pool != D3DPOOL_MANAGED || !IsExDevice(dev)) {
@@ -1329,7 +1507,7 @@ HRESULT STDMETHODCALLTYPE CreateVertexBuffer_Hook(IDirect3DDevice9* dev,
                                                   D3DPOOL pool,
                                                   IDirect3DVertexBuffer9** vb,
                                                   HANDLE* sharedHandle) {
-    ConvertManagedPool(dev, &pool);
+    ConvertManagedBuffer(dev, &pool, &usage);
     return CreateVertexBuffer_Original(dev, length, usage, fvf, pool, vb,
                                        sharedHandle);
 }
@@ -1350,7 +1528,7 @@ HRESULT STDMETHODCALLTYPE CreateIndexBuffer_Hook(IDirect3DDevice9* dev,
                                                  D3DPOOL pool,
                                                  IDirect3DIndexBuffer9** ib,
                                                  HANDLE* sharedHandle) {
-    ConvertManagedPool(dev, &pool);
+    ConvertManagedBuffer(dev, &pool, &usage);
     return CreateIndexBuffer_Original(dev, length, usage, format, pool, ib,
                                       sharedHandle);
 }
@@ -1432,6 +1610,21 @@ bool HasHookedDeviceFunctions(IDirect3DDevice9* dev) {
     return true;
 }
 
+// A destroyed device gives up its window, so that the next device the game
+// creates for it can use the flip model.
+using DeviceRelease_t = ULONG(STDMETHODCALLTYPE*)(IUnknown*);
+DeviceRelease_t DeviceRelease_Original;
+ULONG STDMETHODCALLTYPE DeviceRelease_Hook(IUnknown* self) {
+    ULONG count = DeviceRelease_Original(self);
+    if (count == 0) {
+        // Only used for comparing, the device is gone.
+        auto* dev = (IDirect3DDevice9*)self;
+        SetFlipDevice(dev, nullptr, false);
+        g_upgradedDevices.Set(dev, false);
+    }
+    return count;
+}
+
 void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
     std::lock_guard<std::mutex> guard(g_hookMutex);
     if (g_deviceHooked) {
@@ -1447,6 +1640,9 @@ void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
     WindhawkUtils::SetFunctionHook(
         (DeviceQueryInterface_t)vtbl[kSlotDeviceQueryInterface],
         DeviceQueryInterface_Hook, &DeviceQueryInterface_Original);
+    WindhawkUtils::SetFunctionHook((DeviceRelease_t)vtbl[kSlotDeviceRelease],
+                                   DeviceRelease_Hook,
+                                   &DeviceRelease_Original);
     WindhawkUtils::SetFunctionHook((Reset_t)vtbl[kSlotReset], Reset_Hook,
                                    &Reset_Original);
     WindhawkUtils::SetFunctionHook((Present_t)vtbl[kSlotPresent], Present_Hook,
@@ -1538,7 +1734,12 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
     bool adjusted = false;
     if (pp && device && !(behaviorFlags & D3DCREATE_ADAPTERGROUP_DEVICE)) {
         local = *pp;
-        adjusted = AdjustPresentParams(&local);
+        HWND window = local.hDeviceWindow ? local.hDeviceWindow : focusWindow;
+        if (window && IsFlipWindowAvailable(window, nullptr)) {
+            adjusted = AdjustPresentParams(&local, window);
+        } else {
+            Wh_Log(L"Window %p already has a device, not upgrading", window);
+        }
     }
 
     HRESULT hr = E_FAIL;
@@ -1552,7 +1753,9 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
         EnsureDeviceHooks(*device);
         g_upgradedDevices.Set(*device, false);
         ClearBoundTextures(*device);
-        SetFlipDevice(*device, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        SetFlipDevice(*device,
+                      local.hDeviceWindow ? local.hDeviceWindow : focusWindow,
+                      local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
         ApplyFrameLatency(*device);
         MakeBorderless(local.hDeviceWindow ? local.hDeviceWindow : focusWindow);
@@ -1566,6 +1769,8 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
             g_upgradedDevices.Set(*device, false);
             ClearBoundTextures(*device);
             SetFlipDevice(*device,
+                          pp && pp->hDeviceWindow ? pp->hDeviceWindow
+                                                  : focusWindow,
                           pp && pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
             ApplyFrameLatency(*device);
             if (pp && pp->Windowed) {
@@ -1605,7 +1810,7 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
                                               device);
         if (SUCCEEDED(hr) && device && *device) {
             // In case a stale pointer of a released device is still listed.
-            SetFlipDevice(*device, false);
+            SetFlipDevice(*device, nullptr, false);
             g_upgradedDevices.Set(*device, false);
             ClearBoundTextures(*device);
         }
@@ -1614,7 +1819,23 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
 
     if (g_inCreateDevice || !device || !CreateDeviceEx_Original ||
         (behaviorFlags & D3DCREATE_ADAPTERGROUP_DEVICE) ||
-        !ShouldUpgrade(pp)) {
+        !ShouldUpgrade(pp, focusWindow)) {
+        return callOriginal();
+    }
+
+    if (behaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING) {
+        // See ConvertManagedBuffer.
+        Wh_Log(L"Mixed vertex processing, creating a regular device");
+        return callOriginal();
+    }
+
+    // pp is set, see ShouldUpgrade. Another device of the window, e.g. of an
+    // overlay, would only be refused FLIPEX.
+    HWND window = pp->hDeviceWindow ? pp->hDeviceWindow : focusWindow;
+    if (g_settings.flipModel && !IsFlipWindowAvailable(window, nullptr)) {
+        Wh_Log(L"Window %p already has a flip model device, creating a "
+               L"regular device",
+               window);
         return callOriginal();
     }
 
@@ -1642,6 +1863,8 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
 
     if (!HasHookedDeviceFunctions(deviceEx)) {
         Wh_Log(L"Unexpected device implementation, creating a regular device");
+        // Its Release isn't hooked.
+        SetFlipDevice(deviceEx, nullptr, false);
         deviceEx->Release();
         return callOriginal();
     }
@@ -1649,6 +1872,7 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
     if (g_settings.flipModel && !IsFlipDevice(deviceEx)) {
         // FLIPEX was refused, no reason to keep the Ex device.
         Wh_Log(L"FLIPEX refused, creating a regular device");
+        SetFlipDevice(deviceEx, nullptr, false);
         deviceEx->Release();
         return callOriginal();
     }
@@ -1742,28 +1966,29 @@ HRESULT WINAPI Direct3DCreate9Ex_Hook(UINT sdkVersion, IDirect3D9Ex** d3d) {
 ////////////////////////////////////////////////////////////////////////////////
 // d3d9.dll load handling
 
+// Where the system DLL is: System32, or SysWOW64, under which 32-bit processes
+// may have it recorded. Empty if unknown.
+std::wstring GetSystemDllPath(bool wow64, PCWSTR name) {
+    WCHAR dir[MAX_PATH];
+    UINT len = wow64 ? GetSystemWow64DirectoryW(dir, ARRAYSIZE(dir))
+                     : GetSystemDirectoryW(dir, ARRAYSIZE(dir));
+    if (!len || len >= ARRAYSIZE(dir)) {
+        return std::wstring();
+    }
+    return std::wstring(dir) + L"\\" + name;
+}
+
 // Only the system d3d9.dll is hooked. It's never loaded by the mod, as that
 // would make the loader skip a d3d9.dll proxy in the game's folder.
 HMODULE GetSystemD3D9Module() {
-    WCHAR dir[MAX_PATH];
-
-    UINT len = GetSystemDirectoryW(dir, ARRAYSIZE(dir));
-    if (len && len < ARRAYSIZE(dir)) {
-        std::wstring path = std::wstring(dir) + L"\\d3d9.dll";
-        if (HMODULE module = GetModuleHandleW(path.c_str())) {
-            return module;
+    for (bool wow64 : {false, true}) {
+        std::wstring path = GetSystemDllPath(wow64, L"d3d9.dll");
+        if (!path.empty()) {
+            if (HMODULE module = GetModuleHandleW(path.c_str())) {
+                return module;
+            }
         }
     }
-
-    // 32-bit processes may have it recorded under SysWOW64.
-    len = GetSystemWow64DirectoryW(dir, ARRAYSIZE(dir));
-    if (len && len < ARRAYSIZE(dir)) {
-        std::wstring path = std::wstring(dir) + L"\\d3d9.dll";
-        if (HMODULE module = GetModuleHandleW(path.c_str())) {
-            return module;
-        }
-    }
-
     return nullptr;
 }
 
@@ -1802,6 +2027,158 @@ bool HookD3D9ExportsIfLoaded() {
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// SafeHook: waiting for d3d9.dll without hooking LoadLibraryExW
+//
+// Hooking LoadLibraryExW in kernelbase.dll makes games with anti-tamper
+// protection hang, e.g. Warcraft III. A DLL load notification patches no code.
+// It's called with the loader lock held, so it only signals the hook thread,
+// which hooks d3d9.dll right after. The game may already use it by then.
+
+struct LdrUnicodeString {
+    USHORT length;
+    USHORT maximumLength;
+    PWSTR buffer;
+};
+
+struct LdrDllLoadedData {
+    ULONG flags;
+    const LdrUnicodeString* fullDllName;
+    const LdrUnicodeString* baseDllName;
+    PVOID dllBase;
+    ULONG sizeOfImage;
+};
+
+constexpr ULONG kLdrDllLoaded = 1;
+
+using LdrDllNotification_t = VOID(CALLBACK*)(ULONG,
+                                             const LdrDllLoadedData*,
+                                             PVOID);
+using LdrRegisterDllNotification_t = LONG(NTAPI*)(ULONG,
+                                                  LdrDllNotification_t,
+                                                  PVOID,
+                                                  PVOID*);
+using LdrUnregisterDllNotification_t = LONG(NTAPI*)(PVOID);
+
+PVOID g_dllNotificationCookie;
+HANDLE g_dllLoadedEvent;
+HANDLE g_hookThreadStopEvent;
+HANDLE g_hookThread;
+
+// The paths the system d3d9.dll may be recorded under. Set before the
+// notification is registered, so that the callback only compares strings.
+std::wstring g_systemDllPaths[2];
+std::atomic<int> g_loadedPathIndex{-1};
+
+bool PathEquals(const LdrUnicodeString& string, const std::wstring& path) {
+    return !path.empty() && string.length == path.size() * sizeof(WCHAR) &&
+           _wcsnicmp(string.buffer, path.c_str(), path.size()) == 0;
+}
+
+VOID CALLBACK OnDllNotification(ULONG reason,
+                                const LdrDllLoadedData* data,
+                                PVOID context) {
+    if (reason != kLdrDllLoaded || !data || !data->fullDllName ||
+        !data->fullDllName->buffer) {
+        return;
+    }
+
+    // Only the system d3d9.dll, not a proxy of the game with the same name.
+    for (int i = 0; i < (int)ARRAYSIZE(g_systemDllPaths); i++) {
+        if (PathEquals(*data->fullDllName, g_systemDllPaths[i])) {
+            g_loadedPathIndex = i;
+            SetEvent(g_dllLoadedEvent);
+            return;
+        }
+    }
+}
+
+DWORD WINAPI HookThreadProc(void* parameter) {
+    HANDLE events[] = {g_hookThreadStopEvent, g_dllLoadedEvent};
+    while (!g_exportsHooked) {
+        if (WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
+                                   INFINITE) != WAIT_OBJECT_0 + 1) {
+            break;
+        }
+
+        // It's already loaded, so this only waits until the loader is done
+        // with it, so that it's initialized, and keeps it loaded meanwhile.
+        HMODULE reference = LoadLibraryExW(
+            g_systemDllPaths[g_loadedPathIndex].c_str(), nullptr, 0);
+        if (!reference) {
+            continue;
+        }
+
+        if (HookD3D9ExportsIfLoaded()) {
+            Wh_ApplyHookOperations();
+        }
+        FreeLibrary(reference);
+    }
+    return 0;
+}
+
+void CloseWatchEvents() {
+    if (g_dllLoadedEvent) {
+        CloseHandle(g_dllLoadedEvent);
+        g_dllLoadedEvent = nullptr;
+    }
+    if (g_hookThreadStopEvent) {
+        CloseHandle(g_hookThreadStopEvent);
+        g_hookThreadStopEvent = nullptr;
+    }
+}
+
+bool StartWatchingDllLoad() {
+    for (int i = 0; i < (int)ARRAYSIZE(g_systemDllPaths); i++) {
+        g_systemDllPaths[i] = GetSystemDllPath(i == 1, L"d3d9.dll");
+    }
+
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto registerNotification =
+        ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
+                    ntdll, "LdrRegisterDllNotification")
+              : nullptr;
+
+    g_dllLoadedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_hookThreadStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!registerNotification || !g_dllLoadedEvent ||
+        !g_hookThreadStopEvent ||
+        registerNotification(0, OnDllNotification, nullptr,
+                             &g_dllNotificationCookie) != 0) {
+        g_dllNotificationCookie = nullptr;
+        // Wh_ModInit fails, so nothing else would close them.
+        CloseWatchEvents();
+        Wh_Log(L"Registering for DLL load notifications failed");
+        return false;
+    }
+    Wh_Log(L"SafeHook: waiting for d3d9.dll");
+    return true;
+}
+
+// The notification callback and the thread are in this module, so this must
+// happen before it's unloaded.
+void StopWatchingDllLoad() {
+    if (g_dllNotificationCookie) {
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto unregisterNotification =
+            (LdrUnregisterDllNotification_t)GetProcAddress(
+                ntdll, "LdrUnregisterDllNotification");
+        if (unregisterNotification) {
+            unregisterNotification(g_dllNotificationCookie);
+        }
+        g_dllNotificationCookie = nullptr;
+    }
+
+    if (g_hookThread) {
+        SetEvent(g_hookThreadStopEvent);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+
+    CloseWatchEvents();
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
@@ -1835,6 +2212,7 @@ void LoadSettings() {
 
     g_settings.keepMsaa = Wh_GetIntSetting(L"keepMsaa");
     g_settings.flipModel = Wh_GetIntSetting(L"flipModel");
+    g_settings.safeHook = Wh_GetIntSetting(L"safeHook");
 }
 
 BOOL Wh_ModInit() {
@@ -1844,6 +2222,16 @@ BOOL Wh_ModInit() {
 
     // Hooks set here are applied by Windhawk once Wh_ModInit returns.
     HookD3D9ExportsIfLoaded();
+
+    // Already loaded, nothing to wait for. Then LoadLibraryExW isn't hooked
+    // either, which some anti-tamper protection doesn't tolerate.
+    if (g_exportsHooked) {
+        return TRUE;
+    }
+
+    if (g_settings.safeHook) {
+        return StartWatchingDllLoad();
+    }
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(
@@ -1865,6 +2253,20 @@ void Wh_ModAfterInit() {
     if (HookD3D9ExportsIfLoaded()) {
         Wh_ApplyHookOperations();
     }
+
+    // SafeHook: hooks can only be applied from now on.
+    if (!g_exportsHooked && g_dllNotificationCookie) {
+        g_hookThread =
+            CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
+        if (!g_hookThread) {
+            Wh_Log(L"Creating the hook thread failed");
+        }
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    // Hooks can't be applied anymore after this.
+    StopWatchingDllLoad();
 }
 
 void Wh_ModUninit() {
@@ -1874,6 +2276,9 @@ void Wh_ModUninit() {
     // thread of the game, and Direct3D 9 reference counting is only thread safe
     // for multithreaded devices. The game has to be closed at this point anyway,
     // see the readme.
+
+    // Its code is in this module.
+    StopBorderlessThread();
 
     // The hooks are gone by now.
     if (g_d3d9Module) {

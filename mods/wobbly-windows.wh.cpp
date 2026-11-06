@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.115
+// @version         0.115.4
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -326,8 +326,9 @@ POINT g_lastMousePosition = {};
 bool g_hasLastMousePosition = false;
 HMONITOR g_dragCursorMonitor = nullptr;
 ULONGLONG g_monitorTransitionRebaseUntil = 0;
-using CTopLevelWindowGetVisualProxy_t = void*(__cdecl*)(void* pThis);
-CTopLevelWindowGetVisualProxy_t g_getCanvasRootVisualProxy = nullptr;
+void* g_getCanvasRootVisualProxy = nullptr;
+using CVisualGetVisualProxy_t = void*(__cdecl*)(void* pThis);
+CVisualGetVisualProxy_t g_visualGetVisualProxyForStructure = nullptr;
 using CTopLevelWindowGetRootVisual_t = void*(__cdecl*)(void* pThis, int rootVisualType);
 CTopLevelWindowGetRootVisual_t g_topLevelWindowGetRootVisual = nullptr;
 void* g_transitionWrapperGetVisualWeakFunction = nullptr;
@@ -424,12 +425,12 @@ void* g_containerVisualProxyVtableSymbol = nullptr;
 void* g_matrixTransformProxyVtableSymbol = nullptr;
 size_t g_desktopManagerCompositorOffset = SIZE_MAX;
 size_t g_desktopManagerThreadIdOffset = SIZE_MAX;
-size_t g_canvasVisualOwnerOffset = SIZE_MAX;
 size_t g_visualProxyOffset = SIZE_MAX;
 size_t g_transitionVisualProxyOffset = SIZE_MAX;
 size_t g_topLevelWindowWindowDataOffset = SIZE_MAX;
 static bool IsDwmObjectPointerValid(void* object, std::atomic<void*>& expectedVtable);
 static bool IsVisualProxyPointerValid(void* proxy);
+static bool IsDwmImageAddress(const void* address, size_t size);
 static bool HasExactDwmVtableTrusted(void* object,
                                     std::atomic<void*>& expectedVtable);
 static void RegisterDwmWindowMapping(void* windowData, void* topLevelWindow,
@@ -581,48 +582,29 @@ static void* GetTopLevelVisualProxy(void* topLevelWindow,
         return nullptr;
     }
 
-    // Type 0 is the complete window, including the non-client frame. The proxy
-    // member offset is decoded from the exact Canvas getter instead of hardcoded.
-    if (g_topLevelWindowGetRootVisual && g_visualProxyOffset != SIZE_MAX)
+    // Select the complete window before resolving its proxy. The Canvas getter
+    // can return an inner content visual, even when its proxy type is correct.
+    if (g_topLevelWindowGetRootVisual)
     {
         constexpr int completeWindowRoot = 0;
         void* rootVisual =
             g_topLevelWindowGetRootVisual(topLevelWindow, completeWindowRoot);
-        void* proxy = ReadPointerMember(rootVisual, g_visualProxyOffset);
+        if (!IsDwmImageAddress(ReadPointerMember(rootVisual, 0), sizeof(void*)))
+            return nullptr;
+        void* proxy = g_visualGetVisualProxyForStructure
+            ? g_visualGetVisualProxyForStructure(rootVisual)
+            : ReadPointerMember(rootVisual, g_visualProxyOffset);
         if (IsVisualProxyPointerValid(proxy))
         {
             if (source)
             {
-                *source = L"CompleteWindowRoot";
+                *source = g_visualGetVisualProxyForStructure
+                    ? L"CompleteWindowRootAccessor" : L"CompleteWindowRoot";
             }
             return proxy;
         }
     }
-
-    if (!g_getCanvasRootVisualProxy)
-    {
-        return nullptr;
-    }
-
-    // Accept only exact PDB-resolved CVisualProxy/base-compatible proxy types.
-    void* proxy = g_getCanvasRootVisualProxy(topLevelWindow);
-    if (!IsVisualProxyPointerValid(proxy))
-    {
-        return nullptr;
-    }
-
-    bool decodedPath = g_canvasVisualOwnerOffset != SIZE_MAX && g_visualProxyOffset != SIZE_MAX;
-    if (decodedPath &&
-        ReadPointerMember(ReadPointerMember(topLevelWindow, g_canvasVisualOwnerOffset),
-                          g_visualProxyOffset) != proxy)
-    {
-        return nullptr;
-    }
-    if (source)
-    {
-        *source = decodedPath ? L"VerifiedCanvasPath" : L"TypedCanvasAccessor";
-    }
-    return proxy;
+    return nullptr;
 }
 
 static void* GetTransitionVisualProxy(void* topLevelWindow3D)
@@ -1533,59 +1515,81 @@ static bool FindVisualProxyAccessPath(void* function, size_t* ownerOffset,
     {
         return false;
     }
-    const std::regex loadPattern(
-        R"(^mov (r[a-z0-9]+), (?:qword ptr )?\[(r[a-z0-9]+)\s*\+\s*0x([0-9a-f]{1,8})\]$)",
-        std::regex_constants::icase);
-    BYTE* instruction = static_cast<BYTE*>(function);
-    std::string visualRegister;
-    size_t visualOffset = SIZE_MAX;
-    size_t bytesRead = 0;
-    for (int i = 0; i < 32 && bytesRead < 256; i++)
+    // Decode only a two-load getter, optionally guarded by test rax / jz or jnz.
+    // Both return paths must be proven; never scan past an unrelated function.
+    const BYTE* code = static_cast<const BYTE*>(function);
+    auto read = [&](size_t offset, void* output, size_t size)
     {
-        WH_DISASM_RESULT result = {};
-        if (!IsDwmExecutableAddress(instruction) || !Wh_Disasm(instruction, &result) ||
-            result.length == 0)
+        if (offset > 32 || size == 0 || size > 32 - offset ||
+            !IsReadableMemory(code + offset, size) ||
+            !IsDwmExecutableAddress(code + offset) ||
+            !IsDwmExecutableAddress(code + offset + size - 1))
+            return false;
+        memcpy(output, code + offset, size);
+        return true;
+    };
+    auto byteIs = [&](size_t offset, BYTE expected)
+    {
+        BYTE value;
+        return read(offset, &value, 1) && value == expected;
+    };
+    size_t cursor = 0;
+    auto load = [&](BYTE base, size_t& offset)
+    {
+        BYTE prefix[3];
+        if (!read(cursor, prefix, sizeof(prefix)) ||
+            prefix[0] != 0x48 || prefix[1] != 0x8B)
+            return false;
+        const bool wide = prefix[2] == (0x80 | base);
+        if (!wide && prefix[2] != (0x40 | base)) return false;
+        DWORD displacement = 0;
+        const size_t length = wide ? 4 : 1;
+        if (!read(cursor + 3, &displacement, length) ||
+            (!wide && displacement >= 0x80) ||
+            displacement > 0x400 || displacement % sizeof(void*) != 0)
+            return false;
+        offset = displacement;
+        cursor += 3 + length;
+        return true;
+    };
+    size_t owner, proxy;
+    if (!load(1, owner) || owner < 0x80) return false;  // [rcx + owner]
+    BYTE next[3];
+    if (!read(cursor, next, sizeof(next))) return false;
+    size_t zeroReturn = SIZE_MAX;
+    if (next[0] == 0x48 && next[1] == 0x85 && next[2] == 0xC0)
+    {
+        cursor += 3;
+        BYTE branch[2];
+        if (!read(cursor, branch, sizeof(branch)) ||
+            (branch[0] != 0x74 && branch[0] != 0x75) || branch[1] >= 0x80)
+            return false;
+        cursor += 2;
+        const size_t target = cursor + branch[1];
+        if (branch[0] == 0x74)
+            zeroReturn = target;
+        else
         {
-            break;
+            if (!byteIs(cursor++, 0xC3)) return false;
+            while (cursor < target)
+                if (!byteIs(cursor++, 0xCC)) return false;
+            if (cursor != target) return false;
         }
-        std::string text = result.text;
-        std::smatch match;
-        if (std::regex_match(text, match, loadPattern))
-        {
-            const std::string destination = match[1].str();
-            const std::string base = match[2].str();
-            size_t offset = std::stoull(match[3].str(), nullptr, 16);
-            if (base == "rcx" && offset >= 0x80 && offset <= 0x400 &&
-                offset % sizeof(void*) == 0)
-            {
-                visualRegister = destination;
-                visualOffset = offset;
-            }
-            else if (!visualRegister.empty() && destination == "rax" &&
-                     base == visualRegister && offset <= 0x80 &&
-                     offset % sizeof(void*) == 0)
-            {
-                if (*ownerOffset != SIZE_MAX &&
-                    (*ownerOffset != visualOffset || *proxyOffset != offset))
-                {
-                    return false;
-                }
-                *ownerOffset = visualOffset;
-                *proxyOffset = offset;
-            }
-        }
-        if (text == "ret")
-        {
-            break;
-        }
-        instruction += result.length;
-        bytesRead += result.length;
     }
-    return *ownerOffset != SIZE_MAX && *proxyOffset != SIZE_MAX;
+    if (!load(0, proxy) || proxy > 0x80 || !byteIs(cursor++, 0xC3))
+        return false;  // [rax + proxy], ret
+    if (zeroReturn != SIZE_MAX)
+    {
+        while (cursor < zeroReturn)
+            if (!byteIs(cursor++, 0xCC)) return false;
+        if (cursor != zeroReturn || !byteIs(cursor, 0xC3)) return false;
+    }
+    *ownerOffset = owner;
+    *proxyOffset = proxy;
+    return true;
 }
 
-// Follow only the exact native function's reachable local branches. Accept the
-// sprite member only when every reachable AttachBrush call has proven arguments.
+// Accept only straight pointer getters ending in ret, without other work.
 static bool DecodePointerGetter(void* function, size_t* objectOffset,
                                 size_t* memberOffset = nullptr)
 {
@@ -2647,6 +2651,9 @@ static bool InitializeDwmHooks()
          &g_topLevelWindowGetRootVisual,
          nullptr,
          true},
+        {{L"public: virtual class CVisualProxy * __cdecl "
+           L"CVisual::GetVisualProxyForStructure(void)"},
+         &g_visualGetVisualProxyForStructure, nullptr, true},
         {{L"public: virtual class CTopLevelWindow3D * __cdecl "
             L"winrt::Udwm::Transitions::implementation::TopLevelWindow3DWrapper::GetVisualWeak(void)"},
          &g_transitionWrapperGetVisualWeakFunction, nullptr, true},
@@ -2798,6 +2805,7 @@ static bool InitializeDwmHooks()
     keepValid(g_topLevelWindow3DStartAnimationOriginal);
     keepValid(g_getCanvasRootVisualProxy);
     keepValid(g_topLevelWindowGetRootVisual);
+    keepValid(g_visualGetVisualProxyForStructure);
     keepValid(g_topLevelWindowGetWindowData);
     keepValid(g_desktopManagerPostStartAnimations);
     auto cacheVtableSymbol = [](void* symbol, std::atomic<void*>& target)
@@ -2878,8 +2886,6 @@ static bool InitializeDwmHooks()
          reinterpret_cast<void*>(g_desktopManagerPostStartAnimations)},
         {L"CDesktopManager::AdvanceTimelines",
          reinterpret_cast<void*>(g_desktopManagerAdvanceTimelinesOriginal)},
-        {L"CTopLevelWindow::GetCanvasRootVisualProxy",
-         reinterpret_cast<void*>(g_getCanvasRootVisualProxy)},
         {L"CTopLevelWindow::GetRootVisualNoAddRef",
          reinterpret_cast<void*>(g_topLevelWindowGetRootVisual)},
         {L"CTopLevelWindow::CTopLevelWindow",
@@ -2922,15 +2928,30 @@ static bool InitializeDwmHooks()
         return false;
     }
     Wh_Log(L"DWM compatibility: compositor primary vftable verified by PDB");
-    if (!FindVisualProxyAccessPath(reinterpret_cast<void*>(g_getCanvasRootVisualProxy),
-                                   &g_canvasVisualOwnerOffset,
-                                   &g_visualProxyOffset))
-    {
-        Wh_Log(L"DWM compatibility: visual accessor path unavailable; "
-               L"using typed accessor validation");
-    }
+    size_t canvasOwnerOffset = SIZE_MAX;
+    const bool canvasPathDecoded = FindVisualProxyAccessPath(
+        g_getCanvasRootVisualProxy, &canvasOwnerOffset, &g_visualProxyOffset);
+    size_t accessorOffset = SIZE_MAX;
+    if (g_visualGetVisualProxyForStructure &&
+        DecodePointerGetter(reinterpret_cast<void*>(g_visualGetVisualProxyForStructure), &accessorOffset))
+        g_visualProxyOffset = accessorOffset;
     g_transitionVisualProxyOffset = FindTransitionVisualProxyOffset(
         g_transitionWrapperGetVisualWeakFunction, g_transitionWrapperGetVisualProxyWeakFunction);
+    if (!g_visualGetVisualProxyForStructure && canvasPathDecoded &&
+        g_transitionVisualProxyOffset != SIZE_MAX &&
+        g_transitionVisualProxyOffset != g_visualProxyOffset)
+    {
+        Wh_Log(L"DWM compatibility: Canvas and transition getters disagree on the visual proxy member");
+        return false;
+    }
+    if (!g_visualGetVisualProxyForStructure && g_visualProxyOffset == SIZE_MAX)
+    {
+        Wh_Log(L"DWM compatibility: complete-window proxy unavailable; refusing inner Canvas fallback");
+        return false;
+    }
+    Wh_Log(L"DWM complete-window access: visualAccessor=%s canvasDecode=%s proxyOffset=0x%zx",
+           g_visualGetVisualProxyForStructure ? L"available" : L"unavailable; using decoded member",
+           canvasPathDecoded ? L"verified" : L"unavailable", g_visualProxyOffset);
     Wh_Log(L"Native transition visual: %s proxyOffset=0x%zx",
            hasExactTopLevelWindow3DVtable && g_transitionVisualProxyOffset != SIZE_MAX
                ? L"verified"
@@ -3011,14 +3032,14 @@ static bool InitializeDwmHooks()
         Wh_Log(L"DWM compatibility: existing-window transition mapping unavailable");
     }
     Wh_Log(L"DWM compatibility ABI: HWND lookup=pointer transition lookup=%s "
-           L"matrix=%s visual=complete-root ownerOffset=0x%zx proxyOffset=0x%zx "
+           L"matrix=%s visual=complete-root proxyOffset=0x%zx "
            L"compositorOffset=0x%zx "
            L"threadIdOffset=0x%zx TLW3DDataOffset=0x%zx",
            g_getSyncedWindowDataVoid
                ? L"void"
                : (g_getSyncedWindowDataLong ? L"HRESULT" : L"unavailable"),
            g_cMatrixTransformProxyUpdate ? L"double" : L"float",
-           g_canvasVisualOwnerOffset, g_visualProxyOffset,
+           g_visualProxyOffset,
            g_desktopManagerCompositorOffset, g_desktopManagerThreadIdOffset,
            g_topLevelWindow3DWindowDataOffset);
     void* compositor = FindDwmCompositor();
@@ -5119,8 +5140,7 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
 
 static void HandleMoveSizeStart(HWND hwnd)
 {
-    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) ||
-        !IsInteractiveMoveSizeLoop(hwnd))
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || !IsInteractiveMoveSizeLoop(hwnd))
     {
         return;
     }
@@ -5257,7 +5277,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
     }
     auto finishUpdate = [&](long updateResult, bool appliedIdentity)
     {
-        ULONGLONG now = GetTickCount64();
         bool logFailure = false;
         AcquireSRWLockExclusive(&g_animationSlotsLock);
         WindowAnimationSlot& currentSlot = g_animationSlots[slotIndex];
@@ -5275,6 +5294,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
             }
             else
             {
+                ULONGLONG now = GetTickCount64();
                 if (now - currentSlot.lastMatrixErrorLog >= 1000)
                 {
                     currentSlot.lastMatrixErrorLog = now;

@@ -2,7 +2,7 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.3.18
+// @version         0.3.22
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
@@ -30,6 +30,8 @@
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-centered-start-split-icons.wh.cpp
 // Pointer-handler ABI and symbol names follow m417z's GPL-3.0 mod:
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-reorder-right-drag.wh.cpp
+// Jump-list position hook adapted from m417z's GPL-3.0 mod:
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-jump-list-on-cursor-pos.wh.cpp
 //
 // Taskbar-host discovery also uses MIT-licensed code from Taskbar multi-tray
 // by EDM115 and Island Media Controls by usho. The following MIT notice is
@@ -265,6 +267,45 @@ CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
 void* TaskbarHost_FrameHeight_Original = nullptr;
 using RefCount_Decref_t = void(WINAPI*)(void*);
 RefCount_Decref_t RefCount_Decref_Original = nullptr;
+
+// JumpView computes its own anchor AFTER the context request. Correct that
+// final screen-space X, rather than the earlier OnContextMenu input point.
+// Keep the native Y/alignment and leave secondary taskbars untouched.
+using CTaskListWnd_ComputeJumpViewPosition_t = HRESULT(WINAPI*)(
+    void* pThis,
+    void* taskBtnGroup,
+    int param2,
+    winrt::Windows::Foundation::Point* point,
+    HorizontalAlignment* horizontalAlignment,
+    VerticalAlignment* verticalAlignment);
+CTaskListWnd_ComputeJumpViewPosition_t
+    CTaskListWnd_ComputeJumpViewPosition_Original = nullptr;
+
+HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
+    void* pThis,
+    void* taskBtnGroup,
+    int param2,
+    winrt::Windows::Foundation::Point* point,
+    HorizontalAlignment* horizontalAlignment,
+    VerticalAlignment* verticalAlignment) {
+    HRESULT result = CTaskListWnd_ComputeJumpViewPosition_Original(
+        pThis, taskBtnGroup, param2, point,
+        horizontalAlignment, verticalAlignment);
+    HWND taskbar = g_taskbarWindow;
+    if (FAILED(result) || g_unloading || !point || !taskbar) {
+        return result;
+    }
+    DWORD messagePosition = GetMessagePos();
+    POINT invocation{
+        static_cast<short>(LOWORD(messagePosition)),
+        static_cast<short>(HIWORD(messagePosition))};
+    RECT taskbarRect{};
+    if (GetWindowRect(taskbar, &taskbarRect) &&
+        PtInRect(&taskbarRect, invocation)) {
+        point->X = static_cast<float>(invocation.x);
+    }
+    return result;
+}
 
 struct SharedPtrGuard {
     void* controlBlock;
@@ -1772,6 +1813,9 @@ bool HookTaskbarHostSymbols() {
          &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
          &RefCount_Decref_Original},
+        {{LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
+         &CTaskListWnd_ComputeJumpViewPosition_Original,
+         CTaskListWnd_ComputeJumpViewPosition_Hook, true},
     };
     return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
                                       ARRAYSIZE(taskbarDllHooks));
