@@ -727,7 +727,7 @@ bool RequestFade() {
             }
             return true;
         } else {
-            Wh_Log(L"FindWindowW failed, GLE=%d", GetLastError());
+            Wh_Log(L"FindWindowW failed");
         }
         return false;
     }
