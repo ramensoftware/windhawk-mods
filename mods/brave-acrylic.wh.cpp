@@ -15,9 +15,12 @@
 /*
 # Brave Acrylic
 
-> **Very important — Symbol cache:** Controlled and maintained by **bardelyne**, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. Windhawk downloads the matching file for your installed Brave build and caches it locally. The large symbol files are processed by the workflow; your PC receives only the small compatibility data.
+> **Very important — Symbol cache:** Controlled and maintained by **bardelyne**, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. By default, Windhawk downloads only the small cache for your Brave build. The optional **Download symbols from Brave as a fallback** setting is off by default.
 
-> **If the mod isn’t working after a Brave update,** give it about an hour, then fully exit and reopen Brave so Windhawk can fetch the matching cache. The workflow checks for compatibility every hour. GitHub can delay scheduled runs.
+> **If the mod isn’t working after a Brave update**
+>
+> - **Wait for the small cache (default).** The workflow checks for new Brave builds every hour. Give it about an hour, then fully exit and reopen Brave. GitHub can delay scheduled runs.
+> - **Download directly from Brave.** If you have a fast connection and enough disk space, enable **Download symbols from Brave as a fallback** in the mod’s Windhawk settings, then fully exit and reopen Brave. On a cache miss, Windhawk can download the full symbols from Brave’s official server. For a recent build, the download was about **1.2 GB** and expanded to about **6 GB** on disk.
 
 ![Brave Acrylic](https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png)
 
@@ -66,7 +69,8 @@ Brave's **Show rounded corners on main content areas** setting can remain enable
 | **Blur search suggestions** | On | Use a native results popup with Windows blur below the input cutout. Typed text, result text and input remain native and sharp. |
 | **Popup background opacity (%)** | 62 | Control the background tint of menus, native popups and suggestions from 0 (transparent) to 100 (opaque). Text, icons and controls retain their native opacity. Restart Brave after changing it. |
 | **Hide duplicate Windows buttons** | On | Hide the extra Windows minimize, maximize and close buttons while keeping Brave’s controls. This can affect Alt+Space, taskbar menus and other window tools. |
-| **Use online symbol cache** | On | Let Windhawk download small exact-build files from the author-controlled cache. Turn off to use existing local cached symbols only, then restart Brave. |
+| **Use online symbol cache** | On | Let Windhawk download small exact-build files from the author-controlled cache. |
+| **Download symbols from Brave as a fallback** | Off | Let Windhawk download the full PDB from Brave’s official symbol server if it cannot resolve symbols from the available caches. A tested build used about 1.2 GB of bandwidth and 6.2 GB of disk space. Restart Brave after changing this setting. |
 
 Restart Brave after applying settings, even when a change appears immediately. Some backing views and native popup choices are created with their windows. Webpage backing can apply on tab selection without refreshing the page; restarting after disabling it restores existing renderer defaults. The caption-button option can apply immediately.
 
@@ -108,13 +112,13 @@ Suggestions use Chromium's normal desktop-popup factory instead of its in-window
 
 ## Symbol resolution, privacy and updates
 
-Brave Acrylic resolves exact C++ prototypes and the background-class identity with Windhawk's supported `HookSymbols` / `WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl` mechanism. Windhawk handles its ordinary local cache and optional online download. No build-specific addresses are embedded and remote PDB downloads remain disabled. The mod retains local executable-range, unwind-boundary, approved-leaf, thunk and overlap checks before registering hooks.
+Brave Acrylic uses Windhawk’s `HookSymbols` to resolve exact C++ prototypes and the background-class identity. Windhawk checks its local symbol cache and then the author-hosted cache when enabled. If those lookups do not resolve the symbols and the fallback is on, Windhawk can download and unpack the official Brave PDB. Both sources use the mod’s local executable-range, unwind-boundary, approved-leaf, thunk and overlap checks before hooks are registered. The workflow also checks for compiler aliases when generating the small cache.
 
 Small named-symbol files are published under `brave-acrylic-features-v9/` on our [`symbol-cache` branch](https://github.com/bardelyne/brave-acrylic/tree/symbol-cache). They contain the native function locations needed for each Brave build. The service and publishing workflow are controlled and maintained by bardelyne.
 
 Windhawk handles compatibility downloads and local caching through its standard mechanism. Our workflow uses pinned actions and checks the official Brave archive and matching symbols before publishing. See [cache hosting](https://github.com/bardelyne/brave-acrylic/blob/main/docs/trusted-pipeline.md) for the technical details.
 
-**No telemetry, uploads or login:** the mod only downloads compatibility data through Windhawk. Browser cookies, history, page content, settings and account details stay on your PC. Turn **Use online symbol cache** off and restart Brave to use suitable existing local cached symbols only.
+**No telemetry, uploads or login.** Windhawk downloads symbol data. The server used for the download receives your IP address and the requested build. Browser cookies, history, page content, settings and account details stay on your PC. Turn both symbol download options off and restart Brave to use local symbols only.
 
 The workflow checks the stable release, asset identities and native contract before downloading large files. Unchanged releases skip browser and PDB downloads. Both generation and publication use the run's same source revision; large official files stay on the GitHub runner. Restart Brave after newly required compatibility data becomes available.
 
@@ -126,7 +130,7 @@ The extractor handles verified compiler folding according to each function's rol
 
 ## Troubleshooting
 
-Restart Brave after installing or applying changes: close all windows and its background instance, then reopen normally. Enable Windhawk debug logging to check each feature's availability or a symbol-cache message. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.
+After installing or applying changes, close all Brave windows and its background instance, then reopen normally. If Windhawk cached a failed symbol lookup, enable debug logging in the mod’s Advanced tab before restarting Brave to retry. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.
 
 For reports, include Windows/Brave versions, window type, enabled areas, backdrop configuration, and reproduction steps. See the [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md), [compatibility data](https://github.com/bardelyne/brave-acrylic/blob/main/docs/compatibility.md), [webview investigation](https://github.com/bardelyne/brave-acrylic/blob/main/docs/webview-background.md), and [changelog](https://github.com/bardelyne/brave-acrylic/blob/main/CHANGELOG.md).
 */
@@ -164,7 +168,10 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
   $description: Hide the extra Windows minimize, maximize and close buttons while keeping Brave’s controls. This removes the Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Applies immediately.
 - useOnlineSymbolCache: true
   $name: Use online symbol cache
-  $description: Download small compatibility files from the author-controlled symbol cache. No login, uploads, telemetry or PDB downloads. GitHub sees your IP and requested build URLs. Turn off to use local cached symbols only. Restart Brave after applying changes.
+  $description: Download small compatibility files from the author-controlled symbol cache. GitHub sees your IP and requested build URLs. Restart Brave after applying changes.
+- allowBraveSymbolServerFallback: false
+  $name: Download symbols from Brave as a fallback
+  $description: If the cache cannot resolve symbols, let Windhawk download the full PDB from Brave’s official symbol server. This can delay startup. One tested build downloaded about 1.2 GB and used 6.2 GB on disk. Restart Brave after applying changes.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -315,6 +322,7 @@ static std::atomic<unsigned> s_availableAreas{BraveBackground::All};
 static std::atomic<unsigned> s_requestedUi{8 | 16 | 32};
 static std::atomic<unsigned> s_popupOpacity{62};
 static std::atomic<bool> s_chromeAttempted{false}, s_useOnlineSymbolCache{true};
+static std::atomic<bool> s_allowBraveSymbolServerFallback{false};
 static SRWLOCK s_initLock = SRWLOCK_INIT;
 static bool s_stopping = false, s_activateAfterInit = false, s_isBrowserProcess = false;
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -714,6 +722,8 @@ static void LoadModSettings() {
                                      std::memory_order_relaxed);
     s_useOnlineSymbolCache.store(Wh_GetIntSetting(L"useOnlineSymbolCache") != 0,
                                  std::memory_order_release);
+    s_allowBraveSymbolServerFallback.store(
+        Wh_GetIntSetting(L"allowBraveSymbolServerFallback") != 0, std::memory_order_release);
 }
 
 struct ReadOnlyImage {
@@ -840,9 +850,10 @@ static bool LeafOutsideUnwind(HMODULE module, size_t rva, size_t length) {
 }
 // Windhawk retains standard named-symbol resolution and its own local cache.
 // The author-hosted cache is trusted; local checks validate address structure.
-// No custom HTTP verifier, retry worker, telemetry, or remote PDB fallback.
+// Windhawk handles the optional official PDB fallback when the cache misses.
 static constexpr wchar_t kOnlineSymbolCache[] =
     L"https://raw.githubusercontent.com/bardelyne/brave-acrylic/symbol-cache/brave-acrylic-features-v9";
+static constexpr wchar_t kBraveSymbolServer[] = L"https://brave-symbols.s3.brave.com";
 
 // <feature-kernel>
 static constexpr unsigned kFeatureSlots = 37;
@@ -1174,12 +1185,136 @@ static bool ResolveFeatureAddresses(HMODULE module, size_t *result) {
          &addresses[36], nullptr, true},
     };
     static_assert(ARRAYSIZE(chromeHooks) == kFeatureSlots);
+    const bool allowFallback = s_allowBraveSymbolServerFallback.load();
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-    options.symbolServer = L"";
+    options.symbolServer = allowFallback ? kBraveSymbolServer : L"";
     options.onlineCacheUrl = s_useOnlineSymbolCache.load() ? kOnlineSymbolCache : L"";
-    if (!WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options))
+    if (allowFallback) {
+        // Keep the small cache’s names and also recognize the raw PDB names.
+        // Undecorating millions of names makes a cold Chromium PDB lookup slow.
+        // chrome.dll
+        WindhawkUtils::SYMBOL_HOOK fallbackHooks[] = {
+            {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)",
+              LR"(?OnPaintBackground@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
+             &addresses[0], nullptr, true},
+            {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)",
+              LR"(?DrawColor@Canvas@gfx@@QEAAXIW4SkBlendMode@@@Z)"},
+             &addresses[1], nullptr, true},
+            {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const",
+              LR"(?GetClassNameW@View@views@@QEBA?AV?$basic_string_view@DU?$char_traits@D@__Cr@std@@@__Cr@std@@XZ)"},
+             &addresses[2], nullptr, true},
+            {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const",
+              LR"(?ShouldWindowContentsBeTransparent@BrowserDesktopWindowTreeHostWin_ChromiumImpl@@EEBA_NXZ)"},
+             &addresses[3], nullptr, true},
+            {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)",
+              LR"(??0BraveVerticalTabStripContainerView@@QEAA@PEAVBrowserView@@PEAVView@views@@@Z)"},
+             &addresses[4], nullptr, true},
+            {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)",
+              LR"(?SetBackground@View@views@@QEAAXV?$unique_ptr@VBackground@views@@U?$default_delete@VBackground@views@@@__Cr@std@@@__Cr@std@@@Z)"},
+             &addresses[5], nullptr, true},
+            {{L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const",
+              LR"(?HasFocus@LocationBarView@@UEBA_NXZ)"},
+             &addresses[6], nullptr, true},
+            {{L"public: virtual bool __cdecl views::View::HasFocus(void)const",
+              LR"(?HasFocus@View@views@@UEBA_NXZ)"},
+             &addresses[7], nullptr, true},
+            {{L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)",
+              LR"(?OnThemeChanged@ContentsWebView@@UEAAXXZ)"},
+             &addresses[8], nullptr, true},
+            {{L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)",
+              LR"(?RenderViewReady@ContentsWebView@@UEAAXXZ)"},
+             &addresses[9], nullptr, true},
+            {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)",
+              LR"(?SetColor@LayerAnimator@ui@@UEAAXU?$SkRGBA4f@$02@@@Z)"},
+             &addresses[10], nullptr, true},
+            {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)",
+              LR"(?SetPageBaseBackgroundColor@WebContentsImpl@content@@UEAAXV?$optional@I@__Cr@std@@@Z)"},
+             &addresses[11], nullptr, true},
+            {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)",
+              LR"(?SetWebContents@ContentsWebView@@UEAAXPEAVWebContents@content@@@Z)"},
+             &addresses[12], nullptr, true},
+            {{L"struct HWND__ * __cdecl views::HWNDForView(class views::View const *)",
+              LR"(?HWNDForView@views@@YAPEAUHWND__@@PEBVView@1@@Z)"},
+             &addresses[13], nullptr, true},
+            {{L"public: unsigned int __cdecl ui::ColorProvider::GetColor(int)const",
+              LR"(?GetColor@ColorProvider@ui@@QEBAIH@Z)"},
+             &addresses[14], nullptr, true},
+            {{L"public: virtual void __cdecl views::MenuScrollViewContainer::OnPaintBackground(class gfx::Canvas *)",
+              LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)"},
+             &addresses[15], nullptr, true},
+            {{L"public: virtual void __cdecl views::BubbleBackground::Paint(class gfx::Canvas *,class views::View *)const",
+              LR"(?Paint@BubbleBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
+             &addresses[16], nullptr, true},
+            {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawRRect(class SkRRect const &,class cc::PaintFlags const &)",
+              LR"(?drawRRect@RecordPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+             &addresses[17], nullptr, true},
+            {{L"public: __cdecl RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(class views::View *,class LocationBar *,bool)",
+              LR"(??0RoundedOmniboxResultsFrame@@QEAA@PEAVView@views@@PEAVLocationBar@@_N@Z)"},
+             &addresses[18], nullptr, true},
+            {{L"public: virtual __cdecl RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame(void)",
+              LR"(??1RoundedOmniboxResultsFrame@@UEAA@XZ)"},
+             &addresses[19], nullptr, true},
+            {{L"private: virtual void __cdecl ui::Layer::SetRoundedCornersFromAnimation(class gfx::RoundedCornersF const &,enum ui::PropertyChangeReason)",
+              LR"(?SetRoundedCornersFromAnimation@Layer@ui@@EEAAXAEBVRoundedCornersF@gfx@@W4PropertyChangeReason@2@@Z)"},
+             &addresses[20], nullptr, true},
+            {{L"public: virtual void __cdecl views::SolidBackground::Paint(class gfx::Canvas *,class views::View *)const",
+              LR"(?Paint@SolidBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
+             &addresses[21], nullptr, true},
+            {{L"public: class gfx::Rect __cdecl views::View::GetLocalBounds(void)const",
+              LR"(?GetLocalBounds@View@views@@QEBA?AVRect@gfx@@XZ)"},
+             &addresses[22], nullptr, true},
+            {{L"public: static int __cdecl RoundedOmniboxResultsFrame::GetNonResultSectionHeight(bool)",
+              LR"(?GetNonResultSectionHeight@RoundedOmniboxResultsFrame@@SAH_N@Z)"},
+             &addresses[23], nullptr, true},
+            {{L"const views::SolidBackground::`vftable'",
+              LR"(??_7SolidBackground@views@@6B@)"},
+             &addresses[24], nullptr, true},
+            {{L"public: virtual void __cdecl views::BubbleFrameView::OnThemeChanged(void)",
+              LR"(?OnThemeChanged@BubbleFrameView@views@@UEAAXXZ)"},
+             &addresses[25], nullptr, true},
+            {{L"public: void __cdecl ui::Layer::SetFillsBoundsOpaquely(bool)",
+              LR"(?SetFillsBoundsOpaquely@Layer@ui@@QEAAX_N@Z)",
+              LR"(?SetFillsBoundsOpaquely@Layer@ui@@UEAAX_N@Z)"},
+             &addresses[26], nullptr, true},
+            {{L"public: virtual void __cdecl FadeLabel::OnPaintBackground(class gfx::Canvas *)",
+              LR"(?OnPaintBackground@FadeLabel@@UEAAXPEAVCanvas@gfx@@@Z)"},
+             &addresses[27], nullptr, true},
+            {{L"public: class gfx::Rect __cdecl views::View::GetBoundsInScreen(void)const",
+              LR"(?GetBoundsInScreen@View@views@@QEBA?AVRect@gfx@@XZ)"},
+             &addresses[28], nullptr, true},
+            {{L"public: static void __cdecl RoundedOmniboxResultsFrame::OnBeforeWidgetInit(struct views::Widget::InitParams *,class views::Widget *)",
+              LR"(?OnBeforeWidgetInit@RoundedOmniboxResultsFrame@@SAXPEAUInitParams@Widget@views@@PEAV34@@Z)"},
+             &addresses[29], nullptr, true},
+            {{L"protected: virtual void __cdecl views::View::OnPaintBorder(class gfx::Canvas *)",
+              LR"(?OnPaintBorder@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
+             &addresses[30], nullptr, true},
+            {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawPath(class SkPath const &,class cc::PaintFlags const &,enum cc::UsePaintCache)",
+              LR"(?drawPath@RecordPaintCanvas@cc@@UEAAXAEBVSkPath@@AEBVPaintFlags@2@W4UsePaintCache@2@@Z)"},
+             &addresses[31], nullptr, true},
+            {{L"bool __cdecl wm::AnimateOnChildWindowVisibilityChanged(class aura::Window *,bool)",
+              LR"(?AnimateOnChildWindowVisibilityChanged@wm@@YA_NPEAVWindow@aura@@_N@Z)"},
+             &addresses[32], nullptr, true},
+            {{L"struct HWND__ * __cdecl views::HWNDForNativeWindow(class aura::Window *const)",
+              LR"(?HWNDForNativeWindow@views@@YAPEAUHWND__@@QEAVWindow@aura@@@Z)"},
+             &addresses[33], nullptr, true},
+            {{L"void __cdecl wm::SetWindowVisibilityAnimationType(class aura::Window *,int)",
+              LR"(?SetWindowVisibilityAnimationType@wm@@YAXPEAVWindow@aura@@H@Z)"},
+             &addresses[34], nullptr, true},
+            {{L"void __cdecl wm::SetWindowVisibilityAnimationDuration(class aura::Window *,class base::TimeDelta const &)",
+              LR"(?SetWindowVisibilityAnimationDuration@wm@@YAXPEAVWindow@aura@@AEBVTimeDelta@base@@@Z)"},
+             &addresses[35], nullptr, true},
+            {{L"public: __cdecl ViewShadow::ViewShadow(class views::View *,class gfx::RoundedCornersF const &,struct ViewShadow::ShadowParameters const &)",
+              LR"(??0ViewShadow@@QEAA@PEAVView@views@@AEBVRoundedCornersF@gfx@@AEBUShadowParameters@0@@Z)"},
+             &addresses[36], nullptr, true},
+        };
+        static_assert(ARRAYSIZE(fallbackHooks) == kFeatureSlots);
+        options.noUndecoratedSymbols = TRUE;
+        if (!WindhawkUtils::HookSymbols(module, fallbackHooks, ARRAYSIZE(fallbackHooks), &options))
+            return false;
+    } else if (!WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options)) {
         return false;
+    }
     return ValidateFeatureAddresses(module, addresses, result);
 }
 // </feature-kernel>
