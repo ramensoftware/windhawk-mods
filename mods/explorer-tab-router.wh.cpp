@@ -2786,34 +2786,36 @@ static bool InstallExplorerFrameHooks(bool shellService) {
          true},
     };
     if (!shellService) {
-        // ExplorerFrame.dll. Decorated names identify these function signatures,
-        // including GUID-by-value and the const query. The private tab-record
-        // layout remains a Windows-version compatibility dependency.
+        // ExplorerFrame.dll. The first const-query name retains the symbol
+        // decoder's trailing space. The private tab-record layout remains a
+        // Windows-version compatibility dependency.
         WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
-            {{L"?_OnCommand@CExplorerFrame@@AEAAX_K_J@Z"},
+            {{L"private: void __cdecl CExplorerFrame::_OnCommand(unsigned "
+              L"__int64,__int64)"},
              &FrameCommand_Original,
              FrameCommand_Hook,
              true},
-            {{L"?TryGetFileExplorerTabsExtensionHelpers@CExplorerFrame@@"
-              L"AEAAJIPEAPEAUIFileExplorerTabsExtensionHelpers@@@Z"},
+            {{L"private: long __cdecl "
+              L"CExplorerFrame::TryGetFileExplorerTabsExtensionHelpers("
+              L"unsigned int,struct IFileExplorerTabsExtensionHelpers * *)"},
              &FrameTabOrder_Original,
              nullptr,
              true},
-            {{L"?GetBrowserTabFromId@CExplorerFrame@@AEBAJU_GUID@@"
-              L"AEAUFEBrowserTab@@@Z"},
+            {{L"private: long __cdecl "
+              L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
+              L"FEBrowserTab &)const ",
+              L"private: long __cdecl "
+              L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
+              L"FEBrowserTab &)const",
+              L"private: long __cdecl "
+              L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
+              L"FEBrowserTab &) const"},
              &FrameBrowserTab_Original,
              nullptr,
              true},
         };
-        const WH_HOOK_SYMBOLS_OPTIONS activationOptions = {
-            .optionsSize = sizeof(WH_HOOK_SYMBOLS_OPTIONS),
-            .symbolServer = nullptr,
-            .noUndecoratedSymbols = TRUE,
-            .onlineCacheUrl = nullptr,
-        };
-        if (!WindhawkUtils::HookSymbols(
-                module, explorerFrameDllHooks,
-                std::size(explorerFrameDllHooks), &activationOptions))
+        if (!WindhawkUtils::HookSymbols(module, explorerFrameDllHooks,
+                                        std::size(explorerFrameDllHooks)))
             return false;
         if (!FrameCommand_Original || !FrameTabOrder_Original ||
             !FrameBrowserTab_Original)
