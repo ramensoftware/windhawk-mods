@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.4.2
+// @version         0.4.3
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -80,12 +80,17 @@ floats the dock **Distance from screen edge** away from the screen edge with eve
 corner rounded. **Edge** puts the dock on the screen edge: its corners there are
 square and its far corners keep the dock corner radius. Edge ignores the edge
 distance, so the taskbar is that much shorter and the dock keeps its height.
+**Edge arc** is Edge plus a concave arc of the dock corner radius where each
+outer side meets the screen edge, so the dock flares out along it like a tab.
+With Separate, the facing sides of the two bars meet the screen edge straight;
+**Arc the inner edges** curves them out along it too, each arc at most half the
+12-DIP gap.
 **Whole group**, the default, centers the buttons, the gap, and the tray
 together. **Button area** centers Start through the last app button on the
 monitor, and the tray follows to their right. Every theme, the border line,
 and the Liquid shadow follow the layout and shape. They are saved as `layout`
-(`unified` or `separate`), `shape` (`island` or `edge`) and `alignment` (`group` or
-`buttons`) in `[settings]`.
+(`unified` or `separate`), `shape` (`island`, `edge` or `edgeArc`), `alignment`
+(`group` or `buttons`) and `innerArcs` (`true` or `false`) in `[settings]`.
 
 **Text color** can retain Windows' color, force light or dark text, or
 adapt each text element from its local composed background. Adaptive color uses
@@ -633,7 +638,7 @@ constexpr SettingChoice kSurfaceChoices[]{
 constexpr SettingChoice kLightingChoices[]{
     {L"original", L"Original"}, {L"rich", L"Rich specular"},
     {L"rim", L"Directional rim"}};
-constexpr SettingChoice kShapeChoices[]{{L"island", L"Island"}, {L"edge", L"Edge"}};
+constexpr SettingChoice kShapeChoices[]{{L"island", L"Island"}, {L"edge", L"Edge"}, {L"edgeArc", L"Edge arc"}};
 constexpr SettingChoice kAlignmentChoices[]{{L"group", L"Whole group"}, {L"buttons", L"Button area"}};
 constexpr SettingChoice kLayoutChoices[]{{L"unified", L"Unified"}, {L"separate", L"Separate"}};
 struct SettingField {
@@ -761,6 +766,7 @@ constexpr SettingField kSettingFields[]{
     {L"shape", L"Shape", SettingKind::Segmented, 0, 0, 0, 0, kShapeChoices},
     {L"alignment", L"Alignment", SettingKind::Segmented, 0, 0, 0, 0, kAlignmentChoices},
     {L"layout", L"Layout", SettingKind::Segmented, 0, 0, 0, 0, kLayoutChoices},
+    {L"innerArcs", L"Arc the inner edges", SettingKind::Toggle, 0, 0},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -822,7 +828,7 @@ int LocalChoice(settingsjson::JsonObject const& settings, PCWSTR key) {
     return field.defaultValue;
 }
 
-enum class DockShape { Island, Edge };        // kShapeChoices order.
+enum class DockShape { Island, Edge, EdgeArc }; // kShapeChoices order.
 enum class DockAlignment { Group, Buttons };  // kAlignmentChoices order.
 enum class DockLayout { Unified, Separate };  // kLayoutChoices order.
 // The dock settings the taskbar and the editor preview both draw from.
@@ -830,11 +836,13 @@ struct DockStyle {
     DockShape shape{};
     DockAlignment alignment{};
     DockLayout layout{};
+    bool innerArcs{};
 };
 DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
     return {DockShape(LocalChoice(values, L"shape")),
             DockAlignment(LocalChoice(values, L"alignment")),
-            DockLayout(LocalChoice(values, L"layout"))};
+            DockLayout(LocalChoice(values, L"layout")),
+            LocalBool(values, L"innerArcs")};
 }
 DockStyle g_dockStyle;
 
@@ -1941,11 +1949,13 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
     int uiModel = editor.controls[41].input.as<Controls::ComboBox>().SelectedIndex();
     bool uiSnell = uiModel == 1;
     bool uiRim = editor.controls[52].input.as<Controls::ComboBox>().SelectedIndex() == 2;
-    bool island = editor.controls[110].input.as<Controls::Primitives::Selector>().SelectedIndex() ==
-        int(DockShape::Island);
+    int shape = editor.controls[110].input.as<Controls::Primitives::Selector>().SelectedIndex();
+    bool separate = editor.controls[112].input.as<Controls::Primitives::Selector>().SelectedIndex() ==
+        int(DockLayout::Separate);
     for (size_t i = 0; i < editor.controls.size(); ++i) {
         bool enabled = true;
-        if (i == 6) enabled &= island; // Edge sits on the screen edge.
+        if (i == 6) enabled &= shape == int(DockShape::Island); // Edge and Edge arc sit on the screen edge.
+        if (i == 113) enabled &= separate && shape == int(DockShape::EdgeArc); // Only Separate Edge arc has facing flares.
         if (i == 8 || i == 9) enabled &= liquid;
         if (kSettingFields[i].page == 1 && i != 9) enabled &= liquid && custom;
         if (i == 2) enabled &= editor.trayEnabled.IsOn();
@@ -3230,7 +3240,7 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.refreshTray = find(L"RefreshTray").as<Controls::Button>();
     editor.syncing = true;
     constexpr size_t displayOrder[]{
-        0, 1, 36, 100, 101, 102, 103, 104, 112, 110, 111, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
+        0, 1, 36, 100, 101, 102, 103, 104, 112, 110, 111, 113, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
         9, 20, 21, 10, 22, 23, 24, 11, 25, 12, 26,
         29, 14, 13, 15, 30, 31, 32, 16, 17, 18, 27, 28, 33, 34, 35,
         58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
@@ -3422,7 +3432,8 @@ void CreateEditorContent(SettingsEditor& editor) {
         Automation::AutomationProperties::SetAutomationId(control.input, field.key);
         PCWSTR help = i == 3 || i == 4 ? L"Rounded corners are limited to half the visible shape's width or height." :
             i == 5 ? L"Space above and below each button background. Icons and click targets keep their native size." :
-            i == 110 ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it." :
+            i == 110 ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab." :
+            i == 113 ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, each arc at most half the gap between the bars." :
             i == 111 ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
             i == 112 ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar 12 DIP apart." :
             i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
@@ -4236,10 +4247,10 @@ double EffectiveDockRadius(double width, double height) {
                     std::max(0.0, std::min(width, height) / 2));
 }
 
-// How far Edge's outline runs past the screen edge: beyond its rounded corners and
+// How far an outline on the screen edge runs past it: beyond its rounded corners and
 // the widest inner border line (10 DIP), so neither shows along the edge.
 double DockBleed(DockShape shape, double radius) {
-    return shape == DockShape::Edge ? std::max(radius, 11.0) : 0;
+    return shape != DockShape::Island ? std::max(radius, 11.0) : 0;
 }
 
 // ---- Dock outline ----------------------------------------------------------
@@ -4257,38 +4268,58 @@ struct Anchor {
 struct DockPiece {
     Anchor left{HullEdge::Left, 0}, right{HullEdge::Right, 0};
     float top{}, bottom{};
+    float flareLeft{}, flareRight{}; // Concave arc radius at the wall's screen-edge foot; 0 = none.
     bool operator==(DockPiece const&) const = default;
 };
 struct DockOutline {
     std::vector<DockPiece> pieces{DockPiece{}}; // The hull itself by default.
     float radius{};
+    bool atTop{}; // The screen edge is the hull's top; only flares read it.
     bool operator==(DockOutline const&) const = default;
 };
 // Today's dock: the clip keeps the hull geometry and the shader its own distance.
 bool HullOnly(DockOutline const& outline) {
     return outline.pieces.size() == 1 && outline.pieces[0] == DockPiece{};
 }
+bool Flared(DockOutline const& outline) {
+    return std::ranges::any_of(outline.pieces, [](DockPiece const& piece) {
+        return piece.flareLeft > 0 || piece.flareRight > 0;
+    });
+}
+// A rounded rect can't draw two bars or a flare, so those outlines are a traced path.
+bool NeedsPath(DockOutline const& outline) {
+    return outline.pieces.size() > 1 || Flared(outline);
+}
 DockOutline MakeOutline(DockStyle const& style, double trayWidth, double radius, bool atTop) {
     auto bleed = static_cast<float>(DockBleed(style.shape, radius));
-    DockPiece band{.top = atTop ? -bleed : 0, .bottom = atTop ? 0 : bleed};
-    DockOutline outline{.pieces = {band}, .radius = static_cast<float>(radius)};
+    auto r = static_cast<float>(radius);
+    bool arc = style.shape == DockShape::EdgeArc;
+    // Each facing flare gets at most half the bar gap, so the two never overlap.
+    float outer = arc ? r : 0, facing = arc && style.innerArcs ? std::min(r, static_cast<float>(kBarGap / 2)) : 0;
+    DockPiece band{.top = atTop ? -bleed : 0, .bottom = atTop ? 0 : bleed, .flareLeft = outer, .flareRight = outer};
+    DockOutline outline{.pieces = {band}, .radius = r, .atTop = atTop};
     if (style.layout == DockLayout::Separate) {
         // The tray bar wraps the tray content in the dock padding; the button bar ends a bar gap before it.
         auto trayBar = static_cast<float>(trayWidth + 2 * kDockPadding);
         outline.pieces[0].right = {HullEdge::Right, -(trayBar + static_cast<float>(kBarGap))};
+        outline.pieces[0].flareRight = facing;
         outline.pieces.push_back(band);
         outline.pieces[1].left = {HullEdge::Right, -trayBar};
+        outline.pieces[1].flareLeft = facing;
     }
     return outline;
 }
 
 struct DockHull { float left{}, top{}, right{}, bottom{}; };
 
-// Appends the outline's pieces at a hull as closed figures of four quarter-circle cubics and four
-// lines each. The segment structure never depends on the hull, so a linear morph between two
-// traces is exact for every hull left edge between them.
+// Appends the outline's pieces at a hull as one closed figure each, a quarter-circle cubic per
+// corner. A flared wall instead stops f short of the screen edge, turns out along it in a concave
+// quarter arc of radius f and runs square past it to the piece's edge-side y. The segment structure
+// depends on the outline alone, never on the hull, so a linear morph between two traces is exact
+// for every hull left edge between them.
 void TraceOutline(ID2D1GeometrySink* sink, DockOutline const& outline, DockHull const& hull) {
     constexpr float kappa = 0.5522847f;
+    float edge = outline.atTop ? hull.top : hull.bottom, inward = outline.atTop ? 1.f : -1.f;
     for (auto const& piece : outline.pieces) {
         auto x = [&](Anchor anchor) {
             return (anchor.edge == HullEdge::Left ? hull.left : hull.right) + anchor.offset;
@@ -4296,14 +4327,36 @@ void TraceOutline(ID2D1GeometrySink* sink, DockOutline const& outline, DockHull 
         float left = x(piece.left), right = x(piece.right);
         float top = hull.top + piece.top, bottom = hull.bottom + piece.bottom;
         float r = outline.radius, k = r * (1 - kappa);
-        sink->BeginFigure({left, top + r}, D2D1_FIGURE_BEGIN_FILLED);
-        sink->AddBezier({{left, top + k}, {left + k, top}, {left + r, top}});
-        sink->AddLine({right - r, top});
-        sink->AddBezier({{right - k, top}, {right, top + k}, {right, top + r}});
-        sink->AddLine({right, bottom - r});
-        sink->AddBezier({{right, bottom - k}, {right - k, bottom}, {right - r, bottom}});
-        sink->AddLine({left + r, bottom});
-        sink->AddBezier({{left + k, bottom}, {left, bottom - k}, {left, bottom - r}});
+        bool begun = false;
+        auto to = [&](D2D1_POINT_2F point) {
+            if (begun) sink->AddLine(point);
+            else sink->BeginFigure(point, D2D1_FIGURE_BEGIN_FILLED);
+            begun = true;
+        };
+        // Clockwise, the figure reaches a top-left or bottom-right flare from its wall and the others along the bleed line.
+        auto flare = [&](float wall, float outward, float f, float close, bool fromWall) {
+            float g = f * (1 - kappa);
+            D2D1_POINT_2F foot{wall, edge + inward * f}, tip{wall + outward * f, edge}, square{wall + outward * f, close};
+            D2D1_POINT_2F footControl{wall, edge + inward * g}, tipControl{wall + outward * g, edge};
+            if (fromWall) {
+                to(foot);
+                sink->AddBezier({footControl, tipControl, tip});
+                sink->AddLine(square);
+            } else {
+                to(square);
+                sink->AddLine(tip);
+                sink->AddBezier({tipControl, footControl, foot});
+            }
+        };
+        bool atTop = outline.atTop;
+        if (atTop && piece.flareLeft > 0) flare(left, -1, piece.flareLeft, top, true);
+        else { to({left, top + r}); sink->AddBezier({{left, top + k}, {left + k, top}, {left + r, top}}); }
+        if (atTop && piece.flareRight > 0) flare(right, 1, piece.flareRight, top, false);
+        else { to({right - r, top}); sink->AddBezier({{right - k, top}, {right, top + k}, {right, top + r}}); }
+        if (!atTop && piece.flareRight > 0) flare(right, 1, piece.flareRight, bottom, true);
+        else { to({right, bottom - r}); sink->AddBezier({{right, bottom - k}, {right - k, bottom}, {right - r, bottom}}); }
+        if (!atTop && piece.flareLeft > 0) flare(left, -1, piece.flareLeft, bottom, false);
+        else { to({left + r, bottom}); sink->AddBezier({{left + k, bottom}, {left, bottom - k}, {left, bottom - r}}); }
         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     }
 }
@@ -5519,11 +5572,13 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float border[4]{}; // r, g, b, a in 0..1.
         float borderWidth[4]{}; // x: width in pixels, 0 = none; the rest keeps cbuffer alignment.
         float outputOffset[4]{}; // x, y: output pixel to backdrop pixel; z: 1 draws the lenses alone, clear elsewhere.
-        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the pieces; y: the piece count.
+        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the pieces; y: the piece count;
+        // z, with flares: +1 when the screen edge is the hull's bottom, -1 at its top.
         float dockShape[4]{};
         // Each piece is a box of the dock radius; its left, top, right and bottom sit these pixels from the hull's.
         float dockPieceRect[kMaxDockPieces][4]{};
-        // Which hull edge a piece's left (x) and right (y) edge hangs off: 0 the hull's left, 1 its right.
+        // Which hull edge a piece's left (x) and right (y) edge hangs off: 0 the hull's left, 1 its right;
+        // z and w: its left and right wall's flare radius in pixels, 0 for none.
         float dockPieceSide[kMaxDockPieces][4]{};
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
@@ -5715,6 +5770,15 @@ float roundedDistance(float2 p) {
 float opticalDistance(float2 p) {
     return opticalDistanceFor(p, halfSize, radius);
 }
+// A wall's flare of radius f: a square box over [wall - f, wall + f] from f inside the screen edge
+// to the piece's edge-side y, less the disc of radius f centred f out from the wall and f inside
+// the edge. The box overlaps the bar by f, so the union with it has no interior zero.
+float flareDistance(float2 pixel, float wall, float outward, float f, float sideY) {
+    float foot = center.y + dockShape.z * (halfSize.y - f);
+    float2 size = float2(f, abs(sideY - foot) / 2);
+    float box = roundedDistanceFor(pixel - float2(wall, (sideY + foot) / 2), size, 0);
+    return max(box, f - length(pixel - float2(wall + outward * f, foot)));
+}
 // The union of the dock's pieces in output pixels. Each x edge holds a fixed offset from the hull
 // edge it hangs off, so the pieces follow the sampled hull between layout passes.
 float dockPiecesDistance(float2 pixel, bool optical) {
@@ -5728,6 +5792,9 @@ float dockPiecesDistance(float2 pixel, bool optical) {
         float cornerRadius = min(radius, min(size.x, size.y));
         distance = min(distance, optical ? opticalDistanceFor(p, size, cornerRadius) :
                                            roundedDistanceFor(p, size, cornerRadius));
+        float sideY = dockShape.z > 0 ? edges.w : edges.y;
+        if (dockPieceSide[i].z > 0) distance = min(distance, flareDistance(pixel, edges.x, -1, dockPieceSide[i].z, sideY));
+        if (dockPieceSide[i].w > 0) distance = min(distance, flareDistance(pixel, edges.z, 1, dockPieceSide[i].w, sideY));
     }
     return distance;
 }
@@ -8121,12 +8188,15 @@ void ApplyDockShape(LiquidRenderer::LensConstants& lens, DockOutline const& outl
     if (HullOnly(outline)) return;
     lens.dockShape[0] = 1;
     lens.dockShape[1] = static_cast<float>(outline.pieces.size());
+    if (Flared(outline)) lens.dockShape[2] = outline.atTop ? -1 : 1;
     for (size_t i = 0; i < outline.pieces.size() && i < kMaxDockPieces; ++i) {
         auto const& piece = outline.pieces[i];
         float rect[]{piece.left.offset * scale, piece.top * scale, piece.right.offset * scale, piece.bottom * scale};
         std::copy_n(rect, 4, lens.dockPieceRect[i]);
         lens.dockPieceSide[i][0] = piece.left.edge == HullEdge::Right;
         lens.dockPieceSide[i][1] = piece.right.edge == HullEdge::Right;
+        lens.dockPieceSide[i][2] = piece.flareLeft * scale;
+        lens.dockPieceSide[i][3] = piece.flareRight * scale;
     }
 }
 
@@ -9111,22 +9181,26 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double dockWidth = 5 * step + 284;
         double trayLeft = 64 + 5 * step + 20;
         auto pageValues = EditorPageValues(editor, 0);
-        // Alignment places the dock on the host, so only the layout and shape show here. Edge sits on
-        // the canvas bottom as a bottom taskbar sits on its screen edge.
+        // Alignment places the dock on the host, so only the layout and shape show here. Edge and Edge arc
+        // sit on the canvas bottom as a bottom taskbar sits on its screen edge.
         auto style = ReadDockStyle(pageValues);
-        bool edge = style.shape == DockShape::Edge, separate = style.layout == DockLayout::Separate;
+        bool edge = style.shape != DockShape::Island;
         double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         double radius = std::min(number(3), dockHeight / 2);
         double bleed = DockBleed(style.shape, radius);
         // The tray bar wraps the tray content in the dock padding, like the live tray.
         auto outline = MakeOutline(style, 48 + dockWidth - trayLeft - kDockPadding, radius, false);
+        // A traced outline clips the material, which the outer flares widen past the dock band on both sides.
+        bool traced = NeedsPath(outline);
+        float flare = outline.pieces.front().flareLeft;
         auto buttonInsets=GetButtonInsets({0,0},dockHeight,number(5));
         double padding=buttonInsets.top;
         double buttonHeight=float(dockHeight-buttonInsets.top-buttonInsets.bottom);
         double buttonRadius=ButtonClipRadius(buttonWidth,buttonHeight,number(4));
+        Controls::Canvas::SetLeft(preview.material, 48 - flare);
         Controls::Canvas::SetTop(preview.material, y);
         preview.material.Height(dockHeight);
-        preview.material.Width(dockWidth);
+        preview.material.Width(dockWidth + 2 * flare);
         preview.material.CornerRadius(edge ? CornerRadius{radius, radius, 0, 0} : CornerRadius{radius, radius, radius, radius});
         for (size_t i = 0; i < preview.buttons.size(); ++i) {
             auto button = preview.buttons[i];
@@ -9187,16 +9261,16 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             ApplyBorder(lens, border, 1);
             ApplyDockShape(lens, outline, 1);
             if (lens.optics.shadowOpacity > 0) {
-                // The mask shape is fixed at construction, so a layout change rebuilds the shadow.
-                if (preview.shadow && bool(preview.shadowGeometry.try_as<CompositionPathGeometry>()) != separate) {
+                // The mask shape is fixed at construction, so a change of geometry kind rebuilds the shadow.
+                if (preview.shadow && bool(preview.shadowGeometry.try_as<CompositionPathGeometry>()) != traced) {
                     preview.shadow.reset();
                     preview.shadowGeometry = nullptr;
                 }
                 if (!preview.shadow) {
                     auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(
                         preview.liquidHost).Compositor();
-                    preview.shadowGeometry = separate ? CompositionGeometry(compositor.CreatePathGeometry())
-                                                      : compositor.CreateRoundedRectangleGeometry();
+                    preview.shadowGeometry = traced ? CompositionGeometry(compositor.CreatePathGeometry())
+                                                    : compositor.CreateRoundedRectangleGeometry();
                     preview.shadow = std::make_shared<GlassShadow>(
                         preview.canvas, preview.material, preview.shadowGeometry);
                 }
@@ -9240,17 +9314,17 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                      : winrt::Windows::UI::Color{240, 243, 243, 243}));
         else
             preview.material.Background(GlassMaterial(theme != DockTheme::Glass, dark));
-        float borderWidth = (liquid && !preview.unavailable) || separate ? 0 : border.width;
+        float borderWidth = (liquid && !preview.unavailable) || traced ? 0 : border.width;
         preview.material.BorderBrush(Media::SolidColorBrush(border.color));
         preview.material.BorderThickness({borderWidth, borderWidth, borderWidth, edge ? 0 : borderWidth});
-        // Separate: the material is clipped to a static trace of the outline, and the border line is the live
-        // dock's composition stroke inside that clip, since the Border's own line would stop at the hull.
+        // A traced outline clips the material to a static trace of it, and the border line is the live dock's
+        // composition stroke inside that clip, since the Border's own line would stop at the hull.
         auto materialVisual = Hosting::ElementCompositionPreview::GetElementVisual(preview.material);
         ShapeVisual materialLine{nullptr};
-        if (separate) {
+        if (traced) {
             auto compositor = materialVisual.Compositor();
             if (!preview.outline) preview.outline = compositor.CreatePathGeometry();
-            preview.outline.Path(OutlinePath(outline, {0, 0, float(dockWidth), float(dockHeight)}));
+            preview.outline.Path(OutlinePath(outline, {flare, 0, flare + float(dockWidth), float(dockHeight)}));
             if (!materialVisual.Clip()) materialVisual.Clip(compositor.CreateGeometricClip(preview.outline));
             if (borderWidth == 0 && !liquid && border.width > 0)
                 materialLine = GlassHighlights(preview.outline, DockTheme::Native, dark, border);
@@ -12167,7 +12241,7 @@ void RestoreDock(Root& root) {
 }
 
 bool PrepareDock(OwnedDock& dock, FrameworkElement background,
-                 DockInsets insets) {
+                 DockInsets insets, DockOutline const& silhouette) {
     if (dock.clip) {
         return dock.background == background && dock.visual.Clip() == dock.clip &&
                dock.clip.Geometry() == dock.outline;
@@ -12183,10 +12257,10 @@ bool PrepareDock(OwnedDock& dock, FrameworkElement background,
     geometry.Size({static_cast<float>(background.ActualWidth()),
                    static_cast<float>(height)});
     CompositionGeometry outline = geometry;
-    if (g_dockStyle.layout == DockLayout::Separate) {
-        // Two bars need a path; FollowOutline keys its morph off the hull in this same pass.
+    if (NeedsPath(silhouette)) {
+        // FollowOutline keys the path's morph off the hull in this same pass.
         outline = compositor.CreatePathGeometry();
-    } else if (g_dockStyle.shape == DockShape::Edge) {
+    } else if (!HullOnly(silhouette)) {
         // UpdateFollower binds it to the hull; until then it is the hull's rest rect.
         auto extended = compositor.CreateRoundedRectangleGeometry();
         extended.CornerRadius({radius, radius});
@@ -12629,7 +12703,7 @@ void Refresh(Root& root) {
     m.outline = MakeOutline(g_dockStyle, trayWidth, EffectiveDockRadius(host, m.visibleDockHeight()), m.atTop);
     root.measurements = m;
     root.measurementsReady = true;
-    if (!PrepareDock(root.dock, background, m.insets)) {
+    if (!PrepareDock(root.dock, background, m.insets, m.outline)) {
         root.blocked = true;
         Wh_Log(L"[UWDOCK] clip ownership/tree change; root left native");
         RestoreRoot(root);
@@ -13290,7 +13364,7 @@ void SetModConfiguration(settingsjson::JsonObject const& local) {
     g_trayHighlightRadius=std::clamp(LocalInt(local,L"tray.highlightRadius"),0,100);
     g_dockStyle = ReadDockStyle(local);
     // Edge sits on the screen edge: the frame drops the distance and the visible band keeps its height.
-    g_dockEdgeDistance = g_dockStyle.shape == DockShape::Edge ? 0 : std::clamp(
+    g_dockEdgeDistance = g_dockStyle.shape != DockShape::Island ? 0 : std::clamp(
         LocalInt(local, L"edgeDistance"), 0, 100);
     g_keepButtonRim = LocalBool(local, L"button.border");
     g_buttonLiquidLayer = LocalBool(local, L"button.liquidLayer");
