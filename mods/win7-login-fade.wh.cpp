@@ -896,11 +896,12 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
 
 #pragma region DWM GammaRange hooks
 DWORD* p_g_gammaRange = NULL;
+DWORD* p_g_GdiRampLimit = NULL; // 24h2 stores it in two global variables (and uses both of them) for some very weird reason. Both read the same regkey
 DWORD g_origGammaRange = 128;
 
 #if defined(_M_X64)
 HMODULE hDispBrokerDesktop = NULL;
-void* ColorManagementRpcServerImpl;
+void* ColorManagementRpcServerImpl; // (24h2 one is loaded in another function so won't be caught here)
 
 // fnBase: Base address to search, pass e.g. a function pointer
 // fnLen: Length of the function (search range)
@@ -908,17 +909,11 @@ void* ColorManagementRpcServerImpl;
 char* FindMemory(char* fnBase, size_t fnLen, const std::string& targetRegex) {
     std::regex regex(targetRegex, std::regex::optimize);
     std::match_results<std::string_view::const_iterator> match;
-
     std::string_view search(fnBase, fnLen);
     while (std::regex_search(search.begin(), search.end(), match, regex)) {
-        auto pos = fnBase + match.position(0);
-        Wh_Log(L"Match found at position: %p", pos);
-
         // Return the address of the first match
-        return pos;
+        return fnBase + match.position(0);
     }
-
-    Wh_Log(L"No match found for the regex pattern.");
     return NULL;
 }
 
@@ -954,20 +949,21 @@ bool FindRangeVariable() {
 using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_original;
 LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
+    LONG ret = RegGetValueW_original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData) {
         if (wcscmp(lpSubKey, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ICM") == 0 && wcscmp(lpValue, L"GdiIcmGammaRange") == 0) {
             Wh_Log(L"Hooked DWM GdiIcmGammaRange, pvData=%p", pvData);
             *pcbData = sizeof(DWORD);
             if (pdwType) *pdwType = REG_DWORD;
-            if (!p_g_gammaRange) {
+            if (!p_g_gammaRange && !p_g_GdiRampLimit) { // x86/arm only path
                 p_g_gammaRange = (DWORD*)pvData;
                 g_origGammaRange = *p_g_gammaRange;
             }
-            *p_g_gammaRange = 256;
+            *(DWORD*)pvData = 256;
             return ERROR_SUCCESS;
         }
     }
-    return RegGetValueW_original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    return ret;
 }
 
 bool CreateFadeMutexAndEvent() {
@@ -1189,6 +1185,14 @@ BOOL Wh_ModInit() {
                     (void**)&ColorManagementRpcServerImpl,
                     NULL,
                     FALSE
+                },
+                {
+                    {
+                        L"unsigned long g_GdiRampLimit",
+                    },
+                    (void**)&p_g_GdiRampLimit,
+                    NULL,
+                    TRUE
                 }
             };
             if (!WindhawkUtils::HookSymbols(hDispBrokerDesktop, dispBrokerDesktopDllHooks, ARRAYSIZE(dispBrokerDesktopDllHooks))) {
@@ -1274,10 +1278,17 @@ BOOL Wh_ModInit() {
 
 #if defined(_M_X64)
 void Wh_ModAfterInit() {
-    if (g_isDwm && FindRangeVariable() && p_g_gammaRange) {
-        g_origGammaRange = *p_g_gammaRange;
-        *p_g_gammaRange = 256;
-        Wh_Log(L"Found and set the gamma range variable to 256");
+    if (g_isDwm) {
+        if (FindRangeVariable() && p_g_gammaRange) {
+            g_origGammaRange = *p_g_gammaRange;
+            *p_g_gammaRange = 256;
+            Wh_Log(L"Found and set the gamma range variable (%p) to 256", p_g_gammaRange);
+        }
+        if (p_g_GdiRampLimit) {
+            g_origGammaRange = *p_g_gammaRange;
+            *p_g_GdiRampLimit = 256;
+            Wh_Log(L"Found and set the 24H2 gamma range variable (%p) to 256", p_g_GdiRampLimit);
+        }
     }
 }
 #endif
@@ -1288,6 +1299,9 @@ void Wh_ModUninit() {
     if (g_isDwm) {
         if (p_g_gammaRange) {
             *p_g_gammaRange = g_origGammaRange;
+        }
+        if (p_g_GdiRampLimit) {
+            *p_g_GdiRampLimit = g_origGammaRange;
         }
 #if defined(_M_X64)
         if (hDispBrokerDesktop) {
