@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              crystaldiskinfo-smart-auto-refresh
 // @name            CrystalDiskInfo Smart Auto-Refresh
-// @description     Temporarily pauses the Auto-Refresh function whenever the application's main window is visible
-// @version         1.0.1
+// @description     Temporarily pauses the Auto-Refresh function while the application's main window is visible
+// @version         1.0.2
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         DiskInfo32.exe
@@ -25,13 +25,13 @@
 # CrystalDiskInfo Smart Auto-Refresh
 CrystalDiskInfo includes an optional Auto-Refresh feature that updates disk
 information at specified intervals, which is useful for background monitoring
-while the application is minimized to the system tray. However, when the
+while the application is minimized to the system tray. However, while the
 application's main window is visible, automatic refreshes can interfere with the
 analysis of current disk status, as shifting attribute values make tracking
 specific metrics more difficult.
 
 This mod temporarily pauses the Auto-Refresh function by blocking its disk
-polling cycle whenever the application's main window is visible, allowing for an
+polling cycle while the application's main window is visible, allowing for an
 uninterrupted analysis of current disk status.
 
 The Auto-Refresh function resumes once the application is minimized to the
@@ -56,7 +56,8 @@ of the following options to activate it:
 std::shared_mutex g_timerMutex;
 std::unordered_map<HWND, std::unordered_set<UINT_PTR>> g_timerMap;
 
-// Subclass procedure
+// Subclass procedure for the background timer: Pause the Auto-Refresh function
+// while the main window is visible
 LRESULT CALLBACK AutoRefreshSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     LPARAM lParam, DWORD_PTR dwRefData)
 {
@@ -102,11 +103,10 @@ SetTimer_t SetTimer_Original;
 UINT_PTR WINAPI SetTimer_Hook(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse,
     TIMERPROC lpTimerFunc)
 {
-    // CrystalDiskInfo's minimum Auto-Refresh interval is 1 minute
-    // This threshold avoids interfering with unrelated functions by filtering
-    // out high-frequency timers, ensuring only the application's disk polling
-    // cycle is targeted.
-    if (hWnd && uElapse >= 60000)
+    // CrystalDiskInfo's minimum Auto-Refresh interval is 1 minute.
+    // Filtering for an exact multiple of this interval avoids interfering with
+    // the 130-second timer used for the Power-On Hours calculation.
+    if (hWnd && (uElapse >= 60000) && (uElapse % 60000) == 0)
     {
         bool isSubclassRequired = false;
         {
