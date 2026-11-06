@@ -81,7 +81,7 @@ Windhawk explain their scope and any restart requirements.
 - On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into Explorer and stays loaded until Explorer restarts.
 - The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
-- Close the Notification Area Icons page before disabling, updating, or reloading the mod. The CNI COM implementation uses a shutdown gate and pins its code until Explorer exits, but complete callback lifetime safety has not been verified. Outstanding bridge objects may remain allocated until process exit; repeated updates can retain old mod images.
+- The Notification Area Icons page uses a private COM provider. Its proxy-based behavior and shutdown with the page open have not been verified on every Windows build; icon preference writes can differ from the native behavior. Close the page before disabling, updating, or reloading the mod.
 - Keep a way to disable the mod or restart Explorer.
 - Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
 
@@ -7524,7 +7524,7 @@ static void SetTrayPinned(const std::wstring& key,bool pinned) {
 }
 // ----- [T81-CNI] Undocumented CNI provider, x86-64. -----
 // ABI checked against taskbarcpl.dll 10.0.10240.16384, 10.0.22621.1
-// and 10.0.26100.4484. Close the page before mod unload.
+// and 10.0.26100.4484. Proxy behavior and unload require Windows testing.
 struct NOTIFYITEM {
     PWSTR pszExeName;
     PWSTR pszTip;
@@ -7597,35 +7597,6 @@ struct CniCallbackScope {
     CniCallbackScope() { g_trayCniCallbackDepth.fetch_add(1, std::memory_order_acq_rel); }
     ~CniCallbackScope() { g_trayCniCallbackDepth.fetch_sub(1, std::memory_order_acq_rel); }
 };
-
-// CNI shutdown gate belongs to this DLL copy. A rejected entry never touches
-// tray/UI state. Drain entries before stopping the UI they may be waiting on.
-static std::atomic<bool> g_cniAccepting{true};
-static std::atomic<unsigned> g_cniCalls{0};
-struct CniCallScope {
-    bool entered=false;
-    CniCallScope() {
-        g_cniCalls.fetch_add(1,std::memory_order_seq_cst);
-        entered=g_cniAccepting.load(std::memory_order_seq_cst);
-        if(!entered) g_cniCalls.fetch_sub(1,std::memory_order_seq_cst);
-    }
-    ~CniCallScope() {if(entered)g_cniCalls.fetch_sub(1,std::memory_order_seq_cst);}
-};
-static bool PinCniCode() {
-    // A late COM call can only be safe from unmapped code if this DLL copy is
-    // resident. PIN is permanent until the Explorer process exits, even on update.
-    static bool pinned=false;
-    if(pinned)return true; // called only by the private tray UI thread
-    HMODULE module=nullptr;
-    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           reinterpret_cast<LPCWSTR>(&g_cniAccepting),&module)) {
-        Wh_Log(L"[T81-CNI] module pin failed; private COM server disabled error=%lu",GetLastError());
-        return false;
-    }
-    pinned=true;
-    Wh_Log(L"[T81-CNI] COM code pinned until Explorer exits; updates retain the old image");
-    return true;
-}
 
 // The private tray's preference exists only during this mod session.
 static std::atomic<DWORD> g_privateAutoTray{1};
@@ -7957,44 +7928,9 @@ static DWORD g_trayCniPrivateCookie = 0;
 static std::atomic<bool> g_trayCniPrivateRegistered{false};
 static std::atomic<DWORD> g_trayCniUiThreadId{0};
 
-// In-memory read virtualization, inspired by Windows 8 Network Flyout Restorer
-// (GPL-3.0). Limit it to the exact key and the page's activation thread.
-// Shell helpers may perform the actual read, so checking only the direct
-// calling module can miss the page's own read.
-static SRWLOCK g_cniPageLock = SRWLOCK_INIT;
-struct CniPageThread { DWORD id; unsigned refs; };
-static CniPageThread g_cniPageThreads[32]{};
-static bool CniTrackPageThread(DWORD id) noexcept {
-    AcquireSRWLockExclusive(&g_cniPageLock);
-    CniPageThread* slot = nullptr;
-    for (auto& entry : g_cniPageThreads) {
-        if (entry.id == id) { slot = &entry; break; }
-        if (!entry.id && !slot) slot = &entry;
-    }
-    if (slot) { slot->id = id; ++slot->refs; }
-    ReleaseSRWLockExclusive(&g_cniPageLock);
-    return slot != nullptr;
-}
-static void CniUntrackPageThread(DWORD id) noexcept {
-    AcquireSRWLockExclusive(&g_cniPageLock);
-    for (auto& entry : g_cniPageThreads) {
-        if (entry.id == id) {
-            if (--entry.refs == 0) entry.id = 0;
-            break;
-        }
-    }
-    ReleaseSRWLockExclusive(&g_cniPageLock);
-}
-static bool CniIsPageThread() noexcept {
-    bool found = false;
-    DWORD id = GetCurrentThreadId();
-    AcquireSRWLockShared(&g_cniPageLock);
-    for (const auto& entry : g_cniPageThreads) {
-        if (entry.id == id) { found = true; break; }
-    }
-    ReleaseSRWLockShared(&g_cniPageLock);
-    return found;
-}
+// In-memory read virtualization is limited to the Explorer preference and
+// direct callers from taskbarcpl.dll. The proxy-only path has no page-owned
+// mod object in which to track and untrack a page thread.
 using T81NtQueryKey = LONG (NTAPI*)(HANDLE, int, PVOID, ULONG, PULONG);
 using T81RegGetValue = decltype(&RegGetValueW);
 using T81RegQueryValue = decltype(&RegQueryValueExW);
@@ -8025,7 +7961,6 @@ static bool CniExplorerKey(HKEY key) noexcept {
 }
 static bool CniTaskbarCplCaller(void* address) noexcept {
     if (!g_trayCniPrivateRegistered.load(std::memory_order_acquire)) return false;
-    if (CniIsPageThread()) return true;
     HMODULE caller = nullptr, cpl = GetModuleHandleW(L"taskbarcpl.dll");
     return cpl && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -8194,9 +8129,7 @@ static HRESULT QueueCniUiRequest(CniUiRequest* request, bool waitForUi) {
 
 static bool StartTrayNotifyServer() {
     if (g_trayCni) return true;
-    if (!s || !s->privateActive || !g_cniAccepting.load()) return false;
-    // Do not expose our COM code at all unless pinning this copy succeeded.
-    if (!PinCniCode()) return false;
+    if (!s || !s->privateActive) return false;
 
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) {
@@ -8292,77 +8225,9 @@ static void NotifyTrayCni(ULONG event, const PrivateIcon& icon) {
     if (g_trayCni) g_trayCni->NotifyOne(event, icon);
 }
 
-// The page must be closed before unloading the mod: this client bridge has
-// a mod-owned vtable and can remain referenced by the page. The write methods
-// avoid passing the private item through the COM proxy.
-class CTrayCniClientBridge final : public ITrayNotifyWin8 {
-    std::atomic<ULONG> refs_{1};
-    ITrayNotifyWin8* backend_;
-    DWORD pageThread_;
-    bool tracked_;
-public:
-    explicit CTrayCniClientBridge(ITrayNotifyWin8* backend)
-        : backend_(backend), pageThread_(GetCurrentThreadId()),
-          tracked_(CniTrackPageThread(pageThread_)) {
-        Wh_Log(L"[T81-CNI] page read scope tid=%lu tracked=%d", pageThread_, tracked_ ? 1 : 0);
-    }
-    ~CTrayCniClientBridge() {
-        if (tracked_) CniUntrackPageThread(pageThread_);
-        if (backend_) backend_->Release();
-    }
-
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (!ppv) return E_POINTER;
-        *ppv = nullptr;
-        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
-        if (IsEqualIID(riid, IID_IUnknown) ||
-            IsEqualIID(riid, T81_IID_ITrayNotifyWin8)) {
-            *ppv = static_cast<ITrayNotifyWin8*>(this);
-            AddRef();
-            return S_OK;
-        }
-        return E_NOINTERFACE;
-    }
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        CniCallScope call;if(!call.entered)return 1;
-        return refs_.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-    ULONG STDMETHODCALLTYPE Release() override {
-        // After quiescence retain the object and backend reference rather than
-        // running apartment-dependent teardown against a stopped server.
-        CniCallScope call;if(!call.entered)return 1;
-        ULONG left = refs_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-        if (!left) delete this;
-        return left;
-    }
-    HRESULT STDMETHODCALLTYPE RegisterCallback(
-        INotificationCB* callback, ULONG* cookie) override {
-        if(cookie)*cookie=0;
-        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
-        return backend_->RegisterCallback(callback, cookie);
-    }
-    HRESULT STDMETHODCALLTYPE UnregisterCallback(ULONG cookie) override {
-        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
-        return backend_->UnregisterCallback(cookie);
-    }
-    HRESULT STDMETHODCALLTYPE SetPreference(const NOTIFYITEM* item) override {
-        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
-        if (!g_trayCni || !g_trayCniPrivateRegistered.load()) return E_UNEXPECTED;
-        Wh_Log(L"[T81-CNI] local SetPreference bridge tid=%lu", GetCurrentThreadId());
-        return g_trayCni->SetPreference(item);
-    }
-    HRESULT STDMETHODCALLTYPE EnableAutoTray(BOOL enabled) override {
-        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
-        if (!g_trayCni || !g_trayCniPrivateRegistered.load()) return E_UNEXPECTED;
-        Wh_Log(L"[T81-CNI] local EnableAutoTray bridge tid=%lu", GetCurrentThreadId());
-        return g_trayCni->EnableAutoTray(enabled);
-    }
-    HRESULT STDMETHODCALLTYPE DoAction(BOOL action) override {
-        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
-        return backend_->DoAction(action);
-    }
-};
-
+// Use the private server through COM's ordinary interface, without returning
+// a page-held object whose vtable resides in this mod. Whether writes marshal
+// correctly on each Windows build must be verified independently.
 using TrayCniCoCreateInstance_t = decltype(&CoCreateInstance);
 static TrayCniCoCreateInstance_t realTrayCniCoCreateInstance = nullptr;
 
@@ -8374,28 +8239,12 @@ static HRESULT WINAPI TrayCniCoCreateInstanceHook(
     if (ppv && !outer && (context & CLSCTX_LOCAL_SERVER) &&
         IsEqualCLSID(rclsid, T81_CLSID_TrayNotify) &&
         IsEqualIID(riid, T81_IID_ITrayNotifyWin8)) {
-        CniCallScope call;
-        if(!call.entered) return realTrayCniCoCreateInstance(rclsid,outer,context,riid,ppv);
         *ppv = nullptr;
         HRESULT hr = realTrayCniCoCreateInstance(T81_CLSID_PrivateTrayNotify,
             nullptr, context, riid, ppv);
         if (SUCCEEDED(hr)) {
-            // Only a same-process provider can use the local write bridge.
-            // Otherwise preserve the ordinary COM object and its marshalling.
-            if (g_trayCni && g_trayCniPrivateRegistered.load()) {
-                auto* backend = static_cast<ITrayNotifyWin8*>(*ppv);
-                auto* bridge = new (std::nothrow) CTrayCniClientBridge(backend);
-                if (bridge) {
-                    *ppv = bridge;
-                    Wh_Log(L"[T81-CNI] activation redirected with local synchronous "
-                           L"write bridge pid=%lu tid=%lu hr=0x%08lx",
-                           GetCurrentProcessId(), GetCurrentThreadId(),
-                           (unsigned long)hr);
-                    return S_OK;
-                }
-            }
-            Wh_Log(L"[T81-CNI] activation redirected pid=%lu tid=%lu hr=0x%08lx",
-                   GetCurrentProcessId(), GetCurrentThreadId(), (unsigned long)hr);
+            Wh_Log(L"[T81-CNI] private COM proxy activation pid=%lu tid=%lu hr=0x%08lx (write not confirmed)",
+                   GetCurrentProcessId(),GetCurrentThreadId(),(unsigned long)hr);
             return hr;
         }
         Wh_Log(L"[T81-CNI] private activation failed hr=0x%08lx; native fallback",
@@ -15810,7 +15659,6 @@ static void RemoveExceptionLogger() {
 // normal unload restores its original visibility. Competing mods can conflict.
 BOOL Wh_ModInit() {
     quitting.store(false);
-    g_cniAccepting.store(true,std::memory_order_seq_cst);
     LoadSettings();
     if(debugExceptionLog.load()) InstallExceptionLogger();
     InstallTrayCniHook();
@@ -15842,14 +15690,6 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 }
 void Wh_ModBeforeUninit() {
     RemoveExceptionLogger();
-    // Stop accepting bridge work while its UI server is still running; an
-    // unbounded drain is necessary here rather than unloading with an active
-    // call, but a hung client can delay mod shutdown.
-    g_cniAccepting.store(false,std::memory_order_seq_cst);
-    if(g_cniCalls.load(std::memory_order_seq_cst))
-        Wh_Log(L"[T81-CNI] waiting for in-flight activation/bridge calls before shutdown");
-    while(g_cniCalls.load(std::memory_order_seq_cst)) Sleep(10);
-    Wh_Log(L"[T81-CNI] bridge gate closed and tracked calls drained");
     quitting.store(true);
     if(threadHandle) {
         // TrackPopupMenuEx has its own modal loop: ask its owner to cancel it
