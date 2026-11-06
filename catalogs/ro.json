@@ -1650,6 +1650,34 @@
         "version": "1.0.0"
       }
     },
+    "charging-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793937627000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793937627000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DpakB",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lwinmm",
+        "description": "Plays an animation, shows a battery stats card (optionally with sound) when the charger is plugged in or unplugged.",
+        "donateUrl": "https://buymeacoffee.com/dpakb",
+        "github": "https://github.com/DeepakBalaraman",
+        "homepage": "https://dpakb.com",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Charging Animation",
+        "twitter": "https://twitter.com/dpakb_",
+        "version": "1.0.0"
+      }
+    },
     "charging-sound": {
       "details": {
         "defaultSorting": 13410,
@@ -8493,7 +8521,7 @@
         "ratingUsers": 70,
         "reviews": 2,
         "trendingSorting": 8.341503000572548,
-        "updated": 1793027070000,
+        "updated": 1793937623000,
         "users": 510
       },
       "metadata": {
@@ -8501,7 +8529,7 @@
           "x86-64"
         ],
         "author": "DarkionAvey",
-        "compilerOptions": "-ldcomp -ld3d11 -ldxgi -ld2d1 -ldwrite -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -luser32 -lgdi32 -lwindowscodecs -ldwmapi -luxtheme -lpropsys -lcomctl32 -lruntimeobject",
+        "compilerOptions": "-ldcomp -ld3d11 -ldxgi -ld2d1 -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -luser32 -lgdi32 -lwindowscodecs -ldwmapi -luxtheme -lpropsys -lcomctl32 -lruntimeobject -lninput",
         "description": "GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations",
         "github": "https://github.com/DarkionAvey",
         "include": [
@@ -8509,7 +8537,7 @@
         ],
         "license": "GPL-2.0",
         "name": "GPU-accelerated explorer.exe list and grid views",
-        "version": "0.9.240"
+        "version": "1.0.4"
       }
     },
     "harmful-files-autoaccept": {
@@ -21742,6 +21770,31 @@
         "license": "MIT",
         "name": "Window Center & Resize",
         "version": "1.0"
+      }
+    },
+    "window-centralizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793937618000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793937618000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "3DDinosaur",
+        "compilerOptions": "-lgdi32 -lshell32",
+        "description": "Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.",
+        "github": "https://github.com/3DDinosaur",
+        "include": [
+          "*",
+          "windhawk.exe"
+        ],
+        "name": "Window Centralizer",
+        "version": "1.0.0"
       }
     },
     "window-geometry-memory": {

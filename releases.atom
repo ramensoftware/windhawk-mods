@@ -2,12 +2,213 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-06T03:04:16.000Z</updated>
+    <updated>2026-11-06T04:00:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Charging Animation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/charging-animation#e08adc83efe20a754ebb2e18bf528578b3822bf5</id>
+        <link href="https://windhawk.net/mods/charging-animation"/>
+        <updated>2026-11-06T04:00:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Charging Animation</h1>
+<p>Plays an animation, shows a battery stats card (optionally with sound) when the charger is plugged in or unplugged.</p>
+<p>The animation and the card are separate, and either one can be turned off. The settings are split into
+three groups (BackgroundEffect, Sounds and StatsPanel) plus a single Quiet mode switch at the bottom. Rows
+that your choices don't use hide themselves, so the list stays short.</p>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/windows-charging-animation/main/assets/sample.gif" alt="Charging Animation in action"></p>
+<h2>Background Effect</h2>
+<p><code>When plugged in</code> and <code>When unplugged</code> decide which events play anything at all. The rest of the section is
+shared by both, apart from the two colors and the unplug direction. The sounds have a section of their own.</p>
+<p>There are six looks. <code>Animation</code> picks the one you want.</p>
+<p><strong>Wave</strong> is the default. It takes a picture of the desktop and bends it outward along an expanding ring,
+tinted with the event color. <code>Origin</code> moves where it starts, either one of nine spots on the screen under
+the pointer or <code>Cursor Position</code> to use the pointer itself.</p>
+<p><strong>Linear Wave</strong> is the same refraction with a straight front instead of a ring. A pair of fronts leave
+<code>Origin</code> together and run along the line it sits on, one each way, so <code>Top</code> washes the screen downward,
+<code>Left</code> sweeps it left to right and a corner sends it across at an angle. With <code>Center</code> the two fronts part
+in the middle and run out to either side. The band of light rides them and <code>Motion</code> shapes the speed in the
+same way. <code>Reverse</code> on an unplug runs them back in, so the desktop drains toward the origin instead of
+being pushed away from it.</p>
+<p><strong>Edge Glow</strong> never touches the desktop. A band of light swells out of the screen borders, and one bright
+spot travels around them while it's up, coming in from the border nearest <code>Origin</code>. Set the color to
+<code>rainbow</code> and the band becomes a gradient running around the screen; <code>Motion</code> sets how the spot speeds up
+and slows down.</p>
+<p><strong>Bezel</strong> presses the screen in. A dark frame grows out of all four edges, its inner lip catching a little
+light, and the desktop, captured once when the animation starts, is shrunk to fit inside it, so the whole
+picture slides inward instead of the edges being covered. Nothing on the picture is stretched: it shrinks
+by the same amount both ways, so the frame comes out a little thinner across the top and bottom. The
+picture sinks into the frame's shadow and creeps a little deeper as it settles, then holds and lets go.
+Because the shrunk picture is a still image, the effect gives up after about two seconds whatever <code>Duration</code>
+says. While it runs, the monitor keeps showing that still picture, so anything moving on screen looks
+frozen for those two seconds, even though clicks still reach the windows underneath. The frame is plain
+black and grey throughout, with no tint on it. <code>Strength</code> sets how far in it comes, about 16 pixels on the
+long edge at the default. It presses all four edges by the same amount, so it has no starting point and no
+direction of travel: <code>Origin</code> and <code>Unplug direction</code> are hidden while Bezel is chosen.</p>
+<p><strong>Circuit Trace</strong> is the quiet one. A circuit board wakes along the bottom of the screen, above the
+taskbar: a power rail steps across the width of the monitor at forty-five degrees, a bundle of thin signal
+lines runs beside one stretch of it and fans away at both ends, risers drop off the rail into drilled vias,
+and elbows turn up out of the bottom corners. A charge runs along each trace in turn, close to white at its
+head with a long tail of light behind it, and the via it is heading for rings as it arrives. Between pulses
+the copper only glows faintly, the way a board runs on standby power, and then the whole thing fades out.
+Nothing is captured from the desktop. <code>Strength</code> sets how thick the traces are and how far their glow
+spills, and the layout is different on every event. The board runs along the bottom edge rather than around
+a point, so it has no <code>Origin</code>; <code>Reverse</code> on an unplug sends each charge the other way, out of the far end
+and back into the rail, so the board drains instead of charging.</p>
+<p><strong>Matrix Code</strong> is the busy one. Columns of characters drop down the screen, each a bright head over a
+trail that dims as it falls, and some cells in a trail stay dark, which is what turns a solid bar into a
+stream of characters. The head of every column keeps flickering to a new character while it travels, and
+the columns are let go from the <code>Origin</code> outward, so the cascade spreads across the monitor in one sweep.
+The characters are the event color, with the head of each column close to white, and on <code>rainbow</code> the
+columns take different points of the gradient. Nothing is captured from the desktop. <code>Strength</code> sets how
+long the trails are. Like the bezel it is a burst rather than a slow move, so it gives up after about two
+seconds whatever <code>Duration</code> says. <code>Reverse</code> on an unplug turns the cascade around: the characters run
+upward, and the release starts at the edges and closes in on <code>Origin</code> instead of spreading out from it.</p>
+<p><strong>Colors.</strong> <code>Plugged-in color</code> and <code>Unplugged color</code> each tint their own event. Pick one from the list, or
+choose Custom and type into the field that appears underneath. On Windhawk 2.0 that field is a color
+picker. These all work:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A name</td>
+<td><code>purple</code>, <code>mint</code>, <code>gold</code></td>
+</tr>
+<tr>
+<td>Short hex</td>
+<td><code>#48F</code></td>
+</tr>
+<tr>
+<td>Hex</td>
+<td><code>#4285F4</code></td>
+</tr>
+<tr>
+<td>RGB</td>
+<td><code>66,133,244</code></td>
+</tr>
+<tr>
+<td>Windows accent</td>
+<td><code>accent</code></td>
+</tr>
+<tr>
+<td>Rolling gradient</td>
+<td><code>rainbow</code></td>
+</tr>
+</tbody>
+</table>
+<p>A name that isn't recognized falls back to the event default, blue for plugging in and red for unplugging,
+so a typo doesn't break anything.</p>
+<p><strong>Strength, Duration, Motion and Opacity</strong> control the size and the timing. <code>Strength</code> (0-40) is how far
+the desktop bends, how wide the light band is, how deep the push goes, how thick the traces are, how long
+the cascade trails; at 0 the wave keeps only its glow. <code>Duration</code> (300-5000 ms) is how long the animation
+runs, though the bezel and the cascade stop well before it, <code>Opacity</code> (0-100) fades all of it, and <code>Motion</code>
+picks the easing used by Wave and Edge Glow.</p>
+<p><strong>Dim screen</strong> darkens the monitor the animation plays on, the way a phone dims its display when it starts
+charging. It fades in over the first quarter second, stays down for the length of the animation and fades
+back out at the end, so nothing snaps. The range is 0-90, so the screen is never fully black. The battery
+card sits above the dim and stays bright, only the monitor the animation plays on is dimmed, and with the
+animation turned off for an event there is nothing to dim.</p>
+<p><strong>Unplug direction</strong> picks which way the unplug travels. <code>Forwards</code> plays it exactly like a plug-in,
+expanding from the origin; <code>Reverse</code> starts at the screen edges and collapses back to the origin, like the
+charge being pulled away. Wave, Edge Glow, Circuit Trace and Matrix Code use it, and Bezel hides it because
+it has nowhere to travel.</p>
+<h2>Sounds</h2>
+<p>Both fields take a path to a .wav file, or a system sound alias such as <code>Notification.IM</code> or
+<code>WindowsBackground</code>. Leave a field empty for no sound. If you want the sound on its own, turn off the
+animation and the card for that event. If the Charging Sound mod is also set to play on the same event,
+both sounds will play.</p>
+<h2>Stats Panel</h2>
+<p><code>When plugged in</code> and <code>When unplugged</code> choose which events show the card, so you can keep it for plugging
+in only, for unplugging only, for both or for neither. The rest of the section applies either way.</p>
+<p><strong>Fluent (Windows 11-ish)</strong> is the default. It's an acrylic card: the desktop behind it is blurred once
+when the card appears and covered with the theme color, with a thin border and a soft shadow on top. A
+battery icon sits in a tinted tile next to the percentage, there's a status line under the number, and a
+level bar that fills from empty as the card slides in and turns red below 20% while on battery.</p>
+<p><strong>Fluent (Minimal)</strong> is the same card at badge size, with half the padding, a smaller number, no status
+line and a thinner bar.</p>
+<p><strong>PineApple (Card)</strong> is the plain system HUD: a rounded square, as wide as it is tall, black in dark mode
+and white in light mode, with a large battery icon on top, the percentage below it, the status line under that
+and a full-width capsule bar along the bottom. The accent color isn't used anywhere in it, and the icon and
+the bar turn red when the battery runs low. It fades and pops in quickly instead of sliding; <code>Center</code> is the
+usual place to put it.</p>
+<p><strong>Galaxy UI</strong> is the wide soft card with corners that take about a third of its height. The percentage is
+twice the normal size, with a bolt in a round tinted badge next to it, the status line underneath and one
+thin bar running the full width along the bottom edge. On an unplug the badge shows a battery instead of
+the bolt. The surface is nearly opaque, so the desktop behind only tints it.</p>
+<p><strong>PineApple (Circle)</strong> is the phone charging screen: a thick ring that fills clockwise to the battery
+level, a bolt and the percentage in the middle, and the status line on a small frosted pill underneath.
+The middle of the dial is a soft patch of the blurred desktop, so the number sits on a little frost
+instead of bare wallpaper, and the patch fades away before it reaches the ring, which keeps the dial
+floating instead of turning it into a card. The number and the bolt also carry a soft shadow that keeps
+them readable on a bright background. It springs in with a small overshoot, sweeps the ring once, and
+shrinks away when it closes.</p>
+<p>The Fluent and Galaxy cards follow the Windows app theme; the PineApple card flips between black and
+white with it, so it stays readable on either wallpaper. All five update once a second and fade out at the
+end.</p>
+<p><strong>Position, accent and the rest.</strong> <code>Position</code> is where the card appears: <code>Follow Effect Origin</code> keeps it
+where the animation started, and the other choices are the corners, the edges, <code>Center</code> and the cursor. It
+always stays inside the working area, so the taskbar isn't covered. <code>Accent color</code> sets the tint, with
+<code>Match Effect Color</code> taking the color from the event that brought the card up (the gradient included) and
+<code>Custom</code> reading the field below it in any of the formats above; the PineApple card has no tint to
+give it, so it ignores this one. Turning <code>Details</code> off drops the status line, and <code>Duration</code>, <code>Opacity</code> and
+<code>Font size</code> tune the rest.</p>
+<h2>Quiet Mode</h2>
+<p>While a full-screen app, a game or presentation mode is running, Quiet mode skips the animation, the sound
+and the card. On a locked screen or during the screen saver there is nobody to see the visuals, so the
+animation and the card are skipped then as well, whether Quiet mode is on or off, and only the sound plays.</p>
+<h2>Credits</h2>
+<p>Wave Effect inspired by <a href="https://windhawk.net/mods/magic-pointer">Magic Pointer Mod</a></p>
+<p>Power notification handling adapted from <a href="https://windhawk.net/mods/charging-sound">Charging Sound</a></p>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Centralizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/window-centralizer#877a07f2d63957f5bd9ce4329762e847731fdf8c</id>
+        <link href="https://windhawk.net/mods/window-centralizer"/>
+        <updated>2026-11-06T04:00:18.000Z</updated>
+        <content type="html"><![CDATA[<h1>Window Centralizer</h1>
+<p>New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.</p>
+<p>The window is placed <strong>before</strong> it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.</p>
+<h2>Modes</h2>
+<ul>
+<li><strong>Parent window / monitor</strong>: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.</li>
+<li><strong>Parent monitor only</strong>: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.</li>
+<li><strong>Mouse cursor</strong>: centered on the mouse cursor.</li>
+</ul>
+<p>In every mode the window is kept inside the monitor's work area.</p>
+<h2>Which windows are moved</h2>
+<ul>
+<li>Only windows with a title bar that are smaller than the <strong>window size limit to target</strong> setting (a percentage of the monitor's work area). Large main windows keep their assigned position.</li>
+<li>Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.</li>
+<li>Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, so they can be seen jumping after appearing.</li>
+<li>Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.</li>
+<li>A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.</li>
+<li>Some programs move their window again right after showing it (Firefox). The mod takes care of that. Initial moves by other tools (FancyZones), and the user's own dragging, are left alone.</li>
+</ul>
+<h2>Ignoring windows</h2>
+<p>Press <strong>Win+Alt+I</strong> while a window is active to stop centering that kind of window. Press it again to undo. A short notification confirms the option.</p>
+<p>It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.</p>
+<p>The <strong>Ignored windows</strong> list opens with <strong>Win+Ctrl+Alt+I</strong>, and entries can be reviewed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.</p>
+<p>Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.</p>
+<h2>Compatibility</h2>
+<p>Don't use this mod together with <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp">Center New Windows</a>. Both reposition windows as they are shown, so the same window would be moved twice, especially dialogs when that mod's &quot;Always center dialogs&quot; option is on.</p>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Compiz Desktop Cube for Windows 11 5.9.0]]></title>
         <id>https://windhawk.net/mods/compiz-desktop-cube#77263ff11741f7176db8df91469373cfffa6ee84</id>
@@ -1260,495 +1461,6 @@ eskisinin yerini alır.</li>
         <author>
             <name>DahaSakinOlamazdim</name>
             <uri>https://github.com/DahaSakinOlamazdim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Cursor Themes 1.0]]></title>
-        <id>https://windhawk.net/mods/mouse-cursor-themes#558d15d24060a8952809d06abbbbe8424d8205c3</id>
-        <link href="https://windhawk.net/mods/mouse-cursor-themes"/>
-        <updated>2026-11-04T00:03:04.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mouse Cursor Themes</h1>
-<p>Replaces the Windows mouse cursors with a theme of your choice. All cursors are
-drawn by the mod itself, so every theme is available right after you enable the
-mod and you can switch themes from the settings at any time.</p>
-<p>The mod draws cursor files for the theme and replaces the system cursors of
-your current Windows session with them. It does not change your saved pointer
-scheme or any registry settings. Because of this, the theme works in every
-program that uses the standard Windows cursors.</p>
-<h2>Preview</h2>
-<p><img src="https://i.imgur.com/YBKMSqy.gif" alt="Preview 1"></p>
-<p><img src="https://i.imgur.com/oIhV764.gif" alt="Preview 2"></p>
-<p><img src="https://i.imgur.com/lO9i7j0.gif" alt="Preview 3"></p>
-<h2>Themes</h2>
-<ul>
-<li><strong>Classic White</strong>: White arrow with a black outline.</li>
-<li><strong>Classic Black</strong>: Black arrow with a white outline.</li>
-<li><strong>Neon Blue / Neon Pink / Neon Green</strong>: Bright outline with a glowing halo.</li>
-<li><strong>Sunset</strong>: Orange to pink gradient with a soft warm glow.</li>
-<li><strong>Ocean</strong>: Aqua to deep blue gradient.</li>
-<li><strong>Gold</strong>: Golden gradient with a dark brown outline.</li>
-<li><strong>Rainbow</strong>: A rainbow-colored cursor.</li>
-<li><strong>Crimson</strong>: Red cursor with a white outline and a red glow.</li>
-<li><strong>Silver</strong>: Metallic silver gradient with a dark outline.</li>
-<li><strong>Forest</strong>: Light green to deep green gradient with a dark green outline.</li>
-<li><strong>Lava</strong>: Yellow to red-orange gradient with a hot orange glow.</li>
-<li><strong>Lavender</strong>: Soft lilac to purple gradient.</li>
-<li><strong>Aurora</strong>: Mint to violet gradient with a cool glow.</li>
-<li><strong>Ice</strong>: White to icy blue gradient with a blue outline.</li>
-<li><strong>Candy</strong>: Pink to sky blue gradient with a white outline.</li>
-<li><strong>Midnight</strong>: Dark navy cursor with a golden outline and glow.</li>
-<li><strong>Ghost</strong>: Only an outline, the inside is transparent.</li>
-<li><strong>Custom</strong>: Pick your own fill, outline and glow colors.</li>
-</ul>
-<h2>Pointer shapes</h2>
-<p>The shape of the main pointer can be changed independently from the theme. The
-same shape is also used by the busy (working in background) and help cursors.
-Shapes marked &quot;tip&quot; click with their tip, the others click at their center.</p>
-<ul>
-<li><strong>Classic arrow</strong>: The standard Windows arrow (tip).</li>
-<li><strong>Arrowhead</strong>: The classic arrow without its stem (tip).</li>
-<li><strong>Triangle</strong>: A plain triangle (tip).</li>
-<li><strong>Wedge</strong>: A slim triangle with a straight left edge (tip).</li>
-<li><strong>Kite</strong>: A kite shape (tip).</li>
-<li><strong>Navigator</strong>: A sharp navigation-style arrowhead (tip).</li>
-<li><strong>Chevron</strong>: Two strokes forming an open corner (tip).</li>
-<li><strong>Diamond / Square / Dot / Ring / Target</strong>: Simple geometric shapes.</li>
-<li><strong>Star / Sparkle / Heart</strong>: Decorative shapes.</li>
-</ul>
-<h2>Cursors that are replaced</h2>
-<p>Normal arrow, text (I-beam), link (hand), busy (animated), working in
-background (animated), precision cross, up arrow, all resize cursors, move,
-unavailable (forbidden) and help.</p>
-<h2>Settings</h2>
-<ul>
-<li>Theme</li>
-<li>Pointer shape: Shape of the main pointer (see above).</li>
-<li>Cursor size (%): 100 matches the original Windows cursor size.</li>
-<li>Glow (%): Makes the glow of the themes weaker or stronger (0 turns it off).</li>
-<li>Outline thickness (%): Makes the outline of the cursor thinner or thicker. A thicker outline is easier to see.</li>
-<li>Crisp edges: Draws sharper, less blurry cursor edges.</li>
-<li>Contrast edge: Adds a thin dark or light line around the outline, so the cursor stays clearly visible on any background.</li>
-<li>Animated busy cursors: Turns the spinning busy cursors on or off.</li>
-<li>Custom colors: Used only when the &quot;Custom&quot; theme is selected (format: #RRGGBB).</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The cursor size follows the Windows pointer size setting (Settings &gt;
-Accessibility &gt; Mouse pointer and touch). The cursors are drawn in several sizes, so they stay sharp.</li>
-<li>The mod never changes your saved pointer scheme. When you disable the mod,
-Windows reloads your own pointer scheme. The replaced cursors only live in
-memory, so after you sign out they return to your pointer scheme until the
-mod is started again.</li>
-<li>Programs that use their own cursors (for example some games and drawing
-programs) keep their own cursors.</li>
-<li>If you change the pointer scheme from the Windows settings while the mod is
-running, the mod notices it and applies the theme again.</li>
-<li>The generated cursor files are kept in Windhawk's storage folder for this mod
-and are removed when the mod is disabled.</li>
-</ul>
-<hr>
-<h1>Fare İmleci Temaları</h1>
-<p>Windows fare imleçlerini seçtiğiniz bir temayla değiştirir. Tüm imleçler modun
-kendisi tarafından çizilir; bu yüzden modu açtığınız anda bütün temalar hazırdır
-ve ayarlardan istediğiniz zaman tema değiştirebilirsiniz.</p>
-<p>Mod, tema için imleç dosyaları çizer ve geçerli Windows oturumunuzun sistem
-imleçlerini bu dosyalarla değiştirir. Kayıtlı işaretçi şemanızı veya kayıt defteri
-ayarlarını değiştirmez. Bu sayede tema, standart Windows imleçlerini kullanan her
-programda çalışır.</p>
-<h2>Temalar</h2>
-<ul>
-<li><strong>Klasik Beyaz</strong>: Siyah çerçeveli beyaz ok.</li>
-<li><strong>Klasik Siyah</strong>: Beyaz çerçeveli siyah ok.</li>
-<li><strong>Neon Mavi / Neon Pembe / Neon Yeşil</strong>: Parlak çerçeve ve ışıldayan halo.</li>
-<li><strong>Gün Batımı</strong>: Turuncudan pembeye geçişli, yumuşak sıcak parıltılı.</li>
-<li><strong>Okyanus</strong>: Açık turkuazdan koyu maviye geçişli.</li>
-<li><strong>Altın</strong>: Koyu kahverengi çerçeveli altın renkli geçiş.</li>
-<li><strong>Gökkuşağı</strong>: Gökkuşağı renklerinde imleç.</li>
-<li><strong>Kızıl</strong>: Beyaz çerçeveli, kırmızı parıltılı kırmızı imleç.</li>
-<li><strong>Gümüş</strong>: Koyu çerçeveli, metalik gümüş geçişli.</li>
-<li><strong>Orman</strong>: Açık yeşilden koyu yeşile geçişli, koyu yeşil çerçeveli.</li>
-<li><strong>Lav</strong>: Sarıdan kırmızı-turuncuya geçişli, sıcak turuncu parıltılı.</li>
-<li><strong>Lavanta</strong>: Yumuşak leylaktan mora geçişli.</li>
-<li><strong>Aurora</strong>: Naneden menekşeye geçişli, serin parıltılı.</li>
-<li><strong>Buz</strong>: Beyazdan buz mavisine geçişli, mavi çerçeveli.</li>
-<li><strong>Şeker</strong>: Pembeden gök mavisine geçişli, beyaz çerçeveli.</li>
-<li><strong>Gece Yarısı</strong>: Koyu lacivert, altın sarısı çerçeveli ve parıltılı.</li>
-<li><strong>Hayalet</strong>: Sadece çerçeve, içi şeffaf.</li>
-<li><strong>Özel</strong>: Dolgu, çerçeve ve parıltı renklerini kendiniz seçersiniz.</li>
-</ul>
-<h2>İşaretçi şekilleri</h2>
-<p>Ana işaretçinin şekli temadan bağımsız olarak değiştirilebilir. Aynı şekil,
-meşgul (arka planda çalışıyor) ve yardım imleçlerinde de kullanılır.
-&quot;uç&quot; yazan şekiller uç noktalarıyla, diğerleri merkezleriyle tıklar.</p>
-<ul>
-<li><strong>Klasik ok</strong>: Standart Windows oku (uç).</li>
-<li><strong>Ok başı</strong>: Klasik okun çubuksuz hâli (uç).</li>
-<li><strong>Üçgen</strong>: Sade bir üçgen (uç).</li>
-<li><strong>Kama</strong>: Sol kenarı düz, ince bir üçgen (uç).</li>
-<li><strong>Uçurtma</strong>: Uçurtma biçimi (uç).</li>
-<li><strong>Pusula oku</strong>: Keskin, navigasyon tarzı ok başı (uç).</li>
-<li><strong>Köşe</strong>: Açık bir köşe oluşturan iki çizgi (uç).</li>
-<li><strong>Elmas / Kare / Nokta / Halka / Hedef</strong>: Sade geometrik şekiller.</li>
-<li><strong>Yıldız / Parıltı / Kalp</strong>: Süslü şekiller.</li>
-</ul>
-<h2>Değiştirilen imleçler</h2>
-<p>Normal ok, metin (I imleci), bağlantı (el), meşgul (animasyonlu), arka planda
-çalışıyor (animasyonlu), hassas artı, yukarı ok, tüm boyutlandırma imleçleri,
-taşıma, kullanılamaz (yasak) ve yardım.</p>
-<h2>Ayarlar</h2>
-<ul>
-<li>Tema</li>
-<li>İşaretçi şekli: Ana işaretçinin şekli (yukarıya bakın).</li>
-<li>İmleç boyutu (%): 100, orijinal Windows imleç boyutuna denk gelir.</li>
-<li>Parıltı (%): Temaların parıltısını azaltır veya artırır (0 kapatır).</li>
-<li>Çerçeve kalınlığı (%): İmlecin çerçevesini inceltir veya kalınlaştırır. Kalın çerçeve imleci daha kolay görünür yapar.</li>
-<li>Keskin kenarlar: İmleç kenarlarını daha keskin, daha az bulanık çizer.</li>
-<li>Kontrast kenarı: Çerçevenin etrafına ince bir koyu veya açık çizgi ekler; böylece imleç her arka planda net görünür.</li>
-<li>Animasyonlu meşgul imleçleri: Dönen meşgul imleçlerini açar veya kapatır.</li>
-<li>Özel renkler: Sadece &quot;Özel&quot; tema seçiliyse kullanılır (biçim: #RRGGBB).</li>
-</ul>
-<h2>Notlar</h2>
-<ul>
-<li>İmleç boyutu Windows'un işaretçi boyutu ayarını izler (Ayarlar &gt; Erişilebilirlik &gt;
-Fare işaretçisi ve dokunma). İmleçler birkaç boyutta çizildiği için net kalır.</li>
-<li>Mod kayıtlı işaretçi şemanızı hiçbir zaman değiştirmez. Modu kapattığınızda Windows
-kendi işaretçi şemanızı yeniden yükler. Değiştirilen imleçler yalnızca bellekte
-bulunur; oturumu kapattığınızda mod yeniden başlayana kadar işaretçi şemanıza döner.</li>
-<li>Kendi imleçlerini kullanan programlar (örneğin bazı oyunlar ve çizim programları)
-kendi imleçlerini korur.</li>
-<li>Mod çalışırken Windows ayarlarından işaretçi şemasını değiştirirseniz mod bunu
-fark eder ve temayı yeniden uygular.</li>
-<li>Oluşturulan imleç dosyaları, Windhawk'ın bu mod için ayırdığı depolama klasöründe
-tutulur ve mod kapatılınca silinir.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DahaSakinOlamazdim</name>
-            <uri>https://github.com/DahaSakinOlamazdim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AI Voice Typing 1.0.0]]></title>
-        <id>https://windhawk.net/mods/ai-voice-typing#245488f83190691fbd1edc64d149ac240debf2b0</id>
-        <link href="https://windhawk.net/mods/ai-voice-typing"/>
-        <updated>2026-11-03T23:01:40.000Z</updated>
-        <content type="html"><![CDATA[<h1>AI Voice Typing</h1>
-<p><strong>English</strong> | <a href="#portugu%C3%AAs">Português</a> | <a href="#espa%C3%B1ol">Español</a></p>
-<p>Press a shortcut, speak, press it again, and your words are typed where the
-cursor is, in any app. An AI transcribes what you said and cleans it up in the
-style you choose, or translates it. It uses a cloud provider you set up with
-your own key: <strong>Groq</strong> is recommended (very fast, and its key is free).</p>
-<p><img src="https://i.imgur.com/c9LNTHL.gif" alt="Dictating into a text field: the live text, the AI rewrite and the result"></p>
-<h2>What it does</h2>
-<ul>
-<li><strong>Dictation in any app.</strong> A small bar at the bottom of the screen shows what
-you're saying while you speak. When you stop, the text is pasted where you
-were typing and also left on the clipboard. Dictating again right after, in
-the same field, adds the space between the two.</li>
-<li><strong>Cleaned up in your style.</strong> The AI removes the &quot;ums&quot;, repetitions and false
-starts, and fixes punctuation, without changing what you said. Styles:
-Natural, Professional, Prompt (for writing to an AI), Raw and Transcript
-only, plus your own. Each app can have its own style (Outlook always
-Professional, VS Code always Prompt).</li>
-<li><strong>Translation.</strong> Ctrl+Shift+Y dictates and translates, to one of 34
-languages.</li>
-<li><strong>The result card.</strong> After each dictation, a card shows the text. Its chips
-redo it in another style or translate it, and <strong>Replace</strong> swaps the pasted
-text for the new version.</li>
-<li><strong>Command.</strong> Select text in any app, press Ctrl+Alt+K and say what to do
-with it (&quot;more formal&quot;, &quot;translate to Spanish&quot;, &quot;summarize as bullets&quot;). The
-result replaces the selection.</li>
-<li><strong>About 100 languages</strong> to speak in, detected by itself or chosen. The
-settings and the bar are in English, Spanish, Portuguese, French, German,
-Japanese, Chinese, Russian, Hindi and Bengali.</li>
-<li><strong>Several providers</strong>: Groq, Google Gemini, Mistral, OpenRouter, OpenAI, or
-an OpenAI-compatible server. With more than one set up, the next one is
-tried when one fails. If the transcription still fails, the recording is
-kept so you can <strong>try again</strong> without speaking it all again.</li>
-</ul>
-<p><img src="https://i.imgur.com/teLIabS.gif" alt="Command: the selected text rewritten from a spoken instruction"></p>
-<h2>Getting started</h2>
-<ol>
-<li>Create a free key at <a href="https://console.groq.com/keys">console.groq.com/keys</a>
-(or at another provider: the settings show how, step by step).</li>
-<li>The first time, a short setup wizard opens: the look, the provider (paste
-the key and it's tested at once), the shortcut and style, and a test
-dictation. It can be done again from General.</li>
-<li>Click any text field, press <strong>Ctrl+Shift+Space</strong>, speak, and press it again
-(or click the bar's stop button).</li>
-</ol>
-<table>
-<thead>
-<tr>
-<th>Shortcut</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Ctrl+Shift+Space</strong></td>
-<td>Dictate (press again to stop; in hold mode, hold it while you speak)</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Shift+Y</strong></td>
-<td>Dictate and translate</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Alt+K</strong></td>
-<td>Command on the selected text (while you speak, the card also offers the styles, to apply one without speaking)</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Cancel while recording (while it's being processed, the bar's ✕ cancels)</td>
-</tr>
-</tbody>
-</table>
-<p>Every shortcut can be changed in the settings. &quot;Paste again&quot; (the last
-dictation into the app in front) and &quot;Dictate now&quot; are in the icon's menu;
-&quot;Paste again&quot; has no shortcut by default, because Ctrl+Alt+V is Office's
-Paste Special.</p>
-<p><img src="https://i.imgur.com/1YTQOiV.png" alt="The result card, translated to Spanish"></p>
-<h2>Settings</h2>
-<p>Click the mod's icon in the notification area to open them (right-click it
-for a quick menu): this session's history (with &quot;Redo&quot; in another style or
-language), the styles and your own ones, a style per app, the providers (keys,
-models and the order they're tried in), the shortcuts, the spoken language,
-microphone and dictionary, and the look: theme, accent color, the card's width
-and a glass look for the bar. Start and stop sounds are on by default and can
-be turned off.</p>
-<p><img src="https://i.imgur.com/GKBPArQ.png" alt="The settings window"></p>
-<h2>Privacy</h2>
-<ul>
-<li>The audio goes only to the speech provider you set up (for example Groq,
-<code>api.groq.com</code>), and only with a key saved: while you speak (the live
-preview, which can be turned off) and when you stop. The transcript then
-goes to the text provider for the style or the translation, along with the
-name of the app you're typing into (so the text fits it) and the words in
-your dictionary. With Command, the selected text goes too. Each provider's
-own privacy policy applies (on Gemini's free tier, Google may use what's
-sent to improve its products).</li>
-<li>If Groq answers that the chosen model no longer exists, the mod asks Groq
-for its current list of models, tries up to 4 of them with a short test
-(a second of near-silence, or &quot;OK&quot;), and keeps the one that works.</li>
-<li>Servers contacted, only those of the providers you set up:
-<code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
-<code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, or the address you
-give for an OpenAI-compatible server.</li>
-<li>Nothing is saved to disk: the audio, the text and the history stay in
-memory. A recording whose transcription failed also stays only in memory
-(the last 3), until it's tried again or the history is cleared.</li>
-<li>The dictated text is left on the clipboard, like a normal copy. Command
-copies the selection with Ctrl+C and then puts your clipboard back as it
-was.</li>
-<li>Your keys are stored encrypted for your Windows account (DPAPI), in the
-mod's own storage, and are removed with the mod.</li>
-</ul>
-<h2>Known limitations</h2>
-<ul>
-<li>Windows doesn't let a normal app type into apps running as administrator:
-there, the text is only copied (paste it with Ctrl+V), and Command can't
-read the selection.</li>
-<li>Command doesn't work in terminals (Ctrl+C stops the program there).</li>
-<li>Ctrl+Alt is AltGr on many keyboards: where AltGr+K types a character (for
-example Hungarian or Czech), Command starts without a shortcut; choose one
-in the settings.</li>
-<li>The glass look needs Windows' transparency effects (with them off, or with
-the energy saver on, the bar stays solid).</li>
-<li>Cloud providers only (no local models), over https, so it needs an internet
-connection. The OpenAI-compatible server is used for the text, not for
-speech.</li>
-<li>A recording stops by itself after 12 minutes and is transcribed (the
-providers take files of about 13 minutes at most).</li>
-</ul>
-<p>Prefer a standalone app with more options? The same author makes
-<a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
-<h2>Contact and support</h2>
-<p>Made in Brazil by <strong>caliberda</strong>. Bugs: please open
-<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&amp;body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on GitHub</a>
-(that's where they're tracked). If the mod helps you, you can support it on
-<a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a>. Instagram:
-<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
-<a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<h2>Português</h2>
-<p>Aperte um atalho, fale, aperte de novo, e suas palavras são digitadas onde
-está o cursor, em qualquer app. Uma IA transcreve o que você disse e limpa no
-estilo que você escolher, ou traduz. Ela usa um provedor na nuvem que você
-configura com a sua própria chave: a <strong>Groq</strong> é a recomendada (muito rápida,
-e a chave é grátis).</p>
-<h3>O que faz</h3>
-<ul>
-<li><strong>Ditado em qualquer app.</strong> Uma barrinha embaixo da tela mostra o que você
-está falando enquanto fala. Quando você para, o texto é colado onde você
-estava digitando e também fica na área de transferência. Ditando de novo
-logo em seguida, no mesmo campo, o espaço entre os dois entra sozinho.</li>
-<li><strong>Limpo no seu estilo.</strong> A IA tira os &quot;hã&quot;, &quot;né&quot;, repetições e frases
-começadas de novo, e acerta a pontuação, sem mudar o que você disse.
-Estilos: Natural, Profissional, Prompt (para escrever para uma IA), Cru e Só
-transcrição, e os seus. Cada app pode ter o seu estilo (Outlook sempre
-Profissional, VS Code sempre Prompt).</li>
-<li><strong>Tradução.</strong> Ctrl+Shift+Y dita e traduz, para um de 34 idiomas.</li>
-<li><strong>O card do resultado.</strong> Depois de cada ditado, um card mostra o texto. Os
-chips refazem em outro estilo ou traduzem, e <strong>Substituir</strong> troca o texto
-colado pela versão nova.</li>
-<li><strong>Comando.</strong> Selecione um texto em qualquer app, aperte Ctrl+Alt+K e diga o
-que fazer (&quot;mais formal&quot;, &quot;traduz pro inglês&quot;, &quot;resume em tópicos&quot;). O
-resultado substitui a seleção.</li>
-<li><strong>Cerca de 100 idiomas</strong> para falar, detectados sozinhos ou escolhidos. As
-configurações e a barra estão em português, inglês, espanhol, francês,
-alemão, japonês, chinês, russo, hindi e bengali.</li>
-<li><strong>Vários provedores</strong>: Groq, Google Gemini, Mistral, OpenRouter, OpenAI ou
-um servidor compatível com a OpenAI. Com mais de um, o próximo é tentado
-quando um falha. Se a transcrição ainda assim falhar, a gravação fica
-guardada para <strong>tentar de novo</strong> sem falar tudo outra vez.</li>
-</ul>
-<h3>Como começar</h3>
-<ol>
-<li>Crie uma chave grátis em
-<a href="https://console.groq.com/keys">console.groq.com/keys</a> (ou em outro
-provedor: as configurações mostram o passo a passo).</li>
-<li>Na primeira vez, abre um assistente rápido: a aparência, o provedor (cole
-a chave e ela é testada na hora), o atalho e o estilo, e um ditado de
-teste. Dá para refazer em Geral.</li>
-<li>Clique em qualquer campo de texto, aperte <strong>Ctrl+Shift+Espaço</strong>, fale e
-aperte de novo (ou clique no botão de parar da barra).</li>
-</ol>
-<table>
-<thead>
-<tr>
-<th>Atalho</th>
-<th>O que faz</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Ctrl+Shift+Espaço</strong></td>
-<td>Ditar (aperte de novo para parar; no modo segurar, segure enquanto fala)</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Shift+Y</strong></td>
-<td>Ditar e traduzir</td>
-</tr>
-<tr>
-<td><strong>Ctrl+Alt+K</strong></td>
-<td>Comando no texto selecionado (enquanto você fala, o card também oferece os estilos, para aplicar um sem falar)</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Cancela durante a gravação (enquanto processa, o ✕ da barra cancela)</td>
-</tr>
-</tbody>
-</table>
-<p>Todos os atalhos podem ser trocados nas configurações. &quot;Colar de novo&quot; (o
-último ditado no app da frente) e &quot;Ditar agora&quot; ficam no menu do ícone;
-&quot;Colar de novo&quot; não tem atalho por padrão, porque Ctrl+Alt+V é o Colar
-especial do Office.</p>
-<h3>Configurações</h3>
-<p>Clique no ícone do mod na área de notificação para abri-las (com o botão
-direito, um menu rápido): o histórico desta sessão (com &quot;Refazer&quot; em outro
-estilo ou idioma), os estilos e os seus, um estilo por app, os provedores
-(chaves, modelos e a ordem de tentativa), os atalhos, o idioma falado, o
-microfone e o dicionário, e a aparência: tema, cor de destaque, largura do
-card e o visual de vidro da barra. Os sons de início e fim vêm ligados e dá
-para desligar.</p>
-<h3>Privacidade</h3>
-<ul>
-<li>O áudio vai só para o provedor de voz que você configurou (por exemplo a
-Groq, <code>api.groq.com</code>) e só com uma chave salva: enquanto você fala (a
-prévia ao vivo, que dá para desligar) e quando você para. A transcrição
-então vai ao provedor de texto para o estilo ou a tradução, junto com o
-nome do app em que você está digitando (para o texto combinar com ele) e
-as palavras do seu dicionário. No Comando, o texto selecionado vai junto.
-Vale a política de privacidade de cada provedor (no plano grátis do
-Gemini, o Google pode usar o que é enviado para melhorar os produtos dele).</li>
-<li>Se a Groq responder que o modelo escolhido não existe mais, o mod pede à
-Groq a lista atual de modelos, testa até 4 deles com um teste curto (um
-segundo de quase silêncio, ou &quot;OK&quot;) e fica com o que funcionar.</li>
-<li>Servidores contatados, só os dos provedores que você configurou:
-<code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
-<code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, ou o endereço que
-você informar para um servidor compatível com a OpenAI.</li>
-<li>Nada é gravado em disco: o áudio, o texto e o histórico ficam na memória.
-Uma gravação cuja transcrição falhou também fica só na memória (as 3
-últimas), até ser tentada de novo ou o histórico ser limpo.</li>
-<li>O texto ditado fica na área de transferência, como uma cópia normal. O
-Comando copia a seleção com Ctrl+C e depois devolve a sua área de
-transferência como estava.</li>
-<li>As chaves são guardadas criptografadas para a sua conta do Windows
-(DPAPI), no armazenamento do próprio mod, e são apagadas junto com ele.</li>
-</ul>
-<h3>Limitações conhecidas</h3>
-<ul>
-<li>O Windows não deixa um app comum digitar em apps abertos como
-administrador: neles, o texto só é copiado (cole com Ctrl+V), e o Comando
-não consegue ler a seleção.</li>
-<li>O Comando não funciona em terminais (lá o Ctrl+C interrompe o programa).</li>
-<li>Ctrl+Alt é o AltGr em muitos teclados: onde AltGr+K digita um caractere
-(por exemplo húngaro ou tcheco), o Comando começa sem atalho; escolha um
-nas configurações.</li>
-<li>O vidro precisa dos efeitos de transparência do Windows (desligados, ou
-com a economia de energia, a barra fica sólida).</li>
-<li>Só provedores na nuvem (sem modelos locais), por https, então precisa de
-internet. O servidor compatível com a OpenAI é usado para o texto, não para
-a voz.</li>
-<li>Uma gravação para sozinha depois de 12 minutos e é transcrita (os
-provedores aceitam arquivos de uns 13 minutos no máximo).</li>
-</ul>
-<p>Prefere um app separado com mais opções? O mesmo autor faz o
-<a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
-<h3>Contato e apoio</h3>
-<p>Feito no Brasil por <strong>caliberda</strong>. Bugs: abra
-<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&amp;body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no GitHub</a>
-(é lá que eles são acompanhados). Se o mod te ajuda, dá para apoiar pelo
-<a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a> ou por Pix no
-<a href="https://livepix.gg/caliberda">LivePix</a>. Instagram:
-<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
-<a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<h2>Español</h2>
-<p>Pulsa un atajo, habla, vuelve a pulsarlo y tus palabras se escriben donde
-está el cursor, en cualquier app. Una IA transcribe lo que dijiste y lo
-limpia en el estilo que elijas, o lo traduce. Usa un proveedor en la nube que
-configuras con tu propia clave: se recomienda <strong>Groq</strong> (muy rápido, y la clave
-es gratis).</p>
-<ul>
-<li><strong>Dictado en cualquier app</strong>, con una barra pequeña que muestra lo que dices
-mientras hablas. El texto se pega donde escribías y también queda en el
-portapapeles.</li>
-<li><strong>Limpio en tu estilo</strong> (Natural, Profesional, Prompt, Crudo, Solo
-transcripción y los tuyos), con un estilo por app.</li>
-<li><strong>Traducción</strong> a 34 idiomas con Ctrl+Shift+Y, y una tarjeta con chips para
-rehacer el texto en otro estilo o idioma.</li>
-<li><strong>Comando</strong> (Ctrl+Alt+K): selecciona un texto, di qué hacer y el resultado
-reemplaza la selección.</li>
-<li><strong>Unos 100 idiomas</strong> para hablar; la configuración y la barra están en
-español, inglés, portugués, francés, alemán, japonés, chino, ruso, hindi y
-bengalí.</li>
-<li><strong>Varios proveedores</strong> (Groq, Gemini, Mistral, OpenRouter, OpenAI o un
-servidor compatible con OpenAI): si uno falla, se usa el siguiente, y si la
-transcripción falla, la grabación se guarda para reintentar sin volver a
-hablar.</li>
-</ul>
-<p>Para empezar: crea una clave gratis en
-<a href="https://console.groq.com/keys">console.groq.com/keys</a>; la primera vez se
-abre un asistente rápido. Luego haz clic en un campo de texto, pulsa
-<strong>Ctrl+Shift+Espacio</strong>, habla y vuelve a pulsarlo. <strong>Esc</strong> cancela. &quot;Pegar de
-nuevo&quot; y &quot;Dictar ahora&quot; están en el menú del icono del área de notificación.</p>
-<p>Privacidad: el audio va solo al proveedor de voz que configuraste, solo con
-una clave guardada (mientras hablas, para la vista previa en vivo, y al
-parar); el texto va al proveedor de texto, con el nombre de la app en la que
-escribes y las palabras de tu diccionario, y con el Comando también va el
-texto seleccionado. Si Groq responde que el modelo elegido ya no existe, el
-mod pide su lista de modelos y prueba hasta 4 con una prueba corta. Rige la
-política de privacidad de cada proveedor. No se
-guarda nada en disco: si una transcripción falla, la grabación queda solo en
-memoria (las 3 últimas). Las claves se guardan cifradas para tu cuenta de
-Windows. Limitaciones: no escribe en apps abiertas como administrador (el
-texto queda copiado), el Comando no funciona en terminales, solo usa
-proveedores en la nube y necesita internet, y una grabación se detiene sola a
-los 12 minutos.</p>
-]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
         </author>
     </entry>
 </feed>

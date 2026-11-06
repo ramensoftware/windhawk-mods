@@ -2,12 +2,240 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-06T03:04:21.000Z</updated>
+    <updated>2026-11-06T04:00:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Charging Animation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/charging-animation#e08adc83efe20a754ebb2e18bf528578b3822bf5</id>
+        <link href="https://windhawk.net/mods/charging-animation"/>
+        <updated>2026-11-06T04:00:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Charging Animation</h1>
+<p>Plays an animation, shows a battery stats card (optionally with sound) when the charger is plugged in or unplugged.</p>
+<p>The animation and the card are separate, and either one can be turned off. The settings are split into
+three groups (BackgroundEffect, Sounds and StatsPanel) plus a single Quiet mode switch at the bottom. Rows
+that your choices don't use hide themselves, so the list stays short.</p>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/windows-charging-animation/main/assets/sample.gif" alt="Charging Animation in action"></p>
+<h2>Background Effect</h2>
+<p><code>When plugged in</code> and <code>When unplugged</code> decide which events play anything at all. The rest of the section is
+shared by both, apart from the two colors and the unplug direction. The sounds have a section of their own.</p>
+<p>There are six looks. <code>Animation</code> picks the one you want.</p>
+<p><strong>Wave</strong> is the default. It takes a picture of the desktop and bends it outward along an expanding ring,
+tinted with the event color. <code>Origin</code> moves where it starts, either one of nine spots on the screen under
+the pointer or <code>Cursor Position</code> to use the pointer itself.</p>
+<p><strong>Linear Wave</strong> is the same refraction with a straight front instead of a ring. A pair of fronts leave
+<code>Origin</code> together and run along the line it sits on, one each way, so <code>Top</code> washes the screen downward,
+<code>Left</code> sweeps it left to right and a corner sends it across at an angle. With <code>Center</code> the two fronts part
+in the middle and run out to either side. The band of light rides them and <code>Motion</code> shapes the speed in the
+same way. <code>Reverse</code> on an unplug runs them back in, so the desktop drains toward the origin instead of
+being pushed away from it.</p>
+<p><strong>Edge Glow</strong> never touches the desktop. A band of light swells out of the screen borders, and one bright
+spot travels around them while it's up, coming in from the border nearest <code>Origin</code>. Set the color to
+<code>rainbow</code> and the band becomes a gradient running around the screen; <code>Motion</code> sets how the spot speeds up
+and slows down.</p>
+<p><strong>Bezel</strong> presses the screen in. A dark frame grows out of all four edges, its inner lip catching a little
+light, and the desktop, captured once when the animation starts, is shrunk to fit inside it, so the whole
+picture slides inward instead of the edges being covered. Nothing on the picture is stretched: it shrinks
+by the same amount both ways, so the frame comes out a little thinner across the top and bottom. The
+picture sinks into the frame's shadow and creeps a little deeper as it settles, then holds and lets go.
+Because the shrunk picture is a still image, the effect gives up after about two seconds whatever <code>Duration</code>
+says. While it runs, the monitor keeps showing that still picture, so anything moving on screen looks
+frozen for those two seconds, even though clicks still reach the windows underneath. The frame is plain
+black and grey throughout, with no tint on it. <code>Strength</code> sets how far in it comes, about 16 pixels on the
+long edge at the default. It presses all four edges by the same amount, so it has no starting point and no
+direction of travel: <code>Origin</code> and <code>Unplug direction</code> are hidden while Bezel is chosen.</p>
+<p><strong>Circuit Trace</strong> is the quiet one. A circuit board wakes along the bottom of the screen, above the
+taskbar: a power rail steps across the width of the monitor at forty-five degrees, a bundle of thin signal
+lines runs beside one stretch of it and fans away at both ends, risers drop off the rail into drilled vias,
+and elbows turn up out of the bottom corners. A charge runs along each trace in turn, close to white at its
+head with a long tail of light behind it, and the via it is heading for rings as it arrives. Between pulses
+the copper only glows faintly, the way a board runs on standby power, and then the whole thing fades out.
+Nothing is captured from the desktop. <code>Strength</code> sets how thick the traces are and how far their glow
+spills, and the layout is different on every event. The board runs along the bottom edge rather than around
+a point, so it has no <code>Origin</code>; <code>Reverse</code> on an unplug sends each charge the other way, out of the far end
+and back into the rail, so the board drains instead of charging.</p>
+<p><strong>Matrix Code</strong> is the busy one. Columns of characters drop down the screen, each a bright head over a
+trail that dims as it falls, and some cells in a trail stay dark, which is what turns a solid bar into a
+stream of characters. The head of every column keeps flickering to a new character while it travels, and
+the columns are let go from the <code>Origin</code> outward, so the cascade spreads across the monitor in one sweep.
+The characters are the event color, with the head of each column close to white, and on <code>rainbow</code> the
+columns take different points of the gradient. Nothing is captured from the desktop. <code>Strength</code> sets how
+long the trails are. Like the bezel it is a burst rather than a slow move, so it gives up after about two
+seconds whatever <code>Duration</code> says. <code>Reverse</code> on an unplug turns the cascade around: the characters run
+upward, and the release starts at the edges and closes in on <code>Origin</code> instead of spreading out from it.</p>
+<p><strong>Colors.</strong> <code>Plugged-in color</code> and <code>Unplugged color</code> each tint their own event. Pick one from the list, or
+choose Custom and type into the field that appears underneath. On Windhawk 2.0 that field is a color
+picker. These all work:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A name</td>
+<td><code>purple</code>, <code>mint</code>, <code>gold</code></td>
+</tr>
+<tr>
+<td>Short hex</td>
+<td><code>#48F</code></td>
+</tr>
+<tr>
+<td>Hex</td>
+<td><code>#4285F4</code></td>
+</tr>
+<tr>
+<td>RGB</td>
+<td><code>66,133,244</code></td>
+</tr>
+<tr>
+<td>Windows accent</td>
+<td><code>accent</code></td>
+</tr>
+<tr>
+<td>Rolling gradient</td>
+<td><code>rainbow</code></td>
+</tr>
+</tbody>
+</table>
+<p>A name that isn't recognized falls back to the event default, blue for plugging in and red for unplugging,
+so a typo doesn't break anything.</p>
+<p><strong>Strength, Duration, Motion and Opacity</strong> control the size and the timing. <code>Strength</code> (0-40) is how far
+the desktop bends, how wide the light band is, how deep the push goes, how thick the traces are, how long
+the cascade trails; at 0 the wave keeps only its glow. <code>Duration</code> (300-5000 ms) is how long the animation
+runs, though the bezel and the cascade stop well before it, <code>Opacity</code> (0-100) fades all of it, and <code>Motion</code>
+picks the easing used by Wave and Edge Glow.</p>
+<p><strong>Dim screen</strong> darkens the monitor the animation plays on, the way a phone dims its display when it starts
+charging. It fades in over the first quarter second, stays down for the length of the animation and fades
+back out at the end, so nothing snaps. The range is 0-90, so the screen is never fully black. The battery
+card sits above the dim and stays bright, only the monitor the animation plays on is dimmed, and with the
+animation turned off for an event there is nothing to dim.</p>
+<p><strong>Unplug direction</strong> picks which way the unplug travels. <code>Forwards</code> plays it exactly like a plug-in,
+expanding from the origin; <code>Reverse</code> starts at the screen edges and collapses back to the origin, like the
+charge being pulled away. Wave, Edge Glow, Circuit Trace and Matrix Code use it, and Bezel hides it because
+it has nowhere to travel.</p>
+<h2>Sounds</h2>
+<p>Both fields take a path to a .wav file, or a system sound alias such as <code>Notification.IM</code> or
+<code>WindowsBackground</code>. Leave a field empty for no sound. If you want the sound on its own, turn off the
+animation and the card for that event. If the Charging Sound mod is also set to play on the same event,
+both sounds will play.</p>
+<h2>Stats Panel</h2>
+<p><code>When plugged in</code> and <code>When unplugged</code> choose which events show the card, so you can keep it for plugging
+in only, for unplugging only, for both or for neither. The rest of the section applies either way.</p>
+<p><strong>Fluent (Windows 11-ish)</strong> is the default. It's an acrylic card: the desktop behind it is blurred once
+when the card appears and covered with the theme color, with a thin border and a soft shadow on top. A
+battery icon sits in a tinted tile next to the percentage, there's a status line under the number, and a
+level bar that fills from empty as the card slides in and turns red below 20% while on battery.</p>
+<p><strong>Fluent (Minimal)</strong> is the same card at badge size, with half the padding, a smaller number, no status
+line and a thinner bar.</p>
+<p><strong>PineApple (Card)</strong> is the plain system HUD: a rounded square, as wide as it is tall, black in dark mode
+and white in light mode, with a large battery icon on top, the percentage below it, the status line under that
+and a full-width capsule bar along the bottom. The accent color isn't used anywhere in it, and the icon and
+the bar turn red when the battery runs low. It fades and pops in quickly instead of sliding; <code>Center</code> is the
+usual place to put it.</p>
+<p><strong>Galaxy UI</strong> is the wide soft card with corners that take about a third of its height. The percentage is
+twice the normal size, with a bolt in a round tinted badge next to it, the status line underneath and one
+thin bar running the full width along the bottom edge. On an unplug the badge shows a battery instead of
+the bolt. The surface is nearly opaque, so the desktop behind only tints it.</p>
+<p><strong>PineApple (Circle)</strong> is the phone charging screen: a thick ring that fills clockwise to the battery
+level, a bolt and the percentage in the middle, and the status line on a small frosted pill underneath.
+The middle of the dial is a soft patch of the blurred desktop, so the number sits on a little frost
+instead of bare wallpaper, and the patch fades away before it reaches the ring, which keeps the dial
+floating instead of turning it into a card. The number and the bolt also carry a soft shadow that keeps
+them readable on a bright background. It springs in with a small overshoot, sweeps the ring once, and
+shrinks away when it closes.</p>
+<p>The Fluent and Galaxy cards follow the Windows app theme; the PineApple card flips between black and
+white with it, so it stays readable on either wallpaper. All five update once a second and fade out at the
+end.</p>
+<p><strong>Position, accent and the rest.</strong> <code>Position</code> is where the card appears: <code>Follow Effect Origin</code> keeps it
+where the animation started, and the other choices are the corners, the edges, <code>Center</code> and the cursor. It
+always stays inside the working area, so the taskbar isn't covered. <code>Accent color</code> sets the tint, with
+<code>Match Effect Color</code> taking the color from the event that brought the card up (the gradient included) and
+<code>Custom</code> reading the field below it in any of the formats above; the PineApple card has no tint to
+give it, so it ignores this one. Turning <code>Details</code> off drops the status line, and <code>Duration</code>, <code>Opacity</code> and
+<code>Font size</code> tune the rest.</p>
+<h2>Quiet Mode</h2>
+<p>While a full-screen app, a game or presentation mode is running, Quiet mode skips the animation, the sound
+and the card. On a locked screen or during the screen saver there is nobody to see the visuals, so the
+animation and the card are skipped then as well, whether Quiet mode is on or off, and only the sound plays.</p>
+<h2>Credits</h2>
+<p>Wave Effect inspired by <a href="https://windhawk.net/mods/magic-pointer">Magic Pointer Mod</a></p>
+<p>Power notification handling adapted from <a href="https://windhawk.net/mods/charging-sound">Charging Sound</a></p>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 1.0.4]]></title>
+        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#5a52fd297ff23b70877e27fb8d5860b53c3e5002</id>
+        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
+        <updated>2026-11-06T04:00:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added full touchscreen support, including scrolling, pinch-to-zoom, gestures, and drag-and-drop.</li>
+<li>Added mouse and touch shortcuts: double-click empty space to go up a folder, middle-click folders to open new tabs, and two-finger tap to open context menus.</li>
+<li>Improved file tooltips with detailed metadata, including file sizes, dates, dimensions, and localized relative dates.</li>
+<li>Added selection checkboxes, including a Select All checkbox.</li>
+<li>Redesigned drag-and-drop previews with stacked icons, thumbnails, and smooth animations.</li>
+<li>Added support for native Windows 11 context menus.</li>
+<li>Added persistent folder sorting, synchronized with Explorer's native view.</li>
+<li>Fixed blurry interface elements and inconsistent DPI scaling.</li>
+<li>Fixed cloud, network, and virtual folders incorrectly appearing empty.</li>
+<li>Fixed folders occasionally failing to open or losing selections.</li>
+<li>Fixed Select All occasionally clearing the selection instead.</li>
+<li>Fixed missing icons and incorrect shortcut or cloud status overlays.</li>
+<li>Fixed flickering during window resizing, file renaming, and folder navigation.</li>
+<li>Fixed Explorer's native view not restoring correctly when switching views.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DarkionAvey</name>
+            <uri>https://github.com/DarkionAvey</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Centralizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/window-centralizer#877a07f2d63957f5bd9ce4329762e847731fdf8c</id>
+        <link href="https://windhawk.net/mods/window-centralizer"/>
+        <updated>2026-11-06T04:00:18.000Z</updated>
+        <content type="html"><![CDATA[<h1>Window Centralizer</h1>
+<p>New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.</p>
+<p>The window is placed <strong>before</strong> it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.</p>
+<h2>Modes</h2>
+<ul>
+<li><strong>Parent window / monitor</strong>: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.</li>
+<li><strong>Parent monitor only</strong>: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.</li>
+<li><strong>Mouse cursor</strong>: centered on the mouse cursor.</li>
+</ul>
+<p>In every mode the window is kept inside the monitor's work area.</p>
+<h2>Which windows are moved</h2>
+<ul>
+<li>Only windows with a title bar that are smaller than the <strong>window size limit to target</strong> setting (a percentage of the monitor's work area). Large main windows keep their assigned position.</li>
+<li>Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.</li>
+<li>Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, so they can be seen jumping after appearing.</li>
+<li>Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.</li>
+<li>A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.</li>
+<li>Some programs move their window again right after showing it (Firefox). The mod takes care of that. Initial moves by other tools (FancyZones), and the user's own dragging, are left alone.</li>
+</ul>
+<h2>Ignoring windows</h2>
+<p>Press <strong>Win+Alt+I</strong> while a window is active to stop centering that kind of window. Press it again to undo. A short notification confirms the option.</p>
+<p>It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.</p>
+<p>The <strong>Ignored windows</strong> list opens with <strong>Win+Ctrl+Alt+I</strong>, and entries can be reviewed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.</p>
+<p>Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.</p>
+<h2>Compatibility</h2>
+<p>Don't use this mod together with <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp">Center New Windows</a>. Both reposition windows as they are shown, so the same window would be moved twice, especially dialogs when that mod's &quot;Always center dialogs&quot; option is on.</p>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinTips OSD 1.4.1]]></title>
         <id>https://windhawk.net/mods/wintips-osd#85f2f9f7fe7d0488db6034e8d1a8cbb3e6fe4465</id>
@@ -805,72 +1033,6 @@ same license.</p>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spotlight Launcher 1.1.1]]></title>
-        <id>https://windhawk.net/mods/spotlight-launcher#89c1a71fccf3768d9e5d5b5b6da2c2701bf684a1</id>
-        <link href="https://windhawk.net/mods/spotlight-launcher"/>
-        <updated>2026-11-05T04:00:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Panel position.</strong> A new Appearance option decides what stays centered while the details panel is
-open: the bar together with the panel (the bar slides left, the default) or the bar on its own (the
-panel opens to its right without moving it).</li>
-<li><strong>Solid is the new default background effect.</strong> A fresh install now starts with a plain, opaque
-colour instead of Acrylic. Anyone who already saved the settings keeps their choice. If the settings
-tab was never saved, the mod starts from the defaults, so the effect may change after this update.</li>
-<li><strong>Live acrylic is off by default, and it is a Windows 11 option.</strong> The live blur is drawn by Windows
-in a separate layer behind the bar, so while the details panel animates that layer can trail the bar
-by a frame and leave a slight seam at the edges. Off, the same effects come from a single snapshot
-taken when the bar opens: smoother and lighter on laptops. On Windows 10 the option is ignored and
-the snapshot is always used, because the compositor trails the most there.</li>
-<li><strong>The details panel wipes instead of fading in live mode.</strong> Windows cannot fade the blur layer, so
-the panel now animates its width with an opaque card: both layers are the same shape at every frame.</li>
-<li><strong>The last strip of the closing panel.</strong> Below a certain width Windows collapses the rounded blur
-layer into a minimum pill, which stayed on screen after the card had shrunk past it. The last few
-pixels are now drawn as a tinted tail that dissolves with the card, and the blur layer is hidden
-before it reaches that size.</li>
-</ul>
-]]></content>
-        <author>
-            <name>David Ravelo</name>
-            <uri>https://github.com/DavidRaveloU</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.23.0]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#af08e3162218984b6e83d0f10f3738e63ab94795</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-11-05T04:00:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>0.23.0: The notification no longer leaves a Start Menu shortcut or a registry entry behind. SnapSentry's name and icon now come from a temporary entry that Windows discards at sign-out.</li>
-<li>Windows keeps your notification banner and sound settings for SnapSentry when the mod is disabled or updated.</li>
-<li>Screenshots are renamed as soon as they appear, before the popup, so other tools watching the folder see the final name right away.</li>
-<li>Screenshots you keep are renamed too.</li>
-<li>When the window in front has no title, the program's name is used instead of skipping the rename.</li>
-<li>New &quot;Name by time only&quot; setting, which names each file with just the timestamp.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Operation Styler 1.4.0]]></title>
-        <id>https://windhawk.net/mods/file-operation-styler#950046a0779a24d00464e335cf187745dccec53f</id>
-        <link href="https://windhawk.net/mods/file-operation-styler"/>
-        <updated>2026-11-05T03:03:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added experimental support for third-party file managers using compatible native Windows file-operation dialogs.</li>
-<li>Improved Common Controls v6 compatibility when loading into additional application processes.</li>
-<li>Added instructions for enabling other file managers through Windhawk's custom process inclusion list.</li>
-<li>Preserved existing Windows Explorer functionality and styling.</li>
-</ul>
-]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>
