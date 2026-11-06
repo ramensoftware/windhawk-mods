@@ -60,7 +60,6 @@ and more.
 
 ---
 
-<a name="türkçe"></a>
 ## Türkçe
 
 Bir fare tuşunu basılı tutup başka bir tuşa tıklayarak ya da tekerleği çevirerek
@@ -83,7 +82,6 @@ görüntüsü ve daha fazlası.
 
 ---
 
-<a name="deutsch"></a>
 ## Deutsch
 
 Halten Sie eine Maustaste gedrückt und klicken oder scrollen Sie mit einer anderen,
@@ -95,7 +93,6 @@ Screenshot und mehr. Die Sprache folgt automatisch der Windows-Anzeigesprache
 
 ---
 
-<a name="français"></a>
 ## Français
 
 Maintenez un bouton de la souris, puis cliquez ou faites défiler avec un autre
@@ -106,7 +103,6 @@ d'écran, etc. La langue suit automatiquement celle de Windows (sinon l'anglais)
 
 ---
 
-<a name="русский"></a>
 ## Русский
 
 Удерживайте одну кнопку мыши и щёлкайте или прокручивайте колесо другой, чтобы
