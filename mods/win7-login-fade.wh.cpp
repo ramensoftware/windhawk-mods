@@ -26,13 +26,15 @@
   * Gamma: The classic gamma-ramp-based fade effect, which works by adjusting the screen brightness using the SetDeviceGammaRamp function, the same method used by the original fade effect. On Windows 10 1809 and below, this mode will use the existing kernel-mode fade logic instead of a reimplementation.
   * DWM (Original): Keep the original DWM fade effect to make the fade work as if this mod is disabled. Duration is not adjustable in this mode. Not available for logoff/shutdown.
 * The gamma-based fade types will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment. It's also not compatible with NVIDIA driver's reference color mode.
-* To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may work on 21H2 and later versions; however, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
+* The "Enhanced sleep/hibernate interception" option allows adding fade effects to sleep and hibernation initiated by the idle timer or power button. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (21H2/22H2) and 11 24H2/25H2. It is known to work on 21H2 and later versions and thus enabled by default on those version.
+    * However, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
 * The rest of the features have been tested on Windows 8.1, 10 LTSC 2021 (21H2, 22H2), 11 23H2, 24H2, and 25H2. This mod will not work on Windows 7.
 ## ⚠ Important usage note ⚠
 * On Windows 10 1903 and newer versions, this mod needs a special procedure to get the fade effect to work naturally. Please do either one of the following:
-  * Set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100`** (DWORD, 256 in decimal)
-  * Navigate to Windhawk's Settings > Advanced settings > More advanced settings > Process inclusion list, and make sure that `dwm.exe` is in the list. (See the screenshot below)
-* After doing so, do one of these: reboot, sign out and sign in again, enter the "switch user" screen (not lock) once, or restart DWM.
+  * Set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256 in decimal)
+  * x86-64 only: Navigate to Windhawk's Settings > Advanced settings > More advanced settings > Process inclusion list, and make sure that `dwm.exe` is in the list. (See the screenshot below)
+* 32-bit and Arm64 systems must change the registry as the DWM option won't work reliably.
+* If you chose the registry method, after doing so, do one of these: reboot, sign out and sign in again, enter the "switch user" screen (not lock) once, or restart DWM.
 * Failure to do so may result in an unnatural fade effect that doesn't make the screen fully black.
 
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
@@ -111,8 +113,8 @@
   $description: Set the duration of the fade effect when sleeping, hibernating, and turning off the monitor.
   $description:ko-KR: 절전, 최대 절전 모드, 모니터 끄기 시 페이드 효과의 지속 시간을 설정합니다.
 - enhancedSleepIntercept: auto
-  $name: Enable enhanced sleep/hibernate interception
-  $name:ko-KR: 향상된 절전/최대 절전 모드 가로채기 활성화
+  $name: Enhanced sleep/hibernate interception
+  $name:ko-KR: 향상된 절전/최대 절전 모드 가로채기
   $description: "Adds fade effects to sleep and hibernation by intercepting the messages between Winlogon and the kernel, which allows the fade effect to be applied to every sleep/hibernate action, including the kernel-initiated idle timer and power button actions. This option has limited compatibility; see mod details page for more information."
   $description:ko-KR: "Winlogon과 커널 간의 메시지를 가로채 절전/최대 절전 모드 진입 시 페이드 효과를 추가합니다. 이를 통해 커널에서 시작된 유휴 타이머 및 전원 버튼 동작을 포함하여 모든 절전/최대 절전 모드 작업에 페이드 효과를 적용할 수 있습니다. 이 옵션은 호환성이 높지 않으므로 모드 세부 정보 페이지를 확인하시기 바랍니다."
   $options:
@@ -128,11 +130,8 @@
 
 #include <windhawk_utils.h>
 #include <atomic>
+#include <regex>
 #include <sddl.h>
-
-#ifdef _WIN64
-#define ENABLE_WINLOGON_HOOKS
-#endif
 
 #define WM_MONOFFTASK (WM_USER + 1)
 #define OVERLAY_WIN_CLASS L"LogonSleepFadeOverlay"
@@ -203,7 +202,7 @@ bool IsFadeInProgress() {
     }
 }
 
-bool BeginFade() {
+bool BeginFade(int timeout = 0) {
     if (g_isExiting.load() || IsFadeInProgressInThisProcess()) {
         return false;
     }
@@ -216,7 +215,7 @@ bool BeginFade() {
             return false;
         }
     }
-    DWORD result = WaitForSingleObject(g_fadeMutex, 0);
+    DWORD result = WaitForSingleObject(g_fadeMutex, timeout);
     if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) {
         g_isFadeInProgress.store(true);
         return true;
@@ -353,7 +352,7 @@ int GetDeviceRefreshRate() {
     return refreshRate;
 }
 
-#ifdef ENABLE_WINLOGON_HOOKS
+#ifdef _WIN64
 // flags: this third argument was introduced in Windows 8, and it apparently controls whether to use the DWM fade or not,
 // but I did not find any code responsible for parsing the flags; only seen it being used by winlogon.exe. Known values:
 // 53: 8.0, 8.1 login
@@ -510,7 +509,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             return 1;
         case WM_TIMER:
             KillTimer(hWnd, 1);
-            ShowWindow(hWnd, SW_HIDE);
+            g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
             Wh_Log(L"OverlayWndProc WM_DESTROY");
@@ -570,9 +569,15 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
             );
             if (result == WAIT_OBJECT_0) {
                 Wh_Log(L"Received fade request");
-                if (BeginFade()) PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0);
+                if (BeginFade(100)) {
+                    PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0);
+                }
             } else if (result == WAIT_OBJECT_0 + 1) {
                 DestroyWindow(overlayWnd);
+                if (hDefDesktop) {
+                    CloseDesktop(hDefDesktop);
+                }
+                return 1;
             } else if (result == WAIT_OBJECT_0 + 2) {
                 while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
                 {
@@ -643,13 +648,16 @@ DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
             if (g_monitorOffFadeData.monitors) {
                 // Somehow window message stuff failed
                 Wh_Log(L"Overlay window message loop ended unexpectedly, restoring gamma ramps...");
-                NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+                RestoreGammaAndMonitorOff();
             }
         } else {
             Wh_Log(L"Failed to create overlay window, GLE=%d", GetLastError());
             // Just do the fade without the overlay, which will make the screen flash
-            FadeDesktop(GetDeviceRefreshRate(), g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
-            RestoreGammaAndMonitorOff();
+            if (GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
+                FadeDesktop(GetDeviceRefreshRate(), g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
+                RestoreGammaAndMonitorOff();
+                EndFade();
+            }
         }
         return 0;
     } else {
@@ -689,14 +697,16 @@ bool CreateMonitorOffThread() {
 }
 
 bool RequestFade() {
-    HDESK hDesktop = GetThreadDesktop(GetCurrentThreadId());
-    if (hDesktop) {
-        wchar_t desktopName[256] = {};
-        if (GetUserObjectInformationW(hDesktop, UOI_NAME, desktopName, sizeof(desktopName), nullptr)) {
-            // Keep original in-process fade for secure desktop processes (e.g. LogonUI), as the async fade thread's overlay window is only shown on the default desktop
-            // And secure desktop processes all run as SYSTEM which can also bypass the gamma range check on legacy gamma (1809-) systems
-            if (_wcsicmp(desktopName, L"winlogon") == 0) {
-                return CreateMonitorOffThread();
+    if (!g_isWinlogon) { // it should barely invoke sleep/monoff fade i think
+        HDESK hDesktop = GetThreadDesktop(GetCurrentThreadId());
+        if (hDesktop) {
+            wchar_t desktopName[256] = {};
+            if (GetUserObjectInformationW(hDesktop, UOI_NAME, desktopName, sizeof(desktopName), nullptr)) {
+                // Keep original in-process fade for secure desktop processes (e.g. LogonUI), as the async fade thread's overlay window is only shown on the default desktop
+                // And secure desktop processes all run as SYSTEM which can also bypass the gamma range check on legacy gamma (1809-) systems
+                if (_wcsicmp(desktopName, L"winlogon") == 0) {
+                    return CreateMonitorOffThread();
+                }
             }
         }
     }
@@ -712,6 +722,13 @@ NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel,
     if (InformationLevel == ScreenOff) {
         Wh_Log(L"NtPowerInformation called with ScreenOff");
         if (RequestFade()) {
+            for (int i = 0; i < 5; i++) {
+                if (IsFadeInProgress()) {
+                    Wh_Log(L"Waited %d times for the fade to begin", i);
+                    break;
+                }
+                Sleep(100);
+            }
             Wh_Log(L"Requested fade to Winlogon");
             return 0; // STATUS_SUCCESS
         }
@@ -752,37 +769,37 @@ bool SleepFadeWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     }
 }
 
-#define DWP_HOOK_(type, name, defArgs, callArgs) \
+#define DWP_HOOK_(type, okRet, name, defArgs, callArgs) \
 type (CALLBACK *name ## _orig) defArgs; \
 type CALLBACK name ## _hook  defArgs \
 { \
     if (SleepFadeWndProc(hWnd, uMsg, wParam, lParam)) { \
-        return 0; \
+        return okRet; \
     } \
     return name ## _orig  callArgs; \
 }
 
-#define DWP_HOOK(type, name, defArgs, callArgs)  \
-    DWP_HOOK_(type, name ## A, defArgs, callArgs) \
-    DWP_HOOK_(type, name ## W, defArgs, callArgs) \
+#define DWP_HOOK(type, okRet, name, defArgs, callArgs)  \
+    DWP_HOOK_(type, okRet, name ## A, defArgs, callArgs) \
+    DWP_HOOK_(type, okRet, name ## W, defArgs, callArgs) \
 
 DWP_HOOK(
-    LRESULT,
+    LRESULT, 0,
     DefWindowProc,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 DWP_HOOK(
-    LRESULT,
+    LRESULT, 0,
     DefFrameProc,
     (HWND hWnd, HWND hWndMDIClient, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, hWndMDIClient, uMsg, wParam, lParam))
 DWP_HOOK(
-    LRESULT,
+    LRESULT, 0,
     DefMDIChildProc,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 DWP_HOOK(
-    LRESULT,
+    LRESULT, 0,
     DefDlgProc,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
@@ -794,12 +811,12 @@ DWP_HOOK(
 // so that we can at least do proper fade on hacky monitor off requests from included/hooked processes
 // There are bunch of Win32 APIs to post messages to other processes, but only these two are commonly used by those hacky monitor off implementations
 DWP_HOOK(
-    LRESULT,
+    LRESULT, 0,
     SendMessage,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 DWP_HOOK(
-    BOOL,
+    BOOL, TRUE,
     PostMessage,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
@@ -834,7 +851,7 @@ NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWE
     return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, Asynchronous);
 };
 
-#ifdef ENABLE_WINLOGON_HOOKS
+#ifdef _WIN64
 // Internal Winlogon function for handling power messages sent by win32k (xxxSendWinlogonPowerMessage)
 // a1 known values:
 // 263: Sent before sleeping/hibernating (can block)
@@ -877,13 +894,76 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
 #endif
 #pragma endregion
 
+#pragma region DWM GammaRange hooks
+DWORD* p_g_gammaRange = NULL;
+DWORD g_origGammaRange = 128;
+
+#if defined(_M_X64)
+HMODULE hDispBrokerDesktop = NULL;
+void* ColorManagementRpcServerImpl;
+
+// fnBase: Base address to search, pass e.g. a function pointer
+// fnLen: Length of the function (search range)
+// targetRegex: Target regex string to search
+char* FindMemory(char* fnBase, size_t fnLen, const std::string& targetRegex) {
+    std::regex regex(targetRegex, std::regex::optimize);
+    std::match_results<std::string_view::const_iterator> match;
+
+    std::string_view search(fnBase, fnLen);
+    while (std::regex_search(search.begin(), search.end(), match, regex)) {
+        auto pos = fnBase + match.position(0);
+        Wh_Log(L"Match found at position: %p", pos);
+
+        // Return the address of the first match
+        return pos;
+    }
+
+    Wh_Log(L"No match found for the regex pattern.");
+    return NULL;
+}
+
+bool FindRangeVariable() {
+    if (p_g_gammaRange) return true;
+    if (ColorManagementRpcServerImpl) {
+        std::string targetRegex = R"(H\xc7\xc1\x02\0\0\x80)";
+        char* movHklm = FindMemory((char*)ColorManagementRpcServerImpl, 2000, targetRegex);
+        if (!movHklm) {
+            Wh_Log(L"mov HLKM not found");
+            return false;
+        }
+        Wh_Log(L"[%p] mov rcx, HKEY_LOCAL_MACHINE ; hkey", movHklm);
+
+        targetRegex = R"(H\x8d\x05)";
+        char* leaPvData = FindMemory(movHklm - 60, 60, targetRegex);
+        if (!movHklm) {
+            Wh_Log(L"lea pvData not found");
+            return false;
+        }
+
+        int offset = *(int*)(leaPvData + 3);
+        Wh_Log(L"[%p] lea rax, [rip+0x%x]", leaPvData, offset);
+
+        p_g_gammaRange = (DWORD*)(leaPvData + 7 + offset);
+        Wh_Log(L"DispBroker GammaRange variable: %p; current value: %d", p_g_gammaRange, *p_g_gammaRange);
+        return true;
+    }
+    return false;
+}
+#endif
+
 using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_original;
 LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
     if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData) {
         if (wcscmp(lpSubKey, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ICM") == 0 && wcscmp(lpValue, L"GdiIcmGammaRange") == 0) {
-            Wh_Log(L"Hooked DWM GdiIcmGammaRange");
-            *(DWORD*)pvData = 256;
+            Wh_Log(L"Hooked DWM GdiIcmGammaRange, pvData=%p", pvData);
+            *pcbData = sizeof(DWORD);
+            if (pdwType) *pdwType = REG_DWORD;
+            if (!p_g_gammaRange) {
+                p_g_gammaRange = (DWORD*)pvData;
+                g_origGammaRange = *p_g_gammaRange;
+            }
+            *p_g_gammaRange = 256;
             return ERROR_SUCCESS;
         }
     }
@@ -926,6 +1006,7 @@ bool CreateFadeMutexAndEvent() {
             g_fadeMutex = CreateMutexExW(NULL, kMutexName, 0, SYNCHRONIZE | MUTEX_MODIFY_STATE);
             if (!g_fadeMutex) {
                 Wh_Log(L"CreateMutexExW fallback failed, GLE=%d", GetLastError());
+                return false;
             }
         }
     }
@@ -946,6 +1027,7 @@ bool CreateFadeMutexAndEvent() {
             g_fadeEvent = CreateEventW(NULL, FALSE, FALSE, kEventName);
             if (!g_fadeEvent) {
                 Wh_Log(L"CreateEventW fallback failed, GLE=%d", GetLastError());
+                return false;
             }
         }
     }
@@ -954,11 +1036,11 @@ bool CreateFadeMutexAndEvent() {
         LocalFree(securityDescriptor);
     }
 
-    return g_fadeMutex && g_fadeEvent;
+    return true;
 }
 
 FadeType FadeTypeStringToEnum(LPCWSTR str) {
-    if (wcscmp(str, L"gamma") == 0) {
+    if (wcscmp(str, L"gamma") == 0 || wcscmp(str, L"kernel") == 0) {
         return Gamma;
     } else if (wcscmp(str, L"dwm") == 0) {
         return DWM;
@@ -993,7 +1075,7 @@ void LoadSettings() {
     auto logoffTypeStr = WindhawkUtils::StringSetting::make(L"logoffType");
     FadeType logoffType = Gamma;
     if (*logoffTypeStr) {
-        FadeTypeStringToEnum(logoffTypeStr);
+        logoffType = FadeTypeStringToEnum(logoffTypeStr);
     }
 
     int logoffDuration = Wh_GetIntSetting(L"logoffDuration");
@@ -1052,8 +1134,8 @@ BOOL Wh_ModInit() {
     g_isWinlogon = wcsstr(_wcsupr(exeName), L"\\WINLOGON.EXE") != NULL;
     g_isDwm = wcsstr(exeName, L"\\DWM.EXE") != NULL;
     if (g_isWinlogon) {
-#ifdef ENABLE_WINLOGON_HOOKS
         Wh_Log(L"Running in winlogon.exe");
+#ifdef _WIN64
         SwitchDesktopWithFade_t SwitchDesktopWithFade = (SwitchDesktopWithFade_t)GetProcAddress(user32, "SwitchDesktopWithFade");
         if (!SwitchDesktopWithFade) {
             Wh_Log(L"GetProcAddress SwitchDesktopWithFade failed");
@@ -1094,9 +1176,28 @@ BOOL Wh_ModInit() {
 #else
         Wh_Log(L"Running in winlogon.exe, but winlogon hooks are disabled in this build");
         Wh_SetIntValue(L"WinlogonHookFailed", 1);
-        return FALSE;
 #endif
     } else if (g_isDwm) {
+#if defined(_M_X64)
+        hDispBrokerDesktop = LoadLibraryExW(L"DispBroker.Desktop.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (hDispBrokerDesktop) {
+            WindhawkUtils::SYMBOL_HOOK dispBrokerDesktopDllHooks[] = {
+                {
+                    {
+                        L"public: __cdecl Microsoft::Windows::ColorManagement::ColorManagementRpcServer::ColorManagementRpcServerImpl::ColorManagementRpcServerImpl(class std::shared_ptr<class Microsoft::Windows::ColorManagement::ColorManagementRpcServer::ColorManagementRpcServerPolicy> const &,bool)",
+                    },
+                    (void**)&ColorManagementRpcServerImpl,
+                    NULL,
+                    FALSE
+                }
+            };
+            if (!WindhawkUtils::HookSymbols(hDispBrokerDesktop, dispBrokerDesktopDllHooks, ARRAYSIZE(dispBrokerDesktopDllHooks))) {
+                Wh_Log(L"HookSymbols ColorManagementRpcServerImpl failed");
+            } else {
+                Wh_Log(L"HookSymbols ColorManagementRpcServerImpl OK");
+            }
+        }
+#endif
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
         if (hKernelBase) {
             RegGetValueW_t pRegGetValueW = (RegGetValueW_t)GetProcAddress(hKernelBase, "RegGetValueW");
@@ -1123,7 +1224,9 @@ BOOL Wh_ModInit() {
 #define CLEANUP                   \
     if (g_fadeMutex) {            \
         CloseHandle(g_fadeMutex); \
+        CloseHandle(g_fadeEvent); \
         g_fadeMutex = NULL;       \
+        g_fadeEvent = NULL;       \
     }                             \
     return FALSE;
 
@@ -1169,9 +1272,31 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+#if defined(_M_X64)
+void Wh_ModAfterInit() {
+    if (g_isDwm && FindRangeVariable() && p_g_gammaRange) {
+        g_origGammaRange = *p_g_gammaRange;
+        *p_g_gammaRange = 256;
+        Wh_Log(L"Found and set the gamma range variable to 256");
+    }
+}
+#endif
+
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+    if (g_isDwm) {
+        if (p_g_gammaRange) {
+            *p_g_gammaRange = g_origGammaRange;
+        }
+#if defined(_M_X64)
+        if (hDispBrokerDesktop) {
+            FreeLibrary(hDispBrokerDesktop);
+        }
+#endif
+        return;
+    }
+
     g_isExiting.store(true); // Prevent new fades
     if (IsFadeInProgressInThisProcess()) {
         Wh_Log(L"Fade is in progress during uninit, waiting for it to complete...");
@@ -1180,6 +1305,10 @@ void Wh_ModUninit() {
     if (g_fadeMutex) {
         CloseHandle(g_fadeMutex);
         g_fadeMutex = NULL;
+    }
+    if (g_fadeEvent) {
+        CloseHandle(g_fadeEvent);
+        g_fadeEvent = NULL;
     }
     HANDLE asyncFadeThread = g_asyncFadeThread.exchange(NULL);
     if (asyncFadeThread) {
@@ -1190,6 +1319,10 @@ void Wh_ModUninit() {
             Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
         }
     }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
+    }
     HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
     if (monitorOffThread) {
         WaitForSingleObject(monitorOffThread, INFINITE);
@@ -1198,6 +1331,9 @@ void Wh_ModUninit() {
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    if (g_isDwm) {
+        return TRUE;
+    }
     LoadSettings();
     if (!g_isWinlogon && !g_settings.sleepFadeEnabled) {
         // The global injection is enabled or disabled, need to unload the mod
