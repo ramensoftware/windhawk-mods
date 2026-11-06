@@ -831,31 +831,37 @@ static bool ApplySelection(IShellView* view,
     return SameFolder(view, expected);
 }
 
-// These internal interfaces are resolved by exact symbols. No object offsets
-// are read: Explorer supplies each tab record on its own frame thread.
+// Explorer supplies the private record on its own frame thread. Validate the
+// known prefix and interface IID before using either.
 struct ExplorerTabOrder : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetTabIdAtIndex(UINT index, GUID* id) = 0;
     virtual HRESULT STDMETHODCALLTYPE GetTabIndex(const GUID* id,
                                                   UINT* index) = 0;
 };
-struct ExplorerBrowserTab {
-    ComPtr<IUnknown> host;
-    ComPtr<IUnknown> state;
+static const GUID kExplorerTabOrderIID = {
+    0x9f8df3b4,
+    0x87ae,
+    0x4631,
+    {0xa7, 0xb2, 0x92, 0x69, 0x51, 0x04, 0xcd, 0x1b}};
+struct ExplorerTabPrefix {
+    IUnknown* host;
+    IUnknown* state;
     GUID id{};
-    bool closing = false;
 };
-static_assert(sizeof(ExplorerBrowserTab) == 40);
+static_assert(sizeof(ExplorerTabPrefix) == 32);
 using FrameCommand_t = void (*)(void*, WPARAM, LPARAM);
-using FrameTabOrder_t = HRESULT (*)(void*, UINT, ExplorerTabOrder**);
-using FrameBrowserTab_t = HRESULT (*)(const void*, GUID, ExplorerBrowserTab&);
+using FrameTabOrder_t = HRESULT (*)(void*, UINT, IUnknown**);
+using FrameBrowserTab_t = HRESULT (*)(const void*, GUID, void*);
 static FrameCommand_t FrameCommand_Original;
 static FrameTabOrder_t FrameTabOrder_Original;
 static FrameBrowserTab_t FrameBrowserTab_Original;
 static UINT g_activateTabCommand;
+static std::atomic<bool> g_directActivationBroken{false};
 
 static bool SelectTabOnFrameThread(void* frameObject, HWND wanted) {
-    if (!FrameCommand_Original || !FrameTabOrder_Original ||
-        !FrameBrowserTab_Original || !IsWindow(wanted))
+    if (g_directActivationBroken || !FrameCommand_Original ||
+        !FrameTabOrder_Original || !FrameBrowserTab_Original ||
+        !IsWindow(wanted))
         return false;
     const HWND frame = GetAncestor(wanted, GA_ROOT);
     if (!etr::CanHostFrame(frame))
@@ -869,9 +875,21 @@ static bool SelectTabOnFrameThread(void* frameObject, HWND wanted) {
     for (HWND tab = nullptr;
          (tab = FindWindowExW(frame, tab, L"ShellTabWindowClass", nullptr));)
         ++count;
-    ComPtr<ExplorerTabOrder> order;
-    if (FAILED(FrameTabOrder_Original(frameObject, 0xA221, &order)) || !order)
+    ComPtr<IUnknown> unverifiedOrder;
+    if (FAILED(FrameTabOrder_Original(frameObject, 0xA221, &unverifiedOrder)) ||
+        !unverifiedOrder)
         return false;
+    ComPtr<ExplorerTabOrder> order;
+    if (FAILED(unverifiedOrder->QueryInterface(
+            kExplorerTabOrderIID,
+            reinterpret_cast<void**>(order.GetAddressOf()))) ||
+        !order) {
+        if (!g_directActivationBroken.exchange(true))
+            Wh_Log(
+                L"Unsupported Explorer tab-order interface; disabling direct "
+                L"activation");
+        return false;
+    }
     const ULONGLONG deadline = GetTickCount64() + 1000;
     for (size_t index = 0; index < count; ++index) {
         if (GetTickCount64() >= deadline)
@@ -879,12 +897,28 @@ static bool SelectTabOnFrameThread(void* frameObject, HWND wanted) {
         GUID id{};
         if (FAILED(order->GetTabIdAtIndex(static_cast<UINT>(index), &id)))
             return false;
-        ExplorerBrowserTab tab;
-        if (FAILED(FrameBrowserTab_Original(frameObject, id, tab)) || !tab.host)
+        // Headroom for record growth. An unexpected prefix must not cause
+        // assumed COM pointers to be queried or released.
+        alignas(16) std::array<BYTE, 256> record{};
+        if (FAILED(FrameBrowserTab_Original(frameObject, id, record.data())))
+            return false;
+        ExplorerTabPrefix prefix{};
+        memcpy(&prefix, record.data(), sizeof(prefix));
+        if (!IsEqualGUID(prefix.id, id)) {
+            if (!g_directActivationBroken.exchange(true))
+                Wh_Log(
+                    L"Unexpected Explorer tab-record layout; disabling direct "
+                    L"activation");
+            return false;
+        }
+        ComPtr<IUnknown> host, state;
+        host.Attach(prefix.host);
+        state.Attach(prefix.state);
+        if (!host)
             return false;
         ComPtr<IOleWindow> window;
         HWND handle = nullptr;
-        if (FAILED(tab.host.As(&window)) || FAILED(window->GetWindow(&handle)))
+        if (FAILED(host.As(&window)) || FAILED(window->GetWindow(&handle)))
             return false;
         if (handle != wanted)
             continue;
@@ -2784,48 +2818,38 @@ static bool InstallExplorerFrameHooks(bool shellService) {
          &AddTabAtIndex_Original,
          AddTabAtIndex_Hook,
          true},
+        {{L"private: void __cdecl CExplorerFrame::_OnCommand(unsigned "
+          L"__int64,__int64)"},
+         &FrameCommand_Original,
+         FrameCommand_Hook,
+         true},
+        {{L"private: long __cdecl "
+          L"CExplorerFrame::TryGetFileExplorerTabsExtensionHelpers("
+          L"unsigned int,struct IFileExplorerTabsExtensionHelpers * *)"},
+         &FrameTabOrder_Original,
+         nullptr,
+         true},
+        {{L"private: long __cdecl "
+          L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
+          L"FEBrowserTab &)const ",
+          L"private: long __cdecl "
+          L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
+          L"FEBrowserTab &)const",
+          L"private: long __cdecl "
+          L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
+          L"FEBrowserTab &) const"},
+         &FrameBrowserTab_Original,
+         nullptr,
+         true},
     };
-    if (!shellService) {
-        // ExplorerFrame.dll. The first const-query name retains the symbol
-        // decoder's trailing space. The private tab-record layout remains a
-        // Windows-version compatibility dependency.
-        WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
-            {{L"private: void __cdecl CExplorerFrame::_OnCommand(unsigned "
-              L"__int64,__int64)"},
-             &FrameCommand_Original,
-             FrameCommand_Hook,
-             true},
-            {{L"private: long __cdecl "
-              L"CExplorerFrame::TryGetFileExplorerTabsExtensionHelpers("
-              L"unsigned int,struct IFileExplorerTabsExtensionHelpers * *)"},
-             &FrameTabOrder_Original,
-             nullptr,
-             true},
-            {{L"private: long __cdecl "
-              L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
-              L"FEBrowserTab &)const ",
-              L"private: long __cdecl "
-              L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
-              L"FEBrowserTab &)const",
-              L"private: long __cdecl "
-              L"CExplorerFrame::GetBrowserTabFromId(struct _GUID,struct "
-              L"FEBrowserTab &) const"},
-             &FrameBrowserTab_Original,
-             nullptr,
-             true},
-        };
-        if (!WindhawkUtils::HookSymbols(module, explorerFrameDllHooks,
-                                        std::size(explorerFrameDllHooks)))
-            return false;
-        if (!FrameCommand_Original || !FrameTabOrder_Original ||
-            !FrameBrowserTab_Original)
-            Wh_Log(
-                L"Direct tab activation unavailable: exact frame symbols not "
-                L"found");
-    }
     const size_t count = shellService ? 1 : std::size(shellHooks);
     if (!WindhawkUtils::HookSymbols(module, shellHooks, count))
         return false;
+    if (!shellService && (!FrameCommand_Original || !FrameTabOrder_Original ||
+                          !FrameBrowserTab_Original))
+        Wh_Log(
+            L"Direct tab activation unavailable: exact frame symbols not "
+            L"found");
     if (!shellService && !AddTabAtIndex_Original)
         Wh_Log(
             L"Explicit new-tab activation unavailable: exact AddTabAtIndex "
