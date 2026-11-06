@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.17.0
+// @version         2.18.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -101,12 +101,15 @@ Percentages, USD, and credits use separate axes. Connected samples use lines onl
 isolated readings visible.
 Percentages from different accounts or overlapping windows are not added together.
 
-History follows the configured entry: use a new entry for a different login. Data stays under
-`%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>` with your user-folder permissions, without tokens or
-labels. It is not encrypted and survives mod removal. Kept forever, it grows without limit;
-with a number of days, retention and a roughly 60 MB size cap prune old samples. **Clear all
-history...** removes recordings without changing sign-ins, and **Delete history...** on a
-removed account's page removes just its recordings.
+History follows the configured entry: use a new entry for a different login. Data stays in the
+mod's Windhawk storage, in a folder named after your Windows account's SID, without tokens or
+labels. It is not encrypted, and Windhawk's storage folder lets other users of the PC read it.
+Windhawk deletes the mod's storage, as far as it can, when it removes the mod. Kept forever, it
+grows without limit, though Antigravity readings older than 15 days are kept about 10 minutes
+apart; with a number of days, retention and a roughly 60 MB size cap prune old samples. History
+recorded under `%LOCALAPPDATA%\TaskbarAIQuota` by earlier versions moves there on the first
+start. **Clear all history...** removes recordings without changing sign-ins, and **Delete
+history...** on a removed account's page removes just its recordings.
 See the [usage history guide](https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history)
 for recording rules, export, and verification.
 
@@ -137,6 +140,7 @@ Have a suggestion or found a bug?
 #include <bcrypt.h>
 #include <wincrypt.h>
 #include <dpapi.h>
+#include <sddl.h>
 #include <unknwn.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -834,9 +838,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"No accounts support this view.", L"Kein Konto unterstützt diese Ansicht."},
     {L"", L"No accounts to display.", L"Keine Konten zum Anzeigen."},
     {L"", L"No accounts yet", L"Noch keine Konten"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Nicht verschlüsselt. Messwerte und anonyme IDs, keine Token oder Bezeichnungen. Bleibt nach dem Entfernen des "
-     L"Mods erhalten."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Nicht verschlüsselt. Messwerte und anonyme IDs, keine Token oder Bezeichnungen. Im Windhawk-Speicher des Mods, "
+     L"den Windhawk beim Entfernen des Mods so weit wie möglich löscht."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Nicht gespeichert: Das Speichern würde die gespeicherten Einstellungen ersetzen, die nicht gelesen werden "
+     L"konnten."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Es wurde noch nichts aufgezeichnet. Der Ordner wird mit dem ersten aufgezeichneten Messwert erstellt."},
     {L"", L"Nothing new is recorded.", L"Es wird nichts Neues aufgezeichnet."},
@@ -848,6 +856,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Number size", L"Zahlengröße"},
     {L"", L"On hover", L"Beim Daraufzeigen"},
     {L"", L"Open AI quota settings", L"Einstellungen für KI-Kontingente öffnen"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Einstellungen für KI-Kontingente öffnen. Die gespeicherten Einstellungen konnten nicht gelesen werden."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Einstellungen für KI-Kontingente öffnen. Die gespeicherten Einstellungen konnten nicht gelesen werden; eine "
      L"Sicherung wurde aufbewahrt."},
@@ -1009,11 +1019,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"OpenCode Go in der Taskleiste anzuzeigen."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Legen Sie „Credits-Maximum“ fest, um den Credits-Balken anzuzeigen."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ löscht nichts und hat keine Größenbeschränkung, daher wächst der "
-     L"Verlauf im Speicher des Explorers und auf dem Datenträger weiter. Tageslimits bereinigen stündlich, mit einer "
-     L"Obergrenze von etwa 60\u00A0MB."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ hat keine Größenbeschränkung, daher wächst der Verlauf im Speicher "
+     L"des Explorers und auf dem Datenträger weiter; Antigravity-Messwerte, die älter als 15 Tage sind, werden in "
+     L"Abständen von etwa 10 Minuten aufbewahrt. Tageslimits bereinigen stündlich, mit einer Obergrenze von etwa "
+     L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Kürzel neben jedem Balken: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Kurztext"},
@@ -1116,6 +1128,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Die Fenster „Einstellungen“ und „Nutzungsverlauf“ verwenden dafür „Mica“."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Die gespeicherten Einstellungen konnten nicht gelesen werden, daher zeigt dieses Fenster die Standardwerte. "
+     L"Beim Speichern dieser Änderung werden die gespeicherten Einstellungen, einschließlich der Konten, durch das "
+     L"ersetzt, was dieses Fenster zeigt.\n\nDie gespeicherten Einstellungen ersetzen? Wenn Sie sie behalten, wird "
+     L"diese Änderung nicht gespeichert; sie werden beim nächsten Start des Windows-Explorers erneut gelesen."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Die gespeicherte Anmeldung konnte nicht kopiert werden. Das Konto wurde nicht geändert."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -1159,11 +1178,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Dieses Konto wurde entfernt. Sein gespeicherter Verlauf bleibt erhalten, bis er abläuft oder gelöscht wird."},
     {L"", L"This change couldn't be saved.", L"Diese Änderung konnte nicht gespeichert werden."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Dieser Export enthält etwa {rows, plural, one{# Zeile} other{# Zeilen}}. Er kann eine Weile dauern und die "
-     L"Zeilenlimits von Tabellenkalkulationen überschreiten. Das Verlaufsfenster ist während des Schreibens "
-     L"beschäftigt; die Taskleiste des Explorers bleibt verfügbar. Fortfahren?"},
+     L"Zeilenlimits von Tabellenkalkulationen überschreiten. Bis er abgeschlossen ist, zeigt das Verlaufsfenster "
+     L"seinen Fortschritt, und die meisten seiner Steuerelemente sind nicht verfügbar; das Schließen des Fensters "
+     L"bricht den Export ab. Fortfahren?"},
     {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Die Schwellenwerte bleiben in der Reihenfolge Gelb, Orange, Rot."},
@@ -2088,8 +2108,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"No accounts support this view.", L"Ninguna cuenta admite esta vista."},
     {L"", L"No accounts to display.", L"No hay cuentas que mostrar."},
     {L"", L"No accounts yet", L"Aún no hay cuentas"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Sin cifrar. Lecturas e ID opacos, sin tokens ni etiquetas. Se conserva al quitar el mod."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Sin cifrar. Lecturas e ID opacos, sin tokens ni etiquetas. En el almacenamiento de Windhawk del mod, que "
+     L"Windhawk elimina, en la medida de lo posible, al quitar el mod."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"No se guardó: al guardar se reemplazaría la configuración guardada, que no se pudo leer."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Todavía no se ha registrado nada. La carpeta se crea con la primera muestra registrada."},
     {L"", L"Nothing new is recorded.", L"No se registra nada nuevo."},
@@ -2101,6 +2125,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Number size", L"Tamaño del número"},
     {L"", L"On hover", L"Al pasar el puntero"},
     {L"", L"Open AI quota settings", L"Abrir la configuración de cuotas de IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Abrir la configuración de cuotas de IA. No se pudo leer la configuración guardada."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Abrir la configuración de cuotas de IA. No se pudo leer la configuración guardada; se conservó una copia de "
      L"seguridad."},
@@ -2259,11 +2285,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"OpenCode Go en la barra de tareas."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Define el máximo de créditos para mostrar la barra de créditos."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Compartido entre los usuarios de Windows. Para siempre no elimina nada y no tiene límite de tamaño, así que "
-     L"el historial sigue creciendo en la memoria del Explorador y en el disco. Los límites en días depuran cada "
-     L"hora, con un tope de unos 60\u00A0MB."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Compartido entre los usuarios de Windows. Para siempre no tiene límite de tamaño, así que el historial sigue "
+     L"creciendo en la memoria del Explorador y en el disco; las lecturas de Antigravity de más de 15 días se "
+     L"conservan con unos 10 minutos de separación. Los límites en días depuran cada hora, con un tope de unos "
+     L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Clave corta junto a cada barra: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texto corto"},
@@ -2361,6 +2389,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"mostrar de Windows. Solo se aplica a este usuario de Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Las ventanas de configuración y del historial de uso usan Mica con esta opción."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"No se pudo leer la configuración guardada, así que esta ventana muestra los valores predeterminados. Al guardar "
+     L"este cambio, la configuración guardada, incluidas las cuentas, se reemplaza por lo que muestra esta "
+     L"ventana.\n\n¿Reemplazar la configuración guardada? Si la conservas, este cambio no se guarda; se volverá a leer "
+     L"la próxima vez que se inicie el Explorador de Windows."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"No se pudo copiar la sesión guardada. La cuenta no se cambió."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -2403,11 +2438,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Esta cuenta se quitó. Su historial guardado se conserva hasta que caduque o se elimine."},
     {L"", L"This change couldn't be saved.", L"No se pudo guardar este cambio."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Esta exportación contiene aproximadamente {rows, plural, one{# fila} many{# de filas} other{# filas}}. Puede "
-     L"tardar un rato y superar el límite de filas de las hojas de cálculo. La ventana del historial estará ocupada "
-     L"mientras se escribe; la barra de tareas del Explorador sigue disponible. ¿Continuar?"},
+     L"tardar un rato y superar el límite de filas de las hojas de cálculo. Hasta que termine, la ventana del "
+     L"historial muestra su progreso y la mayoría de sus controles no están disponibles; al cerrar la ventana se "
+     L"cancela la exportación. ¿Continuar?"},
     {L"", L"Threshold notifications", L"Notificaciones de umbral"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Los umbrales mantienen el orden: amarillo, naranja, rojo."},
@@ -3339,8 +3375,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"No accounts support this view.", L"Aucun compte ne prend en charge cette vue."},
     {L"", L"No accounts to display.", L"Aucun compte à afficher."},
     {L"", L"No accounts yet", L"Aucun compte pour l’instant"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Non chiffré. Relevés et ID opaques, sans jetons ni libellés. Conservé après la suppression du mod."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Non chiffré. Relevés et ID opaques, sans jetons ni libellés. Dans le stockage Windhawk du mod, que Windhawk "
+     L"efface, dans la mesure du possible, lors de la suppression du mod."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Non enregistré\u202F: l’enregistrement remplacerait les paramètres enregistrés, qui n’ont pas pu être lus."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Rien n’a encore été enregistré. Le dossier est créé avec le premier échantillon enregistré."},
     {L"", L"Nothing new is recorded.", L"Rien de nouveau n’est enregistré."},
@@ -3352,6 +3392,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Number size", L"Taille des nombres"},
     {L"", L"On hover", L"Au survol"},
     {L"", L"Open AI quota settings", L"Ouvrir les paramètres des quotas IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Ouvrir les paramètres des quotas IA. Les paramètres enregistrés n’ont pas pu être lus."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Ouvrir les paramètres des quotas IA. Les paramètres enregistrés n’ont pas pu être lus\u202F; une sauvegarde a été "
      L"conservée."},
@@ -3512,11 +3554,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"OpenCode Go dans la barre des tâches."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Définissez le maximum de crédits pour afficher la barre des crédits."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Partagé entre les utilisateurs Windows. L’option Indéfiniment ne supprime rien et n’a pas de limite de taille\u202F: "
-     L"l’historique continue de grossir dans la mémoire de l’Explorateur Windows et sur le disque. Avec une limite en "
-     L"jours, le nettoyage a lieu toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Partagé entre les utilisateurs Windows. L’option Indéfiniment n’a pas de limite de taille\u202F: l’historique "
+     L"continue de grossir dans la mémoire de l’Explorateur Windows et sur le disque\u202F; les relevés d’Antigravity "
+     L"de plus de 15\u00A0jours sont conservés à environ 10\u00A0minutes d’intervalle. Avec une limite en jours, le "
+     L"nettoyage a lieu toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Code court à côté de chaque barre\u202F: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texte court"},
@@ -3617,6 +3661,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"langue d’affichage de Windows. S’applique uniquement à cet utilisateur Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Les fenêtres des paramètres et de l’historique d’utilisation utilisent alors Mica."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Les paramètres enregistrés n’ont pas pu être lus, cette fenêtre affiche donc les valeurs par défaut. "
+     L"Enregistrer cette modification remplace les paramètres enregistrés, comptes compris, par ce qu’affiche cette "
+     L"fenêtre.\n\nRemplacer les paramètres enregistrés\u202F? Si vous les conservez, cette modification n’est pas "
+     L"enregistrée\u202F; ils seront relus au prochain démarrage de l’Explorateur Windows."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Impossible de copier la connexion enregistrée. Le compte n’a pas été modifié."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -3660,11 +3711,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Ce compte a été retiré. Son historique enregistré est conservé jusqu’à son expiration ou sa suppression."},
     {L"", L"This change couldn't be saved.", L"Cette modification n’a pas pu être enregistrée."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Cet export contient environ {rows, plural, one{# ligne} many{# de lignes} other{# lignes}}. Il peut prendre du "
-     L"temps et dépasser la limite de lignes des tableurs. La fenêtre de l’historique sera occupée pendant "
-     L"l’écriture\u202F; la barre des tâches de l’Explorateur Windows reste disponible. Continuer\u202F?"},
+     L"temps et dépasser la limite de lignes des tableurs. Jusqu’à la fin, la fenêtre de l’historique affiche sa "
+     L"progression et la plupart de ses commandes sont indisponibles\u202F; fermer la fenêtre annule l’export. "
+     L"Continuer\u202F?"},
     {L"", L"Threshold notifications", L"Notifications de seuil"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Les seuils restent dans l’ordre\u202F: jaune, orange, rouge."},
@@ -4539,8 +4591,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"No accounts support this view.", L"このビューに対応しているアカウントはありません。"},
     {L"", L"No accounts to display.", L"表示するアカウントはありません。"},
     {L"", L"No accounts yet", L"アカウントはまだありません"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"暗号化されていません。測定値と不透明な ID のみで、トークンやラベルは含みません。Mod を削除しても残ります。"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"暗号化されていません。測定値と不透明な ID のみで、トークンやラベルは含みません。Mod の Windhawk ストレージ内にあり、Windhawk が Mod を削除するときに可能な範囲で削除されます。"},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"保存されていません: 保存すると、読み込めなかった保存された設定が置き換えられます。"},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"まだ何も記録されていません。フォルダーは最初のサンプルが記録されたときに作成されます。"},
     {L"", L"Nothing new is recorded.", L"新しいデータは記録されません。"},
@@ -4551,6 +4606,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Number size", L"数値のサイズ"},
     {L"", L"On hover", L"ホバー時"},
     {L"", L"Open AI quota settings", L"AI クォータの設定を開く"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.", L"AI クォータの設定を開く。保存された設定を読み込めませんでした。"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"AI クォータの設定を開く。保存された設定を読み込めませんでした。バックアップを保持しています。"},
     {L"", L"Opens an account’s details after the pointer rests on it.",
@@ -4676,9 +4732,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"account on the taskbar.",
      L"<b>{button}</b> を選択すると、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
     {L"", L"Set Credits max to show the Credits bar.", L"クレジット バーを表示するには、［クレジット上限］を設定してください。"},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Windows のユーザー間で共有されます。［無期限］では何も削除されず、サイズの上限もないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Windows のユーザー間で共有されます。［無期限］ではサイズの上限がないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。15 日より古い Antigravity の測定値は約 10 分間隔で保持されます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"各バーの横の短いキー: {key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短いテキスト"},
@@ -4757,6 +4814,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"設定ウィンドウ、使用履歴ウィンドウ、タスク バー。［自動］は Windows の表示言語に従います。この Windows "
      L"ユーザーにのみ適用されます。"},
     {L"", L"The settings and usage history windows use Mica for it.", L"設定ウィンドウと使用履歴ウィンドウでは、代わりに［Mica］を使います。"},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"保存された設定を読み込めなかったため、このウィンドウには既定値が表示されています。この変更を保存すると、保存された設定 (アカウントを含む) が、このウィンドウに表示されている内容に置き換えられます。\n\n保存された設定を置き換えますか？保持する場合、この変更は保存されず、保存された設定は次回 Windows エクスプローラーが起動したときに再度読み込まれます。"},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"保存されたサインインをコピーできませんでした。アカウントは変更されませんでした。"},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -4787,10 +4848,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"このアカウントは削除されました。保存済みの履歴は、期限切れになるか削除されるまで残ります。"},
     {L"", L"This change couldn't be saved.", L"この変更を保存できませんでした。"},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
-     L"このエクスポートには約 {rows, plural, other{# 行}} "
-     L"が含まれます。時間がかかり、スプレッドシートの行数の上限を超える可能性があります。書き込み中は履歴ウィンドウを操作できませんが、エクスプローラーのタスク バーは引き続き使用できます。続行しますか？"},
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
+     L"このエクスポートには約 {rows, plural, other{# 行}} が含まれます。時間がかかり、スプレッドシートの行数の上限を超える可能性があります。完了するまで、履歴ウィンドウには進行状況が表示され、ほとんどのコントロールは使用できません。ウィンドウを閉じるとエクスポートはキャンセルされます。続行しますか？"},
     {L"", L"Threshold notifications", L"しきい値の通知"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"しきい値は黄色、オレンジ、赤の順に保たれます。"},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
@@ -5658,8 +5718,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"No accounts support this view.", L"Nenhuma conta é compatível com esta visualização."},
     {L"", L"No accounts to display.", L"Nenhuma conta para exibir."},
     {L"", L"No accounts yet", L"Nenhuma conta ainda"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Não criptografado. Leituras e IDs opacos, sem tokens nem rótulos. Permanece após a remoção do mod."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Não criptografado. Leituras e IDs opacos, sem tokens nem rótulos. No armazenamento do Windhawk do mod, que o "
+     L"Windhawk exclui, na medida do possível, ao remover o mod."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Não salvo: salvar substituiria as configurações salvas, que não puderam ser lidas."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Nada foi registrado ainda. A pasta é criada com a primeira amostra registrada."},
     {L"", L"Nothing new is recorded.", L"Nada novo é registrado."},
@@ -5671,6 +5735,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Number size", L"Tamanho do número"},
     {L"", L"On hover", L"Ao passar o mouse"},
     {L"", L"Open AI quota settings", L"Abrir as configurações de cotas de IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Abrir as configurações de cotas de IA. Não foi possível ler as configurações salvas."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Abrir as configurações de cotas de IA. Não foi possível ler as configurações salvas; um backup foi mantido."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
@@ -5825,11 +5891,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"OpenCode Go na barra de tarefas."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Defina Máximo de créditos para mostrar a barra de créditos."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Compartilhado entre os usuários do Windows. A opção Para sempre não exclui nada e não tem limite de tamanho, "
-     L"então o histórico continua crescendo na memória do Windows Explorer e no disco. Com um limite em dias, a "
-     L"limpeza é feita a cada hora, com um teto de cerca de 60\u00A0MB."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Compartilhado entre os usuários do Windows. A opção Para sempre não tem limite de tamanho, então o histórico "
+     L"continua crescendo na memória do Windows Explorer e no disco; as leituras do Antigravity com mais de 15 dias "
+     L"são mantidas com cerca de 10 minutos de intervalo. Com um limite em dias, a limpeza é feita a cada hora, com um "
+     L"teto de cerca de 60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Sigla ao lado de cada barra: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texto curto"},
@@ -5927,6 +5995,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"do Windows. Aplica-se somente a este usuário do Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"As janelas de configurações e de histórico de uso usam Mica nesse caso."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Não foi possível ler as configurações salvas, então esta janela mostra os valores padrão. Salvar esta alteração "
+     L"substitui as configurações salvas, incluindo as contas, pelo que esta janela mostra.\n\nSubstituir as "
+     L"configurações salvas? Se você as mantiver, esta alteração não será salva; elas serão lidas novamente na próxima "
+     L"vez que o Windows Explorer iniciar."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Não foi possível copiar o login armazenado. A conta não foi alterada."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -5969,11 +6044,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Esta conta foi removida. O histórico salvo dela permanece até expirar ou ser excluído."},
     {L"", L"This change couldn't be saved.", L"Não foi possível salvar esta alteração."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Esta exportação contém cerca de {rows, plural, one{# linha} many{# de linhas} other{# linhas}}. Ela pode "
-     L"demorar e ultrapassar o limite de linhas das planilhas. A janela do histórico ficará ocupada durante a "
-     L"gravação; a barra de tarefas do Windows Explorer continua disponível. Continuar?"},
+     L"demorar e ultrapassar o limite de linhas das planilhas. Até terminar, a janela do histórico mostra o progresso "
+     L"e a maioria dos controles fica indisponível; fechar a janela cancela a exportação. Continuar?"},
     {L"", L"Threshold notifications", L"Notificações de limite"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"Os limites ficam em ordem: amarelo, laranja, vermelho."},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
@@ -6883,8 +6958,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"No accounts support this view.", L"Ни один аккаунт не поддерживает этот вид."},
     {L"", L"No accounts to display.", L"Нет аккаунтов для отображения."},
     {L"", L"No accounts yet", L"Аккаунтов пока нет"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Не зашифровано. Замеры и обезличенные идентификаторы, без токенов и меток. Сохраняется после удаления мода."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Не зашифровано. Замеры и обезличенные идентификаторы, без токенов и меток. В хранилище мода в Windhawk, которое "
+     L"Windhawk по возможности удаляет вместе с модом."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Не сохранено: сохранение заменило бы сохранённые параметры, которые не удалось прочитать."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Пока ничего не записано. Папка создаётся с первым записанным замером."},
     {L"", L"Nothing new is recorded.", L"Ничего нового не записывается."},
@@ -6896,6 +6975,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Number size", L"Размер числа"},
     {L"", L"On hover", L"При наведении"},
     {L"", L"Open AI quota settings", L"Открыть параметры квот ИИ"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Открыть параметры квот ИИ. Не удалось прочитать сохранённые параметры."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Открыть параметры квот ИИ. Не удалось прочитать сохранённые параметры; резервная копия сохранена."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
@@ -7049,11 +7130,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
      L"Copilot или OpenCode Go."},
     {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, поэтому "
-     L"история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый час, с "
-     L"пределом около 60\u00A0МБ."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Общий параметр для всех пользователей Windows. «Бессрочно» не ограничивает размер, поэтому история продолжает "
+     L"расти в памяти Проводника и на диске; замеры Antigravity старше 15 дней хранятся с интервалом около 10 минут. "
+     L"Ограничения в днях очищают историю каждый час, с пределом около 60\u00A0МБ."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Короткий текст"},
@@ -7149,6 +7231,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Windows. Действует только для этого пользователя Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Для окон параметров и истории использования вместо него применяется Mica."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Не удалось прочитать сохранённые параметры, поэтому в этом окне показаны значения по умолчанию. При сохранении "
+     L"этого изменения сохранённые параметры, включая аккаунты, будут заменены тем, что показано в этом "
+     L"окне.\n\nЗаменить сохранённые параметры? Если оставить их, это изменение не будет сохранено; они будут снова "
+     L"прочитаны при следующем запуске Проводника Windows."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Не удалось скопировать сохранённый вход. Аккаунт не изменён."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -7190,11 +7279,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Этот аккаунт удалён. Его сохранённая история остаётся, пока не истечёт срок хранения или пока её не удалят."},
     {L"", L"This change couldn't be saved.", L"Не удалось сохранить это изменение."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
-     L"Этот экспорт содержит около {rows, plural, one{# строки} few{# строк} many{# строк} other{# строки}}. Он "
-     L"может занять некоторое время и превысить ограничение на число строк в электронных таблицах. Пока идёт запись, "
-     L"окно истории будет занято; панель задач Проводника остаётся доступной. Продолжить?"},
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
+     L"Этот экспорт содержит около {rows, plural, one{# строки} few{# строк} many{# строк} other{# строки}}. Он может "
+     L"занять некоторое время и превысить ограничение на число строк в электронных таблицах. Пока он не завершится, "
+     L"окно истории показывает ход выполнения, а большинство его элементов управления недоступно; закрытие окна "
+     L"отменяет экспорт. Продолжить?"},
     {L"", L"Threshold notifications", L"Уведомления о пороге"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Пороги всегда идут по порядку: жёлтый, оранжевый, красный."},
@@ -8047,8 +8137,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"No accounts support this view.", L"没有账户支持此视图。"},
     {L"", L"No accounts to display.", L"没有可显示的账户。"},
     {L"", L"No accounts yet", L"还没有账户"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"未加密。仅包含读数和不透明 ID，不含令牌或标签。移除模组后仍会保留。"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"未加密。仅包含读数和不透明 ID，不含令牌或标签。位于此模组的 Windhawk 存储中，Windhawk 移除模组时会尽可能将其删除。"},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.", L"未保存：保存会替换无法读取的已保存设置。"},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"尚未记录任何内容。记录第一个样本时会创建该文件夹。"},
     {L"", L"Nothing new is recorded.", L"不会记录新数据。"},
@@ -8059,6 +8151,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Number size", L"数字大小"},
     {L"", L"On hover", L"悬停时"},
     {L"", L"Open AI quota settings", L"打开 AI 配额设置"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.", L"打开 AI 配额设置。无法读取已保存的设置。"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"打开 AI 配额设置。无法读取已保存的设置；已保留备份。"},
     {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
@@ -8177,9 +8270,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
     {L"", L"Set Credits max to show the Credits bar.", L"设置“积分上限”以显示积分条。"},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"所有 Windows 用户共享此设置。“永久”不会删除任何数据，也没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长。按天数限制时每小时清理一次，上限约 60 MB。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"所有 Windows 用户共享此设置。“永久”没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长；超过 15 天的 Antigravity 读数按约 10 分钟的间隔保留。按天数限制时每小时清理一次，上限约 60 MB。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"每个条形旁的简称：{key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短文本"},
@@ -8253,6 +8347,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"Applies to this Windows user only.",
      L"设置窗口、使用历史窗口和任务栏。“自动”跟随 Windows 显示语言。仅适用于当前 Windows 用户。"},
     {L"", L"The settings and usage history windows use Mica for it.", L"设置窗口和使用历史窗口对此改用“云母”。"},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"无法读取已保存的设置，因此此窗口显示的是默认值。保存此更改会用此窗口显示的内容替换已保存的设置（包括账户）。\n\n要替换已保存的设置吗？如果保留它们，此更改不会保存；下次 Windows 资源管理器启动时会重新读取它们。"},
     {L"", L"The stored sign-in could not be copied. The account was not changed.", L"无法复制已存储的登录信息。账户未更改。"},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
      L"无法删除已存储的登录信息，该信息仍为此账户保留。"},
@@ -8284,9 +8382,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"此账户已移除。其已保存的历史会保留，直到过期或被删除。"},
     {L"", L"This change couldn't be saved.", L"无法保存此更改。"},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
-     L"此导出约包含 {rows, plural, other{# 行}}。这可能需要一段时间，并可能超出电子表格的行数限制。写入期间历史窗口将处于忙碌状态；资源管理器的任务栏仍可使用。要继续吗？"},
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
+     L"此导出约包含 {rows, plural, other{# 行}}。这可能需要一段时间，并可能超出电子表格的行数限制。完成之前，历史窗口会显示导出进度，且大部分控件不可用；关闭窗口会取消导出。要继续吗？"},
     {L"", L"Threshold notifications", L"阈值通知"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"阈值始终保持顺序：黄色、橙色、红色。"},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
@@ -10623,7 +10721,9 @@ static void OpenSettingsWindow();
 static void OpenHistoryWindow(uint64_t historyId = 0);
 static void UiSetWindowAppId(HWND window, PCWSTR appId);
 static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons);
-static bool SaveAppIconPng(const std::wstring& path);
+static std::vector<BYTE> AppIconPng();
+static std::optional<std::deque<HistorySample>> ThinHistorySamples(const std::deque<HistorySample>& samples,
+                                                                   ULONGLONG nowMs);
 static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
                                                const WindowUsage& reading);
 static bool SaveOwnedSettings(const Settings& settings);
@@ -10654,7 +10754,12 @@ static ULONGLONG g_refreshGeneration = 0;
 static std::mutex g_refreshMutex;
 static std::atomic<bool> g_uiInjected{false};
 static std::atomic<bool> g_visualTestMode{false};
+// The settings load's failure (settings/storage.h), until a save replaces the stored settings:
+// whether a backup of them was kept (settings_v1_invalid), and whether a save may replace them:
+// read whole and backed up, or once the settings window's user confirmed it. Each load resets them.
 static std::atomic<bool> g_settingsLoadError{false};
+static std::atomic<bool> g_settingsLoadBackup{false};
+static std::atomic<bool> g_settingsReplaceAllowed{false};
 static std::atomic<bool> g_fetchThreadStarted{false};
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
@@ -10721,6 +10826,193 @@ static void RefreshQuotaByIdentity(uint64_t identityHash) {
     if (found) QueueRefresh(identityHash);
 }
 
+// src/core/user-storage.h
+// This Windows user's part of the mod's Windhawk storage, which Windhawk shares between the PC's
+// users and deletes with the mod: values named after the user's SID (the recording consent,
+// history/journal.h, and the language preference, core/language.h) and a folder named after it
+// (the usage history journal and the notifications' icon). Also the HKCU key older versions kept
+// the preferences in: readers fall back to it until the taskbar's process moves them.
+
+// The Windhawk value names of this user's preferences, each completed by the SID.
+static constexpr PCWSTR kConsentValuePrefix = L"recordHistory_";
+static constexpr PCWSTR kLanguageValuePrefix = L"language_";
+
+// Where older versions kept them, as RecordHistory (DWORD, missing: on) and Language (a tag).
+static constexpr PCWSTR kLegacyUserRegistryParent = L"Software\\Windhawk\\TaskbarAIQuota";
+static constexpr PCWSTR kLegacyUserRegistryKey = L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
+static constexpr PCWSTR kLegacyConsentValue = L"RecordHistory";  // i18n-en
+static constexpr PCWSTR kLegacyLanguageValue = L"Language";      // i18n-en
+
+// The current Windows user's SID (S-1-5-21-...); empty when it can't be read.
+static std::wstring CurrentUserSid() {
+    winrt::handle token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token.put())) return {};
+    DWORD size = 0;
+    GetTokenInformation(token.get(), TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> user(size);
+    PWSTR text = nullptr;
+    if (!size || !GetTokenInformation(token.get(), TokenUser, user.data(), size, &size) ||
+        !ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(user.data())->User.Sid, &text)) {
+        return {};
+    }
+    std::unique_ptr<wchar_t, decltype([](wchar_t* p) { LocalFree(p); })> owned(text);
+    return owned.get();
+}
+
+// This user's folder in the mod's storage, <storage>\<SID>, whether or not it exists; empty when
+// either part can't be read. Windhawk creates the storage folder itself.
+static std::wstring UserStorageFolder() {
+    std::wstring root(32768, L'\0');
+    size_t length = Wh_GetModStoragePath(root.data(), root.size());
+    std::wstring sid = CurrentUserSid();
+    if (!length || sid.empty()) return {};
+    root.resize(length);
+    return root + L"\\" + sid;
+}
+
+// Creates this user's storage folder (UserStorageFolder) if missing. 0 once it is ready, else the
+// error: ERROR_REPARSE_POINT_ENCOUNTERED when the storage folder or this one is a reparse point,
+// refused because every user can write Windhawk's storage.
+static DWORD PrepareUserStorageFolder(const std::wstring& folder) {
+    if (folder.empty()) return ERROR_PATH_NOT_FOUND;
+    auto plainFolder = [](const std::wstring& path) -> DWORD {
+        DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES) return GetLastError();
+        if (attributes & FILE_ATTRIBUTE_REPARSE_POINT) return ERROR_REPARSE_POINT_ENCOUNTERED;
+        return attributes & FILE_ATTRIBUTE_DIRECTORY ? ERROR_SUCCESS : ERROR_DIRECTORY;
+    };
+    if (DWORD error = plainFolder(folder.substr(0, folder.rfind(L'\\')))) return error;
+    if (!CreateDirectoryW(folder.c_str(), nullptr)) {
+        DWORD error = GetLastError();
+        if (error != ERROR_ALREADY_EXISTS) return error;
+    }
+    return plainFolder(folder);
+}
+
+// Opens `path` in this user's storage folder without following a reparse point and keeps the
+// handle only for a plain file (no reparse point, one link), so a link planted in the shared
+// storage can't redirect a write: a mitigation, not a guarantee against hostile folder contents.
+// Adds the read-attributes access the check needs; a refused file fails with
+// ERROR_REPARSE_POINT_ENCOUNTERED.
+static winrt::file_handle OpenUserStorageFile(const std::wstring& path, DWORD access, DWORD share,
+                                              DWORD disposition) {
+    winrt::file_handle file{CreateFileW(path.c_str(), access | FILE_READ_ATTRIBUTES, share, nullptr, disposition,
+                                        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr)};
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (file && (!GetFileInformationByHandle(file.get(), &info) ||
+                 (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || info.nNumberOfLinks != 1)) {
+        file.close();
+        SetLastError(ERROR_REPARSE_POINT_ENCOUNTERED);
+    }
+    return file;
+}
+
+// Creates a uniquely named staging file beside `target`, `<target>.<random>.staging`, to be moved
+// over it once written: new (CREATE_NEW never opens an existing file) and opened as
+// OpenUserStorageFile opens. Its path in `staging`.
+static winrt::file_handle CreateUserStagingFile(const std::wstring& target, std::wstring& staging) {
+    uint64_t random[2] = {};
+    if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(random), sizeof(random),
+                        BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) {
+        SetLastError(ERROR_GEN_FAILURE);
+        return {};
+    }
+    wchar_t suffix[48];
+    swprintf(suffix, std::size(suffix), L".%016llx%016llx.staging", (unsigned long long)random[0],
+             (unsigned long long)random[1]);
+    staging = target + suffix;
+    return OpenUserStorageFile(staging, GENERIC_WRITE, 0, CREATE_NEW);
+}
+
+// Deletes the staging files a crash left beside `target` (CreateUserStagingFile's). Only its
+// writer calls it, holding what serializes its writes.
+static void DeleteStaleStagingFiles(const std::wstring& target) {
+    const std::wstring folder = target.substr(0, target.rfind(L'\\') + 1);
+    WIN32_FIND_DATAW found{};
+    HANDLE find = FindFirstFileExW((target + L".*.staging").c_str(), FindExInfoBasic, &found, FindExSearchNameMatch,
+                                   nullptr, 0);
+    if (find == INVALID_HANDLE_VALUE) return;
+    std::unique_ptr<void, decltype([](HANDLE h) { FindClose(h); })> search(find);
+    do {
+        if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileW((folder + found.cFileName).c_str());
+    } while (FindNextFileW(find, &found));
+}
+
+// Serializes this user's preference writes and their migration across Explorer processes and
+// sessions: a named mutex, waited for up to 2 s; an abandoned one counts as acquired, so holders
+// re-read what they change. A leaf lock: acquire nothing while holding it.
+struct UserPreferencesLock {
+    HANDLE mutex = nullptr;
+    bool held = false;
+
+    explicit UserPreferencesLock(const std::wstring& sid) {
+        mutex = CreateMutexW(nullptr, FALSE, (L"Global\\TaskbarAIQuota." WH_MOD_ID L"." + sid).c_str());
+        if (!mutex) return;
+        DWORD wait = WaitForSingleObject(mutex, 2000);
+        held = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED;
+    }
+    ~UserPreferencesLock() {
+        if (held) ReleaseMutex(mutex);
+        if (mutex) CloseHandle(mutex);
+    }
+    UserPreferencesLock(const UserPreferencesLock&) = delete;
+    UserPreferencesLock& operator=(const UserPreferencesLock&) = delete;
+};
+
+// Once from the taskbar's fetch thread at start: moves this user's preferences from the HKCU key
+// older versions kept them in into Windhawk storage, under UserPreferencesLock. A value already in
+// Windhawk storage wins and the HKCU one goes; otherwise the HKCU one is copied, as readers take it
+// (unreadable: off, Automatic), and deleted only once the copy succeeded. Never writes a default.
+// Then each key goes once it holds no values and no subkeys (never Software\Windhawk).
+static void MigrateUserPreferences() {
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) return;
+    UserPreferencesLock lock(sid);
+    if (!lock.held) {
+        Wh_Log(L"Could not move the preferences: their lock is busy");
+        return;
+    }
+    // Present: read, or there with another type or size.
+    auto present = [](LSTATUS read) {
+        return read == ERROR_SUCCESS || read == ERROR_UNSUPPORTED_TYPE || read == ERROR_MORE_DATA;
+    };
+    const std::wstring consent = kConsentValuePrefix + sid;
+    const std::wstring language = kLanguageValuePrefix + sid;
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLegacyUserRegistryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &key) ==
+        ERROR_SUCCESS) {
+        DWORD value = 0;
+        DWORD size = sizeof(value);
+        LSTATUS read = RegGetValueW(key, nullptr, kLegacyConsentValue, RRF_RT_REG_DWORD, nullptr, &value, &size);
+        if (present(read)) {
+            bool moved = Wh_GetIntValue(consent.c_str(), -1) != -1 ||
+                         Wh_SetIntValue(consent.c_str(), read == ERROR_SUCCESS && value == 1 ? 1 : 0);
+            if (moved) RegDeleteValueW(key, kLegacyConsentValue);
+            else Wh_Log(L"Could not move the recording choice");
+        }
+        wchar_t tag[64] = {};
+        size = sizeof(tag);
+        read = RegGetValueW(key, nullptr, kLegacyLanguageValue, RRF_RT_REG_SZ, nullptr, tag, &size);
+        if (present(read)) {
+            wchar_t stored[64];
+            bool moved = Wh_GetStringValue(language.c_str(), stored, std::size(stored)) ||
+                         Wh_SetStringValue(language.c_str(), read == ERROR_SUCCESS && tag[0] ? tag : L"auto");
+            if (moved) RegDeleteValueW(key, kLegacyLanguageValue);
+            else Wh_Log(L"Could not move the language preference");
+        }
+        RegCloseKey(key);
+    }
+    for (PCWSTR path : {kLegacyUserRegistryKey, kLegacyUserRegistryParent}) {
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, path, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) continue;
+        DWORD subkeys = 0, values = 0;
+        bool empty = RegQueryInfoKeyW(key, nullptr, nullptr, nullptr, &subkeys, nullptr, nullptr, &values, nullptr,
+                                      nullptr, nullptr, nullptr) == ERROR_SUCCESS &&
+                     !subkeys && !values;
+        RegCloseKey(key);
+        if (empty) RegDeleteKeyW(HKEY_CURRENT_USER, path);
+    }
+}
+
 // src/core/language.h
 // The process's current UI language, this Windows user's language preference and regional number
 // format. Native: pure code never reads these; native code snapshots one I18nLocale per frame,
@@ -10731,35 +11023,38 @@ static void RefreshQuotaByIdentity(uint64_t identityHash) {
 // aside).
 static std::atomic<const I18nLanguage*> g_language{&kI18nLanguages[0]};
 
-// This Windows user's settings, never in machine-shared settings_v1: the recording consent
-// (history/journal.h) and the language preference, a tag (missing or empty: Automatic).
-static constexpr PCWSTR kUserRegistryKey = L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
-static constexpr PCWSTR kLanguageRegistryValue = L"Language";  // i18n-en
+// This Windows user's language preference, never in machine-shared settings_v1: a tag in Windhawk
+// storage (core/user-storage.h), Automatic stored as "auto", which names no language.
 
-// The stored tag, spelled as kI18nLanguages spells it; empty (Automatic) when missing, empty,
-// unreadable or naming no language.
+// The stored tag, spelled as kI18nLanguages spells it; empty (Automatic) when missing, unreadable
+// or naming no language. Without the Windhawk value, the HKCU one older versions wrote, rereading
+// the Windhawk value once after finding that absent: the taskbar's process may have just moved it.
 static std::wstring ReadLanguagePreference() {
+    const std::wstring sid = CurrentUserSid();
+    const std::wstring name = kLanguageValuePrefix + sid;
     wchar_t tag[64] = {};
-    DWORD size = sizeof(tag);
-    if (RegGetValueW(HKEY_CURRENT_USER, kUserRegistryKey, kLanguageRegistryValue, RRF_RT_REG_SZ, nullptr, tag,
-                     &size) != ERROR_SUCCESS) {
-        return {};
+    auto stored = [&] { return !sid.empty() && Wh_GetStringValue(name.c_str(), tag, std::size(tag)); };
+    if (!stored()) {
+        DWORD size = sizeof(tag);
+        LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kLegacyUserRegistryKey, kLegacyLanguageValue, RRF_RT_REG_SZ,
+                                      nullptr, tag, &size);
+        if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) {
+            if (!stored()) return {};
+        } else if (result != ERROR_SUCCESS) {
+            return {};
+        }
     }
     const I18nLanguage* language = I18nLanguageByTag(tag);
     return language ? std::wstring(language->tag) : std::wstring();
 }
 
-// Stores a tag, or an empty one for Automatic.
+// Stores a tag, or Automatic for an empty one, under UserPreferencesLock; fails, writing nothing,
+// when the lock can't be had.
 static bool WriteLanguagePreference(const std::wstring& tag) {
-    HKEY key = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kUserRegistryKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key,
-                        nullptr) != ERROR_SUCCESS) {
-        return false;
-    }
-    LSTATUS result = RegSetValueExW(key, kLanguageRegistryValue, 0, REG_SZ,
-                                    reinterpret_cast<const BYTE*>(tag.c_str()), DWORD((tag.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(key);
-    return result == ERROR_SUCCESS;
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) return false;
+    UserPreferencesLock lock(sid);
+    return lock.held && Wh_SetStringValue((kLanguageValuePrefix + sid).c_str(), tag.empty() ? L"auto" : tag.c_str());
 }
 
 // The language a preference shows: its tag's, else (Automatic) the first finished language the
@@ -11374,13 +11669,20 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                    location[0] ? location : L"an unreadable location");
         }
 
+        // Retry-After: delay seconds (digits only), else an HTTP date; either waits at most a day.
+        constexpr ULONGLONG kMaxRetryAfterSec = 24ULL * 60 * 60;
         wchar_t ra[128]{};
         DWORD raSz = sizeof(ra);
         if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER,
                                 WINHTTP_HEADER_NAME_BY_INDEX, ra, &raSz,
                                 WINHTTP_NO_HEADER_INDEX)) {
-            res.retryAfterSec = _wtoi(ra);
-            if (res.retryAfterSec <= 0) {
+            if (ra[0] && !ra[wcsspn(ra, L"0123456789")]) {
+                ULONGLONG seconds = 0;
+                for (const wchar_t* digit = ra; *digit; digit++) {
+                    seconds = std::min(seconds * 10 + ULONGLONG(*digit - L'0'), kMaxRetryAfterSec);
+                }
+                res.retryAfterSec = (int)seconds;
+            } else {
                 SYSTEMTIME st{};
                 FILETIME ft{};
                 if (WinHttpTimeToSystemTime(ra, &st) && SystemTimeToFileTime(&st, &ft)) {
@@ -11391,7 +11693,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                         ULONGLONG now = NowUnixMs();
                         if (retryUnixMs > now) {
                             ULONGLONG deltaSec = (retryUnixMs - now + 999) / 1000;
-                            res.retryAfterSec = (int)std::min(deltaSec, 24ULL * 60 * 60);
+                            res.retryAfterSec = (int)std::min(deltaSec, kMaxRetryAfterSec);
                         }
                     }
                 }
@@ -11541,6 +11843,8 @@ static bool HasStoredToken(uint64_t idHash) {
     return stored[0] != 0;
 }
 
+// Every token read uses a 16,384-character buffer: a value that would fill it (16,383 characters or
+// more) fails before writing.
 static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     std::lock_guard<std::mutex> lk(g_authMutex);
     std::wstring json;
@@ -11556,7 +11860,12 @@ static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     }
     std::string b64 = DpapiProtect(WideToUtf8(json));
     if (b64.empty()) return false;
-    return Wh_SetStringValue(TokenStorageKey(idHash).c_str(), Utf8ToWide(b64).c_str());
+    std::wstring stored = Utf8ToWide(b64);
+    if (stored.size() >= 16383) {
+        Wh_Log(L"Token save failed: %zu characters is over the storage limit", stored.size());
+        return false;
+    }
+    return Wh_SetStringValue(TokenStorageKey(idHash).c_str(), stored.c_str());
 }
 
 static bool ClearStoredToken(uint64_t idHash) {
@@ -12175,11 +12484,16 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
         return {};
     };
 
-    DWORD rcvTimeout = 3000;
-    setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (char*)&rcvTimeout, sizeof(rcvTimeout));
+    // One deadline for the whole request, however its bytes trickle in: each receive waits only
+    // for what is left of it (never 0, which would wait forever).
+    const ULONGLONG deadline = GetTickCount64() + 5000;
     std::string request;
     char buf[2048];
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 16 && !g_unloading; i++) {
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) break;
+        DWORD remaining = DWORD(deadline - now);
+        if (setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (char*)&remaining, sizeof(remaining)) != 0) break;
         int n = recv(client, buf, sizeof(buf), 0);
         if (n <= 0) break;
         request.append(buf, n);
@@ -14468,7 +14782,8 @@ static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, AccountE
 }
 
 // src/history/journal.h
-// Local usage-history journal and its recording consent. Takes no UI or auth locks.
+// Local usage-history journal and its recording consent, in this Windows user's part of the mod's
+// Windhawk storage (core/user-storage.h). Takes no UI or auth locks.
 
 struct HistoryFileHeader {
     uint64_t magic = 0x3154534948514941ULL;  // AIQHIST1
@@ -14485,7 +14800,7 @@ static std::deque<HistorySample> g_historySamples;
 // Let incremental readers (burn-up curves, the history window's refresh) mirror
 // g_historySamples: they copy only samples appended since their last copy while the revision is
 // unchanged. The revision changes when samples are loaded, evicted by the size cap, pruned by
-// retention or deleted with their account; Clear changes g_historyEpoch.
+// retention or thinning or deleted with their account; Clear changes g_historyEpoch.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
 static HistoryJournalError g_historyStatus = HistoryJournalError::None;
@@ -14496,6 +14811,13 @@ static bool g_historyWritable = true;
 static bool g_historyDirty = false;
 static ULONGLONG g_historyMaintenanceMs = 0;
 static ULONGLONG g_historyWriteRetryMs = 0;
+// When Antigravity thinning (history/thinning.h) last ran since the load; 0: not yet.
+static ULONGLONG g_historyThinnedMs = 0;
+// Whether this process settled what older versions left in LocalAppData (moved, cleaned up or
+// kept), so later loads skip it.
+static bool g_historyLegacySettled = false;
+// The journal folder's history.lock, held exclusively from the first load (or the fetch thread's
+// start, PrepareHistoryStorage) until unload.
 static winrt::file_handle g_historyOwnership;
 
 // Each change of the status notifies the settings and history windows (a posted message).
@@ -14515,63 +14837,279 @@ static uint64_t HistoryChecksum(const HistorySample& sample) {
     return hash;
 }
 
+// What older versions left in `legacy` (LocalAppData\TaskbarAIQuota\<mod ID>: the journal, its
+// lock, the notifications' icon), moved into this user's folder or cleaned up. Caller holds
+// g_historyMutex and the journal's ownership. Under the old lock, taken exclusively as older
+// versions take it:
+// - Without a journal here, the old one is copied to a staging file beside g_historyPath, flushed
+//   and moved into place (never over a file), its provenance (size, last write time, contents'
+//   hash) stored in Windhawk storage, then the old journal deleted.
+// - With one here (a plain file, held open meanwhile), the old journal goes only when it matches
+//   that provenance or this journal byte for byte. Any other (a downgrade's own journal) is kept
+//   and never merged.
+// Once the old journal is gone: the old lock, then the icon and the emptied folders, then the
+// provenance. Only not-found counts as absent: an inspection error keeps the old files and never
+// starts a fresh journal, nor does an old lock held by an older version. Returns what stops the
+// load (None: load g_historyPath). A failure before the move leaves the old files as they were,
+// and later loads retry it, as they do the cleanup after it. `create` (recording's loads) retries a
+// failed copy only hourly.
+static HistoryJournalError MoveLegacyHistoryLocked(const std::wstring& legacy, bool create) {
+    using enum HistoryJournalError;
+    auto absent = [](DWORD error) { return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND; };
+    DWORD error = GetFileAttributesW(g_historyPath.c_str()) == INVALID_FILE_ATTRIBUTES ? GetLastError() : 0;
+    if (error && !absent(error)) return None;  // The load reports it.
+    const bool fresh = error != 0;  // No journal here yet.
+    // Loaded samples are the journal: one moved in now wouldn't be in memory.
+    if (fresh && g_historyLoaded) return None;
+    if (legacy.empty()) return fresh ? Unavailable : None;  // Unknown, not absent: never settled.
+    const std::wstring sid = CurrentUserSid();
+    const std::wstring provenanceName = L"historyMigratedFrom_" + sid;
+    struct Provenance {
+        uint64_t size, written, hash;
+    };
+    auto clearProvenance = [&] {
+        BYTE stored[64];
+        if (!sid.empty() && Wh_GetBinaryValue(provenanceName.c_str(), stored, sizeof(stored))) {
+            Wh_DeleteValue(provenanceName.c_str());
+        }
+    };
+    if (GetFileAttributesW(legacy.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        error = GetLastError();
+        if (!absent(error)) {
+            Wh_Log(L"Could not inspect the earlier history folder: %lu", error);
+            return fresh ? CannotRead : None;
+        }
+        clearProvenance();
+        g_historyLegacySettled = true;
+        return None;
+    }
+    const std::wstring journal = legacy + L"\\usage-history-v1.bin";
+    winrt::file_handle lock{CreateFileW((legacy + L"\\history.lock").c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0,
+                                        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!lock) {
+        // An older version holds it (another session, or a downgrade still running), possibly
+        // before it wrote its journal: no journal may start here meanwhile.
+        Wh_Log(L"The earlier history folder is in use (%lu); retrying later", GetLastError());
+        return fresh ? InUse : None;
+    }
+    // Reads `file` from its start in chunks, passing each to `use` (false stops); whether it read to
+    // its end.
+    std::vector<BYTE> buffer(1 << 20);
+    auto eachChunk = [&](HANDLE file, auto&& use) {
+        LARGE_INTEGER start{};
+        if (!SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) return false;
+        for (;;) {
+            DWORD read = 0;
+            if (g_unloading || !ReadFile(file, buffer.data(), DWORD(buffer.size()), &read, nullptr)) return false;
+            if (!read) return true;
+            if (!use(buffer.data(), read)) return false;
+        }
+    };
+    auto fnv = [](uint64_t hash, const BYTE* bytes, DWORD count) {
+        for (DWORD i = 0; i < count; ++i) hash = (hash ^ bytes[i]) * 1099511628211ULL;
+        return hash;
+    };
+    winrt::file_handle source{CreateFileW(journal.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                          FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!source && !absent(error = GetLastError())) {
+        Wh_Log(L"Could not open the earlier history journal: %lu", error);
+        return fresh ? CannotRead : None;
+    }
+    if (source) {
+        // The journal here, once checked to be a file of its own, held until the old one is gone.
+        winrt::file_handle current;
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (!GetFileInformationByHandle(source.get(), &info)) {
+            Wh_Log(L"Could not inspect the earlier history journal: %lu", GetLastError());
+            return fresh ? CannotRead : None;
+        }
+        Provenance found{(uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow,
+                         (uint64_t(info.ftLastWriteTime.dwHighDateTime) << 32) | info.ftLastWriteTime.dwLowDateTime,
+                         1469598103934665603ULL};
+        if (fresh) {
+            if (create && NowUnixMs() < g_historyWriteRetryMs) return CannotWrite;
+            std::wstring staging;
+            winrt::file_handle copy = CreateUserStagingFile(g_historyPath, staging);
+            uint64_t copied = 0;
+            bool ok = copy && eachChunk(source.get(), [&](const BYTE* bytes, DWORD count) {
+                found.hash = fnv(found.hash, bytes, count);
+                copied += count;
+                DWORD written = 0;
+                return WriteFile(copy.get(), bytes, count, &written, nullptr) && written == count;
+            }) && copied == found.size && FlushFileBuffers(copy.get());
+            copy.close();
+            ok = ok && MoveFileExW(staging.c_str(), g_historyPath.c_str(), MOVEFILE_WRITE_THROUGH);
+            if (!ok) {
+                error = GetLastError();
+                if (!staging.empty()) DeleteFileW(staging.c_str());
+                Wh_Log(L"Could not move the earlier history journal: %lu", error);
+                g_historyWriteRetryMs = NowUnixMs() + 3600000;
+                return CannotWrite;
+            }
+            g_historyWriteRetryMs = 0;
+            Wh_Log(L"Moved the history journal into the mod's storage");
+            if (sid.empty() || !Wh_SetBinaryValue(provenanceName.c_str(), &found, sizeof(found))) {
+                Wh_Log(L"Could not store the moved journal's provenance");
+            }
+        } else {
+            // A link here to the old journal would match it: only a plain file counts.
+            current = OpenUserStorageFile(g_historyPath, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING);
+            if (!current) {
+                Wh_Log(L"Could not inspect the history journal (%lu); kept the earlier one", GetLastError());
+                return None;
+            }
+            // Read: every comparison ran to its answer, so a mismatch is a difference, not an error.
+            Provenance stored{};
+            bool read = true, matches = false;
+            if (!sid.empty() && Wh_GetBinaryValue(provenanceName.c_str(), &stored, sizeof(stored)) == sizeof(stored) &&
+                stored.size == found.size && stored.written == found.written) {
+                read = eachChunk(source.get(), [&](const BYTE* bytes, DWORD count) {
+                    found.hash = fnv(found.hash, bytes, count);
+                    return true;
+                });
+                matches = read && found.hash == stored.hash;
+            }
+            LARGE_INTEGER size{};
+            if (!matches && read) read = GetFileSizeEx(current.get(), &size);
+            if (!matches && read && uint64_t(size.QuadPart) == found.size) {
+                std::vector<BYTE> other(buffer.size());
+                bool differs = false;
+                matches = eachChunk(source.get(), [&](const BYTE* bytes, DWORD count) {
+                    DWORD got = 0;
+                    if (!ReadFile(current.get(), other.data(), count, &got, nullptr) || got != count) return false;
+                    differs = memcmp(bytes, other.data(), count) != 0;
+                    return !differs;
+                });
+                read = matches || differs;
+            }
+            if (!matches) {
+                if (read) {
+                    Wh_Log(L"Kept the earlier history journal %s: it differs from the current one, which doesn't "
+                           L"merge it", journal.c_str());
+                    g_historyLegacySettled = true;
+                } else {
+                    Wh_Log(L"Could not compare the earlier history journal; kept it");
+                }
+                return None;
+            }
+        }
+        source.close();
+        if (!DeleteFileW(journal.c_str())) {
+            Wh_Log(L"Could not delete the earlier history journal (%lu); retrying later", GetLastError());
+            return None;
+        }
+    }
+    // The old journal is gone: its leftover rewrite, the old lock, the icon and the emptied
+    // folders, then the provenance.
+    DeleteFileW((journal + L".tmp").c_str());
+    FILE_DISPOSITION_INFO dispose{TRUE};
+    SetFileInformationByHandle(lock.get(), FileDispositionInfo, &dispose, sizeof(dispose));
+    lock.close();
+    for (PCWSTR name : {L"\\notification-icon.png", L"\\notification-icon.png.tmp"}) {
+        DeleteFileW((legacy + name).c_str());
+    }
+    RemoveDirectoryW(legacy.c_str());
+    RemoveDirectoryW(legacy.substr(0, legacy.rfind(L'\\')).c_str());
+    clearProvenance();
+    g_historyLegacySettled = true;
+    return None;
+}
+
+// Takes this user's journal folder for this process: g_historyPath, its ownership (history.lock,
+// held exclusively until unload, so separate Explorer processes, reloads or sessions never compact
+// each other's journal; the OS releases it even after a shell crash), then what older versions
+// left (MoveLegacyHistoryLocked). Without `create`, nothing is created while nothing was recorded,
+// here or by an older version. Returns whether the journal can be loaded; otherwise the status
+// says why (none: nothing recorded yet) and g_historyWritable is false. Caller holds
+// g_historyMutex.
+static bool OwnHistoryStorageLocked(bool create) {
+    std::wstring legacy;
+    if (!g_historyLegacySettled) {
+        PWSTR localAppData = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr, &localAppData))) {
+            legacy = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
+        }
+        CoTaskMemFree(localAppData);
+    }
+    auto fail = [](HistoryJournalError status) {
+        g_historyWritable = false;
+        SetHistoryStatus(status);
+        return false;
+    };
+    if (!g_historyOwnership) {
+        const std::wstring folder = UserStorageFolder();
+        if (folder.empty()) return fail(HistoryJournalError::Unavailable);
+        g_historyPath = folder + L"\\usage-history-v1.bin";
+        auto missing = [](const std::wstring& path) {
+            if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return false;
+            DWORD error = GetLastError();
+            return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+        };
+        if (!create && missing(g_historyPath) && (g_historyLegacySettled || (!legacy.empty() && missing(legacy)))) {
+            return false;
+        }
+        if (DWORD error = PrepareUserStorageFolder(folder)) {
+            return fail(error == ERROR_REPARSE_POINT_ENCOUNTERED ? HistoryJournalError::Unavailable :
+                                                                   HistoryJournalError::CannotCreateDirectory);
+        }
+        g_historyOwnership = OpenUserStorageFile(folder + L"\\history.lock", GENERIC_READ | GENERIC_WRITE, 0, OPEN_ALWAYS);
+        if (!g_historyOwnership) {
+            // In use: retried once the overlapping Explorer session exits.
+            return fail(GetLastError() == ERROR_REPARSE_POINT_ENCOUNTERED ? HistoryJournalError::Unavailable :
+                                                                            HistoryJournalError::InUse);
+        }
+        DeleteStaleStagingFiles(g_historyPath);
+    }
+    if (g_historyLegacySettled) return true;
+    HistoryJournalError status = HistoryJournalError::None;
+    try {
+        status = MoveLegacyHistoryLocked(legacy, create);
+    } catch (...) {
+        Wh_Log(L"Could not check the earlier history folder");
+        status = GetFileAttributesW(g_historyPath.c_str()) == INVALID_FILE_ATTRIBUTES ? HistoryJournalError::CannotRead :
+                                                                                       HistoryJournalError::None;
+    }
+    return status == HistoryJournalError::None || fail(status);
+}
+
+// Before Clear or an account's deletion of a loaded journal: settles what older versions left
+// (OwnHistoryStorageLocked, which never moves a journal in once loaded), so a moved journal's old
+// copy can't come back later, as after the mod's removal and a reinstall. Whether it is settled.
+static bool SettleLegacyHistoryLocked() {
+    if (g_historyLoaded && !g_historyLegacySettled) OwnHistoryStorageLocked(false);
+    return !g_historyLoaded || g_historyLegacySettled;
+}
+
+// Once from the taskbar's fetch thread at start, recording or not: takes the journal's storage as
+// a load does (OwnHistoryStorageLocked: what older versions left moves in or is cleaned up),
+// reading no samples. A read-only take: nothing recorded anywhere creates nothing.
+static void PrepareHistoryStorage() {
+    try {
+        std::lock_guard lock(g_historyMutex);
+        if (!g_historyLoaded && !g_unloading) OwnHistoryStorageLocked(false);
+    } catch (...) {
+        Wh_Log(L"Could not prepare history storage");
+    }
+}
+
 // Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear. Reads
 // the whole journal whatever the retention: maintenance and appends apply it.
 static void LoadHistoryLocked(bool create = false) {
     if (g_historyLoaded) return;
-    g_historyLoaded = true;
-    ++g_historyRevision;
     g_historyWritable = true;
     SetHistoryStatus({});
-    PWSTR localAppData = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &localAppData))) {
-        g_historyWritable = false;
-        SetHistoryStatus(HistoryJournalError::Unavailable);
-        return;
-    }
-    std::wstring directory = localAppData;
-    CoTaskMemFree(localAppData);
-    // Windhawk's writable mod directory is shared across Windows users. Work-pattern
-    // history belongs under the current user's profile, with its inherited private ACL.
-    directory += L"\\TaskbarAIQuota";
-    g_historyPath = directory + L"\\" WH_MOD_ID L"\\usage-history-v1.bin";
-    if (!create && GetFileAttributesW(g_historyPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        DWORD error = GetLastError();
-        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
-            g_historyLoaded = false;
-            return;  // A read-only visit before opt-in must not create a directory or lock.
-        }
-    }
-    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
-        g_historyWritable = false;
-        SetHistoryStatus(HistoryJournalError::CannotCreateDirectory);
-        return;
-    }
-    directory += L"\\" WH_MOD_ID;
-    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
-        g_historyWritable = false;
-        SetHistoryStatus(HistoryJournalError::CannotCreateDirectory);
-        return;
-    }
-    g_historyPath = directory;
-    g_historyPath += L"\\usage-history-v1.bin";
-    // Separate Explorer processes, reloads, or sessions must never compact each other's
-    // journal. The OS releases this exclusive ownership handle even after a shell crash.
-    std::wstring lockPath = directory + L"\\history.lock";
-    g_historyOwnership.attach(CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE,
-        0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!g_historyOwnership) {
-        g_historyLoaded = false;  // Retry after an overlapping Explorer session exits.
-        g_historyWritable = false;
-        SetHistoryStatus(HistoryJournalError::InUse);
-        return;
-    }
-    winrt::file_handle file{CreateFileW(g_historyPath.c_str(), GENERIC_READ,
-        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!OwnHistoryStorageLocked(create)) return;
+    g_historyLoaded = true;
+    ++g_historyRevision;
+    g_historyThinnedMs = 0;
+    // A link in the journal's place is refused, never read as missing or someone else's journal.
+    winrt::file_handle file = OpenUserStorageFile(g_historyPath, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING);
     if (!file) {
-        if (GetLastError() != ERROR_FILE_NOT_FOUND) {
+        DWORD error = GetLastError();
+        if (error != ERROR_FILE_NOT_FOUND) {
             g_historyWritable = false;
-            SetHistoryStatus(HistoryJournalError::CannotRead);
+            SetHistoryStatus(error == ERROR_REPARSE_POINT_ENCOUNTERED ? HistoryJournalError::Unavailable :
+                                                                        HistoryJournalError::CannotRead);
         }
         return;
     }
@@ -14646,12 +15184,12 @@ static void LoadHistoryLocked(bool create = false) {
     if (count) g_historyWritable = false;  // Unload stopped it part-way: never save that part.
 }
 
-// Atomically replaces the journal with `samples`, except those of `skippedAccount` (0: none).
+// Atomically replaces the journal with `samples`, except those of `skippedAccount` (0: none):
+// written to a new staging file, then moved over it.
 static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint64_t skippedAccount = 0) {
     if (g_historyPath.empty() || !g_historyOwnership) return false;
-    std::wstring temporary = g_historyPath + L".tmp";
-    winrt::file_handle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr,
-        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    std::wstring temporary;
+    winrt::file_handle file = CreateUserStagingFile(g_historyPath, temporary);
     if (!file) {
         SetHistoryStatus(HistoryJournalError::CannotWrite);
         g_historyWriteRetryMs = NowUnixMs() + 3600000;
@@ -14690,7 +15228,8 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
 }
 
 // At most hourly: prunes samples older than the published retention and, for a number of days,
-// beyond the size cap; then saves an unsaved journal.
+// beyond the size cap, thins older Antigravity readings (ThinHistorySamples: at the first
+// maintenance after a load, then daily), then saves an unsaved journal.
 static ULONGLONG MaintainHistory(bool create = false) {
     try {
         std::lock_guard lock(g_historyMutex);
@@ -14716,6 +15255,17 @@ static ULONGLONG MaintainHistory(bool create = false) {
         if (g_historySamples.size() != previousSize) {
             g_historyDirty = true;
             ++g_historyRevision;
+        }
+        // Built aside and swapped in: running out of memory leaves the journal as it was. Only a
+        // whole, saveable journal is thinned.
+        if (g_historyLoaded && g_historyWritable && !g_unloading &&
+            (!g_historyThinnedMs || now >= g_historyThinnedMs + kHistoryDayMs)) {
+            g_historyThinnedMs = now;
+            if (auto thinned = ThinHistorySamples(g_historySamples, now)) {
+                g_historySamples.swap(*thinned);
+                g_historyDirty = true;
+                ++g_historyRevision;
+            }
         }
         if (g_historyDirty && g_historyWritable && !g_unloading && now >= g_historyWriteRetryMs) {
             RewriteHistoryLocked(g_historySamples);
@@ -14780,8 +15330,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t ep
             if (now >= g_historyWriteRetryMs) RewriteHistoryLocked(g_historySamples);
             return;
         }
-        winrt::file_handle file{CreateFileW(g_historyPath.c_str(), FILE_APPEND_DATA | FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        winrt::file_handle file = OpenUserStorageFile(g_historyPath, FILE_APPEND_DATA, FILE_SHARE_READ, OPEN_ALWAYS);
         LARGE_INTEGER size{};
         DWORD written = 0;
         bool ok = file && GetFileSizeEx(file.get(), &size);
@@ -14848,7 +15397,13 @@ static bool ClearHistory(HistoryJournalError* error) {
         g_historySamples.clear();
         return true;  // Nothing has ever been recorded; Clear is an idempotent no-op.
     }
-    if (!RewriteHistoryLocked({})) {
+    // Storage that couldn't be taken (in use, unavailable, an earlier version's journal not moved
+    // yet), or an old copy of the moved journal that can't be deleted yet, stays as it is.
+    if (!SettleLegacyHistoryLocked()) {
+        if (error) *error = HistoryJournalError::InUse;
+        return false;
+    }
+    if ((!g_historyLoaded && !g_historyWritable) || !RewriteHistoryLocked({})) {
         if (error) {
             *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
         }
@@ -14892,7 +15447,12 @@ static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error)
         }
         bool present = std::any_of(g_historySamples.begin(), g_historySamples.end(),
                                    [&](const HistorySample& sample) { return sample.accountId == historyId; });
-        // An unload can stop a load part-way: never rewrite what it left.
+        // An unload can stop a load part-way: never rewrite what it left. An old copy of the moved
+        // journal that can't be deleted yet keeps it too.
+        if (!SettleLegacyHistoryLocked()) {
+            if (error) *error = HistoryJournalError::InUse;
+            return false;
+        }
         bool kept = !g_historyLoaded || !g_historyWritable || g_unloading;
         if (!kept && !present && !g_historyDirty) return true;
         if (kept || !RewriteHistoryLocked(g_historySamples, historyId)) {
@@ -14908,27 +15468,32 @@ static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error)
     return true;
 }
 
-// Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared. Recording is on
-// until this user turns it off, which stores 0.
+// Consent is per Windows user, a value in Windhawk storage named after the user's SID
+// (core/user-storage.h); settings_v1 is machine-shared. Recording is on until this user turns it
+// off, which stores 0. Without the Windhawk value, the HKCU one older versions wrote, rereading the
+// Windhawk value once after finding that absent: the taskbar's process may have just moved it.
 static bool ReadHistoryConsent() {
+    const std::wstring sid = CurrentUserSid();
+    const std::wstring name = kConsentValuePrefix + sid;
+    auto stored = [&] { return sid.empty() ? -1 : Wh_GetIntValue(name.c_str(), -1); };
+    if (int value = stored(); value != -1) return value == 1;
     DWORD value = 0;
     DWORD size = sizeof(value);
-    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kUserRegistryKey, L"RecordHistory",
-                                  RRF_RT_REG_DWORD, nullptr, &value, &size);
-    if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) return true;
+    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kLegacyUserRegistryKey, kLegacyConsentValue, RRF_RT_REG_DWORD,
+                                  nullptr, &value, &size);
+    if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) {
+        int moved = stored();
+        return moved == -1 || moved == 1;
+    }
     return result == ERROR_SUCCESS && size == sizeof(value) && value == 1;
 }
 
+// Stores consent under UserPreferencesLock; fails, writing nothing, when the lock can't be had.
 static bool WriteHistoryConsent(bool enabled) {
-    HKEY key = nullptr;
-    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kUserRegistryKey, 0, nullptr, 0,
-                                     KEY_SET_VALUE, nullptr, &key, nullptr);
-    if (result != ERROR_SUCCESS) return false;
-    DWORD value = enabled ? 1 : 0;
-    result = RegSetValueExW(key, L"RecordHistory", 0, REG_DWORD,
-                          reinterpret_cast<const BYTE*>(&value), sizeof(value));
-    RegCloseKey(key);
-    return result == ERROR_SUCCESS;
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) return false;
+    UserPreferencesLock lock(sid);
+    return lock.held && Wh_SetIntValue((kConsentValuePrefix + sid).c_str(), enabled ? 1 : 0);
 }
 
 // src/history/continuity.h
@@ -14981,19 +15546,120 @@ static HistoryBreak HistoryWindowConnection(const HistorySample& a, const Histor
     return HistoryBreak::None;
 }
 
+// Whether readings a and b, b later, lie apart in polling: another account, provider or session,
+// out of order, or more than two of their longer interval apart.
+static bool HistoryPollingGap(const HistorySample& a, const HistorySample& b) {
+    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
+        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
+        return true;
+    ULONGLONG gap = b.timeMs - a.timeMs;
+    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
+    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
+    return gap / 2 + gap % 2 > polling;
+}
+
 // Shared by rendering and integration: no extrapolation, including at range boundaries.
 static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySample& b,
                                       int meter) {
     if (!HistoryHasValue(a, meter) || !HistoryHasValue(b, meter))
         return HistoryBreak::Unavailable;
-    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
-        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
-        return HistoryBreak::Gap;
-    ULONGLONG gap = b.timeMs - a.timeMs;
-    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
-    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
-    if (gap / 2 + gap % 2 > polling) return HistoryBreak::Gap;
+    if (HistoryPollingGap(a, b)) return HistoryBreak::Gap;
     return HistoryWindowConnection(a, b, meter);
+}
+
+// src/history/thinning.h
+// Thinning of older Antigravity readings: it is polled every minute whatever the poll setting, so
+// its readings older than kHistoryThinAgeMs are kept about kHistoryThinSpacingMs apart (a thinned
+// reading stores that as its interval), with every line the history window draws through them
+// still connected, and every break still a break. Pure.
+
+static constexpr ULONGLONG kHistoryThinAgeMs = 15 * kHistoryDayMs;
+static constexpr ULONGLONG kHistoryThinSpacingMs = 600000;
+
+// The journal with each Antigravity account's readings older than kHistoryThinAgeMs at `nowMs`
+// thinned, every other sample as it was, all in their order; nullopt when nothing changes. Per
+// account, over all those readings (thinned ones included), with their stored intervals:
+// - Kept: the first and the last, failed ones, and both readings of each break between
+//   consecutive ones: a polling gap (HistoryPollingGap), a meter gaining or losing its value, the
+//   failed flag changing, or a reset (HistoryWindowConnection) of a meter valued in both.
+// - Any other is dropped only when it comes less than kHistoryThinSpacingMs after the last kept
+//   reading and, on every meter its readings connect from that one to the next, the last kept one
+//   (at its interval once widened) connects straight to the next (at its stored interval).
+// - Kept readings are widened to kHistoryThinSpacingMs, their checksum recomputed, except the last,
+//   failed ones and those beside a polling gap.
+static std::optional<std::deque<HistorySample>> ThinHistorySamples(const std::deque<HistorySample>& samples,
+                                                                   ULONGLONG nowMs) {
+    const ULONGLONG cutoff = nowMs > kHistoryThinAgeMs ? nowMs - kHistoryThinAgeMs : 0;
+    std::map<uint64_t, std::vector<size_t>> runs;  // Each account's readings to thin, by index
+    for (size_t i = 0; i < samples.size(); ++i) {
+        if (samples[i].provider == 3 && samples[i].timeMs < cutoff) runs[samples[i].accountId].push_back(i);
+    }
+    enum class Fate : uint8_t { Kept, Dropped, Widened };
+    std::vector<Fate> fates(samples.size());
+    bool changed = false;
+    for (const auto& [account, run] : runs) {
+        const size_t n = run.size();
+        auto at = [&](size_t k) -> const HistorySample& { return samples[run[k]]; };
+        // Between readings k - 1 and k: a polling gap, or any break.
+        std::vector<bool> gap(n + 1), split(n + 1);
+        for (size_t k = 1; k < n; ++k) {
+            const HistorySample& a = at(k - 1);
+            const HistorySample& b = at(k);
+            gap[k] = HistoryPollingGap(a, b);
+            split[k] = gap[k] || a.failed != b.failed;
+            for (int m = 0; m < int(kHistoryMeterCount) && !split[k]; ++m) {
+                bool valued = HistoryHasValue(a, m);
+                split[k] = valued != HistoryHasValue(b, m) ||
+                           (valued && HistoryWindowConnection(a, b, m) == HistoryBreak::Reset);
+            }
+        }
+        auto widens = [&](size_t k) { return k + 1 < n && !gap[k] && !gap[k + 1] && !at(k).failed; };
+        size_t last = 0;
+        // Per meter: whether the readings connect from the last kept one to the current one.
+        std::array<bool, kHistoryMeterCount> chain;
+        chain.fill(true);
+        for (size_t k = 1; k + 1 < n; ++k) {
+            const HistorySample& reading = at(k);
+            const HistorySample& next = at(k + 1);
+            for (int m = 0; m < int(kHistoryMeterCount); ++m) {
+                chain[m] = chain[m] && HistoryConnection(at(k - 1), reading, m) == HistoryBreak::None;
+            }
+            bool drop = !reading.failed && !split[k] && !split[k + 1] &&
+                        reading.timeMs < at(last).timeMs + kHistoryThinSpacingMs;
+            if (drop) {
+                HistorySample kept = at(last);
+                if (widens(last)) kept.intervalMs = std::max(kept.intervalMs, kHistoryThinSpacingMs);
+                for (int m = 0; m < int(kHistoryMeterCount) && drop; ++m) {
+                    drop = !chain[m] || HistoryConnection(reading, next, m) != HistoryBreak::None ||
+                           HistoryConnection(kept, next, m) == HistoryBreak::None;
+                }
+            }
+            if (drop) {
+                fates[run[k]] = Fate::Dropped;
+                changed = true;
+            } else {
+                last = k;
+                chain.fill(true);
+            }
+        }
+        for (size_t k = 0; k < n; ++k) {
+            if (fates[run[k]] == Fate::Kept && widens(k) && at(k).intervalMs < kHistoryThinSpacingMs) {
+                fates[run[k]] = Fate::Widened;
+                changed = true;
+            }
+        }
+    }
+    if (!changed) return std::nullopt;
+    std::deque<HistorySample> thinned;
+    for (size_t i = 0; i < samples.size(); ++i) {
+        if (fates[i] == Fate::Dropped) continue;
+        HistorySample& sample = thinned.emplace_back(samples[i]);
+        if (fates[i] == Fate::Widened) {
+            sample.intervalMs = kHistoryThinSpacingMs;
+            sample.checksum = HistoryChecksum(sample);
+        }
+    }
+    return thinned;
 }
 
 // src/history/burn-up.h
@@ -15956,12 +16622,17 @@ static HWND g_notifyWnd = nullptr;
 static const UINT kNotifyIconId = 1;
 static PCWSTR kNotifyClassName = L"AiQuotaNotify_" WH_MOD_ID;
 
-// The toasts' app identity (AppUserModelID), its name and icon registered under its HKCU key while
-// notifications are on. The mod ID keeps local and catalog copies apart. The icon file sits in the
-// per-user folder history uses; Windows caches it by path, so a changed app icon needs a new name.
+// The toasts' app identity (AppUserModelID): its name and icon registered once per fetch thread
+// under a volatile HKCU key, which Windows drops at sign-out, and removed while notifications are
+// off and at unload. The mod ID keeps local and catalog copies apart. The icon file sits in this
+// user's storage folder (core/user-storage.h); Windows caches it by path, so a changed app icon
+// needs a new name.
 static constexpr PCWSTR kToastAppId = L"Windhawk.TaskbarAIQuota." WH_MOD_ID;
+static constexpr PCWSTR kToastAppIdParent = L"Software\\Classes\\AppUserModelId";
 static constexpr PCWSTR kToastAppIdKey = L"Software\\Classes\\AppUserModelId\\Windhawk.TaskbarAIQuota." WH_MOD_ID;
 static constexpr PCWSTR kToastIconFile = L"notification-icon.png";
+// Fetch-thread-owned: whether this fetch thread registered the app identity, name and icon.
+static bool g_toastAppIdRegistered = false;
 
 // Fetch-thread only. Drops the tray icon, window, and class created on demand.
 static void RemoveNotifyIcon() {
@@ -15977,10 +16648,13 @@ static void RemoveNotifyIcon() {
 }
 
 // Fetch-thread only. Deletes the toasts' app identity; Windows keeps its own notification settings
-// for it. Returns whether it is gone.
+// for it. Returns whether it is gone; the next toast registers it again.
 static bool RemoveToastAppId() {
     LSTATUS status = RegDeleteTreeW(HKEY_CURRENT_USER, kToastAppIdKey);
-    if (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND) return true;
+    if (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND) {
+        g_toastAppIdRegistered = false;
+        return true;
+    }
     Wh_Log(L"Could not remove the notifications' app identity: %ld", status);
     return false;
 }
@@ -16078,7 +16752,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
         return e.code() == HRESULT(0x803E0111) || e.code() == HRESULT(0x803E0114);
     };
     // Toast: unless Windows has them off, register the app identity with its icon (without one
-    // Windows shows a generic icon), then show it.
+    // Windows shows a generic icon) once per fetch thread, then show it.
     try {
         namespace notifications = winrt::Windows::UI::Notifications;
         notifications::ToastNotifier notifier =
@@ -16096,35 +16770,60 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
             }
         }
 
-        std::wstring icon;
-        PWSTR localAppData = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &localAppData))) {
-            std::wstring folder = std::wstring(localAppData) + L"\\TaskbarAIQuota";
-            CreateDirectoryW(folder.c_str(), nullptr);
-            folder += L"\\" WH_MOD_ID;
-            CreateDirectoryW(folder.c_str(), nullptr);
-            icon = folder + L"\\" + kToastIconFile;
-            if (GetFileAttributesW(icon.c_str()) == INVALID_FILE_ATTRIBUTES && !SaveAppIconPng(icon)) icon.clear();
-        }
-        CoTaskMemFree(localAppData);
-
-        HKEY key = nullptr;
-        LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAppIdKey, 0, nullptr, 0, KEY_SET_VALUE,
-                                         nullptr, &key, nullptr);
-        if (status == ERROR_SUCCESS) {
-            auto setValue = [key](PCWSTR name, const std::wstring& value) {
-                return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()),
-                                      DWORD((value.size() + 1) * sizeof(wchar_t)));
-            };
-            status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
-            if (status == ERROR_SUCCESS && !icon.empty()) {
-                if (LSTATUS iconStatus = setValue(L"IconUri", icon); iconStatus != ERROR_SUCCESS) {
-                    Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
+        if (!g_toastAppIdRegistered) {
+            // The icon: drawn once, written to a staging file, then moved into place.
+            std::wstring icon;
+            const std::wstring folder = UserStorageFolder();
+            if (!PrepareUserStorageFolder(folder)) {
+                icon = folder + L"\\" + kToastIconFile;
+                if (GetFileAttributesW(icon.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                    DeleteStaleStagingFiles(icon);
+                    std::vector<BYTE> png = AppIconPng();
+                    std::wstring staging;
+                    winrt::file_handle file;
+                    if (!png.empty()) file = CreateUserStagingFile(icon, staging);
+                    DWORD written = 0;
+                    bool saved = file && WriteFile(file.get(), png.data(), DWORD(png.size()), &written, nullptr) &&
+                                 written == png.size();
+                    file.close();
+                    if (!saved || !MoveFileExW(staging.c_str(), icon.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                        if (!staging.empty()) DeleteFileW(staging.c_str());
+                        Wh_Log(L"Could not write the notification icon");
+                        icon.clear();
+                    }
                 }
             }
-            RegCloseKey(key);
+            // REG_OPTION_VOLATILE is ignored for an existing key, so a lasting one an earlier
+            // version left goes first. The parent stays lasting: other apps can't add lasting
+            // keys under a volatile one.
+            HKEY key = nullptr;
+            LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAppIdParent, 0, nullptr, 0, KEY_CREATE_SUB_KEY,
+                                             nullptr, &key, nullptr);
+            if (status == ERROR_SUCCESS) {
+                RegCloseKey(key);
+                status = RegDeleteTreeW(HKEY_CURRENT_USER, kToastAppIdKey);
+                if (status == ERROR_FILE_NOT_FOUND) status = ERROR_SUCCESS;
+            }
+            if (status == ERROR_SUCCESS) {
+                status = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAppIdKey, 0, nullptr, REG_OPTION_VOLATILE,
+                                         KEY_SET_VALUE, nullptr, &key, nullptr);
+            }
+            if (status == ERROR_SUCCESS) {
+                auto setValue = [key](PCWSTR name, PCWSTR value) {
+                    return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value),
+                                          DWORD((wcslen(value) + 1) * sizeof(wchar_t)));
+                };
+                status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
+                LSTATUS iconStatus = icon.empty() ? ERROR_FILE_NOT_FOUND : setValue(L"IconUri", icon.c_str());
+                if (status == ERROR_SUCCESS && iconStatus != ERROR_SUCCESS) {
+                    Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
+                }
+                // A missing icon retries with the next toast.
+                g_toastAppIdRegistered = status == ERROR_SUCCESS && iconStatus == ERROR_SUCCESS;
+                RegCloseKey(key);
+            }
+            winrt::check_win32(status);
         }
-        winrt::check_win32(status);
 
         winrt::Windows::Data::Xml::Dom::XmlDocument document;
         document.LoadXml(ThresholdToastXml(title, body, projection, url));
@@ -16520,6 +17219,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     // without unloading. The taskbar's process removes it while notifications are off and at
     // unload; a failed removal retries.
     bool toastAppIdMayExist = true;
+    g_toastAppIdRegistered = false;
+    // Whether this thread moved in what older versions kept outside Windhawk storage.
+    bool legacyMoved = false;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
@@ -16544,6 +17246,17 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         if (waitingForTaskbar) Wh_Log(L"This process owns the taskbar; polling");
         waitingForTaskbar = false;
+        // Once, recording or not: the preferences and journal older versions kept in HKCU and
+        // LocalAppData move into Windhawk storage.
+        if (!legacyMoved) {
+            legacyMoved = true;
+            try {
+                MigrateUserPreferences();
+            } catch (...) {
+                Wh_Log(L"Could not move the preferences");
+            }
+            PrepareHistoryStorage();
+        }
         if (g_historyIdsPendingSave) {
             // Init can run before the shell creates its taskbar. Persist the exact IDs
             // under the normal edit lock before any sample uses them, without history IO.
@@ -23031,10 +23744,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 });
             state.pointerHandlers.push_back({setupElement, tappedToken});
             SetXamlToolTip(setupElement,
-                           I18nText(locale, g_settingsLoadError.load() ?
+                           I18nText(locale, !g_settingsLoadError.load() ? Tr(L"Open AI quota settings") :
+                                            g_settingsLoadBackup.load() ?
                                                 Tr(L"Open AI quota settings. Stored settings could not be read; a "
                                                    L"backup was kept.") :
-                                                Tr(L"Open AI quota settings")),
+                                                Tr(L"Open AI quota settings. Stored settings could not be read.")),
                            locale);
 
             MenuFlyout menu;
@@ -24211,9 +24925,9 @@ static StartArea FindStartArea(FrameworkElement const& root) {
 //
 // Records belong to the taskbar window's thread, which alone adds, changes and removes them and
 // uses their weak references; the settings thread reads only the plain fields. The window's
-// destruction removes them. g_placementMutex is a leaf. Never destroyed: weak references still
-// held at unload are leaked. Side: the taskbar runs down a side of the screen, where the bars
-// don't go beside Start.
+// destruction removes them. g_placementMutex is a leaf. Never destroyed: unload clears what is left
+// (ClearPlacementRecords), leaking the weak references still held. Side: the taskbar runs down a
+// side of the screen, where the bars don't go beside Start.
 enum class PlacementFallback : uint8_t { None, Unavailable, Conflict, Side };
 
 struct PlacementRecord {
@@ -24298,6 +25012,21 @@ static void SetSideTaskbar(HWND hWnd, bool side, bool unsupported) {
         }
     }
     if (changed) NotifySettingsWindowChanged();
+}
+
+// Unload, once every taskbar's teardown ran (RemoveAllQuotaGrids(true)): the records left (a lost
+// margin, a fallback, a side taskbar) go with their storage. Each weak reference still held is
+// its owner thread's, never released here: it moves into a deliberately leaked heap copy, and if
+// that can't be allocated, the records stay as they are.
+static void ClearPlacementRecords() {
+    std::lock_guard<std::mutex> lock(g_placementMutex);
+    std::vector<SideTaskbarRecord>().swap(g_sideTaskbars);
+    for (PlacementRecord& record : g_placementRecords) {
+        if (record.element && !new (std::nothrow) winrt::weak_ref<FrameworkElement>(std::move(record.element))) {
+            return;
+        }
+    }
+    std::vector<PlacementRecord>().swap(g_placementRecords);
 }
 
 // Gives a margin back: without our contribution, unless another mod took it (the record then stays,
@@ -25543,10 +26272,14 @@ static void UiCreateGraphics(UiGraphics& g) {
     winrt::check_hresult(g.d2d->CreateStrokeStyle(&round, nullptr, 0, g.roundCaps.put()));
 }
 
-// Effect-free layouts accumulate while text changes; trimming between frames bounds them. No
-// layout pointer from UiLayout may be held across this call.
-static void UiTrimCaches(UiGraphics& g) {
+// Layouts accumulate while text changes, effect-free ones and each target's inked ones; trimming
+// between frames bounds them. No layout pointer from UiLayout, UiRichLayout or UiInkedLayout may be
+// held across this call.
+static void UiTrimCaches(UiGraphics& g, std::initializer_list<UiTargetCache*> targets = {}) {
     if (g.layouts.size() > 512) g.layouts.clear();
+    for (UiTargetCache* cache : targets) {
+        if (cache->layouts.size() > 512) cache->layouts.clear();
+    }
 }
 
 // A family's font collection, its name resolved (preferred, else fallback) on first use. The
@@ -25838,6 +26571,8 @@ static bool UiParseSvgPath(PCWSTR data, ID2D1GeometrySink* sink) {
                 sink->BeginFigure(current, D2D1_FIGURE_BEGIN_FILLED);
                 open = true;
                 command = relative ? L'l' : L'L';  // Further pairs are implicit lines.
+            } else {
+                command = 0;  // A close takes no numbers: one after it is malformed.
             }
             previous = upper;
             continue;
@@ -28859,10 +29594,10 @@ static void UiHostInvalidate(const UiHost& host) {
     if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
-// Paints main-surface item `id` now, from a handler that keeps the thread busy (no message loop
-// meanwhile): found by id each time, its rectangle invalidated and the main window painted nested
-// (no rebuild there; a lost target is recreated by that paint). Nothing while closing or faulted,
-// without the window or the item. Returns whether it painted.
+// Paints main-surface item `id` now, without a rebuild (an export's progress at each poll): found
+// by id each time, its rectangle invalidated and the main window painted nested in the caller's
+// handler (a lost target is recreated by that paint). Nothing while closing or faulted, without
+// the window or the item. Returns whether it painted.
 static bool UiHostPaintNow(UiHost& host, uint32_t id) {
     UiSurfaceId surface = UiSurfaceId::Content;
     const UiItem* item = host.closing || host.faulted || !host.main || !IsWindow(host.main) ? nullptr :
@@ -28908,7 +29643,8 @@ static void UiHostShowTooltip(UiHost& host, UiTooltipContent content, POINT curs
         UiTooltipHide(tip, host.main);
         return;
     }
-    UiTrimCaches(*host.graphics);
+    UiTrimCaches(*host.graphics, {&host.mainSurface.cache, &host.viewSurface.cache, &host.popup.surface.cache,
+                                  &host.tooltip.surface.cache});
     UiTooltipKey at;
     at.cursor = cursor;
     at.work = monitor.rcWork;
@@ -29390,7 +30126,8 @@ static void UiHostRebuildIfPending(UiHost& host) {
         RECT client{};
         GetClientRect(host.main, &client);
         float scale = UiHostScale(host);
-        UiTrimCaches(*host.graphics);
+        UiTrimCaches(*host.graphics, {&host.mainSurface.cache, &host.viewSurface.cache, &host.popup.surface.cache,
+                                      &host.tooltip.surface.cache});
         UiFrame frame;
         host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
         host.generation++;
@@ -31241,9 +31978,15 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
     }
 }
 
+// Set once a stored configuration of 32,767 characters or more loaded whole: this install's
+// storage reads long values back.
+static std::atomic<bool> g_settingsLongValuesRead{false};
+
+// Portable Windhawk's INI storage reads a value back truncated near 32,767 characters, so a longer
+// one would never load whole: it fails before writing, unless a long one already loaded here.
 static bool SaveOwnedSettings(const Settings& settings) {
     std::wstring json = SerializeSettings(settings);
-    if (json.empty() || json.size() >= 65535) {
+    if (json.empty() || json.size() >= (g_settingsLongValuesRead.load() ? 65535u : 32767u)) {
         Wh_Log(L"Settings save failed: serialization or size limit");
         return false;
     }
@@ -31261,7 +32004,11 @@ enum class OwnedSettingsLoadResult {
     Unreadable,
 };
 
-static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIdsChanged) {
+// Invalid also says whether the blob was backed up (settings_v1_invalid) and read whole (the
+// length its save recorded), which lets the first saved edit replace it without asking.
+static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIdsChanged, bool* backedUp,
+                                                 bool* readWhole) {
+    *backedUp = *readWhole = false;
     std::vector<wchar_t> buf(65536);
     size_t copied = Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size());
     if (!copied || !buf[0]) {
@@ -31286,11 +32033,14 @@ static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIds
         }
     }
     if (!DeserializeSettings(buf.data(), out, historyIdsChanged)) {
-        Wh_Log(L"Settings load failed: invalid stored configuration");
-        Wh_SetStringValue(L"settings_v1_invalid", buf.data());
+        *backedUp = Wh_SetStringValue(L"settings_v1_invalid", buf.data());
+        *readWhole = Wh_GetIntValue(kSettingsLengthStorageKey, 0) == (int)copied;
+        Wh_Log(L"Settings load failed: invalid stored configuration (%s, %s)",
+               *backedUp ? L"backed up" : L"backup failed", *readWhole ? L"read whole" : L"possibly truncated");
         return OwnedSettingsLoadResult::Invalid;
     }
     Wh_SetIntValue(kSettingsLengthStorageKey, (int)copied);
+    if (copied >= 32767) g_settingsLongValuesRead = true;
     return OwnedSettingsLoadResult::Loaded;
 }
 
@@ -31509,8 +32259,11 @@ enum class SettingsApplyResult {
     Changed,
 };
 
-static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity = 0,
-                                              uint64_t newIdentity = 0) {
+// `replaceBlocked` (optional): set when this call failed because its save would replace stored
+// settings the load couldn't read before anyone confirmed that (g_settingsReplaceAllowed).
+static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity = 0, uint64_t newIdentity = 0,
+                                              bool* replaceBlocked = nullptr) {
+    if (replaceBlocked) *replaceBlocked = false;
     Settings previous;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -31544,11 +32297,20 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     Settings sharedPrevious = previous;
     sharedPrevious.historyEnabled = s.historyEnabled;
     sharedPrevious.language = s.language;
-    const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || g_settingsLoadError;
+    // Stored settings the load couldn't read: the first shared save replaces them only once that
+    // is allowed (each load's recovery), and per-user-only edits save nothing shared until then.
+    const bool loadError = g_settingsLoadError, replaceAllowed = g_settingsReplaceAllowed;
+    const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || (loadError && replaceAllowed);
+    if (saveShared && loadError && !replaceAllowed) {
+        Wh_Log(L"Settings not saved: replacing the unreadable stored settings needs confirmation");
+        if (replaceBlocked) *replaceBlocked = true;
+        return SettingsApplyResult::Failed;
+    }
     if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
     // Save shared changes first, consent last: a failed save before it must never grant consent.
     // Per-user-only edits leave shared JSON untouched; a failed write takes back what this call
-    // saved. Registry calls are short and take no history locks.
+    // saved. Preference writes take no history locks; each waits at most 2 s for the per-user
+    // preferences lock another Explorer process may hold.
     const bool languageSaved = !languageChanged || WriteLanguagePreference(s.language);
     if (!languageSaved || (consentChanged && !WriteHistoryConsent(s.historyEnabled))) {
         if (languageChanged && languageSaved && !WriteLanguagePreference(previous.language)) {
@@ -31596,9 +32358,11 @@ static void LoadSettings() {
     s.language = language;
     SetCurrentLanguage(ResolveLanguage(language));
     g_settingsLoadError = false;
+    g_settingsLoadBackup = false;
+    g_settingsReplaceAllowed = false;
     g_historyIdsPendingSave = false;
-    bool historyIdsChanged = false;
-    OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged);
+    bool historyIdsChanged = false, backedUp = false, readWhole = false;
+    OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged, &backedUp, &readWhole);
     if (loadResult == OwnedSettingsLoadResult::Missing) {
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
@@ -31627,12 +32391,17 @@ static void LoadSettings() {
         }
     } else if (loadResult == OwnedSettingsLoadResult::Invalid ||
                loadResult == OwnedSettingsLoadResult::Unreadable) {
-        // Keep the invalid/future/unreadable blob intact. The setup tile opens with safe
-        // defaults; readable invalid blobs were also backed up above.
+        // Keep the invalid/future/unreadable blob intact. The setup tile opens with safe defaults,
+        // and no accounts, so no account command reaches a sign-in before a save replaced the
+        // blob. That save goes ahead on its own only for a blob read whole and backed up; any
+        // other waits for the settings window's user to confirm it.
         s = Settings{};
         s.historyEnabled = historyConsent;
         s.language = language;
         g_settingsLoadError = true;
+        g_settingsLoadBackup = backedUp;
+        g_settingsReplaceAllowed = backedUp && readWhole;
+        if (!g_settingsReplaceAllowed) Wh_Log(L"Stored settings are kept until replacing them is confirmed");
     }
     PublishSettings(std::move(s));
     if (apartmentInitialized) winrt::uninit_apartment();
@@ -32444,6 +33213,8 @@ enum class SettingsNoticeCode : uint8_t {
     AccountsDropped,  // An account vanished: its drafts were dropped
     AccountDropped,   // The account acted on vanished
     AccountNotSaved,  // An account edit failed without a notice of its own
+    ReplaceBlocked,   // Saves would replace stored settings the load couldn't read: a question
+                      // (SettingsEdits::AnswerReplace)
     // The account commands' (settings/account-commands.h) and the store's
     AccountExists,
     AccountSaveFailed,
@@ -32466,6 +33237,7 @@ enum class SettingsNoticeCode : uint8_t {
 struct SettingsAccountResult {
     SettingsSaveResult save = SettingsSaveResult::Unchanged;
     bool missing = false;  // No such account (any more)
+    bool replaceBlocked = false;  // AddAccount's failure, as Apply's `replaceBlocked`
     SettingsNoticeCode notice = SettingsNoticeCode::None;  // What the window tells the user, if anything
     HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     SettingsNoticeKind kind = SettingsNoticeKind::Error;
@@ -32476,8 +33248,10 @@ struct SettingsAccountResult {
 // fresh settings.
 struct SettingsStore {
     virtual SettingsBaseline Load() = 0;
-    // A field (or a group's fields) set to `value`, saved and published.
-    virtual SettingsSaveResult Apply(SettingsField field, int value) = 0;
+    // A field (or a group's fields) set to `value`, saved and published. `replaceBlocked`: it failed
+    // because its save would replace stored settings the last load couldn't read, which waits for
+    // the user's confirmation (ConfirmReplace).
+    virtual SettingsSaveResult Apply(SettingsField field, int value, bool& replaceBlocked) = 0;
     // An account field set to its desired value (`text` for the label and short text), or an
     // account action, on the account freshly resolved from `account`.
     virtual SettingsAccountResult Account(SettingsAccountRef account, SettingsField field, int value,
@@ -32488,6 +33262,8 @@ struct SettingsStore {
                                              const std::vector<std::wstring>& labels) = 0;
     // Whether a sign-in is stored for an identity (presence only).
     virtual bool HasStoredSignIn(uint64_t identity) = 0;
+    // The user confirmed it: saves may replace the stored settings the last load couldn't read.
+    virtual void ConfirmReplace() = 0;
     // Unload or cancellation: stop committing.
     virtual bool Unloading() = 0;
 
@@ -32504,6 +33280,7 @@ enum class SettingsDraftError : uint8_t {
     LabelEmpty,
     LabelTaken,  // Another account of its provider uses it
     SaveFailed,
+    ReplaceBlocked,  // Its save would replace stored settings the load couldn't read; not confirmed
 };
 
 struct SettingsDraft {
@@ -32534,6 +33311,8 @@ static std::wstring SettingsDraftErrorText(const I18nLocale& locale, const Setti
             return I18nText(locale, Tr(L"Another account of this provider uses this label."));
         case SettingsDraftError::SaveFailed:
             return I18nText(locale, Tr(L"This change couldn't be saved."));
+        case SettingsDraftError::ReplaceBlocked:
+            return I18nText(locale, Tr(L"Not saved: saving would replace the stored settings, which couldn't be read."));
     }
     return {};
 }
@@ -32573,6 +33352,12 @@ static std::wstring SettingsNoticeText(const I18nLocale& locale, SettingsNoticeC
         case AccountNotSaved:
             return I18nText(locale, Tr(L"Could not save the account. The change is kept here with its error; change it "
                                        L"again to retry."));
+        case ReplaceBlocked:
+            return I18nText(locale, Tr(L"The stored settings couldn't be read, so this window shows the defaults. "
+                                       L"Saving this change replaces the stored settings, accounts included, with "
+                                       L"what this window shows.\n\nReplace the stored settings? If you keep them, "
+                                       L"this change isn't saved; they're read again the next time Windows Explorer "
+                                       L"starts."));
         case AccountExists:
             return I18nText(locale, Tr(L"That provider and label are already configured."));
         case AccountSaveFailed:
@@ -32640,8 +33425,11 @@ struct SettingsEdits {
     // The added account whose sign-in waits for its naming (CommitLabel); 0 if none
     uint64_t pendingSignIn = 0;
 
-    // Messages for the window to show once the current operation is done
+    // Messages for the window to show once the current operation is done, and the requests whose
+    // saves would replace stored settings the load couldn't read (one ReplaceBlocked notice each),
+    // until the window has the answer (AnswerReplace)
     std::vector<SettingsNotice> notices;
+    std::vector<SettingsRequest> replaceBlocked;
 
     // Baseline and statuses: drafts, requests and text boxes stay as they are, except those of
     // an account that is gone, which go with a notice. A session key lasts for the window, also
@@ -32980,7 +33768,10 @@ struct SettingsEdits {
         }
         SettingsAccountResult result = store->AddAccount(provider, labels);
         bool added = result.save == SettingsSaveResult::Changed;
-        if (result.notice != SettingsNoticeCode::None) {
+        if (!added && result.replaceBlocked) {
+            replaceBlocked.push_back({0, SettingsField::AccountAdd, 0, 0, provider});
+            notices.push_back({SettingsNoticeCode::ReplaceBlocked, SettingsNoticeKind::Warning, true});
+        } else if (result.notice != SettingsNoticeCode::None) {
             notices.push_back({result.notice, result.kind, !added, result.reason});
         }
         if (!added) return 0;
@@ -32994,6 +33785,32 @@ struct SettingsEdits {
             }
         }
         return 0;
+    }
+
+    // The window's answer to the ReplaceBlocked notices of an operation. Replace: the store records
+    // the confirmation (until its next load), then the blocked requests run again, in order, on
+    // fresh settings: a draft's while it is still the one blocked, an add as a new add (`added`:
+    // its key, as AddAccount's). Keep, or unloading: they stay failed with their errors. Returns
+    // the failed saves.
+    int AnswerReplace(bool replace, uint64_t* added = nullptr) {
+        std::vector<SettingsRequest> blocked = std::exchange(replaceBlocked, {});
+        if (!replace || blocked.empty() || store->Unloading()) return 0;
+        store->ConfirmReplace();
+        for (const SettingsRequest& request : blocked) {
+            if (request.field == SettingsField::AccountAdd) {
+                uint64_t key = AddAccount(request.text);
+                if (added && key) *added = key;
+                continue;
+            }
+            if (request.revision) {
+                SettingsDraft* draft = Find(request.key, request.field);
+                if (!draft || draft->revision != request.revision) continue;
+                draft->failed = false;
+                draft->error = SettingsDraftError::None;
+            }
+            queue.push_back(request);
+        }
+        return Process();
     }
 
 private:
@@ -33061,7 +33878,8 @@ private:
     }
 
     // One transaction. Saved (or already so): the draft it was made for is done and the
-    // baseline reloads. Failed: that draft keeps its value with the error.
+    // baseline reloads. Failed: that draft keeps its value with the error; one the stored settings
+    // blocked waits for the window's question about replacing them.
     bool Run(const SettingsRequest& request) {
         if (request.key) {
             std::optional<size_t> index = IndexOf(request.key);
@@ -33070,7 +33888,8 @@ private:
             if (index) result = store->Account(AccountRef(*index), request.field, request.value, request.text);
             return Settle(request, result);
         }
-        SettingsSaveResult result = store->Apply(request.field, request.value);
+        bool blocked = false;
+        SettingsSaveResult result = store->Apply(request.field, request.value, blocked);
         auto same = [&](const SettingsDraft& d) {
             return d.key == request.key && d.field == request.field && d.revision == request.revision;
         };
@@ -33079,8 +33898,12 @@ private:
                 auto draft = std::find_if(drafts.begin(), drafts.end(), same);
                 if (draft != drafts.end()) {
                     draft->failed = true;
-                    draft->error = SettingsDraftError::SaveFailed;
+                    draft->error = blocked ? SettingsDraftError::ReplaceBlocked : SettingsDraftError::SaveFailed;
                 }
+            }
+            if (blocked) {
+                replaceBlocked.push_back(request);
+                notices.push_back({SettingsNoticeCode::ReplaceBlocked, SettingsNoticeKind::Warning, true});
             }
             return false;
         }
@@ -33138,6 +33961,7 @@ struct AccountTarget {
 struct AccountCommandResult {
     SettingsApplyResult apply = SettingsApplyResult::Failed;
     bool missing = false;      // The account isn't configured (any more)
+    bool replaceBlocked = false;  // An add's failure: ApplyOwnedSettings' `replaceBlocked`
     SettingsNoticeCode message = SettingsNoticeCode::None;   // For the user (settings/edits.h)
     HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     UINT icon = MB_ICONERROR;  // The message's
@@ -33174,7 +33998,9 @@ static AccountTarget PublishedAccountTarget(uint64_t identity) {
     return {0, identity};
 }
 
-// Adds `account` labelled with the first of `labels` its provider doesn't use yet.
+// Adds `account` labelled with the first of `labels` its provider doesn't use yet. Only an add can
+// meet stored settings the load couldn't read (that recovery has no accounts to act on), so only it
+// reports a save blocked from replacing them.
 static AccountCommandResult AddAccountCommand(AccountConfig account, const std::vector<std::wstring>& labels) {
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
@@ -33196,7 +34022,7 @@ static AccountCommandResult AddAccountCommand(AccountConfig account, const std::
     account.label = *label;
     uint64_t identity = AccountIdentityHash(account);
     settings.accounts.push_back(std::move(account));
-    result.apply = ApplyOwnedSettings(std::move(settings));
+    result.apply = ApplyOwnedSettings(std::move(settings), 0, 0, &result.replaceBlocked);
     if (result.apply != SettingsApplyResult::Failed) result.account = PublishedAccountTarget(identity);
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {
@@ -33526,12 +34352,7 @@ struct SettingsProductionStore final : SettingsStore {
         status.automaticLanguage = baseline.settings.language.empty() ? g_language.load(std::memory_order_acquire) :
                                                                         &ResolveLanguage({});
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
-        PWSTR localAppData = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,
-                                           &localAppData))) {
-            status.historyFolder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
-        }
-        CoTaskMemFree(localAppData);
+        status.historyFolder = UserStorageFolder();
         return baseline;
     }
 
@@ -33539,7 +34360,7 @@ struct SettingsProductionStore final : SettingsStore {
     // taskbar update runs after the lock is released. A language change also rebuilds the usage
     // history window; one alone doesn't wake polling, and one that keeps the shown language
     // (Automatic resolving to the explicit choice) rebuilds no taskbar.
-    SettingsSaveResult Apply(SettingsField field, int value) override {
+    SettingsSaveResult Apply(SettingsField field, int value, bool& replaceBlocked) override {
         std::unique_lock<std::mutex> configLock(g_configEditMutex);
         Settings settings;
         {
@@ -33552,7 +34373,7 @@ struct SettingsProductionStore final : SettingsStore {
         before.language = settings.language;
         bool poll = settings != before;
         const I18nLanguage* shown = g_language.load(std::memory_order_acquire);
-        SettingsApplyResult result = ApplyOwnedSettings(std::move(settings));
+        SettingsApplyResult result = ApplyOwnedSettings(std::move(settings), 0, 0, &replaceBlocked);
         bool switched = g_language.load(std::memory_order_acquire) != shown;
         configLock.unlock();
         if (result == SettingsApplyResult::Failed) return SettingsSaveResult::Failed;
@@ -33608,6 +34429,12 @@ struct SettingsProductionStore final : SettingsStore {
 
     bool HasStoredSignIn(uint64_t identity) override { return HasStoredToken(identity); }
 
+    // For the rest of this load's recovery (settings/storage.h): LoadSettings resets it.
+    void ConfirmReplace() override {
+        Wh_Log(L"Replacing the stored settings that couldn't be read, as confirmed");
+        g_settingsReplaceAllowed = true;
+    }
+
     bool Unloading() override { return g_unloading || g_settingsWindowCancelRequested; }
 
 private:
@@ -33617,6 +34444,7 @@ private:
                       command.apply == SettingsApplyResult::Unchanged ? SettingsSaveResult::Unchanged :
                                                                          SettingsSaveResult::Changed;
         result.missing = command.missing;
+        result.replaceBlocked = command.replaceBlocked;
         result.notice = command.message;
         result.reason = command.reason;
         result.kind = command.icon == MB_ICONWARNING     ? SettingsNoticeKind::Warning :
@@ -35433,9 +36261,10 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
-        spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever deletes nothing and has no "
-                                                 L"size limit, so history keeps growing in Explorer's memory and on "
-                                                 L"disk. Day limits prune hourly, with a cap of about 60 MB."))}};
+        spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
+                                                 L"keeps growing in Explorer's memory and on disk; Antigravity readings "
+                                                 L"older than 15 days are kept about 10 minutes apart. Day limits "
+                                                 L"prune hourly, with a cap of about 60 MB."))}};
         spec.enabled = s.historyEnabled;
         if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
@@ -35494,8 +36323,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Storage location"));
         spec.description = {{view.status.historyFolder + L"\n", UiRunStyle::Normal, UiInk::Secondary},
-                            {I18nText(locale, Tr(L"Not encrypted. Readings and opaque IDs, no tokens or labels. "
-                                                 L"Survives mod removal."))}};
+                            {I18nText(locale, Tr(L"Not encrypted. Readings and opaque IDs, no tokens or labels. In "
+                                                 L"the mod's Windhawk storage, which Windhawk deletes, as far as it "
+                                                 L"can, when it removes the mod."))}};
         y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistoryFolder,
                                   I18nText(locale, TrCtx(L"button", L"Open folder")), L"\uE838");
     }
@@ -37084,7 +37914,9 @@ struct SettingsUiClient final : UiHostClient {
     static I18nLocale DialogLocale() { return CurrentLocale(); }
 
     // The controller's notices, a message box each. Account operations explain their failures;
-    // other failed saves get the general message.
+    // other failed saves get the general message. Saves blocked from replacing stored settings the
+    // load couldn't read ask once whether to replace them (never while closing: its discard
+    // question covers them); yes saves them again, and what that says shows in turn.
     void ShowNotices(UiHost& host, int failures = 0) {
         std::vector<SettingsNotice> notices = std::exchange(edits.notices, {});
         int explained = int(std::count_if(notices.begin(), notices.end(),
@@ -37094,14 +37926,28 @@ struct SettingsUiClient final : UiHostClient {
                                                   L"change it again to retry.")),
                 kSettingsProductName, MB_OK | MB_ICONERROR);
         }
+        bool replaceAsked = false;
         for (const SettingsNotice& notice : notices) {
             if (Unloading() || host.closing) break;
             I18nLocale locale = DialogLocale();
+            if (notice.code == SettingsNoticeCode::ReplaceBlocked) {
+                if (std::exchange(replaceAsked, true)) continue;
+                bool replace = !closePreparation &&
+                               Ask(host, SettingsNoticeText(locale, notice.code), kSettingsProductName,
+                                   MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES &&
+                               !Unloading() && !closePreparation && !host.closing;
+                uint64_t added = 0;
+                int failed = edits.AnswerReplace(replace, &added);
+                if (added) ShowLabel(host, added);
+                if (replace) Report(host, failed);
+                continue;
+            }
             Ask(host, SettingsNoticeText(locale, notice.code, notice.reason),
                 I18nText(locale, TrCtx(L"dialog-caption", L"Account")),
                 MB_OK | (notice.kind == SettingsNoticeKind::Error   ? MB_ICONERROR :
                          notice.kind == SettingsNoticeKind::Warning ? MB_ICONWARNING : MB_ICONINFORMATION));
         }
+        if (!replaceAsked) edits.AnswerReplace(false);
     }
 
     // Failed saves keep their drafts with an error; the box says so once.
@@ -37791,13 +38637,11 @@ static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons
     }
 }
 
-// The app icon as a 256 px PNG at `path`, the notifications' icon: transparent, straight alpha,
-// its tracks in a fixed grey that suits light and dark backgrounds. The file is replaced only
-// once written whole. Any thread with COM initialized.
-static bool SaveAppIconPng(const std::wstring& path) {
+// The app icon as a 256 px PNG, the notifications' icon: transparent, straight alpha, its tracks in
+// a fixed grey that suits light and dark backgrounds; empty on failure. Encoded in memory, for the
+// caller to write through a checked handle. Any thread with COM initialized.
+static std::vector<BYTE> AppIconPng() {
     constexpr UINT kPixels = 256;
-    std::wstring temp = path + L".tmp";
-    bool written = false;
     try {
         UiGraphics graphics;
         UiCreateGraphics(graphics);
@@ -37838,9 +38682,8 @@ static bool SaveAppIconPng(const std::wstring& path) {
                 }
             }
         }
-        winrt::com_ptr<IWICStream> stream;
-        winrt::check_hresult(wic->CreateStream(stream.put()));
-        winrt::check_hresult(stream->InitializeFromFilename(temp.c_str(), GENERIC_WRITE));
+        winrt::com_ptr<IStream> stream;
+        winrt::check_hresult(CreateStreamOnHGlobal(nullptr, TRUE, stream.put()));
         winrt::com_ptr<IWICBitmapEncoder> encoder;
         winrt::check_hresult(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, encoder.put()));
         winrt::check_hresult(encoder->Initialize(stream.get(), WICBitmapEncoderNoCache));
@@ -37854,13 +38697,18 @@ static bool SaveAppIconPng(const std::wstring& path) {
         winrt::check_hresult(frame->WritePixels(kPixels, kPixels * 4, UINT(pixels.size()), pixels.data()));
         winrt::check_hresult(frame->Commit());
         winrt::check_hresult(encoder->Commit());
-        written = true;
+
+        STATSTG stat{};
+        winrt::check_hresult(stream->Stat(&stat, STATFLAG_NONAME));
+        std::vector<BYTE> png(size_t(stat.cbSize.QuadPart));
+        LARGE_INTEGER start{};
+        winrt::check_hresult(stream->Seek(start, STREAM_SEEK_SET, nullptr));
+        ULONG read = 0;
+        winrt::check_hresult(stream->Read(png.data(), ULONG(png.size()), &read));
+        if (read == png.size()) return png;
     } catch (...) {}
-    // The stream closed the file with the try block.
-    if (written && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) return true;
-    DeleteFileW(temp.c_str());
-    Wh_Log(L"Could not write the notification icon");
-    return false;
+    Wh_Log(L"Could not draw the notification icon");
+    return {};
 }
 
 static UINT GetSettingsActivateMessage() {
@@ -38428,13 +39276,14 @@ static std::atomic<bool> g_historyWindowCancelRequested{false};
 // current selection. OpenHistoryWindow stores it under g_historyWindowMutex.
 static std::atomic<uint64_t> g_historyRequestedAccount{0};
 
-// The window's activation request and explicit load, its posted refresh and export write, and its
-// deferral check timer (main window; the toolkit's own timers use 0x7E01-0x7E02).
+// The window's activation request and explicit load, its posted refresh, and its timers: the
+// deferral check and an export's write poll (main window; the toolkit's own timers use
+// 0x7E01-0x7E02).
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
 static constexpr UINT kHistoryRefreshMessage = WM_APP + 183;
-static constexpr UINT kHistoryWriteMessage = WM_APP + 184;
 static constexpr UINT_PTR kHistoryDeferralTimer = 0x4E01;
+static constexpr UINT_PTR kHistoryWriteTimer = 0x4E02;
 
 // src/history/view.h
 // Usage history window view: the explicit snapshot its frame builders read (history/shell.h,
@@ -39506,15 +40355,17 @@ struct HistoryDestination {
 };
 
 // A CSV write: the rows written, and the Windows error that stopped it (0: the file replaced the
-// destination; ERROR_CANCELLED: unload); `created`: its temporary file was created.
+// destination; ERROR_CANCELLED: the window's close or unload); `created`: its temporary file was
+// created.
 struct HistoryCsvResult {
     size_t rows = 0;
     DWORD error = 0;
     bool created = true;
 };
 
-// What the controller reads and asks for. Production ops are stateless adapters: every request,
-// load, refresh, deferral, operation and close state is the controller's.
+// What the controller reads and asks for. Production ops are adapters holding only the export's
+// running write: every request, load, refresh, deferral, operation and close state is the
+// controller's.
 struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
@@ -39539,14 +40390,17 @@ struct HistoryOps {
     // The save dialog for a CSV, titled `title`, its file types in `locale`'s language, tracked as
     // Ask (its overwrite prompt too).
     virtual HistoryDestination ChooseDestination(const std::wstring& title, const I18nLocale& locale) = 0;
-    // Posts the window's write message (Write); false when it couldn't.
-    virtual bool PostWrite() = 0;
-    // Writes the scope's CSV to a new temporary file beside `destination` and replaces the
-    // destination with it once it is whole and flushed; any failure or unload deletes it and
-    // leaves the destination as it was. `progress` hears the rows written so far, at most every
-    // 250 ms.
-    virtual HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
-                                      const std::function<void(size_t)>& progress) = 0;
+    // Starts writing the scope's CSV off the window's thread, polled by the window every 250 ms
+    // (WriteTick): a new temporary file beside `destination` replaces the destination once it is
+    // whole and flushed; any failure, cancellation or unload before that deletes it and leaves the
+    // destination as it was. False when the poll or the write couldn't start: nothing is written.
+    virtual bool StartWrite(const HistoryExportScope& scope, const std::wstring& destination) = 0;
+    // The started write: the rows written so far in `rows`, and its result once it ended (its poll
+    // stopped); nullopt while it runs.
+    virtual std::optional<HistoryCsvResult> PollWrite(size_t& rows) = 0;
+    // Cancels the started write and stops its poll (nothing once it ended); it ends at its next
+    // check unless its file already replaced the destination. The ops' destruction waits for it.
+    virtual void CancelWrite() = 0;
     // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
     virtual bool Clear(HistoryJournalError& error) = 0;
     virtual void InvalidateCurves() = 0;
@@ -39584,9 +40438,9 @@ struct HistorySeriesKey {
     bool operator==(const HistorySeriesKey&) const = default;
 };
 
-// The running operation: Export (its warning and save dialog), its write (posted once the
-// dialog chose a file), Clear (its confirmation, then the clear), Delete (its confirmation, then
-// the deletion).
+// The running operation: Export (its warning and save dialog), its write (started once the
+// dialog chose a file, polled until it ends), Clear (its confirmation, then the clear), Delete
+// (its confirmation, then the deletion).
 enum class HistoryOperation : uint8_t { None, Export, Writing, Clear, Delete };
 
 // An operation's result (approved Q3 a): a code with its arguments, shown in the language of each
@@ -39598,7 +40452,7 @@ enum class HistoryNoticeCode : uint8_t {
     ConsentFailed,        // Enable recording
     Untracked,            // A dialog couldn't be tracked
     SaveDialogFailed,     // `error`: the save dialog's common dialog error
-    ExportNotStarted,     // The write couldn't be posted, or its progress never showed
+    ExportNotStarted,     // The write or its poll couldn't start
     TemporaryFileFailed,  // `error`: the Windows error
     ExportFailed,         // `error`: the Windows error
     Exported,             // `rows` of the selected account (or `all` accounts) to `text`, both weeks if `compare`
@@ -39742,7 +40596,8 @@ struct HistoryController {
 
     // Operations, one at a time; during one, and during a modal, only the legend's chips act and
     // an explicit load the window asks for waits (loadPending: once after it, taking the latest
-    // request). An export's scope, frozen at its command, its destination and the rows written.
+    // request). An export's scope, frozen at its command, its destination and the rows written as
+    // its last poll read them.
     HistoryOperation operation = HistoryOperation::None;
     bool loadPending = false;
     std::optional<HistoryExportScope> exportScope;
@@ -39750,7 +40605,8 @@ struct HistoryController {
     size_t exported = 0;
 
     // Set once the window closes (the first step of every close, before a running dialog is
-    // cancelled): nothing loads or acts any more, and an operation ends at its next step
+    // cancelled): nothing loads or acts any more, a running write is cancelled, and another
+    // operation ends at its next step
     bool closeRequested = false;
 
     // The window opened, on the settings' default range: until the first load, the pill and the
@@ -39884,11 +40740,13 @@ struct HistoryController {
 
     // The window is closing (its close path's first step, before a running dialog is cancelled):
     // requests stay with the opener; outstanding refresh work, a waiting load and the deferral
-    // timer go. A running operation ends when its dialog returns.
+    // timer go. A running write is cancelled now (the window closes without waiting for it);
+    // another operation ends when its dialog returns.
     void RequestClose() {
         closeRequested = true;
         liveDirty = samplesDirty = loadPending = false;
         Timer(false);
+        if (operation == HistoryOperation::Writing) Stopped();
     }
 
     // Operations and dialogs -----------------------------------------------------------------------
@@ -39898,8 +40756,8 @@ struct HistoryController {
     // arrives during its dialogs (activation, refresh) changes nothing it writes. A large one asks
     // first (Cancel the default); then the save dialog titled by its scope. Each dialog is in the
     // language current as it opens, and every return from one checks the close latch and unload.
-    // With a file chosen the write is posted: the window shows its progress before the write
-    // starts (Write).
+    // With a file chosen the write starts off the window's thread, and the frame this command
+    // builds shows its progress until a poll finds it ended (WriteTick).
     void Export() {
         if (!snapshot) return;
         notice = {};
@@ -39916,9 +40774,10 @@ struct HistoryController {
         if (estimate > 500000) {
             I18nLocale locale = ops->Locale();
             int answer = Ask(I18nText(locale, Tr(L"This export contains about {rows, plural, one{# rows} other{# "
-                                                 L"rows}}. It may take a while and exceed spreadsheet row limits. The "
-                                                 L"history window will be busy while writing; Explorer's taskbar "
-                                                 L"remains available. Continue?"),
+                                                 L"rows}}. It may take a while and exceed spreadsheet row limits. "
+                                                 L"Until it finishes, the history window shows its progress and most "
+                                                 L"of its controls are unavailable; closing the window cancels the "
+                                                 L"export. Continue?"),
                                       {{L"rows", estimate}}),
                              I18nText(locale, TrCtx(L"dialog-caption", L"Large history export")),
                              MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
@@ -39950,26 +40809,25 @@ struct HistoryController {
         destination = std::move(chosen.path);
         exported = 0;
         operation = HistoryOperation::Writing;
-        if (!ops->PostWrite()) return Finish({HistoryNoticeCode::ExportNotStarted});
+        if (!ops->StartWrite(*exportScope, destination)) return Finish({HistoryNoticeCode::ExportNotStarted});
         Compose();
     }
 
-    // The posted write, `shown`: the window painted its progress (else it is closing, or the frame
-    // with the progress never came: nothing is written). It runs to its end without returning to
-    // the window: each progress report sets the rows written and asks `repaint` to show them,
-    // nothing else. Its notice: the rows and where they went, or why the destination is unchanged.
-    void Write(bool shown, const std::function<void()>& repaint) {
-        if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return;
-        if (!shown) return Finish({HistoryNoticeCode::ExportNotStarted});
-        HistoryCsvResult result = ops->WriteCsv(*exportScope, destination, [&](size_t rows) {
-            exported = rows;
-            repaint();
-        });
-        if (Stopped()) return;
-        if (!result.created) return Finish({HistoryNoticeCode::TemporaryFileFailed, result.error});
-        if (result.error) return Finish({HistoryNoticeCode::ExportFailed, result.error});
-        Finish({.code = HistoryNoticeCode::Exported, .rows = result.rows, .all = !exportScope->accountId,
-                .compare = exportScope->compare, .text = destination});
+    // The write's poll (its timer's tick, while it runs): the rows written so far, nothing else
+    // read or composed; once it ended, its notice: the rows and where they went, or why the
+    // destination is unchanged. A close latched or unload cancels it instead, and a result
+    // arriving with unload (perhaps its cancellation) shows nothing. Returns whether it ended
+    // with its notice (the window rebuilds; otherwise it repaints the progress when the rows
+    // moved).
+    bool WriteTick() {
+        if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return false;
+        std::optional<HistoryCsvResult> result = ops->PollWrite(exported);
+        if (!result || Stopped()) return false;
+        if (!result->created) Finish({HistoryNoticeCode::TemporaryFileFailed, result->error});
+        else if (result->error) Finish({HistoryNoticeCode::ExportFailed, result->error});
+        else Finish({.code = HistoryNoticeCode::Exported, .rows = result->rows, .all = !exportScope->accountId,
+                     .compare = exportScope->compare, .text = destination});
+        return true;
     }
 
     // Clear all history (the More menu): asked first (Cancel the default). Whatever its result the
@@ -40110,10 +40968,11 @@ struct HistoryController {
         return answer;
     }
 
-    // After a dialog or a step that can take a while: the close latch or unload ends the running
-    // operation there, nothing more done or shown.
+    // After a dialog or a step that can take a while, and at each write poll: the close latch or
+    // unload ends the running operation there (a write cancelled), nothing more done or shown.
     bool Stopped() {
         if (!closeRequested && !ops->Unloading()) return false;
+        if (operation == HistoryOperation::Writing) ops->CancelWrite();
         operation = HistoryOperation::None;
         exportScope.reset();
         return true;
@@ -41387,17 +42246,39 @@ static bool HistoryDialogCancel() {
 }
 
 // src/history/ops.h
-// Production ops of the usage history window's controller (history/controller.h): stateless
-// adapters over the open request, the journal, the published settings and polls, recording
-// consent, the settings window, the journal's folder, the window's dialogs (history/modal.h), the
-// CSV file, the window's own refresh and write messages and deferral timer, and the current
-// language. History thread only.
+// Production ops of the usage history window's controller (history/controller.h): adapters over
+// the open request, the journal, the published settings and polls, recording consent, the
+// settings window, the journal's folder, the window's dialogs (history/modal.h), the window's own
+// refresh message and deferral timer, and the current language; and the owner of the export's
+// CSV write, its worker thread and poll timer. History thread only, except the worker.
+
+// An export's write, shared by the history thread and its worker: the frozen scope and the
+// destination, the rows written so far, the cancel request, and the result, published before
+// `done` (release) and read after it (acquire).
+struct HistoryWriteJob {
+    HistoryExportScope scope;
+    std::wstring destination;
+    std::atomic<size_t> rows{0};
+    std::atomic<bool> cancel{false}, done{false};
+    HistoryCsvResult result;
+};
 
 struct HistoryProductionOps final : HistoryOps {
     // Wiring, set once the window exists: its host (the dialogs' owner; its popup and tooltip
     // close before each) and the context its dialogs run in.
     UiHost* host = nullptr;
     HistoryDialogContext dialogs;
+
+    // The latest write and its worker (none: null), kept until the worker is joined
+    std::unique_ptr<HistoryWriteJob> job;
+    HANDLE writer = nullptr;
+
+    // Every exit of the window's thread (UiHostRun's return or an exception) cancels the write and
+    // waits for its worker. The window may close before: the worker never touches it.
+    ~HistoryProductionOps() {
+        if (job) job->cancel = true;
+        JoinWriter();
+    }
 
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
@@ -41455,12 +42336,7 @@ struct HistoryProductionOps final : HistoryOps {
     // As Settings > History's link: the folder from a link launch thread (ShellExecute's own
     // message loop would run this window's close, activation and refresh inside the command).
     bool OpenFolder() override {
-        PWSTR localAppData = nullptr;
-        std::wstring folder;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr, &localAppData))) {
-            folder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
-        }
-        CoTaskMemFree(localAppData);
+        std::wstring folder = UserStorageFolder();
         DWORD attributes = folder.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(folder.c_str());
         if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
         OpenUrl(folder.c_str());
@@ -41501,76 +42377,142 @@ struct HistoryProductionOps final : HistoryOps {
         return {error ? HistoryDialogResult::Failed : HistoryDialogResult::Cancelled, {}, error};
     }
 
-    bool PostWrite() override {
+    // A new write once the previous worker has exited (one cancelled and still running refuses
+    // it; the window's thread never waits for it): the poll timer first, so a write never starts
+    // without it, then the worker.
+    bool StartWrite(const HistoryExportScope& scope, const std::wstring& destination) override {
+        if (writer && WaitForSingleObject(writer, 0) != WAIT_OBJECT_0) return false;
+        JoinWriter();
+        job = std::make_unique<HistoryWriteJob>();
+        job->scope = scope;
+        job->destination = destination;
         HWND window = g_historyWindow.load();
-        return window && PostMessageW(window, kHistoryWriteMessage, 0, 0);
+        if (!window || !SetTimer(window, kHistoryWriteTimer, 250, nullptr)) {
+            job.reset();
+            return false;
+        }
+        writer = CreateThread(nullptr, 0, WriteThread, job.get(), 0, nullptr);
+        if (!writer) {
+            Wh_Log(L"Could not create the export thread: %lu", GetLastError());
+            KillTimer(window, kHistoryWriteTimer);
+            job.reset();
+            return false;
+        }
+        return true;
     }
 
-    // The export's file safety: a new temporary file beside the destination (never an existing
-    // one), the rows, flushed and closed, then moved over the destination with write-through. On
-    // any failure, unload or exception the temporary file is deleted and the destination keeps
-    // its content. Progress goes out before each full piece.
-    HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
-                              const std::function<void(size_t)>& progress) override {
-        struct Temporary {
-            HANDLE file = INVALID_HANDLE_VALUE;
-            std::wstring path;
-            ~Temporary() {
-                if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
-                if (!path.empty()) DeleteFileW(path.c_str());
-            }
-        } temporary;
-        HistoryCsvResult result;
-        std::wstring candidate = destination + L".quota-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
-                                 std::to_wstring(GetTickCount64()) + L".tmp";
-        temporary.file = CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
-                                     nullptr);
-        if (temporary.file == INVALID_HANDLE_VALUE) {
-            result.error = GetLastError();
-            result.created = false;
-            return result;
-        }
-        temporary.path = std::move(candidate);
-        auto cancelled = [] { return g_unloading || g_historyWindowCancelRequested; };
-        ULONGLONG nextProgressMs = 0;
-        HistoryCsvEnd end = HistoryCsvWrite(scope, result.rows, [&](const std::string& piece, bool last) {
-            if (!last && GetTickCount64() >= nextProgressMs) {
-                progress(result.rows);
-                nextProgressMs = GetTickCount64() + 250;
-            }
-            for (size_t written = 0; written < piece.size();) {
-                if (cancelled()) {
-                    SetLastError(ERROR_CANCELLED);
-                    return false;
-                }
-                DWORD count = DWORD(std::min(piece.size() - written, size_t(65536))), actual = 0;
-                if (!WriteFile(temporary.file, piece.data() + written, count, &actual, nullptr)) return false;
-                if (!actual) {
-                    SetLastError(ERROR_WRITE_FAULT);
-                    return false;
-                }
-                written += actual;
-            }
-            return true;
-        }, cancelled);
-        bool success = end == HistoryCsvEnd::Written && FlushFileBuffers(temporary.file);
-        DWORD error = success ? ERROR_SUCCESS : end == HistoryCsvEnd::Cancelled ? DWORD(ERROR_CANCELLED) : GetLastError();
-        if (!CloseHandle(std::exchange(temporary.file, INVALID_HANDLE_VALUE)) && success) {
-            success = false;
-            error = GetLastError();
-        }
-        if (success && cancelled()) {
-            success = false;
-            error = ERROR_CANCELLED;
-        }
-        if (success && !MoveFileExW(temporary.path.c_str(), destination.c_str(),
-                                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            success = false;
-            error = GetLastError();
-        }
-        if (success) temporary.path.clear();
-        result.error = success ? 0 : error ? error : DWORD(ERROR_GEN_FAILURE);
+    // Never waits: the write ends once its result is published and its worker is no longer
+    // running (thread teardown can lag the result); only a worker known to have exited is reaped.
+    std::optional<HistoryCsvResult> PollWrite(size_t& rows) override {
+        if (!job) return HistoryCsvResult{0, ERROR_GEN_FAILURE, true};
+        rows = job->rows.load(std::memory_order_relaxed);
+        if (!job->done.load(std::memory_order_acquire)) return std::nullopt;
+        DWORD wait = WaitForSingleObject(writer, 0);
+        if (wait == WAIT_TIMEOUT) return std::nullopt;
+        if (HWND window = g_historyWindow.load()) KillTimer(window, kHistoryWriteTimer);
+        HistoryCsvResult result = job->result;
+        if (wait == WAIT_OBJECT_0) JoinWriter();
         return result;
+    }
+
+    void CancelWrite() override {
+        if (job) job->cancel = true;
+        if (HWND window = g_historyWindow.load()) KillTimer(window, kHistoryWriteTimer);
+    }
+
+    // The worker, catching everything; it reads only its job and the unload flags. The export's
+    // file safety: a new temporary file beside the destination (never an existing one), the rows,
+    // flushed and closed, then moved over the destination with write-through (the commit point:
+    // a cancellation after it leaves the file written). On any failure, cancellation, unload or
+    // exception the temporary file is deleted and the destination keeps its content; the result
+    // is published only after that cleanup. The rows written go out before each piece.
+    static DWORD WINAPI WriteThread(LPVOID parameter) {
+        HistoryWriteJob& job = *static_cast<HistoryWriteJob*>(parameter);
+        HistoryCsvResult result;
+        try {
+            struct Temporary {
+                HANDLE file = INVALID_HANDLE_VALUE;
+                std::wstring path;
+                ~Temporary() {
+                    if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+                    if (!path.empty()) DeleteFileW(path.c_str());
+                }
+            } temporary;
+            std::wstring candidate = job.destination + L".quota-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                     std::to_wstring(GetTickCount64()) + L".tmp";
+            temporary.file = CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                         FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (temporary.file == INVALID_HANDLE_VALUE) {
+                result.error = GetLastError();
+                result.created = false;
+            } else {
+                temporary.path = std::move(candidate);
+                auto cancelled = [&job] { return job.cancel || g_unloading || g_historyWindowCancelRequested; };
+                HistoryCsvEnd end = HistoryCsvWrite(job.scope, result.rows, [&](const std::string& piece, bool) {
+                    job.rows.store(result.rows, std::memory_order_relaxed);
+                    for (size_t written = 0; written < piece.size();) {
+                        if (cancelled()) {
+                            SetLastError(ERROR_CANCELLED);
+                            return false;
+                        }
+                        DWORD count = DWORD(std::min(piece.size() - written, size_t(65536))), actual = 0;
+                        if (!WriteFile(temporary.file, piece.data() + written, count, &actual, nullptr)) return false;
+                        if (!actual) {
+                            SetLastError(ERROR_WRITE_FAULT);
+                            return false;
+                        }
+                        written += actual;
+                    }
+                    return true;
+                }, cancelled);
+                bool success = end == HistoryCsvEnd::Written && FlushFileBuffers(temporary.file);
+                DWORD error = success ? ERROR_SUCCESS :
+                              end == HistoryCsvEnd::Cancelled ? DWORD(ERROR_CANCELLED) : GetLastError();
+                if (!CloseHandle(std::exchange(temporary.file, INVALID_HANDLE_VALUE)) && success) {
+                    success = false;
+                    error = GetLastError();
+                }
+                if (success && cancelled()) {
+                    success = false;
+                    error = ERROR_CANCELLED;
+                }
+                if (success && !MoveFileExW(temporary.path.c_str(), job.destination.c_str(),
+                                            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+                    success = false;
+                    error = GetLastError();
+                }
+                if (success) temporary.path.clear();
+                result.error = success ? 0 : error ? error : DWORD(ERROR_GEN_FAILURE);
+            }
+        } catch (...) {
+            result.error = ERROR_GEN_FAILURE;
+        }
+        job.result = result;
+        job.done.store(true, std::memory_order_release);
+        return 0;
+    }
+
+    // Waits for the worker to exit, cancelling its blocking file calls every 100 ms (a stalled
+    // destination), then drops it and its job. Only its exit ends the wait: a failed wait is
+    // retried, never taken for one (unload must not outlive the worker).
+    void JoinWriter() {
+        if (writer) {
+            // Windhawk's bundled import library lacks CancelSynchronousIo.
+            using CancelIo_t = BOOL(WINAPI*)(HANDLE);
+            static const auto cancelIo = reinterpret_cast<CancelIo_t>(
+                GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CancelSynchronousIo"));
+            bool logged = false;
+            for (DWORD wait; (wait = WaitForSingleObject(writer, 100)) != WAIT_OBJECT_0;) {
+                if (wait == WAIT_TIMEOUT) {
+                    if (cancelIo) cancelIo(writer);
+                    continue;
+                }
+                if (!std::exchange(logged, true)) Wh_Log(L"Could not wait for the export thread: %lu", GetLastError());
+                Sleep(100);
+            }
+            CloseHandle(std::exchange(writer, nullptr));
+        }
+        job.reset();
     }
 
     bool Clear(HistoryJournalError& error) override { return ClearHistory(&error); }
@@ -41673,8 +42615,8 @@ struct HistoryUiClient final : UiHostClient {
     // A new selection or view scrolls the content back to its top; a successful Enable recording
     // focuses the selected entry, and so does a command with dialogs (Export, the More menu's,
     // Delete history) whose loads changed the selection, as an activation's load does. Those
-    // commands return once their dialogs are done; an export's write then waits for its posted
-    // message.
+    // commands return once their dialogs are done; an export's write then runs off this thread,
+    // polled by the window's timer.
     void Invoke(UiHost& host, UiAction action) override {
         if (Unloading() || action.kind != UiActionKind::Command) return;
         uint64_t selected = controller.selectedId;
@@ -41694,10 +42636,9 @@ struct HistoryUiClient final : UiHostClient {
     // end. Notifications become one posted refresh, which holds what it must while the popup is
     // open (the deferral timer checks it), the pointer inspects the chart, or a dialog or an
     // operation runs. A load or refresh that changed the selection (its request, or the account no
-    // longer listed) moves focus to the selected entry. Esc closes. An export's write runs once
-    // the frame with its progress was published by the command's rebuild: painted first (else it
-    // writes nothing), then repainted as rows are written, the item found again each time. A
-    // regional format change composes again like a notification.
+    // longer listed) moves focus to the selected entry. Esc closes. An export's write poll
+    // repaints the progress when its rows moved (the item found again each time, no rebuild) and
+    // rebuilds once the write ended. A regional format change composes again like a notification.
     bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
         result = 0;
         uint64_t selected = controller.selectedId;
@@ -41725,11 +42666,13 @@ struct HistoryUiClient final : UiHostClient {
             case kHistoryRefreshMessage:
                 rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
                 break;
-            case kHistoryWriteMessage:
-                controller.Write(UiHostPaintNow(host, kHistoryUiProgress),
-                                 [&host] { UiHostPaintNow(host, kHistoryUiProgress); });
-                break;
             case WM_TIMER:
+                if (wParam == kHistoryWriteTimer) {
+                    size_t rows = controller.exported;
+                    if (controller.WriteTick()) break;
+                    if (controller.exported != rows) UiHostPaintNow(host, kHistoryUiProgress);
+                    return true;
+                }
                 if (wParam != kHistoryDeferralTimer) return false;
                 controller.DeferralTick(host.popup.open, PointerOnChart(host));
                 return true;
@@ -42061,11 +43004,14 @@ void Wh_ModUninit() {
         g_historyCapped = false;
         g_historyMaintenanceMs = 0;
         g_historyWriteRetryMs = 0;
+        g_historyThinnedMs = 0;
+        g_historyLegacySettled = false;
     }
 
     // All worker threads that can issue finite taskbar marshals are joined. These synchronous
     // cleanup sends are the final per-UI-thread lifetime barrier before the DLL can unload.
     RemoveAllQuotaGrids(true);
+    ClearPlacementRecords();
 
     // A taskbar thread that terminated without window teardown has no owner thread left for its
     // XAML releases. Leak those unreachable states rather than release them under loader lock.
