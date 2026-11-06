@@ -49,7 +49,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
 - **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave
-- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to mute the microphone or quit the app using the camera), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
+- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to mute the microphone or turn the video off for every app), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
 - **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
@@ -96,7 +96,7 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 - **Night light**: on or off
 - **Power mode and power plan**: picking a power mode also switches the plan to Balanced, as Windows requires
 - **Energy saver** and **Do Not Disturb**
-- **Brightness**, **default audio device**, **volume and mute**, **microphone mute**, **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
+- **Brightness**, **default audio device**, **volume and mute**, **microphone mute**, **camera access for apps** ("Turn Video Off"), **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
 
 Nothing is changed unless you click the matching tile or item.
 
@@ -965,12 +965,13 @@ struct ExtState {
     int dnd = -1;                               // Não Perturbe (-1 desconhecido)
     std::vector<std::wstring> micApps, camApps; // apps usando microfone/câmera agora
     std::vector<std::wstring> camKeys;          // de cada app da câmera: caminho do .exe ou família do pacote
+    bool camBlocked = false;                    // acesso dos apps à câmera desligado
     int micMuted = -1;                          // microfone padrão silenciado (-1 sem microfone)
     bool mediaHas = false, playing = false;
     std::wstring title, artist;
     ULONGLONG lastPlaying = 0;                  // pausado há pouco ainda aparece
     bool operator==(const ExtState& o) const {
-        return dnd == o.dnd && micApps == o.micApps && camApps == o.camApps && micMuted == o.micMuted && mediaHas == o.mediaHas &&
+        return dnd == o.dnd && micApps == o.micApps && camApps == o.camApps && micMuted == o.micMuted && camBlocked == o.camBlocked && mediaHas == o.mediaHas &&
                playing == o.playing && title == o.title && artist == o.artist;
     }
 };
@@ -2404,7 +2405,7 @@ enum {
     ID_KEYS = 1200, ID_GO = 1500,
     ID_SW_WIFI = 1980, ID_SW_BT, ID_SW_DARK, ID_SW_MUTE, ID_SW_NIGHT, ID_SLIDER_VOL = 1990, ID_SLIDER_BRIGHT, ID_SLIDER_GLASS, ID_SLIDER_REFRACT, ID_SLIDER_SOFT, ID_SLIDER_WXGLASS,
     ID_SW_GLASSCLEAR = 1970, ID_SW_LIQUID, ID_SW_LIVE, ID_BAR_SETTINGS = 1975,
-    ID_PRIV_MICMUTE = 1950, ID_PRIV_MICSET, ID_PRIV_CAMSET, ID_PRIV_CAMCLOSE = 1953,  // até 1953 + 8
+    ID_PRIV_MICMUTE = 1950, ID_PRIV_MICSET, ID_PRIV_CAMSET, ID_PRIV_CAMOFF = 1953,
     ID_NOW_PREV = 1101 + 40, ID_NOW_PLAY, ID_NOW_NEXT, ID_FOCUS_OFF, ID_FOCUS_SETTINGS, ID_PRIV_SETTINGS,
     ID_HIST_CLEAR = 1150, ID_HIST_BASE = 1151, ID_HIST_WINCENTER = 1190,
 };
@@ -11046,7 +11047,7 @@ static const BsRowDef kBsRows[] = {
     {BR_ITEM, BV_FOCUS, L"Foco (quando ativo)", 0xE708, 0x5E5CE6},
     {BR_ITEM, BV_SEARCH, L"Busca", 0xE721, 0x8E8E93},
     {BR_CHOICE, BV_SEARCHTGT, L"A busca abre", 0, 0, L"Siri Plus: a janela padrão dele, no estilo Spotlight"},
-    {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Laranja e verde quando um app usa o microfone ou a câmera; clique para silenciar o microfone ou fechar o app da câmera"},
+    {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Laranja e verde quando um app usa o microfone ou a câmera; clique para silenciar o microfone ou desligar o vídeo"},
     {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Fundo, cores de seleção, tamanho e quando a barra aparece"},
     {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
     {BR_CHOICE, BV_BARSTYLE, L"Fundo", 0, 0},
@@ -15892,9 +15893,8 @@ static HMENU BuildPrivacyMenu() {
     AddSep(m);
     AddHeader(m, g_ext.camApps.empty() ? L"Câmera" : L"Câmera em uso");
     if (g_ext.camApps.empty()) AddItem(m, 0, T(L"Nenhum app usando a câmera"), false, true);
-    for (size_t i = 0; i < g_ext.camApps.size() && i < 8; i++)
-        AddItem(m, ID_PRIV_CAMCLOSE + (UINT)i,
-                std::wstring(1, (wchar_t)0xE714) + L" " + TF(L"Fechar %s", {g_ext.camApps[i]}));
+    for (auto& a : g_ext.camApps) AddItem(m, ID_PRIV_CAMSET, std::wstring(1, (wchar_t)0xE714) + L" " + a);
+    AddItem(m, ID_PRIV_CAMOFF, std::wstring(1, (wchar_t)0xE714) + L" " + T(L"Desligar o vídeo"), g_ext.camBlocked);
     AddSep(m);
     AddItem(m, ID_PRIV_MICSET, L"Privacidade do microfone...");
     AddItem(m, ID_PRIV_CAMSET, L"Privacidade da câmera...");
@@ -16195,40 +16195,24 @@ static bool MicMutedSet(bool mute) {
     return ok;
 }
 
-// Fecha (WM_CLOSE, como o botão X) as janelas do app que está com a câmera.
-// `key`: caminho do .exe, ou a família do pacote para apps da Store.
-struct CamCloseCtx {
-    std::wstring key;
-    bool packaged;
-    int closed = 0;
-};
-static BOOL CALLBACK CamCloseProc(HWND w, LPARAM lp) {
-    auto* c = (CamCloseCtx*)lp;
-    if (!IsWindowVisible(w) || GetWindow(w, GW_OWNER)) return TRUE;
-    DWORD pid = RealPidOf(w);
-    if (!pid || pid == GetCurrentProcessId()) return TRUE;
-    bool match = false;
-    if (c->packaged) {
-        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (h) {
-            wchar_t fam[256];
-            UINT32 len = ARRAYSIZE(fam);
-            match = GetPackageFamilyName(h, &len, fam) == ERROR_SUCCESS && _wcsicmp(fam, c->key.c_str()) == 0;
-            CloseHandle(h);
-        }
-    } else {
-        match = _wcsicmp(GetProcessPath(pid).c_str(), c->key.c_str()) == 0;
-    }
-    if (match) {
-        PostMessageW(w, WM_CLOSE, 0, 0);
-        c->closed++;
-    }
-    return TRUE;
+// Desligar o vídeo: o mesmo botão "Acesso à câmera" da página de privacidade
+// do Windows (ConsentStore\webcam, "Allow"/"Deny"), para os apps da Store e
+// os da área de trabalho. O Windows corta a imagem de quem estiver usando.
+static const wchar_t kCamConsent[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\webcam";
+static bool CamBlockedGet() {
+    wchar_t v[16] = L"";
+    DWORD sz = sizeof(v);
+    if (RegGetValueW(HKEY_CURRENT_USER, kCamConsent, L"Value", RRF_RT_REG_SZ, nullptr, v, &sz) != ERROR_SUCCESS)
+        return false;
+    return _wcsicmp(v, L"Deny") == 0;
 }
-static void CamCloseApp(const std::wstring& key) {
-    CamCloseCtx c{key, key.find(L'\\') == std::wstring::npos};
-    EnumWindows(CamCloseProc, (LPARAM)&c);
-    if (!c.closed) OpenUri(L"ms-settings:privacy-webcam");  // app sem janela: a página certa
+static bool CamBlockedSet(bool block) {
+    PCWSTR v = block ? L"Deny" : L"Allow";
+    DWORD sz = (DWORD)((wcslen(v) + 1) * sizeof(wchar_t));
+    bool ok = RegSetKeyValueW(HKEY_CURRENT_USER, kCamConsent, L"Value", REG_SZ, v, sz) == ERROR_SUCCESS;
+    std::wstring np = std::wstring(kCamConsent) + L"\\NonPackaged";
+    RegSetKeyValueW(HKEY_CURRENT_USER, np.c_str(), L"Value", REG_SZ, v, sz);
+    return ok;
 }
 
 // ---- Avisos em pílula (estilo Dynamic Island) ----
@@ -16912,6 +16896,7 @@ static void ExtrasPoll() {
             e.camKeys = camRegKeys;
         }
         e.micMuted = MicMutedGet();
+        e.camBlocked = CamBlockedGet();
     } else if (!g_settings.showPrivacy) {
         e.micApps.clear();
         e.camApps.clear();
@@ -19332,11 +19317,6 @@ static void OpenItemMenu(Bar* b, int idx) {
         if (cmd && target && IsWindow(target)) PostMessageW(target, WM_COMMAND, MAKEWPARAM(cmd, 0), 0);
         return;
     }
-    if (cmd >= ID_PRIV_CAMCLOSE && cmd < ID_PRIV_CAMCLOSE + 8) {
-        size_t i = cmd - ID_PRIV_CAMCLOSE;
-        if (i < g_ext.camKeys.size()) CamCloseApp(g_ext.camKeys[i]);
-        return;
-    }
     switch (cmd) {
         case ID_NOW_PREV: CcQueue(JOB_MEDIA_PREV); FocusActive(); return;
         case ID_NOW_PLAY: CcQueue(JOB_MEDIA_TOGGLE); FocusActive(); return;
@@ -19351,6 +19331,16 @@ static void OpenItemMenu(Bar* b, int idx) {
         case ID_PRIV_SETTINGS: OpenUri(L"ms-settings:privacy"); return;
         case ID_PRIV_MICSET: OpenUri(L"ms-settings:privacy-microphone"); return;
         case ID_PRIV_CAMSET: OpenUri(L"ms-settings:privacy-webcam"); return;
+        case ID_PRIV_CAMOFF: {
+            bool block = !g_ext.camBlocked;
+            if (CamBlockedSet(block)) {
+                g_ext.camBlocked = block;
+                IslandShow(0xE714, 0x30D158, block ? L"Vídeo desligado" : L"Vídeo ligado",
+                           block ? L"Nenhum app recebe a imagem da câmera" : L"");
+                RedrawAll();
+            }
+            return;
+        }
         case ID_PRIV_MICMUTE: {
             bool mute = g_ext.micMuted != 1;
             if (MicMutedSet(mute)) {
@@ -20164,18 +20154,27 @@ static void Render(Bar* b) {
                 // ícone riscado.
                 float is = s * g_settings.iconScale;
                 float cx = (p.l + p.r) / 2, cy = h / 2, half = (p.r - p.l) / 4;
-                struct One { float x; wchar_t g; bool on; D2D1_COLOR_F c; };
+                struct One { float x; wchar_t g; bool on; D2D1_COLOR_F c; bool dim = false; };
                 One ones[2] = {
                     {cx - half, g_ext.micMuted == 1 ? (wchar_t)0xEC54 : (wchar_t)0xE720, !g_ext.micApps.empty(),
                      D2D1::ColorF(1.0f, 0.62f, 0.04f, 1)},
-                    {cx + half, (wchar_t)0xE714, !g_ext.camApps.empty(), D2D1::ColorF(0.19f, 0.82f, 0.35f, 1)},
+                    {cx + half, (wchar_t)0xE714, !g_ext.camApps.empty() && !g_ext.camBlocked, D2D1::ColorF(0.19f, 0.82f, 0.35f, 1),
+                     g_ext.camBlocked},
                 };
                 for (const One& o : ones) {
                     D2D1_RECT_F gr = D2D1::RectF(o.x - half, 0, o.x + half, h);
                     // Em uso, o próprio ícone fica laranja ou verde (a sombra não).
                     b->brush->SetColor(o.on && !shadowPass ? o.c : fg);
+                    b->brush->SetOpacity(o.dim ? 0.4f : 1.0f);  // vídeo desligado: apagado
                     wchar_t gs[2] = {o.g, 0};
                     b->rt->DrawText(gs, 1, b->fmtIcon, gr, b->brush);
+                    if (o.dim && !shadowPass) {
+                        // Risco diagonal sobre a câmera.
+                        float d = 6.5f * is;
+                        b->brush->SetOpacity(1.0f);
+                        b->rt->DrawLine(D2D1::Point2F(o.x - d, cy - d), D2D1::Point2F(o.x + d, cy + d), b->brush, 1.5f * is);
+                    }
+                    b->brush->SetOpacity(1.0f);
                 }
                 b->brush->SetColor(fg);
                 continue;
@@ -22040,7 +22039,6 @@ const UiTr kUiTr[] = {
     {L"Silenciar o microfone", L"Mute Microphone", L"Silenciar el micrófono", L"Couper le micro", L"Mikrofon stummschalten", L"Disattiva il microfono", L"将麦克风静音"},
     {L"Nenhum microfone", L"No Microphone", L"Ningún micrófono", L"Aucun micro", L"Kein Mikrofon", L"Nessun microfono", L"没有麦克风"},
     {L"Nenhum app usando a câmera", L"No App Is Using the Camera", L"Ninguna app usa la cámara", L"Aucune app n’utilise la caméra", L"Keine App verwendet die Kamera", L"Nessuna app usa la fotocamera", L"没有应用在使用相机"},
-    {L"Fechar %s", L"Quit %s", L"Cerrar %s", L"Quitter %s", L"%s beenden", L"Chiudi %s", L"退出 %s"},
     {L"Privacidade do microfone...", L"Microphone Privacy...", L"Privacidad del micrófono...", L"Confidentialité du micro...", L"Mikrofon-Datenschutz...", L"Privacy del microfono...", L"麦克风隐私..."},
     {L"Privacidade da câmera...", L"Camera Privacy...", L"Privacidad de la cámara...", L"Confidentialité de la caméra...", L"Kamera-Datenschutz...", L"Privacy della fotocamera...", L"相机隐私..."},
     {L"Microfone silenciado", L"Microphone muted", L"Micrófono silenciado", L"Micro coupé", L"Mikrofon stumm", L"Microfono disattivato", L"麦克风已静音"},
@@ -22048,6 +22046,10 @@ const UiTr kUiTr[] = {
     {L"Microfone", L"Microphone", L"Micrófono", L"Micro", L"Mikrofon", L"Microfono", L"麦克风"},
     {L"Câmera", L"Camera", L"Cámara", L"Caméra", L"Kamera", L"Fotocamera", L"相机"},
     {L"Microfone e câmera", L"Microphone and camera", L"Micrófono y cámara", L"Micro et caméra", L"Mikrofon und Kamera", L"Microfono e fotocamera", L"麦克风和相机"},
-    {L"Laranja e verde quando um app usa o microfone ou a câmera; clique para silenciar o microfone ou fechar o app da câmera", L"Orange and green when an app uses the microphone or camera; click to mute the microphone or quit the camera app", L"Naranja y verde cuando una app usa el micrófono o la cámara; haz clic para silenciar el micrófono o cerrar la app de la cámara", L"Orange et vert quand une app utilise le micro ou la caméra ; cliquez pour couper le micro ou quitter l’app de la caméra", L"Orange und grün, wenn eine App Mikrofon oder Kamera nutzt; klicken, um das Mikrofon stummzuschalten oder die Kamera-App zu beenden", L"Arancione e verde quando un’app usa il microfono o la fotocamera; fai clic per disattivare il microfono o chiudere l’app della fotocamera", L"有应用使用麦克风或相机时显示橙色和绿色；点击可将麦克风静音或退出使用相机的应用"},
+    {L"Laranja e verde quando um app usa o microfone ou a câmera; clique para silenciar o microfone ou desligar o vídeo", L"Orange and green when an app uses the microphone or camera; click to mute the microphone or turn the video off", L"Naranja y verde cuando una app usa el micrófono o la cámara; haz clic para silenciar el micrófono o apagar el vídeo", L"Orange et vert quand une app utilise le micro ou la caméra ; cliquez pour couper le micro ou la vidéo", L"Orange und grün, wenn eine App Mikrofon oder Kamera nutzt; klicken, um das Mikrofon stummzuschalten oder das Video auszuschalten", L"Arancione e verde quando un’app usa il microfono o la fotocamera; fai clic per disattivare il microfono o il video", L"有应用使用麦克风或相机时显示橙色和绿色；点击可将麦克风静音或关闭视频"},
+    {L"Desligar o vídeo", L"Turn Video Off", L"Apagar el vídeo", L"Couper la vidéo", L"Video ausschalten", L"Disattiva il video", L"关闭视频"},
+    {L"Vídeo desligado", L"Video off", L"Vídeo apagado", L"Vidéo coupée", L"Video aus", L"Video disattivato", L"视频已关闭"},
+    {L"Vídeo ligado", L"Video on", L"Vídeo encendido", L"Vidéo activée", L"Video an", L"Video attivo", L"视频已开启"},
+    {L"Nenhum app recebe a imagem da câmera", L"No app gets the camera picture", L"Ninguna app recibe la imagen de la cámara", L"Aucune app ne reçoit l’image de la caméra", L"Keine App erhält das Kamerabild", L"Nessuna app riceve l’immagine della fotocamera", L"所有应用都无法获取相机画面"},
 };
 const size_t kUiTrCount = ARRAYSIZE(kUiTr);
