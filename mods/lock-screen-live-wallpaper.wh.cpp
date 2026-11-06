@@ -9,6 +9,7 @@
 // @donateUrl         https://ko-fi.com/grn15rens
 // @license           GPL-3.0
 // @include           LogonUI.exe
+// @architecture      x86-64
 // @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid
 // ==/WindhawkMod==
 
@@ -62,7 +63,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 - **Audio volume**: 0 means muted. Above 0, audio only plays at 100% speed while the video is playing (not paused, idle-paused, or showing the boot still frame).
 - **Pause when idle**: freezes the video and mutes the audio after the chosen time without input, and resumes on the next input.
 - **Play video on the password screen**: on (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen.
-- **Debug log**: adds CPU and decode statistics every 5 seconds and one UI tree dump. Basic events are always written to the log file, even when this is off.
+- **Debug log**: also writes `debug.log` in the mod's storage folder, with CPU and decode statistics every 5 seconds and one UI tree dump. Basic events always go to Windhawk's log (enable logging for the mod in Windhawk to see them).
 - **Long playback**: the video loops without any time limit. By default it freezes after 5 minutes without input (see **Pause when idle**); set that to 0 if you want it to keep playing while nobody is at the PC.
 
 ## 📈 Performance tips
@@ -75,7 +76,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 
 ## 🔧 Troubleshooting
 
-- **Normal wallpaper is shown**: make sure `LogonUI.exe` is in the process inclusion list and the video path is correct, then read `debug.log` in the mod's storage folder (see "Files written by the mod"). Look for `Failed to open video`, `Unsupported video format`, or `FAIL-SAFE TRIPPED`. Enable **Debug log** for more detail.
+- **Normal wallpaper is shown**: make sure `LogonUI.exe` is in the process inclusion list and the video path is correct, then turn on **Debug log** and read `debug.log` in the mod's storage folder (see "Files written by the mod"). Look for `Failed to open video`, `Unsupported video format`, or `FAIL-SAFE TRIPPED`. Enable **Debug log** for more detail.
 - **Video will not open**: try an H.264 MP4 stored somewhere the SYSTEM account can read.
 - **No sound**: set **Audio volume** above 0 and see the notes above.
 - **Stuttering**: lower the render width and enable **Debug log**, then check the `CPU` and `UI stalls` lines in the log.
@@ -171,7 +172,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 - **Audio volume**: 0 berarti senyap. Di atas 0, audio hanya diputar pada kecepatan 100% dan hanya saat video benar-benar berjalan (bukan saat dijeda, dijeda karena idle, atau menampilkan frame diam setelah boot).
 - **Pause when idle**: membekukan video dan membisukan audio setelah waktu tertentu tanpa input, lalu lanjut saat ada input berikutnya.
 - **Play video on the password screen**: aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen.
-- **Debug log**: menambahkan statistik CPU dan decode setiap 5 detik dan satu kali dump UI tree. Peristiwa dasar selalu ditulis ke file log, walaupun opsi ini mati.
+- **Debug log**: juga menulis `debug.log` di folder penyimpanan mod, berisi statistik CPU dan decode setiap 5 detik dan satu kali dump UI tree. Peristiwa dasar selalu masuk ke log Windhawk (aktifkan logging untuk mod ini di Windhawk untuk melihatnya).
 - **Pemutaran lama**: video diulang tanpa batas waktu. Secara default video dibekukan setelah 5 menit tanpa input (lihat **Pause when idle**); setel ke 0 kalau kamu ingin video terus berjalan saat tidak ada orang di depan PC.
 
 ## 📈 Tips performa
@@ -184,7 +185,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 
 ## 🔧 Pemecahan masalah
 
-- **Wallpaper normal yang tampil**: pastikan `LogonUI.exe` ada di daftar inklusi proses dan path video benar, lalu baca `debug.log` di folder penyimpanan mod (lihat "File yang ditulis oleh mod"). Cari `Failed to open video`, `Unsupported video format`, atau `FAIL-SAFE TRIPPED`. Aktifkan **Debug log** untuk detail lebih banyak.
+- **Wallpaper normal yang tampil**: pastikan `LogonUI.exe` ada di daftar inklusi proses dan path video benar, lalu aktifkan **Debug log** dan baca `debug.log` di folder penyimpanan mod (lihat "File yang ditulis oleh mod"). Cari `Failed to open video`, `Unsupported video format`, atau `FAIL-SAFE TRIPPED`. Aktifkan **Debug log** untuk detail lebih banyak.
 - **Video tidak mau terbuka**: coba MP4 H.264 yang disimpan di tempat yang bisa dibaca akun SYSTEM.
 - **Tidak ada suara**: setel **Audio volume** di atas 0 dan baca catatan di atas.
 - **Patah-patah**: turunkan render width dan aktifkan **Debug log**, lalu cek baris `CPU` dan `UI stalls` di log.
@@ -293,7 +294,7 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
   $description: Do not show the video on the "Shutting down" / "Restarting" status screen. The original Windows background is shown instead.
 - debugLog: false
   $name: Debug log
-  $description: Log CPU and decode statistics every 5 seconds and dump the lock screen UI tree once.
+  $description: Also write debug.log in the mod's storage folder, with CPU and decode statistics every 5 seconds and a one-time dump of the lock screen UI tree.
 */
 // ==/WindhawkModSettings==
 
@@ -330,6 +331,7 @@ static const GUID IID_IBufferByteAccess_ =
     { 0x905a0fef, 0xbc53, 0x11df,
       { 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
 static const GUID kGuidNull = { 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
+static bool g_debug = false;
 static SRWLOCK g_logLock = SRWLOCK_INIT;
 static wchar_t kCacheDir[MAX_PATH] = L"";  // mod storage folder, set in Wh_ModInit
 static wchar_t g_logPath[MAX_PATH] = L"";
@@ -340,6 +342,8 @@ static void FileLog(const wchar_t* fmt, ...) {
     _vsnwprintf(msg, 1023, fmt, ap);
     va_end(ap);
     msg[1023] = 0;
+    Wh_Log(L"%s", msg);
+    if (!g_debug) return;    
     SYSTEMTIME st;
     GetLocalTime(&st);
     wchar_t line[1200];
@@ -347,7 +351,6 @@ static void FileLog(const wchar_t* fmt, ...) {
                st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
                GetTickCount64() / 1000, GetCurrentProcessId(), msg);
     line[1199] = 0;
-    OutputDebugStringW(line);
     char u8[3000];
     int n = WideCharToMultiByte(CP_UTF8, 0, line, -1, u8, sizeof(u8), nullptr, nullptr);
     if (n <= 1) return;
@@ -392,7 +395,7 @@ static uint8_t* g_pixels = nullptr;
 static std::atomic<bool> g_teardown{false}, g_tornDown{false};
 static std::atomic<bool> g_attached{false};
 static std::atomic<DWORD> g_lightUntil{0};
-static bool g_bootStill = false, g_debug = false;
+static bool g_bootStill = false, g_saveLast = false;
 static DWORD g_lastLog = 0, g_lastFind = 0;
 static ULONGLONG g_cpuPrev = 0, g_wallPrev = 0;
 // Fit mode, audio, playback hold (idle / hidden), shutdown screen
@@ -451,13 +454,6 @@ double NowMs() {
     return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
 }
 
-// If a thread is still running when the mod is unloaded, bump this DLL's
-// reference count so the unload cannot pull the code out from under it.
-static void PinModule() {
-    HMODULE self = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                       (LPCWSTR)&PinModule, &self);
-}
 static void UnhookOnce() {
     HHOOK h = g_hook.exchange(nullptr);
     if (h) UnhookWindowsHookEx(h);
@@ -909,7 +905,7 @@ static DWORD DecodeThreadImpl() {
     // if no frame was ever produced, tell the UI thread so the original wallpaper
     // is not replaced by a black bitmap and the fail-safe can trip.
     struct ExitGuard {
-        ~ExitGuard() { if (g_seq == 0) g_decodeDead = true; g_decoderDone = true; }
+        ~ExitGuard() { if (g_seq == 0) g_decodeDead = true; g_decoderDone = true; Wh_SetIntValue(L"pendingStarts", 0); }
     } exitGuard;
 
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -962,7 +958,7 @@ static DWORD DecodeThreadImpl() {
     }
 
     UINT32 sw = 0, sh = 0;
-    UINT32 visH = 0;  // tinggi video sebenarnya (frame bisa dilaporkan 1088 karena padding)    
+    UINT32 visH = 0;  // real video height (frames can be reported as 1088 because of padding)
     LONG stride = 0;
     auto readType = [&]() {
         IMFMediaType* cur = nullptr;
@@ -983,8 +979,8 @@ static DWORD DecodeThreadImpl() {
 
     ULONGLONG startTick = GetTickCount64();
     ULONGLONG t0 = startTick;
-    ULONGLONG lastSave = GetTickCount64();
     LONG seqAtRewind = -1;
+    bool firstPublished = false, savedOnce = false;    
     while (!g_stop) {
         // Playback hold (idle or hidden): park without decoding. On resume the
         // pacing code below re-syncs t0 by itself because the first frame is late.
@@ -1061,12 +1057,13 @@ static DWORD DecodeThreadImpl() {
         LeaveCriticalSection(&g_cs);
         HWND w = g_wnd;
         if (w) PostMessageW(w, WM_NULL, 0, 0);
+        if (!firstPublished) { firstPublished = true; Wh_SetIntValue(L"pendingStarts", 0); }        
 
         if (g_needSave) {
             g_needSave = false;
             SaveCache(tmp.data());
         }
-        if (GetTickCount64() - lastSave > 15000) { lastSave = GetTickCount64(); SaveLast(); }
+        if (g_saveLast && !savedOnce && GetTickCount64() - startTick > 10000) { savedOnce = true; SaveLast(); }
         if (g_paused) {
             FileLog(L"Pause: still frame shown");
             break;
@@ -1075,7 +1072,7 @@ static DWORD DecodeThreadImpl() {
     rd->Release();
     MFShutdown();
     timeEndPeriod(1);
-    if (g_seq > 0) SaveLast();
+    if (g_saveLast && g_seq > 0) SaveLast();
     FileLog(L"Decoder stopped");
     return 0;
 }
@@ -1099,6 +1096,28 @@ DependencyObject FindByName(DependencyObject const& o,
         if (r) return r;
     }
     return nullptr;
+}
+
+struct SceneNodes {
+    DependencyObject msg{ nullptr }, lock{ nullptr }, cred{ nullptr },
+                     imgA{ nullptr }, imgB{ nullptr };
+};
+
+void CollectNodes(DependencyObject const& o, int depth, SceneNodes& s) {
+    if (depth > 60) return;
+    if (auto fe = o.try_as<FrameworkElement>()) {
+        auto n = fe.Name();
+        if (!n.empty()) {
+            if (!s.msg && n == L"DisplayMessageUserControl") s.msg = o;
+            else if (!s.lock && n == L"LockScreenUserControl") s.lock = o;
+            else if (!s.cred && n == L"RequestCredentialUserControl") s.cred = o;
+            else if (!s.imgA && n == L"LockLogonImage") s.imgA = o;
+            else if (!s.imgB && n == L"SwapLockLogonImage") s.imgB = o;
+        }
+    }
+    int cnt = Media::VisualTreeHelper::GetChildrenCount(o);
+    for (int i = 0; i < cnt; i++)
+        CollectNodes(Media::VisualTreeHelper::GetChild(o, i), depth + 1, s);
 }
 
 void EnsureBitmap() {
@@ -1148,8 +1167,7 @@ static bool g_savedA = false, g_savedB = false;
 [[clang::no_destroy]] static Media::Brush g_origBrush{nullptr};
 static bool g_brushOn = false;
 
-void UpdateBrush(DependencyObject const& content) {
-    auto o = FindByName(content, L"DisplayMessageUserControl", 0);
+void UpdateBrush(DependencyObject const& content, DependencyObject const& o) {
     auto fe = o ? o.try_as<FrameworkElement>() : nullptr;
     bool msg = fe && fe.Visibility() == Visibility::Visible && fe.ActualWidth() > 0;
     g_msgSceneUp = msg;
@@ -1190,11 +1208,9 @@ void UpdateBrush(DependencyObject const& content) {
 }
 
 // Detects the password / sign-in screen (UI thread only).
-void UpdatePasswordScene(DependencyObject const& content) {
-    auto o = FindByName(content, L"RequestCredentialUserControl", 0);
+void UpdatePasswordScene(DependencyObject const& o, DependencyObject const& l) {
     auto fe = o ? o.try_as<FrameworkElement>() : nullptr;
     bool credVisible = fe && fe.Visibility() == Visibility::Visible && fe.ActualWidth() > 0;
-    auto l = FindByName(content, L"LockScreenUserControl", 0);
     auto lfe = l ? l.try_as<FrameworkElement>() : nullptr;
     // Password screen = credential UI visible while the lock screen UI is collapsed.
     bool pw = credVisible && lfe && lfe.Visibility() != Visibility::Visible;
@@ -1314,7 +1330,8 @@ void DumpTree(DependencyObject const& o, int d, int& c) {
 }
 
 void LogScene() {
-    auto content = Window::Current().Content();
+    auto window = Window::Current();
+    auto content = window ? window.Content() : nullptr;
     if (!content) return;
     const wchar_t* names[] = { L"DisplayMessageUserControl", L"LockScreenUserControl",
         L"PicturePasswordLogonView", L"RequestCredentialUserControl",
@@ -1381,15 +1398,18 @@ void Step() {
         }
 
         bool both = g_imgA && g_imgB;
-        DWORD interval = both ? (light ? 250u : 1000u) : 30u;
+        DWORD interval = both ? (light ? 250u : 1000u) : (now - g_initTick < 5000 ? 30u : 250u);
         if (now - g_lastFind >= interval) {
             g_lastFind = now;
-            auto content = Window::Current().Content();
+            auto window = Window::Current();
+            auto content = window ? window.Content() : nullptr;
             if (content) {
-                UpdateBrush(content);
-                UpdatePasswordScene(content);                
-                auto a = FindByName(content, L"LockLogonImage", 0);
-                auto b = FindByName(content, L"SwapLockLogonImage", 0);
+                SceneNodes sn;
+                CollectNodes(content, 0, sn);
+                UpdateBrush(content, sn.msg);
+                UpdatePasswordScene(sn.cred, sn.lock);               
+                auto a = sn.imgA;
+                auto b = sn.imgB;
                 g_imgA = a ? a.try_as<Controls::Image>() : nullptr;
                 g_imgB = b ? b.try_as<Controls::Image>() : nullptr;
             } else {
@@ -1509,7 +1529,7 @@ DWORD WINAPI Worker(LPVOID) {
     FileLog(L"Window=%p thread=%u hook=%p", g_wnd, tid, hk);
     while (!g_stop && IsWindow(g_wnd)) {
         PostMessageW(g_wnd, WM_NULL, 0, 0);
-        Sleep(((g_paused || g_bootStill || g_idlePaused.load()) && g_attached) ? 200 : 20);
+        Sleep(200);
     }
     // Exiting because of fail-safe / uninit / window gone: remove the hook so
     // the UI thread has no more overhead.
@@ -1529,6 +1549,7 @@ BOOL Wh_ModInit() {
     wsprintfW(g_logPath, L"%s\\debug.log", kCacheDir);
     wsprintfW(kLastFile, L"%s\\last.bgra", kCacheDir);
     wsprintfW(kLastTmp, L"%s\\last.tmp", kCacheDir);
+    g_debug = Wh_GetIntSetting(L"debugLog") != 0;    
     FileLog(L"Storage: %s", kCacheDir);    
     {
         FILETIME cr, ex, kr, us, nw;
@@ -1583,6 +1604,7 @@ BOOL Wh_ModInit() {
         bool still = !bm || wcscmp(bm, L"play") != 0;
         Wh_FreeStringSetting(bm);
         g_bootStill = still && GetTickCount64() < 180000ULL;
+        g_saveLast = still;        
         FileLog(L"Uptime %llu s, bootMode=%s", GetTickCount64() / 1000,
                still ? L"still" : L"play");
     }
@@ -1613,7 +1635,14 @@ BOOL Wh_ModInit() {
             FileLog(L"Boot: no saved last frame, playing normally");
         }
     }
-
+    if (!(g_paused && g_cacheHit) && !g_bootStill) {
+        int pending = Wh_GetIntValue(L"pendingStarts", 0);
+        if (pending >= 2) {
+            FileLog(L"Two LogonUI sessions in a row ended before the decoder produced a frame; playback disabled. Change any setting to try again.");
+            return TRUE;
+        }
+        Wh_SetIntValue(L"pendingStarts", pending + 1);
+    }
     // Pause mode with a cache hit: no decoder needed at all
     if (!(g_paused && g_cacheHit) && !g_bootStill)
         g_decThread = CreateThread(nullptr, 0, DecodeThread, nullptr, 0, nullptr);
@@ -1639,35 +1668,33 @@ void Wh_ModUninit() {
     // 2) Stop the threads
     g_stop = true;
     if (g_thread) {
-        if (WaitForSingleObject(g_thread, 3000) != WAIT_OBJECT_0) {
+        if (WaitForSingleObject(g_thread, INFINITE) != WAIT_OBJECT_0) {
             FileLog(L"Worker did not stop in time");
-            PinModule();
         }
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
     if (g_audioThread) {
-        if (WaitForSingleObject(g_audioThread, 5000) != WAIT_OBJECT_0) {
+        if (WaitForSingleObject(g_audioThread, INFINITE) != WAIT_OBJECT_0) {
             FileLog(L"Audio thread did not stop in time");
-            PinModule();
         }
         CloseHandle(g_audioThread);
         g_audioThread = nullptr;
     }
     if (g_decThread) {
-        if (WaitForSingleObject(g_decThread, 10000) != WAIT_OBJECT_0) {
+        if (WaitForSingleObject(g_decThread, INFINITE) != WAIT_OBJECT_0) {
             FileLog(L"Decoder did not stop in time");
-            PinModule();
         }
         CloseHandle(g_decThread);
         g_decThread = nullptr;
     }
     // 3) Remove the hook (safe to call twice; the Worker may already have removed it)
     UnhookOnce();
-    Sleep(100);  // let a hook callback that is currently running finish
+    if (w && IsWindow(w)) SendMessageW(w, WM_NULL, 0, 0);  // when this returns, no hook call is still running
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    Wh_SetIntValue(L"pendingStarts", 0);
     *bReload = TRUE;
     return TRUE;
 }
