@@ -2,12 +2,106 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-06T21:01:55.000Z</updated>
+    <updated>2026-11-06T22:03:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Clock Styler 0.6.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-clock-styler#7a2157258d4698ee9eb809ea45719051a62ed99a</id>
+        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
+        <updated>2026-11-06T22:03:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added 3 brand-new Vertical Stack Clock styles (Pixel / Nothing OS, Modern Dual Weight, Heavy Poster Impact) with bespoke 2-row line spacing and weight hierarchy.</li>
+<li>Fixed black lock screen background after laptop wakes up from sleep (#6978) via native display and power state callbacks (<code>PowerSettingRegisterNotification</code> &amp; <code>RegisterSuspendResumeNotification</code>) to pause background polling during quiesce.</li>
+<li>Added a 1000 ms stabilization delay upon wake before resuming clock ticks, preventing contention while LockApp's COM and DXGI pipelines restore wallpaper.</li>
+<li>Added window and element visibility guards (<code>IsWindowVisible</code> &amp; <code>Window::Current().Visible()</code>) before inspecting or modifying the visual tree.</li>
+<li>Reordered theme selection options across all 14 supported languages to place vertical themes right after Classic Flip Clock (positions 4, 5, 6).</li>
+<li>Closed startup settings synchronization race conditions to ensure preferences apply immediately on shell launch.</li>
+<li>Updated README and mod header previews with new vertical clock screenshots.</li>
+</ul>
+]]></content>
+        <author>
+            <name>ali0zdas</name>
+            <uri>https://github.com/ali0zdas</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Better Eject Dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/better-eject-dialog#1419d1c0a9a1ae204c3ca2dbba1858c6a80e9f8b</id>
+        <link href="https://windhawk.net/mods/better-eject-dialog"/>
+        <updated>2026-11-06T22:03:18.000Z</updated>
+        <content type="html"><![CDATA[<h1>Better Eject Dialog</h1>
+<p>When a USB drive is in use, Windows refuses to eject it with a message like
+<em>&quot;Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device. This device is
+currently in use. Close any programs or windows that might be using the device,
+and then try again.&quot;</em> It doesn't say which program is using the drive.</p>
+<table>
+<thead>
+<tr>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-before.png" alt="Before"></td>
+<td><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/e826e35bed4c5f0b2a36bec47168b76a7d263676/windhawk-mods/better-eject-dialog/preview-after.png" alt="After"></td>
+</tr>
+</tbody>
+</table>
+<p>This mod replaces that message with a dialog that:</p>
+<ul>
+<li><strong>Lists the programs that are using the drive</strong>, with their name, process ID,
+path and command line. Background helpers get a clearer name, for example
+<em>COM Surrogate (Plan9FileSystem)</em> for the server that WSL uses to access
+Windows drives.</li>
+<li><strong>Explains common causes</strong>, such as WSL, Windows Search, Microsoft Defender
+and File Explorer.</li>
+<li><strong>Closes or ends a program</strong> with one click. Programs with windows are asked
+to close, so they can still ask you to save your work. Background processes
+are ended. Programs that run as administrator get a UAC prompt.</li>
+<li><strong>Ejects automatically</strong> once the blocking programs exit, so you can leave the
+dialog open and close them yourself. If the drive keeps being used, it stops
+after 5 attempts in a row until you click a button.</li>
+<li><strong>Force ejects</strong> as a last resort. After a confirmation and a UAC prompt, the
+drive is flushed and dismounted so that programs lose access to it, and then
+it's ejected. Programs may lose unsaved changes to files on the drive.</li>
+<li>Keeps Windows' usual <strong>Safe To Remove Hardware</strong> notification when the drive
+is ejected.</li>
+</ul>
+<p>It works when you eject from the <em>Safely Remove Hardware and Eject Media</em> tray
+icon and from <em>Eject</em> in File Explorer.</p>
+<h2>How it finds the programs</h2>
+<p>Every time an eject fails, Windows writes an event to the System event log
+(Kernel-PnP, event ID 225) for each process that has the drive open. The mod
+reads those events, so it can also name programs that run as administrator,
+services and Windows itself.</p>
+<h2>What it doesn't close</h2>
+<ul>
+<li><strong>System</strong> means that Windows or a driver has the drive open, for example for
+indexing, virus scanning, WSL or a mounted disk image. It usually lets go once
+the other programs are closed. If it doesn't, use <strong>Force eject</strong>.</li>
+<li><strong>File Explorer</strong> can't be closed from the dialog, because the dialog runs
+inside it. Close File Explorer windows or previews that show the drive.</li>
+<li><strong>Windows services and core Windows processes</strong> are listed so that you know
+what's using the drive, but they aren't closed from the dialog.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Ejects started by other programs, such as third-party eject tools, aren't
+changed.</li>
+<li>Force eject can lose unsaved changes that programs still have for files on
+the drive. Use it only if you can't close the programs.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ender</name>
+            <uri>https://github.com/EnderDragonEP</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0.3]]></title>
         <id>https://windhawk.net/mods/file-explorer-content-animation#9b70a24771cfbad240c70881b7b1e97baf57b20a</id>
@@ -765,71 +859,6 @@ copy.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Live HUD 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-live-hud-radar#08e84491fa69a919455b948e06fd1539ca6c8963</id>
-        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
-        <updated>2026-11-05T05:01:50.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Live HUD</h1>
-<p>A compact system monitoring widget for the Windows 11 taskbar.
-Displays real-time CPU usage, RAM load, network traffic, and optional latency,
-with an optional process memory trimmer.</p>
-<p>This is a tool mod: it runs in its own dedicated process instead of being
-injected into <code>explorer.exe</code>, so it cannot affect the shell's stability and
-survives Explorer restarts.</p>
-<p><img src="https://i.imgur.com/dDy0BoL.png" alt="Screenshot"></p>
-<h3>Features</h3>
-<ul>
-<li><strong>Real-time monitoring:</strong> CPU load, RAM usage and active network speed.</li>
-<li><strong>Windows 11 look:</strong> blends with the taskbar, configurable corner style.</li>
-<li><strong>Auto-hide:</strong> hides itself when a fullscreen game or application is active.</li>
-<li><strong>Ping (opt-in, off by default):</strong> when enabled, an ICMP echo request is sent
-to the selected public DNS resolver (Cloudflare 1.1.1.1, Google 8.8.8.8 or
-Quad9 9.9.9.9) roughly every 1.6 seconds. Nothing is sent while it is disabled.</li>
-<li><strong>Process Memory Trimmer (opt-in, off by default):</strong> trims the working sets
-of all user processes that can be opened with the current privileges. Trimmed
-pages move to the standby list and programs page the data back in when they
-need it, so this does not free memory in a lasting way and may cause a short
-slowdown.</li>
-</ul>
-<h3>Controls</h3>
-<ul>
-<li><strong>Ctrl + Left Click:</strong> trim memory (only if enabled in settings).</li>
-<li><strong>Alt + Left Click and drag:</strong> adjust the horizontal position on the taskbar.</li>
-</ul>
-<h3>Known limitations</h3>
-<ul>
-<li>Only the primary taskbar is supported (no secondary monitors).</li>
-<li>Network speed is the sum of all active non-loopback adapters.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lemon</name>
-            <uri>https://github.com/lemon-web-stack</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Overflow on Hover 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win11-taskbar-overflow-hover#8a36fa8d78e5834e3ef4039b816a3b33fdb06681</id>
-        <link href="https://windhawk.net/mods/win11-taskbar-overflow-hover"/>
-        <updated>2026-11-05T05:01:45.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Overflow on Hover 🚀</h1>
-<p>A zero-click QoL upgrade for Windows 11. Hover over the taskbar overflow button
-to open the hidden Apps icons.</p>
-<p><img src="https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png" alt="Hover overflow menu"></p>
-<p>✨ Features:</p>
-<ul>
-<li>Zero-Click Open: Auto-expands the hidden icons menu just by hovering.</li>
-<li>Auto-Dismiss: Gracefully closes the menu automatically the moment your mouse leaves the overflow button or the flyout.</li>
-<li>Instant App Launch: Instantly dismisses the overflow flyout the exact millisecond you click an app inside it, completely bypassing the native Windows UI lag.</li>
-</ul>
-<p>Developed by Cougar16 for the Windows customization community.</p>
-]]></content>
-        <author>
-            <name>Cougar16</name>
-            <uri>https://github.com/Cougar16</uri>
         </author>
     </entry>
 </feed>

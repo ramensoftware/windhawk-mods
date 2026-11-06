@@ -2,12 +2,86 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-06T20:00:27.000Z</updated>
+    <updated>2026-11-06T22:03:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Eject Dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/better-eject-dialog#1419d1c0a9a1ae204c3ca2dbba1858c6a80e9f8b</id>
+        <link href="https://windhawk.net/mods/better-eject-dialog"/>
+        <updated>2026-11-06T22:03:18.000Z</updated>
+        <content type="html"><![CDATA[<h1>Better Eject Dialog</h1>
+<p>When a USB drive is in use, Windows refuses to eject it with a message like
+<em>&quot;Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device. This device is
+currently in use. Close any programs or windows that might be using the device,
+and then try again.&quot;</em> It doesn't say which program is using the drive.</p>
+<table>
+<thead>
+<tr>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-before.png" alt="Before"></td>
+<td><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/e826e35bed4c5f0b2a36bec47168b76a7d263676/windhawk-mods/better-eject-dialog/preview-after.png" alt="After"></td>
+</tr>
+</tbody>
+</table>
+<p>This mod replaces that message with a dialog that:</p>
+<ul>
+<li><strong>Lists the programs that are using the drive</strong>, with their name, process ID,
+path and command line. Background helpers get a clearer name, for example
+<em>COM Surrogate (Plan9FileSystem)</em> for the server that WSL uses to access
+Windows drives.</li>
+<li><strong>Explains common causes</strong>, such as WSL, Windows Search, Microsoft Defender
+and File Explorer.</li>
+<li><strong>Closes or ends a program</strong> with one click. Programs with windows are asked
+to close, so they can still ask you to save your work. Background processes
+are ended. Programs that run as administrator get a UAC prompt.</li>
+<li><strong>Ejects automatically</strong> once the blocking programs exit, so you can leave the
+dialog open and close them yourself. If the drive keeps being used, it stops
+after 5 attempts in a row until you click a button.</li>
+<li><strong>Force ejects</strong> as a last resort. After a confirmation and a UAC prompt, the
+drive is flushed and dismounted so that programs lose access to it, and then
+it's ejected. Programs may lose unsaved changes to files on the drive.</li>
+<li>Keeps Windows' usual <strong>Safe To Remove Hardware</strong> notification when the drive
+is ejected.</li>
+</ul>
+<p>It works when you eject from the <em>Safely Remove Hardware and Eject Media</em> tray
+icon and from <em>Eject</em> in File Explorer.</p>
+<h2>How it finds the programs</h2>
+<p>Every time an eject fails, Windows writes an event to the System event log
+(Kernel-PnP, event ID 225) for each process that has the drive open. The mod
+reads those events, so it can also name programs that run as administrator,
+services and Windows itself.</p>
+<h2>What it doesn't close</h2>
+<ul>
+<li><strong>System</strong> means that Windows or a driver has the drive open, for example for
+indexing, virus scanning, WSL or a mounted disk image. It usually lets go once
+the other programs are closed. If it doesn't, use <strong>Force eject</strong>.</li>
+<li><strong>File Explorer</strong> can't be closed from the dialog, because the dialog runs
+inside it. Close File Explorer windows or previews that show the drive.</li>
+<li><strong>Windows services and core Windows processes</strong> are listed so that you know
+what's using the drive, but they aren't closed from the dialog.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Ejects started by other programs, such as third-party eject tools, aren't
+changed.</li>
+<li>Force eject can lose unsaved changes that programs still have for files on
+the drive. Use it only if you can't close the programs.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ender</name>
+            <uri>https://github.com/EnderDragonEP</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Automatic WhatsApp Audio Ducking 1.0]]></title>
         <id>https://windhawk.net/mods/automatic-whatsapp-audio-ducking#0e5cd2eed2bcbee826399b14c5a77ce0306fd307</id>
@@ -1303,73 +1377,6 @@ and their buttons can remain light.</li>
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartPad 1.0]]></title>
-        <id>https://windhawk.net/mods/startpad#76edbcc836b994efec92065992b9a02be87d82a1</id>
-        <link href="https://windhawk.net/mods/startpad"/>
-        <updated>2026-11-04T01:04:37.000Z</updated>
-        <content type="html"><![CDATA[<h1>StartPad</h1>
-<p><img src="https://raw.githubusercontent.com/frankh93/StartPad/main/preview.png" alt="StartPad Preview"></p>
-<p>A macOS Launchpad-style fullscreen app launcher that replaces the Windows 11 Start menu, featuring horizontal paginated grids, interactive app folders, drag-and-drop reordering, and customizable visual themes.</p>
-<h2>Features &amp; How to Use</h2>
-<h3>Pages &amp; Navigation</h3>
-<ul>
-<li><strong>Horizontal Pages</strong>: Apps are organized into pages rather than a vertical scrolling list.</li>
-<li><strong>Switching Pages</strong>: Click and drag horizontally with the mouse, scroll the mouse wheel (vertical or horizontal), click the pagination dots at the bottom, or use <strong>Page Up / Page Down</strong>.</li>
-<li><strong>2D Arrow Key Navigation</strong>: Use the <strong>Arrow keys</strong> or <strong>Tab</strong> to move selection across icons. Moving past the left or right edge of the grid automatically flips to the previous or next page.</li>
-</ul>
-<h3>Drag-and-Drop &amp; Folders</h3>
-<ul>
-<li><strong>Reorder Apps</strong>: <strong>Click and hold</strong> (~320 ms) on any app or folder icon to pick it up, then drag it to a new position on the grid or across pages (hold near the screen edge to flip pages).</li>
-<li><strong>Create Folders</strong>:
-<ul>
-<li><strong>Drag &amp; Drop</strong>: Drag one app icon directly onto another app icon (or into an existing folder).</li>
-<li><strong>Selection Mode</strong>: Click the <strong>More (<code>...</code>)</strong> button on the right side of the search bar and choose <strong>Create folder</strong>, click the apps you want to bundle (marked with a blue checkmark), and click the <strong>Done (<code>✓</code>)</strong> button in the search bar (or press <strong>Enter</strong>).</li>
-</ul>
-</li>
-<li><strong>Rename Folders</strong>: When a folder is open, <strong>click its title</strong> at the top or press <strong>F2</strong> (also works when a folder is selected on the main grid), type the new name, and press <strong>Enter</strong>.</li>
-<li><strong>Remove or Ungroup</strong>: Drag an icon outside the open folder panel to move it back to the main grid, or right-click a folder and select <strong>Ungroup folder</strong>.</li>
-<li><strong>Persistent Layout</strong>: Your custom icon order, folders, and hidden apps are automatically saved to Windhawk's mod storage per user.</li>
-</ul>
-<h3>Search &amp; Launching</h3>
-<ul>
-<li><strong>Instant Search</strong>: Start typing anywhere to filter apps immediately. Press <strong>Esc</strong> or click the clear (<code>×</code>) button to reset the search.</li>
-<li><strong>Launch App</strong>: Click an icon or press <strong>Enter</strong> on the selected app.</li>
-<li><strong>Run as Administrator</strong>: Hold <strong>Ctrl + Shift + Enter</strong> on a selected app, or right-click the app and choose <strong>Run as administrator</strong>.</li>
-<li><strong>Context Menu</strong>: Right-click any app to <strong>Open</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Remove from folder</strong>, or <strong>Hide</strong>.</li>
-</ul>
-<h3>More Options (<code>...</code>) &amp; Hiding Apps</h3>
-<p>Click the <strong><code>...</code></strong> button inside the right side of the search bar to access:</p>
-<ul>
-<li><strong>Create folder</strong>: Interactively select multiple apps to group into a new folder.</li>
-<li><strong>Edit hidden apps</strong>: Toggle visibility badges on all apps to hide or unhide multiple items at once, then click the <strong>Done (<code>✓</code>)</strong> button in the search bar to save.</li>
-<li><strong>Search in hidden apps</strong>: When checked, typing a search query will also return matching apps that you have hidden.</li>
-<li><strong>Reset layout</strong>: Restores the default alphabetical layout and removes all custom folders and hidden-app rules.</li>
-</ul>
-<h3>Power Menu &amp; Visuals</h3>
-<ul>
-<li><strong>Power Button</strong>: Located at the bottom right (aligned with the page dots and last column), providing quick access to <strong>Lock</strong>, <strong>Sign out</strong>, <strong>Sleep</strong>, <strong>Shut down</strong>, and <strong>Restart</strong>.</li>
-<li><strong>Visual Styles</strong>: Choose between <strong>MacOS Style</strong> (pill search bar &amp; squircle folders) and <strong>Windows 11 Fluent</strong> (Acrylic-inspired search box with system accent bar), automatically adapting to Windows Light and Dark modes.</li>
-<li><strong>Legacy Icon Cleanup</strong>: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.</li>
-<li><strong>Localized UI</strong>: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.</li>
-</ul>
-<h2>How StartPad differs from &quot;fullscreen-start&quot; mod</h2>
-<p>Both mods replace the Start menu with a fullscreen app launcher, and <strong>they cannot be enabled at the same time</strong> because both intercept <code>XamlLauncher::ShowStartView</code>.</p>
-<ul>
-<li><strong>StartPad</strong> focuses on a <strong>paginated macOS Launchpad workflow</strong>: horizontal pages with spring physics, <strong>folders</strong> (creation, renaming, ungrouping), <strong>drag-and-drop icon reordering</strong> with persistent layout storage, <strong>hiding apps</strong>, a <strong>right-click context menu</strong> (Run as administrator, Open file location), an integrated <strong>Power menu</strong>, a <strong>Windows 11 Fluent visual style</strong>, and <strong>multilingual UI strings</strong>.</li>
-<li><strong>Fullscreen Start (<code>fullscreen-start</code>)</strong> by Rafael Mendes focuses on a single <strong>vertically scrolled grid</strong> with Direct2D rendering, live DWM Acrylic/Blur backdrops, <code>Ctrl+V</code> clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.</li>
-</ul>
-<h2>Credits &amp; License</h2>
-<ul>
-<li>Hooking <code>XamlLauncher::ShowStartView</code> in <code>twinui.pcshell.dll</code> (<code>kShowMethodKeyboard</code> / <code>kShowFlagKeyboard</code>), secondary folder-process detection (<code>IsFolderWindowsProcess</code>), and thread initialization/uninitialization structure are adapted from <a href="https://github.com/RafaelMendes1407"><strong>Fullscreen Start (Launchpad style)</strong> (<code>fullscreen-start</code>)</a> by <strong>Rafael Mendes</strong>, licensed under the MIT License (Copyright (c) Rafael Mendes).</li>
-<li>Licensed under the <strong>MIT License</strong>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Frankh93</name>
-            <uri>https://github.com/frankh93</uri>
         </author>
     </entry>
 </feed>
