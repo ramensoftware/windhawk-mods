@@ -2404,7 +2404,7 @@ enum {
     ID_KEYS = 1200, ID_GO = 1500,
     ID_SW_WIFI = 1980, ID_SW_BT, ID_SW_DARK, ID_SW_MUTE, ID_SW_NIGHT, ID_SLIDER_VOL = 1990, ID_SLIDER_BRIGHT, ID_SLIDER_GLASS, ID_SLIDER_REFRACT, ID_SLIDER_SOFT, ID_SLIDER_WXGLASS,
     ID_SW_GLASSCLEAR = 1970, ID_SW_LIQUID, ID_SW_LIVE, ID_BAR_SETTINGS = 1975,
-    ID_PRIV_MICMUTE = 1950,
+    ID_PRIV_MICMUTE = 1950, ID_PRIV_INFO,
     ID_NOW_PREV = 1101 + 40, ID_NOW_PLAY, ID_NOW_NEXT, ID_FOCUS_OFF, ID_FOCUS_SETTINGS, ID_PRIV_SETTINGS,
     ID_HIST_CLEAR = 1150, ID_HIST_BASE = 1151, ID_HIST_WINCENTER = 1190,
 };
@@ -15885,15 +15885,17 @@ static HMENU BuildFocusMenu() {
 static HMENU BuildPrivacyMenu() {
     HMENU m = CreatePopupMenu();
     AddHeader(m, g_ext.micApps.empty() ? L"Microfone" : L"Microfone em uso");
-    for (auto& a : g_ext.micApps) AddItem(m, 0, std::wstring(1, (wchar_t)0xE720) + L" " + a, false, true);
+    // Os apps aparecem como itens normais, com ícone (um item inativo sem id vira
+    // título no menu de vidro); clicar neles não faz nada.
+    for (auto& a : g_ext.micApps) AddItem(m, ID_PRIV_INFO, std::wstring(1, (wchar_t)0xE720) + L" " + a);
     if (g_ext.micMuted >= 0)
         AddItem(m, ID_PRIV_MICMUTE, std::wstring(1, (wchar_t)0xEC54) + L" " + T(L"Silenciar o microfone"), g_ext.micMuted == 1);
     else
-        AddItem(m, 0, T(L"Nenhum microfone"), false, true);
+        AddItem(m, ID_PRIV_INFO, T(L"Nenhum microfone"), false, true);
     AddSep(m);
     AddHeader(m, g_ext.camApps.empty() ? L"Câmera" : L"Câmera em uso");
-    if (g_ext.camApps.empty()) AddItem(m, 0, T(L"Nenhum app usando a câmera"), false, true);
-    for (auto& a : g_ext.camApps) AddItem(m, 0, std::wstring(1, (wchar_t)0xE714) + L" " + a, false, true);
+    if (g_ext.camApps.empty()) AddItem(m, ID_PRIV_INFO, T(L"Nenhum app usando a câmera"), false, true);
+    for (auto& a : g_ext.camApps) AddItem(m, ID_PRIV_INFO, std::wstring(1, (wchar_t)0xE714) + L" " + a);
     return m;
 }
 
@@ -19304,6 +19306,7 @@ static void OpenItemMenu(Bar* b, int idx) {
             return;
         case ID_FOCUS_SETTINGS: OpenUri(L"ms-settings:quiethours"); return;
         case ID_PRIV_SETTINGS: OpenUri(L"ms-settings:privacy"); return;
+        case ID_PRIV_INFO: return;  // nome de um app (só informação)
         case ID_PRIV_MICMUTE: {
             bool mute = g_ext.micMuted != 1;
             if (MicMutedSet(mute)) {
