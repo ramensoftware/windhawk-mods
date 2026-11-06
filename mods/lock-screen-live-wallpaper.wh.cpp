@@ -97,6 +97,8 @@ The mod stops itself and restores the original wallpaper for the rest of that `L
 - the lock screen elements (`LockLogonImage` / `SwapLockLogonImage`) are never found, which usually means a Windows update changed the UI, or
 - the UI throws repeated errors (3 within 30 seconds).
 
+Separately, a crash guard protects the sign-in screen. If two `LogonUI.exe` sessions in a row end before the decoder shows its first frame (for example because a codec crashes on your video), the mod turns playback off and the normal wallpaper is shown. To turn it back on, change **Video file or folder**, **Render width** or **Fit mode** to a different value and keep it. Very short sessions (for example two Ctrl+Alt+Del screens in a row) can also trip it; the same fix applies.
+
 ## 📁 Files written by the mod
 
 Everything is stored in the mod's own storage folder inside Windhawk's data folder:
@@ -205,6 +207,8 @@ Mod berhenti sendiri dan mengembalikan wallpaper asli sampai proses `LogonUI.exe
 - tidak ada frame video yang dihasilkan dalam 30 detik,
 - elemen lock screen (`LockLogonImage` / `SwapLockLogonImage`) tidak pernah ditemukan, yang biasanya berarti update Windows mengubah UI, atau
 - UI melempar error berulang (3 kali dalam 30 detik).
+
+Selain itu, ada pelindung crash untuk layar sign-in. Jika dua sesi `LogonUI.exe` berturut-turut berakhir sebelum decoder menampilkan frame pertama (misalnya karena codec crash pada videomu), mod mematikan pemutaran dan wallpaper normal yang tampil. Untuk menyalakannya lagi, ubah **Video file or folder**, **Render width** atau **Fit mode** ke nilai yang berbeda dan biarkan begitu. Sesi yang sangat singkat (misalnya dua kali layar Ctrl+Alt+Del berturut-turut) juga bisa memicunya; solusinya sama.
 
 ## 📁 File yang ditulis oleh mod
 
@@ -736,6 +740,14 @@ static bool RenderFrame(const BYTE* data, size_t stride, bool flip, int sw, int 
 static const CLSID kClsidMMDeviceEnumerator =
     { 0xBCDE0395, 0xE52F, 0x467C, { 0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E } };
 
+// Crash guard: the pendingStarts counter is cleared only after the first video frame
+// AND (if audio is used) the first audio buffer were produced.
+static std::atomic<bool> g_frameDone{false}, g_audioDone{true}, g_pendingCleared{false};
+static void TryClearPending() {
+    if (g_frameDone && g_audioDone && !g_pendingCleared.exchange(true))
+        Wh_SetIntValue(L"pendingStarts", 0);
+}
+
 template <class T> static void SafeRelease(T*& p) {
     if (p) { p->Release(); p = nullptr; }
 }
@@ -882,6 +894,7 @@ DWORD WINAPI AudioThread(LPVOID) {
                 float* o = (float*)outBuf;
                 for (UINT32 i = 0; i < n * ch; i++) o[i] = in[i] * vol;
                 rc->ReleaseBuffer(n, 0);
+                if (!g_audioDone) { g_audioDone = true; TryClearPending(); }                
                 pos += (size_t)n * frameBytes;
                 if (!running) { ac->Start(); running = true; }
             }
@@ -896,6 +909,8 @@ DWORD WINAPI AudioThread(LPVOID) {
     SafeRelease(rd);
     if (mfOk) MFShutdown();
     if (coOk) CoUninitialize();
+    g_audioDone = true;
+    TryClearPending();    
     FileLog(L"Audio: stopped");
     return 0;
 }
@@ -1057,7 +1072,7 @@ static DWORD DecodeThreadImpl() {
         LeaveCriticalSection(&g_cs);
         HWND w = g_wnd;
         if (w) PostMessageW(w, WM_NULL, 0, 0);
-        if (!firstPublished) { firstPublished = true; Wh_SetIntValue(L"pendingStarts", 0); }        
+        if (!firstPublished) { firstPublished = true; g_frameDone = true; TryClearPending(); }
 
         if (g_needSave) {
             g_needSave = false;
@@ -1636,12 +1651,20 @@ BOOL Wh_ModInit() {
         }
     }
     if (!(g_paused && g_cacheHit) && !g_bootStill) {
+        uint64_t fp = Fnv(path + L"|" + std::to_wstring(kW) + L"|" +
+                          std::to_wstring(g_fitMode));
+        int key = (int)(fp ^ (fp >> 32));
+        if (Wh_GetIntValue(L"pendingKey", 0) != key) {
+            Wh_SetIntValue(L"pendingKey", key);
+            Wh_SetIntValue(L"pendingStarts", 0);
+        }        
         int pending = Wh_GetIntValue(L"pendingStarts", 0);
         if (pending >= 2) {
-            FileLog(L"Two LogonUI sessions in a row ended before the decoder produced a frame; playback disabled. Change any setting to try again.");
+            FileLog(L"Two LogonUI sessions in a row ended before the decoder produced a frame; playback disabled. Change the video path, render width or fit mode to try again.");
             return TRUE;
         }
         Wh_SetIntValue(L"pendingStarts", pending + 1);
+        g_audioDone = !(g_audioWanted && !g_paused && g_speed == 100);        
     }
     // Pause mode with a cache hit: no decoder needed at all
     if (!(g_paused && g_cacheHit) && !g_bootStill)
@@ -1651,6 +1674,7 @@ BOOL Wh_ModInit() {
         g_audioThread = CreateThread(nullptr, 0, AudioThread, nullptr, 0, nullptr);
     else if (g_audioWanted)
         FileLog(L"Audio not started (needs 100%% speed, no pause / boot still frame)");
+    if (!g_audioThread) { g_audioDone = true; TryClearPending(); }
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     return TRUE;
 }
@@ -1694,7 +1718,6 @@ void Wh_ModUninit() {
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_SetIntValue(L"pendingStarts", 0);
     *bReload = TRUE;
     return TRUE;
 }
