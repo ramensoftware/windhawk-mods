@@ -3358,6 +3358,34 @@
         "version": "1.0.0"
       }
     },
+    "compiz-desktop-cube": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793934256000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793934256000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Soham",
+        "compilerOptions": "-lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lshell32",
+        "description": "Compiz/GNOME style 3D glass desktop prism for virtual desktops. Drag up from the taskbar to open it, turn it to switch desktops, right-click the screen edges to add or remove desktops. Live desktop, blurred background.",
+        "github": "https://github.com/Soham-Barate",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Compiz Desktop Cube for Windows 11",
+        "version": "5.9.0"
+      }
+    },
     "confirm-closing-multiple-explorer-tabs": {
       "details": {
         "defaultSorting": 5940,
@@ -22711,7 +22739,7 @@
         "ratingUsers": 17,
         "reviews": 0,
         "trendingSorting": 22.5,
-        "updated": 1793754293000,
+        "updated": 1793934261000,
         "users": 225
       },
       "metadata": {
@@ -22725,7 +22753,7 @@
         ],
         "license": "MIT",
         "name": "WinTips 键盘状态提示",
-        "version": "1.2.1"
+        "version": "1.4.1"
       },
       "metadataEnglish": {
         "description": "Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut",

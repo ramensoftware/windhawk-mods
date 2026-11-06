@@ -2,12 +2,84 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-06T02:03:09.000Z</updated>
+    <updated>2026-11-06T03:04:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Compiz Desktop Cube for Windows 11 5.9.0]]></title>
+        <id>https://windhawk.net/mods/compiz-desktop-cube#77263ff11741f7176db8df91469373cfffa6ee84</id>
+        <link href="https://windhawk.net/mods/compiz-desktop-cube"/>
+        <updated>2026-11-06T03:04:16.000Z</updated>
+        <content type="html"><![CDATA[<h1>Compiz Desktop Cube for Windows 11</h1>
+<p><img src="https://raw.githubusercontent.com/Soham-Barate/compiz-desktop-cube-windows11/main/images/cube-demo.gif" alt="Compiz Desktop Cube Preview"></p>
+<p>A Compiz / GNOME style 3D desktop prism for Windows 11 virtual desktops.
+Built on Windows.UI.Composition + Direct2D with a GPU blurred background.</p>
+<h2>How to use</h2>
+<ol>
+<li>Press and hold the <strong>left mouse button</strong> on <strong>empty space</strong> of the taskbar
+(works with an auto-hide taskbar too).</li>
+<li>Drag <strong>upward</strong>. The desktop shrinks gradually into the cube.</li>
+<li>Keep holding and drag <strong>left / right</strong> to turn it. After a moment <strong>up / down</strong> tilts it.</li>
+<li><strong>Mouse wheel</strong> zooms the cube in and out (scroll up = closer, scroll down = farther).
+(Optional: set &quot;Mouse Wheel Action&quot; to the window switcher to get the Alt+Tab style window cycling instead.)</li>
+<li><strong>Add / remove desktops:</strong> while the cube is open, <strong>right-click the right edge</strong> of the screen to add a desktop (+1) or
+<strong>right-click the left edge</strong> to remove one (-1). The frosted gray zones are hidden by default: move the pointer to the far left or
+far right edge and the matching zone (a - or a +) slides in. It stays while the pointer is inside it, flashes when
+you use it and hides again. &quot;-&quot; closes the LAST desktop (its windows move to the previous one). The cube rebuilds itself
+with a little spin and the new face fades in.</li>
+<li>Release. The cube snaps to the nearest face and switches desktop.
+A quick flick also switches. Press <strong>Escape</strong> to cancel.</li>
+</ol>
+<h2>Faces follow your desktop count</h2>
+<ul>
+<li>1 desktop: a single face with limited rotation.</li>
+<li>2 desktops: two faces (a flip card).</li>
+<li>3, 4, 5, 6 desktops: triangle, cube, pentagon, hexagon.</li>
+<li>More than 6 desktops: hexagon, faces are re-mapped while you turn it, so every desktop is reachable.</li>
+</ul>
+<h2>Live desktop</h2>
+<ul>
+<li>The desktop you are on is streamed LIVE (Desktop Duplication) into the front face
+and into the blurred background. A video that is playing keeps playing, blurred
+behind the cube and sharp on the face while it turns.</li>
+<li>The cube overlay is excluded from capture, so it never shows up inside itself.</li>
+<li>Desktops you are not on are rebuilt from your wallpaper plus a capture of each of
+their windows (PrintWindow). Windows that cannot be captured are simply left out
+(no more black placeholder cards). Those faces cannot be live, Windows does not
+render apps of other virtual desktops.</li>
+<li>If Desktop Duplication is not available (some hybrid GPU laptops), a slower GDI
+live capture is used automatically.</li>
+</ul>
+<h2>Smoothness</h2>
+<ul>
+<li>Persistent render thread, devices stay warm between gestures (pre-warmed as soon as you press the taskbar).</li>
+<li>Mouse input is read on the render thread, not on the busy taskbar thread.</li>
+<li>Rendering is locked to the monitor's vertical blank, so it follows 60 / 120 / 144 / 240 Hz by itself. All motion is time based.</li>
+<li>Live frames are presented without ever blocking the render thread, so a busy GPU can no longer make the cube miss a refresh.</li>
+<li>Power: no permanent 1 ms timer, normal-ish thread priorities, the blurred background refreshes at a low rate, and while the cube is held still the render loop drops to about 30 Hz (it jumps back to full refresh the instant you move the mouse).</li>
+<li>Turn on &quot;Enable Diagnostic Logging&quot; to see the measured fps and the monitor Hz in the Windhawk log.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>The real taskbar is hidden from the capture, so every face is the full, uncropped desktop (wallpaper where the taskbar was). The taskbar is restored the moment the gesture ends. If Windows refuses to hide it, the old crop is used as a fallback.</li>
+<li>Window switcher: every window becomes a live thumbnail card (the selected one is refreshed every frame, the others a few times per second). It shows what is visible on screen, so a part hidden behind another window shows that other window.</li>
+<li>The GPU device is created on the graphics adapter that drives your monitor, so screen capture stays on the fast path.</li>
+<li>PrintWindow cannot render every app (some games, protected content). Those windows are left out of other desktops' faces.</li>
+<li>The overlay is hidden from screenshots and screen recorders on purpose (needed for the live capture).</li>
+<li>Desktop switching sends Win+Ctrl+Left/Right. No undocumented COM is used.</li>
+<li>Screen recording: turn on &quot;Screen Recording Mode&quot; in the mod settings to make the cube visible to recorders (it applies the next time you open the cube). The front face is a still picture while it is on.</li>
+<li>The Windows desktop slide animation is hidden only while the cube switches desktops (explorer is told &quot;animations off&quot; for that moment). Your Windows &quot;Animation effects&quot; setting is never changed.</li>
+<li>If you still see a slide on your build, raise &quot;Switch Settle Delay&quot;.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Soham</name>
+            <uri>https://github.com/Soham-Barate</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Large Icons View for File Explorer 2.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-large-icons-view#a26e2956e4c66bab4a5b54df88463a7e8703cd3b</id>
@@ -1677,182 +1749,6 @@ los 12 minutos.</p>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Usage 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-usage#f4350f743d2adcf3fa2efe4c869ad6d9feaf0126</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-usage"/>
-        <updated>2026-11-03T23:01:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar AI Usage</h1>
-<p>See how much of your AI subscription you have left in one place. Get a glimpse
-of all your accounts on the taskbar: Dynamic rings fill as you use your quota.
-A Fluent flyout shows the details of every limit, time for the next reset and
-whether you are burning through it faster than the clock.</p>
-<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/hero.png" alt="Claude flyout above the taskbar tiles"></p>
-<h3>Supported services</h3>
-<ul>
-<li><strong>Claude.</strong> 5-hour session, weekly, Fable weekly, model and surface limits,
-and monthly extra usage.</li>
-<li><strong>ChatGPT / Codex.</strong> 5-hour session, weekly, additional rate limits such as
-Codex Spark, and prepaid credits.</li>
-<li><strong>Antigravity.</strong> Gemini and other-model pools, each with session and weekly
-quotas.</li>
-<li><strong>GitHub Copilot.</strong> Monthly AI credits.</li>
-</ul>
-<h3>Features</h3>
-<ul>
-<li><strong>Multiple tiles and accounts.</strong> Pick up to three quotas to show on the tiles.
-The color moves from green to yellow, orange and red as you pass your
-thresholds.</li>
-<li><strong>Pace at a glance.</strong> A dot on each ring marks where you would be if you
-spread your usage evenly over the window. An indicator estimates when you will
-hit your next limit.</li>
-<li><strong>Fluent flyout.</strong> Compact rows per quota with its reset countdown, banked
-free resets, and direct access to the provider dashboard. Click to show or get
-a glance on hover.</li>
-<li><strong>Sign in your way.</strong> With your permission, the mod finds the Claude Code,
-Codex, Visual Studio and GitHub CLI sign-ins already on this PC and adds an
-account for each, using that sign-in read-only. Or sign in each account on its
-own. Antigravity can read its running local session. An account you remove
-stays removed until you rescan.</li>
-<li><strong>Notifications.</strong> On by default: a notification tells you when usage crosses
-the red threshold, with the next reset time. Pick another threshold or turn
-them off in Settings &gt; Behavior.</li>
-<li><strong>Languages.</strong> English, Spanish and Simplified Chinese, following your Windows
-display language.</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th>Codex</th>
-<th>Antigravity</th>
-<th>Copilot</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-codex.png" alt="Codex flyout"></td>
-<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-antigravity.png" alt="Antigravity flyout"></td>
-<td><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-copilot.png" alt="Copilot flyout"></td>
-</tr>
-</tbody>
-</table>
-<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/settings-display.png" alt="Settings window, Display page"></p>
-<h3>Getting started</h3>
-<ol>
-<li>Enable the mod. Settings opens and asks whether the mod may look for AI
-providers already signed in on this PC. Choose <strong>Find accounts</strong> to add them,
-or <strong>Not now</strong>. You can rescan later with <strong>Rescan</strong> on the Accounts page.</li>
-<li>For anything else, click the <strong>+</strong> tile (or right-click a tile and choose
-<strong>Settings</strong>), add the account and click <strong>Sign in</strong>.</li>
-<li>Left-click a tile for its flyout. Right-click it to refresh, open the
-dashboard, hide accounts or open settings.</li>
-</ol>
-<p>If you use <strong>Taskbar AI Quota Bars</strong>, disable it first. Both mods would poll the
-same accounts, and they don't share accounts or sign-ins.</p>
-<h3>Privacy and disclaimers</h3>
-<ul>
-<li>Sign-ins are stored only on this PC, encrypted with Windows DPAPI for your
-user account. Each token is sent only to the provider that issued it, and the
-mod sends no telemetry. Details are under <strong>Network and credentials</strong>.</li>
-<li>A borrowed sign-in is read on every poll. The mod never writes, refreshes or
-stores it, and never sends a prompt.</li>
-<li><strong>Let Claude Code renew its expired sign-in</strong> (per Claude account, in the
-account editor) is off by default. When you turn it on and a borrowed Claude
-Code sign-in expires, the mod starts <code>claude.exe</code> hidden so that Claude Code
-renews and rewrites its own credentials. It starts in safe mode, without your
-hooks, plugins or MCP servers, with its telemetry and update checks off, and
-receives no prompt. The mod only runs <code>claude.exe</code> from
-<code>%LOCALAPPDATA%\Microsoft\WinGet\Links</code> or <code>%USERPROFILE%\.local\bin</code>, at most
-every 10 minutes, and stops after three failed attempts. With it off, an
-expired sign-in shows &quot;run claude&quot;.</li>
-<li>Usage comes from undocumented endpoints that can change and stop working
-without notice. The author is not responsible for its accuracy.</li>
-<li>Neither this mod nor its author is affiliated with Anthropic, OpenAI, Google,
-GitHub, Microsoft or any other usage provider.</li>
-</ul>
-<h3>Network and credentials</h3>
-<ul>
-<li>
-<p><strong>Hosts contacted.</strong> Each sign-in only goes to its own provider:</p>
-<ul>
-<li>Claude: <code>console.anthropic.com</code> (sign-in, token refresh) and
-<code>api.anthropic.com</code> (usage, profile).</li>
-<li>ChatGPT / Codex: <code>auth.openai.com</code> (sign-in, token refresh) and
-<code>chatgpt.com</code> (usage, credits).</li>
-<li>Antigravity: <code>oauth2.googleapis.com</code> (sign-in, token refresh, revocation)
-and <code>cloudcode-pa.googleapis.com</code> / <code>daily-cloudcode-pa.googleapis.com</code>
-(quota, polled at your poll interval). Without its own sign-in, it asks the
-running Antigravity app's local server on <code>127.0.0.1</code> every minute. Signing
-out, or removing the account together with its sign-in, also revokes that
-sign-in at Google.</li>
-<li>GitHub Copilot: <code>github.com</code> (device sign-in) and <code>api.github.com</code> (user,
-Copilot quota).</li>
-</ul>
-</li>
-<li>
-<p><strong>Client identities.</strong> Sign-in uses the public OAuth clients of Claude Code,
-Codex, Antigravity and GitHub Copilot (copilot.vim). The Claude usage request
-identifies itself as the Claude Code CLI, because the server only returns the
-free-resets data to it. Antigravity requests use the Antigravity app's user
-agent.</p>
-</li>
-<li>
-<p><strong>Scopes requested.</strong></p>
-<ul>
-<li>Claude: <code>org:create_api_key user:profile user:inference</code>.</li>
-<li>OpenAI: <code>openid profile email offline_access api.connectors.read api.connectors.invoke</code>.</li>
-<li>Google: <code>cloud-platform userinfo.email userinfo.profile</code>, the same set
-Google's Gemini CLI requests for these Cloud Code endpoints, which publish
-no narrower scope. A scope never grants more than your Google account
-already has.</li>
-<li>GitHub: <code>read:user</code>.</li>
-</ul>
-<p>A borrowed sign-in keeps whatever scopes its own app requested.</p>
-</li>
-<li>
-<p><strong>On this PC.</strong></p>
-<ul>
-<li>During a sign-in only (up to 3 minutes), a listener on <code>127.0.0.1</code> receives
-the browser redirect: ports 1455/1457 for OpenAI, 51121 for Google.</li>
-<li>To find a running Antigravity session, the mod reads the command line of
-the Antigravity language server process in your session.</li>
-<li>Read-only files: the Claude Code and Codex credential files (for borrowed
-sign-ins) and Claude Code's usage cache (<code>.claude.json</code>). Credential
-Manager: the GitHub CLI and Visual Studio GitHub entries. None of these is
-read to find accounts until you allow it.</li>
-<li>Notifications register
-<code>HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAiUsage</code> while they
-are on. The mod deletes it when it unloads, when you turn notifications off,
-and at start if notifications are off. After the first notification Windows
-keeps its own entry in Settings &gt; System &gt; Notifications, which may remain
-after the mod is removed.</li>
-</ul>
-</li>
-</ul>
-<h3>Credits</h3>
-<ul>
-<li>Based on a fork of
-<a href="https://github.com/Cleroth/windhawk-taskbar-ai-quota">Taskbar AI Quota Bars</a>
-by Cleroth.</li>
-<li>The flyout and button styling come from
-<a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player">Taskbar Fluent Media Player</a>
-by Salyts.</li>
-<li>Provider logos come from <a href="https://simpleicons.org">Simple Icons</a>
-(CC0); the Copilot logo is from
-<a href="https://github.com/primer/octicons">Primer Octicons</a> (MIT, GitHub Inc.).</li>
-<li>Claude, Anthropic, OpenAI, Codex, Gemini, Antigravity, GitHub and Copilot are
-trademarks of their owners. Their names and logos appear only to identify
-which account a tile belongs to.</li>
-</ul>
-<h3>Report a bug</h3>
-<p>Found a problem or have an idea?
-<a href="https://github.com/Sof2245/taskbar-ai-usage/issues">Open an issue on GitHub</a>.</p>
-]]></content>
-        <author>
-            <name>Sof2245</name>
-            <uri>https://github.com/Sof2245</uri>
         </author>
     </entry>
 </feed>
