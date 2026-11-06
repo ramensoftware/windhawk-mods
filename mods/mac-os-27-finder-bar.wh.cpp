@@ -30,6 +30,10 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 
 ![Settings window](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png)
 
+![Control Center in action](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.gif)
+
+![Animated weather widget](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/weather.gif)
+
 ---
 
 ## Left side
