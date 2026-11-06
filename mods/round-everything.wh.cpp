@@ -149,7 +149,15 @@ in the same border hook to floating, snapped and (with the option above)
 maximized windows; menus, tooltips and windows that hid their own border are
 left alone. Turn off *Show accent color on title bars and window borders* in
 Windows' personalization settings if you use it, as that colors the same
-border.
+border. The
+[Window Border Customizer](https://windhawk.net/mods/window-border-customizer)
+mod colors borders as well; use one mod or the other for border colors, not
+both. The colors here are set inside DWM's own border update for the exact
+window (identified through its window data, not by matching rectangles), so
+they apply the instant a window is activated, maximized or restored, with no
+re-evaluation of other windows, and they share one decision with the
+maximized shadow - a maximized window's border and shadow are set together
+in one update.
 
 **This part needs one manual step.** Windhawk doesn't inject into `dwm.exe`
 by default (it is on Windhawk's list of critical system processes), so the
@@ -192,7 +200,7 @@ same license.
 - offset: 16
   $name: Inward offset
   $description: How far (in pixels) the frame extends inwards from the three screen edges that don't carry the taskbar. The taskbar edge gets no offset, so the rounded screen sits flush against the taskbar.
-- edgeOffsets: "-1,-1,-1,-1"
+- edgeOffsetsClockwise: "-1,-1,-1,-1"
   $name: Per-edge offset overrides
   $description: Four values in pixels - the taskbar's edge first, then the other three clockwise (with the taskbar at the bottom, for example, bottom,left,top,right; a value of 24 first leaves a 24 px gap between the taskbar and the rounded screen). A value of 0 or more overrides the inward offset of that edge; -1 keeps the default. Monitors without a taskbar use the inward offset on all four edges.
 - radius: 28
@@ -946,7 +954,10 @@ void LoadSettings() {
 
     s.offset = std::max(0, Wh_GetIntSetting(L"offset"));
 
-    auto edgeOffsets = WindhawkUtils::StringSetting::make(L"edgeOffsets");
+    // A new key for 2.0.0: the order changed from left,top,right,bottom to
+    // taskbar edge first, then clockwise, so 1.0.0 values aren't reread
+    // with the new meaning.
+    auto edgeOffsets = WindhawkUtils::StringSetting::make(L"edgeOffsetsClockwise");
     ParseEdgeOffsets(edgeOffsets.get(), s.edgeOffset);
 
     s.radius = std::max(0, Wh_GetIntSetting(L"radius"));
@@ -6993,7 +7004,21 @@ std::atomic<uint32_t> g_activeBorderArgb{0xFFFFFFFF};
 std::atomic<uint32_t> g_inactiveBorderArgb{0x80FFFFFF};
 
 // "#AARRGGBB", "#RRGGBB" (opaque) or "accent". False for anything else.
-bool ParseBorderColor(PCWSTR text, uint32_t& argb) {
+// The Windows accent color as dwmapi reports it (the Window Border
+// Customizer mod asks the same way from inside dwm.exe).
+bool AccentColor(uint32_t& argb) {
+    DWORD color = 0;
+    BOOL opaque = FALSE;
+    if (FAILED(DwmGetColorizationColor(&color, &opaque))) {
+        return false;
+    }
+    argb = 0xFF000000 | (color & 0x00FFFFFF);
+    return true;
+}
+// "#AARRGGBB", "#RRGGBB" (opaque) or "accent" (`isAccent` says which).
+// False for anything else.
+bool ParseBorderColor(PCWSTR text, uint32_t& argb, bool& isAccent) {
+    isAccent = false;
     if (!text) {
         return false;
     }
@@ -7001,23 +7026,8 @@ bool ParseBorderColor(PCWSTR text, uint32_t& argb) {
         text++;
     }
     if (_wcsicmp(text, L"accent") == 0) {
-        // The colorization color, as dwmapi reports it (the reference for
-        // this is the Window Border Customizer mod, which asks the same
-        // way from inside dwm.exe).
-        using DwmGetColorizationColor_t = HRESULT(WINAPI*)(DWORD*, BOOL*);
-        static DwmGetColorizationColor_t get = [] {
-            HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
-            return dwmapi ? (DwmGetColorizationColor_t)GetProcAddress(
-                                dwmapi, "DwmGetColorizationColor")
-                          : nullptr;
-        }();
-        DWORD color = 0;
-        BOOL opaque = FALSE;
-        if (!get || FAILED(get(&color, &opaque))) {
-            return false;
-        }
-        argb = 0xFF000000 | (color & 0x00FFFFFF);
-        return true;
+        isAccent = true;
+        return AccentColor(argb);
     }
     if (*text == L'#') {
         text++;
@@ -7034,12 +7044,18 @@ bool ParseBorderColor(PCWSTR text, uint32_t& argb) {
     argb = length == 6 ? (0xFF000000 | (uint32_t)value) : (uint32_t)value;
     return true;
 }
-bool LoadBorderColor(PCWSTR key, std::atomic<uint32_t>& into, uint32_t fallback) {
-    PCWSTR text = Wh_GetStringSetting(key);
+// Which of the two colors follow the accent color (re-read by the
+// decoration timer, so a change of accent color is picked up).
+std::atomic<bool> g_activeBorderIsAccent{false};
+std::atomic<bool> g_inactiveBorderIsAccent{false};
+bool LoadBorderColor(PCWSTR key, std::atomic<uint32_t>& into, std::atomic<bool>& isAccent,
+                     uint32_t fallback) {
+    auto text = WindhawkUtils::StringSetting::make(key);
     uint32_t argb = 0;
-    bool ok = text && *text && ParseBorderColor(text, argb);
+    bool accent = false;
+    bool ok = *text.get() && ParseBorderColor(text.get(), argb, accent);
     into = ok ? argb : fallback;
-    Wh_FreeStringSetting(text);
+    isAccent = ok && accent;
     return ok;
 }
 
@@ -7056,10 +7072,14 @@ void LoadDwmSettings() {
     g_customBorderColors = Wh_GetIntSetting(L"windowCorners.borderColors") != 0;
     if (g_customBorderColors) {
         bool active = LoadBorderColor(L"windowCorners.activeBorderColor", g_activeBorderArgb,
-                                      0xFFFFFFFF);
+                                      g_activeBorderIsAccent, 0xFFFFFFFF);
         // Empty or invalid: the active color for inactive windows too.
         bool inactive = LoadBorderColor(L"windowCorners.inactiveBorderColor",
-                                        g_inactiveBorderArgb, g_activeBorderArgb);
+                                        g_inactiveBorderArgb, g_inactiveBorderIsAccent,
+                                        g_activeBorderArgb);
+        if (!inactive) {
+            g_inactiveBorderIsAccent = g_activeBorderIsAccent.load();
+        }
         Wh_Log(L"[dwm] border colors: active #%08X%s, inactive #%08X%s", g_activeBorderArgb.load(),
                active ? L"" : L" (setting not understood, default used)",
                g_inactiveBorderArgb.load(),
@@ -7491,10 +7511,53 @@ struct BorderRecord {
     int pendingCount;
 };
 std::mutex g_borderStateMutex;
-[[clang::no_destroy]] std::unordered_map<HWND, BorderRecord> g_borderRecords;
+std::unordered_map<HWND, BorderRecord> g_borderRecords;
 // What the last radius query said about each border object (CWindowBorder*),
 // for border updates that come without one.
-[[clang::no_destroy]] std::unordered_map<void*, LastRadiusQuery> g_borderStates;
+std::unordered_map<void*, LastRadiusQuery> g_borderStates;
+
+// The records hold DWM's own objects (CTopLevelWindow*, CWindowBorder*),
+// which the timer calls into later. Their (virtual) destructors are hooked
+// - the same hooks Custom Window Corner Radius and Wobbly Windows have on
+// these classes - and a record whose object is being destroyed goes with
+// it, so no stored pointer outlives its object.
+// Without both hooks the timer doesn't call into stored objects at all:
+// a changed decision then asks DWM to re-evaluate every window instead
+// (RequestDwmRefresh, the way the other dwm.exe mods do), which costs a
+// repaint of all frames.
+std::atomic<bool> g_objectLifetimesTracked{false};
+void ForgetWindowObject(void* window) {
+    std::lock_guard<std::mutex> lock(g_borderStateMutex);
+    for (auto it = g_borderRecords.begin(); it != g_borderRecords.end();) {
+        if (it->second.window == window) {
+            it = g_borderRecords.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+void ForgetBorderObject(void* border) {
+    std::lock_guard<std::mutex> lock(g_borderStateMutex);
+    g_borderStates.erase(border);
+    for (auto it = g_borderRecords.begin(); it != g_borderRecords.end();) {
+        if (it->second.border == border) {
+            it = g_borderRecords.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+using Destructor_t = void(WINAPI*)(void* self);
+Destructor_t TopLevelWindowDestructor_Original;
+void WINAPI TopLevelWindowDestructor_Hook(void* self) {
+    ForgetWindowObject(self);
+    TopLevelWindowDestructor_Original(self);
+}
+Destructor_t WindowBorderDestructor_Original;
+void WINAPI WindowBorderDestructor_Hook(void* self) {
+    ForgetBorderObject(self);
+    WindowBorderDestructor_Original(self);
+}
 
 // The window's thread and class, as its identity beyond the handle.
 void WindowIdentity(HWND hwnd, DWORD& thread, wchar_t (&className)[64]) {
@@ -7585,10 +7648,23 @@ Decision Decide(HWND hwnd) {
     return d;
 }
 
+void RequestDwmRefresh(const wchar_t* why);
+
 // Brings a recorded window to the decision with DWM's visual update, which
 // applies the hooks' substitution to its border and shadow - or, without
-// that routine, sets the border again by hand. The caller holds no lock.
+// that routine, sets the border again by hand. Only with the objects'
+// lifetimes tracked (see above); otherwise every window is re-evaluated,
+// at most a few times a second. The caller holds no lock.
+ULONGLONG g_lastGlobalRefresh;
 void RefreshWindow(const BorderRecord& record, const Decision& d) {
+    if (!g_objectLifetimesTracked) {
+        ULONGLONG now = GetTickCount64();
+        if (now - g_lastGlobalRefresh >= 300) {
+            g_lastGlobalRefresh = now;
+            RequestDwmRefresh(L"decoration");
+        }
+        return;
+    }
     if (UpdateWindowVisuals && record.window) {
         UpdateWindowVisuals(record.window);
         return;
@@ -7681,20 +7757,70 @@ void DecorPass(HMONITOR urgent) {
 // first border call, killed before the mod unloads: the timer must not
 // outlive its procedure.
 constexpr UINT_PTR kDecorTimerId = 0x52455645;  // 'REVE'
+constexpr UINT kDecorTickMs = 100;
 std::atomic<HWND> g_decorTimerWindow{nullptr};
-std::atomic<bool> g_decorTimerStop{false};
+std::atomic<bool> g_decorTimerStop{false};  // unloading: never armed again
+// Every SetTimer / KillTimer of the decoration timer happens under this
+// lock, with the stop flag checked under it, so the stop from the unload
+// path can't be undone by a re-arm racing it.
+std::mutex g_decorTimerMutex;
+std::atomic<int> g_decorTicksRunning{0};
+void CALLBACK DecorTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD);
+
+// Arms (or re-arms) the timer, unless the mod is on its way out.
+bool ArmDecorTimer(HWND dwmWnd, UINT ms) {
+    std::lock_guard<std::mutex> lock(g_decorTimerMutex);
+    return !g_decorTimerStop && SetTimer(dwmWnd, kDecorTimerId, ms, DecorTimerProc) != 0;
+}
+bool DecorationWanted() {
+    return g_enabled && (g_maximizedShadow || g_maximizedBorder || g_customBorderColors);
+}
+// The accent color, re-read once a second while a border color follows it.
+void FollowAccentColor() {
+    static int ticks = 0;
+    if (!g_customBorderColors || !(g_activeBorderIsAccent || g_inactiveBorderIsAccent) ||
+        ++ticks % 10 != 0) {
+        return;
+    }
+    uint32_t accent = 0;
+    if (!AccentColor(accent)) {
+        return;
+    }
+    bool changed = false;
+    if (g_activeBorderIsAccent && g_activeBorderArgb.exchange(accent) != accent) {
+        changed = true;
+    }
+    if (g_inactiveBorderIsAccent && g_inactiveBorderArgb.exchange(accent) != accent) {
+        changed = true;
+    }
+    if (changed) {
+        RequestDwmRefresh(L"accent color");  // floating windows too
+    }
+}
 void CALLBACK DecorTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+    struct Running {
+        Running() { g_decorTicksRunning++; }
+        ~Running() { g_decorTicksRunning--; }
+    } running;
     if (g_decorTimerStop) {
-        KillTimer(hwnd, id);
+        KillTimer(hwnd, id);  // the stop did this too; a tick already queued ends here
+        return;
+    }
+    if (!DecorationWanted()) {
+        // Every option off: the timer goes until an option is turned on
+        // again (the border hook starts it).
+        std::lock_guard<std::mutex> lock(g_decorTimerMutex);
+        if (g_decorTimerWindow.exchange(nullptr) == hwnd) {
+            KillTimer(hwnd, id);
+        }
         return;
     }
     HMONITOR urgent = g_urgentMonitor.exchange(nullptr);
     if (urgent) {
-        SetTimer(hwnd, id, 100, DecorTimerProc);  // back to the regular pace
+        ArmDecorTimer(hwnd, kDecorTickMs);  // back to the regular pace
     }
-    if (g_enabled && (g_maximizedShadow || g_maximizedBorder || g_customBorderColors)) {
-        DecorPass(urgent);
-    }
+    FollowAccentColor();
+    DecorPass(urgent);
     g_urgentMonitor2 = nullptr;
 }
 // The next tick as soon as possible, for `monitor` (and `other`, when a
@@ -7706,7 +7832,7 @@ void RushDecorPass(HMONITOR monitor, HMONITOR other) {
     }
     g_urgentMonitor2 = other;
     g_urgentMonitor = monitor;
-    SetTimer(dwmWnd, kDecorTimerId, USER_TIMER_MINIMUM, DecorTimerProc);
+    ArmDecorTimer(dwmWnd, USER_TIMER_MINIMUM);
 }
 void EnsureDecorTimer() {
     if (g_decorTimerWindow.load() || g_decorTimerStop) {
@@ -7716,19 +7842,37 @@ void EnsureDecorTimer() {
     if (!dwmWnd) {
         return;  // tried again at the next border call
     }
-    if (!SetTimer(dwmWnd, kDecorTimerId, 100, DecorTimerProc)) {
+    std::lock_guard<std::mutex> lock(g_decorTimerMutex);
+    if (g_decorTimerStop || g_decorTimerWindow.load()) {
+        return;
+    }
+    if (!SetTimer(dwmWnd, kDecorTimerId, kDecorTickMs, DecorTimerProc)) {
         Wh_Log(L"[dwm] decoration timer not started: %u", GetLastError());
         g_decorTimerStop = true;  // not again
         return;
     }
     g_decorTimerWindow = dwmWnd;
 }
+// Stops the timer for good, before the mod unloads: the stop flag goes up
+// under the arming lock, so no re-arm can follow, the timer is killed
+// (KillTimer takes a window timer from any thread), and a tick in progress
+// - or one retrieved by DWM's loop just before the kill - is given a moment
+// to finish. Nothing is run on DWM's thread for this: a thread hook or a
+// sent message would be one more piece of this image for that thread to
+// be calling when the image goes.
 void StopDecorTimer() {
-    g_decorTimerStop = true;
-    HWND dwmWnd = g_decorTimerWindow.exchange(nullptr);
-    if (dwmWnd) {
-        KillTimer(dwmWnd, kDecorTimerId);
-        Sleep(250);  // a tick already being dispatched finishes
+    {
+        std::lock_guard<std::mutex> lock(g_decorTimerMutex);
+        g_decorTimerStop = true;
+        if (HWND dwmWnd = g_decorTimerWindow.exchange(nullptr)) {
+            if (!KillTimer(dwmWnd, kDecorTimerId)) {
+                Wh_Log(L"[dwm] KillTimer failed: %u", GetLastError());
+            }
+        }
+    }
+    Sleep(50);  // a WM_TIMER already retrieved reaches the procedure within this
+    for (int i = 0; i < 200 && g_decorTicksRunning > 0; i++) {
+        Sleep(10);
     }
 }
 
@@ -7752,7 +7896,7 @@ HRESULT WINAPI SetBorderParameters_Hook(void* self, const RECT* rect, float radi
     }
     bool squared = query.valid && query.squared;
     HWND hwnd = query.hwnd;
-    if (g_enabled && (g_maximizedShadow || g_maximizedBorder || g_customBorderColors)) {
+    if (DecorationWanted()) {
         EnsureDecorTimer();
     }
     if (!color) {
@@ -7963,6 +8107,24 @@ BOOL Init() {
             nullptr,
             true,
         },
+        // The destructors: records of objects DWM frees go with them (see
+        // g_objectLifetimesTracked).
+        {
+            {LR"(protected: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void))",
+             LR"(public: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void))",
+             LR"(private: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void))"},
+            &TopLevelWindowDestructor_Original,
+            TopLevelWindowDestructor_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual __cdecl CWindowBorder::~CWindowBorder(void))",
+             LR"(protected: virtual __cdecl CWindowBorder::~CWindowBorder(void))",
+             LR"(private: virtual __cdecl CWindowBorder::~CWindowBorder(void))"},
+            &WindowBorderDestructor_Original,
+            WindowBorderDestructor_Hook,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks))) {
@@ -7973,11 +8135,16 @@ BOOL Init() {
     if (GetWindowData) {
         FindHwndOffset();
     }
-    Wh_Log(L"[dwm] hooks installed (maximized border and shadow: %s%s%s)",
+    g_objectLifetimesTracked =
+        TopLevelWindowDestructor_Original && WindowBorderDestructor_Original;
+    Wh_Log(L"[dwm] hooks installed (maximized border and shadow: %s%s%s%s)",
            SetBorderParameters_Original ? L"available" : L"SetBorderParameters not found",
            SetBorderParameters_Original && g_hwndOffset < 0 ? L", for every maximized window"
                                                              : L"",
-           UpdateWindowVisuals ? L"" : L"; UpdateWindowVisuals not found: borders set by hand");
+           UpdateWindowVisuals ? L"" : L"; UpdateWindowVisuals not found: borders set by hand",
+           g_objectLifetimesTracked
+               ? L""
+               : L"; destructors not found: changed decisions re-evaluate every window");
     return TRUE;
 }
 
