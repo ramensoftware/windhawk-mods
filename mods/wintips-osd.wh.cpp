@@ -8,7 +8,7 @@
 // @author          DoYouNatureQ
 // @github          https://github.com/DoYouNatureQ
 // @homepage        https://github.com/DoYouNatureQ/WinTips
-// @license         MIT
+// @license         GPL-3.0-or-later
 // @include         windhawk.exe
 // @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi
 // ==/WindhawkMod==
@@ -143,6 +143,14 @@ clipboard tips, this mod is.
 
 - Standalone version, source and issue tracker:
   [WinTips](https://github.com/DoYouNatureQ/WinTips)
+
+## License
+
+GPL-3.0-or-later, the same license as the standalone WinTips app. The mod can be
+copied and modified, but redistributed versions must come with the complete
+corresponding source under the GPL. The look and motion take reference from the
+LockWindow design in FluentFlyout (GPL-3.0); the code here is an independent
+implementation, and the two licenses are compatible.
 */
 // ==/WindhawkModReadme==
 
@@ -1542,6 +1550,16 @@ void DrawScissors(Graphics& g, RectF box, const Theme& theme, float alpha) {
 // Latin glyphs only, so Chinese there falls through to GDI font linking and the
 // two scripts end up on different files with mismatched metrics. "HarmonyOS Sans
 // SC" holds Latin and CJK in one face, which is what the WPF side uses too.
+// EnumFontFamiliesExW wants a FONTENUMPROCW, and that is __stdcall on the 32-bit
+// build. A capture-less lambda is __cdecl, and clang refuses the conversion
+// outright - MSVC lets it slide, which is why the standalone harness built fine
+// while CI failed on [compile:x86]. A real CALLBACK function is the portable way.
+int CALLBACK FontProbeProc(const LOGFONTW*, const TEXTMETRICW*, DWORD,
+                           LPARAM param) {
+    *reinterpret_cast<bool*>(param) = true;
+    return 0;  // one hit is enough
+}
+
 const wchar_t* UiFaceName() {
     static const wchar_t* face = []() -> const wchar_t* {
         HDC dc = GetDC(nullptr);
@@ -1553,13 +1571,8 @@ const wchar_t* UiFaceName() {
             LOGFONTW probe{};
             probe.lfCharSet = DEFAULT_CHARSET;
             wcscpy_s(probe.lfFaceName, LF_FACESIZE, name);
-            EnumFontFamiliesExW(
-                dc, &probe,
-                [](const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM param) -> int {
-                    *reinterpret_cast<bool*>(param) = true;
-                    return 0;  // one hit is enough
-                },
-                reinterpret_cast<LPARAM>(&found), 0);
+            EnumFontFamiliesExW(dc, &probe, FontProbeProc,
+                                reinterpret_cast<LPARAM>(&found), 0);
             return found;
         };
         const wchar_t* result = L"Segoe UI";
