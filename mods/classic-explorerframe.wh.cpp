@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              classic-explorerframe
 // @name            Classic Explorerframe for 24H2 and later
-// @description     Restores classic Explorerframe.dll on Win11 24H2 and later (x86-64 and ARM64, SHA256 verified)
+// @description     Restores classic Explorerframe.dll on Win11 24H2 and later
 // @version         1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @architecture    x86-64
 // @include         explorer.exe
-// @compilerOptions -lwininet -lshell32 -lntdll -lbcrypt
+// @compilerOptions -lwininet -lshell32 -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,38 +17,30 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
 [Flexible Explorer Toolbars Deluxe](https://windhawk.net/mods/flexible-explorer-toolbars-deluxe), such as the Search bar.
 
 Note that to enable the menubar you need to install in addition the mod [ExplorerFrame and menubar fixes fork](https://windhawk.net/mods/restore-folder-menubar-25h2).
+
+This mod downloads the classic Explorerframe.dll from the Microsoft's symbols' server.
+
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
 #include <winternl.h>
 #include <wininet.h>
 #include <shlobj.h>
 #include <strsafe.h>
 #include <bcrypt.h>
 
-#ifndef ARRAYSIZE
-#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
-#endif
-
-#ifndef IMAGE_FILE_MACHINE_AMD64
-#define IMAGE_FILE_MACHINE_AMD64 0x8664
-#endif
-#ifndef IMAGE_FILE_MACHINE_ARM64
-#define IMAGE_FILE_MACHINE_ARM64 0xAA64
-#endif
-#ifndef IMAGE_FILE_MACHINE_ARM64EC
-#define IMAGE_FILE_MACHINE_ARM64EC 0xA641
-#endif
-#ifndef IMAGE_FILE_MACHINE_ARM64X
-#define IMAGE_FILE_MACHINE_ARM64X 0xA64E
-#endif
-
-#ifndef BCRYPT_SHA256_ALGORITHM
-#define BCRYPT_SHA256_ALGORITHM L"SHA256"
-#endif
-#ifndef BCRYPT_SUCCESS
-#define BCRYPT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#if defined(_M_ARM64) || defined(_M_ARM64EC) || defined(__aarch64__)
+static const WCHAR* kDownloadUrl =
+    L"https://msdl.microsoft.com/download/symbols/explorerframe.dll/1187AEC054e000/explorerframe.dll";
+static const WCHAR* kExpectedSha256 =
+    L"7f76b0e033e7c9ae01acdade97f8f857bb205dabb1f1aff59dbb489792454ea8";
+static const WCHAR* kArchSubdir = L"ARM64";
+#else
+static const WCHAR* kDownloadUrl =
+    L"https://msdl.microsoft.com/download/symbols/explorerframe.dll/3691089927d000/explorerframe.dll";
+static const WCHAR* kExpectedSha256 =
+    L"22689659425c7cb765a2d908e84a075482d4ca8abc0e9261c2d6b07bf71d89ad";
+static const WCHAR* kArchSubdir = L"x64";
 #endif
 
 typedef struct _LDR_DATA_TABLE_ENTRY_FULL {
@@ -63,513 +55,415 @@ typedef struct _LDR_DATA_TABLE_ENTRY_FULL {
     ULONG Flags;
 } LDR_DATA_TABLE_ENTRY_FULL, *PLDR_DATA_TABLE_ENTRY_FULL;
 
-WCHAR g_stagingDllPath[MAX_PATH];
-WCHAR g_canonicalDllPath[MAX_PATH];
-volatile BOOL g_fileReady = FALSE;
-volatile BOOL g_insideHook = FALSE;
-volatile BOOL g_isArm64 = FALSE;
+static WCHAR g_stagingDllPath[MAX_PATH] = {0};
+static WCHAR g_tempDllPath[MAX_PATH + 4] = {0};
+static WCHAR g_canonicalDllPath[MAX_PATH] = {0};
 
-static const WCHAR* DOWNLOAD_URL_X64 =
-    L"https://msdl.microsoft.com/download/symbols/explorerframe.dll/3691089927d000/explorerframe.dll";
-static const WCHAR* DOWNLOAD_URL_ARM64 =
-    L"https://msdl.microsoft.com/download/symbols/explorerframe.dll/1187AEC054e000/explorerframe.dll";
+static HANDLE g_hPinnedFile = INVALID_HANDLE_VALUE;
+static LONG g_ready = 0;
 
-static const WCHAR* EXPECTED_SHA256_X64 =
-    L"22689659425c7cb765a2d908e84a075482d4ca8abc0e9261c2d6b07bf71d89ad";
-static const WCHAR* EXPECTED_SHA256_ARM64 =
-    L"7f76b0e033e7c9ae01acdade97f8f857bb205dabb1f1aff59dbb489792454ea8";
+static HANDLE g_hStopEvent = NULL;
+static HANDLE g_hWorkerThread = NULL;
 
-// Архитектура текущего процесса explorer.exe, проверка во время выполнения.
-static USHORT GetCurrentProcessMachine(void) {
-    HMODULE hSelf = GetModuleHandleW(NULL);
-    if (hSelf) {
-        PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)hSelf;
-        if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
-            LONG lfanew = dos->e_lfanew;
-            if (lfanew >= 0 && lfanew < 0x100000) {
-                PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE*)hSelf + lfanew);
-                if (nt->Signature == IMAGE_NT_SIGNATURE) {
-                    return nt->FileHeader.Machine;
-                }
-            }
-        }
-    }
+static SRWLOCK g_cancelLock = SRWLOCK_INIT;
+static HINTERNET g_hInetCancel = NULL;
+static HINTERNET g_hUrlCancel = NULL;
 
-    {
-        HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
-        if (hKernel32) {
-            typedef BOOL (WINAPI *IsWow64Process2_t)(HANDLE, USHORT*, USHORT*);
-            IsWow64Process2_t pIsWow64Process2 =
-                (IsWow64Process2_t)GetProcAddress(hKernel32, "IsWow64Process2");
-            if (pIsWow64Process2) {
-                USHORT procMachine = 0, nativeMachine = 0;
-                if (pIsWow64Process2(GetCurrentProcess(), &procMachine, &nativeMachine)) {
-                    if (procMachine != 0)
-                        return procMachine;
-                    if (nativeMachine != 0)
-                        return nativeMachine;
-                }
-            }
-        }
-    }
+static thread_local bool t_inHook = false;
 
-#if defined(_M_ARM64) || defined(__aarch64__)
-    return IMAGE_FILE_MACHINE_ARM64;
-#else
-    return IMAGE_FILE_MACHINE_AMD64;
-#endif
+static BOOL EnsureDirectoryExists(const WCHAR* filePath) {
+    WCHAR dirPath[MAX_PATH];
+    StringCchCopyW(dirPath, MAX_PATH, filePath);
+    WCHAR* lastSlash = wcsrchr(dirPath, L'\\');
+    if (lastSlash) *lastSlash = L'\0';
+    int r = SHCreateDirectoryExW(NULL, dirPath, NULL);
+    return (r == ERROR_SUCCESS || r == ERROR_ALREADY_EXISTS || r == ERROR_FILE_EXISTS);
 }
 
-static BOOL IsCurrentProcessArm64(void) {
-    USHORT m = GetCurrentProcessMachine();
-    return (m == IMAGE_FILE_MACHINE_ARM64 ||
-            m == IMAGE_FILE_MACHINE_ARM64EC ||
-            m == IMAGE_FILE_MACHINE_ARM64X);
-}
-
-static const WCHAR* CurrentUrl(void) {
-    return g_isArm64 ? DOWNLOAD_URL_ARM64 : DOWNLOAD_URL_X64;
-}
-
-static const WCHAR* CurrentExpectedHash(void) {
-    return g_isArm64 ? EXPECTED_SHA256_ARM64 : EXPECTED_SHA256_X64;
-}
-
-static BOOL HexCharToNibble(WCHAR c, BYTE* out) {
-    if (c >= L'0' && c <= L'9') { *out = (BYTE)(c - L'0'); return TRUE; }
-    if (c >= L'a' && c <= L'f') { *out = (BYTE)(c - L'a' + 10); return TRUE; }
-    if (c >= L'A' && c <= L'F') { *out = (BYTE)(c - L'A' + 10); return TRUE; }
-    return FALSE;
-}
-
-static BOOL ComputeFileSHA256(const WCHAR* filePath, BYTE outHash[32]) {
-    HANDLE hFile = CreateFileW(filePath, GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
-        return FALSE;
-
-    BOOL bResult = FALSE;
+static BOOL ComputeHashFromHandle(HANDLE hFile, WCHAR outHex[65]) {
     BCRYPT_ALG_HANDLE hAlg = NULL;
     BCRYPT_HASH_HANDLE hHash = NULL;
+    PBYTE pbObj = NULL;
+    DWORD cbObj = 0, cbRet = 0;
+    BYTE sum[32];
+    BYTE buf[8192];
+    static const WCHAR hexd[] = L"0123456789abcdef";
 
-    if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0))) {
-        CloseHandle(hFile);
+    if (!hFile || hFile == INVALID_HANDLE_VALUE || !outHex)
+        return FALSE;
+    outHex[0] = L'\0';
+
+    LARGE_INTEGER zero;
+    zero.QuadPart = 0;
+    SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
+
+    if (BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0) < 0)
+        return FALSE;
+    if (BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&cbObj, sizeof(cbObj), &cbRet, 0) < 0 || !cbObj) {
+        BCryptCloseAlgorithmProvider(hAlg, 0);
         return FALSE;
     }
-    if (!BCRYPT_SUCCESS(BCryptCreateHash(hAlg, &hHash, NULL, 0, NULL, 0, 0))) {
+    pbObj = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbObj);
+    if (!pbObj) {
         BCryptCloseAlgorithmProvider(hAlg, 0);
-        CloseHandle(hFile);
+        return FALSE;
+    }
+    if (BCryptCreateHash(hAlg, &hHash, pbObj, cbObj, NULL, 0, 0) < 0) {
+        HeapFree(GetProcessHeap(), 0, pbObj);
+        BCryptCloseAlgorithmProvider(hAlg, 0);
+        return FALSE;
+    }
+
+    BOOL ok = TRUE;
+    for (;;) {
+        DWORD br = 0;
+        if (!ReadFile(hFile, buf, sizeof(buf), &br, NULL)) { ok = FALSE; break; }
+        if (br == 0) break;
+        if (BCryptHashData(hHash, buf, br, 0) < 0) { ok = FALSE; break; }
+    }
+    if (ok && BCryptFinishHash(hHash, sum, sizeof(sum), 0) >= 0) {
+        for (int i = 0; i < 32; i++) {
+            outHex[i*2] = hexd[(sum[i] >> 4) & 0xF];
+            outHex[i*2+1] = hexd[sum[i] & 0xF];
+        }
+        outHex[64] = L'\0';
+    } else {
+        ok = FALSE;
+    }
+
+    if (hHash) BCryptDestroyHash(hHash);
+    HeapFree(GetProcessHeap(), 0, pbObj);
+    BCryptCloseAlgorithmProvider(hAlg, 0);
+    return ok;
+}
+
+static BOOL TryPinExistingFile(void) {
+    if (InterlockedCompareExchange(&g_ready, 0, 0) != 0)
+        return TRUE;
+    if (g_stagingDllPath[0] == L'\0')
+        return FALSE;
+
+    HANDLE h = CreateFileW(g_stagingDllPath, GENERIC_READ, FILE_SHARE_READ,
+        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    WCHAR hex[65];
+    BOOL match = ComputeHashFromHandle(h, hex) && (_wcsicmp(hex, kExpectedSha256) == 0);
+    if (!match) {
+        CloseHandle(h);
+        return FALSE;
+    }
+
+    g_hPinnedFile = h;
+    InterlockedExchange(&g_ready, 1);
+    Wh_Log(L"Pinned: %s", g_stagingDllPath);
+    return TRUE;
+}
+
+static BOOL IsStopRequested(void) {
+    return g_hStopEvent && WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0;
+}
+
+static void PublishCancelHandle(HINTERNET* slot, HINTERNET h) {
+    AcquireSRWLockExclusive(&g_cancelLock);
+    *slot = h;
+    ReleaseSRWLockExclusive(&g_cancelLock);
+}
+
+// TRUE = мы забрали владение, надо закрыть. FALSE = уже забрал Uninit, не трогать.
+static BOOL ClaimCancelHandle(HINTERNET* slot, HINTERNET h) {
+    BOOL took = FALSE;
+    AcquireSRWLockExclusive(&g_cancelLock);
+    if (*slot == h) {
+        *slot = NULL;
+        took = TRUE;
+    }
+    ReleaseSRWLockExclusive(&g_cancelLock);
+    return took;
+}
+
+static BOOL DownloadToTempCancellable(void) {
+    if (!kDownloadUrl || g_tempDllPath[0] == L'\0')
+        return FALSE;
+
+    HINTERNET hInet = InternetOpenW(L"WindhawkMod/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    if (!hInet) return FALSE;
+    PublishCancelHandle(&g_hInetCancel, hInet);
+
+    if (IsStopRequested()) {
+        if (ClaimCancelHandle(&g_hInetCancel, hInet))
+            InternetCloseHandle(hInet);
+        return FALSE;
+    }
+
+    HINTERNET hUrl = InternetOpenUrlW(hInet, kDownloadUrl, NULL, 0,
+        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE, 0);
+    if (!hUrl) {
+        // только если еще опубликовано, иначе Uninit уже закрыл
+        if (ClaimCancelHandle(&g_hInetCancel, hInet))
+            InternetCloseHandle(hInet);
+        return FALSE;
+    }
+    PublishCancelHandle(&g_hUrlCancel, hUrl);
+
+    HANDLE hFile = CreateFileW(g_tempDllPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        if (ClaimCancelHandle(&g_hUrlCancel, hUrl))
+            InternetCloseHandle(hUrl);
+        if (ClaimCancelHandle(&g_hInetCancel, hInet))
+            InternetCloseHandle(hInet);
         return FALSE;
     }
 
     BYTE buf[8192];
-    DWORD dwRead = 0;
-    BOOL bHashOk = TRUE;
+    DWORD br = 0, bw = 0;
+    DWORD total = 0;
+    BOOL ok = TRUE;
 
-    while (ReadFile(hFile, buf, sizeof(buf), &dwRead, NULL) && dwRead != 0) {
-        if (!BCRYPT_SUCCESS(BCryptHashData(hHash, buf, dwRead, 0))) {
-            bHashOk = FALSE;
-            break;
-        }
+    for (;;) {
+        if (IsStopRequested()) { ok = FALSE; break; }
+        if (!InternetReadFile(hUrl, buf, sizeof(buf), &br)) { ok = FALSE; break; }
+        if (br == 0) break;
+        if (!WriteFile(hFile, buf, br, &bw, NULL) || bw != br) { ok = FALSE; break; }
+        total += br;
     }
-
-    if (bHashOk) {
-        if (BCRYPT_SUCCESS(BCryptFinishHash(hHash, outHash, 32, 0))) {
-            bResult = TRUE;
-        }
-    }
-
-    if (hHash) BCryptDestroyHash(hHash);
-    if (hAlg) BCryptCloseAlgorithmProvider(hAlg, 0);
     CloseHandle(hFile);
-    return bResult;
-}
 
-static BOOL VerifyFileSHA256(const WCHAR* path, const WCHAR* expectedHex) {
-    BYTE hash[32];
-    size_t i;
-
-    if (!path || !expectedHex)
-        return FALSE;
-    if (wcslen(expectedHex) != 64)
-        return FALSE;
-    if (!ComputeFileSHA256(path, hash))
-        return FALSE;
-
-    for (i = 0; i < 32; i++) {
-        BYTE hi, lo;
-        if (!HexCharToNibble(expectedHex[i * 2], &hi))
-            return FALSE;
-        if (!HexCharToNibble(expectedHex[i * 2 + 1], &lo))
-            return FALSE;
-        if (hash[i] != (BYTE)((hi << 4) | lo))
-            return FALSE;
-    }
-    return TRUE;
-}
-
-static BOOL EnsureDirectoryExists(const WCHAR* filePath) {
-    WCHAR dirPath[MAX_PATH];
-    WCHAR* lastSlash;
-    int result;
-
-    if (FAILED(StringCchCopyW(dirPath, MAX_PATH, filePath)))
-        return FALSE;
-    lastSlash = wcsrchr(dirPath, L'\\');
-    if (lastSlash) *lastSlash = L'\0';
-
-    result = SHCreateDirectoryExW(NULL, dirPath, NULL);
-    return (result == ERROR_SUCCESS || result == ERROR_ALREADY_EXISTS || result == ERROR_FILE_EXISTS);
-}
-
-static BOOL DownloadFile(const WCHAR* url, const WCHAR* destPath) {
-    HINTERNET hInternet;
-    HINTERNET hUrl;
-    HANDLE hFile;
-    BYTE buffer[8192];
-    DWORD bytesRead = 0, bytesWritten = 0, totalBytes = 0;
-    BOOL success = TRUE;
-
-    hInternet = InternetOpenW(L"WindhawkMod/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    if (!hInternet) {
-        Wh_Log(L"InternetOpenW failed: %u", GetLastError());
-        return FALSE;
-    }
-
-    hUrl = InternetOpenUrlW(hInternet, url, NULL, 0,
-        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE, 0);
-    if (!hUrl) {
-        Wh_Log(L"InternetOpenUrlW failed: %u", GetLastError());
-        InternetCloseHandle(hInternet);
-        return FALSE;
-    }
-
-    hFile = CreateFileW(destPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"CreateFileW failed: %u", GetLastError());
+    if (ClaimCancelHandle(&g_hUrlCancel, hUrl))
         InternetCloseHandle(hUrl);
-        InternetCloseHandle(hInternet);
+    hUrl = NULL;
+    if (ClaimCancelHandle(&g_hInetCancel, hInet))
+        InternetCloseHandle(hInet);
+    hInet = NULL;
+
+    if (!ok || total == 0) {
+        DeleteFileW(g_tempDllPath);
         return FALSE;
     }
 
-    while (InternetReadFile(hUrl, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
-        if (!WriteFile(hFile, buffer, bytesRead, &bytesWritten, NULL) || bytesWritten != bytesRead) {
-            success = FALSE;
-            break;
-        }
-        totalBytes += bytesRead;
+    HANDLE hTmp = CreateFileW(g_tempDllPath, GENERIC_READ, FILE_SHARE_READ,
+        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hTmp == INVALID_HANDLE_VALUE) {
+        DeleteFileW(g_tempDllPath);
+        return FALSE;
     }
-
-    CloseHandle(hFile);
-    InternetCloseHandle(hUrl);
-    InternetCloseHandle(hInternet);
-
-    if (!success || totalBytes == 0) {
-        Wh_Log(L"Download failed or empty");
-        DeleteFileW(destPath);
+    WCHAR hex[65];
+    BOOL match = ComputeHashFromHandle(hTmp, hex) && (_wcsicmp(hex, kExpectedSha256) == 0);
+    CloseHandle(hTmp);
+    if (!match) {
+        Wh_Log(L"Хеш tmp не совпал, удаляем");
+        DeleteFileW(g_tempDllPath);
         return FALSE;
     }
 
-    Wh_Log(L"Скачано %u байт -> %s", totalBytes, destPath);
+    if (IsStopRequested()) {
+        DeleteFileW(g_tempDllPath);
+        return FALSE;
+    }
+
+    // MoveFileExW уже включает MoveFileWithProgressW, fallback не нужен
+    if (!MoveFileExW(g_tempDllPath, g_stagingDllPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(g_tempDllPath);
+        return FALSE;
+    }
+    Wh_Log(L"Скачано %u -> %s", total, g_stagingDllPath);
     return TRUE;
 }
 
-// Проверка с заменой файла при неверной сумме. Вызывается при старте и перед загрузкой.
-static BOOL EnsureStagingFileValid(void) {
-    if (VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash()))
-        return TRUE;
-
-    Wh_Log(L"Хеш %s не совпал, перекачиваю...", g_stagingDllPath);
-    DeleteFileW(g_stagingDllPath);
-
-    if (!EnsureDirectoryExists(g_stagingDllPath)) {
-        Wh_Log(L"Не удалось создать директорию");
-        return FALSE;
-    }
-    if (!DownloadFile(CurrentUrl(), g_stagingDllPath))
-        return FALSE;
-
-    if (!VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
-        Wh_Log(L"Хеш после загрузки не совпал! Удаляю.");
-        DeleteFileW(g_stagingDllPath);
-        return FALSE;
-    }
-
-    Wh_Log(L"Файл перекачан и проверен: %s", g_stagingDllPath);
-    return TRUE;
+static DWORD WINAPI DownloadWorkerProc(LPVOID) {
+    if (IsStopRequested()) return 1;
+    if (TryPinExistingFile())
+        return 0;
+    if (IsStopRequested()) return 1;
+    if (!DownloadToTempCancellable())
+        return 1;
+    TryPinExistingFile();
+    return 0;
 }
 
-static BOOL PrepareExplorerFrameDll(void) {
-    WCHAR storageDir[MAX_PATH];
-    WCHAR systemDir[MAX_PATH];
-    HRESULT hr;
-    DWORD attrs;
-    const WCHAR* leaf;
-
-    // На ARM64 ОС explorer.exe может быть эмулированным x86-64,
-    // поэтому смотрим именно процесс, а не сборку мода.
-    g_isArm64 = IsCurrentProcessArm64();
-    Wh_Log(L"Архитектура текущего процесса: %s (Machine=0x%04X)",
-        g_isArm64 ? L"ARM64" : L"x86-64", GetCurrentProcessMachine());
-
-    memset(storageDir, 0, sizeof(storageDir));
-    {
-        size_t len = Wh_GetModStoragePath(storageDir, ARRAYSIZE(storageDir));
-        if (len == 0 || len >= ARRAYSIZE(storageDir)) {
-            Wh_Log(L"Wh_GetModStoragePath failed");
-            return FALSE;
-        }
-    }
-
-    leaf = g_isArm64 ? L"explorerframe_arm64.dll" : L"explorerframe_x64.dll";
-    hr = StringCchPrintfW(g_stagingDllPath, MAX_PATH, L"%s\\%s", storageDir, leaf);
-    if (FAILED(hr)) return FALSE;
-
-    GetSystemDirectoryW(systemDir, MAX_PATH);
-    StringCchPrintfW(g_canonicalDllPath, MAX_PATH, L"%s\\explorerframe.dll", systemDir);
-
-    if (!EnsureDirectoryExists(g_stagingDllPath)) {
-        Wh_Log(L"Не удалось создать директорию");
-        return FALSE;
-    }
-
-    attrs = GetFileAttributesW(g_stagingDllPath);
-    if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-        if (VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
-            Wh_Log(L"Файл уже на месте и хеш совпадает: %s", g_stagingDllPath);
-            return TRUE;
-        }
-        Wh_Log(L"Хеш существующего файла неверный, заменяю");
-        DeleteFileW(g_stagingDllPath);
-    }
-
-    if (!DownloadFile(CurrentUrl(), g_stagingDllPath)) {
-        Wh_Log(L"Ошибка загрузки");
-        return FALSE;
-    }
-
-    if (!VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
-        Wh_Log(L"Хеш после загрузки неверный, удаляю");
-        DeleteFileW(g_stagingDllPath);
-        return FALSE;
-    }
-
-    Wh_Log(L"Файл сохранён и проверен: %s", g_stagingDllPath);
-    return TRUE;
-}
-
-static BOOL IsExplorerFrameByName(PCWSTR name) {
-    const WCHAR* fileName;
+static BOOL IsExplorerFrameByNameW(PCWSTR name) {
+    const WCHAR* f;
     if (!name) return FALSE;
-    fileName = wcsrchr(name, L'\\');
-    fileName = fileName ? fileName + 1 : name;
-    return _wcsicmp(fileName, L"explorerframe.dll") == 0;
+    f = wcsrchr(name, L'\\');
+    f = f ? f + 1 : name;
+    return _wcsicmp(f, L"explorerframe.dll") == 0;
 }
 
-// PEB через NtQueryInformationProcess: один код для x64 и ARM64.
 static BOOL PatchLoaderEntryPath(HMODULE hModule) {
-    HMODULE hNtdll;
-    typedef NTSTATUS (NTAPI *NtQueryInformationProcess_t)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
-    NtQueryInformationProcess_t pNtQIP;
-    PROCESS_BASIC_INFORMATION pbi;
-    NTSTATUS st;
-    PPEB peb;
-    PLIST_ENTRY head, current;
-    int i;
-
-    size_t fullLen, baseLen;
-    PWSTR fullBuf, baseBuf;
-
-    if (!hModule)
+    if (!hModule || g_canonicalDllPath[0] == L'\0')
         return FALSE;
 
-    hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (!hNtdll)
+    PPEB peb = NtCurrentTeb()->ProcessEnvironmentBlock;
+    if (!peb || !peb->Ldr)
         return FALSE;
 
-    pNtQIP = (NtQueryInformationProcess_t)GetProcAddress(hNtdll, "NtQueryInformationProcess");
-    if (!pNtQIP)
-        return FALSE;
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    typedef NTSTATUS (NTAPI *LockFN)(ULONG, ULONG*, ULONG_PTR*);
+    typedef NTSTATUS (NTAPI *UnlockFN)(ULONG, ULONG_PTR);
+    LockFN pLock = NULL;
+    UnlockFN pUnlock = NULL;
+    ULONG_PTR cookie = 0;
+    BOOL locked = FALSE;
+    if (hNtdll) {
+        pLock = (LockFN)GetProcAddress(hNtdll, "LdrLockLoaderLock");
+        pUnlock = (UnlockFN)GetProcAddress(hNtdll, "LdrUnlockLoaderLock");
+        if (pLock && pUnlock && pLock(0, NULL, &cookie) >= 0)
+            locked = TRUE;
+    }
 
-    memset(&pbi, 0, sizeof(pbi));
-    st = pNtQIP(GetCurrentProcess(), ProcessBasicInformation, &pbi, sizeof(pbi), NULL);
-    if (st != 0 || !pbi.PebBaseAddress) {
-        Wh_Log(L"NtQueryInformationProcess failed: 0x%08X", (unsigned)st);
+    PLIST_ENTRY head = &peb->Ldr->InMemoryOrderModuleList;
+    PLIST_ENTRY cur = head->Flink;
+    PLDR_DATA_TABLE_ENTRY_FULL ent = NULL;
+    int steps = 0;
+    while (cur && cur != head && steps < 10000) {
+        PLDR_DATA_TABLE_ENTRY_FULL cand =
+            CONTAINING_RECORD(cur, LDR_DATA_TABLE_ENTRY_FULL, InMemoryOrderLinks);
+        if ((HMODULE)cand->DllBase == hModule) { ent = cand; break; }
+        cur = cur->Flink;
+        steps++;
+    }
+    if (!ent) {
+        if (locked) pUnlock(0, cookie);
         return FALSE;
     }
 
-    peb = pbi.PebBaseAddress;
-    if (!peb || !peb->Ldr) {
-        Wh_Log(L"Не удалось получить PEB/Ldr");
+    size_t fullLen = wcslen(g_canonicalDllPath);
+    size_t baseLen = wcslen(L"explorerframe.dll");
+    if (ent->FullDllName.Buffer && ent->FullDllName.Length == (USHORT)(fullLen * sizeof(WCHAR)) &&
+        _wcsnicmp(ent->FullDllName.Buffer, g_canonicalDllPath, fullLen) == 0) {
+        if (locked) pUnlock(0, cookie);
+        return TRUE;
+    }
+
+    PWSTR fullBuf = (PWSTR)HeapAlloc(GetProcessHeap(), 0, (fullLen + 1) * sizeof(WCHAR));
+    PWSTR baseBuf = (PWSTR)HeapAlloc(GetProcessHeap(), 0, (baseLen + 1) * sizeof(WCHAR));
+    if (!fullBuf || !baseBuf) {
+        if (fullBuf) HeapFree(GetProcessHeap(), 0, fullBuf);
+        if (baseBuf) HeapFree(GetProcessHeap(), 0, baseBuf);
+        if (locked) pUnlock(0, cookie);
         return FALSE;
     }
-
-    head = &peb->Ldr->InMemoryOrderModuleList;
-    current = head->Flink;
-
-    for (i = 0; i < 4096 && current && current != head; i++) {
-        PLDR_DATA_TABLE_ENTRY_FULL entry =
-            CONTAINING_RECORD(current, LDR_DATA_TABLE_ENTRY_FULL, InMemoryOrderLinks);
-
-        if (entry->DllBase == (PVOID)hModule) {
-            fullLen = wcslen(g_canonicalDllPath);
-            baseLen = wcslen(L"explorerframe.dll");
-
-            fullBuf = (PWSTR)HeapAlloc(GetProcessHeap(), 0, (fullLen + 1) * sizeof(WCHAR));
-            baseBuf = (PWSTR)HeapAlloc(GetProcessHeap(), 0, (baseLen + 1) * sizeof(WCHAR));
-
-            if (!fullBuf || !baseBuf) {
-                Wh_Log(L"HeapAlloc failed");
-                if (fullBuf) HeapFree(GetProcessHeap(), 0, fullBuf);
-                if (baseBuf) HeapFree(GetProcessHeap(), 0, baseBuf);
-                return FALSE;
-            }
-
-            wcscpy_s(fullBuf, fullLen + 1, g_canonicalDllPath);
-            wcscpy_s(baseBuf, baseLen + 1, L"explorerframe.dll");
-
-            entry->FullDllName.Buffer = fullBuf;
-            entry->FullDllName.Length = (USHORT)(fullLen * sizeof(WCHAR));
-            entry->FullDllName.MaximumLength = (USHORT)((fullLen + 1) * sizeof(WCHAR));
-
-            entry->BaseDllName.Buffer = baseBuf;
-            entry->BaseDllName.Length = (USHORT)(baseLen * sizeof(WCHAR));
-            entry->BaseDllName.MaximumLength = (USHORT)((baseLen + 1) * sizeof(WCHAR));
-
-            Wh_Log(L"Loader entry замаскирован: %p -> %s", hModule, g_canonicalDllPath);
-            return TRUE;
-        }
-
-        current = current->Flink;
-    }
-
-    Wh_Log(L"Не найдена loader entry для hModule=%p", hModule);
-    return FALSE;
+    StringCchCopyW(fullBuf, fullLen + 1, g_canonicalDllPath);
+    StringCchCopyW(baseBuf, baseLen + 1, L"explorerframe.dll");
+    ent->FullDllName.Buffer = fullBuf;
+    ent->FullDllName.Length = (USHORT)(fullLen * sizeof(WCHAR));
+    ent->FullDllName.MaximumLength = (USHORT)((fullLen + 1) * sizeof(WCHAR));
+    ent->BaseDllName.Buffer = baseBuf;
+    ent->BaseDllName.Length = (USHORT)(baseLen * sizeof(WCHAR));
+    ent->BaseDllName.MaximumLength = (USHORT)((baseLen + 1) * sizeof(WCHAR));
+    if (locked) pUnlock(0, cookie);
+    return TRUE;
 }
 
 typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR, HANDLE, DWORD);
-LoadLibraryExW_t LoadLibraryExW_Original = NULL;
+static LoadLibraryExW_t LoadLibraryExW_Original = NULL;
 
-typedef HMODULE (WINAPI *LoadLibraryW_t)(LPCWSTR);
-LoadLibraryW_t LoadLibraryW_Original = NULL;
-
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
-    HMODULE result;
-
-    if (g_insideHook || !g_fileReady || !lpLibFileName) {
-        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    }
-
-    if (!IsExplorerFrameByName(lpLibFileName)) {
-        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    }
-
-    Wh_Log(L"[LoadLibraryExW] Перехват: %s -> %s", lpLibFileName, g_stagingDllPath);
-
-    if (!VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
-        BOOL ok;
-        Wh_Log(L"[LoadLibraryExW] Хеш неверный перед загрузкой");
-        g_insideHook = TRUE;
-        ok = EnsureStagingFileValid();
-        g_insideHook = FALSE;
-        if (!ok) {
-            Wh_Log(L"[LoadLibraryExW] Не удалось восстановить файл, гружу оригинал");
-            return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-        }
-    }
-
-    g_insideHook = TRUE;
-    result = LoadLibraryExW_Original(g_stagingDllPath, hFile, dwFlags);
-    g_insideHook = FALSE;
-
-    if (result) {
-        PatchLoaderEntryPath(result);
-        Wh_Log(L"[LoadLibraryExW] Загружено и замаскировано: %p", result);
-    } else {
-        Wh_Log(L"[LoadLibraryExW] Не удалось загрузить: %u", GetLastError());
-    }
-
-    return result;
+static BOOL EnterHook(void) {
+    if (t_inHook) return FALSE;
+    t_inHook = true;
+    return TRUE;
+}
+static void LeaveHook(void) { t_inHook = false; }
+static BOOL IsReady(void) {
+    return InterlockedCompareExchange(&g_ready, 0, 0) != 0 &&
+           g_hPinnedFile != INVALID_HANDLE_VALUE &&
+           g_stagingDllPath[0] != L'\0';
 }
 
-HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR lpLibFileName) {
-    HMODULE result;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    if (!lpLibFileName || hFile != NULL)
+        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (!IsExplorerFrameByNameW(lpLibFileName))
+        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (g_stagingDllPath[0] != L'\0' && _wcsicmp(lpLibFileName, g_stagingDllPath) == 0)
+        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (!IsReady())
+        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (!EnterHook())
+        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
 
-    if (g_insideHook || !g_fileReady || !lpLibFileName) {
-        return LoadLibraryW_Original(lpLibFileName);
-    }
-
-    if (!IsExplorerFrameByName(lpLibFileName)) {
-        return LoadLibraryW_Original(lpLibFileName);
-    }
-
-    Wh_Log(L"[LoadLibraryW] Перехват: %s -> %s", lpLibFileName, g_stagingDllPath);
-
-    if (!VerifyFileSHA256(g_stagingDllPath, CurrentExpectedHash())) {
-        BOOL ok;
-        Wh_Log(L"[LoadLibraryW] Хеш неверный перед загрузкой");
-        g_insideHook = TRUE;
-        ok = EnsureStagingFileValid();
-        g_insideHook = FALSE;
-        if (!ok) {
-            Wh_Log(L"[LoadLibraryW] Не удалось восстановить файл, гружу оригинал");
-            return LoadLibraryW_Original(lpLibFileName);
-        }
-    }
-
-    g_insideHook = TRUE;
-    result = LoadLibraryW_Original(g_stagingDllPath);
-    g_insideHook = FALSE;
-
-    if (result) {
-        PatchLoaderEntryPath(result);
-        Wh_Log(L"[LoadLibraryW] Загружено и замаскировано: %p", result);
+    HMODULE res = LoadLibraryExW_Original(g_stagingDllPath, hFile, dwFlags);
+    DWORD err = GetLastError();
+    LeaveHook();
+    if (res) {
+        PatchLoaderEntryPath(res);
+        SetLastError(0);
     } else {
-        Wh_Log(L"[LoadLibraryW] Не удалось загрузить: %u", GetLastError());
+        SetLastError(err);
     }
-
-    return result;
+    return res;
 }
 
 BOOL Wh_ModInit(void) {
-    HMODULE hKernelBase;
-    HMODULE hKernel32;
-    FARPROC pLoadLibraryExW;
-    FARPROC pLoadLibraryW;
+    Wh_Log(L"Init redirector subdir=%s", kArchSubdir);
 
-    Wh_Log(L"Инициализация ExplorerFrame Redirector v7.1 (x64/ARM64 runtime)");
+    g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_hStopEvent) return FALSE;
 
-    g_fileReady = PrepareExplorerFrameDll();
-    if (!g_fileReady) {
-        Wh_Log(L"Файл не готов, редирект отключён");
+    WCHAR modDir[MAX_PATH];
+    modDir[0] = L'\0';
+    size_t r = Wh_GetModStoragePath(modDir, sizeof(modDir) / sizeof(modDir[0]));
+    if (r == 0 || modDir[0] == L'\0') {
+        Wh_Log(L"Wh_GetModStoragePath failed");
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
         return FALSE;
     }
 
-    hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    hKernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!hKernelBase)
-        hKernelBase = hKernel32;
-
-    if (!hKernelBase || !hKernel32) {
-        Wh_Log(L"Не удалось получить kernelbase/kernel32");
+    if (FAILED(StringCchPrintfW(g_stagingDllPath, MAX_PATH, L"%s\\%s\\explorerframe.dll", modDir, kArchSubdir))) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
+        return FALSE;
+    }
+    if (FAILED(StringCchPrintfW(g_tempDllPath, MAX_PATH + 4, L"%s.tmp", g_stagingDllPath))) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
         return FALSE;
     }
 
-    pLoadLibraryExW = GetProcAddress(hKernelBase, "LoadLibraryExW");
-    if (pLoadLibraryExW) {
-        Wh_SetFunctionHook((void*)pLoadLibraryExW, (void*)LoadLibraryExW_Hook,
-            (void**)&LoadLibraryExW_Original);
-        Wh_Log(L"LoadLibraryExW хук установлен");
+    WCHAR sysDir[MAX_PATH];
+    GetSystemDirectoryW(sysDir, MAX_PATH);
+    StringCchPrintfW(g_canonicalDllPath, MAX_PATH, L"%s\\explorerframe.dll", sysDir);
+
+    EnsureDirectoryExists(g_stagingDllPath);
+
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"), (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
+
+    if (!TryPinExistingFile())
+    {
+        DeleteFileW(g_stagingDllPath);
+        Wh_Log(L"Файл не готов, качаем в фоне");
+        g_hWorkerThread = CreateThread(NULL, 0, DownloadWorkerProc, NULL, 0, NULL);
     }
 
-    pLoadLibraryW = GetProcAddress(hKernel32, "LoadLibraryW");
-    if (pLoadLibraryW) {
-        Wh_SetFunctionHook((void*)pLoadLibraryW, (void*)LoadLibraryW_Hook,
-            (void**)&LoadLibraryW_Original);
-        Wh_Log(L"LoadLibraryW хук установлен");
-    }
-
-    Wh_Log(L"Все хуки установлены");
     return TRUE;
+}
+
+void Wh_ModUninit(void) {
+    if (g_hStopEvent) SetEvent(g_hStopEvent);
+
+    AcquireSRWLockExclusive(&g_cancelLock);
+    HINTERNET hu = g_hUrlCancel;
+    g_hUrlCancel = NULL;
+    HINTERNET hi = g_hInetCancel;
+    g_hInetCancel = NULL;
+    ReleaseSRWLockExclusive(&g_cancelLock);
+    if (hu) InternetCloseHandle(hu);
+    if (hi) InternetCloseHandle(hi);
+
+    if (g_hWorkerThread) {
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = NULL;
+    }
+    if (g_hStopEvent) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
+    }
+    if (g_hPinnedFile != INVALID_HANDLE_VALUE) {
+        CloseHandle(g_hPinnedFile);
+        g_hPinnedFile = INVALID_HANDLE_VALUE;
+    }
+    InterlockedExchange(&g_ready, 0);
 }
