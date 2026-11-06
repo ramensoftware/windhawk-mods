@@ -79,9 +79,9 @@ Windhawk explain their scope and any restart requirements.
 - The Windows 8 Start corner is illustrated, not a live Start-screen preview.
 - Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.
 - On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into Explorer and stays loaded until Explorer restarts.
-- The integrated tray creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and other mods that find the taskbar by class may see this host instead of the native window; tray and appbar messages are forwarded where applicable. Other shell mods can conflict.
+- The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
-- Close the Notification Area Icons page before disabling, updating, or reloading the mod. Although no crash was observed in a test with the page open, this uncommon situation could cause problems.
+- Close the Notification Area Icons page before disabling, updating, or reloading the mod. The CNI COM implementation uses a shutdown gate and pins its code until Explorer exits, but complete callback lifetime safety has not been verified. Outstanding bridge objects may remain allocated until process exit; repeated updates can retain old mod images.
 - Keep a way to disable the mod or restart Explorer.
 - Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
 
@@ -377,6 +377,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:es: "Esta configuración selecciona el componente azul del color personalizado de la barra de 0 a 255. Se aplica cuando el color personalizado de la barra está activado."
   $description:fr: "Ce paramètre définit la composante bleue de la couleur personnalisée de la barre de 0 à 255. Elle s’applique lorsque la couleur personnalisée de la barre est activée."
   $description:pt: "Esta configuração seleciona o componente azul da cor personalizada da barra de 0 a 255. Ela se aplica quando a cor personalizada da barra está ativada."
+- debugExceptionLog: false
+  $name: Exception diagnostics
+  $description: Log distinct exception sites to help diagnose a problem. This is process-wide, diagnostic only, and does not prevent crashes.
 - showRecoverableErrors: true
   $name: "Notify recoverable UI errors"
   $name:it: "Notifica errori recuperabili dell'interfaccia"
@@ -2139,6 +2142,7 @@ std::atomic<bool> aeroPeek{true}, useBetaStartLogo{false};
 // 0=custom, 1=7, 2=8 beta, 3=8.0, 4=8.1. Presets are effective values only.
 std::atomic<int> taskbarSkin{0};
 std::atomic<bool> startHotCorner{false}, customStartColor{false}, showRecoverableErrors{true};
+static std::atomic<bool> debugExceptionLog{false};
 std::atomic<int> startLogoRgb{0x0078D7};
 std::atomic<bool> customTaskbarColor{false};
 std::atomic<int> taskbarColorRgb{0x0078D7};
@@ -2192,6 +2196,7 @@ static void MigrateTaskbarSettings() {
 }
 void LoadSettings() {
     MigrateTaskbarSettings();
+    debugExceptionLog.store(Wh_GetIntSetting(L"debugExceptionLog") != 0);
     enablePrivateTray.store(Wh_GetIntSetting(L"enablePrivateTray") != 0);
     reserveWorkArea.store(Wh_GetIntSetting(L"reserveWorkArea") != 0);
     {
@@ -6179,10 +6184,15 @@ static LRESULT ProcessTrayIdentifier(const COPYDATASTRUCT* data) {
     return (LRESULT)(DWORD)MAKELONG((WORD)p.x,(WORD)p.y);
 }
 static LRESULT ForwardShellMessage(UINT msg,WPARAM wp,LPARAM lp) {
+    try {
     if(!s || !s->native || !IsWindow(s->native) || s->native==s->privateHost) return 0;
     DWORD_PTR result=0;
     if(msg==WM_USER+372) { PostMessageW(s->native,msg,wp,lp); return 0; }
     return SendMessageTimeoutW(s->native,msg,wp,lp,SMTO_ABORTIFHUNG|SMTO_BLOCK,150,&result) ? (LRESULT)result : 0;
+    } catch(...) {
+        Wh_Log(L"[T81-DIAG] shell message forwarding C++ exception; request failed");
+        return 0;
+    }
 }
 static LRESULT CALLBACK PrivateTrayProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     if(!s) return DefWindowProcW(hwnd,msg,wp,lp);
@@ -6297,10 +6307,15 @@ static void ReadNativeTrayToolbar(HWND toolbar,bool overflow,NativeTrayScan& sca
 }
 struct ToolbarEnumContext { NativeTrayScan* scan; bool overflow; };
 static BOOL CALLBACK EnumNativeTrayToolbar(HWND h,LPARAM param) {
+    try {
     auto* ctx=reinterpret_cast<ToolbarEnumContext*>(param);
     wchar_t name[80]={}; GetClassNameW(h,name,(int)std::size(name));
     if(!_wcsicmp(name,TOOLBARCLASSNAMEW)) ReadNativeTrayToolbar(h,ctx->overflow,*ctx->scan);
     return ctx->scan->timedOut?FALSE:TRUE;
+    } catch(...) {
+        Wh_Log(L"[T81-DIAG] native tray toolbar enumeration C++ exception; snapshot incomplete");
+        return FALSE;
+    }
 }
 static unsigned ImportNativeTraySnapshot() {
     if(!s || !s->native || !IsWindow(s->native) || s->nativeSnapshotTimedOut) return 0;
@@ -6483,6 +6498,7 @@ static void GuardPrivateTray() {
 }
 // Event-based repair reduces the interval in which Explorer's own bar can
 // reappear after a balloon/notification. A periodic guard remains as backup.
+static bool AttachClassicClockFrame();
 static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LONG object,LONG child,DWORD,DWORD) {
     try {
     if(!s || !hwnd || object!=OBJID_WINDOW || child!=CHILDID_SELF) return;
@@ -6506,6 +6522,12 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LO
         wchar_t cls[64]{};if(GetClassNameW(hwnd,cls,64) && !wcscmp(cls,L"ClockFlyoutWindow")) {
             BOOL disabled=TRUE;HRESULT hr=DwmSetWindowAttribute(hwnd,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled));
             Wh_Log(L"[T81-DIAG] clock transition disable event=%lu hr=0x%08lx",event,(unsigned long)hr);
+            if(event==EVENT_OBJECT_SHOW && s->clockFixAttempts>0 && AttachClassicClockFrame()) {
+                if(s->bar) KillTimer(s->bar,TIMER_CLOCK_FIX);
+                s->clockFixAttempts=0;
+            }
+        } else if(GetClassNameW(hwnd,cls,64) && !wcscmp(cls,L"BatMeterFlyout")) {
+            BOOL disabled=TRUE;DwmSetWindowAttribute(hwnd,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled));
         }
     }
     } catch(...) {
@@ -7203,6 +7225,7 @@ static void ShowPrivateOverflow() {
         s->overflowPanel=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_NOACTIVATE,
             (LPCWSTR)(ULONG_PTR)(WORD)s->overflowClass,L"",TaskbarPopupStyle(),0,0,200,100,s->bar,nullptr,instance,nullptr);
         if(!s->overflowPanel) {UnregisterClassW((LPCWSTR)(ULONG_PTR)(WORD)s->overflowClass,instance);s->overflowClass=0;return;}
+        { BOOL disabled=TRUE;DwmSetWindowAttribute(s->overflowPanel,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled)); }
         ConfigureSystemPopupFrame(s->overflowPanel);
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_WIN95_CLASSES}; InitCommonControlsEx(&controls);
         s->overflowTooltip=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,nullptr,WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,
@@ -7574,6 +7597,35 @@ struct CniCallbackScope {
     CniCallbackScope() { g_trayCniCallbackDepth.fetch_add(1, std::memory_order_acq_rel); }
     ~CniCallbackScope() { g_trayCniCallbackDepth.fetch_sub(1, std::memory_order_acq_rel); }
 };
+
+// CNI shutdown gate belongs to this DLL copy. A rejected entry never touches
+// tray/UI state. Drain entries before stopping the UI they may be waiting on.
+static std::atomic<bool> g_cniAccepting{true};
+static std::atomic<unsigned> g_cniCalls{0};
+struct CniCallScope {
+    bool entered=false;
+    CniCallScope() {
+        g_cniCalls.fetch_add(1,std::memory_order_seq_cst);
+        entered=g_cniAccepting.load(std::memory_order_seq_cst);
+        if(!entered) g_cniCalls.fetch_sub(1,std::memory_order_seq_cst);
+    }
+    ~CniCallScope() {if(entered)g_cniCalls.fetch_sub(1,std::memory_order_seq_cst);}
+};
+static bool PinCniCode() {
+    // A late COM call can only be safe from unmapped code if this DLL copy is
+    // resident. PIN is permanent until the Explorer process exits, even on update.
+    static bool pinned=false;
+    if(pinned)return true; // called only by the private tray UI thread
+    HMODULE module=nullptr;
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+                           reinterpret_cast<LPCWSTR>(&g_cniAccepting),&module)) {
+        Wh_Log(L"[T81-CNI] module pin failed; private COM server disabled error=%lu",GetLastError());
+        return false;
+    }
+    pinned=true;
+    Wh_Log(L"[T81-CNI] COM code pinned until Explorer exits; updates retain the old image");
+    return true;
+}
 
 // The private tray's preference exists only during this mod session.
 static std::atomic<DWORD> g_privateAutoTray{1};
@@ -8142,7 +8194,9 @@ static HRESULT QueueCniUiRequest(CniUiRequest* request, bool waitForUi) {
 
 static bool StartTrayNotifyServer() {
     if (g_trayCni) return true;
-    if (!s || !s->privateActive) return false;
+    if (!s || !s->privateActive || !g_cniAccepting.load()) return false;
+    // Do not expose our COM code at all unless pinning this copy succeeded.
+    if (!PinCniCode()) return false;
 
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) {
@@ -8260,6 +8314,7 @@ public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (!ppv) return E_POINTER;
         *ppv = nullptr;
+        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
         if (IsEqualIID(riid, IID_IUnknown) ||
             IsEqualIID(riid, T81_IID_ITrayNotifyWin8)) {
             *ppv = static_cast<ITrayNotifyWin8*>(this);
@@ -8269,31 +8324,41 @@ public:
         return E_NOINTERFACE;
     }
     ULONG STDMETHODCALLTYPE AddRef() override {
+        CniCallScope call;if(!call.entered)return 1;
         return refs_.fetch_add(1, std::memory_order_relaxed) + 1;
     }
     ULONG STDMETHODCALLTYPE Release() override {
+        // After quiescence retain the object and backend reference rather than
+        // running apartment-dependent teardown against a stopped server.
+        CniCallScope call;if(!call.entered)return 1;
         ULONG left = refs_.fetch_sub(1, std::memory_order_acq_rel) - 1;
         if (!left) delete this;
         return left;
     }
     HRESULT STDMETHODCALLTYPE RegisterCallback(
         INotificationCB* callback, ULONG* cookie) override {
+        if(cookie)*cookie=0;
+        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
         return backend_->RegisterCallback(callback, cookie);
     }
     HRESULT STDMETHODCALLTYPE UnregisterCallback(ULONG cookie) override {
+        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
         return backend_->UnregisterCallback(cookie);
     }
     HRESULT STDMETHODCALLTYPE SetPreference(const NOTIFYITEM* item) override {
+        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
         if (!g_trayCni || !g_trayCniPrivateRegistered.load()) return E_UNEXPECTED;
         Wh_Log(L"[T81-CNI] local SetPreference bridge tid=%lu", GetCurrentThreadId());
         return g_trayCni->SetPreference(item);
     }
     HRESULT STDMETHODCALLTYPE EnableAutoTray(BOOL enabled) override {
+        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
         if (!g_trayCni || !g_trayCniPrivateRegistered.load()) return E_UNEXPECTED;
         Wh_Log(L"[T81-CNI] local EnableAutoTray bridge tid=%lu", GetCurrentThreadId());
         return g_trayCni->EnableAutoTray(enabled);
     }
     HRESULT STDMETHODCALLTYPE DoAction(BOOL action) override {
+        CniCallScope call;if(!call.entered)return E_UNEXPECTED;
         return backend_->DoAction(action);
     }
 };
@@ -8309,6 +8374,8 @@ static HRESULT WINAPI TrayCniCoCreateInstanceHook(
     if (ppv && !outer && (context & CLSCTX_LOCAL_SERVER) &&
         IsEqualCLSID(rclsid, T81_CLSID_TrayNotify) &&
         IsEqualIID(riid, T81_IID_ITrayNotifyWin8)) {
+        CniCallScope call;
+        if(!call.entered) return realTrayCniCoCreateInstance(rclsid,outer,context,riid,ppv);
         *ppv = nullptr;
         HRESULT hr = realTrayCniCoCreateInstance(T81_CLSID_PrivateTrayNotify,
             nullptr, context, riid, ppv);
@@ -9184,15 +9251,6 @@ static void TickBatterySlide() {
     SetWindowPos(h,nullptr,s->batterySlideTarget.x,s->batterySlideTarget.y+dy,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
     if(elapsed>=70)CancelBatterySlide();
 }
-static void StartBatterySlide(HWND h,POINT target,int offset) {
-    CancelBatterySlide();
-    if(!s || !s->bar || !h || !offset)return;
-    BOOL animations=FALSE;
-    if(!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animations,0) || !animations)return;
-    s->batterySlideWindow=h;s->batterySlideTarget=target;s->batterySlideOffset=offset;s->batterySlideStart=GetTickCount64();
-    if(!SetTimer(s->bar,TIMER_BATTERY_SLIDE,15,nullptr)) {CancelBatterySlide();return;}
-    SetWindowPos(h,nullptr,target.x,target.y+offset,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
-}
 static void PositionOriginalBatteryFlyout(HWND flyout) {
     if(!s || !flyout || !s->bar)return;
     RECT anchor{};bool popup=OverflowIconScreenRect(SystemEntry(HIT_BATTERY),&anchor);
@@ -9213,10 +9271,7 @@ static void PositionOriginalBatteryFlyout(HWND flyout) {
     }
     int x=position.x,y=position.y;
     SetWindowPos(flyout,HWND_TOPMOST,x,y,0,0,SWP_NOSIZE|SWP_NOACTIVATE);
-    // Move only into available work area. With a bottom bar the flyout rises;
-    // with a top bar it moves down. Do not cross the monitor work bounds.
-    int desired=Px(8),offset=s->nativeEdge==ABE_TOP?-std::max(0,std::min(desired,y-(int)mi.rcWork.top)):std::max(0,std::min(desired,(int)mi.rcWork.bottom-(y+h)));
-    StartBatterySlide(flyout,position,offset);
+    CancelBatterySlide();
 }
 
 static BOOL CALLBACK FindOwnBatteryFlyout(HWND hwnd,LPARAM param) {
@@ -9526,7 +9581,8 @@ static bool TryOriginalBatteryFlyout1511() {
     HWND flyout=nullptr; EnumThreadWindows(GetCurrentThreadId(),FindOwnBatteryFlyout,(LPARAM)&flyout);
     bool visible=flyout && IsWindowVisible(flyout);
     Wh_Log(L"[T81-DIAG] battery 1511 ShowBatteryUI hr=0x%08lx own-visible=%d hwnd=%p",(unsigned long)hr,visible?1:0,flyout);
-    if(visible) {StyleOriginalBatteryFlyout(flyout);PositionOriginalBatteryFlyout(flyout);ClearBatteryInitialChildFocus(flyout);}
+    if(visible) {BOOL disabled=TRUE;DwmSetWindowAttribute(flyout,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled));
+        StyleOriginalBatteryFlyout(flyout);PositionOriginalBatteryFlyout(flyout);ClearBatteryInitialChildFocus(flyout);}
     else CancelBatterySlide();
     return SUCCEEDED(hr) && visible;
 }
@@ -9637,7 +9693,8 @@ static void CALLBACK VolumeShowEvent(HWINEVENTHOOK hook,DWORD event,HWND hwnd,LO
         FindVolumePopupContext c{s->volumeLaunchPid,nullptr};
         FindVolumePopupProc(hwnd,(LPARAM)&c);
         if(c.found) {
-            Wh_Log(L"[T81-DIAG] volume popup show event; positioning early");
+            BOOL disabled=TRUE;HRESULT hr=DwmSetWindowAttribute(c.found,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled));
+            Wh_Log(L"[T81-DIAG] volume popup show event; transition disable hr=0x%08lx",(unsigned long)hr);
             PlaceFlyoutAtVisualBar(c.found,s->volumeAnchor);
         }
     } catch(...) {Wh_Log(L"[T81-DIAG] volume show event C++ exception; timer remains active");}
@@ -10212,6 +10269,7 @@ static void ShowLanguageIndicatorMenu() {
         s->languageFlyout=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,L"WH_Taskbar81LanguageFlyout",L"Windows 8.1 Language Switcher",
             WS_POPUP|WS_CLIPCHILDREN,0,0,100,100,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
         if(!s->languageFlyout)return;
+        { BOOL disabled=TRUE;DwmSetWindowAttribute(s->languageFlyout,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled)); }
         // DWMWCP_DONOTROUND: the supplied Windows 8.1 window has square corners.
         DWORD corners=1;DwmSetWindowAttribute(s->languageFlyout,33,&corners,sizeof(corners));
     }
@@ -12302,8 +12360,8 @@ static bool OpenClassicClock() {
         Wh_Log(L"Classic clock ShowFlyout failed (0x%08X); trying configured fallback",(unsigned)hr);
         return false;
     }
-    s->clockFixAttempts=20;
-    SetTimer(s->bar,TIMER_CLOCK_FIX,100,nullptr);
+    s->clockFixAttempts=80;
+    SetTimer(s->bar,TIMER_CLOCK_FIX,25,nullptr);
     // S_OK only means the request was accepted. The timer checks for an
     // actual ClockFlyoutWindow before claiming the border fix was attached.
     return true;
@@ -14769,6 +14827,7 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
 // rectangle equal to the visible bar and its TrayNotifyWnd equal to the tray
 // area: geometry only, the host stays hidden and keeps receiving no input.
 static void SyncPrivateHostGeometry() {
+    try {
     if(!s || !s->privateHost || !IsWindow(s->privateHost))return;
     RECT host{};
     if(!s->bar || !IsWindow(s->bar) || !GetWindowRect(s->bar,&host) || IsRectEmpty(&host)) {
@@ -14802,6 +14861,9 @@ static void SyncPrivateHostGeometry() {
     lastHost=host;lastNotify=notify;s->privateGeometryApplied=true;
     Wh_Log(L"[T81-DIAG] private host geometry hwnd=%p rect=%ld,%ld,%ld,%ld",
            s->privateHost,host.left,host.top,host.right,host.bottom);
+    } catch(...) {
+        Wh_Log(L"[T81-DIAG] private host geometry C++ exception; update skipped");
+    }
 }
 static bool MasterVolumeSnapshot(float* level,bool* muted) {
     if(!s)return false;
@@ -14832,6 +14894,7 @@ static bool ForwardShellWheel(WPARAM wp,LPARAM lp) {
     const bool measured=MasterVolumeSnapshot(&level,&muted);
     bool forwarded=false;
     busy=true;
+    struct BusyReset {bool& flag; ~BusyReset() {flag=false;}} reset{busy};
     for(int index=0;index<2;++index) {
         HWND target=targets[index];
         if(!target)continue;
@@ -14844,7 +14907,6 @@ static bool ForwardShellWheel(WPARAM wp,LPARAM lp) {
                (nowMuted!=muted || std::fabs(nowLevel-level)>0.0005f))break;   // already handled
         }
     }
-    busy=false;
     return forwarded;
 }
 LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
@@ -14909,7 +14971,8 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
                 StopVolumePositionWatch();
                 Wh_Log(L"[T81-DIAG] volume popup target rectangle observed");
             } else {
-                if(c.found) PlaceFlyoutAtVisualBar(c.found,s->volumeAnchor);
+                if(c.found) {BOOL disabled=TRUE;DwmSetWindowAttribute(c.found,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled));
+                    PlaceFlyoutAtVisualBar(c.found,s->volumeAnchor);}
                 if(--s->volumePositionAttempts<=0) {StopVolumePositionWatch();Wh_Log(L"[T81-DIAG] volume popup target not observed in launched PID");}
             }
             return 0;
@@ -15689,11 +15752,67 @@ DWORD WINAPI UIThread(LPVOID) {
 }
 } // namespace
 
+// Process-wide first-chance diagnostics only. Do not recover an exception or
+// modify its context: Windows and any debugger retain their normal behavior.
+static PVOID g_excLogger = nullptr;
+static volatile LONG g_excInfoCount = 0;
+struct ExceptionSite { DWORD code; void* addr; };
+static ExceptionSite g_excSites[16]{};
+static unsigned g_excSiteCount = 0;
+static void ExceptionLogQuiet(const wchar_t* format, ...) {
+    WCHAR buf[1024]{};
+    va_list args; va_start(args,format);
+    _vsnwprintf_s(buf,std::size(buf),_TRUNCATE,format,args);
+    va_end(args);
+    Wh_Log(L"%ls",buf);
+}
+static LONG CALLBACK ExceptionLogger(EXCEPTION_POINTERS* ep) {
+    static volatile LONG busy = 0;
+    // An overlapping or nested handler must not clear the owner's guard.
+    if (InterlockedCompareExchange(&busy,1,0)!=0) return EXCEPTION_CONTINUE_SEARCH;
+    if(ep && ep->ExceptionRecord) {
+        DWORD code=ep->ExceptionRecord->ExceptionCode;
+        void* address=ep->ExceptionRecord->ExceptionAddress;
+        bool info=(code>=0x40010000u && code<=0x400100ffu) ||
+            code==0x406d1388u || code==0xe06d7363u || code==0x80000003u ||
+            code==0x80000004u || code==0x40080201u || (code>=0x6a4u && code<=0x70fu);
+        if(info) InterlockedIncrement(&g_excInfoCount);
+        else {
+            bool seen=false;
+            for(unsigned i=0;i<g_excSiteCount;++i)
+                if(g_excSites[i].code==code && g_excSites[i].addr==address) {seen=true;break;}
+            if(!seen && g_excSiteCount<std::size(g_excSites)) {
+                g_excSites[g_excSiteCount++]={code,address};
+                // Fixed stack buffer, no explicit allocation, loader lookup or I/O.
+                // Wh_Log itself is external and cannot be guaranteed allocation-free.
+                ExceptionLogQuiet(L"[T81-EXCEPTION] first-chance code=0x%08lx address=%p tid=%lu",
+                                  (unsigned long)code,address,GetCurrentThreadId());
+            }
+        }
+    }
+    InterlockedExchange(&busy,0);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+static void InstallExceptionLogger() {
+    if(!g_excLogger) {
+        g_excLogger=AddVectoredExceptionHandler(1,ExceptionLogger);
+        if(!g_excLogger) Wh_Log(L"[T81-EXCEPTION] registration failed error=%lu",GetLastError());
+    }
+}
+static void RemoveExceptionLogger() {
+    if(g_excLogger) {
+        if(RemoveVectoredExceptionHandler(g_excLogger)) g_excLogger=nullptr;
+        else Wh_Log(L"[T81-EXCEPTION] unregister failed error=%lu",GetLastError());
+    }
+}
+
 // No user32 hooks. The private host periodically hides the native window;
 // normal unload restores its original visibility. Competing mods can conflict.
 BOOL Wh_ModInit() {
     quitting.store(false);
+    g_cniAccepting.store(true,std::memory_order_seq_cst);
     LoadSettings();
+    if(debugExceptionLog.load()) InstallExceptionLogger();
     InstallTrayCniHook();
     InstallCniRegistryReadHooks();
     if(useOriginalBatteryFlyout.load() && Battery1511ArchitectureSupported()) {
@@ -15712,6 +15831,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     const bool oldTray=enablePrivateTray.load();
     const bool oldBattery=useOriginalBatteryFlyout.load();
     LoadSettings();
+    if(debugExceptionLog.load()) InstallExceptionLogger(); else RemoveExceptionLogger();
     // These choices require setup normally performed once at initialization:
     // tray ownership, or LoadStringW hook and battery resource provisioning.
     const bool needsReload=oldTray!=enablePrivateTray.load() || (!oldBattery && useOriginalBatteryFlyout.load());
@@ -15721,6 +15841,15 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     return TRUE;
 }
 void Wh_ModBeforeUninit() {
+    RemoveExceptionLogger();
+    // Stop accepting bridge work while its UI server is still running; an
+    // unbounded drain is necessary here rather than unloading with an active
+    // call, but a hung client can delay mod shutdown.
+    g_cniAccepting.store(false,std::memory_order_seq_cst);
+    if(g_cniCalls.load(std::memory_order_seq_cst))
+        Wh_Log(L"[T81-CNI] waiting for in-flight activation/bridge calls before shutdown");
+    while(g_cniCalls.load(std::memory_order_seq_cst)) Sleep(10);
+    Wh_Log(L"[T81-CNI] bridge gate closed and tracked calls drained");
     quitting.store(true);
     if(threadHandle) {
         // TrackPopupMenuEx has its own modal loop: ask its owner to cancel it
@@ -15735,7 +15864,7 @@ void Wh_ModBeforeUninit() {
         CloseHandle(threadHandle); threadHandle=nullptr;
     }
 }
-void Wh_ModUninit() { batteryStringModule.store(nullptr); batteryStringMui.store(nullptr); }
+void Wh_ModUninit() { RemoveExceptionLogger(); batteryStringModule.store(nullptr); batteryStringMui.store(nullptr); }
 
 /*
 ManagedShell and RetroBar: Apache License, Version 2.0.
