@@ -4803,17 +4803,17 @@ void SaveCustomIcons() {
         parts.back() += record;
     }
     for (int i = 0; i < (int)parts.size(); i++) Wh_SetStringValue(CustomIconsKey(i).c_str(), parts[i].c_str());
+    std::vector<WCHAR> probe(1 << 17);
     for (int i = (int)parts.size(); i < kMaxIconParts; i++) {   // parts left from a longer list
-        WCHAR probe[2] = {};
         std::wstring key = CustomIconsKey(i);
-        if (!Wh_GetStringValue(key.c_str(), probe, ARRAYSIZE(probe))) break;
-        Wh_SetStringValue(key.c_str(), L"");
+        if (!Wh_GetStringValue(key.c_str(), probe.data(), (int)probe.size())) break;   // a buffer too small reads as empty: use a part's size
+        Wh_DeleteValue(key.c_str());
     }
 }
 
 void LoadCustomIcons() {
     g_customIcons.clear();
-    std::vector<WCHAR> buf(32768, 0);
+    std::vector<WCHAR> buf(1 << 17, 0);   // version 1.0.0 kept the whole list in "customIcons", up to this size
     for (int part = 0; part < kMaxIconParts; part++) {
         std::wstring key = CustomIconsKey(part);
         buf[0] = 0;
