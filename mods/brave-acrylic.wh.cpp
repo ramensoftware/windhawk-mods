@@ -20,7 +20,7 @@
 > **If the mod isn’t working after a Brave update**
 >
 > - **Wait for the small cache (default).** The workflow checks for new Brave builds every hour. Give it about an hour, then fully exit and reopen Brave. GitHub can delay scheduled runs.
-> - **Download directly from Brave.** If you have a fast connection and enough disk space, enable **Download symbols from Brave as a fallback** in the mod’s Windhawk settings, then fully exit and reopen Brave. On a cache miss, Windhawk can download the full symbols from Brave’s official server. For a recent build, the download was about **1.2 GB** and expanded to about **6 GB** on disk. If symbols are still loading after **five seconds**, Brave opens without acrylic. Leave Brave open until Windhawk finishes loading symbols, then restart Brave to apply the effect.
+> - **Download directly from Brave.** If you have a fast connection and enough disk space, enable **Download symbols from Brave as a fallback** in the mod’s Windhawk settings, then fully exit and reopen Brave. On a cache miss, Windhawk can download the full symbols from Brave’s official server. For a recent build, the download was about **1.2 GB** and expanded to about **6 GB** on disk. If symbols are still loading after **five seconds**, Brave opens without acrylic. Keep Brave open and check the **Brave Acrylic** icon in the Windows notification area. When it says **Restart Brave**, fully exit and reopen Brave to apply the effect.
 
 ![Brave Acrylic](https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png)
 
@@ -171,7 +171,7 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
   $description: Download small compatibility files from the author-controlled symbol cache. GitHub sees your IP and requested build URLs. Restart Brave after applying changes.
 - allowBraveSymbolServerFallback: false
   $name: Download symbols from Brave as a fallback
-  $description: If the cache cannot resolve symbols, let Windhawk download the full PDB from Brave’s official symbol server. Brave continues after five seconds if symbols are still loading. Restart Brave after Windhawk finishes. One tested build downloaded about 1.2 GB and used 6.2 GB on disk.
+  $description: If the cache cannot resolve symbols, let Windhawk download the full PDB from Brave’s official symbol server. Brave continues after five seconds if symbols are still loading. The Brave Acrylic tray icon tells you when to restart. One tested build downloaded about 1.2 GB and used 6.2 GB on disk.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -2311,6 +2311,108 @@ struct SymbolLookup {
 };
 static SymbolLookup s_symbolLookup{};
 
+struct SymbolNotification {
+    HANDLE resolver;
+    HANDLE stop;
+    HANDLE thread;
+};
+static SymbolNotification s_symbolNotification{};
+
+static DWORD WaitForSymbolNotification(const HANDLE *handles, DWORD count) {
+    for (;;) {
+        DWORD result = MsgWaitForMultipleObjectsEx(count, handles, INFINITE, QS_ALLINPUT,
+                                                   MWMO_INPUTAVAILABLE);
+        if (result != WAIT_OBJECT_0 + count)
+            return result;
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (message.message == WM_QUIT)
+                return WAIT_FAILED;
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+}
+
+static void ShowSymbolNotification(NOTIFYICONDATAW &icon, PCWSTR status, PCWSTR message,
+                                   DWORD kind) {
+    icon.uFlags = NIF_TIP | NIF_SHOWTIP | NIF_INFO;
+    icon.dwInfoFlags = kind | NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
+    lstrcpynW(icon.szTip, status, ARRAYSIZE(icon.szTip));
+    lstrcpynW(icon.szInfoTitle, L"Brave Acrylic", ARRAYSIZE(icon.szInfoTitle));
+    lstrcpynW(icon.szInfo, message, ARRAYSIZE(icon.szInfo));
+    if (!Shell_NotifyIconW(NIM_MODIFY, &icon))
+        Wh_Log(L"Could not show the Brave Acrylic symbol notification");
+}
+
+static DWORD WINAPI RunSymbolNotifications(void *parameter) {
+    const auto &notification = *static_cast<SymbolNotification *>(parameter);
+    const HANDLE handles[] = {notification.stop, notification.resolver};
+    if (WaitForSingleObject(handles[0], 0) == WAIT_OBJECT_0)
+        return 0;
+    HWND window = CreateWindowExW(0, L"STATIC", L"", WS_OVERLAPPED, 0, 0, 0, 0, nullptr,
+                                  nullptr, nullptr, nullptr);
+    if (!window)
+        return 0;
+
+    NOTIFYICONDATAW icon{};
+    icon.cbSize = sizeof(icon);
+    icon.hWnd = window;
+    icon.uID = 1;
+    icon.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+    icon.hIcon = LoadIcon(nullptr, IDI_INFORMATION);
+    lstrcpynW(icon.szTip, L"Brave Acrylic: preparing symbols", ARRAYSIZE(icon.szTip));
+    if (Shell_NotifyIconW(NIM_ADD, &icon)) {
+        icon.uVersion = NOTIFYICON_VERSION_4;
+        Shell_NotifyIconW(NIM_SETVERSION, &icon);
+        if (WaitForSingleObject(handles[1], 0) == WAIT_TIMEOUT &&
+            WaitForSingleObject(handles[0], 0) == WAIT_TIMEOUT) {
+            ShowSymbolNotification(icon, L"Brave Acrylic: preparing symbols",
+                                   L"Windhawk is preparing Brave symbols in the background. "
+                                   L"You can keep using Brave.", NIIF_INFO);
+        }
+
+        if (WaitForSymbolNotification(handles, ARRAYSIZE(handles)) == WAIT_OBJECT_0 + 1) {
+            AcquireSRWLockShared(&s_initLock);
+            const bool stopping = s_stopping;
+            const bool ready = s_symbolLookup.succeeded && CompleteFeatures(s_symbolLookup.rva);
+            ReleaseSRWLockShared(&s_initLock);
+            if (!stopping) {
+                if (ready) {
+                    ShowSymbolNotification(icon, L"Brave Acrylic: restart Brave",
+                                           L"Brave symbols are ready. Restart Brave to apply "
+                                           L"the available acrylic effects.", NIIF_INFO);
+                } else {
+                    ShowSymbolNotification(icon, L"Brave Acrylic: symbols unavailable",
+                                           L"Windhawk could not prepare compatible Brave symbols. "
+                                           L"See the mod log for details.", NIIF_WARNING);
+                }
+                // Keep the final tooltip available if Windows muted the banner.
+                WaitForSymbolNotification(handles, 1);
+            }
+        }
+        Shell_NotifyIconW(NIM_DELETE, &icon);
+    } else {
+        Wh_Log(L"Could not add the Brave Acrylic symbol status icon");
+    }
+    DestroyWindow(window);
+    return 0;
+}
+
+// Called under s_initLock, only after the startup budget expires.
+static void StartSymbolNotifications() {
+    s_symbolNotification.resolver = s_symbolWorker;
+    s_symbolNotification.stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!s_symbolNotification.stop)
+        return;
+    s_symbolNotification.thread =
+        CreateThread(nullptr, 0, RunSymbolNotifications, &s_symbolNotification, 0, nullptr);
+    if (!s_symbolNotification.thread) {
+        CloseHandle(s_symbolNotification.stop);
+        s_symbolNotification = {};
+    }
+}
+
 static DWORD WINAPI ResolveBraveSymbolsOnWorker(void *) {
     size_t rva[kFeatureSlots]{};
     HMODULE retainedModule = nullptr;
@@ -2336,8 +2438,8 @@ static DWORD WINAPI ResolveBraveSymbolsOnWorker(void *) {
 // Called with s_initLock held. Waiting releases it so disabling the mod can
 // close the activation gate before waiting for the uncancellable resolver.
 static bool ResolveBraveSymbolsWithStartupBudget(HMODULE module, size_t *rva,
-                                                bool useOnlineCache, DWORD waitMs) {
-    const ULONGLONG deadline = GetTickCount64() + waitMs;
+                                                bool useOnlineCache) {
+    const ULONGLONG deadline = GetTickCount64() + kBraveSymbolStartupWaitMs;
     s_symbolLookup.module = module;
     s_symbolLookup.useOnlineCache = useOnlineCache;
     s_symbolWorker = CreateThread(nullptr, 0, ResolveBraveSymbolsOnWorker, nullptr, 0, nullptr);
@@ -2358,6 +2460,7 @@ static bool ResolveBraveSymbolsWithStartupBudget(HMODULE module, size_t *rva,
         return false;
     if (!s_symbolLookup.finished || s_symbolLookup.completedAt > deadline) {
         Wh_Log(L"Brave continued without acrylic while symbols finish loading; restart afterward");
+        StartSymbolNotifications();
         return false;
     }
     if (!s_symbolLookup.succeeded)
@@ -2368,8 +2471,7 @@ static bool ResolveBraveSymbolsWithStartupBudget(HMODULE module, size_t *rva,
 
 // Installation and shutdown share a barrier. No hook can be registered/applied
 // after Wh_ModBeforeUninit returns, including a loader call that finishes late.
-static bool TryInstallChromeHooks(HMODULE module, bool applyNow,
-                                  DWORD waitMs = kBraveSymbolStartupWaitMs) {
+static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
     if (!module || s_chromeAttempted.exchange(true, std::memory_order_acq_rel))
         return false;
     AcquireSRWLockExclusive(&s_initLock);
@@ -2378,7 +2480,7 @@ static bool TryInstallChromeHooks(HMODULE module, bool applyNow,
     const bool useOnlineCache = s_useOnlineSymbolCache.load();
     const bool allowFallback = s_allowBraveSymbolServerFallback.load();
     const bool resolved = !s_stopping &&
-        (allowFallback ? ResolveBraveSymbolsWithStartupBudget(module, rva, useOnlineCache, waitMs)
+        (allowFallback ? ResolveBraveSymbolsWithStartupBudget(module, rva, useOnlineCache)
                        : ResolveFeatureAddresses(module, rva, useOnlineCache, false));
     if (resolved && !s_stopping) {
         InstallNativeBackgroundHooks(module, rva);
@@ -2499,6 +2601,8 @@ void Wh_ModBeforeUninit() {
     s_transparencyReady.store(false, std::memory_order_release);
     const HANDLE symbolWorker = s_symbolWorker;
     s_symbolWorker = nullptr;
+    if (s_symbolNotification.stop)
+        SetEvent(s_symbolNotification.stop);
     WakeAllConditionVariable(&s_symbolLookupChanged);
     ReleaseSRWLockExclusive(&s_initLock);
     NativeUi::Stop();
@@ -2506,6 +2610,12 @@ void Wh_ModBeforeUninit() {
     // installed, so Chromium cannot save a stripped style during teardown.
     if (s_isBrowserProcess)
         EnumWindows(SyncNativeCaptionWindow, 0);
+    if (s_symbolNotification.thread) {
+        WaitForSingleObject(s_symbolNotification.thread, INFINITE);
+        CloseHandle(s_symbolNotification.thread);
+        CloseHandle(s_symbolNotification.stop);
+        s_symbolNotification = {};
+    }
     // Windhawk's symbol lookup cannot be cancelled. The worker must return
     // before this mod's DLL can be unloaded.
     if (symbolWorker) {
