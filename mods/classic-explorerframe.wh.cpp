@@ -18,6 +18,8 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
 
 Note that to enable the menubar you need to install in addition the mod [ExplorerFrame and menubar fixes fork](https://windhawk.net/mods/restore-folder-menubar-25h2).
 
+This mod downloads the classic Explorerframe.dll and stores it into the mod's storage. You need a working internet access at the first mod's activation.
+
 */
 // ==/WindhawkModReadme==
 
@@ -379,7 +381,23 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     if (!EnterHook())
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
 
-    HMODULE res = LoadLibraryExW_Original(g_stagingDllPath, hFile, dwFlags);
+    constexpr DWORD kResourceOnlyFlags = LOAD_LIBRARY_AS_DATAFILE |
+                                     LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                     LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    constexpr DWORD kSearchFlags = LOAD_WITH_ALTERED_SEARCH_PATH |
+                                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                                LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                                LOAD_LIBRARY_SEARCH_USER_DIRS |
+                                LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
+
+    DWORD redirectFlags = dwFlags;
+    if (!(dwFlags & kResourceOnlyFlags)) {
+        // Image load: resolve the copy's imports from System32 only, never from
+        // the mod storage folder.
+        redirectFlags = (dwFlags & ~kSearchFlags) | LOAD_LIBRARY_SEARCH_SYSTEM32;
+    }
+    HMODULE res = LoadLibraryExW_Original(g_stagingDllPath, hFile, redirectFlags);
+
     DWORD err = GetLastError();
     LeaveHook();
     if (res) {
