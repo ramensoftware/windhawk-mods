@@ -20,7 +20,7 @@ A [Windhawk](https://windhawk.net) mod that replaces the Windows 11 Start menu w
 
 Press the **Windows key** (or click **Start**) and type, or pick what you want to search from the menu that drops down from the bar.
 
-![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri.gif)
+![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri-v2.gif)
 
 ---
 
@@ -81,7 +81,7 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 ### In action
 | Settings panel | Moving the bar |
 |---|---|
-| ![The settings panel](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/settings-panel.gif) | ![Dragging the Siri bar](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/drag-the-bar.gif) |
+| ![The settings panel](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/settings-panel-v2.gif) | ![Dragging the Siri bar](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/drag-the-bar.gif) |
 
 | Right-click menus and tabs | Power options |
 |---|---|
