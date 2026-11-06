@@ -20,7 +20,7 @@
 > **If the mod isn’t working after a Brave update**
 >
 > - **Wait for the small cache (default).** The workflow checks for new Brave builds every hour. Give it about an hour, then fully exit and reopen Brave. GitHub can delay scheduled runs.
-> - **Download directly from Brave.** If you have a fast connection and enough disk space, enable **Download symbols from Brave as a fallback** in the mod’s Windhawk settings, then fully exit and reopen Brave. On a cache miss, Windhawk can download the full symbols from Brave’s official server. For a recent build, the download was about **1.2 GB** and expanded to about **6 GB** on disk.
+> - **Download directly from Brave.** If you have a fast connection and enough disk space, enable **Download symbols from Brave as a fallback** in the mod’s Windhawk settings, then fully exit and reopen Brave. On a cache miss, Windhawk can download the full symbols from Brave’s official server. For a recent build, the download was about **1.2 GB** and expanded to about **6 GB** on disk. If symbols are still loading after **five seconds**, Brave opens without acrylic. Leave Brave open until Windhawk finishes loading symbols, then restart Brave to apply the effect.
 
 ![Brave Acrylic](https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png)
 
@@ -171,7 +171,7 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
   $description: Download small compatibility files from the author-controlled symbol cache. GitHub sees your IP and requested build URLs. Restart Brave after applying changes.
 - allowBraveSymbolServerFallback: false
   $name: Download symbols from Brave as a fallback
-  $description: If the cache cannot resolve symbols, let Windhawk download the full PDB from Brave’s official symbol server. This can delay startup. One tested build downloaded about 1.2 GB and used 6.2 GB on disk. Restart Brave after applying changes.
+  $description: If the cache cannot resolve symbols, let Windhawk download the full PDB from Brave’s official symbol server. Brave continues after five seconds if symbols are still loading. Restart Brave after Windhawk finishes. One tested build downloaded about 1.2 GB and used 6.2 GB on disk.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -209,6 +209,7 @@ BOOL Wh_ModInit() {
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 
 namespace BraveBackground {
 struct ClassName {
@@ -1048,273 +1049,114 @@ static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, siz
     std::copy(normalized.begin(), normalized.end(), result);
     return true;
 }
-static bool ResolveFeatureAddresses(HMODULE module, size_t *result) {
+struct FeatureSymbol {
+    std::wstring_view undecorated;
+    std::wstring_view decorated;
+    std::wstring_view alternate{};
+};
+static constexpr FeatureSymbol kFeatureSymbols[] = {
+    {L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)",
+     LR"(?OnPaintBackground@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)",
+     LR"(?DrawColor@Canvas@gfx@@QEAAXIW4SkBlendMode@@@Z)"},
+    {L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const",
+     LR"(?GetClassNameW@View@views@@QEBA?AV?$basic_string_view@DU?$char_traits@D@__Cr@std@@@__Cr@std@@XZ)"},
+    {L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const",
+     LR"(?ShouldWindowContentsBeTransparent@BrowserDesktopWindowTreeHostWin_ChromiumImpl@@EEBA_NXZ)"},
+    {L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)",
+     LR"(??0BraveVerticalTabStripContainerView@@QEAA@PEAVBrowserView@@PEAVView@views@@@Z)"},
+    {L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)",
+     LR"(?SetBackground@View@views@@QEAAXV?$unique_ptr@VBackground@views@@U?$default_delete@VBackground@views@@@__Cr@std@@@__Cr@std@@@Z)"},
+    {L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const",
+     LR"(?HasFocus@LocationBarView@@UEBA_NXZ)"},
+    {L"public: virtual bool __cdecl views::View::HasFocus(void)const",
+     LR"(?HasFocus@View@views@@UEBA_NXZ)"},
+    {L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)",
+     LR"(?OnThemeChanged@ContentsWebView@@UEAAXXZ)"},
+    {L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)",
+     LR"(?RenderViewReady@ContentsWebView@@UEAAXXZ)"},
+    {L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)",
+     LR"(?SetColor@LayerAnimator@ui@@UEAAXU?$SkRGBA4f@$02@@@Z)"},
+    {L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)",
+     LR"(?SetPageBaseBackgroundColor@WebContentsImpl@content@@UEAAXV?$optional@I@__Cr@std@@@Z)"},
+    {L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)",
+     LR"(?SetWebContents@ContentsWebView@@UEAAXPEAVWebContents@content@@@Z)"},
+    {L"struct HWND__ * __cdecl views::HWNDForView(class views::View const *)",
+     LR"(?HWNDForView@views@@YAPEAUHWND__@@PEBVView@1@@Z)"},
+    {L"public: unsigned int __cdecl ui::ColorProvider::GetColor(int)const",
+     LR"(?GetColor@ColorProvider@ui@@QEBAIH@Z)"},
+    {L"public: virtual void __cdecl views::MenuScrollViewContainer::OnPaintBackground(class gfx::Canvas *)",
+     LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: virtual void __cdecl views::BubbleBackground::Paint(class gfx::Canvas *,class views::View *)const",
+     LR"(?Paint@BubbleBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
+    {L"public: virtual void __cdecl cc::RecordPaintCanvas::drawRRect(class SkRRect const &,class cc::PaintFlags const &)",
+     LR"(?drawRRect@RecordPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+    {L"public: __cdecl RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(class views::View *,class LocationBar *,bool)",
+     LR"(??0RoundedOmniboxResultsFrame@@QEAA@PEAVView@views@@PEAVLocationBar@@_N@Z)"},
+    {L"public: virtual __cdecl RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame(void)",
+     LR"(??1RoundedOmniboxResultsFrame@@UEAA@XZ)"},
+    {L"private: virtual void __cdecl ui::Layer::SetRoundedCornersFromAnimation(class gfx::RoundedCornersF const &,enum ui::PropertyChangeReason)",
+     LR"(?SetRoundedCornersFromAnimation@Layer@ui@@EEAAXAEBVRoundedCornersF@gfx@@W4PropertyChangeReason@2@@Z)"},
+    {L"public: virtual void __cdecl views::SolidBackground::Paint(class gfx::Canvas *,class views::View *)const",
+     LR"(?Paint@SolidBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
+    {L"public: class gfx::Rect __cdecl views::View::GetLocalBounds(void)const",
+     LR"(?GetLocalBounds@View@views@@QEBA?AVRect@gfx@@XZ)"},
+    {L"public: static int __cdecl RoundedOmniboxResultsFrame::GetNonResultSectionHeight(bool)",
+     LR"(?GetNonResultSectionHeight@RoundedOmniboxResultsFrame@@SAH_N@Z)"},
+    {L"const views::SolidBackground::`vftable'",
+     LR"(??_7SolidBackground@views@@6B@)"},
+    {L"public: virtual void __cdecl views::BubbleFrameView::OnThemeChanged(void)",
+     LR"(?OnThemeChanged@BubbleFrameView@views@@UEAAXXZ)"},
+    {L"public: void __cdecl ui::Layer::SetFillsBoundsOpaquely(bool)",
+     LR"(?SetFillsBoundsOpaquely@Layer@ui@@QEAAX_N@Z)",
+     LR"(?SetFillsBoundsOpaquely@Layer@ui@@UEAAX_N@Z)"},
+    {L"public: virtual void __cdecl FadeLabel::OnPaintBackground(class gfx::Canvas *)",
+     LR"(?OnPaintBackground@FadeLabel@@UEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: class gfx::Rect __cdecl views::View::GetBoundsInScreen(void)const",
+     LR"(?GetBoundsInScreen@View@views@@QEBA?AVRect@gfx@@XZ)"},
+    {L"public: static void __cdecl RoundedOmniboxResultsFrame::OnBeforeWidgetInit(struct views::Widget::InitParams *,class views::Widget *)",
+     LR"(?OnBeforeWidgetInit@RoundedOmniboxResultsFrame@@SAXPEAUInitParams@Widget@views@@PEAV34@@Z)"},
+    {L"protected: virtual void __cdecl views::View::OnPaintBorder(class gfx::Canvas *)",
+     LR"(?OnPaintBorder@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: virtual void __cdecl cc::RecordPaintCanvas::drawPath(class SkPath const &,class cc::PaintFlags const &,enum cc::UsePaintCache)",
+     LR"(?drawPath@RecordPaintCanvas@cc@@UEAAXAEBVSkPath@@AEBVPaintFlags@2@W4UsePaintCache@2@@Z)"},
+    {L"bool __cdecl wm::AnimateOnChildWindowVisibilityChanged(class aura::Window *,bool)",
+     LR"(?AnimateOnChildWindowVisibilityChanged@wm@@YA_NPEAVWindow@aura@@_N@Z)"},
+    {L"struct HWND__ * __cdecl views::HWNDForNativeWindow(class aura::Window *const)",
+     LR"(?HWNDForNativeWindow@views@@YAPEAUHWND__@@QEAVWindow@aura@@@Z)"},
+    {L"void __cdecl wm::SetWindowVisibilityAnimationType(class aura::Window *,int)",
+     LR"(?SetWindowVisibilityAnimationType@wm@@YAXPEAVWindow@aura@@H@Z)"},
+    {L"void __cdecl wm::SetWindowVisibilityAnimationDuration(class aura::Window *,class base::TimeDelta const &)",
+     LR"(?SetWindowVisibilityAnimationDuration@wm@@YAXPEAVWindow@aura@@AEBVTimeDelta@base@@@Z)"},
+    {L"public: __cdecl ViewShadow::ViewShadow(class views::View *,class gfx::RoundedCornersF const &,struct ViewShadow::ShadowParameters const &)",
+     LR"(??0ViewShadow@@QEAA@PEAVView@views@@AEBVRoundedCornersF@gfx@@AEBUShadowParameters@0@@Z)"},
+};
+static_assert(ARRAYSIZE(kFeatureSymbols) == kFeatureSlots);
+
+static bool ResolveFeatureAddresses(HMODULE module, size_t *result, bool useOnlineCache,
+                                    bool allowFallback) {
     void *addresses[kFeatureSlots]{};
-    // chrome.dll
-    WindhawkUtils::SYMBOL_HOOK chromeHooks[] = {
-        {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"},
-         &addresses[0],
-         nullptr,
-         true},
-        {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"},
-         &addresses[1],
-         nullptr,
-         true},
-        {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const"},
-         &addresses[2],
-         nullptr,
-         true},
-        {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const"},
-         &addresses[3],
-         nullptr,
-         true},
-        {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)"},
-         &addresses[4],
-         nullptr,
-         true},
-        {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)"},
-         &addresses[5],
-         nullptr,
-         true},
-        {{L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const"},
-         &addresses[6],
-         nullptr,
-         true},
-        {{L"public: virtual bool __cdecl views::View::HasFocus(void)const"},
-         &addresses[7],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)"},
-         &addresses[8],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)"},
-         &addresses[9],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)"},
-         &addresses[10],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)"},
-         &addresses[11],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)"},
-         &addresses[12],
-         nullptr,
-         true},
-        {{L"struct HWND__ * __cdecl views::HWNDForView(class views::View const *)"},
-         &addresses[13],
-         nullptr,
-         true},
-        {{L"public: unsigned int __cdecl ui::ColorProvider::GetColor(int)const"},
-         &addresses[14],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl views::MenuScrollViewContainer::OnPaintBackground(class gfx::Canvas *)"},
-         &addresses[15],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl views::BubbleBackground::Paint(class gfx::Canvas *,class views::View *)const"},
-         &addresses[16],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawRRect(class SkRRect const &,class cc::PaintFlags const &)"},
-         &addresses[17],
-         nullptr,
-         true},
-        {{L"public: __cdecl RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(class views::View *,class LocationBar *,bool)"},
-         &addresses[18],
-         nullptr,
-         true},
-        {{L"public: virtual __cdecl RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame(void)"},
-         &addresses[19],
-         nullptr,
-         true},
-        {{L"private: virtual void __cdecl ui::Layer::SetRoundedCornersFromAnimation(class gfx::RoundedCornersF const &,enum ui::PropertyChangeReason)"},
-         &addresses[20],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl views::SolidBackground::Paint(class gfx::Canvas *,class views::View *)const"},
-         &addresses[21],
-         nullptr,
-         true},
-        {{L"public: class gfx::Rect __cdecl views::View::GetLocalBounds(void)const"},
-         &addresses[22],
-         nullptr,
-         true},
-        {{L"public: static int __cdecl RoundedOmniboxResultsFrame::GetNonResultSectionHeight(bool)"},
-         &addresses[23],
-         nullptr,
-         true},
-        {{L"const views::SolidBackground::`vftable'"}, &addresses[24], nullptr, true},
-        {{L"public: virtual void __cdecl views::BubbleFrameView::OnThemeChanged(void)"},
-         &addresses[25],
-         nullptr,
-         true},
-        {{L"public: void __cdecl ui::Layer::SetFillsBoundsOpaquely(bool)"},
-         &addresses[26],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl FadeLabel::OnPaintBackground(class gfx::Canvas *)"},
-         &addresses[27],
-         nullptr,
-         true},
-        {{L"public: class gfx::Rect __cdecl views::View::GetBoundsInScreen(void)const"},
-         &addresses[28],
-         nullptr,
-         true},
-        {{L"public: static void __cdecl RoundedOmniboxResultsFrame::OnBeforeWidgetInit(struct views::Widget::InitParams *,class views::Widget *)"},
-         &addresses[29],
-         nullptr,
-         true},
-        {{L"protected: virtual void __cdecl views::View::OnPaintBorder(class gfx::Canvas *)"},
-         &addresses[30], nullptr, true},
-        {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawPath(class SkPath const &,class cc::PaintFlags const &,enum cc::UsePaintCache)"},
-         &addresses[31], nullptr, true},
-        {{L"bool __cdecl wm::AnimateOnChildWindowVisibilityChanged(class aura::Window *,bool)"},
-         &addresses[32], nullptr, true},
-        {{L"struct HWND__ * __cdecl views::HWNDForNativeWindow(class aura::Window *const)"},
-         &addresses[33], nullptr, true},
-        {{L"void __cdecl wm::SetWindowVisibilityAnimationType(class aura::Window *,int)"},
-         &addresses[34], nullptr, true},
-        {{L"void __cdecl wm::SetWindowVisibilityAnimationDuration(class aura::Window *,class base::TimeDelta const &)"},
-         &addresses[35], nullptr, true},
-        {{L"public: __cdecl ViewShadow::ViewShadow(class views::View *,class gfx::RoundedCornersF const &,struct ViewShadow::ShadowParameters const &)"},
-         &addresses[36], nullptr, true},
-    };
-    static_assert(ARRAYSIZE(chromeHooks) == kFeatureSlots);
-    const bool allowFallback = s_allowBraveSymbolServerFallback.load();
+    WindhawkUtils::SYMBOL_HOOK hooks[kFeatureSlots];
+    for (unsigned i = 0; i < kFeatureSlots; ++i) {
+        const auto &name = kFeatureSymbols[i];
+        if (!allowFallback) {
+            hooks[i] = {{name.undecorated}, &addresses[i], nullptr, true};
+        } else if (name.alternate.empty()) {
+            hooks[i] = {{name.undecorated, name.decorated}, &addresses[i], nullptr, true};
+        } else {
+            hooks[i] = {{name.undecorated, name.decorated, name.alternate},
+                        &addresses[i], nullptr, true};
+        }
+    }
+
+    // Keep the small cache names and avoid undecorating the full PDB.
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
     options.symbolServer = allowFallback ? kBraveSymbolServer : L"";
-    options.onlineCacheUrl = s_useOnlineSymbolCache.load() ? kOnlineSymbolCache : L"";
-    if (allowFallback) {
-        // Keep the small cache’s names and also recognize the raw PDB names.
-        // Undecorating millions of names makes a cold Chromium PDB lookup slow.
-        // chrome.dll
-        WindhawkUtils::SYMBOL_HOOK fallbackHooks[] = {
-            {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)",
-              LR"(?OnPaintBackground@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
-             &addresses[0], nullptr, true},
-            {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)",
-              LR"(?DrawColor@Canvas@gfx@@QEAAXIW4SkBlendMode@@@Z)"},
-             &addresses[1], nullptr, true},
-            {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const",
-              LR"(?GetClassNameW@View@views@@QEBA?AV?$basic_string_view@DU?$char_traits@D@__Cr@std@@@__Cr@std@@XZ)"},
-             &addresses[2], nullptr, true},
-            {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const",
-              LR"(?ShouldWindowContentsBeTransparent@BrowserDesktopWindowTreeHostWin_ChromiumImpl@@EEBA_NXZ)"},
-             &addresses[3], nullptr, true},
-            {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)",
-              LR"(??0BraveVerticalTabStripContainerView@@QEAA@PEAVBrowserView@@PEAVView@views@@@Z)"},
-             &addresses[4], nullptr, true},
-            {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)",
-              LR"(?SetBackground@View@views@@QEAAXV?$unique_ptr@VBackground@views@@U?$default_delete@VBackground@views@@@__Cr@std@@@__Cr@std@@@Z)"},
-             &addresses[5], nullptr, true},
-            {{L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const",
-              LR"(?HasFocus@LocationBarView@@UEBA_NXZ)"},
-             &addresses[6], nullptr, true},
-            {{L"public: virtual bool __cdecl views::View::HasFocus(void)const",
-              LR"(?HasFocus@View@views@@UEBA_NXZ)"},
-             &addresses[7], nullptr, true},
-            {{L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)",
-              LR"(?OnThemeChanged@ContentsWebView@@UEAAXXZ)"},
-             &addresses[8], nullptr, true},
-            {{L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)",
-              LR"(?RenderViewReady@ContentsWebView@@UEAAXXZ)"},
-             &addresses[9], nullptr, true},
-            {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)",
-              LR"(?SetColor@LayerAnimator@ui@@UEAAXU?$SkRGBA4f@$02@@@Z)"},
-             &addresses[10], nullptr, true},
-            {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)",
-              LR"(?SetPageBaseBackgroundColor@WebContentsImpl@content@@UEAAXV?$optional@I@__Cr@std@@@Z)"},
-             &addresses[11], nullptr, true},
-            {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)",
-              LR"(?SetWebContents@ContentsWebView@@UEAAXPEAVWebContents@content@@@Z)"},
-             &addresses[12], nullptr, true},
-            {{L"struct HWND__ * __cdecl views::HWNDForView(class views::View const *)",
-              LR"(?HWNDForView@views@@YAPEAUHWND__@@PEBVView@1@@Z)"},
-             &addresses[13], nullptr, true},
-            {{L"public: unsigned int __cdecl ui::ColorProvider::GetColor(int)const",
-              LR"(?GetColor@ColorProvider@ui@@QEBAIH@Z)"},
-             &addresses[14], nullptr, true},
-            {{L"public: virtual void __cdecl views::MenuScrollViewContainer::OnPaintBackground(class gfx::Canvas *)",
-              LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)"},
-             &addresses[15], nullptr, true},
-            {{L"public: virtual void __cdecl views::BubbleBackground::Paint(class gfx::Canvas *,class views::View *)const",
-              LR"(?Paint@BubbleBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
-             &addresses[16], nullptr, true},
-            {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawRRect(class SkRRect const &,class cc::PaintFlags const &)",
-              LR"(?drawRRect@RecordPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
-             &addresses[17], nullptr, true},
-            {{L"public: __cdecl RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(class views::View *,class LocationBar *,bool)",
-              LR"(??0RoundedOmniboxResultsFrame@@QEAA@PEAVView@views@@PEAVLocationBar@@_N@Z)"},
-             &addresses[18], nullptr, true},
-            {{L"public: virtual __cdecl RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame(void)",
-              LR"(??1RoundedOmniboxResultsFrame@@UEAA@XZ)"},
-             &addresses[19], nullptr, true},
-            {{L"private: virtual void __cdecl ui::Layer::SetRoundedCornersFromAnimation(class gfx::RoundedCornersF const &,enum ui::PropertyChangeReason)",
-              LR"(?SetRoundedCornersFromAnimation@Layer@ui@@EEAAXAEBVRoundedCornersF@gfx@@W4PropertyChangeReason@2@@Z)"},
-             &addresses[20], nullptr, true},
-            {{L"public: virtual void __cdecl views::SolidBackground::Paint(class gfx::Canvas *,class views::View *)const",
-              LR"(?Paint@SolidBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
-             &addresses[21], nullptr, true},
-            {{L"public: class gfx::Rect __cdecl views::View::GetLocalBounds(void)const",
-              LR"(?GetLocalBounds@View@views@@QEBA?AVRect@gfx@@XZ)"},
-             &addresses[22], nullptr, true},
-            {{L"public: static int __cdecl RoundedOmniboxResultsFrame::GetNonResultSectionHeight(bool)",
-              LR"(?GetNonResultSectionHeight@RoundedOmniboxResultsFrame@@SAH_N@Z)"},
-             &addresses[23], nullptr, true},
-            {{L"const views::SolidBackground::`vftable'",
-              LR"(??_7SolidBackground@views@@6B@)"},
-             &addresses[24], nullptr, true},
-            {{L"public: virtual void __cdecl views::BubbleFrameView::OnThemeChanged(void)",
-              LR"(?OnThemeChanged@BubbleFrameView@views@@UEAAXXZ)"},
-             &addresses[25], nullptr, true},
-            {{L"public: void __cdecl ui::Layer::SetFillsBoundsOpaquely(bool)",
-              LR"(?SetFillsBoundsOpaquely@Layer@ui@@QEAAX_N@Z)",
-              LR"(?SetFillsBoundsOpaquely@Layer@ui@@UEAAX_N@Z)"},
-             &addresses[26], nullptr, true},
-            {{L"public: virtual void __cdecl FadeLabel::OnPaintBackground(class gfx::Canvas *)",
-              LR"(?OnPaintBackground@FadeLabel@@UEAAXPEAVCanvas@gfx@@@Z)"},
-             &addresses[27], nullptr, true},
-            {{L"public: class gfx::Rect __cdecl views::View::GetBoundsInScreen(void)const",
-              LR"(?GetBoundsInScreen@View@views@@QEBA?AVRect@gfx@@XZ)"},
-             &addresses[28], nullptr, true},
-            {{L"public: static void __cdecl RoundedOmniboxResultsFrame::OnBeforeWidgetInit(struct views::Widget::InitParams *,class views::Widget *)",
-              LR"(?OnBeforeWidgetInit@RoundedOmniboxResultsFrame@@SAXPEAUInitParams@Widget@views@@PEAV34@@Z)"},
-             &addresses[29], nullptr, true},
-            {{L"protected: virtual void __cdecl views::View::OnPaintBorder(class gfx::Canvas *)",
-              LR"(?OnPaintBorder@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
-             &addresses[30], nullptr, true},
-            {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawPath(class SkPath const &,class cc::PaintFlags const &,enum cc::UsePaintCache)",
-              LR"(?drawPath@RecordPaintCanvas@cc@@UEAAXAEBVSkPath@@AEBVPaintFlags@2@W4UsePaintCache@2@@Z)"},
-             &addresses[31], nullptr, true},
-            {{L"bool __cdecl wm::AnimateOnChildWindowVisibilityChanged(class aura::Window *,bool)",
-              LR"(?AnimateOnChildWindowVisibilityChanged@wm@@YA_NPEAVWindow@aura@@_N@Z)"},
-             &addresses[32], nullptr, true},
-            {{L"struct HWND__ * __cdecl views::HWNDForNativeWindow(class aura::Window *const)",
-              LR"(?HWNDForNativeWindow@views@@YAPEAUHWND__@@QEAVWindow@aura@@@Z)"},
-             &addresses[33], nullptr, true},
-            {{L"void __cdecl wm::SetWindowVisibilityAnimationType(class aura::Window *,int)",
-              LR"(?SetWindowVisibilityAnimationType@wm@@YAXPEAVWindow@aura@@H@Z)"},
-             &addresses[34], nullptr, true},
-            {{L"void __cdecl wm::SetWindowVisibilityAnimationDuration(class aura::Window *,class base::TimeDelta const &)",
-              LR"(?SetWindowVisibilityAnimationDuration@wm@@YAXPEAVWindow@aura@@AEBVTimeDelta@base@@@Z)"},
-             &addresses[35], nullptr, true},
-            {{L"public: __cdecl ViewShadow::ViewShadow(class views::View *,class gfx::RoundedCornersF const &,struct ViewShadow::ShadowParameters const &)",
-              LR"(??0ViewShadow@@QEAA@PEAVView@views@@AEBVRoundedCornersF@gfx@@AEBUShadowParameters@0@@Z)"},
-             &addresses[36], nullptr, true},
-        };
-        static_assert(ARRAYSIZE(fallbackHooks) == kFeatureSlots);
-        options.noUndecoratedSymbols = TRUE;
-        if (!WindhawkUtils::HookSymbols(module, fallbackHooks, ARRAYSIZE(fallbackHooks), &options))
-            return false;
-    } else if (!WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options)) {
+    options.onlineCacheUrl = useOnlineCache ? kOnlineSymbolCache : L"";
+    options.noUndecoratedSymbols = allowFallback;
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), &options))
         return false;
-    }
     return ValidateFeatureAddresses(module, addresses, result);
 }
 // </feature-kernel>
@@ -2366,10 +2208,7 @@ static void Stop() {
 } // namespace NativeUi
 // </native-ui>
 
-static bool ResolveNativeBackground(HMODULE module) {
-    size_t rva[kFeatureSlots]{};
-    if (!ResolveFeatureAddresses(module, rva))
-        return false;
+static void InstallNativeBackgroundHooks(HMODULE module, const size_t *rva) {
     unsigned features = CompleteFeatures(rva);
     const unsigned optional = CompleteOptionalFeatures(rva, features);
     auto *base = reinterpret_cast<unsigned char *>(module);
@@ -2457,17 +2296,92 @@ static bool ResolveNativeBackground(HMODULE module) {
     for (unsigned i = 0; i < ARRAYSIZE(labels); ++i)
         Wh_Log(L"Brave Acrylic %s: %s %s", WH_MOD_VERSION, labels[i],
                (features & (1u << i)) ? L"available" : L"unavailable; left native");
+}
+
+static constexpr DWORD kBraveSymbolStartupWaitMs = 5000;
+static CONDITION_VARIABLE s_symbolLookupChanged = CONDITION_VARIABLE_INIT;
+static HANDLE s_symbolWorker = nullptr;
+struct SymbolLookup {
+    HMODULE module;
+    bool useOnlineCache;
+    bool finished;
+    bool succeeded;
+    ULONGLONG completedAt;
+    size_t rva[kFeatureSlots];
+};
+static SymbolLookup s_symbolLookup{};
+
+static DWORD WINAPI ResolveBraveSymbolsOnWorker(void *) {
+    size_t rva[kFeatureSlots]{};
+    HMODULE retainedModule = nullptr;
+    const HMODULE module = s_symbolLookup.module;
+    bool succeeded = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                       reinterpret_cast<LPCWSTR>(module), &retainedModule) &&
+                     ResolveFeatureAddresses(module, rva, s_symbolLookup.useOnlineCache, true);
+    if (retainedModule)
+        FreeLibrary(retainedModule);
+
+    // Publish data only. After a timeout this lookup merely fills Windhawk's
+    // cache for the next launch, even if all addresses are valid.
+    AcquireSRWLockExclusive(&s_initLock);
+    std::copy_n(rva, kFeatureSlots, s_symbolLookup.rva);
+    s_symbolLookup.succeeded = succeeded;
+    s_symbolLookup.finished = true;
+    s_symbolLookup.completedAt = GetTickCount64();
+    WakeAllConditionVariable(&s_symbolLookupChanged);
+    ReleaseSRWLockExclusive(&s_initLock);
+    return 0;
+}
+
+// Called with s_initLock held. Waiting releases it so disabling the mod can
+// close the activation gate before waiting for the uncancellable resolver.
+static bool ResolveBraveSymbolsWithStartupBudget(HMODULE module, size_t *rva,
+                                                bool useOnlineCache, DWORD waitMs) {
+    const ULONGLONG deadline = GetTickCount64() + waitMs;
+    s_symbolLookup.module = module;
+    s_symbolLookup.useOnlineCache = useOnlineCache;
+    s_symbolWorker = CreateThread(nullptr, 0, ResolveBraveSymbolsOnWorker, nullptr, 0, nullptr);
+    if (!s_symbolWorker) {
+        Wh_Log(L"Could not start Brave symbol lookup; leaving Brave unmodified");
+        return false;
+    }
+
+    while (!s_symbolLookup.finished && !s_stopping) {
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline ||
+            !SleepConditionVariableSRW(&s_symbolLookupChanged, &s_initLock,
+                                       static_cast<DWORD>(deadline - now), 0)) {
+            break;
+        }
+    }
+    if (s_stopping)
+        return false;
+    if (!s_symbolLookup.finished || s_symbolLookup.completedAt > deadline) {
+        Wh_Log(L"Brave continued without acrylic while symbols finish loading; restart afterward");
+        return false;
+    }
+    if (!s_symbolLookup.succeeded)
+        return false;
+    std::copy_n(s_symbolLookup.rva, kFeatureSlots, rva);
     return true;
 }
 
 // Installation and shutdown share a barrier. No hook can be registered/applied
 // after Wh_ModBeforeUninit returns, including a loader call that finishes late.
-static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
+static bool TryInstallChromeHooks(HMODULE module, bool applyNow,
+                                  DWORD waitMs = kBraveSymbolStartupWaitMs) {
     if (!module || s_chromeAttempted.exchange(true, std::memory_order_acq_rel))
         return false;
     AcquireSRWLockExclusive(&s_initLock);
     bool installed = false;
-    if (!s_stopping && ResolveNativeBackground(module)) {
+    size_t rva[kFeatureSlots]{};
+    const bool useOnlineCache = s_useOnlineSymbolCache.load();
+    const bool allowFallback = s_allowBraveSymbolServerFallback.load();
+    const bool resolved = !s_stopping &&
+        (allowFallback ? ResolveBraveSymbolsWithStartupBudget(module, rva, useOnlineCache, waitMs)
+                       : ResolveFeatureAddresses(module, rva, useOnlineCache, false));
+    if (resolved && !s_stopping) {
+        InstallNativeBackgroundHooks(module, rva);
         if (applyNow) {
             installed = Wh_ApplyHookOperations() != FALSE;
             s_transparencyReady.store(installed && HasCompleteTransparencyPath(),
@@ -2535,7 +2449,9 @@ BOOL Wh_ModInit() {
 
     HMODULE chrome = GetModuleHandleW(L"chrome.dll");
     if (chrome) {
-        return TryInstallChromeHooks(chrome, false);
+        // The opt-in PDB lookup belongs to AfterInit when chrome.dll is
+        // already loaded. Do not hold Windhawk's initialization on it.
+        return s_allowBraveSymbolServerFallback.load() || TryInstallChromeHooks(chrome, false);
     }
 
     const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
@@ -2581,12 +2497,21 @@ void Wh_ModBeforeUninit() {
     s_stopping = true;
     s_activateAfterInit = false;
     s_transparencyReady.store(false, std::memory_order_release);
+    const HANDLE symbolWorker = s_symbolWorker;
+    s_symbolWorker = nullptr;
+    WakeAllConditionVariable(&s_symbolLookupChanged);
     ReleaseSRWLockExclusive(&s_initLock);
     NativeUi::Stop();
     // Restore the real WS_SYSMENU bit while the getter/setter hooks are still
     // installed, so Chromium cannot save a stripped style during teardown.
     if (s_isBrowserProcess)
         EnumWindows(SyncNativeCaptionWindow, 0);
+    // Windhawk's symbol lookup cannot be cancelled. The worker must return
+    // before this mod's DLL can be unloaded.
+    if (symbolWorker) {
+        WaitForSingleObject(symbolWorker, INFINITE);
+        CloseHandle(symbolWorker);
+    }
 }
 
 #endif // x64 native background ABI
