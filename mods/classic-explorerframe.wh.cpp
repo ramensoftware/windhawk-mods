@@ -182,7 +182,7 @@ static BOOL ClaimCancelHandle(HINTERNET* slot, HINTERNET h) {
 }
 
 static BOOL DownloadToTempCancellable(void) {
-    if (!kDownloadUrl || g_tempDllPath[0] == L'\0')
+    if ( g_tempDllPath[0] == L'\0')
         return FALSE;
 
     HINTERNET hInet = InternetOpenW(L"WindhawkMod/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
@@ -271,8 +271,6 @@ static BOOL DownloadToTempCancellable(void) {
 
 static DWORD WINAPI DownloadWorkerProc(LPVOID) {
     if (IsStopRequested()) return 1;
-    if (TryPinExistingFile())
-        return 0;
     if (IsStopRequested()) return 1;
     if (!DownloadToTempCancellable())
         return 1;
