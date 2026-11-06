@@ -45,13 +45,11 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 ### 5. Memory Optimization
 - Gradually trims unused working set memory from idle applications via Windows memory APIs.
 - Automatically suspends trimming on battery power and during post-sleep transitions.
-- Integrates native Windows NT kernel memory pressure notifications (`LowMemoryResourceNotification`) for zero-overhead reactive cleanup.
 - Includes a configurable hotkey (`Ctrl+Alt+F11`) with audio confirmation for manual memory cleanup.
 
-### 6. Dynamic Power Scheme & System Timer Resolution
+### 6. Dynamic Performance Power Scheme
 - Automatically engages High Performance, Ultimate Performance, or a custom power plan GUID during demanding workloads on AC power.
-- Optionally lowers Windows system timer resolution to 0.5 ms during gaming or audio playback on AC power to minimize input lag and micro-stutters.
-- Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while High Performance is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
+- Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while a performance plan (High Performance, Ultimate Performance, or custom scheme) is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
 
 ### 7. Inactive Browser & Web App Tab Trimming
 - Detects dormant background browser and Electron renderers and trims their unused memory while keeping active UI and tabs intact.
@@ -60,16 +58,15 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 ## Settings
 
 All settings are optional and pre-configured for balanced out-of-the-box use.
-Advanced options (e.g., EcoQoS, P/E-core scheduling, power schemes, timer resolution) can be enabled in the mod settings if desired.
+Advanced options (e.g., EcoQoS, P/E-core scheduling, power schemes) can be enabled in the mod settings if desired.
 
 ### Priority & CPU Scheduling
 - **1. Foreground Priority Boost (ProBalance)**: Automatically increases the CPU priority of the active foreground window family (`true` by default).
 - **Foreground Priority Level**: Priority class assigned to the active foreground application (`Above Normal` or `High`).
 - **Suggest P-Cores to Foreground Window**: Directs the active foreground app to Performance Cores on hybrid CPUs via CPU Sets (`false` by default).
-- **Dynamic High-Performance Power Scheme**: Temporarily activates the configured power scheme during demanding workloads on AC power (`false` by default).
+- **Dynamic Performance Power Scheme**: Temporarily activates the configured power scheme during demanding workloads on AC power (`false` by default).
 - **Dynamic Power Plan Selection**: Select High Performance, Ultimate Performance, or Custom GUID (`highPerformance` by default).
 - **Custom Power Plan GUID**: GUID string of a custom power plan when Custom GUID is chosen.
-- **Dynamic System Timer Resolution (0.5 ms in Game/Audio)**: Sets system timer resolution to 0.5 ms during gaming or audio playback on AC power (`false` by default).
 - **Game Alt-Tab Grace Period (seconds)**: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (default: 30 seconds).
 - **2. Throttle CPU-Heavy Background Processes**: Temporarily lowers the priority of background processes consuming excessive CPU (`true` by default).
 - **Restrict Throttled Background Apps to E-Cores**: Confines throttled background tasks to Efficiency Cores on hybrid CPUs via CPU Sets (`false` by default).
@@ -131,7 +128,7 @@ If you find this mod useful, you can support its development and maintenance:
   $name: Suggest P-Cores to Foreground Window
   $description: Directs the active foreground app to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to eliminate micro-stutter.
 - enableDynamicPowerPlan: false
-  $name: Dynamic High-Performance Power Scheme
+  $name: Dynamic Performance Power Scheme
   $description: Automatically engages the configured power scheme while a heavy application or game is active on AC power, and restores your plan on desktop.
 - powerPlanSelection: "highPerformance"
   $name: Dynamic Power Plan Selection
@@ -143,9 +140,6 @@ If you find this mod useful, you can support its development and maintenance:
 - customPowerPlanGuid: ""
   $name: Custom Power Plan GUID
   $description: GUID of a custom power plan to engage when Custom GUID is selected (e.g. e9a42b02-d5df-448d-aa00-03f14749eb61).
-- enableDynamicTimerResolution: false
-  $name: Dynamic System Timer Resolution (0.5 ms in Game/Audio)
-  $description: Sets system timer resolution to 0.5 ms during gaming or audio playback on AC power to minimize input lag and micro-stutters.
 - gameAltTabGracePeriodSeconds: 30
   $name: Game Alt-Tab Grace Period (seconds)
   $description: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (0 to 300s, default 30s).
@@ -265,19 +259,6 @@ typedef NTSTATUS(NTAPI* pfnNtQueryInformationProcess)(
 typedef NTSTATUS(NTAPI* pfnNtSetInformationProcess)(
     HANDLE ProcessHandle, INT ProcessInformationClass, PVOID ProcessInformation,
     ULONG ProcessInformationLength);
-
-typedef NTSTATUS(NTAPI* pfnNtQueryTimerResolution)(
-    PULONG MinimumResolution,
-    PULONG MaximumResolution,
-    PULONG CurrentResolution);
-
-typedef NTSTATUS(NTAPI* pfnNtSetTimerResolution)(
-    ULONG DesiredResolution,
-    BOOLEAN SetResolution,
-    PULONG CurrentResolution);
-
-static pfnNtQueryTimerResolution g_pfnNtQueryTimerResolution = nullptr;
-static pfnNtSetTimerResolution g_pfnNtSetTimerResolution = nullptr;
 
 typedef HRESULT(WINAPI* pfnSHQueryUserNotificationState)(
     QUERY_USER_NOTIFICATION_STATE* pquns);
@@ -493,12 +474,6 @@ enum class ForegroundPrioritySetting : uint8_t {
     High,
 };
 
-enum class PowerPlanSelection : uint8_t {
-    HighPerformance,
-    UltimatePerformance,
-    Custom,
-};
-
 struct ModSettings {
     bool enableProBalance = true;
     ForegroundPrioritySetting foregroundPriorityLevel =
@@ -533,11 +508,8 @@ struct ModSettings {
     bool enablePanicHotkey = true;
     bool enableHotkeySound = true;
     bool enableDynamicPowerPlan = false;
-    PowerPlanSelection powerPlanSelection = PowerPlanSelection::HighPerformance;
-    std::wstring customPowerPlanGuid;
     GUID targetPowerPlanGuid = {
         0x8c5e7fda, 0xe8bf, 0x4a96, {0x9a, 0x85, 0xa6, 0xe2, 0x3a, 0x8e, 0x63, 0x5c}};
-    bool enableDynamicTimerResolution = false;
     bool enableBrowserTabTrim = true;
     int browserTabInactivityMinutes = 10;
     int gameAltTabGracePeriodSeconds = 30;
@@ -564,7 +536,6 @@ static ModSettings GetSettingsSnapshot() {
 static std::atomic<bool> g_workerRunning{false};
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_wakeEvent = nullptr;
-static HANDLE g_lowMemoryNotification = nullptr;
 [[clang::no_destroy]] static std::optional<std::thread> g_workerThread;
 
 static std::atomic<bool> g_hookThreadRunning{false};
@@ -639,59 +610,6 @@ static GUID ParsePowerPlanGuid(const std::wstring& raw, const GUID& fallback) {
     return fallback;
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic System Timer Resolution Management
-// ---------------------------------------------------------------------------
-
-static std::mutex g_timerResolutionMutex;
-static bool g_resolutionIsSet = false;
-static ULONG g_activeDesiredUnits = 0;
-static std::chrono::steady_clock::time_point g_lastResolutionChangeTime{};
-
-static void ApplyTimerResolution(ULONG desiredUnits, bool enable) {
-    if (!g_pfnNtSetTimerResolution || !g_pfnNtQueryTimerResolution) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(g_timerResolutionMutex);
-    auto now = std::chrono::steady_clock::now();
-    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                         now - g_lastResolutionChangeTime)
-                         .count();
-
-    if (elapsedMs < 250 && g_workerRunning.load(std::memory_order_relaxed)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(250 - elapsedMs));
-    }
-
-    g_lastResolutionChangeTime = std::chrono::steady_clock::now();
-    ULONG curRes = 0;
-
-    if (enable) {
-        if (g_resolutionIsSet && g_activeDesiredUnits == desiredUnits) {
-            return;
-        }
-        NTSTATUS status = g_pfnNtSetTimerResolution(desiredUnits, TRUE, &curRes);
-        if (status == 0) {
-            g_resolutionIsSet = true;
-            g_activeDesiredUnits = desiredUnits;
-            ULONG minR = 0, maxR = 0, liveR = 0;
-            g_pfnNtQueryTimerResolution(&minR, &maxR, &liveR);
-            Wh_Log(L"Timer resolution set to %.4f ms (active: %.4f ms)",
-                   desiredUnits / 10000.0, liveR / 10000.0);
-        }
-    } else {
-        if (g_resolutionIsSet) {
-            g_pfnNtSetTimerResolution(g_activeDesiredUnits, FALSE, &curRes);
-            g_resolutionIsSet = false;
-            g_activeDesiredUnits = 0;
-            ULONG minR = 0, maxR = 0, liveR = 0;
-            g_pfnNtQueryTimerResolution(&minR, &maxR, &liveR);
-            Wh_Log(L"Timer resolution released to system default (active: %.4f ms)",
-                   liveR / 10000.0);
-        }
-    }
-}
-
 static std::mutex g_powerSchemeMutex;
 static GUID g_originalPowerScheme{};
 static bool g_hasOriginalPowerScheme = false;
@@ -743,7 +661,15 @@ static void EngageTargetPowerScheme(const GUID& targetGuid) {
         if (PowerSetActiveScheme(nullptr, &targetGuid) == ERROR_SUCCESS) {
             g_isHighPerformanceActive.store(true);
             SavePowerSchemeState(g_originalPowerScheme, /*engaged=*/true);
-            Wh_Log(L"Switched system power plan to performance plan for active foreground workload.");
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(L"Switched system power plan to performance plan %s for active foreground workload.",
+                   guidStr);
+        } else {
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(L"PowerSetActiveScheme failed for target power plan %s.",
+                   guidStr);
         }
     }
 }
@@ -1141,28 +1067,20 @@ static bool IsRunningOnBattery() {
 }
 
 static void UpdateDynamicPowerPlanState(const ModSettings& settings,
-                                        bool inGamingLockdown,
-                                        bool onBattery,
-                                        bool hasActiveAudio) {
-    if (!settings.enableDynamicPowerPlan) {
+                                        bool inGamingLockdown) {
+    if (!settings.enableDynamicPowerPlan || IsRunningOnBattery()) {
         if (g_isHighPerformanceActive.load(std::memory_order_relaxed)) {
             RequestPowerSchemeAsync(false);
         }
-    } else {
-        bool shouldBeHighPerf = inGamingLockdown && !onBattery;
-        bool currentlyHighPerf =
-            g_isHighPerformanceActive.load(std::memory_order_relaxed);
-
-        if (shouldBeHighPerf != currentlyHighPerf) {
-            RequestPowerSchemeAsync(shouldBeHighPerf);
-        }
+        return;
     }
 
-    if (settings.enableDynamicTimerResolution) {
-        bool shouldSetTimer = (inGamingLockdown || hasActiveAudio) && !onBattery;
-        ApplyTimerResolution(5000, shouldSetTimer);
-    } else {
-        ApplyTimerResolution(0, false);
+    bool shouldBeHighPerf = inGamingLockdown;
+    bool currentlyHighPerf =
+        g_isHighPerformanceActive.load(std::memory_order_relaxed);
+
+    if (shouldBeHighPerf != currentlyHighPerf) {
+        RequestPowerSchemeAsync(shouldBeHighPerf);
     }
 }
 
@@ -1959,7 +1877,7 @@ static bool IsSustainedAudioStream(DWORD pid,
 
 static std::unordered_set<DWORD>
 GetActiveAudioProcessIdsCached(const ModSettings& settings) {
-    if (!settings.enableAudioShielding && !settings.enableDynamicTimerResolution) {
+    if (!settings.enableAudioShielding) {
         return {};
     }
     auto now = std::chrono::steady_clock::now();
@@ -5338,9 +5256,8 @@ static void MemoryOptimizerWorker() {
     Wh_Log(L"Memory & Priority Optimizer engine started.");
 
     try {
-        HANDLE waitHandles[3] = {g_stopEvent, g_wakeEvent,
-                                 g_lowMemoryNotification};
-        DWORD waitCount = g_lowMemoryNotification ? 3 : 2;
+        HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
+        DWORD waitCount = 2;
         g_modStartTime = std::chrono::steady_clock::now();
         g_lastIdleCleanTime = g_modStartTime;
         g_lastTriggerCleanTime = g_modStartTime;
@@ -5437,10 +5354,7 @@ static void MemoryOptimizerWorker() {
                 bool inGamingLockdown =
                     IsGamingLockdownActive(fgPid, std::chrono::steady_clock::now(),
                                            settings.gameAltTabGracePeriodSeconds);
-                bool hasActiveAudio =
-                    !GetActiveAudioProcessIdsCached(settings).empty();
-                UpdateDynamicPowerPlanState(settings, inGamingLockdown,
-                                            onBattery, hasActiveAudio);
+                UpdateDynamicPowerPlanState(settings, inGamingLockdown);
 
                 if (!onBattery && !recentlyResumed && !inGamingLockdown) {
                     PerformEarlyMemoryCapSweep(settings, fgPid);
@@ -5601,27 +5515,6 @@ static void MemoryOptimizerWorker() {
                 break;
             } else if (waitRes == WAIT_OBJECT_0 + 1) {
                 ResetEvent(g_wakeEvent);
-            } else if (g_lowMemoryNotification &&
-                       waitRes == WAIT_OBJECT_0 + 2) {
-                BOOL memoryLow = FALSE;
-                if (QueryMemoryResourceNotification(g_lowMemoryNotification,
-                                                    &memoryLow) &&
-                    memoryLow) {
-                    auto now = std::chrono::steady_clock::now();
-                    auto elapsedSinceTrigger =
-                        std::chrono::duration_cast<std::chrono::seconds>(
-                            now - g_lastTriggerCleanTime)
-                            .count();
-                    if (elapsedSinceTrigger >= kTriggerCooldownSec) {
-                        g_lastTriggerCleanTime = now;
-                        PerformMemoryCleanup(
-                            L"[NT Kernel Low Memory Notification]",
-                            /*allowWorkingSetTrim=*/true, /*hogsOnly=*/false,
-                            /*forceHardTrim=*/false);
-                    } else {
-                        Sleep(1000);
-                    }
-                }
             }
         }
     } catch (const std::exception& ex) {
@@ -5722,25 +5615,15 @@ static void LoadSettings() {
 
     auto planSelStr = WindhawkUtils::StringSetting::make(L"powerPlanSelection");
     if (wcscmp(planSelStr.get(), L"ultimatePerformance") == 0) {
-        g_settings.powerPlanSelection = PowerPlanSelection::UltimatePerformance;
         g_settings.targetPowerPlanGuid = kGuidUltimatePerformance;
     } else if (wcscmp(planSelStr.get(), L"custom") == 0) {
-        g_settings.powerPlanSelection = PowerPlanSelection::Custom;
         auto customGuidStr =
             WindhawkUtils::StringSetting::make(L"customPowerPlanGuid");
-        g_settings.customPowerPlanGuid =
-            customGuidStr.get() ? customGuidStr.get() : L"";
         g_settings.targetPowerPlanGuid = ParsePowerPlanGuid(
-            g_settings.customPowerPlanGuid, kGuidHighPerformance);
+            customGuidStr.get() ? customGuidStr.get() : L"",
+            kGuidHighPerformance);
     } else {
-        g_settings.powerPlanSelection = PowerPlanSelection::HighPerformance;
         g_settings.targetPowerPlanGuid = kGuidHighPerformance;
-    }
-
-    g_settings.enableDynamicTimerResolution =
-        Wh_GetIntSetting(L"enableDynamicTimerResolution") != 0;
-    if (!g_settings.enableDynamicTimerResolution) {
-        ApplyTimerResolution(0, false);
     }
 
     int gameGrace = (int)Wh_GetIntSetting(L"gameAltTabGracePeriodSeconds");
@@ -5797,14 +5680,7 @@ BOOL WhTool_ModInit() {
         g_pfnNtQueryInformationProcess =
             (pfnNtQueryInformationProcess)GetProcAddress(
                 hNtdll, "NtQueryInformationProcess");
-        g_pfnNtQueryTimerResolution = (pfnNtQueryTimerResolution)GetProcAddress(
-            hNtdll, "NtQueryTimerResolution");
-        g_pfnNtSetTimerResolution = (pfnNtSetTimerResolution)GetProcAddress(
-            hNtdll, "NtSetTimerResolution");
     }
-
-    g_lowMemoryNotification =
-        CreateMemoryResourceNotification(LowMemoryResourceNotification);
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (hShell32) {
@@ -5952,11 +5828,6 @@ void WhTool_ModUninit() {
         RestoreForegroundBoostLocked();
     }
     RestoreOriginalPowerScheme();
-    ApplyTimerResolution(0, false);
-    if (g_lowMemoryNotification) {
-        CloseHandle(g_lowMemoryNotification);
-        g_lowMemoryNotification = nullptr;
-    }
     size_t immuneCount = 0;
     {
         std::lock_guard<std::mutex> lock(g_immunitySetMutex);
