@@ -18,8 +18,6 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
 
 Note that to enable the menubar you need to install in addition the mod [ExplorerFrame and menubar fixes fork](https://windhawk.net/mods/restore-folder-menubar-25h2).
 
-This mod downloads the classic Explorerframe.dll from the Microsoft's symbols' server.
-
 */
 // ==/WindhawkModReadme==
 
@@ -390,13 +388,23 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         PatchLoaderEntryPath(res);
         SetLastError(0);
     } else {
-        SetLastError(err);
+        Wh_Log(L"Redirect failed (%u), loading the system DLL", err);
+        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     }
     return res;
 }
 
 BOOL Wh_ModInit(void) {
     Wh_Log(L"Init redirector subdir=%s", kArchSubdir);
+
+    using RtlGetVersion_t = NTSTATUS(WINAPI*)(PRTL_OSVERSIONINFOW);
+    auto pRtlGetVersion = (RtlGetVersion_t)GetProcAddress(
+        GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion");
+    RTL_OSVERSIONINFOW vi{sizeof(vi)};
+    if (!pRtlGetVersion || pRtlGetVersion(&vi) != 0 || vi.dwBuildNumber < 26100) {
+        Wh_Log(L"Unsupported Windows build");
+        return FALSE;
+    }
 
     g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_hStopEvent) return FALSE;
