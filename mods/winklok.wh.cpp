@@ -13184,7 +13184,7 @@ namespace ui
                 CloseHandle(in);
                 return false;
             }
-            HANDLE out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, acl.Get(), CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+            HANDLE out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, acl.Get(), CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
             if (out == INVALID_HANDLE_VALUE)
             {
                 CloseHandle(in);
@@ -13322,7 +13322,7 @@ namespace ui
                 OwnerOnly a;
                 HANDLE h = CreateFileW(
                     (dst + L"-shm").c_str(), GENERIC_WRITE, 0, a.Get(),
-                    CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+                    CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
                 if (h != INVALID_HANDLE_VALUE)
                     CloseHandle(h);
             }
@@ -15002,19 +15002,44 @@ namespace ui
 // ============================================================================
 //  WINDHAWK ENTRY POINTS
 // ============================================================================
+static HANDLE g_initThread = nullptr, g_initStop = nullptr;
+
+// Only the explorer.exe that owns the desktop (the one with the taskbar) runs alarms and the panel. The shell window
+// may not exist yet while Explorer starts, so wait for it here instead of in Wh_ModInit.
+static DWORD WINAPI InitThreadProc(LPVOID)
+{
+    HWND shell = nullptr;
+    while (!(shell = GetShellWindow()))
+        if (WaitForSingleObject(g_initStop, 200) == WAIT_OBJECT_0)
+            return 0;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(shell, &pid);
+    if (pid != GetCurrentProcessId() || g_shuttingDown.load())
+        return 0; // another explorer.exe (folder windows, "Show in folder"): stay idle
+    td::g_eng.Load(); // before the UI starts: Load may queue the missed-alarm popup
+    if (!ui::Start())
+        Wh_Log(L"could not start the UI thread");
+    return 0;
+}
+
 BOOL Wh_ModInit()
 {
-    td::g_eng.Load();
-    td::g_set.Load();
-    if (!ui::Start())
-    {
-        Wh_Log(L"could not start the UI thread");
-        return FALSE;
-    }
+    td::g_set.Load(); // read-only, safe in every process
     if (!tb::InstallHooks())
     {
         Wh_Log(L"could not install hooks");
-        ui::Stop();
+        return FALSE;
+    }
+    g_initStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_initThread = g_initStop ? CreateThread(nullptr, 0, InitThreadProc, nullptr, 0, nullptr) : nullptr;
+    if (!g_initThread)
+    {
+        Wh_Log(L"could not start the init thread");
+        if (g_initStop)
+            CloseHandle(g_initStop);
+        g_initStop = nullptr;
+        g_shuttingDown = true;
+        tb::CleanupAll();
         return FALSE;
     }
     Wh_Log(L"Initialised");
@@ -15029,5 +15054,19 @@ void Wh_ModBeforeUninit()
 
 void Wh_ModUninit()
 {
-    ui::Stop();
+    if (g_initStop)
+        SetEvent(g_initStop);
+    if (g_initThread)
+    { // join first: it may still be inside ui::Start
+        WaitForSingleObject(g_initThread, INFINITE);
+        CloseHandle(g_initThread);
+        g_initThread = nullptr;
+    }
+    ui::Stop(); // returns at once when the UI never started
+    if (g_initStop)
+    {
+        CloseHandle(g_initStop);
+        g_initStop = nullptr;
+    }
 }
+
