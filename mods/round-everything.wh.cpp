@@ -413,6 +413,7 @@ constexpr WCHAR kFrameClassName[] = L"RoundEverything_Frame";
 // The monitor corner ears and the bezel ring: black, like a panel's bezel.
 constexpr COLORREF kMonitorCornerColor = RGB(0, 0, 0);
 constexpr WCHAR kCtrlClassName[] = L"RoundEverything_Ctrl";
+constexpr WCHAR kRefreshClassName[] = L"RoundEverything_Refresh";
 constexpr WCHAR kAppBarClassName[] = L"RoundEverything_AppBar";
 // Messages to the mod's control window (all handled on the mod's UI thread).
 constexpr UINT kMsgReload = WM_APP + 1;            // settings changed (or anything else
@@ -450,6 +451,15 @@ constexpr UINT kTickIntervalMs = 500;
 // tick and its last event is never dropped.
 constexpr UINT_PTR kCoalesceTimerId = 2;
 constexpr UINT kCoalesceDelayMs = 16;
+// After a window event (an activation, a minimize, a move) the acrylic
+// frames' backdrops are refreshed every frame for this long: DWM's own
+// changes behind the frame (a shadow handed over or following a dragged
+// window, a minimize animation) go on for up to a few hundred milliseconds
+// after the event, and a slower pace showed them in steps (see
+// RefreshBackdrops).
+constexpr UINT_PTR kRefreshTimerId = 3;
+constexpr UINT kRefreshIntervalMs = 16;
+constexpr ULONGLONG kRefreshBurstMs = 1000;
 // How often the appbar thread re-reads auto-hide and the primary taskbar's
 // edge from the shell when no taskbar event or ABN_* notification asked.
 constexpr ULONGLONG kShellStateRefreshMs = 2000;
@@ -586,6 +596,11 @@ struct Acrylic {
     int graphTicksPending = 0;  // ticks spent waiting for the factories to load
     // DWM's host backdrop, one per frame window.
     wuc::CompositionBackdropBrush hostBackdrop{nullptr};
+    // The band sprites' input rectangles (window coordinates), and under
+    // each, at the bottom of the z-order, the window whose repaint has DWM
+    // read the backdrop there again (see RefreshBackdrops).
+    std::vector<RECT> backdropRects;
+    HWND refreshers[4] = {};
 };
 
 // One slice of the inner shadow: a click-through layered window along one
@@ -3073,7 +3088,10 @@ inline DWORD BlendOver(DWORD top, DWORD bottom) {
 // the backdrop (the monitor corner ears, the noise grain), rasterized by the
 // same code as the solid frame, so both fills have the same geometry. The
 // inner shadow stays the layered window it is with the solid fill, placed
-// right above the frame so the backdrop never samples it.
+// right above the frame so the backdrop never samples it. Under each band,
+// an invisible window at the bottom of the z-order, repainted on window
+// events, has DWM read the backdrop there again when only DWM's own
+// content behind the frame changed (RefreshBackdrops).
 //
 // Two rules of the window manager shape the windows:
 // - a topmost window whose rectangle contains a whole monitor is a
@@ -3094,11 +3112,18 @@ inline DWORD BlendOver(DWORD top, DWORD bottom) {
 // handshake: a cloaked window keeps its place in the z-order, and
 // uncloaking is instant.
 
-// The composition window's constant alpha: it is layered as well, which is
-// part of what keeps a monitor-sized borderless popup from being taken for
-// a full-screen app, and just short of opaque so that it stays a layered
-// window in every respect.
-constexpr BYTE kAcrylicWindowAlpha = 254;
+// The composition window is layered as well (the style is part of what
+// keeps a monitor-sized borderless popup from being taken for a full-screen
+// app), at full alpha. It was one step short of opaque, to be a layered
+// window in every respect: that looks the same, but has DWM render the
+// window through an intermediate surface of the window's size, effect
+// graph and all, on every frame the backdrop changes - which stuttered any
+// window dragged under the frame (10.0.26100; a window a fraction of the
+// size, or the backdrop without the effects, or alpha 255 each ended it).
+constexpr BYTE kAcrylicWindowAlpha = 255;
+// The refresher window's alpha: the least that is still a layered window
+// DWM composes (1/255 of black under the frame, which no eye can see).
+constexpr BYTE kRefreshAlpha = 1;
 
 // GUIDs spelled out: uuid.lib isn't linked, and the composition interop
 // header isn't used (its interfaces are declared below, ABI only).
@@ -3714,6 +3739,7 @@ FollowEntry FollowEntryFor(const Overlay& overlay) {
 bool PresentFrame(HWND hwnd, HDC memDc, int width, int height, const RECT* rect,
                   BYTE alpha);  // defined with the painting code below
 void ApplyFrameMouseStyle(HWND hwnd);  // defined with the overlay code
+void SyncRefreshers(Overlay& overlay);  // defined with the backdrop refresh code
 
 // One row or column of the bezel ring: a layered window painted opaque in
 // the monitor-corner color, click-through (on the taskbar's edge that row
@@ -3902,7 +3928,7 @@ void PlaceAcrylicFrame(Overlay& overlay) {
     const RECT& rc = overlay.layout.overlayRect;
     SetWindowPos(overlay.hwnd, nullptr, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
                  SWP_NOZORDER | SWP_NOACTIVATE);
-    overlay.acrylic->built = false;
+    overlay.acrylic->built = false;  // the refreshers follow the rebuilt bands
     CreateBezelStrips(overlay);
 }
 
@@ -3922,6 +3948,12 @@ void DestroyAcrylic(Overlay& overlay) {
     ac.root = nullptr;
     ac.target = nullptr;
     DestroyBezelStrips(ac);
+    for (HWND& refresher : ac.refreshers) {
+        if (refresher) {
+            DestroyWindow(refresher);
+            refresher = nullptr;
+        }
+    }
     if (overlay.hwnd) {
         DestroyWindow(overlay.hwnd);
         overlay.hwnd = nullptr;
@@ -3962,24 +3994,33 @@ void SetAcrylicCloaked(const Overlay& overlay, bool cloak) {
 // engine rejects any transform over a backdrop brush.) Returns the level
 // built: 0 that graph; 1 the blur alone (the graph the prototype ran on -
 // tried when the composition engine rejects the full one), with the tint
-// then laid over it as a color sprite; -1 nothing.
+// then laid over it as a color sprite; -1 nothing. Only the effects that
+// do something are in the graph (no blur pass at blur 0, and so on); with
+// none left, `result` stays null and the bands show the backdrop itself.
 int BuildAcrylicBrush(Overlay& overlay, COLORREF rgb, wuc::CompositionEffectBrush& result) {
     Acrylic& ac = *overlay.acrylic;
     const Layout& layout = overlay.layout;
     if (!ac.hostBackdrop) {
         ac.hostBackdrop = g_compositor.CreateHostBackdropBrush();
     }
+    result = nullptr;
     for (int level = 0; level < 2; level++) {
         try {
-            wge::IGraphicsEffectSource chain = MakeEffect(
-                kClsidD2D1GaussianBlur, L"Blur",
-                {EffectFloat(layout.backdropBlur), EffectUInt(kGaussianBlurOptimizationBalanced),
-                 EffectUInt(kBorderModeHard)},
-                {wuc::CompositionEffectSourceParameter(L"backdrop")});
+            wge::IGraphicsEffectSource chain = wuc::CompositionEffectSourceParameter(L"backdrop");
+            bool any = false;
+            if (layout.backdropBlur > 0.0f) {
+                chain = MakeEffect(kClsidD2D1GaussianBlur, L"Blur",
+                                   {EffectFloat(layout.backdropBlur),
+                                    EffectUInt(kGaussianBlurOptimizationBalanced),
+                                    EffectUInt(kBorderModeHard)},
+                                   {chain});
+                any = true;
+            }
             if (level == 0) {
                 if (g_settings.saturation != 100) {
                     chain = MakeEffect(kClsidD2D1Saturation, L"Saturation",
                                        {EffectFloat(g_settings.saturation / 100.0f)}, {chain});
+                    any = true;
                 }
                 if (g_settings.luminosityOpacity > 0) {
                     // Luminosity blend: the frame color's brightness with
@@ -3994,6 +4035,7 @@ int BuildAcrylicBrush(Overlay& overlay, COLORREF rgb, wuc::CompositionEffectBrus
                         {EffectColor(rgb, g_settings.luminosityOpacity / 100.0f)}, {});
                     chain = MakeEffect(kClsidD2D1Blend, L"Luminosity",
                                        {EffectUInt(kBlendModeLuminosity)}, {color, chain});
+                    any = true;
                 }
                 if (g_settings.tintOpacity > 0) {
                     auto color = MakeEffect(kClsidD2D1Flood, L"TintColor",
@@ -4001,7 +4043,11 @@ int BuildAcrylicBrush(Overlay& overlay, COLORREF rgb, wuc::CompositionEffectBrus
                                             {});
                     chain = MakeEffect(kClsidD2D1Composite, L"Tint",
                                        {EffectUInt(kCompositeModeSourceOver)}, {chain, color});
+                    any = true;
                 }
+            }
+            if (!any) {
+                return level;  // the backdrop as it is
             }
             auto factory = g_compositor.CreateEffectFactory(chain.as<wge::IGraphicsEffect>());
             // The graph loads asynchronously: Pending is the usual answer
@@ -4142,6 +4188,7 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
     // effect) is one window-sized sprite on top.
     wf::Numerics::float2 size{static_cast<float>(width), static_cast<float>(height)};
     ac.root.Children().RemoveAll();
+    ac.backdropRects.clear();
     ac.root.Size(size);
     RECT inner = layout.innerRect;
     OffsetRect(&inner, -layout.overlayRect.left, -layout.overlayRect.top);
@@ -4165,13 +4212,15 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
         auto maskSurfaceBrush = SurfaceBrushFor(ac.maskSurface);
         maskSurfaceBrush.Offset({-origin.x, -origin.y});
         maskBrush.Mask(maskSurfaceBrush);
-        maskBrush.Source(ac.effectBrush);
+        maskBrush.Source(ac.effectBrush ? wuc::CompositionBrush(ac.effectBrush)
+                                        : wuc::CompositionBrush(ac.hostBackdrop));
         auto fill = g_compositor.CreateSpriteVisual();
         fill.Offset({origin.x, origin.y, 0.0f});
         fill.Size(extent);
         fill.Clip(clip);
         fill.Brush(maskBrush);
         ac.root.Children().InsertAtTop(fill);
+        ac.backdropRects.push_back(input);
         if (level > 0 && g_settings.tintOpacity > 0) {
             auto tintMask = g_compositor.CreateMaskBrush();
             auto tintMaskSurface = SurfaceBrushFor(ac.maskSurface);
@@ -4195,9 +4244,12 @@ bool BuildAcrylicContent(Overlay& overlay, COLORREF rgb) try {
     top.Size(size);
     top.Brush(SurfaceBrushFor(ac.overlaySurface));
     ac.root.Children().InsertAtTop(top);
-    Wh_Log(L"monitor %p: acrylic content %dx%d (graph level %d; blur %.1f, tint #%02X%02X%02X at "
+    SyncRefreshers(overlay);
+    Wh_Log(L"monitor %p: acrylic content %dx%d (%s; blur %.1f, tint #%02X%02X%02X at "
            L"%d%%, luminosity %d%%, saturation %d%%, noise %d%% at %d%%, bevel %d px)",
-           layout.monitor, width, height, level, layout.backdropBlur, GetRValue(rgb),
+           layout.monitor, width, height,
+           !ac.effectBrush ? L"no effects" : level == 0 ? L"full graph" : L"blur only",
+           layout.backdropBlur, GetRValue(rgb),
            GetGValue(rgb), GetBValue(rgb), g_settings.tintOpacity, g_settings.luminosityOpacity,
            g_settings.saturation, g_settings.noiseOpacity, g_settings.noiseDensity,
            layout.bevelWidth);
@@ -6413,6 +6465,137 @@ void CheckEffectGraphs() {
     }
 }
 
+// DWM reads a window's host backdrop again only when a window beneath it
+// presents new content there. Its own changes don't count: a window gone
+// in a minimize animation, a shadow handed from one window to another or
+// taken away, the wallpaper uncovered - all of that stayed in the bands
+// until something else drew under the frame (a click on the desktop, for
+// one). Nothing done to the frame itself helps: its visuals moved, its
+// opacity or layered alpha changed, its DWM attributes set again, a
+// SetWindowPos with SWP_FRAMECHANGED - DWM kept the stale backdrop through
+// each (tested one by one on 10.0.26100).
+//
+// So each band of an acrylic frame has a "refresher" under everything: a
+// layered window the size of the band sprite's input rectangle at the
+// bottom of the z-order, at the lowest alpha so that nothing of it shows,
+// which is repainted after every window event and, as a fallback, every
+// tick. The repaint is a window presenting content under the frame, and
+// the band reads the backdrop again.
+LRESULT CALLBACK RefreshWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC dc = BeginPaint(hwnd, &ps);
+            if (dc) {
+                // GDI marks what it draws as changed whether or not the
+                // pixels differ.
+                FillRect(dc, &ps.rcPaint, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+            }
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// One refresher per band, each the band's input rectangle: created, moved
+// or destroyed as the bands are rebuilt.
+void SyncRefreshers(Overlay& overlay) {
+    Acrylic& ac = *overlay.acrylic;
+    const RECT& frame = overlay.layout.overlayRect;
+    size_t count = std::min<size_t>(ac.backdropRects.size(), 4);
+    for (size_t i = 0; i < 4; i++) {
+        HWND& hwnd = ac.refreshers[i];
+        if (i >= count) {
+            if (hwnd) {
+                DestroyWindow(hwnd);
+                hwnd = nullptr;
+            }
+            continue;
+        }
+        const RECT& band = ac.backdropRects[i];
+        int x = frame.left + band.left, y = frame.top + band.top;
+        int w = band.right - band.left, h = band.bottom - band.top;
+        if (hwnd) {
+            SetWindowPos(hwnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+            continue;
+        }
+        hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+                                   WS_EX_NOACTIVATE,
+                               kRefreshClassName, L"", WS_POPUP, x, y, w, h, nullptr, nullptr,
+                               g_module, nullptr);
+        if (!hwnd) {
+            Wh_Log(L"CreateWindowExW (backdrop refresher) failed: %u", GetLastError());
+            continue;
+        }
+        SetLayeredWindowAttributes(hwnd, 0, kRefreshAlpha, LWA_ALPHA);
+        BOOL excludedFromPeek = TRUE;
+        DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludedFromPeek,
+                              sizeof(excludedFromPeek));
+        BOOL noTransitions = TRUE;
+        DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions,
+                              sizeof(noTransitions));
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        UpdateWindow(hwnd);
+    }
+}
+
+// One repaint of every shown frame's refreshers. On a window event they
+// are also put back under everything, in case a window was sent to the
+// bottom since (it would have gone below them).
+void RefreshBackdrops(bool reassertBottom) {
+    for (Overlay& overlay : *g_overlays) {
+        Acrylic* ac = overlay.acrylic.get();
+        if (!ac || !overlay.shown) {
+            continue;
+        }
+        for (HWND hwnd : ac->refreshers) {
+            if (!hwnd) {
+                continue;
+            }
+            if (reassertBottom && GetWindow(hwnd, GW_HWNDNEXT)) {
+                SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            InvalidateRect(hwnd, nullptr, FALSE);
+            UpdateWindow(hwnd);
+        }
+    }
+}
+
+// A window event: refresh now, and every frame for a moment.
+ULONGLONG g_refreshBurstEnd = 0;
+bool g_refreshBurstRunning = false;
+void StartRefreshBurst() {
+    if (!g_overlaysAcrylic) {
+        return;
+    }
+    g_refreshBurstEnd = GetTickCount64() + kRefreshBurstMs;
+    RefreshBackdrops(true);
+    if (!g_refreshBurstRunning) {
+        if (HWND ctrl = g_ctrlWnd.load()) {
+            if (SetTimer(ctrl, kRefreshTimerId, kRefreshIntervalMs, nullptr)) {
+                g_refreshBurstRunning = true;
+            }
+        }
+    }
+}
+
+void OnRefreshTimer(HWND ctrl) {
+    RefreshBackdrops(false);
+    if (GetTickCount64() >= g_refreshBurstEnd) {
+        KillTimer(ctrl, kRefreshTimerId);
+        g_refreshBurstRunning = false;
+    }
+}
+
 void Tick(bool forceRebuild) {
     if (g_inTick || g_unloading) {
         return;
@@ -6517,6 +6700,10 @@ void Tick(bool forceRebuild) {
         }
     }
 
+    if (acrylic) {
+        RefreshBackdrops(false);  // the fallback for changes no event announced
+    }
+
     ULONGLONG tEnd = GetTickCount64();
     if (tEnd - tStart > 500) {
         Wh_Log(L"slow tick: %llu ms", tEnd - tStart);
@@ -6614,9 +6801,13 @@ void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
                                      LONG idChild, DWORD, DWORD) {
     if (event == EVENT_SYSTEM_FOREGROUND) {
         HookForegroundLocation(hwnd);
-    } else if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd ||
-               hwnd != GetForegroundWindow()) {
-        return;
+    } else if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND ||
+               event == EVENT_SYSTEM_MOVESIZEEND) {
+        // A window leaving or arriving under the frames: the tick (and the
+        // backdrop refresh it starts) is wanted whichever window it is.
+    } else if (event != EVENT_OBJECT_LOCATIONCHANGE || idObject != OBJID_WINDOW ||
+               idChild != CHILDID_SELF || !hwnd || hwnd != GetForegroundWindow()) {
+        return;  // the other system events in the hooked range, or not the foreground window
     }
     if (g_taskbarEventPending) {
         return;
@@ -6667,10 +6858,13 @@ LRESULT CALLBACK CtrlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             } else if (wParam == kCoalesceTimerId) {
                 KillTimer(hwnd, kCoalesceTimerId);
                 Tick(false);
+            } else if (wParam == kRefreshTimerId) {
+                OnRefreshTimer(hwnd);
             }
             return 0;
         case kMsgTaskbarEvent:
             g_taskbarEventPending = false;
+            StartRefreshBurst();
             // An auto-hide slide fires location changes every frame: an
             // event right after a tick is coalesced into one tick a moment
             // later rather than dropped.
@@ -6747,6 +6941,19 @@ bool RegisterClasses() {
         return false;
     }
 
+    WNDCLASSEXW refreshClass{};
+    refreshClass.cbSize = sizeof(refreshClass);
+    refreshClass.lpfnWndProc = RefreshWndProc;
+    refreshClass.hInstance = g_module;
+    refreshClass.lpszClassName = kRefreshClassName;
+    if (!RegisterClassExW(&refreshClass)) {
+        Wh_Log(L"RegisterClassExW (refresher) failed: %u", GetLastError());
+        UnregisterClassW(kFrameClassName, g_module);
+        UnregisterClassW(kCtrlClassName, g_module);
+        UnregisterClassW(kAppBarClassName, g_module);
+        return false;
+    }
+
     return true;
 }
 
@@ -6808,6 +7015,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
         UnregisterClassW(kFrameClassName, g_module);
         UnregisterClassW(kCtrlClassName, g_module);
         UnregisterClassW(kAppBarClassName, g_module);
+        UnregisterClassW(kRefreshClassName, g_module);
         Gdiplus::GdiplusShutdown(gdiplusToken);
         return 0;
     }
@@ -6852,6 +7060,14 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     if (!foregroundEventHook) {
         Wh_Log(L"SetWinEventHook (foreground) failed: %u", GetLastError());
     }
+    // Minimize start and end, move/size end (the handler ignores the other
+    // system events in the range, all rare).
+    HWINEVENTHOOK windowEventHook =
+        SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
+                        ForegroundWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!windowEventHook) {
+        Wh_Log(L"SetWinEventHook (window events) failed: %u", GetLastError());
+    }
     HookForegroundLocation(GetForegroundWindow());
 
     for (;;) {
@@ -6879,11 +7095,15 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     g_ctrlWnd = nullptr;
     KillTimer(ctrl, kTimerId);
     KillTimer(ctrl, kCoalesceTimerId);
+    KillTimer(ctrl, kRefreshTimerId);
     if (taskbarEventHook) {
         UnhookWinEvent(taskbarEventHook);
     }
     if (foregroundEventHook) {
         UnhookWinEvent(foregroundEventHook);
+    }
+    if (windowEventHook) {
+        UnhookWinEvent(windowEventHook);
     }
     HookForegroundLocation(nullptr);
 
@@ -6984,6 +7204,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     UnregisterClassW(kFrameClassName, g_module);
     UnregisterClassW(kCtrlClassName, g_module);
     UnregisterClassW(kAppBarClassName, g_module);
+    UnregisterClassW(kRefreshClassName, g_module);
     Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
 }
@@ -7836,6 +8057,7 @@ void CALLBACK DecorTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
     DecorPass(urgent);
     g_urgentMonitor2 = nullptr;
 }
+
 // The next tick as soon as possible, for `monitor` (and `other`, when a
 // window just moved from there).
 void RushDecorPass(HMONITOR monitor, HMONITOR other) {
@@ -7922,7 +8144,11 @@ HRESULT WINAPI SetBorderParameters_Hook(void* self, const RECT* rect, float radi
         bool ordinary = known && IsOrdinaryFrame(hwnd);
         if (ordinary && used.a > 0.0f) {
             bool active = IsForegroundWindow(hwnd);
-            if (shadowStyle > 0) {
+            // Style 4 is the transitional style (a window being minimized
+            // is still visible, not yet iconic, for its first update): never
+            // learned, or it would be given to maximized windows as "no
+            // shadow" until a floating window at rest taught otherwise.
+            if (shadowStyle > 0 && shadowStyle != kNoShadowStyle) {
                 (active ? g_activeShadowStyles : g_inactiveShadowStyles).See(shadowStyle, hwnd);
             }
             (active ? g_activeBorderColors : g_inactiveBorderColors).See(used, hwnd);
