@@ -3,7 +3,7 @@
 // @name Start Menu Category Manager
 // @name:pt-BR Gerenciador de Categorias do Menu Iniciar
 // @description Adds a "Manage Categories" item to the Windows 11 Start menu's right-click menu, for customising app categories. Also hides empty category tiles from the Start menu (optional).
-// @description:pt-BR Adiciona o item "Gerenciar Categorias" ao menu de contexto (botão direito) do Menu Iniciar do Windows 11, para personalizar as categorias dos aplicativos.
+// @description:pt-BR Adiciona o item "Gerenciar Categorias" ao menu de contexto (botão direito) do Menu Iniciar do Windows 11, para personalizar as categorias dos aplicativos. Também oculta blocos de categorias vazias do menu Iniciar (opcional).
 // @version 1.0.0
 // @author Feuer
 // @github https://github.com/feuerdraws
