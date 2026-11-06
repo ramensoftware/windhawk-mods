@@ -79,7 +79,8 @@ frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.
   Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step,
   at 0 % and 100 % too. Only the very first flyout after Explorer starts can show for a moment, before the mod
   knows its window. Brightness and other Windows indicators use the same window and stay visible: Windows
-  reports brightness changes, so the brightness indicator shows even at 0 % or 100 % volume. Airplane mode and
+  reports brightness changes, so the brightness indicator shows even at 0 % or 100 % volume, except when the
+  brightness itself is already at its limit (then nothing changes and nothing is reported). Airplane mode and
   other rare indicators shown right after an outside volume change, or at 0 % or 100 %, can be hidden as well.
   While the option is on, other tray apps and mods
   that react to the wheel in the notification area (for example Taskbar Volume Control with the tray area as its
