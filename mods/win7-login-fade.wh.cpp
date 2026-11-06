@@ -30,16 +30,17 @@
     * However, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
 * The rest of the features have been tested on Windows 8.1, 10 LTSC 2021 (21H2, 22H2), 11 23H2, 24H2, and 25H2. This mod will not work on Windows 7.
 ## ⚠ Important usage note ⚠
-* On Windows 10 1903 and newer versions, this mod needs a special procedure to get the fade effect to work naturally. Please do either one of the following:
+* On Windows 10 1903 and newer versions, this mod needs a special procedure to get the fade effect to work naturally. Please do either of the following:
   * Set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256 in decimal)
   * x86-64 only: Navigate to Windhawk's Settings > Advanced settings > More advanced settings > Process inclusion list, and make sure that `dwm.exe` is in the list. (See the screenshot below)
-* 32-bit and Arm64 systems must change the registry as the DWM option won't work reliably.
+* 32-bit and Arm64 systems must change the registry, as the DWM option won't work reliably.
 * If you chose the registry method, after doing so, do one of these: reboot, sign out and sign in again, enter the "switch user" screen (not lock) once, or restart DWM.
 * Failure to do so may result in an unnatural fade effect that doesn't make the screen fully black.
 
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 
-* Neither of those is required on Windows 10 1809 or earlier.
+* Neither of those is required on Windows 10 1809 or earlier, unless you use both screensavers and the idle monitor off timer, or use programs that switch to a non-default desktop, such as SysInternals Desktops.
+  * If you use them, follow the above registry key method, then reboot or sign out and sign in again.
 * To allow fading in the logon screen when turning off the monitor with the idle timer, you must allow Windhawk to inject into **LogonUI.exe**. Follow the above `dwm.exe` steps for the instructions. (replace `dwm` with `LogonUI`)
 
 ## Presets
@@ -710,10 +711,10 @@ bool RequestFade() {
             if (GetUserObjectInformationW(hDesktop, UOI_NAME, desktopName, sizeof(desktopName), nullptr)) {
                 // Keep original in-process fade for secure desktop processes (e.g. LogonUI), as the async fade thread's overlay window is only shown on the default desktop
                 // And secure desktop processes all run as SYSTEM which can also bypass the gamma range check on legacy gamma (1809-) systems
-                if (_wcsicmp(desktopName, L"winlogon") == 0) {
+                // Natural fading will fail if a non-SYSTEM process on neither the default desktop nor the secure desktop initiates this on legacy gamma systems without the regkey tweak
+                // But honestly this should be rare...
+                if (_wcsicmp(desktopName, L"default") != 0) {
                     return CreateMonitorOffThread();
-                } else if (_wcsicmp(desktopName, L"default") != 0) {
-                    return false; // only default and secure desktops are supported
                 }
             }
         }
