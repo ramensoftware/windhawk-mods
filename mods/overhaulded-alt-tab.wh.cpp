@@ -10,10 +10,9 @@
 // @include         explorer.exe
 // @compilerOptions -lshell32 -lgdi32
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
-# Overhaulded Task Switcher 
+# Overhaulded Task Switcher
 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
@@ -28,7 +27,6 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 - Modern horizontal task switcher interface
 - App grouping by application/process
 - Real DWM window previews
-- Dynamic Obsidian visual system
 - Rounded cards with subtle downward shadows
 - Floating task switcher surface
 - Fluid opening animation
@@ -37,6 +35,8 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 - Subtle center-card snap animation
 - Hover interactions
 - Window closing
+- Automatic card count that never duplicates previews when few windows are open
+- Optional filter to show only the windows of the current monitor
 - Resolution-aware UI scaling
 - High-DPI support
 - Alt + Tab support
@@ -69,7 +69,7 @@ The visual system uses a Black Obsidian surface with:
 - Smooth transitions
 - A fixed central visualizer
 
-The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating through a physical stack of windows rather than moving the entire interface.
+The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating between windows rather than moving the entire interface.
 
 ## Smooth Animations
 
@@ -168,15 +168,6 @@ Some applications may behave differently than standard desktop windows, especial
       - "110": 110%
       - "125": 125%
     - Cards:
-        - VisibleCards: "5"
-          $name: Visible cards
-          $description: Number of cards shown in the carousel.
-          $options:
-          - "3": 3 cards
-          - "5": 5 cards (default)
-        - SingleWindowCard: true
-          $name: Single card when one window is open
-          $description: Show only the center card when there is just one eligible window.
         - NormalColor: "#050507"
           $name: Cards color
           $description: Base color of unselected cards.
@@ -229,6 +220,15 @@ Some applications may behave differently than standard desktop windows, especial
       - "smooth": Smooth
       - "balanced": Balanced
   $name: Animation
+- Behavior:
+    - MonitorFilter: "All"
+      $name: Windows shown
+      $description: Choose which windows appear in the switcher. With a monitor filter the switcher also opens on that monitor. If that monitor has no windows, all windows are shown.
+      $options:
+      - "All": All monitors (default)
+      - "Cursor": Only the monitor where the mouse cursor is
+      - "Foreground": Only the monitor of the active window
+  $name: Behavior
 - Background: "dwm"
   $name: Background
   $description: Background layer behind the cards.
@@ -315,10 +315,15 @@ static const wchar_t kWindowClassName[] = L"OverhauldedAltTabSelector";
 
 static const int kSelectorWidth = 1220;
 static const int kSelectorHeight = 430;
-static const int kMaxCarouselSlots = 5;
-static int g_visibleCardCount = 5;
+static const int kMaxCarouselSlots = 32;
+static const int kCarouselMaxCards = 5;
+enum class MonitorFilterMode { All, Cursor, Foreground };
+static MonitorFilterMode g_monitorFilterMode = MonitorFilterMode::All;
 static int g_uiScalePercent = 100;
 static int g_animationSpeedPercent = 100;
+static COLORREF g_textNormalColor = RGB(230, 230, 230);
+static COLORREF g_textSelectedColor = RGB(255, 255, 255);
+static COLORREF g_counterTextColor = RGB(190, 190, 190);
 
 enum class BaseBackgroundMode
 {
@@ -335,8 +340,6 @@ static std::vector<DWORD> g_capturedDesktopPixels;
 static std::vector<DWORD> g_blurredDesktopPixels;
 static bool g_fullscreenHdcDrawFailureLogged = false;
 
-// Captura de escritorio y superficies auxiliares legacy. La escena Fullscreen se
-// presenta ahora en un HWND render target Direct2D de hardware, sin BitBlt final.
 struct FsSurface
 {
     HDC dc = nullptr;
@@ -348,14 +351,12 @@ struct FsSurface
 static FsSurface g_fsSharp;
 static FsSurface g_fsBlur;
 static FsSurface g_fsBack;
-static FsSurface g_fsScene;                      // superficie del área sucia (Direct2D)
-static ID2D1Bitmap* g_fsSharpD2D = nullptr;      // escritorio nítido (GPU)
-static ID2D1Bitmap* g_fsBlurD2D = nullptr;       // escritorio desenfocado (GPU)
-static RECT g_paintDirty = {};                   // rcPaint del WM_PAINT actual
+static FsSurface g_fsScene;
+static ID2D1Bitmap* g_fsSharpD2D = nullptr;
+static ID2D1Bitmap* g_fsBlurD2D = nullptr;
+static RECT g_paintDirty = {};
 static float g_lastBackdropPresence = -1.0f;
 
-// Sombra suave de las cards en GDI: sprite premultiplicado (solo alfa, negro)
-// que se dibuja con AlphaBlend en 9 porciones. msimg32 se carga bajo demanda.
 struct ShadowSprite
 {
     HDC dc = nullptr;
@@ -371,11 +372,8 @@ typedef BOOL (WINAPI* AlphaBlendProc)(HDC, int, int, int, int, HDC, int, int,
 static HMODULE g_msimg32Module = nullptr;
 static AlphaBlendProc g_pAlphaBlend = nullptr;
 static BITMAPINFO g_blurredDesktopBitmapInfo = {};
-// Equivalent black overlay multiplier; 0.58 leaves 58% of the blurred RGB values.
 static const float kFullscreenBackdropBrightness = 0.58f;
 static const float kFullscreenBlurStandardDeviation = 46.0f;
-// Blur is computed at quarter resolution per axis (1/16 of the pixels).
-// DWM/D2D scales it to the monitor during composition; the sharp reveal stays full-res.
 static const int kFullscreenBlurDownsample = 4;
 static void GetFullscreenBlurDimensions(int width, int height, int& blurWidth, int& blurHeight)
 {
@@ -393,9 +391,6 @@ static BaseBackgroundMode g_baseBackgroundMode = BaseBackgroundMode::Dwm;
 static ExperimentalBackgroundMode g_experimentalBackgroundMode =
     ExperimentalBackgroundMode::None;
 
-// Pattern Waves is available only as an overlay over an active base
-// background. Its saved setting is preserved while Background is None, but it
-// must not render or run its simulation in that state.
 static bool IsPatternWavesActive()
 {
     return g_baseBackgroundMode != BaseBackgroundMode::None &&
@@ -403,8 +398,6 @@ static bool IsPatternWavesActive()
            g_experimentalBackgroundMode == ExperimentalBackgroundMode::PatternWaves;
 }
 
-// The mouse spotlight is an independent background interaction. It remains
-// available even when an experimental background such as Pattern Waves is active.
 static bool IsBackgroundSpotlightAllowed()
 {
     return g_baseBackgroundMode == BaseBackgroundMode::Dwm ||
@@ -415,9 +408,6 @@ static bool IsBackgroundSpotlightAllowed()
 static COLORREF g_dwmBackgroundColor = RGB(20, 26, 34);
 static float g_dwmBackgroundOpacity = 0.20f;
 
-// Cursor spotlight over the background only. The cards are rendered later,
-// so their surfaces naturally occlude the spotlight without extra masks.
-// Radio del spotlight en DIP (antes 310; el diámetro pasa al 37,5 %).
 static const float kSpotlightRadiusDip = 116.0f;
 static ID2D1RadialGradientBrush* g_ambientShadowBrush = nullptr;
 static ID2D1RadialGradientBrush* g_backgroundSpotlightBrush = nullptr;
@@ -443,18 +433,11 @@ static const int kPatternFieldWidth = 96;
 static const int kPatternFieldHeight = 36;
 static const int kPatternFieldCount = kPatternFieldWidth * kPatternFieldHeight;
 static const UINT kPatternTimerId = 91;
-// Pattern Waves tiene un presupuesto independiente del renderer principal.
 static float g_patternQualityScale = 1.0f;
-// La calidad del fondo no debe oscilar con la granularidad del reloj de Windows.
-// Se requieren varias muestras consecutivas y existe un periodo de permanencia.
 static ULONGLONG g_patternQualityCooldownUntil = 0;
 static int g_patternSlowSamples = 0;
 static int g_patternFastSamples = 0;
 
-// One low-resolution height field drives every visible part of Pattern Waves:
-// fixed-grid dot scale, field-derived lighting and opacity.
-// Ripple simulation buffers. The procedural base surface is sampled separately;
-// these buffers contain only the transient disturbance caused by the cursor.
 static float g_patternRippleA[kPatternFieldCount] = {};
 static float g_patternRippleB[kPatternFieldCount] = {};
 static float g_patternRippleC[kPatternFieldCount] = {};
@@ -466,25 +449,20 @@ static POINT g_patternPreviousCursor = {};
 static bool g_patternHasCursor = false;
 static bool g_patternCursorInside = false;
 static ULONGLONG g_patternLastTick = 0;
-// One shared combined-field cache per rendered frame. Dots and border sample
-// this cache instead of recomputing procedural trigonometry independently.
 static float g_patternCombinedFieldCache[kPatternFieldCount] = {};
-// Temporary dimensions for rendering the same field in selector or monitor space.
 static int g_patternFieldRenderWidth = 0;
 static int g_patternFieldRenderHeight = 0;
 static const int kCounterWidth = 140;
 static const int kCounterHeight = 28;
 static const int kCounterTop = 378;
-// Opacidad común de las superficies Black Obsidian; los textos y thumbnails no se alteran.
 static const float kCardSurfaceOpacity = 0.75f;
 static COLORREF g_cardNormalColor = RGB(5, 5, 7);
 static COLORREF g_cardSelectedColor = RGB(9, 10, 11);
-// Timer del failsafe: solo existe mientras el selector está abierto.
 static const UINT_PTR kActivityTimerId = 77;
 static const UINT_PTR kTabRepeatTimerId = 89;
 static const UINT_PTR kSelectorMotionTimerId = 90;
-static const float kNavigationDuration = 150.0f; // Linear/Smooth default, reduced from 180 ms.
-static const float kBouncyNavigationDuration = 180.0f; // Preserve the original spring timing.
+static const float kNavigationDuration = 150.0f;
+static const float kBouncyNavigationDuration = 180.0f;
 static const int kDefaultAnimationFps = 120;
 enum class AnimationStyle { Linear, Bouncy, Rct, Cinematic };
 static AnimationStyle g_animationStyle = AnimationStyle::Linear;
@@ -492,11 +470,10 @@ enum class CardMotionStyle { Smooth, Linear, Bouncy };
 static CardMotionStyle g_cardMotionStyle = CardMotionStyle::Smooth;
 static int g_cardMotionSpeedPercent = 100;
 static bool g_expandSelectedWindow = true;
-static bool g_singleWindowCard = true;
 static int g_animationFps = kDefaultAnimationFps;
 
-static int GetCarouselCenterSlot() { return g_visibleCardCount / 2; }
-static int GetCarouselSlotCount() { return g_visibleCardCount; }
+static int GetCarouselCenterSlot();
+static int GetCarouselSlotCount();
 static float AnimationDuration(float baseMs)
 {
     return baseMs * 100.0f / static_cast<float>(g_animationSpeedPercent);
@@ -509,27 +486,27 @@ static float CardNavigationDuration()
         static_cast<float>(g_animationSpeedPercent) *
         100.0f / static_cast<float>(g_cardMotionSpeedPercent);
 }
+static void ApplyVisualStylePalette();
+
 static void LoadTaskSwitcherSettings()
 {
     auto read = [](PCWSTR key) {
         PCWSTR value = Wh_GetStringSetting(key);
-        std::wstring result(value);
-        Wh_FreeStringSetting(value);
+        std::wstring result(value ? value : L"");
+        if (value)
+            Wh_FreeStringSetting(value);
         return result;
     };
 
-    // Numeric options use integer settings and are clamped to their valid ranges.
+    std::wstring monitorFilter = read(L"Behavior.MonitorFilter");
+    g_monitorFilterMode = monitorFilter == L"Cursor" ? MonitorFilterMode::Cursor
+        : monitorFilter == L"Foreground" ? MonitorFilterMode::Foreground
+        : MonitorFilterMode::All;
+
     auto readNumber = [](PCWSTR key, int low, int high) {
         const int value = Wh_GetIntSetting(key);
         return std::max(low, std::min(high, value));
     };
-
-    // The three 1.2.1 settings were flat keys. They are only consulted when the
-    // current key reads empty.
-    std::wstring visible = read(L"Appearance.Cards.VisibleCards");
-    if (visible.empty())
-        visible = read(L"VisibleCards");
-    g_visibleCardCount = visible == L"3" ? 3 : 5;
 
     std::wstring scale = read(L"Appearance.Scale");
     g_uiScalePercent = 100;
@@ -567,12 +544,7 @@ static void LoadTaskSwitcherSettings()
         cardSpeed == 200) ? cardSpeed : 100;
     g_expandSelectedWindow =
         Wh_GetIntSetting(L"Appearance.Cards.ExpandSelectedWindow") != 0;
-    g_singleWindowCard =
-        Wh_GetIntSetting(L"Appearance.Cards.SingleWindowCard") != 0;
 
-    // Background is the base layer and ExperimentalSettings.GeneralBackground
-    // controls the optional overlay. Blur falls back to the regular DWM surface
-    // for the current session if capture or processing cannot be prepared.
     std::wstring background = read(L"Background");
     Wh_Log(L"[FS] Background leido = '%s'", background.c_str());
     g_baseBackgroundMode = background == L"none"
@@ -586,8 +558,6 @@ static void LoadTaskSwitcherSettings()
         ? ExperimentalBackgroundMode::PatternWaves
         : ExperimentalBackgroundMode::None;
 
-    // Accepts "#RRGGBB" or "RRGGBB" (surrounding spaces ignored). Anything else,
-    // including an empty string, returns the fallback (the default color).
     auto parseColor = [](const std::wstring& raw, COLORREF fallback) {
         size_t first = raw.find_first_not_of(L" \t");
         if (first == std::wstring::npos)
@@ -617,12 +587,12 @@ static void LoadTaskSwitcherSettings()
     g_dwmBackgroundOpacity =
         static_cast<float>(readNumber(L"Dwm.Opacity", 0, 100)) / 100.0f;
 
+    ApplyVisualStylePalette();
+
     g_patternShape = read(L"ExperimentalSettings.PatternWaves.Shape") == L"squares"
         ? PatternShape::Squares
         : PatternShape::Dots;
 
-    // Free 0-200 control with recalibrated scale: the 100 value reproduces the
-    // previous internal 200 behavior exactly.
     g_patternSpeed = static_cast<float>(
         readNumber(L"ExperimentalSettings.PatternWaves.Speed", 0, 200)) * 2.0f / 100.0f;
     g_patternWaveStrength = static_cast<float>(
@@ -643,17 +613,10 @@ static void LoadTaskSwitcherSettings()
 
 static UINT GetPatternTimerInterval()
 {
-    // El efecto experimental no comparte la frecuencia de navegación/cards.
-    // 30 Hz es suficiente para un fondo y deja margen a DWM/input en equipos antiguos.
     return g_patternQualityScale < 0.72f ? 50u : 33u;
 }
 
 // RELOJ DE ANIMACIÓN Y CURVAS
-// Todas las animaciones se evalúan contra el mismo instante (g_frameTimeMs) por
-// frame. Es el instante previsto de presentación del frame (ver RunFrame), no
-// el momento en que el código llega a ejecutarse, de modo que el jitter del
-// timer no afecta a la velocidad percibida. QPC en lugar de GetTickCount64
-// (granularidad de ~15.6 ms).
 static LONGLONG g_qpcFrequency = 0;
 static double QpcNowMs()
 {
@@ -690,8 +653,6 @@ static float EaseOutCubic(float t)
     float u = 1.0f - Clamp01(t);
     return 1.0f - u * u * u;
 }
-// Cinematic ease-out: a small, controlled overshoot gives the scene a sense
-// of momentum without changing the timing or spring model used by Bouncy.
 static float EaseOutBack(float t, float overshoot = 1.15f)
 {
     t = Clamp01(t);
@@ -705,8 +666,6 @@ static float EaseInCubic(float t)
     t = Clamp01(t);
     return t * t * t;
 }
-// Salida exponencial normalizada: velocidad inicial máxima (respuesta inmediata),
-// llega exactamente a 1.0 en t=1 y no tiene overshoot. k controla la agresividad.
 static float EaseOutExp(float t, float k)
 {
     t = Clamp01(t);
@@ -742,15 +701,9 @@ static int g_runtimeSelectorHeight = kSelectorHeight;
 static float g_sceneScaleX = 1.0f;
 static float g_sceneScaleY = 1.0f;
 static float g_sceneOpacity = 1.0f;
-// Offset temporal usado cuando el HWND se amplía al área de trabajo.
 static POINT g_selectionExpansionSceneOffset = {};
-// Estado de la transición de confirmación. La ventana del selector se reutiliza
-// y se amplía al área de trabajo; las miniaturas DWM se interpolan desde la
-// tarjeta visible hasta ese destino, sin crear otro renderer ni otra ventana.
 static bool g_selectionExpansionActive = false;
 static bool g_selectionExpansionFinishPending = false;
-// La superficie expandida permanece encima hasta que la ventana destino ya es
-// foreground (o vence el timeout), evitando un frame vacío entre ambas.
 static bool g_selectionActivationRequested = false;
 static ULONGLONG g_selectionActivationRequestTick = 0;
 static const ULONGLONG kSelectionActivationWaitMaxMs = 400;
@@ -762,28 +715,28 @@ static RECT g_selectionExpansionDestinationRect = {};
 static RECT g_selectionExpansionWorkRect = {};
 static double g_selectionExpansionStart = 0.0;
 static float g_selectionExpansionProgress = 0.0f;
-// Progreso común de la escena: 0 = oculta/colapsada, 1 = completamente abierta.
-// Escala, opacidad y apertura del carrusel se derivan de este único valor.
 static float g_scenePresence = 1.0f;
 static float g_closeStartPresence = 1.0f;
 static float g_carouselSpread = 1.0f;
 static float g_cardSnapScale = 1.0f;
+static int g_staticPreviousSelected = -1;
+static double g_staticSelectionStartTime = 0.0;
+static bool g_staticSelectionAnimating = false;
+static float g_staticScaleFrom[3] = { 1.0f, 1.0f, 1.0f };
+static float g_staticIndicatorStartX = 0.0f;
+static constexpr float kStaticSelectedScale = 1.075f;
+static constexpr float kStaticSelectionDurationMs = 190.0f;
 
 static int ScaleLayoutPx(float value)
 {
     return static_cast<int>(roundf(value * g_uiScale.value));
 }
 
-// Constantes fijas en píxeles (bordes, radios pequeños) que deben crecer con el
-// DPI del monitor pero no con el ajuste "fit" por resolución. A 100% DPI es 1:1.
 static float DpiPx(float value)
 {
     return value * g_uiScale.dpiScale;
 }
 
-// El UI thread es Per-Monitor-V2: todo el layout está en píxeles físicos. La
-// escala final combina el DPI real del monitor con el ajuste por área de trabajo
-// (medida en DIPs), de modo que a 100% el resultado es idéntico al anterior.
 static void UpdateUIScaleForWorkArea(const RECT& work, float dpiScale)
 {
     dpiScale = std::max(0.5f, std::min(8.0f, dpiScale));
@@ -815,8 +768,6 @@ static D2D1::Matrix3x2F GetSceneTransform()
         D2D1::SizeF(sx, sy),
         D2D1::Point2F(static_cast<float>(g_runtimeSelectorWidth) * 0.5f,
                       static_cast<float>(g_runtimeSelectorHeight) * 0.5f));
-    // El cambio de tamaño/movimiento del HWND no debe mover la escena de la
-    // tarjeta durante el primer frame de la expansión.
     transform.dx += static_cast<float>(g_selectorSceneOffset.x +
                                       g_selectionExpansionSceneOffset.x);
     transform.dy += static_cast<float>(g_selectorSceneOffset.y +
@@ -850,8 +801,8 @@ typedef HRESULT (WINAPI* DwmSetWindowAttributeFn)(HWND, DWORD,
 typedef HRESULT (WINAPI* DwmGetWindowAttributeFn)(HWND, DWORD,
                                                    void*, DWORD);
 
-// Atributos y flags DWM usados por el glass y las miniaturas.
 static const DWORD kDwmWaExtendedFrameBounds = 9;
+static const DWORD kDwmTransitionsForcedDisabled = 3;
 static const DWORD kDwmWindowCornerPreference = 33;
 static const DWORD kDwmBorderColor = 34;
 static const DWORD kDwmColorNone = 0xFFFFFFFE;
@@ -880,6 +831,22 @@ struct CardStyleConfig
 };
 
 static CardStyleConfig g_cardStyle;
+
+static void ApplyVisualStylePalette()
+{
+    g_textNormalColor = RGB(208, 210, 218);
+    g_textSelectedColor = RGB(246, 247, 250);
+    g_counterTextColor = RGB(186, 188, 196);
+    g_cardStyle.glowEnabled = true;
+    g_cardStyle.glowIntensity = 1;
+    g_cardStyle.cardBackground = g_cardNormalColor;
+    g_cardStyle.selectedCardBackground = g_cardSelectedColor;
+    g_cardStyle.borderColor = RGB(10, 11, 13);
+    g_cardStyle.selectedBorderColor = RGB(20, 21, 23);
+    g_cardStyle.cornerRadius = 12;
+    g_cardStyle.selectedCornerRadius = 14;
+}
+
 
 // ESTADO
 
@@ -924,6 +891,7 @@ struct AppGroup
     std::wstring windowTitle;
     std::vector<HWND> windows;
     HWND representativeWindow;
+    ULONGLONG lastActivated;
     HICON icon;
     ID2D1Bitmap* iconBitmap;
     ID2D1LinearGradientBrush* surfaceBrushNormal;
@@ -936,6 +904,9 @@ struct UserWindowInfo
 {
     HWND hwnd;
     DWORD processId;
+    DWORD threadId;
+    FILETIME processCreationTime;
+    std::wstring windowClass;
     std::wstring processPath;
     std::wstring appName;
     std::wstring windowTitle;
@@ -943,20 +914,9 @@ struct UserWindowInfo
 };
 
 // ARQUITECTURA DE HILOS
-//
-//  Input thread : dueño de WH_MOUSE_LL (solo mientras el selector está
-//                 interactivo), del hotkey reenviado y del polling de
-//                 modificadores. El teclado del selector se procesa en su WndProc.
-//  UI thread    : dueño del HWND del selector, D2D/DWrite/GDI/DWM,
-//                 animaciones, timers, WinEvent hook, enumeración de ventanas,
-//                 iconos, información de procesos y activación de ventanas.
-//
-// Variables de un solo dueño: las "input" solo las toca el input thread y las
-// "ui" solo las toca el UI thread. Lo compartido usa Interlocked*.
 
 static HMODULE g_hModule = nullptr;
 
-// Workers (creados/cerrados por WhTool_ModInit / WhTool_ModUninit).
 static HANDLE g_inputThread = nullptr;
 static HANDLE g_uiThread = nullptr;
 static HANDLE g_inputReadyEvent = nullptr;
@@ -967,44 +927,30 @@ static volatile LONG g_inputInitOk = 0;
 static volatile LONG g_uiInitOk = 0;
 static volatile LONG g_shutdownRequested = 0;
 
-// Solo input thread.
 static HHOOK g_mouseHook = nullptr;
-static HWND volatile g_inputControlWnd = nullptr;   // ventana message-only
+static HWND volatile g_inputControlWnd = nullptr;
 
-// Estado compartido entre hooks y UI.
 static volatile LONG g_nextSessionId = 0;
-// Id de la sesión de selector actualmente activa (0 = ninguna). Lo publica el
-// input thread al abrir; el UI thread solo lo limpia con CAS sobre su propio id.
 static volatile LONG g_sessionActive = 0;
-// 1 mientras el selector acepta interacción de ratón (el UI thread lo gobierna).
 static volatile LONG g_uiSelectorOpen = 0;
-// 1 durante la expansión de confirmación; input y UI deben rechazar nuevas
-// sesiones para que otra pulsación no interrumpa la transición de 300 ms.
 static volatile LONG g_selectionTransitionActive = 0;
 static volatile LONG64 g_lastMousePt = 0;
 static volatile LONG g_mouseMovePending = 0;
 
-// Comandos input -> UI (PostThreadMessage) y UI -> input (ventana de control).
-static const UINT WM_UI_OPEN = WM_APP + 1;         // wParam=sessionId, lParam=shift
-static const UINT WM_UI_NAVIGATE = WM_APP + 4;     // wParam=sessionId, lParam=+1/-1
-static const UINT WM_UI_CONFIRM = WM_APP + 5;      // wParam=sessionId
-static const UINT WM_UI_CANCEL = WM_APP + 6;       // wParam=sessionId
-static const UINT WM_UI_MOUSE_MOVE = WM_APP + 7;   // posición en g_lastMousePt
-static const UINT WM_UI_MOUSE_BUTTON = WM_APP + 8; // wParam=mensaje, lParam=pt (16 bit)
-static const UINT WM_UI_MOUSE_WHEEL = WM_APP + 9;  // wParam=delta (short)
+static const UINT WM_UI_OPEN = WM_APP + 1;
+static const UINT WM_UI_NAVIGATE = WM_APP + 4;
+static const UINT WM_UI_CONFIRM = WM_APP + 5;
+static const UINT WM_UI_CANCEL = WM_APP + 6;
+static const UINT WM_UI_MOUSE_MOVE = WM_APP + 7;
+static const UINT WM_UI_MOUSE_BUTTON = WM_APP + 8;
+static const UINT WM_UI_MOUSE_WHEEL = WM_APP + 9;
 static const UINT WM_UI_SETTINGS = WM_APP + 10;
-static const UINT WM_IN_MOUSEHOOK = WM_APP + 20;   // wParam=1 instalar, 0 quitar
-static const UINT WM_IN_ACTIVATE = WM_APP + 21;     // wParam=target HWND
+static const UINT WM_IN_MOUSEHOOK = WM_APP + 20;
+static const UINT WM_IN_ACTIVATE = WM_APP + 21;
 
-// WM_UI_OPEN lParam: bit 0 = Shift pulsado (dirección inversa),
-// bit 1 = sesión iniciada por el hotkey reenviado desde Explorer.
 static const LPARAM kUiOpenShift = 1;
 static const LPARAM kUiOpenFromHotkey = 2;
 
-// Hotkey de Alt+Tab reenviado desde explorer.exe (ver sección EXPLORER).
-// Explorer localiza la ventana de control del input thread por clase y título:
-// FindWindow compara títulos sin enviar mensajes, así que el título publica si
-// la herramienta está lista para aceptar sesiones.
 static const WCHAR kInputControlClass[] = L"OverhauldedAltTabInput";
 static const WCHAR kInputControlTitleIdle[] = L"Overhaulded Alt+Tab";
 static const WCHAR kInputControlTitleReady[] = L"Overhaulded Alt+Tab (ready)";
@@ -1013,23 +959,22 @@ static const WPARAM kHotkeyFlagBackwards = 1;
 static const WPARAM kHotkeyFlagCtrl = 2;
 static UINT g_hotkeyMessage = 0;
 static void InitHotkeyMessage();
-// Sondeo del Alt físico durante sesiones Alt/AltGr: el hook puede perder el
-// key-up cuando el foreground es una ventana elevada.
 static const UINT_PTR kModifierReleasePollTimerId = 1;
 static const UINT kModifierReleasePollMs = 30;
 static const int kModifierReleaseTicks = 5;
 static const UINT_PTR kActivationRetryTimerId = 2;
 static const UINT kActivationRetryMs = 50;
 static const int kMaxActivationRetries = 20;
-static bool g_modifierReleasePolling = false;     // solo input thread
-static int g_modifierReleaseCount = 0;     // solo input thread
-static HWND g_inputActivationTarget = nullptr; // solo input thread
-static int g_inputActivationRetryCount = 0;     // solo input thread
-static BOOL g_inputActivationLastSetForegroundResult = FALSE; // solo input thread
+static bool g_modifierReleasePolling = false;
+static int g_modifierReleaseCount = 0;
+static HWND g_inputActivationTarget = nullptr;
+static int g_inputActivationRetryCount = 0;
+static BOOL g_inputActivationLastSetForegroundResult = FALSE;
+static HWND g_restoreTransitionTarget = nullptr;
+static BOOL g_restoreTransitionPreviousValue = FALSE;
+static bool g_restoreTransitionOverrideActive = false;
 
-// Solo UI thread.
 static HWND g_selector = nullptr;
-// El contenido D2D y la superficie visual viven en g_selector.
 static bool g_classesRegistered = false;
 static LONG g_uiSessionId = 0;
 static bool g_uiTabDown = false;
@@ -1040,7 +985,6 @@ static HMODULE g_shcoreApi = nullptr;
 typedef HRESULT (WINAPI* GetDpiForMonitorFn)(HMONITOR, int, UINT*, UINT*);
 static GetDpiForMonitorFn g_getDpiForMonitor = nullptr;
 
-// Colección visual estable: una ranura = un thumbnail DWM reutilizado.
 struct ThumbnailSlot
 {
     HTHUMBNAIL thumbnail;
@@ -1066,17 +1010,13 @@ static DwmGetCompositionTimingInfoFn g_dwmGetCompositionTimingInfo = nullptr;
 static bool g_dwmTimingResolved = false;
 static bool g_dwmGlassEnabled = false;
 
-// Selección lógica vs. posición animada. La colección de AppGroups no se toca.
 static float g_animOffset = 0.0f;
 static float g_animStartOffset = 0.0f;
 static double g_animStartTime = 0.0;
 static bool g_animActive = false;
 
-// Hover es exclusivamente visual y nunca sustituye a g_selected.
 static int g_hoveredSlot = -1;
 static bool g_hoveredCloseButton = false;
-// Mouse carousel drag is tracked on the UI thread. Selection is committed only
-// on release, while g_animOffset provides continuous Direct2D/DWM card motion.
 static bool g_mousePressActive = false;
 static bool g_mouseDragging = false;
 static int g_mousePressedSlot = -1;
@@ -1091,7 +1031,6 @@ static SelectorAnimationState g_selectorAnimation = SelectorAnimationState::None
 static double g_selectorAnimationStart = 0.0;
 static HWND g_pendingActivationTarget = nullptr;
 static HWND g_selectorOriginWindow = nullptr;
-// El selector tomó el foco (solo sesiones iniciadas por el hotkey de Explorer).
 static bool g_selectorFocusTaken = false;
 static bool g_cardExitActive = false;
 static int g_cardExitSlot = -1;
@@ -1127,13 +1066,12 @@ static HMODULE g_d2dApi = nullptr;
 static HMODULE g_dwriteApi = nullptr;
 
 static ID2D1Factory* g_d2dFactory = nullptr;
-static ID2D1DCRenderTarget* g_d2dDCRenderTarget = nullptr; // Target GDI para los modos no fullscreen.
-static ID2D1RenderTarget* g_d2dRenderTarget = nullptr;     // Target activo usado por los helpers D2D.
-static ID2D1HwndRenderTarget* g_fsHwndRenderTarget = nullptr; // Fullscreen: presentacion D2D por GPU, sin HDC/BitBlt.
+static ID2D1DCRenderTarget* g_d2dDCRenderTarget = nullptr;
+static ID2D1RenderTarget* g_d2dRenderTarget = nullptr;
+static ID2D1HwndRenderTarget* g_fsHwndRenderTarget = nullptr;
 static ID2D1SolidColorBrush* g_d2dBrush = nullptr;
 static ID2D1RadialGradientBrush* g_closeAccentBrush = nullptr;
 static ID2D1PathGeometry* g_closeButtonGeometry = nullptr;
-// Capas y máscara reutilizadas entre frames (antes se creaban por frame).
 static ID2D1Layer* g_sceneLayer = nullptr;
 static ID2D1Layer* g_cardExitLayer = nullptr;
 static ID2D1Layer* g_closeLayer = nullptr;
@@ -1146,7 +1084,6 @@ static IDWriteTextFormat* g_dwriteSelectedFormat = nullptr;
 static IDWriteTextFormat* g_dwriteNormalFormat = nullptr;
 static IDWriteTextFormat* g_dwriteCounterFormat = nullptr;
 static IDWriteTextFormat* g_dwriteCloseFormat = nullptr;
-// Escala con la que se construyeron los TextFormat / fuentes GDI actuales.
 static float g_dwriteFormatsScale = 0.0f;
 static float g_gdiFontsScale = 0.0f;
 
@@ -1185,12 +1122,55 @@ static HFONT g_secondaryFont = nullptr;
 
 static std::vector<AppGroup> g_groups;
 static std::vector<UserWindowInfo> g_userWindows;
-// UI thread only. A window remains here after WM_CLOSE is posted until it
-// actually disappears, so a synchronous refresh cannot re-add its card.
-static std::vector<HWND> g_pendingCloseWindows;
+struct PendingCloseWindow
+{
+    HWND hwnd;
+    DWORD processId;
+    DWORD threadId;
+    FILETIME processCreationTime;
+    std::wstring windowClass;
+};
+static std::vector<PendingCloseWindow> g_pendingCloseWindows;
 static std::vector<std::pair<DWORD, size_t>> g_groupWindowCursors;
 static int g_selected = 0;
 static SelectorState g_state = SelectorState::Idle;
+
+static bool IsCompactAutomaticMode()
+{
+    return g_groups.size() >= 2 && g_groups.size() <= 3;
+}
+
+static int GetCarouselCenterSlot()
+{
+    return IsCompactAutomaticMode()
+        ? (GetCarouselSlotCount() - 1) / 2
+        : GetCarouselSlotCount() / 2;
+}
+static int GetCarouselSlotCount()
+{
+    const int count = static_cast<int>(g_groups.size());
+    return count >= 4 ? kCarouselMaxCards : count;
+}
+static int GetSelectedSlot()
+{
+    return IsCompactAutomaticMode() ? g_selected : GetCarouselCenterSlot();
+}
+static bool IsSlotSelected(int slot)
+{
+    if (IsCompactAutomaticMode())
+        return slot == g_selected;
+    return fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset) < 0.5f;
+}
+static float GetSlotSelectionDistance(int slot)
+{
+    return IsCompactAutomaticMode()
+        ? fabsf(static_cast<float>(slot - g_selected))
+        : fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
+}
+static bool IsSingleCardMode()
+{
+    return g_groups.size() == 1;
+}
 
 
 static bool LoadGdiFunctions();
@@ -1249,6 +1229,7 @@ struct CardSlotGeometry
 static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
 {
     CardSlotGeometry g = {};
+
     if (slot <= -1)
     {
         g.left = -115.0f;
@@ -1325,15 +1306,12 @@ static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
 static CardSlotGeometry GetSlotKeyframe(int slot)
 {
     CardSlotGeometry g = {};
-    if (g_visibleCardCount == 5)
+    if (GetCarouselSlotCount() == kCarouselMaxCards)
     {
-        // Keep the original five-card trajectory, including its off-screen
-        // keyframes used while a navigation animation is in progress.
         g = GetCanonicalSlotKeyframe(slot);
     }
     else
     {
-        // The three-card layout reuses the center and adjacent keyframes.
         const int relative = slot - GetCarouselCenterSlot();
         const int canonical = std::max(-1, std::min(1, relative)) + 2;
         g = GetCanonicalSlotKeyframe(canonical);
@@ -1349,6 +1327,44 @@ static inline float LerpFloat(float a, float b, float t)
 
 static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
 {
+    if (IsCompactAutomaticMode())
+    {
+        const int slot = std::max(0, std::min(
+            static_cast<int>(g_groups.size()) - 1,
+            static_cast<int>(roundf(virtualSlot))));
+        const int count = static_cast<int>(g_groups.size());
+        const float cardWidth = count == 2 ? 340.0f : 320.0f;
+        const float cardHeight = count == 2 ? 240.0f : 225.0f;
+        const float gap = count == 2 ? 36.0f : 28.0f;
+        const float totalWidth = count * cardWidth + (count - 1) * gap;
+        const float startX = (1220.0f - totalWidth) * 0.5f;
+        const float left = startX + slot * (cardWidth + gap);
+        CardSlotGeometry compact = {};
+        compact.left = left;
+        compact.top = count == 2 ? 85.0f : 95.0f;
+        compact.right = left + cardWidth;
+        compact.bottom = compact.top + cardHeight;
+        compact.cornerRadius = 14.0f;
+        compact.headerHeight = 32.0f;
+        compact.padding = 10.0f;
+        compact.left *= g_uiScale.value;
+        compact.top *= g_uiScale.value;
+        compact.right *= g_uiScale.value;
+        compact.bottom *= g_uiScale.value;
+        compact.cornerRadius *= g_uiScale.value;
+        compact.headerHeight *= g_uiScale.value;
+        compact.padding *= g_uiScale.value;
+        if (g_carouselSpread != 1.0f)
+        {
+            const float spreadCenterX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
+            const float shift = ((compact.left + compact.right) * 0.5f - spreadCenterX) *
+                                (g_carouselSpread - 1.0f);
+            compact.left += shift;
+            compact.right += shift;
+        }
+        return compact;
+    }
+
     int k0 = static_cast<int>(floorf(virtualSlot));
     int k1 = k0 + 1;
     float f = virtualSlot - static_cast<float>(k0);
@@ -1374,8 +1390,6 @@ static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
 
     if (g_carouselSpread != 1.0f)
     {
-        // Apertura/cierre: las cards se abren desde el centro de la superficie
-        // con el mismo progreso que escala el fondo.
         const float spreadCenterX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
         const float shift = ((res.left + res.right) * 0.5f - spreadCenterX) *
                             (g_carouselSpread - 1.0f);
@@ -1383,12 +1397,14 @@ static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
         res.right += shift;
     }
 
+
     return res;
 }
 
 static RECT GetSlotCardRect(int slot);
 static RECT GetSlotHeaderRect(int slot);
 static RECT GetSlotPreviewRect(int slot);
+
 static RECT GetCounterRect();
 static RECT GetCloseButtonRect(int slot);
 static RECT GetCloseHoverButtonRect(int slot);
@@ -1487,7 +1503,6 @@ static D2D1_COLOR_F AddMediaAccent(const D2D1_COLOR_F& base,
 static void UiEndSession();
 static void LeaveActiveState(SelectorState newState);
 
-// ESTADO DEL TECLADO (solo input thread)
 
 static ModifierSession g_sessionModifier = ModifierSession::None;
 static LONG g_inputSessionId = 0;
@@ -1500,7 +1515,6 @@ static bool g_altMenuMaskPending = false;
 
 // UTILIDADES DE ESTADO
 
-// Los hooks nunca llaman a las APIs de ventana desde aquí: solo publican.
 static bool PostUiCommand(UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
@@ -1520,8 +1534,6 @@ static void PostInputControl(UINT message, WPARAM wParam)
         PostMessageW(control, message, wParam, 0);
 }
 
-// El UI thread activa/desactiva la interacción de ratón; el input thread
-// instala WH_MOUSE_LL solo mientras el selector acepta interacción.
 static void UiSetInteractive(bool on)
 {
     LONG next = on ? 1 : 0;
@@ -1530,7 +1542,6 @@ static void UiSetInteractive(bool on)
         PostInputControl(WM_IN_MOUSEHOOK, static_cast<WPARAM>(next));
 }
 
-// Termina la sesión desde el lado UI. CAS: nunca pisa una sesión más nueva.
 static void UiEndSession()
 {
     UiSetInteractive(false);
@@ -1561,8 +1572,6 @@ static void MarkSelectorActivity()
     g_lastSelectorActivity = GetTickCount64();
 }
 
-// Estado físico de los modificadores, actualizado al iniciar y por el sondeo
-// periódico de la sesión (no depende de eventos de teclado globales).
 static bool IsAltGrPhysicallyDown();
 static void InputResetKeyboardState()
 {
@@ -1588,7 +1597,6 @@ static void ClearSelectorKeyboardSession()
     g_altGrActive = IsAltGrPhysicallyDown();
 }
 
-// Solo UI thread: reconcilia el estado visual/temporizado al cerrar.
 static void CleanupKeyboardState()
 {
     if (g_cleanupInProgress)
@@ -1628,9 +1636,6 @@ static std::wstring BaseNameWithoutExtension(const std::wstring& path)
     return name.empty() ? L"Application" : name;
 }
 
-// A 32-bit tool process is redirected from System32 to SysWOW64. Use the
-// Sysnative alias for metadata/icon APIs when the target path names a native
-// System32 executable, so 64-bit-only applications keep their real names/icons.
 static std::wstring GetNativeSystemPathForApi(const std::wstring& path)
 {
 #if defined(_WIN64)
@@ -1781,14 +1786,13 @@ static bool GetProcessDetails(DWORD processId, std::wstring* path, std::wstring*
     if (!process)
         return false;
 
-    wchar_t buffer[1024] = {};
-    DWORD length = ARRAYSIZE(buffer);
-    BOOL ok = QueryFullProcessImageNameW(process, 0, buffer, &length);
+    std::wstring fullPath(32768, L'\0');
+    DWORD length = static_cast<DWORD>(fullPath.size());
+    BOOL ok = QueryFullProcessImageNameW(process, 0, &fullPath[0], &length);
     CloseHandle(process);
     if (!ok || length == 0)
         return false;
-
-    std::wstring fullPath(buffer, length);
+    fullPath.resize(length);
     if (path)
         *path = fullPath;
     if (appName)
@@ -1819,9 +1823,6 @@ static bool IsFullscreenApplicationWindow(HWND hwnd)
     if (!GetMonitorInfoW(monitor, &monitorInfo))
         return false;
 
-    // Borderless fullscreen windows are commonly WS_POPUP windows without
-    // WS_EX_APPWINDOW or a normal frame. Accept only a top-level window whose
-    // bounds cover an entire monitor (or its work area), not every popup.
     const LONG tolerance = 4;
     const RECT* candidates[] = { &monitorInfo.rcMonitor, &monitorInfo.rcWork };
     for (size_t i = 0; i < ARRAYSIZE(candidates); ++i)
@@ -1900,16 +1901,11 @@ static WindowClassification ClassifyApplicationWindow(
     return WindowClassification::Unknown;
 }
 
-// Ventanas legítimas que Windows/host marcan como owned o ToolWindow y que el
-// filtro estricto descartaba (consolas, terminales, visor/editor de Windhawk).
-// Solo se consulta para ventanas que ya iban a ser rechazadas por GW_OWNER o
-// WS_EX_TOOLWINDOW: no convierte todas las ToolWindow en aplicaciones.
 static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
                                             const std::wstring& processPath,
                                             const std::wstring& appName,
                                             const std::wstring& windowClass)
 {
-    // Nunca ventanas de nuestro propio proceso (selector, ventanas internas).
     if (processId == GetCurrentProcessId())
         return false;
 
@@ -1917,7 +1913,6 @@ static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
     std::wstring executableName = LowerAscii(BaseNameWithoutExtension(processPath));
     std::wstring cls = LowerAscii(windowClass);
 
-    // Consolas clásicas (cmd/PowerShell en conhost) y Windows Terminal.
     if (cls == L"consolewindowclass" || cls == L"cascadia_hosting_window_class")
         return true;
 
@@ -1927,8 +1922,6 @@ static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
                                     WS_MINIMIZEBOX | WS_MAXIMIZEBOX |
                                     WS_SYSMENU)) != 0;
     bool hasApplicationStyle = (exStyle & WS_EX_APPWINDOW) != 0;
-    // Exigir marco/AppWindow descarta ventanas auxiliares (IME, tooltips...)
-    // que pertenezcan al mismo proceso.
     if (!hasNormalFrame && !hasApplicationStyle)
         return false;
 
@@ -1940,7 +1933,6 @@ static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
         name == L"wt" || executableName == L"wt")
         return true;
 
-    // Visor/editor de código de Windhawk (ventana Chromium del proceso UI).
     if ((name == L"windhawk" || executableName == L"windhawk") && cls == L"chrome_widgetwin_1")
         return true;
 
@@ -1968,7 +1960,6 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
     if ((exStyle & WS_EX_NOACTIVATE) != 0)
         return false;
 
-    // Owned / ToolWindow: rechazo por defecto, salvo la allowlist de abajo.
     const bool ownedOrToolWindow =
         GetWindow(hwnd, GW_OWNER) != nullptr ||
         (exStyle & WS_EX_TOOLWINDOW) != 0;
@@ -1993,8 +1984,6 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
         if (!IsConsoleOrWindhawkViewerWindow(hwnd, pid, allowPath, allowName, windowClass))
             return false;
 
-        // Allowlist: se acepta directamente. El resto de filtros (que exigen
-        // ventana sin owner) no aplican a estas ventanas.
         if (allowName.empty())
             allowName = title;
         if (processId)
@@ -2057,16 +2046,77 @@ static bool IsWindowPendingClose(HWND hwnd);
 static void MarkWindowPendingClose(HWND hwnd);
 static void UnmarkWindowPendingClose(HWND hwnd);
 
-// Devuelve true si la ventana quedó (o ya estaba) en el registro MRU.
-static bool RegisterUserWindow(HWND hwnd, bool activity)
+static bool CaptureWindowIdentity(HWND hwnd, DWORD* processId, DWORD* threadId,
+                                  FILETIME* processCreationTime,
+                                  std::wstring* windowClass)
 {
-    if (IsWindowPendingClose(hwnd))
+    if (!hwnd || !IsWindow(hwnd))
         return false;
 
-    DWORD processId = 0;
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
+    if (!tid || !pid)
+        return false;
+
+    wchar_t className[256] = {};
+    int classLength = GetClassNameW(hwnd, className, ARRAYSIZE(className));
+    if (classLength <= 0)
+        return false;
+
+    FILETIME creation = {};
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (process)
+    {
+        FILETIME exitTime = {}, kernelTime = {}, userTime = {};
+        if (!GetProcessTimes(process, &creation, &exitTime, &kernelTime, &userTime))
+            creation = {};
+        CloseHandle(process);
+    }
+
+    if (processId) *processId = pid;
+    if (threadId) *threadId = tid;
+    if (processCreationTime) *processCreationTime = creation;
+    if (windowClass) *windowClass = std::wstring(className, classLength);
+    return true;
+}
+
+static bool SameProcessCreationTime(const FILETIME& a, const FILETIME& b)
+{
+    const bool aKnown = a.dwLowDateTime || a.dwHighDateTime;
+    const bool bKnown = b.dwLowDateTime || b.dwHighDateTime;
+    return !aKnown || !bKnown ||
+           (a.dwLowDateTime == b.dwLowDateTime &&
+            a.dwHighDateTime == b.dwHighDateTime);
+}
+
+static bool IsUserWindowIdentityCurrent(const UserWindowInfo& item)
+{
+    DWORD pid = 0, tid = 0;
+    FILETIME creation = {};
+    std::wstring windowClass;
+    if (!CaptureWindowIdentity(item.hwnd, &pid, &tid, &creation, &windowClass))
+        return false;
+
+    return pid == item.processId && tid == item.threadId &&
+           windowClass == item.windowClass &&
+           SameProcessCreationTime(item.processCreationTime, creation);
+}
+
+static bool RegisterUserWindow(HWND hwnd, bool activity)
+{
+    if (!hwnd || IsWindowPendingClose(hwnd))
+        return false;
+
+    DWORD processId = 0, threadId = 0;
+    FILETIME processCreationTime = {};
+    std::wstring windowClass;
+    if (!CaptureWindowIdentity(hwnd, &processId, &threadId,
+                               &processCreationTime, &windowClass))
+        return false;
+
     std::wstring processPath;
     std::wstring appName;
-    if (!IsRealUserApplicationWindow(hwnd, &processId, &processPath, &appName))
+    if (!IsRealUserApplicationWindow(hwnd, nullptr, &processPath, &appName))
         return false;
 
     int titleLength = GetWindowTextLengthW(hwnd);
@@ -2083,6 +2133,25 @@ static bool RegisterUserWindow(HWND hwnd, bool activity)
         UserWindowInfo& item = g_userWindows[i];
         if (item.hwnd == hwnd)
         {
+            const bool sameIdentity =
+                item.processId == processId && item.threadId == threadId &&
+                item.windowClass == windowClass &&
+                SameProcessCreationTime(item.processCreationTime, processCreationTime);
+            if (!sameIdentity)
+            {
+                item = {};
+                item.hwnd = hwnd;
+                item.processId = processId;
+                item.threadId = threadId;
+                item.processCreationTime = processCreationTime;
+                item.windowClass = windowClass;
+                item.processPath = processPath;
+                item.appName = appName;
+                item.windowTitle = windowTitle;
+                item.lastActivated = activity ? now : 0;
+                return true;
+            }
+
             item.windowTitle = windowTitle;
             item.appName = appName;
             item.processPath = processPath;
@@ -2095,6 +2164,9 @@ static bool RegisterUserWindow(HWND hwnd, bool activity)
     UserWindowInfo item = {};
     item.hwnd = hwnd;
     item.processId = processId;
+    item.threadId = threadId;
+    item.processCreationTime = processCreationTime;
+    item.windowClass = windowClass;
     item.processPath = processPath;
     item.appName = appName;
     item.windowTitle = windowTitle;
@@ -2105,10 +2177,25 @@ static bool RegisterUserWindow(HWND hwnd, bool activity)
 
 static bool IsWindowPendingClose(HWND hwnd)
 {
-    for (size_t i = 0; i < g_pendingCloseWindows.size(); ++i)
+    for (size_t i = 0; i < g_pendingCloseWindows.size();)
     {
-        if (g_pendingCloseWindows[i] == hwnd)
+        PendingCloseWindow& pending = g_pendingCloseWindows[i];
+        if (pending.hwnd != hwnd)
+        {
+            ++i;
+            continue;
+        }
+
+        UserWindowInfo identity = {};
+        identity.hwnd = pending.hwnd;
+        identity.processId = pending.processId;
+        identity.threadId = pending.threadId;
+        identity.processCreationTime = pending.processCreationTime;
+        identity.windowClass = pending.windowClass;
+        if (IsUserWindowIdentityCurrent(identity))
             return true;
+
+        g_pendingCloseWindows.erase(g_pendingCloseWindows.begin() + i);
     }
     return false;
 }
@@ -2117,19 +2204,32 @@ static void MarkWindowPendingClose(HWND hwnd)
 {
     if (!hwnd || IsWindowPendingClose(hwnd))
         return;
-    g_pendingCloseWindows.push_back(hwnd);
+
+    PendingCloseWindow pending = {};
+    pending.hwnd = hwnd;
+    if (!CaptureWindowIdentity(hwnd, &pending.processId, &pending.threadId,
+                               &pending.processCreationTime, &pending.windowClass))
+        return;
+    g_pendingCloseWindows.push_back(std::move(pending));
 }
 
 static void UnmarkWindowPendingClose(HWND hwnd)
 {
-    std::erase(g_pendingCloseWindows, hwnd);
+    std::erase_if(g_pendingCloseWindows,
+                  [hwnd](const PendingCloseWindow& item) { return item.hwnd == hwnd; });
 }
 
 static void PrunePendingCloseWindows()
 {
     for (size_t i = 0; i < g_pendingCloseWindows.size();)
     {
-        if (!g_pendingCloseWindows[i] || !IsWindow(g_pendingCloseWindows[i]))
+        UserWindowInfo identity = {};
+        identity.hwnd = g_pendingCloseWindows[i].hwnd;
+        identity.processId = g_pendingCloseWindows[i].processId;
+        identity.threadId = g_pendingCloseWindows[i].threadId;
+        identity.processCreationTime = g_pendingCloseWindows[i].processCreationTime;
+        identity.windowClass = g_pendingCloseWindows[i].windowClass;
+        if (!IsUserWindowIdentityCurrent(identity))
         {
             g_pendingCloseWindows.erase(g_pendingCloseWindows.begin() + i);
             continue;
@@ -2144,7 +2244,8 @@ static void PruneUserWindowRegistry()
     for (size_t i = 0; i < g_userWindows.size();)
     {
         HWND hwnd = g_userWindows[i].hwnd;
-        if (!hwnd || !IsWindow(hwnd) || hwnd == g_selector ||
+        if (!hwnd || hwnd == g_selector ||
+            !IsUserWindowIdentityCurrent(g_userWindows[i]) ||
             IsWindowPendingClose(hwnd))
         {
             g_userWindows.erase(g_userWindows.begin() + i);
@@ -2160,7 +2261,6 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM)
     return TRUE;
 }
 
-// MRU por evento: reemplaza el polling de GetForegroundWindow cada 250 ms.
 static void CALLBACK ForegroundRetryProc(HWND, UINT, UINT_PTR id, DWORD)
 {
     KillTimer(nullptr, id);
@@ -2179,19 +2279,54 @@ static void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwn
     if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
         return;
 
-    PruneUserWindowRegistry();
     UnmarkWindowPendingClose(hwnd);
     if (RegisterUserWindow(hwnd, true))
         return;
 
-    // Algunas ventanas llegan a primer plano antes de tener título/estilos
-    // finales. Un único reintento diferido (no es polling permanente).
     g_foregroundRetryWindow = hwnd;
     if (!g_foregroundRetryTimer)
         g_foregroundRetryTimer = SetTimer(nullptr, 0, 250, ForegroundRetryProc);
 }
 
-static void RefreshWindowList()
+static HMONITOR g_filterMonitor = nullptr;
+
+static HMONITOR GetWindowMonitorForFilter(HWND hwnd)
+{
+    if (!hwnd || !IsWindow(hwnd))
+        return nullptr;
+    if (IsIconic(hwnd))
+    {
+        WINDOWPLACEMENT placement = {};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(hwnd, &placement))
+            return MonitorFromRect(&placement.rcNormalPosition,
+                                   MONITOR_DEFAULTTONEAREST);
+    }
+    return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+}
+
+static HMONITOR ResolveFilterMonitor(HWND originWindow)
+{
+    switch (g_monitorFilterMode)
+    {
+    case MonitorFilterMode::Cursor:
+    {
+        POINT cursor = {};
+        if (GetCursorPos(&cursor))
+            return MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+        break;
+    }
+    case MonitorFilterMode::Foreground:
+        if (originWindow && IsWindow(originWindow))
+            return MonitorFromWindow(originWindow, MONITOR_DEFAULTTONEAREST);
+        break;
+    default:
+        break;
+    }
+    return nullptr;
+}
+
+static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
 {
     ReleaseGroupResources();
     PruneUserWindowRegistry();
@@ -2201,12 +2336,26 @@ static void RefreshWindowList()
     g_groups.clear();
     HWND foreground = GetForegroundWindow();
 
-    // Cada HWND válido es una tarjeta independiente, incluso si varias
-    // ventanas pertenecen al mismo proceso.
+    if (g_filterMonitor && fallbackToAllIfEmpty)
+    {
+        bool anyOnMonitor = false;
+        for (size_t i = 0; i < g_userWindows.size() && !anyOnMonitor; ++i)
+        {
+            const HWND candidate = g_userWindows[i].hwnd;
+            anyOnMonitor =
+                IsRealUserApplicationWindow(candidate, nullptr, nullptr, nullptr) &&
+                GetWindowMonitorForFilter(candidate) == g_filterMonitor;
+        }
+        if (!anyOnMonitor)
+            g_filterMonitor = nullptr;
+    }
+
     for (size_t i = 0; i < g_userWindows.size(); ++i)
     {
         UserWindowInfo& item = g_userWindows[i];
         if (!IsRealUserApplicationWindow(item.hwnd, nullptr, nullptr, nullptr))
+            continue;
+        if (g_filterMonitor && GetWindowMonitorForFilter(item.hwnd) != g_filterMonitor)
             continue;
 
         bool duplicate = false;
@@ -2227,13 +2376,14 @@ static void RefreshWindowList()
         group.appName = item.appName;
         group.windowTitle = item.windowTitle;
         group.representativeWindow = item.hwnd;
+        group.lastActivated = item.lastActivated;
         group.icon = GetApplicationIcon(item.hwnd, item.processPath, &group.ownIcon);
         group.iconBitmap = nullptr;
         group.windows.push_back(item.hwnd);
         g_groups.push_back(group);
     }
 
-    // La ventana en primer plano va primero; el resto conserva el orden MRU.
+    size_t sortBegin = 0;
     for (size_t i = 0; i < g_groups.size(); ++i)
     {
         if (g_groups[i].representativeWindow == foreground)
@@ -2244,47 +2394,18 @@ static void RefreshWindowList()
                 g_groups[0] = g_groups[i];
                 g_groups[i] = first;
             }
+            sortBegin = 1;
             break;
         }
     }
 
-    for (size_t i = 1; i < g_groups.size(); ++i)
+    if (g_groups.size() > sortBegin + 1)
     {
-        size_t newest = i;
-        ULONGLONG newestTime = 0;
-        for (size_t j = 0; j < g_userWindows.size(); ++j)
-        {
-            if (g_userWindows[j].hwnd == g_groups[newest].representativeWindow)
-            {
-                newestTime = g_userWindows[j].lastActivated;
-                break;
-            }
-        }
-
-        for (size_t j = i + 1; j < g_groups.size(); ++j)
-        {
-            ULONGLONG candidateTime = 0;
-            for (size_t k = 0; k < g_userWindows.size(); ++k)
-            {
-                if (g_userWindows[k].hwnd == g_groups[j].representativeWindow)
-                {
-                    candidateTime = g_userWindows[k].lastActivated;
-                    break;
-                }
-            }
-            if (candidateTime > newestTime)
-            {
-                newest = j;
-                newestTime = candidateTime;
-            }
-        }
-
-        if (newest != i)
-        {
-            AppGroup ordered = g_groups[i];
-            g_groups[i] = g_groups[newest];
-            g_groups[newest] = ordered;
-        }
+        std::stable_sort(g_groups.begin() + sortBegin, g_groups.end(),
+                         [](const AppGroup& a, const AppGroup& b)
+                         {
+                             return a.lastActivated > b.lastActivated;
+                         });
     }
 
     g_selected = 0;
@@ -2326,11 +2447,10 @@ static const std::wstring& MakeCounterText()
 
 // DPI POR MONITOR
 
-// DPI efectivo del monitor (shcore.dll, resuelto dinámicamente). 1.0 = 100%.
 static float GetMonitorDpiScale(HMONITOR monitor)
 {
     if (!g_shcoreApi)
-        g_shcoreApi = LoadLibraryW(L"shcore.dll");
+        g_shcoreApi = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (g_shcoreApi && !g_getDpiForMonitor)
         g_getDpiForMonitor = reinterpret_cast<GetDpiForMonitorFn>(
             GetProcAddress(g_shcoreApi, "GetDpiForMonitor"));
@@ -2352,7 +2472,6 @@ static void UpdateUIScaleForMonitor(HMONITOR monitor)
         UpdateUIScaleForWorkArea(info.rcWork, GetMonitorDpiScale(monitor));
 }
 
-// Marca el hilo actual como Per-Monitor-V2 (solo afecta a este hilo).
 static void SetThreadPerMonitorAwareV2()
 {
     typedef HANDLE (WINAPI* SetThreadDpiAwarenessContextFn)(HANDLE);
@@ -2518,7 +2637,7 @@ static HICON GetApplicationIcon(HWND hwnd, const std::wstring& processPath, bool
     {
         HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
         if (!shell32)
-            shell32 = LoadLibraryW(L"shell32.dll");
+            shell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (shell32)
         {
             typedef UINT (WINAPI* ExtractIconExWFn)(LPCWSTR, int, HICON*, HICON*, UINT);
@@ -2541,8 +2660,6 @@ static HICON GetApplicationIcon(HWND hwnd, const std::wstring& processPath, bool
     return LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
 }
 
-// Captura fullscreen estática. La imagen nítida conserva resolución nativa para
-// la revelación inicial; el blur se reduce antes del efecto y se escala al dibujar.
 static const IID kIidD2D1Factory1 = {
     0xbb12d362, 0xdaee, 0x4b9a, { 0xaa, 0x1d, 0x14, 0xba, 0x40, 0x1c, 0xfa, 0x1f }
 };
@@ -2671,7 +2788,7 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
     BITMAPINFO captureInfo = {};
     captureInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     captureInfo.bmiHeader.biWidth = width;
-    captureInfo.bmiHeader.biHeight = -height; // Top-down; matches D2D row order.
+    captureInfo.bmiHeader.biHeight = -height;
     captureInfo.bmiHeader.biPlanes = 1;
     captureInfo.bmiHeader.biBitCount = 32;
     captureInfo.bmiHeader.biCompression = BI_RGB;
@@ -2760,8 +2877,6 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
         { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
 
     {
-        // Downsample on CPU before uploading: the Gaussian blur processes only
-        // 1/16 of the monitor pixels, greatly reducing GPU work and readback cost.
         try
         {
             blurInput.resize(static_cast<size_t>(blurWidth) * blurHeight);
@@ -2802,15 +2917,10 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
     blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
                          kFullscreenBlurStandardDeviation /
                              static_cast<float>(kFullscreenBlurDownsample));
-    // Gaussian Blur's default optimization is Balanced. Leave it at that default
-    // to remain compatible with SDK headers that omit the enum symbol.
     blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
                          D2D1_BORDER_MODE_HARD);
 
     {
-        // Ruta solo Direct2D: el destino del blur y la copia legible por CPU
-        // son bitmaps de D2D. Se evita CreateBitmapFromDxgiSurface, que fallaba
-        // en este equipo.
         const D2D1_SIZE_U bitmapSize = D2D1::SizeU(blurWidth, blurHeight);
         const D2D1_PIXEL_FORMAT bitmapFormat = D2D1::PixelFormat(
             DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
@@ -2913,9 +3023,6 @@ cleanup:
     return success;
 }
 
-// Draw the captured desktop directly to the selector's HDC. This keeps the
-// fullscreen background independent of Direct2D's ability to allocate a
-// monitor-sized bitmap; the GDI scene renderer draws the cards over it.
 static bool DrawFullscreenBackgroundGdi(HDC hdc)
 {
     if (!hdc)
@@ -2949,9 +3056,6 @@ static bool DrawFullscreenBackgroundGdi(HDC hdc)
     if (!BitBlt(hdc, 0, 0, width, height, g_fsSharp.dc, 0, 0, SRCCOPY))
         return false;
 
-    // La revelación del desenfoque nace del centro del monitor (no de los
-    // bordes del rectángulo del selector) y crece hasta cubrir todo el monitor,
-    // con el mismo progreso (g_scenePresence) que anima el resto de la escena.
     const float progress = Clamp01(g_scenePresence);
     const int centerX = width / 2;
     const int centerY = height / 2;
@@ -2961,8 +3065,6 @@ static bool DrawFullscreenBackgroundGdi(HDC hdc)
     int bottom = height;
     if (g_animationStyle == AnimationStyle::Rct)
     {
-        // RCT fullscreen reveal: begin as a horizontal line across the screen,
-        // then expand vertically from the center until the blur covers the monitor.
         const int halfHeight = std::max(1, static_cast<int>(centerY * progress));
         top = std::max(0, centerY - halfHeight);
         bottom = std::min(height, centerY + halfHeight);
@@ -3011,8 +3113,6 @@ static bool DrawFullscreenBackgroundGdi(HDC hdc)
     return success;
 }
 
-// Direct2D: el escritorio nítido conserva resolución nativa; el bitmap de blur
-// ocupa 1/16 de los píxeles. Ambos se reconstruyen desde RAM si cambia el target.
 static bool EnsureFullscreenD2DBitmaps()
 {
     if (g_fsSharpD2D && g_fsBlurD2D)
@@ -3049,9 +3149,6 @@ static bool EnsureFullscreenD2DBitmaps()
     return true;
 }
 
-// Fondo fullscreen dentro de la escena D2D. Usa g_scenePresence, el mismo progreso
-// que apertura/cierre y carrusel; no crea un reloj ni una animación independiente.
-// Se dibuja antes del transform de escena para mantener la continuidad espacial.
 static void DrawFullscreenBackgroundD2D()
 {
     if (!g_d2dRenderTarget || !g_fsSharpD2D || !g_fsBlurD2D)
@@ -3063,7 +3160,6 @@ static void DrawFullscreenBackgroundD2D()
         g_fsSharpD2D, D2D1::RectF(0.0f, 0.0f, width, height), 1.0f,
         D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
 
-    // Revelación desde el centro del monitor hasta cubrirlo.
     const float progress = Clamp01(g_scenePresence);
     const float cx = width * 0.5f;
     const float cy = height * 0.5f;
@@ -3073,7 +3169,6 @@ static void DrawFullscreenBackgroundD2D()
     float bottom = height;
     if (g_animationStyle == AnimationStyle::Rct)
     {
-        // RCT starts as a full-width horizontal line and reveals vertically.
         const float halfHeight = std::max(1.0f, cy * progress);
         top = cy - halfHeight;
         bottom = cy + halfHeight;
@@ -3099,8 +3194,6 @@ static void DrawFullscreenBackgroundD2D()
         D2D1::RectF((width - dw) * 0.5f, (height - dh) * 0.5f,
                     (width + dw) * 0.5f, (height + dh) * 0.5f),
         1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-    // Pattern Waves shares the exact fullscreen reveal clip and presence curve.
-    // Its procedural field is evaluated in monitor coordinates, not selector space.
     if (IsPatternWavesActive())
     {
         RECT fullscreenPatternRect = { 0, 0,
@@ -3150,8 +3243,6 @@ static bool PrepareFullscreenBackdrop(const RECT& monitorRect, const RECT& selec
     g_blurredDesktopBitmapInfo.bmiHeader.biPlanes = 1;
     g_blurredDesktopBitmapInfo.bmiHeader.biBitCount = 32;
     g_blurredDesktopBitmapInfo.bmiHeader.biCompression = BI_RGB;
-    // The pixel buffers are rendered directly into the selector HDC. Do not
-    // make readiness depend on creating monitor-sized Direct2D bitmaps.
     g_blurredBackgroundReady = true;
     Wh_Log(L"Fullscreen background ready (%d x %d)", width, height);
     return true;
@@ -3159,8 +3250,6 @@ static bool PrepareFullscreenBackdrop(const RECT& monitorRect, const RECT& selec
 
 static void UpdateFullscreenBackdrop()
 {
-    // El fondo solo cambia cuando cambia la presencia: mientras está quieto no
-    // se invalida el monitor entero (el frame loop invalida solo las cards).
     if (g_blurredBackgroundReady && g_selector && IsWindow(g_selector) &&
         g_scenePresence != g_lastBackdropPresence)
     {
@@ -3182,8 +3271,6 @@ static void ReleaseDWriteFormats()
 
 static bool LoadD2DAndDWrite()
 {
-    // Los TextFormat dependen de g_uiScale: si la escala cambió (otro monitor /
-    // otro DPI) se reconstruyen en lugar de reutilizar formatos obsoletos.
     if (g_d2dFactory && g_d2dRenderTarget && g_dwriteFactory &&
         g_dwriteFormatsScale == g_uiScale.value)
     {
@@ -3212,10 +3299,8 @@ static bool LoadD2DAndDWrite()
 
     if (g_d2dFactory && !g_d2dDCRenderTarget)
     {
-        // El layout está expresado en píxeles físicos: el render target debe
-        // trabajar a 96 DPI (1 DIP = 1 px) y no heredar el DPI del sistema.
         D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            D2D1_RENDER_TARGET_TYPE_HARDWARE,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
             96.0f, 96.0f, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_FEATURE_LEVEL_DEFAULT
         );
@@ -3273,7 +3358,6 @@ static bool LoadD2DAndDWrite()
             g_dwriteNormalFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             g_dwriteNormalFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         }
-        // Match GDI's DT_END_ELLIPSIS while clipping to each card's true text area.
         IDWriteInlineObject* ellipsisSign = nullptr;
         IDWriteTextFormat* trimmingFormat = g_dwriteNormalFormat
             ? g_dwriteNormalFormat : g_dwriteSelectedFormat;
@@ -3501,9 +3585,6 @@ static void UnloadD2DAndDWrite()
     if (g_d2dApi) { FreeLibrary(g_d2dApi); g_d2dApi = nullptr; }
 }
 
-// D2DERR_RECREATE_TARGET: los recursos dependientes del dispositivo se liberan
-// y se recrean de forma perezosa en el siguiente frame. Los iconos HICON y los
-// datos de grupos se conservan.
 static void ReleaseD2DDeviceResources()
 {
     for (size_t i = 0; i < g_groups.size(); ++i)
@@ -3552,7 +3633,7 @@ static bool LoadGdiFunctions()
         return true;
 
     if (!g_gdiApi)
-        g_gdiApi = LoadLibraryW(L"gdi32.dll");
+        g_gdiApi = LoadLibraryExW(L"gdi32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_gdiApi)
         return false;
 
@@ -3645,7 +3726,6 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
             if (maximum < 28)
                 continue;
 
-            // Favorecer tonos con información cromática sin dejar que dominen.
             double saturation = static_cast<double>(maximum - minimum) / 255.0;
             double brightness = static_cast<double>(maximum) / 255.0;
             double weight = 0.25 + saturation * 0.75;
@@ -3665,7 +3745,6 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
             int minimum = std::min(r, std::min(g, b));
             if (maximum > 0 && maximum - minimum >= 8)
             {
-                // La card sigue siendo Obsidian: el color solo ilumina su borde.
                 const float scale = 0.78f;
                 result.color = RGB(static_cast<BYTE>(r * scale),
                                    static_cast<BYTE>(g * scale),
@@ -3675,8 +3754,6 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
             }
             else
             {
-                // Imagen casi monocroma/negra: producir un tono frío mínimo,
-                // determinista y oscuro para que el contorno no desaparezca.
                 BYTE level = static_cast<BYTE>(std::max(12, std::min(24, maximum)));
                 result.color = RGB(level, static_cast<BYTE>(level + 2),
                                    static_cast<BYTE>(level + 5));
@@ -3686,8 +3763,6 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
         }
         else
         {
-            // No se encontraron píxeles suficientemente luminosos: fallback
-            // cromático fijo, sobrio y no aleatorio para artwork casi negro.
             result.color = RGB(12, 14, 18);
             result.strength = 0.65f;
             result.valid = true;
@@ -3784,7 +3859,6 @@ static void CreateUiFonts()
 {
     if (g_nameFont || g_selectedNameFont || g_secondaryFont)
     {
-        // Las fuentes GDI del fallback también dependen de la escala.
         if (g_gdiFontsScale == g_uiScale.value)
             return;
         ReleaseUiFontObjects();
@@ -3864,16 +3938,30 @@ static RECT ScaleRectAroundPoint(const RECT& rect, float scale,
     return result;
 }
 
+static float GetSlotVisualScale(int slot)
+{
+    if (!IsCompactAutomaticMode())
+        return slot == GetCarouselCenterSlot() ? g_cardSnapScale : 1.0f;
+    const float targetScale = slot == g_selected ? kStaticSelectedScale : 1.0f;
+    if (!g_staticSelectionAnimating || slot < 0 || slot >= 3)
+        return targetScale;
+    const float progress = EaseSmooth(ElapsedFraction(
+        g_staticSelectionStartTime, kStaticSelectionDurationMs));
+    return LerpFloat(g_staticScaleFrom[slot], targetScale, progress);
+}
+
 static RECT GetSlotCardRect(int slot)
 {
-    CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) + g_animOffset);
+    CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) +
+        (IsCompactAutomaticMode() ? 0.0f : g_animOffset));
     RECT rc = {};
     rc.left = static_cast<int>(roundf(g.left));
     rc.top = static_cast<int>(roundf(g.top));
     rc.right = static_cast<int>(roundf(g.right));
     rc.bottom = static_cast<int>(roundf(g.bottom));
-    if (slot == GetCarouselCenterSlot())
-        rc = ScaleRectAroundCenter(rc, g_cardSnapScale);
+    const float visualScale = GetSlotVisualScale(slot);
+    if (fabsf(visualScale - 1.0f) > 0.0001f)
+        rc = ScaleRectAroundCenter(rc, visualScale);
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -3885,15 +3973,22 @@ static RECT GetSlotCardRect(int slot)
 
 static RECT GetSlotHeaderRect(int slot)
 {
-    CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) + g_animOffset);
+    CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) +
+        (IsCompactAutomaticMode() ? 0.0f : g_animOffset));
     int pad = static_cast<int>(roundf(g.padding));
     RECT header = {};
     header.left = static_cast<int>(roundf(g.left)) + pad;
     header.right = static_cast<int>(roundf(g.right)) - pad;
     header.top = static_cast<int>(roundf(g.top)) + pad;
     header.bottom = header.top + static_cast<int>(roundf(g.headerHeight));
-    // El título se mantiene en su geometría normal. El bounce se separa
-    // lógicamente y se aplica únicamente al icono en PaintSlotHeader*.
+    const float visualScale = IsCompactAutomaticMode() ? GetSlotVisualScale(slot) : 1.0f;
+    if (fabsf(visualScale - 1.0f) > 0.0001f)
+    {
+        RECT card = GetSlotCardRect(slot);
+        const float pivotX = (static_cast<float>(card.left) + card.right) * 0.5f;
+        const float pivotY = (static_cast<float>(card.top) + card.bottom) * 0.5f;
+        header = ScaleRectAroundPoint(header, visualScale, pivotX, pivotY);
+    }
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -3905,10 +4000,11 @@ static RECT GetSlotHeaderRect(int slot)
 
 static RECT GetSlotPreviewRect(int slot)
 {
-    CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) + g_animOffset);
+    CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) +
+        (IsCompactAutomaticMode() ? 0.0f : g_animOffset));
     int pad = static_cast<int>(roundf(g.padding));
     int hHeight = static_cast<int>(roundf(g.headerHeight));
-    float dist = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
+    float dist = GetSlotSelectionDistance(slot);
     int gap = ScaleLayoutPx(static_cast<float>((dist < 0.5f) ? 8 : (dist < 1.5f ? 6 : 4)));
 
     RECT preview = {};
@@ -3916,8 +4012,21 @@ static RECT GetSlotPreviewRect(int slot)
     preview.right = static_cast<int>(roundf(g.right)) - pad;
     preview.top = static_cast<int>(roundf(g.top)) + pad + hHeight + gap;
     preview.bottom = static_cast<int>(roundf(g.bottom)) - pad;
-    if (slot == GetCarouselCenterSlot())
+    if (IsCompactAutomaticMode())
+    {
+        const float visualScale = GetSlotVisualScale(slot);
+        if (fabsf(visualScale - 1.0f) > 0.0001f)
+        {
+            RECT card = GetSlotCardRect(slot);
+            const float pivotX = (static_cast<float>(card.left) + card.right) * 0.5f;
+            const float pivotY = (static_cast<float>(card.top) + card.bottom) * 0.5f;
+            preview = ScaleRectAroundPoint(preview, visualScale, pivotX, pivotY);
+        }
+    }
+    else if (slot == GetCarouselCenterSlot())
+    {
         preview = ScaleRectAroundCenter(preview, g_cardSnapScale);
+    }
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -4028,9 +4137,13 @@ static int ResolveGroupIndex(int slot)
     if (count <= 0)
         return -1;
 
-    // Avoid rendering/registering the same window in every carousel slot.
-    // Keep the center slot so the normal card geometry and selection behavior remain intact.
-    if (g_singleWindowCard && count == 1 && slot != GetCarouselCenterSlot())
+    if (IsCompactAutomaticMode())
+        return slot >= 0 && slot < count ? slot : -1;
+
+    if (IsSingleCardMode())
+        return slot == GetCarouselCenterSlot() ? g_selected : -1;
+
+    if (slot < 0 || slot >= GetCarouselSlotCount())
         return -1;
 
     int index = g_selected + (slot - GetCarouselCenterSlot());
@@ -4059,9 +4172,13 @@ static void UpdateHoveredSlot(POINT ptClient)
 
 static int GetSlotAtPoint(POINT ptClient)
 {
-    RECT rcCenter = GetSlotCardRect(GetCarouselCenterSlot());
-    if (PtInRect(&rcCenter, ptClient))
-        return GetCarouselCenterSlot();
+    const int selectedSlot = GetSelectedSlot();
+    if (selectedSlot >= 0 && selectedSlot < GetCarouselSlotCount())
+    {
+        RECT rcSelected = GetSlotCardRect(selectedSlot);
+        if (PtInRect(&rcSelected, ptClient))
+            return selectedSlot;
+    }
 
     for (int i = 0; i < GetCarouselSlotCount(); ++i)
     {
@@ -4179,11 +4296,6 @@ static void PaintBottomShadowGDI(HDC hdc, const RECT& objectRect, int radius)
 }
 
 // SOMBRAS SUAVES DE LAS CARDS
-//
-// Perfil de sombra: alfa(d) = fuerza * 0.5 * erfc(d / (sigma * sqrt2)), donde d es
-// la distancia con signo al borde de la card. Es la caída de un borde desenfocado
-// con gaussiana, sin bandas visibles. La sombra rodea toda la card y se desplaza
-// hacia abajo.
 
 static float ShadowSigmaPx() { return static_cast<float>(ScaleLayoutPx(9.0f)); }
 static float ShadowOffsetPx() { return static_cast<float>(ScaleLayoutPx(7.0f)); }
@@ -4236,8 +4348,6 @@ static bool EnsureShadowSprite(HDC ref, int radius, int margin)
         return false;
     }
 
-    // La forma interior mide 2*radius+2: el centro (2 px) se estira luego, de
-    // modo que el perfil de los lados rectos es exacto a cualquier tamaño.
     const float sigma = std::max(1.0f, static_cast<float>(margin) / 3.0f);
     const float center = static_cast<float>(size) * 0.5f;
     const float r = static_cast<float>(radius);
@@ -4253,7 +4363,6 @@ static bool EnsureShadowSprite(HDC ref, int radius, int margin)
             const float sd = sqrtf(ox * ox + oy * oy) +
                              std::min(std::max(qx, qy), 0.0f) - r;
             const float a = std::max(0.0f, std::min(1.0f, ShadowProfile(sd, sigma, 1.0f)));
-            // Premultiplicado: el color es negro, solo cuenta el alfa.
             pixels[y * size + x] = static_cast<DWORD>(a * 255.0f + 0.5f) << 24;
         }
     }
@@ -4290,7 +4399,7 @@ static void PaintCardShadowGDI(HDC hdc, const RECT& cardRect, int radius,
     }
 
     const int s = g_shadowSprite.size;
-    const int mid = s - 2 * corner;  // 2 px estirables
+    const int mid = s - 2 * corner;
     BLENDFUNCTION blend = {};
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = static_cast<BYTE>(
@@ -4301,13 +4410,11 @@ static void PaintCardShadowGDI(HDC hdc, const RECT& cardRect, int radius,
         if (dw > 0 && dh > 0)
             g_pAlphaBlend(hdc, dx, dy, dw, dh, src, sx, sy, sw, sh, blend);
     };
-    // Esquinas 1:1.
     blit(outer.left, outer.top, corner, corner, 0, 0, corner, corner);
     blit(outer.right - corner, outer.top, corner, corner, s - corner, 0, corner, corner);
     blit(outer.left, outer.bottom - corner, corner, corner, 0, s - corner, corner, corner);
     blit(outer.right - corner, outer.bottom - corner, corner, corner,
          s - corner, s - corner, corner, corner);
-    // Lados estirados.
     blit(outer.left + corner, outer.top, w - 2 * corner, corner,
          corner, 0, mid, corner);
     blit(outer.left + corner, outer.bottom - corner, w - 2 * corner, corner,
@@ -4316,15 +4423,10 @@ static void PaintCardShadowGDI(HDC hdc, const RECT& cardRect, int radius,
          0, corner, corner, mid);
     blit(outer.right - corner, outer.top + corner, corner, h - 2 * corner,
          s - corner, corner, corner, mid);
-    // Centro (queda bajo la card).
     blit(outer.left + corner, outer.top + corner, w - 2 * corner, h - 2 * corner,
          corner, corner, mid, mid);
 }
 
-// Direct2D: capas de rectángulos redondeados cuyo alfa se calcula para que el
-// resultado acumulado reproduzca el perfil gaussiano. El interior de la card se
-// excluye con una máscara geométrica, porque la superficie de la card es
-// translúcida y la sombra no debe verse a través de ella.
 static void PaintCardShadowD2D(const RECT& cardRect, float radius, float strength)
 {
     if (!g_d2dRenderTarget || !g_d2dBrush || !g_d2dFactory || strength <= 0.0f)
@@ -4382,7 +4484,6 @@ static void PaintCardShadowD2D(const RECT& cardRect, float radius, float strengt
         }
     }
 
-    // De fuera hacia dentro: cada capa se compone "over" con el alfa calculado.
     for (int k = kLayers - 1; k >= 0; --k)
     {
         if (alphas[k] < 0.002f)
@@ -4502,9 +4603,6 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
         properties.rcDestination = RECT{ 0, 0, 0, 0 };
     else
     {
-        // Crop the matching source pixels when a card crosses the selector
-        // edge. Without rcSource, DWM scales the complete source into the
-        // remaining destination rectangle and deforms the preview.
         int destinationWidth = destination.right - destination.left;
         int destinationHeight = destination.bottom - destination.top;
         RECT sourceClip = {
@@ -4527,15 +4625,12 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
         properties.rcSource = sourceClip;
     }
     properties.fVisible = visible ? TRUE : FALSE;
-    // Previews DWM siempre nítidas; la translucidez solo pertenece a la card.
     float thumbnailOpacity = g_sceneOpacity;
     if (g_cardExitActive && slot == g_cardExitSlot)
         thumbnailOpacity *= GetCardExitOpacity();
     properties.opacity = static_cast<BYTE>(std::max(0, std::min(255,
         static_cast<int>(roundf(thumbnailOpacity * 255.0f)))));
 
-    // UpdateThumbnailProperties puede ejecutarse en cada frame de una animación.
-    // DWM no necesita recibir otra orden si geometría, visibilidad y opacidad no cambiaron.
     bool unchanged = slotState.hasProperties &&
         slotState.lastVisible == properties.fVisible &&
         slotState.lastOpacity == properties.opacity &&
@@ -4563,8 +4658,9 @@ static void UpdateThumbnailSlots()
         return;
     }
 
-    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
+    for (int drawIndex = 0; drawIndex < GetCarouselSlotCount(); ++drawIndex)
     {
+        const int slot = drawIndex;
         int index = ResolveGroupIndex(slot);
         HWND source = (index >= 0) ? g_groups[index].representativeWindow : nullptr;
         if (!source || !IsWindow(source))
@@ -4581,9 +4677,6 @@ static void UpdateThumbnailSlots()
             {
                 g_thumbnailSlots[slot].thumbnail = thumbnail;
                 g_thumbnailSlots[slot].source = source;
-                // Use the dimensions DWM actually exposes for its thumbnail,
-                // rather than GetClientRect/GetWindowRect which can differ by
-                // invisible resize borders and cause a few pixels of offset.
                 if (g_dwmQueryThumbnailSourceSize)
                 {
                     SIZE thumbnailSize = {};
@@ -4601,7 +4694,7 @@ static void UpdateThumbnailSlots()
         RECT area = TransformSceneRect(GetSlotPreviewRect(slot));
         if (g_selectionExpansionActive)
         {
-            if (slot == GetCarouselCenterSlot())
+            if (slot == GetSelectedSlot())
                 area = g_selectionExpansionRect;
             else
                 area = RECT{ 0, 0, 0, 0 };
@@ -4612,6 +4705,8 @@ static void UpdateThumbnailSlots()
 
 static void StopCarouselAnimation()
 {
+    g_staticSelectionAnimating = false;
+    g_staticPreviousSelected = -1;
     g_animActive = false;
     g_animOffset = 0.0f;
     g_animStartOffset = 0.0f;
@@ -4643,24 +4738,16 @@ static void StartSelectorClose(HWND target)
     g_cardExitSlot = -1;
     g_cardExitTarget = nullptr;
     g_pendingActivationTarget = target;
-    // El cierre parte del progreso actual de la escena (incluso si la apertura
-    // aún no terminó), así que no hay saltos de escala u opacidad.
     g_closeStartPresence = g_scenePresence;
     g_selectorAnimation = SelectorAnimationState::Closing;
     g_selectorAnimationStart = FrameClockNow();
     RequestFrame();
 }
 
-// Único punto donde se traduce el progreso de escena a escala, opacidad y
-// apertura del carrusel. Apertura y cierre solo difieren en cómo evoluciona
-// "presence", por lo que convergen exactamente al mismo estado.
 static void ApplyScenePresence(float presence)
 {
     if (g_animationStyle == AnimationStyle::Rct)
     {
-        // CRT: al cerrar, primero colapsa en vertical hacia una línea y luego
-        // en horizontal hacia un punto, con la opacidad bajando a 0. Al abrir
-        // es la transición inversa (el mismo mapeo recorrido al revés).
         presence = Clamp01(presence);
         g_scenePresence = presence;
         UpdateFullscreenBackdrop();
@@ -4674,9 +4761,6 @@ static void ApplyScenePresence(float presence)
         return;
     }
 
-    // Linear y Bouncy comparten el mapeo. Bouncy empieza más pequeño y deja
-    // que "presence" supere 1.0 un instante (overshoot), de modo que escala,
-    // opacidad y apertura del carrusel siguen un único progreso.
     const bool bouncy = g_animationStyle == AnimationStyle::Bouncy;
     const bool cinematic = g_animationStyle == AnimationStyle::Cinematic;
     presence = (bouncy || cinematic) ? std::max(0.0f, presence) : Clamp01(presence);
@@ -4694,10 +4778,6 @@ static void ApplyScenePresence(float presence)
         : 0.96f + 0.04f * presence;
 }
 
-// Resorte subamortiguado existente para Bouncy: se conserva su modelo físico
-// (respuesta de segundo orden), con amortiguación ligeramente menor y mayor
-// velocidad inicial. La normalización al valor en t=1 evita un salto de valor
-// al terminar; el overshoot de la presencia queda alrededor del 20 %.
 static float SpringResponseRaw(float t)
 {
     const float zeta = 0.48f, omega = 32.0f, v0 = 14.0f, span = 0.30f;
@@ -4720,8 +4800,6 @@ static float SpringOvershoot(float t)
 
 static float OpenDurationMs()
 {
-    // Fullscreen's backdrop reveal is intentionally much snappier than the
-    // regular selector. Keep Bouncy's existing timing as requested.
     if (g_baseBackgroundMode == BaseBackgroundMode::Fullscreen)
     {
         switch (g_animationStyle)
@@ -4770,7 +4848,6 @@ static float OpenPresenceAt(float t)
     }
 }
 
-// Fracción de presencia que queda al cerrar (1 -> 0).
 static float CloseRemainingAt(float t)
 {
     if (g_animationStyle == AnimationStyle::Rct)
@@ -4784,8 +4861,6 @@ static float CloseRemainingAt(float t)
 
 static float GetCardExitProgress()
 {
-    // Se evalúa una vez por frame en UpdateSelectorMotion; paint y thumbnails
-    // leen el mismo valor.
     return g_cardExitActive ? g_cardExitProgress : 0.0f;
 }
 
@@ -4820,15 +4895,13 @@ static RECT LerpRect(const RECT& a, const RECT& b, float t)
     return result;
 }
 
-// Duración base fija de la expansión hasta llenar la pantalla: 120 ms.
-// AnimationDuration conserva el ajuste global de velocidad del usuario.
 static float CalculateSelectionExpansionDurationMs(
     const RECT& source, const RECT& destination, const RECT& work)
 {
     (void)source;
     (void)destination;
     (void)work;
-    return 120.0f;
+    return 200.0f;
 }
 
 static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
@@ -4836,7 +4909,6 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
     if (!target || !IsWindow(target) || !g_selector ||
         !IsWindow(g_selector) || g_selectionExpansionActive)
     {
-        // El llamador conserva la finalización inmediata como fallback.
         g_pendingActivationTarget = target;
         g_cleanupInProgress = true;
         DestroySelector();
@@ -4872,16 +4944,13 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
         ActivateWindow(target);
         return;
     }
-    // El rectángulo de las tarjetas está en coordenadas cliente. No asumir
-    // que coincide con el borde externo del HWND: esa diferencia puede ser de
-    // unos píxeles en DPI por monitor o cuando DWM aplica sus bordes.
     POINT selectorClientOrigin = { 0, 0 };
     if (!ClientToScreen(g_selector, &selectorClientOrigin))
     {
         selectorClientOrigin.x = selectorRect.left;
         selectorClientOrigin.y = selectorRect.top;
     }
-    const int selectedSlot = GetCarouselCenterSlot();
+    const int selectedSlot = GetSelectedSlot();
     const RECT preview = TransformSceneRect(GetSlotPreviewRect(selectedSlot));
     RECT targetWindowRect = {};
     if (!GetWindowRect(target, &targetWindowRect))
@@ -4895,9 +4964,6 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
         ActivateWindow(target);
         return;
     }
-    // GetWindowRect puede incluir los bordes invisibles de redimensionado.
-    // DWMWA_EXTENDED_FRAME_BOUNDS da los límites físicos que realmente se ven,
-    // evitando que el thumbnail termine desplazado respecto a la ventana.
     if (!IsIconic(target) && LoadDwmFunctions() && g_dwmGetWindowAttribute)
     {
         RECT visibleFrame = {};
@@ -4912,10 +4978,6 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
     }
     if (targetWasMinimized && IsIconic(target))
     {
-        // La restauración ocurre en paralelo a la animación: no esperamos a que
-        // el hilo de la aplicación atienda ShowWindowAsync. GetWindowRect puede
-        // devolver el rectángulo del icono mientras tanto, así que usamos la
-        // posición normal guardada por Windows como destino temporal.
         WINDOWPLACEMENT placement = {};
         placement.length = sizeof(placement);
         bool haveNormalRect = false;
@@ -4924,8 +4986,6 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
             RECT normalRect = placement.rcNormalPosition;
             if ((GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
             {
-                // rcNormalPosition usa coordenadas de workspace. Trasladar el
-                // origen de workspace del monitor principal a coordenadas de pantalla.
                 POINT origin = { 0, 0 };
                 HMONITOR primary = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
                 MONITORINFO primaryInfo = {};
@@ -4970,8 +5030,6 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
         const ThumbnailSlot& previewThumbnail = g_thumbnailSlots[selectedSlot];
         if (previewThumbnail.sourceWidth > 0 && previewThumbnail.sourceHeight > 0)
         {
-            // Reproduce exactamente el letterboxing usado al pintar la miniatura
-            // dentro de la tarjeta, para que el primer frame no salte lateralmente.
             expansionSourceRect = ContainedRect(
                 preview, previewThumbnail.sourceWidth, previewThumbnail.sourceHeight);
         }
@@ -5017,26 +5075,18 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
     g_uiTabDown = false;
     g_tabRepeatStarted = false;
     KillTimer(g_selector, kTabRepeatTimerId);
-    // Pattern Waves and the cursor spotlight belong to the task-switcher
-    // backdrop, which is removed for the selected-window expansion.
     const bool wasFullscreenBackdrop = IsFullscreenBackdropActive();
     HideFullscreenBackdrop(true);
     if (wasFullscreenBackdrop)
     {
-        // Blur mode disabled DWM glass on the selector itself. Restore it before
-        // clearing the expanded HWND so the selected thumbnail reveals desktop.
         ApplySelectorVisuals(g_selector);
     }
     KillTimer(g_selector, kPatternTimerId);
     g_backgroundSpotlightActive = false;
     UiSetInteractive(false);
     g_selectorAnimation = SelectorAnimationState::SelectionExpansion;
-    // El HWND pasa a cubrir el monitor sin activar ni cambiar el orden Z.
     SetWindowPos(g_selector, HWND_TOPMOST, work.left, work.top,
                  workWidth, workHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    // Recalibrar contra el cliente real después del resize. Así el destino
-    // ocupa exactamente todos los píxeles que el renderer puede dibujar, sin
-    // desplazamiento lateral por marcos, DPI o coordenadas de monitor.
     RECT clientAfterResize = {};
     POINT clientAfterOrigin = { 0, 0 };
     if (GetClientRect(g_selector, &clientAfterResize) &&
@@ -5075,10 +5125,7 @@ static void UpdateSelectionExpansion()
     {
         const float raw = ElapsedFraction(g_selectionExpansionStart,
                                            g_selectionExpansionDurationMs);
-        // Misma estrategia de desplazamiento agresivo usada por el renderer:
-        // respuesta inmediata, avance fuerte al inicio y llegada exacta al
-        // destino sin overshoot ni rebote adicional.
-        const float eased = EaseOutExp(raw, 7.0f);
+        const float eased = raw * raw * (3.0f - 2.0f * raw);
         g_selectionExpansionProgress = eased;
         g_selectionExpansionRect = LerpRect(g_selectionExpansionStartRect,
                                              g_selectionExpansionDestinationRect,
@@ -5091,8 +5138,6 @@ static void UpdateSelectionExpansion()
         HWND target = g_selectionExpansionTarget;
         if (!g_selectionActivationRequested)
         {
-            // Pide activar la ventana mientras el selector sigue cubriendo la
-            // pantalla. La expansión final permanece dibujada durante la espera.
             g_selectionActivationRequested = true;
             g_selectionActivationRequestTick = GetTickCount64();
             ActivateWindow(target);
@@ -5102,8 +5147,6 @@ static void UpdateSelectionExpansion()
             GetTickCount64() - g_selectionActivationRequestTick;
         const bool targetReady = target && IsWindow(target) &&
             !IsIconic(target) && GetForegroundWindow() == target;
-        // Deja al menos un ciclo de composición para que DWM actualice la
-        // ventana destino detrás de la cubierta antes de retirarla.
         const bool targetFrameSettled = targetReady && activationWaitMs >= 20;
         const bool activationTimedOut =
             activationWaitMs >= kSelectionActivationWaitMaxMs;
@@ -5114,8 +5157,6 @@ static void UpdateSelectionExpansion()
             return;
         }
 
-        // El destino ya está foreground (o agotó el tiempo máximo de espera):
-        // retirar ahora la cubierta expandida evita enseñar un hueco intermedio.
         g_selectionExpansionActive = false;
         g_selectionActivationRequested = false;
         g_selectionActivationRequestTick = 0;
@@ -5184,9 +5225,6 @@ static void UpdateSelectorMotion()
     }
     if (g_selectorAnimation == SelectorAnimationState::Opening)
     {
-        // Una sola curva de salida exponencial: respuesta inmediata, sin
-        // overshoot y asentamiento limpio. Fondo, cards y opacidad salen de
-        // ApplyScenePresence con el mismo progreso.
         const float t = ElapsedFraction(g_selectorAnimationStart,
                                         AnimationDuration(OpenDurationMs()));
         ApplyScenePresence(OpenPresenceAt(t));
@@ -5198,8 +5236,6 @@ static void UpdateSelectorMotion()
     }
     else if (g_selectorAnimation == SelectorAnimationState::SelectionChange)
     {
-        // La navegación se anima exclusivamente mediante g_animOffset; la
-        // superficie permanece fija.
         ApplyScenePresence(1.0f);
         if (ElapsedFraction(g_selectorAnimationStart,
                             CardNavigationDuration()) >= 1.0f)
@@ -5207,8 +5243,6 @@ static void UpdateSelectorMotion()
     }
     else if (g_selectorAnimation == SelectorAnimationState::Closing)
     {
-        // Inverso de la apertura: la escena converge al mismo estado inicial
-        // (escala reducida, opacidad 0, cards recogidas) con salida inmediata.
         const float t = ElapsedFraction(g_selectorAnimationStart,
                                         AnimationDuration(CloseDurationMs()));
         ApplyScenePresence(g_closeStartPresence * CloseRemainingAt(t));
@@ -5232,8 +5266,6 @@ static void UpdateSelectorMotion()
     UpdateSelectorControls();
 }
 
-// "La escena cambió": solo marca el frame como sucio. El render ocurre una vez
-// por frame en RunFrame, nunca de forma síncrona por cada cambio de estado.
 static void UpdateSelectorControls()
 {
     if (!g_selector || !IsWindow(g_selector))
@@ -5244,15 +5276,6 @@ static void UpdateSelectorControls()
 }
 
 // FRAME PUMP
-//
-// Sustituye al SetTimer (resolución ~15.6 ms, jitter alto) como reloj de
-// animación. Un waitable timer de alta resolución despierta al UI thread justo
-// después de un vblank de DWM; la animación se evalúa en el instante previsto
-// de presentación (el siguiente vblank), así que el espaciado entre muestras es
-// constante aunque el timer tenga jitter. Si DWM no ofrece timing, se usa un
-// intervalo fijo. Sin timer de alta resolución se usa SetTimer como último
-// recurso. Cuando no hay animación ni cambios pendientes el pump no se arma y
-// el hilo duerme en MsgWaitForMultipleObjectsEx.
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
@@ -5299,7 +5322,6 @@ static bool QueryVBlank(double& vblankMs, double& periodMs)
         return false;
     DWM_TIMING_INFO info = {};
     info.cbSize = sizeof(info);
-    // Windows 8.1 and newer require a null HWND for this query.
     if (FAILED(g_dwmGetCompositionTimingInfo(nullptr, &info)))
         return false;
     const double toMs = 1000.0 / static_cast<double>(g_qpcFrequency > 0 ? g_qpcFrequency : 1);
@@ -5308,15 +5330,11 @@ static bool QueryVBlank(double& vblankMs, double& periodMs)
     return info.qpcVBlank != 0 && periodMs > 3.0 && periodMs < 40.0;
 }
 
-// Devuelve el instante de muestreo de la animación (presentación prevista) y,
-// opcionalmente, cuándo hay que despertar para renderizarlo.
 static double NextSampleTimeMs(double now, double* wakeMs)
 {
     double vblank = 0.0, period = 0.0;
     if (QueryVBlank(vblank, period))
     {
-        // "Balanced" renderiza cada N vblanks para no exceder el objetivo; el
-        // paso entero mantiene un espaciado uniforme (p. ej. 144 Hz -> 72 Hz).
         const double refreshHz = 1000.0 / period;
         const int step = std::max(1, static_cast<int>(
             floor(refreshHz / static_cast<double>(g_animationFps) + 0.5)));
@@ -5333,9 +5351,6 @@ static double NextSampleTimeMs(double now, double* wakeMs)
     return now;
 }
 
-// Con el fondo fullscreen quieto (presencia estable, sin expansión de
-// selección), un frame solo cambia la zona de las cards y sus sombras: se
-// invalida únicamente esa zona en vez del monitor completo.
 static void InvalidateSelectorForFrame()
 {
     if (IsFullscreenBackdropActive() && g_fsSharpD2D && g_fsBlurD2D &&
@@ -5401,7 +5416,7 @@ static void RequestFrame()
 
 static bool SceneIsAnimating()
 {
-    return g_animActive ||
+    return g_animActive || g_staticSelectionAnimating ||
            g_selectorAnimation == SelectorAnimationState::Opening ||
            g_selectorAnimation == SelectorAnimationState::SelectionChange ||
            g_selectorAnimation == SelectorAnimationState::CardExit ||
@@ -5412,7 +5427,7 @@ static bool SceneIsAnimating()
 static void RunFrame()
 {
     if (!g_framePumpArmed)
-        return;  // disparo obsoleto de un pump ya desarmado
+        return;
     g_framePumpArmed = false;
     if (!g_selector || !IsWindow(g_selector) || !IsWindowVisible(g_selector))
     {
@@ -5425,8 +5440,6 @@ static void RunFrame()
     g_frameTimeMs = NextSampleTimeMs(now, nullptr);
     g_lastSampleMs = g_frameTimeMs;
 
-    // Un solo instante para toda la escena: apertura/cierre, carrusel y salida
-    // de cards se evalúan con el mismo reloj.
     g_inFrame = true;
     UpdateSelectorMotion();
     if (g_selector && IsWindow(g_selector))
@@ -5442,8 +5455,6 @@ static void RunFrame()
     if (g_frameDirty)
     {
         g_frameDirty = false;
-        // Thumbnails DWM y superficie D2D se actualizan juntos, con el mismo
-        // estado de escena, dentro del mismo frame.
         UpdateThumbnailSlots();
         InvalidateSelectorForFrame();
         UpdateWindow(g_selector);
@@ -5483,13 +5494,11 @@ static ID2D1LinearGradientBrush* EnsureSurfaceGradientBrush(int groupIndex,
         GetGValue(cardColor) / 255.0f,
         GetBValue(cardColor) / 255.0f,
         kCardSurfaceOpacity);
-    // Columna ambiental horizontalmente modulada: el centro recibe una
-    // influencia moderada y los extremos recuperan Black Obsidian.
     D2D1_COLOR_F edge = base;
-    D2D1_COLOR_F soft = AddMediaAccent(base, group.mediaAccent,
-                                         selected ? 0.145f : 0.115f);
-    D2D1_COLOR_F center = AddMediaAccent(base, group.mediaAccent,
-                                           selected ? 0.300f : 0.235f);
+    D2D1_COLOR_F soft =
+        AddMediaAccent(base, group.mediaAccent, selected ? 0.145f : 0.115f);
+    D2D1_COLOR_F center =
+        AddMediaAccent(base, group.mediaAccent, selected ? 0.300f : 0.235f);
 
     D2D1_GRADIENT_STOP stops[5] = {};
     stops[0].position = 0.0f;
@@ -5560,17 +5569,15 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
     int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
     int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
     RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
-    if (slot == GetCarouselCenterSlot())
+    const float iconScale = IsCompactAutomaticMode() ? 1.0f : GetSlotVisualScale(slot);
+    if (fabsf(iconScale - 1.0f) > 0.0001f)
     {
         RECT cardRect = GetSlotCardRect(slot);
         float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
         float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
-        iconRect = ScaleRectAroundPoint(iconRect, g_cardSnapScale, pivotX, pivotY);
+        iconRect = ScaleRectAroundPoint(iconRect, iconScale, pivotX, pivotY);
     }
 
-    // El encabezado es deliberadamente transparente: no crea una superficie
-    // oscura independiente sobre el gradiente Dynamic Obsidian de la card.
-    // El icono y el texto se dibujan directamente sobre la superficie iluminada.
 
     EnsureIconBitmap(groupIndex);
     if (group.iconBitmap)
@@ -5591,12 +5598,51 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
             static_cast<float>(textX), static_cast<float>(rc.top),
             static_cast<float>(rc.right - ScaleLayoutPx(8.0f)), static_cast<float>(rc.bottom));
         D2D1_COLOR_F textColor = selected
-            ? D2D1::ColorF(0.965f, 0.968f, 0.98f, 1.0f)
-            : D2D1::ColorF(0.815f, 0.823f, 0.855f, 1.0f);
+            ? D2D1::ColorF(GetRValue(g_textSelectedColor) / 255.0f,
+                           GetGValue(g_textSelectedColor) / 255.0f,
+                           GetBValue(g_textSelectedColor) / 255.0f, 1.0f)
+            : D2D1::ColorF(GetRValue(g_textNormalColor) / 255.0f,
+                           GetGValue(g_textNormalColor) / 255.0f,
+                           GetBValue(g_textNormalColor) / 255.0f, 1.0f);
         g_d2dBrush->SetColor(textColor);
         g_d2dRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
                                       format, &textRectD2D, g_d2dBrush);
     }
+}
+
+static void PaintCompactSelectionIndicatorD2D()
+{
+    if (!IsCompactAutomaticMode() || !g_d2dRenderTarget || !g_d2dBrush)
+        return;
+
+    const int count = GetCarouselSlotCount();
+    if (count < 2 || count > 3 || g_selected < 0 || g_selected >= count)
+        return;
+
+    float centers[3] = {};
+    for (int slot = 0; slot < count; ++slot)
+    {
+        const RECT card = GetSlotCardRect(slot);
+        centers[slot] = (static_cast<float>(card.left) + card.right) * 0.5f;
+    }
+
+    float activeX = centers[g_selected];
+    if (g_staticSelectionAnimating)
+    {
+        const float t = EaseSmooth(ElapsedFraction(
+            g_staticSelectionStartTime, kStaticSelectionDurationMs));
+        activeX = LerpFloat(g_staticIndicatorStartX, centers[g_selected], t);
+    }
+
+    const float y = ScaleLayoutPx(352.0f);
+    const float activeRadius = ScaleLayoutPx(4.0f);
+    const D2D1_ELLIPSE active = D2D1::Ellipse(
+        D2D1::Point2F(activeX, y), activeRadius, activeRadius);
+    const COLORREF accent = g_cardStyle.selectedBorderColor;
+    g_d2dBrush->SetColor(D2D1::ColorF(
+        GetRValue(accent) / 255.0f, GetGValue(accent) / 255.0f,
+        GetBValue(accent) / 255.0f, 0.98f));
+    g_d2dRenderTarget->FillEllipse(&active, g_d2dBrush);
 }
 
 static void PaintCounterD2D()
@@ -5604,15 +5650,16 @@ static void PaintCounterD2D()
     RECT rc = GetCounterRect();
     const std::wstring& text = MakeCounterText();
 
-    // El contador no tiene superficie propia: el texto flota directamente
-    // sobre la misma card translúcida, sin cápsula, rectángulo ni borde.
 
     if (g_dwriteCounterFormat)
     {
         D2D1_RECT_F textRectD2D = D2D1::RectF(
             static_cast<float>(rc.left), static_cast<float>(rc.top),
             static_cast<float>(rc.right), static_cast<float>(rc.bottom));
-        g_d2dBrush->SetColor(D2D1::ColorF(0.73f, 0.74f, 0.77f, 1.0f));
+        g_d2dBrush->SetColor(D2D1::ColorF(
+            GetRValue(g_counterTextColor) / 255.0f,
+            GetGValue(g_counterTextColor) / 255.0f,
+            GetBValue(g_counterTextColor) / 255.0f, 1.0f));
         g_d2dRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
                                       g_dwriteCounterFormat, &textRectD2D, g_d2dBrush);
     }
@@ -5630,21 +5677,21 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
     int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
     int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
     RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
-    if (slot == GetCarouselCenterSlot())
+    const float iconScale = IsCompactAutomaticMode() ? 1.0f : GetSlotVisualScale(slot);
+    if (fabsf(iconScale - 1.0f) > 0.0001f)
     {
         RECT cardRect = GetSlotCardRect(slot);
         float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
         float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
-        iconRect = ScaleRectAroundPoint(iconRect, g_cardSnapScale, pivotX, pivotY);
+        iconRect = ScaleRectAroundPoint(iconRect, iconScale, pivotX, pivotY);
     }
 
-    // Sin panel, relleno ni borde propio: el encabezado deja ver la card.
 
     RECT textRect = rc;
     textRect.left = textX;
     textRect.right = rc.right - ScaleLayoutPx(8.0f);
     HFONT font = selected ? g_selectedNameFont : g_nameFont;
-    COLORREF textColor = selected ? RGB(246, 247, 250) : RGB(208, 210, 218);
+    COLORREF textColor = selected ? g_textSelectedColor : g_textNormalColor;
     if (g_setBkMode) g_setBkMode(hdc, TRANSPARENT);
     if (g_setTextColor) g_setTextColor(hdc, textColor);
     HGDIOBJ oldFont = font && g_selectObject ? g_selectObject(hdc, font) : nullptr;
@@ -5660,15 +5707,56 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
     }
 }
 
+static void PaintCompactSelectionIndicatorGDI(HDC hdc)
+{
+    if (!IsCompactAutomaticMode() || !hdc || !g_createSolidBrush ||
+        !g_createPen || !g_selectObject || !g_getStockObject ||
+        !g_roundRect || !g_deleteObject)
+        return;
+
+    const int count = GetCarouselSlotCount();
+    if (count < 2 || count > 3 || g_selected < 0 || g_selected >= count)
+        return;
+
+    float centers[3] = {};
+    for (int slot = 0; slot < count; ++slot)
+    {
+        const RECT card = GetSlotCardRect(slot);
+        centers[slot] = (static_cast<float>(card.left) + card.right) * 0.5f;
+    }
+    float activeX = centers[g_selected];
+    if (g_staticSelectionAnimating)
+    {
+        const float t = EaseSmooth(ElapsedFraction(
+            g_staticSelectionStartTime, kStaticSelectionDurationMs));
+        activeX = LerpFloat(g_staticIndicatorStartX, centers[g_selected], t);
+    }
+
+    const int y = ScaleLayoutPx(352.0f);
+    const int activeDot = ScaleLayoutPx(8.0f);
+    HGDIOBJ oldPen = g_selectObject(hdc, g_getStockObject(NULL_PEN));
+    const COLORREF accent = g_cardStyle.selectedBorderColor;
+    HBRUSH activeBrush = g_createSolidBrush(accent);
+    if (activeBrush)
+    {
+        HGDIOBJ previousBrush = g_selectObject(hdc, activeBrush);
+        const int x = static_cast<int>(roundf(activeX));
+        g_roundRect(hdc, x - activeDot / 2, y - activeDot / 2,
+                    x + activeDot / 2, y + activeDot / 2, activeDot, activeDot);
+        g_selectObject(hdc, previousBrush);
+        g_deleteObject(activeBrush);
+    }
+    if (oldPen)
+        g_selectObject(hdc, oldPen);
+}
+
 static void PaintCounterGDI(HDC hdc)
 {
     RECT rc = GetCounterRect();
     const std::wstring& text = MakeCounterText();
 
-    // GDI no ofrece alpha blending con el pincel sólido usado por este
-    // fallback; no dibujamos una superficie opaca independiente detrás del texto.
     if (g_setBkMode) g_setBkMode(hdc, TRANSPARENT);
-    if (g_setTextColor) g_setTextColor(hdc, RGB(186, 188, 196));
+    if (g_setTextColor) g_setTextColor(hdc, g_counterTextColor);
     HGDIOBJ oldFont = g_secondaryFont && g_selectObject ?
         g_selectObject(hdc, g_secondaryFont) : nullptr;
     DrawTextW(hdc, text.c_str(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -5696,9 +5784,6 @@ static void PaintCenterAccentMarginD2D(const RECT& cardRect, int groupIndex, flo
                     static_cast<float>(cardRect.bottom) + margin),
         radius + margin, radius + margin);
 
-    // Marco vectorial: no es un bitmap ni una sombra rasterizada. Sigue
-    // exactamente el contorno redondeado de la card central y toma el color
-    // dominante extraído de su contenido.
     g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, 0.34f));
     g_d2dRenderTarget->DrawRoundedRectangle(&outer, g_d2dBrush,
                                                static_cast<float>(ScaleLayoutPx(2.0f)));
@@ -5828,8 +5913,6 @@ static void UpdatePatternWaves()
         std::min(0.05f, static_cast<float>(now - g_patternLastTick) / 1000.0f);
     g_patternLastTick = now;
 
-    // Only cursor energy is simulated here. The base surface is procedural and
-    // sampled separately, so every ripple naturally returns to that base.
     int steps = dt > 0.026f ? 2 : 1;
     float propagation = std::max(0.10f, std::min(0.42f,
         0.18f + g_patternWaveStrength * 0.16f));
@@ -5866,8 +5949,6 @@ static void UpdatePatternWaves()
     RequestFrame();
 }
 
-// Stable spatial variation: it is tied to the fixed grid coordinates, not to
-// time, so dots have a subtle hierarchy without behaving independently.
 static float PatternDotVariation(float pixelX, float pixelY, float spacing)
 {
     int gridX = static_cast<int>(floorf(pixelX / std::max(1.0f, spacing)));
@@ -5895,10 +5976,8 @@ static float PatternBaseHeight(float pixelX, float pixelY, float time)
     const int renderHeight = PatternFieldRenderHeight();
     if (renderWidth <= 0 || renderHeight <= 0)
         return 0.0f;
-    // X is dominant, producing vertical crests. Y and time bend them organically.
     float nx = pixelX / static_cast<float>(renderWidth);
     float ny = pixelY / static_cast<float>(renderHeight);
-    // Reduce all procedural phase motion by 60% while preserving the Speed control.
     const float phaseTime = time * 0.40f;
     const float speed = 0.55f + g_patternSpeed * 1.35f;
     float organic = 0.20f * sinf(ny * 7.0f + phaseTime * 0.31f +
@@ -5906,8 +5985,6 @@ static float PatternBaseHeight(float pixelX, float pixelY, float time)
     float ridges = sinf(nx * 13.5f + phaseTime * speed + organic);
     float fine = 0.28f * sinf(nx * 27.0f - phaseTime * speed * 0.55f + ny * 2.5f);
     float height = (ridges + fine) / 1.28f;
-    // Slightly larger field amplitude gives the influence more spatial body;
-    // visual brightness remains controlled in the dot stage below.
     return height * std::max(0.0f, std::min(2.0f, g_patternWaveStrength)) * 0.68f;
 }
 
@@ -5972,11 +6049,6 @@ static void DrawPatternWaves(const RECT& clientRect)
     g_patternFieldRenderHeight = height;
     const double drawStartMs = QpcNowMs();
     UpdatePatternRenderCache(static_cast<float>(drawStartMs / 1000.0));
-    // La calidad adaptativa controla la cadencia, no la geometría del patrón.
-    // Así una variación de rendimiento no cambia tamaño/posición de los dots.
-    // Density controls the visual grid independently from the low-resolution
-    // simulation. At the default value this produces a considerably denser
-    // micro-dot surface while keeping the ripple buffer small.
     const float spacing = std::max(6.0f,
         g_patternDensity * g_uiScale.value * 0.55f);
     const float renderMargin = spacing * 1.5f;
@@ -5984,8 +6056,6 @@ static void DrawPatternWaves(const RECT& clientRect)
     const float contrast = std::max(0.0f, std::min(2.0f, g_patternContrast));
     const float effectOpacity = std::max(0.0f, std::min(1.0f, g_patternOpacity));
 
-    // Keep DWM visible. This is a translucent tint plus one dot field, not an
-    // opaque second background.
     D2D1_RECT_F background = D2D1::RectF(0.0f, 0.0f,
                                           static_cast<float>(width),
                                           static_cast<float>(height));
@@ -5993,17 +6063,11 @@ static void DrawPatternWaves(const RECT& clientRect)
                                       0.08f * effectOpacity));
     g_d2dRenderTarget->FillRectangle(&background, g_d2dBrush);
 
-    // The caller already applies the scene transform used by the cards and
-    // DWM background. Pattern Waves is deliberately rendered in that same
-    // coordinate space, so opening/closing animations affect the whole field
-    // without introducing a second animation system.
 
     for (float y = -renderMargin; y < height + renderMargin; y += spacing)
     {
         for (float x = -renderMargin; x < width + renderMargin; x += spacing)
         {
-            // The grid is fixed. The combined field is converted into a smooth
-            // influence profile; it changes only the visual state of each dot.
             float field = std::max(-1.0f, std::min(1.0f,
                 PatternFieldSample(x, y)));
             float dx = (PatternFieldSample(x + 3.0f, y) -
@@ -6012,13 +6076,8 @@ static void DrawPatternWaves(const RECT& clientRect)
                         PatternFieldSample(x, y - 3.0f)) * 0.1667f;
             float normalLight = std::max(0.0f, std::min(1.0f,
                 0.50f + (-dx - dy) * 0.36f * light));
-            // A shared-field falloff controls every visual property. The stable
-            // variation only supplies subtle scale/opacity hierarchy on the
-            // fixed grid; it is never an animation of individual dots.
             float waveEnergy = std::max(0.0f, std::min(1.0f,
                 fabsf(field) * (1.25f + 0.20f * light)));
-            // Broaden the soft band first, then use a gentle nonlinear remap
-            // so the crest grows visibly without creating hard rings.
             float influence = SmoothStep01((waveEnergy - 0.10f) / 0.82f);
             influence = powf(influence, 0.78f);
             float litInfluence = std::max(0.0f, std::min(1.0f,
@@ -6029,18 +6088,11 @@ static void DrawPatternWaves(const RECT& clientRect)
                 0.16f + (brightness - 0.16f) * contrast));
             float variation = PatternDotVariation(x, y, spacing);
             float baseScale = 0.78f + variation * 0.22f;
-            // Most dots remain micro-sized; only the shared-field crest adds
-            // substantial scale. This widens the wave without adding dots.
             float radius = std::max(0.85f,
                 spacing * (0.026f * baseScale + influence * 0.185f));
-            // Lift visibility mainly through opacity, while retaining a dim
-            // but clearly present base layer over the Obsidian background.
             float dotAlpha = effectOpacity *
                 std::min(0.90f, 0.095f + 0.17f * brightness +
                          0.45f * influence + variation * 0.030f);
-            // Neutral white/gray palette: the field changes tone, not hue.
-            // Neutral luminance ramp: small dots become light gray, while
-            // wave-driven dots approach white without introducing saturation.
             float tone = std::max(0.0f, std::min(0.985f,
                 0.62f + brightness * 0.25f + influence * 0.20f +
                 variation * 0.020f));
@@ -6049,12 +6101,7 @@ static void DrawPatternWaves(const RECT& clientRect)
         }
     }
 
-    // No restablecer aquí el transform: el caller conserva el mismo transform
-    // de escena para continuar dibujando cards/UI de forma consistente.
 
-    // QPC gives sub-millisecond draw-cost samples; hysteresis prevents isolated
-    // slow frames from changing the background quality and causing visual jumps.
-    // This only adjusts the background's own density, never the UI layout.
     const double drawMs = QpcNowMs() - drawStartMs;
     const ULONGLONG now = GetTickCount64();
     if (drawMs >= 12.0)
@@ -6074,8 +6121,6 @@ static void DrawPatternWaves(const RECT& clientRect)
     }
 
     bool qualityChanged = false;
-    // En idle, el grid elegido para el fondo permanece estable. La simulación
-    // y el repaint continúan; solo se evita un cambio compositivo no solicitado.
     const bool layoutIdle = g_selectorAnimation == SelectorAnimationState::Open &&
                             !g_animActive && !g_cardExitActive;
     if (layoutIdle)
@@ -6085,7 +6130,6 @@ static void DrawPatternWaves(const RECT& clientRect)
     }
     if (!layoutIdle && now >= g_patternQualityCooldownUntil)
     {
-        // Cuatro muestras lentas consecutivas para degradar.
         if (g_patternSlowSamples >= 4)
         {
             float next = std::max(0.55f, g_patternQualityScale - 0.15f);
@@ -6095,7 +6139,6 @@ static void DrawPatternWaves(const RECT& clientRect)
             g_patternFastSamples = 0;
             g_patternQualityCooldownUntil = now + 2500;
         }
-        // La recuperación es deliberadamente mucho más lenta que la degradación.
         else if (g_patternFastSamples >= 24 && g_patternQualityScale < 1.0f)
         {
             g_patternQualityScale = std::min(1.0f, g_patternQualityScale + 0.05f);
@@ -6133,9 +6176,6 @@ static bool IsPointInsideRoundedRect(const D2D1_ROUNDED_RECT& rect, float x, flo
     return nx * nx + ny * ny <= 1.0f;
 }
 
-// Radio único del contenedor principal. La región Win32 es la autoridad de
-// clipping; cualquier hit-test o capa visual debe reutilizar exactamente este
-// cálculo para no introducir una segunda curvatura.
 static int GetSelectorCornerRadiusPx(int width, int height)
 {
     if (width <= 0 || height <= 0)
@@ -6150,8 +6190,6 @@ static bool IsPointInsidePatternArea(POINT point)
         g_runtimeSelectorWidth <= 0 || g_runtimeSelectorHeight <= 0)
         return false;
 
-    // Reuse the exact dimensions and radius of ApplySelectorRoundedRegion.
-    // The final pixels are clipped by that same SetWindowRgn region.
     RECT clientRect = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
     int radiusPx = GetSelectorCornerRadiusPx(clientRect.right, clientRect.bottom);
     D2D1_ROUNDED_RECT area = D2D1::RoundedRect(
@@ -6164,10 +6202,6 @@ static bool IsPointInsidePatternArea(POINT point)
                                     static_cast<float>(point.y));
 }
 
-// Sombra ambiental del fondo general: un pozo oscuro y suave detrás de las
-// cards que se desvanece a alfa 0 antes de llegar a los bordes. Es un degradado
-// radial (no un rectángulo), así que no tapa la transparencia de DWM ni dibuja
-// un borde. El brush se crea una vez; por frame solo se ajustan centro y radios.
 static ID2D1RadialGradientBrush* EnsureAmbientShadowBrush()
 {
     if (g_ambientShadowBrush)
@@ -6227,8 +6261,6 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc);
 
 static void ReleaseD2DResourcesForTargetSwitch()
 {
-    // D2D bitmaps, brushes and layers belong to the render target that created
-    // them. Preserve HICON handles, but discard all target-bound caches.
     for (auto& group : g_groups)
     {
         if (group.iconBitmap) { group.iconBitmap->Release(); group.iconBitmap = nullptr; }
@@ -6282,7 +6314,7 @@ static bool EnsureFullscreenGpuTarget(HWND hwnd)
             Wh_Log(L"[FS-GPU] No se pudo crear el target D2D por hardware: 0x%08X",
                    static_cast<unsigned>(hr));
             if (g_fsHwndRenderTarget) { g_fsHwndRenderTarget->Release(); g_fsHwndRenderTarget = nullptr; }
-            return false; // No fallback a GDI: Fullscreen debe ser acelerado por hardware.
+            return false;
         }
     }
     else
@@ -6305,14 +6337,10 @@ static bool EnsureFullscreenGpuTarget(HWND hwnd)
     return SetActiveD2DTarget(g_fsHwndRenderTarget);
 }
 
-// En Fullscreen, Direct2D dibuja directamente en un HWND render target por GPU;
-// no se hace presentacion final por GDI/BitBlt.
 static void PaintSelectorScene(HWND hwnd, HDC hdc)
 {
     if (IsFullscreenBackdropActive())
     {
-        // Fullscreen is rendered directly to a hardware-only Direct2D HWND target.
-        // This route never binds a GDI HDC and never presents with BitBlt.
         if (!LoadD2DAndDWrite() || !EnsureFullscreenGpuTarget(hwnd) ||
             !LoadD2DAndDWrite() || !g_d2dRenderTarget || !g_d2dBrush ||
             !EnsureFullscreenD2DBitmaps())
@@ -6341,16 +6369,10 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
     const bool fullscreenBackdrop = IsFullscreenBackdropActive();
     const bool d2dLoaded = LoadD2DAndDWrite() && g_d2dRenderTarget && g_d2dBrush;
 
-    // Fullscreen con Direct2D: fondo y escena se dibujan juntos en un único
-    // BeginDraw/EndDraw sobre una superficie del tamaño del área sucia
-    // (rcPaint). El render target DC vuelca toda su superficie al EndDraw, así
-    // que el fondo no puede pintarse antes con GDI: debe ir dentro de D2D.
     bool useSceneDc = false;
     RECT dirty = clientRect;
     if (fullscreenBackdrop && d2dLoaded && EnsureFullscreenD2DBitmaps())
     {
-        // HWND render targets are redrawn as a complete frame. This avoids
-        // clearing untouched areas when D2D Clear() resets the whole target.
         dirty = clientRect;
         useSceneDc = false;
     }
@@ -6389,9 +6411,6 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             DrawFullscreenBackgroundD2D();
         if (g_selectionExpansionActive)
         {
-            // The selected window is a DWM thumbnail composed independently
-            // over this HWND. Clear the task-switcher UI immediately after
-            // selection, while that thumbnail continues its expansion.
             const HRESULT drawResult = g_d2dRenderTarget->EndDraw();
             if (drawResult == static_cast<HRESULT>(0x8899000C))
                 ReleaseD2DDeviceResources();
@@ -6427,17 +6446,12 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             g_d2dRenderTarget->PushLayer(&opacityParameters, sceneOpacityLayer);
         }
 
-        // El background y el contenedor forman parte de la misma escena que
-        // las cards: deben acompañar la escala de apertura/cierre y compartir
-        // su pivote central.
         if (sceneScaleX != 1.0f || sceneScaleY != 1.0f ||
             g_selectionExpansionActive || fullscreenBackdrop)
         {
             g_d2dRenderTarget->SetTransform(GetSceneTransform() * baseTransform);
         }
 
-        // Base background layer. None deliberately leaves the surface
-        // transparent so whatever is underneath remains visible.
         D2D1_RECT_F bgRect = D2D1::RectF(
             static_cast<float>(sceneRect.left),
             static_cast<float>(sceneRect.top),
@@ -6454,13 +6468,10 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
         }
         else if (!fullscreenBackdrop && g_baseBackgroundMode != BaseBackgroundMode::None)
         {
-            // Fallback for DWM mode if glass is unavailable.
             g_d2dBrush->SetColor(D2D1::ColorF(0.70f, 0.74f, 0.82f, 0.18f));
             g_d2dRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
         }
 
-        // Cursor spotlight: only the background is affected. Cards are drawn
-        // afterwards, so the spotlight never bleeds across their surfaces.
         if (!fullscreenBackdrop && IsBackgroundSpotlightAllowed() &&
             g_dwmGlassEnabled && g_backgroundSpotlightActive)
         {
@@ -6485,14 +6496,8 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             }
         }
 
-        // Experimental background is an independent layer over the base.
         if (!fullscreenBackdrop && IsPatternWavesActive())
         {
-            // Pattern Waves is content inside the selector's existing DWM
-            // container. The window region clips it; no second rounded mask
-            // or Pattern-specific container is created here.
-            // The caller already owns the scene transform, so Pattern Waves
-            // draws in scene coordinates without a second scale.
             DrawPatternWaves(sceneRect);
             if (sceneScaleX != 1.0f || sceneScaleY != 1.0f)
             {
@@ -6500,15 +6505,10 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             }
         }
 
-        // The global container border/shadow is itself a background visual.
-        // With no base and no experimental layer, omit it so cards float over
-        // the desktop. Pattern Waves keeps its own mask and reactive border.
         const bool hasVisualBackground =
             !fullscreenBackdrop && g_baseBackgroundMode != BaseBackgroundMode::None;
         if (hasVisualBackground)
         {
-            // DWM owns the single rounded container. Pattern Waves does not
-            // replace or add another outline around the same area.
             D2D1_ROUNDED_RECT containerRect = D2D1::RoundedRect(
                 D2D1::RectF(DpiPx(0.75f), DpiPx(0.75f),
                             static_cast<float>(sceneRect.right) - DpiPx(0.75f),
@@ -6528,8 +6528,6 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             PaintBottomShadowD2D(containerShadow, ScaleLayoutPx(12.0f), 0.34f);
         }
 
-        // Sombra ambiental general: por encima del fondo (DWM/Pattern) y por
-        // detrás de las cards. Se dibuja con ambos modos de fondo.
         if (!fullscreenBackdrop)
         {
             if (ID2D1RadialGradientBrush* ambient = EnsureAmbientShadowBrush())
@@ -6544,14 +6542,11 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             }
         }
 
-    // Todas las sombras antes que las cards: la sombra de una card nunca queda
-    // por encima de otra card ya pintada.
     for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
         {
             if (ResolveGroupIndex(slot) < 0)
                 continue;
-            const float shadowDist = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
-            const bool shadowSelected = (shadowDist < 0.5f);
+            const bool shadowSelected = IsSlotSelected(slot);
             const RECT shadowCard = GetSlotCardRect(slot);
             const float shadowRadius = shadowSelected
                 ? static_cast<float>(g_cardStyle.selectedCornerRadius) * g_uiScale.value
@@ -6562,8 +6557,9 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             PaintCardShadowD2D(shadowCard, shadowRadius, shadowStrength);
         }
 
-    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
+    for (int drawIndex = 0; drawIndex < GetCarouselSlotCount(); ++drawIndex)
         {
+            const int slot = drawIndex;
             int index = ResolveGroupIndex(slot);
             if (index < 0)
                 continue;
@@ -6584,12 +6580,12 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                 }
             }
 
-            float distFromCenter = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
-            bool selected = (distFromCenter < 0.5f);
+            float distFromCenter = GetSlotSelectionDistance(slot);
+            bool selected = IsSlotSelected(slot);
             RECT cardRect = GetSlotCardRect(slot);
             float radius = selected ? static_cast<float>(g_cardStyle.selectedCornerRadius) * g_uiScale.value
                                     : static_cast<float>(g_cardStyle.cornerRadius) * g_uiScale.value;
-            if (selected && slot == GetCarouselCenterSlot())
+            if (selected && (IsCompactAutomaticMode() || slot == GetCarouselCenterSlot()))
                 PaintCenterAccentMarginD2D(cardRect, index, radius);
 
             COLORREF cardColor = selected ? g_cardSelectedColor : g_cardNormalColor;
@@ -6602,8 +6598,7 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                 D2D1::RectF(static_cast<float>(cardRect.left) + 0.5f, static_cast<float>(cardRect.top) + 0.5f,
                             static_cast<float>(cardRect.right) - 0.5f, static_cast<float>(cardRect.bottom) - 0.5f),
                 radius, radius);
-            ID2D1LinearGradientBrush* surfaceBrush =
-                EnsureSurfaceGradientBrush(index, selected);
+            ID2D1LinearGradientBrush* surfaceBrush = EnsureSurfaceGradientBrush(index, selected);
             if (surfaceBrush)
             {
                 float cardHeight = static_cast<float>(cardRect.bottom - cardRect.top);
@@ -6621,9 +6616,13 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                 g_d2dRenderTarget->FillRoundedRectangle(&cr, g_d2dBrush);
             }
 
-            D2D1_COLOR_F borderCol = selected
-                ? D2D1::ColorF(0.080f, 0.085f, 0.095f, 0.92f)
-                : D2D1::ColorF(0.035f, 0.040f, 0.050f, 0.82f);
+            COLORREF borderColor = selected ? g_cardStyle.selectedBorderColor
+                                              : g_cardStyle.borderColor;
+            D2D1_COLOR_F borderCol = D2D1::ColorF(
+                GetRValue(borderColor) / 255.0f,
+                GetGValue(borderColor) / 255.0f,
+                GetBValue(borderColor) / 255.0f,
+                selected ? 0.98f : 0.88f);
             g_d2dBrush->SetColor(borderCol);
             g_d2dRenderTarget->DrawRoundedRectangle(&cr, g_d2dBrush,
                                                       DpiPx(selected ? 1.5f : 1.0f));
@@ -6633,9 +6632,6 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                 D2D1::RectF(static_cast<float>(prevRect.left) + 0.5f, static_cast<float>(prevRect.top) + 0.5f,
                             static_cast<float>(prevRect.right) - 0.5f, static_cast<float>(prevRect.bottom) - 0.5f),
                 DpiPx(6.0f), DpiPx(6.0f));
-            // No se pinta un panel opaco detrás del thumbnail. El thumbnail
-            // DWM permanece nítido y con opacity=255; los huecos dejan ver la
-            // superficie translúcida de la card.
             D2D1_COLOR_F prevBorder = selected
                 ? D2D1::ColorF(0.080f, 0.085f, 0.095f, 0.60f)
                 : D2D1::ColorF(0.035f, 0.040f, 0.050f, 0.50f);
@@ -6647,7 +6643,8 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                 g_groups[index].icon)
             {
                 EnsureIconBitmap(index);
-                int relative = slot - GetCarouselCenterSlot();
+                int relative = IsCompactAutomaticMode()
+                    ? slot - g_selected : slot - GetCarouselCenterSlot();
                 int iconSize = ScaleLayoutPx(static_cast<float>(selected ? 56 : (abs(relative) == 1 ? 40 : 28)));
                 int cx = prevRect.left + (prevRect.right - prevRect.left - iconSize) / 2;
                 int cy = prevRect.top + (prevRect.bottom - prevRect.top - iconSize) / 2;
@@ -6751,12 +6748,14 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             }
         }
 
+        PaintCompactSelectionIndicatorD2D();
+
         if (g_selectionExpansionActive && g_d2dRenderTarget)
         {
-            // El rectángulo de expansión ya está expresado en coordenadas del
-            // cliente ampliado, no en la escena original trasladada.
             g_d2dRenderTarget->SetTransform(baseTransform);
             const float p = g_selectionExpansionProgress;
+            const float shadowRadius = DpiPx(14.0f) * (1.0f - p) + DpiPx(6.0f) * p;
+            PaintCardShadowD2D(g_selectionExpansionRect, shadowRadius, 0.78f);
             const float radius = std::max(0.0f, DpiPx(14.0f) * (1.0f - p));
             D2D1_ROUNDED_RECT expansionRect = D2D1::RoundedRect(
                 D2D1::RectF(static_cast<float>(g_selectionExpansionRect.left),
@@ -6779,7 +6778,7 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
         g_d2dRenderTarget->SetTransform(baseTransform);
         g_d2dRenderTarget->PopAxisAlignedClip();
         const HRESULT drawResult = g_d2dRenderTarget->EndDraw();
-        if (drawResult == static_cast<HRESULT>(0x8899000C))  // D2DERR_RECREATE_TARGET
+        if (drawResult == static_cast<HRESULT>(0x8899000C))
             ReleaseD2DDeviceResources();
         else if (SUCCEEDED(drawResult))
             presentScene();
@@ -6788,14 +6787,11 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
 
     if (fullscreenBackdrop)
     {
-        // Strict hardware-only policy: never switch Fullscreen back to GDI.
         return;
     }
 
     if (g_selectionExpansionActive)
     {
-        // Keep the selected fullscreen backdrop behind the expanding DWM
-        // thumbnail. For regular DWM mode, black remains transparent glass.
         if (IsFullscreenBackdropActive())
         {
             if (!DrawFullscreenBackgroundGdi(hdc))
@@ -6837,13 +6833,11 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
         PaintBottomShadowGDI(hdc, containerShadow, ScaleLayoutPx(12.0f));
     }
 
-    // Todas las sombras antes que las cards (ver ruta Direct2D).
     for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
     {
         if (ResolveGroupIndex(slot) < 0)
             continue;
-        float shadowDist = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
-        bool shadowSelected = (shadowDist < 0.5f);
+        bool shadowSelected = IsSlotSelected(slot);
         int shadowRadius = shadowSelected
             ? ScaleLayoutPx(static_cast<float>(g_cardStyle.selectedCornerRadius))
             : ScaleLayoutPx(static_cast<float>(g_cardStyle.cornerRadius));
@@ -6851,13 +6845,14 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                            shadowSelected ? 0.65f : 0.50f);
     }
 
-    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
+    for (int drawIndex = 0; drawIndex < GetCarouselSlotCount(); ++drawIndex)
     {
+        const int slot = drawIndex;
         int index = ResolveGroupIndex(slot);
         if (index < 0)
             continue;
-        float dist = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
-        bool selected = (dist < 0.5f);
+        float dist = GetSlotSelectionDistance(slot);
+        bool selected = IsSlotSelected(slot);
         RECT cardRect = GetSlotCardRect(slot);
         int radius = selected ? ScaleLayoutPx(static_cast<float>(g_cardStyle.selectedCornerRadius))
                               : ScaleLayoutPx(static_cast<float>(g_cardStyle.cornerRadius));
@@ -6907,10 +6902,20 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             if (oldFont && g_selectObject) g_selectObject(hdc, oldFont);
         }
     }
+    if (g_selectionExpansionActive)
+    {
+        const float p = g_selectionExpansionProgress;
+        const int shadowRadius = static_cast<int>(roundf(
+            DpiPx(14.0f) * (1.0f - p) + DpiPx(6.0f) * p));
+        PaintCardShadowGDI(hdc, g_selectionExpansionRect, shadowRadius, 0.78f);
+    }
+    PaintCompactSelectionIndicatorGDI(hdc);
     PaintCounterGDI(hdc);
     if (fullscreenGdiState)
         RestoreDC(hdc, fullscreenGdiState);
 }
+
+static void UiHandleSettingsChanged();
 
 static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -6920,9 +6925,10 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
         UpdateSelectorControls();
         return 0;
 
-    // Keyboard input is handled only while this selector owns the foreground.
-    // Explorer forwards Alt+Tab to start/navigate sessions; these window messages
-    // handle subsequent navigation and confirmation without a desktop-wide hook.
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+        return 0;
+
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
     {
@@ -6957,8 +6963,6 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             CancelSelection();
             return 0;
         default:
-            // While the selector is active, do not let unrelated keys trigger
-            // default window/menu behavior.
             return 0;
         }
     }
@@ -6975,8 +6979,6 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             g_tabRepeatStarted = false;
             KillTimer(hwnd, kTabRepeatTimerId);
         }
-        // Alt/AltGr release is confirmed by the input thread's physical-state
-        // polling, which also works when the former foreground was elevated.
         return 0;
     }
 
@@ -7009,7 +7011,6 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
 
         if (wParam == kActivityTimerId)
         {
-            // Failsafe: existe únicamente mientras el selector está abierto.
             if (g_state == SelectorState::SelectorActive)
             {
                 ULONGLONG now = GetTickCount64();
@@ -7031,7 +7032,6 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
 
         if (wParam == kSelectorMotionTimerId)
         {
-            // Solo en el camino de reserva (sin waitable timer): disparo único.
             KillTimer(hwnd, kSelectorMotionTimerId);
             RunFrame();
             return 0;
@@ -7068,8 +7068,6 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
         return 0;
 
     case WM_DPICHANGED:
-        // El tamaño y la posición los fija CreateSelector en píxeles físicos
-        // para el monitor de destino; no se acepta el rectángulo sugerido.
         return 0;
 
     case WM_SIZE:
@@ -7132,13 +7130,9 @@ static void UpdateSelectorSurfaceTransform()
         return;
     if (g_selectionExpansionActive || IsFullscreenBackdropActive())
     {
-        // El mismo HWND del selector cubre temporalmente el monitor para el blur
-        // y la expansión de selección; esas superficies deben quedar sin región.
         if (g_selectorRegionClearedWindow != g_selector &&
             SetWindowRgn(g_selector, nullptr, TRUE))
         {
-            // SetWindowRgn(NULL) elimina la región; recordar el estado evita
-            // forzar una recomposición completa repetidamente durante frames.
             g_selectorRegionClearedWindow = g_selector;
             g_selectorRegionAppliedWindow = nullptr;
             g_selectorRegionAppliedWidth = 0;
@@ -7148,9 +7142,6 @@ static void UpdateSelectorSurfaceTransform()
         return;
     }
 
-    // Fuera del modo fullscreen, el HWND conserva su geometría delimitada.
-    // La escena lógica permanece igual; el blur sólo cambia el viewport físico
-    // del mismo HWND y aplica una traslación a tarjetas, thumbnails e input.
     ApplySelectorRoundedRegion(g_selector);
 }
 
@@ -7166,8 +7157,6 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
     if (width <= 0 || height <= 0)
         return;
 
-    // La región solo depende del tamaño y del radio. Reaplicarla en cada frame
-    // creaba un HRGN y forzaba una recomposición completa de la ventana.
     int radius = GetSelectorCornerRadiusPx(width, height);
     if (g_selectorRegionAppliedWindow == hwnd &&
         g_selectorRegionAppliedWidth == width &&
@@ -7202,7 +7191,6 @@ static bool InitializePersistentSelector()
     if (!RegisterSelectorClasses())
         return false;
 
-    // Creada por el UI thread (Per-Monitor-V2) con el HMODULE del mod.
     HWND selector = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kWindowClassName, L"",
@@ -7221,8 +7209,6 @@ static bool InitializePersistentSelector()
     ApplySelectorVisuals(g_selector);
 
 
-    // Precalentar el renderer mientras el selector está oculto. Esto elimina
-    // la creación de D2D/DWrite/fonts del camino crítico de Alt+Tab.
     LoadD2DAndDWrite();
     CreateUiFonts();
     UpdateSelectorControls();
@@ -7230,14 +7216,11 @@ static bool InitializePersistentSelector()
     return true;
 }
 
-// Se ejecuta siempre en el UI thread, nunca en un hook.
 static bool CreateSelector(bool shiftHeld)
 {
     if (g_state != SelectorState::SelectorActive || g_cleanupInProgress)
         return false;
 
-    // El selector se crea y precalienta únicamente durante la inicialización
-    // del UI thread. Nunca se crea ni se carga en el camino de Alt+Tab.
     if (!g_selector || !IsWindow(g_selector))
         return false;
 
@@ -7246,15 +7229,17 @@ static bool CreateSelector(bool shiftHeld)
     MarkSelectorActivity();
 
     g_pendingCloseWindows.clear();
-    RefreshWindowList();
+    g_filterMonitor = ResolveFilterMonitor(g_selectorOriginWindow);
+    RefreshWindowList(true);
     if (g_groups.empty())
     {
         g_selectorOpening = false;
         return false;
     }
 
-    HMONITOR monitor = MonitorFromWindow(g_selectorOriginWindow,
-                                         MONITOR_DEFAULTTONEAREST);
+    HMONITOR monitor = g_filterMonitor
+        ? g_filterMonitor
+        : MonitorFromWindow(g_selectorOriginWindow, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo = {};
     monitorInfo.cbSize = sizeof(monitorInfo);
     if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo))
@@ -7265,8 +7250,6 @@ static bool CreateSelector(bool shiftHeld)
 
     const RECT& work = monitorInfo.rcWork;
     UpdateUIScaleForWorkArea(work, GetMonitorDpiScale(monitor));
-    // Si el monitor tiene otra escala, reconstruir TextFormat y fuentes GDI
-    // antes de mostrar (no reutilizar formatos de otra escala).
     LoadD2DAndDWrite();
     CreateUiFonts();
     int x = work.left + ((work.right - work.left) - g_runtimeSelectorWidth) / 2;
@@ -7274,7 +7257,6 @@ static bool CreateSelector(bool shiftHeld)
 
     StopCarouselAnimation();
 
-    // El HWND principal mantiene una superficie física estable durante la animación.
     SetWindowPos(g_selector, HWND_TOPMOST, x, y,
                  g_runtimeSelectorWidth, g_runtimeSelectorHeight,
                  SWP_NOACTIVATE | SWP_HIDEWINDOW);
@@ -7299,11 +7281,15 @@ static bool CreateSelector(bool shiftHeld)
         ApplySelectorRoundedRegion(g_selector);
     }
     ApplySelectorVisuals(g_selector);
-    // RefreshWindowList coloca la ventana que estaba en foreground en índice 0.
-    // La primera pulsación respeta Shift: Alt+Tab avanza y Alt+Shift+Tab
-    // retrocede desde la ventana actualmente activa.
     if (g_groups.size() > 1)
-        g_selected = shiftHeld ? static_cast<int>(g_groups.size()) - 1 : 1;
+    {
+        const bool originListed =
+            g_groups[0].representativeWindow == g_selectorOriginWindow;
+        if (g_filterMonitor && !originListed)
+            g_selected = shiftHeld ? static_cast<int>(g_groups.size()) - 1 : 0;
+        else
+            g_selected = shiftHeld ? static_cast<int>(g_groups.size()) - 1 : 1;
+    }
     else
         g_selected = 0;
     g_animOffset = 0.0f;
@@ -7318,7 +7304,6 @@ static bool CreateSelector(bool shiftHeld)
     CreateUiFonts();
     UpdateThumbnailSlots();
 
-    // Allows the selector to take foreground after Explorer forwards Alt+Tab.
     INPUT input;
     ZeroMemory(&input, sizeof(INPUT));
     SendInput(1, &input, sizeof(INPUT));
@@ -7332,7 +7317,6 @@ static bool CreateSelector(bool shiftHeld)
     ResetPatternWaves();
     if (IsPatternWavesActive())
         SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
-    // Failsafe solo mientras el selector está abierto (sin polling permanente).
     SetTimer(g_selector, kActivityTimerId, 250, nullptr);
     return true;
 }
@@ -7362,9 +7346,6 @@ static void HideSelectorForSession()
     }
     HideFullscreenBackdrop(true);
 
-    // No conservar superficies DWM registradas mientras el selector está oculto:
-    // así ninguna miniatura puede sobrevivir visualmente al cierre. La siguiente
-    // sesión las registra de nuevo mediante UpdateThumbnailSlots.
     UnregisterAllThumbnails();
     ShowWindow(g_selector, SW_HIDE);
     if (wasFullscreen)
@@ -7388,6 +7369,8 @@ static void HideSelectorForSession()
     g_scenePresence = 1.0f;
     g_carouselSpread = 1.0f;
     g_cardSnapScale = 1.0f;
+    g_staticSelectionAnimating = false;
+    g_staticPreviousSelected = -1;
     g_animActive = false;
     g_animOffset = 0.0f;
     g_animStartOffset = 0.0f;
@@ -7413,14 +7396,10 @@ static void HideSelectorForSession()
 
 static void DestroySelector()
 {
-    // Esta función mantiene el HWND y el renderer vivos entre sesiones. El
-    // desmontaje real ocurre únicamente al terminar el UI thread. No se toca
-    // ClipCursor ni ningún estado global que Overhaulded no haya creado.
     ReleaseCapture();
     HideSelectorForSession();
 }
 
-// Solo UI thread, al terminar el hilo.
 static void ShutdownPersistentSelector()
 {
 
@@ -7473,14 +7452,31 @@ static void EmergencyCloseSelector()
 
 static void UpdateCarouselAnimation(HWND)
 {
+    if (IsCompactAutomaticMode())
+    {
+        g_animActive = false;
+        g_animOffset = 0.0f;
+        g_animStartOffset = 0.0f;
+        if (g_staticSelectionAnimating &&
+            ElapsedFraction(g_staticSelectionStartTime,
+                            kStaticSelectionDurationMs) >= 1.0f)
+        {
+            g_staticSelectionAnimating = false;
+            g_staticPreviousSelected = -1;
+        }
+        if (g_staticSelectionAnimating)
+            UpdateSelectorControls();
+        return;
+    }
+    if (g_staticSelectionAnimating)
+    {
+        g_staticSelectionAnimating = false;
+        g_staticPreviousSelected = -1;
+    }
     if (!g_animActive)
         return;
     const float progress = ElapsedFraction(g_animStartTime,
                                            CardNavigationDuration());
-    // Card navigation has its own style, independent from selector/background
-    // opening and closing. Linear moves at constant velocity; Smooth uses a
-    // symmetric smoothstep curve (ease-in/ease-out) over the SAME duration.
-    // Neither style overshoots; Bouncy keeps its spring response.
     const float eased = g_cardMotionStyle == CardMotionStyle::Bouncy
         ? SpringOvershoot(progress)
         : g_cardMotionStyle == CardMotionStyle::Linear
@@ -7508,13 +7504,8 @@ static void StartSlide(int steps)
     if (steps == 0 || g_groups.empty())
         return;
 
-    // With a single visible card there is nowhere to navigate. Ignore every
-    // navigation source (arrows, Tab/repeat, forwarded hotkeys and mouse wheel)
-    // so the lone card stays centered and no selection animation is triggered.
-    if (g_singleWindowCard && g_groups.size() == 1)
+    if (IsSingleCardMode())
         return;
-    // Solo se marca SelectionChange desde Open: no se toca la escena si la
-    // apertura o el cierre están en curso.
     if (g_selectorAnimation == SelectorAnimationState::Open)
     {
         g_selectorAnimation = SelectorAnimationState::SelectionChange;
@@ -7522,9 +7513,42 @@ static void StartSlide(int steps)
     }
 
     int count = static_cast<int>(g_groups.size());
+    const int previousSelected = g_selected;
+    if (IsCompactAutomaticMode())
+    {
+        RECT currentIndicatorCard = GetSlotCardRect(g_selected);
+        g_staticIndicatorStartX =
+            (static_cast<float>(currentIndicatorCard.left) + currentIndicatorCard.right) * 0.5f;
+        if (g_staticSelectionAnimating && g_staticPreviousSelected >= 0 &&
+            g_staticPreviousSelected < count)
+        {
+            RECT previousIndicatorCard = GetSlotCardRect(g_staticPreviousSelected);
+            const float previousX =
+                (static_cast<float>(previousIndicatorCard.left) + previousIndicatorCard.right) * 0.5f;
+            const float progress = EaseSmooth(ElapsedFraction(
+                g_staticSelectionStartTime, kStaticSelectionDurationMs));
+            g_staticIndicatorStartX = LerpFloat(previousX, g_staticIndicatorStartX, progress);
+        }
+        for (int slot = 0; slot < count && slot < 3; ++slot)
+            g_staticScaleFrom[slot] = GetSlotVisualScale(slot);
+    }
     g_selected = (g_selected + steps) % count;
     while (g_selected < 0)
         g_selected += count;
+
+    if (IsCompactAutomaticMode())
+    {
+        g_staticPreviousSelected = previousSelected;
+        g_staticSelectionStartTime = FrameClockNow();
+        g_staticSelectionAnimating = previousSelected != g_selected;
+        g_animActive = false;
+        g_animOffset = 0.0f;
+        g_animStartOffset = 0.0f;
+        g_cardSnapScale = 1.0f;
+        UpdateSelectorControls();
+        RequestFrame();
+        return;
+    }
 
     g_animStartOffset = g_animOffset + static_cast<float>(steps);
     if (g_animStartOffset > 2.0f) g_animStartOffset = 2.0f;
@@ -7613,7 +7637,6 @@ static HWND GetNextGroupWindow(AppGroup& group)
     return target;
 }
 
-// Solicita la activación al input thread sin bloquear el UI thread.
 static void ActivateWindow(HWND target)
 {
     if (!target || !IsWindow(target))
@@ -7625,31 +7648,98 @@ static void ActivateWindow(HWND target)
                            reinterpret_cast<WPARAM>(target), 0);
 }
 
-// Esta función solo se ejecuta desde el input thread. Repite la ruta completa
-// de activación porque algunas ventanas elevadas aún están restaurándose cuando
-// termina la expansión del selector.
+static bool BeginRestoreWithoutDwmTransition(HWND target)
+{
+    if (g_restoreTransitionOverrideActive &&
+        g_restoreTransitionTarget == target)
+        return true;
+
+    if (g_restoreTransitionOverrideActive)
+    {
+        if (g_restoreTransitionTarget && IsWindow(g_restoreTransitionTarget) &&
+            LoadDwmFunctions() && g_dwmSetWindowAttribute)
+        {
+            g_dwmSetWindowAttribute(g_restoreTransitionTarget,
+                kDwmTransitionsForcedDisabled,
+                &g_restoreTransitionPreviousValue,
+                sizeof(g_restoreTransitionPreviousValue));
+        }
+        g_restoreTransitionTarget = nullptr;
+        g_restoreTransitionOverrideActive = false;
+    }
+
+    if (!LoadDwmFunctions() || !g_dwmSetWindowAttribute ||
+        !g_dwmGetWindowAttribute)
+        return false;
+
+    BOOL previousValue = FALSE;
+    g_dwmGetWindowAttribute(target, kDwmTransitionsForcedDisabled,
+                            &previousValue, sizeof(previousValue));
+
+    BOOL disabled = TRUE;
+    if (FAILED(g_dwmSetWindowAttribute(target,
+            kDwmTransitionsForcedDisabled,
+            &disabled, sizeof(disabled))))
+        return false;
+
+    g_restoreTransitionTarget = target;
+    g_restoreTransitionPreviousValue = previousValue;
+    g_restoreTransitionOverrideActive = true;
+    return true;
+}
+
+static void EndRestoreWithoutDwmTransition(HWND target)
+{
+    if (!g_restoreTransitionOverrideActive ||
+        (target && g_restoreTransitionTarget != target))
+        return;
+
+    HWND restoreTarget = g_restoreTransitionTarget;
+    if (restoreTarget && IsWindow(restoreTarget) &&
+        LoadDwmFunctions() && g_dwmSetWindowAttribute)
+    {
+        g_dwmSetWindowAttribute(restoreTarget,
+            kDwmTransitionsForcedDisabled,
+            &g_restoreTransitionPreviousValue,
+            sizeof(g_restoreTransitionPreviousValue));
+    }
+
+    g_restoreTransitionTarget = nullptr;
+    g_restoreTransitionPreviousValue = FALSE;
+    g_restoreTransitionOverrideActive = false;
+}
+
 static bool TryActivateWindowOnInputThread(HWND target)
 {
     if (!target || !IsWindow(target))
+    {
+        EndRestoreWithoutDwmTransition(nullptr);
         return false;
+    }
 
     if (IsIconic(target))
+    {
+        BeginRestoreWithoutDwmTransition(target);
         ShowWindowAsync(target, SW_RESTORE);
+    }
 
     g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
-    if (GetForegroundWindow() == target)
+    if (GetForegroundWindow() == target && !IsIconic(target))
+    {
+        EndRestoreWithoutDwmTransition(target);
         return true;
+    }
 
-    // No se bloquea el input thread esperando al hilo de la ventana destino.
-    // SWP_ASYNCWINDOWPOS entrega el cambio de z-order de forma asíncrona.
     SetWindowPos(target, HWND_TOP, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                      SWP_ASYNCWINDOWPOS);
     g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
-    return GetForegroundWindow() == target;
+    const bool activated = GetForegroundWindow() == target && !IsIconic(target);
+    if (!IsIconic(target))
+        EndRestoreWithoutDwmTransition(target);
+    return activated;
 }
 
-// Esta función solo se ejecuta desde InputThreadProc / su WndProc.
 static void ActivateWindowOnInputThread(HWND control, HWND target)
 {
     if (TryActivateWindowOnInputThread(target))
@@ -7660,9 +7750,6 @@ static void ActivateWindowOnInputThread(HWND control, HWND target)
         return;
     }
 
-    // Restore/activation of an elevated or busy application may complete
-    // asynchronously. Retry briefly from the input thread instead of dropping
-    // the request after the expansion has hidden the selector.
     g_inputActivationTarget = target;
     g_inputActivationRetryCount = 0;
     SetTimer(control, kActivationRetryTimerId, kActivationRetryMs, nullptr);
@@ -7674,6 +7761,7 @@ static void InputRetryActivation(HWND control)
     if (!target || !IsWindow(target) ||
         ++g_inputActivationRetryCount > kMaxActivationRetries)
     {
+        EndRestoreWithoutDwmTransition(nullptr);
         g_inputActivationTarget = nullptr;
         g_inputActivationRetryCount = 0;
         KillTimer(control, kActivationRetryTimerId);
@@ -7715,9 +7803,6 @@ static void ConfirmSelection()
         return;
     }
 
-    // La confirmación conserva el selector visible y comienza la expansión de
-    // la tarjeta seleccionada. Si el monitor, el HWND o el renderer no pueden
-    // sostenerla, StartSelectionExpansion aplica el fallback inmediato.
     if (!target || !IsWindow(target))
     {
         g_cleanupInProgress = true;
@@ -7730,8 +7815,6 @@ static void ConfirmSelection()
     }
     if (!g_expandSelectedWindow)
     {
-        // Modo directo: conservar la confirmación y la activación originales,
-        // pero sin ejecutar la expansión visual de 240 ms.
         g_cleanupInProgress = true;
         DestroySelector();
         g_state = SelectorState::Idle;
@@ -7741,9 +7824,6 @@ static void ConfirmSelection()
         return;
     }
     const bool targetWasMinimized = IsIconic(target);
-    // No restaurar aquí: la ventana real podría empezar a aparecer detrás de
-    // la miniatura antes de que concluya la expansión. ActivateWindow la restaura
-    // cuando el selector ya cubre toda la pantalla.
     StartSelectionExpansion(target, targetWasMinimized);
 }
 
@@ -7778,11 +7858,6 @@ static bool UiCommandMatchesSession(WPARAM sessionId)
     return static_cast<LONG>(sessionId) == g_uiSessionId && IsSelectorActive();
 }
 
-// Sesiones iniciadas desde Explorer: este permite al proceso del selector tomar
-// el foco aunque lo tuviera una ventana elevada. El selector procesa la
-// navegación en su WndProc; el polling de modificadores confirma Alt/Ctrl.
-// WS_EX_NOACTIVATE se retira solo durante la sesión; HideSelectorForSession lo
-// restablece. Si no logra tomar el foco, el hotkey reenviado sigue navegando.
 static void UiTakeForeground()
 {
     if (!g_selector || !IsWindow(g_selector))
@@ -7797,7 +7872,6 @@ static void UiTakeForeground()
     }
 }
 
-// Si el selector tomó el foco, cancelar debe devolverlo a la ventana de origen.
 static HWND FocusRestoreTarget()
 {
     if (g_selectorFocusTaken && g_selectorOriginWindow &&
@@ -7816,7 +7890,6 @@ static void UiOpen(LONG sessionId, bool shiftHeld, bool fromHotkey)
 
     if (!CreateSelector(shiftHeld))
     {
-        // Nada que mostrar (o precarga no disponible): terminar la sesión.
         g_state = SelectorState::Idle;
         UiEndSession();
         return;
@@ -7825,7 +7898,6 @@ static void UiOpen(LONG sessionId, bool shiftHeld, bool fromHotkey)
     UiSetInteractive(true);
     if (fromHotkey)
     {
-        // El hook no vio este Tab: no hay keyup que detenga un autorepeat.
         UiTakeForeground();
         return;
     }
@@ -7856,7 +7928,7 @@ static void UiHandleMouseMove()
         screenPt.x = static_cast<LONG>(static_cast<ULONG>(static_cast<ULONG64>(packed) & 0xFFFFFFFFULL));
         screenPt.y = static_cast<LONG>(static_cast<ULONG>((static_cast<ULONG64>(packed) >> 32) & 0xFFFFFFFFULL));
         const int dx = screenPt.x - g_mousePressScreenPoint.x;
-        if (g_groups.size() > 1 && !g_singleWindowCard &&
+        if (g_groups.size() >= 4 && !IsCompactAutomaticMode() &&
             (g_mouseDragging || std::abs(dx) >= 7))
         {
             g_mouseDragging = true;
@@ -7875,15 +7947,9 @@ static void UiHandleMouseMove()
     g_backgroundSpotlightActive = PtInRect(&clientRect, pt) &&
                                    IsBackgroundSpotlightAllowed();
     UpdatePatternCursor(pt);
-    // Apply the cursor impulse immediately on the UI thread instead of waiting
-    // for the next 33/50 Hz Pattern timer tick. This keeps the wave response
-    // synchronized with mouse movement while the timer continues propagating
-    // the already-created wave field between mouse events.
     if (IsPatternWavesActive() && g_patternCursorInteraction)
         UpdatePatternWaves();
     UpdateHoveredSlot(pt);
-    // Los cambios de hover piden su propio frame; solo el spotlight y Pattern
-    // Waves dependen de cada movimiento del cursor. Se agrupan por frame.
     if (g_backgroundSpotlightActive || IsPatternWavesActive())
         RequestFrame();
     MarkSelectorActivity();
@@ -7927,7 +7993,7 @@ static void FinishMouseCarouselDrag()
     if (dragged)
     {
         const int count = static_cast<int>(g_groups.size());
-        if (count <= 1 || g_singleWindowCard)
+        if (count < 4 || IsCompactAutomaticMode())
         {
             g_animOffset = 0.0f;
             g_animActive = false;
@@ -7936,14 +8002,11 @@ static void FinishMouseCarouselDrag()
         else
         {
             int steps = static_cast<int>(roundf(-g_animOffset));
-            // Avoid circling more than once during one gesture.
             steps = std::max(-(count - 1), std::min(count - 1, steps));
             g_selected = (g_mousePressSelected + steps) % count;
             if (g_selected < 0)
                 g_selected += count;
 
-            // Rebase the dragged geometry to the newly selected logical item;
-            // the residual offset then eases back to the canonical carousel.
             g_animStartOffset = g_animOffset + static_cast<float>(steps);
             g_animOffset = g_animStartOffset;
             g_animStartTime = FrameClockNow();
@@ -7960,14 +8023,12 @@ static void FinishMouseCarouselDrag()
         return;
     }
 
-    // A press that did not cross the drag threshold keeps the existing click
-    // behavior: close button, activate center card, or navigate to a side card.
     if (pressedSlot < 0)
         return;
-    if (pressedSlot == GetCarouselCenterSlot())
+    if (pressedSlot == GetSelectedSlot())
         ConfirmSelection();
     else
-        StartSlide(pressedSlot - GetCarouselCenterSlot());
+        StartSlide(pressedSlot - GetSelectedSlot());
 }
 
 static void UiHandleMouseButton(UINT message, POINT screenPt)
@@ -8020,8 +8081,6 @@ static void UiHandleMouseButton(UINT message, POINT screenPt)
         return;
     }
 
-    // Defer click activation/navigation until release so a normal press can
-    // become a drag without accidentally activating the center window.
     g_mousePressActive = true;
     g_mouseDragging = false;
     g_mousePressedSlot = clickedSlot;
@@ -8049,8 +8108,11 @@ static void UiHandleSettingsChanged()
     }
     if (g_selector && IsWindow(g_selector))
     {
-        // A visible-card count change can invalidate existing DWM slot mapping.
         UnregisterAllThumbnails();
+        g_staticSelectionAnimating = false;
+        g_staticPreviousSelected = -1;
+        g_animActive = false;
+        g_animOffset = 0.0f;
         ResetPatternWaves();
         if (IsPatternWavesActive())
         {
@@ -8128,8 +8190,6 @@ static void HandleUiCommand(const MSG& msg)
     }
 }
 
-// INPUT THREAD. El mouse hook solo publica eventos; teclado y modifiers siguen
-// rutas separadas por Explorer, el selector y el polling físico.
 
 static bool InputSessionActive()
 {
@@ -8137,7 +8197,6 @@ static bool InputSessionActive()
            InterlockedCompareExchange(&g_sessionActive, 0, 0) == g_inputSessionId;
 }
 
-// Si el UI cerró la sesión (clic, timeout, ventana inválida), reconciliar.
 static void SyncInputSession()
 {
     if (g_inputSessionId != 0 && !InputSessionActive())
@@ -8190,8 +8249,6 @@ static void SendAltMenuMaskIfNeeded()
     g_altMenuMaskPending = false;
 }
 
-// Todas las sesiones de modificador se confirman al soltarse. El polling
-// cubre los key-up que pueden perderse ante ventanas con privilegios elevados.
 static void OnModifierReleased()
 {
     if (InputSessionActive() && SessionModifierReleased())
@@ -8199,8 +8256,6 @@ static void OnModifierReleased()
     g_altGrActive = IsAltGrPhysicallyDown();
 }
 
-// Abre una sesión a partir del hotkey reenviado desde Explorer. Solo input thread.
-// Devuelve false (con el estado ya limpio) si el UI thread no aceptó la orden.
 static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
                               bool shift, bool fromHotkey)
 {
@@ -8211,8 +8266,6 @@ static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
 
     g_inputSessionId = id;
     InterlockedExchange(&g_sessionActive, id);
-    // AltGr is physically Ctrl + RightAlt. Track its RightAlt as the primary
-    // release key; other Ctrl+Alt sessions complete when both modifiers are up.
     const bool altGrSession = rightAlt && ctrlHeld && !leftAlt;
     g_sessionModifier = altGrSession
         ? ModifierSession::RightAlt
@@ -8227,9 +8280,6 @@ static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
     if (posted)
     {
         g_altMenuMaskPending = !g_altGrActive;
-        // Poll every Alt-based session, not only forwarded Explorer hotkeys.
-        // This is the release fallback when an elevated foreground prevents the
-        // low-level hook from observing Alt/AltGr key-up.
         if (g_inputControlWnd)
         {
             g_modifierReleasePolling = true;
@@ -8252,7 +8302,6 @@ static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
 {
-    // Solo interviene mientras el UI thread declara el selector interactivo.
     if (nCode != HC_ACTION || !lParam ||
         InterlockedCompareExchange(&g_uiSelectorOpen, 0, 0) == 0)
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
@@ -8265,8 +8314,6 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
             (static_cast<ULONG64>(static_cast<ULONG>(mouse->pt.y)) << 32) |
             static_cast<ULONG64>(static_cast<ULONG>(mouse->pt.x)));
         InterlockedExchange64(&g_lastMousePt, packed);
-        // Coalescencia: como máximo un WM_UI_MOUSE_MOVE pendiente. El hook
-        // observa el movimiento pero no lo suprime.
         if (InterlockedExchange(&g_mouseMovePending, 1) == 0)
         {
             if (!PostUiCommand(WM_UI_MOUSE_MOVE, 0, 0))
@@ -8314,11 +8361,6 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-// HOTKEY REENVIADO DESDE EXPLORER Y SONDEO DE MODIFICADORES (input thread)
-//
-// Explorer entrega el WM_HOTKEY a la ventana de control. El selector maneja
-// sus propias teclas cuando toma el foco; este timer detecta la liberación de
-// Alt/Ctrl mediante el estado físico, sin un hook global de teclado.
 
 static void InputSyncModifiersFromSystem()
 {
@@ -8341,21 +8383,16 @@ static void InputHandleForwardedHotkey(WPARAM flags)
 
     if (InputSessionActive())
     {
-        // La sesión ya existe y el hook no vio esta pulsación (por eso llegó el
-        // hotkey): un único paso de navegación, sin segunda sesión.
         PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
                       static_cast<LPARAM>(shift ? -1 : 1));
         return;
     }
 
-// El hotkey llega desde Explorer; tomar los modificadores físicos para
-    // distinguir Alt, AltGr y Ctrl+Alt.
     InputSyncModifiersFromSystem();
     bool leftAlt = g_altLeftDown;
     const bool rightAlt = g_altRightDown;
     if (!leftAlt && !rightAlt)
     {
-        // El hotkey garantiza que Alt está pulsado aunque no se lea todavía.
         g_altLeftDown = true;
         leftAlt = true;
     }
@@ -8365,11 +8402,8 @@ static void InputHandleForwardedHotkey(WPARAM flags)
     if (!StartInputSession(leftAlt, rightAlt, ctrlHeld, shift, true))
         return;
 
-    // StartInputSession owns the shared modifier-release polling setup.
 }
 
-// Confirma la liberación del modificador leyendo su estado físico periódicamente;
-// no depende de un hook global de teclado ni de recibir key-up del foreground.
 static void InputPollModifierRelease(HWND control)
 {
     if (!g_modifierReleasePolling || !InputSessionActive())
@@ -8380,8 +8414,6 @@ static void InputPollModifierRelease(HWND control)
         return;
     }
 
-    // Do not depend on low-level key-up delivery: query the physical key state
-    // on each tick, including both Ctrl and Alt for AltGr/Ctrl+Alt sessions.
     InputSyncModifiersFromSystem();
     if (!SessionModifierReleased())
     {
@@ -8424,7 +8456,6 @@ static DWORD WINAPI InputThreadProc(LPVOID)
 {
     SetThreadPerMonitorAwareV2();
 
-    // Crear la cola de mensajes antes de publicar la disponibilidad.
     MSG message = {};
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -8445,8 +8476,6 @@ static DWORD WINAPI InputThreadProc(LPVOID)
         : nullptr;
     if (control && g_hotkeyMessage != 0)
     {
-        // Explorer publica el hotkey desde otro proceso: permitirlo aunque esta
-        // herramienta tenga otro nivel de integridad.
         ChangeWindowMessageFilterEx(control, g_hotkeyMessage, MSGFLT_ALLOW,
                                     nullptr);
     }
@@ -8462,7 +8491,6 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     if (!ok && control)
         Wh_Log(L"Input control window initialization failed");
 
-    // UI thread ya listo: Explorer puede empezar a reenviar el hotkey.
     if (ok && control)
         SetWindowTextW(control, kInputControlTitleReady);
 
@@ -8512,8 +8540,6 @@ static DWORD WINAPI InputThreadProc(LPVOID)
         }
     }
 
-    // El propio hilo retira sus hooks y destruye su ventana. Primero se vuelve a
-    // publicar "no listo" para que Explorer deje el hotkey al sistema.
     if (control)
         SetWindowTextW(control, kInputControlTitleIdle);
     g_modifierReleasePolling = false;
@@ -8536,8 +8562,6 @@ static bool InitializeUiThreadState()
     if (!RegisterSelectorClasses())
         return false;
 
-    // Escala del monitor principal para que el precalentado (D2D/DWrite/fuentes)
-    // ya use la escala correcta en el caso habitual.
     POINT origin = { 0, 0 };
     UpdateUIScaleForMonitor(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY));
 
@@ -8547,7 +8571,6 @@ static bool InitializeUiThreadState()
 
     RegisterUserWindow(GetForegroundWindow(), true);
 
-    // MRU por evento, sin polling. OUTOFCONTEXT: se entrega en este hilo.
     g_winEventHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                                      nullptr, ForegroundWinEventProc, 0, 0,
                                      WINEVENT_OUTOFCONTEXT);
@@ -8575,7 +8598,6 @@ static void ShutdownUiThreadState()
     else
         CleanupKeyboardState();
 
-    // El hilo propietario destruye la ventana y libera D2D/DWrite/GDI/DWM.
     ShutdownPersistentSelector();
     ShutdownFramePump();
     UnregisterSelectorClasses();
@@ -8595,7 +8617,7 @@ static void ShutdownUiThreadState()
 
 static DWORD WINAPI UiThreadProc(LPVOID)
 {
-    // Debe hacerse antes de crear cualquier ventana de este hilo.
+    g_uiThreadId = GetCurrentThreadId();
     SetThreadPerMonitorAwareV2();
 
     MSG message = {};
@@ -8607,9 +8629,6 @@ static DWORD WINAPI UiThreadProc(LPVOID)
 
     if (ok)
     {
-        // Duerme hasta que llegue un mensaje o venza el frame timer. Sin
-        // animación ni cambios pendientes el timer no está armado y el hilo no
-        // consume CPU.
         bool running = true;
         while (running)
         {
@@ -8644,8 +8663,9 @@ static DWORD WINAPI UiThreadProc(LPVOID)
     return 0;
 }
 
-// Arranca un hilo y espera sin timeout a que esté listo o haya terminado.
-// El evento no se cierra mientras el hilo pueda seguir usándolo.
+static const DWORD kWorkerStartTimeoutMs = 15000;
+static const DWORD kWorkerStopTimeoutMs = 5000;
+
 static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, HANDLE* outThread,
                               DWORD* outThreadId, HANDLE* outEvent,
                               volatile LONG* okFlag)
@@ -8665,13 +8685,19 @@ static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, HANDLE* outThread,
     }
 
     HANDLE waits[2] = { readyEvent, thread };
-    DWORD result = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+    DWORD result = WaitForMultipleObjects(2, waits, FALSE, kWorkerStartTimeoutMs);
+    if (result == WAIT_TIMEOUT)
+    {
+        Wh_Log(L"Worker thread %lu did not become ready in time", threadId);
+        InterlockedExchange(&g_shutdownRequested, 1);
+        PostThreadMessageW(threadId, WM_QUIT, 0, 0);
+        *outEvent = nullptr;
+        return false;
+    }
     bool ok = (result == WAIT_OBJECT_0) &&
               InterlockedCompareExchange(okFlag, 0, 0) == 1;
     if (!ok)
     {
-        // El hilo ya terminó o está terminando por sí mismo: esperar su fin
-        // antes de cerrar handles.
         WaitForSingleObject(thread, INFINITE);
         CloseHandle(thread);
         CloseHandle(readyEvent);
@@ -8702,24 +8728,23 @@ BOOL WhTool_ModInit()
     g_state = SelectorState::Idle;
     InitHotkeyMessage();
 
-    // 1) UI thread: crea el selector y precalienta el renderer.
     DWORD uiThreadId = 0;
     if (!StartWorkerThread(UiThreadProc, &g_uiThread, &uiThreadId,
                            &g_uiReadyEvent, &g_uiInitOk))
         return FALSE;
     g_uiThreadId = uiThreadId;
 
-    // 2) Input thread: crea la ventana de control y el polling. Se publica
-    //    cuando el selector ya existe.
     if (!StartWorkerThread(InputThreadProc, &g_inputThread, &g_inputThreadId,
                            &g_inputReadyEvent, &g_inputInitOk))
     {
         InterlockedExchange(&g_shutdownRequested, 1);
         PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_uiThread, INFINITE);
-        CloseHandle(g_uiThread);
+        if (WaitForSingleObject(g_uiThread, kWorkerStopTimeoutMs) != WAIT_TIMEOUT)
+        {
+            CloseHandle(g_uiThread);
+            CloseHandle(g_uiReadyEvent);
+        }
         g_uiThread = nullptr;
-        CloseHandle(g_uiReadyEvent);
         g_uiReadyEvent = nullptr;
         g_uiThreadId = 0;
         return FALSE;
@@ -8730,7 +8755,6 @@ BOOL WhTool_ModInit()
 
 void WhTool_ModSettingsChanged()
 {
-    // Los ajustes los carga exclusivamente el UI thread.
     PostUiCommand(WM_UI_SETTINGS, 0, 0);
 }
 
@@ -8738,26 +8762,36 @@ void WhTool_ModUninit()
 {
     InterlockedExchange(&g_shutdownRequested, 1);
 
-    // 1) Input thread: retira sus hooks, destruye su ventana y termina.
+    bool threadTimedOut = false;
     if (g_inputThread)
     {
         PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_inputThread, INFINITE);
-        CloseHandle(g_inputThread);
+        if (WaitForSingleObject(g_inputThread, kWorkerStopTimeoutMs) == WAIT_TIMEOUT)
+        {
+            Wh_Log(L"Input thread did not stop in time");
+            threadTimedOut = true;
+        }
+        else
+            CloseHandle(g_inputThread);
         g_inputThread = nullptr;
     }
 
-    // 2) UI thread: retira el WinEvent hook, destruye la ventana y libera
-    //    D2D/DWrite/GDI/DWM antes de terminar.
     if (g_uiThread)
     {
         PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_uiThread, INFINITE);
-        CloseHandle(g_uiThread);
+        if (WaitForSingleObject(g_uiThread, kWorkerStopTimeoutMs) == WAIT_TIMEOUT)
+        {
+            Wh_Log(L"UI thread did not stop in time");
+            threadTimedOut = true;
+        }
+        else
+            CloseHandle(g_uiThread);
         g_uiThread = nullptr;
     }
 
-    // Ningún hilo puede usar ya los eventos: cerrarlos ahora es seguro.
+    if (threadTimedOut)
+        return;
+
     if (g_inputReadyEvent)
     {
         CloseHandle(g_inputReadyEvent);
@@ -8772,26 +8806,15 @@ void WhTool_ModUninit()
     g_uiThreadId = 0;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// EXPLORER (solo en explorer.exe)
-//
-// El selector nativo lo abre un hotkey que explorer registra para sí mismo.
-// El selector nativo registra el hotkey de Alt+Tab en el shell. Este componente
-// observa la cola del hilo "Immersive Shell" de Explorer y reenvía el hotkey al
-// switcher en lugar de abrir el selector nativo. Explorer mantiene la ruta de
-// Alt+Tab cuando el foreground es una ventana elevada; el selector procesa sus
-// propias teclas una vez toma el foco. Esta es la única parte que corre en
-// Explorer: no crea ventanas ni instala hooks globales; solo usa un hook de
-// hilo WH_GETMESSAGE.
+// //////////////////////////////////////////////////////////////////////////////
 
 static const WCHAR kAltTabThreadName[] = L"Immersive Shell";
 static const DWORD kFindAltTabThreadIntervalMs = 2000;
 static const DWORD kFindAltTabThreadMaxIntervalMs = 60000;
 static const DWORD kWaitForTaskbarIntervalMs = 1000;
 
-// Hilo de explorer (hook) y su thread de vigilancia.
 static HHOOK g_messageHook = nullptr;
-static HANDLE g_messageHookThread = nullptr;    // para saber cuándo termina
+static HANDLE g_messageHookThread = nullptr;
 static volatile LONG g_messageHookCalls = 0;
 static HANDLE g_explorerStopEvent = nullptr;
 static HANDLE g_explorerThread = nullptr;
@@ -8803,9 +8826,22 @@ static void InitHotkeyMessage()
         g_hotkeyMessage = RegisterWindowMessageW(kHotkeyMessageName);
 }
 
-// Entrega el hotkey a Overhaulded. Devuelve false si la herramienta no está
-// corriendo o no puede aceptar una sesión ahora; entonces abre el selector
-// nativo (comportamiento seguro).
+static bool IsControlOwnerTrusted(DWORD processId)
+{
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process)
+        return false;
+    WCHAR path[MAX_PATH * 2] = {};
+    DWORD length = ARRAYSIZE(path);
+    const BOOL ok = QueryFullProcessImageNameW(process, 0, path, &length);
+    CloseHandle(process);
+    if (!ok || length == 0)
+        return false;
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, L"windhawk.exe") == 0;
+}
+
 static bool ForwardHotkey(WPARAM flags)
 {
     if (!g_hotkeyMessage)
@@ -8816,11 +8852,11 @@ static bool ForwardHotkey(WPARAM flags)
     if (!control)
         return false;
 
-    // Explorer acaba de recibir el hotkey, así que puede ceder el foreground.
-    // El selector lo necesita para tomar el foco si una ventana elevada lo tenía.
     DWORD processId = 0;
     GetWindowThreadProcessId(control, &processId);
-    if (processId && !AllowSetForegroundWindow(processId))
+    if (!processId || !IsControlOwnerTrusted(processId) || IsHungAppWindow(control))
+        return false;
+    if (!AllowSetForegroundWindow(processId))
         Wh_Log(L"Explorer could not grant foreground permission to process %lu",
                processId);
 
@@ -8836,9 +8872,6 @@ static LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam)
         msg->message == WM_HOTKEY && HIWORD(msg->lParam) == VK_TAB)
     {
         const UINT modifiers = LOWORD(msg->lParam);
-        // El mismo criterio que el hook: cualquier Tab con Alt (Shift invierte,
-        // Ctrl se reenvía para que se resuelva AltGr con el estado real). Win+Tab
-        // no es de Overhaulded.
         if ((modifiers & MOD_ALT) != 0 && (modifiers & MOD_WIN) == 0)
         {
             WPARAM flags = 0;
@@ -8848,8 +8881,6 @@ static LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam)
                 flags |= kHotkeyFlagCtrl;
             if (ForwardHotkey(flags))
             {
-                // Explorer recibe un mensaje vacío en lugar del hotkey, solo
-                // tras confirmar que la entrega se realizó.
                 msg->message = WM_NULL;
             }
         }
@@ -8860,7 +8891,6 @@ static LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam)
     return result;
 }
 
-// ID del hilo de explorer que recibe el hotkey, o 0 si ahora no existe.
 static DWORD FindAltTabThread()
 {
     DWORD found = 0;
@@ -8895,7 +8925,6 @@ static DWORD FindAltTabThread()
     return found;
 }
 
-// Engancha el hilo que recibe el hotkey, si existe ahora.
 static bool HookAltTabThread()
 {
     const DWORD threadId = FindAltTabThread();
@@ -8904,7 +8933,6 @@ static bool HookAltTabThread()
     HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
     if (!thread)
         return false;
-    // Hilo del mismo proceso: sin módulo (documentación de SetWindowsHookEx).
     HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, nullptr, threadId);
     if (!hook)
     {
@@ -8931,18 +8959,12 @@ static void UnhookAltTabThread()
         g_messageHookThread = nullptr;
     }
 
-    // Las llamadas ya en curso en el hilo de Explorer deben salir del módulo
-    // antes de descargarlo. Tras retirar el hook no pueden empezar otras; el
-    // callback solo hace trabajo no bloqueante, por lo que esperamos a que
-    // finalicen todas antes de permitir la descarga.
     while (InterlockedCompareExchange(&g_messageHookCalls, 0, 0) > 0)
         Sleep(1);
 }
 
 static DWORD WINAPI ExplorerThreadProc(LPVOID)
 {
-    // Solo el proceso de shell (el de la barra de tareas) recibe el hotkey. Con
-    // "carpetas en proceso separado" otros explorer.exe no tienen nada que hacer.
     for (;;)
     {
         if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr))
@@ -8956,13 +8978,10 @@ static DWORD WINAPI ExplorerThreadProc(LPVOID)
             }
             break;
         }
-        // Explorer aún está arrancando.
         if (WaitForSingleObject(g_explorerStopEvent, kWaitForTaskbarIntervalMs) != WAIT_TIMEOUT)
             return 0;
     }
 
-    // Engancha el hilo y vuelve a hacerlo si se recrea (reinicio de shell). Hasta
-    // que existe, se busca cada vez con menos frecuencia.
     DWORD interval = kFindAltTabThreadIntervalMs;
     bool loggedMissing = false;
     for (;;)
@@ -8983,7 +9002,6 @@ static DWORD WINAPI ExplorerThreadProc(LPVOID)
         }
         else if (result == WAIT_OBJECT_0 + 1)
         {
-            // El hilo terminó (su ID puede reutilizarse).
             UnhookAltTabThread();
             interval = kFindAltTabThreadIntervalMs;
             loggedMissing = false;
@@ -9014,11 +9032,10 @@ static void StopExplorerPart()
     }
 }
 
-// No espera nada, para no retrasar el arranque de explorer.
 static void StartExplorerPart()
 {
     if (g_explorerThread)
-        return;  // nunca hilos de vigilancia duplicados
+        return;
 
     g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_explorerStopEvent)
@@ -9054,19 +9071,7 @@ static void ExplorerModUninit()
     StopExplorerPart();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
+// //////////////////////////////////////////////////////////////////////////////
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -9077,8 +9082,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    // explorer.exe: solo el componente que reenvía el hotkey. No se crea
-    // selector, renderer ni hooks globales, y no se lanza el tool mod.
     if (IsExplorerProcess()) {
         g_isExplorer = true;
         return ExplorerModInit();
@@ -9224,7 +9227,6 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    // El componente de explorer no usa ajustes: no se reinicia nada.
     if (g_isExplorer) {
         return;
     }
