@@ -3,7 +3,7 @@
 // @name            Logitech Battery Tray
 // @description     Native taskbar battery indicators for Logitech G HUB and HID++ devices.
 // @description:ru  Индикаторы заряда устройств Logitech через G HUB и HID++ в панели задач.
-// @version         0.1
+// @version         0.1.1
 // @author          uMk0
 // @github          https://github.com/umk0
 // @license         GPL-3.0-or-later
@@ -56,8 +56,10 @@ optional smaller icon indicating the device type.
 
 G HUB must be running to use its data; direct HID++ reading works independently.
 The G HUB client connects only to 127.0.0.1:9010. It requests /devices/list and
-/battery/<deviceId>/state, subscribes to /battery/state/changed, and polls every
-two seconds by default to recover missed updates and refresh the device list.
+/battery/<deviceId>/state, subscribes to /battery/state/changed, and uses a
+persistent query connection with a 30-second fallback poll by default. Failed
+connections retry with exponential backoff, up to 60 seconds. Events update
+readings independently of fallback polling.
 Updates cannot arrive earlier than G HUB reports them.
 
 The HID++ provider reads compatible Logitech devices through Unifying, Bolt,
@@ -88,12 +90,23 @@ least one second apart before reappearing, with no intervening failed reading.
 These windows absorb temporary failures, not indefinitely cache charging state.
 Provider requests run outside the taskbar UI thread. Reconnection is automatic.
 Windows HID arrival/removal and receiver notifications trigger rediscovery;
-periodic scanning also handles devices that do not send connection events.
+three-minute scanning also handles devices that do not send connection events.
+Event-capable HID++ features use the configured fallback interval. ADC (0x1F20)
+and legacy register devices use a two-second poll because they may lack events.
+Presence confirmation temporarily uses a short interval to avoid delayed recovery.
+The XAML UI updates on data, size and theme changes, without a periodic repaint.
+In Auto mode, a transient XAML failure must last 30 seconds before notification
+icons appear; missing taskbar symbols select the compatibility backend immediately.
 On supported left/right taskbars, indicators are stacked vertically and the
 percentage is placed below the icons. Button width follows the taskbar width;
 the configured button width applies to horizontal taskbars only.
 
 ## Credits and limitations
+
+Disable direct HID++ reading before updating device firmware. Persistent HID
+handles are read-only; write access is opened only for each battery/probe request.
+This reduces sharing conflicts, but cannot guarantee compatibility with tools
+that require exclusive access. Firmware updates with this mod have not been tested.
 
 The G HUB interface is unofficial and may change with G HUB updates.
 XAML root access is adapted from Taskbar Folder Menus by sb4ssman:
@@ -132,11 +145,11 @@ Battery features: https://github.com/pwr-Solaar/Solaar
   - beforeIcons: Перед стрелкой трея
   - beforeOmni: Перед сетью и громкостью
   - beforeClock: Перед часами
-- refreshSeconds: 2
+- refreshSeconds: 30
   $name: Poll interval (seconds)
   $name:ru: Интервал резервного опроса (секунды)
-  $description: 1-30 seconds. G HUB events update readings independently of this interval.
-  $description:ru: От 1 до 30 секунд. События G HUB обновляют данные независимо от этого интервала.
+  $description: 30-300 seconds. G HUB and HID++ events update readings immediately. ADC and legacy HID++ devices use a separate 2-second interval.
+  $description:ru: От 30 до 300 секунд. События G HUB и HID++ обновляют данные сразу. ADC и устаревшие HID++ устройства опрашиваются отдельно каждые 2 секунды.
 - iconStyle: batteryAndDevice
   $name: Icon style (XAML)
   $name:ru: Стиль значка (XAML)
@@ -151,8 +164,8 @@ Battery features: https://github.com/pwr-Solaar/Solaar
 - directHidpp: true
   $name: Read Logitech HID++ directly
   $name:ru: Прямое чтение Logitech HID++
-  $description: Detect supported Logitech battery devices without requiring G HUB.
-  $description:ru: Определять заряд поддерживаемых устройств Logitech без обязательного запуска G HUB.
+  $description: Detect supported Logitech battery devices without requiring G HUB. Disable before updating device firmware.
+  $description:ru: Определять заряд поддерживаемых устройств Logitech без обязательного запуска G HUB. Отключайте перед обновлением прошивки устройств.
 - showNewDevices: true
   $name: Show devices without a matching rule
   $name:ru: Показывать устройства без отдельного правила
@@ -203,15 +216,12 @@ Battery features: https://github.com/pwr-Solaar/Solaar
 #include <commctrl.h>
 #include <shellapi.h>
 #include <setupapi.h>
-#include <devpkey.h>
 #include <dbt.h>
 #include <hidsdi.h>
 #include <hidpi.h>
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.h>
-#include <winrt/Windows.UI.Text.h>
-#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -229,6 +239,8 @@ Battery features: https://github.com/pwr-Solaar/Solaar
 #include <cwctype>
 #include <map>
 #include <memory>
+#include <optional>
+#include <limits>
 
 using namespace winrt::Windows::Data::Json;
 using namespace winrt::Windows::UI;
@@ -250,6 +262,7 @@ struct DeviceBattery {
     bool fromHidpp = false;
     bool approximate = false;
     ULONGLONG observedAt = 0;
+    ULONGLONG missingSince = 0;
     ULONGLONG revision = 0;
 };
 
@@ -513,10 +526,8 @@ static bool ApplyBattery(DeviceBattery& device, const JsonObject& battery, bool 
     return true;
 }
 
-static BatterySnapshot QueryBatteries(HANDLE cancel, unsigned short port = 9010) {
+static BatterySnapshot QueryBatteries(GHubClient& client, HANDLE cancel) {
     BatterySnapshot result;
-    GHubClient client(cancel);
-    if (!client.Connect(port)) return result;
     auto list = client.Get(L"/devices/list");
     if (!RequestSucceeded(list)) return result;
     auto payload = list.GetNamedObject(L"payload", nullptr);
@@ -592,6 +603,7 @@ static bool ApplyHubEvent(BatterySnapshot& snapshot, const JsonObject& event) {
         updated.charging = payload.GetNamedBoolean(L"charging", false);
     } else return false;
     updated.observedAt = GetTickCount64();
+    updated.missingSince = 0;
     updated.revision = ++g_hubRevision;
     bool stateChanged = !SameDeviceState(*found, updated);
     bool hubAvailabilityChanged = !snapshot.hubAvailable;
@@ -634,8 +646,9 @@ static BatterySnapshot MergeHubSnapshot(BatterySnapshot next,
         if (present == next.devices.end() && next.devices.size() >= 64) continue;
 
         auto missing = previous;
+        if (!missing.missingSince) missing.missingSince = now;
         if (previous.revision <= queryRevision &&
-            (!previous.observedAt || now < previous.observedAt || now - previous.observedAt > presenceGraceMs)) {
+            (!previous.observedAt || now - missing.missingSince >= presenceGraceMs)) {
             missing.online = false;
             missing.charging = false;
             missing.percent = -1;
@@ -764,6 +777,7 @@ static bool DecodeHidBattery(DeviceBattery& device, unsigned feature, const std:
 
 class HidEndpoint {
     HANDLE handle = INVALID_HANDLE_VALUE;
+    std::wstring devicePath;
     OVERLAPPED readOverlapped{};
     std::vector<BYTE> readBuffer;
     bool readPending = false, ready = false;
@@ -781,7 +795,8 @@ public:
         if (readOverlapped.hEvent) CloseHandle(readOverlapped.hEvent);
     }
     bool Open(const std::wstring& path) {
-        handle = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+        devicePath = path;
+        handle = CreateFileW(path.c_str(), GENERIC_READ,
             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
         if (handle == INVALID_HANDLE_VALUE || !readOverlapped.hEvent) return false;
         PHIDP_PREPARSED_DATA data = nullptr;
@@ -820,18 +835,23 @@ public:
     }
     bool Write(const std::vector<BYTE>& packet, HANDLE cancel) {
         if (packet.size() > outputLength) return false;
+        // Keep write access only for the request, not for the mod's lifetime.
+        HANDLE output = CreateFileW(devicePath.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+        if (output == INVALID_HANDLE_VALUE) return false;
+        struct CloseOutput { HANDLE handle; ~CloseOutput() { CloseHandle(handle); } } closeOutput{output};
         std::vector<BYTE> buffer(outputLength);
         std::copy(packet.begin(), packet.end(), buffer.begin());
         OVERLAPPED operation{};
         operation.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!operation.hEvent) return false;
         DWORD bytes = 0;
-        bool success = WriteFile(handle, buffer.data(), static_cast<DWORD>(buffer.size()), &bytes, &operation);
+        bool success = WriteFile(output, buffer.data(), static_cast<DWORD>(buffer.size()), &bytes, &operation);
         if (!success && GetLastError() == ERROR_IO_PENDING) {
             HANDLE events[] = {cancel, operation.hEvent};
             DWORD wait = WaitForMultipleObjects(2, events, FALSE, 800);
-            if (wait != WAIT_OBJECT_0 + 1) CancelIoEx(handle, &operation);
-            success = GetOverlappedResult(handle, &operation, &bytes, TRUE) && wait == WAIT_OBJECT_0 + 1;
+            if (wait != WAIT_OBJECT_0 + 1) CancelIoEx(output, &operation);
+            success = GetOverlappedResult(output, &operation, &bytes, TRUE) && wait == WAIT_OBJECT_0 + 1;
         }
         DWORD error = success ? ERROR_SUCCESS : GetLastError();
         CloseHandle(operation.hEvent);
@@ -914,6 +934,16 @@ struct HidPresence {
     ULONGLONG availableSince = 0, unavailableSince = 0, disconnectedSince = 0;
 };
 
+static DWORD HidPollDelay(unsigned feature, bool confirming, DWORD fallback) {
+    return confirming || feature == 0x1F20 || feature < 0x1000 ? 2000 : fallback;
+}
+
+struct RetryBackoff {
+    DWORD delay = 1000;
+    DWORD Failed() { DWORD result = delay; delay = std::min<DWORD>(delay * 2, 60000); return result; }
+    void Reset() { delay = 1000; }
+};
+
 static bool HidAddressMatches(BYTE expected, BYTE actual, bool directHeadset) {
     return expected == actual || (directHeadset && expected == 0xFF && actual == 0);
 }
@@ -973,6 +1003,7 @@ class HidChannel {
         unsigned feature = 0;
         bool discoverAgain = false;
         HidPresence presence;
+        ULONGLONG nextPoll = 0;
         DeviceBattery device;
     };
     std::vector<Slot> slots;
@@ -994,6 +1025,9 @@ class HidChannel {
             bool valid = DecodeHidBattery(reading, slot.feature, payload);
             if (valid || IsConfirmedHidAbsence(slot.feature, payload)) {
                 UpdateHidPresence(slot.device, valid ? &reading : nullptr, slot.presence, GetTickCount64());
+                if ((DeviceShouldBeShown(slot.device) && slot.presence.unavailableSince) ||
+                    (!DeviceShouldBeShown(slot.device) && slot.presence.availableSince))
+                    slot.nextPoll = std::min(slot.nextPoll, GetTickCount64() + 2000);
                 if (!SameDeviceState(previous, slot.device) && changed) changed();
             }
         }
@@ -1100,6 +1134,9 @@ public:
                         slot.device = std::move(reading);
                         break;
                     }
+                    // A known ADC endpoint remains pollable while its headset is off.
+                    // Do not require a valid battery sample to discover the connection.
+                    if (feature == 0x1F20) { slot.feature = feature; slot.index = index; }
                 }
                 if (!slot.feature) continue;
                 if (BYTE nameIndex = Feature(slotNumber, 5)) {
@@ -1133,20 +1170,21 @@ public:
                     // A failed probe must never erase the last working device.
                     slot.device = existing->device;
                     slot.presence = existing->presence;
-                    UpdateHidPresence(slot.device, &reading, slot.presence, GetTickCount64());
+                    UpdateHidPresence(slot.device, DeviceShouldBeShown(reading) ? &reading : nullptr, slot.presence, GetTickCount64());
                     *existing = std::move(slot);
                 } else {
                     slot.device.online = slot.device.charging = false;
                     slot.device.percent = -1;
-                    UpdateHidPresence(slot.device, &reading, slot.presence, GetTickCount64());
+                    UpdateHidPresence(slot.device, DeviceShouldBeShown(reading) ? &reading : nullptr, slot.presence, GetTickCount64());
                     slots.push_back(std::move(slot));
                 }
                 if (changed) changed();
             }
         }
     }
-    void Poll() {
+    void Poll(DWORD fallback = 30000, bool force = false) {
         for (auto& slot : slots) {
+            if (!force && GetTickCount64() < slot.nextPoll) continue;
             auto previous = slot.device;
             auto answer = slot.feature < 0x1000 ? Request(slot.slot, 0x81, static_cast<BYTE>(slot.feature), {}, true)
                 : Request(slot.slot, slot.index, slot.feature == 0x1004 ? 1 : 0, {}, false, slot.feature);
@@ -1159,8 +1197,16 @@ public:
             if (!valid) {
                 if (lastError && lastError != 4 && lastError != 9) slot.discoverAgain = true;
             }
+            slot.nextPoll = GetTickCount64() + HidPollDelay(slot.feature,
+                (DeviceShouldBeShown(slot.device) && slot.presence.unavailableSince) ||
+                (!DeviceShouldBeShown(slot.device) && slot.presence.availableSince), fallback);
             if (!SameDeviceState(previous, slot.device) && changed) changed();
         }
+    }
+    ULONGLONG NextPoll() const {
+        ULONGLONG due = std::numeric_limits<ULONGLONG>::max();
+        for (auto& slot : slots) due = std::min(due, slot.nextPoll);
+        return due;
     }
     void Pump() {
         for (auto* endpoint : {longEndpoint.get(), shortEndpoint.get()}) {
@@ -1204,7 +1250,12 @@ public:
         }
         if (changed) changed();
     }
-    void Poll() { for (auto& channel : channels) channel->Poll(); }
+    void Poll(DWORD fallback = 30000, bool force = false) { for (auto& channel : channels) channel->Poll(fallback, force); }
+    ULONGLONG NextPoll() const {
+        ULONGLONG due = std::numeric_limits<ULONGLONG>::max();
+        for (auto& channel : channels) due = std::min(due, channel->NextPoll());
+        return due;
+    }
     void Pump() { for (auto& channel : channels) channel->Pump(); }
     bool NeedsDiscovery() const {
         return std::any_of(channels.begin(), channels.end(), [](auto& channel) { return channel->NeedsDiscovery(); });
@@ -1384,7 +1435,7 @@ struct Settings {
     bool nativeOnly = false;
     std::wstring position = L"batteryArea";
     std::wstring iconStyle = L"batteryAndDevice";
-    int pollSeconds = 2;
+    int pollSeconds = 30;
     bool directHidpp = true;
     bool showNewDevices = true;
     std::vector<DeviceRule> rules;
@@ -1399,6 +1450,8 @@ static Settings g_settings;
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_hubRefresh = nullptr;
 static HANDLE g_hidRefresh = nullptr;
+static HANDLE g_eventRefresh = nullptr;
+static HANDLE g_nativeRefresh = nullptr;
 static HANDLE g_worker = nullptr;
 static HANDLE g_eventWorker = nullptr;
 static std::atomic<bool> g_unloading{false};
@@ -1411,6 +1464,20 @@ static std::vector<DeviceBattery> g_hidSnapshot;
 static HANDLE g_hidWorker = nullptr;
 static HANDLE g_nativeWorker = nullptr;
 static std::atomic<bool> g_modernAttached{false};
+static std::atomic<ULONGLONG> g_detachedSince{0};
+
+static void NotifyConsumers() {
+    if (g_unloading) return;
+    if (auto window = g_taskbar.load()) PostMessageW(window, g_uiMessage, 0, 0);
+    if (g_nativeRefresh) SetEvent(g_nativeRefresh);
+}
+
+static void SetModernAttached(bool attached) {
+    bool previous = g_modernAttached.exchange(attached);
+    if (attached) g_detachedSince = 0;
+    else if (!g_detachedSince.load()) g_detachedSince = GetTickCount64();
+    if (previous != attached && g_nativeRefresh) SetEvent(g_nativeRefresh);
+}
 
 struct DeviceView {
     Button button{nullptr};
@@ -1426,20 +1493,29 @@ struct DeviceView {
     Viewbox contentBox{nullptr};
     winrt::event_token click{};
 };
-[[clang::no_destroy]] static std::vector<DeviceView> g_views;
+[[clang::no_destroy]] static std::optional<std::vector<DeviceView>> g_views;
 [[clang::no_destroy]] static StackPanel g_group{nullptr};
 [[clang::no_destroy]] static Panel g_parent{nullptr};
 [[clang::no_destroy]] static RowDefinition g_insertedRow{nullptr};
 [[clang::no_destroy]] static ColumnDefinition g_insertedColumn{nullptr};
 static bool g_verticalLayout = false;
+static bool g_visualDirty = true;
+static winrt::event_token g_unloadedToken{}, g_sizeToken{}, g_themeToken{};
+static std::vector<DeviceBattery> g_renderedDevices;
+static double g_renderedWidth = -1, g_renderedHeight = -1;
+static ElementTheme g_renderedTheme = ElementTheme::Default;
+
+struct TrayPalette {
+    Brush foreground{nullptr}, transparent{nullptr}, hover{nullptr}, pressed{nullptr},
+        green{nullptr}, critical{nullptr}, low{nullptr};
+};
+[[clang::no_destroy]] static std::optional<TrayPalette> g_palette;
 
 static void ReportUIStage(int stage, PCWSTR message) {
-    if (stage != 40) g_modernAttached = false;
+    if (stage != 40) SetModernAttached(false);
     static int previous = -1;
     if (previous == stage) return;
     previous = stage;
-    Wh_SetIntValue(L"uiStage", stage);
-    Wh_SetStringValue(L"uiStatus", message);
     Wh_Log(L"Logitech Battery Tray: %s", message);
 }
 
@@ -1453,7 +1529,7 @@ static void LoadSettings() {
         g_settings.position = L"batteryArea";
     auto style = WindhawkUtils::StringSetting::make(L"iconStyle");
     g_settings.iconStyle = *style.get() ? style.get() : L"batteryAndDevice";
-    g_settings.pollSeconds = std::clamp(Wh_GetIntSetting(L"refreshSeconds"), 1, 30);
+    g_settings.pollSeconds = std::clamp(Wh_GetIntSetting(L"refreshSeconds"), 30, 300);
     g_settings.directHidpp = Wh_GetIntSetting(L"directHidpp") != 0;
     g_settings.showNewDevices = Wh_GetIntSetting(L"showNewDevices") != 0;
     g_settings.rules.clear();
@@ -1573,7 +1649,7 @@ static void PutBrush(Button button, PCWSTR key, Brush brush) {
 }
 
 static void ClearViews() {
-    for (auto& view : g_views) {
+    if (g_views) for (auto& view : *g_views) {
         try {
             view.button.Click(view.click);
             ToolTipService::SetToolTip(view.button, nullptr);
@@ -1582,7 +1658,7 @@ static void ClearViews() {
             view.button.Content(nullptr);
         } catch (...) {}
     }
-    std::vector<DeviceView>().swap(g_views);
+    g_views.reset();
     if (g_group) g_group.Children().Clear();
 }
 
@@ -1605,7 +1681,11 @@ static void SetTraySpan(const FrameworkElement& element, bool vertical, int span
 }
 
 static void RemoveGroup() {
-    g_modernAttached = false;
+    SetModernAttached(false);
+    if (g_unloadedToken.value) g_group.Unloaded(g_unloadedToken);
+    if (g_sizeToken.value) g_parent.SizeChanged(g_sizeToken);
+    if (g_themeToken.value) g_parent.ActualThemeChanged(g_themeToken);
+    g_unloadedToken = g_sizeToken = g_themeToken = {};
     ClearViews();
     if (g_parent) {
         uint32_t index = 0;
@@ -1635,6 +1715,9 @@ static void RemoveGroup() {
     g_parent = nullptr;
     g_insertedRow = nullptr;
     g_insertedColumn = nullptr;
+    g_palette.reset();
+    g_renderedDevices.clear();
+    g_visualDirty = true;
 }
 
 static DeviceView MakeDeviceView() {
@@ -1720,7 +1803,6 @@ static DeviceView MakeDeviceView() {
     ToolTipService::SetToolTip(view.button, view.tooltip);
     view.click = view.button.Click([](auto& sender, auto&) {
         if (g_unloading || !g_settings.openGHubOnClick) return;
-        if (winrt::unbox_value_or<bool>(sender.template as<Button>().Tag(), false)) return;
         WCHAR programFiles[MAX_PATH]{};
         if (!GetEnvironmentVariableW(L"ProgramW6432", programFiles, ARRAYSIZE(programFiles)))
             GetEnvironmentVariableW(L"ProgramFiles", programFiles, ARRAYSIZE(programFiles));
@@ -1736,12 +1818,12 @@ static void UpdateUI() {
     try {
         HWND window = g_taskbar.load();
         if (!window) return;
-        auto root = GetTaskbarXamlRoot(window);
+        auto root = g_parent ? g_parent.XamlRoot() : GetTaskbarXamlRoot(window);
         if (!root) {
             ReportUIStage(21, L"Waiting for the taskbar XAML root");
             return;
         }
-        auto parent = FindChild(root.Content().try_as<FrameworkElement>(), [](auto& element) {
+        auto parent = g_parent ? g_parent : FindChild(root.Content().try_as<FrameworkElement>(), [](auto& element) {
             return element.Name() == L"SystemTrayFrameGrid";
         }).try_as<Panel>();
         if (!parent) {
@@ -1831,15 +1913,22 @@ static void UpdateUI() {
                 parent.Children().InsertAt(insertIndex, g_group);
                 Wh_Log(L"Inserted into StackPanel, index=%u", insertIndex);
             }
-        }
-        // Native tray elements may be recreated with their original row or column.
-        if (parentGrid) {
-            int cell = TrayCell(g_group, vertical);
-            for (auto child : parent.Children()) {
-                auto element = child.try_as<FrameworkElement>();
-                if (element && element != g_group && TrayCell(element, vertical) == cell)
-                    SetTrayCell(element, vertical, cell + 1);
-            }
+            g_unloadedToken = g_group.Unloaded([](auto&, auto&) {
+                if (g_unloading) return;
+                SetModernAttached(false);
+                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 2, 0);
+            });
+            g_sizeToken = g_parent.SizeChanged([](auto&, auto&) {
+                if (g_unloading) return;
+                g_visualDirty = true;
+                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 0, 0);
+            });
+            g_themeToken = g_parent.ActualThemeChanged([](auto&, auto&) {
+                if (g_unloading) return;
+                g_palette.reset();
+                g_visualDirty = true;
+                if (auto hwnd = g_taskbar.load()) PostMessageW(hwnd, g_uiMessage, 0, 0);
+            });
         }
         BatterySnapshot snapshot;
         {
@@ -1849,24 +1938,39 @@ static void UpdateUI() {
         auto& devices = snapshot.devices;
         std::erase_if(devices, [](auto& device) { return !DeviceVisible(device, g_settings.rules, g_settings.showNewDevices); });
         std::erase_if(devices, [](const auto& device) { return !DeviceShouldBeShown(device); });
-        g_group.Visibility(devices.empty() ? Visibility::Collapsed : Visibility::Visible);
-        if (g_views.size() != devices.size()) {
-            ClearViews();
-            for (size_t i = 0; i < devices.size(); ++i) {
-                g_views.push_back(MakeDeviceView());
-                g_group.Children().Append(g_views.back().button);
-            }
-        }
-        auto foreground = NativeForeground(parent);
-        auto solid = foreground.try_as<SolidColorBrush>();
-        Color textColor = solid ? solid.Color() : Color{255, 245, 245, 245};
-        bool dark = (static_cast<int>(textColor.R) + textColor.G + textColor.B) > 384;
-        auto transparent = BrushFromColor(0, 0, 0, 0);
-        auto hover = dark ? BrushFromColor(18, 255, 255, 255) : BrushFromColor(12, 0, 0, 0);
-        auto pressed = dark ? BrushFromColor(12, 255, 255, 255) : BrushFromColor(8, 0, 0, 0);
-        auto green = dark ? BrushFromColor(255, 108, 203, 95) : BrushFromColor(255, 26, 127, 55);
         double trayWidth = std::min(parent.ActualWidth(),
             (taskbarRect.right - taskbarRect.left) / std::max(0.1, root.RasterizationScale()));
+        double layoutHeight = vertical ? 0 : parent.ActualHeight();
+        auto theme = parent.ActualTheme();
+        if (!g_visualDirty && SameDeviceList(devices, g_renderedDevices) &&
+            trayWidth == g_renderedWidth && layoutHeight == g_renderedHeight && theme == g_renderedTheme) {
+            SetModernAttached(true);
+            return;
+        }
+        g_group.Visibility(devices.empty() ? Visibility::Collapsed : Visibility::Visible);
+        if (!g_views || g_views->size() != devices.size()) {
+            ClearViews();
+            g_views.emplace();
+            for (size_t i = 0; i < devices.size(); ++i) {
+                g_views->push_back(MakeDeviceView());
+                g_group.Children().Append(g_views->back().button);
+            }
+        }
+        if (!g_palette || theme != g_renderedTheme) {
+            TrayPalette palette;
+            palette.foreground = NativeForeground(parent);
+            auto solid = palette.foreground.try_as<SolidColorBrush>();
+            Color color = solid ? solid.Color() : Color{255, 245, 245, 245};
+            bool dark = int(color.R) + color.G + color.B > 384;
+            palette.transparent = BrushFromColor(0, 0, 0, 0);
+            palette.hover = dark ? BrushFromColor(18, 255, 255, 255) : BrushFromColor(12, 0, 0, 0);
+            palette.pressed = dark ? BrushFromColor(12, 255, 255, 255) : BrushFromColor(8, 0, 0, 0);
+            palette.green = dark ? BrushFromColor(255, 108, 203, 95) : BrushFromColor(255, 26, 127, 55);
+            palette.critical = dark ? BrushFromColor(255, 255, 153, 164) : BrushFromColor(255, 196, 43, 28);
+            palette.low = dark ? BrushFromColor(255, 252, 225, 0) : BrushFromColor(255, 157, 93, 0);
+            g_palette = std::move(palette);
+        }
+        const auto& [foreground, transparent, hover, pressed, green, critical, low] = *g_palette;
         auto placement = Primitives::PlacementMode::Top;
         if (vertical) {
             MONITORINFO monitor{sizeof(monitor)};
@@ -1875,18 +1979,18 @@ static void UpdateUI() {
                     ? Primitives::PlacementMode::Right : Primitives::PlacementMode::Left;
         }
         for (size_t i = 0; i < devices.size(); ++i) {
-            auto& view = g_views[i];
+            auto& view = (*g_views)[i];
             auto& device = devices[i];
             Brush tint = foreground;
             bool available = DeviceShouldBeShown(device);
             if (available && !device.charging) {
                 if (device.critical || device.percent <= 10)
-                    tint = dark ? BrushFromColor(255, 255, 153, 164) : BrushFromColor(255, 196, 43, 28);
+                    tint = critical;
                 else if (device.percent <= g_settings.lowBatteryPercent)
-                    tint = dark ? BrushFromColor(255, 252, 225, 0) : BrushFromColor(255, 157, 93, 0);
+                    tint = low;
             }
             if (available && device.chargingError)
-                tint = dark ? BrushFromColor(255, 255, 153, 164) : BrushFromColor(255, 196, 43, 28);
+                tint = critical;
             bool batteryStyle = g_settings.iconStyle != L"device";
             bool chargingVisible = available && (device.chargingError || (!batteryStyle && device.charging));
             double iconWidth = g_settings.iconSize + (g_settings.iconStyle == L"batteryAndDevice" ? 17 : 0) + (chargingVisible ? 12 : 0);
@@ -1914,7 +2018,6 @@ static void UpdateUI() {
             PutBrush(view.button, L"ButtonForegroundPointerOver", foreground);
             PutBrush(view.button, L"ButtonForegroundPressed", foreground);
             view.button.RequestedTheme(parent.ActualTheme());
-            view.button.Tag(winrt::box_value(device.fromHidpp));
             view.icon.Glyph(batteryStyle ? BatteryGlyph(device.percent, available && device.charging && !device.chargingError) : DeviceGlyph(device.type));
             view.icon.Foreground(available && device.charging && !device.chargingError ? green : tint);
             view.deviceIcon.Glyph(DeviceGlyph(device.type));
@@ -1939,13 +2042,20 @@ static void UpdateUI() {
             Automation::AutomationProperties::SetName(view.button, tooltip);
         }
         ReportUIStage(40, L"Battery indicators created and updated");
-        g_modernAttached = true;
+        g_renderedDevices = devices;
+        g_renderedWidth = trayWidth;
+        g_renderedHeight = layoutHeight;
+        g_renderedTheme = theme;
+        g_visualDirty = false;
+        SetModernAttached(true);
     } catch (const winrt::hresult_error& error) {
-        g_modernAttached = false;
+        try { RemoveGroup(); } catch (...) {}
+        SetModernAttached(false);
         ReportUIStage(26, L"XAML operation failed; see the detailed error in the log");
         Wh_Log(L"Tray is not ready: 0x%08X %s", static_cast<unsigned>(error.code()), error.message().c_str());
     } catch (...) {
-        g_modernAttached = false;
+        try { RemoveGroup(); } catch (...) {}
+        SetModernAttached(false);
         Wh_Log(L"Tray is not ready");
     }
 }
@@ -1954,9 +2064,47 @@ static void UpdateUI() {
 // This window and all its icons belong to the worker and are removed before unload.
 struct NativeTrayState {
     std::vector<DeviceBattery> devices;
-    bool hubAvailable = false;
+    std::vector<std::pair<std::wstring, UINT>> identities;
+    int iconSize = 0;
     UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    UINT IdFor(const std::wstring& key) {
+        for (const auto& [saved, id] : identities) if (saved == key) return id;
+        UINT id = 2166136261U;
+        for (wchar_t ch : key) id = (id ^ static_cast<unsigned>(ch)) * 16777619U;
+        // Preserve collision assignments until unload, including disconnected devices.
+        while (!id || std::any_of(identities.begin(), identities.end(), [&](auto& item) { return item.second == id; })) ++id;
+        identities.emplace_back(key, id);
+        return id;
+    }
 };
+
+static DWORD NativeFallbackDelay(bool modernAvailable, bool attached, ULONGLONG detachedAt, ULONGLONG now) {
+    if (attached) return INFINITE;
+    if (!modernAvailable) return 0;
+    if (!detachedAt) return 30000;
+    if (now - detachedAt >= 30000) return 0;
+    return static_cast<DWORD>(30000 - (now - detachedAt));
+}
+
+static int NativeIconSize() {
+    HWND taskbar = FindTaskbar();
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    auto windowDpi = reinterpret_cast<UINT(WINAPI*)(HWND)>(GetProcAddress(user32, "GetDpiForWindow"));
+    auto metrics = reinterpret_cast<int(WINAPI*)(int, UINT)>(GetProcAddress(user32, "GetSystemMetricsForDpi"));
+    UINT dpi = taskbar && windowDpi ? windowDpi(taskbar) : 0;
+    if (!dpi) {
+        // The first Windows 10 releases predate GetDpiForWindow.
+        HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (shcore) {
+            auto monitorDpi = reinterpret_cast<HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*)>(GetProcAddress(shcore, "GetDpiForMonitor"));
+            UINT y = 96;
+            if (monitorDpi) monitorDpi(MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY), 0, &dpi, &y);
+            FreeLibrary(shcore);
+        }
+    }
+    if (!dpi) dpi = 96;
+    return std::max(1, metrics ? metrics(SM_CXSMICON, dpi) : MulDiv(16, dpi, 96));
+}
 
 static HICON MakeNativeBatteryIcon(const DeviceBattery& device, int size) {
     BITMAPINFO info{};
@@ -1978,7 +2126,8 @@ static HICON MakeNativeBatteryIcon(const DeviceBattery& device, int size) {
         auto oldBitmap = SelectObject(dc, mask);
         PatBlt(dc, 0, 0, size, size, BLACKNESS);
         SelectObject(dc, color);
-        memset(pixels, 0, size * size * 4);
+        auto data = static_cast<DWORD*>(pixels);
+        std::fill_n(data, size * size, 0x00303030);
         auto oldFont = SelectObject(dc, font);
         SetBkMode(dc, TRANSPARENT);
         // An opaque neutral tile keeps the number legible on either taskbar theme.
@@ -1986,9 +2135,7 @@ static HICON MakeNativeBatteryIcon(const DeviceBattery& device, int size) {
         RECT rect{0, 0, size, size};
         auto text = std::to_wstring(device.percent);
         DrawTextW(dc, text.c_str(), -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        auto data = static_cast<DWORD*>(pixels);
         for (int i = 0; i < size * size; ++i) {
-            if (!(data[i] & 0xFFFFFF)) data[i] = 0x303030;
             data[i] |= 0xFF000000;
         }
         SelectObject(dc, oldFont);
@@ -2007,50 +2154,59 @@ static void ClearNativeIcons(HWND window, NativeTrayState& state) {
     for (size_t i = 0; i < state.devices.size(); ++i) {
         NOTIFYICONDATAW data{sizeof(data)};
         data.hWnd = window;
-        data.uID = static_cast<UINT>(i + 1);
+        data.uID = state.IdFor(state.devices[i].key);
         Shell_NotifyIconW(NIM_DELETE, &data);
     }
     state.devices.clear();
 }
 
-static void RefreshNativeIcons(HWND window, NativeTrayState& state) {
+static bool RefreshNativeIcons(HWND window, NativeTrayState& state) {
     BatterySnapshot snapshot;
-    if (!g_modernAttached) {
+    if (!NativeFallbackDelay(g_taskbarModule != nullptr, g_modernAttached.load(),
+                             g_detachedSince.load(), GetTickCount64())) {
         std::lock_guard lock(g_snapshotMutex);
         snapshot = CombineLogitechProviders(g_snapshot, g_hidSnapshot);
     }
     std::erase_if(snapshot.devices, [](const auto& device) {
         return !DeviceShouldBeShown(device) || !DeviceVisible(device, g_settings.rules, g_settings.showNewDevices);
     });
-    if (SameDeviceList(snapshot.devices, state.devices) && snapshot.hubAvailable == state.hubAvailable) return;
-    for (size_t i = snapshot.devices.size(); i < state.devices.size(); ++i) {
+    int size = NativeIconSize();
+    if (SameDeviceList(snapshot.devices, state.devices) && size == state.iconSize) return true;
+    std::erase_if(state.devices, [&](const auto& device) {
+        if (std::any_of(snapshot.devices.begin(), snapshot.devices.end(), [&](auto& current) { return current.key == device.key; })) return false;
         NOTIFYICONDATAW data{sizeof(data)};
         data.hWnd = window;
-        data.uID = static_cast<UINT>(i + 1);
+        data.uID = state.IdFor(device.key);
         Shell_NotifyIconW(NIM_DELETE, &data);
-    }
-    for (size_t i = 0; i < snapshot.devices.size(); ++i) {
+        return true;
+    });
+    for (const auto& device : snapshot.devices) {
+        auto previous = std::find_if(state.devices.begin(), state.devices.end(), [&](auto& item) { return item.key == device.key; });
+        bool exists = previous != state.devices.end();
+        if (exists && size == state.iconSize && SameDeviceState(*previous, device)) continue;
         NOTIFYICONDATAW data{sizeof(data)};
         data.hWnd = window;
-        data.uID = static_cast<UINT>(i + 1);
+        data.uID = state.IdFor(device.key);
         data.uFlags = NIF_ICON | NIF_TIP;
-        data.hIcon = MakeNativeBatteryIcon(snapshot.devices[i], GetSystemMetrics(SM_CXSMICON));
-        if (!data.hIcon) { ClearNativeIcons(window, state); return; }
-        const auto& device = snapshot.devices[i];
+        data.hIcon = MakeNativeBatteryIcon(device, size);
+        if (!data.hIcon) return false;
         auto tip = FormatBatteryTooltip(device, *g_tooltipStrings, g_tooltipLocale.c_str());
         wcsncpy_s(data.szTip, tip.c_str(), _TRUNCATE);
-        BOOL updated = Shell_NotifyIconW(i < state.devices.size() ? NIM_MODIFY : NIM_ADD, &data);
+        BOOL updated = Shell_NotifyIconW(exists ? NIM_MODIFY : NIM_ADD, &data);
         DestroyIcon(data.hIcon);
-        if (!updated) { ClearNativeIcons(window, state); return; }
-        if (i >= state.devices.size()) state.devices.push_back(device);
+        if (!updated) return false;
+        if (exists) *previous = device;
+        else state.devices.push_back(device);
     }
     state.devices = std::move(snapshot.devices);
-    state.hubAvailable = snapshot.hubAvailable;
+    state.iconSize = size;
+    return true;
 }
 
 static void RequestDeviceRefresh() {
     if (g_hubRefresh) SetEvent(g_hubRefresh);
     if (g_hidRefresh) SetEvent(g_hidRefresh);
+    if (g_eventRefresh) SetEvent(g_eventRefresh);
 }
 
 static bool IsLogitechInterfaceChange(WPARAM event, LPARAM data) {
@@ -2073,6 +2229,10 @@ static LRESULT CALLBACK NativeTrayProc(HWND window, UINT message, WPARAM wParam,
         SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
     } else if (state && message == state->taskbarCreated) {
         state->devices.clear();
+        RequestDeviceRefresh();
+        if (g_nativeRefresh) SetEvent(g_nativeRefresh);
+    } else if (message == WM_SETTINGCHANGE || message == WM_DISPLAYCHANGE || message == WM_DPICHANGED) {
+        if (g_nativeRefresh) SetEvent(g_nativeRefresh);
     } else if (message == WM_DEVICECHANGE && IsLogitechInterfaceChange(wParam, lParam)) {
         RequestDeviceRefresh();
     } else if (message == WM_POWERBROADCAST && wParam == PBT_APMRESUMEAUTOMATIC) {
@@ -2100,18 +2260,29 @@ static DWORD WINAPI NativeTrayWorker(void*) {
         HidD_GetHidGuid(&filter.dbcc_classguid);
         HDEVNOTIFY notifications = RegisterDeviceNotificationW(window, &filter, DEVICE_NOTIFY_WINDOW_HANDLE);
         if (!notifications) Wh_Log(L"HID arrival notifications unavailable; periodic discovery remains active");
-        ULONGLONG nextRefresh = GetTickCount64() + (g_taskbarModule ? 5000 : 0);
+        RetryBackoff retry;
+        bool refresh = true;
+        ULONGLONG retryAt = 0;
         for (;;) {
-            auto now = GetTickCount64();
-            if (now >= nextRefresh) {
-                try { RefreshNativeIcons(window, state); } catch (...) { ClearNativeIcons(window, state); }
-                nextRefresh = GetTickCount64() + 2000;
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
+            DWORD delay = NativeFallbackDelay(g_taskbarModule != nullptr, g_modernAttached.load(),
+                                              g_detachedSince.load(), GetTickCount64());
+            bool success = true;
+            if (refresh) {
+                try { success = RefreshNativeIcons(window, state); }
+                catch (...) { success = false; }
+                if (success) { retry.Reset(); retryAt = 0; }
+                else retryAt = GetTickCount64() + retry.Failed();
             }
-            now = GetTickCount64();
-            DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_stopEvent,
-                now >= nextRefresh ? 0 : static_cast<DWORD>(std::min<ULONGLONG>(2000, nextRefresh - now)),
-                QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            if (!delay) delay = INFINITE;
+            if (retryAt) {
+                auto now = GetTickCount64();
+                delay = std::min(delay, retryAt <= now ? DWORD{0} : static_cast<DWORD>(retryAt - now));
+            }
+            HANDLE events[] = {g_stopEvent, g_nativeRefresh};
+            DWORD wait = MsgWaitForMultipleObjectsEx(ARRAYSIZE(events), events, delay, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
+            refresh = wait == WAIT_TIMEOUT || wait == WAIT_OBJECT_0 + 1;
             MSG message;
             while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&message);
@@ -2126,6 +2297,15 @@ static DWORD WINAPI NativeTrayWorker(void*) {
     return window ? 0 : 2;
 }
 
+static void UpdateUIAndRetry(HWND window) {
+    UpdateUI();
+    if (g_timerId) KillTimer(window, g_timerId);
+    g_timerId = 0;
+    // Once attached, XAML events and provider changes are the only update sources.
+    if (!g_modernAttached && !g_unloading)
+        g_timerId = SetTimer(window, reinterpret_cast<UINT_PTR>(&g_timerId), 5000, nullptr);
+}
+
 static LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message,
         WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (message == g_uiMessage) {
@@ -2133,25 +2313,28 @@ static LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message,
             if (g_timerId) KillTimer(window, g_timerId);
             g_timerId = 0;
             RemoveGroup();
-        } else if (wParam == 2) {
-            RemoveGroup();
-            UpdateUI();
         } else if (!g_unloading) {
-            if (!g_timerId) g_timerId = SetTimer(window,
-                reinterpret_cast<UINT_PTR>(&g_timerId), 2000, nullptr);
-            UpdateUI();
+            if (wParam == 2) RemoveGroup();
+            UpdateUIAndRetry(window);
         }
         return 0;
     }
     if (message == WM_TIMER && g_timerId && wParam == g_timerId) {
-        UpdateUI();
+        UpdateUIAndRetry(window);
         return 0;
+    }
+    if (!g_unloading && (message == WM_SIZE || message == WM_DPICHANGED || message == WM_THEMECHANGED)) {
+        g_visualDirty = true;
+        if (message == WM_THEMECHANGED) g_palette.reset();
+        PostMessageW(window, g_uiMessage, 0, 0);
+        if (g_nativeRefresh) SetEvent(g_nativeRefresh);
     }
     if (message == WM_NCDESTROY) {
         if (g_timerId) KillTimer(window, g_timerId);
         g_timerId = 0;
         RemoveGroup();
         g_taskbar = nullptr;
+        if (g_hubRefresh) SetEvent(g_hubRefresh);
     }
     return DefSubclassProc(window, message, wParam, lParam);
 }
@@ -2161,6 +2344,9 @@ static DWORD WINAPI BatteryWorker(void*) {
     try {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         apartmentInitialized = true;
+        std::unique_ptr<GHubClient> client;
+        RetryBackoff reconnect;
+        ULONGLONG nextQuery = 0;
         for (;;) {
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
             if (g_taskbarModule && !g_taskbar && !g_unloading) {
@@ -2170,35 +2356,47 @@ static DWORD WINAPI BatteryWorker(void*) {
                     PostMessageW(window, g_uiMessage, 0, 0);
                 }
             }
-            auto queryRevision = g_hubRevision.load(std::memory_order_relaxed);
-            BatterySnapshot next;
-            try {
-                next = QueryBatteries(g_stopEvent);
-            } catch (const winrt::hresult_error& error) {
-                Wh_Log(L"G HUB query: 0x%08X %s", static_cast<unsigned>(error.code()), error.message().c_str());
-            } catch (...) {
-                Wh_Log(L"G HUB query failed");
+            if (GetTickCount64() >= nextQuery) {
+                auto queryRevision = g_hubRevision.load(std::memory_order_relaxed);
+                BatterySnapshot next;
+                try {
+                    if (!client) {
+                        auto connection = std::make_unique<GHubClient>(g_stopEvent);
+                        if (connection->Connect()) client = std::move(connection);
+                    }
+                    if (client) next = QueryBatteries(*client, g_stopEvent);
+                } catch (const winrt::hresult_error& error) {
+                    Wh_Log(L"G HUB query: 0x%08X %s", static_cast<unsigned>(error.code()), error.message().c_str());
+                } catch (...) { Wh_Log(L"G HUB query failed"); }
+                bool connected = next.hubAvailable;
+                if (!connected) client.reset();
+                else reconnect.Reset();
+                bool snapshotChanged = false, confirming = false;
+                {
+                    std::lock_guard lock(g_snapshotMutex);
+                    next = MergeHubSnapshot(std::move(next), g_snapshot, queryRevision, GetTickCount64());
+                    snapshotChanged = next.hubAvailable != g_snapshot.hubAvailable ||
+                        !SameDeviceList(next.devices, g_snapshot.devices);
+                    g_snapshot = std::move(next);
+                    confirming = std::any_of(g_snapshot.devices.begin(), g_snapshot.devices.end(),
+                        [](auto& device) { return device.missingSince && DeviceShouldBeShown(device); });
+                }
+                if (snapshotChanged) NotifyConsumers();
+                nextQuery = GetTickCount64() + (connected ? g_settings.pollSeconds * 1000 : reconnect.Failed());
+                if (confirming) nextQuery = std::min(nextQuery, GetTickCount64() + 5000);
             }
-            bool snapshotChanged = false;
-            {
-                std::lock_guard lock(g_snapshotMutex);
-                next = MergeHubSnapshot(std::move(next), g_snapshot,
-                                        queryRevision, GetTickCount64());
-                snapshotChanged = next.hubAvailable != g_snapshot.hubAvailable ||
-                    !SameDeviceList(next.devices, g_snapshot.devices);
-                g_snapshot = std::move(next);
-            }
-            if (snapshotChanged) if (auto window = g_taskbar.load(); window && !g_unloading)
-                PostMessageW(window, g_uiMessage, 0, 0);
+            auto now = GetTickCount64();
+            DWORD delay = nextQuery <= now ? 0 : static_cast<DWORD>(nextQuery - now);
+            if (g_taskbarModule && !g_taskbar) delay = std::min<DWORD>(delay, 5000);
             HANDLE events[] = {g_stopEvent, g_hubRefresh};
-            DWORD wait = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, g_settings.pollSeconds * 1000);
+            DWORD wait = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, delay);
             if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
-            // Coalesce reconnect bursts without polling on every notification.
-            if (wait == WAIT_OBJECT_0 + 1 && WaitForSingleObject(g_stopEvent, 500) != WAIT_TIMEOUT) break;
+            if (wait == WAIT_OBJECT_0 + 1) {
+                if (WaitForSingleObject(g_stopEvent, 500) != WAIT_TIMEOUT) break;
+                nextQuery = 0;
+            }
         }
-    } catch (...) {
-        Wh_Log(L"Battery worker could not start");
-    }
+    } catch (...) { Wh_Log(L"Battery worker could not start"); }
     if (apartmentInitialized) winrt::uninit_apartment();
     return 0;
 }
@@ -2208,12 +2406,15 @@ static DWORD WINAPI GHubEventWorker(void*) {
     try {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         apartmentInitialized = true;
+        RetryBackoff reconnect;
         while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
+            ULONGLONG connectedAt = 0;
             try {
-                // A dedicated stream leaves notifications independent of fallback GETs.
                 GHubClient client(g_stopEvent);
                 if (client.Connect()) {
                     client.Send(L"/battery/state/changed", L"SUBSCRIBE");
+                    connectedAt = GetTickCount64();
+                    SetEvent(g_hubRefresh);
                     Wh_Log(L"G HUB battery event stream connected");
                     while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
                         auto event = client.Receive();
@@ -2224,14 +2425,14 @@ static DWORD WINAPI GHubEventWorker(void*) {
                             changed = ApplyHubEvent(g_snapshot, event);
                         }
                         if (discover) SetEvent(g_hubRefresh);
-                        if (changed) {
-                            if (auto window = g_taskbar.load(); window && !g_unloading)
-                                PostMessageW(window, g_uiMessage, 0, 0);
-                        }
+                        if (changed) NotifyConsumers();
                     }
                 }
             } catch (...) {}
-            if (WaitForSingleObject(g_stopEvent, 1500) != WAIT_TIMEOUT) break;
+            if (connectedAt && GetTickCount64() - connectedAt >= 60000) reconnect.Reset();
+            HANDLE events[] = {g_stopEvent, g_eventRefresh};
+            DWORD wait = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, reconnect.Failed());
+            if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
         }
     } catch (...) { Wh_Log(L"G HUB event worker could not start"); }
     if (apartmentInitialized) winrt::uninit_apartment();
@@ -2252,27 +2453,24 @@ static DWORD WINAPI HidBatteryWorker(void*) {
                 changed = !SameDeviceList(devices, g_hidSnapshot);
                 g_hidSnapshot = std::move(devices);
             }
-            if (changed) if (auto window = g_taskbar.load(); window && !g_unloading)
-                PostMessageW(window, g_uiMessage, 0, 0);
+            if (changed) NotifyConsumers();
         };
-        ULONGLONG nextDiscovery = 0, nextPoll = 0, nextEventDiscovery = 0;
+        ULONGLONG nextDiscovery = 0, nextEventDiscovery = 0;
         while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
             auto now = GetTickCount64();
             bool refresh = WaitForSingleObject(g_hidRefresh, 0) == WAIT_OBJECT_0;
-            if (refresh) ResetEvent(g_hidRefresh);
-            if (refresh) nextDiscovery = nextPoll = 0;
+            if (refresh) { ResetEvent(g_hidRefresh); nextDiscovery = 0; }
             if (now >= nextDiscovery || (provider.NeedsDiscovery() && now >= nextEventDiscovery)) {
                 provider.Discover();
                 nextEventDiscovery = GetTickCount64() + 1000;
-                nextDiscovery = GetTickCount64() + 10000;
-                nextPoll = 0;
+                nextDiscovery = GetTickCount64() + 180000;
             }
-            if (now >= nextPoll) { provider.Poll(); nextPoll = GetTickCount64() + g_settings.pollSeconds * 1000; }
+            provider.Poll(g_settings.pollSeconds * 1000, refresh);
             provider.Pump();
             now = GetTickCount64();
-            auto due = std::min(nextDiscovery, nextPoll);
+            auto due = std::min(nextDiscovery, provider.NextPoll());
             if (provider.NeedsDiscovery()) due = std::min(due, nextEventDiscovery);
-            if (!provider.Wait(due <= now ? 0 : static_cast<DWORD>(std::min<ULONGLONG>(due - now, 30000)), g_hidRefresh)) break;
+            if (!provider.Wait(due <= now ? 0 : static_cast<DWORD>(due - now), g_hidRefresh)) break;
         }
     } catch (...) { Wh_Log(L"Logitech HID++ worker could not start"); }
     if (apartmentInitialized) winrt::uninit_apartment();
@@ -2293,12 +2491,11 @@ static void StopWorker() {
         CloseHandle(g_worker);
         g_worker = nullptr;
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
-    // The notification window and all producers have stopped before these are closed.
-    for (HANDLE* event : {&g_hubRefresh, &g_hidRefresh}) {
+}
+
+static void CloseWorkerEvents() {
+    // UI callbacks are also producers: close events only after detaching XAML.
+    for (HANDLE* event : {&g_stopEvent, &g_hubRefresh, &g_hidRefresh, &g_eventRefresh, &g_nativeRefresh}) {
         if (*event) CloseHandle(*event);
         *event = nullptr;
     }
@@ -2308,11 +2505,13 @@ static void StartWorker() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hubRefresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_hidRefresh = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent || !g_hubRefresh || !g_hidRefresh) { StopWorker(); return; }
-    if (g_stopEvent) g_worker = CreateThread(nullptr, 0, BatteryWorker, nullptr, 0, nullptr);
-    if (g_stopEvent) g_eventWorker = CreateThread(nullptr, 0, GHubEventWorker, nullptr, 0, nullptr);
-    if (g_stopEvent && g_settings.directHidpp) g_hidWorker = CreateThread(nullptr, 0, HidBatteryWorker, nullptr, 0, nullptr);
-    if (g_stopEvent) g_nativeWorker = CreateThread(nullptr, 0, NativeTrayWorker, nullptr, 0, nullptr);
+    g_eventRefresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_nativeRefresh = CreateEventW(nullptr, FALSE, TRUE, nullptr);
+    if (!g_stopEvent || !g_hubRefresh || !g_hidRefresh || !g_eventRefresh || !g_nativeRefresh) { StopWorker(); return; }
+    g_worker = CreateThread(nullptr, 0, BatteryWorker, nullptr, 0, nullptr);
+    g_eventWorker = CreateThread(nullptr, 0, GHubEventWorker, nullptr, 0, nullptr);
+    if (g_settings.directHidpp) g_hidWorker = CreateThread(nullptr, 0, HidBatteryWorker, nullptr, 0, nullptr);
+    g_nativeWorker = CreateThread(nullptr, 0, NativeTrayWorker, nullptr, 0, nullptr);
     if (!g_worker || !g_eventWorker || !g_nativeWorker || (g_settings.directHidpp && !g_hidWorker)) {
         Wh_Log(L"Failed to start workers; rolling back partial startup");
         StopWorker();
@@ -2349,6 +2548,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    g_detachedSince = GetTickCount64();
     HWND window = FindTaskbar();
     if (g_taskbarModule && window && WindhawkUtils::SetWindowSubclassFromAnyThread(window, TaskbarSubclass, 0)) {
         g_taskbar = window;
@@ -2366,6 +2566,7 @@ void Wh_ModUninit() {
         SendMessageW(window, g_uiMessage, 1, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, TaskbarSubclass);
     }
+    CloseWorkerEvents();
     if (g_taskbarModule) {
         FreeLibrary(g_taskbarModule);
         g_taskbarModule = nullptr;
@@ -2378,386 +2579,3 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = TRUE;
     return TRUE;
 }
-
-#ifdef LOGITECH_BATTERY_NATIVE_TEST
-#include <cstdio>
-int main() {
-    struct InterfaceEvent {
-        DWORD size, type, reserved;
-        GUID guid;
-        wchar_t name[64];
-    } notification{sizeof(InterfaceEvent), DBT_DEVTYP_DEVICEINTERFACE, 0, {}, L"\\\\?\\HID#VID_046D&PID_0000"};
-    static_assert(offsetof(InterfaceEvent, name) == offsetof(DEV_BROADCAST_DEVICEINTERFACE_W, dbcc_name));
-    if (!IsLogitechInterfaceChange(DBT_DEVICEARRIVAL, reinterpret_cast<LPARAM>(&notification)) ||
-        !IsLogitechInterfaceChange(DBT_DEVICEREMOVECOMPLETE, reinterpret_cast<LPARAM>(&notification)) ||
-        IsLogitechInterfaceChange(DBT_DEVNODES_CHANGED, 0)) return 9;
-    wcscpy_s(notification.name, L"\\\\?\\HID#VID_1234&PID_0000");
-    if (IsLogitechInterfaceChange(DBT_DEVICEARRIVAL, reinterpret_cast<LPARAM>(&notification))) return 10;
-    notification.size = sizeof(DEV_BROADCAST_HDR);
-    if (IsLogitechInterfaceChange(DBT_DEVICEARRIVAL, reinterpret_cast<LPARAM>(&notification))) return 11;
-    g_hubRefresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_hidRefresh = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hubRefresh || !g_hidRefresh) return 12;
-    RequestDeviceRefresh();
-    bool signaled = WaitForSingleObject(g_hubRefresh, 0) == WAIT_OBJECT_0 &&
-                    WaitForSingleObject(g_hidRefresh, 0) == WAIT_OBJECT_0;
-    CloseHandle(g_hubRefresh);
-    CloseHandle(g_hidRefresh);
-    g_hubRefresh = g_hidRefresh = nullptr;
-    if (!signaled) return 13;
-    DeviceBattery warmup;
-    warmup.percent = 50;
-    if (HICON icon = MakeNativeBatteryIcon(warmup, 16)) DestroyIcon(icon);
-    else return 7;
-    DWORD before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
-    for (int size : {16, 20, 24, 32, 48}) for (int percent : {0, 9, 50, 99, 100}) {
-        DeviceBattery device;
-        device.percent = percent;
-        for (bool charging : {false, true}) {
-            device.charging = charging;
-            HICON icon = MakeNativeBatteryIcon(device, size);
-            if (!icon) return 1;
-            ICONINFO info{};
-            if (!GetIconInfo(icon, &info)) { DestroyIcon(icon); return 2; }
-            BITMAP bitmap{};
-            GetObjectW(info.hbmColor, sizeof(bitmap), &bitmap);
-            bool valid = bitmap.bmWidth == size && bitmap.bmHeight == size;
-            DeleteObject(info.hbmColor);
-            DeleteObject(info.hbmMask);
-            DestroyIcon(icon);
-            if (!valid) return 3;
-        }
-    }
-    DWORD after = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
-    if (after != before) { std::printf("GDI before=%lu after=%lu\n", before, after); return 4; }
-    g_stopEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
-    if (!g_stopEvent) return 5;
-    for (int i = 0; i < 10; ++i) if (NativeTrayWorker(nullptr)) { CloseHandle(g_stopEvent); return 8; }
-    WNDCLASSW cls{};
-    bool stale = GetClassInfoW(GetModuleHandleW(nullptr), L"Windhawk_LogitechBattery_" WH_MOD_ID, &cls);
-    CloseHandle(g_stopEvent);
-    g_stopEvent = nullptr;
-    if (stale) return 6;
-    std::puts("PASS: Logitech arrival/removal filter, worker wake events, 50 native icons, GDI resources, 10 hidden-window stop/reload cycles; no tray icons published.");
-    return 0;
-}
-#endif
-
-#ifdef LOGITECH_BATTERY_PROVIDER_TEST
-
-#include <cstdio>
-#include <cstdlib>
-#include <thread>
-
-static void PrintSnapshot(const BatterySnapshot& snapshot) {
-    for (const auto& device : snapshot.devices) {
-        auto name = winrt::to_string(device.name);
-        auto type = winrt::to_string(device.type);
-        std::printf("%s | %s | percent=%d online=%d charging=%d hours=%.2f approximate=%d source=%s\n",
-            name.c_str(), type.c_str(), device.percent, device.online, device.charging, device.hours,
-            device.approximate, device.fromHidpp ? "HID++" : "G HUB");
-    }
-    std::fflush(stdout);
-}
-
-static void CheckProviderBehavior() {
-    auto require = [](bool condition, PCWSTR message) { if (!condition) throw winrt::hresult_error(E_FAIL, message); };
-    for (double width : {32.0, 40.0, 48.0, 64.0, 80.0}) {
-        for (double iconWidth : {16.0, 33.0, 61.0}) {
-            for (double textWidth : {0.0, 38.0, 47.0}) {
-                double naturalWidth = std::max(iconWidth, textWidth);
-                double naturalHeight = 37 + (textWidth ? 20 : 0);
-                auto size = SizeBatteryButton(true, width, 500, naturalWidth, naturalHeight, 160);
-                double scale = std::min(1.0, size.contentWidth / naturalWidth);
-                require(size.width <= width && size.width == width - 4, L"Vertical button must fit the tray, ignoring horizontal preferred width");
-                require(naturalHeight * scale + 8 <= size.height, L"Vertical content must fit inside button height");
-                require(size.contentWidth + 8 <= size.width, L"Vertical content must respect padding");
-                auto otherHeight = SizeBatteryButton(true, width, 1000, naturalWidth, naturalHeight, 160);
-                require(otherHeight.height == size.height, L"Vertical button must not depend on the full tray height");
-            }
-        }
-    }
-    auto horizontalSize = SizeBatteryButton(false, 400, 48, 71, 16, 66);
-    require(horizontalSize.width == 83 && horizontalSize.height == 36, L"Horizontal layout dimensions must be preserved");
-    auto wideHorizontal = SizeBatteryButton(false, 400, 48, 71, 16, 120);
-    require(wideHorizontal.width == 120, L"Horizontal preferred width must still apply");
-    const BYTE x64[] = {0x48,0x83,0xEC,0x28,0x48,0x83,0xC1,0x30};
-    const DWORD arm64[] = {0xD503237F,0xA9807BFD,0x910003FD,0xF8430C00};
-    size_t offset = 0;
-    require(DecodeHostOffset(x64, sizeof(x64), false, offset) && offset == 0x30, L"x64 host offset");
-    require(DecodeHostOffset(reinterpret_cast<const BYTE*>(arm64), sizeof(arm64), true, offset) && offset == 0x30, L"ARM64 host offset");
-    require(!DecodeHostOffset(x64, 7, false, offset), L"Truncated host prologue must be rejected");
-    require(!DecodeHostOffset(x64, sizeof(x64), true, offset), L"Wrong architecture must be rejected");
-    DeviceBattery unknown;
-    unknown.charging = true;
-    require(!DeviceShouldBeShown(unknown), L"Unknown battery percentage must not appear as -1 percent");
-    require(SameDeviceList({unknown}, {unknown}), L"Equal snapshots must not trigger redraws");
-    DeviceBattery mouse{L"example_wireless_mouse",L"Example Wireless Mouse",L"MOUSE"};
-    mouse.id = L"mouse"; mouse.key = L"ghub:mouse"; mouse.unit = L"12345678";
-    mouse.online = true; mouse.percent = 95; mouse.charging = true;
-    LoadTooltipLanguage();
-    require(g_tooltipStrings != nullptr && !g_tooltipLocale.empty(), L"Windows UI language detection failed");
-    require(FindTooltipLanguage(L"RU-ru") == FindTooltipLanguage(L"ru"), L"Regional locale matching failed");
-    require(FindTooltipLanguage(L"en_GB") == FindTooltipLanguage(L"en"), L"Locale separator matching failed");
-    require(FindTooltipLanguage(L"zh-HK") == FindTooltipLanguage(L"zh-Hant"), L"Traditional Chinese locale mismatch");
-    require(FindTooltipLanguage(L"zh-CN") == FindTooltipLanguage(L"zh-Hans"), L"Simplified Chinese locale mismatch");
-    require(FindTooltipLanguage(L"zz-ZZ") == nullptr, L"Unsupported language must allow English fallback");
-    for (const auto& strings : kTooltipLanguages) {
-        require(FindTooltipLanguage(strings.language) == &strings, L"Duplicate or unreachable language entry");
-        auto text = FormatBatteryTooltip(mouse, strings, L"en-US");
-        require(text.find(strings.charging) != std::wstring::npos && text.find(L"95%") != std::wstring::npos,
-            L"Localized charging tooltip failed");
-        require(text.find(mouse.key) == std::wstring::npos && text.find(L"G HUB") == std::wstring::npos &&
-            text.find(L"HID++") == std::wstring::npos && text.find(L"GitHub") == std::wstring::npos,
-            L"Tooltip exposes provider diagnostics");
-        auto state = mouse;
-        state.chargingError = true;
-        require(FormatBatteryTooltip(state, strings, L"en-US").find(strings.error) != std::wstring::npos, L"Charging error localization");
-        state.chargingError = false; state.fullyCharged = true;
-        require(FormatBatteryTooltip(state, strings, L"en-US").find(strings.charged) != std::wstring::npos, L"Full charge localization");
-        state.fullyCharged = false; state.charging = false; state.percent = 5; state.hours = 2.5;
-        text = FormatBatteryTooltip(state, strings, L"en-US");
-        require(text.find(strings.low) != std::wstring::npos && text.find(strings.remaining) != std::wstring::npos, L"Low charge and duration localization");
-        state.online = false;
-        require(FormatBatteryTooltip(state, strings, L"en-US").find(strings.unavailable) != std::wstring::npos, L"Unavailable battery localization");
-    }
-    require(DeviceVisible(mouse, {{L"",false}}, true), L"Empty optional rule must not hide a detected device");
-    DeviceBattery keyboard{L"another_model", L"Another Vendor Device", L"KEYBOARD"};
-    require(DeviceVisible(keyboard, {}, true), L"Detection must not depend on a personal model list");
-    require(DeviceVisible(mouse, {}, true), L"New devices must be visible by default");
-    require(!DeviceVisible(mouse, {{L"*wireless*",false}}, true), L"Model filtering failed");
-    require(DeviceVisible(mouse, {{L"*",false},{L"Example",true}}, true), L"Last matching rule must win");
-    require(!DeviceVisible(mouse, {}, false), L"Explicit new-device opt-out failed");
-    require(DeviceShouldBeShown(mouse), L"Connected device must be shown");
-    DeviceBattery disconnected = mouse;
-    disconnected.online = false;
-    disconnected.charging = false;
-    require(!DeviceShouldBeShown(disconnected), L"Fully disconnected device must be hidden");
-    disconnected.charging = true;
-    require(DeviceShouldBeShown(disconnected), L"Charging device must remain visible while inactive");
-    require(BatteryGlyph(100,false) == L"\uE83F" && BatteryGlyph(100,true) == L"\uEA93" && BatteryGlyph(95,true) == L"\uE83E", L"Windows battery glyph mapping failed");
-    require(std::wstring(DeviceGlyph(L"KEYBOARD")) != DeviceGlyph(L"HEADSET"), L"Device type icons failed");
-    BatterySnapshot current{{mouse},true};
-    require(ApplyHubEvent(current, JsonObject::Parse(LR"({"path":"/battery/state/changed","payload":{"deviceId":"mouse","percentage":95,"charging":false}})")), L"Unplug event ignored");
-    require(!current.devices[0].charging && current.devices[0].percent == 95, L"Unplug event must preserve percentage and remove lightning");
-    DeviceBattery docked = mouse;
-    docked.online = false;
-    JsonObject chargingBattery = JsonObject::Parse(LR"({"percentage":76,"charging":true})");
-    require(ApplyBattery(docked, chargingBattery, false) && !docked.online && docked.charging && docked.percent == 76,
-            L"G HUB charging state must survive an inactive device state");
-    BatterySnapshot chargeEvent{{docked},true};
-    chargeEvent.devices[0].charging = false;
-    require(ApplyHubEvent(chargeEvent, JsonObject::Parse(LR"({"path":"/battery/state/changed","payload":{"deviceId":"mouse","charging":true}})")) &&
-            !chargeEvent.devices[0].online && chargeEvent.devices[0].charging,
-            L"Charging-only event must keep an inactive device visible");
-    BatterySnapshot newerEvent{{mouse},true};
-    newerEvent.devices[0].revision = 42;
-    BatterySnapshot staleList{{},true};
-    auto merged = MergeHubSnapshot(staleList, newerEvent, 41, GetTickCount64());
-    require(merged.devices.size() == 1 && merged.devices[0].online,
-            L"A stale device-list response must not overwrite a newer event");
-    auto recentlyCharging = docked;
-    recentlyCharging.observedAt = GetTickCount64() - 1000;
-    recentlyCharging.revision = 4;
-    merged = MergeHubSnapshot(staleList, BatterySnapshot{{recentlyCharging},true}, 4, GetTickCount64());
-    require(merged.devices.size() == 1 && merged.devices[0].charging,
-            L"A brief G HUB list omission must not flicker a charging device");
-    recentlyCharging.observedAt -= 10000;
-    merged = MergeHubSnapshot(staleList, BatterySnapshot{{recentlyCharging},true}, 4, GetTickCount64());
-    require(merged.devices.size() == 1 && !DeviceShouldBeShown(merged.devices[0]),
-            L"A stale disconnected device must disappear after the charging grace period");
-    auto stale = BatterySnapshot{{mouse},true};
-    stale.devices[0].revision = 0;
-    KeepFreshHubReadings(stale, current);
-    require(!stale.devices[0].charging, L"Older GET must not overwrite a newer event");
-    require(!ApplyHubEvent(current, JsonObject::Parse(LR"({"path":"/battery/state/changed","payload":{"deviceId":"unknown","percentage":95}})")), L"Unknown event device must not create a phantom icon");
-    require(HubEventNeedsDiscovery(current, JsonObject::Parse(LR"({"path":"/battery/state/changed","payload":{"deviceId":"unknown","percentage":95}})")),
-            L"Unknown battery event must request discovery");
-    require(!HubEventNeedsDiscovery(current, JsonObject::Parse(LR"({"path":"/battery/state/changed","payload":{}})")),
-            L"An empty subscription acknowledgment must not request discovery");
-    auto offlineEvent = current;
-    offlineEvent.devices[0].online = false;
-    offlineEvent.devices[0].revision = 20;
-    auto activeList = current;
-    activeList.devices[0].online = true;
-    activeList.devices[0].revision = 19;
-    KeepFreshHubReadings(activeList, offlineEvent);
-    require(activeList.devices[0].online, L"Battery events must not undo a newly active connection");
-    auto recent = mouse;
-    recent.observedAt = 10000;
-    recent.revision = 5;
-    auto failed = recent;
-    failed.observedAt = 0;
-    failed.percent = -1;
-    failed.online = failed.charging = false;
-    for (auto incomplete : {BatterySnapshot{}, BatterySnapshot{{failed},true}}) {
-        auto retained = MergeHubSnapshot(incomplete, BatterySnapshot{{recent},true}, 5, 11000);
-        require(DeviceShouldBeShown(retained.devices[0]), L"One failed query must not hide a fresh device");
-        retained = MergeHubSnapshot(incomplete, retained, 5, 16000);
-        require(!DeviceShouldBeShown(retained.devices[0]), L"Repeated query errors must not retain an icon forever");
-    }
-    DeviceBattery visible = mouse;
-    HidPresence presence;
-    UpdateHidPresence(visible, nullptr, presence, 10000);
-    require(DeviceShouldBeShown(visible), L"A transient HID disconnect must not hide the device");
-    UpdateHidPresence(visible, nullptr, presence, 14999);
-    require(DeviceShouldBeShown(visible), L"Repeated disconnect notifications must use the same grace window");
-    UpdateHidPresence(visible, &mouse, presence, 15000);
-    UpdateHidPresence(visible, nullptr, presence, 16000);
-    require(DeviceShouldBeShown(visible), L"A valid reading must cancel pending disappearance");
-    UpdateHidPresence(visible, nullptr, presence, 21000);
-    require(!DeviceShouldBeShown(visible), L"A sustained disconnect must hide the device");
-    UpdateHidPresence(visible, &mouse, presence, 22000);
-    require(!DeviceShouldBeShown(visible), L"A single reconnect response must not flash an icon");
-    UpdateHidPresence(visible, nullptr, presence, 22500);
-    UpdateHidPresence(visible, &mouse, presence, 24000);
-    require(!DeviceShouldBeShown(visible), L"Failed reconnects must reset confirmation");
-    UpdateHidPresence(visible, &mouse, presence, 25000);
-    require(DeviceShouldBeShown(visible), L"Confirmed reconnect must restore the icon without reloading");
-    DeviceBattery direct;
-    require(DecodeHidBattery(direct,0x1004,{95,8,1,0}) && direct.charging && !direct.approximate, L"HID++ unified charging decode failed");
-    require(DecodeHidBattery(direct,0x1004,{95,8,0,0}) && !direct.charging, L"HID++ unified unplug decode failed");
-    require(DecodeHidBattery(direct,0x1004,{0,2,0,0}) && direct.percent == 20 && direct.approximate, L"HID++ coarse levels must be marked approximate");
-    require(DecodeHidBattery(direct,0x1000,{0,0,0}) && direct.percent == 0, L"An empty battery is not an unavailable battery");
-    require(!DecodeHidBattery(direct,0x1004,{200,8,0}), L"Invalid HID++ percentage accepted");
-    require(DecodeHidBattery(direct,0x1001,{0x0F,0xE3,0x80}) && direct.percent == 90 && direct.approximate && direct.charging, L"HID++ voltage estimate failed");
-    require(!DecodeHidBattery(direct,0x1F20,{0x0F,0xE3,0}), L"Disconnected ADC headset accepted");
-    require(!DecodeHidBattery(direct,0x1F20,{0x0F,0xE6,0x0F}), L"ADC unknown status must not be mistaken for charging");
-    require(!IsConfirmedHidAbsence(0x1F20,{0x0F,0xE6,0x0F}) && IsConfirmedHidAbsence(0x1F20,{0,0,0}),
-            L"Unknown status with valid voltage is not a confirmed power-off");
-    require(DecodeHidBattery(direct,0x1F20,{0x0F,0xE6,7}) && direct.fullyCharged && direct.percent == 100,
-            L"ADC full status must be recognized");
-    require(!AcceptBatteryReply(0x1F20, {0,0,0}) && AcceptBatteryReply(0x1F20, {0x0F,0xE6,7}),
-            L"A zero ADC reply must leave room for the following valid reply");
-    require(HidAddressMatches(0xFF,0,true) && !HidAddressMatches(0xFF,0,false) && !HidAddressMatches(1,0,true),
-            L"Direct headset address alias must not mix receiver slots");
-    require(IsBatteryInput({0x11,0,8,0x0C,0x0F,0xE6,7},0xFF,8,0x1F20,true), L"ADC read reply from address zero ignored");
-    require(IsBatteryInput({0x11,0xFF,8,5,0x0F,0xE6,7},0xFF,8,0x1F20,true), L"Peer ADC read reply ignored");
-    require(!IsBatteryInput({0x11,0xFF,4,0x30,0,1,0x41},0xFF,8,0x1F20,true), L"Lighting traffic accepted as battery state");
-    require(!IsBatteryInput({0x11,0xFF,8,0x10,0,1,0x41},0xFF,8,0x1F20,true), L"ADC configuration reply accepted as battery state");
-    HidPresence communication;
-    auto communicating = mouse;
-    UpdateHidPresence(communicating, nullptr, communication, 10000, false);
-    UpdateHidPresence(communicating, nullptr, communication, 22000, false);
-    require(DeviceShouldBeShown(communicating), L"A 12-second response gap is not a confirmed disconnect");
-    UpdateHidPresence(communicating, nullptr, communication, 40000, false);
-    require(!DeviceShouldBeShown(communicating), L"Unknown transport state must expire after 30 seconds");
-    // Replay the captured zero/valid pair, address aliases and long reply gap.
-    struct AdcFrame { ULONGLONG time; BYTE address, software; std::vector<BYTE> payload; };
-    const AdcFrame frames[] = {
-        {3672,0xFF,0x0D,{0,0,0}}, {4969,0xFF,5,{0x0F,0xE6,7}},
-        {5735,0xFF,0x0E,{0x0F,0xE6,7}}, {7735,0xFF,0x0F,{0x0F,0xE6,7}},
-        {9782,0xFF,0x0A,{0x0F,0xE6,7}}, {11079,0xFF,0x0B,{0,0,0}},
-        {11094,0xFF,0x0B,{0x0F,0xE6,7}}, {18329,0xFF,0x0E,{0x0F,0xE6,7}},
-        {25141,0,0x0C,{0x0F,0xE6,7}}, {27829,0xFF,0x0D,{0x0F,0xE6,7}},
-        {39000,0xFF,0x0C,{0x0F,0xE6,7}}, {41016,0,0x0D,{0x0F,0xE5,7}},
-    };
-    auto replayed = mouse;
-    HidPresence replayPresence;
-    ULONGLONG nextTimeout = 2000;
-    for (const auto& frame : frames) {
-        while (nextTimeout < frame.time) {
-            UpdateHidPresence(replayed, nullptr, replayPresence, nextTimeout, false);
-            require(DeviceShouldBeShown(replayed), L"Recorded communication gap hid the headset");
-            nextTimeout += 2000;
-        }
-        std::vector<BYTE> packet{0x11,frame.address,8,frame.software};
-        packet.insert(packet.end(), frame.payload.begin(), frame.payload.end());
-        require(IsBatteryInput(packet,0xFF,8,0x1F20,true), L"Recorded ADC frame rejected");
-        auto reading = replayed;
-        bool valid = DecodeHidBattery(reading,0x1F20,frame.payload);
-        UpdateHidPresence(replayed, valid ? &reading : nullptr, replayPresence, frame.time,
-                          IsConfirmedHidAbsence(0x1F20,frame.payload));
-        require(DeviceShouldBeShown(replayed), L"Recorded charging sequence caused a disappearance");
-    }
-    UpdateHidPresence(replayed,nullptr,replayPresence,50000,true);
-    UpdateHidPresence(replayed,nullptr,replayPresence,56000,true);
-    require(!DeviceShouldBeShown(replayed), L"Confirmed power-off must still hide the headset after replay");
-    require(DecodeHidBattery(direct,0x0D,{75,0,0x50}) && direct.charging, L"Legacy HID++ charge failed");
-    require(DecodeHidBattery(direct,0x07,{5,0,0}) && direct.percent == 50 && direct.approximate, L"Legacy HID++ coarse level failed");
-    direct.name = mouse.name; direct.type = L"MOUSE"; direct.unit = mouse.unit; direct.fromHidpp = true;
-    auto combined = CombineLogitechProviders(BatterySnapshot{{mouse},true}, {direct});
-    require(combined.devices.size() == 1 && !combined.devices[0].fromHidpp, L"G HUB and HID++ must not create duplicate indicators");
-    mouse.online = false;
-    combined = CombineLogitechProviders(BatterySnapshot{{mouse},false}, {direct});
-    require(combined.devices.size() == 1 && combined.devices[0].fromHidpp && combined.devices[0].key == mouse.key, L"HID++ fallback must preserve visibility key");
-    std::puts("PASS: visibility, glyphs, event unplug, stale GET protection, all battery decoders, duplicate suppression and HID++ fallback.");
-}
-
-int main(int argc, char** argv) {
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    int exitCode = 0;
-    HANDLE cancel = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    ULONGLONG started = GetTickCount64();
-    try {
-        if (argc > 1 && std::string(argv[1]) == "selftest") {
-            CheckProviderBehavior();
-            CloseHandle(cancel); winrt::uninit_apartment(); return 0;
-        }
-        unsigned short port = argc > 1 ? static_cast<unsigned short>(std::atoi(argv[1])) : 9010;
-        if (argc > 2 && std::string(argv[2]) == "cancel") SetEvent(cancel);
-        if (argc > 2 && (std::string(argv[2]) == "cancelEvents" || std::string(argv[2]) == "cancelHid")) {
-            bool events = std::string(argv[2]) == "cancelEvents";
-            {
-                GHubClient stream(cancel);
-                if (events && (!stream.Connect(port))) throw winrt::hresult_error(E_FAIL,L"Event cancel probe connection failed");
-                if (events) stream.Send(L"/battery/state/changed",L"SUBSCRIBE");
-                std::thread stopper([cancel] { Sleep(80); SetEvent(cancel); });
-                try {
-                    if (events) while (WaitForSingleObject(cancel,0) != WAIT_OBJECT_0) stream.Receive();
-                    else { HidProvider provider(cancel); provider.Discover(); provider.Poll(); }
-                } catch (...) {}
-                stopper.join();
-            }
-            auto elapsed = GetTickCount64() - started;
-            std::printf("PASS: %s cancellation elapsedMs=%llu\n",events ? "event stream" : "HID++",elapsed);
-            CloseHandle(cancel);winrt::uninit_apartment();return elapsed < 1500 ? 0 : 3;
-        }
-        if (argc > 2 && std::string(argv[2]) == "hid") {
-            auto collections = EnumerateLogitechHid();
-            std::printf("Logitech HID++ collections=%zu\n", collections.size());
-            for (const auto& c : collections) std::printf("pid=%04X product=%s receiver=%d headset=%d short=%d\n", c.pid, winrt::to_string(c.product).c_str(), c.receiver, c.headset, !c.shortPath.empty());
-            HidProvider provider(cancel);
-            provider.Discover(); provider.Poll();
-            BatterySnapshot snapshot{provider.Snapshot(),true};
-            std::printf("HID++ devices=%zu elapsedMs=%llu\n", snapshot.devices.size(),GetTickCount64()-started);
-            PrintSnapshot(snapshot);
-            CloseHandle(cancel); winrt::uninit_apartment(); return 0;
-        }
-        auto snapshot = QueryBatteries(cancel, port);
-        if (argc > 2 && std::string(argv[2]) == "combined") {
-            HidProvider provider(cancel);
-            provider.Discover(); provider.Poll();
-            snapshot = CombineLogitechProviders(std::move(snapshot), provider.Snapshot());
-        }
-        std::printf("hubAvailable=%d devices=%zu elapsedMs=%llu\n", snapshot.hubAvailable,
-                    snapshot.devices.size(), GetTickCount64() - started);
-        PrintSnapshot(snapshot);
-        if (argc > 2 && std::string(argv[2]) == "events") {
-            GHubClient stream(cancel);
-            if (!stream.Connect(port)) throw winrt::hresult_error(E_FAIL,L"Event stream connection failed");
-            stream.Send(L"/battery/state/changed",L"SUBSCRIBE");
-            auto deadline = GetTickCount64() + (argc > 3 ? std::atoi(argv[3]) : 3) * 1000;
-            while (GetTickCount64() < deadline) {
-                try {
-                    auto event = stream.Receive(deadline);
-                    if (ApplyHubEvent(snapshot,event)) {
-                        std::printf("event elapsedMs=%llu\n", GetTickCount64() - started);
-                        PrintSnapshot(snapshot);
-                    }
-                } catch (const winrt::hresult_error&) { break; }
-            }
-        }
-        if (!snapshot.hubAvailable) exitCode = 2;
-    } catch (const winrt::hresult_error& error) {
-        std::printf("error=0x%08X message=%s elapsedMs=%llu\n",
-            static_cast<unsigned>(error.code()), winrt::to_string(error.message()).c_str(),
-            GetTickCount64() - started);
-        exitCode = 3;
-    }
-    CloseHandle(cancel);
-    winrt::uninit_apartment();
-    return exitCode;
-}
-
-#endif
