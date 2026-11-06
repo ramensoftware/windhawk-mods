@@ -113,33 +113,33 @@ to an app or to a whole Start menu folder.
 ## Category IDs
 
 Microsoft publishes no list of the numbers Start uses, so these were found by testing on Windows 11 26H2
-(build 26300). The pt-BR names are the headings exactly as Start shows them; the English names are
-translations, so they may differ from what Start shows in English.
+(build 26300), with Windows in Brazilian Portuguese. The names below are translations of the headings Start showed,
+so they may differ from what Start shows in English.
 
-| Heading (English) | Heading (pt-BR, as Start shows it) | IDs |
-|---|---|---|
-| Accessibility | Acessibilidade | 1 |
-| Business | Comercial | 20 |
-| Creativity | Criatividade | 6, 7, 22, 23, 30 |
-| Developer Tools | Ferramentas de Desenvolvedor | 15 |
-| Education | Educação | 19 |
-| Entertainment | Entretenimento | 16 |
-| Food & Dining | Bares e Restaurantes | 29 |
-| Games | Jogos | 3 |
-| Health & Fitness | Saúde e Bem-estar | 12 |
-| Information & Reading | Informações e Leitura | 14, 21, 24, 25, 31 |
-| Kids & Family | Crianças + Família | 10 |
-| Lifestyle | Estilo de vida | 27 |
-| Medical | Medicina | 11 |
-| Music | Música | 17 |
-| Other | Outro | 0 |
-| Personal Finance | Finanças Pessoais | 18 |
-| Productivity | Produtividade | 2, 5, 13 |
-| Shopping | Compras | 28 |
-| Social | Social | 8 |
-| Sports | Esportes | 26 |
-| Travel | Viagem | 4 |
-| Utilities & Tools | Utilitários e Ferramentas | 9 |
+| Heading | IDs |
+|---|---|
+| Accessibility | 1 |
+| Business | 20 |
+| Creativity | 6, 7, 22, 23, 30 |
+| Developer Tools | 15 |
+| Education | 19 |
+| Entertainment | 16 |
+| Food & Dining | 29 |
+| Games | 3 |
+| Health & Fitness | 12 |
+| Information & Reading | 14, 21, 24, 25, 31 |
+| Kids & Family | 10 |
+| Lifestyle | 27 |
+| Medical | 11 |
+| Music | 17 |
+| Other | 0 |
+| Personal Finance | 18 |
+| Productivity | 2, 5, 13 |
+| Shopping | 28 |
+| Social | 8 |
+| Sports | 26 |
+| Travel | 4 |
+| Utilities & Tools | 9 |
 
 - Several IDs lead to the same heading (for example 2, 5 and 13 all show under *Productivity*).
 - **Start only shows a heading as its own tile when at least 3 apps are assigned to it.** With fewer, those apps
@@ -193,6 +193,188 @@ category list (`AllAppsGroupViewModel`), all optional. To find their new names a
 DLL's symbols in Windhawk for those class and function names. The mod also hooks
 `RegGetValueW` in `kernelbase.dll` inside the Start menu process, which `StartTileData.dll` uses to read each app's
 `Category` value.
+
+---
+
+# Gerenciador de Categorias do Menu Iniciar
+
+> **Aviso:** este mod foi feito com "vibe coding". Foi escrito com um assistente de IA e testado apenas pelo autor,
+> em uma única configuração. Ele altera o que o menu Iniciar lê das suas configurações de categoria e reinicia o
+> processo do menu Iniciar, então use por sua conta e risco e guarde um backup do seu layout (**Exportar** salva um).
+
+Adiciona o item **Gerenciar Categorias** ao menu de contexto do menu Iniciar do Windows 11
+(clique com o botão direito em uma área vazia do menu Iniciar, ao lado do item de configurações do Iniciar).
+
+Ao escolher **Gerenciar Categorias**, o menu Iniciar fecha e a janela do gerenciador abre.
+
+A janela do gerenciador sempre roda dentro do `explorer.exe`. A pequena parte do mod que roda
+dentro do processo do menu Iniciar apenas adiciona o item de menu e pede ao Explorer que abra a janela.
+Se o item não aparecer, o log do Windhawk (linhas que começam com `[start]`) mostra se
+o processo do menu Iniciar encontrou o item de configurações do Iniciar.
+
+Sempre que o mod é carregado (instalado, atualizado, ativado novamente ou com o Explorer reiniciado), ele reinicia o
+processo do menu Iniciar caso esse processo tenha começado antes do mod. O novo processo já carrega o mod desde o início,
+então o novo item de menu aparece sem reiniciar o Explorer.
+
+**Seu layout fica neste mod.** O mod nunca grava no registro do Windows. Ele guarda as categorias que você
+escolhe no seu próprio armazenamento, e a parte do mod que roda dentro do processo do menu Iniciar entrega a sua
+categoria ao Iniciar quando ele lê a categoria de um app. Se você desativar ou desinstalar o mod, todas as categorias
+voltam para a que o Windows escolheu, então mantenha o mod instalado para manter o seu layout. **Exportar** salva uma
+cópia dele em um arquivo. O layout pertence à conta do Windows que o criou: outras contas no mesmo PC mantêm as suas.
+
+**Categorias vazias.** Na visualização por categorias de **Todos os aplicativos**, uma categoria sem apps ainda aparece
+como um bloco vazio. A opção **Hide empty category tiles** (ocultar blocos de categorias vazias, ativada por padrão)
+oculta esses blocos, mostra-os de novo assim que um app é atribuído à categoria e faz os blocos seguintes subirem para
+preencher o espaço. Um bloco conta como vazio quando a categoria não contém apps, então isso não depende do idioma de
+exibição, e itens fixados e outros blocos nunca são alterados. Isso inclui o contêiner *Outro* vazio que o Windows 11
+mostra quando você move todos os apps para fora de *Outro*. A opção não altera nenhuma categoria e não grava no
+registro. Alterá-la, assim como desativar o mod, reinicia o processo do menu Iniciar, porque o Iniciar não reconstrói
+a lista de categorias toda vez que o menu abre.
+
+**Exportar** salva em um arquivo de texto as alterações de categoria que o mod aplica (não as categorias do próprio
+Windows), incluindo apps que não estão instalados. **Importar** adiciona esse arquivo às suas alterações atuais.
+Exportar, Importar e Redefinir tudo pedem confirmação antes.
+
+**Redefinir tudo** remove todas as alterações que o mod aplica, então todos os apps voltam para a categoria que o
+Windows escolheu. Antes, ele grava uma cópia do seu layout atual na pasta de armazenamento do mod, que o **Importar**
+consegue carregar. O Windhawk remove essa pasta junto com o mod, então use **Exportar** se quiser uma cópia que fique.
+
+O gerenciador lista todos os apps que o menu Iniciar conhece (apps da área de trabalho e apps da Microsoft
+Store, obtidos de `shell:AppsFolder`) e permite atribuir uma categoria do menu Iniciar
+a um app ou a uma pasta inteira do menu Iniciar.
+
+## Observações
+- Atalhos dentro de uma pasta que contém dois ou mais atalhos são tratados como um
+  grupo: alterar um altera a pasta inteira, porque o menu Iniciar os agrupa.
+- Escolher **Padrão do Windows** remove a alteração do mod para o app, que volta para a categoria que o Windows escolheu.
+- Aplicar uma alteração reinicia o StartMenuExperienceHost para que ela tenha efeito imediatamente.
+- O Windows guarda suas categorias em `HKCU\Software\Microsoft\Windows\CurrentVersion\Start\TileProperties`. O mod
+  apenas lê essa chave e nunca grava nela; as alterações do mod ficam no armazenamento do próprio mod.
+- O Iniciar às vezes mantém várias chaves para o mesmo app (uma gêmea `P~` e outra `W~`, e uma
+  chave por atalho do menu Iniciar). O mod dá à chave principal do app e a todas as outras chaves a mesma categoria,
+  para que nunca divirjam. Apps cujas chaves divergem no momento (valores do próprio Windows, para apps que você não
+  alterou) recebem um **\*** amarelo depois do nome; passe o mouse sobre ele para ver detalhes.
+- Um título com um **\*** vermelho depois do nome tem 1 ou 2 apps atribuídos, então o Iniciar dobra esses apps em um
+  título mais amplo (veja **IDs de categoria** abaixo). Uma pasta do Iniciar conta como um app, e *Outro* nunca é
+  marcado. Passe o mouse sobre o nome para ver a mesma explicação. A lista recarrega sozinha quando uma alteração faz
+  um título entrar ou sair dessa faixa.
+- Uma pasta cujos apps estão em categorias diferentes mostra **Misto** na lista suspensa. Clique no cartão da pasta,
+  ou na seta dela, para expandir ou recolher.
+- Pressione **F5** (ou clique no botão de atualizar) para recarregar a lista de apps. O ícone de atualizar gira uma vez
+  e o texto de status pisca uma vez, para você ver que funcionou.
+- Passe o mouse sobre qualquer lista suspensa e gire a roda do mouse para percorrer as opções. Na lista suspensa de uma
+  linha, a nova categoria é aplicada quando a roda fica parada por cerca de um segundo.
+- A caixa de ID na parte de baixo só aparece depois que você escolhe **ID personalizado...** na lista suspensa de
+  baixo. Pressione **Enter** nela para aplicar o ID aos apps marcados imediatamente.
+- Clique na linha de um app (não na caixa de seleção nem na lista suspensa) para ver na barra de status a chave de
+  registro que ele usa, abaixo de `TileProperties`, e quantas outras chaves ele tem. Uma pasta do Iniciar não tem
+  chave própria, então clicar no cartão dela mostra quantos apps ela contém; cada app dentro mostra a sua própria chave.
+- A janela segue o idioma de exibição do Windows: inglês ou português do Brasil
+  (incluindo o item do menu de contexto, **Gerenciar Categorias**).
+- A lista suspensa ao lado da caixa de pesquisa filtra a lista pela categoria atribuída a cada
+  app. **Marcar tudo** marca ou desmarca tudo o que está sendo exibido, e **Expandir tudo** / **Recolher tudo**
+  abre ou fecha todas as pastas.
+- Cada entrada do filtro de categorias mostra quantos apps estão atribuídos a ela. Os números contam todos os
+  apps, não apenas os que a pesquisa mostra no momento. Apps cujo ID armazenado não está na lista são
+  contados apenas em *todas as categorias*.
+- A lista suspensa **Ordem** organiza a lista: A a Z, Z a A, por ID de categoria (crescente ou
+  decrescente), por nome da categoria, ou com os apps de chaves divergentes primeiro. Apps sem alteração
+  (*Padrão do Windows*) não têm ID e ficam por último nas ordens por ID e por categoria. Uma pasta é
+  posicionada pelo menor ID entre seus apps (o maior, em "decrescente"). A ordem também vale
+  dentro de cada pasta.
+- Marque as caixas ao lado de apps ou pastas para alterar vários de uma vez, depois escolha uma categoria na lista
+  suspensa de baixo e clique em **Aplicar aos marcados**. Isso vale para todos os apps marcados.
+- Clique com o botão direito em um app ou no cartão de uma pasta e escolha **Abrir local do arquivo** para abrir no
+  Explorador de Arquivos a pasta do menu Iniciar que guarda o atalho dele. Para um app, o atalho fica selecionado.
+  Apps sem atalho no menu Iniciar (a maioria dos apps da Microsoft Store) têm o item desabilitado; clicar nele
+  explica o motivo na barra de status.
+- O Iniciar guarda um número por app. Escolha **ID personalizado...** para testar qualquer número de 0 a 999. A lista
+  mostra o ID armazenado de cada app, para você ver qual número o próprio Iniciar usou para um app que já está
+  sob o título que você quer.
+
+## IDs de categoria
+
+A Microsoft não publica uma lista dos números que o Iniciar usa, então estes foram encontrados por testes no
+Windows 11 26H2 (build 26300). Os nomes abaixo são os títulos exatamente como o Iniciar os mostra em português do
+Brasil.
+
+| Título | IDs |
+|---|---|
+| Acessibilidade | 1 |
+| Bares e Restaurantes | 29 |
+| Comercial | 20 |
+| Compras | 28 |
+| Crianças + Família | 10 |
+| Criatividade | 6, 7, 22, 23, 30 |
+| Educação | 19 |
+| Entretenimento | 16 |
+| Esportes | 26 |
+| Estilo de vida | 27 |
+| Ferramentas de Desenvolvedor | 15 |
+| Finanças Pessoais | 18 |
+| Informações e Leitura | 14, 21, 24, 25, 31 |
+| Jogos | 3 |
+| Medicina | 11 |
+| Música | 17 |
+| Outro | 0 |
+| Produtividade | 2, 5, 13 |
+| Saúde e Bem-estar | 12 |
+| Social | 8 |
+| Utilitários e Ferramentas | 9 |
+| Viagem | 4 |
+
+- Vários IDs levam ao mesmo título (por exemplo, 2, 5 e 13 aparecem todos em *Produtividade*).
+- **O Iniciar só mostra um título como bloco próprio quando pelo menos 3 apps estão atribuídos a ele.** Com menos,
+  esses apps aparecem sob um título mais amplo, mesmo que o ID não mude: *Jogos*, *Música* e *Esportes* ficam em
+  *Entretenimento*, e *Viagem*, *Medicina*, *Saúde e Bem-estar*, *Finanças Pessoais*, *Compras* e
+  *Bares e Restaurantes* ficam em *Estilo de vida*. Dê o mesmo ID a um terceiro app e o bloco aparece sozinho.
+- Um app dentro de uma pasta do menu Iniciar parece contar como um app, não importa quantos apps a pasta contenha.
+- IDs acima de 31 não têm nome. Um ID acima de 31 com 3 ou mais apps ganha um título sem nome, e com menos apps
+  esses apps ficam em *Outro*, então use os IDs até 31.
+
+## Reinicializações do menu Iniciar
+
+Aplicar uma alteração, **Importar**, **Redefinir tudo**, carregar o mod e desativá-lo ou removê-lo reiniciam o
+processo do menu Iniciar, então o Iniciar pode piscar ou fechar por um instante a cada vez. A reinicialização é
+ignorada quando nada mudou de fato, e um processo do Iniciar que começou há menos de um segundo é deixado em paz.
+
+## Desinstalar ou desativar
+
+O mod não faz nenhuma alteração permanente nos valores de categoria do próprio Windows. Quando ele é desativado,
+desinstalado ou atualizado, o processo do menu Iniciar reinicia e lê seus próprios valores de novo, então todas as
+categorias voltam para a que o Windows escolheu. Seu layout fica no armazenamento do mod enquanto ele estiver
+instalado, então desativar e ativar o mod (ou atualizá-lo) traz suas categorias de volta. O Windhawk remove o
+armazenamento junto com o mod, então use **Exportar** antes se quiser guardar o seu layout.
+
+## Testado em
+
+Apenas no Windows 11 build 26300, em um computador x64, com o Windows em português do Brasil. O mod não foi
+testado em ARM64, porque não tenho um dispositivo ARM64. Em qualquer outro build, o mod pode
+não conseguir se conectar ao menu Iniciar (veja abaixo).
+
+## Se uma atualização do Windows quebrar o mod
+
+O mod depende de partes privadas do menu Iniciar que a Microsoft pode alterar sem aviso. Ele foi escrito e testado
+no Windows 11 build 26300. Quando algo deixa de corresponder, o mod continua rodando e apenas a parte afetada
+deixa de funcionar. O que você pode ver:
+
+- **Sem o item "Gerenciar Categorias" no menu de contexto do menu Iniciar.** O hook do menu não foi conectado. O
+  Windows também mostra uma mensagem única por build do Windows.
+- **Suas categorias deixam de ser aplicadas** (o gerenciador ainda abre e as lista). O hook em `RegGetValueW` na
+  `kernelbase.dll`, que entrega a sua categoria ao Iniciar, não está sendo usado por este build do Iniciar. As linhas
+  de log que começam com `[start]` dizem se ele foi instalado e se entregou uma categoria.
+- **Blocos vazios não são ocultados, ou são ocultados mas os outros blocos não sobem.** Os hooks da opção
+  **Hide empty category tiles** não foram encontrados (todos são opcionais). Se apenas o hook de `ReplaceAll` estiver
+  faltando, os blocos vazios continuam ocultos e só os espaços voltam. O item de menu e suas categorias não são afetados.
+
+Onde procurar: o log do Windhawk (linhas que começam com `[start]`) diz se os hooks foram encontrados. A função que o
+mod precisa na DLL do menu Iniciar (`StartMenu.dll`, ou `StartUI.dll` em alguns builds) é
+`consume_..._IVector<IVector<MenuFlyoutItemBase>>::Append`, que adiciona o item de menu. A opção de blocos vazios também
+usa `CategoryProvider::PruneAndCombineCategories`, `StartBlendedFlexFrame::OnContextRequested` e o `ReplaceAll` da
+lista de categorias (`AllAppsGroupViewModel`), todos opcionais. Para encontrar os novos nomes depois de uma
+atualização, procure os símbolos da DLL do menu Iniciar no Windhawk por esses nomes de classe e função. O mod também
+conecta `RegGetValueW` na `kernelbase.dll` dentro do processo do menu Iniciar, que a `StartTileData.dll` usa para
+ler o valor `Category` de cada app.
 */
 // ==/WindhawkModReadme==
 
