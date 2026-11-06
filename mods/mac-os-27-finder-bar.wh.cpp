@@ -49,7 +49,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
 - **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave
-- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (orange and green while an app uses them, as on the Mac; click to mute the microphone or quit the app using the camera), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
+- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to mute the microphone or quit the app using the camera), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
 - **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
@@ -16048,6 +16048,136 @@ static void MicSessionApps(std::vector<std::wstring>& out) {
     col->Release();
 }
 
+// Câmera: o monitor de atividade dos sensores do Media Foundation avisa quais
+// processos estão recebendo imagem de cada câmera (Windows 10 2004 ou mais
+// novo). Interfaces de mfidl.h, declaradas aqui: nem todo SDK as traz.
+struct IMFSensorProcessActivity_ : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetProcessId(ULONG* pid) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetStreamingState(BOOL* streaming) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetStreamingMode(int* mode) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetReportTime(FILETIME* ft) = 0;
+};
+struct IMFSensorActivityReport_ : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetFriendlyName(LPWSTR name, ULONG cch, ULONG* written) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSymbolicLink(LPWSTR link, ULONG cch, ULONG* written) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProcessCount(ULONG* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProcessActivity(ULONG i, IMFSensorProcessActivity_** act) = 0;
+};
+struct IMFSensorActivitiesReport_ : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetCount(ULONG* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetActivityReport(ULONG i, IMFSensorActivityReport_** report) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetActivityReportByDeviceName(LPCWSTR name, IMFSensorActivityReport_** report) = 0;
+};
+struct IMFSensorActivityMonitor_ : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE Start() = 0;
+    virtual HRESULT STDMETHODCALLTYPE Stop() = 0;
+};
+static const IID kIID_SensorReportCallback = {0xDE5072EE, 0xDBE3, 0x46DC, {0x8A, 0x87, 0xB6, 0xF6, 0x31, 0x19, 0x47, 0x51}};
+
+static SRWLOCK g_camLock = SRWLOCK_INIT;
+static std::vector<DWORD> g_camPids;  // processos com a câmera ligada agora
+static bool g_camMonitorOk = false;
+
+struct CamReportCallback : IUnknown {
+    LONG refs = 1;
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == kIID_SensorReportCallback) {
+            *ppv = static_cast<IUnknown*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG r = InterlockedDecrement(&refs);
+        if (!r) delete this;
+        return r;
+    }
+    // Chega numa thread do Media Foundation: só copia os processos.
+    virtual HRESULT STDMETHODCALLTYPE OnActivitiesReport(IMFSensorActivitiesReport_* rep) {
+        std::vector<DWORD> pids;
+        ULONG n = 0;
+        if (rep && SUCCEEDED(rep->GetCount(&n))) {
+            for (ULONG i = 0; i < n; i++) {
+                IMFSensorActivityReport_* r = nullptr;
+                if (FAILED(rep->GetActivityReport(i, &r)) || !r) continue;
+                ULONG pc = 0;
+                r->GetProcessCount(&pc);
+                for (ULONG j = 0; j < pc; j++) {
+                    IMFSensorProcessActivity_* a = nullptr;
+                    BOOL on = FALSE;
+                    ULONG pid = 0;
+                    if (SUCCEEDED(r->GetProcessActivity(j, &a)) && a && SUCCEEDED(a->GetStreamingState(&on)) && on &&
+                        SUCCEEDED(a->GetProcessId(&pid)) && pid &&
+                        std::find(pids.begin(), pids.end(), (DWORD)pid) == pids.end())
+                        pids.push_back(pid);
+                    if (a) a->Release();
+                }
+                r->Release();
+            }
+        }
+        AcquireSRWLockExclusive(&g_camLock);
+        g_camPids.swap(pids);
+        ReleaseSRWLockExclusive(&g_camLock);
+        return S_OK;
+    }
+};
+static IMFSensorActivityMonitor_* g_camMonitor = nullptr;
+static CamReportCallback* g_camCallback = nullptr;
+
+static void CamMonitorStart() {
+    static bool tried = false;  // tenta uma vez (Windows antigo não tem o monitor)
+    if (g_camMonitor || tried) return;
+    tried = true;
+    HMODULE m = LoadLibraryExW(L"mfsensorgroup.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    using Create_t = HRESULT(WINAPI*)(IUnknown*, IMFSensorActivityMonitor_**);
+    auto create = m ? (Create_t)GetProcAddress(m, "MFCreateSensorActivityMonitor") : nullptr;
+    if (!create) return;
+    g_camCallback = new CamReportCallback();
+    if (SUCCEEDED(create(g_camCallback, &g_camMonitor)) && g_camMonitor && SUCCEEDED(g_camMonitor->Start())) {
+        g_camMonitorOk = true;
+    } else {
+        SafeRelease(g_camMonitor);
+        g_camCallback->Release();
+        g_camCallback = nullptr;
+    }
+}
+// No encerramento: para o monitor (nenhum aviso chega depois) e solta tudo.
+static void CamMonitorStop() {
+    if (g_camMonitor) {
+        g_camMonitor->Stop();
+        SafeRelease(g_camMonitor);
+    }
+    if (g_camCallback) {
+        g_camCallback->Release();
+        g_camCallback = nullptr;
+    }
+    g_camMonitorOk = false;
+}
+
+// Apps com a câmera ligada (pelo monitor): nome e caminho do .exe.
+static void CamSensorApps(std::vector<std::wstring>& names, std::vector<std::wstring>& keys) {
+    std::vector<DWORD> pids;
+    AcquireSRWLockShared(&g_camLock);
+    pids = g_camPids;
+    ReleaseSRWLockShared(&g_camLock);
+    for (DWORD pid : pids) {
+        if (pid == GetCurrentProcessId()) continue;
+        std::wstring path = GetProcessPath(pid);
+        if (path.empty()) continue;
+        size_t k = path.find_last_of(L'\\');
+        std::wstring exe = k == std::wstring::npos ? path : path.substr(k + 1);
+        if (_wcsicmp(exe.c_str(), L"svchost.exe") == 0) continue;  // o próprio serviço da câmera
+        std::wstring name = GetFileDescription(path);
+        if (name.empty()) name = PrivPrettyName(path, false);
+        if (name.empty() || std::find(names.begin(), names.end(), name) != names.end()) continue;
+        names.push_back(name);
+        keys.push_back(path);
+    }
+}
+
 // Microfone padrão silenciado? (-1 = sem microfone.) E silenciar/reativar.
 static int MicMutedGet() {
     IAudioEndpointVolume* v = GetEndpointVolume(eCapture);
@@ -16765,9 +16895,21 @@ static void ExtrasPoll() {
         if (PrivChanged(0, L"microphone")) micReg = PrivScan(L"microphone");
         e.micApps = micReg;
         MicSessionApps(e.micApps);
+        // Câmera: o registro (como antes) mais o monitor dos sensores, que vê
+        // também os apps que o registro deixa de fora.
+        static std::vector<std::wstring> camReg, camRegKeys;
         if (PrivChanged(1, L"webcam")) {
-            e.camKeys.clear();
-            e.camApps = PrivScan(L"webcam", &e.camKeys);
+            camRegKeys.clear();
+            camReg = PrivScan(L"webcam", &camRegKeys);
+        }
+        CamMonitorStart();
+        e.camApps.clear();
+        e.camKeys.clear();
+        if (g_camMonitorOk) {
+            CamSensorApps(e.camApps, e.camKeys);  // monitor funcionando: ele basta
+        } else {
+            e.camApps = camReg;
+            e.camKeys = camRegKeys;
         }
         e.micMuted = MicMutedGet();
     } else if (!g_settings.showPrivacy) {
@@ -20017,9 +20159,9 @@ static void Render(Bar* b) {
                 continue;
             }
             if (p.spec.kind == K_PRIV) {
-                // Microfone e câmera. Em uso, cada um ganha a cápsula colorida do
-                // Mac: laranja no microfone, verde na câmera, com o ícone branco.
-                // Microfone silenciado: o ícone riscado.
+                // Microfone e câmera. Em uso, o ícone fica colorido como no Mac:
+                // laranja no microfone, verde na câmera. Microfone silenciado: o
+                // ícone riscado.
                 float is = s * g_settings.iconScale;
                 float cx = (p.l + p.r) / 2, cy = h / 2, half = (p.r - p.l) / 4;
                 struct One { float x; wchar_t g; bool on; D2D1_COLOR_F c; };
@@ -20030,15 +20172,8 @@ static void Render(Bar* b) {
                 };
                 for (const One& o : ones) {
                     D2D1_RECT_F gr = D2D1::RectF(o.x - half, 0, o.x + half, h);
-                    if (o.on && !shadowPass) {
-                        float pw = std::min(half - 1.0f * s, 9.5f * is), ph = std::min(h * 0.36f, 8.5f * is);
-                        b->brush->SetColor(o.c);
-                        b->rt->FillRoundedRectangle(
-                            D2D1::RoundedRect(D2D1::RectF(o.x - pw, cy - ph, o.x + pw, cy + ph), ph, ph), b->brush);
-                        b->brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
-                    } else {
-                        b->brush->SetColor(fg);
-                    }
+                    // Em uso, o próprio ícone fica laranja ou verde (a sombra não).
+                    b->brush->SetColor(o.on && !shadowPass ? o.c : fg);
                     wchar_t gs[2] = {o.g, 0};
                     b->rt->DrawText(gs, 1, b->fmtIcon, gr, b->brush);
                 }
@@ -21227,6 +21362,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     StopDlWatcher();
     NotifStop();
     StopJobThreads();
+    CamMonitorStop();
     g_notifApiOk = false;
     BnrApply();  // as faixas do Windows voltam ao lugar e a vigia sai
     // 3) Janelas e recursos da própria thread.
