@@ -53,7 +53,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 | Audio | Plays the video's audio track when the volume is above 0 |
 | Power saving | Still-frame mode, pause when idle, and optional pause on the password screen |
 | Boot behavior | Optionally show the last frame right after boot instead of decoding |
-| Shutdown screen | Optionally keep Windows' own background (usually black) on the "Shutting down" / "Restarting" screen |
+| Shutdown screen | Optionally show the video on the "Shutting down" / "Restarting" screen (off by default, so Windows' own black screen is shown) |
 | Fail-safe | Restores the original wallpaper if the lock screen UI changes or the mod misbehaves |
 | Debug log | Optional CPU and decode statistics and a UI tree dump |
 
@@ -61,7 +61,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 
 - **Render width**: internal canvas width (320 to 1920). The height follows your screen's aspect ratio. This is the biggest CPU lever.
 - **Hardware video decoding**: on (default) decodes with the GPU when possible, which greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. If the GPU path cannot produce a frame, the mod falls back to software decoding by itself. Changing this setting also re-enables playback if the crash guard turned it off.
-- **Behavior right after boot**: with `still`, the first 3 minutes after boot show the last saved frame without decoding. Needs at least one earlier session where the video was playing.
+- **Behavior right after boot**: with **Show last frame**, the first 3 minutes after boot show the last saved frame without decoding. Needs at least one earlier session where the video was playing.
 - **Audio volume**: 0 means muted. Above 0, audio only plays at 100% speed while the video is playing (not paused, idle-paused, or showing the boot still frame).
 - **Pause when idle**: freezes the video and mutes the audio after the chosen time without input, and resumes on the next input.
 - **Play video on the password screen**: on (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen.
@@ -112,7 +112,7 @@ Everything is stored in the mod's own storage folder inside Windhawk's data fold
 
 - `debug.log`: log file, trimmed automatically after 2 MB
 - `frame_*.bgra`: cached first frame, so the lock screen can show something immediately
-- `last.bgra`: last shown frame, used by the `still` boot mode
+- `last.bgra`: last shown frame, used by the **Show last frame** boot mode
 
 You can delete these files at any time; the mod recreates what it needs. The folder is removed automatically when the mod is uninstalled.
 
@@ -167,7 +167,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 | Audio | Memutar audio video jika volume di atas 0 |
 | Hemat daya | Mode gambar diam, jeda saat idle, dan opsi jeda di layar password |
 | Perilaku saat boot | Opsional menampilkan frame terakhir tepat setelah boot tanpa decoding |
-| Layar shutdown | Opsional mempertahankan latar bawaan Windows (biasanya hitam) di layar "Shutting down" / "Restarting" |
+| Layar shutdown | Opsional menampilkan video di layar "Shutting down" / "Restarting" (mati secara default, sehingga layar hitam bawaan Windows yang tampil) |
 | Fail-safe | Mengembalikan wallpaper asli jika UI lock screen berubah atau mod bermasalah |
 | Debug log | Opsional: statistik CPU dan decode serta dump UI tree |
 
@@ -175,7 +175,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 
 - **Render width**: lebar kanvas internal (320 sampai 1920). Tinggi mengikuti rasio aspek layarmu. Ini pengaturan yang paling berpengaruh pada CPU.
 - **Hardware video decoding**: aktif (default) berarti video di-decode oleh GPU jika memungkinkan, sehingga pemakaian CPU turun jauh untuk video 4K atau 60 fps. Matikan jika pemutaran bermasalah atau layar sign-in bermasalah. Jika jalur GPU gagal menghasilkan frame, mod otomatis beralih ke decoding software. Mengubah setting ini juga menyalakan kembali pemutaran jika crash guard sempat mematikannya.
-- **Behavior right after boot**: dengan `still`, 3 menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Butuh minimal satu sesi sebelumnya di mana video sempat diputar.
+- **Behavior right after boot**: dengan **Show last frame**, 3 menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Butuh minimal satu sesi sebelumnya di mana video sempat diputar.
 - **Audio volume**: 0 berarti senyap. Di atas 0, audio hanya diputar pada kecepatan 100% dan hanya saat video benar-benar berjalan (bukan saat dijeda, dijeda karena idle, atau menampilkan frame diam setelah boot).
 - **Pause when idle**: membekukan video dan membisukan audio setelah waktu tertentu tanpa input, lalu lanjut saat ada input berikutnya.
 - **Play video on the password screen**: aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen.
@@ -226,7 +226,7 @@ Semuanya disimpan di folder penyimpanan milik mod sendiri, di dalam folder data 
 
 - `debug.log`: file log, dipangkas otomatis setelah 2 MB
 - `frame_*.bgra`: cache frame pertama, agar lock screen bisa langsung menampilkan sesuatu
-- `last.bgra`: frame terakhir yang ditampilkan, dipakai oleh mode boot `still`
+- `last.bgra`: frame terakhir yang ditampilkan, dipakai oleh mode boot **Show last frame**
 
 Kamu boleh menghapus file-file ini kapan saja; mod akan membuat ulang yang dibutuhkan. Folder ini dihapus otomatis saat mod di-uninstall.
 
@@ -245,29 +245,25 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
 
 // ==WindhawkModSettings==
 /*
-- videoPath: ""
-  $name: Video file or folder
-  $description: Full path to a video file (mp4 recommended), or a folder with videos (one is picked at random each lock).
-- width: 1920
-  $name: Render width
-  $description: Internal width in pixels, 320 to 1920 (the height follows your screen's aspect ratio). Lower = less CPU, higher = sharper. Common values are 960, 1280 and 1920.
-- fitMode: cover
-  $name: Fit mode
-  $description: How the video is scaled to the screen.
-  $options:
-  - cover: Cover (fill the screen, crop the edges)
-  - fill: Fill (stretch, may distort)
-  - fit: Fit (letterbox, keep aspect ratio)
-  - center: Center (original pixel size, no scaling)
-- audioVolume: 0
-  $name: Audio volume (%)
-  $description: 0 to 100. 0 = muted (default). Above 0 plays the audio track of the video, only at 100% video speed while the video is playing (not paused, no boot still frame). Scales the mod's own audio before it reaches Windows, so it is separate from other apps. The system master volume still applies on top.
-- speed: 100
-  $name: Video speed (%)
-  $description: 25 to 400. 100 = normal speed.
-- hwDecode: true
-  $name: Hardware video decoding
-  $description: Decode the video on the GPU (D3D11/DXVA) when possible. This greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. Falls back to software decoding automatically if the GPU cannot decode the video.  
+- general:
+  - videoPath: ""
+    $name: Video file or folder
+    $description: Full path to a video file (mp4 recommended), or a folder with videos (one is picked at random each lock).
+  - fitMode: cover
+    $name: Fit mode
+    $description: How the video is scaled to the screen.
+    $options:
+    - cover: Cover (fill the screen, crop the edges)
+    - fill: Fill (stretch, may distort)
+    - fit: Fit (letterbox, keep aspect ratio)
+    - center: Center (original pixel size, no scaling)
+  - audioVolume: 0
+    $name: Audio volume (%)
+    $description: 0 to 100. 0 = muted (default). Above 0 plays the audio track of the video, only at 100% video speed while the video is playing (not paused, and not while the last frame is shown after boot). Scales the mod's own audio before it reaches Windows, so it is separate from other apps. The system master volume still applies on top.
+  - speed: 100
+    $name: Video speed (%)
+    $description: 25 to 400. 100 = normal speed.
+  $name: General
 - colorAdjustments:
   - hue: 0
     $name: Hue shift (degrees)
@@ -285,6 +281,14 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
     $name: Gamma
     $description: 20 to 300 (100 = 1.0).
   $name: Color adjustments
+- performance:
+  - width: 1920
+    $name: Render width
+    $description: Internal width in pixels, 320 to 1920 (the height follows your screen's aspect ratio). Lower = less CPU, higher = sharper. Common values are 960, 1280 and 1920.
+  - hwDecode: true
+    $name: Hardware video decoding
+    $description: Decode the video on the GPU (D3D11/DXVA) when possible. This greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. Falls back to software decoding automatically if the GPU cannot decode the video.
+  $name: Performance
 - power:
   - paused: false
     $name: Pause (show a still frame)
@@ -292,22 +296,24 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
   - idlePauseSeconds: 300
     $name: Pause when idle (seconds)
     $description: Freeze the video and mute the audio after this many seconds without keyboard or mouse input. It resumes on the next input. 0 = never.
+  $name: Pause and power saving
+- screens:
   - playOnPasswordScreen: true
     $name: Play video on the password screen
     $description: On = the video keeps playing while you type your password. Off = the video freezes on the password screen, which can help if playback stutters there. It plays again on the lock screen.
+  - showOnShutdown: false
+    $name: Show video on shutdown / restart screen
+    $description: Show the video on the "Shutting down" / "Restarting" status screen. Off (default) = Windows' own background for that screen (usually plain black) is shown instead.
   - bootMode: still
     $name: Behavior right after boot
-    $description: "still = for the first 3 minutes after boot, show the last frame without decoding. play = play immediately."
+    $description: "Show last frame = for the first 3 minutes after boot, the last saved frame is shown without decoding. Play video = the video plays immediately."
     $options:
     - still: Show last frame
     - play: Play video
-  $name: Pause and power saving
-- hideOnShutdown: false
-  $name: Hide video on shutdown / restart screen
-  $description: Do not show the video on the "Shutting down" / "Restarting" status screen. Windows' own background for that screen (usually plain black) is shown instead.
+  $name: Screens and startup
 - debugLog: false
   $name: Debug log
-  $description: Also write debug.log in the mod's storage folder, with CPU and decode statistics every 5 seconds and a one-time dump of the lock screen UI tree.
+  $description: Also write debug.log with CPU and decode statistics every 5 seconds and a one-time dump of the lock screen UI tree. It is saved in C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper (ProgramData is hidden, so paste this path into the File Explorer address bar).
 */
 // ==/WindhawkModSettings==
 
@@ -484,7 +490,7 @@ static bool g_identity = true;
 int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 void LoadColorSettings() {
-    g_speed = ClampInt(Wh_GetIntSetting(L"speed"), 25, 400);
+    g_speed = ClampInt(Wh_GetIntSetting(L"general.speed"), 25, 400);
     g_hue = ClampInt(Wh_GetIntSetting(L"colorAdjustments.hue"), -180, 180);    
     g_sat = ClampInt(Wh_GetIntSetting(L"colorAdjustments.saturation"), 0, 300);
     g_bri = ClampInt(Wh_GetIntSetting(L"colorAdjustments.brightness"), -100, 100);
@@ -1770,10 +1776,10 @@ BOOL Wh_ModInit() {
         ProcessIdToSessionId(GetCurrentProcessId(), &sid);
         FileLog(L"=== MOD INIT === LogonUI age=%llu ms, session=%lu", a / 10000, sid);
     }
-    PCWSTR p = Wh_GetStringSetting(L"videoPath");
+    PCWSTR p = Wh_GetStringSetting(L"general.videoPath");
     std::wstring path = Clean(p ? p : L"");
     Wh_FreeStringSetting(p);
-    int w = Wh_GetIntSetting(L"width");
+    int w = Wh_GetIntSetting(L"performance.width");
     if (w < 320) w = 320;
     if (w > 1920) w = 1920;
     kW = (w / 2) * 2;
@@ -1786,7 +1792,7 @@ BOOL Wh_ModInit() {
     g_frameBytes = (size_t)kW * kH * 4;
     LoadColorSettings();
     {
-        PCWSTR fm = Wh_GetStringSetting(L"fitMode");
+        PCWSTR fm = Wh_GetStringSetting(L"general.fitMode");
         g_fitMode = kFitCover;
         if (fm) {
             if (wcscmp(fm, L"fill") == 0) g_fitMode = kFitFill;
@@ -1795,12 +1801,12 @@ BOOL Wh_ModInit() {
             Wh_FreeStringSetting(fm);
         }
     }
-    g_audioVol = ClampInt(Wh_GetIntSetting(L"audioVolume"), 0, 100);
+    g_audioVol = ClampInt(Wh_GetIntSetting(L"general.audioVolume"), 0, 100);
     g_audioWanted = g_audioVol > 0;    
     g_idleMs = (DWORD)ClampInt(Wh_GetIntSetting(L"power.idlePauseSeconds"), 0, 86400) * 1000u;
-    g_hideOnShutdown = Wh_GetIntSetting(L"hideOnShutdown") != 0;
-    g_playOnPassword = Wh_GetIntSetting(L"power.playOnPasswordScreen") != 0;
-    g_hwDecode = Wh_GetIntSetting(L"hwDecode") != 0;    
+    g_hideOnShutdown = Wh_GetIntSetting(L"screens.showOnShutdown") == 0;
+    g_playOnPassword = Wh_GetIntSetting(L"screens.playOnPasswordScreen") != 0;
+    g_hwDecode = Wh_GetIntSetting(L"performance.hwDecode") != 0; 
     FileLog(L"Fit=%d audio=%d vol=%d idle=%lu ms hideOnShutdown=%d", g_fitMode,
            g_audioWanted ? 1 : 0, g_audioVol, g_idleMs, g_hideOnShutdown ? 1 : 0);    
 
@@ -1810,7 +1816,7 @@ BOOL Wh_ModInit() {
     g_paused = Wh_GetIntSetting(L"power.paused") != 0;
     g_debug = Wh_GetIntSetting(L"debugLog") != 0;
     {
-        PCWSTR bm = Wh_GetStringSetting(L"power.bootMode");
+        PCWSTR bm = Wh_GetStringSetting(L"screens.bootMode");
         bool still = !bm || wcscmp(bm, L"play") != 0;
         Wh_FreeStringSetting(bm);
         g_bootStill = still && GetTickCount64() < 180000ULL;
