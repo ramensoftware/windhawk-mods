@@ -49,7 +49,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
 - **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave
-- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), privacy dots (orange/green while the microphone or camera is in use), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
+- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (orange and green while an app uses them, as on the Mac; click to mute the microphone or quit the app using the camera), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
 - **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
@@ -96,7 +96,7 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 - **Night light**: on or off
 - **Power mode and power plan**: picking a power mode also switches the plan to Balanced, as Windows requires
 - **Energy saver** and **Do Not Disturb**
-- **Brightness**, **default audio device**, **volume and mute**, **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
+- **Brightness**, **default audio device**, **volume and mute**, **microphone mute**, **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
 
 Nothing is changed unless you click the matching tile or item.
 
@@ -233,6 +233,8 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
 #include <netlistmgr.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
+#include <audiopolicy.h>
+#include <appmodel.h>
 #include <propidl.h>
 #include <wincodec.h>
 #include <wbemidl.h>
@@ -962,11 +964,13 @@ struct Status {
 struct ExtState {
     int dnd = -1;                               // Não Perturbe (-1 desconhecido)
     std::vector<std::wstring> micApps, camApps; // apps usando microfone/câmera agora
+    std::vector<std::wstring> camKeys;          // de cada app da câmera: caminho do .exe ou família do pacote
+    int micMuted = -1;                          // microfone padrão silenciado (-1 sem microfone)
     bool mediaHas = false, playing = false;
     std::wstring title, artist;
     ULONGLONG lastPlaying = 0;                  // pausado há pouco ainda aparece
     bool operator==(const ExtState& o) const {
-        return dnd == o.dnd && micApps == o.micApps && camApps == o.camApps && mediaHas == o.mediaHas &&
+        return dnd == o.dnd && micApps == o.micApps && camApps == o.camApps && micMuted == o.micMuted && mediaHas == o.mediaHas &&
                playing == o.playing && title == o.title && artist == o.artist;
     }
 };
@@ -2400,6 +2404,7 @@ enum {
     ID_KEYS = 1200, ID_GO = 1500,
     ID_SW_WIFI = 1980, ID_SW_BT, ID_SW_DARK, ID_SW_MUTE, ID_SW_NIGHT, ID_SLIDER_VOL = 1990, ID_SLIDER_BRIGHT, ID_SLIDER_GLASS, ID_SLIDER_REFRACT, ID_SLIDER_SOFT, ID_SLIDER_WXGLASS,
     ID_SW_GLASSCLEAR = 1970, ID_SW_LIQUID, ID_SW_LIVE, ID_BAR_SETTINGS = 1975,
+    ID_PRIV_MICMUTE = 1950, ID_PRIV_MICSET, ID_PRIV_CAMSET, ID_PRIV_CAMCLOSE = 1953,  // até 1953 + 8
     ID_NOW_PREV = 1101 + 40, ID_NOW_PLAY, ID_NOW_NEXT, ID_FOCUS_OFF, ID_FOCUS_SETTINGS, ID_PRIV_SETTINGS,
     ID_HIST_CLEAR = 1150, ID_HIST_BASE = 1151, ID_HIST_WINCENTER = 1190,
 };
@@ -11041,7 +11046,7 @@ static const BsRowDef kBsRows[] = {
     {BR_ITEM, BV_FOCUS, L"Foco (quando ativo)", 0xE708, 0x5E5CE6},
     {BR_ITEM, BV_SEARCH, L"Busca", 0xE721, 0x8E8E93},
     {BR_CHOICE, BV_SEARCHTGT, L"A busca abre", 0, 0, L"Siri Plus: a janela padrão dele, no estilo Spotlight"},
-    {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Pontos laranja e verde quando um app usa o microfone ou a câmera"},
+    {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Laranja e verde quando um app usa o microfone ou a câmera; clique para silenciar o microfone ou fechar o app da câmera"},
     {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Fundo, cores de seleção, tamanho e quando a barra aparece"},
     {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
     {BR_CHOICE, BV_BARSTYLE, L"Fundo", 0, 0},
@@ -15878,17 +15883,21 @@ static HMENU BuildFocusMenu() {
 
 static HMENU BuildPrivacyMenu() {
     HMENU m = CreatePopupMenu();
-    if (!g_ext.micApps.empty()) {
-        AddHeader(m, L"Microfone em uso");
-        for (auto& a : g_ext.micApps) AddItem(m, ID_PRIV_SETTINGS, std::wstring(1, (wchar_t)0xE720) + L" " + a);
-    }
-    if (!g_ext.camApps.empty()) {
-        if (!g_ext.micApps.empty()) AddSep(m);
-        AddHeader(m, L"Câmera em uso");
-        for (auto& a : g_ext.camApps) AddItem(m, ID_PRIV_SETTINGS + 0, std::wstring(1, (wchar_t)0xE714) + L" " + a);
-    }
+    AddHeader(m, g_ext.micApps.empty() ? L"Microfone" : L"Microfone em uso");
+    for (auto& a : g_ext.micApps) AddItem(m, ID_PRIV_MICSET, std::wstring(1, (wchar_t)0xE720) + L" " + a);
+    if (g_ext.micMuted >= 0)
+        AddItem(m, ID_PRIV_MICMUTE, std::wstring(1, (wchar_t)0xEC54) + L" " + T(L"Silenciar o microfone"), g_ext.micMuted == 1);
+    else
+        AddItem(m, 0, T(L"Nenhum microfone"), false, true);
     AddSep(m);
-    AddItem(m, ID_PRIV_SETTINGS, L"Configurações de privacidade...");
+    AddHeader(m, g_ext.camApps.empty() ? L"Câmera" : L"Câmera em uso");
+    if (g_ext.camApps.empty()) AddItem(m, 0, T(L"Nenhum app usando a câmera"), false, true);
+    for (size_t i = 0; i < g_ext.camApps.size() && i < 8; i++)
+        AddItem(m, ID_PRIV_CAMCLOSE + (UINT)i,
+                std::wstring(1, (wchar_t)0xE714) + L" " + TF(L"Fechar %s", {g_ext.camApps[i]}));
+    AddSep(m);
+    AddItem(m, ID_PRIV_MICSET, L"Privacidade do microfone...");
+    AddItem(m, ID_PRIV_CAMSET, L"Privacidade da câmera...");
     return m;
 }
 
@@ -15919,7 +15928,8 @@ static bool PrivInUse(HKEY k) {
     return start != 0 && stop == 0;
 }
 
-static void PrivScanKey(HKEY parent, bool packaged, std::vector<std::wstring>& out) {
+static void PrivScanKey(HKEY parent, bool packaged, std::vector<std::wstring>& out,
+                        std::vector<std::wstring>* keys = nullptr) {
     wchar_t name[512];
     for (DWORD i = 0; i < 400; i++) {
         DWORD len = ARRAYSIZE(name);
@@ -15929,7 +15939,15 @@ static void PrivScanKey(HKEY parent, bool packaged, std::vector<std::wstring>& o
         if (RegOpenKeyExW(parent, name, 0, KEY_READ, &k) != ERROR_SUCCESS) continue;
         if (PrivInUse(k)) {
             std::wstring n = PrivPrettyName(name, packaged);
-            if (!n.empty() && std::find(out.begin(), out.end(), n) == out.end()) out.push_back(n);
+            if (!n.empty() && std::find(out.begin(), out.end(), n) == out.end()) {
+                out.push_back(n);
+                if (keys) {
+                    // Sem pacote, o nome da chave é o caminho do .exe com "#" no lugar de "\".
+                    std::wstring key = name;
+                    if (!packaged) std::replace(key.begin(), key.end(), L'#', L'\\');
+                    keys->push_back(key);
+                }
+            }
         }
         RegCloseKey(k);
     }
@@ -15968,20 +15986,119 @@ static void PrivWatchClose() {
     }
 }
 
-static std::vector<std::wstring> PrivScan(PCWSTR cap) {
+static std::vector<std::wstring> PrivScan(PCWSTR cap, std::vector<std::wstring>* keys = nullptr) {
     std::vector<std::wstring> out;
     std::wstring base = std::wstring(L"Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\") + cap;
     HKEY k;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, KEY_READ, &k) == ERROR_SUCCESS) {
-        PrivScanKey(k, true, out);
+        PrivScanKey(k, true, out, keys);
         HKEY np;
         if (RegOpenKeyExW(k, L"NonPackaged", 0, KEY_READ, &np) == ERROR_SUCCESS) {
-            PrivScanKey(np, false, out);
+            PrivScanKey(np, false, out, keys);
             RegCloseKey(np);
         }
         RegCloseKey(k);
     }
     return out;
+}
+
+// Microfone: além do registro, as sessões de áudio ativas nos microfones (o
+// mesmo que o Windows usa no ícone do microfone). Junta os nomes dos apps.
+static std::wstring GetFileDescription(const std::wstring& path);
+static void MicSessionApps(std::vector<std::wstring>& out) {
+    if (!g_mmEnum) return;
+    IMMDeviceCollection* col = nullptr;
+    if (FAILED(g_mmEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &col)) || !col) return;
+    UINT n = 0;
+    col->GetCount(&n);
+    for (UINT i = 0; i < n && i < 16; i++) {
+        IMMDevice* dev = nullptr;
+        IAudioSessionManager2* mgr = nullptr;
+        IAudioSessionEnumerator* en = nullptr;
+        if (SUCCEEDED(col->Item(i, &dev)) && dev &&
+            SUCCEEDED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr)) && mgr &&
+            SUCCEEDED(mgr->GetSessionEnumerator(&en)) && en) {
+            int count = 0;
+            en->GetCount(&count);
+            for (int k = 0; k < count && k < 64; k++) {
+                IAudioSessionControl* c = nullptr;
+                IAudioSessionControl2* c2 = nullptr;
+                AudioSessionState st = AudioSessionStateInactive;
+                if (SUCCEEDED(en->GetSession(k, &c)) && c && SUCCEEDED(c->GetState(&st)) &&
+                    st == AudioSessionStateActive &&
+                    SUCCEEDED(c->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&c2)) && c2 &&
+                    c2->IsSystemSoundsSession() != S_OK) {
+                    DWORD pid = 0;
+                    c2->GetProcessId(&pid);
+                    std::wstring path = pid ? GetProcessPath(pid) : L"";
+                    if (!path.empty()) {
+                        std::wstring name = GetFileDescription(path);
+                        if (name.empty()) name = PrivPrettyName(path, false);
+                        if (!name.empty() && std::find(out.begin(), out.end(), name) == out.end()) out.push_back(name);
+                    }
+                }
+                SafeRelease(c2);
+                SafeRelease(c);
+            }
+        }
+        SafeRelease(en);
+        SafeRelease(mgr);
+        SafeRelease(dev);
+    }
+    col->Release();
+}
+
+// Microfone padrão silenciado? (-1 = sem microfone.) E silenciar/reativar.
+static int MicMutedGet() {
+    IAudioEndpointVolume* v = GetEndpointVolume(eCapture);
+    if (!v) return -1;
+    BOOL m = FALSE;
+    int r = SUCCEEDED(v->GetMute(&m)) ? (m ? 1 : 0) : -1;
+    v->Release();
+    return r;
+}
+static bool MicMutedSet(bool mute) {
+    IAudioEndpointVolume* v = GetEndpointVolume(eCapture);
+    if (!v) return false;
+    bool ok = SUCCEEDED(v->SetMute(mute, nullptr));
+    v->Release();
+    return ok;
+}
+
+// Fecha (WM_CLOSE, como o botão X) as janelas do app que está com a câmera.
+// `key`: caminho do .exe, ou a família do pacote para apps da Store.
+struct CamCloseCtx {
+    std::wstring key;
+    bool packaged;
+    int closed = 0;
+};
+static BOOL CALLBACK CamCloseProc(HWND w, LPARAM lp) {
+    auto* c = (CamCloseCtx*)lp;
+    if (!IsWindowVisible(w) || GetWindow(w, GW_OWNER)) return TRUE;
+    DWORD pid = RealPidOf(w);
+    if (!pid || pid == GetCurrentProcessId()) return TRUE;
+    bool match = false;
+    if (c->packaged) {
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (h) {
+            wchar_t fam[256];
+            UINT32 len = ARRAYSIZE(fam);
+            match = GetPackageFamilyName(h, &len, fam) == ERROR_SUCCESS && _wcsicmp(fam, c->key.c_str()) == 0;
+            CloseHandle(h);
+        }
+    } else {
+        match = _wcsicmp(GetProcessPath(pid).c_str(), c->key.c_str()) == 0;
+    }
+    if (match) {
+        PostMessageW(w, WM_CLOSE, 0, 0);
+        c->closed++;
+    }
+    return TRUE;
+}
+static void CamCloseApp(const std::wstring& key) {
+    CamCloseCtx c{key, key.find(L'\\') == std::wstring::npos};
+    EnumWindows(CamCloseProc, (LPARAM)&c);
+    if (!c.closed) OpenUri(L"ms-settings:privacy-webcam");  // app sem janela: a página certa
 }
 
 // ---- Avisos em pílula (estilo Dynamic Island) ----
@@ -16644,11 +16761,19 @@ static void ExtrasPoll() {
     }
     // Privacidade, a cada 2 s.
     if (g_settings.showPrivacy && n % 2 == 0) {
-        if (PrivChanged(0, L"microphone")) e.micApps = PrivScan(L"microphone");
-        if (PrivChanged(1, L"webcam")) e.camApps = PrivScan(L"webcam");
+        static std::vector<std::wstring> micReg;
+        if (PrivChanged(0, L"microphone")) micReg = PrivScan(L"microphone");
+        e.micApps = micReg;
+        MicSessionApps(e.micApps);
+        if (PrivChanged(1, L"webcam")) {
+            e.camKeys.clear();
+            e.camApps = PrivScan(L"webcam", &e.camKeys);
+        }
+        e.micMuted = MicMutedGet();
     } else if (!g_settings.showPrivacy) {
         e.micApps.clear();
         e.camApps.clear();
+        e.camKeys.clear();
         g_privWatch[0].armed = g_privWatch[1].armed = false;  // ao religar, lê de novo
     }
     // Tocando agora: pede a leitura ao trabalhador e copia o último resultado.
@@ -19065,6 +19190,11 @@ static void OpenItemMenu(Bar* b, int idx) {
         if (cmd && target && IsWindow(target)) PostMessageW(target, WM_COMMAND, MAKEWPARAM(cmd, 0), 0);
         return;
     }
+    if (cmd >= ID_PRIV_CAMCLOSE && cmd < ID_PRIV_CAMCLOSE + 8) {
+        size_t i = cmd - ID_PRIV_CAMCLOSE;
+        if (i < g_ext.camKeys.size()) CamCloseApp(g_ext.camKeys[i]);
+        return;
+    }
     switch (cmd) {
         case ID_NOW_PREV: CcQueue(JOB_MEDIA_PREV); FocusActive(); return;
         case ID_NOW_PLAY: CcQueue(JOB_MEDIA_TOGGLE); FocusActive(); return;
@@ -19077,6 +19207,17 @@ static void OpenItemMenu(Bar* b, int idx) {
             return;
         case ID_FOCUS_SETTINGS: OpenUri(L"ms-settings:quiethours"); return;
         case ID_PRIV_SETTINGS: OpenUri(L"ms-settings:privacy"); return;
+        case ID_PRIV_MICSET: OpenUri(L"ms-settings:privacy-microphone"); return;
+        case ID_PRIV_CAMSET: OpenUri(L"ms-settings:privacy-webcam"); return;
+        case ID_PRIV_MICMUTE: {
+            bool mute = g_ext.micMuted != 1;
+            if (MicMutedSet(mute)) {
+                g_ext.micMuted = mute ? 1 : 0;
+                IslandShow(mute ? 0xEC54 : 0xE720, 0xFF9F0A, mute ? L"Microfone silenciado" : L"Microfone ativado");
+                RedrawAll();
+            }
+            return;
+        }
         case ID_HIST_WINCENTER:
             SendKeys(M_WIN, 'N');
             return;
@@ -19487,7 +19628,7 @@ static std::wstring BarItemName(Bar* b, int idx) {
         case K_SEARCH: return L"Buscar";
         case K_PRIV: {
             bool mic = !g_ext.micApps.empty(), cam = !g_ext.camApps.empty();
-            return mic && cam ? L"Em uso: microfone e câmera" : cam ? L"Em uso: câmera" : mic ? L"Em uso: microfone" : L"";
+            return mic && cam ? L"Em uso: microfone e câmera" : cam ? L"Em uso: câmera" : mic ? L"Em uso: microfone" : L"Microfone e câmera";
         }
         case K_MORE: return b->moreOpen ? L"Recolher ícones" : L"Mostrar todos os ícones";
         case K_NOTIF: return g_islUnread ? TF(L"Notificações (%s novas)", {std::to_wstring(g_islUnread)}) : std::wstring(L"Notificações");
@@ -19686,8 +19827,7 @@ static void Render(Bar* b) {
                 if (g_settings.showSearch) right.push_back({K_SEARCH, Glyph(0xE721), true, 1.0f, L""});
                 break;
             case K_PRIV:
-                if (g_settings.showPrivacy && (!g_ext.micApps.empty() || !g_ext.camApps.empty()))
-                    right.push_back({K_PRIV, L"", false, 1.0f, L""});
+                if (g_settings.showPrivacy) right.push_back({K_PRIV, L"", false, 1.0f, L""});
                 break;
             case K_NOTIF:
                 // Botão de Notificações: as do Windows e todos os avisos da pílula.
@@ -19707,7 +19847,7 @@ static void Render(Bar* b) {
                    : r.kind == K_CC      ? std::max(box, 22 * is)
                    : r.kind == K_WEATHER ? box + (r.text.empty() ? 0 : 3 * s + Measure(b->fmtText, r.text))
                    : r.kind == K_NOW     ? box + 3 * s + std::min(140 * s, Measure(b->fmtText, r.text))
-                   : r.kind == K_PRIV    ? std::round((g_ext.micApps.empty() || g_ext.camApps.empty() ? 9 : 19) * is)
+                   : r.kind == K_PRIV    ? std::round(box * 1.9f)  // microfone e câmera
                    : r.icon              ? box
                                          : Measure(b->fmtText, r.text);
         float pw = r.prefix.empty() ? 0 : Measure(b->fmtText, r.prefix) + 4 * s;
@@ -19877,17 +20017,30 @@ static void Render(Bar* b) {
                 continue;
             }
             if (p.spec.kind == K_PRIV) {
-                // Pontos: laranja = microfone, verde = câmera (como no Mac).
-                if (shadowPass) continue;
-                float is = s * g_settings.iconScale, rr = 3.6f * is;
-                float cx = (p.l + p.r) / 2, cy = h / 2;
-                std::vector<D2D1_COLOR_F> dots;
-                if (!g_ext.micApps.empty()) dots.push_back(D2D1::ColorF(1.0f, 0.62f, 0.04f, 1));
-                if (!g_ext.camApps.empty()) dots.push_back(D2D1::ColorF(0.19f, 0.82f, 0.35f, 1));
-                float x0 = cx - (dots.size() - 1) * 5 * is;
-                for (size_t k = 0; k < dots.size(); k++) {
-                    b->brush->SetColor(dots[k]);
-                    b->rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x0 + k * 10 * is, cy), rr, rr), b->brush);
+                // Microfone e câmera. Em uso, cada um ganha a cápsula colorida do
+                // Mac: laranja no microfone, verde na câmera, com o ícone branco.
+                // Microfone silenciado: o ícone riscado.
+                float is = s * g_settings.iconScale;
+                float cx = (p.l + p.r) / 2, cy = h / 2, half = (p.r - p.l) / 4;
+                struct One { float x; wchar_t g; bool on; D2D1_COLOR_F c; };
+                One ones[2] = {
+                    {cx - half, g_ext.micMuted == 1 ? (wchar_t)0xEC54 : (wchar_t)0xE720, !g_ext.micApps.empty(),
+                     D2D1::ColorF(1.0f, 0.62f, 0.04f, 1)},
+                    {cx + half, (wchar_t)0xE714, !g_ext.camApps.empty(), D2D1::ColorF(0.19f, 0.82f, 0.35f, 1)},
+                };
+                for (const One& o : ones) {
+                    D2D1_RECT_F gr = D2D1::RectF(o.x - half, 0, o.x + half, h);
+                    if (o.on && !shadowPass) {
+                        float pw = std::min(half - 1.0f * s, 9.5f * is), ph = std::min(h * 0.36f, 8.5f * is);
+                        b->brush->SetColor(o.c);
+                        b->rt->FillRoundedRectangle(
+                            D2D1::RoundedRect(D2D1::RectF(o.x - pw, cy - ph, o.x + pw, cy + ph), ph, ph), b->brush);
+                        b->brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+                    } else {
+                        b->brush->SetColor(fg);
+                    }
+                    wchar_t gs[2] = {o.g, 0};
+                    b->rt->DrawText(gs, 1, b->fmtIcon, gr, b->brush);
                 }
                 b->brush->SetColor(fg);
                 continue;
@@ -21748,5 +21901,17 @@ const UiTr kUiTr[] = {
     {L"Clique na pílula para abrir e editar", L"Click the pill to open and edit", L"Haz clic en la píldora para abrir y editar", L"Cliquez sur la pastille pour ouvrir et modifier", L"Auf die Pille klicken zum Öffnen und Bearbeiten", L"Fai clic sulla pillola per aprire e modificare", L"点击胶囊提示以打开和编辑"},
     {L"Salva · clique para abrir e editar", L"Saved · click to open and edit", L"Guardada · haz clic para abrir y editar", L"Enregistrée · cliquez pour ouvrir et modifier", L"Gespeichert · zum Öffnen und Bearbeiten klicken", L"Salvata · fai clic per aprire e modificare", L"已保存 · 点击以打开和编辑"},
     {L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais", L"Notices you can open or reply to stay 2.5 times longer", L"Los avisos que se pueden abrir o responder duran 2,5 veces más", L"Les avis qu’on peut ouvrir ou auxquels on peut répondre restent 2,5 fois plus longtemps", L"Hinweise, die man öffnen oder beantworten kann, bleiben 2,5-mal länger", L"Gli avvisi che si possono aprire o a cui rispondere restano 2,5 volte di più", L"可打开或回复的提示停留时间延长 2.5 倍"},
+    {L"Silenciar o microfone", L"Mute Microphone", L"Silenciar el micrófono", L"Couper le micro", L"Mikrofon stummschalten", L"Disattiva il microfono", L"将麦克风静音"},
+    {L"Nenhum microfone", L"No Microphone", L"Ningún micrófono", L"Aucun micro", L"Kein Mikrofon", L"Nessun microfono", L"没有麦克风"},
+    {L"Nenhum app usando a câmera", L"No App Is Using the Camera", L"Ninguna app usa la cámara", L"Aucune app n’utilise la caméra", L"Keine App verwendet die Kamera", L"Nessuna app usa la fotocamera", L"没有应用在使用相机"},
+    {L"Fechar %s", L"Quit %s", L"Cerrar %s", L"Quitter %s", L"%s beenden", L"Chiudi %s", L"退出 %s"},
+    {L"Privacidade do microfone...", L"Microphone Privacy...", L"Privacidad del micrófono...", L"Confidentialité du micro...", L"Mikrofon-Datenschutz...", L"Privacy del microfono...", L"麦克风隐私..."},
+    {L"Privacidade da câmera...", L"Camera Privacy...", L"Privacidad de la cámara...", L"Confidentialité de la caméra...", L"Kamera-Datenschutz...", L"Privacy della fotocamera...", L"相机隐私..."},
+    {L"Microfone silenciado", L"Microphone muted", L"Micrófono silenciado", L"Micro coupé", L"Mikrofon stumm", L"Microfono disattivato", L"麦克风已静音"},
+    {L"Microfone ativado", L"Microphone on", L"Micrófono activado", L"Micro activé", L"Mikrofon an", L"Microfono attivo", L"麦克风已开启"},
+    {L"Microfone", L"Microphone", L"Micrófono", L"Micro", L"Mikrofon", L"Microfono", L"麦克风"},
+    {L"Câmera", L"Camera", L"Cámara", L"Caméra", L"Kamera", L"Fotocamera", L"相机"},
+    {L"Microfone e câmera", L"Microphone and camera", L"Micrófono y cámara", L"Micro et caméra", L"Mikrofon und Kamera", L"Microfono e fotocamera", L"麦克风和相机"},
+    {L"Laranja e verde quando um app usa o microfone ou a câmera; clique para silenciar o microfone ou fechar o app da câmera", L"Orange and green when an app uses the microphone or camera; click to mute the microphone or quit the camera app", L"Naranja y verde cuando una app usa el micrófono o la cámara; haz clic para silenciar el micrófono o cerrar la app de la cámara", L"Orange et vert quand une app utilise le micro ou la caméra ; cliquez pour couper le micro ou quitter l’app de la caméra", L"Orange und grün, wenn eine App Mikrofon oder Kamera nutzt; klicken, um das Mikrofon stummzuschalten oder die Kamera-App zu beenden", L"Arancione e verde quando un’app usa il microfono o la fotocamera; fai clic per disattivare il microfono o chiudere l’app della fotocamera", L"有应用使用麦克风或相机时显示橙色和绿色；点击可将麦克风静音或退出使用相机的应用"},
 };
 const size_t kUiTrCount = ARRAYSIZE(kUiTr);
