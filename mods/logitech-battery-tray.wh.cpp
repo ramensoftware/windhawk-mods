@@ -1380,8 +1380,6 @@ static BatteryButtonSize SizeBatteryButton(bool vertical, double trayWidth, doub
     return {width, std::clamp(trayHeight - 8, 24.0, 36.0), std::max(1.0, width - 12)};
 }
 
-#ifndef LOGITECH_BATTERY_PROVIDER_TEST
-
 struct Settings {
     bool nativeOnly = false;
     std::wstring position = L"batteryArea";
@@ -2445,7 +2443,7 @@ int main() {
 }
 #endif
 
-#else
+#ifdef LOGITECH_BATTERY_PROVIDER_TEST
 
 #include <cstdio>
 #include <cstdlib>
