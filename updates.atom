@@ -2,12 +2,135 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-06T04:00:27.000Z</updated>
+    <updated>2026-11-06T20:00:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.2]]></title>
+        <id>https://windhawk.net/mods/start-everything#1e59c5e80950f4b2f82b43edcb31e3eedf6c592a</id>
+        <link href="https://windhawk.net/mods/start-everything"/>
+        <updated>2026-11-06T20:00:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>
+<p>Size the first Apps and Files batches to the panel height and append 40 results near the bottom. The installed inventory also appends 40 results; remove the initial-result settings.</p>
+</li>
+<li>
+<p>Warm app and custom-command icons in the background before the first search window opens.</p>
+</li>
+<li>
+<p>Show files for empty searches and preserve Everything's current or saved sort order. Updating Everything's run history is a separate opt-in setting, off by default.</p>
+</li>
+<li>
+<p>Keep Files totals consistent with exclusions and duplicates, marking provisional totals until the final page is reached.</p>
+</li>
+<li>
+<p>Match Cyrillic and other Unicode app names independently of the process locale.</p>
+</li>
+<li>
+<p>Preserve typing in Start's editable fields, including pinned-folder names.</p>
+</li>
+<li>
+<p>Add Windows-provided Pin/Unpin actions, including original-shortcut fallback for desktop apps, while keeping search open after pinning.</p>
+</li>
+<li>
+<p>Open the selected supported app's Advanced options page through App settings, with translations in all 50 interface languages.</p>
+</li>
+<li>
+<p>Automatically show decimal, hexadecimal, binary and octal conversions for standalone whole numbers, preserving exact 64-bit magnitudes and negative values.</p>
+</li>
+<li>
+<p>Improve the Swedish package-bundle label and update the documentation.</p>
+</li>
+<li>
+<p>Add scrolling to <code>/services</code> in batches of 40, remove its 100-result cap, and preserve expanded rows during live status updates.</p>
+</li>
+<li>
+<p>Discover Windows menu actions in the background, show a localized Checking pins status, and keep Apps and Files menus free of opening and closing animations.</p>
+</li>
+<li>
+<p>Preserve learned favorites and captured theme data in portable Windhawk, and improve cleanup when the mod is disabled or updated.</p>
+</li>
+<li>
+<p>Keep excluded paths out of all file batches, use Unicode-aware path matching, and cache safe Everything sort preferences per search-window session.</p>
+</li>
+</ul>
+]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Automatic WhatsApp Audio Ducking 1.0]]></title>
+        <id>https://windhawk.net/mods/automatic-whatsapp-audio-ducking#0e5cd2eed2bcbee826399b14c5a77ce0306fd307</id>
+        <link href="https://windhawk.net/mods/automatic-whatsapp-audio-ducking"/>
+        <updated>2026-11-06T20:00:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Automatic WhatsApp Audio Ducking</h1>
+<p>While WhatsApp or other chosen apps (voice messages, videos, calls' media, ...) produce sound, the
+per-app volume of the configured target apps (default: Spotify) is lowered to
+a fixed percentage. When WhatsApp or the specified apps have been silent for a short moment, the
+original volume is restored.</p>
+<p>This only changes the per-app volume slider of the Windows volume mixer, not
+the system volume.</p>
+<h2>Choosing messengers</h2>
+<p>In the settings under &quot;Messengers&quot; you can switch on WhatsApp (default),
+Telegram, Signal, Discord, Microsoft Teams, Zoom, Slack, Viber and Element.
+Any other app can be added by its process name under &quot;Additional trigger apps&quot;
+(e.g. <code>Threema.exe</code>).</p>
+<h2>Calls</h2>
+<p>Windows lowers other apps by itself during calls (communication streams) unless
+&quot;Do nothing&quot; is selected in the Sound control panel (Communications tab). The
+mod detects such calls via the Windows ducking notification and stays out of
+the way, so the volume is not lowered twice (changeable with &quot;Also duck calls
+that Windows already ducks&quot;). If a call is not flagged by Windows but a
+selected messenger has an open microphone stream, the mod ducks for the whole
+call, also between ringtones and beeps. The log shows who handles the call.</p>
+<h2>Notes</h2>
+<ul>
+<li>Messengers are detected by process name. Audio from <code>msedgewebview2.exe</code>
+helper processes started by a selected messenger counts as well; other child
+processes (e.g. a browser opened from a link) do not.</li>
+<li>If nothing happens, check the Windhawk log: the mod logs the process name of
+every audio session it sees when a new one appears.</li>
+<li>If you change the volume of a target app yourself while it is ducked, your
+value is taken as the new &quot;original&quot; volume.</li>
+<li>All active playback devices are handled.</li>
+<li>The mod only works while audio is involved: it waits for Windows audio events
+and does not poll while no trigger app has an open audio stream.</li>
+<li>Windows remembers the volume of each app. While an app is ducked, the mod
+keeps a record of its original volume in Windhawk's storage, so the volume is
+restored after a restart of the mod, a closed and reopened app or a changed
+playback device. If an app stays closed while the mod is turned off, Windows
+can keep its lowered volume until you raise it in the volume mixer.</li>
+</ul>
+<h2>Warning:</h2>
+<p>I used AI (Claude Sonnet 5.5) to create this mod. I am not responsible for any damage using this mod may cause. Use at your own risk.
+However I did ask Claude to check for security vulnerabilities.</p>
+]]></content>
+        <author>
+            <name>wa0dim</name>
+            <uri>https://github.com/wa0dim</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Copy File Contents 1.4.1]]></title>
+        <id>https://windhawk.net/mods/copy-file-contents#50e514baec095cd9fa07354bcefc3b82dc121306</id>
+        <link href="https://windhawk.net/mods/copy-file-contents"/>
+        <updated>2026-11-06T20:00:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix SHA-256 read errors being mistaken for end-of-file, which could produce a hash of incomplete data.</li>
+<li>Report complete hash and clipboard-write failures, and identify successful files in joined partial multi-file results.</li>
+<li>Improve unload handling, attempt to cancel tracked synchronous file calls, clean up resources and synchronize settings; correct the initialization version log and documentation.</li>
+</ul>
+]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Charging Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/charging-animation#e08adc83efe20a754ebb2e18bf528578b3822bf5</id>
@@ -801,238 +924,6 @@ the parts that depend on this most.</p>
         <author>
             <name>Analytic Endeavors</name>
             <uri>https://github.com/ae-reid-havens</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ThinkPad Battery Controls 0.9.17]]></title>
-        <id>https://windhawk.net/mods/thinkpad-battery-controls#5a3110472be3b0f634f91538af4cdcede6ba7a79</id>
-        <link href="https://windhawk.net/mods/thinkpad-battery-controls"/>
-        <updated>2026-11-05T05:01:30.000Z</updated>
-        <content type="html"><![CDATA[<h1>ThinkPad Battery Controls</h1>
-<p>Right-click the Windows battery icon to set charging limits, apply saved presets,
-or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.</p>
-<p>The manufacturer should have made these everyday controls part of the Windows
-battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.</p>
-<h2>Screenshots</h2>
-<p><strong>Battery menu</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-menu.png" alt="Battery menu"></p>
-<p><strong>Charge thresholds</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charge-thresholds.png" alt="Charge thresholds"></p>
-<p><strong>Quick charging presets</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charging-presets.png" alt="Quick charging presets"></p>
-<p><strong>Manage presets</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/manage-presets.png" alt="Manage presets"></p>
-<p><strong>Battery health</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-health.png" alt="Battery health"></p>
-<p><strong>Power controls</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/power-controls.png" alt="Power controls"></p>
-<p><strong>Calibration confirmation</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/calibration-confirmation.png" alt="Calibration confirmation"></p>
-<h2>Setup</h2>
-<p>Choose a backend in Windhawk Settings:</p>
-<ul>
-<li><strong>Integrated Lenovo service</strong> (default): no utility download. Requires compatible
-Lenovo Power Manager service and drivers.</li>
-<li><strong>Lenovo ChargeThreshold.exe</strong>: <a href="https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/ChargeThreshold.exe">download Lenovo's utility</a>,
-save it wherever you prefer on a local drive, and enter its full path in Settings.
-The mod verifies the reviewed executable before running it. It never downloads,
-installs or elevates anything. Setup and diagnostics includes the download link.
-Only Lenovo's version 1.0.0.2 build is accepted; a newer Lenovo build needs a mod
-update. Choose a folder that other accounts cannot change.</li>
-</ul>
-<p>The gear beside the charge summary opens diagnostics and a driver link based on
-this machine's detected model. No serial number is read or sent. Drivers are installed separately.</p>
-<h2>Charging and presets</h2>
-<p>Save up to 20 named presets and choose up to five quick favorites. Manage presets
-is available in Set charge threshold and at the bottom of Apply charging preset.
-Quick presets apply to both batteries. Set charge threshold can edit each battery
-separately or link their limits with the integrated backend. Each result is read back.</p>
-<p>Charge to full saves the original limits, disables them temporarily, then restores
-at 100% or after eight hours. Cancel restores immediately. A newer enabled range
-from Vantage is preserved. The integrated backend restores each battery separately;
-Lenovo's executable cannot restore different ranges on two batteries. Select the
-integrated backend for that situation. Present batteries restore independently; recovery for a missing battery is retained.</p>
-<p>Charging limits belong to the laptop, not to one Windows account. Signed-in
-sessions share recovery records and normally coordinate through a machine-wide
-lock. If the lock cannot be used, charging commands and recovery continue without
-coordination immediately. If a holder blocks ten consecutive periodic checks
-(about five minutes), they also continue without coordination. The menu then says
-(not coordinated). The mod retries the lock and resumes coordination when it
-acquires it. During fallback, simultaneous changes in different sessions can
-overwrite one another. This favors restoring charge limits over waiting indefinitely.</p>
-<p><strong>Thresholds persist after this mod is disabled or removed.</strong> Disabling or updating
-the mod ends a pending full-charge request early: it tries to restore your limits
-first. Signing out, restarting, shutting down or an Explorer crash skips that step;
-the saved request is then restored the next time the mod runs, at 100% or once its
-eight hours have passed. If restoration fails, or the mod is removed while it cannot
-run, limits may remain off and charging can continue to 100% until the mod runs
-again or you set limits in Vantage. Removing the mod also removes its Windhawk
-recovery data. Restore protection before removal.</p>
-<p>If an initiated write is cancelled before completion, or its utility process is
-terminated while running, further changes and recovery pause to avoid racing
-a command still running in Lenovo's service. Ordinary launch failures and completed
-errors do not trigger this warning. The menu header links the paused state to setup. Saved limits are retained. Restart
-Windows, then use Setup and diagnostics to acknowledge the restart and resume
-recovery. This applies to both backends; cancelling a client cannot undo a server write.</p>
-<h2>Advanced controls</h2>
-<p>Battery health shows supported readings. Power offers the verified three-state USB
-control. Always-on USB settings persist after disabling or removing the mod.
-Advanced &gt; Experimental groups calibration and independent two-battery limits.
-Both have simulated coverage, not complete physical validation. Set charge threshold
-applies one range to both batteries; separate ranges are available only through
-Experimental. Calibration requires a separate confirmation and connected power; it saves
-current limits and blocks charging edits while running. Cancellation also requires
-confirmation. Removing the mod during calibration loses saved recovery: check its
-state and charging limits in Vantage. Cooling and airplane controls remain omitted
-until supported behavior is verified. Calibration is not a battery-health treatment.</p>
-<h2>Compatibility</h2>
-<p>Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
-mock coverage only and is experimental until a two-battery hardware test is completed. The executable backend
-requires English output. Private taskbar symbols can change after Windows updates.
-The tray icon hook is placed in SystemTray.dll, an older Taskbar.View.dll or
-ExplorerExtensions.dll, as Taskbar tray system icon tweaks does.</p>
-<p>Author/publisher: Bill Bauman. Apache-2.0. Project-name trademark and attribution
-terms are in the source repository; Lenovo's executable remains separately licensed.
-No Lenovo or Microsoft endorsement is implied.</p>
-]]></content>
-        <author>
-            <name>Bill Bauman</name>
-            <uri>https://github.com/billbauman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Round Everything 1.0.0]]></title>
-        <id>https://windhawk.net/mods/round-everything#37be93ac3c0356ab82594e732a758a2aa245f46b</id>
-        <link href="https://windhawk.net/mods/round-everything"/>
-        <updated>2026-11-05T04:00:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>Round Everything</h1>
-<p>Turns the taskbar into a frame around the whole screen. The taskbar keeps its
-rectangular shape, and the other three screen edges get a band of the same
-color, pushed inwards by a configurable offset. The visible &quot;screen&quot; becomes a
-rounded rectangle that sits flush against the taskbar, with one configurable
-corner radius.</p>
-<p>Works with the taskbar on any edge (top, bottom, left, right) and on every
-monitor. A monitor without a taskbar (&quot;Show my taskbar on all displays&quot; off)
-gets the frame on all four edges.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/round-everything/demo.gif" alt="Demo"></p>
-<h2>How it works</h2>
-<p>The mod runs inside the taskbar's <code>explorer.exe</code> and creates one layered,
-always-on-top window per monitor covering the area next to the taskbar:
-three bands of the configured offset with the rounded corners. The taskbar
-itself, its background painted in the frame color, is the fourth side. The
-frame shape is drawn with GDI+ (anti-aliased); the inner area is fully
-transparent and lets the mouse through, while the painted frame is solid to
-the mouse, like the taskbar. No explorer function is hooked: the taskbar's
-XAML tree is reached through a few <code>taskbar.dll</code> symbol lookups (no XAML
-diagnostics, so it coexists with Taskbar Styler).</p>
-<ul>
-<li><strong>Color</strong> – the frame has one color of your choice, and the taskbar's own
-background (<code>Taskbar.TaskbarBackground</code>) is painted with it at the same
-opacity, so the taskbar and the frame are one surface. The taskbar's own
-background is restored when the mod is turned off.</li>
-<li>Frame and taskbar come and go together. When the mod starts, the frame
-appears in the same instant as the taskbar's new look. When the
-taskbar moves, resizes or rebuilds (changing its position, a taskbar mod
-reloading) its background turns transparent and the frame goes away the
-instant the taskbar window moves; once everything has settled - taskbar
-at its new edge and uncloaked, its corners in place, the work area
-reserved - the taskbar paints its background again and, from inside that
-same rendering pass, reveals the frame (re-shaped for the new edge), so
-the two reach the screen in one composition. When the mod is turned off
-the frame disappears as the taskbar is handed back.</li>
-<li>The frame stays visible during Aero Peek (hovering a taskbar thumbnail or
-the show-desktop corner), like the taskbar itself.</li>
-<li><strong>Task View</strong> (Win+Tab) – the frame goes away and the taskbar's background
-and monitor corners turn transparent while it is open; everything comes
-back together when it closes.</li>
-<li><strong>Full-screen apps</strong> – the frame hides on a monitor while a full-screen
-window (game, video, F11 browser) is showing there, and comes back
-afterwards.</li>
-<li><strong>Work area</strong> – <em>Shrink the work area to the rounded screen</em> (on by
-default) pushes the work area inwards so maximized and snapped windows stay
-inside the frame; turned off, the frame is purely visual: it overlaps the
-edges of maximized windows and lets the mouse through. Shrinking registers
-one invisible appbar per frame edge (the same mechanism the taskbar uses),
-so the shell reserves the space itself; the appbars are removed and the
-work area returns to normal when the option or the mod is turned off. <em>Extra
-work-area inset</em> shrinks it further, on all four sides, so a strip of
-wallpaper stays visible between the frame/taskbar and your windows.</li>
-<li><strong>Monitor corners</strong> – the four outer corners of each monitor are rounded
-too, so the whole screen reads as a rounded panel: the sliver outside a
-quarter circle is painted in the <em>Monitor corner color</em> (black by default).
-The two corners away from the taskbar are part of the frame itself; the
-two on the taskbar are XAML shapes added inside the taskbar (no extra
-windows, so nothing to fight over z-order with), click-through, removed
-when the mod is disabled.</li>
-<li><strong>Taskbar border line</strong> – the taskbar draws a 1px line along its inner edge
-(<code>BackgroundStroke</code>), which shows up as a seam between the taskbar and the
-frame. The mod sets that line's opacity to 0 and restores it when disabled.</li>
-<li>Offsets and radii are in pixels at 100% scaling and scaled per monitor
-(configurable).</li>
-</ul>
-<h2>Window corners (dwm.exe)</h2>
-<p>Windows 11 rounds normal windows with a fixed 8 px radius and draws maximized
-windows square. With <strong>Round window corners</strong> on, the mod also runs inside
-<code>dwm.exe</code> and hooks the corner-radius decision
-(<code>CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle</code>): every window that
-Windows would round - normal, snapped or maximized - gets the one <strong>Window
-corner radius</strong> you set, and maximized windows are rounded too, so they sit in
-the rounded screen like cards. Windows that opt out of rounding (<code>DONOTROUND</code>)
-and small-radius surfaces (menus, tooltips) are left alone. Changes apply at
-once: DWM is asked to re-evaluate every window (no window's own corner
-preference is touched). Full-screen windows share the maximized path in DWM,
-so they get rounded corners as well.</p>
-<p><strong>This part needs one manual step.</strong> Windhawk doesn't inject into <code>dwm.exe</code>
-by default (it is on Windhawk's list of critical system processes), so the
-window-corner part does nothing until you add <code>dwm.exe</code> to the <strong>Process
-inclusion list</strong> in Windhawk's advanced settings. The frame, the monitor
-corners and the work area don't depend on it and work right away. <code>udwm.dll</code>
-symbols are downloaded by Windhawk on first use.</p>
-<p>This does the same job as the <em>Rounded corners for maximized and snapped
-windows</em> option of the
-<a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a>
-mod, through the same hook - the mechanism is the one Alexey Lavrinenko
-contributed there; use one mod or the other for window corners, not both.</p>
-<h2>Notes</h2>
-<ul>
-<li>Shell flyouts (Start, notification center, Task View, …) live above the
-frame, so they are never covered.</li>
-<li>With the work area reserved, the frame is solid to the mouse, like the
-taskbar: clicks on it (and on the extra work-area inset strip) go nowhere,
-which keeps the invisible resize borders of maximized windows underneath
-from being hit. Without it the frame lets the mouse through.</li>
-<li>With an auto-hide taskbar the frame spans the whole monitor and the taskbar
-slides in over it.</li>
-<li>Setting all offsets to 0 and keeping a radius gives you just the rounded
-screen corners against the taskbar.</li>
-</ul>
-<h2>Credits</h2>
-<p>The taskbar-thread helpers (<code>RunFromWindowThreadTimeout</code>,
-<code>FindCurrentProcessTaskbarWnd</code>) and the <code>taskbar.dll</code> XAML-root lookup are
-ported from <a href="https://windhawk.net/mods/taskbar-multirow">Taskbar multi-row</a>
-by m417z, licensed under the GNU GPL v3.0. This mod is published under the
-same license.</p>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Window Cards 1.8.1]]></title>
-        <id>https://windhawk.net/mods/desktop-window-cards#47e9614d53032425caead5d34b842c8125812e22</id>
-        <link href="https://windhawk.net/mods/desktop-window-cards"/>
-        <updated>2026-11-05T04:00:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Excluded programs: a blank entry hides the entries after it. Windhawk returns &quot;&quot; both for a blank array entry and past the end of the list, so the break on an empty entry ended the list at the first blank one. Every program listed after it stopped being excluded, with no warning. The loop now reads the bounded range (256 entries, only on start and on reload) and skips blank entries.</li>
-<li>Excluded programs: normalization. \r/\n are trimmed along with spaces and quotes, / is accepted in full paths (C:/Program Files/...), and duplicate entries are ignored.</li>
-<li>Worker: no busy loop on init failure. If the frame timer can't be created, handles[0] is null and MsgWaitForMultipleObjectsEx fails immediately, so the loop spins at 100% CPU. The worker now checks the window classes, controller and frame timer before it starts, logs which one failed, and leaves the loop on WAIT_FAILED.</li>
-</ul>
-<p>THANKS TO @MayconDIS</p>
-]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

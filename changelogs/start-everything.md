@@ -1,3 +1,22 @@
+## 2.2 ([Nov 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1e59c5e80950f4b2f82b43edcb31e3eedf6c592a/mods/start-everything.wh.cpp))
+
+* Size the first Apps and Files batches to the panel height and append 40 results near the bottom. The installed inventory also appends 40 results; remove the initial-result settings.
+* Warm app and custom-command icons in the background before the first search window opens.
+* Show files for empty searches and preserve Everything's current or saved sort order. Updating Everything's run history is a separate opt-in setting, off by default.
+* Keep Files totals consistent with exclusions and duplicates, marking provisional totals until the final page is reached.
+* Match Cyrillic and other Unicode app names independently of the process locale.
+* Preserve typing in Start's editable fields, including pinned-folder names.
+* Add Windows-provided Pin/Unpin actions, including original-shortcut fallback for desktop apps, while keeping search open after pinning.
+* Open the selected supported app's Advanced options page through App settings, with translations in all 50 interface languages.
+* Automatically show decimal, hexadecimal, binary and octal conversions for standalone whole numbers, preserving exact 64-bit magnitudes and negative values.
+* Improve the Swedish package-bundle label and update the documentation.
+
+* Add scrolling to `/services` in batches of 40, remove its 100-result cap, and preserve expanded rows during live status updates.
+
+* Discover Windows menu actions in the background, show a localized Checking pins status, and keep Apps and Files menus free of opening and closing animations.
+* Preserve learned favorites and captured theme data in portable Windhawk, and improve cleanup when the mod is disabled or updated.
+* Keep excluded paths out of all file batches, use Unicode-aware path matching, and cache safe Everything sort preferences per search-window session.
+
 ## 2.1.1 ([Oct 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/72a7dafa9d0cb1cc8629697da56aa7a2a6380892/mods/start-everything.wh.cpp))
 
 * Keep ordinary search focused on launchable apps and Windows Settings, removing duplicate installed-only product entries. Keep technical package names and full identities in inventory matching only, and avoid storing a second installed-only catalog among launch entries.

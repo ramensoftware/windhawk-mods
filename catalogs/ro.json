@@ -955,6 +955,30 @@
         "version": "1.1"
       }
     },
+    "automatic-whatsapp-audio-ducking": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793995227000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793995227000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "wa0dim",
+        "compilerOptions": "-lole32 -luuid -ladvapi32",
+        "description": "Lowers the volume of chosen apps (e.g. Spotify) while WhatsApp or other apps play audio, then restores it",
+        "github": "https://github.com/wa0dim",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Automatic WhatsApp Audio Ducking",
+        "version": "1.0"
+      }
+    },
     "autoscroll-win32": {
       "details": {
         "defaultSorting": 5330,
@@ -3587,20 +3611,20 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793754288000,
+        "updated": 1793995222000,
         "users": 47
       },
       "metadata": {
         "author": "metanoid18",
         "compilerOptions": "-lole32 -luuid -lshell32 -lbcrypt",
-        "description": "Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.",
+        "description": "Copies a selected file's text or its SHA-256 hash without opening it in an app, from a keyboard shortcut or the right-click menu.",
         "github": "https://github.com/Metanoid18",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
         "name": "Copy File Contents",
-        "version": "1.4"
+        "version": "1.4.1"
       }
     },
     "copy-queue": {
@@ -8519,7 +8543,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 2, 7, 61],
         "ratingUsers": 70,
-        "reviews": 2,
+        "reviews": 3,
         "trendingSorting": 8.341503000572548,
         "updated": 1793937623000,
         "users": 510
@@ -15193,7 +15217,7 @@
         "ratingUsers": 91,
         "reviews": 0,
         "trendingSorting": 6.229235030094597,
-        "updated": 1793369105000,
+        "updated": 1793995232000,
         "users": 1040
       },
       "metadata": {
@@ -15211,7 +15235,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Everything & Power Tools in the Start Menu",
-        "version": "2.1.1"
+        "version": "2.2"
       }
     },
     "start-menu-all-apps": {

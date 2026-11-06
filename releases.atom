@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-06T04:00:27.000Z</updated>
+    <updated>2026-11-06T20:00:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Automatic WhatsApp Audio Ducking 1.0]]></title>
+        <id>https://windhawk.net/mods/automatic-whatsapp-audio-ducking#0e5cd2eed2bcbee826399b14c5a77ce0306fd307</id>
+        <link href="https://windhawk.net/mods/automatic-whatsapp-audio-ducking"/>
+        <updated>2026-11-06T20:00:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Automatic WhatsApp Audio Ducking</h1>
+<p>While WhatsApp or other chosen apps (voice messages, videos, calls' media, ...) produce sound, the
+per-app volume of the configured target apps (default: Spotify) is lowered to
+a fixed percentage. When WhatsApp or the specified apps have been silent for a short moment, the
+original volume is restored.</p>
+<p>This only changes the per-app volume slider of the Windows volume mixer, not
+the system volume.</p>
+<h2>Choosing messengers</h2>
+<p>In the settings under &quot;Messengers&quot; you can switch on WhatsApp (default),
+Telegram, Signal, Discord, Microsoft Teams, Zoom, Slack, Viber and Element.
+Any other app can be added by its process name under &quot;Additional trigger apps&quot;
+(e.g. <code>Threema.exe</code>).</p>
+<h2>Calls</h2>
+<p>Windows lowers other apps by itself during calls (communication streams) unless
+&quot;Do nothing&quot; is selected in the Sound control panel (Communications tab). The
+mod detects such calls via the Windows ducking notification and stays out of
+the way, so the volume is not lowered twice (changeable with &quot;Also duck calls
+that Windows already ducks&quot;). If a call is not flagged by Windows but a
+selected messenger has an open microphone stream, the mod ducks for the whole
+call, also between ringtones and beeps. The log shows who handles the call.</p>
+<h2>Notes</h2>
+<ul>
+<li>Messengers are detected by process name. Audio from <code>msedgewebview2.exe</code>
+helper processes started by a selected messenger counts as well; other child
+processes (e.g. a browser opened from a link) do not.</li>
+<li>If nothing happens, check the Windhawk log: the mod logs the process name of
+every audio session it sees when a new one appears.</li>
+<li>If you change the volume of a target app yourself while it is ducked, your
+value is taken as the new &quot;original&quot; volume.</li>
+<li>All active playback devices are handled.</li>
+<li>The mod only works while audio is involved: it waits for Windows audio events
+and does not poll while no trigger app has an open audio stream.</li>
+<li>Windows remembers the volume of each app. While an app is ducked, the mod
+keeps a record of its original volume in Windhawk's storage, so the volume is
+restored after a restart of the mod, a closed and reopened app or a changed
+playback device. If an app stays closed while the mod is turned off, Windows
+can keep its lowered volume until you raise it in the volume mixer.</li>
+</ul>
+<h2>Warning:</h2>
+<p>I used AI (Claude Sonnet 5.5) to create this mod. I am not responsible for any damage using this mod may cause. Use at your own risk.
+However I did ask Claude to check for security vulnerabilities.</p>
+]]></content>
+        <author>
+            <name>wa0dim</name>
+            <uri>https://github.com/wa0dim</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Charging Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/charging-animation#e08adc83efe20a754ebb2e18bf528578b3822bf5</id>
@@ -1318,149 +1370,6 @@ and their buttons can remain light.</li>
         <author>
             <name>Frankh93</name>
             <uri>https://github.com/frankh93</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hourly Peek Buddy 1.0]]></title>
-        <id>https://windhawk.net/mods/hourly-peek-buddy#660bc1995e97a6f66040c56cb782989087a68073</id>
-        <link href="https://windhawk.net/mods/hourly-peek-buddy"/>
-        <updated>2026-11-04T00:03:08.000Z</updated>
-        <content type="html"><![CDATA[<h1>Hourly Peek Buddy</h1>
-<p><img src="https://i.imgur.com/pSUzh1o.gif" alt="Screenshot"></p>
-<p>A fun reminder for the top of every hour or at the times you choose.</p>
-<p>A funny little character pops up from the bottom corner of your screen, waves
-at you with a speech bubble, and goes away again. It shows up at the top of every
-hour and at any other times you choose, and it appears on top of all your
-apps. There are 14 characters and 6 ways of showing up, and you can see the
-result right away with the built-in preview, so you never have to wait for the
-next hour.</p>
-<p>All characters are drawn by the mod itself, so there are no images to download.</p>
-<h2>Preview</h2>
-<p>Windhawk settings cannot have a button, so the preview works like this:</p>
-<ul>
-<li><strong>Preview when settings are saved</strong> (on by default): every time you press
-<em>Save</em>, the character shows up once with your new settings.</li>
-<li><strong>Preview now</strong>: flip this switch and save, and the character shows up again
-even if nothing else has changed.</li>
-</ul>
-<p>Tip: pick a character or a movement, save, and watch. Repeat until you find your favorite.</p>
-<h2>Characters</h2>
-<p>Ghost, Cat, Alien, Robot, Penguin (with a party hat), Duck, Slime, Grumpy bomb,
-Cactus, Pumpkin, Teddy bear, Mushroom, Donut and Pizza slice. Or choose
-<strong>Random</strong> to be surprised every time.</p>
-<h2>Ways of showing up</h2>
-<ul>
-<li><strong>Peek</strong>: Rises from the bottom edge and wiggles.</li>
-<li><strong>Springy</strong>: Pops up like a jack-in-the-box and bounces.</li>
-<li><strong>Slide</strong>: Slides in from the side of the screen with a little overshoot.</li>
-<li><strong>Hop</strong>: Hops in from the side of the screen.</li>
-<li><strong>Spin</strong>: Flies in from the corner while spinning.</li>
-<li><strong>Pop</strong>: Grows out of the corner with a bounce.</li>
-</ul>
-<h2>When does it show up?</h2>
-<ul>
-<li>At the top of every hour (can be turned off).</li>
-<li>Every N minutes, counted from midnight (for example 15 means :00, :15, :30
-and :45; 0 turns this off).</li>
-<li>At exact times of your choice, for example <code>09:30, 13:15, 17:45</code>.</li>
-<li>Quiet hours: it stays away between the two hours you choose (for example from
-23 to 8). Using the same value for both turns quiet hours off.</li>
-<li>Optional: skip it while a full-screen game, video or presentation is active.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li>Preview when settings are saved / Preview now</li>
-<li>Character, Movement, Corner (bottom right or bottom left), Monitor (primary
-or the one with the mouse)</li>
-<li>Schedule: top of every hour, every N minutes, exact times, quiet hours</li>
-<li>Stay time (seconds), Size (%), Opacity (%)</li>
-<li>Speech bubble: time with a funny message, time only, your own message
-(<code>{time}</code> is replaced with the current time), or no bubble</li>
-<li>Message language: automatic (follows Windows), Turkish or English</li>
-<li>Click to dismiss, Play a sound, Skip full-screen apps</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The mod runs in its own <code>windhawk.exe</code> process and does not inject into
-other programs. It does not change any system or registry setting.</li>
-<li>The character window never takes the keyboard focus. If <strong>Click to dismiss</strong>
-is off, the character is click-through and the mouse goes straight to the
-app below.</li>
-<li>The size follows the DPI of the monitor.</li>
-<li>It appears above the taskbar edge (the work area), as if it peeks out from
-behind it.</li>
-<li>If you start a new show (for example with the preview) while one is on the
-screen, the old one is replaced.</li>
-</ul>
-<hr>
-<h1>Saat Başı Sürpriz Dostu</h1>
-<p>Ekranın alt köşesinden komik, küçük bir karakter çıkar, konuşma balonuyla size
-göz kırpar ve tekrar gider. Her saat başı ve seçtiğiniz diğer zamanlarda ortaya
-çıkar, üstelik tüm uygulamaların üzerinde görünür. 14 karakter ve 6 farklı
-çıkış şekli vardır; yerleşik ön izleme sayesinde sonucu hemen görürsünüz, bir
-sonraki saat başını beklemenize gerek kalmaz.</p>
-<p>Tüm karakterleri modun kendisi çizer, bu yüzden indirilecek görsel yoktur.</p>
-<h2>Ön izleme</h2>
-<p>Windhawk ayarlarında düğme olamadığı için ön izleme şöyle çalışır:</p>
-<ul>
-<li><strong>Ayarlar kaydedilince ön izle</strong> (varsayılan olarak açık): <em>Kaydet</em>'e her
-bastığınızda karakter, yeni ayarlarınızla bir kez ortaya çıkar.</li>
-<li><strong>Şimdi ön izle</strong>: Bu anahtarı çevirip kaydederseniz, başka hiçbir şey
-değişmemiş olsa bile karakter yeniden çıkar.</li>
-</ul>
-<p>İpucu: Bir karakter veya hareket seçin, kaydedin ve izleyin. Favorinizi bulana
-kadar tekrarlayın.</p>
-<h2>Karakterler</h2>
-<p>Hayalet, Kedi, Uzaylı, Robot, Penguen (parti şapkalı), Ördek, Jöle, Huysuz
-bomba, Kaktüs, Balkabağı, Oyuncak ayı, Mantar, Donut ve Pizza dilimi. Her
-seferinde sürpriz için <strong>Rastgele</strong>'yi seçebilirsiniz.</p>
-<h2>Çıkış şekilleri</h2>
-<ul>
-<li><strong>Dikizleme</strong>: Alt kenardan yükselir ve sallanır.</li>
-<li><strong>Yaylı</strong>: Kutudan fırlayan oyuncak gibi çıkar ve zıplar.</li>
-<li><strong>Kayma</strong>: Ekranın kenarından hafif taşarak kayarak gelir.</li>
-<li><strong>Hoplama</strong>: Ekranın kenarından hoplaya hoplaya gelir.</li>
-<li><strong>Dönme</strong>: Köşeden dönerek uçarak gelir.</li>
-<li><strong>Patlama</strong>: Köşeden zıplayarak büyür.</li>
-</ul>
-<h2>Ne zaman çıkar?</h2>
-<ul>
-<li>Her saat başı (kapatılabilir).</li>
-<li>Her N dakikada bir, geceyarısından itibaren sayılır (örneğin 15 için :00,
-:15, :30 ve :45; 0 bunu kapatır).</li>
-<li>Seçtiğiniz tam saatlerde, örneğin <code>09:30, 13:15, 17:45</code>.</li>
-<li>Sessiz saatler: Seçtiğiniz iki saat arasında çıkmaz (örneğin 23 ile 8
-arası). İkisine de aynı değeri vermek sessiz saatleri kapatır.</li>
-<li>İsteğe bağlı: Tam ekran oyun, video veya sunum varken atlanır.</li>
-</ul>
-<h2>Ayarlar</h2>
-<ul>
-<li>Ayarlar kaydedilince ön izle / Şimdi ön izle</li>
-<li>Karakter, Hareket, Köşe (sağ alt veya sol alt), Monitör (ana monitör veya
-fare imlecinin olduğu monitör)</li>
-<li>Zamanlama: her saat başı, her N dakikada bir, tam saatler, sessiz saatler</li>
-<li>Kalma süresi (saniye), Boyut (%), Opaklık (%)</li>
-<li>Konuşma balonu: saat ve komik mesaj, sadece saat, kendi mesajınız
-(<code>{time}</code> yerine o anki saat yazılır) veya balonsuz</li>
-<li>Mesaj dili: otomatik (Windows'u izler), Türkçe veya İngilizce</li>
-<li>Tıklayınca kapat, Ses çal, Tam ekran uygulamaları atla</li>
-</ul>
-<h2>Notlar</h2>
-<ul>
-<li>Mod kendi <code>windhawk.exe</code> sürecinde çalışır ve başka programlara kod
-enjekte etmez. Hiçbir sistem veya kayıt defteri ayarını değiştirmez.</li>
-<li>Karakter penceresi klavye odağını almaz. <strong>Tıklayınca kapat</strong> kapalıysa
-karakter tıklamayı geçirir; fare doğrudan alttaki uygulamaya gider.</li>
-<li>Boyut, monitörün DPI değerini izler.</li>
-<li>Karakter görev çubuğunun kenarının (çalışma alanının) üstünde, sanki
-arkasından dikiliyormuş gibi görünür.</li>
-<li>Ekranda bir karakter varken yenisi başlatılırsa (örneğin ön izleme ile)
-eskisinin yerini alır.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DahaSakinOlamazdim</name>
-            <uri>https://github.com/DahaSakinOlamazdim</uri>
         </author>
     </entry>
 </feed>

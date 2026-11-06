@@ -18,6 +18,15 @@
       "parentId": null,
       "timestamp": 1793127165,
       "votes": 0
+    },
+    {
+      "authorName": "jsx_A.M",
+      "content": "Probably one of the best mods for WH. Update [1.0.4] addressed the incorrect file sorting from Explorer's native view. It still happens occasionally, but once it's fully fixed, I'll definitely keep this mod enabled at all times. Aside from that, it's great! An option to hide the 'shortcut' arrow from icons would also be a fantastic addition.",
+      "id": 105,
+      "modVersion": "1.0.4",
+      "parentId": null,
+      "timestamp": 1793969399,
+      "votes": 0
     }
   ]
 }
