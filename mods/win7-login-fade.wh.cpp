@@ -135,7 +135,6 @@
 
 #define WM_MONOFFTASK (WM_USER + 1)
 #define OVERLAY_WIN_CLASS L"LogonSleepFadeOverlay"
-#define LSF_EVENT_NAME L"Local\\LsfFadeEvent"
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
@@ -163,7 +162,6 @@ bool g_isDwm = false;
 bool g_isModernGamma = false;
 bool g_is21H2OrNewer = false;
 HANDLE g_fadeMutex = NULL;
-HANDLE g_fadeEvent = NULL;
 HANDLE g_stopEvent = NULL;
 std::atomic<bool> g_isFadeInProgress = false;
 std::atomic<bool> g_isExiting = false;
@@ -475,9 +473,17 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     switch (uMsg) {
         case WM_CREATE:
             Wh_Log(L"OverlayWndProc WM_CREATE");
+            if (!ChangeWindowMessageFilterEx(hWnd, WM_MONOFFTASK, MSGFLT_ALLOW, NULL)) {
+                Wh_Log(L"ChangeWindowMessageFilterEx failed, GLE=%d", GetLastError());
+            }
             return 0;
         case WM_MONOFFTASK: {
             Wh_Log(L"OverlayWndProc WM_MONOFFTASK");
+            if (g_isWinlogon && !BeginFade(100)) {
+                NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+                return 1;
+            }
+
             int refreshRate = GetDeviceRefreshRate();
             if (!GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
                 EndFade();
@@ -546,15 +552,16 @@ HWND CreateOverlayWindow() {
 }
 
 DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
-    if (!g_fadeEvent || !g_stopEvent) {
+    if (!g_stopEvent) {
         return 1;
     }
 
     HDESK hDefDesktop = OpenDesktopW(L"default", 0, FALSE, DESKTOP_CREATEWINDOW | DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS);
-    if (hDefDesktop) {
-        Wh_Log(L"OpenDesktopW OK");
-        SetThreadDesktop(hDefDesktop);
+    if (!hDefDesktop) {
+        Wh_Log(L"OpenDesktopW failed, GLE=%d", GetLastError());
+        return 1;
     }
+    SetThreadDesktop(hDefDesktop);
 
     HWND overlayWnd = CreateOverlayWindow();
 
@@ -566,29 +573,22 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
     // So just show an black overlay window between the fade and the monitor off to cover up the potential flash, and hide the overlay after a fixed amount of time
     MSG msg;
     if (overlayWnd) {
-        HANDLE waitHandles[2] = { g_fadeEvent, g_stopEvent };
+        HANDLE waitHandles[1] = { g_stopEvent };
         while (TRUE) {
             DWORD result = MsgWaitForMultipleObjects(
-                2,
+                1,
                 waitHandles,
                 FALSE,
                 INFINITE,
                 QS_ALLINPUT
             );
             if (result == WAIT_OBJECT_0) {
-                Wh_Log(L"Received fade request");
-                if (BeginFade(100)) {
-                    PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0);
-                } else {
-                    NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-                }
-            } else if (result == WAIT_OBJECT_0 + 1) {
                 DestroyWindow(overlayWnd);
                 if (hDefDesktop) {
                     CloseDesktop(hDefDesktop);
                 }
                 return 1;
-            } else if (result == WAIT_OBJECT_0 + 2) {
+            } else if (result == WAIT_OBJECT_0 + 1) {
                 while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
                     if (msg.message == WM_QUIT) {
                         if (hDefDesktop) {
@@ -613,7 +613,7 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
 }
 
 bool CreateAsyncFadeThread() {
-    if (!g_fadeEvent || !g_stopEvent) {
+    if (!g_stopEvent) {
         return false;
     }
 
@@ -712,16 +712,22 @@ bool RequestFade() {
                 // And secure desktop processes all run as SYSTEM which can also bypass the gamma range check on legacy gamma (1809-) systems
                 if (_wcsicmp(desktopName, L"winlogon") == 0) {
                     return CreateMonitorOffThread();
+                } else if (_wcsicmp(desktopName, L"default") != 0) {
+                    return false; // only default and secure desktops are supported
                 }
             }
         }
     }
     if (g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
-        HANDLE hEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, LSF_EVENT_NAME);
-        if (hEvent) {
-            BOOL ret = SetEvent(hEvent);
-            CloseHandle(hEvent);
-            return ret;
+        HWND overlayWnd = FindWindowW(OVERLAY_WIN_CLASS, NULL);
+        if (overlayWnd) {
+            if (!PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0)) {
+                Wh_Log(L"PostMessageW failed, GLE=%d", GetLastError());
+                return false;
+            }
+            return true;
+        } else {
+            Wh_Log(L"FindWindowW failed, GLE=%d", GetLastError());
         }
         return false;
     }
@@ -734,16 +740,6 @@ NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel,
     if (InformationLevel == ScreenOff) {
         Wh_Log(L"NtPowerInformation called with ScreenOff");
         if (RequestFade()) {
-            for (int i = 0; i < 5; i++) {
-                if (IsFadeInProgress()) {
-                    Wh_Log(L"Waited %d times for the fade to begin", i);
-                    break;
-                }
-                Sleep(100);
-            }
-            if (!IsFadeInProgress()) {
-                return NtPowerInformation_original(InformationLevel, InputBuffer, InputBufferLength, OutputBuffer, OutputBufferLength);
-            }
             Wh_Log(L"Requested fade to Winlogon");
             return 0; // STATUS_SUCCESS
         }
@@ -929,12 +925,12 @@ void* ColorManagementRpcServerImpl; // (24h2 one is loaded in another function s
 
 // fnBase: Base address to search, pass e.g. a function pointer
 // fnLen: Length of the function (search range)
-// targetRegex: Target regex string to search
+// target: Target string to search
 char* FindMemory(char* fnBase, size_t fnLen, const std::string& targetRegex) {
     std::regex regex(targetRegex, std::regex::optimize);
     std::match_results<std::string_view::const_iterator> match;
     std::string_view search(fnBase, fnLen);
-    while (std::regex_search(search.begin(), search.end(), match, regex)) {
+    if (std::regex_search(search.begin(), search.end(), match, regex)) {
         // Return the address of the first match
         return fnBase + match.position(0);
     }
@@ -952,19 +948,16 @@ bool FindRangeVariable() {
         }
         Wh_Log(L"[%p] mov rcx, HKEY_LOCAL_MACHINE ; hkey", movHklm);
 
-        targetRegex = R"(H\x8d\x05)";
+        targetRegex = R"(H\x8d\x05.?.?.?.?H\x89D\x24\x28)";
         char* leaPvData = FindMemory(movHklm - 60, 60, targetRegex);
         if (!leaPvData) {
             Wh_Log(L"lea pvData not found");
             return false;
         }
-        if (leaPvData[7] != 0x48 || (unsigned char)leaPvData[8] != 0x89 || leaPvData[9] != 0x44 || leaPvData[10] != 0x24 || leaPvData[11] != 0x28) {
-            Wh_Log(L"rip is not mov [rsp+0x28], rax");
-            return false;
-        }
 
         int offset = *(int*)(leaPvData + 3);
-        Wh_Log(L"[%p] lea rax, [rip+0x%x]", leaPvData, offset);
+        Wh_Log(L"[%p] lea rax, [rip+%xh]", leaPvData, offset);
+        Wh_Log(L"[%p] mov [rsp+28h], rax ; pvData", leaPvData + 7);
 
         DWORD* candidate = (DWORD*)(leaPvData + 7 + offset);
         if (!IsInModule(hDispBrokerDesktop, candidate, sizeof(DWORD))) {
@@ -984,14 +977,14 @@ using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_original;
 LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
     LONG ret = RegGetValueW_original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-    if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData && ret != ERROR_MORE_DATA) {
+    if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData && ret != ERROR_SUCCESS) {
         if (_wcsicmp(lpSubKey, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ICM") == 0 && _wcsicmp(lpValue, L"GdiIcmGammaRange") == 0) {
             Wh_Log(L"Hooked DWM GdiIcmGammaRange, pvData=%p", pvData);
             *pcbData = sizeof(DWORD);
             if (pdwType) *pdwType = REG_DWORD;
 #if not defined(_M_X64)
             HMODULE hDispBrokerDesktop = GetModuleHandleW(L"DispBroker.Desktop.dll");
-            if (!p_g_gammaRange && !p_g_GdiRampLimit && IsInModule(hDispBrokerDesktop, pvData, sizeof(DWORD))) {
+            if (hDispBrokerDesktop && !p_g_gammaRange && !p_g_GdiRampLimit && IsInModule(hDispBrokerDesktop, pvData, sizeof(DWORD))) {
                 p_g_gammaRange = (DWORD*)pvData;
             }
 #endif
@@ -1004,7 +997,7 @@ LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWOR
 }
 #pragma endregion
 
-bool CreateFadeMutexAndEvent() {
+bool CreateFadeMutex() {
     static const wchar_t* kMutexName = L"Local\\LsfFadeMutex";
     static const wchar_t* kSddl = L"D:(A;;GA;;;IU)(A;;GA;;;SY)(A;;GA;;;BA)";
 
@@ -1039,37 +1032,6 @@ bool CreateFadeMutexAndEvent() {
             g_fadeMutex = CreateMutexExW(NULL, kMutexName, 0, SYNCHRONIZE | MUTEX_MODIFY_STATE);
             if (!g_fadeMutex) {
                 Wh_Log(L"CreateMutexExW fallback failed, GLE=%d", GetLastError());
-                if (securityDescriptor) {
-                    LocalFree(securityDescriptor);
-                }
-                return false;
-            }
-        }
-    }
-
-    if (g_isWinlogon) {
-        g_fadeEvent = CreateEventW(
-            sa.lpSecurityDescriptor ? &sa : NULL,
-            FALSE,
-            FALSE,
-            LSF_EVENT_NAME
-        );
-
-        if (!g_fadeEvent) {
-            DWORD createError = GetLastError();
-            Wh_Log(L"CreateEventW with custom/default security failed, GLE=%d", createError);
-
-            if (sa.lpSecurityDescriptor) {
-                // Retry without explicit security descriptor
-                g_fadeEvent = CreateEventW(NULL, FALSE, FALSE, LSF_EVENT_NAME);
-                if (!g_fadeEvent) {
-                    Wh_Log(L"CreateEventW fallback failed, GLE=%d", GetLastError());
-                    CloseHandle(g_fadeMutex);
-                    if (securityDescriptor) {
-                        LocalFree(securityDescriptor);
-                    }
-                    return false;
-                }
             }
         }
     }
@@ -1148,9 +1110,6 @@ void LoadSettings() {
     g_settings.sleepFadeEnabled = sleepFadeEnabled;
     g_settings.sleepDuration = sleepDuration;
     g_settings.enhancedSleepIntercept = enhancedSleepIntercept;
-
-    // Wh_Log(L"Settings loaded: logonType=%d, logonDuration=%d, logoffType=%d, logoffDuration=%d, sleepFadeEnabled=%d, sleepDuration=%d, enhancedSleepIntercept=%d",
-    //     g_settings.logonType, g_settings.logonDuration, g_settings.logoffType, g_settings.logoffDuration, g_settings.sleepFadeEnabled, g_settings.sleepDuration, g_settings.enhancedSleepIntercept);
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -1224,7 +1183,7 @@ BOOL Wh_ModInit() {
         }
 #else
         Wh_Log(L"Running in winlogon.exe, but winlogon hooks are disabled in this build");
-        Wh_SetIntValue(L"WinlogonHookFailed" /* add session id here!!! */, 1);
+        Wh_SetIntValue(L"WinlogonHookFailed", 1);
 #endif
     } else if (g_isDwm) {
 #if defined(_M_X64)
@@ -1270,11 +1229,11 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!CreateFadeMutexAndEvent()) {
+    if (!CreateFadeMutex()) {
         // Likely services, but I think they would barely initiate the sleep fade anyway
-        Wh_Log(L"Failed to create/open fade mutex and event");
+        Wh_Log(L"Failed to create/open fade mutex");
         if (!g_isWinlogon) {
-            // Allow winlogon to proceed without mutex or event to allow the single process mode (no sleep fade) to work at least, but not for others
+            // Allow winlogon to proceed without mutex to allow the single process mode (no sleep fade) to work at least, but not for others
             return FALSE;
         }
     }
@@ -1282,9 +1241,7 @@ BOOL Wh_ModInit() {
 #define CLEANUP                   \
     if (g_fadeMutex) {            \
         CloseHandle(g_fadeMutex); \
-        CloseHandle(g_fadeEvent); \
         g_fadeMutex = NULL;       \
-        g_fadeEvent = NULL;       \
     }                             \
     return FALSE;
 
@@ -1390,10 +1347,6 @@ void Wh_ModUninit() {
     if (g_fadeMutex) {
         CloseHandle(g_fadeMutex);
         g_fadeMutex = NULL;
-    }
-    if (g_fadeEvent) {
-        CloseHandle(g_fadeEvent);
-        g_fadeEvent = NULL;
     }
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
