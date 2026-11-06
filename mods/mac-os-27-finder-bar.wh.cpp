@@ -2506,7 +2506,12 @@ static int CountWindowsUpdates() {
                 n = (int)c;
             job->Release();
         }
-        if (cb) cb->Release();
+        if (cb) {
+            // O Windows Update pode soltar a referência dele ao retorno depois:
+            // espera a nossa ser a única antes de liberar (o código é do mod).
+            while (InterlockedCompareExchange(&cb->refs, 0, 0) > 1) Sleep(10);
+            cb->Release();
+        }
         if (ev) CloseHandle(ev);
         SysFreeString(q);
     }
@@ -16153,6 +16158,9 @@ static void CamMonitorStop() {
         SafeRelease(g_camMonitor);
     }
     if (g_camCallback) {
+        // O Media Foundation pode ainda estar dentro de OnActivitiesReport, ou
+        // soltar a referência dele mais tarde: espera a nossa ser a única.
+        while (InterlockedCompareExchange(&g_camCallback->refs, 0, 0) > 1) Sleep(10);
         g_camCallback->Release();
         g_camCallback = nullptr;
     }
