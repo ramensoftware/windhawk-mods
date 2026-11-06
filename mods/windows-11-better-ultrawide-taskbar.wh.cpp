@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.4.1
+// @version         0.4.2
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -73,8 +73,9 @@ material without it.
 **Layout**, **Shape** and **Alignment** are under **Dock layout**. **Unified**, the
 default, is one dock around the buttons and the tray. **Separate** splits it into a
 button bar and a tray bar with a 12-DIP gap between their edges, so the tray content
-sits 28 DIP after the last button; both bars follow Windows' button animation
-together. **Island**, the default shape,
+sits 28 DIP after the last button. In both layouts the dock reaches its new width as
+a button appears, before Windows slides the other buttons into place, and shrinks
+with that slide when a button closes. **Island**, the default shape,
 floats the dock **Distance from screen edge** away from the screen edge with every
 corner rounded. **Edge** puts the dock on the screen edge: its corners there are
 square and its far corners keep the dock corner radius. Edge ignores the edge
@@ -5125,6 +5126,12 @@ struct Measurements {
     }
 };
 
+// The follower's expression terms over `geometry` (a Root's metrics) and `anchor` (Start's handout Visual).
+// Correction: half of Start's squeeze when native layout pins it left of its centred slot (BoundaryThreshold).
+// StripOrigin: the repeater's x = 0 in hull DIP once the buttons Translation is applied.
+std::wstring Correction() { return L"Max(0, (geometry.threshold - anchor.Offset.X) / 2)"; }
+std::wstring StripOrigin() { return L"geometry.dockOrigin + geometry.shift + " + Correction(); }
+
 // Last button content to tray content: Separate adds both bars' padding around the bar gap.
 double ButtonTrayGap(DockLayout layout) {
     return layout == DockLayout::Separate ? kBarGap + 2 * kDockPadding : kGap;
@@ -5347,6 +5354,7 @@ struct Root {
     winrt::weak_ref<FrameworkElement> anchor;
     CompositionPropertySet metrics{nullptr};
     double nativeRightOverhang{NAN};
+    double lead{NAN}; // The layout-final hull left last handed to metrics.lead, in hull DIP.
     double hostWidth{};
     Measurements measurements{};
     bool measurementsReady{};
@@ -6147,7 +6155,7 @@ float4 ps(VertexOutput input) : SV_Target {
     struct LensProbe {
         Visual button{nullptr}, anchor{nullptr};
         FrameworkElement plate{nullptr};
-        CompositionRoundedRectangleGeometry dock{nullptr};
+        CompositionPropertySet metrics{nullptr};
         ContainerVisual row{nullptr};
         CompositionPropertySet values{nullptr};
         uint32_t tag{};
@@ -6508,25 +6516,24 @@ float4 ps(VertexOutput input) : SV_Target {
 
     void TrackLens(size_t index, Visual const& button, Visual const& anchor,
                     FrameworkElement const& plate,
-                    CompositionRoundedRectangleGeometry const& dock,
+                    CompositionPropertySet const& metrics,
                     float nativeCenter, float clipCenter) {
         if (!geometryVisual || index >= kMaxButtonLenses) return;
         std::lock_guard lock(mutex);
         auto& probe = lensProbes[index];
-        if (probe.button == button && probe.anchor == anchor && probe.plate == plate && probe.dock == dock &&
+        if (probe.button == button && probe.anchor == anchor && probe.plate == plate && probe.metrics == metrics &&
             probe.nativeCenter == nativeCenter && probe.clipCenter == clipCenter) return;
         if (probe.row) geometryVisual.Children().Remove(probe.row);
         auto compositor = geometryVisual.Compositor();
         probe = {};
         probe.button = button; probe.anchor = anchor;
-        probe.plate = plate; probe.dock = dock;
+        probe.plate = plate; probe.metrics = metrics;
         probe.nativeCenter = nativeCenter; probe.clipCenter = clipCenter;
         probe.tag = (++nextLensTag & 0xffffffu);
         if (!probe.tag) probe.tag = (++nextLensTag & 0xffffffu);
         probe.values = compositor.CreatePropertySet();
         probe.values.InsertScalar(L"nativeCenter",nativeCenter);
         probe.values.InsertScalar(L"clipCenter",clipCenter);
-        probe.values.InsertScalar(L"padding",float(kDockPadding));
         probe.row = compositor.CreateContainerVisual();
         probe.row.Size({8,2});
         probe.row.Offset({0,float(2*(index+1)),0});
@@ -6534,12 +6541,14 @@ float4 ps(VertexOutput input) : SV_Target {
             auto visual = compositor.CreateSpriteVisual();
             visual.Size({2,2}); visual.Offset({float(component*2),0,0});
             auto brush = compositor.CreateColorBrush();
-            std::wstring value = L"Floor((dock.Offset.X + local.padding + button.Offset.X - anchor.Offset.X + local." +
+            // The button's own place in hull DIP. Not recovered from the hull, which runs ahead of Start while
+            // the lead covers a new layout.
+            std::wstring value = L"Floor((" + StripOrigin() + L" + button.Offset.X + local." +
                 std::wstring(component ? L"clipCenter" : L"nativeCenter") + L" + 32768) * 16)";
             auto expression = compositor.CreateExpressionAnimation(
                 L"ColorRGB(255, Floor("+value+L"/65536), Floor("+value+L"/256)-Floor("+value+
                 L"/65536)*256, "+value+L"-Floor("+value+L"/256)*256)");
-            expression.SetReferenceParameter(L"dock",dock);
+            expression.SetReferenceParameter(L"geometry",metrics);
             expression.SetReferenceParameter(L"button",button);
             expression.SetReferenceParameter(L"anchor",anchor);
             expression.SetReferenceParameter(L"local",probe.values);
@@ -12001,7 +12010,7 @@ ButtonGlassSources AddButtonLenses(Root const& root, LiquidRenderer::LensConstan
                 auto nativeRight = local.TransformPoint({float(plate.ActualWidth()),float(plate.ActualHeight())});
                 auto clipLeft = local.TransformPoint({offset.x,offset.y});
                 auto clipRight = local.TransformPoint({offset.x+extent.x,offset.y+extent.y});
-                root.dock.liquid->TrackLens(index,source.visual,anchorVisual,plate,root.dock.geometry,
+                root.dock.liquid->TrackLens(index,source.visual,anchorVisual,plate,root.metrics,
                     (nativeLeft.X+nativeRight.X)/2,(clipLeft.X+clipRight.X)/2);
             }
         }
@@ -12253,12 +12262,57 @@ double BoundaryThreshold(double& overhang, double start, double buttons,
 
 std::wstring EdgeExpression(bool buttons = false) {
     // No retiring right edge feeds the parent: it would add a second reflow.
-    std::wstring correction = L"Max(0, (geometry.threshold - anchor.Offset.X) / 2)";
     if (buttons)
-        return L"Vector3(geometry.shift + " + correction +
+        return L"Vector3(geometry.shift + " + Correction() +
                L", geometry.vertical, 0)";
     return L"Vector3(Clamp(dock.Offset.X + dock.Size.X + geometry.trayDockBase"
            L", geometry.minX, geometry.maxX), geometry.vertical, 0)";
+}
+
+// The hull's left edge in hull DIP: the smaller of Start's animated edge (its handout Offset.X carried into the
+// strip, less the padding) and the eased layout-final edge metrics.lead. Growth makes lead the smaller, so the
+// hull reaches the new layout as it is laid out; a shrink makes lead the larger, so the hull follows Start's slide.
+std::wstring HullLeft() {
+    return L"Min(" + StripOrigin() + L" + anchor.Offset.X - geometry.padding, geometry.lead)";
+}
+
+// Drives the hull's Offset and Size off `metrics` and Start's handout Visual. Windows lays a new button out at its
+// final slot and fades it in there about 300 ms before it slides Start, so a hull that only followed Start would
+// leave that slot outside the dock; the lead term covers it. The hull is symmetric about geometry.center, so one
+// left edge places both ends.
+void BindHull(CompositionRoundedRectangleGeometry const& hull, CompositionPropertySet const& metrics,
+              Visual const& anchor) {
+    auto compositor = hull.Compositor();
+    auto offset = compositor.CreateExpressionAnimation(L"Vector2(" + HullLeft() + L", geometry.margin)");
+    auto size = compositor.CreateExpressionAnimation(
+        L"Vector2(2 * Max(0, geometry.center - (" + HullLeft() + L")), geometry.height)");
+    for (auto const& expression : {offset, size}) {
+        expression.SetReferenceParameter(L"geometry", metrics);
+        expression.SetReferenceParameter(L"anchor", anchor);
+    }
+    hull.StartAnimation(L"Offset", offset);
+    hull.StartAnimation(L"Size", size);
+}
+
+constexpr std::chrono::milliseconds kLeadDuration{333}; // Windows' reposition animation, so the two motions pace alike.
+
+// Hands the compositor the layout-final hull left. The first call inserts the scalar, before the hull expressions
+// that read it start. A later target starts a final-keyframe ease, which begins at the running value, so a
+// retarget mid-ease never jumps. A repeat within 0.01 DIP is a no-op.
+void LeadHull(Root& root, double target) {
+    if (std::isnan(root.lead)) {
+        root.metrics.InsertScalar(L"lead", static_cast<float>(target));
+        root.lead = target;
+        return;
+    }
+    if (std::abs(target - root.lead) < 0.01) return;
+    root.lead = target;
+    auto compositor = root.metrics.Compositor();
+    auto ease = compositor.CreateScalarKeyFrameAnimation();
+    ease.InsertKeyFrame(1, static_cast<float>(target),
+                        compositor.CreateCubicBezierEasingFunction({0.33f, 1.f}, {0.68f, 1.f}));
+    ease.Duration(kLeadDuration);
+    root.metrics.StartAnimation(L"lead", ease);
 }
 
 void StopFollower(Root& root) {
@@ -12272,6 +12326,7 @@ void StopFollower(Root& root) {
     root.buttonsFollower = nullptr;
     root.anchor = {};
     root.nativeRightOverhang = NAN;
+    root.lead = NAN;
     root.metrics = nullptr;
     RestoreStatePlates(root);
     root.sources.clear();
@@ -12384,6 +12439,9 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     root.dock.geometry.CornerRadius({radius, radius});
     if (auto extended = root.dock.outline.try_as<CompositionRoundedRectangleGeometry>(); extended && extended != root.dock.geometry)
         extended.CornerRadius({radius, radius});
+    // Start's arranged x is what anchor.Offset.X reads once Windows' slide lands, so at rest Min() is the identity.
+    double startRest = start.ActualOffset().x;
+    LeadHull(root, m.dockOrigin() + m.shift + std::max(0.0, (threshold - startRest) / 2) + startRest - kDockPadding);
     FollowOutline(root.dock, root.metrics, m);
     if (root.follower && !anchorChanged) return;
     auto anchorVisual = Hosting::ElementCompositionPreview::GetElementVisual(start);
@@ -12391,21 +12449,9 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         root.metrics.Compositor().CreateExpressionAnimation(EdgeExpression());
     auto buttonsAnimation =
         root.metrics.Compositor().CreateExpressionAnimation(EdgeExpression(true));
-    std::wstring dockLeft =
-        L"geometry.dockOrigin + geometry.shift + Max(0, (geometry.threshold - "
-        L"anchor.Offset.X) / 2) + anchor.Offset.X - geometry.padding";
-    auto dockOffsetAnimation = root.metrics.Compositor().CreateExpressionAnimation(
-        L"Vector2(" + dockLeft + L", geometry.margin)");
-    // New buttons receive their final right edge before their native entrance.
-    // The dock is symmetric about geometry.center, so its animated leading edge is sufficient.
-    auto dockSizeAnimation = root.metrics.Compositor().CreateExpressionAnimation(
-        L"Vector2(2 * Max(0, geometry.center - (" + dockLeft +
-        L")), geometry.height)");
     animation.Target(L"Translation");
     buttonsAnimation.Target(L"Translation");
-    dockOffsetAnimation.Target(L"Offset");
-    dockSizeAnimation.Target(L"Size");
-    for (auto const& expression : {animation, buttonsAnimation, dockOffsetAnimation, dockSizeAnimation}) {
+    for (auto const& expression : {animation, buttonsAnimation}) {
         expression.SetReferenceParameter(L"geometry", root.metrics);
         expression.SetReferenceParameter(L"anchor", anchorVisual);
     }
@@ -12418,8 +12464,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     root.buttonsTranslation.installed = true;
     root.buttonsTranslation.element.StartAnimation(buttonsAnimation);
     root.trayTranslation.element.StartAnimation(animation);
-    root.dock.geometry.StartAnimation(L"Offset", dockOffsetAnimation);
-    root.dock.geometry.StartAnimation(L"Size", dockSizeAnimation);
+    BindHull(root.dock.geometry, root.metrics, anchorVisual);
     if (root.dock.outline.try_as<CompositionRoundedRectangleGeometry>() && root.dock.outline != root.dock.geometry) {
         // Bound to the hull, like the tray, so it moves in the hull's compositor frame.
         auto outlineOffset = root.metrics.Compositor().CreateExpressionAnimation(
