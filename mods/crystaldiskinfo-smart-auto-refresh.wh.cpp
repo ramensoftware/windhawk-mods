@@ -38,7 +38,7 @@ The Auto-Refresh function resumes once the application is minimized to the
 taskbar or system tray.
 
 **Note:** If CrystalDiskInfo is already running when the mod is loaded, pick one
-of the following options to activate it:
+of the following options for the mod to take effect:
 * Restart the application completely.
 * Select an interval in **Function** → **Auto Refresh**, including the one
   currently set.
@@ -140,10 +140,6 @@ BOOL WINAPI KillTimer_Hook(HWND hWnd, UINT_PTR nIDEvent)
         if (it != g_timerMap.end())
         {
             it->second.erase(nIDEvent);
-            if (it->second.empty())
-            {
-                g_timerMap.erase(it);
-            }
         }
     }
     return KillTimer_Original(hWnd, nIDEvent);
