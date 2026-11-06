@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.18.0
+// @version         2.18.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1019,11 +1019,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"OpenCode Go in der Taskleiste anzuzeigen."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Legen Sie „Credits-Maximum“ fest, um den Credits-Balken anzuzeigen."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
-     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ hat keine Größenbeschränkung, daher wächst der Verlauf im Speicher "
-     L"des Explorers und auf dem Datenträger weiter; Antigravity-Messwerte, die älter als 15 Tage sind, werden in "
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
+     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ hat keine Größenbeschränkung, daher wächst der Verlauf auf dem "
+     L"Datenträger weiter; Antigravity-Messwerte, die älter als 15 Tage sind, werden in "
      L"Abständen von etwa 10 Minuten aufbewahrt. Tageslimits bereinigen stündlich, mit einer Obergrenze von etwa "
      L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
@@ -2285,11 +2285,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"OpenCode Go en la barra de tareas."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Define el máximo de créditos para mostrar la barra de créditos."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
      L"Compartido entre los usuarios de Windows. Para siempre no tiene límite de tamaño, así que el historial sigue "
-     L"creciendo en la memoria del Explorador y en el disco; las lecturas de Antigravity de más de 15 días se "
+     L"creciendo en el disco; las lecturas de Antigravity de más de 15 días se "
      L"conservan con unos 10 minutos de separación. Los límites en días depuran cada hora, con un tope de unos "
      L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
@@ -3554,11 +3554,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"OpenCode Go dans la barre des tâches."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Définissez le maximum de crédits pour afficher la barre des crédits."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
      L"Partagé entre les utilisateurs Windows. L’option Indéfiniment n’a pas de limite de taille\u202F: l’historique "
-     L"continue de grossir dans la mémoire de l’Explorateur Windows et sur le disque\u202F; les relevés d’Antigravity "
+     L"continue de grossir sur le disque\u202F; les relevés d’Antigravity "
      L"de plus de 15\u00A0jours sont conservés à environ 10\u00A0minutes d’intervalle. Avec une limite en jours, le "
      L"nettoyage a lieu toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
@@ -4732,10 +4732,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"account on the taskbar.",
      L"<b>{button}</b> を選択すると、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
     {L"", L"Set Credits max to show the Credits bar.", L"クレジット バーを表示するには、［クレジット上限］を設定してください。"},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
-     L"Windows のユーザー間で共有されます。［無期限］ではサイズの上限がないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。15 日より古い Antigravity の測定値は約 10 分間隔で保持されます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
+     L"Windows のユーザー間で共有されます。［無期限］ではサイズの上限がないため、履歴はディスク上で増え続けます。15 日より古い Antigravity の測定値は約 10 分間隔で保持されます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"各バーの横の短いキー: {key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短いテキスト"},
@@ -5891,11 +5891,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"OpenCode Go na barra de tarefas."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Defina Máximo de créditos para mostrar a barra de créditos."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
      L"Compartilhado entre os usuários do Windows. A opção Para sempre não tem limite de tamanho, então o histórico "
-     L"continua crescendo na memória do Windows Explorer e no disco; as leituras do Antigravity com mais de 15 dias "
+     L"continua crescendo no disco; as leituras do Antigravity com mais de 15 dias "
      L"são mantidas com cerca de 10 minutos de intervalo. Com um limite em dias, a limpeza é feita a cada hora, com um "
      L"teto de cerca de 60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
@@ -7130,11 +7130,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
      L"Copilot или OpenCode Go."},
     {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
      L"Общий параметр для всех пользователей Windows. «Бессрочно» не ограничивает размер, поэтому история продолжает "
-     L"расти в памяти Проводника и на диске; замеры Antigravity старше 15 дней хранятся с интервалом около 10 минут. "
+     L"расти на диске; замеры Antigravity старше 15 дней хранятся с интервалом около 10 минут. "
      L"Ограничения в днях очищают историю каждый час, с пределом около 60\u00A0МБ."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
@@ -8270,10 +8270,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
     {L"", L"Set Credits max to show the Credits bar.", L"设置“积分上限”以显示积分条。"},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
-     L"所有 Windows 用户共享此设置。“永久”没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长；超过 15 天的 Antigravity 读数按约 10 分钟的间隔保留。按天数限制时每小时清理一次，上限约 60 MB。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
+     L"所有 Windows 用户共享此设置。“永久”没有大小限制，因此历史会在磁盘中持续增长；超过 15 天的 Antigravity 读数按约 10 分钟的间隔保留。按天数限制时每小时清理一次，上限约 60 MB。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"每个条形旁的简称：{key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短文本"},
@@ -10170,8 +10170,8 @@ static uint32_t HistoryProviderCode(const std::wstring& provider) {
            provider == L"copilot" ? 4 : provider == L"opencode" ? 5 : 0;
 }
 // The journal's state when it was read: loaded (a damaged or unreadable journal stays loaded with
-// an error status), then its epoch (Clear), revision (load, cap eviction, retention pruning) and
-// append count. Equal stamps hold the same samples.
+// an error status), then its epoch (Clear), revision (load, any rewrite, records leaving memory)
+// and append count. Equal stamps hold the same samples.
 struct HistoryJournalStamp {
     bool loaded = false;
     uint64_t epoch = 0, revision = 0, appended = 0;
@@ -10200,14 +10200,20 @@ struct HistorySnapshot {
     HistoryJournalError status = HistoryJournalError::None;  // The journal's error status; None while healthy
     bool capped = false;  // The storage cap pruned the oldest samples
     HistoryJournalStamp stamp;
+    // Every sample from here on: the asked start, or later when the older ones couldn't be read
+    ULONGLONG from = 0;
 };
 // A memory-only look at the journal: its stamp, status and cap, and a replacement for a held
-// snapshot (every sample from the asked start on, possibly none) or nullopt: no replacement.
+// snapshot (every sample from `from` on, possibly none) or nullopt: no replacement. Incomplete:
+// memory doesn't reach back to the asked start, so `from` is the held snapshot's start (or later,
+// where memory begins); only an explicit load reads further back.
 struct HistoryPeek {
     HistoryJournalStamp stamp;
     HistoryJournalError status = HistoryJournalError::None;
     bool capped = false;
     std::optional<std::vector<HistorySample>> samples;
+    ULONGLONG from = 0;
+    bool incomplete = false;
 };
 
 // src/history/journal-error.h
@@ -10722,8 +10728,6 @@ static void OpenHistoryWindow(uint64_t historyId = 0);
 static void UiSetWindowAppId(HWND window, PCWSTR appId);
 static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons);
 static std::vector<BYTE> AppIconPng();
-static std::optional<std::deque<HistorySample>> ThinHistorySamples(const std::deque<HistorySample>& samples,
-                                                                   ULONGLONG nowMs);
 static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
                                                const WindowUsage& reading);
 static bool SaveOwnedSettings(const Settings& settings);
@@ -14781,9 +14785,195 @@ static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, AccountE
     }
 }
 
+// src/history/continuity.h
+// Reading continuity rules shared by the history window and the flyout's burn-up curves.
+
+// Reset endpoints jitter by up to this much between readings of one window.
+static constexpr ULONGLONG kHistoryResetToleranceMs = 120000;
+
+static bool HistoryHasValue(const HistorySample& sample, int meter) {
+    return !sample.failed && sample.meters[meter].value != -1 &&
+           std::isfinite(sample.meters[meter].value);
+}
+
+enum class HistoryBreak { None, Gap, Reset, Unavailable };
+
+// Whether two valid readings of a meter, b later than a, belong to one quota window,
+// regardless of how they were sampled.
+static HistoryBreak HistoryWindowConnection(const HistorySample& a, const HistorySample& b,
+                                            int meter) {
+    ULONGLONG gap = b.timeMs - a.timeMs;
+    const auto& av = a.meters[meter];
+    const auto& bv = b.meters[meter];
+    if (av.durationMs != bv.durationMs) return HistoryBreak::Reset;
+    if (!!av.resetMs != !!bv.resetMs) return HistoryBreak::Reset;
+    if (av.resetMs) {
+        // Reset endpoints can jitter. Never require exact equality; reject a boundary
+        // within two minutes of this interval or a material shift of the reset epoch.
+        constexpr ULONGLONG tolerance = kHistoryResetToleranceMs;
+        ULONGLONG shift = av.resetMs > bv.resetMs ? av.resetMs - bv.resetMs : bv.resetMs - av.resetMs;
+        ULONGLONG lower = a.timeMs > tolerance ? a.timeMs - tolerance : 0;
+        ULONGLONG upper = b.timeMs > ULLONG_MAX - tolerance ? ULLONG_MAX : b.timeMs + tolerance;
+        if ((av.resetMs >= lower && av.resetMs <= upper) ||
+            (bv.resetMs >= lower && bv.resetMs <= upper)) return HistoryBreak::Reset;
+        if (shift > tolerance) {
+            // OpenAI's unused windows and OpenCode Go's unused 5-hour window roll a full duration
+            // ahead until first use anchors them. This is not a reset: the old deadline is still
+            // beyond this sampled interval. Keep real boundaries, other providers and lanes,
+            // backward shifts, and partial windows conservative.
+            if ((a.provider == 2 || (a.provider == 5 && meter == 0)) && av.value == 0 &&
+                bv.value >= 0 && av.durationMs &&
+                av.resetMs > upper && bv.resetMs > upper && bv.resetMs > av.resetMs &&
+                (shift <= gap || shift - gap <= tolerance)) {
+                ULONGLONG remaining = av.resetMs - a.timeMs;
+                ULONGLONG error = remaining > av.durationMs ? remaining - av.durationMs : av.durationMs - remaining;
+                if (error <= tolerance) return HistoryBreak::None;
+            }
+            return HistoryBreak::Reset;
+        }
+    }
+    return HistoryBreak::None;
+}
+
+// Whether readings a and b, b later, lie apart in polling: another account, provider or session,
+// out of order, or more than two of their longer interval apart.
+static bool HistoryPollingGap(const HistorySample& a, const HistorySample& b) {
+    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
+        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
+        return true;
+    ULONGLONG gap = b.timeMs - a.timeMs;
+    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
+    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
+    return gap / 2 + gap % 2 > polling;
+}
+
+// Shared by rendering and integration: no extrapolation, including at range boundaries.
+static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySample& b,
+                                      int meter) {
+    if (!HistoryHasValue(a, meter) || !HistoryHasValue(b, meter))
+        return HistoryBreak::Unavailable;
+    if (HistoryPollingGap(a, b)) return HistoryBreak::Gap;
+    return HistoryWindowConnection(a, b, meter);
+}
+
+// src/history/thinning.h
+// Thinning of older Antigravity readings: it is polled every minute whatever the poll setting, so
+// its readings older than kHistoryThinAgeMs are kept about kHistoryThinSpacingMs apart (a thinned
+// reading stores that as its interval), with every line the history window draws through them
+// still connected, and every break still a break. Pure: a machine fed the journal's readings, one
+// pass, deciding each reading once the next one of its account arrives.
+
+static constexpr ULONGLONG kHistoryThinAgeMs = 15 * kHistoryDayMs;
+static constexpr ULONGLONG kHistoryThinSpacingMs = 600000;
+
+// What thinning does with a reading: keeps it as it was, drops it, or keeps it with its interval
+// widened to kHistoryThinSpacingMs (its checksum then recomputed by the writer).
+enum class HistoryThinFate : uint8_t { Kept, Dropped, Widened };
+
+// Per account, over its readings older than kHistoryThinAgeMs at `nowMs` (thinned ones included),
+// with their stored intervals:
+// - Kept: the first and the last, failed ones, and both readings of each break between
+//   consecutive ones: a polling gap (HistoryPollingGap), a meter gaining or losing its value, the
+//   failed flag changing, or a reset (HistoryWindowConnection) of a meter valued in both.
+// - Any other is dropped only when it comes less than kHistoryThinSpacingMs after the last kept
+//   reading and, on every meter its readings connect from that one to the next, the last kept one
+//   (at its interval once widened) connects straight to the next (at its stored interval).
+// - Kept readings are widened to kHistoryThinSpacingMs, except the last, failed ones and those
+//   beside a polling gap.
+// Feed it the eligible readings (Eligible) in journal order; a reading's fate is final once the
+// next reading of its account was fed, and each account's last one stays Kept.
+struct HistoryThinning {
+    explicit HistoryThinning(ULONGLONG nowMs) : cutoff(nowMs > kHistoryThinAgeMs ? nowMs - kHistoryThinAgeMs : 0) {}
+
+    // Readings it decides and their fates
+    ULONGLONG cutoff;
+    // Each fed reading's fate, in the order fed (its eligible ordinal); whether any isn't Kept
+    std::vector<HistoryThinFate> fates;
+    bool changed = false;
+
+    bool Eligible(const HistorySample& sample) const { return sample.provider == 3 && sample.timeMs < cutoff; }
+
+    // The next eligible reading; decides the previous one of its account. Throws when out of
+    // memory (the caller drops the machine).
+    void Feed(const HistorySample& reading) {
+        auto run = std::find_if(runs.begin(), runs.end(), [&](const Run& r) { return r.account == reading.accountId; });
+        if (run == runs.end()) {
+            run = runs.emplace(runs.end());
+            run->account = reading.accountId;
+        }
+        fates.push_back(HistoryThinFate::Kept);
+        const size_t ordinal = fates.size() - 1;
+        if (run->seen++) {
+            const HistorySample& current = run->current;
+            bool gap = HistoryPollingGap(current, reading);
+            bool split = gap || current.failed != reading.failed;
+            for (int m = 0; m < int(kHistoryMeterCount) && !split; ++m) {
+                bool valued = HistoryHasValue(current, m);
+                split = valued != HistoryHasValue(reading, m) ||
+                        (valued && HistoryWindowConnection(current, reading, m) == HistoryBreak::Reset);
+            }
+            bool drop = false;
+            if (run->seen > 2) {
+                for (int m = 0; m < int(kHistoryMeterCount); ++m) {
+                    run->chain[m] = run->chain[m] && HistoryConnection(run->previous, current, m) == HistoryBreak::None;
+                }
+                drop = !current.failed && !run->splitBefore && !split &&
+                       current.timeMs < run->kept.timeMs + kHistoryThinSpacingMs;
+                if (drop) {
+                    HistorySample kept = run->kept;
+                    if (run->keptWidens) kept.intervalMs = std::max(kept.intervalMs, kHistoryThinSpacingMs);
+                    for (int m = 0; m < int(kHistoryMeterCount) && drop; ++m) {
+                        drop = !run->chain[m] || HistoryConnection(current, reading, m) != HistoryBreak::None ||
+                               HistoryConnection(kept, reading, m) == HistoryBreak::None;
+                    }
+                }
+            }
+            if (drop) {
+                fates[run->ordinal] = HistoryThinFate::Dropped;
+                changed = true;
+            } else {
+                run->kept = current;
+                run->keptWidens = !run->gapBefore && !gap && !current.failed;
+                run->chain.fill(true);
+                if (run->keptWidens && current.intervalMs < kHistoryThinSpacingMs) {
+                    fates[run->ordinal] = HistoryThinFate::Widened;
+                    changed = true;
+                }
+            }
+            run->previous = current;
+            run->gapBefore = gap;
+            run->splitBefore = split;
+        }
+        run->current = reading;
+        run->ordinal = ordinal;
+    }
+
+private:
+    // One account's readings so far: the undecided newest one (`current`, with its ordinal), the
+    // one before it, what lies between them, the last kept one (widened or not) and, per meter,
+    // whether the readings connect from it to `current`.
+    struct Run {
+        uint64_t account = 0;
+        size_t seen = 0, ordinal = 0;
+        HistorySample previous, current, kept;
+        bool gapBefore = false, splitBefore = false, keptWidens = false;
+        std::array<bool, kHistoryMeterCount> chain{};
+    };
+    std::vector<Run> runs;
+};
+
 // src/history/journal.h
 // Local usage-history journal and its recording consent, in this Windows user's part of the mod's
 // Windhawk storage (core/user-storage.h). Takes no UI or auth locks.
+//
+// The journal is the file's committed records (g_historyCommittedRecords complete records after a
+// valid header) followed by the pending ones (admitted, not written yet). Explorer keeps in memory
+// its summary and its cache: in journal order, every record from g_historyCacheFrom on and every
+// pending one. The cache spans the hot window (the flyout's burn-up windows) and the open history
+// window's pinned range; older records are read from the file, by the window's explicit loads, a
+// burn-up tail reaching further back, and the rewrite transactions (maintenance, Clear, an
+// account's deletion), which stream the file into a staging file that replaces it. Admission never
+// lets time go backwards, so the journal is in time order.
 
 struct HistoryFileHeader {
     uint64_t magic = 0x3154534948514941ULL;  // AIQHIST1
@@ -14795,12 +14985,63 @@ static constexpr size_t kHistoryMaxSamples = 250000;
 static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
 static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
 static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
+// The cache's hot window: the longest burn-up window (32 days, history/burn-up.h), its reset
+// tolerance and a margin.
+static constexpr ULONGLONG kHistoryHotWindowMs = 35 * kHistoryDayMs;
+// Records per file read or write.
+static constexpr size_t kHistoryChunkRecords = 1024;
+
+// What the whole journal holds, beside the cache: per account its record count and last record
+// (an append's failed-marker check), the record count, how many are Antigravity's (thinning's),
+// the oldest time (retention pruning) and the last record's time (appends never go back).
+struct HistoryAccountSummary {
+    uint64_t accountId = 0;
+    uint64_t records = 0;
+    HistorySample last;
+};
+struct HistoryJournalSummary {
+    std::vector<HistoryAccountSummary> accounts;
+    uint64_t records = 0, antigravity = 0;
+    ULONGLONG oldestMs = ULLONG_MAX, lastMs = 0;
+
+    const HistoryAccountSummary* Find(uint64_t accountId) const {
+        auto it = std::find_if(accounts.begin(), accounts.end(),
+                               [&](const HistoryAccountSummary& account) { return account.accountId == accountId; });
+        return it == accounts.end() ? nullptr : &*it;
+    }
+    // The next record in journal order. Throws when out of memory (a new account).
+    void Add(const HistorySample& sample) {
+        auto it = std::find_if(accounts.begin(), accounts.end(), [&](const HistoryAccountSummary& account) {
+            return account.accountId == sample.accountId;
+        });
+        if (it == accounts.end()) {
+            it = accounts.emplace(accounts.end());
+            it->accountId = sample.accountId;
+        }
+        ++it->records;
+        it->last = sample;
+        ++records;
+        antigravity += sample.provider == 3;
+        oldestMs = std::min(oldestMs, sample.timeMs);
+        lastMs = sample.timeMs;
+    }
+};
+
 // In-memory journal state, then its storage state.
-static std::deque<HistorySample> g_historySamples;
+static std::deque<HistorySample> g_historySamples;  // The cache
+static std::vector<HistorySample> g_historyPending;
+static HistoryJournalSummary g_historySummary;
+// Where the cache starts: the earlier of the hot window's and the pinned range's start, as the last
+// load, trim or widening set it (the clock alone never moves it back).
+static ULONGLONG g_historyCacheFrom = 0;
+// The open history window's range start (ULLONG_MAX: none): its explicit loads set it, a complete
+// refresh moves it to its replacement's start, its thread's end releases it.
+static ULONGLONG g_historyPinMs = ULLONG_MAX;
 // Let incremental readers (burn-up curves, the history window's refresh) mirror
 // g_historySamples: they copy only samples appended since their last copy while the revision is
-// unchanged. The revision changes when samples are loaded, evicted by the size cap, pruned by
-// retention or thinning or deleted with their account; Clear changes g_historyEpoch.
+// unchanged. The revision changes when the journal is loaded or rewritten (retention, the size cap,
+// thinning, an account's deletion) and when records leave the cache; Clear changes
+// g_historyEpoch. Records read into the cache's start (an explicit load's widening) change neither.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
 static HistoryJournalError g_historyStatus = HistoryJournalError::None;
@@ -14808,7 +15049,10 @@ static bool g_historyLoaded = false;
 static bool g_historyCapped = false;
 static std::wstring g_historyPath;
 static bool g_historyWritable = true;
-static bool g_historyDirty = false;
+static uint64_t g_historyCommittedRecords = 0;
+// Whether the file starts with a valid header; otherwise (none yet, or its write failed) the next
+// write puts it first.
+static bool g_historyHeaderValid = false;
 static ULONGLONG g_historyMaintenanceMs = 0;
 static ULONGLONG g_historyWriteRetryMs = 0;
 // When Antigravity thinning (history/thinning.h) last ran since the load; 0: not yet.
@@ -14835,6 +15079,10 @@ static uint64_t HistoryChecksum(const HistorySample& sample) {
         hash = (hash ^ bytes[i]) * 1099511628211ULL;
     }
     return hash;
+}
+
+static ULONGLONG HistoryHotStart(ULONGLONG now) {
+    return now > kHistoryHotWindowMs ? now - kHistoryHotWindowMs : 0;
 }
 
 // What older versions left in `legacy` (LocalAppData\TaskbarAIQuota\<mod ID>: the journal, its
@@ -15092,8 +15340,139 @@ static void PrepareHistoryStorage() {
     }
 }
 
+// File records ----------------------------------------------------------------------------------
+
+static bool HistoryHeaderValid(const HistoryFileHeader& header) {
+    return header.magic == HistoryFileHeader{}.magic && header.version == 1 &&
+           header.recordBytes == sizeof(HistorySample);
+}
+
+// Any nonzero provider code: a later version's providers stay readable after a downgrade.
+static bool HistoryRecordValid(const HistorySample& sample) {
+    bool valid = sample.checksum == HistoryChecksum(sample) && sample.accountId && sample.timeMs &&
+                 sample.timeMs < kHistoryTimestampLimitMs && sample.intervalMs > 0 &&
+                 sample.intervalMs <= kHistoryDayMs && sample.provider && sample.failed <= 1;
+    for (const auto& meter : sample.meters) {
+        valid = valid && std::isfinite(meter.value) && meter.value >= -1 && meter.value <= 1e12 &&
+                meter.resetMs < kHistoryTimestampLimitMs && meter.durationMs <= kHistoryMaxWindowMs;
+    }
+    return valid;
+}
+
+// How a pass over the journal's records ended: every record read; unload stopped it; a read (or
+// the consumer) failed; a record or the header doesn't validate; the file is gone or shorter than
+// its committed records.
+enum class HistoryPass : uint8_t { Done, Cancelled, Failed, Damaged, Lost };
+
+// Reads `count` records through `file` from the first, in chunks of kHistoryChunkRecords, each
+// validated: `use(record)` for each (false fails the pass). `read` counts the records passed on;
+// unload during any read cancels the pass. Throws only what `use` throws, or when out of memory.
+static HistoryPass ReadHistoryRecordsLocked(HANDLE file, uint64_t count, uint64_t& read, auto&& use) {
+    read = 0;
+    if (!count) return HistoryPass::Done;
+    LARGE_INTEGER start{};
+    start.QuadPart = sizeof(HistoryFileHeader);
+    if (!SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) return HistoryPass::Failed;
+    std::vector<HistorySample> chunk(size_t(std::min<uint64_t>(count, kHistoryChunkRecords)));
+    while (read < count) {
+        if (g_unloading) return HistoryPass::Cancelled;
+        size_t n = size_t(std::min<uint64_t>(count - read, chunk.size()));
+        DWORD bytes = DWORD(n * sizeof(HistorySample)), got = 0;
+        if (!ReadFile(file, chunk.data(), bytes, &got, nullptr) || got != bytes) return HistoryPass::Failed;
+        for (size_t i = 0; i < n; ++i, ++read) {
+            if (!HistoryRecordValid(chunk[i])) return HistoryPass::Damaged;
+            if (!use(chunk[i])) return HistoryPass::Failed;
+        }
+    }
+    return g_unloading ? HistoryPass::Cancelled : HistoryPass::Done;
+}
+
+// Opens the journal to read its committed records, denying other writers and its deletion while
+// held (FILE_SHARE_READ only): a plain file (OpenUserStorageFile) holding every committed record
+// after a valid header. Without committed records there is nothing to open: an empty handle.
+static HistoryPass OpenHistorySourceLocked(winrt::file_handle& file) {
+    file.close();
+    if (!g_historyCommittedRecords) return HistoryPass::Done;
+    file = OpenUserStorageFile(g_historyPath, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING);
+    if (!file) {
+        DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ||
+                       error == ERROR_REPARSE_POINT_ENCOUNTERED ?
+                   HistoryPass::Lost :
+                   HistoryPass::Failed;
+    }
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file.get(), &size)) return HistoryPass::Failed;
+    if (uint64_t(size.QuadPart) < sizeof(HistoryFileHeader) + g_historyCommittedRecords * sizeof(HistorySample)) {
+        return HistoryPass::Lost;
+    }
+    HistoryFileHeader header;
+    DWORD read = 0;
+    if (!ReadFile(file.get(), &header, sizeof(header), &read, nullptr) || read != sizeof(header)) {
+        return HistoryPass::Failed;
+    }
+    return HistoryHeaderValid(header) ? HistoryPass::Done : HistoryPass::Damaged;
+}
+
+// Every record of the journal in order: the committed ones through `source` (none when it is
+// empty), then the pending ones. Unload at any point cancels the pass.
+static HistoryPass EachHistoryRecordLocked(const winrt::file_handle& source, auto&& use) {
+    uint64_t read = 0;
+    HistoryPass end = source ? ReadHistoryRecordsLocked(source.get(), g_historyCommittedRecords, read, use) :
+                               HistoryPass::Done;
+    for (size_t i = 0; end == HistoryPass::Done && i < g_historyPending.size(); ++i) {
+        if (g_unloading) end = HistoryPass::Cancelled;
+        else if (!use(g_historyPending[i])) end = HistoryPass::Failed;
+    }
+    return end == HistoryPass::Done && g_unloading ? HistoryPass::Cancelled : end;
+}
+
+// A pass that couldn't read the journal. Damage, or a file lost or shortened, means it can't be
+// saved to any more (until Clear); otherwise, given the operation's `failure` status, it is retried
+// after an hour; unload reports nothing.
+static void HistoryPassFailedLocked(HistoryPass end, HistoryJournalError failure) {
+    if (end == HistoryPass::Damaged || end == HistoryPass::Lost) {
+        Wh_Log(L"The history journal on disk is %s; not saving to it until Clear",
+               end == HistoryPass::Damaged ? L"damaged" : L"missing or shortened");
+        g_historyWritable = false;
+        SetHistoryStatus(end == HistoryPass::Damaged ? HistoryJournalError::DamagedRecord :
+                                                       HistoryJournalError::ReadFailed);
+    } else if (end == HistoryPass::Failed && failure != HistoryJournalError::None) {
+        SetHistoryStatus(failure);
+        g_historyWriteRetryMs = NowUnixMs() + 3600000;
+    }
+}
+
+// The committed records from `fromMs` on that the cache doesn't hold (before g_historyCacheFrom),
+// in journal order, read from the file: `use(record)` for each. Nothing to read before a load.
+static HistoryPass ReadHistoryRangeLocked(ULONGLONG fromMs, const std::function<void(const HistorySample&)>& use) {
+    if (!g_historyLoaded || fromMs >= g_historyCacheFrom) return HistoryPass::Done;
+    winrt::file_handle source;
+    HistoryPass end = HistoryPass::Failed;
+    try {
+        end = OpenHistorySourceLocked(source);
+        uint64_t read = 0;
+        if (end == HistoryPass::Done && source) {
+            end = ReadHistoryRecordsLocked(source.get(), g_historyCommittedRecords, read,
+                                           [&](const HistorySample& sample) {
+                                               if (sample.timeMs >= fromMs && sample.timeMs < g_historyCacheFrom) {
+                                                   use(sample);
+                                               }
+                                               return true;
+                                           });
+        }
+    } catch (...) {
+        end = HistoryPass::Failed;
+    }
+    HistoryPassFailedLocked(end, HistoryJournalError::None);
+    return end;
+}
+
+// Load and writes --------------------------------------------------------------------------------
+
 // Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear. Reads
-// the whole journal whatever the retention: maintenance and appends apply it.
+// the whole journal whatever the retention (maintenance and appends apply it): every record
+// validated into the summary, the cache's in memory.
 static void LoadHistoryLocked(bool create = false) {
     if (g_historyLoaded) return;
     g_historyWritable = true;
@@ -15102,6 +15481,12 @@ static void LoadHistoryLocked(bool create = false) {
     g_historyLoaded = true;
     ++g_historyRevision;
     g_historyThinnedMs = 0;
+    g_historySamples.clear();
+    g_historyPending.clear();
+    g_historySummary = {};
+    g_historyCommittedRecords = 0;
+    g_historyHeaderValid = false;
+    g_historyCacheFrom = std::min(HistoryHotStart(NowUnixMs()), g_historyPinMs);
     // A link in the journal's place is refused, never read as missing or someone else's journal.
     winrt::file_handle file = OpenUserStorageFile(g_historyPath, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING);
     if (!file) {
@@ -15121,115 +15506,200 @@ static void LoadHistoryLocked(bool create = false) {
         SetHistoryStatus(HistoryJournalError::CannotReadSize);
         return;
     }
-    if (size.QuadPart == 0) {
-        g_historyDirty = true;  // Crash between first file creation and header write.
-        return;
-    }
+    if (size.QuadPart == 0) return;  // Crash between first file creation and header write.
     if (size.QuadPart < (LONGLONG)sizeof(header) ||
         !ReadFile(file.get(), &header, sizeof(header), &read, nullptr) ||
-        read != sizeof(header) || header.magic != HistoryFileHeader{}.magic ||
-        header.version != 1 || header.recordBytes != sizeof(HistorySample)) {
+        read != sizeof(header) || !HistoryHeaderValid(header)) {
         g_historyWritable = false;
         SetHistoryStatus(HistoryJournalError::Unsupported);
         return;
     }
-    size_t count = (size_t)((size.QuadPart - sizeof(header)) / sizeof(HistorySample));
-    // A crash may leave only a partial final record. Retain complete checksummed samples.
-    g_historyDirty = (size.QuadPart - sizeof(header)) % sizeof(HistorySample) != 0;
-    std::array<HistorySample, 256> batch;
-    while (count && !g_unloading) {
-        size_t n = std::min(count, batch.size());
-        DWORD bytes = (DWORD)(n * sizeof(HistorySample));
-        if (!ReadFile(file.get(), batch.data(), bytes, &read, nullptr) || read != bytes) {
-            g_historyWritable = false;
-            SetHistoryStatus(HistoryJournalError::ReadFailed);
-            return;
-        }
-        for (size_t i = 0; i < n; ++i) {
-            const auto& sample = batch[i];
-            // Any nonzero provider code: a later version's providers stay readable after a
-            // downgrade.
-            bool valid = sample.checksum == HistoryChecksum(sample) && sample.accountId &&
-                         sample.timeMs && sample.timeMs < kHistoryTimestampLimitMs &&
-                         sample.intervalMs > 0 && sample.intervalMs <= kHistoryDayMs &&
-                         sample.provider && sample.failed <= 1;
-            for (const auto& meter : sample.meters) {
-                valid = valid && std::isfinite(meter.value) && meter.value >= -1 &&
-                        meter.value <= 1e12 && meter.resetMs < kHistoryTimestampLimitMs &&
-                        meter.durationMs <= kHistoryMaxWindowMs;
-            }
-            if (!valid) {
-                // Stop at corruption rather than connecting graphs across unknown records.
-                // A lone torn last record is recoverable; interior corruption needs consent.
-                if (count == n && i + 1 == n) {
-                    g_historyDirty = true;
-                    return;
-                }
-                g_historyWritable = false;
-                SetHistoryStatus(HistoryJournalError::DamagedRecord);
-                return;
-            }
-            try {
-                g_historySamples.push_back(sample);
-            } catch (...) {
-                // Out of memory: a partial journal must never be saved over the whole one.
-                g_historyWritable = false;
-                g_historySamples.clear();
-                SetHistoryStatus(HistoryJournalError::TooLarge);
-                return;
-            }
-        }
-        count -= n;
+    g_historyHeaderValid = true;
+    // A crash may leave a partial final record; the next write cuts it off.
+    const uint64_t count = uint64_t(size.QuadPart - sizeof(header)) / sizeof(HistorySample);
+    uint64_t loaded = 0;
+    HistoryPass end = HistoryPass::Failed;
+    try {
+        end = ReadHistoryRecordsLocked(file.get(), count, loaded, [](const HistorySample& sample) {
+            g_historySummary.Add(sample);
+            if (sample.timeMs >= g_historyCacheFrom) g_historySamples.push_back(sample);
+            ++g_historyCommittedRecords;
+            return true;
+        });
+    } catch (...) {
+        // Out of memory: a partial journal must never be saved over the whole one.
+        g_historyWritable = false;
+        g_historySamples.clear();
+        g_historySummary = {};
+        g_historyCommittedRecords = 0;
+        SetHistoryStatus(HistoryJournalError::TooLarge);
+        return;
     }
-    if (count) g_historyWritable = false;  // Unload stopped it part-way: never save that part.
+    if (end == HistoryPass::Done) return;
+    // Stop at corruption rather than connecting graphs across unknown records. A lone torn last
+    // record is recoverable (the next write cuts it off); interior corruption needs consent.
+    if (end == HistoryPass::Damaged && loaded + 1 == count) return;
+    g_historyWritable = false;  // Never save over the part an unload or a failed read stopped at.
+    if (end == HistoryPass::Damaged) SetHistoryStatus(HistoryJournalError::DamagedRecord);
+    else if (end == HistoryPass::Failed) SetHistoryStatus(HistoryJournalError::ReadFailed);
 }
 
-// Atomically replaces the journal with `samples`, except those of `skippedAccount` (0: none):
-// written to a new staging file, then moved over it.
-static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint64_t skippedAccount = 0) {
-    if (g_historyPath.empty() || !g_historyOwnership) return false;
-    std::wstring temporary;
-    winrt::file_handle file = CreateUserStagingFile(g_historyPath, temporary);
-    if (!file) {
-        SetHistoryStatus(HistoryJournalError::CannotWrite);
-        g_historyWriteRetryMs = NowUnixMs() + 3600000;
-        return false;
-    }
-    HistoryFileHeader header;
-    DWORD written = 0;
-    bool ok = WriteFile(file.get(), &header, sizeof(header), &written, nullptr) &&
-              written == sizeof(header);
-    std::array<HistorySample, 256> batch;
-    auto it = samples.begin();
-    while (ok && it != samples.end()) {
-        size_t n = 0;
-        for (; n < batch.size() && it != samples.end(); ++it) {
-            if (!skippedAccount || it->accountId != skippedAccount) batch[n++] = *it;
+// Saves the pending records after the committed ones: the journal opened as a plain file (created
+// with its header when it has none yet), its header checked and its length holding every committed
+// record (otherwise nothing is written: never a hole), whatever follows them cut off (a torn record
+// or an earlier attempt's part), then the records, flushed when `recovering` or cutting. Once all
+// are written they are committed (their storage released), and those then older than the cache
+// leave it. Otherwise they stay pending and the write is retried after an hour; unload stops it
+// between chunks, reporting nothing.
+static bool WriteHistoryPendingLocked(bool recovering) {
+    if (g_historyPending.empty()) return true;
+    LARGE_INTEGER end{};
+    end.QuadPart = g_historyHeaderValid ?
+        LONGLONG(sizeof(HistoryFileHeader) + g_historyCommittedRecords * sizeof(HistorySample)) : 0;
+    winrt::file_handle file = OpenUserStorageFile(g_historyPath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
+                                                  g_historyHeaderValid ? OPEN_EXISTING : OPEN_ALWAYS);
+    LARGE_INTEGER size{};
+    bool ok = file && GetFileSizeEx(file.get(), &size);
+    if (ok && g_historyHeaderValid) {
+        HistoryFileHeader header;
+        DWORD read = 0;
+        if (size.QuadPart < end.QuadPart || !ReadFile(file.get(), &header, sizeof(header), &read, nullptr) ||
+            read != sizeof(header) || !HistoryHeaderValid(header)) {
+            Wh_Log(L"The history journal on disk isn't the one loaded; not saving to it");
+            SetHistoryStatus(HistoryJournalError::CannotWrite);
+            g_historyWriteRetryMs = NowUnixMs() + 3600000;
+            return false;
         }
-        DWORD bytes = (DWORD)(n * sizeof(HistorySample));
-        ok = WriteFile(file.get(), batch.data(), bytes, &written, nullptr) && written == bytes;
     }
-    ok = ok && FlushFileBuffers(file.get());
-    file.close();
-    if (ok) {
-        ok = MoveFileExW(temporary.c_str(), g_historyPath.c_str(),
-                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (ok && size.QuadPart != end.QuadPart) {
+        recovering = true;
+        ok = SetFilePointerEx(file.get(), end, nullptr, FILE_BEGIN) && SetEndOfFile(file.get());
     }
+    ok = ok && SetFilePointerEx(file.get(), end, nullptr, FILE_BEGIN);
+    DWORD written = 0;
+    if (ok && !g_historyHeaderValid) {
+        HistoryFileHeader header;
+        ok = WriteFile(file.get(), &header, sizeof(header), &written, nullptr) && written == sizeof(header);
+        g_historyHeaderValid = ok;
+    }
+    for (size_t i = 0; ok && i < g_historyPending.size(); i += kHistoryChunkRecords) {
+        if (g_unloading) return false;
+        DWORD bytes = DWORD(std::min(kHistoryChunkRecords, g_historyPending.size() - i) * sizeof(HistorySample));
+        ok = WriteFile(file.get(), g_historyPending.data() + i, bytes, &written, nullptr) && written == bytes;
+    }
+    ok = ok && (!recovering || FlushFileBuffers(file.get()));
     if (!ok) {
-        DeleteFileW(temporary.c_str());
-        SetHistoryStatus(HistoryJournalError::WriteFailed);
+        SetHistoryStatus(HistoryJournalError::NotSaved);
         g_historyWriteRetryMs = NowUnixMs() + 3600000;
         return false;
     }
-    g_historyDirty = false;
+    // The pending records are the cache's last ones.
+    auto saved = g_historySamples.end() - ptrdiff_t(g_historyPending.size());
+    g_historyCommittedRecords += g_historyPending.size();
+    std::vector<HistorySample>().swap(g_historyPending);
     g_historyWriteRetryMs = 0;
     SetHistoryStatus({});
+    auto kept = std::remove_if(saved, g_historySamples.end(),
+                               [](const HistorySample& sample) { return sample.timeMs < g_historyCacheFrom; });
+    if (kept != g_historySamples.end()) {
+        g_historySamples.erase(kept, g_historySamples.end());
+        ++g_historyRevision;
+    }
     return true;
 }
 
+// A rewrite transaction's last step: the journal's records in order (the committed ones through
+// `source`, none when it is empty, then the pending ones), each that `keep` keeps (as it may change
+// it), are written to a new staging file, which replaces the journal (`source` closed first). Then
+// the cache (from g_historyCacheFrom), summary and count built meanwhile take over, with every
+// record committed (the pending records' storage released). False, the journal as it was:
+// damage, any read, write, flush or move failure, running out of memory or unload up to the move;
+// the status says why.
+static bool ReplaceHistoryLocked(winrt::file_handle& source, auto&& keep) {
+    if (g_historyPath.empty() || !g_historyOwnership) return false;
+    std::wstring staging;
+    winrt::file_handle out;
+    HistoryPass end = HistoryPass::Failed;
+    HistoryJournalError failure = HistoryJournalError::WriteFailed;
+    try {
+        out = CreateUserStagingFile(g_historyPath, staging);
+        if (!out) failure = HistoryJournalError::CannotWrite;
+        std::deque<HistorySample> cache;
+        HistoryJournalSummary summary;
+        uint64_t records = 0;
+        std::vector<HistorySample> buffer;
+        buffer.reserve(kHistoryChunkRecords);
+        HistoryFileHeader header;
+        DWORD written = 0;
+        bool ok = out && WriteFile(out.get(), &header, sizeof(header), &written, nullptr) && written == sizeof(header);
+        auto flush = [&] {
+            DWORD bytes = DWORD(buffer.size() * sizeof(HistorySample));
+            ok = ok && (buffer.empty() || (WriteFile(out.get(), buffer.data(), bytes, &written, nullptr) &&
+                                           written == bytes));
+            buffer.clear();
+            return ok;
+        };
+        if (ok) {
+            end = EachHistoryRecordLocked(source, [&](const HistorySample& record) {
+                HistorySample sample = record;
+                if (!keep(sample)) return true;
+                summary.Add(sample);
+                if (sample.timeMs >= g_historyCacheFrom) cache.push_back(sample);
+                ++records;
+                buffer.push_back(sample);
+                return buffer.size() < kHistoryChunkRecords || flush();
+            });
+        }
+        ok = ok && end == HistoryPass::Done && flush() && FlushFileBuffers(out.get());
+        out.close();
+        source.close();
+        if (ok && g_unloading) {
+            ok = false;
+            end = HistoryPass::Cancelled;
+        }
+        if (ok &&
+            MoveFileExW(staging.c_str(), g_historyPath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            g_historySamples.swap(cache);
+            g_historySummary = std::move(summary);
+            g_historyCommittedRecords = records;
+            std::vector<HistorySample>().swap(g_historyPending);
+            g_historyHeaderValid = true;
+            ++g_historyRevision;
+            g_historyWriteRetryMs = 0;
+            SetHistoryStatus({});
+            return true;
+        }
+        if (end == HistoryPass::Done) end = HistoryPass::Failed;
+    } catch (...) {
+        end = HistoryPass::Failed;
+    }
+    out.close();
+    source.close();
+    if (!staging.empty()) DeleteFileW(staging.c_str());
+    HistoryPassFailedLocked(end, failure);
+    return false;
+}
+
+// Drops the committed records the cache no longer needs: those before both the hot window and the
+// pinned range. Pending records stay; the clock alone never moves the cache's start back.
+static void TrimHistoryCacheLocked(ULONGLONG now) {
+    if (!g_historyLoaded) return;
+    ULONGLONG from = std::max(g_historyCacheFrom, std::min(HistoryHotStart(now), g_historyPinMs));
+    auto committed = g_historySamples.begin() + ptrdiff_t(g_historySamples.size() - g_historyPending.size());
+    auto kept = std::remove_if(g_historySamples.begin(), committed,
+                               [from](const HistorySample& sample) { return sample.timeMs < from; });
+    g_historyCacheFrom = from;
+    if (kept == committed) return;
+    g_historySamples.erase(kept, committed);
+    ++g_historyRevision;
+}
+
 // At most hourly: prunes samples older than the published retention and, for a number of days,
-// beyond the size cap, thins older Antigravity readings (ThinHistorySamples: at the first
-// maintenance after a load, then daily), then saves an unsaved journal.
+// beyond the size cap, thins older Antigravity readings (at the first maintenance after a load,
+// then daily), saves pending records and trims the cache. Its rewrite is one transaction over one
+// source, nothing changed unless it all succeeds: with the cap, a first pass counts what the
+// retention keeps; with thinning due, a pass feeds what both keep to the thinning machine; then,
+// when any of them drops or changes a record, the journal is rewritten with what all three keep.
 static ULONGLONG MaintainHistory(bool create = false) {
     try {
         std::lock_guard lock(g_historyMutex);
@@ -15242,34 +15712,74 @@ static ULONGLONG MaintainHistory(bool create = false) {
             return g_historyMaintenanceMs + kHistoryMaintenanceIntervalMs;
         }
         g_historyMaintenanceMs = now;
-        int retentionDays = g_historyRetentionDays.load();
-        ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
-        auto previousSize = g_historySamples.size();
-        std::erase_if(g_historySamples, [cutoff](const auto& sample) {
-            return sample.timeMs < cutoff;
-        });
-        if (retentionDays > 0 && g_historySamples.size() > kHistoryMaxSamples) {
-            g_historySamples.erase(g_historySamples.begin(), g_historySamples.end() - kHistoryMaxSamples);
-            g_historyCapped = true;
-        }
-        if (g_historySamples.size() != previousSize) {
-            g_historyDirty = true;
-            ++g_historyRevision;
-        }
-        // Built aside and swapped in: running out of memory leaves the journal as it was. Only a
-        // whole, saveable journal is thinned.
-        if (g_historyLoaded && g_historyWritable && !g_unloading &&
-            (!g_historyThinnedMs || now >= g_historyThinnedMs + kHistoryDayMs)) {
-            g_historyThinnedMs = now;
-            if (auto thinned = ThinHistorySamples(g_historySamples, now)) {
-                g_historySamples.swap(*thinned);
-                g_historyDirty = true;
-                ++g_historyRevision;
+        // A transaction that runs out of memory changes nothing; the trim still runs.
+        try {
+            if (g_historyLoaded && g_historyWritable && !g_unloading && now >= g_historyWriteRetryMs) {
+                int retentionDays = g_historyRetentionDays.load();
+                ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
+                bool pruning = g_historySummary.oldestMs < cutoff;
+                bool capping = retentionDays > 0 && g_historySummary.records > kHistoryMaxSamples;
+                bool thinning = !g_historyThinnedMs || now >= g_historyThinnedMs + kHistoryDayMs;
+                if (thinning && !g_historySummary.antigravity) {
+                    g_historyThinnedMs = now;
+                    thinning = false;
+                }
+                if (pruning || capping || thinning) {
+                    winrt::file_handle source;
+                    HistoryPass end = OpenHistorySourceLocked(source);
+                    // The oldest records the cap drops of those the retention keeps.
+                    uint64_t evicted = 0;
+                    if (end == HistoryPass::Done && capping) {
+                        uint64_t retained = 0;
+                        end = EachHistoryRecordLocked(source, [&](const HistorySample& sample) {
+                            retained += sample.timeMs >= cutoff;
+                            return true;
+                        });
+                        evicted = retained > kHistoryMaxSamples ? retained - kHistoryMaxSamples : 0;
+                    }
+                    auto kept = [cutoff, evicted, seen = uint64_t(0)](const HistorySample& sample) mutable {
+                        return sample.timeMs >= cutoff && ++seen > evicted;
+                    };
+                    std::optional<HistoryThinning> thinner;
+                    if (end == HistoryPass::Done && thinning) {
+                        thinner.emplace(now);
+                        auto keeps = kept;
+                        end = EachHistoryRecordLocked(source, [&](const HistorySample& sample) {
+                            if (keeps(sample) && thinner->Eligible(sample)) thinner->Feed(sample);
+                            return true;
+                        });
+                    }
+                    bool thins = thinner && thinner->changed;
+                    if (end != HistoryPass::Done) {
+                        HistoryPassFailedLocked(end, HistoryJournalError::WriteFailed);
+                    } else if (pruning || evicted || thins) {
+                        size_t ordinal = 0;
+                        if (ReplaceHistoryLocked(source, [&, kept](HistorySample& sample) mutable {
+                                if (!kept(sample)) return false;
+                                if (!thins || !thinner->Eligible(sample)) return true;
+                                HistoryThinFate fate = thinner->fates[ordinal++];
+                                if (fate == HistoryThinFate::Widened) {
+                                    sample.intervalMs = kHistoryThinSpacingMs;
+                                    sample.checksum = HistoryChecksum(sample);
+                                }
+                                return fate != HistoryThinFate::Dropped;
+                            })) {
+                            g_historyCapped = g_historyCapped || evicted;
+                            if (thinning) g_historyThinnedMs = now;
+                        }
+                    } else {
+                        if (thinning) g_historyThinnedMs = now;
+                        source.close();
+                        WriteHistoryPendingLocked(true);
+                    }
+                } else {
+                    WriteHistoryPendingLocked(true);
+                }
             }
+        } catch (...) {
+            Wh_Log(L"History maintenance failed");
         }
-        if (g_historyDirty && g_historyWritable && !g_unloading && now >= g_historyWriteRetryMs) {
-            RewriteHistoryLocked(g_historySamples);
-        }
+        TrimHistoryCacheLocked(now);
         return now + kHistoryMaintenanceIntervalMs;
     } catch (...) {
         Wh_Log(L"History maintenance failed");
@@ -15277,6 +15787,10 @@ static ULONGLONG MaintainHistory(bool create = false) {
     }
 }
 
+// Admits a poll round's samples by the journal's summary (never before the last record's time, one
+// failed marker per outage), all or none: they join the cache and the pending records, then are
+// written. Past the size cap (a number of days kept) the oldest records go in a rewrite that also
+// saves them; while an earlier failure waits for its retry they stay pending, in memory.
 static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t epoch, ULONGLONG generation) {
     if (samples.empty() || g_unloading) return;
     try {
@@ -15290,18 +15804,16 @@ static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t ep
         int retentionDays = g_historyRetentionDays.load();
         ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
         std::vector<HistorySample> admitted;
+        HistoryJournalSummary summary = g_historySummary;
         for (auto sample : samples) {
-            if (sample.timeMs < cutoff ||
-                (!g_historySamples.empty() && sample.timeMs < g_historySamples.back().timeMs)) {
+            if (sample.timeMs < cutoff || (summary.records && sample.timeMs < summary.lastMs)) {
                 continue;  // Never turn a backwards system-clock adjustment into negative time.
             }
             if (sample.failed) {
-                auto previous = std::find_if(g_historySamples.rbegin(), g_historySamples.rend(),
-                    [&](const HistorySample& entry) { return entry.accountId == sample.accountId; });
                 // One marker breaks continuity for an entire outage; failed retries add
                 // no measurements and must not fill the journal with an unchanged error.
-                if (previous != g_historySamples.rend() && previous->failed &&
-                    previous->session == sample.session) continue;
+                const HistoryAccountSummary* previous = summary.Find(sample.accountId);
+                if (previous && previous->last.failed && previous->last.session == sample.session) continue;
             }
             for (auto& meter : sample.meters) {
                 if (!std::isfinite(meter.value) || meter.value < 0 || meter.value > 1e12) {
@@ -15313,81 +15825,137 @@ static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t ep
                 if (meter.durationMs > kHistoryMaxWindowMs) meter.durationMs = 0;
             }
             sample.checksum = HistoryChecksum(sample);
-            g_historySamples.push_back(sample);
-            ++g_historyAppendCount;
+            summary.Add(sample);
             admitted.push_back(sample);
         }
         if (admitted.empty()) return;
-        if (retentionDays > 0 && g_historySamples.size() > kHistoryMaxSamples) {
-            // Amortize compaction instead of rewriting a full journal every new sample.
-            while (g_historySamples.size() > kHistoryMaxSamples * 9 / 10) {
-                g_historySamples.pop_front();
-            }
-            ++g_historyRevision;
-            g_historyDirty = g_historyCapped = true;
+        // Every allocation first: out of memory admits nothing.
+        const bool retrying = !g_historyPending.empty();
+        if (size_t needed = g_historyPending.size() + admitted.size(); needed > g_historyPending.capacity()) {
+            g_historyPending.reserve(std::max(needed, 2 * g_historyPending.capacity()));
         }
-        if (g_historyDirty) {
-            if (now >= g_historyWriteRetryMs) RewriteHistoryLocked(g_historySamples);
+        size_t cached = 0;
+        try {
+            for (const auto& sample : admitted) {
+                g_historySamples.push_back(sample);
+                ++cached;
+            }
+        } catch (...) {
+            while (cached--) g_historySamples.pop_back();
+            throw;
+        }
+        g_historyPending.insert(g_historyPending.end(), admitted.begin(), admitted.end());
+        g_historySummary = std::move(summary);
+        g_historyAppendCount += admitted.size();
+        if (retentionDays > 0 && g_historySummary.records > kHistoryMaxSamples && now >= g_historyWriteRetryMs) {
+            // Amortize compaction instead of rewriting a full journal every new sample.
+            winrt::file_handle source;
+            HistoryPass end = OpenHistorySourceLocked(source);
+            uint64_t evicted = g_historySummary.records - kHistoryMaxSamples * 9 / 10;
+            if (end != HistoryPass::Done) {
+                HistoryPassFailedLocked(end, HistoryJournalError::NotSaved);
+            } else if (ReplaceHistoryLocked(source, [evicted, seen = uint64_t(0)](HistorySample&) mutable {
+                           return ++seen > evicted;
+                       })) {
+                g_historyCapped = true;
+            }
             return;
         }
-        winrt::file_handle file = OpenUserStorageFile(g_historyPath, FILE_APPEND_DATA, FILE_SHARE_READ, OPEN_ALWAYS);
-        LARGE_INTEGER size{};
-        DWORD written = 0;
-        bool ok = file && GetFileSizeEx(file.get(), &size);
-        if (ok && size.QuadPart == 0) {
-            HistoryFileHeader header;
-            ok = WriteFile(file.get(), &header, sizeof(header), &written, nullptr) &&
-                 written == sizeof(header);
-        }
-        DWORD bytes = (DWORD)(admitted.size() * sizeof(HistorySample));
-        if (ok) ok = WriteFile(file.get(), admitted.data(), bytes, &written, nullptr) && written == bytes;
-        if (!ok) {
-            // Retain admitted samples in memory; next append repairs a possible torn tail.
-            g_historyDirty = true;
-            g_historyWriteRetryMs = now + 3600000;
-            SetHistoryStatus(HistoryJournalError::NotSaved);
-        } else {
-            SetHistoryStatus({});
-        }
+        if (!retrying || now >= g_historyWriteRetryMs) WriteHistoryPendingLocked(retrying);
     } catch (...) {
         Wh_Log(L"History append failed");
     }
 }
 
-// Loads the journal if it isn't (read-only), then its samples from `fromMs` on with the status,
-// cap and stamp of that state.
+// History window -------------------------------------------------------------------------------
+
+// The history window's explicit load: loads the journal if it isn't (read-only), pins its range at
+// `fromMs` (the cache keeps it while the window is open) and widens the cache back to it from the
+// file, or trims what a narrower range no longer needs, then its samples from `fromMs` on with the
+// status, cap and stamp of that state. Records that couldn't be read leave the snapshot starting
+// later (`from`) with a read failure's status.
 static HistorySnapshot ReadHistorySnapshot(ULONGLONG fromMs) {
     std::lock_guard lock(g_historyMutex);
+    g_historyPinMs = fromMs;
     LoadHistoryLocked();
     HistorySnapshot snapshot;
-    snapshot.status = g_historyStatus;
+    snapshot.from = fromMs;
+    bool unread = false;
+    if (g_historyLoaded && fromMs < g_historyCacheFrom) {
+        std::vector<HistorySample> older;
+        HistoryPass end = ReadHistoryRangeLocked(fromMs, [&](const HistorySample& sample) { older.push_back(sample); });
+        if (end == HistoryPass::Done) {
+            try {
+                g_historySamples.insert(g_historySamples.begin(), older.begin(), older.end());
+                g_historyCacheFrom = fromMs;
+            } catch (...) {
+                end = HistoryPass::Failed;
+            }
+        }
+        if (end != HistoryPass::Done) {
+            snapshot.from = g_historyCacheFrom;
+            unread = true;
+        }
+    }
+    TrimHistoryCacheLocked(NowUnixMs());
+    snapshot.status = unread && g_historyStatus == HistoryJournalError::None ? HistoryJournalError::ReadFailed :
+                                                                               g_historyStatus;
     snapshot.capped = g_historyCapped;
     snapshot.stamp = {g_historyLoaded, g_historyEpoch.load(), g_historyRevision, g_historyAppendCount};
     for (const auto& sample : g_historySamples) {
-        if (sample.timeMs >= fromMs) snapshot.samples.push_back(sample);
+        if (sample.timeMs >= snapshot.from) snapshot.samples.push_back(sample);
     }
     return snapshot;
 }
 
-// The history window's refresh: memory only, never loading, creating or retrying storage. In one
-// hold: the stamp, status and cap, and, when `samples` asks for them, the journal is loaded and it
-// differs from a snapshot held with `held` from `heldFrom` (another stamp, or `fromMs` further
-// back), a replacement: every sample from `fromMs` on, possibly none.
+// The history window's refresh: memory only, never loading, creating, retrying or reading
+// storage. In one hold: the stamp, status and cap, and, when `samples` asks for them and the
+// journal is loaded:
+// - from `fromMs` within the cache, when it differs from a snapshot held with `held` from
+//   `heldFrom` (another stamp, or `fromMs` further back): a replacement, every sample from `fromMs`
+//   on (possibly none), and the pin moves there, trimming what memory no longer needs (the stamp
+//   returned is the one after it, which the replacement matches);
+// - from earlier: incomplete. The held range (from `heldFrom`, or the cache's start if later) is
+//   replaced when the stamp changed or memory no longer reaches back to it; the pin stays.
 static HistoryPeek PeekHistorySnapshot(ULONGLONG fromMs, bool samples, const HistoryJournalStamp& held,
                                        ULONGLONG heldFrom) {
     std::lock_guard lock(g_historyMutex);
+    auto stamp = [] {
+        return HistoryJournalStamp{g_historyLoaded, g_historyEpoch.load(), g_historyRevision, g_historyAppendCount};
+    };
     HistoryPeek peek;
-    peek.stamp = {g_historyLoaded, g_historyEpoch.load(), g_historyRevision, g_historyAppendCount};
+    peek.stamp = stamp();
     peek.status = g_historyStatus;
     peek.capped = g_historyCapped;
-    if (samples && g_historyLoaded && (peek.stamp != held || fromMs < heldFrom)) {
+    if (!samples || !g_historyLoaded) return peek;
+    peek.incomplete = fromMs < g_historyCacheFrom;
+    peek.from = peek.incomplete ? std::max(heldFrom, g_historyCacheFrom) : fromMs;
+    if (peek.incomplete ? peek.stamp != held || peek.from != heldFrom : peek.stamp != held || fromMs < heldFrom) {
         std::vector<HistorySample>& replacement = peek.samples.emplace();
         for (const auto& sample : g_historySamples) {
-            if (sample.timeMs >= fromMs) replacement.push_back(sample);
+            if (sample.timeMs >= peek.from) replacement.push_back(sample);
+        }
+        if (!peek.incomplete) {
+            g_historyPinMs = fromMs;
+            TrimHistoryCacheLocked(NowUnixMs());
+            peek.stamp = stamp();
         }
     }
     return peek;
 }
+
+// The history window's thread ends (every exit): its range no longer holds records in memory.
+static void ReleaseHistoryPin() {
+    try {
+        std::lock_guard lock(g_historyMutex);
+        g_historyPinMs = ULLONG_MAX;
+        TrimHistoryCacheLocked(NowUnixMs());
+    } catch (...) {
+        Wh_Log(L"Could not release the history window's range");
+    }
+}
+
+// Clear and deletion ----------------------------------------------------------------------------
 
 static bool ClearHistory(HistoryJournalError* error) {
     std::lock_guard lock(g_historyMutex);
@@ -15403,41 +15971,35 @@ static bool ClearHistory(HistoryJournalError* error) {
         if (error) *error = HistoryJournalError::InUse;
         return false;
     }
-    if ((!g_historyLoaded && !g_historyWritable) || !RewriteHistoryLocked({})) {
+    winrt::file_handle nothing;  // Reads no committed record: none is kept.
+    if ((!g_historyLoaded && !g_historyWritable) ||
+        !ReplaceHistoryLocked(nothing, [](HistorySample&) { return false; })) {
         if (error) {
             *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
         }
         return false;
     }
-    g_historySamples.clear();
     g_historyWritable = true;
     g_historyCapped = false;
     return true;
 }
 
 // Whether the journal may hold samples of a history ID, from memory only (never loading,
-// creating or retrying storage): unless it is loaded, readable whole and saved, it may.
+// creating or retrying storage): its summary, and unless it is loaded, readable whole and saved,
+// it may.
 static bool HistoryMayHaveSamples(uint64_t historyId) {
     std::lock_guard lock(g_historyMutex);
-    return !g_historyLoaded || !g_historyWritable || g_historyDirty ||
-           std::any_of(g_historySamples.begin(), g_historySamples.end(),
-                       [&](const HistorySample& sample) { return sample.accountId == historyId; });
+    const HistoryAccountSummary* account = g_historySummary.Find(historyId);
+    return !g_historyLoaded || !g_historyWritable || !g_historyPending.empty() || (account && account->records);
 }
 
-// The memory half of deleting an account's history, once the journal was rewritten without its
-// samples: they go, and the revision tells incremental readers. Caller holds g_historyMutex.
-static void EraseHistorySamplesLocked(uint64_t historyId) {
-    if (std::erase_if(g_historySamples, [&](const HistorySample& sample) { return sample.accountId == historyId; })) {
-        ++g_historyRevision;
-    }
-}
-
-// Deletes a removed account's samples: the journal rewritten without them, then memory, then the
-// windows told. Remove the account first: its settings publication fences out batches still
-// carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
-// journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
-// with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
-// then saves) is rewritten even without the account's samples. Holds only the history lock.
+// Deletes a removed account's samples: the journal rewritten without them (the cache and summary
+// with it, the revision telling incremental readers), then the windows told. Remove the account
+// first: its settings publication fences out batches still carrying its samples and drops its
+// burn-up curves. Nothing ever recorded is a success; a journal that couldn't be read (damaged,
+// unreadable, in use by another session) stays as it is, with `error` saying why. One with pending
+// records is rewritten, saving them, even without the account's samples. Holds only the history
+// lock.
 static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error) {
     {
         std::lock_guard lock(g_historyMutex);
@@ -15445,8 +16007,8 @@ static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error)
         if (!g_historyLoaded && g_historyWritable && !g_historyOwnership && !g_historyPath.empty()) {
             return true;
         }
-        bool present = std::any_of(g_historySamples.begin(), g_historySamples.end(),
-                                   [&](const HistorySample& sample) { return sample.accountId == historyId; });
+        const HistoryAccountSummary* account = g_historySummary.Find(historyId);
+        bool present = account && account->records;
         // An unload can stop a load part-way: never rewrite what it left. An old copy of the moved
         // journal that can't be deleted yet keeps it too.
         if (!SettleLegacyHistoryLocked()) {
@@ -15454,14 +16016,18 @@ static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error)
             return false;
         }
         bool kept = !g_historyLoaded || !g_historyWritable || g_unloading;
-        if (!kept && !present && !g_historyDirty) return true;
-        if (kept || !RewriteHistoryLocked(g_historySamples, historyId)) {
+        if (!kept && !present && g_historyPending.empty()) return true;
+        winrt::file_handle source;
+        HistoryPass opened = kept ? HistoryPass::Cancelled : OpenHistorySourceLocked(source);
+        HistoryPassFailedLocked(opened, HistoryJournalError::WriteFailed);
+        if (opened != HistoryPass::Done ||
+            !ReplaceHistoryLocked(source,
+                                  [historyId](HistorySample& sample) { return sample.accountId != historyId; })) {
             if (error) {
                 *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
             }
             return false;
         }
-        EraseHistorySamplesLocked(historyId);
         if (!present) return true;
     }
     NotifySettingsWindowChanged();
@@ -15494,172 +16060,6 @@ static bool WriteHistoryConsent(bool enabled) {
     if (sid.empty()) return false;
     UserPreferencesLock lock(sid);
     return lock.held && Wh_SetIntValue((kConsentValuePrefix + sid).c_str(), enabled ? 1 : 0);
-}
-
-// src/history/continuity.h
-// Reading continuity rules shared by the history window and the flyout's burn-up curves.
-
-// Reset endpoints jitter by up to this much between readings of one window.
-static constexpr ULONGLONG kHistoryResetToleranceMs = 120000;
-
-static bool HistoryHasValue(const HistorySample& sample, int meter) {
-    return !sample.failed && sample.meters[meter].value != -1 &&
-           std::isfinite(sample.meters[meter].value);
-}
-
-enum class HistoryBreak { None, Gap, Reset, Unavailable };
-
-// Whether two valid readings of a meter, b later than a, belong to one quota window,
-// regardless of how they were sampled.
-static HistoryBreak HistoryWindowConnection(const HistorySample& a, const HistorySample& b,
-                                            int meter) {
-    ULONGLONG gap = b.timeMs - a.timeMs;
-    const auto& av = a.meters[meter];
-    const auto& bv = b.meters[meter];
-    if (av.durationMs != bv.durationMs) return HistoryBreak::Reset;
-    if (!!av.resetMs != !!bv.resetMs) return HistoryBreak::Reset;
-    if (av.resetMs) {
-        // Reset endpoints can jitter. Never require exact equality; reject a boundary
-        // within two minutes of this interval or a material shift of the reset epoch.
-        constexpr ULONGLONG tolerance = kHistoryResetToleranceMs;
-        ULONGLONG shift = av.resetMs > bv.resetMs ? av.resetMs - bv.resetMs : bv.resetMs - av.resetMs;
-        ULONGLONG lower = a.timeMs > tolerance ? a.timeMs - tolerance : 0;
-        ULONGLONG upper = b.timeMs > ULLONG_MAX - tolerance ? ULLONG_MAX : b.timeMs + tolerance;
-        if ((av.resetMs >= lower && av.resetMs <= upper) ||
-            (bv.resetMs >= lower && bv.resetMs <= upper)) return HistoryBreak::Reset;
-        if (shift > tolerance) {
-            // OpenAI's unused windows and OpenCode Go's unused 5-hour window roll a full duration
-            // ahead until first use anchors them. This is not a reset: the old deadline is still
-            // beyond this sampled interval. Keep real boundaries, other providers and lanes,
-            // backward shifts, and partial windows conservative.
-            if ((a.provider == 2 || (a.provider == 5 && meter == 0)) && av.value == 0 &&
-                bv.value >= 0 && av.durationMs &&
-                av.resetMs > upper && bv.resetMs > upper && bv.resetMs > av.resetMs &&
-                (shift <= gap || shift - gap <= tolerance)) {
-                ULONGLONG remaining = av.resetMs - a.timeMs;
-                ULONGLONG error = remaining > av.durationMs ? remaining - av.durationMs : av.durationMs - remaining;
-                if (error <= tolerance) return HistoryBreak::None;
-            }
-            return HistoryBreak::Reset;
-        }
-    }
-    return HistoryBreak::None;
-}
-
-// Whether readings a and b, b later, lie apart in polling: another account, provider or session,
-// out of order, or more than two of their longer interval apart.
-static bool HistoryPollingGap(const HistorySample& a, const HistorySample& b) {
-    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
-        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
-        return true;
-    ULONGLONG gap = b.timeMs - a.timeMs;
-    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
-    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
-    return gap / 2 + gap % 2 > polling;
-}
-
-// Shared by rendering and integration: no extrapolation, including at range boundaries.
-static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySample& b,
-                                      int meter) {
-    if (!HistoryHasValue(a, meter) || !HistoryHasValue(b, meter))
-        return HistoryBreak::Unavailable;
-    if (HistoryPollingGap(a, b)) return HistoryBreak::Gap;
-    return HistoryWindowConnection(a, b, meter);
-}
-
-// src/history/thinning.h
-// Thinning of older Antigravity readings: it is polled every minute whatever the poll setting, so
-// its readings older than kHistoryThinAgeMs are kept about kHistoryThinSpacingMs apart (a thinned
-// reading stores that as its interval), with every line the history window draws through them
-// still connected, and every break still a break. Pure.
-
-static constexpr ULONGLONG kHistoryThinAgeMs = 15 * kHistoryDayMs;
-static constexpr ULONGLONG kHistoryThinSpacingMs = 600000;
-
-// The journal with each Antigravity account's readings older than kHistoryThinAgeMs at `nowMs`
-// thinned, every other sample as it was, all in their order; nullopt when nothing changes. Per
-// account, over all those readings (thinned ones included), with their stored intervals:
-// - Kept: the first and the last, failed ones, and both readings of each break between
-//   consecutive ones: a polling gap (HistoryPollingGap), a meter gaining or losing its value, the
-//   failed flag changing, or a reset (HistoryWindowConnection) of a meter valued in both.
-// - Any other is dropped only when it comes less than kHistoryThinSpacingMs after the last kept
-//   reading and, on every meter its readings connect from that one to the next, the last kept one
-//   (at its interval once widened) connects straight to the next (at its stored interval).
-// - Kept readings are widened to kHistoryThinSpacingMs, their checksum recomputed, except the last,
-//   failed ones and those beside a polling gap.
-static std::optional<std::deque<HistorySample>> ThinHistorySamples(const std::deque<HistorySample>& samples,
-                                                                   ULONGLONG nowMs) {
-    const ULONGLONG cutoff = nowMs > kHistoryThinAgeMs ? nowMs - kHistoryThinAgeMs : 0;
-    std::map<uint64_t, std::vector<size_t>> runs;  // Each account's readings to thin, by index
-    for (size_t i = 0; i < samples.size(); ++i) {
-        if (samples[i].provider == 3 && samples[i].timeMs < cutoff) runs[samples[i].accountId].push_back(i);
-    }
-    enum class Fate : uint8_t { Kept, Dropped, Widened };
-    std::vector<Fate> fates(samples.size());
-    bool changed = false;
-    for (const auto& [account, run] : runs) {
-        const size_t n = run.size();
-        auto at = [&](size_t k) -> const HistorySample& { return samples[run[k]]; };
-        // Between readings k - 1 and k: a polling gap, or any break.
-        std::vector<bool> gap(n + 1), split(n + 1);
-        for (size_t k = 1; k < n; ++k) {
-            const HistorySample& a = at(k - 1);
-            const HistorySample& b = at(k);
-            gap[k] = HistoryPollingGap(a, b);
-            split[k] = gap[k] || a.failed != b.failed;
-            for (int m = 0; m < int(kHistoryMeterCount) && !split[k]; ++m) {
-                bool valued = HistoryHasValue(a, m);
-                split[k] = valued != HistoryHasValue(b, m) ||
-                           (valued && HistoryWindowConnection(a, b, m) == HistoryBreak::Reset);
-            }
-        }
-        auto widens = [&](size_t k) { return k + 1 < n && !gap[k] && !gap[k + 1] && !at(k).failed; };
-        size_t last = 0;
-        // Per meter: whether the readings connect from the last kept one to the current one.
-        std::array<bool, kHistoryMeterCount> chain;
-        chain.fill(true);
-        for (size_t k = 1; k + 1 < n; ++k) {
-            const HistorySample& reading = at(k);
-            const HistorySample& next = at(k + 1);
-            for (int m = 0; m < int(kHistoryMeterCount); ++m) {
-                chain[m] = chain[m] && HistoryConnection(at(k - 1), reading, m) == HistoryBreak::None;
-            }
-            bool drop = !reading.failed && !split[k] && !split[k + 1] &&
-                        reading.timeMs < at(last).timeMs + kHistoryThinSpacingMs;
-            if (drop) {
-                HistorySample kept = at(last);
-                if (widens(last)) kept.intervalMs = std::max(kept.intervalMs, kHistoryThinSpacingMs);
-                for (int m = 0; m < int(kHistoryMeterCount) && drop; ++m) {
-                    drop = !chain[m] || HistoryConnection(reading, next, m) != HistoryBreak::None ||
-                           HistoryConnection(kept, next, m) == HistoryBreak::None;
-                }
-            }
-            if (drop) {
-                fates[run[k]] = Fate::Dropped;
-                changed = true;
-            } else {
-                last = k;
-                chain.fill(true);
-            }
-        }
-        for (size_t k = 0; k < n; ++k) {
-            if (fates[run[k]] == Fate::Kept && widens(k) && at(k).intervalMs < kHistoryThinSpacingMs) {
-                fates[run[k]] = Fate::Widened;
-                changed = true;
-            }
-        }
-    }
-    if (!changed) return std::nullopt;
-    std::deque<HistorySample> thinned;
-    for (size_t i = 0; i < samples.size(); ++i) {
-        if (fates[i] == Fate::Dropped) continue;
-        HistorySample& sample = thinned.emplace_back(samples[i]);
-        if (fates[i] == Fate::Widened) {
-            sample.intervalMs = kHistoryThinSpacingMs;
-            sample.checksum = HistoryChecksum(sample);
-        }
-    }
-    return thinned;
 }
 
 // src/history/burn-up.h
@@ -15724,15 +16124,24 @@ struct BurnUpSampleCache {
     std::vector<BurnUpAccountTail> accounts;
 };
 
-// Copy step, run under g_historyMutex with the journal's epoch, revision and append count. A
-// requested tail gets only the samples appended since the last copy; it is refilled from its
-// scan start when it is new or must reach further back, on `rescan`, or when the journal changed
-// other than by appends (Clear, load, cap eviction, retention pruning), which also drops
-// unrequested tails: they refill once requested again. Each requested tail is then trimmed to its
-// scan start.
-static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<HistorySample>& journal,
+// Reads the journal's samples older than its cache, from `from` on, from the file
+// (ReadHistoryRangeLocked): `use(sample)` for each in journal order; whether every one was read.
+using BurnUpArchiveReader =
+    std::function<bool(ULONGLONG from, const std::function<void(const HistorySample&)>& use)>;
+
+// Copy step, run under g_historyMutex with the journal's cache (`journal`: in journal order, every
+// sample from `cachedFrom` on), epoch, revision and append count. A requested tail gets only the
+// samples appended since the last copy; it is refilled from its scan start when it is new or must
+// reach further back, on `rescan`, or when the journal changed other than by appends (Clear, load,
+// rewrites, samples leaving the cache), which also drops unrequested tails: they refill once
+// requested again. A refill reaching back before the cache reads the older part through `older`
+// first, one pass for all; each refill is built aside and taken only whole, and one whose older
+// part couldn't be read drops its tail, refilled when next requested. Each requested tail is then
+// trimmed to its scan start.
+static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<HistorySample>& journal, ULONGLONG cachedFrom,
                               uint64_t epoch, uint64_t revision, uint64_t appended,
-                              const std::vector<BurnUpRequest>& requests, bool rescan) {
+                              const std::vector<BurnUpRequest>& requests, bool rescan,
+                              const BurnUpArchiveReader& older) {
     uint64_t added = appended - cache.appended;
     if (rescan || cache.epoch != epoch || cache.revision != revision ||
         appended < cache.appended || added > journal.size()) {
@@ -15746,34 +16155,49 @@ static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<History
         return std::find_if(cache.accounts.begin(), cache.accounts.end(),
                             [&](const BurnUpAccountTail& tail) { return tail.historyId == historyId; });
     };
-    std::vector<uint64_t> refill;
+    std::vector<BurnUpAccountTail> refills;
     ULONGLONG oldest = ULLONG_MAX;
     for (const auto& request : requests) {
         auto tail = tailOf(request.historyId);
         if (tail != cache.accounts.end() && request.from >= tail->from) continue;
-        if (tail == cache.accounts.end()) {
-            tail = cache.accounts.insert(cache.accounts.end(), BurnUpAccountTail{request.historyId});
-        }
-        tail->from = request.from;
-        tail->samples.clear();
-        refill.push_back(request.historyId);
+        BurnUpAccountTail& refill = refills.emplace_back();
+        refill.historyId = request.historyId;
+        refill.from = request.from;
         oldest = std::min(oldest, request.from);
     }
-    auto refilled = [&](uint64_t historyId) {
-        return std::find(refill.begin(), refill.end(), historyId) != refill.end();
+    auto refillOf = [&](uint64_t historyId) {
+        return std::find_if(refills.begin(), refills.end(),
+                            [&](const BurnUpAccountTail& refill) { return refill.historyId == historyId; });
     };
     for (size_t i = journal.size() - added; i < journal.size(); ++i) {
         auto tail = tailOf(journal[i].accountId);
-        if (tail != cache.accounts.end() && !refilled(tail->historyId)) tail->samples.push_back(journal[i]);
-    }
-    for (size_t i = journal.size(); i-- > 0 && journal[i].timeMs >= oldest && !g_unloading;) {
-        auto tail = tailOf(journal[i].accountId);
-        if (tail != cache.accounts.end() && refilled(tail->historyId) && journal[i].timeMs >= tail->from) {
-            tail->samples.push_front(journal[i]);
+        if (tail != cache.accounts.end() && refillOf(tail->historyId) == refills.end()) {
+            tail->samples.push_back(journal[i]);
         }
+    }
+    auto take = [&](const HistorySample& sample) {
+        auto refill = refillOf(sample.accountId);
+        if (refill != refills.end() && sample.timeMs >= refill->from) refill->samples.push_back(sample);
+    };
+    bool archived = oldest >= cachedFrom || older(oldest, take);
+    size_t first = journal.size();
+    while (first > 0 && journal[first - 1].timeMs >= oldest) --first;
+    for (size_t i = first; i < journal.size() && !g_unloading; ++i) take(journal[i]);
+    for (auto& refill : refills) {
+        auto tail = tailOf(refill.historyId);
+        if (g_unloading || (!archived && refill.from < cachedFrom)) {
+            if (tail != cache.accounts.end()) cache.accounts.erase(tail);
+            continue;
+        }
+        if (tail == cache.accounts.end()) {
+            tail = cache.accounts.insert(cache.accounts.end(), BurnUpAccountTail{refill.historyId});
+        }
+        tail->from = refill.from;
+        tail->samples = std::move(refill.samples);
     }
     for (const auto& request : requests) {
         auto tail = tailOf(request.historyId);
+        if (tail == cache.accounts.end()) continue;
         tail->from = request.from;
         while (!tail->samples.empty() && tail->samples.front().timeMs < tail->from) tail->samples.pop_front();
     }
@@ -15917,6 +16341,9 @@ static BurnUpStore g_burnUpCurves;
 static std::atomic<ULONGLONG> g_burnUpPolicyGeneration{0};
 // Asks the fetch thread to rebuild every recorded account from local history only.
 static std::atomic<bool> g_burnUpRebuildRequested{false};
+// The journal's memory holds every current window (with its reset tolerance) at the current
+// clock; only a stale window or a clock moved back reads its file.
+static_assert(kBurnUpMaxWindowMs + kHistoryResetToleranceMs < kHistoryHotWindowMs);
 
 // Drops published curves and requests a full local rebuild. Caller holds g_dataMutex, then
 // updates the UI and wakes the fetch thread once it holds no locks.
@@ -15927,10 +16354,10 @@ static void ResetBurnUpCurvesLocked() {
 
 // Fetch thread only, after AppendHistory while this shell records. Under g_historyMutex the
 // flagged recorded accounts' tails in `cache` copy only what was appended since the last round
-// (a full scan of their current windows after an invalidation or journal change; never loading
-// the journal). Curves are built outside the lock and published unless Clear or a policy change
-// superseded the copy or `policyGeneration`'s settings snapshot. Returns whether the store was
-// published.
+// (a full scan of their current windows after an invalidation or journal change, reading the
+// journal's file for a window reaching back before its memory; never loading the journal). Curves
+// are built outside the lock and published unless Clear or a policy change superseded the copy or
+// `policyGeneration`'s settings snapshot. Returns whether the store was published.
 static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<AccountConfig>& accounts,
                                 const std::vector<AccountData>& readings,
                                 const std::vector<bool>& rebuild, bool replaceAll,
@@ -15964,8 +16391,11 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
         {
             std::lock_guard lock(g_historyMutex);
             epoch = g_historyEpoch.load();
-            UpdateBurnUpTails(cache, g_historySamples, epoch, g_historyRevision,
-                              g_historyAppendCount, targets, replaceAll);
+            UpdateBurnUpTails(cache, g_historySamples, g_historyCacheFrom, epoch, g_historyRevision,
+                              g_historyAppendCount, targets, replaceAll,
+                              [](ULONGLONG from, const std::function<void(const HistorySample&)>& use) {
+                                  return ReadHistoryRangeLocked(from, use) == HistoryPass::Done;
+                              });
         }
         if (g_unloading) {
             cache = {};  // A refill may have stopped part-way.
@@ -36262,9 +36692,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
         spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
-                                                 L"keeps growing in Explorer's memory and on disk; Antigravity readings "
-                                                 L"older than 15 days are kept about 10 minutes apart. Day limits "
-                                                 L"prune hourly, with a cap of about 60 MB."))}};
+                                                 L"keeps growing on disk; Antigravity readings older than 15 days are "
+                                                 L"kept about 10 minutes apart. Day limits prune hourly, with a cap of "
+                                                 L"about 60 MB."))}};
         spec.enabled = s.historyEnabled;
         if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
@@ -40370,11 +40800,13 @@ struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
     // Prunes the journal to the published retention, then reads its samples from `from` on with
-    // their stamp; may initialize or retry the storage.
+    // their stamp (from later when older ones couldn't be read); may initialize or retry the
+    // storage and reads the journal's file. The window's range stays in the journal's memory.
     virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from) = 0;
-    // Memory only, never initializing or retrying the storage: the journal's stamp, status and
-    // cap, and, when `samples` asks, a replacement for a snapshot held with `held` from
-    // `heldFrom` (the journal loaded, and another stamp or `from` further back).
+    // Memory only, never initializing, retrying or reading the storage: the journal's stamp,
+    // status and cap, and, when `samples` asks, a replacement for a snapshot held with `held` from
+    // `heldFrom` (the journal loaded, and another stamp or `from` further back). Incomplete when
+    // memory doesn't reach back to `from`: the replacement (if any) keeps the held range.
     virtual HistoryPeek PeekSnapshot(ULONGLONG from, bool samples, const HistoryJournalStamp& held,
                                      ULONGLONG heldFrom) = 0;
     virtual HistorySettingsSnapshot ReadSettings() = 0;
@@ -40633,7 +41065,8 @@ struct HistoryController {
         HistorySortSamples(loaded->samples);
         HistoryJournalError status = loaded->status;
         bool capped = loaded->capped;
-        if (!Adopt(std::move(read), std::move(loaded), readStart, start, end, readStart, request)) return;
+        ULONGLONG loadedFrom = std::max(readStart, loaded->from);
+        if (!Adopt(std::move(read), std::move(loaded), loadedFrom, start, end, readStart, request)) return;
         journalStatus = status;
         journalCapped = capped;
         liveDirty = samplesDirty = false;
@@ -41106,7 +41539,9 @@ struct HistoryController {
     // The sample part (after the first load): the times move to now, and the snapshot is
     // replaced when the journal holds other samples for them (another stamp, or a start further
     // back); its accounts, their rows and the selection are rebuilt in the same step, before
-    // anything can paint or pick. Returns whether it ran.
+    // anything can paint or pick. A start further back than the journal's memory reaches stays an
+    // explicit load's (Refresh): the shown range keeps the held one's start, replaced whole when
+    // the journal changed. Returns whether it ran.
     bool Samples() {
         if (!snapshot) return false;
         auto [start, end, readStart] = Times(settings.settings.historyRetentionDays);
@@ -41122,8 +41557,9 @@ struct HistoryController {
             replacement->status = peek.status;
             replacement->capped = peek.capped;
             replacement->stamp = peek.stamp;
+            replacement->from = std::max(readStart, peek.from);
             next = std::move(replacement);
-            nextFrom = readStart;
+            nextFrom = next->from;
         }
         if (!Adopt(settings, std::move(next), nextFrom, start, end, readStart, 0)) return false;
         Compose();
@@ -41146,10 +41582,15 @@ struct HistoryController {
     // Takes `read` and the `next` snapshot (read from `nextFrom`) for the times [start, end) read
     // from `readStart`: collects the accounts over them and resolves the selection (a listed
     // request wins; else it stays while listed, else All accounts; a change drops the notice).
-    // Start 0 (All kept forever) begins at the oldest sample held, showing at least a day.
-    // False when unload cut the collection short: nothing changes then.
+    // Times before `nextFrom` (a snapshot starting later than asked) aren't shown. Start 0 (All
+    // kept forever) begins at the oldest sample held, showing at least a day. False when unload
+    // cut the collection short: nothing changes then.
     bool Adopt(HistorySettingsSnapshot read, std::shared_ptr<const HistorySnapshot> next, ULONGLONG nextFrom,
                ULONGLONG start, ULONGLONG end, ULONGLONG readStart, uint64_t request) {
+        if (nextFrom > readStart) {
+            readStart = std::min(nextFrom, end);
+            start = std::max(start, readStart);
+        }
         if (!start && end) {
             start = end > kHistoryDayMs ? end - kHistoryDayMs : 0;
             if (next && !next->samples.empty()) start = std::min(start, next->samples.front().timeMs);
@@ -42274,16 +42715,18 @@ struct HistoryProductionOps final : HistoryOps {
     HANDLE writer = nullptr;
 
     // Every exit of the window's thread (UiHostRun's return or an exception) cancels the write and
-    // waits for its worker. The window may close before: the worker never touches it.
+    // waits for its worker, and releases the window's range from the journal's memory. The window
+    // may close before: the worker never touches it.
     ~HistoryProductionOps() {
         if (job) job->cancel = true;
         JoinWriter();
+        ReleaseHistoryPin();
     }
 
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
-    // An explicit viewer read also prunes retained history while recording is off. Each call
-    // holds only the history leaf lock.
+    // An explicit viewer read also prunes retained history while recording is off; it pins the
+    // window's range in the journal's memory. Each call holds only the history leaf lock.
     HistorySnapshot ExplicitSnapshot(ULONGLONG from) override {
         MaintainHistory();
         return ReadHistorySnapshot(from);
@@ -42996,11 +43439,16 @@ void Wh_ModUninit() {
         std::lock_guard lock(g_historyMutex);
         g_historyOwnership.close();
         g_historySamples.clear();
+        g_historyPending.clear();
+        g_historySummary = {};
+        g_historyCommittedRecords = 0;
+        g_historyHeaderValid = false;
+        g_historyCacheFrom = 0;
+        g_historyPinMs = ULLONG_MAX;
         g_historyPath.clear();
         SetHistoryStatus({});
         g_historyLoaded = false;
         g_historyWritable = true;
-        g_historyDirty = false;
         g_historyCapped = false;
         g_historyMaintenanceMs = 0;
         g_historyWriteRetryMs = 0;
