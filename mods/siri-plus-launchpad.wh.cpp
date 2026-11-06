@@ -3564,18 +3564,21 @@ std::map<std::wstring, CfgOverride> g_cfgOverrides;
 bool g_cfgOverridesLoaded, g_cfgOverridesDirty;
 constexpr WCHAR kCfgOverridesKey[] = L"settingsPanel";
 
+// The stored lists put one entry per record. The separator is a control character, not a line break: portable Windhawk keeps
+// values in an INI file, where a line break is lost. Values written by earlier versions (with line breaks) are still read.
+constexpr WCHAR kRecSep = L'\x1E';
+std::vector<std::wstring> Split(const std::wstring& s, WCHAR sep);
+std::vector<std::wstring> SplitRecords(const std::wstring& s) {
+    std::wstring t = s;
+    for (WCHAR& c : t) if (c == L'\n') c = kRecSep;
+    return Split(t, kRecSep);
+}
 void LoadCfgOverrides() {
     g_cfgOverridesLoaded = true;
     g_cfgOverrides.clear();
     std::vector<WCHAR> buf(32768);
     Wh_GetStringValue(kCfgOverridesKey, buf.data(), buf.size());
-    std::wstring text = buf.data();
-    size_t pos = 0;
-    while (pos < text.size()) {
-        size_t end = text.find(L'\n', pos);
-        if (end == std::wstring::npos) end = text.size();
-        std::wstring line = text.substr(pos, end - pos);
-        pos = end + 1;
+    for (const std::wstring& line : SplitRecords(buf.data())) {
         size_t a = line.find(L'\t'), b = a == std::wstring::npos ? a : line.find(L'\t', a + 1);
         if (b == std::wstring::npos) continue;
         std::wstring key = line.substr(0, a);
@@ -3591,7 +3594,7 @@ void SaveCfgOverrides() {
     ++g_cfgVersion;
     SaveThemeTransparency();
     std::wstring text;
-    for (auto& [key, o] : g_cfgOverrides) text += key + L"\t" + o.value + L"\t" + o.base + L"\n";
+    for (auto& [key, o] : g_cfgOverrides) text += key + L"\t" + o.value + L"\t" + o.base + kRecSep;
     Wh_SetStringValue(kCfgOverridesKey, text.c_str());
     g_cfgOverridesDirty = false;
 }
@@ -3796,7 +3799,7 @@ void LoadThemeTransparency() {
     g_themeTransparency.clear();
     WCHAR buf[512] = {};
     Wh_GetStringValue(kThemeTransparencyKey, buf, ARRAYSIZE(buf));
-    for (const auto& line : Split(buf, L'\n')) {
+    for (const auto& line : SplitRecords(buf)) {
         auto f = Split(line, L'\t');
         if (f.size() == 2 && !f[0].empty()) g_themeTransparency[f[0]] = std::clamp(_wtoi(f[1].c_str()), 0, 100);
     }
@@ -3804,7 +3807,7 @@ void LoadThemeTransparency() {
 void SaveThemeTransparency() {
     ++g_cfgVersion;
     std::wstring text;
-    for (auto& [theme, v] : g_themeTransparency) text += theme + L"\t" + std::to_wstring(v) + L"\n";
+    for (auto& [theme, v] : g_themeTransparency) text += theme + L"\t" + std::to_wstring(v) + kRecSep;
     Wh_SetStringValue(kThemeTransparencyKey, text.c_str());
 }
 int ThemeTransparency(Theme t, int fromWindhawk) {
@@ -4270,6 +4273,7 @@ bool Picking() { return g_pickerChip != kNoChip; }
 int g_pickerPrevFilter = -1;
 int g_chipRename = -1;       // the user tab whose name is being typed
 float g_chipScroll;          // the strip scrolls sideways when the chips don't fit
+std::wstring g_menuClipText;   // the clipboard text a context menu acts on (by text: the list can shift while the menu is open)
 int g_menuChip = kNoChip;    // the tab a context menu acts on
 bool g_chipPress, g_chipDragged;   // the strip is held / dragged sideways with the mouse
 int g_chipPressed = kNoChip;
@@ -4284,7 +4288,7 @@ void LoadLaunchCounts() {
     buf.back() = 0;
     g_launchCounts.clear();
     g_launchTimes.clear();
-    for (auto& line : Split(buf.data(), L'\n')) {
+    for (auto& line : SplitRecords(buf.data())) {
         // "count<TAB>target" or "count<TAB>last launch<TAB>target"
         auto parts = Split(line, L'\t');
         if (parts.size() == 2) g_launchCounts[parts[1]] = _wtoi(parts[0].c_str());
@@ -4297,7 +4301,7 @@ void LoadLaunchCounts() {
     Wh_GetStringValue(kKnownAppsKey, known.data(), known.size());
     known.back() = 0;
     g_firstSeen.clear();
-    for (auto& line : Split(known.data(), L'\n')) {
+    for (auto& line : SplitRecords(known.data())) {
         size_t tab = line.find(L'\t');
         if (tab != std::wstring::npos) g_firstSeen[line.substr(tab + 1)] = _wcstoui64(line.substr(0, tab).c_str(), nullptr, 10);
     }
@@ -4307,17 +4311,24 @@ void LoadLaunchCounts() {
 void UpdateKnownApps(const AppList& apps) {
     bool first = g_firstSeen.empty(), changed = false;
     unsigned long long now = NowFileTime();
+    std::unordered_set<std::wstring> installed;
     for (auto& app : apps) {
         std::wstring target = ToLower(app->target);
+        installed.insert(target);
         if (g_firstSeen.count(target)) continue;
         g_firstSeen[target] = first ? 0 : now;
         changed = true;
     }
+    // Only the apps that are installed now are kept (uninstalled ones would pile up until the value is too long)
+    for (auto it = g_firstSeen.begin(); it != g_firstSeen.end();) {
+        if (installed.count(it->first)) ++it;
+        else { it = g_firstSeen.erase(it); changed = true; }
+    }
     if (!changed) return;
     std::wstring data;
     for (auto& [target, time] : g_firstSeen) {
-        if (data.size() > 60000) break;
-        data += std::to_wstring(time) + L"\t" + target + L"\n";
+        if (data.size() > 30000) break;   // portable Windhawk reads a value back correctly only up to 32,767 characters
+        data += std::to_wstring(time) + L"\t" + target + kRecSep;
     }
     Wh_SetStringValue(kKnownAppsKey, data.c_str());
 }
@@ -4328,7 +4339,7 @@ void SaveLaunchCounts() {
     std::sort(top.begin(), top.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
     if (top.size() > 60) top.resize(60);
     std::wstring data;
-    for (auto& [count, target] : top) data += std::to_wstring(count) + L"\t" + std::to_wstring(g_launchTimes[target]) + L"\t" + target + L"\n";
+    for (auto& [count, target] : top) data += std::to_wstring(count) + L"\t" + std::to_wstring(g_launchTimes[target]) + L"\t" + target + kRecSep;
     Wh_SetStringValue(kLaunchKey, data.c_str());
 }
 
@@ -4346,7 +4357,9 @@ void LoadUserAssist() {
             DWORD nameLen = 1024, dataLen = sizeof(data), type = 0;
             LONG r = RegEnumValueW(key, i, name, &nameLen, nullptr, &type, data, &dataLen);
             if (r == ERROR_NO_MORE_ITEMS) break;
-            if (r != ERROR_SUCCESS || type != REG_BINARY || dataLen < 8) continue;
+            if (r == ERROR_MORE_DATA) continue;   // this value is bigger than the buffer: skip it
+            if (r != ERROR_SUCCESS) break;        // e.g. the key was deleted while reading: stop instead of looping
+            if (type != REG_BINARY || dataLen < 8) continue;
             for (DWORD c = 0; c < nameLen; c++) {
                 WCHAR& ch = name[c];
                 if (ch >= L'a' && ch <= L'z') ch = L'a' + (ch - L'a' + 13) % 26;
@@ -4562,7 +4575,10 @@ std::wstring ReadClipboardText(size_t maxLen, bool forHistory = false) {
     if (!open) return text;
     if (forHistory && ExcludedFromHistory()) { CloseClipboard(); g_clipReadResult = 2; return text; }
     if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
-        if (auto* p = (PCWSTR)GlobalLock(data)) { text = p; GlobalUnlock(data); g_clipReadResult = 0; }
+        if (auto* p = (PCWSTR)GlobalLock(data)) {   // the text may not end with a NUL: read at most what the block holds
+            text.assign(p, wcsnlen(p, GlobalSize(data) / sizeof(WCHAR)));
+            GlobalUnlock(data); g_clipReadResult = 0;
+        }
     }
     CloseClipboard();
     if (text.size() > maxLen) text.resize(maxLen);
@@ -4626,7 +4642,7 @@ std::vector<std::wstring> Split(const std::wstring& s, WCHAR sep) {
 }
 
 std::wstring Clean(std::wstring s) {
-    for (auto& c : s) if (c == L'\t' || c == L'\n' || c == L'\r') c = L' ';
+    for (auto& c : s) if (c == L'\t' || c == L'\n' || c == L'\r' || c == kRecSep) c = L' ';
     return s;
 }
 
@@ -4635,7 +4651,7 @@ void SaveFolders() {
     for (const auto& f : g_folders) {
         data += Clean(f.name); data += L'\t'; data += Clean(f.sortKey);
         for (const auto& a : f.apps) { data += L'\t'; data += Clean(a->target); }
-        data += L'\n';
+        data += kRecSep;
     }
     Wh_SetStringValue(kFoldersKey, data.c_str());
 }
@@ -4645,7 +4661,7 @@ void LoadFolders() {
     Wh_GetStringValue(kFoldersKey, buf.data(), buf.size());
     buf.back() = 0;
     g_folders.clear();
-    for (const auto& line : Split(buf.data(), L'\n')) {
+    for (const auto& line : SplitRecords(buf.data())) {
         auto fields = Split(line, L'\t');
         if (fields.size() < 2) continue;
         Folder folder;
@@ -4665,7 +4681,7 @@ void SaveCustomTabs() {
     for (const auto& t : g_customTabs) {
         data += Clean(t.name);
         for (const auto& target : t.targets) { data += L'\t'; data += Clean(target); }
-        data += L'\n';
+        data += kRecSep;
     }
     Wh_SetStringValue(kCustomTabsKey, data.c_str());
 }
@@ -4675,7 +4691,7 @@ void LoadCustomTabs() {
     Wh_GetStringValue(kCustomTabsKey, buf.data(), buf.size());
     buf.back() = 0;
     g_customTabs.clear();
-    for (const auto& line : Split(buf.data(), L'\n')) {
+    for (const auto& line : SplitRecords(buf.data())) {
         auto fields = Split(line, L'\t');
         if (fields.empty() || fields[0].empty() || (int)g_customTabs.size() >= kMaxCustomTabs) continue;
         CustomTab tab;
@@ -4693,7 +4709,7 @@ void SaveBuiltinTabs() {
         data += std::to_wstring(i) + L"\t" + (b.hidden ? L"1" : L"0");
         for (const auto& t : b.added) { data += L"\t+"; data += Clean(t); }
         for (const auto& t : b.removed) { data += L"\t-"; data += Clean(t); }
-        data += L'\n';
+        data += kRecSep;
     }
     Wh_SetStringValue(kBuiltinTabsKey, data.c_str());
 }
@@ -4703,7 +4719,7 @@ void LoadBuiltinTabs() {
     Wh_GetStringValue(kBuiltinTabsKey, buf.data(), buf.size());
     buf.back() = 0;
     for (auto& b : g_builtinTabs) b = BuiltinTab{};
-    for (const auto& line : Split(buf.data(), L'\n')) {
+    for (const auto& line : SplitRecords(buf.data())) {
         auto fields = Split(line, L'\t');
         if (fields.size() < 2) continue;
         int i = _wtoi(fields[0].c_str());
@@ -4719,7 +4735,7 @@ void LoadBuiltinTabs() {
 
 void SaveSearchHistory() {
     std::wstring data;
-    for (const auto& q : g_searchHistory) { data += Clean(q); data += L'\n'; }
+    for (const auto& q : g_searchHistory) { data += Clean(q); data += kRecSep; }
     Wh_SetStringValue(kHistoryKey, data.c_str());
 }
 
@@ -4728,7 +4744,7 @@ void LoadSearchHistory() {
     Wh_GetStringValue(kHistoryKey, buf.data(), buf.size());
     buf.back() = 0;
     g_searchHistory.clear();
-    for (auto& q : Split(buf.data(), L'\n'))
+    for (auto& q : SplitRecords(buf.data()))
         if (!q.empty() && (int)g_searchHistory.size() < kHistoryMax) g_searchHistory.push_back(q);
 }
 
@@ -4772,7 +4788,7 @@ void DialogEnd();
 
 void SaveCustomIcons() {
     std::wstring data;
-    for (auto& [target, path] : g_customIcons) { data += Clean(target); data += L'\t'; data += Clean(path); data += L'\n'; }
+    for (auto& [target, path] : g_customIcons) { data += Clean(target); data += L'\t'; data += Clean(path); data += kRecSep; }
     Wh_SetStringValue(kIconsKey, data.c_str());
 }
 
@@ -4781,7 +4797,7 @@ void LoadCustomIcons() {
     Wh_GetStringValue(kIconsKey, buf.data(), buf.size());
     buf.back() = 0;
     g_customIcons.clear();
-    for (const auto& line : Split(buf.data(), L'\n')) {
+    for (const auto& line : SplitRecords(buf.data())) {
         auto f = Split(line, L'\t');
         if (f.size() == 2 && !f[0].empty() && !f[1].empty()) g_customIcons[f[0]] = f[1];
     }
@@ -4940,7 +4956,6 @@ bool SearchEverything(const FileJob& job, std::vector<std::wstring>& out, std::w
     HWND wnd = CreateEvReplyWindow();
     if (!wnd) { status = L"Everything: IPC window failed"; Wh_Log(L"CreateWindowEx: %u", GetLastError()); return false; }
     SetWindowLongPtrW(wnd, GWLP_USERDATA, (LONG_PTR)&reply);
-    ChangeWindowMessageFilterEx(wnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
 
     size_t textBytes = (job.query.size() + 1) * sizeof(WCHAR);
     std::vector<BYTE> buf(sizeof(EvQuery2) + textBytes, 0);
@@ -5201,6 +5216,8 @@ bool PruneClipHistory();
 
 // ---------- Calculator: a typed expression shows its result first (like Spotlight) ----------
 // + - * / (also x, × and ÷), ^ for powers, ( ), a % after a number = that many hundredths; "." or "," for decimals
+// Only 0-9 are digits here (iswdigit also accepts superscripts and digits of other scripts, which would be misread)
+bool CalcDigit(wchar_t c) { return c >= L'0' && c <= L'9'; }
 struct CalcParser {
     const std::wstring& s; size_t i = 0; bool ok = true;
     wchar_t mark = L'.';   // Windows' decimal mark; the other one counts as decimal only when it can't be a thousands mark
@@ -5215,14 +5232,14 @@ struct CalcParser {
         Skip();
         size_t start = i;
         std::string digits;
-        while (i < s.size() && (iswdigit(s[i]) || s[i] == L'.' || s[i] == L',')) {
-            if (s[i] != mark && !iswdigit(s[i])) {
+        while (i < s.size() && (CalcDigit(s[i]) || s[i] == L'.' || s[i] == L',')) {
+            if (s[i] != mark && !CalcDigit(s[i])) {
                 // "1,000" (English) or "1.000" (Portuguese): three digits after it look like thousands: no answer
                 size_t k = i + 1;
-                while (k < s.size() && iswdigit(s[k])) k++;
+                while (k < s.size() && CalcDigit(s[k])) k++;
                 if (k - (i + 1) == 3) { ok = false; return 0; }
             }
-            digits += iswdigit(s[i]) ? (char)s[i] : '.';
+            digits += CalcDigit(s[i]) ? (char)s[i] : '.';
             i++;
         }
         if (i == start || std::count(digits.begin(), digits.end(), '.') > 1 || digits == ".") { ok = false; return 0; }
@@ -5269,7 +5286,7 @@ std::wstring CalcResult(const std::wstring& text, bool forced = false) {
     bool digit = false, op = false, onlyDash = true;   // onlyDash: no operation but "-" between digits, no spaces
     for (size_t k = 0; k < text.size(); k++) {
         wchar_t c = text[k];
-        if (iswdigit(c)) digit = true;
+        if (CalcDigit(c)) digit = true;
         else if (wcschr(L"+*/^%xX\u00D7\u00F7\u2212", c)) { op = true; onlyDash = false; }
         else if (c == L'-' && k > 0) op = true;
         else if (!wcschr(L" .,()-", c)) return {};
@@ -6801,6 +6818,8 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
 
 // What the launcher already drew under a context menu, blurred inside the menu's shape (the live blur only reaches
 // the desktop behind the window, not the launcher's own icons)
+[[clang::no_destroy]] ComPtr<ID2D1Effect> g_menuBlur;   // the blur behind menus (see ResetGlobals at shutdown)
+unsigned g_menuBlurGeneration = ~0u;
 void DrawMenuBackdropBlur(const D2D1_RECT_F& r, float rad, float alpha) {
     ComPtr<ID2D1DeviceContext> dc;
     if (alpha <= 0.01f || g_settings.light || FAILED(g_target.As(&dc))) return;
@@ -6820,16 +6839,14 @@ void DrawMenuBackdropBlur(const D2D1_RECT_F& r, float rad, float alpha) {
     D2D1_POINT_2U at = D2D1::Point2U(0, 0);
     D2D1_RECT_U from = D2D1::RectU(left, top, right, bottom);
     if (FAILED(copy->CopyFromRenderTarget(&at, g_target.Get(), &from))) return;
-    // The effect is kept between frames (it belongs to the target: dropped with it)
-    static ComPtr<ID2D1Effect> menuBlur;
-    static unsigned menuBlurGeneration = ~0u;
-    if (!menuBlur || menuBlurGeneration != g_targetGeneration) {
-        menuBlur.Reset();
-        if (FAILED(dc->CreateEffect(kClsidGaussianBlur, &menuBlur))) return;
-        menuBlur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
-        menuBlurGeneration = g_targetGeneration;
+    // The effect is kept between frames and replaced when the target changes; released when the launcher shuts down
+    if (!g_menuBlur || g_menuBlurGeneration != g_targetGeneration) {
+        g_menuBlur.Reset();
+        if (FAILED(dc->CreateEffect(kClsidGaussianBlur, &g_menuBlur))) return;
+        g_menuBlur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
+        g_menuBlurGeneration = g_targetGeneration;
     }
-    ComPtr<ID2D1Effect> blur = menuBlur;
+    ComPtr<ID2D1Effect> blur = g_menuBlur;
     blur->SetInput(0, copy.Get());
     blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
     ComPtr<ID2D1RoundedRectangleGeometry> clip;
@@ -9103,6 +9120,8 @@ void CloseFolder(bool animate = true) {
 
 void HideNow() {
     ShowWindow(g_wnd, SW_HIDE);
+    if (g_barDrag.active) ReleaseCapture();
+    g_barDrag = BarDrag{};   // a drag in progress ends with the launcher
     KillTimer(g_wnd, kTimerCaret);
     HideGlass();
     g_openFolderIndex = -1; g_folderAnim = 0.0f; g_folderClosing = false; g_renaming = false; g_mainItems.clear();
@@ -9506,9 +9525,14 @@ void RunAction(const std::wstring& id) {
     if (id == L"restart") { RunPowerChoice(kMenuRestart); return; }
     if (id == L"shutdown") { RunPowerChoice(kMenuShutdown); return; }
     if (id == L"signout") { RunPowerChoice(kMenuSignOut); return; }
+    if (id == L"recycle") {   // its confirmation blocks this thread: the launcher must be gone before, not closing
+        HideNow();
+        AllowSetForegroundWindow(ASFW_ANY);
+        SHEmptyRecycleBinW(nullptr, nullptr, 0);
+        return;
+    }
     Close();
     AllowSetForegroundWindow(ASFW_ANY);
-    if (id == L"recycle") { SHEmptyRecycleBinW(nullptr, nullptr, 0); return; }
     if (id.rfind(L"ms-settings:", 0) == 0) {   // a Windows Settings page
         ShellExecuteW(nullptr, L"open", id.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return;
@@ -9682,6 +9706,11 @@ bool ExcludedFromHistory() {
 
 // When each copy entered the history (for "how long a copy stays")
 std::unordered_map<std::wstring, double> g_clipTimes;
+// Shortens the history to `max` texts and forgets the timestamps of those that left it (they would otherwise stay in memory)
+void TrimClipHistory(size_t max) {
+    for (size_t k = max; k < g_clipHistory.size(); k++) g_clipTimes.erase(g_clipHistory[k]);
+    if (g_clipHistory.size() > max) g_clipHistory.resize(max);
+}
 // Copies older than the chosen time leave the history; returns true if something left
 bool PruneClipHistory() {
     if (g_settings.clipKeepSec <= 0 || g_clipHistory.empty()) return false;
@@ -9726,7 +9755,7 @@ void OnClipboardUpdate() {
     if (it != g_clipHistory.end()) g_clipHistory.erase(it);
     g_clipHistory.insert(g_clipHistory.begin(), text);
     g_clipTimes[text] = Now();
-    if ((int)g_clipHistory.size() > g_settings.clipMax) g_clipHistory.resize(g_settings.clipMax);
+    TrimClipHistory((size_t)std::max(0, g_settings.clipMax));
     PruneClipHistory();
     if (g_shown && g_siriTab == 2) RefreshTabItems(false);
 }
@@ -10644,7 +10673,7 @@ void ExecuteMenu(int id) {
             break;
         case kMenuClipRemove:
             if (histIdx >= 0 && histIdx < (int)g_layoutItems.size())
-                if (App* h = ResolveApp(g_layoutItems[histIdx]); h && h->kind == 2) RemoveClipItem(h->target);
+                RemoveClipItem(g_menuClipText);
             break;
         case kMenuClipClear:
             ClearClipboardAll();
@@ -11597,8 +11626,7 @@ void CfgApplySettings() {
         g_settings.siri = g_cfg.siriMode; g_settings.siriOriginal = g_cfg.siriOriginal; g_settings.fullscreen = g_cfg.fullscreen;
         BuildTabs();
     }
-    if (!g_settings.clipEnabled) g_clipHistory.clear();
-    else if ((int)g_clipHistory.size() > g_settings.clipMax) g_clipHistory.resize(g_settings.clipMax);
+    TrimClipHistory(g_settings.clipEnabled ? (size_t)std::max(0, g_settings.clipMax) : 0);
     ComputeLayout();
     Render();
 }
@@ -11669,7 +11697,7 @@ void DialogBegin(bool hide) {
     else SetWindowPos(g_wnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 void DialogEnd() {
-    if (g_dialogHid) { ShowWindow(g_wnd, SW_SHOWNA); g_dialogHid = false; }
+    if (g_dialogHid) { if (g_shown) ShowWindow(g_wnd, SW_SHOWNA); g_dialogHid = false; }   // not if it was hidden meanwhile (settings saved)
     SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     g_glassPlaced = RECT{};   // the glass window is put back under the launcher at the next frame
     g_dialogOpen = false;
@@ -11949,7 +11977,10 @@ void BackupImport() {
             std::wstring base = CfgWindhawkValue(*it);
             if (value != base) g_cfgOverrides[it->key] = {value, base};
         } else if (f.size() == 3 && f[0] == "V" && B64ToW(f[1], key) && B64ToW(f[2], value)) {
-            for (PCWSTR k : kBackupStrings) if (key == k) Wh_SetStringValue(k, value.c_str());
+            for (PCWSTR k : kBackupStrings) if (key == k) {
+                for (WCHAR& c : value) if (c == L'\n') c = kRecSep;   // backups made by earlier versions
+                Wh_SetStringValue(k, value.c_str());
+            }
         } else if (f.size() == 3 && f[0] == "N" && B64ToW(f[1], key)) {
             for (PCWSTR k : kBackupInts) if (key == k) Wh_SetIntValue(k, atoi(f[2].c_str()));
         } else if (f.size() == 4 && f[0] == "I") {
@@ -12769,9 +12800,11 @@ void GhClose(bool render = true) {
 // Right-click an app > "Change icon..." (asks for the folder the first time)
 void GhOpen(App* app) {
     if (!app) return;
+    const std::wstring target = app->target;   // `app` can be freed while the folder picker below is open (the app list reloads)
     std::wstring folder = GhCleanFolder(g_ghSetting);
     if (folder.empty()) {   // no icon folder yet: ask for it now
         if (!PickIconsFolderFromMenu()) return;
+        if (!g_shown) return;   // hidden or reloaded while the picker was open
         folder = GhCleanFolder(g_ghSetting);
         if (folder.empty()) return;
     }
@@ -12783,7 +12816,7 @@ void GhOpen(App* app) {
         g_gh.loading = g_gh.refreshing = false;
         g_gh.listTime = -1000;
     }
-    g_gh.target = app->target;
+    g_gh.target = target;
     g_gh.active = true;
     // Where the launcher is now, to come back to it
     g_gh.back.tab = g_siriTab;
@@ -13103,8 +13136,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_RELOAD:
             LoadSettings();
             if (g_shown) HideNow();
-            if (!g_settings.clipEnabled) g_clipHistory.clear();   // off: the history is cleared
-            else if ((int)g_clipHistory.size() > g_settings.clipMax) g_clipHistory.resize(g_settings.clipMax);
+            TrimClipHistory(g_settings.clipEnabled ? (size_t)std::max(0, g_settings.clipMax) : 0);   // off: the history is cleared
             g_fileStatus.clear(); // Everything IPC needs no reload (no DLL)
             return 0;
         case WM_APP_QUIT: DestroyWindow(hwnd); return 0;
@@ -13539,7 +13571,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 App* a = idx >= 0 ? ResolveApp(g_layoutItems[idx]) : nullptr;
                 g_menu.open = false; g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
                 std::vector<MenuItem> clip;
-                if (a && a->kind == 2) { g_menu.appIdx = idx; clip.push_back({Tr(L"Remove this item"), kMenuClipRemove}); clip.push_back({L"", 0, true}); }
+                if (a && a->kind == 2) { g_menu.appIdx = idx; g_menuClipText = a->target; clip.push_back({Tr(L"Remove this item"), kMenuClipRemove}); clip.push_back({L"", 0, true}); }
                 clip.push_back({Tr(L"Clear clipboard"), kMenuClipClear, false, true});
                 OpenMenu((float)x, (float)y, std::move(clip));
                 return 0;
@@ -13787,7 +13819,7 @@ DWORD WINAPI StartThread(void*) {
     while (PeekMessageW(&msg, nullptr, WM_APP_FILES, WM_APP_FILES, PM_REMOVE)) delete (FileResult*)msg.lParam;
     g_selection.clear(); g_menu = PopupMenu{};
     AppList().swap(g_apps); AppList().swap(g_tabItems); AppList().swap(g_fileResults);
-    g_clipHistory.clear();
+    g_clipHistory.clear(); g_clipTimes.clear();
     g_searchHistory.clear();
     g_fileStatus.clear();
     std::vector<Folder>().swap(g_folders); g_customIcons.clear(); g_mainItems.clear(); g_backdropImage = {}; FreeSurface(g_surface);
@@ -13795,6 +13827,13 @@ DWORD WINAPI StartThread(void*) {
     g_titleFormat.Reset(); g_menuFormat.Reset(); g_tabFormat.Reset(); g_listFormat.Reset();
     g_listSubFormat.Reset(); g_glyphFormat.Reset(); g_hintFormat.Reset();
     g_glyphLargeFormat.Reset(); g_categoryFormat.Reset(); g_keyFormat.Reset();
+    // Drawing objects that live in globals: released here, not left to the DLL unload
+    g_menuBlur.Reset();
+    g_lqSource.Reset(); g_lqBlur.Reset(); g_lqMapXf.Reset(); g_lqDisp.Reset(); g_lqColor.Reset();
+    FreeLiquid();   // HideNow doesn't run when the mod unloads with the launcher open
+    decltype(g_ghItems)().swap(g_ghItems);
+    g_cfgTitle.Reset(); g_cfgHead.Reset(); g_cfgBody.Reset(); g_cfgDesc.Reset(); g_cfgHeadDesc.Reset(); g_cfgValue.Reset();
+    g_cfgCaption.Reset(); g_cfgBar.Reset(); g_cfgButton.Reset(); g_cfgGlyphS.Reset(); g_cfgGlyphM.Reset(); g_cfgGlyphL.Reset(); g_cfgGlyphXS.Reset();
     ResetTarget(); g_shadowCuts.reset(); g_gradientStops.reset(); g_dwrite.Reset(); g_d2d.Reset();
     DestroyGlassWindow();
     if (g_glassClassOk) { UnregisterClassW(kGlassClass, instance); g_glassClassOk = false; }
