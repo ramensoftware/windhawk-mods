@@ -925,7 +925,7 @@ void* ColorManagementRpcServerImpl; // (24h2 one is loaded in another function s
 
 // fnBase: Base address to search, pass e.g. a function pointer
 // fnLen: Length of the function (search range)
-// target: Target string to search
+// targetRegex: Target regex string to search
 char* FindMemory(char* fnBase, size_t fnLen, const std::string& targetRegex) {
     std::regex regex(targetRegex, std::regex::optimize);
     std::match_results<std::string_view::const_iterator> match;
@@ -977,7 +977,7 @@ using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_original;
 LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
     LONG ret = RegGetValueW_original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-    if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData && ret != ERROR_SUCCESS) {
+    if (hkey == HKEY_LOCAL_MACHINE && lpSubKey && lpValue && pvData && ret == ERROR_SUCCESS) {
         if (_wcsicmp(lpSubKey, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ICM") == 0 && _wcsicmp(lpValue, L"GdiIcmGammaRange") == 0) {
             Wh_Log(L"Hooked DWM GdiIcmGammaRange, pvData=%p", pvData);
             *pcbData = sizeof(DWORD);
@@ -997,7 +997,7 @@ LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWOR
 }
 #pragma endregion
 
-bool CreateFadeMutex() {
+HANDLE CreateFadeMutex() {
     static const wchar_t* kMutexName = L"Local\\LsfFadeMutex";
     static const wchar_t* kSddl = L"D:(A;;GA;;;IU)(A;;GA;;;SY)(A;;GA;;;BA)";
 
@@ -1016,21 +1016,21 @@ bool CreateFadeMutex() {
         Wh_Log(L"ConvertStringSecurityDescriptorToSecurityDescriptorW failed, GLE=%d", GetLastError());
     }
 
-    g_fadeMutex = CreateMutexExW(
+    HANDLE mutex = CreateMutexExW(
         sa.lpSecurityDescriptor ? &sa : NULL,
         kMutexName,
         0,
         SYNCHRONIZE | MUTEX_MODIFY_STATE
     );
 
-    if (!g_fadeMutex) {
+    if (!mutex) {
         DWORD createError = GetLastError();
         Wh_Log(L"CreateMutexExW with custom/default security failed, GLE=%d", createError);
 
         if (sa.lpSecurityDescriptor) {
             // Retry without explicit security descriptor
-            g_fadeMutex = CreateMutexExW(NULL, kMutexName, 0, SYNCHRONIZE | MUTEX_MODIFY_STATE);
-            if (!g_fadeMutex) {
+            mutex = CreateMutexExW(NULL, kMutexName, 0, SYNCHRONIZE | MUTEX_MODIFY_STATE);
+            if (!mutex) {
                 Wh_Log(L"CreateMutexExW fallback failed, GLE=%d", GetLastError());
             }
         }
@@ -1040,7 +1040,7 @@ bool CreateFadeMutex() {
         LocalFree(securityDescriptor);
     }
 
-    return true;
+    return mutex;
 }
 
 FadeType FadeTypeStringToEnum(LPCWSTR str) {
@@ -1229,7 +1229,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!CreateFadeMutex()) {
+    g_fadeMutex = CreateFadeMutex();
+    if (!g_fadeMutex) {
         // Likely services, but I think they would barely initiate the sleep fade anyway
         Wh_Log(L"Failed to create/open fade mutex");
         if (!g_isWinlogon) {
