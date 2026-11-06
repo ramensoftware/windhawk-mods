@@ -53,7 +53,7 @@ The mod runs inside `LogonUI.exe`, decodes your video with Media Foundation, and
 | Audio | Plays the video's audio track when the volume is above 0 |
 | Power saving | Still-frame mode, pause when idle, and optional pause on the password screen |
 | Boot behavior | Optionally show the last frame right after boot instead of decoding |
-| Shutdown screen | Optionally keep the original background on the "Shutting down" / "Restarting" screen |
+| Shutdown screen | Optionally keep Windows' own background (usually black) on the "Shutting down" / "Restarting" screen |
 | Fail-safe | Restores the original wallpaper if the lock screen UI changes or the mod misbehaves |
 | Debug log | Optional CPU and decode statistics and a UI tree dump |
 
@@ -167,7 +167,7 @@ Mod ini berjalan di dalam `LogonUI.exe`, men-decode videomu dengan Media Foundat
 | Audio | Memutar audio video jika volume di atas 0 |
 | Hemat daya | Mode gambar diam, jeda saat idle, dan opsi jeda di layar password |
 | Perilaku saat boot | Opsional menampilkan frame terakhir tepat setelah boot tanpa decoding |
-| Layar shutdown | Opsional mempertahankan latar asli di layar "Shutting down" / "Restarting" |
+| Layar shutdown | Opsional mempertahankan latar bawaan Windows (biasanya hitam) di layar "Shutting down" / "Restarting" |
 | Fail-safe | Mengembalikan wallpaper asli jika UI lock screen berubah atau mod bermasalah |
 | Debug log | Opsional: statistik CPU dan decode serta dump UI tree |
 
@@ -250,7 +250,7 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
   $description: Full path to a video file (mp4 recommended), or a folder with videos (one is picked at random each lock).
 - width: 1920
   $name: Render width
-  $description: Internal width in pixels (the height follows your screen's aspect ratio). Lower = less CPU, higher = sharper.
+  $description: Internal width in pixels, 320 to 1920 (the height follows your screen's aspect ratio). Lower = less CPU, higher = sharper. Common values are 960, 1280 and 1920.
 - fitMode: cover
   $name: Fit mode
   $description: How the video is scaled to the screen.
@@ -304,7 +304,7 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
   $name: Pause and power saving
 - hideOnShutdown: false
   $name: Hide video on shutdown / restart screen
-  $description: Do not show the video on the "Shutting down" / "Restarting" status screen. The original Windows background is shown instead.
+  $description: Do not show the video on the "Shutting down" / "Restarting" status screen. Windows' own background for that screen (usually plain black) is shown instead.
 - debugLog: false
   $name: Debug log
   $description: Also write debug.log in the mod's storage folder, with CPU and decode statistics every 5 seconds and a one-time dump of the lock screen UI tree.
