@@ -21,13 +21,14 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 - **What it does**: Mitigates micro-stutters and input latency spikes caused by background processes competing for CPU resources.
 - **What it does not do**: It does not increase maximum hardware performance or raw gaming FPS.
 - **Plug & Play**: Safe, balanced defaults work out of the box without requiring any configuration.
-- **Advanced tuning**: Deeper options (e.g., EcoQoS, P/E-core scheduling, power plans, timer resolution) are disabled by default.
+- **Advanced tuning**: Deeper options (e.g., EcoQoS, P/E-core scheduling, dynamic power schemes, anti-timer coalescing) are disabled by default.
 
 ## Key Features
 
 ### 1. Foreground Priority Boost
 - Elevates the CPU priority of the active window and its related child processes.
 - Optionally directs the active application to Performance Cores via Windows CPU Sets on hybrid architectures.
+- Optionally instructs the Windows kernel to disable timer coalescing and honor high-precision sub-millisecond timers for active games without DLL injection.
 
 ### 2. Background Throttling
 - Temporarily reduces the CPU priority of background processes exceeding defined utilization thresholds.
@@ -64,6 +65,7 @@ Advanced options (e.g., EcoQoS, P/E-core scheduling, power schemes) can be enabl
 - **1. Foreground Priority Boost (ProBalance)**: Automatically increases the CPU priority of the active foreground window family (`true` by default).
 - **Foreground Priority Level**: Priority class assigned to the active foreground application (`Above Normal` or `High`).
 - **Suggest P-Cores to Foreground Window**: Directs the active foreground app to Performance Cores on hybrid CPUs via CPU Sets (`false` by default).
+- **Anti-Timer Coalescing (High-Precision Game Timers)**: Instructs the Windows kernel to disable timer coalescing and honor high-precision sub-millisecond timers for the active foreground game without DLL injection (`false` by default).
 - **Dynamic Performance Power Scheme**: Temporarily activates the configured power scheme during demanding workloads on AC power (`false` by default).
 - **Dynamic Power Plan Selection**: Select High Performance, Ultimate Performance, or Custom GUID (`highPerformance` by default).
 - **Custom Power Plan GUID**: GUID string of a custom power plan when Custom GUID is chosen.
@@ -127,6 +129,9 @@ If you find this mod useful, you can support its development and maintenance:
 - enableForegroundCpuSets: false
   $name: Suggest P-Cores to Foreground Window
   $description: Directs the active foreground app to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to eliminate micro-stutter.
+- enableAntiTimerCoalescing: false
+  $name: Anti-Timer Coalescing (High-Precision Game Timers)
+  $description: Instructs the Windows kernel to disable timer coalescing and honor high-precision sub-millisecond timers for the active foreground game without DLL injection.
 - enableDynamicPowerPlan: false
   $name: Dynamic Performance Power Scheme
   $description: Automatically engages the configured power scheme while a heavy application or game is active on AC power, and restores your plan on desktop.
@@ -479,6 +484,7 @@ struct ModSettings {
     ForegroundPrioritySetting foregroundPriorityLevel =
         ForegroundPrioritySetting::AboveNormal;
     bool enableForegroundCpuSets = false;
+    bool enableAntiTimerCoalescing = false;
     bool enableBackgroundCpuSets = false;
     bool enableBackgroundThrottling = true;
     int backgroundCpuThrottleThresholdPercent = 15;
@@ -572,6 +578,7 @@ struct BoostedProcessEntry {
     ULONG originalIoPriority = IoPriorityNormal;
     ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
     bool cpuSetsApplied = false;
+    bool antiTimerCoalescingApplied = false;
 };
 static std::atomic<DWORD> g_currentBoostedPid{0};
 static std::vector<BoostedProcessEntry> g_boostedProcesses;
@@ -614,6 +621,9 @@ static std::mutex g_powerSchemeMutex;
 static GUID g_originalPowerScheme{};
 static bool g_hasOriginalPowerScheme = false;
 static std::atomic<bool> g_isHighPerformanceActive{false};
+static GUID g_engagedPowerPlanGuid{};
+static GUID g_lastFailedPowerPlanGuid{};
+static bool g_hasFailedPowerPlanGuid = false;
 
 // Async background dispatcher for non-blocking ACPI power plan switches
 static std::atomic<bool> g_desiredHighPerformance{false};
@@ -637,13 +647,36 @@ static void RestoreOriginalPowerScheme() {
     }
     PowerSetActiveScheme(nullptr, &g_originalPowerScheme);
     g_isHighPerformanceActive.store(false);
+    g_engagedPowerPlanGuid = GUID{};
     ClearPowerSchemeState();
     Wh_Log(L"Restored original system power plan.");
 }
 
 static void EngageTargetPowerScheme(const GUID& targetGuid) {
     std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+    if (g_hasFailedPowerPlanGuid &&
+        IsEqualGUID(g_lastFailedPowerPlanGuid, targetGuid)) {
+        return;
+    }
     if (g_isHighPerformanceActive.load()) {
+        if (IsEqualGUID(g_engagedPowerPlanGuid, targetGuid)) {
+            return;
+        }
+        // Swapping target scheme while already engaged (e.g. settings changed during workload)
+        if (PowerSetActiveScheme(nullptr, &targetGuid) == ERROR_SUCCESS) {
+            g_engagedPowerPlanGuid = targetGuid;
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(L"Switched active performance power plan to %s.", guidStr);
+        } else {
+            g_lastFailedPowerPlanGuid = targetGuid;
+            g_hasFailedPowerPlanGuid = true;
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(
+                L"PowerSetActiveScheme failed for target power plan %s. Skipping until settings change.",
+                guidStr);
+        }
         return;
     }
 
@@ -660,16 +693,21 @@ static void EngageTargetPowerScheme(const GUID& targetGuid) {
 
         if (PowerSetActiveScheme(nullptr, &targetGuid) == ERROR_SUCCESS) {
             g_isHighPerformanceActive.store(true);
+            g_engagedPowerPlanGuid = targetGuid;
             SavePowerSchemeState(g_originalPowerScheme, /*engaged=*/true);
             wchar_t guidStr[64]{};
             StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
-            Wh_Log(L"Switched system power plan to performance plan %s for active foreground workload.",
-                   guidStr);
+            Wh_Log(
+                L"Switched system power plan to performance plan %s for active foreground workload.",
+                guidStr);
         } else {
+            g_lastFailedPowerPlanGuid = targetGuid;
+            g_hasFailedPowerPlanGuid = true;
             wchar_t guidStr[64]{};
             StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
-            Wh_Log(L"PowerSetActiveScheme failed for target power plan %s.",
-                   guidStr);
+            Wh_Log(
+                L"PowerSetActiveScheme failed for target power plan %s. Skipping until settings change.",
+                guidStr);
         }
     }
 }
@@ -2232,6 +2270,23 @@ static bool ResetProcessEcoQoS(HANDLE hProcess) {
                                  &state, sizeof(state)) != 0;
 }
 
+// Disables timer coalescing on Windows 10 (1709+) and Windows 11 for active foreground games,
+// ensuring the kernel honors high-resolution sub-millisecond timers without DLL injection.
+static bool SetProcessAntiTimerCoalescing(HANDLE hProcess, bool enable) {
+    PROCESS_POWER_THROTTLING_STATE state{};
+    state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    if (enable) {
+        state.ControlMask = PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+        state.StateMask = 0; // Cleared: timers are not coalesced and high-resolution timers are honored
+    } else {
+        state.ControlMask = 0; // Cleared: restore OS-managed default
+        state.StateMask = 0;
+    }
+    return SetProcessInformation(hProcess,
+                                 (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
+                                 &state, sizeof(state)) != 0;
+}
+
 // ---------------------------------------------------------------------------
 // Foreground Priority Boost
 // ---------------------------------------------------------------------------
@@ -2276,6 +2331,9 @@ static void RestoreForegroundBoostLocked() {
                 SetProcessMemoryPriorityHint(entry.hProcess, entry.originalMemoryPriority);
                 if (entry.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                     g_pfnSetProcessDefaultCpuSets(entry.hProcess, nullptr, 0);
+                }
+                if (entry.antiTimerCoalescingApplied) {
+                    SetProcessAntiTimerCoalescing(entry.hProcess, false);
                 }
             }
             CloseHandle(entry.hProcess);
@@ -2495,6 +2553,13 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                         }
                     }
 
+                    bool appliedAntiTimerCoalescing = false;
+                    if (settings.enableAntiTimerCoalescing && pid == newForegroundPid) {
+                        if (SetProcessAntiTimerCoalescing(hProc, true)) {
+                            appliedAntiTimerCoalescing = true;
+                        }
+                    }
+
                     if (pid == newForegroundPid) {
                         foregroundBoosted = true;
                         if (itName != nameByPid.end()) {
@@ -2514,6 +2579,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                     entry.originalIoPriority = origIoPriority;
                     entry.originalMemoryPriority = origMemoryPriority;
                     entry.cpuSetsApplied = appliedCpuSets;
+                    entry.antiTimerCoalescingApplied = appliedAntiTimerCoalescing;
                     g_boostedProcesses.push_back(entry);
                     continue;
                 }
@@ -5257,7 +5323,6 @@ static void MemoryOptimizerWorker() {
 
     try {
         HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
-        DWORD waitCount = 2;
         g_modStartTime = std::chrono::steady_clock::now();
         g_lastIdleCleanTime = g_modStartTime;
         g_lastTriggerCleanTime = g_modStartTime;
@@ -5508,7 +5573,7 @@ static void MemoryOptimizerWorker() {
             }
 
             DWORD waitSec = (DWORD)std::clamp(settings.checkIntervalSec, 1, 60);
-            DWORD waitRes = WaitForMultipleObjects(waitCount, waitHandles,
+            DWORD waitRes = WaitForMultipleObjects(ARRAYSIZE(waitHandles), waitHandles,
                                                    FALSE, waitSec * 1000);
 
             if (waitRes == WAIT_OBJECT_0) {
@@ -5556,6 +5621,9 @@ static void LoadSettings() {
 
     g_settings.enableForegroundCpuSets =
         Wh_GetIntSetting(L"enableForegroundCpuSets") != 0;
+
+    g_settings.enableAntiTimerCoalescing =
+        Wh_GetIntSetting(L"enableAntiTimerCoalescing") != 0;
 
     g_settings.enableBackgroundCpuSets =
         Wh_GetIntSetting(L"enableBackgroundCpuSets") != 0;
@@ -5620,10 +5688,14 @@ static void LoadSettings() {
         auto customGuidStr =
             WindhawkUtils::StringSetting::make(L"customPowerPlanGuid");
         g_settings.targetPowerPlanGuid = ParsePowerPlanGuid(
-            customGuidStr.get() ? customGuidStr.get() : L"",
-            kGuidHighPerformance);
+            customGuidStr.get(), kGuidHighPerformance);
     } else {
         g_settings.targetPowerPlanGuid = kGuidHighPerformance;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        g_hasFailedPowerPlanGuid = false;
     }
 
     int gameGrace = (int)Wh_GetIntSetting(L"gameAltTabGracePeriodSeconds");
@@ -5742,17 +5814,114 @@ BOOL WhTool_ModInit() {
     return TRUE;
 }
 
+static void LogSettingsTransitions(const ModSettings& oldSettings,
+                                   const ModSettings& newSettings) {
+    if (oldSettings.enableDynamicPowerPlan != newSettings.enableDynamicPowerPlan) {
+        if (newSettings.enableDynamicPowerPlan) {
+            wchar_t guidStr[64]{};
+            StringFromGUID2(newSettings.targetPowerPlanGuid, guidStr, ARRAYSIZE(guidStr));
+            LogEvent(LogCategory::Power,
+                     L"Dynamic Performance Power Scheme: ON (Target: %s)",
+                     guidStr);
+        } else {
+            LogEvent(LogCategory::Power,
+                     L"Dynamic Performance Power Scheme: OFF");
+        }
+    } else if (newSettings.enableDynamicPowerPlan &&
+               !IsEqualGUID(oldSettings.targetPowerPlanGuid, newSettings.targetPowerPlanGuid)) {
+        wchar_t guidStr[64]{};
+        StringFromGUID2(newSettings.targetPowerPlanGuid, guidStr, ARRAYSIZE(guidStr));
+        LogEvent(LogCategory::Power,
+                 L"Dynamic Power Scheme target updated: %s",
+                 guidStr);
+    }
+
+    if (oldSettings.enableForegroundCpuSets != newSettings.enableForegroundCpuSets) {
+        LogEvent(LogCategory::ProBalance,
+                 L"P-Core affinity for foreground app: %s",
+                 newSettings.enableForegroundCpuSets ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.enableAntiTimerCoalescing != newSettings.enableAntiTimerCoalescing) {
+        LogEvent(LogCategory::ProBalance,
+                 L"Anti-Timer Coalescing for foreground games: %s",
+                 newSettings.enableAntiTimerCoalescing ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.enableProBalance != newSettings.enableProBalance) {
+        LogEvent(LogCategory::ProBalance,
+                 L"Foreground Priority Boost (ProBalance): %s",
+                 newSettings.enableProBalance ? L"ON" : L"OFF");
+    } else if (oldSettings.foregroundPriorityLevel != newSettings.foregroundPriorityLevel) {
+        LogEvent(LogCategory::ProBalance,
+                 L"Foreground Priority Level: %s",
+                 (newSettings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
+                     ? L"High"
+                     : L"AboveNormal");
+    }
+
+    if (oldSettings.enableBackgroundThrottling != newSettings.enableBackgroundThrottling) {
+        LogEvent(LogCategory::Throttler,
+                 L"Background CPU Throttling: %s",
+                 newSettings.enableBackgroundThrottling ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableEcoQosManagement != newSettings.enableEcoQosManagement) {
+        LogEvent(LogCategory::Throttler,
+                 L"Windows Efficiency Mode (EcoQoS) for background: %s",
+                 newSettings.enableEcoQosManagement ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableBackgroundCpuSets != newSettings.enableBackgroundCpuSets) {
+        LogEvent(LogCategory::Throttler,
+                 L"E-Core confinement for background apps: %s",
+                 newSettings.enableBackgroundCpuSets ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.enableAudioShielding != newSettings.enableAudioShielding) {
+        LogEvent(LogCategory::Sanctuary,
+                 L"Audio & Music Protection Shield: %s",
+                 newSettings.enableAudioShielding ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableNetworkShielding != newSettings.enableNetworkShielding) {
+        LogEvent(LogCategory::Sanctuary,
+                 L"Network Activity Shield: %s",
+                 newSettings.enableNetworkShielding ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.trimMinimizedWindows != newSettings.trimMinimizedWindows) {
+        LogEvent(LogCategory::Memory,
+                 L"Clean Minimized Windows: %s",
+                 newSettings.trimMinimizedWindows ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableBrowserTabTrim != newSettings.enableBrowserTabTrim) {
+        LogEvent(LogCategory::Memory,
+                 L"Inactive Browser & Web App Tabs Trim: %s",
+                 newSettings.enableBrowserTabTrim ? L"ON" : L"OFF");
+    }
+    if (oldSettings.freeRamThresholdPercent != newSettings.freeRamThresholdPercent) {
+        if (newSettings.freeRamThresholdPercent <= 0) {
+            LogEvent(LogCategory::Memory,
+                     L"Standard Free RAM Threshold: Auto-Adaptive");
+        } else {
+            LogEvent(LogCategory::Memory,
+                     L"Standard Free RAM Threshold: %d%%",
+                     newSettings.freeRamThresholdPercent);
+        }
+    }
+}
+
 void WhTool_ModSettingsChanged() {
     LogEvent(LogCategory::Boot,
              L"Settings updated. Reloading configuration...");
+    ModSettings oldSettings = GetSettingsSnapshot();
     LoadSettings();
+    ModSettings newSettings = GetSettingsSnapshot();
 
-    ModSettings settings = GetSettingsSnapshot();
+    LogSettingsTransitions(oldSettings, newSettings);
 
     // If foreground boost was disabled, restore boosted process immediately.
     // Note: Background throttling restoration is handled safely by the worker
     // thread upon waking to avoid cross-thread data races on throttled processes.
-    if (!settings.enableProBalance) {
+    if (!newSettings.enableProBalance) {
         std::lock_guard<std::recursive_mutex> lock(g_priorityMutex);
         RestoreForegroundBoostLocked();
     } else {
@@ -5761,11 +5930,15 @@ void WhTool_ModSettingsChanged() {
     }
 
     if (g_hookThreadRunning.load() && g_hookThreadId != 0) {
-        if (settings.enablePanicHotkey && !g_panicHotkeyRegistered.load()) {
+        if (newSettings.enablePanicHotkey && !g_panicHotkeyRegistered.load()) {
             PostThreadMessageW(g_hookThreadId, WM_APP, 1, 0);
-        } else if (!settings.enablePanicHotkey && g_panicHotkeyRegistered.load()) {
+        } else if (!newSettings.enablePanicHotkey && g_panicHotkeyRegistered.load()) {
             PostThreadMessageW(g_hookThreadId, WM_APP, 0, 0);
         }
+    }
+
+    if (newSettings.enableDynamicPowerPlan && g_isHighPerformanceActive.load()) {
+        RequestPowerSchemeAsync(true);
     }
 
     if (g_wakeEvent) {
