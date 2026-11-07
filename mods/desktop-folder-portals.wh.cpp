@@ -3,7 +3,7 @@
 // @name            Desktop Folder Portals (Windows 11)
 // @description     Интерактивные папки-порталы на рабочем столе с плавной морфинг-анимацией, эффектом стекла и сеткой файлов.
 // @version         1.2.0
-// @author          Eswerd2324
+// @author          https://github.com/Eswerd2324
 // @github          https://github.com/windhawkmods
 // @include         explorer.exe
 // @compilerOptions -luxtheme -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
