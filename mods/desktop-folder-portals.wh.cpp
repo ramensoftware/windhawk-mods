@@ -9,7 +9,6 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luxtheme -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
-// ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
@@ -23,11 +22,9 @@
 *Dark glass styling with customizable blur*
 
 ### Folder Grid
-![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Folder%20Grid%20(2-5%20folders).jpg)
+![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Folder%20Grid%20%282-5%20folders%29.jpg)
 *Customize window size and folder grid layout*
-*/
-// ==/WindhawkModReadme==
-/*
+
 # Desktop Folder Portals (Windows 11)
 
 Desktop Folder Portals is a Windows 11 modification that brings interactive, on-hover folder content previews directly to your desktop without opening separate File Explorer windows.
