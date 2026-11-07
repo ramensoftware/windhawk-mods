@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-07T19:00:27.000Z</updated>
+    <updated>2026-11-07T21:03:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Outlook Refined 0.6.1]]></title>
+        <id>https://windhawk.net/mods/outlook-refined#e4a1aeceacc4da99b4b2f1848ef84b6655ee5250</id>
+        <link href="https://windhawk.net/mods/outlook-refined"/>
+        <updated>2026-11-07T21:03:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Favorites collected by the Outgoing and Junk groups are labelled with their own account when no other account has a favorite of the same name. They were labelled with the primary account.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Analytic Endeavors</name>
+            <uri>https://github.com/ae-reid-havens</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tab Router 1.1.2]]></title>
         <id>https://windhawk.net/mods/explorer-tab-router#6a2eda932f27a788ca5627e4e817b0a6f9f9c568</id>
@@ -750,78 +764,6 @@ animation and the card are skipped then as well, whether Quiet mode is on or off
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compiz Desktop Cube for Windows 11 5.9.0]]></title>
-        <id>https://windhawk.net/mods/compiz-desktop-cube#77263ff11741f7176db8df91469373cfffa6ee84</id>
-        <link href="https://windhawk.net/mods/compiz-desktop-cube"/>
-        <updated>2026-11-06T03:04:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Compiz Desktop Cube for Windows 11</h1>
-<p><img src="https://raw.githubusercontent.com/Soham-Barate/compiz-desktop-cube-windows11/main/images/cube-demo.gif" alt="Compiz Desktop Cube Preview"></p>
-<p>A Compiz / GNOME style 3D desktop prism for Windows 11 virtual desktops.
-Built on Windows.UI.Composition + Direct2D with a GPU blurred background.</p>
-<h2>How to use</h2>
-<ol>
-<li>Press and hold the <strong>left mouse button</strong> on <strong>empty space</strong> of the taskbar
-(works with an auto-hide taskbar too).</li>
-<li>Drag <strong>upward</strong>. The desktop shrinks gradually into the cube.</li>
-<li>Keep holding and drag <strong>left / right</strong> to turn it. After a moment <strong>up / down</strong> tilts it.</li>
-<li><strong>Mouse wheel</strong> zooms the cube in and out (scroll up = closer, scroll down = farther).
-(Optional: set &quot;Mouse Wheel Action&quot; to the window switcher to get the Alt+Tab style window cycling instead.)</li>
-<li><strong>Add / remove desktops:</strong> while the cube is open, <strong>right-click the right edge</strong> of the screen to add a desktop (+1) or
-<strong>right-click the left edge</strong> to remove one (-1). The frosted gray zones are hidden by default: move the pointer to the far left or
-far right edge and the matching zone (a - or a +) slides in. It stays while the pointer is inside it, flashes when
-you use it and hides again. &quot;-&quot; closes the LAST desktop (its windows move to the previous one). The cube rebuilds itself
-with a little spin and the new face fades in.</li>
-<li>Release. The cube snaps to the nearest face and switches desktop.
-A quick flick also switches. Press <strong>Escape</strong> to cancel.</li>
-</ol>
-<h2>Faces follow your desktop count</h2>
-<ul>
-<li>1 desktop: a single face with limited rotation.</li>
-<li>2 desktops: two faces (a flip card).</li>
-<li>3, 4, 5, 6 desktops: triangle, cube, pentagon, hexagon.</li>
-<li>More than 6 desktops: hexagon, faces are re-mapped while you turn it, so every desktop is reachable.</li>
-</ul>
-<h2>Live desktop</h2>
-<ul>
-<li>The desktop you are on is streamed LIVE (Desktop Duplication) into the front face
-and into the blurred background. A video that is playing keeps playing, blurred
-behind the cube and sharp on the face while it turns.</li>
-<li>The cube overlay is excluded from capture, so it never shows up inside itself.</li>
-<li>Desktops you are not on are rebuilt from your wallpaper plus a capture of each of
-their windows (PrintWindow). Windows that cannot be captured are simply left out
-(no more black placeholder cards). Those faces cannot be live, Windows does not
-render apps of other virtual desktops.</li>
-<li>If Desktop Duplication is not available (some hybrid GPU laptops), a slower GDI
-live capture is used automatically.</li>
-</ul>
-<h2>Smoothness</h2>
-<ul>
-<li>Persistent render thread, devices stay warm between gestures (pre-warmed as soon as you press the taskbar).</li>
-<li>Mouse input is read on the render thread, not on the busy taskbar thread.</li>
-<li>Rendering is locked to the monitor's vertical blank, so it follows 60 / 120 / 144 / 240 Hz by itself. All motion is time based.</li>
-<li>Live frames are presented without ever blocking the render thread, so a busy GPU can no longer make the cube miss a refresh.</li>
-<li>Power: no permanent 1 ms timer, normal-ish thread priorities, the blurred background refreshes at a low rate, and while the cube is held still the render loop drops to about 30 Hz (it jumps back to full refresh the instant you move the mouse).</li>
-<li>Turn on &quot;Enable Diagnostic Logging&quot; to see the measured fps and the monitor Hz in the Windhawk log.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The real taskbar is hidden from the capture, so every face is the full, uncropped desktop (wallpaper where the taskbar was). The taskbar is restored the moment the gesture ends. If Windows refuses to hide it, the old crop is used as a fallback.</li>
-<li>Window switcher: every window becomes a live thumbnail card (the selected one is refreshed every frame, the others a few times per second). It shows what is visible on screen, so a part hidden behind another window shows that other window.</li>
-<li>The GPU device is created on the graphics adapter that drives your monitor, so screen capture stays on the fast path.</li>
-<li>PrintWindow cannot render every app (some games, protected content). Those windows are left out of other desktops' faces.</li>
-<li>The overlay is hidden from screenshots and screen recorders on purpose (needed for the live capture).</li>
-<li>Desktop switching sends Win+Ctrl+Left/Right. No undocumented COM is used.</li>
-<li>Screen recording: turn on &quot;Screen Recording Mode&quot; in the mod settings to make the cube visible to recorders (it applies the next time you open the cube). The front face is a still picture while it is on.</li>
-<li>The Windows desktop slide animation is hidden only while the cube switches desktops (explorer is told &quot;animations off&quot; for that moment). Your Windows &quot;Animation effects&quot; setting is never changed.</li>
-<li>If you still see a slide on your build, raise &quot;Switch Settle Delay&quot;.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Soham</name>
-            <uri>https://github.com/Soham-Barate</uri>
         </author>
     </entry>
 </feed>

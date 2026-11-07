@@ -12466,7 +12466,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793854894000,
+        "updated": 1794085391000,
         "users": 12
       },
       "metadata": {
@@ -12482,7 +12482,7 @@
         ],
         "license": "MIT",
         "name": "Outlook Refined",
-        "version": "0.6"
+        "version": "0.6.1"
       }
     },
     "overhaulded-alt-tab": {
