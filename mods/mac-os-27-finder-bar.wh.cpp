@@ -115,6 +115,10 @@ The mod only goes online for features you set up yourself (the calendar reads lo
 
 The copy pill only says "Copied" or "Cut": it never shows what was copied, and it skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.
 
+## How it runs
+
+The bar runs in its own process, so if it ever fails, the taskbar and desktop keep working. The mod starts that process from Explorer. Explorer keeps only a small hook that copies the tray icons' registrations to the bar.
+
 ## Known limitations
 
 - Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.
@@ -270,10 +274,8 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
 #include <cfgmgr32.h>
 #include <shlobj.h>
 
-// C++/WinRT (vem com o compilador do Windhawk): vidro por bloco, rádios e mídia.
-// Sem ele o mod compila igual, com vidro mais opaco e sem esses recursos.
-#if __has_include(<winrt/Windows.UI.Composition.h>)
-#define FTB_WINRT 1
+// C++/WinRT (vem com o compilador do Windhawk): vidro por bloco, rádios, mídia
+// e leitura das notificações do Windows.
 #ifdef GetCurrentTime
 #undef GetCurrentTime
 #endif
@@ -288,19 +290,9 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
 #include <winrt/Windows.Devices.Radios.h>
 #include <winrt/Windows.Media.Control.h>
 #include <winrt/Windows.Storage.Streams.h>
-// Leitura das notificações do Windows (experimental; só se o SDK tiver os cabeçalhos).
-#if __has_include(<winrt/Windows.UI.Notifications.Management.h>) && __has_include(<winrt/Windows.ApplicationModel.h>)
-#define FTB_NOTIF 1
 #include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.UI.Notifications.Management.h>
-#endif
-#else
-#define FTB_WINRT 0
-#endif
-#ifndef FTB_NOTIF
-#define FTB_NOTIF 0
-#endif
 
 // Alguns SDKs (mingw) não definem estes flags do wlanapi.h.
 #ifndef WLAN_AVAILABLE_NETWORK_CONNECTED
@@ -1060,6 +1052,15 @@ static HWND g_owner = nullptr;
 // Janela só de mensagens (não recebe broadcasts): as threads de trabalho mandam
 // para ela os resultados, que levam um ponteiro no lParam.
 static HWND g_worker = nullptr;
+// O explorer.exe do shell (dono da barra de tarefas e da área de trabalho).
+// Antes a barra rodava nele; agora roda noutro processo, e as verificações de
+// "é o próprio processo" valem também para ele.
+static DWORD ShellPid() {
+    DWORD pid = 0;
+    if (HWND t = FindWindowW(L"Shell_TrayWnd", nullptr)) GetWindowThreadProcessId(t, &pid);
+    return pid;
+}
+static bool IsShellOrSelf(DWORD pid) { return pid && (pid == GetCurrentProcessId() || pid == ShellPid()); }
 static const wchar_t kWorkerClass[] = L"WhFinderTopBarWorker";
 static ID2D1Factory* g_d2d = nullptr;
 static IDWriteFactory* g_dwrite = nullptr;
@@ -3621,9 +3622,9 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
             // ativo pode mudar, e o encerramento tem de ser do app que foi perguntado.
             DWORD pid = g_active.pid;
             std::wstring name = g_active.name;
-            if (pid && pid != GetCurrentProcessId() &&
+            if (pid && !IsShellOrSelf(pid) &&
                 Confirm(TF(L"Forçar o encerramento de %s? Alterações não salvas serão perdidas.", {name}).c_str()) &&
-                pid != GetCurrentProcessId()) {
+                !IsShellOrSelf(pid)) {
                 HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
                 if (h) { TerminateProcess(h, 1); CloseHandle(h); }
             }
@@ -3798,7 +3799,6 @@ static void PopAnim(ID2D1RenderTarget* rt, const D2D1::Matrix3x2F& base = D2D1::
     rt->SetTransform(base);
 }
 
-#if FTB_WINRT
 // Aplica a mesma animação a um pedaço de vidro (visual de composição).
 static void AnimateVisual(winrt::Windows::UI::Composition::SpriteVisual& vis, const D2D1_RECT_F& r, const AnimV& v,
                           D2D1_POINT_2F pivot) {
@@ -3811,7 +3811,6 @@ static void AnimateVisual(winrt::Windows::UI::Composition::SpriteVisual& vis, co
     } catch (...) {
     }
 }
-#endif
 
 struct GlassLayer;  // definido com os menus de vidro
 static GlassLayer* BackdropOpen(Bar* b);
@@ -3855,8 +3854,30 @@ static TrayPopup& g_tray = *g_trayStore;
 
 static HWND HandleFrom32(DWORD v) { return (HWND)(LONG_PTR)(LONG)v; }
 
-// Roda na thread da taskbar: só copia os dados e avisa a nossa thread.
+// ===========================================================================
+// Dois processos. A barra roda num explorer.exe próprio ("-tool-mod"); se ela
+// falhar, a barra de tarefas e a área de trabalho continuam. No explorer.exe
+// do shell fica só o que precisa estar lá: um gancho na thread da barra de
+// tarefas que copia os registros de ícones da bandeja (Shell_NotifyIcon) e os
+// manda para a barra por WM_COPYDATA, para a janela-cliente abaixo.
+// ===========================================================================
+static bool g_isHost = false;  // este é o explorer.exe do shell (só a bandeja)
+// Códigos de saída do processo da barra (o vigia do shell decide se reabre).
+// Valores próprios: um processo fechado de fora (o "Reiniciar" ou "Finalizar
+// tarefa" do Gerenciador de Tarefas) sai com 0 ou 1, e esse a barra reabre.
+static const UINT kExitClean = 0x46544230, kExitDuplicate = 0x46544231, kExitFailed = 0x46544232;
+static HANDLE g_watchThread = nullptr;
+static const wchar_t kTrayClientClass[] = L"WhFinderTopBarTrayClient";
+static const ULONG_PTR kTrayFwd = 0x46544231;    // um registro de ícone
+static const ULONG_PTR kTrayHello = 0x46544232;  // o gancho acabou de ser instalado
+static HANDLE g_hostStop = nullptr, g_hostWake = nullptr, g_hostThread = nullptr;
+static volatile LONG g_hostHookBusy = 0;
+static HWND g_trayClient = nullptr;  // (no processo da barra)
+
+// Roda na thread da barra de tarefas (no shell): só copia os dados e acorda a
+// thread que os encaminha.
 static LRESULT CALLBACK TrayCallWndProc(int code, WPARAM wp, LPARAM lp) {
+    InterlockedIncrement(&g_hostHookBusy);
     if (code == HC_ACTION) {
         auto* c = reinterpret_cast<CWPSTRUCT*>(lp);
         if (c && c->message == WM_COPYDATA && c->hwnd == g_trayWnd) {
@@ -3867,14 +3888,128 @@ static LRESULT CALLBACK TrayCallWndProc(int code, WPARAM wp, LPARAM lp) {
                 DWORD n = std::min<DWORD>(cds->cbData, (DWORD)sizeof(TrayMsg));
                 std::vector<BYTE> data(p, p + n);
                 AcquireSRWLockExclusive(&g_trayLock);
-                g_trayQueue.push_back(std::move(data));
+                if (g_trayQueue.size() < 4096) g_trayQueue.push_back(std::move(data));
                 ReleaseSRWLockExclusive(&g_trayLock);
-                HWND owner = g_owner;
-                if (owner) PostMessageW(owner, WM_APP_TRAY, 0, 0);
+                if (g_hostWake) SetEvent(g_hostWake);
             }
         }
     }
-    return CallNextHookEx(nullptr, code, wp, lp);
+    LRESULT r = CallNextHookEx(nullptr, code, wp, lp);
+    InterlockedDecrement(&g_hostHookBusy);
+    return r;
+}
+
+// A janela-cliente da barra (só de mensagens, no outro processo).
+static HWND FindTrayClient() { return FindWindowExW(HWND_MESSAGE, nullptr, kTrayClientClass, nullptr); }
+
+static bool HostSend(HWND client, ULONG_PTR kind, const void* data, DWORD size) {
+    COPYDATASTRUCT cds{kind, size, const_cast<void*>(data)};
+    DWORD_PTR r = 0;
+    return SendMessageTimeoutW(client, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &r) != 0;
+}
+
+// Thread do shell: acha a barra de tarefas deste processo, instala o gancho e
+// encaminha os registros. Uma barra nova (o processo dela reiniciou) recebe um
+// "olá", e ela pede aos apps que registrem os ícones de novo.
+static DWORD WINAPI HostThreadProc(LPVOID) {
+    for (int i = 0;; i++) {
+        HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+        DWORD pid = 0;
+        DWORD tid = tray ? GetWindowThreadProcessId(tray, &pid) : 0;
+        if (tray && pid == GetCurrentProcessId()) {
+            g_trayWnd = tray;
+            g_trayHook = SetWindowsHookExW(WH_CALLWNDPROC, TrayCallWndProc, g_hInst, tid);
+            if (!g_trayHook) Wh_Log(L"Hook da bandeja falhou: %u", GetLastError());
+            break;
+        }
+        // Outro explorer.exe (pastas em processo separado) ou sem barra ainda.
+        if (i >= 240 || WaitForSingleObject(g_hostStop, 500) == WAIT_OBJECT_0) return 0;
+    }
+    HWND lastClient = nullptr;
+    HANDLE hs[2] = {g_hostStop, g_hostWake};
+    for (;;) {
+        DWORD r = WaitForMultipleObjects(2, hs, FALSE, 2000);
+        if (r == WAIT_OBJECT_0) break;
+        HWND client = FindTrayClient();
+        if (client && client != lastClient) {
+            HostSend(client, kTrayHello, nullptr, 0);
+            lastClient = client;
+        }
+        std::vector<std::vector<BYTE>> q;
+        AcquireSRWLockExclusive(&g_trayLock);
+        q.swap(g_trayQueue);
+        ReleaseSRWLockExclusive(&g_trayLock);
+        if (!client) continue;  // a barra ainda não abriu: ela pede tudo de novo ao abrir
+        for (auto& m : q) {
+            if (WaitForSingleObject(g_hostStop, 0) == WAIT_OBJECT_0) break;
+            HostSend(client, kTrayFwd, m.data(), (DWORD)m.size());
+        }
+    }
+    return 0;
+}
+
+static void HostStart() {
+    g_hostStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hostWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (g_hostStop && g_hostWake) g_hostThread = CreateThread(nullptr, 0, HostThreadProc, nullptr, 0, nullptr);
+}
+// Antes de sair: tira o gancho e espera uma chamada dele que esteja em andamento.
+static void HostUnhook() {
+    if (g_trayHook) {
+        UnhookWindowsHookEx(g_trayHook);
+        g_trayHook = nullptr;
+    }
+    while (InterlockedCompareExchange(&g_hostHookBusy, 0, 0) > 0) Sleep(10);
+}
+static void HostStop() {
+    if (g_hostStop) SetEvent(g_hostStop);
+    if (g_watchThread) {
+        WaitForSingleObject(g_watchThread, INFINITE);
+        CloseHandle(g_watchThread);
+        g_watchThread = nullptr;
+    }
+    if (g_hostThread) {
+        WaitForSingleObject(g_hostThread, INFINITE);
+        CloseHandle(g_hostThread);
+        g_hostThread = nullptr;
+    }
+    HostUnhook();  // (se a thread instalou o gancho depois do BeforeUninit)
+    if (g_hostStop) { CloseHandle(g_hostStop); g_hostStop = nullptr; }
+    if (g_hostWake) { CloseHandle(g_hostWake); g_hostWake = nullptr; }
+    AcquireSRWLockExclusive(&g_trayLock);
+    g_trayQueue.clear();
+    ReleaseSRWLockExclusive(&g_trayLock);
+}
+
+static void TrayRequestIcons() {
+    // Pede aos apps que registrem de novo seus ícones (o mesmo aviso que o
+    // Windows envia quando o explorer reinicia), para conhecermos os que já existiam.
+    g_ignoreTaskbarCreatedUntil = GetTickCount64() + 5000;
+    PostMessageW(HWND_BROADCAST, g_msgTaskbarCreated, 0, 0);
+}
+
+// Processo da barra: recebe os registros do shell e põe na fila de sempre.
+static LRESULT CALLBACK TrayClientProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_COPYDATA) {
+        auto* cds = reinterpret_cast<COPYDATASTRUCT*>(lp);
+        if (!cds) return FALSE;
+        if (cds->dwData == kTrayHello) {
+            TrayRequestIcons();
+            return TRUE;
+        }
+        if (cds->dwData == kTrayFwd && cds->lpData && cds->cbData >= 8 && cds->cbData <= sizeof(TrayMsg) &&
+            *(const DWORD*)cds->lpData == 0x34753423) {
+            const BYTE* p = (const BYTE*)cds->lpData;
+            std::vector<BYTE> data(p, p + cds->cbData);
+            AcquireSRWLockExclusive(&g_trayLock);
+            if (g_trayQueue.size() < 4096) g_trayQueue.push_back(std::move(data));
+            ReleaseSRWLockExclusive(&g_trayLock);
+            if (g_owner) PostMessageW(g_owner, WM_APP_TRAY, 0, 0);
+            return TRUE;
+        }
+        return FALSE;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 static int FindTray(const NID32& n) {
@@ -3959,25 +4094,26 @@ static void PurgeDeadTrayIcons() {
     if (changed && g_tray.hwnd) LayoutTrayPopup();
 }
 
+// Processo da barra: abre a janela-cliente e pede os ícones a todos os apps.
 static void InstallTrayHook() {
-    if (g_trayHook) return;
-    g_trayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!g_trayWnd) return;
-    DWORD tid = GetWindowThreadProcessId(g_trayWnd, nullptr);
-    g_trayHook = SetWindowsHookExW(WH_CALLWNDPROC, TrayCallWndProc, g_hInst, tid);
-    if (!g_trayHook) {
-        Wh_Log(L"Hook da bandeja falhou: %u", GetLastError());
-        return;
-    }
-    // Pede aos apps que registrem de novo seus ícones (o mesmo aviso que o
-    // Windows envia quando o explorer reinicia), para conhecermos os que já existiam.
-    g_ignoreTaskbarCreatedUntil = GetTickCount64() + 5000;
-    PostMessageW(HWND_BROADCAST, g_msgTaskbarCreated, 0, 0);
-    Wh_Log(L"Hook da bandeja instalado");
+    if (g_trayClient) return;
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = TrayClientProc;
+    wc.hInstance = g_hInst;
+    wc.lpszClassName = kTrayClientClass;
+    RegisterClassExW(&wc);
+    g_trayClient = CreateWindowExW(0, kTrayClientClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInst, nullptr);
+    // O WM_COPYDATA vem de outro processo (mesmo nível de integridade).
+    if (g_trayClient) ChangeWindowMessageFilterEx(g_trayClient, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+    TrayRequestIcons();
 }
 
 static void RemoveTrayHook() {
-    if (g_trayHook) { UnhookWindowsHookEx(g_trayHook); g_trayHook = nullptr; }
+    if (g_trayClient) {
+        DestroyWindow(g_trayClient);
+        g_trayClient = nullptr;
+        UnregisterClassW(kTrayClientClass, g_hInst);
+    }
     for (auto& t : g_trayIcons)
         if (t.icon) DestroyIcon(t.icon);
     g_trayIcons.clear();
@@ -4219,7 +4355,6 @@ static int WlanRadio(int set) {
     return state;
 }
 
-#if FTB_WINRT
 // Cancela e espera a operação sair de "em andamento": wait_for deixou um
 // tratador (código do mod) registrado nela, e ele precisa rodar antes de a DLL
 // poder sair. O cancelamento costuma terminar na hora. Lê só o estado, sem
@@ -4239,11 +4374,9 @@ static auto CcAwait(Op const& op, DWORD ms = 3000) {
     }
     return op.GetResults();
 }
-#endif
 
 static void CcDoRadios(unsigned jobs) {
     int bt = -1, wifi = -1;
-#if FTB_WINRT
     using namespace winrt::Windows::Devices::Radios;
     static bool access = false;
     if (!access) access = CcAwait(Radio::RequestAccessAsync()) == RadioAccessStatus::Allowed;
@@ -4258,7 +4391,6 @@ static void CcDoRadios(unsigned jobs) {
             wifi = r.State() == RadioState::On ? 1 : 0;
         }
     }
-#endif
     if (wifi < 0) wifi = WlanRadio((jobs & JOB_SET_WIFI) ? (g_ccWantWifi ? 1 : 0) : -1);
     AcquireSRWLockExclusive(&g_ccLock);
     g_ccShared.wifiRadio = wifi;
@@ -4268,16 +4400,9 @@ static void CcDoRadios(unsigned jobs) {
 
 // ---- Mídia (GlobalSystemMediaTransportControls) ----
 
-#if FTB_WINRT
 using MediaManager = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
-#else
-struct MediaManager {
-    MediaManager(std::nullptr_t) {}
-};
-#endif
 
 static void CcDoMedia(unsigned jobs, MediaManager& mgr) {
-#if FTB_WINRT
     using namespace winrt::Windows::Media::Control;
     if (!mgr) mgr = CcAwait(GlobalSystemMediaTransportControlsSessionManager::RequestAsync());
     auto session = mgr.GetCurrentSession();
@@ -4355,18 +4480,10 @@ static void CcDoMedia(unsigned jobs, MediaManager& mgr) {
         g_ccShared.thumbSerial++;
     }
     ReleaseSRWLockExclusive(&g_ccLock);
-#else
-    (void)jobs;
-    (void)mgr;
-#endif
 }
 
 static DWORD WINAPI CcWorkerProc(LPVOID) {
-#if FTB_WINRT
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
-#else
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-#endif
     {
         MediaManager media{nullptr};
         IWbemServices* wmi = nullptr;
@@ -4412,11 +4529,7 @@ static DWORD WINAPI CcWorkerProc(LPVOID) {
         }
         if (wmi) wmi->Release();
     }
-#if FTB_WINRT
     winrt::uninit_apartment();
-#else
-    CoUninitialize();
-#endif
     return 0;
 }
 
@@ -4755,11 +4868,9 @@ struct CcPanel {
     std::wstring power;  // modo ou plano de energia atual
     bool glassOk = false;
     LiquidSurface* lq = nullptr;
-#if FTB_WINRT
     winrt::Windows::UI::Composition::Desktop::DesktopWindowTarget target{nullptr};
     winrt::Windows::UI::Composition::ContainerVisual root{nullptr};
     std::vector<winrt::Windows::UI::Composition::SpriteVisual> visuals;
-#endif
     ULONGLONG openTick = 0;
     bool animating = false;
     GlassLayer* backdrop = nullptr;  // fundo da tela desfocado/escurecido
@@ -4770,10 +4881,8 @@ struct CcPanel {
 [[clang::no_destroy]] static std::optional<CcPanel> g_ccStore{std::in_place};
 static CcPanel& g_cc = *g_ccStore;
 
-#if FTB_WINRT
 [[clang::no_destroy]] static winrt::Windows::UI::Composition::Compositor g_compositor{nullptr};
 [[clang::no_destroy]] static winrt::Windows::UI::Composition::CompositionBrush g_backdrop{nullptr};
-#endif
 static IUnknown* g_dqController = nullptr;
 
 // ICompositorDesktopInterop (windows.ui.composition.interop.h), declarado aqui.
@@ -4783,7 +4892,6 @@ struct ICompositorDesktopInteropLite : IUnknown {
 };
 
 [[maybe_unused]] static bool EnsureCompositor() {
-#if FTB_WINRT
     if (g_compositor) return true;
     try {
         if (!g_dqController) {
@@ -4805,21 +4913,15 @@ struct ICompositorDesktopInteropLite : IUnknown {
         g_compositor = nullptr;
         return false;
     }
-#else
-    return false;
-#endif
 }
 
 static void ReleaseCompositor() {
-#if FTB_WINRT
     g_backdrop = nullptr;
     g_compositor = nullptr;
-#endif
     if (g_dqController) { g_dqController->Release(); g_dqController = nullptr; }
 }
 
 static void CcGlassSetShapes() {
-#if FTB_WINRT
     if (!g_cc.glassOk || !g_cc.root) return;
     try {
         namespace N = winrt::Windows::Foundation::Numerics;
@@ -4842,12 +4944,10 @@ static void CcGlassSetShapes() {
     } catch (...) {
         Wh_Log(L"Vidro: falha ao montar as formas");
     }
-#endif
 }
 
 // Coloca o vidro de um bloco num retângulo qualquer (durante a troca de lugar/forma).
 static void CcGlassPlace(size_t i, const D2D1_RECT_F& r, float radius) {
-#if FTB_WINRT
     if (!g_cc.glassOk || i >= g_cc.visuals.size()) return;
     try {
         namespace N = winrt::Windows::Foundation::Numerics;
@@ -4862,26 +4962,13 @@ static void CcGlassPlace(size_t i, const D2D1_RECT_F& r, float radius) {
         v.Clip(g_compositor.CreateGeometricClip(geo));
     } catch (...) {
     }
-#else
-    (void)i;
-    (void)r;
-    (void)radius;
-#endif
 }
 
 static void CcGlassAnimate(size_t i, const D2D1_RECT_F& r, const AnimV& v, D2D1_POINT_2F pivot) {
-#if FTB_WINRT
     if (g_cc.glassOk && i < g_cc.visuals.size()) AnimateVisual(g_cc.visuals[i], r, v, pivot);
-#else
-    (void)i;
-    (void)r;
-    (void)v;
-    (void)pivot;
-#endif
 }
 
 static bool CcCreateGlass() {
-#if FTB_WINRT
     if (!EnsureCompositor()) return false;
     g_cc.glass = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TRANSPARENT |
                                      WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -4918,13 +5005,9 @@ static bool CcCreateGlass() {
         g_cc.glass = nullptr;
         return false;
     }
-#else
-    return false;
-#endif
 }
 
 static void CcDestroyGlass() {
-#if FTB_WINRT
     try {
         if (g_cc.root) g_cc.root.Children().RemoveAll();
     } catch (...) {
@@ -4932,20 +5015,15 @@ static void CcDestroyGlass() {
     g_cc.visuals.clear();
     g_cc.root = nullptr;
     g_cc.target = nullptr;
-#endif
     if (g_cc.glass) { DestroyWindow(g_cc.glass); g_cc.glass = nullptr; }
     LqFree(g_cc.lq);
 }
 
 static void CcSetGlassOpacity(float o) {
-#if FTB_WINRT
     try {
         if (g_cc.root) g_cc.root.Opacity(o);
     } catch (...) {
     }
-#else
-    (void)o;
-#endif
 }
 
 // ---- Layout (medidas da maquete aprovada, em DIPs × escala) ----
@@ -7603,11 +7681,9 @@ struct GlassLayer {
     HWND hwnd = nullptr;
     bool ok = false;
     LiquidSurface* lq = nullptr;  // vidro líquido: a foto no lugar da composição
-#if FTB_WINRT
     winrt::Windows::UI::Composition::Desktop::DesktopWindowTarget target{nullptr};
     winrt::Windows::UI::Composition::ContainerVisual root{nullptr};
     std::vector<winrt::Windows::UI::Composition::SpriteVisual> visuals;
-#endif
 };
 
 static bool GlassLayerCreate(GlassLayer& g, POINT pos, int W, int H, bool allowLiquid = true,
@@ -7616,7 +7692,6 @@ static bool GlassLayerCreate(GlassLayer& g, POINT pos, int W, int H, bool allowL
         g.ok = true;  // o vidro é desenhado pelo próprio painel
         return true;
     }
-#if FTB_WINRT
     if (!EnsureCompositor()) return false;
     g.hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
                                  WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -7650,17 +7725,9 @@ static bool GlassLayerCreate(GlassLayer& g, POINT pos, int W, int H, bool allowL
         g.hwnd = nullptr;
         return false;
     }
-#else
-    (void)g;
-    (void)pos;
-    (void)W;
-    (void)H;
-    return false;
-#endif
 }
 
 static void GlassLayerShapes(GlassLayer& g, const std::vector<CcShape>& shapes) {
-#if FTB_WINRT
     if (!g.ok || !g.root) return;
     try {
         namespace N = winrt::Windows::Foundation::Numerics;
@@ -7682,39 +7749,21 @@ static void GlassLayerShapes(GlassLayer& g, const std::vector<CcShape>& shapes) 
         }
     } catch (...) {
     }
-#else
-    (void)g;
-    (void)shapes;
-#endif
 }
 
 static void GlassLayerAnimate(GlassLayer& g, size_t i, const D2D1_RECT_F& r, const AnimV& v, D2D1_POINT_2F pivot) {
-#if FTB_WINRT
     if (g.ok && i < g.visuals.size()) AnimateVisual(g.visuals[i], r, v, pivot);
-#else
-    (void)g;
-    (void)i;
-    (void)r;
-    (void)v;
-    (void)pivot;
-#endif
 }
 
 static void GlassLayerOpacity(GlassLayer& g, float o) {
-#if FTB_WINRT
     try {
         if (g.root) g.root.Opacity(o);
     } catch (...) {
     }
-#else
-    (void)g;
-    (void)o;
-#endif
 }
 
 static void GlassLayerDestroy(GlassLayer& g) {
     LqFree(g.lq);
-#if FTB_WINRT
     try {
         if (g.root) g.root.Children().RemoveAll();
     } catch (...) {
@@ -7722,7 +7771,6 @@ static void GlassLayerDestroy(GlassLayer& g) {
     g.visuals.clear();
     g.root = nullptr;
     g.target = nullptr;
-#endif
     if (g.hwnd) DestroyWindow(g.hwnd);
     g.hwnd = nullptr;
     g.ok = false;
@@ -7738,7 +7786,6 @@ static GlassLayer* BackdropOpen(Bar* b) {
         return nullptr;
     }
     GlassLayerShapes(*g, {{D2D1::RectF(0, 0, (float)W, (float)H), 0}});
-#if FTB_WINRT
     try {
         namespace N = winrt::Windows::Foundation::Numerics;
         auto dim = g_compositor.CreateSpriteVisual();
@@ -7747,7 +7794,6 @@ static GlassLayer* BackdropOpen(Bar* b) {
         g->root.Children().InsertAtTop(dim);
     } catch (...) {
     }
-#endif
     SetWindowPos(g->hwnd, b->hwnd, m.left, m.top, W, H, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     return g;
 }
@@ -9261,7 +9307,7 @@ static void TrayCtxTick(HWND hwnd) {
     if (el < 600) return;                 // o menu ainda pode estar aparecendo
     KillTimer(hwnd, 7);
     g_tray.ctxActive = false;
-    if (!fg || fg == hwnd || fg == g_tray.ctxOwner || fgPid == GetCurrentProcessId() || ClassIs(fg, L"Shell_TrayWnd")) {
+    if (!fg || fg == hwnd || fg == g_tray.ctxOwner || IsShellOrSelf(fgPid) || ClassIs(fg, L"Shell_TrayWnd")) {
         SetForegroundWindow(hwnd);  // menu fechado: o painel volta a ser o ativo
     } else {
         PostMessageW(hwnd, WM_CLOSE, 0, 0);  // abriu outra janela: o painel sai
@@ -17747,7 +17793,6 @@ static void ReplySend(const IslandNote& n, const std::wstring& text, bool open) 
     if (!StartJobThread(ReplyThreadProc, job)) delete job;
 }
 
-#if FTB_NOTIF
 // 1º caminho: a API de notificações do Windows (com prazos: nunca trava a thread).
 static DWORD WINAPI NotifThreadProc(LPVOID) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -17818,7 +17863,6 @@ static DWORD WINAPI NotifThreadProc(LPVOID) {
     winrt::uninit_apartment();
     return 0;
 }
-#endif
 
 // 2º caminho (sem acesso à API): lê o aviso do Windows na tela, por UI Automation,
 // quando a janela "Nova notificação" aparece. Precisa das faixas ligadas.
@@ -18142,16 +18186,9 @@ static void NotifApply() {
     BnrApply();
     if (!want) return;
     if (g_notifThread || g_toastHook) return;
-#if FTB_NOTIF
     g_notifStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_notifThread = CreateThread(nullptr, 0, NotifThreadProc, nullptr, 0, nullptr);
     if (!g_notifThread) ToastWatchStart();
-#else
-    ToastWatchStart();
-    NotifMsg* m = new NotifMsg();
-    m->kind = 3;
-    NotifPost(m);
-#endif
 }
 
 static DWORD NotifColor(const std::wstring& app) {
@@ -20343,7 +20380,7 @@ static void UpdateFullscreen() {
             HWND fg = GetForegroundWindow();
             DWORD pid = 0;
             if (fg) GetWindowThreadProcessId(fg, &pid);
-            hide = pid != GetCurrentProcessId() && ForegroundIsFullscreenOn(b);
+            hide = !IsShellOrSelf(pid) && ForegroundIsFullscreenOn(b);
         }
         // Só esconde se continuar em tela cheia na conferência seguinte (uma janela
         // que pisca do tamanho da tela não derruba a barra); volta na hora.
@@ -21011,14 +21048,10 @@ static void PickIconFont() {
     }
 }
 
-static bool WaitForOwnTaskbar() {
+// A barra espera a barra de tarefas do Windows existir (está noutro processo).
+static bool WaitForTaskbar() {
     for (;;) {
-        HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (tray) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(tray, &pid);
-            return pid == GetCurrentProcessId();
-        }
+        if (FindWindowW(L"Shell_TrayWnd", nullptr)) return true;
         if (WaitForSingleObject(g_stopEvent, 500) == WAIT_OBJECT_0) return false;
     }
 }
@@ -21110,10 +21143,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
 
-    if (!WaitForOwnTaskbar()) {
-        Wh_Log(L"Este explorer.exe não hospeda a taskbar; barra não criada");
-        return 0;
-    }
+    if (!WaitForTaskbar()) return 0;
 
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -21319,8 +21349,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     }
 
     FlushSaves();  // sliders mexidos há pouco
-    // 1) Primeiro o gancho na thread da barra de tarefas: depois disto nada do
-    //    mod roda dentro de outra thread do Explorer.
+    // 1) A janela que recebe os ícones da bandeja do shell, e o aviso de janela ativa.
     RemoveTrayHook();
     if (g_fgHook) { UnhookWinEvent(g_fgHook); g_fgHook = nullptr; }
     // 2) Threads de trabalho: cancela o que estiver em andamento e espera todas.
@@ -21383,33 +21412,173 @@ static DWORD WINAPI BarThread(LPVOID) {
 // Ciclo de vida do mod
 // ===========================================================================
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Mac OS 27 Finder Bar: init");
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), reinterpret_cast<HMODULE*>(&g_hInst));
+// ---- Entrada do mod ----
+// No explorer.exe do shell: a bandeja (HostThreadProc) e o lançamento do
+// processo da barra. No processo "explorer.exe -tool-mod <id>": a barra; o
+// código do Explorer nesse processo nunca roda (o ponto de entrada é trocado).
+static HANDLE g_toolMutex = nullptr;
+
+static void WINAPI EntryPointHook() { ExitThread(0); }
+
+static BOOL BarInit() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, BarThread, nullptr, 0, &g_threadId);
     return g_thread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
-    if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
-}
-
-void Wh_ModUninit() {
-    Wh_Log(L"Mac OS 27 Finder Bar: uninit");
+static void BarUninit() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
         // WM_QUIT também tira a thread de uma caixa de mensagem ou do diálogo de
         // abrir arquivo (os laços modais saem com ele e o repassam). A espera é
-        // até o fim: a DLL só pode sair depois que nada do mod estiver rodando.
+        // até o fim: nada do mod pode estar rodando quando o processo sai.
         if (g_threadId) PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
-    // Mod desativado: as faixas do Windows voltam ao lugar.
+}
+
+BOOL Wh_ModInit() {
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), reinterpret_cast<HMODULE*>(&g_hInst));
+    DWORD session = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &session) && session == 0) return FALSE;
+
+    bool excluded = false, toolProcess = false, ourTool = false;
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) return FALSE;
+    for (int i = 1; i < argc; i++)
+        if (!wcscmp(argv[i], L"-service") || !wcscmp(argv[i], L"-service-start") || !wcscmp(argv[i], L"-service-stop"))
+            excluded = true;
+    for (int i = 1; i < argc - 1; i++) {
+        if (!wcscmp(argv[i], L"-tool-mod")) {
+            toolProcess = true;
+            ourTool = !wcscmp(argv[i + 1], WH_MOD_ID);
+            break;
+        }
+    }
+    LocalFree(argv);
+    if (excluded) return FALSE;
+
+    if (ourTool) {
+        Wh_Log(L"Mac OS 27 Finder Bar: processo da barra");
+        g_toolMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(kExitDuplicate);  // já está rodando
+        if (!BarInit()) ExitProcess(kExitFailed);
+        // O Explorer deste processo não deve iniciar: o ponto de entrada só sai da thread.
+        auto* dos = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        auto* nt = (IMAGE_NT_HEADERS*)((BYTE*)dos + dos->e_lfanew);
+        void* entry = (BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint;
+        Wh_SetFunctionHook(entry, (void*)EntryPointHook, nullptr);
+        return TRUE;
+    }
+    if (toolProcess) return FALSE;  // processo de ferramenta de outro mod
+    g_isHost = true;
+    return TRUE;
+}
+
+// Abre o processo da barra; devolve o handle dele (ou nullptr).
+static HANDLE LaunchBarProcess() {
+    wchar_t exe[MAX_PATH];
+    DWORD n = GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
+    if (!n || n >= ARRAYSIZE(exe)) return nullptr;
+    std::wstring cmd = L"\"" + std::wstring(exe) + L"\" -tool-mod \"" WH_MOD_ID L"\"";
+    HMODULE k = GetModuleHandleW(L"kernelbase.dll");
+    if (!k) k = GetModuleHandleW(L"kernel32.dll");
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
+                                                   BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION,
+                                                   PHANDLE);
+    // CreateProcessInternalW: o CreateProcessW do Explorer pode estar sob ganchos de outros mods.
+    auto create = k ? (CreateProcessInternalW_t)GetProcAddress(k, "CreateProcessInternalW") : nullptr;
+    if (!create) return nullptr;
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi{};
+    if (!create(nullptr, exe, cmd.data(), nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi,
+                nullptr)) {
+        Wh_Log(L"Processo da barra não abriu: %u", GetLastError());
+        return nullptr;
+    }
+    CloseHandle(pi.hThread);
+    return pi.hProcess;
+}
+
+// O processo da barra que já está rodando (aberto por um shell anterior).
+static HANDLE OpenRunningBarProcess() {
+    HWND c = FindTrayClient();
+    DWORD pid = 0;
+    if (c) GetWindowThreadProcessId(c, &pid);
+    return pid ? OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+}
+
+// Vigia o processo da barra: se ele sair sem ser pelo fim normal do mod
+// (travou, ou foi fechado pelo Gerenciador de Tarefas), abre de novo. No
+// máximo 5 vezes por minuto, para não ficar em laço se algo der errado.
+static DWORD WINAPI BarWatchProc(LPVOID) {
+    HANDLE proc = LaunchBarProcess();
+    ULONGLONG windowStart = GetTickCount64();
+    int launches = 1;
+    while (proc) {
+        HANDLE hs[2] = {g_hostStop, proc};
+        DWORD r = WaitForMultipleObjects(2, hs, FALSE, INFINITE);
+        if (r != WAIT_OBJECT_0 + 1) break;  // o mod está saindo
+        DWORD code = 0;
+        GetExitCodeProcess(proc, &code);
+        CloseHandle(proc);
+        proc = nullptr;
+        if (code == kExitClean) break;  // o mod foi desativado: o processo saiu de propósito
+        if (code == kExitDuplicate) {
+            // Já havia uma barra (o shell reiniciou e ela continuou): vigia aquela.
+            for (int i = 0; i < 20 && !proc; i++) {
+                proc = OpenRunningBarProcess();
+                if (!proc && WaitForSingleObject(g_hostStop, 500) == WAIT_OBJECT_0) return 0;
+            }
+            continue;
+        }
+        ULONGLONG now = GetTickCount64();
+        if (now - windowStart > 60000) {
+            windowStart = now;
+            launches = 0;
+        }
+        if (++launches > 5) {
+            Wh_Log(L"Processo da barra saiu 5 vezes em um minuto; não abre de novo");
+            break;
+        }
+        Wh_Log(L"Processo da barra saiu (código %u); abrindo de novo", code);
+        if (WaitForSingleObject(g_hostStop, 1000) == WAIT_OBJECT_0) break;
+        proc = LaunchBarProcess();
+    }
+    if (proc) CloseHandle(proc);
+    return 0;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isHost) return;
+    HostStart();
+    if (g_hostStop) g_watchThread = CreateThread(nullptr, 0, BarWatchProc, nullptr, 0, nullptr);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isHost) return;
+    if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
+}
+
+void Wh_ModBeforeUninit() {
+    if (g_isHost) HostUnhook();
+}
+
+void Wh_ModUninit() {
+    if (g_isHost) {
+        HostStop();
+        return;
+    }
+    Wh_Log(L"Mac OS 27 Finder Bar: fim do processo da barra");
+    BarUninit();
+    ExitProcess(kExitClean);
 }
 
 // ===========================================================================
