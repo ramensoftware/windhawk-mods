@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.4.5
+// @version         0.4.6
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -1728,6 +1728,9 @@ struct SettingsEditor {
     POINT captionClickPoint{};
     // Press point as a fraction of the window size, while a caption drag runs.
     std::optional<std::pair<double, double>> dragGrip;
+    // Sizing hit and the press point's inset from each window edge, while a frame resize runs.
+    std::optional<std::pair<int, RECT>> sizeGrip;
+    std::optional<std::pair<WPARAM, LPARAM>> laidOutSize; // The last WM_SIZE laid out.
     bool framePointerOver{};
     UINT dpi{96};
     bool syncing{}, valid{}, dirty{}, navigatingFocus{}, compactLayout{};
@@ -2720,6 +2723,25 @@ bool EditorCaptionButton(int hit) {
     return hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE;
 }
 
+HCURSOR EditorSizingCursor(int hit) {
+    static LPCWSTR const cursors[]{IDC_SIZEWE, IDC_SIZEWE, IDC_SIZENS, IDC_SIZENWSE,
+                                   IDC_SIZENESW, IDC_SIZENS, IDC_SIZENESW, IDC_SIZENWSE};
+    return hit >= HTLEFT && hit <= HTBOTTOMRIGHT ? LoadCursorW(nullptr, cursors[hit - HTLEFT]) : nullptr;
+}
+
+// Each edge the hit moves keeps the press point's inset from it; the size stays at least `minimum`.
+RECT SizedFromCursor(RECT rect, int hit, POINT cursor, RECT inset, SIZE minimum) {
+    if (hit == HTLEFT || hit == HTTOPLEFT || hit == HTBOTTOMLEFT)
+        rect.left = std::min(cursor.x - inset.left, rect.right - minimum.cx);
+    if (hit == HTRIGHT || hit == HTTOPRIGHT || hit == HTBOTTOMRIGHT)
+        rect.right = std::max(cursor.x + inset.right, rect.left + minimum.cx);
+    if (hit == HTTOP || hit == HTTOPLEFT || hit == HTTOPRIGHT)
+        rect.top = std::min(cursor.y - inset.top, rect.bottom - minimum.cy);
+    if (hit == HTBOTTOM || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT)
+        rect.bottom = std::max(cursor.y + inset.bottom, rect.top + minimum.cy);
+    return rect;
+}
+
 LRESULT EditorFrameHitTest(SettingsEditor const& editor, POINT point) {
     RECT rect{};
     if (!GetWindowRect(editor.window, &rect)) return HTCLIENT;
@@ -2727,12 +2749,17 @@ LRESULT EditorFrameHitTest(SettingsEditor const& editor, POINT point) {
         point.y < rect.top || point.y >= rect.bottom) return HTNOWHERE;
     if (!IsZoomed(editor.window)) {
         int border = std::max(1, EditorScale(editor, 6));
+        // The window region rounds the corners off (radius + 2 px), so a corner's sizing
+        // zone runs along both of its edges out past the rounding to stay on screen.
+        int corner = border + (editor.windowShapeRadius > 0 ? int(std::ceil(editor.windowShapeRadius)) + 2 : 0);
         bool left = point.x < rect.left + border, right = point.x >= rect.right - border;
         bool top = point.y < rect.top + border, bottom = point.y >= rect.bottom - border;
-        if (top) return left ? HTTOPLEFT : right ? HTTOPRIGHT : HTTOP;
-        if (bottom) return left ? HTBOTTOMLEFT : right ? HTBOTTOMRIGHT : HTBOTTOM;
-        if (left) return HTLEFT;
-        if (right) return HTRIGHT;
+        bool nearLeft = point.x < rect.left + corner, nearRight = point.x >= rect.right - corner;
+        bool nearTop = point.y < rect.top + corner, nearBottom = point.y >= rect.bottom - corner;
+        if (top) return nearLeft ? HTTOPLEFT : nearRight ? HTTOPRIGHT : HTTOP;
+        if (bottom) return nearLeft ? HTBOTTOMLEFT : nearRight ? HTBOTTOMRIGHT : HTBOTTOM;
+        if (left) return nearTop ? HTTOPLEFT : nearBottom ? HTBOTTOMLEFT : HTLEFT;
+        if (right) return nearTop ? HTTOPRIGHT : nearBottom ? HTBOTTOMRIGHT : HTRIGHT;
     }
     RECT client{};
     POINT origin{};
@@ -2947,8 +2974,15 @@ bool RouteEditorFrameInput(SettingsEditor& editor, MSG const& message) {
         GetWindowRect(editor.window, &frame) && frame.right > frame.left && frame.bottom > frame.top)
         editor.dragGrip = std::pair{double(point.x - frame.left) / (frame.right - frame.left),
                                     double(point.y - frame.top) / (frame.bottom - frame.top)};
-    SendMessageW(editor.window, nativeMessage, hit, position); // Runs the whole caption move loop.
+    if (nativeMessage == WM_NCLBUTTONDOWN && hit >= HTLEFT && hit <= HTBOTTOMRIGHT &&
+        GetWindowRect(editor.window, &frame))
+        editor.sizeGrip = std::pair{hit, RECT{point.x - frame.left, point.y - frame.top,
+                                              frame.right - point.x, frame.bottom - point.y}};
+    SendMessageW(editor.window, nativeMessage, hit, position); // Runs the whole move or size loop.
     editor.dragGrip.reset();
+    editor.sizeGrip.reset();
+    // In Explorer nothing else shows the sizing cursor over the frame.
+    if (auto cursor = EditorSizingCursor(hit); cursor && nativeMessage == WM_NCMOUSEMOVE) SetCursor(cursor);
     return true;
 }
 
@@ -3599,6 +3633,15 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
         }
         if (message == WM_NCHITTEST)
             return EditorFrameHitTest(*editor, {short(LOWORD(lp)), short(HIWORD(lp))});
+        if (message == WM_SETCURSOR) {
+            // The frame's own hit, not lp's: a child's WM_SETCURSOR reaches here with its HTCLIENT.
+            POINT cursor{};
+            HCURSOR sizing = GetCursorPos(&cursor) ? EditorSizingCursor(EditorFrameHitTest(*editor, cursor)) : nullptr;
+            if (sizing) {
+                SetCursor(sizing);
+                return TRUE;
+            }
+        }
         if (message == WM_NCMOUSEMOVE) {
             editor->framePointerOver = true;
             editor->captionHovered = EditorCaptionButton(int(wp)) ? int(wp) : 0;
@@ -3684,7 +3727,8 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
             return 0;
         }
         if (message == WM_SIZE) {
-            LayoutEditor(*editor);
+            // A layout costs a resize step; skip it when neither the size nor the show state changed.
+            if (std::exchange(editor->laidOutSize, std::pair{wp, lp}) != std::pair{wp, lp}) LayoutEditor(*editor);
             if (wp == SIZE_MINIMIZED) CloseEditorPreview(*editor);
             else if (!editor->preview.renderer) UpdateEditorPreview(*editor);
             return 0;
@@ -3735,6 +3779,25 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
             } else if (GetWindowRect(window, &current)) {
                 OffsetRect(&proposed, current.left - proposed.left, current.top - proposed.top);
             }
+            return TRUE;
+        }
+        if (message == WM_SIZING && editor->sizeGrip) {
+            // The size loop replays queued positions the same way. Size from the cursor while
+            // the button is held, and keep the window as it is once released.
+            auto& proposed = *reinterpret_cast<RECT*>(lp);
+            auto [hit, inset] = *editor->sizeGrip;
+            RECT current{};
+            POINT cursor{};
+            if (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) < 0 &&
+                GetCursorPos(&cursor)) {
+                MINMAXINFO limits{};
+                SendMessageW(window, WM_GETMINMAXINFO, 0, reinterpret_cast<LPARAM>(&limits));
+                proposed = SizedFromCursor(proposed, hit, cursor, inset,
+                                           {limits.ptMinTrackSize.x, limits.ptMinTrackSize.y});
+            } else if (GetWindowRect(window, &current)) {
+                proposed = current;
+            }
+            SetCursor(EditorSizingCursor(hit)); // Explorer's arrow would otherwise show while held.
             return TRUE;
         }
         if (message == WM_MOVE && editor->content) UpdateEditorPosition(*editor);
