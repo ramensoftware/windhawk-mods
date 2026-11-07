@@ -462,7 +462,7 @@ bool TurnOffMonitor(HWND hWnd, BOOL useWm = TRUE) {
         // It seems that the first simple monitor-off state can only be entered by the idle timer
         // All traditional methods of turning the monitor off (including the below window msg hack) make the system enter the extra sleep mode (the second state above)
         // NtPowerInformation(ScreenOff) always enters the sleep state, and SC_MONITORPOWER enters sleep state when called at arbitrary timing
-        // Seems calling DefWindowProc SC_MONITORPOWER while the idle timer is engaging (from any process/window) works for entering the first state, fortunately
+        // Seems calling DefWindowProc SC_MONITORPOWER while the idle timer is engaging (from any process/window) works for entering the former state, fortunately
         //
         // (Entering the sleep state seems to be managed by the Immersive Shell. Terminating explorer.exe or running Explorer7 without immersive makes the system never enter such a state)
         // (Not even by calling NtPowerInformation(ScreenOff) or pressing the power button configured to sleep)
@@ -951,7 +951,6 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
 
 #pragma region DWM GammaRange hooks
 DWORD* p_g_gammaRange = NULL;
-DWORD* p_g_GdiRampLimit = NULL; // 24h2 stores it in two global variables (and uses both of them) for some very weird reason. Both read the same regkey
 DWORD g_origGammaRange = 128;
 
 bool IsInModule(HMODULE module, const void* p, size_t size) {
@@ -961,6 +960,8 @@ bool IsInModule(HMODULE module, const void* p, size_t size) {
 }
 
 #if defined(_M_X64)
+DWORD* p_g_GdiRampLimit = NULL; // 24h2 stores it in two global variables (and uses both of them) for some very weird reason. Both read the same regkey
+
 HMODULE hDispBrokerDesktop = NULL;
 void* ColorManagementRpcServerImpl; // (24h2 one is loaded in another function so won't be caught here)
 
@@ -1024,7 +1025,7 @@ LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWOR
             Wh_Log(L"Hooked DWM GdiIcmGammaRange, pvData=%p", pvData);
 #if not defined(_M_X64)
             HMODULE hDispBrokerDesktop = GetModuleHandleW(L"DispBroker.Desktop.dll");
-            if (hDispBrokerDesktop && !p_g_gammaRange && !p_g_GdiRampLimit && IsInModule(hDispBrokerDesktop, pvData, sizeof(DWORD))) {
+            if (hDispBrokerDesktop && !p_g_gammaRange && IsInModule(hDispBrokerDesktop, pvData, sizeof(DWORD))) {
                 p_g_gammaRange = (DWORD*)pvData;
             }
 #endif
@@ -1363,10 +1364,10 @@ void Wh_ModUninit() {
         if (p_g_gammaRange) {
             *p_g_gammaRange = g_origGammaRange;
         }
+#if defined(_M_X64)
         if (p_g_GdiRampLimit) {
             *p_g_GdiRampLimit = g_origGammaRange;
         }
-#if defined(_M_X64)
         if (hDispBrokerDesktop) {
             FreeLibrary(hDispBrokerDesktop);
         }
