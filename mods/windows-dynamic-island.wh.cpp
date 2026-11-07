@@ -4,7 +4,7 @@
 // @description     Apple-style Dynamic Island for Windows 11. A small blank pill that expands into Clock, Calendar, Media and Quick Settings, in Black or Frosted Glass.
 // @version         1.3.0
 // @author          Saa079
-// @github           Saa079
+// @github           https://github.com/Saa079
 // @include         explorer.exe
 // @compilerOptions -lgdiplus -lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -luuid -lwlanapi -lshell32 -lshlwapi -lruntimeobject -DWINRT_NO_MODULE_LOCK
 // ==/WindhawkMod==
