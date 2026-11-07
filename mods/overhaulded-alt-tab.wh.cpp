@@ -12,10 +12,10 @@
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-# Overhaulded Task Switcher
+# Overhaulded Task Switcher  
 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
-
+ 
 Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
 
 ## Screenshot
@@ -27,6 +27,7 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 - Modern horizontal task switcher interface
 - App grouping by application/process
 - Real DWM window previews
+- Dynamic Obsidian visual system
 - Rounded cards with subtle downward shadows
 - Floating task switcher surface
 - Fluid opening animation
@@ -35,8 +36,6 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 - Subtle center-card snap animation
 - Hover interactions
 - Window closing
-- Automatic card count that never duplicates previews when few windows are open
-- Optional filter to show only the windows of the current monitor
 - Resolution-aware UI scaling
 - High-DPI support
 - Alt + Tab support
@@ -50,7 +49,6 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 - Visual continuity between selections
 - Smoothest carousel-style navigation
 - Real window previews
-- Application-aware grouping
 - Subtle depth and lighting
 - Fast activation through background execution
 
@@ -69,7 +67,7 @@ The visual system uses a Black Obsidian surface with:
 - Smooth transitions
 - A fixed central visualizer
 
-The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating between windows rather than moving the entire interface.
+The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating through a physical stack of windows rather than moving the entire interface.
 
 ## Smooth Animations
 
@@ -143,12 +141,14 @@ The project is continuously evolving as new ideas and technical improvements are
 
 This project is licensed under the **MIT License**.
 
-See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for the complete license text.
+See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) file for the complete license text.
 
 ---
 Overhaulded is still a pre-release project.
 
 Some applications may behave differently than standard desktop windows, especially those using unusual window structures, custom rendering, or multiple processes.
+
+THANKS FOR EVERYONE.
 
 ![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/preview.gif)
 */
@@ -304,12 +304,13 @@ Some applications may behave differently than standard desktop windows, especial
 #include <cwchar>
 #include <cstring>
 #include <tlhelp32.h>
+#include <windhawk_utils.h>
 
 typedef DWORD (WINAPI* GetFileVersionInfoSizeWFn)(LPCWSTR, LPDWORD);
 typedef BOOL (WINAPI* GetFileVersionInfoWFn)(LPCWSTR, DWORD, DWORD, LPVOID);
 typedef BOOL (WINAPI* VerQueryValueWFn)(LPCVOID, LPCWSTR, LPVOID*, PUINT);
 
-// CONFIGURACIÓN
+// SETTINGS
 
 static const wchar_t kWindowClassName[] = L"OverhauldedAltTabSelector";
 
@@ -338,23 +339,9 @@ static RECT g_blurredInitialRect = {};
 static POINT g_selectorSceneOffset = {};
 static std::vector<DWORD> g_capturedDesktopPixels;
 static std::vector<DWORD> g_blurredDesktopPixels;
-static bool g_fullscreenHdcDrawFailureLogged = false;
 
-struct FsSurface
-{
-    HDC dc = nullptr;
-    HBITMAP bitmap = nullptr;
-    HGDIOBJ oldBitmap = nullptr;
-    int width = 0;
-    int height = 0;
-};
-static FsSurface g_fsSharp;
-static FsSurface g_fsBlur;
-static FsSurface g_fsBack;
-static FsSurface g_fsScene;
 static ID2D1Bitmap* g_fsSharpD2D = nullptr;
 static ID2D1Bitmap* g_fsBlurD2D = nullptr;
-static RECT g_paintDirty = {};
 static float g_lastBackdropPresence = -1.0f;
 
 struct ShadowSprite
@@ -371,7 +358,6 @@ typedef BOOL (WINAPI* AlphaBlendProc)(HDC, int, int, int, int, HDC, int, int,
                                       int, int, BLENDFUNCTION);
 static HMODULE g_msimg32Module = nullptr;
 static AlphaBlendProc g_pAlphaBlend = nullptr;
-static BITMAPINFO g_blurredDesktopBitmapInfo = {};
 static const float kFullscreenBackdropBrightness = 0.58f;
 static const float kFullscreenBlurStandardDeviation = 46.0f;
 static const int kFullscreenBlurDownsample = 4;
@@ -491,11 +477,8 @@ static void ApplyVisualStylePalette();
 static void LoadTaskSwitcherSettings()
 {
     auto read = [](PCWSTR key) {
-        PCWSTR value = Wh_GetStringSetting(key);
-        std::wstring result(value ? value : L"");
-        if (value)
-            Wh_FreeStringSetting(value);
-        return result;
+        auto setting = WindhawkUtils::StringSetting::make(key);
+        return std::wstring(setting.get());
     };
 
     std::wstring monitorFilter = read(L"Behavior.MonitorFilter");
@@ -519,16 +502,11 @@ static void LoadTaskSwitcherSettings()
     }
 
     std::wstring speed = read(L"Animation.Speed");
-    if (speed.empty()) speed = read(L"Appearance.AnimationSpeed");
-    if (speed.empty()) speed = read(L"AnimationSpeed");
     g_animationSpeedPercent = (speed == L"75" ? 75 : speed == L"125" ? 125 : speed == L"150" ? 150 : 100);
     std::wstring mode = read(L"Animation.PerformanceMode");
-    if (mode.empty()) mode = read(L"Appearance.PerformanceMode");
-    if (mode.empty()) mode = read(L"PerformanceMode");
     g_animationFps = mode == L"balanced" ? 90 : kDefaultAnimationFps;
 
     std::wstring style = read(L"Animation.Style");
-    if (style.empty()) style = read(L"Appearance.AnimationStyle");
     g_animationStyle = style == L"Bouncy" ? AnimationStyle::Bouncy
                      : style == L"RCT" ? AnimationStyle::Rct
                      : style == L"Cinematic" ? AnimationStyle::Cinematic
@@ -538,15 +516,19 @@ static void LoadTaskSwitcherSettings()
     g_cardMotionStyle = cardMotion == L"Linear" ? CardMotionStyle::Linear
                       : cardMotion == L"Bouncy" ? CardMotionStyle::Bouncy
                       : CardMotionStyle::Smooth;
-    const int cardSpeed = readNumber(L"Appearance.Cards.MotionSpeed", 75, 200);
-    g_cardMotionSpeedPercent = (cardSpeed == 75 || cardSpeed == 100 ||
-        cardSpeed == 125 || cardSpeed == 150 || cardSpeed == 175 ||
-        cardSpeed == 200) ? cardSpeed : 100;
+    const int cardSpeed = _wtoi(read(L"Appearance.Cards.MotionSpeed").c_str());
+
+    g_cardMotionSpeedPercent =
+        (cardSpeed == 75 || cardSpeed == 100 ||
+         cardSpeed == 125 || cardSpeed == 150 ||
+         cardSpeed == 175 || cardSpeed == 200)
+            ? cardSpeed
+            : 100;
     g_expandSelectedWindow =
         Wh_GetIntSetting(L"Appearance.Cards.ExpandSelectedWindow") != 0;
 
     std::wstring background = read(L"Background");
-    Wh_Log(L"[FS] Background leido = '%s'", background.c_str());
+    Wh_Log(L"[FS] Background read = '%s'", background.c_str());
     g_baseBackgroundMode = background == L"none"
         ? BaseBackgroundMode::None
         : background == L"blurred"
@@ -616,7 +598,7 @@ static UINT GetPatternTimerInterval()
     return g_patternQualityScale < 0.72f ? 50u : 33u;
 }
 
-// RELOJ DE ANIMACIÓN Y CURVAS
+// ANIMATION CLOCK AND CURVES
 static LONGLONG g_qpcFrequency = 0;
 static double QpcNowMs()
 {
@@ -665,12 +647,6 @@ static float EaseInCubic(float t)
 {
     t = Clamp01(t);
     return t * t * t;
-}
-static float EaseOutExp(float t, float k)
-{
-    t = Clamp01(t);
-    const float tail = expf(-k);
-    return 1.0f - (expf(-k * t) - tail) / (1.0f - tail);
 }
 static float ElapsedFraction(double startMs, float durationMs)
 {
@@ -848,7 +824,7 @@ static void ApplyVisualStylePalette()
 }
 
 
-// ESTADO
+// STATE
 
 enum class SelectorState
 {
@@ -913,7 +889,7 @@ struct UserWindowInfo
     ULONGLONG lastActivated;
 };
 
-// ARQUITECTURA DE HILOS
+// THREAD ARCHITECTURE
 
 static HMODULE g_hModule = nullptr;
 
@@ -1039,7 +1015,7 @@ static float g_cardExitDirection = 1.0f;
 static double g_cardExitStart = 0.0;
 static float g_cardExitProgress = 0.0f;
 
-// DIRECT2D Y DIRECTWRITE
+// DIRECT2D AND DIRECTWRITE
 
 typedef HRESULT (WINAPI* D2D1CreateFactoryFn)(
     D2D1_FACTORY_TYPE factoryType,
@@ -1086,35 +1062,6 @@ static IDWriteTextFormat* g_dwriteCounterFormat = nullptr;
 static IDWriteTextFormat* g_dwriteCloseFormat = nullptr;
 static float g_dwriteFormatsScale = 0.0f;
 static float g_gdiFontsScale = 0.0f;
-
-typedef HFONT (WINAPI* CreateFontIndirectWFn)(const LOGFONTW*);
-typedef BOOL (WINAPI* DeleteObjectFn)(HGDIOBJ);
-typedef HRGN (WINAPI* CreateRoundRectRgnFn)(int, int, int, int, int, int);
-typedef HGDIOBJ (WINAPI* GetStockObjectFn)(int);
-typedef int (WINAPI* SetBkModeFn)(HDC, int);
-typedef COLORREF (WINAPI* SetTextColorFn)(HDC, COLORREF);
-typedef HBRUSH (WINAPI* CreateSolidBrushFn)(COLORREF);
-typedef HPEN (WINAPI* CreatePenFn)(int, int, COLORREF);
-typedef HGDIOBJ (WINAPI* SelectObjectFn)(HDC, HGDIOBJ);
-typedef BOOL (WINAPI* RoundRectFn)(HDC, int, int, int, int, int, int);
-typedef int (WINAPI* GetTextFaceWFn)(HDC, int, LPWSTR);
-typedef int (WINAPI* GetDIBitsFn)(HDC, HBITMAP, UINT, UINT, LPVOID, LPBITMAPINFO, UINT);
-typedef int (WINAPI* GetObjectWFn)(HGDIOBJ, int, LPVOID);
-
-static HMODULE g_gdiApi = nullptr;
-static CreateFontIndirectWFn g_createFontIndirectW = nullptr;
-static DeleteObjectFn g_deleteObject = nullptr;
-static CreateRoundRectRgnFn g_createRoundRectRgn = nullptr;
-static GetStockObjectFn g_getStockObject = nullptr;
-static SetBkModeFn g_setBkMode = nullptr;
-static SetTextColorFn g_setTextColor = nullptr;
-static CreateSolidBrushFn g_createSolidBrush = nullptr;
-static CreatePenFn g_createPen = nullptr;
-static SelectObjectFn g_selectObject = nullptr;
-static RoundRectFn g_roundRect = nullptr;
-static GetTextFaceWFn g_getTextFaceW = nullptr;
-static GetDIBitsFn g_getDIBits = nullptr;
-static GetObjectWFn g_getObjectW = nullptr;
 
 static HFONT g_nameFont = nullptr;
 static HFONT g_selectedNameFont = nullptr;
@@ -1173,7 +1120,6 @@ static bool IsSingleCardMode()
 }
 
 
-static bool LoadGdiFunctions();
 static bool LoadDwmFunctions();
 static HICON GetApplicationIcon(HWND hwnd, const std::wstring& processPath, bool* outOwnIcon);
 static void ReleaseGroupResources();
@@ -1513,7 +1459,7 @@ static bool g_ctrlRightDown = false;
 static bool g_altGrActive = false;
 static bool g_altMenuMaskPending = false;
 
-// UTILIDADES DE ESTADO
+// STATE UTILITIES
 
 static bool PostUiCommand(UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -1609,7 +1555,7 @@ static void CleanupKeyboardState()
     g_cleanupInProgress = false;
 }
 
-// ENUMERACIÓN DE VENTANAS Y FILTROS
+// WINDOW ENUMERATION AND FILTERS
 
 static bool IsShellWindow(HWND hwnd)
 {
@@ -2445,7 +2391,7 @@ static const std::wstring& MakeCounterText()
     return cached;
 }
 
-// DPI POR MONITOR
+// PER-MONITOR DPI
 
 static float GetMonitorDpiScale(HMONITOR monitor)
 {
@@ -2491,7 +2437,7 @@ static void SetThreadPerMonitorAwareV2()
     pSetThreadDpiAwarenessContext(context);
 }
 
-// DWM Y EFECTOS DE FONDO
+// DWM AND BACKGROUND EFFECTS
 
 static bool LoadDwmFunctions()
 {
@@ -2684,49 +2630,6 @@ static bool IsFullscreenBackdropActive()
     return g_blurredBackgroundReady;
 }
 
-static void FsSurfaceRelease(FsSurface& s)
-{
-    if (s.dc && s.oldBitmap)
-        SelectObject(s.dc, s.oldBitmap);
-    if (s.dc)
-        DeleteDC(s.dc);
-    if (s.bitmap)
-        DeleteObject(s.bitmap);
-    s = FsSurface();
-}
-
-static bool FsSurfaceCreate(FsSurface& s, HDC ref, int width, int height,
-                            const DWORD* source)
-{
-    FsSurfaceRelease(s);
-    BITMAPINFO info = {};
-    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    info.bmiHeader.biWidth = width;
-    info.bmiHeader.biHeight = -height;
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    info.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    s.bitmap = CreateDIBSection(ref, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!s.bitmap || !bits)
-    {
-        FsSurfaceRelease(s);
-        return false;
-    }
-    s.dc = CreateCompatibleDC(ref);
-    if (!s.dc)
-    {
-        FsSurfaceRelease(s);
-        return false;
-    }
-    s.oldBitmap = SelectObject(s.dc, s.bitmap);
-    if (source)
-        std::memcpy(bits, source, static_cast<size_t>(width) * height * sizeof(DWORD));
-    s.width = width;
-    s.height = height;
-    return true;
-}
-
 static void ReleaseFullscreenD2DBitmaps()
 {
     ReleaseComObject(g_fsSharpD2D);
@@ -2751,15 +2654,10 @@ static void HideFullscreenBackdrop(bool releasePixels)
     g_lastBackdropPresence = -1.0f;
     if (releasePixels)
     {
-        FsSurfaceRelease(g_fsSharp);
-        FsSurfaceRelease(g_fsBlur);
-        FsSurfaceRelease(g_fsBack);
-        FsSurfaceRelease(g_fsScene);
         ReleaseFullscreenD2DBitmaps();
         ReleaseShadowSprite();
         std::vector<DWORD>().swap(g_capturedDesktopPixels);
         std::vector<DWORD>().swap(g_blurredDesktopPixels);
-        g_blurredDesktopBitmapInfo = BITMAPINFO();
         g_blurredMonitorRect = {};
         g_blurredInitialRect = {};
     }
@@ -2772,7 +2670,7 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
     if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
         static_cast<unsigned long long>(width) * height > 20000000ULL)
     {
-        Wh_Log(L"[FS] tamano de monitor no valido: %d x %d", width, height);
+        Wh_Log(L"[FS] Invalid monitor size: %d x %d", width, height);
         return false;
     }
 
@@ -2780,7 +2678,7 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
     HDC captureDc = screenDc ? CreateCompatibleDC(screenDc) : nullptr;
     if (!screenDc || !captureDc)
     {
-        Wh_Log(L"[FS] GetDC/CreateCompatibleDC fallo (%lu)", GetLastError());
+        Wh_Log(L"[FS] GetDC/CreateCompatibleDC failed (%lu)", GetLastError());
         if (captureDc) DeleteDC(captureDc);
         if (screenDc) ReleaseDC(nullptr, screenDc);
         return false;
@@ -2820,7 +2718,7 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
     ReleaseDC(nullptr, screenDc);
     if (input.empty())
     {
-        Wh_Log(L"[FS] BitBlt/captura fallo (%d x %d)", width, height);
+        Wh_Log(L"[FS] BitBlt/capture failed (%d x %d)", width, height);
         return false;
     }
     g_capturedDesktopPixels.swap(input);
@@ -2848,7 +2746,7 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
     bool success = false;
 
     if (!createD3D || !createD2D)
-        { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+        { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
     {
         const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         HRESULT hr = createD3D(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
@@ -2863,18 +2761,18 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
                            &d3dDevice, nullptr, &d3dContext);
         }
         if (FAILED(hr) || !d3dDevice || !d3dContext)
-            { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+            { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
     }
     if (FAILED(d3dDevice->QueryInterface(kIidDxgiDevice,
                                          reinterpret_cast<void**>(&dxgiDevice))))
-        { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+        { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
     if (FAILED(createD2D(D2D1_FACTORY_TYPE_SINGLE_THREADED, kIidD2D1Factory1,
                          nullptr, reinterpret_cast<void**>(&factory1))) || !factory1)
-        { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+        { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
     if (FAILED(factory1->CreateDevice(dxgiDevice, &d2dDevice)) || !d2dDevice ||
         FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
                                                &d2dContext)) || !d2dContext)
-        { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+        { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
 
     {
         try
@@ -2896,7 +2794,7 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
         catch (...)
         {
             blurInput.clear();
-            Wh_Log(L"[FS] No se pudo reservar el buffer reducido del blur");
+            Wh_Log(L"[FS] Failed to allocate the reduced blur buffer");
             goto cleanup;
         }
 
@@ -2908,11 +2806,11 @@ static bool CaptureAndBlurMonitor(const RECT& monitorRect)
                 blurInput.data(),
                 static_cast<UINT32>(blurWidth * sizeof(DWORD)), &inputProps, &inputBitmap)) ||
             !inputBitmap)
-            { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+            { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
     }
     if (FAILED(d2dContext->CreateEffect(kGaussianBlurEffectClsid, &blurEffect)) ||
         !blurEffect)
-        { Wh_Log(L"[FS] CaptureAndBlurMonitor fallo en la linea %d", __LINE__); goto cleanup; }
+        { Wh_Log(L"[FS] CaptureAndBlurMonitor failed at line %d", __LINE__); goto cleanup; }
     blurEffect->SetInput(0, inputBitmap);
     blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
                          kFullscreenBlurStandardDeviation /
@@ -3023,96 +2921,6 @@ cleanup:
     return success;
 }
 
-static bool DrawFullscreenBackgroundGdi(HDC hdc)
-{
-    if (!hdc)
-        return false;
-
-    const int width = g_blurredMonitorRect.right - g_blurredMonitorRect.left;
-    const int height = g_blurredMonitorRect.bottom - g_blurredMonitorRect.top;
-    if (width <= 0 || height <= 0)
-        return false;
-
-    if (!g_fsSharp.dc || !g_fsBlur.dc)
-    {
-        int blurWidth = 0, blurHeight = 0;
-        GetFullscreenBlurDimensions(width, height, blurWidth, blurHeight);
-        const size_t expectedPixels = static_cast<size_t>(width) * height;
-        const size_t expectedBlurPixels = static_cast<size_t>(blurWidth) * blurHeight;
-        if (g_capturedDesktopPixels.size() != expectedPixels ||
-            g_blurredDesktopPixels.size() != expectedBlurPixels)
-            return false;
-        if (!FsSurfaceCreate(g_fsSharp, hdc, width, height,
-                             g_capturedDesktopPixels.data()) ||
-            !FsSurfaceCreate(g_fsBlur, hdc, blurWidth, blurHeight,
-                             g_blurredDesktopPixels.data()))
-        {
-            FsSurfaceRelease(g_fsSharp);
-            FsSurfaceRelease(g_fsBlur);
-            return false;
-        }
-    }
-
-    if (!BitBlt(hdc, 0, 0, width, height, g_fsSharp.dc, 0, 0, SRCCOPY))
-        return false;
-
-    const float progress = Clamp01(g_scenePresence);
-    const int centerX = width / 2;
-    const int centerY = height / 2;
-    int left = 0;
-    int right = width;
-    int top = 0;
-    int bottom = height;
-    if (g_animationStyle == AnimationStyle::Rct)
-    {
-        const int halfHeight = std::max(1, static_cast<int>(centerY * progress));
-        top = std::max(0, centerY - halfHeight);
-        bottom = std::min(height, centerY + halfHeight);
-    }
-    else
-    {
-        left = std::max(0, static_cast<int>(centerX - centerX * progress));
-        top = std::max(0, static_cast<int>(centerY - centerY * progress));
-        right = std::min(width, static_cast<int>(centerX + (width - centerX) * progress));
-        bottom = std::min(height, static_cast<int>(centerY + (height - centerY) * progress));
-    }
-    if (right <= left || bottom <= top)
-        return true;
-
-    const float zoom = 1.0f + std::min(0.02f,
-        std::max(0.0f, g_scenePresence - 1.0f) * 0.10f);
-    const int drawW = static_cast<int>(width * zoom);
-    const int drawH = static_cast<int>(height * zoom);
-
-    bool success;
-    if (drawW == width && drawH == height)
-    {
-        success = StretchBlt(hdc, left, top, right - left, bottom - top,
-                             g_fsBlur.dc,
-                             left * g_fsBlur.width / width,
-                             top * g_fsBlur.height / height,
-                             std::max(1, (right - left) * g_fsBlur.width / width),
-                             std::max(1, (bottom - top) * g_fsBlur.height / height),
-                             SRCCOPY) != FALSE;
-    }
-    else
-    {
-        const int clipState = SaveDC(hdc);
-        if (!clipState)
-            return false;
-        IntersectClipRect(hdc, left, top, right, bottom);
-        SetStretchBltMode(hdc, COLORONCOLOR);
-        success = StretchBlt(hdc, (width - drawW) / 2, (height - drawH) / 2,
-                             drawW, drawH, g_fsBlur.dc, 0, 0,
-                             g_fsBlur.width, g_fsBlur.height,
-                             SRCCOPY) != FALSE;
-        RestoreDC(hdc, clipState);
-    }
-    if (success)
-        g_fullscreenHdcDrawFailureLogged = false;
-    return success;
-}
-
 static bool EnsureFullscreenD2DBitmaps()
 {
     if (g_fsSharpD2D && g_fsBlurD2D)
@@ -3194,21 +3002,7 @@ static void DrawFullscreenBackgroundD2D()
         D2D1::RectF((width - dw) * 0.5f, (height - dh) * 0.5f,
                     (width + dw) * 0.5f, (height + dh) * 0.5f),
         1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-    if (IsPatternWavesActive())
-    {
-        RECT fullscreenPatternRect = { 0, 0,
-            static_cast<LONG>(width), static_cast<LONG>(height) };
-        DrawPatternWaves(fullscreenPatternRect);
-    }
     g_d2dRenderTarget->PopAxisAlignedClip();
-}
-
-static void LogFullscreenHdcDrawFailure()
-{
-    if (g_fullscreenHdcDrawFailureLogged)
-        return;
-    Wh_Log(L"Fullscreen background HDC draw failed");
-    g_fullscreenHdcDrawFailureLogged = true;
 }
 
 static bool PrepareFullscreenBackdrop(const RECT& monitorRect, const RECT& selectorRect)
@@ -3216,7 +3010,7 @@ static bool PrepareFullscreenBackdrop(const RECT& monitorRect, const RECT& selec
     HideFullscreenBackdrop(true);
     if (g_baseBackgroundMode != BaseBackgroundMode::Fullscreen)
     {
-        Wh_Log(L"[FS] modo de fondo no es Fullscreen (modo=%d)", static_cast<int>(g_baseBackgroundMode));
+        Wh_Log(L"[FS] Background mode is not Fullscreen (mode=%d)", static_cast<int>(g_baseBackgroundMode));
         return false;
     }
     if (!CaptureAndBlurMonitor(monitorRect))
@@ -3234,15 +3028,6 @@ static bool PrepareFullscreenBackdrop(const RECT& monitorRect, const RECT& selec
         selectorRect.right - monitorRect.left,
         selectorRect.bottom - monitorRect.top
     };
-    g_blurredDesktopBitmapInfo = BITMAPINFO();
-    g_blurredDesktopBitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    int blurWidth = 0, blurHeight = 0;
-    GetFullscreenBlurDimensions(width, height, blurWidth, blurHeight);
-    g_blurredDesktopBitmapInfo.bmiHeader.biWidth = blurWidth;
-    g_blurredDesktopBitmapInfo.bmiHeader.biHeight = -blurHeight;
-    g_blurredDesktopBitmapInfo.bmiHeader.biPlanes = 1;
-    g_blurredDesktopBitmapInfo.bmiHeader.biBitCount = 32;
-    g_blurredDesktopBitmapInfo.bmiHeader.biCompression = BI_RGB;
     g_blurredBackgroundReady = true;
     Wh_Log(L"Fullscreen background ready (%d x %d)", width, height);
     return true;
@@ -3258,7 +3043,7 @@ static void UpdateFullscreenBackdrop()
     }
 }
 
-// GESTIÓN DE DIRECT2D Y DIRECTWRITE
+// DIRECT2D AND DIRECTWRITE MANAGEMENT
 
 static void ReleaseDWriteFormats()
 {
@@ -3397,9 +3182,6 @@ static ID2D1Bitmap* CreateD2DBitmapFromHIcon(ID2D1RenderTarget* renderTarget, HI
     if (!renderTarget || !hIcon)
         return nullptr;
 
-    if (!LoadGdiFunctions())
-        return nullptr;
-
     ICONINFO iconInfo = {};
     if (!GetIconInfo(hIcon, &iconInfo))
         return nullptr;
@@ -3407,14 +3189,20 @@ static ID2D1Bitmap* CreateD2DBitmapFromHIcon(ID2D1RenderTarget* renderTarget, HI
     HDC screenDC = GetDC(nullptr);
     if (!screenDC)
     {
-        if (iconInfo.hbmColor) g_deleteObject(iconInfo.hbmColor);
-        if (iconInfo.hbmMask)  g_deleteObject(iconInfo.hbmMask);
+        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask)  DeleteObject(iconInfo.hbmMask);
         return nullptr;
     }
 
     BITMAP bm = {};
-    g_getObjectW(iconInfo.hbmColor ? iconInfo.hbmColor : iconInfo.hbmMask,
-                 sizeof(BITMAP), &bm);
+    if (!GetObjectW(iconInfo.hbmColor ? iconInfo.hbmColor : iconInfo.hbmMask,
+                    sizeof(BITMAP), &bm))
+    {
+        ReleaseDC(nullptr, screenDC);
+        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+        return nullptr;
+    }
 
     int width  = bm.bmWidth;
     int height = iconInfo.hbmColor ? bm.bmHeight : (bm.bmHeight / 2);
@@ -3422,8 +3210,8 @@ static ID2D1Bitmap* CreateD2DBitmapFromHIcon(ID2D1RenderTarget* renderTarget, HI
     if (width <= 0 || height <= 0 || width > 1024 || height > 1024)
     {
         ReleaseDC(nullptr, screenDC);
-        if (iconInfo.hbmColor) g_deleteObject(iconInfo.hbmColor);
-        if (iconInfo.hbmMask)  g_deleteObject(iconInfo.hbmMask);
+        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask)  DeleteObject(iconInfo.hbmMask);
         return nullptr;
     }
 
@@ -3441,9 +3229,15 @@ static ID2D1Bitmap* CreateD2DBitmapFromHIcon(ID2D1RenderTarget* renderTarget, HI
 
     if (iconInfo.hbmColor)
     {
-        g_getDIBits(screenDC, iconInfo.hbmColor, 0,
-                    static_cast<UINT>(height),
-                    pixels.data(), &bmi, DIB_RGB_COLORS);
+        if (GetDIBits(screenDC, iconInfo.hbmColor, 0,
+                      static_cast<UINT>(height), pixels.data(), &bmi,
+                      DIB_RGB_COLORS) != height)
+        {
+            ReleaseDC(nullptr, screenDC);
+            if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+            if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+            return nullptr;
+        }
 
         for (int i = 0; i < width * height; ++i)
         {
@@ -3485,9 +3279,15 @@ static ID2D1Bitmap* CreateD2DBitmapFromHIcon(ID2D1RenderTarget* renderTarget, HI
     else if (iconInfo.hbmMask)
     {
         std::vector<DWORD> maskPixels(static_cast<size_t>(width * height), 0);
-        g_getDIBits(screenDC, iconInfo.hbmMask, 0,
-                    static_cast<UINT>(height),
-                    maskPixels.data(), &bmi, DIB_RGB_COLORS);
+        if (GetDIBits(screenDC, iconInfo.hbmMask, 0,
+                      static_cast<UINT>(height), maskPixels.data(), &bmi,
+                      DIB_RGB_COLORS) != height)
+        {
+            ReleaseDC(nullptr, screenDC);
+            if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+            if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+            return nullptr;
+        }
 
         for (int i = 0; i < width * height; ++i)
         {
@@ -3505,8 +3305,8 @@ static ID2D1Bitmap* CreateD2DBitmapFromHIcon(ID2D1RenderTarget* renderTarget, HI
     }
 
     ReleaseDC(nullptr, screenDC);
-    if (iconInfo.hbmColor) g_deleteObject(iconInfo.hbmColor);
-    if (iconInfo.hbmMask)  g_deleteObject(iconInfo.hbmMask);
+    if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+    if (iconInfo.hbmMask)  DeleteObject(iconInfo.hbmMask);
 
     D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
@@ -3624,77 +3424,25 @@ static void ReleaseD2DDeviceResources()
     RequestFrame();
 }
 
-static bool LoadGdiFunctions()
-{
-    if (g_createFontIndirectW && g_deleteObject && g_createRoundRectRgn && g_getStockObject &&
-        g_setBkMode && g_setTextColor && g_createSolidBrush &&
-        g_createPen && g_selectObject && g_roundRect && g_getTextFaceW &&
-        g_getDIBits && g_getObjectW)
-        return true;
-
-    if (!g_gdiApi)
-        g_gdiApi = LoadLibraryExW(L"gdi32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!g_gdiApi)
-        return false;
-
-    g_createFontIndirectW = reinterpret_cast<CreateFontIndirectWFn>(
-        GetProcAddress(g_gdiApi, "CreateFontIndirectW"));
-    g_deleteObject = reinterpret_cast<DeleteObjectFn>(
-        GetProcAddress(g_gdiApi, "DeleteObject"));
-    g_createRoundRectRgn = reinterpret_cast<CreateRoundRectRgnFn>(
-        GetProcAddress(g_gdiApi, "CreateRoundRectRgn"));
-    g_getStockObject = reinterpret_cast<GetStockObjectFn>(
-        GetProcAddress(g_gdiApi, "GetStockObject"));
-    g_setBkMode = reinterpret_cast<SetBkModeFn>(
-        GetProcAddress(g_gdiApi, "SetBkMode"));
-    g_setTextColor = reinterpret_cast<SetTextColorFn>(
-        GetProcAddress(g_gdiApi, "SetTextColor"));
-    g_createSolidBrush = reinterpret_cast<CreateSolidBrushFn>(
-        GetProcAddress(g_gdiApi, "CreateSolidBrush"));
-    g_createPen = reinterpret_cast<CreatePenFn>(
-        GetProcAddress(g_gdiApi, "CreatePen"));
-    g_selectObject = reinterpret_cast<SelectObjectFn>(
-        GetProcAddress(g_gdiApi, "SelectObject"));
-    g_roundRect = reinterpret_cast<RoundRectFn>(
-        GetProcAddress(g_gdiApi, "RoundRect"));
-    g_getTextFaceW = reinterpret_cast<GetTextFaceWFn>(
-        GetProcAddress(g_gdiApi, "GetTextFaceW"));
-    g_getDIBits = reinterpret_cast<GetDIBitsFn>(
-        GetProcAddress(g_gdiApi, "GetDIBits"));
-    g_getObjectW = reinterpret_cast<GetObjectWFn>(
-        GetProcAddress(g_gdiApi, "GetObjectW"));
-
-    if (!g_createFontIndirectW || !g_deleteObject || !g_createRoundRectRgn || !g_getStockObject ||
-        !g_setBkMode || !g_setTextColor || !g_createSolidBrush ||
-        !g_createPen || !g_selectObject || !g_roundRect ||
-        !g_getDIBits || !g_getObjectW)
-    {
-        FreeLibrary(g_gdiApi);
-        g_gdiApi = nullptr;
-        return false;
-    }
-    return true;
-}
-
 static MediaAccent ExtractMediaAccentFromImage(HICON icon)
 {
     MediaAccent result;
-    if (!icon || !LoadGdiFunctions())
+    if (!icon)
         return result;
 
     ICONINFO iconInfo = {};
     if (!GetIconInfo(icon, &iconInfo) || !iconInfo.hbmColor)
     {
-        if (iconInfo.hbmMask) g_deleteObject(iconInfo.hbmMask);
+        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
         return result;
     }
 
     BITMAP bitmap = {};
-    if (!g_getObjectW(iconInfo.hbmColor, sizeof(bitmap), &bitmap) ||
+    if (!GetObjectW(iconInfo.hbmColor, sizeof(bitmap), &bitmap) ||
         bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0)
     {
-        g_deleteObject(iconInfo.hbmColor);
-        if (iconInfo.hbmMask) g_deleteObject(iconInfo.hbmMask);
+        DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
         return result;
     }
 
@@ -3710,7 +3458,7 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
     bmi.bmiHeader.biCompression = BI_RGB;
 
     HDC screenDC = GetDC(nullptr);
-    if (screenDC && g_getDIBits(screenDC, iconInfo.hbmColor, 0,
+    if (screenDC && GetDIBits(screenDC, iconInfo.hbmColor, 0,
                                 static_cast<UINT>(height), pixels.data(),
                                 &bmi, DIB_RGB_COLORS) != 0)
     {
@@ -3771,8 +3519,8 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
 
     if (screenDC)
         ReleaseDC(nullptr, screenDC);
-    g_deleteObject(iconInfo.hbmColor);
-    if (iconInfo.hbmMask) g_deleteObject(iconInfo.hbmMask);
+    DeleteObject(iconInfo.hbmColor);
+    if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
     return result;
 }
 
@@ -3793,9 +3541,6 @@ static D2D1_COLOR_F AddMediaAccent(const D2D1_COLOR_F& base,
 
 static HFONT CreateModernFont(const wchar_t* preferredFace, const wchar_t* fallbackFace, LONG height, LONG weight)
 {
-    if (!LoadGdiFunctions())
-        return nullptr;
-
     LOGFONTW font = {};
     font.lfHeight = height;
     font.lfWeight = weight;
@@ -3808,47 +3553,37 @@ static HFONT CreateModernFont(const wchar_t* preferredFace, const wchar_t* fallb
     if (preferredFace && preferredFace[0] != L'\0')
     {
         lstrcpynW(font.lfFaceName, preferredFace, LF_FACESIZE);
-        HFONT hFont = g_createFontIndirectW(&font);
+        HFONT hFont = CreateFontIndirectW(&font);
         if (hFont)
         {
-            if (g_getTextFaceW)
+            HDC screenDC = GetDC(nullptr);
+            if (screenDC)
             {
-                HDC screenDC = GetDC(nullptr);
-                if (screenDC)
-                {
-                    HGDIOBJ old = g_selectObject(screenDC, hFont);
-                    wchar_t actualFace[LF_FACESIZE] = {};
-                    g_getTextFaceW(screenDC, LF_FACESIZE, actualFace);
-                    g_selectObject(screenDC, old);
-                    ReleaseDC(nullptr, screenDC);
+                HGDIOBJ old = SelectObject(screenDC, hFont);
+                wchar_t actualFace[LF_FACESIZE] = {};
+                GetTextFaceW(screenDC, LF_FACESIZE, actualFace);
+                SelectObject(screenDC, old);
+                ReleaseDC(nullptr, screenDC);
 
-                    if (_wcsicmp(actualFace, preferredFace) == 0)
-                        return hFont;
-                }
+                if (_wcsicmp(actualFace, preferredFace) == 0)
+                    return hFont;
             }
-            else
-            {
-                return hFont;
-            }
-            g_deleteObject(hFont);
+            DeleteObject(hFont);
         }
     }
 
     lstrcpynW(font.lfFaceName, (fallbackFace && fallbackFace[0] != L'\0') ? fallbackFace : L"Segoe UI", LF_FACESIZE);
-    return g_createFontIndirectW(&font);
+    return CreateFontIndirectW(&font);
 }
 
 static void ReleaseUiFontObjects()
 {
-    if (g_deleteObject)
-    {
-        if (g_nameFont)
-            g_deleteObject(reinterpret_cast<HGDIOBJ>(g_nameFont));
-        if (g_selectedNameFont)
-            g_deleteObject(reinterpret_cast<HGDIOBJ>(g_selectedNameFont));
-        if (g_secondaryFont)
-            g_deleteObject(reinterpret_cast<HGDIOBJ>(g_secondaryFont));
-    }
+    if (g_nameFont)
+        DeleteObject(reinterpret_cast<HGDIOBJ>(g_nameFont));
+    if (g_selectedNameFont)
+        DeleteObject(reinterpret_cast<HGDIOBJ>(g_selectedNameFont));
+    if (g_secondaryFont)
+        DeleteObject(reinterpret_cast<HGDIOBJ>(g_secondaryFont));
     g_nameFont = nullptr;
     g_selectedNameFont = nullptr;
     g_secondaryFont = nullptr;
@@ -3876,14 +3611,6 @@ static void CreateUiFonts()
 static void DestroyUiFonts()
 {
     ReleaseUiFontObjects();
-    g_getTextFaceW = nullptr;
-    g_getDIBits = nullptr;
-    g_getObjectW = nullptr;
-    if (g_gdiApi)
-    {
-        FreeLibrary(g_gdiApi);
-        g_gdiApi = nullptr;
-    }
 }
 
 static RECT ContainedRect(const RECT& area, int sourceWidth, int sourceHeight)
@@ -3909,7 +3636,7 @@ static RECT ContainedRect(const RECT& area, int sourceWidth, int sourceHeight)
 }
 
 
-// GEOMETRÍA Y TRAYECTORIA DEL CARRUSEL
+// CAROUSEL GEOMETRY AND PATH
 
 static RECT ScaleRectAroundCenter(const RECT& rect, float scale)
 {
@@ -4225,19 +3952,27 @@ static void DrawCardGlowAndBorderGDI(HDC hdc, const RECT& rect, int radius, bool
     COLORREF bgCol = selected ? g_cardStyle.selectedCardBackground : g_cardStyle.cardBackground;
     COLORREF borderCol = selected ? g_cardStyle.selectedBorderColor : g_cardStyle.borderColor;
 
-    HBRUSH bgBrush = g_createSolidBrush ? g_createSolidBrush(bgCol) : nullptr;
-    HPEN borderPen = g_createPen ? g_createPen(PS_SOLID, selected ? 2 : 1, borderCol) : nullptr;
+    HBRUSH bgBrush = CreateSolidBrush(bgCol);
+    HPEN borderPen = CreatePen(PS_SOLID, selected ? 2 : 1, borderCol);
 
-    if (bgBrush && borderPen && g_roundRect && g_deleteObject)
+    if (bgBrush && borderPen)
     {
-        HGDIOBJ oldBrush = g_selectObject(hdc, bgBrush);
-        HGDIOBJ oldPen = g_selectObject(hdc, borderPen);
-        g_roundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, radius, radius);
-        g_selectObject(hdc, oldBrush);
-        g_selectObject(hdc, oldPen);
-        g_deleteObject(bgBrush);
-        g_deleteObject(borderPen);
+        HGDIOBJ oldBrush = SelectObject(hdc, bgBrush);
+        if (oldBrush && oldBrush != HGDI_ERROR)
+        {
+            HGDIOBJ oldPen = SelectObject(hdc, borderPen);
+            if (oldPen && oldPen != HGDI_ERROR)
+            {
+                RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, radius, radius);
+                SelectObject(hdc, oldPen);
+            }
+            SelectObject(hdc, oldBrush);
+        }
     }
+    if (bgBrush)
+        DeleteObject(bgBrush);
+    if (borderPen)
+        DeleteObject(borderPen);
 }
 
 static void PaintBottomShadowD2D(const RECT& objectRect, float radius,
@@ -4271,8 +4006,7 @@ static void PaintBottomShadowD2D(const RECT& objectRect, float radius,
 
 static void PaintBottomShadowGDI(HDC hdc, const RECT& objectRect, int radius)
 {
-    if (!hdc || !g_createSolidBrush || !g_selectObject || !g_getStockObject ||
-        !g_roundRect || !g_deleteObject)
+    if (!hdc)
         return;
     const COLORREF colors[] = { RGB(10, 10, 13), RGB(16, 16, 20), RGB(23, 23, 28) };
     for (int i = 0; i < 3; ++i)
@@ -4284,18 +4018,29 @@ static void PaintBottomShadowGDI(HDC hdc, const RECT& objectRect, int radius)
                         objectRect.bottom - 1 + offset,
                         objectRect.right + spread,
                         objectRect.bottom + offset + depth };
-        HBRUSH brush = g_createSolidBrush(colors[i]);
-        HGDIOBJ oldBrush = g_selectObject(hdc, brush);
-        HGDIOBJ oldPen = g_selectObject(hdc, g_getStockObject(NULL_PEN));
-        g_roundRect(hdc, shadow.left, shadow.top, shadow.right, shadow.bottom,
-                    radius + spread, radius + spread);
-        g_selectObject(hdc, oldPen);
-        g_selectObject(hdc, oldBrush);
-        g_deleteObject(brush);
+        HBRUSH brush = CreateSolidBrush(colors[i]);
+        if (!brush)
+            continue;
+        HGDIOBJ oldBrush = SelectObject(hdc, brush);
+        if (!oldBrush || oldBrush == HGDI_ERROR)
+        {
+            DeleteObject(brush);
+            continue;
+        }
+        HGDIOBJ nullPen = GetStockObject(NULL_PEN);
+        HGDIOBJ oldPen = nullPen ? SelectObject(hdc, nullPen) : nullptr;
+        if (oldPen && oldPen != HGDI_ERROR)
+        {
+            RoundRect(hdc, shadow.left, shadow.top, shadow.right, shadow.bottom,
+                        radius + spread, radius + spread);
+            SelectObject(hdc, oldPen);
+        }
+        SelectObject(hdc, oldBrush);
+        DeleteObject(brush);
     }
 }
 
-// SOMBRAS SUAVES DE LAS CARDS
+// SOFT CARD SHADOWS
 
 static float ShadowSigmaPx() { return static_cast<float>(ScaleLayoutPx(9.0f)); }
 static float ShadowOffsetPx() { return static_cast<float>(ScaleLayoutPx(7.0f)); }
@@ -4367,9 +4112,17 @@ static bool EnsureShadowSprite(HDC ref, int radius, int margin)
         }
     }
 
+    HGDIOBJ oldBitmap = SelectObject(dc, bitmap);
+    if (!oldBitmap || oldBitmap == HGDI_ERROR)
+    {
+        DeleteDC(dc);
+        DeleteObject(bitmap);
+        return false;
+    }
+
     g_shadowSprite.dc = dc;
     g_shadowSprite.bitmap = bitmap;
-    g_shadowSprite.oldBitmap = SelectObject(dc, bitmap);
+    g_shadowSprite.oldBitmap = oldBitmap;
     g_shadowSprite.size = size;
     g_shadowSprite.margin = margin;
     g_shadowSprite.radius = radius;
@@ -4895,13 +4648,21 @@ static RECT LerpRect(const RECT& a, const RECT& b, float t)
     return result;
 }
 
-static float CalculateSelectionExpansionDurationMs(
-    const RECT& source, const RECT& destination, const RECT& work)
+static float CalculateSelectionExpansionDurationMs()
 {
-    (void)source;
-    (void)destination;
-    (void)work;
     return 200.0f;
+}
+
+static void HideSelectorAndActivateWindow(HWND target, bool setPendingTarget)
+{
+    if (setPendingTarget)
+        g_pendingActivationTarget = target;
+    g_cleanupInProgress = true;
+    DestroySelector();
+    g_state = SelectorState::Idle;
+    g_cleanupInProgress = false;
+    CleanupKeyboardState();
+    ActivateWindow(target);
 }
 
 static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
@@ -4909,13 +4670,7 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
     if (!target || !IsWindow(target) || !g_selector ||
         !IsWindow(g_selector) || g_selectionExpansionActive)
     {
-        g_pendingActivationTarget = target;
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, true);
         return;
     }
     HMONITOR monitor = MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST);
@@ -4923,25 +4678,13 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
     monitorInfo.cbSize = sizeof(monitorInfo);
     if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo))
     {
-        g_pendingActivationTarget = target;
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, true);
         return;
     }
     RECT selectorRect = {};
     if (!GetWindowRect(g_selector, &selectorRect))
     {
-        g_pendingActivationTarget = target;
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, true);
         return;
     }
     POINT selectorClientOrigin = { 0, 0 };
@@ -4955,13 +4698,7 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
     RECT targetWindowRect = {};
     if (!GetWindowRect(target, &targetWindowRect))
     {
-        g_pendingActivationTarget = target;
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, true);
         return;
     }
     if (!IsIconic(target) && LoadDwmFunctions() && g_dwmGetWindowAttribute)
@@ -5041,13 +4778,7 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
         expansionSourceRect.right <= expansionSourceRect.left ||
         expansionSourceRect.bottom <= expansionSourceRect.top)
     {
-        g_pendingActivationTarget = target;
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, true);
         return;
     }
     g_selectionExpansionActive = true;
@@ -5109,9 +4840,7 @@ static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
             targetWindowRect.bottom - clientAfterOrigin.y };
         g_selectionExpansionRect = g_selectionExpansionStartRect;
     }
-    g_selectionExpansionDurationMs = CalculateSelectionExpansionDurationMs(
-        g_selectionExpansionStartRect, g_selectionExpansionDestinationRect,
-        g_selectionExpansionWorkRect);
+    g_selectionExpansionDurationMs = CalculateSelectionExpansionDurationMs();
     g_selectionExpansionStart = FrameClockNow();
     UpdateSelectorSurfaceTransform();
     UpdateThumbnailSlots();
@@ -5692,12 +5421,12 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
     textRect.right = rc.right - ScaleLayoutPx(8.0f);
     HFONT font = selected ? g_selectedNameFont : g_nameFont;
     COLORREF textColor = selected ? g_textSelectedColor : g_textNormalColor;
-    if (g_setBkMode) g_setBkMode(hdc, TRANSPARENT);
-    if (g_setTextColor) g_setTextColor(hdc, textColor);
-    HGDIOBJ oldFont = font && g_selectObject ? g_selectObject(hdc, font) : nullptr;
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, textColor);
+    HGDIOBJ oldFont = font ? SelectObject(hdc, font) : nullptr;
     DrawTextW(hdc, text.c_str(), -1, &textRect,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    if (oldFont && g_selectObject) g_selectObject(hdc, oldFont);
+    if (oldFont && oldFont != HGDI_ERROR) SelectObject(hdc, oldFont);
 
     if (group.icon)
     {
@@ -5709,9 +5438,7 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
 
 static void PaintCompactSelectionIndicatorGDI(HDC hdc)
 {
-    if (!IsCompactAutomaticMode() || !hdc || !g_createSolidBrush ||
-        !g_createPen || !g_selectObject || !g_getStockObject ||
-        !g_roundRect || !g_deleteObject)
+    if (!IsCompactAutomaticMode() || !hdc)
         return;
 
     const int count = GetCarouselSlotCount();
@@ -5734,20 +5461,24 @@ static void PaintCompactSelectionIndicatorGDI(HDC hdc)
 
     const int y = ScaleLayoutPx(352.0f);
     const int activeDot = ScaleLayoutPx(8.0f);
-    HGDIOBJ oldPen = g_selectObject(hdc, g_getStockObject(NULL_PEN));
+    HGDIOBJ nullPen = GetStockObject(NULL_PEN);
+    HGDIOBJ oldPen = nullPen ? SelectObject(hdc, nullPen) : nullptr;
     const COLORREF accent = g_cardStyle.selectedBorderColor;
-    HBRUSH activeBrush = g_createSolidBrush(accent);
+    HBRUSH activeBrush = CreateSolidBrush(accent);
     if (activeBrush)
     {
-        HGDIOBJ previousBrush = g_selectObject(hdc, activeBrush);
-        const int x = static_cast<int>(roundf(activeX));
-        g_roundRect(hdc, x - activeDot / 2, y - activeDot / 2,
-                    x + activeDot / 2, y + activeDot / 2, activeDot, activeDot);
-        g_selectObject(hdc, previousBrush);
-        g_deleteObject(activeBrush);
+        HGDIOBJ previousBrush = SelectObject(hdc, activeBrush);
+        if (previousBrush && previousBrush != HGDI_ERROR)
+        {
+            const int x = static_cast<int>(roundf(activeX));
+            RoundRect(hdc, x - activeDot / 2, y - activeDot / 2,
+                        x + activeDot / 2, y + activeDot / 2, activeDot, activeDot);
+            SelectObject(hdc, previousBrush);
+        }
+        DeleteObject(activeBrush);
     }
-    if (oldPen)
-        g_selectObject(hdc, oldPen);
+    if (oldPen && oldPen != HGDI_ERROR)
+        SelectObject(hdc, oldPen);
 }
 
 static void PaintCounterGDI(HDC hdc)
@@ -5755,12 +5486,11 @@ static void PaintCounterGDI(HDC hdc)
     RECT rc = GetCounterRect();
     const std::wstring& text = MakeCounterText();
 
-    if (g_setBkMode) g_setBkMode(hdc, TRANSPARENT);
-    if (g_setTextColor) g_setTextColor(hdc, g_counterTextColor);
-    HGDIOBJ oldFont = g_secondaryFont && g_selectObject ?
-        g_selectObject(hdc, g_secondaryFont) : nullptr;
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, g_counterTextColor);
+    HGDIOBJ oldFont = g_secondaryFont ? SelectObject(hdc, g_secondaryFont) : nullptr;
     DrawTextW(hdc, text.c_str(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    if (oldFont && g_selectObject) g_selectObject(hdc, oldFont);
+    if (oldFont && oldFont != HGDI_ERROR) SelectObject(hdc, oldFont);
 }
 
 static void PaintCenterAccentMarginD2D(const RECT& cardRect, int groupIndex, float radius)
@@ -6311,7 +6041,7 @@ static bool EnsureFullscreenGpuTarget(HWND hwnd)
             props, hwndProps, &g_fsHwndRenderTarget);
         if (FAILED(hr) || !g_fsHwndRenderTarget)
         {
-            Wh_Log(L"[FS-GPU] No se pudo crear el target D2D por hardware: 0x%08X",
+            Wh_Log(L"[FS-GPU] Failed to create the hardware D2D target: 0x%08X",
                    static_cast<unsigned>(hr));
             if (g_fsHwndRenderTarget) { g_fsHwndRenderTarget->Release(); g_fsHwndRenderTarget = nullptr; }
             return false;
@@ -6325,7 +6055,7 @@ static bool EnsureFullscreenGpuTarget(HWND hwnd)
             const HRESULT hr = g_fsHwndRenderTarget->Resize(D2D1::SizeU(width, height));
             if (FAILED(hr))
             {
-                Wh_Log(L"[FS-GPU] Resize del target fallo: 0x%08X", static_cast<unsigned>(hr));
+                Wh_Log(L"[FS-GPU] Target resize failed: 0x%08X", static_cast<unsigned>(hr));
                 if (g_d2dRenderTarget == g_fsHwndRenderTarget)
                     g_d2dRenderTarget = nullptr;
                 g_fsHwndRenderTarget->Release();
@@ -6345,7 +6075,7 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             !LoadD2DAndDWrite() || !g_d2dRenderTarget || !g_d2dBrush ||
             !EnsureFullscreenD2DBitmaps())
         {
-            Wh_Log(L"[FS-GPU] Frame omitido: no hay un target de hardware listo.");
+            Wh_Log(L"[FS-GPU] Frame skipped: no hardware target is ready.");
             return;
         }
         PaintSelectorSceneImpl(hwnd, hdc);
@@ -6369,34 +6099,11 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
     const bool fullscreenBackdrop = IsFullscreenBackdropActive();
     const bool d2dLoaded = LoadD2DAndDWrite() && g_d2dRenderTarget && g_d2dBrush;
 
-    bool useSceneDc = false;
-    RECT dirty = clientRect;
-    if (fullscreenBackdrop && d2dLoaded && EnsureFullscreenD2DBitmaps())
-    {
-        dirty = clientRect;
-        useSceneDc = false;
-    }
-    const D2D1::Matrix3x2F baseTransform = useSceneDc
-        ? D2D1::Matrix3x2F::Translation(-static_cast<float>(dirty.left),
-                                        -static_cast<float>(dirty.top))
-        : D2D1::Matrix3x2F::Identity();
-    RECT bindRect = clientRect;
-    HDC d2dDc = hdc;
-    if (useSceneDc)
-    {
-        bindRect = RECT{ 0, 0, dirty.right - dirty.left, dirty.bottom - dirty.top };
-        d2dDc = g_fsScene.dc;
-    }
-    auto presentScene = [&]() {
-        if (useSceneDc)
-            BitBlt(hdc, dirty.left, dirty.top, dirty.right - dirty.left,
-                   dirty.bottom - dirty.top, g_fsScene.dc, 0, 0, SRCCOPY);
-    };
     const bool usingFullscreenGpu = fullscreenBackdrop &&
         g_fsHwndRenderTarget && g_d2dRenderTarget == g_fsHwndRenderTarget;
     bool d2dActive = d2dLoaded && (usingFullscreenGpu ||
         (!fullscreenBackdrop && g_d2dDCRenderTarget &&
-         SUCCEEDED(g_d2dDCRenderTarget->BindDC(d2dDc, &bindRect))));
+         SUCCEEDED(g_d2dDCRenderTarget->BindDC(hdc, &clientRect))));
 
     if (fullscreenBackdrop && !usingFullscreenGpu)
         return;
@@ -6405,7 +6112,7 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
     {
         g_d2dRenderTarget->BeginDraw();
         g_d2dRenderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-        g_d2dRenderTarget->SetTransform(baseTransform);
+        g_d2dRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
         g_d2dRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
         if (fullscreenBackdrop)
             DrawFullscreenBackgroundD2D();
@@ -6414,13 +6121,9 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             const HRESULT drawResult = g_d2dRenderTarget->EndDraw();
             if (drawResult == static_cast<HRESULT>(0x8899000C))
                 ReleaseD2DDeviceResources();
-            else if (SUCCEEDED(drawResult))
-                presentScene();
             return;
         }
         RECT sceneRect = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
-        if (g_selectionExpansionActive)
-            GetClientRect(hwnd, &sceneRect);
         D2D1_RECT_F sceneClip = fullscreenBackdrop
             ? D2D1::RectF(0.0f, 0.0f,
                           static_cast<float>(clientRect.right),
@@ -6447,9 +6150,9 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
         }
 
         if (sceneScaleX != 1.0f || sceneScaleY != 1.0f ||
-            g_selectionExpansionActive || fullscreenBackdrop)
+            fullscreenBackdrop)
         {
-            g_d2dRenderTarget->SetTransform(GetSceneTransform() * baseTransform);
+            g_d2dRenderTarget->SetTransform(GetSceneTransform());
         }
 
         D2D1_RECT_F bgRect = D2D1::RectF(
@@ -6501,7 +6204,7 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             DrawPatternWaves(sceneRect);
             if (sceneScaleX != 1.0f || sceneScaleY != 1.0f)
             {
-                g_d2dRenderTarget->SetTransform(GetSceneTransform() * baseTransform);
+                g_d2dRenderTarget->SetTransform(GetSceneTransform());
             }
         }
 
@@ -6750,38 +6453,16 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
 
         PaintCompactSelectionIndicatorD2D();
 
-        if (g_selectionExpansionActive && g_d2dRenderTarget)
-        {
-            g_d2dRenderTarget->SetTransform(baseTransform);
-            const float p = g_selectionExpansionProgress;
-            const float shadowRadius = DpiPx(14.0f) * (1.0f - p) + DpiPx(6.0f) * p;
-            PaintCardShadowD2D(g_selectionExpansionRect, shadowRadius, 0.78f);
-            const float radius = std::max(0.0f, DpiPx(14.0f) * (1.0f - p));
-            D2D1_ROUNDED_RECT expansionRect = D2D1::RoundedRect(
-                D2D1::RectF(static_cast<float>(g_selectionExpansionRect.left),
-                            static_cast<float>(g_selectionExpansionRect.top),
-                            static_cast<float>(g_selectionExpansionRect.right),
-                            static_cast<float>(g_selectionExpansionRect.bottom)),
-                radius, radius);
-            g_d2dBrush->SetColor(D2D1::ColorF(0.18f, 0.20f, 0.24f,
-                                               0.70f * (1.0f - p) + 0.18f));
-            g_d2dRenderTarget->DrawRoundedRectangle(&expansionRect,
-                                                       g_d2dBrush,
-                                                       DpiPx(1.5f));
-        }
-        if (!g_selectionExpansionActive)
-            PaintCounterD2D();
+        PaintCounterD2D();
         if (sceneOpacityLayer)
         {
             g_d2dRenderTarget->PopLayer();
         }
-        g_d2dRenderTarget->SetTransform(baseTransform);
+        g_d2dRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
         g_d2dRenderTarget->PopAxisAlignedClip();
         const HRESULT drawResult = g_d2dRenderTarget->EndDraw();
         if (drawResult == static_cast<HRESULT>(0x8899000C))
             ReleaseD2DDeviceResources();
-        else if (SUCCEEDED(drawResult))
-            presentScene();
         return;
     }
 
@@ -6792,36 +6473,15 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
 
     if (g_selectionExpansionActive)
     {
-        if (IsFullscreenBackdropActive())
-        {
-            if (!DrawFullscreenBackgroundGdi(hdc))
-                LogFullscreenHdcDrawFailure();
-        }
-        else
-        {
-            HGDIOBJ stockBrush = LoadGdiFunctions() && g_getStockObject
-                ? g_getStockObject(BLACK_BRUSH) : nullptr;
-            HBRUSH glassClearBrush = reinterpret_cast<HBRUSH>(stockBrush);
-            if (glassClearBrush)
-                FillRect(hdc, &clientRect, glassClearBrush);
-        }
+        HBRUSH glassClearBrush = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+        if (glassClearBrush)
+            FillRect(hdc, &clientRect, glassClearBrush);
         return;
     }
 
-    const bool fullscreenBackdropGdi = IsFullscreenBackdropActive();
-    int fullscreenGdiState = 0;
-    if (fullscreenBackdropGdi)
-    {
-        fullscreenGdiState = SaveDC(hdc);
-        if (!DrawFullscreenBackgroundGdi(hdc))
-            LogFullscreenHdcDrawFailure();
-        SetViewportOrgEx(hdc, g_selectorSceneOffset.x,
-                         g_selectorSceneOffset.y, nullptr);
-    }
-
-    const bool hasVisualBackground = !fullscreenBackdropGdi &&
-        (g_baseBackgroundMode != BaseBackgroundMode::None ||
-         IsPatternWavesActive());
+    const bool hasVisualBackground =
+        g_baseBackgroundMode != BaseBackgroundMode::None ||
+        IsPatternWavesActive();
     if (hasVisualBackground)
     {
         RECT containerShadow = {
@@ -6860,59 +6520,67 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
         PaintSlotHeaderGDI(hdc, slot, index, selected, dist);
         if (g_hoveredSlot == slot)
         {
-            HPEN hoverPen = g_createPen ? g_createPen(PS_SOLID, 1, RGB(110, 116, 130)) : nullptr;
-            if (hoverPen && g_selectObject && g_getStockObject && g_roundRect && g_deleteObject)
+            HPEN hoverPen = CreatePen(PS_SOLID, 1, RGB(110, 116, 130));
+            if (hoverPen)
             {
                 RECT hoverRect = cardRect;
                 hoverRect.left -= 3; hoverRect.top -= 3;
                 hoverRect.right += 3; hoverRect.bottom += 3;
-                HGDIOBJ oldPen = g_selectObject(hdc, hoverPen);
-                HGDIOBJ oldBrush = g_selectObject(hdc, g_getStockObject(NULL_BRUSH));
-                g_roundRect(hdc, hoverRect.left, hoverRect.top, hoverRect.right, hoverRect.bottom, radius + 2, radius + 2);
-                g_selectObject(hdc, oldBrush);
-                g_selectObject(hdc, oldPen);
-                g_deleteObject(hoverPen);
+                HGDIOBJ oldPen = SelectObject(hdc, hoverPen);
+                if (oldPen && oldPen != HGDI_ERROR)
+                {
+                    HGDIOBJ nullBrush = GetStockObject(NULL_BRUSH);
+                    HGDIOBJ oldBrush = nullBrush ? SelectObject(hdc, nullBrush) : nullptr;
+                    if (oldBrush && oldBrush != HGDI_ERROR)
+                    {
+                        RoundRect(hdc, hoverRect.left, hoverRect.top,
+                                  hoverRect.right, hoverRect.bottom,
+                                  radius + 2, radius + 2);
+                        SelectObject(hdc, oldBrush);
+                    }
+                    SelectObject(hdc, oldPen);
+                }
+                DeleteObject(hoverPen);
             }
             RECT closeRect = GetCloseHoverButtonRect(slot);
-            if (g_hoveredCloseButton && g_createSolidBrush && g_createPen &&
-                g_selectObject && g_roundRect && g_deleteObject)
+            if (g_hoveredCloseButton)
             {
                 RECT buttonRect = closeRect;
                 int buttonPad = ScaleLayoutPx(2.0f);
                 buttonRect.left -= buttonPad; buttonRect.top -= buttonPad;
                 buttonRect.right += buttonPad; buttonRect.bottom += buttonPad;
-                HBRUSH buttonBrush = g_createSolidBrush(RGB(24, 8, 10));
-                HPEN buttonPen = g_createPen(PS_SOLID, 1, RGB(122, 36, 42));
-                HGDIOBJ oldBrush = g_selectObject(hdc, buttonBrush);
-                HGDIOBJ oldPen = g_selectObject(hdc, buttonPen);
-                g_roundRect(hdc, buttonRect.left, buttonRect.top,
-                            buttonRect.right, buttonRect.bottom,
-                            ScaleLayoutPx(12.0f), ScaleLayoutPx(6.0f));
-                g_selectObject(hdc, oldBrush);
-                g_selectObject(hdc, oldPen);
-                g_deleteObject(buttonBrush);
-                g_deleteObject(buttonPen);
+                HBRUSH buttonBrush = CreateSolidBrush(RGB(24, 8, 10));
+                HPEN buttonPen = CreatePen(PS_SOLID, 1, RGB(122, 36, 42));
+                if (buttonBrush && buttonPen)
+                {
+                    HGDIOBJ oldBrush = SelectObject(hdc, buttonBrush);
+                    if (oldBrush && oldBrush != HGDI_ERROR)
+                    {
+                        HGDIOBJ oldPen = SelectObject(hdc, buttonPen);
+                        if (oldPen && oldPen != HGDI_ERROR)
+                        {
+                            RoundRect(hdc, buttonRect.left, buttonRect.top,
+                                        buttonRect.right, buttonRect.bottom,
+                                        ScaleLayoutPx(12.0f), ScaleLayoutPx(6.0f));
+                            SelectObject(hdc, oldPen);
+                        }
+                        SelectObject(hdc, oldBrush);
+                    }
+                }
+                if (buttonBrush)
+                    DeleteObject(buttonBrush);
+                if (buttonPen)
+                    DeleteObject(buttonPen);
             }
-            if (g_setBkMode) g_setBkMode(hdc, TRANSPARENT);
-            if (g_setTextColor)
-                g_setTextColor(hdc, g_hoveredCloseButton ? RGB(220, 100, 104) : RGB(158, 61, 64));
-            HGDIOBJ oldFont = g_selectedNameFont && g_selectObject ?
-                g_selectObject(hdc, g_selectedNameFont) : nullptr;
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, g_hoveredCloseButton ? RGB(220, 100, 104) : RGB(158, 61, 64));
+            HGDIOBJ oldFont = g_selectedNameFont ? SelectObject(hdc, g_selectedNameFont) : nullptr;
             DrawTextW(hdc, L"\x00D7", -1, &closeRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            if (oldFont && g_selectObject) g_selectObject(hdc, oldFont);
+            if (oldFont && oldFont != HGDI_ERROR) SelectObject(hdc, oldFont);
         }
-    }
-    if (g_selectionExpansionActive)
-    {
-        const float p = g_selectionExpansionProgress;
-        const int shadowRadius = static_cast<int>(roundf(
-            DpiPx(14.0f) * (1.0f - p) + DpiPx(6.0f) * p));
-        PaintCardShadowGDI(hdc, g_selectionExpansionRect, shadowRadius, 0.78f);
     }
     PaintCompactSelectionIndicatorGDI(hdc);
     PaintCounterGDI(hdc);
-    if (fullscreenGdiState)
-        RestoreDC(hdc, fullscreenGdiState);
 }
 
 static void UiHandleSettingsChanged();
@@ -7055,7 +6723,6 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        g_paintDirty = ps.rcPaint;
         PaintSelectorScene(hwnd, hdc);
         EndPaint(hwnd, &ps);
         return 0;
@@ -7147,7 +6814,7 @@ static void UpdateSelectorSurfaceTransform()
 
 static void ApplySelectorRoundedRegion(HWND hwnd)
 {
-    if (!hwnd || !IsWindow(hwnd) || !LoadGdiFunctions() || !g_createRoundRectRgn)
+    if (!hwnd || !IsWindow(hwnd))
         return;
 
     RECT rc = {};
@@ -7164,7 +6831,7 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
         g_selectorRegionAppliedRadius == radius)
         return;
 
-    HRGN region = g_createRoundRectRgn(0, 0, width + 1, height + 1,
+    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
                                        radius * 2, radius * 2);
     if (!region)
         return;
@@ -7176,8 +6843,8 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
         g_selectorRegionAppliedHeight = height;
         g_selectorRegionAppliedRadius = radius;
     }
-    else if (g_deleteObject)
-        g_deleteObject(region);
+    else
+        DeleteObject(region);
 }
 
 static bool InitializePersistentSelector()
@@ -7805,22 +7472,12 @@ static void ConfirmSelection()
 
     if (!target || !IsWindow(target))
     {
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, false);
         return;
     }
     if (!g_expandSelectedWindow)
     {
-        g_cleanupInProgress = true;
-        DestroySelector();
-        g_state = SelectorState::Idle;
-        g_cleanupInProgress = false;
-        CleanupKeyboardState();
-        ActivateWindow(target);
+        HideSelectorAndActivateWindow(target, false);
         return;
     }
     const bool targetWasMinimized = IsIconic(target);
@@ -7851,7 +7508,7 @@ static void CancelSelection()
     StartSelectorClose(FocusRestoreTarget());
 }
 
-// COMANDOS EN EL UI THREAD
+// UI THREAD COMMANDS
 
 static bool UiCommandMatchesSession(WPARAM sessionId)
 {
@@ -8450,7 +8107,7 @@ static LRESULT CALLBACK InputControlProc(HWND hwnd, UINT message, WPARAM wParam,
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-// HILOS
+// THREADS
 
 static DWORD WINAPI InputThreadProc(LPVOID)
 {
@@ -8467,9 +8124,9 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     controlClass.lpfnWndProc = InputControlProc;
     controlClass.hInstance = g_hModule;
     controlClass.lpszClassName = kInputControlClass;
-    const bool controlClassRegistered =
-        RegisterClassExW(&controlClass) != 0 ||
-        GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    const bool controlClassRegistered = RegisterClassExW(&controlClass) != 0;
+    if (!controlClassRegistered)
+        Wh_Log(L"RegisterClassExW failed: %lu", GetLastError());
     HWND control = controlClassRegistered
         ? CreateWindowExW(0, kInputControlClass, kInputControlTitleIdle, 0,
                           0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hModule, nullptr)
@@ -8481,16 +8138,14 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     }
     if (!control)
     {
-        Wh_Log(L"Input control window creation failed: %lu", GetLastError());
+        if (controlClassRegistered)
+            Wh_Log(L"Input control window creation failed: %lu", GetLastError());
     }
     else
     {
         g_inputControlWnd = control;
         ok = true;
     }
-    if (!ok && control)
-        Wh_Log(L"Input control window initialization failed");
-
     if (ok && control)
         SetWindowTextW(control, kInputControlTitleReady);
 
@@ -8540,6 +8195,7 @@ static DWORD WINAPI InputThreadProc(LPVOID)
         }
     }
 
+    EndRestoreWithoutDwmTransition(nullptr);
     if (control)
         SetWindowTextW(control, kInputControlTitleIdle);
     g_modifierReleasePolling = false;
@@ -8825,21 +8481,25 @@ static void InitHotkeyMessage()
     if (!g_hotkeyMessage)
         g_hotkeyMessage = RegisterWindowMessageW(kHotkeyMessageName);
 }
-
 static bool IsControlOwnerTrusted(DWORD processId)
 {
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (!process)
         return false;
+
     WCHAR path[MAX_PATH * 2] = {};
     DWORD length = ARRAYSIZE(path);
     const BOOL ok = QueryFullProcessImageNameW(process, 0, path, &length);
     CloseHandle(process);
+
     if (!ok || length == 0)
         return false;
+
     PCWSTR name = wcsrchr(path, L'\\');
     name = name ? name + 1 : path;
-    return _wcsicmp(name, L"windhawk.exe") == 0;
+
+    return _wcsicmp(name, L"windhawk.exe") == 0 ||
+        _wcsicmp(name, L"windhawk-mod.exe") == 0;
 }
 
 static bool ForwardHotkey(WPARAM flags)
