@@ -5,9 +5,8 @@
 // @version         1.0
 // @author          mikybuilds
 // @github          https://github.com/mikybuilds
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lgdi32 -luser32 -lole32 -loleaut32
+// @include         windhawk.exe
+// @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,6 +15,8 @@
 
 Snow falls over your desktop. Flakes land on the top edge of your windows and on
 the taskbar and slowly build up snow drifts of different heights.
+
+![Desktop Snowfall demo](https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif)
 
 * The snow follows the window. Toss a window up and the snow flies up in loose
   clumps and lands back with a little bounce. Pull it down or shrink it from
@@ -35,7 +36,12 @@ the taskbar and slowly build up snow drifts of different heights.
 
 The snow is drawn on the GPU on a transparent, click-through overlay, so it
 never gets in the way of mouse input. The overlay is hidden automatically while
-a fullscreen app (a game or a video) is in the foreground.
+a fullscreen app (a game or a video) is in the foreground. The mod runs in its
+own process, separately from Explorer.
+
+The overlay is redrawn every frame, so the snow keeps the GPU a little busy even
+when nothing else on the screen changes. On a laptop running on battery, a lower
+frame rate limit (for example, 30) saves power.
 */
 // ==/WindhawkModReadme==
 
@@ -48,18 +54,18 @@ a fullscreen app (a game or a video) is in the foreground.
     the snowfall (0-600)
 - speed: 100
   $name: Fall speed (%)
-  $description: 100 is the default speed
+  $description: 100 is the default speed (10-500)
 - wind: 15
   $name: Wind (%)
   $description: Horizontal drift. Negative values blow to the left (-100 to 100)
 - size: 100
   $name: Flake size (%)
-  $description: 100 is the default size
+  $description: 100 is the default size (20-400)
 - capHeight: 8
   $name: Snow cap height (pixels)
   $description: >-
     Maximum height of the snow that settles on windows and the taskbar. 0
-    disables the caps.
+    disables the caps (0-40)
 - sweepWithCursor: true
   $name: Sweep snow with the cursor
   $description: Moving the mouse cursor through a snow cap pushes the snow off
@@ -101,6 +107,8 @@ a fullscreen app (a game or a video) is in the foreground.
 #include <dxgi1_3.h>
 #include <uiautomation.h>
 #include <wrl/client.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -147,6 +155,7 @@ struct {
 HANDLE g_stopEvent;
 HANDLE g_snowThread;
 HANDLE g_taskbarThread;
+std::atomic<bool> g_overlayHidden{false};  // hidden while a fullscreen app runs
 
 void LoadSettings() {
     g_settings.intensity = std::clamp(Wh_GetIntSetting(L"intensity"), 0, 600);
@@ -160,7 +169,8 @@ void LoadSettings() {
     g_settings.allMonitors = Wh_GetIntSetting(L"allMonitors") != 0;
     g_settings.pauseInFullscreen = Wh_GetIntSetting(L"pauseInFullscreen") != 0;
 
-    PCWSTR taskbarSnow = Wh_GetStringSetting(L"taskbarSnow");
+    WindhawkUtils::StringSetting taskbarSnow =
+        WindhawkUtils::StringSetting::make(L"taskbarSnow");
     TaskbarSnow mode = TaskbarSnow::Auto;
     if (!wcscmp(taskbarSnow, L"whole")) {
         mode = TaskbarSnow::Whole;
@@ -169,7 +179,6 @@ void LoadSettings() {
     } else if (!wcscmp(taskbarSnow, L"off")) {
         mode = TaskbarSnow::Off;
     }
-    Wh_FreeStringSetting(taskbarSnow);
     g_settings.taskbarSnow = mode;
 }
 
@@ -323,13 +332,14 @@ DWORD WINAPI TaskbarThread(LPVOID) {
 
             do {
                 TaskbarSnow mode = g_settings.taskbarSnow;
-                if (mode != TaskbarSnow::Auto && mode != TaskbarSnow::Parts) {
+                if ((mode != TaskbarSnow::Auto && mode != TaskbarSnow::Parts) ||
+                    g_overlayHidden) {
                     continue;
                 }
 
                 std::vector<HWND> taskbars;
                 EnumWindows(
-                    [](HWND hwnd, LPARAM lParam) -> BOOL {
+                    [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
                         wchar_t cls[64];
                         if (GetClassName(hwnd, cls, ARRAYSIZE(cls)) &&
                             IsTaskbarClass(cls)) {
@@ -388,12 +398,12 @@ struct Chunk {
     float vx, vy;
     float size;
     float area;
-    uintptr_t ignoreKey;  // the cap it came from
+    uint64_t ignoreKey;  // the cap it came from
 };
 
 // Something that snow can lie on: a window, the taskbar or a part of it.
 struct Body {
-    uintptr_t key;
+    uint64_t key;
     HWND hwnd;
     RECT rc;
     bool snowCap;
@@ -429,8 +439,9 @@ struct Cap {
     unsigned seenFrame = 0;
 };
 
-static uintptr_t BodyKey(HWND hwnd, int part) {
-    return (reinterpret_cast<uintptr_t>(hwnd) << 2) | part;
+static uint64_t BodyKey(HWND hwnd, int part) {
+    return (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hwnd)) << 2) |
+           part;
 }
 
 static uint32_t Hash32(uint32_t x) {
@@ -486,7 +497,7 @@ class Overlay {
     float Rand();
     void SpawnFlake(Flake& f, bool scatter);
     void SpawnChunk(float x, float y, float area, float vx, float vy,
-                    uintptr_t ignoreKey);
+                    uint64_t ignoreKey);
     void SpawnPuff(float x, float y, float vx, float vy, float size,
                    float life);
     void DropColumns(Cap& cap, int first, int count);
@@ -496,8 +507,8 @@ class Overlay {
     bool IsFullscreenAppActive();
     bool IsCoveredAbove(size_t bodyIndex, int x, int y);
     const Body* FindLanding(float x, float oldY, float newY,
-                            uintptr_t ignoreKey);
-    void AddSnow(uintptr_t key, int column, float amount);
+                            uint64_t ignoreKey);
+    void AddSnow(uint64_t key, int column, float amount);
 
     void UpdateCaps(float dt);
     bool InheritSnow(Cap& cap, unsigned lastSeen);
@@ -535,7 +546,7 @@ class Overlay {
     std::vector<Chunk> m_chunks;
     std::vector<Puff> m_puffs;
     std::vector<Body> m_bodies;
-    std::unordered_map<uintptr_t, Cap> m_caps;
+    std::unordered_map<uint64_t, Cap> m_caps;
 
     POINT m_lastCursor = {};
     bool m_cursorValid = false;
@@ -839,7 +850,7 @@ void Overlay::SpawnFlake(Flake& f, bool scatter) {
 }
 
 void Overlay::SpawnChunk(float x, float y, float area, float vx, float vy,
-                         uintptr_t ignoreKey) {
+                         uint64_t ignoreKey) {
     if (m_chunks.size() >= kMaxChunks || area < 0.5f) {
         return;
     }
@@ -921,7 +932,7 @@ void Overlay::AddTaskbarBodies(HWND hwnd, const RECT& rc) {
 void Overlay::CollectBodies() {
     m_bodies.clear();
     EnumWindows(
-        [](HWND hwnd, LPARAM lParam) -> BOOL {
+        [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
             Overlay* self = reinterpret_cast<Overlay*>(lParam);
             if (hwnd == self->m_hwnd || !IsWindowVisible(hwnd) ||
                 IsIconic(hwnd)) {
@@ -1015,7 +1026,7 @@ bool Overlay::IsCoveredAbove(size_t bodyIndex, int x, int y) {
 // The topmost body under a falling particle decides what happens to it: the
 // particle lands if it just crossed the body's top edge.
 const Body* Overlay::FindLanding(float x, float oldY, float newY,
-                                 uintptr_t ignoreKey) {
+                                 uint64_t ignoreKey) {
     int sx = static_cast<int>(std::floor(x));
     for (const Body& b : m_bodies) {
         if (sx < b.rc.left || sx >= b.rc.right || newY < b.rc.top ||
@@ -1030,7 +1041,7 @@ const Body* Overlay::FindLanding(float x, float oldY, float newY,
     return nullptr;
 }
 
-void Overlay::AddSnow(uintptr_t key, int column, float amount) {
+void Overlay::AddSnow(uint64_t key, int column, float amount) {
     auto it = m_caps.find(key);
     if (it == m_caps.end()) {
         return;
@@ -1372,6 +1383,10 @@ void Overlay::Ambient(float dt) {
 
     for (size_t i = 0; i < m_bodies.size(); i++) {
         const Body& b = m_bodies[i];
+        // A maximized window keeps its cap for later, but the cap isn't drawn.
+        if (!b.snowCap) {
+            continue;
+        }
         auto it = m_caps.find(b.key);
         if (it == m_caps.end()) {
             continue;
@@ -1461,6 +1476,10 @@ void Overlay::Sweep(float dt) {
 
     for (size_t i = 0; i < m_bodies.size(); i++) {
         const Body& b = m_bodies[i];
+        // A maximized window keeps its cap for later, but the cap isn't drawn.
+        if (!b.snowCap) {
+            continue;
+        }
         auto it = m_caps.find(b.key);
         if (it == m_caps.end()) {
             continue;
@@ -1792,6 +1811,7 @@ void Overlay::Run() {
             g_settings.pauseInFullscreen && IsFullscreenAppActive();
         if (fullscreen == m_visible) {
             m_visible = !fullscreen;
+            g_overlayHidden = !m_visible;
             ShowWindow(m_hwnd, m_visible ? SW_SHOWNOACTIVATE : SW_HIDE);
             m_cursorValid = false;
         }
@@ -1834,22 +1854,6 @@ void Overlay::Run() {
 DWORD WINAPI SnowThread(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // Only the explorer.exe process that owns the taskbar shows the snow.
-    for (;;) {
-        HWND tray = FindWindow(L"Shell_TrayWnd", nullptr);
-        if (tray) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(tray, &pid);
-            if (pid != GetCurrentProcessId()) {
-                return 0;
-            }
-            break;
-        }
-        if (WaitForSingleObject(g_stopEvent, 1000) == WAIT_OBJECT_0) {
-            return 0;
-        }
-    }
-
     g_taskbarThread = CreateThread(nullptr, 0, TaskbarThread, nullptr, 0,
                                    nullptr);
 
@@ -1871,7 +1875,7 @@ DWORD WINAPI SnowThread(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
 
     LoadSettings();
@@ -1891,12 +1895,12 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
 
     SetEvent(g_stopEvent);
@@ -1905,4 +1909,183 @@ void Wh_ModUninit() {
     CloseHandle(g_stopEvent);
     g_snowThread = nullptr;
     g_stopEvent = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
