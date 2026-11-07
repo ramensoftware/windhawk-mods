@@ -933,7 +933,12 @@ STDMETHODIMP GetSystemFontFallback_Hook(
             *fallback = fallback0.detach();
             return hr;
         };
-        fallback1.as(*dwriteFallback);
+        if (!fallback1.try_as(*dwriteFallback)) {
+            Wh_Log(L"CreateFontFallback did not return IDWriteFontFallback1");
+
+            *fallback = fallback0.detach();
+            return E_NOINTERFACE;
+        }
 
         Wh_Log(L"Injected overrides");
     }
@@ -1728,17 +1733,12 @@ struct Context {
                 const auto lastBreakRange = std::ranges::find_last_if(
                     text.substr(position, fitEnd - position), &IsDrawTextBreakCharacter
                 );
-                const auto lastBreak =
-                    lastBreakRange.empty()
-                        ? position
-                        : static_cast<size_t>(lastBreakRange.begin() - text.cbegin());
+                if (!lastBreakRange.empty()) {
+                    const auto lastBreak =
+                        static_cast<size_t>(lastBreakRange.begin() - text.cbegin());
 
-                Wh_Log(L"lastBreak: %zu", lastBreak);
+                    Wh_Log(L"lastBreak: %zu", lastBreak);
 
-                if (lastBreak >= position) {
-                    // A left-aligned line may retain the whitespace that fitted
-                    // after the previous word. Center/right alignment breaks before
-                    // it.
                     if (!(format & (DT_RIGHT | DT_CENTER))) {
                         line.end = line.next = lastBreak + 1;
                     } else {
@@ -2044,7 +2044,11 @@ struct Context {
         };
 
         Wh_Log(
-            L"text: \"%.*s\", count: %d, size: %zu", ctx.text.size(), text, count, ctx.text.size()
+            L"text: \"%.*s\", count: %d, size: %zu",
+            static_cast<int>(ctx.text.size()),
+            text,
+            count,
+            ctx.text.size()
         );
 
         if (ctx.text.size() > INT_MAX / 4) {
@@ -2176,7 +2180,13 @@ static std::optional<DrawRunResult<DrawRun>> RenderThemedTextRuns(
 
     const std::wstring_view textView(text, count < 0 ? wcslen(text) : count);
 
-    Wh_Log(L"text: \"%.*s\", count: %d, size: %zu", textView.size(), text, count, textView.size());
+    Wh_Log(
+        L"text: \"%.*s\", count: %d, size: %zu",
+        static_cast<int>(textView.size()),
+        text,
+        count,
+        textView.size()
+    );
 
     const auto originalFont = static_cast<HFONT>(GetCurrentObject(hdc, OBJ_FONT));
     if (!originalFont) {
@@ -2532,7 +2542,7 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 LoadLibraryExW_t g_originalLoadLibraryExW;
 
-extern bool InstallGDIHooks(HMODULE);
+extern bool InstallGDIHooks();
 
 HMODULE WINAPI LoadLibraryExW_Hook(
     LPCWSTR name,
@@ -2540,7 +2550,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(
     DWORD flags
 ) {
     HMODULE module = g_originalLoadLibraryExW(name, file, flags);
-    if (module && InstallGDIHooks(module)) {
+    if (module && InstallGDIHooks()) {
         Wh_ApplyHookOperations();
     }
     return module;
@@ -2574,7 +2584,7 @@ static BOOL RenderTextOutRuns(
     LPCWSTR text,
     int count
 ) {
-    if (count < -1 || count == 0) {
+    if (!text || count < -1 || count == 0) {
         return g_originalTextOutW(hdc, x, y, text, count);
     }
 
@@ -2591,7 +2601,13 @@ static BOOL RenderTextOutRuns(
 
     const std::wstring_view textView(text, count < 0 ? wcslen(text) : count);
 
-    Wh_Log(L"text: \"%.*s\", count: %d, size: %zu", textView.size(), text, count, textView.size());
+    Wh_Log(
+        L"text: \"%.*s\", count: %d, size: %zu",
+        static_cast<int>(textView.size()),
+        text,
+        count,
+        textView.size()
+    );
 
     Wh_Log(L">");
     const auto runs = BuildRuns(hdc, originalFont, textView);
@@ -2630,7 +2646,7 @@ static BOOL WINAPI TextOutW_Hook(
     LPCWSTR text,
     int count
 ) {
-    if (g_inHook || !text || count <= 0) {
+    if (g_inHook) {
         return g_originalTextOutW(hdc, x, y, text, count);
     }
 
@@ -2669,7 +2685,7 @@ static bool InstallDWriteHooks() {
     const winrt::com_ptr<IDWriteFactory> factory0(factory, winrt::take_ownership_from_abi);
 
     if (!factory0.try_as<IDWriteFactory2>()) {
-        Wh_Log(L"System does not support IDWriteFactory2: Skipping DirectWrite hooks");
+        Wh_Log(L"System does not support IDWriteFactory2: skipping DirectWrite hooks");
         return true;
     }
 
@@ -2686,7 +2702,7 @@ static bool InstallDWriteHooks() {
 
     if (!factory0.try_as<IDWriteFactory6>()) {
         Wh_Log(
-            L"System does not support IDWriteFactory6: Skipping IDWriteFactory6::CreateTextFormat"
+            L"System does not support IDWriteFactory6: skipping IDWriteFactory6::CreateTextFormat"
         );
         return true;
     }
@@ -2697,29 +2713,11 @@ static bool InstallDWriteHooks() {
     return true;
 }
 
-bool InstallGDIHooks(const HMODULE module = nullptr) {
-    auto needs_gdi32 = true;
-    auto needs_user32 = true;
-    auto needs_uxtheme = true;
-    auto needs_comctl32 = true;
-
+bool InstallGDIHooks() {
     auto queued = false;
 
-    if (module) {
-        std::array<wchar_t, MAX_PATH> moduleName{};
-
-        const std::wstring_view moduleNameView(
-            wcslwr(moduleName.data()), GetModuleFileNameW(module, moduleName.data(), MAX_PATH)
-        );
-
-        needs_gdi32 = moduleNameView.ends_with(L"gdi32.dll");
-        needs_user32 = moduleNameView.ends_with(L"user32.dll");
-        needs_uxtheme = moduleNameView.ends_with(L"uxtheme.dll");
-        needs_comctl32 = moduleNameView.ends_with(L"comctl32.dll");
-    }
-
 #define HOOK(dll, f)                                                                               \
-    queued |= needs_##dll && HookFunctionFromDLL(L## #dll L".dll", #f, f##_Hook, &g_original##f)
+    queued |= !g_original##f && HookFunctionFromDLL(L## #dll L".dll", #f, f##_Hook, &g_original##f)
 
     HOOK(gdi32, TextOutW);
     HOOK(gdi32, ExtTextOutW);
@@ -2783,7 +2781,7 @@ void Wh_ModSettingsChanged() {
 //   "files": [
 //     {
 //       "path": "src/font-fallback-override.cpp",
-//       "hash": "3f80b95d4af2613b71a73c8d39a07c61e533481f5e4797d9b20c40e7d037cb5b",
+//       "hash": "8bc41dfd8e3d00af6718e8b5d43e36483ef78b13ba9d6e13ad94847a12cc463e",
 //       "bom": false
 //     },
 //     {
@@ -2798,7 +2796,7 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/dwrite/hooks/GetSystemFontFallback.h",
-//       "hash": "4c4113b3435a5b83ddf7522fdcab1fe7c1f36570acdceb939cd582be9d35a7bd",
+//       "hash": "4f8c9f0602327ba5ca50ffafabcc33b325768b4c714bc98d205c7b47dd617ecd",
 //       "bom": false
 //     },
 //     {
@@ -2818,12 +2816,12 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/DrawTextW.h",
-//       "hash": "2ca2ffd7874cc69477b70aaa7c214d10457878e010d5285f7dc7f8794426dd06",
+//       "hash": "df70e54da969d420cdead6635d9a7cb4d9741d7100da8031507c1833c6e28eb2",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/DrawThemeText.h",
-//       "hash": "43988c7aac3b475255a3e198d0db353d2b4ec2027e361989a8f2c6cebadb4b0e",
+//       "hash": "72bead1ce26e024ad20463ed86651f5c74d5602e3a6106e29ecd8354760d01f4",
 //       "bom": false
 //     },
 //     {
@@ -2833,12 +2831,12 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/LoadLibraryW.h",
-//       "hash": "e673210cac5bb5e4081ea835e05924b864dc33f03ef5e4cbc37260d37c6afef5",
+//       "hash": "3a91af02c78fdfbb088626bf320cb735bc8317b6a9b43126696b48d5bdffd52a",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/TextOutW.h",
-//       "hash": "ae30396acf4d3b15fdbd191363cba9611cfe3c59ead1fc4f88f96274f67680c3",
+//       "hash": "a499685862b495a7e7576071609552c052c02b8e4bb682fe40daab454f81bc44",
 //       "bom": false
 //     },
 //     {
