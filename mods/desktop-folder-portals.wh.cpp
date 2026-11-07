@@ -15,15 +15,15 @@
 /*
 # Desktop Folder Portals
 
-![Translucent Glass](https://raw.githubusercontent.com/Eswerd2324/Desktop-Folder-Portals-Windows-11-/refs/heads/main/Translucent%20Glass.jpg)
+![Translucent Glass](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Translucent%20Glass.jpg)
 *Light theme with transparency and blur effects*
 
 ### Dark Glass Theme
-![Dark Glass](https://raw.githubusercontent.com/Eswerd2324/Desktop-Folder-Portals-Windows-11-/main/Dark%20Glass.jpg)
+![Dark Glass](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Dark%20Glass.jpg)
 *Dark glass styling with customizable blur*
 
 ### Folder Grid
-![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/Desktop-Folder-Portals-Windows-11-/main/Folder%20Grid%20%282-5%20folders%29.jpg)
+![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Folder%20Grid%20(2-5%20folders).jpg)
 *Customize window size and folder grid layout*
 */
 // ==/WindhawkModReadme==
