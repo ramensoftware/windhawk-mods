@@ -52,9 +52,9 @@ can therefore be rendered as:
 This mod only works on Windows 8.1 or later.
 
 [before]:
-https://github.com/RagibHasin/font-fallback-override.wh.cpp/blob/master/assets/before.png?raw=true
+https://raw.githubusercontent.com/RagibHasin/font-fallback-override.wh.cpp/master/assets/before.png
 [after]:
-https://github.com/RagibHasin/font-fallback-override.wh.cpp/blob/master/assets/after.png?raw=true
+https://raw.githubusercontent.com/RagibHasin/font-fallback-override.wh.cpp/master/assets/after.png
 */
 // ==/WindhawkModReadme==
 
@@ -72,9 +72,12 @@ https://github.com/RagibHasin/font-fallback-override.wh.cpp/blob/master/assets/a
 */
 // ==/WindhawkModSettings==
 
+#include <cstring>
+
 #include <dwrite.h>
 #include <dwrite_2.h>
 #include <dwrite_3.h>
+#include <libloaderapi.h>
 #include <unknwn.h>
 #include <winrt/base.h>
 
@@ -500,7 +503,7 @@ class Mutex {
 // original font. We therefore derive LOGFONTW from the currently selected font
 // and only replace lfFaceName.
 //
-// Cache key is original HFONT + replacement family.
+// Cache key is LOGFONTW of the original HFONT + replacement family.
 //
 // The cache is intentionally simple. Font handles are generally long-lived in
 // classic Win32 applications.
@@ -769,7 +772,7 @@ struct FallbackRule {
             return originalFont;
         }
 
-        FontCacheKey key{.originalFont = logFont, .family = fontFamily};
+        const FontCacheKey key{.originalFont = logFont, .family = fontFamily};
 
         {
             auto fontCache = g_fontCache.lock();
@@ -794,18 +797,8 @@ struct FallbackRule {
             return originalFont;
         }
 
-        {
-            const auto [it, inserted] = g_fontCache.lock_mut()->emplace(
-                key, std::make_shared<ManagedFontHandle>(replacement)
-            );
-
-            // check if another thread already inserted it
-            if (!inserted) {
-                return it->second;
-            }
-        }
-
-        return replacement;
+        auto handle = std::make_shared<ManagedFontHandle>(replacement);
+        return g_fontCache.lock_mut()->try_emplace(key, handle).first->second;
     }
 };
 
@@ -1050,7 +1043,7 @@ BuildRuns(
         text = text.substr(charLen);
     }
 
-    Wh_Log(L"> #runs: %d", runs.size());
+    Wh_Log(L"> #runs: %zu", runs.size());
 
     return std::pair{runs, replaced};
 }
@@ -1141,18 +1134,18 @@ static bool HookFunctionFromDLL(
         reinterpret_cast<Prototype*>(GetProcAddress(module, functionName));
 
     if (!target) {
-        Wh_Log(L"GetProcAddress(%s) failed", functionName);
+        Wh_Log(L"GetProcAddress(%S) failed", functionName);
 
         return false;
     }
 
     if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
-        Wh_Log(L"SetFunctionHook(%s) failed", functionName);
+        Wh_Log(L"SetFunctionHook(%S) failed", functionName);
 
         return false;
     }
 
-    Wh_Log(L"Hooked %ls!%s", moduleName, functionName);
+    Wh_Log(L"Hooked %ls!%S", moduleName, functionName);
 
     return true;
 }
@@ -1168,18 +1161,18 @@ static bool HookFunctionInVtable(
     const auto target = reinterpret_cast<Prototype*>((*reinterpret_cast<void***>(vtable))[idx]);
 
     if (!target) {
-        Wh_Log(L"Failed to find entry #%d of the Vtable", idx);
+        Wh_Log(L"Failed to find entry #%u of the Vtable", idx);
 
         return false;
     }
 
     if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
-        Wh_Log(L"SetFunctionHook failed for entry #%d", idx);
+        Wh_Log(L"SetFunctionHook failed for entry #%u", idx);
 
         return false;
     }
 
-    Wh_Log(L"Hooked entry #%d", idx);
+    Wh_Log(L"Hooked entry #%u", idx);
 
     return true;
 }
@@ -1644,7 +1637,7 @@ struct Context {
         const RECT* const clipRect,
         const int tabWidth
     ) const {
-        if (offset < 0 || offset >= lineText.size()) {
+        if (offset >= lineText.size()) {
             return;
         }
 
@@ -1737,7 +1730,7 @@ struct Context {
                 );
                 const auto lastBreak =
                     lastBreakRange.empty()
-                        ? fitEnd
+                        ? position
                         : static_cast<size_t>(lastBreakRange.begin() - text.cbegin());
 
                 Wh_Log(L"lastBreak: %zu", lastBreak);
@@ -2036,7 +2029,7 @@ struct Context {
         LPDRAWTEXTPARAMS params,
         bool allowModifyString
     ) {
-        if (!text || !rect || count < -1 || !g_originalDrawTextW) {
+        if (!text || !rect || count < -1 || count == 0 || !g_originalDrawTextW) {
             return std::nullopt;
         }
 
@@ -2051,7 +2044,7 @@ struct Context {
         };
 
         Wh_Log(
-            L"text: \"%.s\", count: %d, size: %d", ctx.text.size(), text, count, ctx.text.size()
+            L"text: \"%.*s\", count: %d, size: %zu", ctx.text.size(), text, count, ctx.text.size()
         );
 
         if (ctx.text.size() > INT_MAX / 4) {
@@ -2177,13 +2170,13 @@ static std::optional<DrawRunResult<DrawRun>> RenderThemedTextRuns(
     DWORD textFlags,
     DrawRun&& drawRun
 ) {
-    if (!text || !rect || count <= 0) {
+    if (!text || !rect) {
         return std::nullopt;
     }
 
     const std::wstring_view textView(text, count < 0 ? wcslen(text) : count);
 
-    Wh_Log(L"text: \"%.s\", count: %d, size: %d", textView.size(), text, count, textView.size());
+    Wh_Log(L"text: \"%.*s\", count: %d, size: %zu", textView.size(), text, count, textView.size());
 
     const auto originalFont = static_cast<HFONT>(GetCurrentObject(hdc, OBJ_FONT));
     if (!originalFont) {
@@ -2260,7 +2253,7 @@ static HRESULT WINAPI DrawThemeText_Hook(
     DWORD textFlags2,
     LPCRECT rect
 ) {
-    if (g_inHook || !text || !rect || count <= 0 || (textFlags & DT_CALCRECT)) {
+    if (g_inHook || !text || !rect || count < -1 || count == 0 || (textFlags & DT_CALCRECT)) {
         return g_originalDrawThemeText(
             theme, hdc, partId, stateId, text, count, textFlags, textFlags2, rect
         );
@@ -2306,7 +2299,7 @@ static HRESULT WINAPI DrawThemeTextEx_Hook(
     LPRECT rect,
     const DTTOPTS* options
 ) {
-    if (g_inHook || !text || !rect || count <= 0 || (textFlags & DT_CALCRECT)
+    if (g_inHook || !text || !rect || count < -1 || count == 0 || (textFlags & DT_CALCRECT)
         || (options && (options->dwFlags & DTT_CALCRECT))) {
         return g_originalDrawThemeTextEx(
             theme, hdc, partId, stateId, text, count, textFlags, rect, options
@@ -2433,8 +2426,6 @@ static BOOL RenderExtTextOutRuns(
     UINT count,
     const INT* dx
 ) {
-    Wh_Log(L">");
-
     // TODO: measure and draw for non-left alignment
     const auto textAlign = GetTextAlign(hdc);
     if ((options & ETO_GLYPH_INDEX) || (textAlign & TA_RIGHT) || (textAlign & TA_CENTER)) {
@@ -2452,7 +2443,7 @@ static BOOL RenderExtTextOutRuns(
 
     const std::wstring_view textView(text, count);
 
-    Wh_Log(L"text: \"%.s\", count: %d", count, text, count);
+    Wh_Log(L"text: \"%.*s\", count: %u", count, text, count);
 
     const auto runs = BuildRuns(hdc, originalFont, textView);
     if (!runs || !runs->second) {
@@ -2465,29 +2456,36 @@ static BOOL RenderExtTextOutRuns(
 
     options &= ~ETO_OPAQUE;
 
-    const size_t dxFactor = (options & ETO_PDY) ? 2 : 1;
+    const auto displacementsHaveY = options & ETO_PDY;
+    const auto dxFactor = displacementsHaveY ? 2UZ : 1;
     const auto dxSpan = dx ? std::span{dx, textView.size() * dxFactor} : std::span<INT>{};
     auto currentX = x;
+    auto currentY = y;
     for (const auto& run : runs->first) {
         const SelectedObjectGuard fontGuard(hdc, get(run.font));
         if (!fontGuard) {
             continue;
         }
 
-        const auto runDx = dx ? dxSpan.subspan(run.text.cbegin() - text, run.text.size() * dxFactor)
-                              : std::span<INT>{};
+        const auto runDx =
+            dx ? dxSpan.subspan((run.text.cbegin() - text) * dxFactor, run.text.size() * dxFactor)
+               : std::span<INT>{};
         const auto result = g_originalExtTextOutW(
-            hdc, currentX, y, options, rect, run.text.cbegin(), run.text.size(), runDx.data()
+            hdc, currentX, currentY, options, rect, run.text.cbegin(), run.text.size(), runDx.data()
         );
 
         if (dx) {
-            auto indices = std::views::iota(0UZ, runDx.size());
-            auto runDxOnly = std::views::zip(indices, runDx) | std::views::filter([](auto p) {
-                                 return std::get<0>(p) % 2 == 0;
+            auto enumerated = std::views::zip(std::views::iota(0UZ, runDx.size()), runDx);
+            auto runDxOnly = enumerated | std::views::filter([=](auto p) {
+                                 return !displacementsHaveY || std::get<0>(p) % 2 == 0;
                              })
                              | std::views::elements<1>;
-            currentX += (options & ETO_PDY) ? std::ranges::fold_left(runDxOnly, 0, std::plus{})
-                                            : std::ranges::fold_left(runDx, 0, std::plus{});
+            auto runDyOnly = enumerated | std::views::filter([=](auto p) {
+                                 return displacementsHaveY && std::get<0>(p) % 2 != 0;
+                             })
+                             | std::views::elements<1>;
+            currentX += std::ranges::fold_left(runDxOnly, 0, std::plus{});
+            currentY += std::ranges::fold_left(runDyOnly, 0, std::plus{});
         } else {
             SIZE extent{};
             GetTextExtentPoint32W(
@@ -2527,12 +2525,6 @@ static BOOL WINAPI ExtTextOutW_Hook(
 // WHAM@5 end-transform 62
 // WHAM@5 end 57
 // WHAM@5 begin 63: src/includes/gdi/hooks/LoadLibraryW.h
-#include <algorithm>
-#include <array>
-#include <string_view>
-
-#include <winnt.h>
-
 #include <windhawk_api.h>
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -2540,19 +2532,17 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 LoadLibraryExW_t g_originalLoadLibraryExW;
 
-HMODULE WINAPI LoadLibraryExW_Hook(
-    LPCWSTR lpLibFileName,
-    HANDLE hFile,
-    DWORD dwFlags
-) {
-    constexpr std::array hookedDLLs{L"gdi32.dll", L"user32.dll", L"comctl32.dll", L"uxtheme.dll"};
+extern bool InstallGDIHooks(HMODULE);
 
-    HMODULE module = g_originalLoadLibraryExW(lpLibFileName, hFile, dwFlags);
-    if (module
-        && std::ranges::find(hookedDLLs, std::wstring_view{lpLibFileName}) != hookedDLLs.cend()) {
+HMODULE WINAPI LoadLibraryExW_Hook(
+    LPCWSTR name,
+    HANDLE file,
+    DWORD flags
+) {
+    HMODULE module = g_originalLoadLibraryExW(name, file, flags);
+    if (module && InstallGDIHooks(module)) {
         Wh_ApplyHookOperations();
     }
-
     return module;
 }
 // WHAM@5 end 63
@@ -2584,7 +2574,15 @@ static BOOL RenderTextOutRuns(
     LPCWSTR text,
     int count
 ) {
-    Wh_Log(L">");
+    if (count < -1 || count == 0) {
+        return g_originalTextOutW(hdc, x, y, text, count);
+    }
+
+    // TODO: measure and draw for non-left alignment
+    const auto textAlign = GetTextAlign(hdc);
+    if ((textAlign & TA_RIGHT) || (textAlign & TA_CENTER)) {
+        return g_originalTextOutW(hdc, x, y, text, count);
+    }
 
     const auto originalFont = static_cast<HFONT>(GetCurrentObject(hdc, OBJ_FONT));
     if (!originalFont) {
@@ -2593,7 +2591,7 @@ static BOOL RenderTextOutRuns(
 
     const std::wstring_view textView(text, count < 0 ? wcslen(text) : count);
 
-    Wh_Log(L"text: \"%.s\", count: %d, size: %d", textView.size(), text, count, textView.size());
+    Wh_Log(L"text: \"%.*s\", count: %d, size: %zu", textView.size(), text, count, textView.size());
 
     Wh_Log(L">");
     const auto runs = BuildRuns(hdc, originalFont, textView);
@@ -2669,49 +2667,71 @@ static bool InstallDWriteHooks() {
     constexpr auto offsetCreateTextFormat6 = 54UZ;     // 7th of IDWriteFactory6
 
     const winrt::com_ptr<IDWriteFactory> factory0(factory, winrt::take_ownership_from_abi);
-    const auto supportsFactory6 = static_cast<bool>(factory0.try_as<IDWriteFactory6>());
 
-    if (!HookFunctionInVtable(
-            factory,
-            offsetGetSystemFontFallback,
-            GetSystemFontFallback_Hook,
-            &g_originalGetSystemFontFallback
-        )) {
-        Wh_Log(L"Failed to hook GetSystemFontFallback");
-        return false;
-    }
-    Wh_Log(L"Successfully hooked GetSystemFontFallback");
-
-    if (!HookFunctionInVtable(
-            factory, offsetCreateTextFormat0, CreateTextFormat0_Hook, &g_originalCreateTextFormat0
-        )) {
-        Wh_Log(L"Failed to find CreateTextFormat0");
-        return false;
-    }
-    Wh_Log(L"Successfully hooked CreateTextFormat0");
-
-    if (!HookFunctionInVtable(
-            factory, offsetCreateTextLayout0, CreateTextLayout0_Hook, &g_originalCreateTextLayout0
-        )) {
-        Wh_Log(L"Failed to find CreateTextLayout0");
-        return false;
-    }
-    Wh_Log(L"Successfully hooked CreateTextLayout0");
-
-    if (!supportsFactory6) {
-        Wh_Log(L"System does not support IDWriteFactory6");
-        Wh_Log(L"Did not attempt hooking CreateTextFormat6");
+    if (!factory0.try_as<IDWriteFactory2>()) {
+        Wh_Log(L"System does not support IDWriteFactory2: Skipping DirectWrite hooks");
         return true;
     }
-    if (!HookFunctionInVtable(
-            factory, offsetCreateTextFormat6, CreateTextFormat6_Hook, &g_originalCreateTextFormat6
-        )) {
-        Wh_Log(L"Failed to find CreateTextFormat6");
-        return false;
+
+#define HOOK(f)                                                                                    \
+    if (!HookFunctionInVtable(factory, offset##f, f##_Hook, &g_original##f)) {                     \
+        Wh_Log(L"Failed to hook %S", #f);                                                          \
+        return false;                                                                              \
+    }                                                                                              \
+    Wh_Log(L"Successfully hooked %S", #f);
+
+    HOOK(GetSystemFontFallback);
+    HOOK(CreateTextFormat0);
+    HOOK(CreateTextLayout0);
+
+    if (!factory0.try_as<IDWriteFactory6>()) {
+        Wh_Log(
+            L"System does not support IDWriteFactory6: Skipping IDWriteFactory6::CreateTextFormat"
+        );
+        return true;
     }
-    Wh_Log(L"Successfully hooked CreateTextFormat6");
+    HOOK(CreateTextFormat6);
+
+#undef HOOK
 
     return true;
+}
+
+bool InstallGDIHooks(const HMODULE module = nullptr) {
+    auto needs_gdi32 = true;
+    auto needs_user32 = true;
+    auto needs_uxtheme = true;
+    auto needs_comctl32 = true;
+
+    auto queued = false;
+
+    if (module) {
+        std::array<wchar_t, MAX_PATH> moduleName{};
+
+        const std::wstring_view moduleNameView(
+            wcslwr(moduleName.data()), GetModuleFileNameW(module, moduleName.data(), MAX_PATH)
+        );
+
+        needs_gdi32 = moduleNameView.ends_with(L"gdi32.dll");
+        needs_user32 = moduleNameView.ends_with(L"user32.dll");
+        needs_uxtheme = moduleNameView.ends_with(L"uxtheme.dll");
+        needs_comctl32 = moduleNameView.ends_with(L"comctl32.dll");
+    }
+
+#define HOOK(dll, f)                                                                               \
+    queued |= needs_##dll && HookFunctionFromDLL(L## #dll L".dll", #f, f##_Hook, &g_original##f)
+
+    HOOK(gdi32, TextOutW);
+    HOOK(gdi32, ExtTextOutW);
+    HOOK(user32, DrawTextW);
+    HOOK(user32, DrawTextExW);
+    HOOK(uxtheme, DrawThemeText);
+    HOOK(uxtheme, DrawThemeTextEx);
+    HOOK(comctl32, DrawShadowText);
+
+#undef HOOK
+
+    return queued;
 }
 
 BOOL Wh_ModInit() {
@@ -2724,30 +2744,15 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook DirectWrite font fallback machinery");
     }
 
-    const auto successGDI =
-        (HookFunctionFromDLL(L"gdi32.dll", "TextOutW", TextOutW_Hook, &g_originalTextOutW)
-         && HookFunctionFromDLL(
-             L"gdi32.dll", "ExtTextOutW", ExtTextOutW_Hook, &g_originalExtTextOutW
-         )
-         && HookFunctionFromDLL(L"user32.dll", "DrawTextW", DrawTextW_Hook, &g_originalDrawTextW)
-         && HookFunctionFromDLL(
-             L"user32.dll", "DrawTextExW", DrawTextExW_Hook, &g_originalDrawTextExW
-         )
-         && HookFunctionFromDLL(
-             L"uxtheme.dll", "DrawThemeText", DrawThemeText_Hook, &g_originalDrawThemeText
-         )
-         && HookFunctionFromDLL(
-             L"uxtheme.dll", "DrawThemeTextEx", DrawThemeTextEx_Hook, &g_originalDrawThemeTextEx
-         )
-         && HookFunctionFromDLL(
-             L"comctl32.dll", "DrawShadowText", DrawShadowText_Hook, &g_originalDrawShadowText
-         ))
-        || HookFunctionFromDLL(
-            L"kernelbase.dll", "LoadLibraryExW", LoadLibraryExW_Hook, &g_originalLoadLibraryExW
-        );
-
+    const auto successGDI = InstallGDIHooks();
     if (!successGDI) {
         Wh_Log(L"Failed to hook one or more GDI routines");
+    }
+
+    if (!HookFunctionFromDLL(
+            L"kernelbase.dll", "LoadLibraryExW", LoadLibraryExW_Hook, &g_originalLoadLibraryExW
+        )) {
+        Wh_Log(L"Failed to hook library loader routine");
     }
 
     return successDWrite || successGDI;
@@ -2778,7 +2783,7 @@ void Wh_ModSettingsChanged() {
 //   "files": [
 //     {
 //       "path": "src/font-fallback-override.cpp",
-//       "hash": "9f4064f3363b9c023939b4a2e202f9bec46260e8c684d487067672871845d064",
+//       "hash": "3f80b95d4af2613b71a73c8d39a07c61e533481f5e4797d9b20c40e7d037cb5b",
 //       "bom": false
 //     },
 //     {
@@ -2798,12 +2803,12 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/fallback_rule.h",
-//       "hash": "c038d809fb4ad6c1083ece3de17b6a39f8c0fc25a93d4035d8e43d5d1bad1127",
+//       "hash": "094ca9a076031c32140ec0da5b4f6e54d2e29437d8dec20c805542bce70b47de",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/font_cache.h",
-//       "hash": "0e5d330203c624674673f661e12b14abd170198507bf3cbda27c5bf6487ced21",
+//       "hash": "dfdefcefd2f477dc54275f8c2c5b05a329a87490ec0425c9b53615fdacfdbc60",
 //       "bom": false
 //     },
 //     {
@@ -2813,37 +2818,37 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/DrawTextW.h",
-//       "hash": "f4a0a5ada3524ca123e356dfbd5a22d103496849df506cefef0f90198df8ebdf",
+//       "hash": "2ca2ffd7874cc69477b70aaa7c214d10457878e010d5285f7dc7f8794426dd06",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/DrawThemeText.h",
-//       "hash": "c3c1f1c2e79bf97d31db1620fc90cb41199daf4adcd815c8bda0bc52c43bf65c",
+//       "hash": "43988c7aac3b475255a3e198d0db353d2b4ec2027e361989a8f2c6cebadb4b0e",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/ExtTextOutW.h",
-//       "hash": "8dbb470d5f74e7a0807978e93b829843784d1f80d01afafa8f9d54d118fbb11b",
+//       "hash": "1c1bb0b66d01326cbefc395648c0a263627bc0ae051c123274e8cf2330295d11",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/LoadLibraryW.h",
-//       "hash": "2546a05f6327ae7e22af4c1c183d306e8c900bc937506a31b46137691f5d9f14",
+//       "hash": "e673210cac5bb5e4081ea835e05924b864dc33f03ef5e4cbc37260d37c6afef5",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/TextOutW.h",
-//       "hash": "921016abd1035f9ff00d1d3660d3fd26e89368a3a85a4afc8904679c048ca345",
+//       "hash": "ae30396acf4d3b15fdbd191363cba9611cfe3c59ead1fc4f88f96274f67680c3",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/text_run.h",
-//       "hash": "c7371d06ff1059e0e204e26a646517477946a5d65bc66458e898f5804e92c057",
+//       "hash": "fb6bea1abc18ed7403bdaeaed560307acafcbf99d656a6079edbaec157e0e4a8",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/hooks.h",
-//       "hash": "a94795504b031e217089a6bf0ee66fb96ffe0755c0fc435943d815b8bd120937",
+//       "hash": "a58dff90a56a98e0ef06f620242128cf6e14769ca87ad73a6e01d00953263cdd",
 //       "bom": false
 //     },
 //     {
@@ -2874,7 +2879,7 @@ void Wh_ModSettingsChanged() {
 //       "type": "include",
 //       "id": 1,
 //       "path": "src/includes/dwrite/hooks/CreateTextFormat.h",
-//       "directive": "#include \"includes/dwrite/hooks/CreateTextFormat.h\"\r\n"
+//       "directive": "#include \"includes/dwrite/hooks/CreateTextFormat.h\" // IWYU pragma: keep\r\n"
 //     },
 //     {
 //       "type": "transform",
@@ -2899,7 +2904,7 @@ void Wh_ModSettingsChanged() {
 //       "type": "include",
 //       "id": 5,
 //       "path": "src/includes/dwrite/hooks/CreateTextLayout.h",
-//       "directive": "#include \"includes/dwrite/hooks/CreateTextLayout.h\"\r\n"
+//       "directive": "#include \"includes/dwrite/hooks/CreateTextLayout.h\" // IWYU pragma: keep\r\n"
 //     },
 //     {
 //       "type": "transform",
@@ -3077,7 +3082,7 @@ void Wh_ModSettingsChanged() {
 //       "type": "include",
 //       "id": 33,
 //       "path": "src/includes/gdi/hooks/DrawTextW.h",
-//       "directive": "#include \"includes/gdi/hooks/DrawTextW.h\"\r\n"
+//       "directive": "#include \"includes/gdi/hooks/DrawTextW.h\"     // IWYU pragma: keep\r\n"
 //     },
 //     {
 //       "type": "transform",
@@ -3187,7 +3192,7 @@ void Wh_ModSettingsChanged() {
 //       "type": "include",
 //       "id": 50,
 //       "path": "src/includes/gdi/hooks/DrawThemeText.h",
-//       "directive": "#include \"includes/gdi/hooks/DrawThemeText.h\"\r\n"
+//       "directive": "#include \"includes/gdi/hooks/DrawThemeText.h\" // IWYU pragma: keep\r\n"
 //     },
 //     {
 //       "type": "transform",
@@ -3233,7 +3238,7 @@ void Wh_ModSettingsChanged() {
 //       "type": "include",
 //       "id": 57,
 //       "path": "src/includes/gdi/hooks/ExtTextOutW.h",
-//       "directive": "#include \"includes/gdi/hooks/ExtTextOutW.h\"\r\n"
+//       "directive": "#include \"includes/gdi/hooks/ExtTextOutW.h\"   // IWYU pragma: keep\r\n"
 //     },
 //     {
 //       "type": "transform",
@@ -3278,7 +3283,7 @@ void Wh_ModSettingsChanged() {
 //       "type": "include",
 //       "id": 64,
 //       "path": "src/includes/gdi/hooks/TextOutW.h",
-//       "directive": "#include \"includes/gdi/hooks/TextOutW.h\"\r\n"
+//       "directive": "#include \"includes/gdi/hooks/TextOutW.h\"      // IWYU pragma: keep\r\n"
 //     },
 //     {
 //       "type": "transform",
