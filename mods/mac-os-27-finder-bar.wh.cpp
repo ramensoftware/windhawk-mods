@@ -16180,10 +16180,18 @@ struct CamReportCallback : IUnknown {
 static IMFSensorActivityMonitor_* g_camMonitor = nullptr;
 static CamReportCallback* g_camCallback = nullptr;
 
+static bool g_mfStarted = false;
 static void CamMonitorStart() {
     static bool tried = false;  // tenta uma vez (Windows antigo não tem o monitor)
     if (g_camMonitor || tried) return;
     tried = true;
+    // O Media Foundation precisa estar iniciado neste processo. No explorer.exe
+    // do shell ele já estava; no processo próprio da barra, não.
+    if (HMODULE mf = LoadLibraryExW(L"mfplat.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+        using Startup_t = HRESULT(WINAPI*)(ULONG, DWORD);
+        if (auto startup = (Startup_t)GetProcAddress(mf, "MFStartup"))
+            g_mfStarted = SUCCEEDED(startup(0x00020070 /* MF_VERSION */, 1 /* MFSTARTUP_LITE */));
+    }
     HMODULE m = LoadLibraryExW(L"mfsensorgroup.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     using Create_t = HRESULT(WINAPI*)(IUnknown*, IMFSensorActivityMonitor_**);
     auto create = m ? (Create_t)GetProcAddress(m, "MFCreateSensorActivityMonitor") : nullptr;
@@ -16211,6 +16219,13 @@ static void CamMonitorStop() {
         g_camCallback = nullptr;
     }
     g_camMonitorOk = false;
+    if (g_mfStarted) {
+        if (HMODULE mf = GetModuleHandleW(L"mfplat.dll")) {
+            using Shutdown_t = HRESULT(WINAPI*)();
+            if (auto shutdown = (Shutdown_t)GetProcAddress(mf, "MFShutdown")) shutdown();
+        }
+        g_mfStarted = false;
+    }
 }
 
 // Apps com a câmera ligada (pelo monitor): nome e caminho do .exe.
@@ -16925,9 +16940,8 @@ static void ExtrasPoll() {
         CamMonitorStart();
         e.camApps.clear();
         e.camKeys.clear();
-        if (g_camMonitorOk) {
-            CamSensorApps(e.camApps, e.camKeys);  // monitor funcionando: ele basta
-        } else {
+        if (g_camMonitorOk) CamSensorApps(e.camApps, e.camKeys);
+        if (e.camApps.empty()) {  // o monitor não viu nada (ou não existe): vale o registro
             e.camApps = camReg;
             e.camKeys = camRegKeys;
         }
