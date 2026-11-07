@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-06T22:03:24.000Z</updated>
+    <updated>2026-11-07T16:00:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.2]]></title>
+        <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#cda8376695f4e5390fa76ce4ac7566d9e9db99e2</id>
+        <link href="https://windhawk.net/mods/pointer-afterimage-motion-blur"/>
+        <updated>2026-11-07T16:00:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>No more trail across the screen when the pointer jumps across a large part of the screen, such as with PowerToys Cursor Wrap.</li>
+<li>Fixes flickering hover highlights in Office menus (such as Excel's recent files) while the blur is drawn. The overlay window used to move and resize with the blur on every frame, and Windows reports each of those changes to the window under the pointer as a mouse move. Now the window stays put while the pointer is still and only its picture changes.</li>
+<li>The blur is now the same size as the pointer at 125% and 175% scaling; it was drawn up to 25% larger there. Windows scales the pointer in steps (the same size at 100% and 125%), not by the exact scaling.</li>
+<li>A new pointer size is picked up the next time the mouse moves after a pause; before, the blur kept the old size until the mod was restarted.</li>
+<li>A little less CPU for the mod and dwm.exe while the blur is drawn. Memory goes up to 7-8 MB (more on larger screens) for short bursts while the blur is drawn (the window is now larger than the blur) and drops back once the mouse stops.</li>
+</ul>
+]]></content>
+        <author>
+            <name>sidlikesgrapess</name>
+            <uri>https://github.com/sidlikesgrapess</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.5.0]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#1492292686dabfa975d4165614a4eb3707ce300d</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-07T16:00:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Eight card languages: Simplified and Traditional Chinese, English, German, Japanese, Russian, Spanish, Portuguese, plus automatic detection from the Windows display language.</li>
+<li>New &quot;Tint opacity&quot; setting for the acrylic material (20-90%, default 55%). The default is more transparent than before - raise it to 85 to get the 1.4.x look.</li>
+<li>The acrylic card border now uses a top-lit gradient stroke instead of a flat color.</li>
+<li>&quot;Language&quot; option labels are now localized; existing language settings keep working.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Screen Clock Styler 0.6.0]]></title>
         <id>https://windhawk.net/mods/lock-screen-clock-styler#7a2157258d4698ee9eb809ea45719051a62ed99a</id>
@@ -804,61 +839,6 @@ copy.</li>
         <author>
             <name>Marco Petrucci</name>
             <uri>https://github.com/marco00petrucci</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Zones 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-zones#257552e34e2175c3c1b58df047f3d0e23cf1491d</id>
-        <link href="https://windhawk.net/mods/taskbar-zones"/>
-        <updated>2026-11-05T06:03:11.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Zones</h1>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/taskbar-zones/main/assets/taskbar-zones-cover.png" alt="Taskbar Zones"></p>
-<p>Keep your apps on the <strong>left or right side</strong> of the Windows 11 taskbar. Each app stays on the side you choose, even when you open or close it.</p>
-<h2>Features</h2>
-<ul>
-<li><strong>Two fixed zones:</strong> Choose the left or right side for each app.</li>
-<li><strong>Easy drag and drop:</strong> Move apps between zones or change their order.</li>
-<li><strong>Saved layout:</strong> Keep your app positions after restarting Explorer or your PC.</li>
-<li><strong>Custom layout:</strong> Adjust spacing and the size of icons on the right.</li>
-<li><strong>Multiple monitors:</strong> Supports compatible secondary taskbars.</li>
-</ul>
-<h2>How to use</h2>
-<ol>
-<li>Set your Windows 11 taskbar alignment to <strong>Left</strong>.</li>
-<li>Drag an app icon across the middle gap to move it to the other side.</li>
-<li>Drag icons within the same zone to reorder them.</li>
-<li>Open the mod settings to adjust the layout.</li>
-</ol>
-<h2>Notes</h2>
-<ul>
-<li>Your Windows pinned apps are not changed.</li>
-<li>Do not enable <strong>Taskbar Split</strong> or other mods that reposition the same icons at the same time.</li>
-<li>If the taskbar is too crowded to fit both zones, Windows' normal layout is used until space is available again.</li>
-<li>Secondary monitors show only the app buttons that Windows puts on each taskbar.</li>
-<li>Windows updates may affect compatibility.</li>
-</ul>
-<h2>Credits</h2>
-<p><strong>Taskbar Zones</strong> is maintained by <strong>Luiz Bizzio</strong>. It is a separate, modified version of <a href="https://github.com/Artllex/taskbar-split">Taskbar Split by Arkadiusz (Artllex)</a>, with persistent per-app zones, cross-zone dragging and secondary taskbar support.</p>
-<p>Licensed under <strong>GPL-3.0</strong>. Additional code credits and copyright notices are in the source file.</p>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#6f0737091288bb212c5ea3c6c18ee4cded0c39aa</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2026-11-05T05:30:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the vertical taskbar, where items span across multiple columns instead or multiple rows.</li>
-<li>Fixed compatibility with the Taskbar Labels for Windows 11 mod when used with high DPI.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

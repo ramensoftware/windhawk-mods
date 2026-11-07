@@ -12927,7 +12927,7 @@
         "ratingUsers": 163,
         "reviews": 1,
         "trendingSorting": 13.649970483914935,
-        "updated": 1792148504000,
+        "updated": 1794067242000,
         "users": 4123
       },
       "metadata": {
@@ -12942,7 +12942,7 @@
         ],
         "license": "Unlicense",
         "name": "Pointer Afterimage Motion Blur",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "power-action-countdown": {
@@ -22679,7 +22679,7 @@
         "ratingUsers": 23,
         "reviews": 0,
         "trendingSorting": 29.4,
-        "updated": 1793934261000,
+        "updated": 1794067237000,
         "users": 294
       },
       "metadata": {
@@ -22691,9 +22691,9 @@
         "include": [
           "windhawk.exe"
         ],
-        "license": "MIT",
+        "license": "GPL-3.0-or-later",
         "name": "WinTips OSD",
-        "version": "1.4.1"
+        "version": "1.5.0"
       }
     },
     "winui-context-menu-animation": {
