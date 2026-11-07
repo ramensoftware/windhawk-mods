@@ -6,7 +6,7 @@
 // @author          Omar
 // @github          https://github.com/uomr
 // @homepage        https://github.com/uomr/keyboard-layout-fixer
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -luser32 -lole32
 // ==/WindhawkMod==
 
@@ -25,7 +25,7 @@ Fixes the common frustration of typing Arabic text while the keyboard is acciden
 - **Bi-directional (AR <-> EN):** Automatically detects language direction.
 - **Smart Shift / Caps Lock fix:** Resolves accidental Shift / Caps-Lock misfires.
 - **Universal compatibility:** Works in modern browsers and legacy Win32/ERP applications.
-- **Zero background overhead:** Runs natively inside Windows Explorer.
+- **Dedicated tool process:** Runs safely as an independent background tool mod.
 */
 // ==/WindhawkModReadme==
 
@@ -36,10 +36,10 @@ Fixes the common frustration of typing Arabic text while the keyboard is acciden
 #include <cwctype>
 
 // ── Global State ────────────────────────────────────────────────────────────
-static HHOOK g_hHook = NULL;
-static HANDLE g_hWorkerThread = NULL;
+static HHOOK g_hHook = nullptr;
+static HANDLE g_hWorkerThread = nullptr;
 static DWORD g_workerThreadId = 0;
-static volatile LONG g_isConverting = 0;
+static HANDLE g_hConversionThread = nullptr;
 
 // ── Maps ────────────────────────────────────────────────────────────────────
 static std::unordered_map<wchar_t, std::wstring> g_en2ar;
@@ -137,7 +137,7 @@ static std::wstring ConvertSmart(const std::wstring& text) {
 // ── Clipboard Helpers ───────────────────────────────────────────────────────
 static std::wstring GetClipboardText() {
     std::wstring text;
-    if (!OpenClipboard(NULL)) return text;
+    if (!OpenClipboard(nullptr)) return text;
     HANDLE hData = GetClipboardData(CF_UNICODETEXT);
     if (hData) {
         wchar_t* p = (wchar_t*)GlobalLock(hData);
@@ -151,7 +151,7 @@ static std::wstring GetClipboardText() {
 }
 
 static void SetClipboardText(const std::wstring& text) {
-    if (!OpenClipboard(NULL)) return;
+    if (!OpenClipboard(nullptr)) return;
     EmptyClipboard();
     if (!text.empty()) {
         size_t bytes = (text.length() + 1) * sizeof(wchar_t);
@@ -170,7 +170,7 @@ static void SetClipboardText(const std::wstring& text) {
 
 static HWND GetFocusedControlHandle() {
     HWND activeWnd = GetForegroundWindow();
-    if (!activeWnd) return NULL;
+    if (!activeWnd) return nullptr;
 
     DWORD pid = 0;
     DWORD activeThreadId = GetWindowThreadProcessId(activeWnd, &pid);
@@ -185,6 +185,15 @@ static HWND GetFocusedControlHandle() {
     return activeWnd;
 }
 
+static bool IsConsoleWindow(HWND hWnd) {
+    if (!hWnd) return false;
+    wchar_t className[64];
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        if (wcscmp(className, L"ConsoleWindowClass") == 0) return true;
+    }
+    return false;
+}
+
 static void ReleaseModifiers() {
     // Tap Ctrl before releasing Alt to prevent Windows from activating the window menu bar (SC_KEYMENU)
     keybd_event(VK_CONTROL, 0, 0, 0);
@@ -195,6 +204,11 @@ static void ReleaseModifiers() {
 
 // ── Conversion Execution Worker ─────────────────────────────────────────────
 static DWORD WINAPI ExecuteConversionThread(LPVOID) {
+    HWND hForeground = GetForegroundWindow();
+    if (IsConsoleWindow(hForeground)) {
+        return 0; // Skip terminal windows to avoid sending SIGINT (Ctrl+C break)
+    }
+
     ReleaseModifiers();
     Sleep(80);
 
@@ -234,9 +248,10 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
         }
     }
 
-    // ERP WM_COPY fallback
+    // ERP WM_COPY fallback using SendMessageTimeout (prevents hangs if target unresponsive)
     if (selected.empty() && hTarget) {
-        SendMessage(hTarget, WM_COPY, 0, 0);
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(hTarget, WM_COPY, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result);
         Sleep(50);
         selected = GetClipboardText();
         if (!selected.empty()) usedWmCopy = true;
@@ -244,14 +259,12 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
 
     if (selected.empty()) {
         SetClipboardText(backup);
-        InterlockedExchange(&g_isConverting, 0);
         return 0;
     }
 
     std::wstring converted = ConvertSmart(selected);
     if (converted == selected) {
         SetClipboardText(backup);
-        InterlockedExchange(&g_isConverting, 0);
         return 0;
     }
 
@@ -260,7 +273,8 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
 
     // Paste: mutually exclusive to avoid double-pasting
     if (usedWmCopy && hTarget) {
-        SendMessage(hTarget, WM_PASTE, 0, 0);
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(hTarget, WM_PASTE, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result);
     } else {
         keybd_event(VK_CONTROL, 0, 0, 0);
         keybd_event('V', 0, 0, 0);
@@ -269,11 +283,11 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
         keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
     }
 
-    Sleep(150);
+    // 250ms delay before restoring clipboard to give asynchronous apps time to read
+    Sleep(250);
     SetClipboardText(backup);
     MessageBeep(MB_OK);
 
-    InterlockedExchange(&g_isConverting, 0);
     return 0;
 }
 
@@ -290,9 +304,11 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             (ctrl && shft && kb->vkCode == 'X');        // Ctrl + Shift + X
 
         if (trigger) {
-            if (InterlockedCompareExchange(&g_isConverting, 1, 0) == 0) {
-                HANDLE hThread = CreateThread(NULL, 0, ExecuteConversionThread, NULL, 0, NULL);
-                if (hThread) CloseHandle(hThread);
+            // Check if previous conversion finished before starting a new one
+            if (!g_hConversionThread ||
+                WaitForSingleObject(g_hConversionThread, 0) == WAIT_OBJECT_0) {
+                if (g_hConversionThread) CloseHandle(g_hConversionThread);
+                g_hConversionThread = CreateThread(nullptr, 0, ExecuteConversionThread, nullptr, 0, nullptr);
             }
             return 1; // Consume keystroke immediately
         }
@@ -302,7 +318,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
 // ── Worker Thread for Hook Message Loop ─────────────────────────────────────
 static DWORD WINAPI HookThreadProc(LPVOID) {
-    g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
+    g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
     if (!g_hHook) {
         Wh_Log(L"Arabic Keyboard Fixer: Failed to install hook.");
         return 0;
@@ -310,24 +326,24 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     Wh_Log(L"Arabic Keyboard Fixer: Hook installed successfully.");
 
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0) > 0) {
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     if (g_hHook) {
         UnhookWindowsHookEx(g_hHook);
-        g_hHook = NULL;
+        g_hHook = nullptr;
     }
     return 0;
 }
 
-// ── Windhawk Entry Points ───────────────────────────────────────────────────
-BOOL Wh_ModInit() {
+// ── Windhawk Tool Mod Callbacks ─────────────────────────────────────────────
+BOOL WhTool_ModInit() {
     InitMaps();
-    Wh_Log(L"Arabic Keyboard Fixer: Initializing mod...");
+    Wh_Log(L"Arabic Keyboard Fixer: Initializing tool mod...");
 
-    g_hWorkerThread = CreateThread(NULL, 0, HookThreadProc, NULL, 0, &g_workerThreadId);
+    g_hWorkerThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
         Wh_Log(L"Arabic Keyboard Fixer: Failed to spawn hook thread.");
         return FALSE;
@@ -335,14 +351,192 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Arabic Keyboard Fixer: Unloading mod...");
+void WhTool_ModSettingsChanged() {
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"Arabic Keyboard Fixer: Unloading tool mod...");
     if (g_workerThreadId) {
-        PostThreadMessage(g_workerThreadId, WM_QUIT, 0, 0);
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
     }
     if (g_hWorkerThread) {
         WaitForSingleObject(g_hWorkerThread, 1500);
         CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = NULL;
+        g_hWorkerThread = nullptr;
     }
+    if (g_hConversionThread) {
+        WaitForSingleObject(g_hConversionThread, 1500);
+        CloseHandle(g_hConversionThread);
+        g_hConversionThread = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
