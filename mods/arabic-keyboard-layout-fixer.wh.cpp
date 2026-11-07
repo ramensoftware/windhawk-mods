@@ -2,12 +2,12 @@
 // @id              arabic-keyboard-layout-fixer
 // @name            Arabic Keyboard Layout Fixer
 // @description     Instantly converts mistyped Arabic/English text with Alt+Z across any application.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Omar
 // @github          https://github.com/uomr
 // @homepage        https://github.com/uomr/keyboard-layout-fixer
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lole32
+// @compilerOptions -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -26,12 +26,14 @@ Fixes the common frustration of typing Arabic text while the keyboard is acciden
 - **Smart Shift / Caps Lock fix:** Resolves accidental Shift / Caps-Lock misfires.
 - **Universal compatibility:** Works in modern browsers and legacy Win32/ERP applications.
 - **Dedicated tool process:** Runs safely as an independent background tool mod.
+- **Full clipboard preservation:** Restores all clipboard formats (images, files, text) and keeps history clean.
 */
 // ==/WindhawkModReadme==
 
 #include <windhawk_api.h>
 #include <windows.h>
 #include <string>
+#include <vector>
 #include <unordered_map>
 #include <cwctype>
 
@@ -50,10 +52,6 @@ static bool IsArabicLetter(wchar_t c) {
 }
 
 static void InitMaps() {
-    static bool initialized = false;
-    if (initialized) return;
-    initialized = true;
-
     struct MapEntry { wchar_t en; const wchar_t* ar; };
     MapEntry entries[] = {
         { L'`', L"ذ" }, { L'q', L"ض" }, { L'w', L"ص" }, { L'e', L"ث" }, { L'r', L"ق" },
@@ -134,10 +132,80 @@ static std::wstring ConvertSmart(const std::wstring& text) {
     return (ar >= en && ar > 0) ? ArToEn(text) : EnToAr(text);
 }
 
-// ── Clipboard Helpers ───────────────────────────────────────────────────────
+// ── Full Clipboard Snapshot & Preservation ──────────────────────────────────
+struct ClipboardSnapshot {
+    struct Entry {
+        UINT format;
+        std::vector<BYTE> bytes;
+    };
+    std::vector<Entry> formats;
+};
+
+static bool OpenClipboardRetrying(HWND hWnd = nullptr, bool wait = true) {
+    for (int i = 0; i < (wait ? 10 : 1); i++) {
+        if (OpenClipboard(hWnd)) return true;
+        if (wait) Sleep(20);
+    }
+    return false;
+}
+
+static ClipboardSnapshot SaveClipboard() {
+    constexpr size_t kMaxBytes = 32 * 1024 * 1024;
+    ClipboardSnapshot snapshot;
+    if (!OpenClipboardRetrying()) return snapshot;
+
+    size_t total = 0;
+    for (UINT format = 0; (format = EnumClipboardFormats(format)) != 0;) {
+        if (format == CF_BITMAP || format == CF_ENHMETAFILE || format == CF_METAFILEPICT ||
+            format == CF_PALETTE || format == CF_OWNERDISPLAY || format == CF_DSPBITMAP ||
+            format == CF_DSPENHMETAFILE || format == CF_DSPMETAFILEPICT ||
+            format == CF_DIBV5 || format == CF_TEXT || format == CF_OEMTEXT) {
+            continue;
+        }
+        HANDLE data = GetClipboardData(format);
+        SIZE_T size = data ? GlobalSize(data) : 0;
+        if (!size || total + size > kMaxBytes) continue;
+
+        if (const void* p = GlobalLock(data)) {
+            snapshot.formats.push_back({ format, std::vector<BYTE>((const BYTE*)p, (const BYTE*)p + size) });
+            total += size;
+            GlobalUnlock(data);
+        }
+    }
+    CloseClipboard();
+    return snapshot;
+}
+
+static void RestoreClipboard(const ClipboardSnapshot& snapshot) {
+    if (!OpenClipboardRetrying()) return;
+    EmptyClipboard();
+    for (const auto& entry : snapshot.formats) {
+        if (HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, entry.bytes.size())) {
+            if (void* p = GlobalLock(memory)) {
+                memcpy(p, entry.bytes.data(), entry.bytes.size());
+                GlobalUnlock(memory);
+                if (SetClipboardData(entry.format, memory)) {
+                    continue;
+                }
+            }
+            GlobalFree(memory);
+        }
+    }
+    // Keep restored contents out of Windows Clipboard History (Win + V)
+    if (!snapshot.formats.empty()) {
+        static const UINT cfExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+        if (HGLOBAL flag = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD))) {
+            if (!SetClipboardData(cfExclude, flag)) {
+                GlobalFree(flag);
+            }
+        }
+    }
+    CloseClipboard();
+}
+
 static std::wstring GetClipboardText() {
     std::wstring text;
-    if (!OpenClipboard(nullptr)) return text;
+    if (!OpenClipboardRetrying()) return text;
     HANDLE hData = GetClipboardData(CF_UNICODETEXT);
     if (hData) {
         wchar_t* p = (wchar_t*)GlobalLock(hData);
@@ -151,7 +219,7 @@ static std::wstring GetClipboardText() {
 }
 
 static void SetClipboardText(const std::wstring& text) {
-    if (!OpenClipboard(nullptr)) return;
+    if (!OpenClipboardRetrying()) return;
     EmptyClipboard();
     if (!text.empty()) {
         size_t bytes = (text.length() + 1) * sizeof(wchar_t);
@@ -161,26 +229,32 @@ static void SetClipboardText(const std::wstring& text) {
             if (p) {
                 memcpy(p, text.c_str(), bytes);
                 GlobalUnlock(hMem);
-                SetClipboardData(CF_UNICODETEXT, hMem);
+                if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
+                    GlobalFree(hMem);
+                }
+            } else {
+                GlobalFree(hMem);
             }
+        }
+    }
+    // Keep intermediate converted text out of Win+V history
+    static const UINT cfExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    if (HGLOBAL flag = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD))) {
+        if (!SetClipboardData(cfExclude, flag)) {
+            GlobalFree(flag);
         }
     }
     CloseClipboard();
 }
 
+// ── Target Control Handle (via GetGUIThreadInfo — No AttachThreadInput) ─────
 static HWND GetFocusedControlHandle() {
     HWND activeWnd = GetForegroundWindow();
     if (!activeWnd) return nullptr;
 
-    DWORD pid = 0;
-    DWORD activeThreadId = GetWindowThreadProcessId(activeWnd, &pid);
-    DWORD currentThreadId = GetCurrentThreadId();
-
-    if (activeThreadId != currentThreadId) {
-        AttachThreadInput(currentThreadId, activeThreadId, TRUE);
-        HWND focusWnd = GetFocus();
-        AttachThreadInput(currentThreadId, activeThreadId, FALSE);
-        return focusWnd ? focusWnd : activeWnd;
+    GUITHREADINFO gti = { sizeof(gti) };
+    if (GetGUIThreadInfo(GetWindowThreadProcessId(activeWnd, nullptr), &gti) && gti.hwndFocus) {
+        return gti.hwndFocus;
     }
     return activeWnd;
 }
@@ -194,53 +268,73 @@ static bool IsConsoleWindow(HWND hWnd) {
     return false;
 }
 
+// ── Keyboard Synthesis via SendInput ────────────────────────────────────────
+static void SendCtrlKey(WORD vk) {
+    INPUT inputs[4] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = vk;
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = vk;
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(4, inputs, sizeof(INPUT));
+}
+
 static void ReleaseModifiers() {
-    // Tap Ctrl before releasing Alt to prevent Windows from activating the window menu bar (SC_KEYMENU)
-    keybd_event(VK_CONTROL, 0, 0, 0);
-    keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-    keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
+    INPUT inputs[4] = {};
+    // Tap Ctrl to suppress SC_KEYMENU
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = VK_MENU; // Alt
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = VK_CONTROL;
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_SHIFT;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(4, inputs, sizeof(INPUT));
 }
 
 // ── Conversion Execution Worker ─────────────────────────────────────────────
 static DWORD WINAPI ExecuteConversionThread(LPVOID) {
     HWND hForeground = GetForegroundWindow();
     if (IsConsoleWindow(hForeground)) {
-        return 0; // Skip terminal windows to avoid sending SIGINT (Ctrl+C break)
+        return 0; // Skip console windows to avoid sending SIGINT (Ctrl+C break)
     }
 
     ReleaseModifiers();
     Sleep(80);
 
     HWND hTarget = GetFocusedControlHandle();
-    std::wstring backup = GetClipboardText();
-    SetClipboardText(L"");
+
+    // 1. Save full clipboard snapshot
+    ClipboardSnapshot backup = SaveClipboard();
+    DWORD seqBefore = GetClipboardSequenceNumber();
 
     bool usedWmCopy = false;
 
-    // Try Ctrl+C
-    keybd_event(VK_CONTROL, 0, 0, 0);
-    keybd_event('C', 0, 0, 0);
-    Sleep(35);
-    keybd_event('C', 0, KEYEVENTF_KEYUP, 0);
-    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+    // 2. Send Ctrl+C via SendInput
+    SendCtrlKey('C');
 
     std::wstring selected;
     for (int i = 0; i < 15; ++i) {
         Sleep(25);
-        selected = GetClipboardText();
-        if (!selected.empty()) break;
+        if (GetClipboardSequenceNumber() != seqBefore) {
+            selected = GetClipboardText();
+            if (!selected.empty()) break;
+        }
     }
 
     // Web input copy retry
     if (selected.empty()) {
         Sleep(50);
-        keybd_event(VK_CONTROL, 0, 0, 0);
-        keybd_event('C', 0, 0, 0);
-        Sleep(35);
-        keybd_event('C', 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-
+        SendCtrlKey('C');
         for (int i = 0; i < 15; ++i) {
             Sleep(25);
             selected = GetClipboardText();
@@ -248,7 +342,7 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
         }
     }
 
-    // ERP WM_COPY fallback using SendMessageTimeout (prevents hangs if target unresponsive)
+    // ERP WM_COPY fallback with SendMessageTimeout
     if (selected.empty() && hTarget) {
         DWORD_PTR result = 0;
         SendMessageTimeoutW(hTarget, WM_COPY, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result);
@@ -258,53 +352,58 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
     }
 
     if (selected.empty()) {
-        SetClipboardText(backup);
+        RestoreClipboard(backup);
         return 0;
     }
 
+    // 3. Convert text
     std::wstring converted = ConvertSmart(selected);
     if (converted == selected) {
-        SetClipboardText(backup);
+        RestoreClipboard(backup);
         return 0;
     }
 
+    // 4. Put converted text in clipboard
     SetClipboardText(converted);
     Sleep(40);
 
-    // Paste: mutually exclusive to avoid double-pasting
+    // 5. Paste: mutually exclusive to avoid double-pasting
     if (usedWmCopy && hTarget) {
         DWORD_PTR result = 0;
         SendMessageTimeoutW(hTarget, WM_PASTE, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result);
     } else {
-        keybd_event(VK_CONTROL, 0, 0, 0);
-        keybd_event('V', 0, 0, 0);
-        Sleep(35);
-        keybd_event('V', 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+        SendCtrlKey('V');
     }
 
-    // 250ms delay before restoring clipboard to give asynchronous apps time to read
+    // 6. Allow target application to process paste before restoring original clipboard
     Sleep(250);
-    SetClipboardText(backup);
+    RestoreClipboard(backup);
     MessageBeep(MB_OK);
 
     return 0;
 }
 
-// ── Hook Callback ───────────────────────────────────────────────────────────
+// ── Hook Callback (Strict Modifier Matching & No Injected Keys) ─────────────
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
         KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
+
+        // Skip injected keystrokes
+        if (kb->flags & LLKHF_INJECTED) {
+            return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+        }
+
         bool alt  = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
         bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         bool shft = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
+        bool win  = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
 
+        // Strict modifier check: Alt+Z (no Ctrl, Shift, Win) or Ctrl+Shift+X (no Alt, Win)
         bool trigger =
-            (alt && kb->vkCode == 'Z') ||               // Alt + Z
-            (ctrl && shft && kb->vkCode == 'X');        // Ctrl + Shift + X
+            (alt && !ctrl && !shft && !win && kb->vkCode == 'Z') ||
+            (ctrl && shft && !alt && !win && kb->vkCode == 'X');
 
         if (trigger) {
-            // Check if previous conversion finished before starting a new one
             if (!g_hConversionThread ||
                 WaitForSingleObject(g_hConversionThread, 0) == WAIT_OBJECT_0) {
                 if (g_hConversionThread) CloseHandle(g_hConversionThread);
@@ -320,10 +419,10 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 static DWORD WINAPI HookThreadProc(LPVOID) {
     g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
     if (!g_hHook) {
-        Wh_Log(L"Arabic Keyboard Fixer: Failed to install hook.");
+        Wh_Log(L"Failed to install hook.");
         return 0;
     }
-    Wh_Log(L"Arabic Keyboard Fixer: Hook installed successfully.");
+    Wh_Log(L"Hook installed successfully.");
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -341,11 +440,11 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
 // ── Windhawk Tool Mod Callbacks ─────────────────────────────────────────────
 BOOL WhTool_ModInit() {
     InitMaps();
-    Wh_Log(L"Arabic Keyboard Fixer: Initializing tool mod...");
+    Wh_Log(L"Initializing tool mod...");
 
     g_hWorkerThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
-        Wh_Log(L"Arabic Keyboard Fixer: Failed to spawn hook thread.");
+        Wh_Log(L"Failed to spawn hook thread.");
         return FALSE;
     }
     return TRUE;
@@ -355,17 +454,17 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"Arabic Keyboard Fixer: Unloading tool mod...");
+    Wh_Log(L"Unloading tool mod...");
     if (g_workerThreadId) {
         PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
     }
     if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, 1500);
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = nullptr;
     }
     if (g_hConversionThread) {
-        WaitForSingleObject(g_hConversionThread, 1500);
+        WaitForSingleObject(g_hConversionThread, INFINITE);
         CloseHandle(g_hConversionThread);
         g_hConversionThread = nullptr;
     }
