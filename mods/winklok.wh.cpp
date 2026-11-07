@@ -23,7 +23,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktop.jpg)
+![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktopv1.1.0.png)
 
 ---
 
@@ -45,7 +45,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowone.png)
 ![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowtwo.png)
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthree.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthird.png)
 ---
 
 ## Features
@@ -150,7 +150,6 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <winsvc.h>
-#include <sddl.h>
 #include <dwmapi.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -283,7 +282,7 @@ namespace td
             stacked = Wh_GetIntValue(L"stacked", 0);
             {
                 const int bell = Wh_GetIntValue(L"showBell", -1); // -1: first run
-                bellUnset = bell < 0 || Wh_GetIntValue(L"notifMode", -1) < 0; // -1: new install, or an update from v1.0
+                bellUnset = bell < 0;
                 showBell = bell < 0 ? 0 : bell;
             }
             hour24 = Wh_GetIntValue(L"hour24", -1);
@@ -456,8 +455,6 @@ namespace td
                 o += L"\\\\";
             else if (c == L'|')
                 o += L"\\p";
-            else if (c == L';')
-                o += L"\\s";
             else if (c == L'\n')
                 o += L"\\n";
             else if (c != L'\r')
@@ -475,7 +472,8 @@ namespace td
             if (c == L'\\' && i + 1 < s.size())
             {
                 wchar_t n = s[++i];
-                o += n == L'p' ? L'|' : n == L's' ? L';' : n == L'n' ? L'\n' : n;
+                o += n == L'p' ? L'|' : n == L'n' ? L'\n'
+                                                  : n;
             }
             else
                 o += c;
@@ -515,47 +513,6 @@ namespace td
         wchar_t *e = nullptr;
         long long v = wcstoll(s.c_str(), &e, 10);
         return (e && *e == 0) ? v : def;
-    }
-
-    static const size_t kChunk = 30000; // stay under Windhawk's 32,767-char value limit
-    static std::vector<std::wstring> SplitRecords(const std::wstring &s)
-    { return Split(s, s.find(L'\n') != std::wstring::npos ? L'\n' : L';'); } // old data used line breaks
-
-    static void PutBig(const wchar_t *key, const std::wstring &v)
-    {
-        const std::wstring k = key;
-        const int old = Wh_GetIntValue((k + L"_n").c_str(), 0);
-        int n = 0;
-        for (size_t s = 0; s < v.size(); ++n)
-        {
-            size_t e = std::min(v.size(), s + kChunk);
-            while (e < v.size() && e > s + 1 && (iswspace(v[e - 1]) || iswspace(v[e]))) --e; // INI may trim edge spaces
-            Wh_SetStringValue((k + L"_" + std::to_wstring(n)).c_str(), v.substr(s, e - s).c_str());
-            s = e;
-        }
-        for (int i = n; i < old; ++i) Wh_DeleteValue((k + L"_" + std::to_wstring(i)).c_str());
-        Wh_SetIntValue((k + L"_n").c_str(), n);
-        Wh_DeleteValue(key); // the old single-value copy
-    }
-    static std::wstring GetBig(const wchar_t *key)
-    {
-        const std::wstring k = key;
-        std::wstring v;
-        std::vector<wchar_t> b(kChunk + 2);
-        const int n = Wh_GetIntValue((k + L"_n").c_str(), 0);
-        for (int i = 0; i < n; ++i)
-        {
-            const size_t m = Wh_GetStringValue((k + L"_" + std::to_wstring(i)).c_str(), b.data(), b.size());
-            if (m >= b.size()) return L"";
-            v.append(b.data(), m);
-        }
-        if (n == 0) // data saved by older versions
-        {
-            b.assign(200000, 0);
-            const size_t m = Wh_GetStringValue(key, b.data(), b.size());
-            if (m < b.size()) v.assign(b.data(), m);
-        }
-        return v;
     }
 
     // ---- formatting -------------------------------------------------------------
@@ -747,7 +704,6 @@ namespace td
                 o += L"AL|" + std::to_wstring(a.id) + L"|" + std::to_wstring(a.hh) + L"|" + std::to_wstring(a.mm) + L"|" +
                      std::to_wstring(a.days) + L"|" + (a.enabled ? L"1" : L"0") + L"|" + Esc(a.label) + L"|" +
                      std::to_wstring(a.snoozeMin) + L"|" + std::to_wstring(a.sound) + L"\n";
-            std::replace(o.begin(), o.end(), L'\n', L';'); // fields are escaped, so every '\n' left is a separator
             Wh_SetStringValue(L"state", o.c_str());
         }
 
@@ -761,7 +717,7 @@ namespace td
                 SeedPresetsL();
                 return;
             }
-            auto lines = SplitRecords(std::wstring(buf.data(), n));
+            auto lines = Split(std::wstring(buf.data(), n), L'\n');
             if (lines.empty() || lines[0] != L"v1")
             {
                 SeedPresetsL();
@@ -1324,14 +1280,14 @@ namespace tb
         std::vector<std::function<void()>> revokers;
         std::vector<std::pair<wux::FrameworkElement, wux::Thickness>> shifted;
         std::vector<std::pair<wux::FrameworkElement, wux::Visibility>> bells;
-        wux::FrameworkElement bellLeaf{nullptr};
-        ULONGLONG bellNextSearchMs = 0, bellDeepMs = 0, bellBackoffMs = 250;
         // Every tooltip attached to the native clock (and its ancestors) is removed and remembered here.
         std::vector<std::pair<wux::DependencyObject, wf::IInspectable>> tooltips;
         bool injected = false, bellHidden = false, seenLoaded = false;
         int injectFailures = 0, layoutKey = -1;
+        bool bellDumped = false; // the not-found diagnostic is written once only
         // Time stamps (ms, GetTickCount64) so the periodic jobs keep their cadence whatever the tick interval is.
         ULONGLONG unloadedSinceMs = 0, lastTipMs = 0, lastMeasureMs = 0, lastBrushMs = 0;
+        ULONGLONG lastBellCheckMs = 0;
         double shift = 0, nativeH = 0, nativeDy = 0;
 
         void ClearUi()
@@ -1621,71 +1577,112 @@ namespace tb
         }
     }
 
-    // Find and hide only the native notification glyph, never its parent button.
-    static wux::FrameworkElement FindNativeBell(Entry &en, bool deep)
+    // Find only the notification glyph content inside NotificationCenterButton.
+    // The button itself must NEVER be collapsed: Windows places the taskbar clock/time
+    // in the same notification/date-time surface on some Windows 11 builds.
+    // Windhawk's Taskbar Styler target identifies the safe leaf as:
+    // NotificationCenterButton > ... > IconView#SystemTrayIcon > Grid > Grid > TextIconContent.
+    static wux::FrameworkElement FindNativeBell(Entry &en)
     {
-        constexpr const wchar_t *kLeaf = L"SystemTray.TextIconContent";
+        auto findInsideButton = [](wux::DependencyObject const &root) -> wux::FrameworkElement
+        {
+            auto button = FindVisualByName(root, L"NotificationCenterButton", 64);
+            if (!button)
+                return nullptr;
+
+            // Prefer the exact icon branch; fall back to the same leaf class within this
+            // button for taskbar builds that change one of the intermediate containers.
+            auto iconView = FindVisualByName(button, L"SystemTrayIcon", 64);
+            if (iconView)
+            {
+                auto iconContent = FindVisualByClass(iconView, L"SystemTray.TextIconContent", 64);
+                if (iconContent)
+                    return iconContent;
+            }
+
+            return FindVisualByClass(button, L"SystemTray.TextIconContent", 64);
+        };
+
         try
         {
-            wux::DependencyObject cur = en.clock; // the clock lives inside NotificationCenterButton
-            for (int i = 0; i < 16 && cur; ++i)
+            // The clock and notification button can be siblings, so search their shared XamlRoot.
+            auto xamlRoot = en.clock.XamlRoot();
+            if (xamlRoot)
             {
-                cur = wuxm::VisualTreeHelper::GetParent(cur);
-                if (!cur) break;
-                auto fe = cur.try_as<wux::FrameworkElement>();
-                if (fe && fe.Name() == L"NotificationCenterButton")
-                    return FindVisualByClass(fe, kLeaf, 16);
+                auto content = xamlRoot.Content();
+                if (auto iconContent = findInsideButton(content))
+                    return iconContent;
             }
-            if (deep) // rare full search, at most every 30 s
-                if (auto xr = en.clock.XamlRoot())
-                    if (auto btn = FindVisualByName(xr.Content(), L"NotificationCenterButton", 64))
-                        return FindVisualByClass(btn, kLeaf, 64);
+
+            // Fallback for a temporarily unavailable XamlRoot. This still returns only the
+            // TextIconContent leaf, never NotificationCenterButton or one of its parents.
+            wux::DependencyObject root = en.clock;
+            for (int i = 0; i < 64 && root; ++i)
+            {
+                wux::DependencyObject parent = wuxm::VisualTreeHelper::GetParent(root);
+                if (!parent)
+                    break;
+                root = parent;
+            }
+            return findInsideButton(root);
         }
-        catch (...) {}
-        return nullptr;
+        catch (...)
+        {
+            return nullptr;
+        }
     }
 
+    // ---- native Windows notification icon ----------------------------------------------
     static void ApplyBell(Entry &en)
     {
-        if (!WkActive()) return;
+        if (!WkActive())
+            return;
+
         const ULONGLONG now = GetTickCount64();
-        bool attached = false;
-        if (en.bellLeaf)
-            try { attached = (bool)wuxm::VisualTreeHelper::GetParent(en.bellLeaf); } catch (...) {}
-        if (!attached)
+        if (en.lastBellCheckMs && now - en.lastBellCheckMs < 1000)
+            return;
+        en.lastBellCheckMs = now;
+
+        auto iconContent = FindNativeBell(en);
+        if (!iconContent)
         {
-            if (en.bellLeaf) { en.bellLeaf = nullptr; en.bellBackoffMs = 250; en.bellNextSearchMs = 0; } // taskbar rebuilt: look again at once
             en.bellHidden = false;
-            if (now < en.bellNextSearchMs) return;
-            const bool deep = now >= en.bellDeepMs;
-            if (deep) en.bellDeepMs = now + 30000;
-            en.bellLeaf = FindNativeBell(en, deep);
-            if (!en.bellLeaf)
+            if (!en.bellDumped)
             {
-                en.bellNextSearchMs = now + en.bellBackoffMs;
-                en.bellBackoffMs = std::min<ULONGLONG>(en.bellBackoffMs * 2, 2000);
-                return;
+                en.bellDumped = true;
+                Wh_Log(L"WinKlok: native TextIconContent bell glyph was not found; retrying");
             }
-            const auto orig = en.bellLeaf.Visibility();
-            if (en.bells.empty() || orig != wux::Visibility::Collapsed)
-            {
-                en.bells.clear();
-                en.bells.emplace_back(en.bellLeaf, orig);
-                if (td::g_set.bellUnset.load())
-                {
-                    td::g_set.bellUnset = false;
-                    td::g_set.showBell = orig == wux::Visibility::Visible ? 1 : 0;
-                    td::g_set.Save();
-                }
-            }
+            return;
         }
+
+        bool tracked = false;
+        for (const auto &b : en.bells)
+            tracked = tracked || b.first == iconContent;
+        if (!tracked)
+        {
+            const wux::Visibility original = iconContent.Visibility();
+            en.bells.emplace_back(iconContent, original);
+            if (td::g_set.bellUnset.load())
+            { // Preserve the existing first-run default for WinKlok's own notification icon.
+                td::g_set.bellUnset = false;
+                td::g_set.showBell = original == wux::Visibility::Visible ? 1 : 0;
+                td::g_set.Save();
+            }
+            Wh_Log(L"WinKlok: found native TextIconContent bell glyph; original visibility=%d", (int)original);
+        }
+
         try
         {
-            if (en.bellLeaf.Visibility() != wux::Visibility::Collapsed)
-                en.bellLeaf.Visibility(wux::Visibility::Collapsed);
-            en.bellHidden = true;
+            if (iconContent.Visibility() != wux::Visibility::Collapsed)
+                iconContent.Visibility(wux::Visibility::Collapsed);
         }
-        catch (...) { en.bellLeaf = nullptr; en.bellHidden = false; }
+        catch (...)
+        {
+            en.bellHidden = false;
+            return;
+        }
+
+        en.bellHidden = true;
     }
 
     // ---- click handling ------------------------------------------------------------------
@@ -2044,7 +2041,6 @@ namespace tb
                 }
             }
             en.bells.clear();
-            en.bellLeaf = nullptr;
             en.bellHidden = false;
             RestoreClockTooltips(en);
             RemoveOurChildren(en);
@@ -2172,6 +2168,10 @@ namespace tb
         SetTimer(it->second, 1, ms, nullptr);
     }
 
+    // The tick only runs as fast as what is on screen needs: 100 ms for a running stopwatch preview (tenths),
+    // 250 ms for a running timer preview or while the bell is still being set up, 100 ms until the first
+    // injection has succeeded, and 1 s otherwise. Engine and settings changes do not wait for the next tick:
+    // they post a refresh (PostRefreshAll).
     static bool IsTaskbarWindow(HWND w)
     {
         wchar_t cls[64] = {};
@@ -2185,13 +2185,12 @@ namespace tb
         {
             if (!IsWindowVisible(w) || IsIconic(w) || GetWindow(w, GW_OWNER))
                 continue;
-            if (GetWindowLongPtrW(w, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST))
+            if (GetWindowLongPtrW(w, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE))
                 continue;
             wchar_t cls[64] = {};
             if (!GetClassNameW(w, cls, 64) || IsTaskbarWindow(w) || wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0)
                 continue;
-            wchar_t title[2];
-            if (InternalGetWindowText(w, title, ARRAYSIZE(title)) <= 0)
+            if (GetWindowTextLengthW(w) <= 0)
                 continue;
             DWORD cloaked = 0;
             if (SUCCEEDED(DwmGetWindowAttribute(w, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) && cloaked)
@@ -2261,10 +2260,6 @@ namespace tb
             SetForegroundWindow(desk);
     }
 
-    // The tick only runs as fast as what is on screen needs: 100 ms for a running stopwatch preview (tenths),
-    // 250 ms for a running timer preview or while the bell is still being set up, 100 ms until the first
-    // injection has succeeded, and 1 s otherwise. Engine and settings changes do not wait for the next tick:
-    // they post a refresh (PostRefreshAll).
     static void OnTick()
     {
         auto list = EntriesForThisThread();
@@ -2346,13 +2341,15 @@ namespace tb
                 want = 100;
             else if (previews && snap.tmOn && snap.tmRun)
                 want = 250;
+            const bool bell = true; // the native bell is always looked for (and hidden)
             for (auto &en : list)
             {
                 if (!en->clock)
                     continue;
                 if (!en->injected && en->injectFailures < 25)
                     want = std::min(want, 100u); // retry the first injection quickly
-                else if (!en->bellHidden && en->bellBackoffMs <= 1000) want = std::min(want, 250u);
+                else if (bell && !en->bellHidden)
+                    want = std::min(want, 250u); // keep checking until the native notification control is found
             }
         }
         SetTickMs(want);
@@ -3219,7 +3216,7 @@ namespace ui
             {
                 const DWORD r = g_waitClock(1, &g_stopEvt, 100);
                 if (r == WAIT_OBJECT_0 && WaitForSingleObject(g_stopEvt, 0) == WAIT_OBJECT_0)
-                    return false; // stop requested (checked again, so a compositor tick can never be mistaken for it)
+                    return false;                              // stop requested (checked again, so a compositor tick can never be mistaken for it)
                 paced = r != WAIT_TIMEOUT && r != WAIT_FAILED; // the compositor ticked; on a timeout or failure a frame is still posted
                 return true;
             }
@@ -9901,7 +9898,7 @@ namespace ui
         void SaveNoteData(const Note &n)
         {
             const std::wstring v = std::to_wstring(n.modified) + L"|" + td::Esc(n.title) + L"|" + td::Esc(n.body);
-            td::PutBig(NoteKey(n.id).c_str(), v);
+            Wh_SetStringValue(NoteKey(n.id).c_str(), v.c_str());
         }
         void SortNotes()
         {
@@ -9922,9 +9919,12 @@ namespace ui
                     const int id = (int)td::ToLL(tok, 0);
                     if (id <= 0)
                         continue;
-                    const std::wstring v = td::GetBig(NoteKey(id).c_str());
-                    const auto f = td::Split(v, L'|');
-                    if (v.empty() || f.size() < 3) continue;
+                    const size_t m = Wh_GetStringValue(NoteKey(id).c_str(), buf.data(), buf.size());
+                    if (m == 0 || m >= buf.size())
+                        continue;
+                    const auto f = td::Split(std::wstring(buf.data(), m), L'|');
+                    if (f.size() < 3)
+                        continue;
                     Note note;
                     note.id = id;
                     note.modified = td::ToLL(f[0]);
@@ -10027,8 +10027,7 @@ namespace ui
             notes.erase(std::remove_if(notes.begin(), notes.end(), [&](const Note &n)
                                        { return n.id == id; }),
                         notes.end());
-            td::PutBig(NoteKey(id).c_str(), L"");
-            Wh_DeleteValue((NoteKey(id) + L"_n").c_str());
+            Wh_DeleteValue(NoteKey(id).c_str());
             SaveIndex();
             if (curNote == id)
             {
@@ -11881,29 +11880,34 @@ namespace ui
             std::wstring o = L"v1\n";
             for (const Todo &t : todos)
                 o += std::to_wstring(t.id) + L"|" + (t.done ? L"1" : L"0") + L"|0|0|" + std::to_wstring(t.created) + L"|" + td::Esc(t.text) + L"\n";
-            std::replace(o.begin(), o.end(), L'\n', L';');
-            td::PutBig(L"todos", o);
+            Wh_SetStringValue(L"todos", o.c_str());
             Wh_SetIntValue(L"todoNext", nextTodoId);
         }
         void LoadTodos()
         {
             todos.clear();
-            const auto lines = td::SplitRecords(td::GetBig(L"todos"));
+            // Room for a full list: kMaxTodos lines of up to 200 characters with every one of them escaped, plus the fields.
+            std::vector<wchar_t> buf(kMaxTodos * 460 + 64);
+            const size_t n = Wh_GetStringValue(L"todos", buf.data(), buf.size());
             int maxId = 0;
-            for (size_t i = 1; i < lines.size() && todos.size() < kMaxTodos; ++i)
+            if (n > 0 && n < buf.size())
             {
-                const auto f = td::Split(lines[i], L'|');
-                if (f.size() < 6)
-                    continue;
-                Todo t;
-                t.id = (int)td::ToLL(f[0]);
-                if (t.id <= 0)
-                    continue;
-                t.done = f[1] == L"1";
-                t.created = td::ToLL(f[4]);
-                t.text = td::ClampName(td::Unesc(f[5]), 200);
-                maxId = std::max(maxId, t.id);
-                todos.push_back(std::move(t));
+                const auto lines = td::Split(std::wstring(buf.data(), n), L'\n');
+                for (size_t i = 1; i < lines.size() && todos.size() < kMaxTodos; ++i)
+                {
+                    const auto f = td::Split(lines[i], L'|');
+                    if (f.size() < 6)
+                        continue;
+                    Todo t;
+                    t.id = (int)td::ToLL(f[0]);
+                    if (t.id <= 0)
+                        continue;
+                    t.done = f[1] == L"1";
+                    t.created = td::ToLL(f[4]);
+                    t.text = td::ClampName(td::Unesc(f[5]), 200);
+                    maxId = std::max(maxId, t.id);
+                    todos.push_back(std::move(t));
+                }
             }
             nextTodoId = std::max(maxId + 1, Wh_GetIntValue(L"todoNext", 1));
         }
@@ -13128,52 +13132,9 @@ namespace ui
         // Background read state (see "background reading" below). g_cancel is checked inside the long loops.
         static std::atomic<bool> g_cancel{false}, g_busy{false};
 
-        static const std::wstring &UserSid()
-        {
-            static const std::wstring sid = []
-            {
-                std::wstring s;
-                HANDLE t = nullptr;
-                if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &t))
-                {
-                    DWORD n = 0;
-                    GetTokenInformation(t, TokenUser, nullptr, 0, &n);
-                    std::vector<BYTE> b(n ? n : 1);
-                    LPWSTR str = nullptr;
-                    if (n && GetTokenInformation(t, TokenUser, b.data(), n, &n) &&
-                        ConvertSidToStringSidW(((TOKEN_USER *)b.data())->User.Sid, &str))
-                    {
-                        s = str;
-                        LocalFree(str);
-                    }
-                    CloseHandle(t);
-                }
-                return s;
-            }();
-            return sid;
-        }
-        struct OwnerOnly // security attributes: full access for this user only
-        {
-            SECURITY_ATTRIBUTES sa{};
-            PSECURITY_DESCRIPTOR sd = nullptr;
-            OwnerOnly()
-            {
-                const std::wstring d = L"D:P(A;;FA;;;" + UserSid() + L")";
-                if (!UserSid().empty() && ConvertStringSecurityDescriptorToSecurityDescriptorW(d.c_str(), SDDL_REVISION_1, &sd, nullptr))
-                {
-                    sa.nLength = sizeof(sa);
-                    sa.lpSecurityDescriptor = sd;
-                }
-            }
-            ~OwnerOnly() { if (sd) LocalFree(sd); }
-            SECURITY_ATTRIBUTES *Get() { return sd ? &sa : nullptr; }
-        };
-
         // The database is in use by Windows, so it is read with every sharing mode allowed.
         static bool CopyShared(const std::wstring &src, const std::wstring &dst)
         {
-            OwnerOnly acl;
-            if (!acl.Get()) return false;
             HANDLE in = CreateFileW(src.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
             if (in == INVALID_HANDLE_VALUE)
@@ -13184,7 +13145,7 @@ namespace ui
                 CloseHandle(in);
                 return false;
             }
-            HANDLE out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, acl.Get(), CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+            HANDLE out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
             if (out == INVALID_HANDLE_VALUE)
             {
                 CloseHandle(in);
@@ -13260,7 +13221,7 @@ namespace ui
             if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) || !dir[0])
                 return L"";
             CreateDirectoryW(dir, nullptr); // (already there in most cases)
-            return UserSid().empty() ? L"" : std::wstring(dir) + L"\\wpndatabase-" + UserSid() + L".db";
+            return std::wstring(dir) + L"\\wpndatabase-copy.db";
         }
         static void DeleteCopy(const std::wstring &dst)
         {
@@ -13274,6 +13235,21 @@ namespace ui
         static void CleanupLeftovers()
         {
             DeleteCopy(CopyBase());
+            // Copies that earlier test builds left in %TEMP% (WKP<hex>.tmp and its -wal/-shm/-journal).
+            wchar_t tmp[MAX_PATH] = {};
+            const DWORD n = GetTempPathW(MAX_PATH, tmp);
+            if (!n || n >= MAX_PATH)
+                return;
+            WIN32_FIND_DATAW fd{};
+            HANDLE h = FindFirstFileW((std::wstring(tmp) + L"WKP*.tmp*").c_str(), &fd);
+            if (h == INVALID_HANDLE_VALUE)
+                return;
+            do
+            {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                    DeleteFileW((std::wstring(tmp) + fd.cFileName).c_str());
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
         }
 
         // Reads the toast notifications currently held by Windows, newest first. False: they could not be read.
@@ -13318,14 +13294,6 @@ namespace ui
                 WideCharToMultiByte(CP_UTF8, 0, dst.c_str(), -1, &s[0], n, nullptr, nullptr);
                 return s;
             }();
-            {
-                OwnerOnly a;
-                HANDLE h = CreateFileW(
-                    (dst + L"-shm").c_str(), GENERIC_WRITE, 0, a.Get(),
-                    CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
-                if (h != INVALID_HANDLE_VALUE)
-                    CloseHandle(h);
-            }
             void *db = nullptr;
             bool ok = false;
             if (g_sql.open_v2(path.c_str(), &db, 2 /*SQLITE_OPEN_READWRITE: our private copy*/, nullptr) == 0 && db)
@@ -15002,44 +14970,19 @@ namespace ui
 // ============================================================================
 //  WINDHAWK ENTRY POINTS
 // ============================================================================
-static HANDLE g_initThread = nullptr, g_initStop = nullptr;
-
-// Only the explorer.exe that owns the desktop (the one with the taskbar) runs alarms and the panel. The shell window
-// may not exist yet while Explorer starts, so wait for it here instead of in Wh_ModInit.
-static DWORD WINAPI InitThreadProc(LPVOID)
-{
-    HWND shell = nullptr;
-    while (!(shell = GetShellWindow()))
-        if (WaitForSingleObject(g_initStop, 200) == WAIT_OBJECT_0)
-            return 0;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(shell, &pid);
-    if (pid != GetCurrentProcessId() || g_shuttingDown.load())
-        return 0; // another explorer.exe (folder windows, "Show in folder"): stay idle
-    td::g_eng.Load(); // before the UI starts: Load may queue the missed-alarm popup
-    if (!ui::Start())
-        Wh_Log(L"could not start the UI thread");
-    return 0;
-}
-
 BOOL Wh_ModInit()
 {
-    td::g_set.Load(); // read-only, safe in every process
+    td::g_eng.Load();
+    td::g_set.Load();
+    if (!ui::Start())
+    {
+        Wh_Log(L"could not start the UI thread");
+        return FALSE;
+    }
     if (!tb::InstallHooks())
     {
         Wh_Log(L"could not install hooks");
-        return FALSE;
-    }
-    g_initStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_initThread = g_initStop ? CreateThread(nullptr, 0, InitThreadProc, nullptr, 0, nullptr) : nullptr;
-    if (!g_initThread)
-    {
-        Wh_Log(L"could not start the init thread");
-        if (g_initStop)
-            CloseHandle(g_initStop);
-        g_initStop = nullptr;
-        g_shuttingDown = true;
-        tb::CleanupAll();
+        ui::Stop();
         return FALSE;
     }
     Wh_Log(L"Initialised");
@@ -15054,19 +14997,5 @@ void Wh_ModBeforeUninit()
 
 void Wh_ModUninit()
 {
-    if (g_initStop)
-        SetEvent(g_initStop);
-    if (g_initThread)
-    { // join first: it may still be inside ui::Start
-        WaitForSingleObject(g_initThread, INFINITE);
-        CloseHandle(g_initThread);
-        g_initThread = nullptr;
-    }
-    ui::Stop(); // returns at once when the UI never started
-    if (g_initStop)
-    {
-        CloseHandle(g_initStop);
-        g_initStop = nullptr;
-    }
+    ui::Stop();
 }
-
