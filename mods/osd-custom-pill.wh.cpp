@@ -12,7 +12,7 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.9.7
+// @version         4.9.8
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
@@ -458,19 +458,19 @@ static inline float Clamp(float v, float a, float b) { return v < a ? a : (v > b
 static inline float Lerp(float a, float b, float t) { return a + (b - a) * t; }
 
 static bool IsKnownNonOsdFlyout(HWND hwnd) {
-    using GetWindowBandFn = BOOL (WINAPI*)(HWND, PDWORD);
-    static auto getBand = (GetWindowBandFn)GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "GetWindowBand");
-    DWORD band = 0;
-    if (!getBand || !getBand(hwnd, &band) || band != 7) return false;
+    // Snap Layouts, Snap Assist and Task View can live in different Z-bands
+    // depending on the Windows build and the display scale. Never gate this
+    // exclusion on GetWindowBand.
     DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!tid) return false;
     HANDLE th = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
     if (!th) return false;
     PWSTR description = nullptr;
     bool excluded = false;
     if (SUCCEEDED(GetThreadDescription(th, &description)) && description) {
-        excluded = wcscmp(description, L"MultitaskingView") == 0 ||
-                   wcsstr(description, L"Snap") != nullptr;
+        excluded = _wcsicmp(description, L"MultitaskingView") == 0 ||
+                   wcsstr(description, L"Snap") != nullptr ||
+                   wcsstr(description, L"snap") != nullptr;
         LocalFree(description);
     }
     CloseHandle(th);
@@ -1671,21 +1671,21 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
 
     RECT rc{};
     if (!GetWindowRect(hwnd, &rc)) return ShowWindow_Orig(hwnd, cmd);
+    const int physicalWidth = rc.right - rc.left;
     const int physicalHeight = rc.bottom - rc.top;
-    const UINT windowDpi = GetDpiForWindow(hwnd);
-    const int logicalHeight = windowDpi > 0
-        ? MulDiv(physicalHeight, 96, windowDpi) : physicalHeight;
 
-    // Windows 11 can report the OSD host in physical pixels, in already
-    // scaled coordinates, or with an unexpected DPI-awareness context.
-    // Preserve the 80-110 px path that worked on the original (v4.8) mod,
-    // and ALSO accept a DPI-normalized OSD at other display scale factors.
-    // Both checks still require the native XAML host class and exclude
-    // identified Snap / Task View flyouts.
-    const bool legacyOsdSize = physicalHeight >= 80 && physicalHeight <= 110;
-    const bool scaledOsdSize = logicalHeight >= 75 && logicalHeight <= 120;
-    if ((!legacyOsdSize && !scaledOsdSize) || IsKnownNonOsdFlyout(hwnd))
+    // XAML host sizes vary across Windows 11 builds and display scales.
+    // A tight fixed-height test misses the native OSD at 100% and 125%.
+    // Match the small host as a candidate; reject known Snap / Task View
+    // flyouts by their thread description, regardless of the Z-band.
+    // The larger limit also allows the same OSD to be detected at 200%.
+    if (physicalWidth <= 0 || physicalHeight <= 0 ||
+        physicalWidth >= 700 || physicalHeight >= 250 ||
+        IsKnownNonOsdFlyout(hwnd))
         return ShowWindow_Orig(hwnd, cmd);
+
+    Wh_Log(L"Native OSD candidate: size=%dx%d dpi=%u", physicalWidth,
+           physicalHeight, GetDpiForWindow(hwnd));
 
     int pend = 0;
     if ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
