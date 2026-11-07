@@ -4,11 +4,11 @@
 // @name:zh-CN      WinTips 键盘状态提示
 // @description     Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut
 // @description:zh-CN 按下大写/数字/滚动锁定、Insert 或复制/粘贴/剪切时弹出 Win11 质感的浮窗提示
-// @version         1.4.1
+// @version         1.5.0
 // @author          DoYouNatureQ
 // @github          https://github.com/DoYouNatureQ
 // @homepage        https://github.com/DoYouNatureQ/WinTips
-// @license         MIT
+// @license         GPL-3.0-or-later
 // @include         windhawk.exe
 // @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi
 // ==/WindhawkMod==
@@ -51,9 +51,10 @@ counts consecutive actions.
   administrator window has focus, which a low-level keyboard hook can't see.
 - **Follows Windows.** Per-monitor DPI, light/dark theme and the system accent
   color.
-- **Speaks your Windows language.** The card is English unless Windows is set
-  to a Chinese variant, in which case it shows simplified Chinese. The
-  *Language* setting overrides the detection either way.
+- **Speaks your Windows language.** The card follows the Windows display
+  language: simplified or traditional Chinese, English, German, Japanese,
+  Russian, Spanish and Portuguese, with English for anything else. *Language*
+  pins one of the eight instead.
 - **Follows the focused display.** The card lands on the display with the
   window you are working in, positioned with that display's own DPI, work area
   and taskbar state, so a mixed-DPI setup still lines up. *Show on* can follow
@@ -73,8 +74,9 @@ counts consecutive actions.
 ## Settings
 
 - **Language** — language of the text on the card. Follow Windows (the
-  default) shows simplified Chinese on a Chinese Windows and English
-  everywhere else; English and Chinese pin it either way.
+  default) matches the Windows display language across simplified and
+  traditional Chinese, English, German, Japanese, Russian, Spanish and
+  Portuguese; any other value pins the card to that language.
 - **Caps Lock / Num Lock / Scroll Lock / Insert / Copy / Paste / Cut** — turn
   each tip on or off.
 - **Also notify non-keyboard copies** — context menu copies, in-app "Copy"
@@ -93,6 +95,9 @@ counts consecutive actions.
 - **Horizontal / vertical offset** — pixel-level fine tuning.
 - **Theme** — follow Windows, dark or light.
 - **Card material** — acrylic (blurred backdrop) or solid.
+- **Tint opacity** — acrylic only: how much of the card is the tint painted
+  over the blurred backdrop. 20 to 90 percent, 55 by default — lower shows more
+  of the background, higher looks more solid.
 - **Blur radius** — 0 to 40 pixels, acrylic material only.
 - **Accent color** — `#RRGGBB` for the status bar and the `×N` badge; leave
   empty to follow the system accent color.
@@ -138,6 +143,14 @@ clipboard tips, this mod is.
 
 - Standalone version, source and issue tracker:
   [WinTips](https://github.com/DoYouNatureQ/WinTips)
+
+## License
+
+GPL-3.0-or-later, the same license as the standalone WinTips app. The mod can be
+copied and modified, but redistributed versions must come with the complete
+corresponding source under the GPL. The look and motion take reference from the
+LockWindow design in FluentFlyout (GPL-3.0); the code here is an independent
+implementation, and the two licenses are compatible.
 */
 // ==/WindhawkModReadme==
 
@@ -147,19 +160,32 @@ clipboard tips, this mod is.
   $name: Language
   $name:zh-CN: 语言
   $description: >-
-    Language of the text on the card. Follow Windows is the default: a
-    Chinese Windows shows simplified Chinese, any other language shows English.
-    English and Chinese pin the card to that language.
+    Language of the text on the card. Follow Windows reads the Windows display
+    language: Chinese gets simplified or traditional as appropriate, German,
+    Japanese, Russian, Spanish and Portuguese are matched too, and everything
+    else reads English. Any other value pins the card to that language.
   $description:zh-CN: >-
-    浮窗上文字使用的语言。默认跟随系统：中文系统显示简体中文，其他语言显示英文。也可以固定为英文或简体中文。
+    浮窗上文字使用的语言。默认跟随系统：中文系统按简繁显示对应写法，德语、日语、俄语、西班牙语、葡萄牙语同样自动匹配，其他语言显示英文。也可以固定为某一种。
   $options:
   - auto: Follow Windows
-  - en: English
   - zh: 简体中文
+  - zh-Hant: 繁體中文
+  - en: English
+  - de: Deutsch
+  - ja: 日本語
+  - ru: Русский
+  - es: Español
+  - pt: Português
   $options:zh-CN:
   - auto: 跟随系统
-  - en: English
   - zh: 简体中文
+  - zh-Hant: 繁體中文
+  - en: English
+  - de: Deutsch
+  - ja: 日本語
+  - ru: Русский
+  - es: Español
+  - pt: Português
 - notifyCapsLock: true
   $name: Caps Lock
   $name:zh-CN: 大写锁定
@@ -303,6 +329,16 @@ clipboard tips, this mod is.
   $options:zh-CN:
   - acrylic: 亚克力（模糊背景）
   - solid: 纯色
+- tintOpacity: 55
+  $name: Tint opacity (percent)
+  $name:zh-CN: 底色不透明度（百分比）
+  $description: >-
+    Only used by the Acrylic material: how much of the card is the tint
+    painted over the blurred backdrop. Lower shows more of the blurred
+    background, higher looks more solid. 20 to 90, 55 is the balance point
+    where text stays readable over a light wallpaper.
+  $description:zh-CN: >-
+    仅亚克力材质有效：模糊背景之上那层底色盖住多少。数值越低越透、背景越清晰，越高越接近实心。20 至 90，55 是"看得见背后"与"文字不失读"的平衡点。
 - blurRadius: 12
   $name: Blur radius (pixels)
   $name:zh-CN: 模糊半径（像素）
@@ -420,9 +456,16 @@ enum MonitorMode {
 };
 
 enum LanguageMode {
-    kLangAuto = 0,    // follow the Windows display language
-    kLangEnglish = 1, // always English
-    kLangChinese = 2, // always Chinese
+    kLangAuto = 0, // follow the Windows display language
+    kLangZhHans = 1,
+    kLangZhHant = 2,
+    kLangEnglish = 3,
+    kLangGerman = 4,
+    kLangJapanese = 5,
+    kLangRussian = 6,
+    kLangSpanish = 7,
+    kLangPortuguese = 8,
+    kLangCount = 9,
 };
 
 struct Settings {
@@ -439,6 +482,10 @@ struct Settings {
     int monitor = kMonitorFocus;
     int theme = 0;      // 0 = system, 1 = dark, 2 = light
     int material = kMaterialAcrylic;
+    // How much of the card the tint covers on the acrylic path, in percent.
+    // 55 is the same balance point the WinTips app settled on: below ~40 the
+    // text starts fighting a busy wallpaper, above ~75 the blur is invisible.
+    int tintOpacity = 55;
     int blurRadius = 12;
     std::wstring accentColor;
     bool pollElevated = true;
@@ -474,19 +521,55 @@ int Clamp(int v, int lo, int hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Setting value -> Language. Accepts the codes the WinTips app writes
+// (zh / zh-Hant / en / de / ja / ru / es / pt) plus the usual Windows-style
+// aliases, so a hand-edited registry value still lands somewhere sensible.
+// Anything else - including an empty value - means Follow Windows.
+int ParseLanguageCode(const wchar_t* code) {
+    if (!code || !code[0]) {
+        return kLangAuto;
+    }
+    std::wstring v(code);
+    if (EqualsNoCase(v, L"zh") || EqualsNoCase(v, L"zh-CN") ||
+        EqualsNoCase(v, L"zh-Hans") || EqualsNoCase(v, L"chs")) {
+        return kLangZhHans;
+    }
+    if (EqualsNoCase(v, L"zh-Hant") || EqualsNoCase(v, L"zh-TW") ||
+        EqualsNoCase(v, L"zh-HK") || EqualsNoCase(v, L"zh-MO") ||
+        EqualsNoCase(v, L"cht")) {
+        return kLangZhHant;
+    }
+    if (EqualsNoCase(v, L"en") || EqualsNoCase(v, L"en-US") ||
+        EqualsNoCase(v, L"en-GB")) {
+        return kLangEnglish;
+    }
+    if (EqualsNoCase(v, L"de") || EqualsNoCase(v, L"de-DE")) {
+        return kLangGerman;
+    }
+    if (EqualsNoCase(v, L"ja") || EqualsNoCase(v, L"jp") ||
+        EqualsNoCase(v, L"ja-JP")) {
+        return kLangJapanese;
+    }
+    if (EqualsNoCase(v, L"ru") || EqualsNoCase(v, L"ru-RU")) {
+        return kLangRussian;
+    }
+    if (EqualsNoCase(v, L"es") || EqualsNoCase(v, L"es-ES")) {
+        return kLangSpanish;
+    }
+    if (EqualsNoCase(v, L"pt") || EqualsNoCase(v, L"pt-BR") ||
+        EqualsNoCase(v, L"pt-PT")) {
+        return kLangPortuguese;
+    }
+    return kLangAuto;
+}
+
 void LoadSettings() {
     Settings s;
 
     // Follow Windows is the default, and what an empty or unknown value falls
-    // back to: a Chinese Windows reads Chinese, everything else reads English.
+    // back to: the card then reads whatever the Windows display language is.
     const wchar_t* str = Wh_GetStringSetting(L"language");
-    if (str && EqualsNoCase(str, L"en")) {
-        s.language = kLangEnglish;
-    } else if (str && EqualsNoCase(str, L"zh")) {
-        s.language = kLangChinese;
-    } else {
-        s.language = kLangAuto;
-    }
+    s.language = ParseLanguageCode(str);
     Wh_FreeStringSetting(str);
 
     s.notify[kCapsLock] = Wh_GetIntSetting(L"notifyCapsLock") != 0;
@@ -549,6 +632,8 @@ void LoadSettings() {
                                                       : kMaterialAcrylic;
     Wh_FreeStringSetting(str);
 
+    s.tintOpacity = Clamp(Wh_GetIntSetting(L"tintOpacity"), 20, 90);
+
     int blur = Wh_GetIntSetting(L"blurRadius");
     s.blurRadius = Clamp(blur, 0, 40);
 
@@ -559,36 +644,108 @@ void LoadSettings() {
 // Localization
 // =============================================================================
 
-// English until DetectLanguage() runs: a card drawn before the settings are
-// loaded should read as English rather than silently falling back to Chinese.
-bool g_chinese = false;
+// The card is only ever drawn after DetectLanguage() has run; English is the
+// fallback so a missing call shows up as English instead of pinning every user
+// to one language.
+LanguageMode g_lang = kLangEnglish;
+
+// One row per language: the seven tip labels, then the two lock states and the
+// Insert event. A table rather than a switch keeps a missing translation a
+// compile-time error (the initializer needs kKindCount labels) instead of a
+// blank label at runtime.
+struct LanguageStrings {
+    const wchar_t* key[kKindCount];
+    const wchar_t* on;
+    const wchar_t* off;
+    const wchar_t* insertPressed;
+};
+
+const LanguageStrings kLanguageStrings[kLangCount] = {
+    // Follow Windows: never used as-is, kept so the table indices line up with
+    // the LanguageMode enum. English is what resolving "auto" falls back to.
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Copied",
+      L"Pasted", L"Cut"},
+     L"On", L"Off", L"Insert pressed"},
+    // Simplified Chinese
+    {{L"大写锁定", L"数字锁定", L"滚动锁定", L"Insert", L"已复制", L"已粘贴",
+      L"已剪切"},
+     L"开启", L"关闭", L"Insert 键已按下"},
+    // Traditional Chinese
+    {{L"大寫鎖定", L"數字鎖定", L"捲動鎖定", L"Insert", L"已複製", L"已貼上",
+      L"已剪下"},
+     L"開啟", L"關閉", L"Insert 鍵已按下"},
+    // English
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Copied",
+      L"Pasted", L"Cut"},
+     L"On", L"Off", L"Insert pressed"},
+    // German
+    {{L"Feststelltaste", L"Num-Taste", L"Rollen", L"Einfg", L"Kopiert",
+      L"Eingefügt", L"Ausgeschnitten"},
+     L"An", L"Aus", L"Einfg gedrückt"},
+    // Japanese
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"コピーしました",
+      L"貼り付けました", L"切り取りました"},
+     L"オン", L"オフ", L"Insert キーを押しました"},
+    // Russian
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Скопировано",
+      L"Вставлено", L"Вырезано"},
+     L"Вкл", L"Выкл", L"Insert нажата"},
+    // Spanish
+    {{L"Bloq Mayús", L"Bloq Num", L"Bloq Despl", L"Insert", L"Copiado",
+      L"Pegado", L"Cortado"},
+     L"Activado", L"Desactivado", L"Insert pulsado"},
+    // Portuguese
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Copiado",
+      L"Colado", L"Recortado"},
+     L"Ativado", L"Desativado", L"Insert pressionado"},
+};
+
+// The language actually drawn: the setting when it names one, otherwise the
+// Windows display language.
+LanguageMode ResolveLanguage() {
+    if (g_settings.language > kLangAuto && g_settings.language < kLangCount) {
+        return (LanguageMode)g_settings.language;
+    }
+    LANGID lang = GetUserDefaultUILanguage();
+    if (!lang) {
+        return kLangEnglish;
+    }
+    switch (PRIMARYLANGID(lang)) {
+        case LANG_CHINESE: {
+            // Traditional scripts are Taiwan, Hong Kong and Macao; the
+            // mainland and Singapore builds are simplified.
+            WORD sub = SUBLANGID(lang);
+            return (sub == SUBLANG_CHINESE_TRADITIONAL ||
+                    sub == SUBLANG_CHINESE_HONGKONG ||
+                    sub == SUBLANG_CHINESE_MACAU)
+                       ? kLangZhHant
+                       : kLangZhHans;
+        }
+        case LANG_GERMAN:
+            return kLangGerman;
+        case LANG_JAPANESE:
+            return kLangJapanese;
+        case LANG_RUSSIAN:
+            return kLangRussian;
+        case LANG_SPANISH:
+            return kLangSpanish;
+        case LANG_PORTUGUESE:
+            return kLangPortuguese;
+        default:
+            return kLangEnglish;
+    }
+}
 
 void DetectLanguage() {
-    switch (g_settings.language) {
-        case kLangChinese:
-            g_chinese = true;
-            return;
-        case kLangEnglish:
-            g_chinese = false;
-            return;
-        default:
-            break;
-    }
-    // Follow Windows. Every Chinese variant (zh-CN, zh-TW, zh-HK, zh-SG) maps
-    // to simplified Chinese; every other language - and a system that reports
-    // no language at all - reads as English.
-    LANGID lang = GetUserDefaultUILanguage();
-    g_chinese = lang != 0 && PRIMARYLANGID(lang) == LANG_CHINESE;
+    g_lang = ResolveLanguage();
+}
+
+const LanguageStrings& Strings() {
+    return kLanguageStrings[g_lang];
 }
 
 const wchar_t* KeyName(TipKind kind) {
-    static const wchar_t* zh[] = {L"大写锁定", L"数字锁定", L"滚动锁定",
-                                  L"Insert",   L"已复制",   L"已粘贴",
-                                  L"已剪切"};
-    static const wchar_t* en[] = {L"Caps Lock", L"Num Lock",  L"Scroll Lock",
-                                  L"Insert",    L"Copied",    L"Pasted",
-                                  L"Cut"};
-    return g_chinese ? zh[kind] : en[kind];
+    return Strings().key[kind];
 }
 
 void FormatTip(TipKind kind, bool on, std::wstring& out) {
@@ -596,14 +753,13 @@ void FormatTip(TipKind kind, bool on, std::wstring& out) {
         case kCapsLock:
         case kNumLock:
         case kScrollLock:
-            if (g_chinese) {
-                out = std::wstring(KeyName(kind)) + (on ? L" 开启" : L" 关闭");
-            } else {
-                out = std::wstring(KeyName(kind)) + (on ? L" On" : L" Off");
-            }
+            // "{label} {state}" holds in every language the card ships with.
+            out = KeyName(kind);
+            out += L' ';
+            out += on ? Strings().on : Strings().off;
             break;
         case kInsert:
-            out = g_chinese ? L"已按下 Insert" : L"Insert pressed";
+            out = Strings().insertPressed;
             break;
         default:
             out = KeyName(kind);
@@ -714,11 +870,15 @@ Theme CurrentTheme() {
     const BYTE alpha = 238;
     t.surface = t.dark ? Color(alpha, 0x2B, 0x2B, 0x2B)
                        : Color(alpha, 0xFB, 0xFB, 0xFB);
-    // Acrylic is a tint over the blurred backdrop. The opacity is deliberately
-    // near the Windows 11 material (about 84%), which keeps the card tone close
-    // to the original app's DWM acrylic while the blur still shows through.
-    t.tint = t.dark ? Color(214, 0x1F, 0x1F, 0x1F)
-                    : Color(214, 0xF2, 0xF2, 0xF2);
+    // Acrylic is a tint over the blurred backdrop. The alpha comes from the
+    // tint opacity setting (20-90%, default 55), which is the same knob the
+    // WinTips app exposes: low values keep the wallpaper visible through the
+    // blur, high ones drift back towards the solid card.
+    const BYTE tintAlpha =
+        (BYTE)std::lround((float)Clamp(g_settings.tintOpacity, 20, 90) * 255.0f /
+                          100.0f);
+    t.tint = t.dark ? Color(tintAlpha, 0x20, 0x20, 0x20)
+                    : Color(tintAlpha, 0xF3, 0xF3, 0xF3);
     t.text = t.dark ? Color(255, 0xFF, 0xFF, 0xFF) : Color(255, 0x19, 0x19, 0x19);
     t.accent = ParseHexColor(g_settings.accentColor, t.accent) ? t.accent
                                                                : SystemAccent();
@@ -1381,8 +1541,56 @@ void DrawScissors(Graphics& g, RectF box, const Theme& theme, float alpha) {
     g.Restore(state);
 }
 
+// HarmonyOS Sans is the preferred UI face (matches the WinTips app), but GDI has
+// no graceful fallback of its own: an unknown lfFaceName silently lands on
+// whatever the mapper picks (usually Arial), which looks nothing like the WPF
+// original. So each candidate is probed once and Segoe UI is the last resort.
+//
+// SC comes first on purpose. The Windows builds of plain "HarmonyOS Sans" carry
+// Latin glyphs only, so Chinese there falls through to GDI font linking and the
+// two scripts end up on different files with mismatched metrics. "HarmonyOS Sans
+// SC" holds Latin and CJK in one face, which is what the WPF side uses too.
+// EnumFontFamiliesExW wants a FONTENUMPROCW, and that is __stdcall on the 32-bit
+// build. A capture-less lambda is __cdecl, and clang refuses the conversion
+// outright - MSVC lets it slide, which is why the standalone harness built fine
+// while CI failed on [compile:x86]. A real CALLBACK function is the portable way.
+int CALLBACK FontProbeProc(const LOGFONTW*, const TEXTMETRICW*, DWORD,
+                           LPARAM param) {
+    *reinterpret_cast<bool*>(param) = true;
+    return 0;  // one hit is enough
+}
+
+const wchar_t* UiFaceName() {
+    static const wchar_t* face = []() -> const wchar_t* {
+        HDC dc = GetDC(nullptr);
+        if (!dc) {
+            return L"Segoe UI";
+        }
+        auto installed = [dc](const wchar_t* name) {
+            bool found = false;
+            LOGFONTW probe{};
+            probe.lfCharSet = DEFAULT_CHARSET;
+            wcscpy_s(probe.lfFaceName, LF_FACESIZE, name);
+            EnumFontFamiliesExW(dc, &probe, FontProbeProc,
+                                reinterpret_cast<LPARAM>(&found), 0);
+            return found;
+        };
+        const wchar_t* result = L"Segoe UI";
+        if (installed(L"HarmonyOS Sans SC")) {
+            result = L"HarmonyOS Sans SC";
+        } else if (installed(L"HarmonyOS Sans")) {
+            result = L"HarmonyOS Sans";  // Latin-only build: CJK falls back
+        }
+        ReleaseDC(nullptr, dc);
+        return result;
+    }();
+    return face;
+}
+
 // Segoe UI Variable is a variable font, which GDI+ can't select a weight for;
 // a LOGFONT with lfWeight gives an exact 500/600 weight on Segoe UI instead.
+// HarmonyOS Sans ships as discrete faces (Thin/Light/Regular/Medium/Bold/Black),
+// so lfWeight 500/600 maps onto Medium/Bold the same way.
 // The same LOGFONT feeds both the HFONT used for measuring and the GDI+ Font
 // used for drawing, so the two never disagree about metrics.
 LOGFONTW MakeUiLogFont(float pixelSize, int weight) {
@@ -1391,7 +1599,7 @@ LOGFONTW MakeUiLogFont(float pixelSize, int weight) {
     lf.lfWeight = weight;
     lf.lfQuality = ANTIALIASED_QUALITY;
     lf.lfCharSet = DEFAULT_CHARSET;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, LF_FACESIZE, UiFaceName());
     return lf;
 }
 
@@ -1719,34 +1927,15 @@ struct Surface {
         return true;
     }
 
+    // GDI+ hands back a DIB it has written to as premultiplied BGRA already: a
+    // 32-bit DIB opened through an HDC is treated as PARGB, so every blend it
+    // performs is composited against the (zeroed) destination and stored
+    // pre-multiplied. UpdateLayeredWindow wants exactly that, so no extra pass
+    // is needed - running one multiplies by alpha a second time and turns every
+    // antialiased edge pixel into a dark fringe.
     void Clear() {
         if (bits) {
             memset(bits, 0, (size_t)stride * height);
-        }
-    }
-
-    // UpdateLayeredWindow expects premultiplied alpha.
-    void Premultiply() {
-        if (!bits) {
-            return;
-        }
-        auto* base = (BYTE*)bits;
-        for (int y = 0; y < height; y++) {
-            BYTE* row = base + (size_t)y * stride;
-            for (int x = 0; x < width; x++) {
-                BYTE* px = row + x * 4;
-                BYTE a = px[3];
-                if (a == 255) {
-                    continue;
-                }
-                if (a == 0) {
-                    px[0] = px[1] = px[2] = 0;
-                    continue;
-                }
-                px[0] = (BYTE)(px[0] * a / 255);
-                px[1] = (BYTE)(px[1] * a / 255);
-                px[2] = (BYTE)(px[2] * a / 255);
-            }
         }
     }
 };
@@ -1899,8 +2088,23 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
         g.FillPath(&surface, &card);
     }
 
-    Pen border(theme.border, 1.0f);
-    g.DrawPath(&border, &card);
+    // The glass edge is lit from above and fades out towards the bottom: the
+    // eye decides "this is a pane of glass" mostly from the boundary, and a
+    // border at one flat alpha reads like a sticker instead. Solid keeps the
+    // original flat border - there is no glass to catch the light.
+    if (acrylic && !theme.highContrast) {
+        LinearGradientBrush lit(
+            PointF(0.0f, 0.0f), PointF(0.0f, height),
+            theme.dark ? Color(0x3D, 0xFF, 0xFF, 0xFF)
+                       : Color(0x4A, 0xFF, 0xFF, 0xFF),
+            theme.dark ? Color(0x0F, 0xFF, 0xFF, 0xFF)
+                       : Color(0x14, 0x00, 0x00, 0x00));
+        Pen border(&lit, 1.0f);
+        g.DrawPath(&border, &card);
+    } else {
+        Pen border(theme.border, 1.0f);
+        g.DrawPath(&border, &card);
+    }
 }
 
 // =============================================================================
@@ -2136,7 +2340,6 @@ void Present(float dx, float dy, BYTE alpha) {
                    CardHangsTop(g_monitor, g_posX, g_posY, (float)g_cardWidth,
                                 (float)g_cardHeight));
     }
-    g_surface.Premultiply();
 
     HDC screen = GetDC(nullptr);
     POINT src{0, 0};
