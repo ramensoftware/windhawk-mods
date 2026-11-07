@@ -16,7 +16,9 @@
 
 New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.
 
-The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. It is also kept invisible for a moment while it draws its contents, so dialogs don't flash blank while loading. Elevated programs are covered as well.
+The window is placed **before** it appears, so there is no jump and no flicker. Elevated programs are covered as well.
+
+With **Show windows already drawn** on, a centered window is also kept invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or from an animation mod, may then be skipped; turn the option off to keep animations playing at the final position.
 
 ## Modes
 
@@ -64,7 +66,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
   $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
 - revealWhenDrawn: true
   $name: Show windows after complete UI load
-  $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Turn it off if windows seem slow to appear.
+  $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. Opening animations may be skipped; turn off to keep them.
 - ignoreHotkey: Win+Alt+I
   $name: Ignore hotkey
   $description: Add/remove the active window to the list. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Alt+I). Leave empty for no hotkey.
@@ -105,17 +107,15 @@ wchar_t g_listHotkey[64];
 wchar_t g_processName[MAX_PATH];  // file name of the current process, for ignore rules
 
 void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    wcsncpy_s(dst, dstChars, value, _TRUNCATE);
-    Wh_FreeStringSetting(value);
+    auto value = WindhawkUtils::StringSetting::make(name);
+    wcsncpy_s(dst, dstChars, value.get(), _TRUNCATE);
 }
 
 void LoadCenteringSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
-    g_mode = wcscmp(mode, L"mouse") == 0     ? MODE_MOUSE
-             : wcscmp(mode, L"monitor") == 0 ? MODE_MONITOR
-                                             : MODE_PARENT;
-    Wh_FreeStringSetting(mode);
+    auto mode = WindhawkUtils::StringSetting::make(L"mode");
+    g_mode = wcscmp(mode.get(), L"mouse") == 0     ? MODE_MOUSE
+             : wcscmp(mode.get(), L"monitor") == 0 ? MODE_MONITOR
+                                                   : MODE_PARENT;
     int pct = Wh_GetIntSetting(L"maxAreaPercent");
     g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
     g_revealWhenDrawn = Wh_GetIntSetting(L"revealWhenDrawn") != 0;
@@ -183,14 +183,74 @@ void DialogSignature(HWND hwnd, wchar_t* sig, size_t sigChars) {
 
 // ───────────── Ignore list ─────────────
 //
-// Stored in the mod's storage as one string, one rule per line: "process.exe|class|signature|title".
+// Each rule is "process.exe|class|signature|title".
 // - signature: DialogSignature for standard dialogs, empty for any other window (the class is its kind).
 // - title: the window's title when the rule was made, shown in the list only; never matched.
+// Stored as "ruleCount" plus one value per rule ("rule0", "rule1"…), since portable Windhawk keeps
+// storage in an INI file, which can't hold line breaks. In memory, the rules are one string, one per line.
 // "ignoredVersion" is bumped on every change so each process reloads its cached copy only when
 // the list actually changed.
 
 constexpr size_t kIgnoredChars = 32768;
-constexpr wchar_t kRulesKey[] = L"rules";
+constexpr size_t kRuleChars = 1024;
+constexpr wchar_t kLegacyRulesKey[] = L"rules";  // 1.0–1.1: all rules in one value, joined with \n
+
+void RuleValueName(int index, wchar_t* name, size_t chars) {
+    swprintf_s(name, chars, L"rule%d", index);
+}
+
+/// Reads the stored rules into buf, one per line. Falls back to the legacy single value if the list
+/// hasn't been converted yet.
+void ReadRules(wchar_t* buf, size_t chars) {
+    buf[0] = L'\0';
+    int count = Wh_GetIntValue(L"ruleCount", -1);
+    if (count < 0) {
+        Wh_GetStringValue(kLegacyRulesKey, buf, chars);
+        return;
+    }
+    size_t used = 0;
+    for (int i = 0; i < count; i++) {
+        wchar_t name[16], rule[kRuleChars];
+        RuleValueName(i, name, ARRAYSIZE(name));
+        rule[0] = L'\0';
+        Wh_GetStringValue(name, rule, ARRAYSIZE(rule));
+        size_t len = wcslen(rule);
+        if (!len || used + len + 2 >= chars)
+            continue;
+        if (used)
+            buf[used++] = L'\n';
+        wmemcpy(buf + used, rule, len + 1);
+        used += len;
+    }
+}
+
+/// Stores the rules in text (one per line), deletes values left over from a longer list, and bumps
+/// "ignoredVersion".
+void WriteRules(const wchar_t* text) {
+    int oldCount = Wh_GetIntValue(L"ruleCount", 0);
+    int count = 0;
+    for (const wchar_t* line = text; *line;) {
+        const wchar_t* end = wcschr(line, L'\n');
+        size_t len = end ? (size_t)(end - line) : wcslen(line);
+        if (len && len < kRuleChars) {
+            wchar_t name[16], rule[kRuleChars];
+            wmemcpy(rule, line, len);
+            rule[len] = L'\0';
+            RuleValueName(count++, name, ARRAYSIZE(name));
+            Wh_SetStringValue(name, rule);
+        }
+        if (!end)
+            break;
+        line = end + 1;
+    }
+    Wh_SetIntValue(L"ruleCount", count);
+    for (int i = count; i < oldCount; i++) {
+        wchar_t name[16];
+        RuleValueName(i, name, ARRAYSIZE(name));
+        Wh_DeleteValue(name);
+    }
+    Wh_SetIntValue(L"ignoredVersion", Wh_GetIntValue(L"ignoredVersion", 0) + 1);
+}
 
 struct IgnoreCache {
     SRWLOCK lock = SRWLOCK_INIT;
@@ -231,7 +291,7 @@ bool SplitRule(wchar_t* buf, wchar_t** cls, wchar_t** sig, wchar_t** title) {
 }
 
 bool RuleMatches(const wchar_t* rule, size_t ruleLen, WindowKey& key) {
-    wchar_t buf[1024];
+    wchar_t buf[kRuleChars];
     if (ruleLen >= ARRAYSIZE(buf))
         return false;
     wmemcpy(buf, rule, ruleLen);
@@ -252,8 +312,7 @@ bool IsIgnoredAs(const wchar_t* process, HWND hwnd, const wchar_t* cls) {
         if (!g_ignore.text)
             g_ignore.text = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
         if (g_ignore.text) {
-            g_ignore.text[0] = L'\0';
-            Wh_GetStringValue(kRulesKey, g_ignore.text, kIgnoredChars);
+            ReadRules(g_ignore.text, kIgnoredChars);
             g_ignore.version = version;
         }
     }
@@ -574,6 +633,13 @@ bool SetCloak(HWND hwnd, BOOL cloak) {
     return SUCCEEDED(DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloak, sizeof(cloak)));
 }
 
+// Whoever cloaked a window first (the app itself, or a mod such as Mobile Open Animation) uncloaks it;
+// this mod only ever lifts its own cloak.
+bool IsCloaked(HWND hwnd) {
+    DWORD cloaked = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked;
+}
+
 BOOL CALLBACK FindPendingPaint(HWND child, LPARAM found) {
     if (IsWindowVisible(child) && GetUpdateRect(child, nullptr, FALSE)) {
         *(bool*)found = true;
@@ -590,7 +656,11 @@ bool HasPendingPaint(HWND hwnd) {
     return found;
 }
 
+// Uncloaking happens outside g_revealLock: it fires EVENT_OBJECT_UNCLOAKED, and an in-context WinEvent
+// hook that shows a window from it would reenter HideUntilDrawn on the same thread and deadlock.
 void CALLBACK RevealCheck(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER timer) {
+    HWND reveal[ARRAYSIZE(g_pendingReveal)];
+    int revealCount = 0;
     AcquireSRWLockExclusive(&g_revealLock);
     DWORD now = GetTickCount();
     int kept = 0;
@@ -601,7 +671,7 @@ void CALLBACK RevealCheck(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER timer) {
         DWORD elapsed = now - p.start;
         p.quietChecks = IsWindowVisible(p.hwnd) && !HasPendingPaint(p.hwnd) ? p.quietChecks + 1 : 0;
         if ((elapsed >= kRevealMinMs && p.quietChecks >= 2) || elapsed >= kRevealMaxMs) {
-            SetCloak(p.hwnd, FALSE);
+            reveal[revealCount++] = p.hwnd;
             continue;
         }
         g_pendingReveal[kept++] = p;
@@ -610,6 +680,8 @@ void CALLBACK RevealCheck(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER timer) {
     if (!kept)
         SetThreadpoolTimer(timer, nullptr, 0, 0);
     ReleaseSRWLockExclusive(&g_revealLock);
+    for (int i = 0; i < revealCount; i++)
+        SetCloak(reveal[i], FALSE);
 }
 
 /// Cloaks a window that was just centered, until RevealCheck finds it drawn.
@@ -620,7 +692,8 @@ void HideUntilDrawn(HWND hwnd) {
     bool listed = false;
     for (int i = 0; i < g_pendingRevealCount; i++)
         listed = listed || g_pendingReveal[i].hwnd == hwnd;
-    if (!listed && g_revealTimer && g_pendingRevealCount < (int)ARRAYSIZE(g_pendingReveal) && SetCloak(hwnd, TRUE)) {
+    if (!listed && g_revealTimer && g_pendingRevealCount < (int)ARRAYSIZE(g_pendingReveal) && !IsCloaked(hwnd) &&
+        SetCloak(hwnd, TRUE)) {
         g_pendingReveal[g_pendingRevealCount++] = {hwnd, GetTickCount(), 0};
         if (g_pendingRevealCount == 1) {
             ULARGE_INTEGER due;
@@ -647,12 +720,16 @@ void StopRevealing() {
         WaitForThreadpoolTimerCallbacks(timer, TRUE);
         CloseThreadpoolTimer(timer);
     }
+    HWND reveal[ARRAYSIZE(g_pendingReveal)];
     AcquireSRWLockExclusive(&g_revealLock);
-    for (int i = 0; i < g_pendingRevealCount; i++)
-        if (IsWindow(g_pendingReveal[i].hwnd))
-            SetCloak(g_pendingReveal[i].hwnd, FALSE);
+    int revealCount = g_pendingRevealCount;
+    for (int i = 0; i < revealCount; i++)
+        reveal[i] = g_pendingReveal[i].hwnd;
     g_pendingRevealCount = 0;
     ReleaseSRWLockExclusive(&g_revealLock);
+    for (int i = 0; i < revealCount; i++)
+        if (IsWindow(reveal[i]))
+            SetCloak(reveal[i], FALSE);
 }
 
 bool IsUwpFrame(HWND hwnd) {
@@ -840,13 +917,20 @@ wchar_t* g_hostList;  // kIgnoredChars buffer with the current list
 void HostLoadList() {
     if (!g_hostList)
         g_hostList = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
-    g_hostList[0] = L'\0';
-    Wh_GetStringValue(kRulesKey, g_hostList, kIgnoredChars);
+    ReadRules(g_hostList, kIgnoredChars);
 }
 
 void HostSaveList() {
-    Wh_SetStringValue(kRulesKey, g_hostList);
-    Wh_SetIntValue(L"ignoredVersion", Wh_GetIntValue(L"ignoredVersion", 0) + 1);
+    WriteRules(g_hostList);
+}
+
+/// Converts a list stored by 1.0–1.1 in the single "rules" value to one value per rule.
+void ConvertLegacyRules() {
+    if (Wh_GetIntValue(L"ruleCount", -1) >= 0)
+        return;
+    HostLoadList();
+    HostSaveList();
+    Wh_DeleteValue(kLegacyRulesKey);
 }
 
 /// Line number of the first rule that matches the window, or -1.
@@ -1078,7 +1162,7 @@ void ToggleIgnoreActive() {
     bool nowIgnored = index < 0;
     if (nowIgnored) {
         bool dialog = IsDialogClass(cls);
-        wchar_t rule[1024];
+        wchar_t rule[kRuleChars];
         swprintf_s(rule, L"%s|%s|%s|%s", process, cls, dialog ? SignatureOf(key) : L"", dialog ? title : L"");
         if (!AddRule(rule))
             return;
@@ -1459,6 +1543,7 @@ DWORD WINAPI HostThread(void*) {
     if (hostAtom && toastAtom && listAtom) {
         g_hwndHost = CreateWindowExW(0, kHostClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
         if (g_hwndHost) {
+            ConvertLegacyRules();
             ApplyHostSettings(false);
             StartUwpCentering();
             RunHostLoop();
