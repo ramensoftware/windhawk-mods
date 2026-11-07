@@ -82,9 +82,9 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 #include <stdio.h>
 #include <wchar.h>
 #include <wctype.h>
- 
+
 // ───────────── GDI+ (flat API, only to load PNG/JPG/GIF images) ─────────────
- 
+
 extern "C" {
 struct GdiplusStartupInputFlat {
     UINT32 GdiplusVersion;
@@ -98,14 +98,14 @@ int WINAPI GdipCreateBitmapFromFile(const WCHAR* filename, void** bitmap);
 int WINAPI GdipCreateHBITMAPFromBitmap(void* bitmap, HBITMAP* hbm, DWORD background);
 int WINAPI GdipDisposeImage(void* image);
 }
- 
+
 // ───────────── State ─────────────
- 
+
 enum Pattern { PAT_SOLID, PAT_CHECKER, PAT_STRIPES, PAT_IMAGE, PAT_COUNT };
 const wchar_t* const kPatternNames[PAT_COUNT] = {L"Solid", L"Checkerboard", L"Stripes", L"Image"};
- 
+
 constexpr int SL_OPACITY = 0, SL_BRIGHTNESS = 1, SL_CONTRAST = 2, SL_SIZE = 3, SL_ANGLE = 4, SL_COUNT = 5;
- 
+
 struct Appearance {
     int pattern;
     int slider[SL_COUNT];   // opacity/brightness/contrast in %, size in px, angle in degrees
@@ -117,21 +117,21 @@ struct Appearance {
     bool active;
     wchar_t image[MAX_PATH];
 };
- 
+
 const Appearance kDefaults = {PAT_STRIPES, {20, 0, 60, 20, 45}, 0xFFFFFF, true, true, true, false, true, L""};
 const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size", L"angle"};
 const int kSliderMin[SL_COUNT] = {0, 0, 0, 1, 0};
 const int kSliderMax[SL_COUNT] = {100, 100, 100, 200, 180};
- 
+
 struct ModSettings {
     wchar_t toggleHotkey[64];
     wchar_t configHotkey[64];
     bool trayIcon;
 };
- 
+
 Appearance g_ap;
 ModSettings g_settings;
- 
+
 HANDLE g_thread;
 HWND g_hwndMain;      // hidden window: hotkeys, timers, broadcasts
 HWND g_hwndOverlay;
@@ -151,19 +151,19 @@ HICON g_trayIcon;
 bool g_iconOwned, g_trayIconOwned;  // false for the shared IDI_APPLICATION icon, which must not be destroyed
 bool g_trayAdded;
 UINT g_wmTaskbarCreated;
- 
+
 constexpr wchar_t kMainClass[] = L"BackgroundDimmer_Main";
 constexpr wchar_t kOverlayClass[] = L"BackgroundDimmer_Overlay";
 constexpr wchar_t kConfigClass[] = L"BackgroundDimmer_Config";
- 
+
 enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT, WM_APP_TRAY };
 enum { HK_TOGGLE = 1, HK_CONFIG = 2 };
 enum { TIMER_REPOSITION = 1, TIMER_SAVE = 2, TIMER_FIT = 3 };
- 
+
 // ───────────── Persistence ─────────────
- 
+
 int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
- 
+
 void LoadAppearance() {
     for (int i = 0; i < SL_COUNT; i++)
         g_ap.slider[i] = Clamp(Wh_GetIntValue(kSliderKeys[i], kDefaults.slider[i]), kSliderMin[i], kSliderMax[i]);
@@ -192,7 +192,7 @@ void LoadAppearance() {
     g_ap.image[0] = L'\0';
     Wh_GetStringValue(L"image", g_ap.image, ARRAYSIZE(g_ap.image));
 }
- 
+
 void SaveAppearance() {
     g_savePending = false;
     Wh_SetIntValue(L"texture", g_ap.pattern);
@@ -206,26 +206,26 @@ void SaveAppearance() {
     Wh_SetIntValue(L"active", g_ap.active);
     Wh_SetStringValue(L"image", g_ap.image);
 }
- 
+
 void ScheduleSave() {
     g_savePending = true;
     SetTimer(g_hwndMain, TIMER_SAVE, 800, nullptr);
 }
- 
+
 void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
     PCWSTR value = Wh_GetStringSetting(name);
     wcsncpy_s(dst, dstChars, value, _TRUNCATE);
     Wh_FreeStringSetting(value);
 }
- 
+
 void LoadModSettings() {
     CopySetting(L"toggleHotkey", g_settings.toggleHotkey, ARRAYSIZE(g_settings.toggleHotkey));
     CopySetting(L"configHotkey", g_settings.configHotkey, ARRAYSIZE(g_settings.configHotkey));
     g_settings.trayIcon = Wh_GetIntSetting(L"trayIcon") != 0;
 }
- 
+
 // ───────────── Hotkeys ─────────────
- 
+
 UINT KeyFromName(const wchar_t* name) {
     size_t len = wcslen(name);
     if (len == 1) {
@@ -251,7 +251,7 @@ UINT KeyFromName(const wchar_t* name) {
             return k.vk;
     return 0;
 }
- 
+
 /// Parses "Ctrl+Alt+K" into MOD_* modifiers and a virtual key. False if empty or invalid.
 bool ParseHotkey(const wchar_t* text, UINT* mods, UINT* vk) {
     *mods = 0;
@@ -280,7 +280,7 @@ bool ParseHotkey(const wchar_t* text, UINT* mods, UINT* vk) {
     }
     return *vk != 0;
 }
- 
+
 bool RegisterHotkeyText(int id, const wchar_t* text) {
     UnregisterHotKey(g_hwndMain, id);
     if (!text[0])
@@ -296,13 +296,13 @@ bool RegisterHotkeyText(int id, const wchar_t* text) {
     }
     return true;
 }
- 
+
 // ───────────── Pattern brush ─────────────
- 
+
 int Pct255(int pct) { return (pct * 255 + 50) / 100; }
- 
+
 int RgbToRef(int rgb) { return ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF); }
- 
+
 /// Base color (0xRRGGBB) scaled by a 0–255 level, as a COLORREF.
 COLORREF Shade(int rgb, int level) {
     level = Clamp(level, 0, 255);
@@ -311,7 +311,7 @@ COLORREF Shade(int rgb, int level) {
     int b = (rgb & 0xFF) * level / 255;
     return RGB(r, g, b);
 }
- 
+
 // Copied into a compatible bitmap: GDI+ returns a DIB section, which CreatePatternBrush does not accept on every Windows version.
 HBITMAP LoadTile(const wchar_t* path) {
     if (!path[0] || GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES)
@@ -324,7 +324,7 @@ HBITMAP LoadTile(const wchar_t* path) {
     GdipDisposeImage(gpBitmap);
     if (!src)
         return nullptr;
- 
+
     BITMAP bm;
     GetObject(src, sizeof(bm), &bm);
     int w = bm.bmWidth, h = bm.bmHeight < 0 ? -bm.bmHeight : bm.bmHeight;
@@ -343,7 +343,7 @@ HBITMAP LoadTile(const wchar_t* path) {
     DeleteObject(src);
     return dst;
 }
- 
+
 // Soft square wave: +1 on even bands and -1 on odd ones, with t in band widths of s px. Edges blend over
 // about 1 px, so stripes at any angle stay smooth.
 float Wave(float t, float s) {
@@ -353,7 +353,7 @@ float Wave(float t, float s) {
         ph -= 1;
     return sign * fminf(1.f, 2 * fminf(ph, 1 - ph) * s);
 }
- 
+
 /// 8-bit DIB the size of the virtual screen with the stripes or checkerboard as palette indexes (1 = dark,
 /// 255 = light). Colors live only in the palette, so brightness, contrast and color changes don't re-render it.
 /// Renders into `reuse` when it already has the virtual screen's size, and returns it; otherwise creates a new DIB.
@@ -388,7 +388,7 @@ HBITMAP BuildTexture(HBITMAP reuse) {
     double angle = g_ap.slider[SL_ANGLE] * 3.14159265358979 / 180;
     double c = cos(angle), sn = sin(angle);
     bool checker = g_ap.pattern == PAT_CHECKER;
- 
+
     // Positions across the bands are fixed point, 1/65536 px, wrapped to one period (2s px). One period of the
     // wave is tabulated at 1/64 px (index = phase >> 10), so each pixel costs an add, a compare and a lookup.
     const uint32_t period = (uint32_t)(2 * s) << 16;
@@ -406,7 +406,7 @@ HBITMAP BuildTexture(HBITMAP reuse) {
         return (uint32_t)(v < 0 ? v + period : v) % period;
     };
     uint32_t stepV = wrap(sn), stepU = wrap(c);
- 
+
     for (int y = 0; y < h; y++) {
         BYTE* row = (BYTE*)bits + (size_t)y * stride;
         uint32_t v = wrap(y * c);
@@ -430,7 +430,7 @@ HBITMAP BuildTexture(HBITMAP reuse) {
     free(wave);
     return bmp;
 }
- 
+
 void ApplyTexturePalette() {
     int k = Pct255(g_ap.slider[SL_CONTRAST]);
     int lvl = Pct255(g_ap.slider[SL_BRIGHTNESS]);
@@ -450,7 +450,7 @@ void ApplyTexturePalette() {
     SelectObject(dc, old);
     DeleteDC(dc);
 }
- 
+
 void BuildBrush() {
     HBITMAP tile = g_ap.pattern == PAT_IMAGE ? LoadTile(g_ap.image) : nullptr;
     HBRUSH brush = tile ? CreatePatternBrush(tile) : nullptr;
@@ -471,7 +471,7 @@ void BuildBrush() {
     if (g_hwndOverlay)
         InvalidateRect(g_hwndOverlay, nullptr, TRUE);
 }
- 
+
 /// Brightness, contrast or color changed: only the palette is rebuilt when a texture is in use.
 void UpdateColors() {
     if (!g_texture) {
@@ -481,11 +481,11 @@ void UpdateColors() {
     ApplyTexturePalette();
     InvalidateRect(g_hwndOverlay, nullptr, TRUE);
 }
- 
+
 #ifndef WDA_EXCLUDEFROMCAPTURE
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
- 
+
 // WDA_EXCLUDEFROMCAPTURE needs Windows 10 2004 (build 19041); older builds treat it as WDA_MONITOR, which
 // blacks out the whole layer in screenshots and screen sharing.
 bool CaptureExclusionSupported() {
@@ -498,40 +498,40 @@ bool CaptureExclusionSupported() {
     }
     return supported != 0;
 }
- 
+
 void ApplyCaptureExclusion() {
     if (!CaptureExclusionSupported())
         return;
     if (!SetWindowDisplayAffinity(g_hwndOverlay, g_ap.hideFromCapture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE))
         Wh_Log(L"SetWindowDisplayAffinity failed: %u", GetLastError());
 }
- 
+
 void ApplyOpacity() {
     SetLayeredWindowAttributes(g_hwndOverlay, 0, (BYTE)Pct255(g_ap.slider[SL_OPACITY]), LWA_ALPHA);
 }
- 
+
 // ───────────── Overlay placement ─────────────
- 
+
 void FitOverlay() {
     SetWindowPos(g_hwndOverlay, nullptr, GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
                  GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN),
                  SWP_NOZORDER | SWP_NOACTIVATE);
 }
- 
+
 void ShowOverlay(bool show) {
     if (show == g_overlayVisible)
         return;
     g_overlayVisible = show;
     ShowWindow(g_hwndOverlay, show ? SW_SHOWNOACTIVATE : SW_HIDE);
 }
- 
+
 bool ClassIn(const wchar_t* cls, const wchar_t* const* list, size_t count) {
     for (size_t i = 0; i < count; i++)
         if (wcscmp(cls, list[i]) == 0)
             return true;
     return false;
 }
- 
+
 // Transient windows that never move the layer: menus, taskbar thumbnails, the stand-in shown while switching.
 bool IsIgnoredClass(const wchar_t* cls) {
     static const wchar_t* const kIgnored[] = {
@@ -539,7 +539,7 @@ bool IsIgnoredClass(const wchar_t* cls) {
     };
     return ClassIn(cls, kIgnored, ARRAYSIZE(kIgnored));
 }
- 
+
 // Shell surfaces (taskbar, Start, Alt+Tab, notifications). They are topmost, so with the layer at the top of the
 // normal band every regular window is dimmed while one of them has focus.
 bool IsShellClass(const wchar_t* cls) {
@@ -549,7 +549,7 @@ bool IsShellClass(const wchar_t* cls) {
     };
     return ClassIn(cls, kShell, ARRAYSIZE(kShell));
 }
- 
+
 /// Highest visible, non-minimized, non-cloaked window of the process in the normal (non-topmost) band, or nullptr.
 /// Windows owned by a visible window are skipped, so their owner is returned instead (owned windows sit above it).
 HWND TopWindowOfProcess(DWORD pid) {
@@ -571,7 +571,7 @@ HWND TopWindowOfProcess(DWORD pid) {
     }
     return nullptr;
 }
- 
+
 // Moves the layer to the top of the non-topmost band, unless it is already there.
 void RaiseOverlayToTop() {
     HWND prev = GetWindow(g_hwndOverlay, GW_HWNDPREV);
@@ -579,7 +579,7 @@ void RaiseOverlayToTop() {
         return;
     SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
- 
+
 // Puts the layer right below the window, or at the top of the normal band when the window is topmost:
 // inserting the layer behind a topmost window would make it topmost too.
 void PlaceBelow(HWND hwnd) {
@@ -591,7 +591,7 @@ void PlaceBelow(HWND hwnd) {
         return;
     SetWindowPos(g_hwndOverlay, hwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
- 
+
 void ForgetMenu(HWND hwnd) {
     int n = 0;
     for (int i = 0; i < g_menuCount; i++)
@@ -599,13 +599,13 @@ void ForgetMenu(HWND hwnd) {
             g_menus[n++] = g_menus[i];
     g_menuCount = n;
 }
- 
+
 void TrackMenu(HWND hwnd, bool open) {
     ForgetMenu(hwnd);
     if (open && hwnd && g_menuCount < (int)ARRAYSIZE(g_menus))
         g_menus[g_menuCount++] = hwnd;
 }
- 
+
 // Drops menus that closed without a MENUPOPUPEND. Only from the timer: right after MENUPOPUPSTART the menu
 // may not be visible yet.
 void PruneMenus() {
@@ -615,7 +615,7 @@ void PruneMenus() {
             g_menus[n++] = g_menus[i];
     g_menuCount = n;
 }
- 
+
 void Reposition() {
     if (!g_hwndOverlay)
         return;
@@ -666,7 +666,7 @@ void Reposition() {
     }
     PlaceBelow(root);
 }
- 
+
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG, LONG, DWORD, DWORD) {
     if (event == EVENT_SYSTEM_MENUPOPUPSTART) {
         wchar_t cls[16];
@@ -680,9 +680,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG, LONG, DW
     }
     Reposition();
 }
- 
+
 // ───────────── Icon ─────────────
- 
+
 HICON LoadSystemIcon(int index, int size, bool* owned) {
     wchar_t path[MAX_PATH];
     GetSystemDirectoryW(path, MAX_PATH);
@@ -691,9 +691,9 @@ HICON LoadSystemIcon(int index, int size, bool* owned) {
     *owned = SUCCEEDED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) && icon;
     return *owned ? icon : LoadIconW(nullptr, IDI_APPLICATION);
 }
- 
+
 // ───────────── Tray icon ─────────────
- 
+
 void RemoveTrayIcon() {
     if (!g_trayAdded)
         return;
@@ -704,7 +704,7 @@ void RemoveTrayIcon() {
     Shell_NotifyIconW(NIM_DELETE, &nid);
     g_trayAdded = false;
 }
- 
+
 /// Adds, updates or removes the tray icon to match the setting; the tooltip shows whether dimming is on.
 void UpdateTrayIcon() {
     if (!g_settings.trayIcon) {
@@ -724,9 +724,9 @@ void UpdateTrayIcon() {
         return;
     g_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
 }
- 
+
 // ───────────── Configuration window ─────────────
- 
+
 enum {
     ID_PATTERN = 100,
     ID_SLIDER = 110,      // + SL_* index
@@ -743,16 +743,16 @@ enum {
     ID_DIM_OWNERS,
     ID_DIM_MENUS,
 };
- 
+
 struct ConfigUi {
     HFONT font;
     HBRUSH swatchBrush;
     UINT dpi;
 };
 ConfigUi g_ui;
- 
+
 HWND Ctl(int id) { return GetDlgItem(g_hwndConfig, id); }
- 
+
 void UpdateValueLabels() {
     for (int i = 0; i < SL_COUNT; i++) {
         wchar_t text[16];
@@ -765,7 +765,7 @@ void UpdateValueLabels() {
         SetWindowTextW(Ctl(ID_VALUE + i), text);
     }
 }
- 
+
 // Solid ignores contrast and size; image ignores everything but opacity.
 void UpdateEnabled() {
     bool image = g_ap.pattern == PAT_IMAGE;
@@ -777,14 +777,14 @@ void UpdateEnabled() {
     EnableWindow(Ctl(ID_SLIDER + SL_ANGLE), !flat);
     EnableWindow(Ctl(ID_HIDE_CAPTURE), CaptureExclusionSupported());
 }
- 
+
 void UpdateSwatch() {
     if (g_ui.swatchBrush)
         DeleteObject(g_ui.swatchBrush);
     g_ui.swatchBrush = CreateSolidBrush(RgbToRef(g_ap.colorRgb));
     InvalidateRect(Ctl(ID_SWATCH), nullptr, TRUE);
 }
- 
+
 void UpdateActiveLabel() {
     wchar_t text[96];
     if (g_settings.toggleHotkey[0])
@@ -793,7 +793,7 @@ void UpdateActiveLabel() {
         wcscpy_s(text, L"Active");
     SetWindowTextW(Ctl(ID_ACTIVE), text);
 }
- 
+
 void SyncControls() {
     if (!g_hwndConfig)
         return;
@@ -811,7 +811,7 @@ void SyncControls() {
     UpdateSwatch();
     UpdateActiveLabel();
 }
- 
+
 void SetActive(bool active) {
     g_ap.active = active;
     if (g_hwndConfig)
@@ -820,7 +820,7 @@ void SetActive(bool active) {
     UpdateTrayIcon();
     ScheduleSave();
 }
- 
+
 bool PickImage() {
     wchar_t file[MAX_PATH];
     wcscpy_s(file, g_ap.image);
@@ -838,7 +838,7 @@ bool PickImage() {
     g_ap.pattern = PAT_IMAGE;
     return true;
 }
- 
+
 void OnPatternChanged() {
     int sel = (int)SendMessageW(Ctl(ID_PATTERN), CB_GETCURSEL, 0, 0);
     if (sel < 0)
@@ -851,7 +851,7 @@ void OnPatternChanged() {
     BuildBrush();
     ScheduleSave();
 }
- 
+
 void PickColor() {
     static COLORREF custom[16];
     CHOOSECOLORW cc = {};
@@ -867,7 +867,7 @@ void PickColor() {
     UpdateColors();
     ScheduleSave();
 }
- 
+
 void ResetDefaults() {
     wchar_t image[MAX_PATH];
     wcscpy_s(image, g_ap.image);
@@ -881,21 +881,21 @@ void ResetDefaults() {
     UpdateTrayIcon();
     ScheduleSave();
 }
- 
+
 int Scale(int v) { return MulDiv(v, (int)g_ui.dpi, 96); }
- 
+
 void MoveCtl(int id, int x, int y, int w, int h) {
     SetWindowPos(Ctl(id), nullptr, Scale(x), Scale(y), Scale(w), Scale(h), SWP_NOZORDER | SWP_NOACTIVATE);
 }
- 
+
 BOOL CALLBACK SetFontProc(HWND child, LPARAM font) {
     SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
     return TRUE;
 }
- 
+
 // Layout in 96-dpi pixels, scaled to the DPI of the current monitor.
 const int kClientW = 440, kClientH = 454;
- 
+
 void LayoutConfig(UINT dpi) {
     g_ui.dpi = dpi;
     NONCLIENTMETRICSW ncm = {};
@@ -906,7 +906,7 @@ void LayoutConfig(UINT dpi) {
     if (g_ui.font)
         DeleteObject(g_ui.font);
     g_ui.font = font;
- 
+
     const int lx = 14, cx = 124, row = 32;
     int y = 14;
     MoveCtl(ID_LABEL + 0, lx, y + 4, 104, 20);
@@ -938,7 +938,7 @@ void LayoutConfig(UINT dpi) {
     MoveCtl(ID_RESET, lx, y, 140, 28);
     MoveCtl(IDCANCEL, kClientW - 14 - 92, y, 92, 28);
 }
- 
+
 void ResizeConfigForDpi(UINT dpi, const RECT* suggested) {
     RECT rc = {0, 0, MulDiv(kClientW, (int)dpi, 96), MulDiv(kClientH, (int)dpi, 96)};
     DWORD style = (DWORD)GetWindowLongPtrW(g_hwndConfig, GWL_STYLE);
@@ -962,22 +962,22 @@ void ResizeConfigForDpi(UINT dpi, const RECT* suggested) {
     // The window's current DPI, not the argument: the move above may have sent a nested WM_DPICHANGED.
     LayoutConfig(GetDpiForWindow(g_hwndConfig));
 }
- 
+
 HWND AddCtl(const wchar_t* cls, const wchar_t* text, DWORD style, int id, DWORD exStyle = 0) {
     return CreateWindowExW(exStyle, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 0, 0, g_hwndConfig,
                            (HMENU)(INT_PTR)id, GetModuleHandleW(nullptr), nullptr);
 }
- 
+
 void CreateConfigControls() {
     const wchar_t* labels[] = {L"Pattern", L"Opacity", L"Brightness", L"Contrast", L"Size", L"Rotation",
                                L"Base color", L"Image"};
     for (int i = 0; i < (int)ARRAYSIZE(labels); i++)
         AddCtl(L"STATIC", labels[i], SS_LEFT, ID_LABEL + i);
- 
+
     HWND combo = AddCtl(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, ID_PATTERN);
     for (const wchar_t* name : kPatternNames)
         SendMessageW(combo, CB_ADDSTRING, 0, (LPARAM)name);
- 
+
     for (int i = 0; i < SL_COUNT; i++) {
         HWND tb = AddCtl(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, ID_SLIDER + i);
         SendMessageW(tb, TBM_SETRANGEMIN, FALSE, kSliderMin[i]);
@@ -985,7 +985,7 @@ void CreateConfigControls() {
         SendMessageW(tb, TBM_SETPAGESIZE, 0, 5);
         AddCtl(L"STATIC", L"", SS_RIGHT, ID_VALUE + i);
     }
- 
+
     AddCtl(L"STATIC", L"", SS_SUNKEN, ID_SWATCH);
     AddCtl(L"BUTTON", L"Choose…", BS_PUSHBUTTON | WS_TABSTOP, ID_COLOR);
     AddCtl(L"EDIT", L"", ES_AUTOHSCROLL | ES_READONLY, ID_IMAGE, WS_EX_CLIENTEDGE);
@@ -999,7 +999,7 @@ void CreateConfigControls() {
     AddCtl(L"BUTTON", L"Reset to defaults", BS_PUSHBUTTON | WS_TABSTOP, ID_RESET);
     AddCtl(L"BUTTON", L"Close", BS_DEFPUSHBUTTON | WS_TABSTOP, IDCANCEL);
 }
- 
+
 LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_HSCROLL: {
@@ -1091,7 +1091,7 @@ LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
- 
+
 /// Opens the configuration window, or brings it to the front. Closing destroys it rather than hiding it.
 void OpenConfig() {
     if (g_hwndConfig) {
@@ -1116,9 +1116,9 @@ void OpenConfig() {
     ShowWindow(g_hwndConfig, SW_SHOW);
     SetForegroundWindow(g_hwndConfig);
 }
- 
+
 // ───────────── Main hidden window ─────────────
- 
+
 void ApplyModSettings(bool fromSettingsChange) {
     RegisterHotkeyText(HK_TOGGLE, g_settings.toggleHotkey);
     g_configHotkeyActive = RegisterHotkeyText(HK_CONFIG, g_settings.configHotkey);
@@ -1128,7 +1128,7 @@ void ApplyModSettings(bool fromSettingsChange) {
     if (fromSettingsChange && !g_configHotkeyActive && !g_trayAdded)
         OpenConfig();
 }
- 
+
 void Shutdown() {
     if (g_savePending)
         SaveAppearance();
@@ -1145,7 +1145,7 @@ void Shutdown() {
     g_hwndOverlay = nullptr;
     DestroyWindow(g_hwndMain);
 }
- 
+
 LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == g_wmTaskbarCreated && msg) {
         // Explorer restarted and the notification area is empty again.
@@ -1197,7 +1197,7 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
- 
+
 LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_ERASEBKGND: {
@@ -1228,47 +1228,47 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
- 
+
 // ───────────── Thread ─────────────
- 
+
 void RegisterClasses(HINSTANCE inst) {
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.hInstance = inst;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
- 
+
     wc.lpfnWndProc = MainProc;
     wc.lpszClassName = kMainClass;
     RegisterClassExW(&wc);
- 
+
     wc.lpfnWndProc = OverlayProc;
     wc.lpszClassName = kOverlayClass;
     RegisterClassExW(&wc);
- 
+
     wc.lpfnWndProc = ConfigProc;
     wc.lpszClassName = kConfigClass;
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     wc.hIcon = g_icon;
     RegisterClassExW(&wc);
 }
- 
+
 DWORD WINAPI ThreadProc(void*) {
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_BAR_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&icc);
     GdiplusStartupInputFlat gdiplusInput = {1, nullptr, FALSE, FALSE};
     if (GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != 0)
         Wh_Log(L"GdiplusStartup failed: the Image pattern falls back to a solid tint");
- 
+
     UINT systemDpi = GetDpiForSystem();
     g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, systemDpi), &g_iconOwned);
     g_trayIcon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXSMICON, systemDpi), &g_trayIconOwned);
     g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
- 
+
     LoadAppearance();
- 
+
     HINSTANCE inst = GetModuleHandleW(nullptr);
     RegisterClasses(inst);
- 
+
     // A regular (not message-only) window, so it receives the WM_DISPLAYCHANGE broadcast.
     g_hwndMain = CreateWindowExW(WS_EX_TOOLWINDOW, kMainClass, L"Background Dimmer", WS_POPUP, 0, 0, 0, 0, nullptr,
                                  nullptr, inst, nullptr);
@@ -1295,7 +1295,7 @@ DWORD WINAPI ThreadProc(void*) {
             Wh_SetIntValue(L"initialized", 1);
             OpenConfig();
         }
- 
+
         MSG msg;
         while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
             if (g_hwndConfig && IsDialogMessageW(g_hwndConfig, &msg))
@@ -1306,7 +1306,7 @@ DWORD WINAPI ThreadProc(void*) {
     } else {
         Wh_Log(L"Window creation failed: %u", GetLastError());
     }
- 
+
     if (g_brush)
         DeleteObject(g_brush);
     if (g_brushBitmap)
@@ -1326,19 +1326,19 @@ DWORD WINAPI ThreadProc(void*) {
     GdiplusShutdown(g_gdiplusToken);
     return 0;
 }
- 
+
 // ───────────── Tool mod callbacks ─────────────
- 
+
 BOOL WhTool_ModInit() {
     g_thread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
     return g_thread != nullptr;
 }
- 
+
 void WhTool_ModSettingsChanged() {
     if (g_hwndMain)
         PostMessageW(g_hwndMain, WM_APP_RELOAD, 0, 0);
 }
- 
+
 void WhTool_ModUninit() {
     if (g_hwndMain)
         PostMessageW(g_hwndMain, WM_APP_EXIT, 0, 0);
@@ -1348,7 +1348,7 @@ void WhTool_ModUninit() {
         g_thread = nullptr;
     }
 }
- 
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -1362,22 +1362,22 @@ void WhTool_ModUninit() {
 // * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
- 
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
- 
+
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
     ExitThread(0);
 }
- 
+
 BOOL Wh_ModInit() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
     }
- 
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -1387,7 +1387,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
- 
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -1396,7 +1396,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
- 
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -1406,13 +1406,13 @@ BOOL Wh_ModInit() {
             break;
         }
     }
- 
+
     LocalFree(argv);
- 
+
     if (isExcluded) {
         return FALSE;
     }
- 
+
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
@@ -1420,41 +1420,41 @@ BOOL Wh_ModInit() {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
- 
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
- 
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
- 
+
         IMAGE_DOS_HEADER* dosHeader =
             (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
- 
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
- 
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
- 
+
     if (isToolModProcess) {
         return FALSE;
     }
- 
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
- 
+
 void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
- 
+
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
@@ -1463,13 +1463,13 @@ void Wh_ModAfterInit() {
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
- 
+
     WCHAR
     commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
- 
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -1478,7 +1478,7 @@ void Wh_ModAfterInit() {
             return;
         }
     }
- 
+
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -1494,7 +1494,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
- 
+
     STARTUPINFO si{
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
@@ -1506,24 +1506,24 @@ void Wh_ModAfterInit() {
         Wh_Log(L"CreateProcess failed");
         return;
     }
- 
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
- 
+
 void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
- 
+
     WhTool_ModSettingsChanged();
 }
- 
+
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
- 
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
