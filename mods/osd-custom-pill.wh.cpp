@@ -12,18 +12,19 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.8
+// @version         4.9.5
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
-// @compilerOptions -lole32 -lgdi32 -luser32 -ldxva2 -luuid -ldwmapi -ladvapi32
+// @architecture    x86-64
+// @compilerOptions -lole32 -lgdi32 -luser32 -ldxva2 -luuid -ldwmapi -ladvapi32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # OSD Custom Pill
 
-An animated on-screen indicator for volume, brightness and virtual desktops on Windows.
+An animated on-screen indicator for volume, brightness and virtual desktops on Windows 11.
 
 ![OSD Custom Pill preview](https://raw.githubusercontent.com/yelloxygene/osd-custom-pill-assets/main/osd%20custom%20pill%20GIF.gif)
 
@@ -179,7 +180,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "胶囊底部与屏幕底部的距离（缩放比例 100% 时的像素）"
 - shakePx: 18
   $name: "Directional motion: horizontal displacement (px at 100%, 0 = disabled)"
-  $name:fr-FR: "\"Impulsion directionnelle : déplacement horizontal (px à 100%, 0 = désactivé)\""
+  $name:fr-FR: "Impulsion directionnelle : déplacement horizontal (px à 100%, 0 = désactivé)"
   $name:de-DE: "Richtungsbewegung: horizontale Verschiebung (px bei 100 %, 0 = aus)"
   $name:es-ES: "Movimiento direccional: desplazamiento horizontal (px al 100 %, 0 = desactivado)"
   $name:it-IT: "Movimento direzionale: spostamento orizzontale (px al 100%, 0 = disattivato)"
@@ -191,7 +192,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "方向运动：水平位移（缩放比例 100% 时的像素，0 = 禁用）"
 - shakeMs: 750
   $name: "Directional motion: spring duration (ms; higher = slower)"
-  $name:fr-FR: "\"Impulsion directionnelle : durée du ressort (ms, plus grand = plus lent)\""
+  $name:fr-FR: "Impulsion directionnelle : durée du ressort (ms, plus grand = plus lent)"
   $name:de-DE: "Richtungsbewegung: Federdauer (ms; größer = langsamer)"
   $name:es-ES: "Movimiento direccional: duración del resorte (ms; mayor = más lento)"
   $name:it-IT: "Movimento direzionale: durata della molla (ms; maggiore = più lento)"
@@ -203,7 +204,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "方向运动：弹簧持续时间（毫秒，越大越慢）"
 - shakeDampingPct: 32
   $name: "Directional motion: damping (%; lower = more bouncing)"
-  $name:fr-FR: "\"Impulsion directionnelle : amortissement (%, plus petit = plus de rebonds)\""
+  $name:fr-FR: "Impulsion directionnelle : amortissement (%, plus petit = plus de rebonds)"
   $name:de-DE: "Richtungsbewegung: Dämpfung (%; kleiner = mehr Nachschwingen)"
   $name:es-ES: "Movimiento direccional: amortiguación (%; menor = más rebote)"
   $name:it-IT: "Movimento direzionale: smorzamento (%; minore = più rimbalzi)"
@@ -215,7 +216,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "方向运动：阻尼（%，越小回弹越明显）"
 - valueShakePct: 70
   $name: "Motion per value change (% intensity, 0 = disabled)"
-  $name:fr-FR: "\"Impulsion à chaque changement de valeur (% de l'amplitude, 0 = désactivée)\""
+  $name:fr-FR: "Impulsion à chaque changement de valeur (% de l'amplitude, 0 = désactivée)"
   $name:de-DE: "Bewegung je Wertänderung (Intensität in %, 0 = aus)"
   $name:es-ES: "Movimiento por cambio de valor (intensidad en %, 0 = desactivado)"
   $name:it-IT: "Movimento per variazione del valore (intensità %, 0 = disattivato)"
@@ -227,7 +228,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "每次更改数值时的运动强度（%，0 = 禁用）"
 - shakeWidthPct: 32
   $name: "Directional motion: maximum horizontal stretch (%)"
-  $name:fr-FR: "\"Impulsion directionnelle : élargissement horizontal maximal (%)\""
+  $name:fr-FR: "Impulsion directionnelle : élargissement horizontal maximal (%)"
   $name:de-DE: "Richtungsbewegung: maximale horizontale Dehnung (%)"
   $name:es-ES: "Movimiento direccional: estiramiento horizontal máximo (%)"
   $name:it-IT: "Movimento direzionale: allungamento orizzontale massimo (%)"
@@ -238,20 +239,20 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:ko-KR: "방향 이동: 최대 수평 늘어남(%)"
   $name:zh-CN: "方向运动：最大水平拉伸（%）"
 - returnPowerPct: 155
-  $name: "Elastic return: rebound strength (%, 100 = v4.4, 155 = stronger, 0 = soft)"
-  $name:fr-FR: "\"Retour élastique : puissance du rebond (%, 100 = comme la v4.4, 155 = plus marqué, 0 = retour doux)\""
-  $name:de-DE: "Elastische Rückkehr: Rückfederstärke (%, 100 = wie v4.4, 155 = stärker, 0 = sanft)"
-  $name:es-ES: "Retorno elástico: fuerza del rebote (%, 100 = como v4.4, 155 = más fuerte, 0 = suave)"
-  $name:it-IT: "Ritorno elastico: intensità del rimbalzo (%, 100 = come v4.4, 155 = più forte, 0 = delicato)"
-  $name:pt-BR: "Retorno elástico: força do rebote (%, 100 = como na v4.4, 155 = mais forte, 0 = suave)"
-  $name:pl-PL: "Sprężysty powrót: siła odbicia (%, 100 = jak w v4.4, 155 = mocniej, 0 = łagodnie)"
-  $name:ru-RU: "Упругий возврат: сила отскока (%, 100 = как в v4.4, 155 = сильнее, 0 = плавно)"
-  $name:ja-JP: "弾性復帰: 跳ね返りの強さ (%、100 = v4.4相当、155 = 強め、0 = 穏やか)"
-  $name:ko-KR: "탄성 복귀: 반동 강도(%, 100 = v4.4와 동일, 155 = 더 강함, 0 = 부드럽게)"
-  $name:zh-CN: "弹性复位：回弹力度（%，100 = 与 v4.4 相同，155 = 更强，0 = 柔和）"
+  $name: "Elastic return: rebound strength (%, 100 = standard, 155 = stronger, 0 = soft)"
+  $name:fr-FR: "Retour élastique : puissance du rebond (%, 100 = comme la standard, 155 = plus marqué, 0 = retour doux)"
+  $name:de-DE: "Elastische Rückkehr: Rückfederstärke (%, 100 = wie standard, 155 = stärker, 0 = sanft)"
+  $name:es-ES: "Retorno elástico: fuerza del rebote (%, 100 = como standard, 155 = más fuerte, 0 = suave)"
+  $name:it-IT: "Ritorno elastico: intensità del rimbalzo (%, 100 = come standard, 155 = più forte, 0 = delicato)"
+  $name:pt-BR: "Retorno elástico: força do rebote (%, 100 = como na standard, 155 = mais forte, 0 = suave)"
+  $name:pl-PL: "Sprężysty powrót: siła odbicia (%, 100 = jak w standard, 155 = mocniej, 0 = łagodnie)"
+  $name:ru-RU: "Упругий возврат: сила отскока (%, 100 = как в standard, 155 = сильнее, 0 = плавно)"
+  $name:ja-JP: "弾性復帰: 跳ね返りの強さ (%、100 = standard相当、155 = 強め、0 = 穏やか)"
+  $name:ko-KR: "탄성 복귀: 반동 강도(%, 100 = standard와 동일, 155 = 더 강함, 0 = 부드럽게)"
+  $name:zh-CN: "弹性复位：回弹力度（%，100 = 与 standard 相同，155 = 更强，0 = 柔和）"
 - compactEnabled: true
   $name: "Compact mode: enable compact mode"
-  $name:fr-FR: "\"Mode compact : activer le mode compact\""
+  $name:fr-FR: "Mode compact : activer le mode compact"
   $name:de-DE: "Kompaktmodus: aktivieren"
   $name:es-ES: "Modo compacto: activar"
   $name:it-IT: "Modalità compatta: attiva"
@@ -263,7 +264,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "紧凑模式：启用"
 - compactTriggerCount: 2
   $name: "Compact mode: number of presses before activation"
-  $name:fr-FR: "\"Mode compact : nombre de pressions avant activation\""
+  $name:fr-FR: "Mode compact : nombre de pressions avant activation"
   $name:de-DE: "Kompaktmodus: Anzahl der Tastendrücke bis zur Aktivierung"
   $name:es-ES: "Modo compacto: número de pulsaciones para activarse"
   $name:it-IT: "Modalità compatta: numero di pressioni per l'attivazione"
@@ -275,7 +276,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "紧凑模式：激活所需按键次数"
 - compactReturnToNormal: true
   $name: "Compact mode: return to normal after a pause (off = compact until hidden)"
-  $name:fr-FR: "\"Mode compact : revenir au mode normal après une pause (décoché = reste compact jusqu'à sa disparition)\""
+  $name:fr-FR: "Mode compact : revenir au mode normal après une pause (décoché = reste compact jusqu'à sa disparition)"
   $name:de-DE: "Kompaktmodus: nach einer Pause zur Normalgröße zurückkehren (aus = kompakt bis zum Ausblenden)"
   $name:es-ES: "Modo compacto: volver al tamaño normal tras una pausa (desactivado = compacto hasta ocultarse)"
   $name:it-IT: "Modalità compatta: torna normale dopo una pausa (disattivato = compatta fino alla scomparsa)"
@@ -287,7 +288,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "紧凑模式：暂停后恢复正常大小（关闭 = 一直保持紧凑直到隐藏）"
 - compactReleaseMs: 450
   $name: "Compact mode: max gap between presses and return delay (ms; 0 = no limit/automatic return)"
-  $name:fr-FR: "\"Mode compact : fenêtre entre les pressions et délai de retour (ms, 0 = aucune limite / aucun retour automatique)\""
+  $name:fr-FR: "Mode compact : fenêtre entre les pressions et délai de retour (ms, 0 = aucune limite / aucun retour automatique)"
   $name:de-DE: "Kompaktmodus: maximales Intervall zwischen Tastendrücken und Rückkehrverzögerung (ms; 0 = unbegrenzt/keine automatische Rückkehr)"
   $name:es-ES: "Modo compacto: intervalo máximo entre pulsaciones y retraso del retorno (ms; 0 = sin límite/sin retorno automático)"
   $name:it-IT: "Modalità compatta: intervallo massimo tra pressioni e ritardo di ritorno (ms; 0 = senza limite/nessun ritorno automatico)"
@@ -297,7 +298,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:ja-JP: "コンパクトモード: 連続操作の最大間隔と復帰までの遅延 (ms、0 = 制限なし/自動復帰なし)"
   $name:ko-KR: "컴팩트 모드: 키 입력 사이 최대 간격 및 복귀 지연(ms, 0 = 제한 없음/자동 복귀 없음)"
   $name:zh-CN: "紧凑模式：按键间最大间隔和复位延迟（毫秒，0 = 无限制/不自动复位）"
-- deskLabel: Bureau
+- deskLabel: Desktop
   $name: "Label before virtual desktop number when no name is set"
   $name:fr-FR: "Mot affiché devant le numéro quand le bureau n'a pas de nom"
   $name:de-DE: "Text vor der Nummer eines unbenannten virtuellen Desktops"
@@ -311,7 +312,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "未命名虚拟桌面编号前显示的文字"
 - deskWidthPx: 200
   $name: "Virtual desktop: pill width (px at 100% scaling)"
-  $name:fr-FR: "\"Bureau : largeur de la pilule (px à 100%)\""
+  $name:fr-FR: "Bureau : largeur de la pilule (px à 100%)"
   $name:de-DE: "Virtueller Desktop: Breite der Pillenanzeige (px bei 100 %)"
   $name:es-ES: "Escritorio virtual: anchura de la píldora (px al 100 %)"
   $name:it-IT: "Desktop virtuale: larghezza della pillola (px al 100%)"
@@ -323,7 +324,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：胶囊宽度（缩放比例 100% 时的像素）"
 - deskHeightPx: 44
   $name: "Virtual desktop: pill height (px at 100% scaling)"
-  $name:fr-FR: "\"Bureau : hauteur de la pilule (px à 100%)\""
+  $name:fr-FR: "Bureau : hauteur de la pilule (px à 100%)"
   $name:de-DE: "Virtueller Desktop: Höhe der Pillenanzeige (px bei 100 %)"
   $name:es-ES: "Escritorio virtual: altura de la píldora (px al 100 %)"
   $name:it-IT: "Desktop virtuale: altezza della pillola (px al 100%)"
@@ -335,7 +336,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：胶囊高度（缩放比例 100% 时的像素）"
 - deskBottomOffsetPx: 70
   $name: "Virtual desktop: distance from screen bottom (px at 100% scaling)"
-  $name:fr-FR: "\"Bureau : distance au bas de l'écran (px à 100%)\""
+  $name:fr-FR: "Bureau : distance au bas de l'écran (px à 100%)"
   $name:de-DE: "Virtueller Desktop: Abstand zum unteren Bildschirmrand (px bei 100 %)"
   $name:es-ES: "Escritorio virtual: distancia al borde inferior de la pantalla (px al 100 %)"
   $name:it-IT: "Desktop virtuale: distanza dal bordo inferiore dello schermo (px al 100%)"
@@ -347,7 +348,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：距屏幕底部的距离（缩放比例 100% 时的像素）"
 - deskHoldMs: 120
   $name: "Virtual desktop: delay before expansion (ms)"
-  $name:fr-FR: "\"Bureau : délai avant le dépliage (ms)\""
+  $name:fr-FR: "Bureau : délai avant le dépliage (ms)"
   $name:de-DE: "Virtueller Desktop: Verzögerung vor dem Aufklappen (ms)"
   $name:es-ES: "Escritorio virtual: retraso antes de expandirse (ms)"
   $name:it-IT: "Desktop virtuale: ritardo prima dell'espansione (ms)"
@@ -359,7 +360,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：展开前的延迟（毫秒）"
 - deskCloseHoldMs: 140
   $name: "Virtual desktop: delay before sliding down (ms)"
-  $name:fr-FR: "\"Bureau : délai avant la sortie par le bas (ms)\""
+  $name:fr-FR: "Bureau : délai avant la sortie par le bas (ms)"
   $name:de-DE: "Virtueller Desktop: Verzögerung vor dem Abgleiten nach unten (ms)"
   $name:es-ES: "Escritorio virtual: retraso antes de deslizarse hacia abajo (ms)"
   $name:it-IT: "Desktop virtuale: ritardo prima dello scorrimento verso il basso (ms)"
@@ -371,7 +372,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：向下滑动前的延迟（毫秒）"
 - deskResponseMs: 450
   $name: "Virtual desktop: spring response time (ms)"
-  $name:fr-FR: "\"Bureau : vitesse du ressort (ms)\""
+  $name:fr-FR: "Bureau : vitesse du ressort (ms)"
   $name:de-DE: "Virtueller Desktop: Reaktionszeit der Feder (ms)"
   $name:es-ES: "Escritorio virtual: tiempo de respuesta del resorte (ms)"
   $name:it-IT: "Desktop virtuale: tempo di risposta della molla (ms)"
@@ -383,7 +384,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：弹簧响应时间（毫秒）"
 - deskDampingPct: 62
   $name: "Virtual desktop: damping (%; lower = more bouncing)"
-  $name:fr-FR: "\"Bureau : amortissement (%, plus petit = plus de rebonds)\""
+  $name:fr-FR: "Bureau : amortissement (%, plus petit = plus de rebonds)"
   $name:de-DE: "Virtueller Desktop: Dämpfung (%; kleiner = mehr Nachschwingen)"
   $name:es-ES: "Escritorio virtual: amortiguación (%; menor = más rebote)"
   $name:it-IT: "Desktop virtuale: smorzamento (%; minore = più rimbalzi)"
@@ -395,7 +396,7 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "虚拟桌面：阻尼（%，越小回弹越明显）"
 - deskDurationMs: 0
   $name: "Virtual desktop: display duration (ms; 0 = follow Windows)"
-  $name:fr-FR: "\"Bureau : durée d'affichage (ms, 0 = suit Windows)\""
+  $name:fr-FR: "Bureau : durée d'affichage (ms, 0 = suit Windows)"
   $name:de-DE: "Virtueller Desktop: Anzeigedauer (ms; 0 = Windows folgen)"
   $name:es-ES: "Escritorio virtual: duración de visualización (ms; 0 = seguir Windows)"
   $name:it-IT: "Desktop virtuale: durata della visualizzazione (ms; 0 = segue Windows)"
@@ -410,6 +411,8 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <shellscalingapi.h>
+#include <atomic>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <physicalmonitorenumerationapi.h>
@@ -428,13 +431,18 @@ struct {
 struct {
     int widthPx, heightPx, bottomOffset, holdMs, closeHoldMs, responseMs, dampingPct, durationMs;
 } dk;
-static wchar_t g_deskLabel[32] = L"Bureau";
+static wchar_t g_deskLabel[32] = L"Desktop";
 
 #define MSG_SHOW   (WM_APP + 1)
 #define MSG_HIDE   (WM_APP + 2)
 #define MSG_VALUES (WM_APP + 3)
+#define MSG_RELOAD (WM_APP + 4)
+#define MSG_DESKTOP (WM_APP + 5)
 
-static volatile LONG g_run = 1;
+static HANDLE g_stopEvent = nullptr;
+static HANDLE g_pollWakeEvent = nullptr;
+static std::atomic<bool> g_rebindAudio{false};
+static SRWLOCK g_labelLock = SRWLOCK_INIT;
 static volatile LONG g_vol = -1, g_mute = 0, g_bri = -1;
 static volatile DWORD g_volTick = 0, g_briTick = 0;
 static volatile DWORD g_deskTick = 0;   // dernier changement de bureau détecté
@@ -444,9 +452,30 @@ static int g_bumpDir = 0;               // sens de la secousse à jouer à l'ouv
 static HWND g_ui = nullptr;
 static HWND g_osd = nullptr;
 static HANDLE g_uiThread = nullptr, g_pollThread = nullptr;
+static float g_fontScale = 0.0f;
 
 static inline float Clamp(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
 static inline float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+
+static bool IsKnownNonOsdFlyout(HWND hwnd) {
+    using GetWindowBandFn = BOOL (WINAPI*)(HWND, PDWORD);
+    static auto getBand = (GetWindowBandFn)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetWindowBand");
+    DWORD band = 0;
+    if (!getBand || !getBand(hwnd, &band) || band != 7) return false;
+    DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
+    HANDLE th = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
+    if (!th) return false;
+    PWSTR description = nullptr;
+    bool excluded = false;
+    if (SUCCEEDED(GetThreadDescription(th, &description)) && description) {
+        excluded = wcscmp(description, L"MultitaskingView") == 0 ||
+                   wcsstr(description, L"Snap") != nullptr;
+        LocalFree(description);
+    }
+    CloseHandle(th);
+    return excluded;
+}
 
 static bool IsOsd(HWND h) {
     wchar_t b[128];
@@ -524,29 +553,40 @@ static void ReadDesktopName(wchar_t* out, int n) {
             }
         }
     }
-    if (index > 0) _snwprintf(out, n, L"%s %d", g_deskLabel, index);
-    else _snwprintf(out, n, L"%s", g_deskLabel);
+    wchar_t label[32];
+    AcquireSRWLockShared(&g_labelLock);
+    wcsncpy(label, g_deskLabel, 31); label[31] = 0;
+    ReleaseSRWLockShared(&g_labelLock);
+    if (index > 0) _snwprintf(out, n, L"%s %d", label, index);
+    else _snwprintf(out, n, L"%s", label);
     out[n - 1] = 0;
 }
 
-// ---------------------------------------------------------------- lecture des valeurs
-static int ReadVolume(IMMDeviceEnumerator* en, bool* mute) {
-    IMMDevice* dev = nullptr; IAudioEndpointVolume* ep = nullptr; int res = -1;
-    if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eMultimedia, &dev)) && dev) {
-        if (SUCCEEDED(dev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&ep)) && ep) {
-            float lv = 0; BOOL m = FALSE;
-            if (SUCCEEDED(ep->GetMasterVolumeLevelScalar(&lv))) {
-                res = (int)(lv * 100.0f + 0.5f);
-                ep->GetMute(&m);
-                *mute = m != FALSE;
-            }
-            ep->Release();
-        }
-        dev->Release();
+// Read the current desktop ID instead of relying only on the displayed name.
+// Two desktops may share the same name, and registry notifications may arrive
+// after the native flyout has already been shown.
+static bool ReadCurrentDesktopId(GUID* out) {
+    if (!out) return false;
+    wchar_t path[300];
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    _snwprintf(path, 300,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\%lu\\VirtualDesktops",
+        (unsigned long)session);
+    BYTE bytes[16];
+    DWORD bytesSize = sizeof(bytes);
+    bool ok = RegBin(path, L"CurrentVirtualDesktop", bytes, &bytesSize);
+    if (!ok) {
+        bytesSize = sizeof(bytes);
+        ok = RegBin(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops",
+                    L"CurrentVirtualDesktop", bytes, &bytesSize);
     }
-    return res;
+    if (!ok || bytesSize != sizeof(bytes)) return false;
+    memcpy(out, bytes, sizeof(bytes));
+    return true;
 }
 
+// ---------------------------------------------------------------- lecture des valeurs
 struct DispBrightness { UCHAR policy, ac, dc; };
 #define IOCTL_QUERY_BRIGHTNESS CTL_CODE(0x23, 0x126, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
@@ -580,60 +620,171 @@ static void PostValue(int kind, int v, bool mute) {
     if (g_ui) PostMessageW(g_ui, MSG_VALUES, (WPARAM)kind, (LPARAM)(v | (mute ? 0x100 : 0)));
 }
 
-static DWORD WINAPI PollThread(LPVOID) {
-    bool comOk = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
-    IMMDeviceEnumerator* en = nullptr;
-    CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&en);
-
-    HANDLE hLcd = CreateFileW(L"\\\\.\\LCD", GENERIC_READ | GENERIC_WRITE,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    bool lcdOk = ReadLcd(hLcd) >= 0;
-
-    int pv = -1, pm = 0, pb = -1;
-    DWORD lastDdc = GetTickCount();
-    if (lcdOk) pb = ReadLcd(hLcd); else pb = ReadDdc();
-    g_bri = pb;
-
-    wchar_t ld[64] = L""; DWORD lastDeskPoll = 0;
-    ReadDesktopName(ld, 64);
-
-    while (g_run) {
-        DWORD now = GetTickCount();
-
-        if (en) {
-            bool m = false;
-            int v = ReadVolume(en, &m);
-            if (v >= 0 && (v != pv || (int)m != pm)) {
-                bool first = pv < 0;
-                pv = v; pm = m ? 1 : 0;
-                g_vol = v; g_mute = pm;
-                if (!first) { g_volTick = GetTickCount(); PostValue(0, v, m); }
-            }
-        }
-
-        int b = -1;
-        if (lcdOk) b = ReadLcd(hLcd);
-        else if ((LONG)(g_wantDdcUntil - now) > 0 && now - lastDdc > 250) { b = ReadDdc(); lastDdc = now; }
-        if (b >= 0 && b != pb) {
-            pb = b; g_bri = b; g_briTick = GetTickCount();
-            PostValue(1, b, false);
-        }
-
-        if (now - lastDeskPoll > 150) {
-            wchar_t nn[64];
-            ReadDesktopName(nn, 64);
-            if (wcscmp(nn, ld) != 0) {
-                wcscpy(ld, nn);
-                g_deskTick = GetTickCount();
-                if (!g_deskTick) g_deskTick = 1;
-            }
-            lastDeskPoll = now;
-        }
-        Sleep(50);
+// Windows provides event notifications for endpoint volume and default-device
+// changes. There is no need to activate a new audio endpoint every 50 ms.
+class VolumeNotification final : public IAudioEndpointVolumeCallback {
+    LONG refs = 1;
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (iid != __uuidof(IUnknown) && iid != __uuidof(IAudioEndpointVolumeCallback))
+            return E_NOINTERFACE;
+        *out = static_cast<IAudioEndpointVolumeCallback*>(this); AddRef(); return S_OK;
     }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG n = InterlockedDecrement(&refs); if (!n) delete this; return n;
+    }
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA data) override {
+        if (!data || !g_stopEvent || WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0)
+            return S_OK;
+        int newVol = (int)(data->fMasterVolume * 100.0f + 0.5f);
+        int newMute = data->bMuted ? 1 : 0;
+        bool changed = newVol != g_vol || newMute != g_mute;
+        bool initial = g_vol < 0;
+        g_vol = newVol; g_mute = newMute;
+        if (changed && !initial) {
+            g_volTick = GetTickCount();
+            PostValue(0, newVol, newMute != 0);
+        }
+        return S_OK;
+    }
+};
+class AudioDeviceNotification final : public IMMNotificationClient {
+    LONG refs = 1;
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (iid != __uuidof(IUnknown) && iid != __uuidof(IMMNotificationClient))
+            return E_NOINTERFACE;
+        *out = static_cast<IMMNotificationClient*>(this); AddRef(); return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG n = InterlockedDecrement(&refs); if (!n) delete this; return n;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
+        if (flow == eRender && role == eMultimedia) {
+            g_rebindAudio.store(true);
+            if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
+        }
+        return S_OK;
+    }
+};
 
+static DWORD WINAPI PollThread(LPVOID) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool comOk = SUCCEEDED(hr);
+    IMMDeviceEnumerator* en = nullptr;
+    IAudioEndpointVolume* ep = nullptr;
+    IMMDevice* dev = nullptr;
+    VolumeNotification* volumeCb = new VolumeNotification();
+    AudioDeviceNotification* deviceCb = new AudioDeviceNotification();
+    if (comOk && FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+        CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&en))) en = nullptr;
+    if (en) en->RegisterEndpointNotificationCallback(deviceCb);
+
+    auto Unbind = [&]() {
+        if (ep) { ep->UnregisterControlChangeNotify(volumeCb); ep->Release(); ep = nullptr; }
+        if (dev) { dev->Release(); dev = nullptr; }
+    };
+    auto Bind = [&]() {
+        Unbind();
+        if (!en || FAILED(en->GetDefaultAudioEndpoint(eRender, eMultimedia, &dev)) || !dev) return;
+        if (FAILED(dev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
+             (void**)&ep)) || !ep) return;
+        float lv = 0; BOOL mute = FALSE;
+        if (SUCCEEDED(ep->GetMasterVolumeLevelScalar(&lv))) {
+            g_vol = (LONG)(lv * 100.0f + 0.5f);
+            if (SUCCEEDED(ep->GetMute(&mute))) g_mute = mute ? 1 : 0;
+        }
+        ep->RegisterControlChangeNotify(volumeCb);
+    };
+    Bind();
+
+    HANDLE hLcd = CreateFileW(L"\\\\.\\LCD", GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    bool lcdOk = ReadLcd(hLcd) >= 0;
+    int pb = lcdOk ? ReadLcd(hLcd) : ReadDdc();
+    g_bri = pb;
+    DWORD lastDdc = GetTickCount();
+
+    // Registry change notifications replace continuous desktop-name polling.
+    wchar_t sessPath[300]; DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    _snwprintf(sessPath, 300,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\%lu\\VirtualDesktops",
+        (unsigned long)session);
+    HKEY desktopKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, sessPath, 0, KEY_NOTIFY, &desktopKey) != ERROR_SUCCESS)
+        RegOpenKeyExW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops",
+            0, KEY_NOTIFY, &desktopKey);
+    HANDLE desktopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    auto ArmDesktop = [&]() {
+        if (desktopKey && desktopEvent)
+            RegNotifyChangeKeyValue(desktopKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET,
+                                    desktopEvent, TRUE);
+    };
+    ArmDesktop();
+    wchar_t lastName[64] = L"";
+    ReadDesktopName(lastName, 64);
+    GUID lastDesktopId{};
+    bool lastDesktopValid = ReadCurrentDesktopId(&lastDesktopId);
+
+    // During an active OSD, sample laptop brightness. Otherwise wait for
+    // notifications, using no 50ms background polling loop.
+    while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
+        DWORD now = GetTickCount();
+        bool active = (LONG)(g_wantDdcUntil - now) > 0;
+        HANDLE waits[3] = {g_stopEvent, g_pollWakeEvent, desktopEvent};
+        DWORD count = desktopKey && desktopEvent ? 3 : 2;
+        DWORD result = WaitForMultipleObjects(count, waits, FALSE, active ? 80 : INFINITE);
+        if (result == WAIT_OBJECT_0) break;
+        if (g_rebindAudio.exchange(false)) Bind();
+        if (result == WAIT_OBJECT_0 + 2) {
+            wchar_t name[64]; ReadDesktopName(name, 64);
+            // A registry notification may mean a rename or an unrelated write.
+            // Only a change of the current desktop GUID is a desktop switch.
+            if (wcscmp(lastName, name) != 0)
+                wcscpy(lastName, name);
+            GUID current{};
+            if (ReadCurrentDesktopId(&current)) {
+                if (lastDesktopValid && memcmp(&lastDesktopId, &current, sizeof(current)) != 0) {
+                    g_deskTick = GetTickCount();
+                    if (!g_deskTick) g_deskTick = 1;
+                    HWND ui = g_ui;
+                    if (ui) PostMessageW(ui, MSG_DESKTOP, 0, 0);
+                }
+                lastDesktopId = current;
+                lastDesktopValid = true;
+            }
+            ArmDesktop();
+        }
+        now = GetTickCount();
+        if ((LONG)(g_wantDdcUntil - now) > 0) {
+            int b = -1;
+            if (lcdOk) b = ReadLcd(hLcd);
+            else if (now - lastDdc >= 250) { b = ReadDdc(); lastDdc = now; }
+            if (b >= 0 && b != pb) {
+                pb = b; g_bri = b; g_briTick = GetTickCount();
+                PostValue(1, b, false);
+            }
+        }
+    }
+    // Unregister before releasing callbacks and COM objects.
+    Unbind();
+    if (en) { en->UnregisterEndpointNotificationCallback(deviceCb); en->Release(); }
+    volumeCb->Release(); deviceCb->Release();
+    if (desktopKey) RegCloseKey(desktopKey);
+    if (desktopEvent) CloseHandle(desktopEvent);
     if (hLcd != INVALID_HANDLE_VALUE) CloseHandle(hLcd);
-    if (en) en->Release();
     if (comOk) CoUninitialize();
     return 0;
 }
@@ -648,6 +799,32 @@ static DWORD g_showTick = 0;
 static bool g_muted = false;
 static bool g_unfolded = false, g_phase2 = false;
 static wchar_t g_deskName[64] = L"";
+// Classification fallback for keys which do not produce a new value at a limit.
+// All of these fields are accessed exclusively on the UI thread.
+static int g_lastConfirmedKind = 0; // 0 volume, 1 brightness, 2 desktop
+static DWORD g_lastConfirmedTick = 0;
+static GUID g_observedDesktopId{};
+static bool g_observedDesktopValid = false;
+static bool g_pendingDesktopChange = false;
+static bool g_pendingHide = false;
+static DWORD g_nativeHideDeadline = 0; // avoids losing a short native OSD cycle
+static DWORD g_brightnessHideDeadline = 0; // merge fast repeat presses into one continuous brightness OSD
+
+
+static bool DesktopIdChanged() {
+    GUID current{};
+    if (!ReadCurrentDesktopId(&current)) return false;
+    if (!g_observedDesktopValid) {
+        g_observedDesktopId = current;
+        g_observedDesktopValid = true;
+        return false;
+    }
+    if (memcmp(&current, &g_observedDesktopId, sizeof(current)) == 0)
+        return false;
+    g_observedDesktopId = current;
+    return true;
+}
+
 
 static Spring sp_p, sp_y, sp_v;
 static float g_curV = 0, g_p = 0, g_ga = 0, g_yOff = 0, g_startOff = 0;
@@ -859,7 +1036,7 @@ static void Render() {
 
 // ---------------------------------------------------------------- profils
 static void MakeFonts(int h) {
-    if (g_fIcon && g_fText && h == g_fontH) return;
+    if (g_fIcon && g_fText && h == g_fontH && fabsf(g_fontScale - g_s) < 0.001f) return;
     if (g_maskDC) SelectObject(g_maskDC, GetStockObject(SYSTEM_FONT));   // libère les anciennes polices
     if (g_fIcon) DeleteObject(g_fIcon);
     if (g_fText) DeleteObject(g_fText);
@@ -870,6 +1047,7 @@ static void MakeFonts(int h) {
                           OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
                           DEFAULT_PITCH, L"Segoe UI");
     g_fontH = h;
+    g_fontScale = g_s;
 }
 
 static void UseProfile(bool desk) {
@@ -886,6 +1064,7 @@ static void UseProfile(bool desk) {
 }
 
 static void StartClose() {
+    g_brightnessHideDeadline = 0;
     st = S_CLOSING; stStart = GetTickCount();
     g_phase2 = false; g_hidePending = false;
     sp_p.t = 0;
@@ -949,10 +1128,16 @@ static void LoadValues() {
 }
 
 static void BeginShow() {
+    g_brightnessHideDeadline = 0;
+    HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = 96, dpiY = 96;
+    if (FAILED(GetDpiForMonitor(primary, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
+        dpiX = GetDpiForSystem();
+    g_s = (dpiX ? dpiX : 96) / 96.0f;
     UseProfile(g_kind == 2);
     EnsureCanvas();
     MONITORINFO mi{}; mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
+    GetMonitorInfoW(primary, &mi);
     g_dst.x = (mi.rcMonitor.left + mi.rcMonitor.right) / 2 - g_cw / 2;
     g_dst.y = mi.rcMonitor.bottom - (LONG)(a_bottom * g_s) - (LONG)g_H - g_padY;
     g_baseY = g_dst.y;
@@ -1013,40 +1198,94 @@ static void Tick() {
             (GetAsyncKeyState(VK_CONTROL) & 0x8000);
         const bool volumeEvent = EventNearShow(g_volTick, now, 110);
         const bool brightnessEvent = EventNearShow(g_briTick, now, 110);
-        const bool desktopEvent = EventNearShow(g_deskTick, now, 110);
+        // Registry writes alone are not sufficient to identify a desktop switch.
+        // They can also happen when the desktop list or a label is updated.
+        const bool desktopIntent = g_pendKind == 2 || desktopKeysHeld;
+        if ((desktopIntent || (!volumeKeyHeld && !volumeEvent && !brightnessEvent)) &&
+            DesktopIdChanged())
+            g_pendingDesktopChange = true;
 
-        // A physically detected volume key always wins, even at 0% or 100%.
-        // Volume at a limit may not generate a new audio event.
+        int decidedKind = -1;
+        // Physical volume keys and actual value notifications outrank cached
+        // desktop information, including while a desktop pill is still visible.
         if (g_pendKind == 1 || volumeKeyHeld) {
-            if ((int)el >= g.startDelayMs) { g_kind = 0; BeginShow(); }
-        } else if (g_pendKind == 2 || (desktopKeysHeld && desktopEvent)) {
-            if ((int)el >= g.startDelayMs) { g_kind = 2; BeginShow(); }
-        } else if (volumeEvent || brightnessEvent || desktopEvent) {
-            if ((int)el >= g.startDelayMs) {
-                // Prefer value changes over a possibly coincidental desktop
-                // event. Use the most recent confirmed value change.
-                if (volumeEvent && brightnessEvent)
-                    g_kind = (LONG)(g_briTick - g_volTick) > 0 ? 1 : 0;
-                else if (volumeEvent) g_kind = 0;
-                else if (brightnessEvent) g_kind = 1;
-                else g_kind = 2;
-                BeginShow();
-            }
+            decidedKind = 0;
+        } else if (g_pendingDesktopChange && !volumeEvent && !brightnessEvent) {
+            decidedKind = 2;
+        } else if (desktopIntent && !volumeEvent && !brightnessEvent) {
+            decidedKind = 2;
+        } else if (volumeEvent || brightnessEvent) {
+            if (volumeEvent && brightnessEvent)
+                decidedKind = (LONG)(g_briTick - g_volTick) > 0 ? 1 : 0;
+            else decidedKind = brightnessEvent ? 1 : 0;
         } else if ((int)el >= g.decideMs) {
-            // Unknown OSD: never infer brightness from its current level or
-            // a virtual desktop from the absence of volume changes.
-            // These heuristics caused false indicators at minimum volume.
-            g_kind = 0;
+            // On many laptops the brightness keys don't produce a standard
+            // virtual-key event. At 100% (or 0%), pressing the brightness key
+            // also produces NO value-change notification. Previously this
+            // branch always fell back to volume, even when brightness was at
+            // its limit and no volume input was observed.
+            //
+            // Only infer brightness at its limit after actual volume-key,
+            // volume-notification and desktop-change checks above have failed.
+            // A recent confirmed brightness event is stronger evidence, but a
+            // known brightness limit should also work for the first press.
+            const bool recentBrightness = g_lastConfirmedKind == 1 &&
+                (now - g_lastConfirmedTick) < 30000;
+            const bool knownBrightnessLimit = (g_bri >= 0 && g_bri <= 2) || g_bri >= 98;
+            const bool noVolumeEvidence = g_pendKind != 1 &&
+                !volumeKeyHeld && !volumeEvent;
+            const bool noDesktopEvidence = !g_pendingDesktopChange &&
+                !desktopIntent;
+            decidedKind = noVolumeEvidence && noDesktopEvidence &&
+                (recentBrightness || knownBrightnessLimit) ? 1 : 0;
+        }
+
+        if (decidedKind >= 0 && (int)el >= g.startDelayMs) {
+            g_kind = decidedKind;
+            if (decidedKind == 1 && brightnessEvent) {
+                g_lastConfirmedKind = 1;
+                g_lastConfirmedTick = now;
+            } else if (decidedKind == 0 && (g_pendKind == 1 || volumeEvent)) {
+                g_lastConfirmedKind = 0;
+                g_lastConfirmedTick = now;
+            }
+            const bool shortNativeCycle = g_pendingHide;
+            g_pendingHide = false;
+            g_pendingDesktopChange = false;
             BeginShow();
+            if (shortNativeCycle && decidedKind != 2)
+                g_nativeHideDeadline = now + 650;
         }
         return;
     }
     if (st == S_OPEN) {
+        // Brightness Fn keys can briefly hide/re-show the native OSD for
+        // every auto-repeat, even when brightness remains at 100%. Do not
+        // close our pill until that sequence actually stops.
+        if (g_kind == 1 && g_brightnessHideDeadline &&
+            (LONG)(now - g_brightnessHideDeadline) >= 0) {
+            g_brightnessHideDeadline = 0;
+            StartClose();
+        }
+        if (st != S_OPEN) return;
         if (!g_unfolded && (int)(now - stStart) >= a_hold) {
             g_unfolded = true; sp_p.t = 1;
             if (g_pendBump) { Bump(g_bumpDir, 1.0f); g_pendBump = false; }
         }
         CheckLimitKeys(now);
+        if (g_nativeHideDeadline &&
+            (LONG)(now - g_nativeHideDeadline) >= 0 &&
+            !((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN)) & 0x8000)) {
+            g_nativeHideDeadline = 0;
+            StartClose();
+        }
+        // Native OSD sometimes disappears without passing through ShowWindow.
+        // Ensure the custom window cannot stay visible indefinitely.
+        const bool volumeButtonHeld = g_kind == 0 &&
+            ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN)) & 0x8000);
+        if (g_kind != 2 && !volumeButtonHeld && now - stStart > 6500 &&
+            now - g_lastBump > 1200 && now - g_volTick > 1200 &&
+            now - g_briTick > 1200) StartClose();
         if (!g.compactEnabled) {
             // Désactivation immédiate du mode compact si l'option est décochée.
             sp_c.t = 0;
@@ -1111,7 +1350,7 @@ static void Tick() {
 
         // Petite impulsion supplementaire au relachement : elle accelere le
         // retour vers le repos et genere une surcompensation plus visible.
-        // 100 % = comportement v4.4 ; moins de 100 % adoucit le ressort.
+        // 100 % = base rebound; lower values soften the return.
         const float extra = Clamp(g.returnPowerPct / 100.0f - 1.0f, -1.0f, 2.0f);
         if (extra > 0.0f) {
             sp_shape.v -= extra * 0.72f * sqrtf(g_shapeReleaseK) * fmaxf(sp_shape.x, 0.0f);
@@ -1142,58 +1381,180 @@ static void Tick() {
     Render();
 }
 
+static void LoadSettings();
 static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     switch (msg) {
     case MSG_SHOW: {
         DWORD now = GetTickCount();
         g_wantDdcUntil = now + 2000;
-        if (st == S_HIDDEN) {
-            g_limitDir = 0;
-            g_pendKind = (int)w; g_showTick = now;
-            st = S_PENDING; stStart = now; lastTick = now;
-        } else if (st == S_CLOSING) {
-            st = S_OPEN; stStart = now;
-            g_unfolded = true; g_phase2 = false;
-            sp_p.t = 1; sp_y.t = 0;
-            g_deskT0 = now; g_hidePending = false;
-            SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        } else if (st == S_OPEN) {
-            g_deskT0 = now; g_hidePending = false;
+        if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
+        const int keyHint = (int)w;
+        const bool volumeKeyHeld = keyHint == 1 ||
+            (((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
+               GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) != 0);
+        const bool recentVolume = EventNearShow(g_volTick, now, 110);
+        const bool recentBrightness = EventNearShow(g_briTick, now, 110);
+        // Do not interpret an old registry tick as another desktop switch.
+        // Keep the current desktop ID untouched if the volume key is held.
+        const bool desktopSwitch = !volumeKeyHeld && !recentVolume &&
+            !recentBrightness && DesktopIdChanged();
+        const bool carryDesktop = st == S_PENDING && g_pendingDesktopChange &&
+            (now - g_showTick) < 400 && !volumeKeyHeld &&
+            !recentVolume && !recentBrightness;
+
+        // If ShowWindow is signaled repeatedly for the same native cycle,
+        // do not postpone classification indefinitely.
+        if (st == S_PENDING && now - g_showTick < 65 &&
+            (g_pendKind == keyHint || (carryDesktop && keyHint == 0)))
+            return 0;
+
+        // Repeated presses of the SAME kind should extend the current pill,
+        // not restart its animation. A different kind must be reclassified.
+        if (st == S_OPEN && g_kind == 0 &&
+            (volumeKeyHeld || (recentVolume && !recentBrightness && !desktopSwitch))) {
+            g_nativeHideDeadline = 0;
+            g_hidePending = false;
+            return 0;
         }
-        return 0; }
+        if (st == S_OPEN && g_kind == 2 && (keyHint == 2 || desktopSwitch) &&
+            !volumeKeyHeld && !recentVolume && !recentBrightness) {
+            BeginShow(); // next virtual desktop, same visual profile
+            return 0;
+        }
+        if (st == S_OPEN && g_kind == 2 && keyHint == 0 &&
+            !volumeKeyHeld && !recentVolume && !recentBrightness && !desktopSwitch) {
+            // Repeated ShowWindow for an unchanged desktop must not suddenly
+            // replace the desktop pill by an unrelated volume pill.
+            g_deskT0 = now;
+            return 0;
+        }
+        // When brightness is at its limit, Fn+brightness may trigger a new
+        // native ShowWindow without any brightness value-change event.
+        // Treat it as a continuation of the existing brightness pill; never
+        // call BeginShow(), which would reset and replay its opening animation.
+        const bool repeatBrightness = !desktopSwitch && !volumeKeyHeld &&
+            !recentVolume && keyHint != 1 && keyHint != 2 &&
+            (recentBrightness || (g_bri >= 98 && g_bri <= 100));
+        if ((st == S_OPEN || st == S_CLOSING) && g_kind == 1 &&
+            repeatBrightness) {
+            g_brightnessHideDeadline = 0;
+            g_nativeHideDeadline = 0;
+            g_hidePending = false;
+            if (st == S_CLOSING) {
+                // Reverse the ongoing close smoothly, preserving spring state.
+                st = S_OPEN;
+                stStart = now - (DWORD)a_hold;
+                g_unfolded = true;
+                g_phase2 = false;
+                sp_p.t = 1.0f;
+                sp_y.t = 0.0f;
+            }
+            return 0;
+        }
+
+        // This also handles a new volume/brightness OSD while the virtual
+        // desktop pill is open or an older pill is closing.
+        g_brightnessHideDeadline = 0;
+        g_pendingDesktopChange = desktopSwitch || carryDesktop;
+        g_pendKind = carryDesktop && keyHint == 0 ? 2 : keyHint;
+        g_showTick = now;
+        g_pendingHide = false;
+        g_nativeHideDeadline = 0;
+        st = S_PENDING;
+        stStart = now;
+        lastTick = now;
+        return 0;
+    }
     case MSG_HIDE:
-        if (st == S_PENDING) { st = S_HIDDEN; }
-        else if (st == S_OPEN) {
-            if (g_kind == 2) g_hidePending = true;   // fermeture gérée dans Tick (durée)
-            else StartClose();
+        if (st == S_PENDING) {
+            // Windows may hide its original OSD before our decision delay
+            // finishes. Never discard the queued show in this case.
+            g_pendingHide = true;
+        } else if (st == S_OPEN) {
+            if (g_kind == 2) g_hidePending = true;
+            else if (g_kind == 1) {
+                // A short grace period avoids a close/open flicker between
+                // consecutive brightness-key repeats at the hardware limit.
+                // A new MSG_SHOW clears the deadline without restarting.
+                g_brightnessHideDeadline = GetTickCount() + 330;
+            } else StartClose();
         }
         return 0;
-    case MSG_VALUES:
-        if (st == S_OPEN) {
-            if (g_kind == 2) return 0;               // ne pas écraser la pilule bureau
-            int kind = (int)w, v = (int)(l & 0xFF);
-            bool mute = (l & 0x100) != 0;
-            if (kind != g_kind) {
-                g_kind = kind; sp_v.x = (float)v; sp_v.v = 0;
-                sp_c.t = 0; g_chain = 0;
-            } else if ((float)v != sp_v.t) {         // la valeur a changé
+    case MSG_DESKTOP:
+        // A desktop event is valid only if the GUID has really changed.
+        // This may arrive before or after the native XAML ShowWindow event.
+        if (DesktopIdChanged()) {
+            DWORD now = GetTickCount();
+            const bool volumeHeld =
+                ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
+                  GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) != 0;
+            // If another control was just used, its live notification wins.
+            if (volumeHeld || EventNearShow(g_volTick, now, 180) ||
+                EventNearShow(g_briTick, now, 180))
+                return 0;
+            g_pendingDesktopChange = true;
+            g_pendKind = 2;
+            g_showTick = now;
+            g_pendingHide = false;
+            g_nativeHideDeadline = 0;
+            if (st == S_OPEN && g_kind == 2) {
+                BeginShow();
+            } else {
+                st = S_PENDING;
+                stStart = now;
+                lastTick = now;
+            }
+        }
+        return 0;
+    case MSG_VALUES: {
+        const int kind = (int)w;
+        if (kind != 0 && kind != 1) return 0;
+        const int v = (int)(l & 0xFF);
+        const bool mute = (l & 0x100) != 0;
+        const DWORD now = GetTickCount();
+        g_lastConfirmedKind = kind;
+        g_lastConfirmedTick = now;
+
+        if (st == S_PENDING) {
+            // The latest real audio/brightness event resolves any ambiguity.
+            // The pending classifier will pick up its timestamp immediately.
+            if (kind == 0) g_volTick = now;
+            else g_briTick = now;
+            return 0;
+        }
+        if (st == S_OPEN || st == S_CLOSING) {
+            g_nativeHideDeadline = 0;
+            if (kind != g_kind || st == S_CLOSING) {
+                // A real volume or brightness change ALWAYS replaces a
+                // visible desktop pill. Do not discard these notifications.
+                g_kind = kind;
+                g_pendingDesktopChange = false;
+                g_pendKind = kind == 0 ? 1 : 0;
+                BeginShow();
+            } else if ((float)v != sp_v.t) {
                 Bump(v > sp_v.t ? 1 : -1, g.valueShakePct / 100.0f);
-                DWORD n = GetTickCount();
                 if (g.compactEnabled) {
-                    // compactReleaseMs sert aussi de fenêtre pour compter une série
-                    // de pressions. À 0, on compte pendant toute la durée d'affichage.
                     bool sameSequence = g.compactReleaseMs <= 0 ||
-                        (int)(n - g_lastChg) <= g.compactReleaseMs;
+                        (int)(now - g_lastChg) <= g.compactReleaseMs;
                     g_chain = sameSequence ? g_chain + 1 : 1;
-                    g_lastChg = n;
+                    g_lastChg = now;
                     if (g_chain >= g.compactTriggerCount) sp_c.t = 1;
                 } else {
                     g_chain = 0;
                     sp_c.t = 0;
                 }
             }
-            sp_v.t = (float)v; g_muted = mute;
+            sp_v.t = (float)v;
+            g_muted = mute;
+            g_hidePending = false;
         }
+        return 0;
+    }
+    case MSG_RELOAD:
+        LoadSettings();
+        UseProfile(g_kind == 2);
+        EnsureCanvas();
+        if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
         return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -1203,18 +1564,23 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
 }
 
 static DWORD WINAPI UiThread(LPVOID) {
-    HINSTANCE hi = GetModuleHandleW(nullptr);
+    HMODULE hi = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&UiProc, &hi);
+    if (!hi) return 1;
     WNDCLASSW wc{};
     wc.lpfnWndProc = UiProc; wc.hInstance = hi; wc.lpszClassName = L"WhOsdCustomPill";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"OSD Custom Pill: RegisterClassW failed (error %lu)", GetLastError());
+        return 1;
+    }
 
     g_scrDC = GetDC(nullptr);
     g_dc = CreateCompatibleDC(g_scrDC);
     g_maskDC = CreateCompatibleDC(g_scrDC);
-    UINT dpi = GetDpiForSystem();
-    g_s = (dpi ? dpi : 96) / 96.0f;
-    g_pad = (int)(16 * g_s);
+    g_s = 1.0f;  // refreshed from the primary monitor in BeginShow
     UseProfile(false);
     EnsureCanvas();
 
@@ -1223,6 +1589,17 @@ static DWORD WINAPI UiThread(LPVOID) {
                                 wc.lpszClassName, L"", WS_POPUP, 0, 0, 1, 1,
                                 nullptr, nullptr, hi, nullptr);
     g_ui = hwnd;
+    // Cache the initial desktop so the first switch can be detected by GUID.
+    g_observedDesktopValid = ReadCurrentDesktopId(&g_observedDesktopId);
+    if (!hwnd) {
+        Wh_Log(L"OSD Custom Pill: CreateWindowExW failed (error %lu)", GetLastError());
+        FreeCanvas();
+        if (g_dc) DeleteDC(g_dc);
+        if (g_maskDC) DeleteDC(g_maskDC);
+        if (g_scrDC) ReleaseDC(nullptr, g_scrDC);
+        UnregisterClassW(wc.lpszClassName, hi);
+        return 1;
+    }
 
     bool quit = false;
     while (!quit) {
@@ -1231,18 +1608,19 @@ static DWORD WINAPI UiThread(LPVOID) {
             if (m.message == WM_QUIT) { quit = true; break; }
             TranslateMessage(&m); DispatchMessageW(&m);
         }
-        if (quit) break;
+        if (quit || WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
         if (st != S_HIDDEN) {
             DWORD t = GetTickCount();
             DwmFlush();
             if (GetTickCount() - t < 4) Sleep(8);
             Tick();
         } else {
-            WaitMessage();
+            MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
         }
     }
 
     g_ui = nullptr;
+    if (hwnd) DestroyWindow(hwnd);
     FreeCanvas();
     if (g_maskDC) SelectObject(g_maskDC, GetStockObject(SYSTEM_FONT));
     if (g_fIcon) DeleteObject(g_fIcon);
@@ -1270,11 +1648,39 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
         }
         return r;
     }
-    if (IsWindowVisible(hwnd)) return ShowWindow_Orig(hwnd, cmd);
+    if (IsWindowVisible(hwnd)) {
+        // Windows may re-use an already-visible XAML host. In that case
+        // the native OSD has been given an empty region by this mod, so
+        // still refresh the corresponding custom pill on a new show call.
+        if (hwnd == g_osd) {
+            int hint = 0;
+            if ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
+                 GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) hint = 1;
+            else if (((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) &&
+                     (GetAsyncKeyState(VK_CONTROL) & 0x8000)) hint = 2;
+            PostMessageW(g_ui, MSG_SHOW, (WPARAM)hint, 0);
+            if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
+        }
+        return ShowWindow_Orig(hwnd, cmd);
+    }
 
-    RECT rc; GetWindowRect(hwnd, &rc);
-    int h = rc.bottom - rc.top;
-    if (h < 80 || h > 110) return ShowWindow_Orig(hwnd, cmd);   // autre flyout
+    RECT rc{};
+    if (!GetWindowRect(hwnd, &rc)) return ShowWindow_Orig(hwnd, cmd);
+    const int physicalHeight = rc.bottom - rc.top;
+    const UINT windowDpi = GetDpiForWindow(hwnd);
+    const int logicalHeight = windowDpi > 0
+        ? MulDiv(physicalHeight, 96, windowDpi) : physicalHeight;
+
+    // Windows 11 can report the OSD host in physical pixels, in already
+    // scaled coordinates, or with an unexpected DPI-awareness context.
+    // Preserve the 80-110 px path that worked on the original (v4.8) mod,
+    // and ALSO accept a DPI-normalized OSD at other display scale factors.
+    // Both checks still require the native XAML host class and exclude
+    // identified Snap / Task View flyouts.
+    const bool legacyOsdSize = physicalHeight >= 80 && physicalHeight <= 110;
+    const bool scaledOsdSize = logicalHeight >= 75 && logicalHeight <= 120;
+    if ((!legacyOsdSize && !scaledOsdSize) || IsKnownNonOsdFlyout(hwnd))
+        return ShowWindow_Orig(hwnd, cmd);
 
     int pend = 0;
     if ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
@@ -1292,6 +1698,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
     SetWindowRgn(hwnd, CreateRectRgn(0, 0, 0, 0), FALSE);       // original invisible
     BOOL r = ShowWindow_Orig(hwnd, cmd);
     PostMessageW(g_ui, MSG_SHOW, (WPARAM)pend, 0);
+    if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
     return r;
 }
 
@@ -1327,17 +1734,25 @@ static void LoadSettings() {
     dk.durationMs   = Wh_GetIntSetting(L"deskDurationMs");
 
     PCWSTR lbl = Wh_GetStringSetting(L"deskLabel");
-    if (lbl && lbl[0]) { wcsncpy(g_deskLabel, lbl, 31); g_deskLabel[31] = 0; }
+    AcquireSRWLockExclusive(&g_labelLock);
+    wcsncpy(g_deskLabel, lbl[0] ? lbl : L"Desktop", 31);
+    g_deskLabel[31] = 0;
+    ReleaseSRWLockExclusive(&g_labelLock);
     Wh_FreeStringSetting(lbl);
 
     if (g.startDelayMs < 0) g.startDelayMs = 0;
     if (g.decideMs < 100) g.decideMs = 100;
+    if (g.decideMs > 700) g.decideMs = 700;
+    if (g.startDelayMs > 700) g.startDelayMs = 700;
     if (g.holdMs < 0) g.holdMs = 0;
     if (g.closeHoldMs < 0) g.closeHoldMs = 0;
     if (g.responseMs < 100) g.responseMs = 100;
     if (g.heightPx < 30) g.heightPx = 30;
+    if (g.heightPx > 160) g.heightPx = 160;
     if (g.widthPx < g.heightPx + 120) g.widthPx = g.heightPx + 120;
+    if (g.widthPx > 900) g.widthPx = 900;
     if (g.shakePx < 0) g.shakePx = 0;
+    if (g.shakePx > 150) g.shakePx = 150;
     if (g.shakeMs < 100) g.shakeMs = 100;
     if (g.shakeDampPct < 10) g.shakeDampPct = 10;
     if (g.valueShakePct < 0) g.valueShakePct = 0;
@@ -1350,7 +1765,9 @@ static void LoadSettings() {
     if (g.compactReleaseMs < 0) g.compactReleaseMs = 0;
 
     if (dk.heightPx < 30) dk.heightPx = 30;
+    if (dk.heightPx > 160) dk.heightPx = 160;
     if (dk.widthPx < dk.heightPx + 80) dk.widthPx = dk.heightPx + 80;
+    if (dk.widthPx > 900) dk.widthPx = 900;
     if (dk.holdMs < 0) dk.holdMs = 0;
     if (dk.closeHoldMs < 0) dk.closeHoldMs = 0;
     if (dk.responseMs < 100) dk.responseMs = 100;
@@ -1361,19 +1778,43 @@ static void LoadSettings() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_pollWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_pollWakeEvent) {
+        if (g_stopEvent) CloseHandle(g_stopEvent);
+        if (g_pollWakeEvent) CloseHandle(g_pollWakeEvent);
+        g_stopEvent = g_pollWakeEvent = nullptr;
+        return FALSE;
+    }
     g_uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     g_pollThread = CreateThread(nullptr, 0, PollThread, nullptr, 0, nullptr);
+    if (!g_uiThread || !g_pollThread) {
+        SetEvent(g_stopEvent);
+        if (g_uiThread) { WaitForSingleObject(g_uiThread, INFINITE); CloseHandle(g_uiThread); }
+        if (g_pollThread) { WaitForSingleObject(g_pollThread, INFINITE); CloseHandle(g_pollThread); }
+        CloseHandle(g_stopEvent); CloseHandle(g_pollWakeEvent);
+        g_stopEvent = g_pollWakeEvent = nullptr;
+        return FALSE;
+    }
     Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Orig);
     return TRUE;
 }
 
-void Wh_ModBeforeUninit() {
-    g_run = 0;
-    HWND ui = g_ui;
-    if (ui) PostMessageW(ui, WM_CLOSE, 0, 0);
-    if (g_uiThread)   { WaitForSingleObject(g_uiThread, 1000);   CloseHandle(g_uiThread); }
-    if (g_pollThread) { WaitForSingleObject(g_pollThread, 1000); CloseHandle(g_pollThread); }
+// Hooks have been removed before Wh_ModUninit. Do not restore the native
+// window region while a ShowWindow hook invocation could still hide it again.
+void Wh_ModUninit() {
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (g_uiThread) { WaitForSingleObject(g_uiThread, INFINITE); CloseHandle(g_uiThread); g_uiThread = nullptr; }
+    if (g_pollThread) { WaitForSingleObject(g_pollThread, INFINITE); CloseHandle(g_pollThread); g_pollThread = nullptr; }
     if (g_osd && IsWindow(g_osd)) SetWindowRgn(g_osd, nullptr, TRUE);
+    g_osd = nullptr;
+    if (g_pollWakeEvent) CloseHandle(g_pollWakeEvent);
+    if (g_stopEvent) CloseHandle(g_stopEvent);
+    g_pollWakeEvent = g_stopEvent = nullptr;
 }
 
-void Wh_ModSettingsChanged() { LoadSettings(); }
+void Wh_ModSettingsChanged() {
+    HWND hwnd = g_ui;
+    if (hwnd) PostMessageW(hwnd, MSG_RELOAD, 0, 0);
+    else LoadSettings();
+}
