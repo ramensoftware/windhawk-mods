@@ -4103,8 +4103,9 @@ static void InstallTrayHook() {
     wc.lpszClassName = kTrayClientClass;
     RegisterClassExW(&wc);
     g_trayClient = CreateWindowExW(0, kTrayClientClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInst, nullptr);
-    // O WM_COPYDATA vem de outro processo (mesmo nível de integridade).
-    if (g_trayClient) ChangeWindowMessageFilterEx(g_trayClient, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+    // Sem liberar o filtro de mensagens: o shell roda no mesmo nível de
+    // integridade e o WM_COPYDATA dele já passa; processos de nível mais baixo
+    // continuam bloqueados (não podem criar ícones falsos na bandeja).
     TrayRequestIcons();
 }
 
