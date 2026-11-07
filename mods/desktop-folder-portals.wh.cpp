@@ -9,18 +9,18 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luxtheme -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
-// ==WindhawkMod==
+// ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Desktop Folder Portals
 
 ![Translucent Glass](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Translucent%20Glass.jpg)
-*Light theme with transparency and blur effects*
+*Translucent dark glass backdrop over a light desktop wallpaper*
 
-### Dark Glass Theme
+### Dark Glass Styling
 ![Dark Glass](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Dark%20Glass.jpg)
-*Dark glass styling with customizable blur*
+*Dark glass styling with customizable background opacity and blur*
 
 ### Folder Grid
 ![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Folder%20Grid%20%282-5%20folders%29.jpg)
@@ -35,9 +35,9 @@ Desktop Folder Portals is a Windows 11 modification that brings interactive, on-
 * **Seamless Hover Previews:** Hovering over any desktop folder smoothly expands an interactive mini-window displaying its contents, collapsing once the cursor moves away.
 * **Classic Shell Context Menu (`IContextMenu`):** Right-clicking an item opens the classic Win32 shell context menu (`TrackPopupMenuEx`) for standard file operations and property inspection, while selecting "Rename" opens the parent folder in File Explorer with the item selected in inline edit mode (`SHOpenFolderAndSelectItems`).
 * **Effortless Drag-and-Drop:** Transfer files straight from the preview portal to the desktop, active folders, or third-party applications via native OLE Drag-and-Drop.
-* **Fluent-Inspired Glass Visuals:** Styled with DWM rounded corners, drop shadows, smooth DWM background blur on levels 1–2, and Acrylic blur (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) on level 3.
+* **Fluent-Inspired Glass Visuals:** Styled with a dark glass theme, DWM rounded corners, drop shadows, smooth DWM background blur on levels 1–2, and Acrylic blur (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) on level 3.
 * **Granular Customization:** Configure hover response delays, animation duration, grid columns, and visual styling via the Windhawk settings interface.
-* **Smart Item Filtering & Single-Click Launch:** Displays up to 45 items per folder (sorted with folders first), automatically skips hidden and system files, and opens any file or subfolder with a single left click.
+* **Smart Item Filtering & Single-Click Launch:** Displays up to 45 items in the preview grid while showing the true total item count in the header (sorted with folders first), automatically skips hidden and system files, and opens any file or subfolder with a single left click.
 
 ---
 
@@ -50,19 +50,14 @@ Desktop Folder Portals — модификация для Windows 11, внедр�
 * **Интерактивные порталы:** Плавное появление компактного всплывающего окна с файлами при наведении курсора на директорию и его исчезновение при отведении мыши.
 * **Классическое контекстное меню оболочки (`IContextMenu`):** Правый клик вызывает классическое системное контекстное меню Win32 (`TrackPopupMenuEx`) для стандартных файловых операций и просмотра свойств, а выбор пункта «Переименовать» открывает родительскую папку в Проводнике с выделением элемента в режиме редактирования имени (`SHOpenFolderAndSelectItems`).
 * **Полноценный Drag-and-Drop:** Удобный перенос файлов из окна предпросмотра на рабочий стол, в открытые папки или сторонние приложения через системный OLE Drag-and-Drop.
-* **Стеклянное оформление в духе Fluent:** Скругленные углы DWM, мягкие тени, гладкое DWM-размытие фона на уровнях 1–2 и эффект Acrylic (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) на 3-м уровне размытия.
+* **Стеклянное оформление в духе Fluent:** Тёмное стеклянное оформление со скругленными углами DWM, мягкими тенями, гладким DWM-размытием фона на уровнях 1–2 и эффектом Acrylic (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) на 3-м уровне размытия.
 * **Гибкая кастомизация:** Настройка задержки срабатывания, длительности анимации, числа колонок сетки и параметров прозрачности в панели Windhawk.
-* **Умная выборка и запуск в один клик:** Отображает до 45 элементов папки (с приоритетной сортировкой подпапок), автоматически пропускает скрытые и системные файлы и позволяет открывать любые файлы или вложенные папки одиночным левым кликом мыши.
+* **Умная выборка и запуск в один клик:** Отображает в сетке до 45 элементов папки с показом точного общего числа объектов в заголовке (с приоритетной сортировкой подпапок), автоматически пропускает скрытые и системные файлы и позволяет открывать любые файлы или вложенные папки одиночным левым кликом мыши.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable Folder Portals
-  $name:ru-RU: Включить папки-порталы
-  $description: Activates or disables popup folder portals on the desktop.
-  $description:ru-RU: Активирует или отключает всплывающие порталы на рабочем столе.
 - hoverDelayMs: 220
   $name: Hover Delay (ms)
   $name:ru-RU: Задержка срабатывания (мс)
@@ -192,7 +187,6 @@ constexpr UINT_PTR TIMER_ID_MOUSECHECK = 1002;
 constexpr wchar_t  PORTAL_CLASS_NAME[] = L"WindhawkDesktopFolderPortalWnd";
 
 struct ModSettings {
-    bool enabled = true;
     int hoverDelayMs = 220;
     int animDurationMs = 150;
     int portalWidth = 340;
@@ -570,7 +564,7 @@ public:
 
     // IShellBrowser
     STDMETHODIMP InsertMenusSB(HMENU, LPOLEMENUGROUPWIDTHS) override { return E_NOTIMPL; }
-    STDMETHODIMP SetMenuSB(HMENU, HOLEMENU, HWND) override { return E_NOTIMPL; }
+    STDMETHODIMP SetMenuSB(HMENU, HOLEMENU, HWND) override { return S_OK; }
     STDMETHODIMP RemoveMenusSB(HMENU) override { return E_NOTIMPL; }
     STDMETHODIMP SetStatusTextSB(LPCWSTR) override { return S_OK; }
     STDMETHODIMP EnableModelessSB(BOOL) override { return S_OK; }
@@ -606,9 +600,15 @@ public:
     STDMETHODIMP OnViewWindowActive(IShellView*) override { return S_OK; }
     STDMETHODIMP SetToolbarItems(LPTBBUTTONSB, UINT, UINT) override { return E_NOTIMPL; }
 
-    // Быстрое чтение папки через FindFirstFileExW без блокирующих вызовов на старте
-    bool PopulateItemsFromDirectory(const std::wstring& folderPath, std::vector<PortalFileItem>& outItems, size_t maxItems = 45) {
+    // Быстрое чтение папки через FindFirstFileExW с подсчетом истинного общего количества объектов
+    bool PopulateItemsFromDirectory(
+        const std::wstring& folderPath,
+        std::vector<PortalFileItem>& outItems,
+        size_t& outTotalCount,
+        size_t maxItems = 45)
+    {
         outItems.clear();
+        outTotalCount = 0;
         if (folderPath.empty()) return false;
 
         std::wstring searchPattern = folderPath;
@@ -631,7 +631,7 @@ public:
             return false;
         }
 
-        outItems.reserve(maxItems);
+        std::vector<PortalFileItem> allItems;
         const bool isRu = IsRussianUILanguage();
         do {
             if (fd.cFileName[0] == L'.' &&
@@ -641,6 +641,8 @@ public:
             if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) {
                 continue;
             }
+
+            ++outTotalCount;
 
             PortalFileItem item;
             item.name = fd.cFileName;
@@ -656,18 +658,24 @@ public:
                 item.sizeOrTypeText = szBuf;
             }
 
-            outItems.push_back(std::move(item));
-        } while (outItems.size() < maxItems && FindNextFileW(hFind, &fd));
+            allItems.push_back(std::move(item));
+        } while (FindNextFileW(hFind, &fd));
 
         FindClose(hFind);
 
-        // Сортируем: сначала папки, затем файлы по алфавиту
-        std::sort(outItems.begin(), outItems.end(), [](const PortalFileItem& a, const PortalFileItem& b) {
+        // Сортируем все найденные элементы: сначала папки, затем файлы по алфавиту
+        std::sort(allItems.begin(), allItems.end(), [](const PortalFileItem& a, const PortalFileItem& b) {
             if (a.isDirectory != b.isDirectory) {
                 return a.isDirectory > b.isDirectory;
             }
             return CompareStringOrdinal(a.name.c_str(), -1, b.name.c_str(), -1, TRUE) == CSTR_LESS_THAN;
         });
+
+        // Оставляем до maxItems элементов для отрисовки в сетке, сохраняя истинный outTotalCount
+        if (allItems.size() > maxItems) {
+            allItems.resize(maxItems);
+        }
+        outItems = std::move(allItems);
 
         return true;
     }
@@ -712,6 +720,7 @@ struct PortalWindowState {
     IContextMenu3* pActiveCtxMenu3 = nullptr;
 
     LightweightPortalShellBrowser* pShellBrowser = nullptr;
+    size_t totalItemCount = 0;
     std::vector<PortalFileItem> items;
 } g_portal;
 
@@ -793,7 +802,7 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
 
                         // Обновляем список файлов на случай удаления/изменения
                         if (!g_unloading.load() && g_portal.pShellBrowser && IsWindow(hPortal)) {
-                            g_portal.pShellBrowser->PopulateItemsFromDirectory(g_portal.folderPath, g_portal.items, 45);
+                            g_portal.pShellBrowser->PopulateItemsFromDirectory(g_portal.folderPath, g_portal.items, g_portal.totalItemCount, 45);
                             RenderAndPresentPortal(hPortal);
                         }
                     }
@@ -848,7 +857,7 @@ void StartNativeFileDragAndDrop(HWND hPortal, int itemIndex) {
 
             // Если файл был перемещен из папки, мгновенно обновляем список в портале
             if (!g_unloading.load() && SUCCEEDED(hrDrag) && IsWindow(hPortal) && g_portal.pShellBrowser) {
-                g_portal.pShellBrowser->PopulateItemsFromDirectory(g_portal.folderPath, g_portal.items, 45);
+                g_portal.pShellBrowser->PopulateItemsFromDirectory(g_portal.folderPath, g_portal.items, g_portal.totalItemCount, 45);
                 RenderAndPresentPortal(hPortal);
             }
         }
@@ -1245,7 +1254,7 @@ void RenderAndPresentPortal(HWND hWnd) {
             g.DrawString(g_portal.folderTitle.c_str(), -1, g_renderCache.titleFont, titleRect, &leftFormat, &titleBrush);
 
             wchar_t countText[64] = {};
-            UINT itemCount = static_cast<UINT>(g_portal.items.size());
+            UINT itemCount = static_cast<UINT>(g_portal.totalItemCount);
             if (isRu) {
                 wsprintfW(countText, L"%u объект.", itemCount);
             } else {
@@ -1326,6 +1335,7 @@ void DestroyPortalImmediately() {
     g_portal.pressedGridIndex = -1;
     g_portal.isDraggingOrMenuActive = false;
     g_portal.scrollOffsetY = 0;
+    g_portal.totalItemCount = 0;
     g_portal.items.clear();
 
     if (g_portal.pShellBrowser) {
@@ -1567,7 +1577,7 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         if (wParam == TIMER_ID_MOUSECHECK) {
             if (g_portal.isDraggingOrMenuActive) return 0;
-            if (!g_settings.enabled || !IsCursorInsideSafeZone()) {
+            if (!IsCursorInsideSafeZone()) {
                 StartPortalFadeOut();
             }
             return 0;
@@ -1689,9 +1699,9 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
     g_portal.isDraggingOrMenuActive = false;
     g_portal.scrollOffsetY = 0;
 
-    // Инициализируем легковесный экземпляр IShellBrowser и мгновенно считываем список файлов
+    // Инициализируем легковесный экземпляр IShellBrowser и мгновенно считываем список файлов и общее число объектов
     g_portal.pShellBrowser = new LightweightPortalShellBrowser(hPortal);
-    g_portal.pShellBrowser->PopulateItemsFromDirectory(folderPath, g_portal.items, 45);
+    g_portal.pShellBrowser->PopulateItemsFromDirectory(folderPath, g_portal.items, g_portal.totalItemCount, 45);
 
     ApplyPortalDwmVisuals(hPortal);
 
@@ -1722,25 +1732,23 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
 
     switch (uMsg) {
     case WM_MOUSEMOVE: {
-        if (g_settings.enabled) {
-            TRACKMOUSEEVENT tme = {};
-            tme.cbSize = sizeof(tme);
-            tme.dwFlags = TME_HOVER | TME_LEAVE;
-            tme.hwndTrack = hWnd;
-            tme.dwHoverTime = static_cast<DWORD>(std::clamp(g_settings.hoverDelayMs, 50, 2000));
-            TrackMouseEvent(&tme);
+        TRACKMOUSEEVENT tme = {};
+        tme.cbSize = sizeof(tme);
+        tme.dwFlags = TME_HOVER | TME_LEAVE;
+        tme.hwndTrack = hWnd;
+        tme.dwHoverTime = static_cast<DWORD>(std::clamp(g_settings.hoverDelayMs, 50, 2000));
+        TrackMouseEvent(&tme);
 
-            if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd)) {
-                if (!IsCursorInsideSafeZone()) {
-                    StartPortalFadeOut();
-                }
+        if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd)) {
+            if (!IsCursorInsideSafeZone()) {
+                StartPortalFadeOut();
             }
         }
         break;
     }
 
     case WM_MOUSEHOVER: {
-        if (g_settings.enabled && IsTrueDesktopListView(hWnd)) {
+        if (IsTrueDesktopListView(hWnd)) {
             LVHITTESTINFO ht = {};
             ht.pt.x = GET_X_LPARAM(lParam);
             ht.pt.y = GET_Y_LPARAM(lParam);
@@ -1798,7 +1806,7 @@ void TrySubclassDesktopListView(HWND hWnd) {
     if (g_unloading.load() || !IsTrueDesktopListView(hWnd)) return;
 
     {
-        // Ошибка 2: Захватываем мьютекс исключительно для атомарной проверки и резервирования хэндла
+        // Захватываем мьютекс исключительно для атомарной проверки и резервирования хэндла
         std::lock_guard<std::mutex> lock(g_subclassMutex);
         if (!g_subclassedWindows.insert(hWnd).second) {
             return;
@@ -1916,7 +1924,6 @@ HWND WINAPI Hook_CreateWindowExW(
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_stateMutex);
 
-    g_settings.enabled          = Wh_GetIntSetting(L"enabled") != 0;
     g_settings.hoverDelayMs     = std::clamp(Wh_GetIntSetting(L"hoverDelayMs"), 50, 2000);
     g_settings.animDurationMs   = std::clamp(Wh_GetIntSetting(L"animDurationMs"), 60, 1000);
     g_settings.portalWidth      = std::clamp(Wh_GetIntSetting(L"portalWidth"), 240, 640);
@@ -2008,9 +2015,7 @@ void Wh_ModSettingsChanged() {
 
     if (hTarget && IsWindow(hTarget)) {
         RunFromWindowThread(hTarget, []() {
-            if (!g_settings.enabled) {
-                DestroyPortalImmediately();
-            } else if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd)) {
+            if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd)) {
                 ApplyPortalDwmVisuals(g_portal.hPortalWnd);
                 RenderAndPresentPortal(g_portal.hPortalWnd);
             }
