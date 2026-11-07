@@ -20,10 +20,13 @@ Note that to enable the menubar you need to install in addition the mod [Explore
 
 This mod downloads the classic Explorerframe.dll and stores it into the mod's storage. You need a working internet access at the first mod's activation.
 
+Restart Explorer after enabling or disabling the mod. At the first activation the file is downloaded in the background, so wait a few seconds before restarting, otherwise the mod takes effect only at the following Explorer start.
+
+Mods that hook ExplorerFrame.dll and happen to load before this mod might have no effect, because folder windows don't use the copy they hooked.
+
 */
 // ==/WindhawkModReadme==
 
-#include <winternl.h>
 #include <wininet.h>
 #include <shlobj.h>
 #include <strsafe.h>
@@ -43,24 +46,10 @@ static const WCHAR* kExpectedSha256 =
 static const WCHAR* kArchSubdir = L"x64";
 #endif
 
-typedef struct _LDR_DATA_TABLE_ENTRY_FULL {
-    LIST_ENTRY InLoadOrderLinks;
-    LIST_ENTRY InMemoryOrderLinks;
-    LIST_ENTRY InInitializationOrderLinks;
-    PVOID DllBase;
-    PVOID EntryPoint;
-    ULONG SizeOfImage;
-    UNICODE_STRING FullDllName;
-    UNICODE_STRING BaseDllName;
-    ULONG Flags;
-} LDR_DATA_TABLE_ENTRY_FULL, *PLDR_DATA_TABLE_ENTRY_FULL;
-
 static WCHAR g_stagingDllPath[MAX_PATH] = {0};
 static WCHAR g_tempDllPath[MAX_PATH + 4] = {0};
-static WCHAR g_canonicalDllPath[MAX_PATH] = {0};
 
 static HANDLE g_hPinnedFile = INVALID_HANDLE_VALUE;
-static LONG g_ready = 0;
 
 static HANDLE g_hStopEvent = NULL;
 static HANDLE g_hWorkerThread = NULL;
@@ -137,9 +126,64 @@ static BOOL ComputeHashFromHandle(HANDLE hFile, WCHAR outHex[65]) {
     return ok;
 }
 
-static BOOL TryPinExistingFile(void) {
-    if (InterlockedCompareExchange(&g_ready, 0, 0) != 0)
+static BOOL CopyResourceFile(const WCHAR* srcDir, const WCHAR* dstDir, const WCHAR* subDir, const WCHAR* fileName) {
+    WCHAR src[MAX_PATH], dst[MAX_PATH], tmp[MAX_PATH];
+    if (FAILED(StringCchPrintfW(src, MAX_PATH, L"%s\\%s\\%s", srcDir, subDir, fileName)) ||
+        FAILED(StringCchPrintfW(dst, MAX_PATH, L"%s\\%s\\%s", dstDir, subDir, fileName)) ||
+        FAILED(StringCchPrintfW(tmp, MAX_PATH, L"%s.%lu.tmp", dst, GetCurrentProcessId())))
+        return FALSE;
+
+    if (GetFileAttributesW(dst) != INVALID_FILE_ATTRIBUTES)
         return TRUE;
+    if (GetFileAttributesW(src) == INVALID_FILE_ATTRIBUTES || !EnsureDirectoryExists(dst))
+        return FALSE;
+
+    // Renamed into place so that other Explorer processes never map a partial file.
+    if (!CopyFileW(src, tmp, FALSE))
+        return FALSE;
+    if (!MoveFileExW(tmp, dst, 0)) {
+        DWORD err = GetLastError();
+        DeleteFileW(tmp);
+        return err == ERROR_ALREADY_EXISTS;
+    }
+    return TRUE;
+}
+
+// The DLL has no resources of its own. The loader looks for them relative to
+// the DLL's path: <dll dir>\<lang>\<name>.mui and <dll dir>\..\SystemResources\<name>.mun.
+static BOOL SetupResourceFiles(void) {
+    WCHAR storageDir[MAX_PATH], dllDir[MAX_PATH], windowsDir[MAX_PATH], systemDir[MAX_PATH];
+    if (!Wh_GetModStoragePath(storageDir, MAX_PATH) ||
+        FAILED(StringCchPrintfW(dllDir, MAX_PATH, L"%s\\%s", storageDir, kArchSubdir)) ||
+        !GetSystemWindowsDirectoryW(windowsDir, MAX_PATH) ||
+        !GetSystemDirectoryW(systemDir, MAX_PATH))
+        return FALSE;
+
+    if (!CopyResourceFile(windowsDir, storageDir, L"SystemResources", L"explorerframe.dll.mun")) {
+        Wh_Log(L"Failed to copy the .mun file: %lu", GetLastError());
+        return FALSE;
+    }
+
+    WCHAR langs[512];
+    ULONG langCount = 0, langsLen = ARRAYSIZE(langs);
+    if (!GetThreadPreferredUILanguages(MUI_LANGUAGE_NAME | MUI_MERGE_SYSTEM_FALLBACK | MUI_MERGE_USER_FALLBACK,
+                                       &langCount, langs, &langsLen)) {
+        Wh_Log(L"GetThreadPreferredUILanguages failed: %lu", GetLastError());
+        return FALSE;
+    }
+
+    // Not every language in the fallback chain is installed, one is enough.
+    BOOL anyCopied = FALSE;
+    for (const WCHAR* lang = langs; *lang; lang += wcslen(lang) + 1) {
+        if (CopyResourceFile(systemDir, dllDir, lang, L"explorerframe.dll.mui"))
+            anyCopied = TRUE;
+    }
+    if (!anyCopied)
+        Wh_Log(L"No .mui file found for the preferred UI languages");
+    return anyCopied;
+}
+
+static BOOL TryPinExistingFile(void) {
     if (g_stagingDllPath[0] == L'\0')
         return FALSE;
 
@@ -156,7 +200,6 @@ static BOOL TryPinExistingFile(void) {
     }
 
     g_hPinnedFile = h;
-    InterlockedExchange(&g_ready, 1);
     Wh_Log(L"Pinned: %s", g_stagingDllPath);
     return TRUE;
 }
@@ -273,11 +316,7 @@ static BOOL DownloadToTempCancellable(void) {
 
 static DWORD WINAPI DownloadWorkerProc(LPVOID) {
     if (IsStopRequested()) return 1;
-    if (IsStopRequested()) return 1;
-    if (!DownloadToTempCancellable())
-        return 1;
-    TryPinExistingFile();
-    return 0;
+    return DownloadToTempCancellable() ? 0 : 1;
 }
 
 static BOOL IsExplorerFrameByNameW(PCWSTR name) {
@@ -286,72 +325,6 @@ static BOOL IsExplorerFrameByNameW(PCWSTR name) {
     f = wcsrchr(name, L'\\');
     f = f ? f + 1 : name;
     return _wcsicmp(f, L"explorerframe.dll") == 0;
-}
-
-static BOOL PatchLoaderEntryPath(HMODULE hModule) {
-    if (!hModule || g_canonicalDllPath[0] == L'\0')
-        return FALSE;
-
-    PPEB peb = NtCurrentTeb()->ProcessEnvironmentBlock;
-    if (!peb || !peb->Ldr)
-        return FALSE;
-
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    typedef NTSTATUS (NTAPI *LockFN)(ULONG, ULONG*, ULONG_PTR*);
-    typedef NTSTATUS (NTAPI *UnlockFN)(ULONG, ULONG_PTR);
-    LockFN pLock = NULL;
-    UnlockFN pUnlock = NULL;
-    ULONG_PTR cookie = 0;
-    BOOL locked = FALSE;
-    if (hNtdll) {
-        pLock = (LockFN)GetProcAddress(hNtdll, "LdrLockLoaderLock");
-        pUnlock = (UnlockFN)GetProcAddress(hNtdll, "LdrUnlockLoaderLock");
-        if (pLock && pUnlock && pLock(0, NULL, &cookie) >= 0)
-            locked = TRUE;
-    }
-
-    PLIST_ENTRY head = &peb->Ldr->InMemoryOrderModuleList;
-    PLIST_ENTRY cur = head->Flink;
-    PLDR_DATA_TABLE_ENTRY_FULL ent = NULL;
-    int steps = 0;
-    while (cur && cur != head && steps < 10000) {
-        PLDR_DATA_TABLE_ENTRY_FULL cand =
-            CONTAINING_RECORD(cur, LDR_DATA_TABLE_ENTRY_FULL, InMemoryOrderLinks);
-        if ((HMODULE)cand->DllBase == hModule) { ent = cand; break; }
-        cur = cur->Flink;
-        steps++;
-    }
-    if (!ent) {
-        if (locked) pUnlock(0, cookie);
-        return FALSE;
-    }
-
-    size_t fullLen = wcslen(g_canonicalDllPath);
-    size_t baseLen = wcslen(L"explorerframe.dll");
-    if (ent->FullDllName.Buffer && ent->FullDllName.Length == (USHORT)(fullLen * sizeof(WCHAR)) &&
-        _wcsnicmp(ent->FullDllName.Buffer, g_canonicalDllPath, fullLen) == 0) {
-        if (locked) pUnlock(0, cookie);
-        return TRUE;
-    }
-
-    PWSTR fullBuf = (PWSTR)HeapAlloc(GetProcessHeap(), 0, (fullLen + 1) * sizeof(WCHAR));
-    PWSTR baseBuf = (PWSTR)HeapAlloc(GetProcessHeap(), 0, (baseLen + 1) * sizeof(WCHAR));
-    if (!fullBuf || !baseBuf) {
-        if (fullBuf) HeapFree(GetProcessHeap(), 0, fullBuf);
-        if (baseBuf) HeapFree(GetProcessHeap(), 0, baseBuf);
-        if (locked) pUnlock(0, cookie);
-        return FALSE;
-    }
-    StringCchCopyW(fullBuf, fullLen + 1, g_canonicalDllPath);
-    StringCchCopyW(baseBuf, baseLen + 1, L"explorerframe.dll");
-    ent->FullDllName.Buffer = fullBuf;
-    ent->FullDllName.Length = (USHORT)(fullLen * sizeof(WCHAR));
-    ent->FullDllName.MaximumLength = (USHORT)((fullLen + 1) * sizeof(WCHAR));
-    ent->BaseDllName.Buffer = baseBuf;
-    ent->BaseDllName.Length = (USHORT)(baseLen * sizeof(WCHAR));
-    ent->BaseDllName.MaximumLength = (USHORT)((baseLen + 1) * sizeof(WCHAR));
-    if (locked) pUnlock(0, cookie);
-    return TRUE;
 }
 
 typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR, HANDLE, DWORD);
@@ -363,11 +336,6 @@ static BOOL EnterHook(void) {
     return TRUE;
 }
 static void LeaveHook(void) { t_inHook = false; }
-static BOOL IsReady(void) {
-    return InterlockedCompareExchange(&g_ready, 0, 0) != 0 &&
-           g_hPinnedFile != INVALID_HANDLE_VALUE &&
-           g_stagingDllPath[0] != L'\0';
-}
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     if (!lpLibFileName || hFile != NULL)
@@ -375,8 +343,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     if (!IsExplorerFrameByNameW(lpLibFileName))
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (g_stagingDllPath[0] != L'\0' && _wcsicmp(lpLibFileName, g_stagingDllPath) == 0)
-        return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (!IsReady())
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (!EnterHook())
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
@@ -401,13 +367,44 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     DWORD err = GetLastError();
     LeaveHook();
     if (res) {
-        PatchLoaderEntryPath(res);
         SetLastError(0);
     } else {
         Wh_Log(L"Redirect failed (%u), loading the system DLL", err);
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     }
     return res;
+}
+
+static BOOL HasFolderWindow(void) {
+    BOOL found = FALSE;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD pid = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &pid) && pid == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"CabinetWClass") == 0) {
+                *(BOOL*)lParam = TRUE;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        (LPARAM)&found);
+    return found;
+}
+
+// A loaded system DLL with no folder windows is unused, e.g. another mod loaded
+// it during startup. That mod's hooks on it have no effect.
+static BOOL IsSystemDllInUse(void) {
+    // A loaded old build stays in use, e.g. after a mod update.
+    if (GetModuleHandleW(g_stagingDllPath) || !GetModuleHandleW(L"explorerframe.dll"))
+        return FALSE;
+
+    if (HasFolderWindow())
+        return TRUE;
+
+    Wh_Log(L"The system DLL is loaded but unused, hooks on it have no effect");
+    return FALSE;
 }
 
 BOOL Wh_ModInit(void) {
@@ -446,20 +443,27 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    WCHAR sysDir[MAX_PATH];
-    GetSystemDirectoryW(sysDir, MAX_PATH);
-    StringCchPrintfW(g_canonicalDllPath, MAX_PATH, L"%s\\explorerframe.dll", sysDir);
-
     EnsureDirectoryExists(g_stagingDllPath);
-
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"), (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
 
     if (!TryPinExistingFile())
     {
         DeleteFileW(g_stagingDllPath);
         Wh_Log(L"Файл не готов, качаем в фоне");
+        // Used from the next Explorer start, folder windows may open during the download.
         g_hWorkerThread = CreateThread(NULL, 0, DownloadWorkerProc, NULL, 0, NULL);
+        return TRUE;
     }
+
+    if (IsSystemDllInUse()) {
+        Wh_Log(L"Folder windows already use the system DLL, restart Explorer to apply the mod");
+        return TRUE;
+    }
+
+    // The DLL can't create its windows without its resources.
+    if (!SetupResourceFiles())
+        return TRUE;
+
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"), (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
 
     return TRUE;
 }
@@ -489,5 +493,4 @@ void Wh_ModUninit(void) {
         CloseHandle(g_hPinnedFile);
         g_hPinnedFile = INVALID_HANDLE_VALUE;
     }
-    InterlockedExchange(&g_ready, 0);
 }
