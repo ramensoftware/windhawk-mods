@@ -15,7 +15,7 @@
 /*
 # Desktop Folder Portals (Windows 11)
 
-![Desktop Folder Portals Preview](https://raw.githubusercontent.com/Eswerd2324/desktop-folder-portals/main/preview.gif)
+![Desktop Folder Portals Preview]
 
 Desktop Folder Portals is an elegant Windows 11 modification that brings interactive, on-hover folder content previews directly to your desktop without opening separate File Explorer windows.
 
