@@ -73,7 +73,9 @@ changes are event-driven regardless), **Excluded programs** (executables whose
 windows should never trigger the bleed), **Transparent taskbar when nothing is
 maximized** (the taskbar's own background and border line are hidden, so the
 wallpaper shows through whenever no bleed is showing - the taskbar is then
-either bled or transparent, never stock), and the experimental **Gradient
+either bled or transparent, never stock; a taskbar the mod leaves idle, such
+as a bottom taskbar without **Any taskbar position**, keeps its background),
+and the experimental **Gradient
 bleed** and **Any taskbar position** toggles described above.
 
 The panel is a regular XAML `Border` named `TaskbarBleedPanel`, so its shape can
@@ -95,10 +97,12 @@ drives those (the background is a gradient brush).
   Task Manager at either rate, and the fast rate only runs during a transition.
   With no maximized window the poll timer is off, and window events are only
   acted on when they come from a maximized window or the window being
-  followed, so tooltips, thumbnails and overlays cost nothing. Every 10 s the
-  mod checks that its panels are still where it put them in the taskbar's
-  tree (the taskbar, or another taskbar mod, can rebuild that tree without
-  notice) and repairs them if not, so the bleed never silently stops.
+  followed, so tooltips, thumbnails and overlays cost nothing. The one thing
+  that runs regardless is a check every 10 s that the panels are still where
+  the mod put them in the taskbar's tree (the taskbar, or another taskbar
+  mod, can rebuild that tree without notice), repairing them if not, so the
+  bleed never silently stops. It touches only what the mod itself placed or
+  changed.
 - Windows that exclude themselves from capture (protected media, some
   remote-desktop clients) return no usable pixels; the panel then keeps its
   last color.
@@ -505,8 +509,10 @@ struct Island {
     wuxm::LinearGradientBrush brush{nullptr};
     std::vector<wuxm::GradientStop> stops;  // kGradientPoints + 2: edge copies of the outer points
     bool shown = false;
-    bool strokeHidden = false;
-    bool fillHidden = false;
+    bool strokeHidden = false;  // the mod collapsed the stroke; strokeOriginal is what to put back
+    bool fillHidden = false;    // the mod zeroed the fill's opacity; fillOriginal is what to put back
+    wux::Visibility strokeOriginal = wux::Visibility::Visible;
+    double fillOriginal = 1.0;
     int forcedTheme = ThemeNone;
     wux::ElementTheme originalTheme = wux::ElementTheme::Default;  // the root's own RequestedTheme (restored on hide)
     bool originalSystemLight = false;  // Windows mode when originalTheme was captured
@@ -593,6 +599,7 @@ double MsSinceLastEvent() {
 
 constexpr UINT WM_TRACKER_TICK = WM_APP + 1;
 constexpr UINT WM_TRACKER_SETTINGS = WM_APP + 2;  // re-run the color pipeline on the next tick
+constexpr UINT WM_TRACKER_ISLAND_ATTACHED = WM_APP + 3;  // wParam: taskbar HWND whose island was (re)created
 
 // ---- Timing ----------------------------------------------------------------
 // Window events (switch, maximize, minimize, move) trigger a tick kDebounceMs
@@ -677,7 +684,7 @@ std::atomic<bool> g_taskbarMissingIsland{false};  // set by AttachAllTaskbars: a
 // is silent and permanent, and only a re-enable used to repair it. Every
 // kIslandHealthMs the tracker runs AttachAllTaskbars, which prunes and
 // re-attaches detached islands, followed by a repair pass over the live ones
-// (VerifyIslands); every repair is logged.
+// (VerifyIsland); every repair is logged.
 constexpr ULONGLONG kIslandHealthMs = 10000;
 void WINAPI IslandHealthCheck(void*);          // painter section
 ULONGLONG g_healthDueMs = 0;                   // tracker thread only (NowMs)
@@ -827,12 +834,12 @@ BOOL CALLBACK EnumWindowsForemostProc(HWND hwnd, LPARAM lParam) {
 // found) the fallback below freezes the panel while a taskbar flyout is
 // hovered.
 //
-// Peek is only ever on while the cursor rests on taskbar UI (a thumbnail, or
-// the show-desktop corner), so a "Peek on" with the cursor elsewhere for
-// kPeekAwayMs means Explorer ended Peek without the deactivate call (or the
-// call never reached the hook). Believing it would hide every panel for good,
-// so the tracker checks every kPeekCheckMs while Peek is on and resets the
-// state itself.
+// Peek is only ever on while Explorer shows what started it: a thumbnail
+// flyout (hovered, or reached with Win+T), the show-desktop corner under the
+// cursor, a switcher. A "Peek on" with none of that for kPeekAwayMs means
+// Explorer ended Peek without the deactivate call (or the call never reached
+// the hook). Believing it would hide every panel for good, so the tracker
+// checks every kPeekCheckMs while Peek is on and resets the state itself.
 std::atomic<HWND> g_peekWindow{nullptr};
 std::atomic<bool> g_peekActive{false};
 bool g_peekHooked = false;
@@ -893,7 +900,7 @@ bool CursorOverTaskbarPopup(HWND taskbar) {
 }
 
 // The cursor over anything of the taskbar's thread: the taskbar itself, a
-// flyout, a thumbnail. Everything that can keep Peek alive lives there.
+// flyout, a thumbnail.
 bool CursorOnTaskbarThread(HWND taskbar) {
     POINT pt;
     HWND under = GetCursorPos(&pt) ? WindowFromPoint(pt) : nullptr;
@@ -901,19 +908,51 @@ bool CursorOnTaskbarThread(HWND taskbar) {
     return root && GetWindowThreadProcessId(root, nullptr) == GetWindowThreadProcessId(taskbar, nullptr);
 }
 
-// Clears a Peek state that can no longer be true (see the notes above).
+bool IsTaskbarWindowClass(HWND hWnd);   // painter section
+bool IsTaskViewWindowClass(HWND hwnd);  // full-screen covers
+
+// A visible popup of the taskbar's thread (a thumbnail flyout, hovered or
+// reached with Win+T) or a visible switcher host: something Explorer shows
+// that can keep Peek alive without the cursor being anywhere near it.
+bool ExplorerShowsPeekSource(HWND taskbar) {
+    struct Ctx {
+        bool found = false;
+    } ctx;
+    EnumThreadWindows(
+        GetWindowThreadProcessId(taskbar, nullptr),
+        [](HWND hwnd, LPARAM lp) -> BOOL {
+            RECT r;
+            if (IsWindowVisible(hwnd) && !IsTaskbarWindowClass(hwnd) && GetWindowRect(hwnd, &r) && r.right > r.left &&
+                r.bottom > r.top) {
+                reinterpret_cast<Ctx*>(lp)->found = true;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&ctx));
+    if (ctx.found) return true;
+    for (HWND hwnd = FindWindowExW(nullptr, nullptr, L"XamlExplorerHostIslandWindow", nullptr); hwnd;
+         hwnd = FindWindowExW(nullptr, hwnd, L"XamlExplorerHostIslandWindow", nullptr)) {
+        if (IsWindowVisible(hwnd) && !IsWindowCloaked(hwnd)) return true;
+    }
+    return false;
+}
+
+// Clears a Peek state that can no longer be true (see the notes above): the
+// cursor is away from the taskbar and Explorer shows nothing Peek could come
+// from.
 void CheckStalePeek(const std::vector<HWND>& taskbars, ULONGLONG now) {
     if (!g_peekActive || taskbars.empty()) {
         g_peekAwaySince = 0;
         return;
     }
-    if (CursorOnTaskbarThread(taskbars.front())) {
+    if (CursorOnTaskbarThread(taskbars.front()) || ExplorerShowsPeekSource(taskbars.front())) {
         g_peekAwaySince = 0;
     } else if (!g_peekAwaySince) {
         g_peekAwaySince = now;
     } else if (now - g_peekAwaySince >= kPeekAwayMs) {
-        Wh_Log(L"peek of %p ended without notice (cursor away from the taskbar for %llu ms), resuming",
-               g_peekWindow.load(), now - g_peekAwaySince);
+        Wh_Log(L"peek of %p ended without notice (nothing showing it for %llu ms), resuming", g_peekWindow.load(),
+               now - g_peekAwaySince);
         g_peekWindow = nullptr;
         g_peekActive = false;
         g_peekAwaySince = 0;
@@ -1123,7 +1162,9 @@ bool IsTaskViewWindowClass(HWND hwnd) {
 
 bool IsTaskViewWindow(HWND hwnd) {
     WCHAR title[64];
-    if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0) return false;
+    // Not GetWindowTextW: these windows belong to this process, and that would
+    // send WM_GETTEXT to their thread and wait, on every poll.
+    if (InternalGetWindowText(hwnd, title, ARRAYSIZE(title)) <= 0) return false;
     if (wcscmp(title, L"Task View") == 0) return true;
     if (wcscmp(title, L"Task Switching") == 0) return false;
     return hwnd == GetForegroundWindow() && !(GetAsyncKeyState(VK_MENU) & 0x8000);
@@ -1766,6 +1807,12 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
                 // drop the cached samples so the next tick recomputes them.
                 for (auto& kv : g_track) kv.second.haveLastSample = false;
                 ScheduleDebouncedTick();
+            } else if (msg.message == WM_TRACKER_ISLAND_ATTACHED) {
+                // A new panel starts hidden, and the tracker's state for that
+                // taskbar survives a prune and re-attach: make the next tick
+                // commit to the new panel (and force its theme) again.
+                if (auto it = g_track.find((HWND)msg.wParam); it != g_track.end()) it->second.active = false;
+                ScheduleDebouncedTick();
             } else {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
@@ -2013,6 +2060,10 @@ void ApplyTheme(Island& isl, bool active, Rgb color) {
     }
 }
 
+// The stroke and the fill belong to the taskbar, and other mods set them too
+// (Styler themes collapse the stroke; transparency mods zero the fill). So the
+// mod only ever undoes what it did itself: hiding saves the element's value
+// of the moment, un-hiding puts that value back, whatever it was.
 void SetStrokeHidden(Island& isl, bool hide) {
     if (isl.strokeHidden == hide) return;
     auto stroke = isl.stroke.get();
@@ -2020,7 +2071,12 @@ void SetStrokeHidden(Island& isl, bool hide) {
         isl.strokeHidden = false;
         return;
     }
-    stroke.Visibility(hide ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+    if (hide) {
+        isl.strokeOriginal = stroke.Visibility();
+        stroke.Visibility(wux::Visibility::Collapsed);
+    } else {
+        stroke.Visibility(isl.strokeOriginal);
+    }
     isl.strokeHidden = hide;
 }
 
@@ -2040,13 +2096,27 @@ void SetFillHidden(Island& isl, bool hide) {
         isl.fillHidden = false;
         return;
     }
-    fill.Opacity(hide ? 0.0 : 1.0);
+    if (hide) {
+        isl.fillOriginal = fill.Opacity();
+        fill.Opacity(0.0);
+    } else {
+        fill.Opacity(isl.fillOriginal);
+    }
     isl.fillHidden = hide;
 }
 
 // What the taskbar's own background and border should look like right now.
+// The transparent option applies to the taskbars the tracker paints, i.e.
+// those passing the same dock check as ProcessTaskbar; a taskbar the mod
+// leaves idle keeps its background.
 void DesiredBackgroundState(Island const& isl, bool& strokeHidden, bool& fillHidden) {
-    bool transparent = GetSettings().transparentIdle;
+    Settings s = GetSettings();
+    bool transparent = s.transparentIdle;
+    if (transparent && !s.anyDock) {
+        MONITORINFO mi{sizeof(mi)};
+        HMONITOR hmon = MonitorFromWindow(isl.hwnd, MONITOR_DEFAULTTONEAREST);
+        transparent = hmon && GetMonitorInfoW(hmon, &mi) && IsTaskbarTopDocked(isl.hwnd, mi.rcMonitor);
+    }
     fillHidden = transparent;
     strokeHidden = isl.shown || transparent;
 }
@@ -2271,7 +2341,11 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
 
     Wh_Log(L"taskbar %p: island attached (grid=%s stroke=%d fill=%d)", taskbarWnd, grid.Name().c_str(),
            isl->stroke.get() ? 1 : 0, isl->fill.get() ? 1 : 0);
-    RequestTick();
+    if (g_trackerThreadId) {
+        PostThreadMessageW(g_trackerThreadId, WM_TRACKER_ISLAND_ATTACHED, (WPARAM)taskbarWnd, 0);
+    } else {
+        RequestTick();
+    }
     return true;
 }
 
@@ -2353,26 +2427,21 @@ void VerifyIsland(Island& isl) try {
         Wh_Log(L"taskbar %p: panel opacity was %.2f while %s, reset", isl.hwnd, actual,
                isl.shown ? L"shown" : L"hidden");
     }
-    // Background and border: a settings change just means a new desired state
-    // (applied quietly); a drift from the state the mod last set is a repair.
+    // Background and border: only a hide the mod made itself is re-applied
+    // when it was undone (a repair); while the mod isn't hiding an element,
+    // whatever another mod does to it is none of its business. A changed
+    // desired state (settings, dock) is then applied quietly.
     bool strokeHidden, fillHidden;
     DesiredBackgroundState(isl, strokeHidden, fillHidden);
-    if (auto stroke = isl.stroke.get()) {
-        bool hiddenNow = stroke.Visibility() == wux::Visibility::Collapsed;
-        if (isl.strokeHidden == strokeHidden && hiddenNow != strokeHidden) {
-            Wh_Log(L"taskbar %p: background stroke was %s again, %s", isl.hwnd, hiddenNow ? L"hidden" : L"shown",
-                   strokeHidden ? L"re-hidden" : L"re-shown");
-        }
-        isl.strokeHidden = hiddenNow;  // so SetStrokeHidden writes whatever differs
+    if (auto stroke = isl.stroke.get();
+        stroke && isl.strokeHidden && strokeHidden && stroke.Visibility() != wux::Visibility::Collapsed) {
+        Wh_Log(L"taskbar %p: background stroke was shown again, re-hidden", isl.hwnd);
+        stroke.Visibility(wux::Visibility::Collapsed);
     }
     SetStrokeHidden(isl, strokeHidden);
-    if (auto fill = isl.fill.get()) {
-        bool hiddenNow = fill.Opacity() < 0.01;
-        if (isl.fillHidden == fillHidden && hiddenNow != fillHidden) {
-            Wh_Log(L"taskbar %p: taskbar background was %s again, %s", isl.hwnd, hiddenNow ? L"hidden" : L"shown",
-                   fillHidden ? L"re-hidden" : L"re-shown");
-        }
-        isl.fillHidden = hiddenNow;
+    if (auto fill = isl.fill.get(); fill && isl.fillHidden && fillHidden && fill.Opacity() > 0.01) {
+        Wh_Log(L"taskbar %p: taskbar background was shown again, re-hidden", isl.hwnd);
+        fill.Opacity(0.0);
     }
     SetFillHidden(isl, fillHidden);
 } catch (winrt::hresult_error const& e) {
