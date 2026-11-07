@@ -2332,8 +2332,9 @@ Settings LoadSettings() {
     const int strumRampStep = Wh_GetIntSetting(L"Strumming.RampStep");
     s.strumRampStep = std::clamp(strumRampStep == 0 ? 2 : strumRampStep, 1, 10);
     const int strumTargetOffset = Wh_GetIntSetting(L"Strumming.TargetOffset");
-    s.strumTargetOffset =
-        std::clamp(strumTargetOffset == 0 ? 20 : strumTargetOffset, 0, 80);
+    // Zero is a real target - no ramp above the starting tempo - so it is not
+    // folded back into the default here.
+    s.strumTargetOffset = std::clamp(strumTargetOffset, 0, 80);
 
     // The circle of fifths defaults. A settings file written before this tool
     // has no Circle.Mode, so it reads back empty and stays major; PlayOnSelect
@@ -2414,6 +2415,11 @@ Settings LoadSettings() {
 
 Settings g_settings;
 Color g_accent = kFallbackAccent;
+
+// What the panel last opened with, so a settings edit reaches the next open
+// without overriding a tool or instrument the player chose with the picker.
+int g_seededTool = -1;
+int g_seededInstrument = -1;
 
 bool UseDarkTheme() {
     switch (g_settings.theme) {
@@ -4662,16 +4668,16 @@ void OpenFlyout() {
         SetWindowPos(g_panel.Hwnd(), nullptr, work.left, work.top, 0, 0,
                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
-    // The default instrument only decides the tab the mod starts on.
-    static bool instrumentApplied = false;
-    if (!instrumentApplied) {
-        instrumentApplied = true;
+    // The default instrument decides the tab the panel starts on, so it is
+    // applied until the settings change, and then it steps aside again.
+    if (g_seededInstrument != g_settings.defaultInstrument) {
+        g_seededInstrument = g_settings.defaultInstrument;
         SetInstrument(g_settings.defaultInstrument, false);
     }
-    // The default tool works the same way: it only decides the first panel.
-    static bool toolApplied = false;
-    if (!toolApplied) {
-        toolApplied = true;
+    // The default tool works the same way: it decides the first panel after an
+    // edit, not the panel the player left the mod on.
+    if (g_seededTool != g_settings.defaultTool) {
+        g_seededTool = g_settings.defaultTool;
         SetTool(g_settings.defaultTool);
     }
     if (g_app.results.empty()) {
@@ -5781,8 +5787,9 @@ DWORD WINAPI MetroThreadProc(void*) {
     // late by the time it runs. It sleeps between blocks, so raising it costs
     // the rest of the process nothing.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-    a.audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    a.stopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    // The events belong to the caller, which makes them before it starts this
+    // thread: a stop that arrives while the device is still opening then has
+    // a handle to signal and a thread to join.
     bool opened = false;
     if (a.audioEvent && a.stopEvent) {
         WAVEFORMATEX format{};
@@ -5892,31 +5899,24 @@ bool StartMetroAudio() {
     a.beat = 0;
     a.sub = 0;
     a.countingIn = g_metroShared.strum.load() && g_metroShared.countIn.load();
+    a.audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    a.stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     a.readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!a.readyEvent) {
+    if (!a.audioEvent || !a.stopEvent || !a.readyEvent) {
+        StopMetroAudio();
         return false;
     }
     a.thread = CreateThread(nullptr, 0, MetroThreadProc, nullptr, 0, nullptr);
     if (!a.thread) {
-        CloseHandle(a.readyEvent);
-        a.readyEvent = nullptr;
+        StopMetroAudio();
         return false;
     }
     WaitForSingleObject(a.readyEvent, 2000);
     if (!g_metroShared.running.load()) {
-        WaitForSingleObject(a.thread, 1000);
-        CloseHandle(a.thread);
-        a.thread = nullptr;
-        CloseHandle(a.readyEvent);
-        a.readyEvent = nullptr;
-        if (a.audioEvent) {
-            CloseHandle(a.audioEvent);
-            a.audioEvent = nullptr;
-        }
-        if (a.stopEvent) {
-            CloseHandle(a.stopEvent);
-            a.stopEvent = nullptr;
-        }
+        // The device did not come up in time. The thread may still be inside
+        // waveOutOpen, so it is stopped through the same join path as
+        // everything else rather than having its state freed underneath it.
+        StopMetroAudio();
         return false;
     }
     return true;
@@ -5928,7 +5928,10 @@ void StopMetroAudio() {
         SetEvent(a.stopEvent);
     }
     if (a.thread) {
-        WaitForSingleObject(a.thread, 2000);
+        // The loop wakes on the stop event, so the join always returns. Giving
+        // up before it does would free buffers the thread and the device are
+        // still using.
+        WaitForSingleObject(a.thread, INFINITE);
         CloseHandle(a.thread);
         a.thread = nullptr;
     }
@@ -6152,8 +6155,8 @@ void StopTunerAudio();
 
 DWORD WINAPI TunerThreadProc(void*) {
     TunerAudio& a = g_tunerAudio;
-    a.audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    a.stopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    // The caller makes the events, for the same reason the metronome's caller
+    // does: a stop can arrive before this thread has opened the microphone.
     bool opened = false;
     if (a.audioEvent && a.stopEvent) {
         // The mapper takes whatever the default microphone offers, so try the
@@ -6275,31 +6278,24 @@ bool StartTunerAudio() {
     a.box = 0.0f;
     a.boxCount = 0;
     a.rate = kTunerRate;
+    a.audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    a.stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     a.readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!a.readyEvent) {
+    if (!a.audioEvent || !a.stopEvent || !a.readyEvent) {
+        StopTunerAudio();
         return false;
     }
     a.thread = CreateThread(nullptr, 0, TunerThreadProc, nullptr, 0, nullptr);
     if (!a.thread) {
-        CloseHandle(a.readyEvent);
-        a.readyEvent = nullptr;
+        StopTunerAudio();
         return false;
     }
     WaitForSingleObject(a.readyEvent, 2000);
     if (!g_tunerShared.running.load()) {
-        WaitForSingleObject(a.thread, 1000);
-        CloseHandle(a.thread);
-        a.thread = nullptr;
-        CloseHandle(a.readyEvent);
-        a.readyEvent = nullptr;
-        if (a.audioEvent) {
-            CloseHandle(a.audioEvent);
-            a.audioEvent = nullptr;
-        }
-        if (a.stopEvent) {
-            CloseHandle(a.stopEvent);
-            a.stopEvent = nullptr;
-        }
+        // The microphone did not come up in time, and the thread may still be
+        // inside waveInOpen, so it goes through the same join path as any
+        // other stop.
+        StopTunerAudio();
         return false;
     }
     return true;
@@ -6311,7 +6307,9 @@ void StopTunerAudio() {
         SetEvent(a.stopEvent);
     }
     if (a.thread) {
-        WaitForSingleObject(a.thread, 2000);
+        // The loop wakes on the stop event, so the join always returns, and
+        // the input buffers are only freed once it has.
+        WaitForSingleObject(a.thread, INFINITE);
         CloseHandle(a.thread);
         a.thread = nullptr;
     }
@@ -10498,8 +10496,19 @@ void ClipPianoRoom(std::vector<float>& out) {
     }
 }
 
+// One clip at a time. A new clip stops and joins the last before it starts,
+// so a held key cannot pile up streams and buffers, and the thread is always
+// joined before the panel goes away.
+struct ClipPlayback {
+    HANDLE thread = nullptr;
+    HANDLE stopEvent = nullptr;
+};
+
+ClipPlayback g_clip;
+
 DWORD WINAPI ClipAudioThreadProc(void* param) {
     ClipRequest* request = static_cast<ClipRequest*>(param);
+    const HANDLE stop = g_clip.stopEvent;
     // A scale asks for a real arpeggio: each note starts well after the last,
     // so it rises where a chord's near-simultaneous spread would blur together.
     const bool spaced = request->arpeggio > 0.0f && request->noteCount > 1;
@@ -10564,6 +10573,12 @@ DWORD WINAPI ClipAudioThreadProc(void* param) {
         const float value = std::clamp(out[i], -1.0f, 1.0f);
         pcm[i] = static_cast<short>(lroundf(value * 32767.0f));
     }
+    // A newer clip may have asked for this one to go while it was still being
+    // synthesised, in which case there is nothing left to play.
+    if (WaitForSingleObject(stop, 0) == WAIT_OBJECT_0) {
+        delete request;
+        return 0;
+    }
 
     WAVEFORMATEX format{};
     format.wFormatTag = WAVE_FORMAT_PCM;
@@ -10583,10 +10598,15 @@ DWORD WINAPI ClipAudioThreadProc(void* param) {
             MMSYSERR_NOERROR) {
             if (waveOutWrite(device, &header, sizeof(WAVEHDR)) ==
                 MMSYSERR_NOERROR) {
+                // Drain the clip, but let a stop cut it short so the next one
+                // can take the device over without waiting out the tail.
                 const ULONGLONG deadline = GetTickCount64() + 8000;
                 while (!(header.dwFlags & WHDR_DONE) &&
                        GetTickCount64() < deadline) {
-                    Sleep(25);
+                    if (WaitForSingleObject(stop, 25) == WAIT_OBJECT_0) {
+                        waveOutReset(device);
+                        break;
+                    }
                 }
             }
             waveOutUnprepareHeader(device, &header, sizeof(WAVEHDR));
@@ -10597,10 +10617,30 @@ DWORD WINAPI ClipAudioThreadProc(void* param) {
     return 0;
 }
 
-// Fire a one-shot clip on its own thread. The worker takes ownership of the
-// request; if the thread cannot start the buffer is freed here and nothing
-// sounds, which is the right failure mode for a background nicety.
+// Stops the clip that is playing, if any, and joins its thread. Safe to call
+// when nothing is playing.
+void ClipStop() {
+    ClipPlayback& c = g_clip;
+    if (c.stopEvent) {
+        SetEvent(c.stopEvent);
+    }
+    if (c.thread) {
+        WaitForSingleObject(c.thread, INFINITE);
+        CloseHandle(c.thread);
+        c.thread = nullptr;
+    }
+    if (c.stopEvent) {
+        CloseHandle(c.stopEvent);
+        c.stopEvent = nullptr;
+    }
+}
+
+// Fire a one-shot clip, taking the device from whatever is playing now. The
+// worker takes ownership of the request; if the thread cannot start the buffer
+// is freed here and nothing sounds, which is the right failure mode for a
+// background nicety.
 void PlayAcousticClip(const int* notes, int count, float arpeggio, bool piano) {
+    ClipStop();
     ClipRequest* request = new ClipRequest();
     request->noteCount = std::min(count, kMaxNotes);
     for (int i = 0; i < request->noteCount; i++) {
@@ -10608,11 +10648,16 @@ void PlayAcousticClip(const int* notes, int count, float arpeggio, bool piano) {
     }
     request->arpeggio = arpeggio;
     request->piano = piano;
-    HANDLE thread = CreateThread(nullptr, 0, ClipAudioThreadProc, request, 0,
+    g_clip.stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_clip.stopEvent) {
+        delete request;
+        return;
+    }
+    g_clip.thread = CreateThread(nullptr, 0, ClipAudioThreadProc, request, 0,
                                  nullptr);
-    if (thread) {
-        CloseHandle(thread);
-    } else {
+    if (!g_clip.thread) {
+        CloseHandle(g_clip.stopEvent);
+        g_clip.stopEvent = nullptr;
         delete request;
     }
 }
@@ -10962,29 +11007,41 @@ void ApplyToggleHotkey() {
 }
 
 void ApplySettings() {
+    // The previous values are what tell a real settings edit from any other
+    // call, so the tool state is only re-seeded when the setting behind it
+    // actually moved.
+    const Settings previous = g_settings;
     g_settings = LoadSettings();
     g_accent = ResolveAccent(g_settings.accentChoice, g_settings.customAccent);
-    if (!g_metro.defaultsApplied) {
-        // The settings only seed the meter, so a later change under Settings
-        // never pulls a meter out from under the panel.
+    // These four have no control in the panel, so a settings edit is the only
+    // way they can change and they follow it every time.
+    g_strum.rampStepBpm = g_settings.strumRampStep;
+    g_strum.targetOffsetBpm = g_settings.strumTargetOffset;
+    g_circle.playOnSelect = g_settings.circlePlayOnSelect;
+    g_trainer.seconds = g_settings.trainerSeconds;
+    // The rest are also reachable from the panel, so they are only seeded when
+    // their setting changed: an unrelated edit never pulls a meter, a pattern
+    // or a ring out from under the player.
+    if (!g_metro.defaultsApplied ||
+        previous.metronomeBeats != g_settings.metronomeBeats ||
+        previous.metronomeUnit != g_settings.metronomeUnit ||
+        previous.metronomeSubdivision != g_settings.metronomeSubdivision) {
         g_metro.defaultsApplied = true;
         g_metro.beats = g_settings.metronomeBeats;
         g_metro.unit = g_settings.metronomeUnit;
         g_metro.subdivision = g_settings.metronomeSubdivision;
         g_metro.group = DefaultGrouping(g_metro.beats, g_metro.unit);
     }
-    if (!g_strum.defaultsApplied) {
-        // Same one-shot seeding as the metronome: the strumming settings only
-        // shape the tool the first time, so a later trip through Settings never
-        // rewrites a pattern the player hand-edited.
+    if (!g_strum.defaultsApplied ||
+        previous.strumSubdivision != g_settings.strumSubdivision) {
+        // The grid is rebuilt from the subdivision, so this is the one change
+        // that has to start the bar over.
         g_strum.defaultsApplied = true;
         g_strum.beats = 4;
         g_strum.unit = 4;
         g_strum.subdivision = g_settings.strumSubdivision;
         g_strum.countIn = g_settings.strumCountIn;
         g_strum.loop = g_settings.strumLoop;
-        g_strum.rampStepBpm = g_settings.strumRampStep;
-        g_strum.targetOffsetBpm = g_settings.strumTargetOffset;
         // Open on a plain downbeat pattern: one downstroke on every beat,
         // accented on the one, laid out across the default subdivision.
         const int cells = StrumSlotCount();
@@ -11002,20 +11059,21 @@ void ApplySettings() {
         g_strum.preset = 0;
         g_strum.slotCursor = 0;
         StrumSync();
+    } else if (previous.strumCountIn != g_settings.strumCountIn ||
+               previous.strumLoop != g_settings.strumLoop) {
+        // Count-in and loop shape the transport, not the cells.
+        g_strum.countIn = g_settings.strumCountIn;
+        g_strum.loop = g_settings.strumLoop;
+        StrumSync();
     }
-    if (!g_circle.defaultsApplied) {
-        // One-shot seeding like the other tools: the circle settings only
-        // shape the panel the first time, so a later trip through Settings
-        // never overrides the key the player is exploring.
+    if (!g_circle.defaultsApplied ||
+        previous.circleMinor != g_settings.circleMinor) {
         g_circle.defaultsApplied = true;
         g_circle.minor = g_settings.circleMinor;
-        g_circle.playOnSelect = g_settings.circlePlayOnSelect;
     }
-    if (!g_trainer.defaultsApplied) {
-        // The trainer's time limit and note set come from the settings once,
-        // so a later pass never resets a round in progress.
+    if (!g_trainer.defaultsApplied ||
+        previous.trainerNaturals != g_settings.trainerNaturals) {
         g_trainer.defaultsApplied = true;
-        g_trainer.seconds = g_settings.trainerSeconds;
         g_trainer.naturals = g_settings.trainerNaturals;
     }
     MetronomeSync();
@@ -12128,14 +12186,21 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
         case WM_KEYDOWN:
             // Alt combinations belong to the shell, not to the flyout.
             if (!(lParam & (1 << 29))) {
-                // A held tap or start key auto repeats, which would read as a
-                // very fast tempo or flicker the transport, so only the first
-                // press counts.
+                // A held key auto repeats, which would read as a very fast
+                // tempo, flicker the transport or start the same clip over and
+                // over, so only the first press counts on every card whose key
+                // starts, stops or plays something.
                 const bool repeat = (lParam & (1 << 30)) != 0;
+                const bool transportKey =
+                    wParam == VK_SPACE || wParam == VK_RETURN;
                 const bool singleShot =
-                    (g_app.tool == kToolTempo &&
-                     (wParam == VK_SPACE || wParam == VK_RETURN)) ||
-                    (g_app.tool == kToolMetronome && wParam == VK_SPACE);
+                    (transportKey && (g_app.tool == kToolTempo ||
+                                      g_app.tool == kToolMetronome ||
+                                      g_app.tool == kToolStrum ||
+                                      g_app.tool == kToolCircle ||
+                                      g_app.tool == kToolTrainer)) ||
+                    (g_app.tool == kToolCircle && wParam >= '1' &&
+                     wParam <= '7');
                 if (repeat && singleShot) {
                     return 0;
                 }
@@ -12473,6 +12538,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     TunerHalt();
     TrainerHalt();
     StrumHalt();
+    // And let any chord or scale clip finish before the process unwinds.
+    ClipStop();
     DestroyWindows();
     UnregisterWindowClasses();
     g_fonts.Clear();
