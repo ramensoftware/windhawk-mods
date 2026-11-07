@@ -2,15 +2,15 @@
 // @id              taskbar-dock-animation-tray-fix
 // @name              Taskbar Dock Animation – Tray Fix
 // @name:zh-CN        任务栏 Dock 动画（托盘修复版）
-// @description       Animates taskbar icons on mouse hover like in macOS
+// @description       Dock-style hover zoom with a Widgets toggle and system tray exclusion
 // @description:uk-UA Анімація іконок панелі завдань, як в macOS, при наведенні
-// @description:zh-CN 类似 macOS 的任务栏图标悬停动画
+// @description:zh-CN 任务栏 Dock 悬停动画，可单独关闭小组件动画，排除系统托盘
 // @description:ja-JP macOS のように、マウスホバーでタスクバーアイコンをアニメーション表示します
 // @description:ko-KR macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다
 // @description:pt-BR Anima os ícones da barra de tarefas ao passar o mouse, como no macOS
 // @description:it-IT Anima le icone della barra delle applicazioni al passaggio del mouse, come su macOS
-// @version           1.0.1
-// @author            PDSB001, Ph0en1x-dev
+// @version           1.0.2
+// @author            PDSB001
 // @github            https://github.com/PDSB001
 // @include           explorer.exe
 // @architecture      x86-64
@@ -43,7 +43,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 /*
 # Taskbar Dock Animation – Tray Fix
 
-Magnifies Windows 11 taskbar app buttons and Widgets on hover. The system tray stays at its normal size, including the input method and volume icons.
+Magnifies Windows 11 taskbar app buttons and Widgets on hover. The system tray stays at its normal size, including the input method and volume icons. Use **Disable Widgets animation** to keep Widgets at their normal size while other buttons still animate.
 
 Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](https://github.com/Ph0en1x-dev). Maintained by PDSB001 under the MIT license.
 */
@@ -120,7 +120,7 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
   $name:ko-KR: 바운스 시작 지연(ms)
   $name:pt-BR: Atraso para iniciar o bounce (ms)
   $name:it-IT: Ritardo di inizio bounce (ms)
-  $description: How long to wait after the cursor stops before starting the idle "breathing" animation (default 100ms)
+  $description: How long to wait after the cursor stops before starting the idle "breathing" animation (default 500ms)
   $description:uk-UA: Скільки чекати після зупинки курсора перед початком анімації "дихання" (за замовчуванням 100мс)
   $description:zh-CN: 光标停止后等待多久开始“呼吸”动画（默认 100ms）
   $description:ja-JP: カーソル停止後、待機時の「呼吸」アニメを開始するまでの遅延（既定 100ms）
@@ -187,6 +187,11 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
   $description:ko-KR: 작업 표시줄에 창 제목(직사각형 버튼)이 표시될 때 애니메이션 중앙 정렬을 수정합니다.
   $description:pt-BR: Ative se a barra mostrar títulos de janelas (ícones retangulares) para corrigir o alinhamento.
   $description:it-IT: Abilita se la barra mostra i titoli delle finestre (pulsanti rettangolari) per correggere la centratura.
+- DisableWidgetsAnimation: false
+  $name: Disable Widgets animation
+  $name:zh-CN: 关闭小组件动画
+  $description: Keep Widgets at their normal size without changing animation for other buttons.
+  $description:zh-CN: 小组件保持原大小，其他按钮的动画设置不受影响。
 - ExcludeSystemButtonsMode: 0
   $name: Exclude system buttons
   $name:uk-UA: Ігнорувати системні кнопки
@@ -274,6 +279,7 @@ struct {
     bool disableVerticalBounce;
     bool taskbarLabelsMode;
     int excludeSystemButtonsMode;
+    bool disableWidgetsAnimation;
     double lerpSpeed;
     bool disableBounce;
 } g_settings;
@@ -286,6 +292,7 @@ std::atomic<bool> g_hooksApplied = false;
 // Animation Loop Globals
 winrt::event_token g_renderingToken;
 std::atomic<bool> g_isRenderingHooked = false;
+std::atomic<bool> g_unloading = false;
 std::atomic<void*> g_activeContextKey = nullptr;
 std::chrono::steady_clock::time_point g_lastSignificantMoveTime;
 const double MOUSE_STOP_THRESHOLD = 0.5;
@@ -861,12 +868,14 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
         return false;
     };
 
+    auto IsWidgetsButton = [](FrameworkElement const& element) {
+        return ToLower(W(winrt::get_class_name(element))) == L"taskbar.widgetsbutton" ||
+               ToLower(W(element.Name())) == L"widgetsbutton";
+    };
+
     auto FindWidgets = [&](auto const& self, FrameworkElement const& root) -> FrameworkElement {
         if (IsTrayNode(root)) return nullptr;
-        auto className = ToLower(W(winrt::get_class_name(root)));
-        auto name = ToLower(W(root.Name()));
-        if ((className == L"taskbar.widgetsbutton" || name == L"widgetsbutton") &&
-            !ContainsTray(ContainsTray, root)) {
+        if (IsWidgetsButton(root) && !ContainsTray(ContainsTray, root)) {
             return root;
         }
         int count = VisualTreeHelper::GetChildrenCount(root);
@@ -886,14 +895,18 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
             for (auto parent = VisualTreeHelper::GetParent(element); parent;
                  parent = VisualTreeHelper::GetParent(parent)) {
                 auto ancestor = parent.try_as<FrameworkElement>();
-                if (ancestor && IsTrayNode(ancestor)) return;
+                if (ancestor && (IsTrayNode(ancestor) ||
+                                 (g_settings.disableWidgetsAnimation && IsWidgetsButton(ancestor)))) {
+                    return;
+                }
                 if (ancestor == taskbarFrame) break;
             }
             if (ContainsTray(ContainsTray, element)) {
-                if (g_settings.excludeSystemButtonsMode >= 2) return;
+                if (g_settings.disableWidgetsAnimation || g_settings.excludeSystemButtonsMode >= 2) return;
                 element = FindWidgets(FindWidgets, element);
                 if (!element) return;
             }
+            if (g_settings.disableWidgetsAnimation && FindWidgets(FindWidgets, element)) return;
 
             auto tg = element.RenderTransform().try_as<TransformGroup>();
             if (!tg || tg.Children().Size() < 4) {
@@ -1256,6 +1269,7 @@ int WINAPI TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
     auto original = [=]() {
         return TaskbarFrame_OnPointerMoved_Original(pThis, pArgs);
     };
+    if (g_unloading.load()) return original();
     FrameworkElement element = nullptr;
     ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
     if (!element)
@@ -1284,6 +1298,7 @@ int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
     auto original = [=]() {
         return TaskbarFrame_OnPointerExited_Original(pThis, pArgs);
     };
+    if (g_unloading.load()) return original();
     FrameworkElement element = nullptr;
     ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
     if (!element)
@@ -1314,7 +1329,7 @@ void LoadSettings() {
     if (g_settings.spacingFactor < 0.0) g_settings.spacingFactor = 0.5;
 
     g_settings.bounceDelay = Wh_GetIntSetting(L"BounceDelay");
-    if (g_settings.bounceDelay < 0) g_settings.bounceDelay = 100;
+    if (g_settings.bounceDelay < 0) g_settings.bounceDelay = 500;
 
     g_settings.focusDuration = (double)Wh_GetIntSetting(L"FocusDuration");
     if (g_settings.focusDuration <= 0) g_settings.focusDuration = 150.0;
@@ -1323,6 +1338,7 @@ void LoadSettings() {
     g_settings.disableVerticalBounce = (bool)Wh_GetIntSetting(L"DisableVerticalBounce");
     g_settings.taskbarLabelsMode = (bool)Wh_GetIntSetting(L"TaskbarLabelsMode");
     g_settings.excludeSystemButtonsMode = Wh_GetIntSetting(L"ExcludeSystemButtonsMode");
+    g_settings.disableWidgetsAnimation = Wh_GetIntSetting(L"DisableWidgetsAnimation") != 0;
 
     g_settings.lerpSpeed = (double)Wh_GetIntSetting(L"LerpSpeed");
     if (g_settings.lerpSpeed < 0) g_settings.lerpSpeed = 0;
@@ -1466,43 +1482,30 @@ bool RunFromWindowThread(HWND hWnd,
 }
 
 void Wh_ModBeforeUninit() {
-    Wh_Log(L"DockAnimation: Wh_ModBeforeUninit (safe cleanup)");
+    g_unloading = true;
 
-    g_activeContextKey = nullptr;
-    g_isBouncing = false;
-    g_isMouseInside = false;
-    g_animationIntensity = 0.0;
-
-    try {
-        if (g_isRenderingHooked.exchange(false)) {
-            Media::CompositionTarget::Rendering(g_renderingToken);
-            Wh_Log(L"DockAnimation: Unhooked CompositionTarget::Rendering.");
-        }
-    }
-    catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: HRESULT error unhooking rendering: %s",
-               e.message().c_str());
-    }
-
-    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
-    if (hTaskbar) {
-        RunFromWindowThread(
-            hTaskbar,
+    HWND taskbar = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (taskbar && !RunFromWindowThread(
+            taskbar,
             [](PVOID) {
                 try {
-                    for (auto& pair : g_contexts) {
-                        auto& ctx = pair.second;
-                        ResetAllIconScales(ctx.icons);
+                    // XAML rendering events are registered on the taskbar thread.
+                    if (g_isRenderingHooked.load()) {
+                        Media::CompositionTarget::Rendering(g_renderingToken);
+                        g_isRenderingHooked = false;
                     }
-                    g_contexts.clear();
-                    Wh_Log(L"DockAnimation: UI contexts cleaned up.");
+                } catch (winrt::hresult_error const& e) {
+                    Wh_Log(L"DockAnimation: Could not unsubscribe from rendering: %s",
+                           e.message().c_str());
                 }
-                catch (...) {}
+
+                for (auto& [key, context] : g_contexts) {
+                    ResetAllIconScales(context.icons);
+                }
+                g_contexts.clear();
             },
-            nullptr);
-    }
-    else {
-        g_contexts.clear();
+            nullptr)) {
+        Wh_Log(L"DockAnimation: Could not run cleanup on the taskbar thread.");
     }
     g_taskbarViewDllLoaded = false;
     g_hooksApplied = false;
