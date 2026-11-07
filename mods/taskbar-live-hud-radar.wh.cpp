@@ -2,7 +2,7 @@
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, network speed, optional ping and a working set trimmer
-// @version         1.1
+// @version         1.1.2
 // @author          Lemon
 // @github          https://github.com/lemon-web-stack
 // @homepage        https://github.com/lemon-web-stack
@@ -23,7 +23,7 @@ This is a tool mod: it runs in its own dedicated process instead of being
 injected into `explorer.exe`, so it cannot affect the shell's stability and
 survives Explorer restarts.
 
-![Screenshot](https://i.imgur.com/sNiODdx.png)
+![Screenshot](https://i.imgur.com/dDy0BoL.png)
 
 ### Features
 - **Real-time monitoring:** CPU load, RAM usage and active network speed (Mbps/Kbps).
@@ -265,7 +265,7 @@ std::atomic<int> g_pingMs(PING_PENDING);
 std::atomic<DWORD> g_netDownKbps(0);
 std::atomic<DWORD> g_netUpKbps(0);
 
-// History buffer for Ctrl + Right Click mini-graph
+// History buffer for mini-graph
 std::mutex g_historyMutex;
 static const size_t MAX_GRAPH_POINTS = 50;
 std::deque<int> g_cpuHistory;
@@ -320,7 +320,6 @@ void UpdateCachedFonts(UINT dpi) {
     Gdiplus::REAL fontHeight = (Gdiplus::REAL)ScaleDpi(12, dpi);
     Gdiplus::REAL smallFontHeight = (Gdiplus::REAL)ScaleDpi(10, dpi);
 
-    // Создаём объекты для Windows 11 и Windows 10
     Gdiplus::FontFamily familyVar(L"Segoe UI Variable Text");
     Gdiplus::FontFamily familySegoe(L"Segoe UI");
 
@@ -501,7 +500,6 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
                 }
             }
         }
-        // Перевод в килобиты в секунду (Кбит/с): байты * 8
         g_netDownKbps = (DWORD)((diffIn * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
         g_netUpKbps   = (DWORD)((diffOut * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
         s_prevNetCounters.swap(cur);
@@ -535,7 +533,6 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
 
     pFreeMibTable(pTable);
 
-    // Перевод в килобиты в секунду (Кбит/с): байты * 8
     g_netDownKbps = (DWORD)((diffIn * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
     g_netUpKbps   = (DWORD)((diffOut * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
     s_prevNetCounters.swap(cur);
@@ -713,7 +710,6 @@ void FormatStrings(wchar_t* cpuVal, wchar_t* ramVal, wchar_t* pingVal, wchar_t* 
     DWORD activeKb = (downKb >= upKb) ? downKb : upKb;
     const wchar_t* arrow = (downKb >= upKb) ? L"\u2193" : L"\u2191";
 
-    // Форматирование в мегабитах (Mbps) и килобитах (Kbps)
     if (activeKb >= 1024) {
         DWORD mb = activeKb / 1024;
         DWORD rem = ((activeKb % 1024) * 10) / 1024;
@@ -772,10 +768,8 @@ void RenderGraphPopup(HWND hWnd) {
 
     if (pBits) {
         memset(pBits, 0, width * height * 4);
-    }
-
-    {
-        Gdiplus::Graphics g(memDC);
+        Gdiplus::Bitmap bmp(width, height, width * 4, PixelFormat32bppPARGB, (BYTE*)pBits);
+        Gdiplus::Graphics g(&bmp);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
@@ -813,12 +807,10 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::Pen borderPen(borderColor, 1.0f);
         g.DrawPath(&borderPen, &bgPath);
 
-        // Header
         Gdiplus::Color colText = isLight ? Gdiplus::Color(255, 30, 32, 38) : Gdiplus::Color(255, 240, 242, 246);
         Gdiplus::SolidBrush textBrush(colText);
         g.DrawString(L"Activity (Last 50s)", -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)ScaleDpi(10, g_currentDpi), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &textBrush);
 
-        // Legend
         wchar_t legBuf[32];
         wsprintfW(legBuf, L"CPU %d%%", g_cpuUsage.load());
         Gdiplus::SolidBrush cpuBrush(Gdiplus::Color(255, 75, 175, 255));
@@ -828,13 +820,11 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::SolidBrush ramBrush(Gdiplus::Color(255, 175, 130, 255));
         g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - ScaleDpi(55, g_currentDpi)), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &ramBrush);
 
-        // Graph area
         int gx = ScaleDpi(10, g_currentDpi);
         int gy = ScaleDpi(26, g_currentDpi);
         int gw = width - gx * 2;
         int gh = height - gy - ScaleDpi(8, g_currentDpi);
 
-        // Grid lines (50%, 100%)
         Gdiplus::Pen gridPen(isLight ? Gdiplus::Color(70, 180, 185, 195) : Gdiplus::Color(60, 255, 255, 255), 1.0f);
         g.DrawLine(&gridPen, gx, gy, gx + gw, gy);
         g.DrawLine(&gridPen, gx, gy + gh / 2, gx + gw, gy + gh / 2);
@@ -858,14 +848,12 @@ void RenderGraphPopup(HWND hWnd) {
                 poly.emplace_back(px, py);
             }
 
-            // Fill area under curve
             std::vector<Gdiplus::PointF> fillPoly = poly;
             fillPoly.emplace_back(poly.back().X, (Gdiplus::REAL)(gy + gh));
             fillPoly.emplace_back(poly.front().X, (Gdiplus::REAL)(gy + gh));
             Gdiplus::SolidBrush areaBrush(areaColor);
             g.FillPolygon(&areaBrush, fillPoly.data(), (INT)fillPoly.size());
 
-            // Stroke line
             Gdiplus::Pen strokePen(lineColor, 1.6f);
             g.DrawLines(&strokePen, poly.data(), (INT)poly.size());
         };
@@ -1052,10 +1040,8 @@ void SyncWindowGeometry() {
 
     if (pBits) {
         memset(pBits, 0, exactWidth * height * 4);
-    }
-
-    {
-        Gdiplus::Graphics g(memDC);
+        Gdiplus::Bitmap bmp(exactWidth, height, exactWidth * 4, PixelFormat32bppPARGB, (BYTE*)pBits);
+        Gdiplus::Graphics g(&bmp);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
@@ -1183,6 +1169,9 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
 
+        case WM_NCHITTEST:
+            return HTCLIENT;
+
         case WM_MOUSEMOVE: {
             if (!g_isHovered) {
                 g_isHovered = true;
@@ -1215,9 +1204,8 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_RBUTTONUP: {
             if (GetKeyState(VK_CONTROL) & 0x8000) {
                 ToggleGraphWindow();
-                return 0;
             }
-            break;
+            return 0;
         }
 
         case WM_LBUTTONDOWN: {
