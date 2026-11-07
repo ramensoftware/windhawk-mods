@@ -2,7 +2,7 @@
 // @id              background-dimmer
 // @name            Background Dimmer
 // @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in a secondary configuration window
-// @version         1.0.0
+// @version         1.1.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         windhawk-mod-uiaccess.exe
@@ -27,7 +27,9 @@ Windows that run as administrator need Windhawk 2 (currently in alpha). On Windh
 
 The look is tuned in the mod's own **configuration window**, where every change shows up immediately on screen. Open it with the **configuration hotkey** (**Win+Ctrl+Alt+D** by default, changeable in the mod settings).
 
-The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.
+With the **tray icon** option in the mod settings, an icon in the notification area also opens it with a click, and a right-click toggles the dimming on and off.
+
+The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program and the tray icon is off, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.
 
 Changes made in the configuration window are saved automatically. Dimming can be turned off with the **Active** checkbox in the window, or with an optional on/off hotkey.
 
@@ -43,11 +45,12 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 
 ## Behavior
 
-- Dialogs stay lit together with the window that owns them.
-- The taskbar, Start, Alt+Tab and menus never move the layer.
+- By default, a dialog also dims the window that owns it. An option in the configuration window keeps them lit together instead.
+- While the taskbar, Start or Alt+Tab has focus, every window is dimmed.
+- A menu keeps the window that opened it lit, unless the option to dim behind menus is turned on in the configuration window. That option works with standard Windows menus; apps that draw their own menus, such as Office and web-based apps, aren't detected.
 - When the desktop has focus, the layer can either hide or cover everything (option in the configuration window).
 - The mod runs in its own Windhawk process and does not inject into Explorer or any other program.
-- Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).
+- By default, the layer is left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later). This can be turned off in the configuration window.
 - The appearance is stored per computer, so all Windows users of the same PC share it.
 */
 // ==/WindhawkModReadme==
@@ -56,15 +59,13 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 /*
 - configHotkey: Win+Ctrl+Alt+D
   $name: Configuration window hotkey
-  $description: >-
-    Opens the live configuration window. Modifiers (Ctrl, Alt, Shift, Win)
-    and one key, joined with +, for example Win+Ctrl+Alt+D or Ctrl+Shift+F9. If
-    empty, the configuration window opens whenever these settings are saved.
+  $description: Opens the live configuration window. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Ctrl+Alt+D). If empty and the tray icon is off, the configuration window opens whenever these settings are saved.
 - toggleHotkey: ""
   $name: On/off hotkey
-  $description: >-
-    Turns the dimming on and off, same format as above. Leave empty for no
-    hotkey.
+  $description: Turns the dimming on and off, same format as above.
+- trayIcon: false
+  $name: Tray icon
+  $description: Shows an icon in the notification area. Click it to open the configuration window, right-click it to toggle dimming on and off.
 */
 // ==/WindhawkModSettings==
 
@@ -108,11 +109,13 @@ struct Appearance {
     int colorRgb;           // 0xRRGGBB
     bool hideOnDesktop;
     bool hideFromCapture;
+    bool dimOwners;
+    bool dimMenus;
     bool active;
     wchar_t image[MAX_PATH];
 };
 
-const Appearance kDefaults = {PAT_DIAGONAL, {20, 0, 60, 16}, 0xFFFFFF, true, false, true, L""};
+const Appearance kDefaults = {PAT_DIAGONAL, {20, 0, 60, 16}, 0xFFFFFF, true, true, true, false, true, L""};
 const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size"};
 const int kSliderMin[SL_COUNT] = {0, 0, 0, 1};
 const int kSliderMax[SL_COUNT] = {100, 100, 100, 200};
@@ -120,6 +123,7 @@ const int kSliderMax[SL_COUNT] = {100, 100, 100, 200};
 struct ModSettings {
     wchar_t toggleHotkey[64];
     wchar_t configHotkey[64];
+    bool trayIcon;
 };
 
 Appearance g_ap;
@@ -135,15 +139,20 @@ HBITMAP g_brushBitmap;
 bool g_overlayVisible;
 bool g_configHotkeyActive;
 bool g_savePending;
+HWND g_menus[8];  // open popup menus, oldest first: the first is the menu, the rest its submenus
+int g_menuCount;
 ULONG_PTR g_gdiplusToken;
 HICON g_icon;
-bool g_iconExtracted;  // false when g_icon is the shared IDI_APPLICATION icon, which must not be destroyed
+HICON g_trayIcon;
+bool g_iconOwned, g_trayIconOwned;  // false for the shared IDI_APPLICATION icon, which must not be destroyed
+bool g_trayAdded;
+UINT g_wmTaskbarCreated;
 
 constexpr wchar_t kMainClass[] = L"BackgroundDimmer_Main";
 constexpr wchar_t kOverlayClass[] = L"BackgroundDimmer_Overlay";
 constexpr wchar_t kConfigClass[] = L"BackgroundDimmer_Config";
 
-enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT };
+enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT, WM_APP_TRAY };
 enum { HK_TOGGLE = 1, HK_CONFIG = 2 };
 enum { TIMER_REPOSITION = 1, TIMER_SAVE = 2, TIMER_FIT = 3 };
 
@@ -158,6 +167,8 @@ void LoadAppearance() {
     g_ap.colorRgb = Wh_GetIntValue(L"color", kDefaults.colorRgb) & 0xFFFFFF;
     g_ap.hideOnDesktop = Wh_GetIntValue(L"hideOnDesktop", kDefaults.hideOnDesktop) != 0;
     g_ap.hideFromCapture = Wh_GetIntValue(L"hideFromCapture", kDefaults.hideFromCapture) != 0;
+    g_ap.dimOwners = Wh_GetIntValue(L"dimOwners", kDefaults.dimOwners) != 0;
+    g_ap.dimMenus = Wh_GetIntValue(L"dimMenus", kDefaults.dimMenus) != 0;
     g_ap.active = Wh_GetIntValue(L"active", kDefaults.active) != 0;
     g_ap.image[0] = L'\0';
     Wh_GetStringValue(L"image", g_ap.image, ARRAYSIZE(g_ap.image));
@@ -171,6 +182,8 @@ void SaveAppearance() {
     Wh_SetIntValue(L"color", g_ap.colorRgb);
     Wh_SetIntValue(L"hideOnDesktop", g_ap.hideOnDesktop);
     Wh_SetIntValue(L"hideFromCapture", g_ap.hideFromCapture);
+    Wh_SetIntValue(L"dimOwners", g_ap.dimOwners);
+    Wh_SetIntValue(L"dimMenus", g_ap.dimMenus);
     Wh_SetIntValue(L"active", g_ap.active);
     Wh_SetStringValue(L"image", g_ap.image);
 }
@@ -189,6 +202,7 @@ void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
 void LoadModSettings() {
     CopySetting(L"toggleHotkey", g_settings.toggleHotkey, ARRAYSIZE(g_settings.toggleHotkey));
     CopySetting(L"configHotkey", g_settings.configHotkey, ARRAYSIZE(g_settings.configHotkey));
+    g_settings.trayIcon = Wh_GetIntSetting(L"trayIcon") != 0;
 }
 
 // ───────────── Hotkeys ─────────────
@@ -421,17 +435,43 @@ void ShowOverlay(bool show) {
     ShowWindow(g_hwndOverlay, show ? SW_SHOWNOACTIVATE : SW_HIDE);
 }
 
-// Windows that never move the layer when they get focus (taskbar, Alt+Tab, Start, menus).
-bool IsIgnoredClass(const wchar_t* cls) {
-    static const wchar_t* const kIgnored[] = {
-        L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame",
-        L"ForegroundStaging", L"TaskListThumbnailWnd", L"NotifyIconOverflowWindow",
-        L"TopLevelWindowForOverflowXamlIsland", L"Windows.UI.Core.CoreWindow", L"#32768", kMainClass,
-    };
-    for (const wchar_t* c : kIgnored)
-        if (wcscmp(cls, c) == 0)
+bool ClassIn(const wchar_t* cls, const wchar_t* const* list, size_t count) {
+    for (size_t i = 0; i < count; i++)
+        if (wcscmp(cls, list[i]) == 0)
             return true;
     return false;
+}
+
+// Transient windows that never move the layer: menus, taskbar thumbnails, the stand-in shown while switching.
+bool IsIgnoredClass(const wchar_t* cls) {
+    static const wchar_t* const kIgnored[] = {
+        L"ForegroundStaging", L"TaskListThumbnailWnd", L"#32768", kMainClass,
+    };
+    return ClassIn(cls, kIgnored, ARRAYSIZE(kIgnored));
+}
+
+// Shell surfaces (taskbar, Start, Alt+Tab, notifications). They are topmost, so with the layer at the top of the
+// normal band every regular window is dimmed while one of them has focus.
+bool IsShellClass(const wchar_t* cls) {
+    static const wchar_t* const kShell[] = {
+        L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame",
+        L"NotifyIconOverflowWindow", L"TopLevelWindowForOverflowXamlIsland", L"Windows.UI.Core.CoreWindow",
+    };
+    return ClassIn(cls, kShell, ARRAYSIZE(kShell));
+}
+
+// Highest visible, non-minimized window of the process in the normal (non-topmost) band, or nullptr.
+HWND TopWindowOfProcess(DWORD pid) {
+    for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        if (w == g_hwndOverlay || !IsWindowVisible(w) || IsIconic(w) ||
+            (GetWindowLongPtrW(w, GWL_EXSTYLE) & WS_EX_TOPMOST))
+            continue;
+        DWORD wPid = 0;
+        GetWindowThreadProcessId(w, &wPid);
+        if (wPid == pid)
+            return w;
+    }
+    return nullptr;
 }
 
 // Moves the layer to the top of the non-topmost band, unless it is already there.
@@ -442,11 +482,52 @@ void RaiseOverlayToTop() {
     SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
+// Puts the layer right below the window, or at the top of the normal band when the window is topmost:
+// inserting the layer behind a topmost window would make it topmost too.
+void PlaceBelow(HWND hwnd) {
+    if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
+        RaiseOverlayToTop();
+        return;
+    }
+    if (GetWindow(hwnd, GW_HWNDNEXT) == g_hwndOverlay)
+        return;
+    SetWindowPos(g_hwndOverlay, hwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+}
+
+void ForgetMenu(HWND hwnd) {
+    int n = 0;
+    for (int i = 0; i < g_menuCount; i++)
+        if (g_menus[i] != hwnd)
+            g_menus[n++] = g_menus[i];
+    g_menuCount = n;
+}
+
+void TrackMenu(HWND hwnd, bool open) {
+    ForgetMenu(hwnd);
+    if (open && hwnd && g_menuCount < (int)ARRAYSIZE(g_menus))
+        g_menus[g_menuCount++] = hwnd;
+}
+
+// Drops menus that closed without a MENUPOPUPEND. Only from the timer: right after MENUPOPUPSTART the menu
+// may not be visible yet.
+void PruneMenus() {
+    int n = 0;
+    for (int i = 0; i < g_menuCount; i++)
+        if (IsWindow(g_menus[i]) && IsWindowVisible(g_menus[i]))
+            g_menus[n++] = g_menus[i];
+    g_menuCount = n;
+}
+
 void Reposition() {
     if (!g_hwndOverlay)
         return;
     if (!g_ap.active) {
         ShowOverlay(false);
+        return;
+    }
+    if (g_ap.dimMenus && g_menuCount) {
+        ShowOverlay(true);
+        PlaceBelow(g_menus[0]);
         return;
     }
     HWND fg = GetForegroundWindow();
@@ -455,6 +536,11 @@ void Reposition() {
     wchar_t cls[256];
     if (!GetClassNameW(fg, cls, ARRAYSIZE(cls)) || IsIgnoredClass(cls))
         return;
+    if (IsShellClass(cls)) {
+        ShowOverlay(true);
+        RaiseOverlayToTop();
+        return;
+    }
     if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
         if (g_ap.hideOnDesktop) {
             ShowOverlay(false);
@@ -468,32 +554,75 @@ void Reposition() {
     // Below the root owner, so a dialog and the window that owns it stay lit together.
     // Stops at the last visible owner: hidden owners (WinForms ShowInTaskbar=false, Java dialogs) aren't raised
     // with the window they own, so placing the layer below one would leave everything in between undimmed.
+    // When the chain ends at a hidden owner, the app's highest visible window stands in for it (Excel's Find
+    // dialog is topmost and owned by a hidden XLMAIN).
     HWND root = fg;
-    for (HWND owner; (owner = GetWindow(root, GW_OWNER)) && IsWindowVisible(owner);)
-        root = owner;
-    if (GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOPMOST) {
-        // Inserting the layer behind a topmost window would make it topmost too; go to the top of the normal band instead.
-        RaiseOverlayToTop();
-        return;
+    if (!g_ap.dimOwners) {
+        HWND owner;
+        while ((owner = GetWindow(root, GW_OWNER)) && IsWindowVisible(owner))
+            root = owner;
+        if (owner) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(fg, &pid);
+            if (HWND top = TopWindowOfProcess(pid))
+                root = top;
+        }
     }
-    if (GetWindow(root, GW_HWNDNEXT) == g_hwndOverlay)
-        return;
-    SetWindowPos(g_hwndOverlay, root, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+    PlaceBelow(root);
 }
 
-void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG, LONG, DWORD, DWORD) {
+    if (event == EVENT_SYSTEM_MENUPOPUPSTART)
+        TrackMenu(hwnd, true);
+    else if (event == EVENT_SYSTEM_MENUPOPUPEND)
+        TrackMenu(hwnd, false);
+    else if (event != EVENT_SYSTEM_FOREGROUND)
+        return;
     Reposition();
 }
 
 // ───────────── Icon ─────────────
 
-HICON LoadSystemIcon(int index, int size) {
+HICON LoadSystemIcon(int index, int size, bool* owned) {
     wchar_t path[MAX_PATH];
     GetSystemDirectoryW(path, MAX_PATH);
     wcscat_s(path, L"\\imageres.dll");
     HICON icon = nullptr;
-    g_iconExtracted = SUCCEEDED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) && icon;
-    return g_iconExtracted ? icon : LoadIconW(nullptr, IDI_APPLICATION);
+    *owned = SUCCEEDED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) && icon;
+    return *owned ? icon : LoadIconW(nullptr, IDI_APPLICATION);
+}
+
+// ───────────── Tray icon ─────────────
+
+void RemoveTrayIcon() {
+    if (!g_trayAdded)
+        return;
+    NOTIFYICONDATAW nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_hwndMain;
+    nid.uID = 1;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    g_trayAdded = false;
+}
+
+/// Adds, updates or removes the tray icon to match the setting; the tooltip shows whether dimming is on.
+void UpdateTrayIcon() {
+    if (!g_settings.trayIcon) {
+        RemoveTrayIcon();
+        return;
+    }
+    NOTIFYICONDATAW nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_hwndMain;
+    nid.uID = 1;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid.uCallbackMessage = WM_APP_TRAY;
+    nid.hIcon = g_trayIcon;
+    swprintf_s(nid.szTip, L"Background Dimmer: %s\nRight-click to turn %s", g_ap.active ? L"on" : L"off",
+               g_ap.active ? L"off" : L"on");
+    if (g_trayAdded && Shell_NotifyIconW(NIM_MODIFY, &nid))
+        return;
+    g_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
 }
 
 // ───────────── Configuration window ─────────────
@@ -511,6 +640,8 @@ enum {
     ID_HIDE_CAPTURE,
     ID_ACTIVE,
     ID_RESET,
+    ID_DIM_OWNERS,
+    ID_DIM_MENUS,
 };
 
 struct ConfigUi {
@@ -568,6 +699,8 @@ void SyncControls() {
     SetWindowTextW(Ctl(ID_IMAGE), g_ap.image);
     CheckDlgButton(g_hwndConfig, ID_HIDE_DESKTOP, g_ap.hideOnDesktop ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(g_hwndConfig, ID_HIDE_CAPTURE, g_ap.hideFromCapture ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(g_hwndConfig, ID_DIM_OWNERS, g_ap.dimOwners ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(g_hwndConfig, ID_DIM_MENUS, g_ap.dimMenus ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(g_hwndConfig, ID_ACTIVE, g_ap.active ? BST_CHECKED : BST_UNCHECKED);
     UpdateValueLabels();
     UpdateEnabled();
@@ -580,6 +713,7 @@ void SetActive(bool active) {
     if (g_hwndConfig)
         CheckDlgButton(g_hwndConfig, ID_ACTIVE, active ? BST_CHECKED : BST_UNCHECKED);
     Reposition();
+    UpdateTrayIcon();
     ScheduleSave();
 }
 
@@ -640,6 +774,7 @@ void ResetDefaults() {
     ApplyCaptureExclusion();
     BuildBrush();
     Reposition();
+    UpdateTrayIcon();
     ScheduleSave();
 }
 
@@ -655,7 +790,7 @@ BOOL CALLBACK SetFontProc(HWND child, LPARAM font) {
 }
 
 // Layout in 96-dpi pixels, scaled to the DPI of the current monitor.
-const int kClientW = 440, kClientH = 370;
+const int kClientW = 440, kClientH = 422;
 
 void LayoutConfig(UINT dpi) {
     g_ui.dpi = dpi;
@@ -689,6 +824,10 @@ void LayoutConfig(UINT dpi) {
     MoveCtl(ID_HIDE_DESKTOP, lx, y, kClientW - 2 * lx, 22);
     y += 26;
     MoveCtl(ID_HIDE_CAPTURE, lx, y, kClientW - 2 * lx, 22);
+    y += 26;
+    MoveCtl(ID_DIM_OWNERS, lx, y, kClientW - 2 * lx, 22);
+    y += 26;
+    MoveCtl(ID_DIM_MENUS, lx, y, kClientW - 2 * lx, 22);
     y += 26;
     MoveCtl(ID_ACTIVE, lx, y, kClientW - 2 * lx, 22);
     y += 38;
@@ -749,6 +888,8 @@ void CreateConfigControls() {
     AddCtl(L"BUTTON", L"Don't dim while the desktop has focus", BS_AUTOCHECKBOX | WS_TABSTOP, ID_HIDE_DESKTOP);
     AddCtl(L"BUTTON", L"Hide the layer from screenshots and screen sharing", BS_AUTOCHECKBOX | WS_TABSTOP,
            ID_HIDE_CAPTURE);
+    AddCtl(L"BUTTON", L"Dim a window while one of its dialogs has focus", BS_AUTOCHECKBOX | WS_TABSTOP, ID_DIM_OWNERS);
+    AddCtl(L"BUTTON", L"Dim everything behind an open menu", BS_AUTOCHECKBOX | WS_TABSTOP, ID_DIM_MENUS);
     AddCtl(L"BUTTON", L"Active", BS_AUTOCHECKBOX | WS_TABSTOP, ID_ACTIVE);
     AddCtl(L"BUTTON", L"Reset to defaults", BS_PUSHBUTTON | WS_TABSTOP, ID_RESET);
     AddCtl(L"BUTTON", L"Close", BS_DEFPUSHBUTTON | WS_TABSTOP, IDCANCEL);
@@ -799,6 +940,16 @@ LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case ID_HIDE_CAPTURE:
                     g_ap.hideFromCapture = IsDlgButtonChecked(hwnd, ID_HIDE_CAPTURE) == BST_CHECKED;
                     ApplyCaptureExclusion();
+                    ScheduleSave();
+                    return 0;
+                case ID_DIM_OWNERS:
+                    g_ap.dimOwners = IsDlgButtonChecked(hwnd, ID_DIM_OWNERS) == BST_CHECKED;
+                    Reposition();
+                    ScheduleSave();
+                    return 0;
+                case ID_DIM_MENUS:
+                    g_ap.dimMenus = IsDlgButtonChecked(hwnd, ID_DIM_MENUS) == BST_CHECKED;
+                    Reposition();
                     ScheduleSave();
                     return 0;
                 case ID_ACTIVE:
@@ -866,7 +1017,8 @@ void ApplyModSettings(bool fromSettingsChange) {
     g_configHotkeyActive = RegisterHotkeyText(HK_CONFIG, g_settings.configHotkey);
     if (g_hwndConfig)
         UpdateActiveLabel();
-    if (fromSettingsChange && !g_configHotkeyActive)
+    UpdateTrayIcon();
+    if (fromSettingsChange && !g_configHotkeyActive && !g_settings.trayIcon)
         OpenConfig();
 }
 
@@ -880,6 +1032,7 @@ void Shutdown() {
     g_hook = nullptr;
     UnregisterHotKey(g_hwndMain, HK_TOGGLE);
     UnregisterHotKey(g_hwndMain, HK_CONFIG);
+    RemoveTrayIcon();
     if (g_hwndOverlay)
         DestroyWindow(g_hwndOverlay);
     g_hwndOverlay = nullptr;
@@ -887,9 +1040,16 @@ void Shutdown() {
 }
 
 LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == g_wmTaskbarCreated && msg) {
+        // Explorer restarted and the notification area is empty again.
+        g_trayAdded = false;
+        UpdateTrayIcon();
+        return 0;
+    }
     switch (msg) {
         case WM_TIMER:
             if (wParam == TIMER_REPOSITION) {
+                PruneMenus();
                 Reposition();
             } else if (wParam == TIMER_SAVE) {
                 KillTimer(hwnd, TIMER_SAVE);
@@ -907,6 +1067,12 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_DISPLAYCHANGE:
             SetTimer(hwnd, TIMER_FIT, 500, nullptr);
+            return 0;
+        case WM_APP_TRAY:
+            if (lParam == WM_LBUTTONUP)
+                OpenConfig();
+            else if (lParam == WM_RBUTTONUP)
+                SetActive(!g_ap.active);
             return 0;
         case WM_APP_RELOAD:
             LoadModSettings();
@@ -976,7 +1142,10 @@ DWORD WINAPI ThreadProc(void*) {
     if (GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != 0)
         Wh_Log(L"GdiplusStartup failed: the Image pattern falls back to a solid tint");
 
-    g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, GetDpiForSystem()));
+    UINT systemDpi = GetDpiForSystem();
+    g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, systemDpi), &g_iconOwned);
+    g_trayIcon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXSMICON, systemDpi), &g_trayIconOwned);
+    g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
     LoadAppearance();
 
@@ -995,7 +1164,7 @@ DWORD WINAPI ThreadProc(void*) {
         ApplyOpacity();
         ApplyCaptureExclusion();
         FitOverlay();
-        g_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0,
+        g_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MENUPOPUPEND, nullptr, WinEventProc, 0, 0,
                                  WINEVENT_OUTOFCONTEXT);
         // Safety net for z-order changes no WinEvent reports, such as the active window being lowered or made
         // topmost without the foreground window changing.
@@ -1024,8 +1193,10 @@ DWORD WINAPI ThreadProc(void*) {
         DeleteObject(g_brushBitmap);
     g_brush = nullptr;
     g_brushBitmap = nullptr;
-    if (g_icon && g_iconExtracted)
+    if (g_icon && g_iconOwned)
         DestroyIcon(g_icon);
+    if (g_trayIcon && g_trayIconOwned)
+        DestroyIcon(g_trayIcon);
     UnregisterClassW(kConfigClass, inst);
     UnregisterClassW(kOverlayClass, inst);
     UnregisterClassW(kMainClass, inst);
