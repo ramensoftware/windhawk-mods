@@ -16,6 +16,8 @@
 
 When Explorer refuses to delete, move or rename something because it is in use ("Folder In Use" / "File In Use"), this mod finds out which processes are blocking it and lets you decide what to do.
 
+![Screenshot](https://i.imgur.com/A0Dnrn5.png)
+
 When the warning appears, a small dialog lists the blocking processes and offers:
 
 * **End processes and continue** - terminates the processes and presses *Try Again* for you, so Explorer completes the original operation.
@@ -43,7 +45,7 @@ If Explorer windows are open inside the item being processed, they are moved up 
 ## Settings
 
 * **Modern dialogs** - use task-dialog style windows instead of classic message boxes.
-* **Show message when nothing is found** - show a dialog when no blocking process could be identified.
+* **Show message when nothing is found** - show a dialog when the blocked item or its blocking process could not be identified (enabled by default).
 */
 // ==/WindhawkModReadme==
 
@@ -52,9 +54,9 @@ If Explorer windows are open inside the item being processed, they are moved up 
 - modernDialogs: true
   $name: Modern dialogs
   $description: Use task-dialog style windows instead of classic message boxes
-- showNoResultDialog: false
+- showNoResultDialog: true
   $name: Show message when nothing is found
-  $description: Show a dialog when no blocking process could be identified
+  $description: Show a dialog when the blocked item or its blocking process could not be identified
 */
 // ==/WindhawkModSettings==
 
@@ -78,6 +80,8 @@ If Explorer windows are open inside the item being processed, they are moved up 
 static const wchar_t* kRetryId = L"eltInterruptRetryBtn";
 
 static const wchar_t* kDialogClass = L"OperationStatusWindow";
+
+static const wchar_t* kTitle = L"Unlock \"Folder In Use\"";
 
 struct ThreadInfo {
     HANDLE h;
@@ -289,29 +293,22 @@ static bool DefaultActionElement(IUIAutomationElement* el) {
     return SUCCEEDED(pat->DoDefaultAction());
 }
 
-static bool WaitInterruptGone(IUIAutomation* ua, HWND dlg, int ms) {
-    for (int waited = 0; waited < ms; waited += 100) {
-        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return true;
-        if (!InterruptActive(ua, dlg)) return true;
-    }
-    return false;
-}
-
 static void PressRetry(HWND dlg) {
     if (!IsWindow(dlg)) return;
-    EnableWindow(dlg, TRUE);
 
     Com<IUIAutomation> ua;
     if (CreateUia(&ua)) {
         Com<IUIAutomationElement> btn;
         if (FindRetry(ua.p, dlg, &btn) && btn) {
+            // One press only: if the retry fails again (or the next item is
+            // also locked), the new warning must not be pressed a second time.
             if (InvokeElement(btn.p)) {
                 Wh_Log(L"Retry pressed via Invoke");
-                if (WaitInterruptGone(ua.p, dlg, 1500)) return;
+                return;
             }
             if (DefaultActionElement(btn.p)) {
                 Wh_Log(L"Retry pressed via default action");
-                if (WaitInterruptGone(ua.p, dlg, 1500)) return;
+                return;
             }
         }
     }
@@ -345,7 +342,7 @@ static void FillCommon(TASKDIALOGCONFIG& cfg, const std::wstring& instruction,
     cfg.cbSize = sizeof(cfg);
     cfg.hwndParent = nullptr;
     cfg.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-    cfg.pszWindowTitle = L"Unlock";
+    cfg.pszWindowTitle = kTitle;
     cfg.pszMainInstruction = instruction.c_str();
     cfg.pszContent = content.empty() ? nullptr : content.c_str();
     cfg.pfCallback = TdCallback;
@@ -370,7 +367,7 @@ static void ShowInfo(const std::wstring& instruction, const std::wstring& conten
     std::wstring text = instruction;
     if (!content.empty()) text += L"\n\n" + content;
     if (!details.empty()) text += L"\n\n" + details;
-    MessageBoxW(nullptr, text.c_str(), L"Unlock",
+    MessageBoxW(nullptr, text.c_str(), kTitle,
                 MB_OK | MB_TOPMOST | MB_SETFOREGROUND | (error ? MB_ICONERROR : MB_ICONINFORMATION));
 }
 
@@ -403,14 +400,14 @@ static Choice ShowChoice(const std::wstring& instruction, const std::wstring& co
     if (!details.empty()) text += L"\n\n" + details;
     if (hasSecondary) {
         text += L"\n\nYes: end processes and continue\nNo: only end processes\nCancel: do nothing";
-        int r = MessageBoxW(nullptr, text.c_str(), L"Unlock",
+        int r = MessageBoxW(nullptr, text.c_str(), kTitle,
                             MB_YESNOCANCEL | MB_DEFBUTTON3 | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
         if (r == IDYES) return CHOICE_CLOSE_CONTINUE;
         if (r == IDNO) return CHOICE_CLOSE_ONLY;
         return CHOICE_CANCEL;
     }
     text += L"\n\nContinue?";
-    int r = MessageBoxW(nullptr, text.c_str(), L"Unlock",
+    int r = MessageBoxW(nullptr, text.c_str(), kTitle,
                         MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
     return r == IDYES ? CHOICE_CLOSE_CONTINUE : CHOICE_CANCEL;
 }
@@ -495,8 +492,12 @@ static std::vector<std::wstring> ResolveTargets(const std::vector<std::wstring>&
                                                 const std::vector<std::wstring>& texts) {
     auto matches = [&](const std::wstring& path) {
         const WCHAR* n = PathFindFileNameW(path.c_str());
+        // With "Hide extensions for known file types" (the Windows default)
+        // the warning shows the name without its extension.
+        const WCHAR* ext = PathFindExtensionW(n);
+        std::wstring noExt(n, (size_t)(ext - n));
         for (auto& t : texts)
-            if (TextMatchesName(t, n)) return true;
+            if (TextMatchesName(t, n) || TextMatchesName(t, noExt)) return true;
         return false;
     };
 
@@ -736,6 +737,7 @@ static void HandleScanMain(ScanJob& job) {
         break;
     }
     if (!ok || self == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Handle table unavailable");
         if (self != INVALID_HANDLE_VALUE) CloseHandle(self);
         return;
     }
@@ -748,6 +750,7 @@ static void HandleScanMain(ScanJob& job) {
         if (entries[i].Pid == myPid && entries[i].Handle == (ULONG_PTR)self) { fileType = entries[i].Type; break; }
     }
     CloseHandle(self);
+    Wh_Log(L"Handle table: %d entries, file type index %d", (int)n, fileType);
     if (fileType < 0) return;
 
     struct Proc { HANDLE h; bool canKill; };
@@ -849,7 +852,8 @@ static void FindLockersHandles(const std::vector<std::wstring>& roots, const std
 
     SrwLock lock(&job->lock);
     if (job->finished) {
-        for (auto& kv : job->found) result[kv.first] = kv.second;
+        for (auto& kv : job->found)
+            AddLocker(result, kv.first, kv.second.name, kv.second.h, kv.second.canKill);
         job->found.clear();
         fileHandles = job->fileHandles;
         inaccessible = job->inaccessibleProcs;
@@ -968,7 +972,8 @@ static DWORD WorkerMain(LPVOID param) {
         for (size_t i = 0; i < sel.size() && i < 5; i++) details += L"    " + sel[i] + L"\n";
         details += L"Texts read from the warning: " + std::to_wstring(texts.size());
         for (size_t i = 0; i < texts.size() && i < 6; i++) details += L"\n    " + texts[i];
-        ShowInfo(L"Couldn't identify the blocked item", content, details, false);
+        if (Wh_GetIntSetting(L"showNoResultDialog"))
+            ShowInfo(L"Couldn't identify the blocked item", content, details, false);
         releaseAll();
         Wh_Log(L"Worker finished (no matching target)");
         return 0;
@@ -993,7 +998,8 @@ static DWORD WorkerMain(LPVOID param) {
     size_t fileHandles = 0, inaccessible = 0;
     bool timedOut = false;
     FindLockersHandles(targets, excluded, lockers, fileHandles, inaccessible, timedOut);
-    Wh_Log(L"Lockers found: %d", (int)lockers.size());
+    Wh_Log(L"Lockers found: %d (handles checked: %d, inaccessible: %d, timed out: %d)",
+           (int)lockers.size(), (int)fileHandles, (int)inaccessible, (int)timedOut);
 
     if (g_stop) {
         releaseAll();
@@ -1160,8 +1166,14 @@ static DWORD WINAPI MonitorThread(LPVOID) {
         for (auto it = g_seen.begin(); it != g_seen.end();)
             it = present.count(it->first) ? std::next(it) : g_seen.erase(it);
 
-        for (auto it = g_handled.begin(); it != g_handled.end();)
-            it = InterruptActive(ua.p, *it) ? std::next(it) : g_handled.erase(it);
+        for (auto it = g_handled.begin(); it != g_handled.end();) {
+            if (InterruptActive(ua.p, *it)) {
+                ++it;
+            } else {
+                g_seen.erase(*it);
+                it = g_handled.erase(it);
+            }
+        }
 
         for (HWND h : g_candidates) {
             if (g_stop) break;
