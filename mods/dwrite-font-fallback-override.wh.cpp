@@ -7,7 +7,7 @@
 // @author          Muhammad Ragib Hasin
 // @github          https://github.com/RagibHasin
 // @include         *
-// @compilerOptions -std=c++26 -luser32 -lgdi32 -ldwrite -lole32 -lwindowsapp
+// @compilerOptions -luser32 -lgdi32 -ldwrite -lole32 -lwindowsapp
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -43,6 +43,18 @@ can therefore be rendered as:
 
     original font -> Bengali fallback -> original font -> CJK fallback
 
+| Before            | After           |
+| ----------------- | --------------- |
+| ![Before][before] | ![After][after] |
+
+## Notice
+
+This mod only works on Windows 8.1 or later.
+
+[before]:
+https://github.com/RagibHasin/font-fallback-override.wh.cpp/blob/master/assets/before.png?raw=true
+[after]:
+https://github.com/RagibHasin/font-fallback-override.wh.cpp/blob/master/assets/after.png?raw=true
 */
 // ==/WindhawkModReadme==
 
@@ -266,6 +278,7 @@ STDMETHODIMP CreateTextLayout0_Hook(
 // WHAM@5 end-transform 12
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -280,8 +293,12 @@ STDMETHODIMP CreateTextLayout0_Hook(
 // WHAM@5 transform 14: pragma-once
 // WHAM@5 end-transform 14
 
+#include <memory>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <unordered_map>
+#include <variant>
 
 // WHAM@5 begin 15: src/includes/utils.h
 // WHAM@5 transform 17: guard-open
@@ -346,12 +363,8 @@ static char32_t ParseHex(const WCHAR* str) {
         return 0;
     }
 
-    try {
-        // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers)
-        return std::wcstoul(str, nullptr, 16);
-    } catch (...) {
-        return 0;
-    }
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers)
+    return std::wcstoul(str, nullptr, 16);
 }
 
 // MARK: Excerpt from https://github.com/dragazo/rustex begins
@@ -493,35 +506,129 @@ class Mutex {
 // classic Win32 applications.
 
 struct FontCacheKey {
-    HFONT originalFont;
+    LOGFONTW originalFont;
     std::wstring family;
 
     bool operator==(const FontCacheKey& other) const {
-        return originalFont == other.originalFont && family == other.family;
+        return family == other.family && originalFont.lfHeight == other.originalFont.lfHeight
+               && originalFont.lfWidth == other.originalFont.lfWidth
+               && originalFont.lfEscapement == other.originalFont.lfEscapement
+               && originalFont.lfOrientation == other.originalFont.lfOrientation
+               && originalFont.lfWeight == other.originalFont.lfWeight
+               && originalFont.lfItalic == other.originalFont.lfItalic
+               && originalFont.lfUnderline == other.originalFont.lfUnderline
+               && originalFont.lfStrikeOut == other.originalFont.lfStrikeOut
+               && originalFont.lfCharSet == other.originalFont.lfCharSet
+               && originalFont.lfOutPrecision == other.originalFont.lfOutPrecision
+               && originalFont.lfClipPrecision == other.originalFont.lfClipPrecision
+               && originalFont.lfQuality == other.originalFont.lfQuality
+               && originalFont.lfPitchAndFamily == other.originalFont.lfPitchAndFamily
+               && std::wstring_view(static_cast<const wchar_t*>(originalFont.lfFaceName))
+                      == std::wstring_view(
+                          static_cast<const wchar_t*>(other.originalFont.lfFaceName)
+                      );
     }
 };
 
 template <>
 class std::hash<FontCacheKey> {
   public:
-    static constexpr std::size_t operator()(const FontCacheKey& key) {
-        const size_t h1 = std::hash<void*>{}(static_cast<void*>(key.originalFont));
-        const size_t h2 = std::hash<std::wstring>{}(key.family);
+    static constexpr size_t operator()(const FontCacheKey& key) {
+        auto hash = 0UZ;
 
-        // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers)
-        return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+        auto combine = [&](const auto& v) {
+            // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers)
+            hash ^= std::hash<std::remove_cvref_t<decltype(v)>>{}(v) + 0x9e3779b9 + (hash << 6)
+                    + (hash >> 2);
+            // NOLINTEND(cppcoreguidelines-avoid-magic-numbers)
+        };
+
+        combine(key.originalFont.lfHeight);
+        combine(key.originalFont.lfWidth);
+        combine(key.originalFont.lfEscapement);
+        combine(key.originalFont.lfOrientation);
+        combine(key.originalFont.lfWeight);
+        combine(key.originalFont.lfItalic);
+        combine(key.originalFont.lfUnderline);
+        combine(key.originalFont.lfStrikeOut);
+        combine(key.originalFont.lfCharSet);
+        combine(key.originalFont.lfOutPrecision);
+        combine(key.originalFont.lfClipPrecision);
+        combine(key.originalFont.lfQuality);
+        combine(key.originalFont.lfPitchAndFamily);
+        combine(std::wstring_view(static_cast<const wchar_t*>(key.originalFont.lfFaceName)));
+        combine(key.family);
+
+        return hash;
     }
 };
 
-static const Mutex<std::unordered_map<FontCacheKey, HFONT>> g_fontCache;
+struct ManagedFontHandle {
+  public:
+    ManagedFontHandle(const HFONT font)
+        : font(font) {
+    }
+    ~ManagedFontHandle() {
+        DeleteObject(font);
+    }
+
+    ManagedFontHandle(const ManagedFontHandle&) = delete;
+    ManagedFontHandle(ManagedFontHandle&&) = delete;
+    ManagedFontHandle& operator=(const ManagedFontHandle&) = delete;
+    ManagedFontHandle& operator=(ManagedFontHandle&&) = delete;
+
+    HFONT operator*() const {
+        return font;
+    }
+
+    bool operator==(const ManagedFontHandle& other) const {
+        return font == other.font;
+    }
+    bool operator==(const HFONT other) const {
+        return font == other;
+    }
+
+    bool operator!=(const ManagedFontHandle& other) const {
+        return font != other.font;
+    }
+    bool operator!=(const HFONT other) const {
+        return font != other;
+    }
+
+  private:
+    HFONT font;
+};
+
+bool operator==(
+    const HFONT a,
+    const ManagedFontHandle& b
+) {
+    return b == a;
+}
+bool operator!=(
+    const HFONT a,
+    const ManagedFontHandle& b
+) {
+    return b != a;
+}
+
+using FontHandle = std::variant<std::shared_ptr<ManagedFontHandle>, HFONT>;
+
+HFONT get(const FontHandle& handle) {
+    if (std::holds_alternative<HFONT>(handle)) {
+        return std::get<HFONT>(handle);
+    }
+    return **std::get<std::shared_ptr<ManagedFontHandle>>(handle);
+}
+
+static const Mutex<std::unordered_map<FontCacheKey, std::shared_ptr<ManagedFontHandle>>>
+    g_fontCache;
 
 static void ClearFontCache() {
     auto fontCache = g_fontCache.lock_mut();
 
     for (auto& [_, font] : *fontCache) {
-        if (font) {
-            DeleteObject(font);
-        }
+        font.reset();
     }
 
     fontCache->clear();
@@ -651,16 +758,18 @@ struct FallbackRule {
     /// This is important because blindly calling CreateFontW with only a family
     /// name would lose DPI-scaled size and visual characteristics of the
     /// control.
-    HFONT GetReplacementFont(
+    FontHandle GetReplacementFont(
         HDC hdc,
         HFONT originalFont,
         const std::wstring_view text
     ) const {
-        if (!originalFont || FontHasGlyph(hdc, originalFont, text) || fontFamily.empty()) {
+        LOGFONTW logFont{};
+        if (!originalFont || FontHasGlyph(hdc, originalFont, text) || fontFamily.empty()
+            || GetObjectW(originalFont, sizeof(logFont), &logFont) != sizeof(logFont)) {
             return originalFont;
         }
 
-        FontCacheKey key{.originalFont = originalFont, .family = fontFamily};
+        FontCacheKey key{.originalFont = logFont, .family = fontFamily};
 
         {
             auto fontCache = g_fontCache.lock();
@@ -671,14 +780,11 @@ struct FallbackRule {
             }
         }
 
-        LOGFONTW lf{};
-        if (GetObjectW(originalFont, sizeof(lf), &lf) != sizeof(lf)) {
-            return originalFont;
-        }
+        wcsncpy_s(
+            static_cast<wchar_t*>(logFont.lfFaceName), LF_FACESIZE, fontFamily.c_str(), _TRUNCATE
+        );
 
-        wcsncpy_s(static_cast<wchar_t*>(lf.lfFaceName), LF_FACESIZE, fontFamily.c_str(), _TRUNCATE);
-
-        const auto replacement = CreateFontIndirectW(&lf);
+        const auto replacement = CreateFontIndirectW(&logFont);
         if (!replacement) {
             return originalFont;
         }
@@ -689,11 +795,12 @@ struct FallbackRule {
         }
 
         {
-            const auto [it, inserted] = g_fontCache.lock_mut()->emplace(key, replacement);
+            const auto [it, inserted] = g_fontCache.lock_mut()->emplace(
+                key, std::make_shared<ManagedFontHandle>(replacement)
+            );
 
             // check if another thread already inserted it
             if (!inserted) {
-                DeleteObject(replacement);
                 return it->second;
             }
         }
@@ -702,12 +809,10 @@ struct FallbackRule {
     }
 };
 
-static const Mutex<std::vector<FallbackRule>> g_fallbackRules;
+static const Mutex<std::shared_ptr<std::vector<FallbackRule>>> g_fallbackRules;
 
 static void LoadRules() {
-    auto fallbackRules = g_fallbackRules.lock_mut();
-
-    fallbackRules->clear();
+    auto fallbackRules = std::make_shared<std::vector<FallbackRule>>();
 
     using WindhawkUtils::StringSetting;
 
@@ -747,13 +852,15 @@ static void LoadRules() {
     }
 
     Wh_Log(L"Loaded %zu fallback rules", fallbackRules->size());
+
+    *g_fallbackRules.lock_mut() = fallbackRules;
 }
 
 /// Find the user rule that applies to a Unicode scalar.
 ///
 /// Rules are evaluated in declaration order. The first matching rule wins,
 /// matching the spirit of the supplied DirectWrite mod.
-static const FallbackRule* FindRule(char32_t codePoint) {
+static std::shared_ptr<FallbackRule> FindRule(char32_t codePoint) {
     if (codePoint < hiSurrogateBase) {
         Wh_Log(
             L"codePoint: %lc (U+%X)",
@@ -766,9 +873,9 @@ static const FallbackRule* FindRule(char32_t codePoint) {
 
     auto fallbackRules = g_fallbackRules.lock();
 
-    for (const auto& rule : *fallbackRules) {
+    for (auto& rule : **fallbackRules) {
         if (rule.startChar <= codePoint && codePoint <= rule.endChar) {
-            return &rule;
+            return {*fallbackRules, &rule};
         }
     }
 
@@ -782,7 +889,7 @@ static const FallbackRule* FindRule(char32_t codePoint) {
 
 using winrt::com_ptr;
 
-static const Mutex<com_ptr<IDWriteFontFallback1>> g_fallback;
+static const Mutex<com_ptr<IDWriteFontFallback1>> g_dwriteFallback;
 
 using GetSystemFontFallback_t = HRESULT(STDMETHODCALLTYPE*)(
     IDWriteFactory8* self,
@@ -797,9 +904,9 @@ STDMETHODIMP GetSystemFontFallback_Hook(
     IDWriteFontFallback1** fallback
 ) {
     Wh_Log(L"GetSystemFontFallback");
-    auto fallbackLock = g_fallback.lock_mut();
+    auto dwriteFallback = g_dwriteFallback.lock_mut();
 
-    if (*fallbackLock == nullptr) {
+    if (*dwriteFallback == nullptr) {
         com_ptr<IDWriteFontFallback1> fallback0;
         auto hr = g_originalGetSystemFontFallback(self, fallback0.put());
 
@@ -809,7 +916,8 @@ STDMETHODIMP GetSystemFontFallback_Hook(
             return hr;
         };
 
-        for (const auto& rule : *g_fallbackRules.lock()) {
+        auto fallbackRules = g_fallbackRules.lock();
+        for (const auto& rule : **fallbackRules) {
             const DWRITE_UNICODE_RANGE range{rule.startChar, rule.endChar};
             auto fontFamily = rule.fontFamily.c_str();
             if (FAILED(builder->AddMapping(&range, 1, &fontFamily, 1))) {
@@ -832,12 +940,12 @@ STDMETHODIMP GetSystemFontFallback_Hook(
             *fallback = fallback0.detach();
             return hr;
         };
-        fallback1.as(*fallbackLock);
+        fallback1.as(*dwriteFallback);
 
         Wh_Log(L"Injected overrides");
     }
 
-    fallbackLock->copy_to(fallback);
+    dwriteFallback->copy_to(fallback);
     return S_OK;
 }
 // WHAM@5 transform 30: guard-close
@@ -845,13 +953,14 @@ STDMETHODIMP GetSystemFontFallback_Hook(
 // WHAM@5 end-transform 30
 // WHAM@5 end 9
 // WHAM@5 reference 31: src/includes/fallback_rule.h -> 11
-// WHAM@5 begin 32: src/includes/gdi/hooks/DrawTextW.h
-// WHAM@5 transform 46: guard-open
+// WHAM@5 reference 32: src/includes/gdi/font_cache.h -> 13
+// WHAM@5 begin 33: src/includes/gdi/hooks/DrawTextW.h
+// WHAM@5 transform 48: guard-open
 #ifndef WHAM_ONCE_9BDBA01438861D6E04D46260
 #define WHAM_ONCE_9BDBA01438861D6E04D46260
-// WHAM@5 end-transform 46
-// WHAM@5 transform 33: pragma-once
-// WHAM@5 end-transform 33
+// WHAM@5 end-transform 48
+// WHAM@5 transform 34: pragma-once
+// WHAM@5 end-transform 34
 
 #include <algorithm>
 #include <functional>
@@ -863,29 +972,30 @@ STDMETHODIMP GetSystemFontFallback_Hook(
 
 #include <windhawk_api.h>
 
-// WHAM@5 reference 34: src/includes/gdi/font_utils.h -> 21
-// WHAM@5 begin 35: src/includes/gdi/text_run.h
-// WHAM@5 transform 39: guard-open
+// WHAM@5 reference 35: src/includes/gdi/font_utils.h -> 21
+// WHAM@5 begin 36: src/includes/gdi/text_run.h
+// WHAM@5 transform 41: guard-open
 #ifndef WHAM_ONCE_FF4C6D7DC454A3E24FE07AE4
 #define WHAM_ONCE_FF4C6D7DC454A3E24FE07AE4
-// WHAM@5 end-transform 39
-// WHAM@5 transform 36: pragma-once
-// WHAM@5 end-transform 36
+// WHAM@5 end-transform 41
+// WHAM@5 transform 37: pragma-once
+// WHAM@5 end-transform 37
 
 #include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-// WHAM@5 reference 37: src/includes/fallback_rule.h -> 11
-// WHAM@5 reference 38: src/includes/utils.h -> 15
+// WHAM@5 reference 38: src/includes/fallback_rule.h -> 11
+// WHAM@5 reference 39: src/includes/gdi/font_cache.h -> 13
+// WHAM@5 reference 40: src/includes/utils.h -> 15
 
 /// Run representation.
 ///
 /// A run is a contiguous UTF-16 range that should be rendered with one font.
 struct TextRun {
     std::wstring_view text;
-    HFONT font;
+    FontHandle font;
 };
 
 /// Build runs.
@@ -926,10 +1036,9 @@ BuildRuns(
 
         const auto rule = FindRule(codePoint);
         const auto ch = text.substr(0, charLen);
-        const auto selectedFont =
-            rule ? rule->GetReplacementFont(hdc, originalFont, ch) : originalFont;
+        auto selectedFont = rule ? rule->GetReplacementFont(hdc, originalFont, ch) : originalFont;
 
-        replaced |= selectedFont != originalFont;
+        replaced |= get(selectedFont) != originalFont;
 
         if (!runs.empty() && runs.back().font == selectedFont
             && runs.back().text.cend() == text.cbegin()) {
@@ -945,17 +1054,17 @@ BuildRuns(
 
     return std::pair{runs, replaced};
 }
-// WHAM@5 transform 40: guard-close
+// WHAM@5 transform 42: guard-close
 #endif // WHAM_ONCE_FF4C6D7DC454A3E24FE07AE4
-// WHAM@5 end-transform 40
-// WHAM@5 end 35
-// WHAM@5 begin 41: src/includes/hooks.h
-// WHAM@5 transform 43: guard-open
+// WHAM@5 end-transform 42
+// WHAM@5 end 36
+// WHAM@5 begin 43: src/includes/hooks.h
+// WHAM@5 transform 45: guard-open
 #ifndef WHAM_ONCE_048057A8FDB52DFB4101C9C9
 #define WHAM_ONCE_048057A8FDB52DFB4101C9C9
-// WHAM@5 end-transform 43
-// WHAM@5 transform 42: pragma-once
-// WHAM@5 end-transform 42
+// WHAM@5 end-transform 45
+// WHAM@5 transform 44: pragma-once
+// WHAM@5 end-transform 44
 
 #include <uxtheme.h>
 
@@ -1032,18 +1141,18 @@ static bool HookFunctionFromDLL(
         reinterpret_cast<Prototype*>(GetProcAddress(module, functionName));
 
     if (!target) {
-        Wh_Log(L"GetProcAddress(%S) failed", functionName);
+        Wh_Log(L"GetProcAddress(%s) failed", functionName);
 
         return false;
     }
 
     if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
-        Wh_Log(L"SetFunctionHook(%S) failed", functionName);
+        Wh_Log(L"SetFunctionHook(%s) failed", functionName);
 
         return false;
     }
 
-    Wh_Log(L"Hooked %LS!%S", moduleName, functionName);
+    Wh_Log(L"Hooked %ls!%s", moduleName, functionName);
 
     return true;
 }
@@ -1074,11 +1183,11 @@ static bool HookFunctionInVtable(
 
     return true;
 }
-// WHAM@5 transform 44: guard-close
+// WHAM@5 transform 46: guard-close
 #endif // WHAM_ONCE_048057A8FDB52DFB4101C9C9
-// WHAM@5 end-transform 44
-// WHAM@5 end 41
-// WHAM@5 reference 45: src/includes/utils.h -> 15
+// WHAM@5 end-transform 46
+// WHAM@5 end 43
+// WHAM@5 reference 47: src/includes/utils.h -> 15
 
 using namespace std::literals;
 
@@ -1105,7 +1214,7 @@ struct ParsedDrawText {
         const auto [_, charLen] = DecodeCodePoint(text);
         const auto ch = text.substr(0, charLen);
         this->text.append(ch);
-        sourceEnds.append_range(std::ranges::views::repeat(text.cend(), charLen));
+        sourceEnds.append_range(std::views::repeat(text.cend(), charLen));
     }
 
   public:
@@ -1114,10 +1223,9 @@ struct ParsedDrawText {
     ParsedDrawText(
         std::wstring_view text,
         const UINT format
-    )
-        : text(text)
-        , sourceEnds(text.size()) {
-        this->text.clear();
+    ) {
+        this->text.reserve(text.size());
+        sourceEnds.reserve(text.size());
 
         const auto noPrefix = (format & DT_NOPREFIX) != 0;
         const auto hidePrefix = (format & DT_HIDEPREFIX) != 0;
@@ -1221,7 +1329,7 @@ struct Context {
             return SIZE{0, 0};
         }
 
-        const SelectedObjectGuard fontGuard(hdc, run.font);
+        const SelectedObjectGuard fontGuard(hdc, get(run.font));
         if (!fontGuard) {
             return std::nullopt;
         }
@@ -1368,7 +1476,8 @@ struct Context {
         }
 
         for (auto end = text.size(); end > 0;) {
-            const auto test = std::wstring(text.substr(0, end)) + ellipsis;
+            std::wstring test{text.substr(0, end)};
+            test += ellipsis;
             const auto size = MeasureDrawTextRange(test, 0, test.size(), tabWidth);
             if (size && size->cx <= width) {
                 bestEnd = end;
@@ -1389,7 +1498,8 @@ struct Context {
                 --wordEnd;
             }
             if (wordEnd > 0) {
-                const auto wordCandidate = std::wstring(text.substr(0, wordEnd)) + ellipsis;
+                std::wstring wordCandidate{text.substr(0, wordEnd)};
+                wordCandidate += ellipsis;
                 const auto size =
                     MeasureDrawTextRange(wordCandidate, 0, wordCandidate.size(), tabWidth);
                 if (size && size->cx <= width) {
@@ -1440,7 +1550,10 @@ struct Context {
             prefix = prefix.substr(0, std::max(0UZ, newLength));
         }
 
-        return std::wstring(ellipsis) + suffix;
+        std::wstring output{ellipsis};
+        output += suffix;
+
+        return output;
     }
 
     bool DrawTextLineWithFallback(
@@ -1478,7 +1591,7 @@ struct Context {
                     return false;
                 }
 
-                const SelectedObjectGuard fontGuard(hdc, run.font);
+                const SelectedObjectGuard fontGuard(hdc, get(run.font));
                 if (!fontGuard) {
                     return false;
                 }
@@ -1597,7 +1710,7 @@ struct Context {
             .start = position, .end = paragraphEnd, .next = paragraphEnd, .ellipsified = false
         };
 
-        Wh_Log(L"line.next: %lld", line.next);
+        Wh_Log(L"line.next: %zu", line.next);
 
         // DrawText's word wrapping is opt-in. Without DT_WORDBREAK, a paragraph is
         // one line and is only clipped/ellipsified according to the requested
@@ -1613,21 +1726,21 @@ struct Context {
                     FindFittingPrefix(text, position, paragraphEnd, availableWidth, tabWidth);
 
                 Wh_Log(
-                    L"fullWidth: %ld, availableWidth: %ld, fitEnd: %lld",
+                    L"fullWidth: %ld, availableWidth: %ld, fitEnd: %zu",
                     fullSize->cx,
                     availableWidth,
                     fitEnd
                 );
 
-                const auto lastBreak = static_cast<size_t>(
-                    std::ranges::find_last_if(
-                        text.substr(position, fitEnd - position), &IsDrawTextBreakCharacter
-                    )
-                        .begin()
-                    - text.cbegin()
+                const auto lastBreakRange = std::ranges::find_last_if(
+                    text.substr(position, fitEnd - position), &IsDrawTextBreakCharacter
                 );
+                const auto lastBreak =
+                    lastBreakRange.empty()
+                        ? fitEnd
+                        : static_cast<size_t>(lastBreakRange.begin() - text.cbegin());
 
-                Wh_Log(L"lastBreak: %lld", lastBreak);
+                Wh_Log(L"lastBreak: %zu", lastBreak);
 
                 if (lastBreak >= position) {
                     // A left-aligned line may retain the whitespace that fitted
@@ -1667,7 +1780,7 @@ struct Context {
                         ++line.next;
                     }
                 }
-                Wh_Log(L"line.next: %lld", line.next);
+                Wh_Log(L"line.next: %zu", line.next);
             }
         }
 
@@ -1680,7 +1793,7 @@ struct Context {
                 ++line.next;
             }
         }
-        Wh_Log(L"line.next: %lld", line.next);
+        Wh_Log(L"line.next: %zu", line.next);
 
         // Empty paragraphs still represent a logical line.
         line.end = std::max(line.end, line.start);
@@ -1777,7 +1890,7 @@ struct Context {
         std::vector<Modification> modifications;
 
         for (;;) {
-            Wh_Log(L"position: %lld", position);
+            Wh_Log(L"position: %zu", position);
             const auto offsetY =
                 ((format & DT_EDITCONTROL) ? 2 * safeLineHeight - 1 : safeLineHeight);
             const auto lastLine = !(format & DT_NOCLIP)
@@ -1889,8 +2002,7 @@ struct Context {
             std::wstring modified(text);
             std::ranges::sort(modifications, std::ranges::greater{}, &Modification::start);
             for (const auto& [start, length, replacement] : modifications) {
-                if (start >= 0 && length >= 0 && start <= modified.size()
-                    && start + length <= modified.size()) {
+                if (start <= modified.size() && start + length <= modified.size()) {
                     modified.replace(start, length, replacement);
                 }
             }
@@ -1938,7 +2050,9 @@ struct Context {
             .originalFont = static_cast<HFONT>(GetCurrentObject(hdc, OBJ_FONT))
         };
 
-        Wh_Log(L"text: \"%s\", count: %d, size: %d", text, count, ctx.text.size());
+        Wh_Log(
+            L"text: \"%.s\", count: %d, size: %d", ctx.text.size(), text, count, ctx.text.size()
+        );
 
         if (ctx.text.size() > INT_MAX / 4) {
             return std::nullopt;
@@ -2018,17 +2132,17 @@ static int WINAPI DrawTextExW_Hook(
         Context::Make(hdc, text, count, rect, format, params, true).transform(&Context::execute);
     return result ? *result : g_originalDrawTextExW(hdc, text, count, rect, format, params);
 }
-// WHAM@5 transform 47: guard-close
+// WHAM@5 transform 49: guard-close
 #endif // WHAM_ONCE_9BDBA01438861D6E04D46260
-// WHAM@5 end-transform 47
-// WHAM@5 end 32
-// WHAM@5 begin 48: src/includes/gdi/hooks/DrawThemeText.h
-// WHAM@5 transform 53: guard-open
+// WHAM@5 end-transform 49
+// WHAM@5 end 33
+// WHAM@5 begin 50: src/includes/gdi/hooks/DrawThemeText.h
+// WHAM@5 transform 55: guard-open
 #ifndef WHAM_ONCE_897489964A98944CB7267F46
 #define WHAM_ONCE_897489964A98944CB7267F46
-// WHAM@5 end-transform 53
-// WHAM@5 transform 49: pragma-once
-// WHAM@5 end-transform 49
+// WHAM@5 end-transform 55
+// WHAM@5 transform 51: pragma-once
+// WHAM@5 end-transform 51
 
 #include <algorithm>
 #include <concepts>
@@ -2039,9 +2153,9 @@ static int WINAPI DrawTextExW_Hook(
 #include <utility>
 #include <vector>
 
-// WHAM@5 reference 50: src/includes/gdi/font_utils.h -> 21
-// WHAM@5 reference 51: src/includes/gdi/text_run.h -> 35
-// WHAM@5 reference 52: src/includes/hooks.h -> 41
+// WHAM@5 reference 52: src/includes/gdi/font_utils.h -> 21
+// WHAM@5 reference 53: src/includes/gdi/text_run.h -> 36
+// WHAM@5 reference 54: src/includes/hooks.h -> 43
 
 template <typename DrawRun>
 using DrawRunResult = std::invoke_result_t<const DrawRun&, const TextRun&, RECT&, DWORD>;
@@ -2067,9 +2181,10 @@ static std::optional<DrawRunResult<DrawRun>> RenderThemedTextRuns(
         return std::nullopt;
     }
 
-    Wh_Log(L"text: \"%s\", count: %d", text, count);
+    const std::wstring_view textView(text, count < 0 ? wcslen(text) : count);
 
-    const std::wstring_view textView(text, static_cast<size_t>(count));
+    Wh_Log(L"text: \"%.s\", count: %d, size: %d", textView.size(), text, count, textView.size());
+
     const auto originalFont = static_cast<HFONT>(GetCurrentObject(hdc, OBJ_FONT));
     if (!originalFont) {
         return std::nullopt;
@@ -2081,11 +2196,12 @@ static std::optional<DrawRunResult<DrawRun>> RenderThemedTextRuns(
         return std::nullopt;
     }
 
-    std::vector<LONG> measuredWidths(runs->first.size());
+    std::vector<LONG> measuredWidths;
+    measuredWidths.reserve(runs->first.size());
 
     int totalWidth = 0;
     for (const auto& run : runs->first) {
-        const SelectedObjectGuard fontGuard(hdc, run.font);
+        const SelectedObjectGuard fontGuard(hdc, get(run.font));
         if (!fontGuard) {
             return std::nullopt;
         }
@@ -2111,7 +2227,7 @@ static std::optional<DrawRunResult<DrawRun>> RenderThemedTextRuns(
 
     const auto runFlags = textFlags & ~(DT_CENTER | DT_RIGHT);
     std::optional<DrawRunResult<DrawRun>> lastResult;
-    for (const auto& [run, measuredWidth] : std::ranges::views::zip(runs->first, measuredWidths)) {
+    for (const auto& [run, measuredWidth] : std::views::zip(runs->first, measuredWidths)) {
         RECT runRect = *rect;
         runRect.left = currentX;
         runRect.right = currentX + measuredWidth;
@@ -2153,7 +2269,7 @@ static HRESULT WINAPI DrawThemeText_Hook(
     const HookGuard _;
     const auto result = RenderThemedTextRuns(
         hdc, text, count, rect, textFlags, [&](const TextRun& run, RECT& runRect, DWORD runFlags) {
-            const SelectedObjectGuard fontGuard(hdc, run.font);
+            const SelectedObjectGuard fontGuard(hdc, get(run.font));
             if (!fontGuard) {
                 return E_FAIL;
             }
@@ -2190,7 +2306,8 @@ static HRESULT WINAPI DrawThemeTextEx_Hook(
     LPRECT rect,
     const DTTOPTS* options
 ) {
-    if (g_inHook || !text || !rect || count <= 0 || (textFlags & DT_CALCRECT)) {
+    if (g_inHook || !text || !rect || count <= 0 || (textFlags & DT_CALCRECT)
+        || (options && (options->dwFlags & DTT_CALCRECT))) {
         return g_originalDrawThemeTextEx(
             theme, hdc, partId, stateId, text, count, textFlags, rect, options
         );
@@ -2200,7 +2317,7 @@ static HRESULT WINAPI DrawThemeTextEx_Hook(
 
     const auto result = RenderThemedTextRuns(
         hdc, text, count, rect, textFlags, [&](const TextRun& run, RECT& runRect, DWORD runFlags) {
-            const SelectedObjectGuard fontGuard(hdc, run.font);
+            const SelectedObjectGuard fontGuard(hdc, get(run.font));
             if (!fontGuard) {
                 return E_FAIL;
             }
@@ -2251,7 +2368,7 @@ static int WINAPI DrawShadowText_Hook(
         rect,
         flags,
         [&](const TextRun& run, RECT& runRect, DWORD runFlags) {
-            const SelectedObjectGuard fontGuard(hdc, run.font);
+            const SelectedObjectGuard fontGuard(hdc, get(run.font));
             if (!fontGuard) {
                 return 0;
             }
@@ -2276,25 +2393,25 @@ static int WINAPI DrawShadowText_Hook(
         hdc, text, count, rect, flags, textColor, shadowColor, shadowOffsetX, shadowOffsetY
     );
 }
-// WHAM@5 transform 54: guard-close
+// WHAM@5 transform 56: guard-close
 #endif // WHAM_ONCE_897489964A98944CB7267F46
-// WHAM@5 end-transform 54
-// WHAM@5 end 48
-// WHAM@5 begin 55: src/includes/gdi/hooks/ExtTextOutW.h
-// WHAM@5 transform 59: guard-open
+// WHAM@5 end-transform 56
+// WHAM@5 end 50
+// WHAM@5 begin 57: src/includes/gdi/hooks/ExtTextOutW.h
+// WHAM@5 transform 61: guard-open
 #ifndef WHAM_ONCE_04CE2DE842A117CBD931D577
 #define WHAM_ONCE_04CE2DE842A117CBD931D577
-// WHAM@5 end-transform 59
-// WHAM@5 transform 56: pragma-once
-// WHAM@5 end-transform 56
+// WHAM@5 end-transform 61
+// WHAM@5 transform 58: pragma-once
+// WHAM@5 end-transform 58
 
 #include <algorithm>
-#include <functional>
+#include <ranges>
 #include <span>
 #include <string_view>
 
-// WHAM@5 reference 57: src/includes/gdi/text_run.h -> 35
-// WHAM@5 reference 58: src/includes/hooks.h -> 41
+// WHAM@5 reference 59: src/includes/gdi/text_run.h -> 36
+// WHAM@5 reference 60: src/includes/hooks.h -> 43
 
 /// ExtTextOutW renderer.
 ///
@@ -2318,7 +2435,9 @@ static BOOL RenderExtTextOutRuns(
 ) {
     Wh_Log(L">");
 
-    if (options & ETO_GLYPH_INDEX) {
+    // TODO: measure and draw for non-left alignment
+    const auto textAlign = GetTextAlign(hdc);
+    if ((options & ETO_GLYPH_INDEX) || (textAlign & TA_RIGHT) || (textAlign & TA_CENTER)) {
         return g_originalExtTextOutW(hdc, x, y, options, rect, text, count, dx);
     }
 
@@ -2331,31 +2450,44 @@ static BOOL RenderExtTextOutRuns(
 
     Wh_Log(L">");
 
-    const auto textView = std::wstring_view(text, count < 0 ? wcslen(text) : count);
+    const std::wstring_view textView(text, count);
 
-    Wh_Log(L"text: \"%s\", count: %d, size: %d", text, count, textView.size());
+    Wh_Log(L"text: \"%.s\", count: %d", count, text, count);
 
-    Wh_Log(L">");
     const auto runs = BuildRuns(hdc, originalFont, textView);
     if (!runs || !runs->second) {
         return g_originalExtTextOutW(hdc, x, y, options, rect, text, count, dx);
     }
 
-    const auto dxSpan = dx ? std::span{dx, textView.size()} : std::span<INT>{};
+    if (options & ETO_OPAQUE) {
+        g_originalExtTextOutW(hdc, x, y, ETO_OPAQUE, rect, nullptr, 0, nullptr);
+    }
+
+    options &= ~ETO_OPAQUE;
+
+    const size_t dxFactor = (options & ETO_PDY) ? 2 : 1;
+    const auto dxSpan = dx ? std::span{dx, textView.size() * dxFactor} : std::span<INT>{};
     auto currentX = x;
     for (const auto& run : runs->first) {
-        const SelectedObjectGuard fontGuard(hdc, run.font);
+        const SelectedObjectGuard fontGuard(hdc, get(run.font));
         if (!fontGuard) {
             continue;
         }
 
-        const auto runDx = dx ? dxSpan.subspan(run.text.cbegin() - text) : std::span<INT>{};
+        const auto runDx = dx ? dxSpan.subspan(run.text.cbegin() - text, run.text.size() * dxFactor)
+                              : std::span<INT>{};
         const auto result = g_originalExtTextOutW(
             hdc, currentX, y, options, rect, run.text.cbegin(), run.text.size(), runDx.data()
         );
 
         if (dx) {
-            currentX += std::ranges::fold_left(runDx, 0, std::plus{});
+            auto indices = std::views::iota(0UZ, runDx.size());
+            auto runDxOnly = std::views::zip(indices, runDx) | std::views::filter([](auto p) {
+                                 return std::get<0>(p) % 2 == 0;
+                             })
+                             | std::views::elements<1>;
+            currentX += (options & ETO_PDY) ? std::ranges::fold_left(runDxOnly, 0, std::plus{})
+                                            : std::ranges::fold_left(runDx, 0, std::plus{});
         } else {
             SIZE extent{};
             GetTextExtentPoint32W(
@@ -2390,22 +2522,52 @@ static BOOL WINAPI ExtTextOutW_Hook(
 
     return RenderExtTextOutRuns(hdc, x, y, options, rect, text, count, dx);
 }
-// WHAM@5 transform 60: guard-close
+// WHAM@5 transform 62: guard-close
 #endif // WHAM_ONCE_04CE2DE842A117CBD931D577
-// WHAM@5 end-transform 60
-// WHAM@5 end 55
-// WHAM@5 begin 61: src/includes/gdi/hooks/TextOutW.h
-// WHAM@5 transform 65: guard-open
+// WHAM@5 end-transform 62
+// WHAM@5 end 57
+// WHAM@5 begin 63: src/includes/gdi/hooks/LoadLibraryW.h
+#include <algorithm>
+#include <array>
+#include <string_view>
+
+#include <winnt.h>
+
+#include <windhawk_api.h>
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+LoadLibraryExW_t g_originalLoadLibraryExW;
+
+HMODULE WINAPI LoadLibraryExW_Hook(
+    LPCWSTR lpLibFileName,
+    HANDLE hFile,
+    DWORD dwFlags
+) {
+    constexpr std::array hookedDLLs{L"gdi32.dll", L"user32.dll", L"comctl32.dll", L"uxtheme.dll"};
+
+    HMODULE module = g_originalLoadLibraryExW(lpLibFileName, hFile, dwFlags);
+    if (module
+        && std::ranges::find(hookedDLLs, std::wstring_view{lpLibFileName}) != hookedDLLs.cend()) {
+        Wh_ApplyHookOperations();
+    }
+
+    return module;
+}
+// WHAM@5 end 63
+// WHAM@5 begin 64: src/includes/gdi/hooks/TextOutW.h
+// WHAM@5 transform 68: guard-open
 #ifndef WHAM_ONCE_2A8DE16B7CCB576C2F8E77E9
 #define WHAM_ONCE_2A8DE16B7CCB576C2F8E77E9
+// WHAM@5 end-transform 68
+// WHAM@5 transform 65: pragma-once
 // WHAM@5 end-transform 65
-// WHAM@5 transform 62: pragma-once
-// WHAM@5 end-transform 62
 
 #include <string_view>
 
-// WHAM@5 reference 63: src/includes/gdi/text_run.h -> 35
-// WHAM@5 reference 64: src/includes/hooks.h -> 41
+// WHAM@5 reference 66: src/includes/gdi/text_run.h -> 36
+// WHAM@5 reference 67: src/includes/hooks.h -> 43
 
 /// Render a TextOutW-style string.
 ///
@@ -2429,9 +2591,9 @@ static BOOL RenderTextOutRuns(
         return g_originalTextOutW(hdc, x, y, text, count);
     }
 
-    const auto textView = std::wstring_view(text, count < 0 ? wcslen(text) : count);
+    const std::wstring_view textView(text, count < 0 ? wcslen(text) : count);
 
-    Wh_Log(L"text: \"%s\", count: %d, size: %d", text, count, textView.size());
+    Wh_Log(L"text: \"%.s\", count: %d, size: %d", textView.size(), text, count, textView.size());
 
     Wh_Log(L">");
     const auto runs = BuildRuns(hdc, originalFont, textView);
@@ -2442,7 +2604,7 @@ static BOOL RenderTextOutRuns(
     int currentX = x;
 
     for (const auto& run : runs->first) {
-        const SelectedObjectGuard fontGuard(hdc, run.font);
+        const SelectedObjectGuard fontGuard(hdc, get(run.font));
         if (!fontGuard) {
             continue;
         }
@@ -2478,11 +2640,11 @@ static BOOL WINAPI TextOutW_Hook(
 
     return RenderTextOutRuns(hdc, x, y, text, count);
 }
-// WHAM@5 transform 66: guard-close
+// WHAM@5 transform 69: guard-close
 #endif // WHAM_ONCE_2A8DE16B7CCB576C2F8E77E9
-// WHAM@5 end-transform 66
-// WHAM@5 end 61
-// WHAM@5 reference 67: src/includes/hooks.h -> 41
+// WHAM@5 end-transform 69
+// WHAM@5 end 64
+// WHAM@5 reference 70: src/includes/hooks.h -> 43
 
 static bool InstallDWriteHooks() {
     IUnknown* factory = nullptr;
@@ -2506,10 +2668,8 @@ static bool InstallDWriteHooks() {
     constexpr auto offsetCreateTextLayout0 = 18UZ;     // 16th of IDWriteFactory
     constexpr auto offsetCreateTextFormat6 = 54UZ;     // 7th of IDWriteFactory6
 
-    const com_ptr<IDWriteFactory> factory0(factory, winrt::take_ownership_from_abi);
+    const winrt::com_ptr<IDWriteFactory> factory0(factory, winrt::take_ownership_from_abi);
     const auto supportsFactory6 = static_cast<bool>(factory0.try_as<IDWriteFactory6>());
-
-    using WindhawkUtils::SetFunctionHook;
 
     if (!HookFunctionInVtable(
             factory,
@@ -2565,22 +2725,25 @@ BOOL Wh_ModInit() {
     }
 
     const auto successGDI =
-        HookFunctionFromDLL(L"gdi32.dll", "TextOutW", TextOutW_Hook, &g_originalTextOutW)
-        && HookFunctionFromDLL(
-            L"gdi32.dll", "ExtTextOutW", ExtTextOutW_Hook, &g_originalExtTextOutW
-        )
-        && HookFunctionFromDLL(L"user32.dll", "DrawTextW", DrawTextW_Hook, &g_originalDrawTextW)
-        && HookFunctionFromDLL(
-            L"user32.dll", "DrawTextExW", DrawTextExW_Hook, &g_originalDrawTextExW
-        )
-        && HookFunctionFromDLL(
-            L"uxtheme.dll", "DrawThemeText", DrawThemeText_Hook, &g_originalDrawThemeText
-        )
-        && HookFunctionFromDLL(
-            L"uxtheme.dll", "DrawThemeTextEx", DrawThemeTextEx_Hook, &g_originalDrawThemeTextEx
-        )
-        && HookFunctionFromDLL(
-            L"comctl32.dll", "DrawShadowText", DrawShadowText_Hook, &g_originalDrawShadowText
+        (HookFunctionFromDLL(L"gdi32.dll", "TextOutW", TextOutW_Hook, &g_originalTextOutW)
+         && HookFunctionFromDLL(
+             L"gdi32.dll", "ExtTextOutW", ExtTextOutW_Hook, &g_originalExtTextOutW
+         )
+         && HookFunctionFromDLL(L"user32.dll", "DrawTextW", DrawTextW_Hook, &g_originalDrawTextW)
+         && HookFunctionFromDLL(
+             L"user32.dll", "DrawTextExW", DrawTextExW_Hook, &g_originalDrawTextExW
+         )
+         && HookFunctionFromDLL(
+             L"uxtheme.dll", "DrawThemeText", DrawThemeText_Hook, &g_originalDrawThemeText
+         )
+         && HookFunctionFromDLL(
+             L"uxtheme.dll", "DrawThemeTextEx", DrawThemeTextEx_Hook, &g_originalDrawThemeTextEx
+         )
+         && HookFunctionFromDLL(
+             L"comctl32.dll", "DrawShadowText", DrawShadowText_Hook, &g_originalDrawShadowText
+         ))
+        || HookFunctionFromDLL(
+            L"kernelbase.dll", "LoadLibraryExW", LoadLibraryExW_Hook, &g_originalLoadLibraryExW
         );
 
     if (!successGDI) {
@@ -2592,13 +2755,18 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Font Fallback Override - Uninitializing");
+
+    ClearFontCache();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading...");
 
     LoadRules();
-    *g_fallback.lock_mut() = nullptr;
+
+    *g_dwriteFallback.lock_mut() = nullptr;
+
+    ClearFontCache();
 }
 // #region WHAM recovery
 // clang-format off
@@ -2610,7 +2778,7 @@ void Wh_ModSettingsChanged() {
 //   "files": [
 //     {
 //       "path": "src/font-fallback-override.cpp",
-//       "hash": "9a1539c74e5360ad94eb4147a89a100bf7396d2d9d0df40b608457bd9c6e5a2c",
+//       "hash": "9f4064f3363b9c023939b4a2e202f9bec46260e8c684d487067672871845d064",
 //       "bom": false
 //     },
 //     {
@@ -2625,17 +2793,17 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/dwrite/hooks/GetSystemFontFallback.h",
-//       "hash": "390aba7114abf3ba9ebb7835d958c17297928cab077c6d0131e77890ef744f6a",
+//       "hash": "4c4113b3435a5b83ddf7522fdcab1fe7c1f36570acdceb939cd582be9d35a7bd",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/fallback_rule.h",
-//       "hash": "1b95ce5a3e83022b7af7add0d1335da6e280b29b7d38ae3ec7991190859c28b5",
+//       "hash": "c038d809fb4ad6c1083ece3de17b6a39f8c0fc25a93d4035d8e43d5d1bad1127",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/font_cache.h",
-//       "hash": "26a4e5f53b476d438f8f19732af93e4540329969c8b384854643cb6cff5ae659",
+//       "hash": "0e5d330203c624674673f661e12b14abd170198507bf3cbda27c5bf6487ced21",
 //       "bom": false
 //     },
 //     {
@@ -2645,37 +2813,42 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/DrawTextW.h",
-//       "hash": "352d952cd1da77dab77eb6fc786f517fbd484cfe0a9923350632415891076776",
+//       "hash": "f4a0a5ada3524ca123e356dfbd5a22d103496849df506cefef0f90198df8ebdf",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/DrawThemeText.h",
-//       "hash": "fb8645795011a4826c6f893b26b115a5e8a05196af0331703738d9e83cc60546",
+//       "hash": "c3c1f1c2e79bf97d31db1620fc90cb41199daf4adcd815c8bda0bc52c43bf65c",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/ExtTextOutW.h",
-//       "hash": "ae37defbab4274891226e047e743d30211d4d83a3873b46847a124d99d2071c8",
+//       "hash": "8dbb470d5f74e7a0807978e93b829843784d1f80d01afafa8f9d54d118fbb11b",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/gdi/hooks/LoadLibraryW.h",
+//       "hash": "2546a05f6327ae7e22af4c1c183d306e8c900bc937506a31b46137691f5d9f14",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/hooks/TextOutW.h",
-//       "hash": "cc021726800aae2b6fcb499e976afa5b2426f8a45ba1ffb68cb49c81f3fb9b57",
+//       "hash": "921016abd1035f9ff00d1d3660d3fd26e89368a3a85a4afc8904679c048ca345",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/gdi/text_run.h",
-//       "hash": "d7184568fa92ddb075c9d63ea11b493e6e47f1c5c2d9703c8d46f5d238b015f2",
+//       "hash": "c7371d06ff1059e0e204e26a646517477946a5d65bc66458e898f5804e92c057",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/hooks.h",
-//       "hash": "0ebe969091dc26691b146837581f8a6147f7774e78da706d6de281b9b014c764",
+//       "hash": "a94795504b031e217089a6bf0ee66fb96ffe0755c0fc435943d815b8bd120937",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/includes/utils.h",
-//       "hash": "05101255042a34928c7a73f551b5885977f441c7d59ca90093dd7d4eb57569d5",
+//       "hash": "be68d00ca0e6c9c098df48d04ddc9ab1b3ba373b070e3220f2c29e5737fd488f",
 //       "bom": false
 //     }
 //   ],
@@ -2894,238 +3067,258 @@ void Wh_ModSettingsChanged() {
 //       "bodyId": 11
 //     },
 //     {
-//       "type": "include",
+//       "type": "reference",
 //       "id": 32,
+//       "path": "src/includes/gdi/font_cache.h",
+//       "directive": "#include \"includes/gdi/font_cache.h\"\r\n",
+//       "bodyId": 13
+//     },
+//     {
+//       "type": "include",
+//       "id": 33,
 //       "path": "src/includes/gdi/hooks/DrawTextW.h",
 //       "directive": "#include \"includes/gdi/hooks/DrawTextW.h\"\r\n"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 33,
+//       "id": 34,
 //       "kind": "pragma-once",
 //       "directive": "#pragma once\r\n",
 //       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 //     },
 //     {
 //       "type": "reference",
-//       "id": 34,
+//       "id": 35,
 //       "path": "src/includes/gdi/font_utils.h",
 //       "directive": "#include \"includes/gdi/font_utils.h\"\r\n",
 //       "bodyId": 21
 //     },
 //     {
 //       "type": "include",
-//       "id": 35,
+//       "id": 36,
 //       "path": "src/includes/gdi/text_run.h",
 //       "directive": "#include \"includes/gdi/text_run.h\"\r\n"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 36,
+//       "id": 37,
 //       "kind": "pragma-once",
 //       "directive": "#pragma once\r\n",
 //       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 //     },
 //     {
 //       "type": "reference",
-//       "id": 37,
+//       "id": 38,
 //       "path": "src/includes/fallback_rule.h",
 //       "directive": "#include \"includes/fallback_rule.h\"\r\n",
 //       "bodyId": 11
 //     },
 //     {
 //       "type": "reference",
-//       "id": 38,
+//       "id": 39,
+//       "path": "src/includes/gdi/font_cache.h",
+//       "directive": "#include \"includes/gdi/font_cache.h\"\r\n",
+//       "bodyId": 13
+//     },
+//     {
+//       "type": "reference",
+//       "id": 40,
 //       "path": "src/includes/utils.h",
 //       "directive": "#include \"includes/utils.h\"\r\n",
 //       "bodyId": 15
 //     },
 //     {
 //       "type": "transform",
-//       "id": 39,
+//       "id": 41,
 //       "kind": "guard-open",
 //       "hash": "63527483f33ac4f58cc2bfd02c3e39db2336bcb4c337588a669638b5e2cdedcf"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 40,
+//       "id": 42,
 //       "kind": "guard-close",
 //       "hash": "ae780058adf22156f3100598439f4dba702c185da13902c54c5c2992fefb14fd"
 //     },
 //     {
 //       "type": "include",
-//       "id": 41,
+//       "id": 43,
 //       "path": "src/includes/hooks.h",
 //       "directive": "#include \"includes/hooks.h\"\r\n"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 42,
+//       "id": 44,
 //       "kind": "pragma-once",
 //       "directive": "#pragma once\r\n",
 //       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 43,
+//       "id": 45,
 //       "kind": "guard-open",
 //       "hash": "47ce1832f74395b28adeb6eeb493988177de40b3466cbd98272b4fe0ee1e2244"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 44,
+//       "id": 46,
 //       "kind": "guard-close",
 //       "hash": "062160069f5aca93b9adf8a276ca5ea9a786972f7bdbff10b0a010668b2cc93e"
 //     },
 //     {
 //       "type": "reference",
-//       "id": 45,
+//       "id": 47,
 //       "path": "src/includes/utils.h",
 //       "directive": "#include \"includes/utils.h\"\r\n",
 //       "bodyId": 15
 //     },
 //     {
 //       "type": "transform",
-//       "id": 46,
+//       "id": 48,
 //       "kind": "guard-open",
 //       "hash": "3170d2bfbf0b366042c92a249d05456413e8c632d07fe198630dfd1cb2df9872"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 47,
+//       "id": 49,
 //       "kind": "guard-close",
 //       "hash": "f8ebf78fb17ae505a90a012a8e243daf3233a66f35a0ba86dcf8a222919150f3"
 //     },
 //     {
 //       "type": "include",
-//       "id": 48,
+//       "id": 50,
 //       "path": "src/includes/gdi/hooks/DrawThemeText.h",
 //       "directive": "#include \"includes/gdi/hooks/DrawThemeText.h\"\r\n"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 49,
+//       "id": 51,
 //       "kind": "pragma-once",
 //       "directive": "#pragma once\r\n",
 //       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 //     },
 //     {
 //       "type": "reference",
-//       "id": 50,
+//       "id": 52,
 //       "path": "src/includes/gdi/font_utils.h",
 //       "directive": "#include \"includes/gdi/font_utils.h\"\r\n",
 //       "bodyId": 21
 //     },
 //     {
 //       "type": "reference",
-//       "id": 51,
+//       "id": 53,
 //       "path": "src/includes/gdi/text_run.h",
 //       "directive": "#include \"includes/gdi/text_run.h\"\r\n",
-//       "bodyId": 35
+//       "bodyId": 36
 //     },
 //     {
 //       "type": "reference",
-//       "id": 52,
+//       "id": 54,
 //       "path": "src/includes/hooks.h",
 //       "directive": "#include \"includes/hooks.h\"\r\n",
-//       "bodyId": 41
+//       "bodyId": 43
 //     },
 //     {
 //       "type": "transform",
-//       "id": 53,
+//       "id": 55,
 //       "kind": "guard-open",
 //       "hash": "b16b568ddc505a4efe6c7a685754fef356d089d5e7bad02c33b2289b612e11ed"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 54,
+//       "id": 56,
 //       "kind": "guard-close",
 //       "hash": "2a5b840791be81ee85ee5f2427bfa6621f9167f8ff2d2fc9d2154e7b582de482"
 //     },
 //     {
 //       "type": "include",
-//       "id": 55,
+//       "id": 57,
 //       "path": "src/includes/gdi/hooks/ExtTextOutW.h",
 //       "directive": "#include \"includes/gdi/hooks/ExtTextOutW.h\"\r\n"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 56,
+//       "id": 58,
 //       "kind": "pragma-once",
 //       "directive": "#pragma once\r\n",
 //       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 //     },
 //     {
 //       "type": "reference",
-//       "id": 57,
+//       "id": 59,
 //       "path": "src/includes/gdi/text_run.h",
 //       "directive": "#include \"includes/gdi/text_run.h\"\r\n",
-//       "bodyId": 35
+//       "bodyId": 36
 //     },
 //     {
 //       "type": "reference",
-//       "id": 58,
+//       "id": 60,
 //       "path": "src/includes/hooks.h",
 //       "directive": "#include \"includes/hooks.h\"\r\n",
-//       "bodyId": 41
+//       "bodyId": 43
 //     },
 //     {
 //       "type": "transform",
-//       "id": 59,
+//       "id": 61,
 //       "kind": "guard-open",
 //       "hash": "1e798ba74e1ae7ec0a1e6e1c118987a81c5641d8c7ea7458c0817165578a1524"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 60,
+//       "id": 62,
 //       "kind": "guard-close",
 //       "hash": "7740b01cab5e823df053f8bca219576c30bc06287975f5b19b7ddc6a50f8b2d1"
 //     },
 //     {
 //       "type": "include",
-//       "id": 61,
+//       "id": 63,
+//       "path": "src/includes/gdi/hooks/LoadLibraryW.h",
+//       "directive": "#include \"includes/gdi/hooks/LoadLibraryW.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 64,
 //       "path": "src/includes/gdi/hooks/TextOutW.h",
 //       "directive": "#include \"includes/gdi/hooks/TextOutW.h\"\r\n"
 //     },
 //     {
 //       "type": "transform",
-//       "id": 62,
+//       "id": 65,
 //       "kind": "pragma-once",
 //       "directive": "#pragma once\r\n",
 //       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 //     },
 //     {
 //       "type": "reference",
-//       "id": 63,
+//       "id": 66,
 //       "path": "src/includes/gdi/text_run.h",
 //       "directive": "#include \"includes/gdi/text_run.h\"\r\n",
-//       "bodyId": 35
-//     },
-//     {
-//       "type": "reference",
-//       "id": 64,
-//       "path": "src/includes/hooks.h",
-//       "directive": "#include \"includes/hooks.h\"\r\n",
-//       "bodyId": 41
-//     },
-//     {
-//       "type": "transform",
-//       "id": 65,
-//       "kind": "guard-open",
-//       "hash": "4c409a2861b5fa7bca3b6a235a2144d9905112c2434e11deaebe92f1c7d73739"
-//     },
-//     {
-//       "type": "transform",
-//       "id": 66,
-//       "kind": "guard-close",
-//       "hash": "d6f3664120ffd1b69eaf0f325d88b7480b5cc0085f9900cd2f06a52490e02ab0"
+//       "bodyId": 36
 //     },
 //     {
 //       "type": "reference",
 //       "id": 67,
 //       "path": "src/includes/hooks.h",
 //       "directive": "#include \"includes/hooks.h\"\r\n",
-//       "bodyId": 41
+//       "bodyId": 43
+//     },
+//     {
+//       "type": "transform",
+//       "id": 68,
+//       "kind": "guard-open",
+//       "hash": "4c409a2861b5fa7bca3b6a235a2144d9905112c2434e11deaebe92f1c7d73739"
+//     },
+//     {
+//       "type": "transform",
+//       "id": 69,
+//       "kind": "guard-close",
+//       "hash": "d6f3664120ffd1b69eaf0f325d88b7480b5cc0085f9900cd2f06a52490e02ab0"
+//     },
+//     {
+//       "type": "reference",
+//       "id": 70,
+//       "path": "src/includes/hooks.h",
+//       "directive": "#include \"includes/hooks.h\"\r\n",
+//       "bodyId": 43
 //     }
 //   ]
 // }
