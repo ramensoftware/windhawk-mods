@@ -2,7 +2,7 @@
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, network speed, optional ping and a working set trimmer
-// @version         1.1.2
+// @version         1.1
 // @author          Lemon
 // @github          https://github.com/lemon-web-stack
 // @homepage        https://github.com/lemon-web-stack
@@ -16,7 +16,7 @@
 # Taskbar Live HUD
 
 A compact system monitoring widget for the Windows 10 & 11 taskbar.
-Displays real-time CPU usage, RAM load, network traffic (in Mbps/Kbps), and optional latency,
+Displays real-time CPU usage, RAM load, network traffic (in Mbps/Kbps), and optional router latency,
 with an optional process memory trimmer and real-time mini-graph.
 
 This is a tool mod: it runs in its own dedicated process instead of being
@@ -29,14 +29,18 @@ survives Explorer restarts.
 - **Real-time monitoring:** CPU load, RAM usage and active network speed (Mbps/Kbps).
 - **Windows 10 & 11 look:** blends with the taskbar, configurable corner style, custom/auto background color and per-pixel background alpha.
 - **Auto-hide:** hides itself when a fullscreen game or application is active.
-- **Ping (opt-in, off by default):** ping your local router gateway (0 internet traffic) or public DNS resolvers.
-- **Mini History Graph:** press **Ctrl + Right Click** to open a real-time CPU/RAM history graph.
-- **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click**.
+- **Ping (opt-in, off by default):** measures ICMP latency to the local router (default gateway) roughly every 1.6 seconds. Nothing is sent while it is disabled.
+- **Mini History Graph:** press **Ctrl + Right Click** to open a real-time CPU & RAM history graph.
+- **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click**. Trimmed pages move to the standby list and programs page the data back in when they need it, so this does not free memory in a lasting way and may cause a short slowdown.
 
 ### Controls
 - **Ctrl + Left Click:** trim memory (only if enabled in settings).
 - **Ctrl + Right Click:** toggle real-time CPU & RAM mini-graph popup.
 - **Alt + Left Click and drag:** adjust the horizontal position on the taskbar.
+
+### Known limitations
+- Only the primary taskbar is supported (no secondary monitors).
+- Network speed is the sum of all active hardware adapters.
 */
 // ==/WindhawkModReadme==
 
@@ -83,16 +87,8 @@ survives Explorer restarts.
   $name: "Enable Process Memory Trimmer (Ctrl + Click)"
   $description: "Allows pressing Ctrl + Left Click to trim working set memory of user processes"
 - showPing: false
-  $name: "Show Ping (Opt-in)"
-  $description: "Measure ICMP latency (a request is sent about every 1.6 seconds)"
-- pingTarget: router
-  $name: "Ping Target Server"
-  $description: "Target used when ping display is enabled"
-  $options:
-    - router: "Local Router (Default Gateway - 0 Internet Traffic)"
-    - cf: "Cloudflare (1.1.1.1)"
-    - gg: "Google (8.8.8.8)"
-    - q9: "Quad9 (9.9.9.9)"
+  $name: "Show Ping to Local Router (Opt-in)"
+  $description: "Measure ICMP latency to the local default gateway (a request is sent about every 1.6 seconds)"
 */
 // ==/WindhawkModSettings==
 
@@ -129,9 +125,6 @@ survives Explorer restarts.
 #ifndef NET_TYPE_LOOPBACK
 #define NET_TYPE_LOOPBACK 24
 #endif
-
-static const DWORD NET_OPER_CONNECTED   = 4;
-static const DWORD NET_OPER_OPERATIONAL = 5;
 
 static const int PING_ERROR   = -1;
 static const int PING_PENDING = -2;
@@ -237,8 +230,6 @@ struct ModSettings {
     bool showNetSpeed;
     bool enableRamClean;
     bool showPing;
-    bool pingIsGateway;
-    unsigned long pingIp;
     bool customBgEnabled;
     BYTE customR, customG, customB;
 };
@@ -278,6 +269,7 @@ Gdiplus::Color g_statusColor(255, 110, 230, 145);
 
 bool g_isHovered = false;
 bool g_isDragging = false;
+bool g_isTaskbarLight = false;
 POINT g_dragStartPt = {};
 int g_dragStartOffset = 0;
 
@@ -301,7 +293,7 @@ int ScaleDpi(int val, UINT dpi) {
     return MulDiv(val, (int)dpi, 96);
 }
 
-bool IsTaskbarLight() {
+bool ReadTaskbarLightTheme() {
     DWORD val = 0;
     DWORD sz = sizeof(val);
     if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
@@ -320,6 +312,7 @@ void UpdateCachedFonts(UINT dpi) {
     Gdiplus::REAL fontHeight = (Gdiplus::REAL)ScaleDpi(12, dpi);
     Gdiplus::REAL smallFontHeight = (Gdiplus::REAL)ScaleDpi(10, dpi);
 
+    // Support Windows 11 (Segoe UI Variable) and Windows 10 (Segoe UI fallback)
     Gdiplus::FontFamily familyVar(L"Segoe UI Variable Text");
     Gdiplus::FontFamily familySegoe(L"Segoe UI");
 
@@ -362,38 +355,19 @@ void LoadSettings(bool fromSettingsChanged = false) {
     s.bgAlpha = (std::max)(40, (std::min)(255, rawAlpha));
 
     PCWSTR bgModeStr = Wh_GetStringSetting(L"bgColorMode");
-    s.customBgEnabled = (bgModeStr && lstrcmpiW(bgModeStr, L"custom") == 0);
+    s.customBgEnabled = (lstrcmpiW(bgModeStr, L"custom") == 0);
     Wh_FreeStringSetting(bgModeStr);
 
     s.customR = 20; s.customG = 21; s.customB = 26;
     PCWSTR hexStr = Wh_GetStringSetting(L"customBgColor");
-    if (hexStr) {
-        ParseHexColor(hexStr, s.customR, s.customG, s.customB);
-        Wh_FreeStringSetting(hexStr);
-    }
+    ParseHexColor(hexStr, s.customR, s.customG, s.customB);
+    Wh_FreeStringSetting(hexStr);
 
     s.cornerPref = 2;
     PCWSTR cornerStr = Wh_GetStringSetting(L"cornerStyle");
     if (lstrcmpiW(cornerStr, L"square") == 0) s.cornerPref = 1;
     else if (lstrcmpiW(cornerStr, L"small") == 0) s.cornerPref = 3;
     Wh_FreeStringSetting(cornerStr);
-
-    s.pingIsGateway = true;
-    s.pingIp = 0;
-    PCWSTR targetStr = Wh_GetStringSetting(L"pingTarget");
-    if (targetStr) {
-        if (lstrcmpiW(targetStr, L"cf") == 0) {
-            s.pingIsGateway = false;
-            s.pingIp = MakeIpv4(1, 1, 1, 1);
-        } else if (lstrcmpiW(targetStr, L"gg") == 0) {
-            s.pingIsGateway = false;
-            s.pingIp = MakeIpv4(8, 8, 8, 8);
-        } else if (lstrcmpiW(targetStr, L"q9") == 0) {
-            s.pingIsGateway = false;
-            s.pingIp = MakeIpv4(9, 9, 9, 9);
-        }
-        Wh_FreeStringSetting(targetStr);
-    }
 
     s.showCpu = (Wh_GetIntSetting(L"showCpu") != 0);
     s.showRam = (Wh_GetIntSetting(L"showRam") != 0);
@@ -417,7 +391,7 @@ void LoadSettings(bool fromSettingsChanged = false) {
 
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        if (s.showPing && (!settings.showPing || settings.pingIp != s.pingIp || settings.pingIsGateway != s.pingIsGateway)) {
+        if (s.showPing && !settings.showPing) {
             g_pingMs = PING_PENDING;
         }
         settings = s;
@@ -473,38 +447,7 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
     static GetIfTable2_t pGetIfTable2 = hIphlpapi ? (GetIfTable2_t)GetProcAddress(hIphlpapi, "GetIfTable2") : nullptr;
     static FreeMibTable_t pFreeMibTable = hIphlpapi ? (FreeMibTable_t)GetProcAddress(hIphlpapi, "FreeMibTable") : nullptr;
 
-    if (!pGetIfTable2 || !pFreeMibTable) {
-        ULONG bufSize = 0;
-        if (GetIfTable(NULL, &bufSize, FALSE) != ERROR_INSUFFICIENT_BUFFER) return;
-        std::vector<BYTE> buf(bufSize);
-        MIB_IFTABLE* table = (MIB_IFTABLE*)buf.data();
-        if (GetIfTable(table, &bufSize, FALSE) != NO_ERROR) return;
-
-        std::vector<IfCounter> cur;
-        cur.reserve(table->dwNumEntries);
-        ULONG64 diffIn = 0, diffOut = 0;
-
-        for (DWORD i = 0; i < table->dwNumEntries; i++) {
-            const MIB_IFROW& row = table->table[i];
-            if (row.dwType == NET_TYPE_LOOPBACK) continue;
-            if (row.dwOperStatus != NET_OPER_OPERATIONAL && row.dwOperStatus != NET_OPER_CONNECTED) continue;
-
-            IfCounter c = { row.dwIndex, (ULONG64)row.dwInOctets, (ULONG64)row.dwOutOctets };
-            cur.push_back(c);
-
-            for (const IfCounter& p : s_prevNetCounters) {
-                if (p.index == c.index) {
-                    diffIn  += (DWORD)(c.inOctets  - p.inOctets);
-                    diffOut += (DWORD)(c.outOctets - p.outOctets);
-                    break;
-                }
-            }
-        }
-        g_netDownKbps = (DWORD)((diffIn * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
-        g_netUpKbps   = (DWORD)((diffOut * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
-        s_prevNetCounters.swap(cur);
-        return;
-    }
+    if (!pGetIfTable2 || !pFreeMibTable) return;
 
     LOCAL_IF_TABLE2* pTable = nullptr;
     if (pGetIfTable2(&pTable) != NO_ERROR || !pTable) return;
@@ -516,8 +459,9 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
     for (ULONG i = 0; i < pTable->NumEntries; i++) {
         const LOCAL_IF_ROW2& row = pTable->Table[i];
         if (row.Type == NET_TYPE_LOOPBACK) continue;
+        if (!row.InterfaceAndOperStatusFlags.HardwareInterface) continue;
         if (row.InterfaceAndOperStatusFlags.FilterInterface) continue;
-        if (row.OperStatus != 1 && row.OperStatus != NET_OPER_CONNECTED && row.OperStatus != NET_OPER_OPERATIONAL) continue;
+        if (row.OperStatus != 1) continue; // IfOperStatusUp == 1
 
         IfCounter c = { (DWORD)row.InterfaceIndex, row.InOctets, row.OutOctets };
         cur.push_back(c);
@@ -533,8 +477,9 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
 
     pFreeMibTable(pTable);
 
-    g_netDownKbps = (DWORD)((diffIn * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
-    g_netUpKbps   = (DWORD)((diffOut * 8ULL * 1000ULL) / (elapsedMs * 1024ULL));
+    // Decimal kilobits per second: (bytes * 8 * 1000) / (elapsedMs * 1000) = (bytes * 8) / elapsedMs
+    g_netDownKbps = (DWORD)((diffIn * 8ULL) / elapsedMs);
+    g_netUpKbps   = (DWORD)((diffOut * 8ULL) / elapsedMs);
     s_prevNetCounters.swap(cur);
 }
 
@@ -590,10 +535,8 @@ DWORD WINAPI CleanRamThreadProc(LPVOID) {
 
     wchar_t* msg = new wchar_t[48];
     if (freedMB >= 1024.0) {
-        int gb = (int)(freedMB / 1024.0);
-        int rem = (int)(((long long)(freedMB * 10.0)) % 10);
-        if (rem > 9) rem = 9;
-        wsprintfW(msg, L"+%d.%d GB Trimmed", gb, rem);
+        int tenths = (int)(freedMB * 10.0 / 1024.0);
+        wsprintfW(msg, L"+%d.%d GB Trimmed", tenths / 10, tenths % 10);
     } else if (freedMB >= 1.0) {
         wsprintfW(msg, L"+%d MB Trimmed", (int)freedMB);
     } else {
@@ -710,9 +653,9 @@ void FormatStrings(wchar_t* cpuVal, wchar_t* ramVal, wchar_t* pingVal, wchar_t* 
     DWORD activeKb = (downKb >= upKb) ? downKb : upKb;
     const wchar_t* arrow = (downKb >= upKb) ? L"\u2193" : L"\u2191";
 
-    if (activeKb >= 1024) {
-        DWORD mb = activeKb / 1024;
-        DWORD rem = ((activeKb % 1024) * 10) / 1024;
+    if (activeKb >= 1000) {
+        DWORD mb = activeKb / 1000;
+        DWORD rem = (activeKb % 1000) / 100;
         wsprintfW(netVal, L"%s%u.%u Mbps", arrow, mb, rem);
     } else {
         wsprintfW(netVal, L"%s%u Kbps", arrow, activeKb);
@@ -773,18 +716,19 @@ void RenderGraphPopup(HWND hWnd) {
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
-        int bgAlpha, cornerPref;
+        int bgAlpha, cornerPref, interval;
         bool customBg;
         BYTE cr, cg, cb;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             bgAlpha = settings.bgAlpha;
             cornerPref = settings.cornerPref;
+            interval = settings.updateInterval;
             customBg = settings.customBgEnabled;
             cr = settings.customR; cg = settings.customG; cb = settings.customB;
         }
 
-        bool isLight = IsTaskbarLight();
+        bool isLight = g_isTaskbarLight;
         Gdiplus::Color bgColor, borderColor;
         if (customBg) {
             bgColor = Gdiplus::Color(bgAlpha, cr, cg, cb);
@@ -797,7 +741,7 @@ void RenderGraphPopup(HWND hWnd) {
             borderColor = Gdiplus::Color(255, 60, 65, 78);
         }
 
-        int radius = (cornerPref == 1) ? 0 : ScaleDpi(6, g_currentDpi);
+        int radius = (cornerPref == 1) ? 0 : (cornerPref == 3 ? ScaleDpi(3, g_currentDpi) : ScaleDpi(6, g_currentDpi));
         Gdiplus::GraphicsPath bgPath;
         AddRoundedRect(bgPath, 0, 0, width - 1, height - 1, radius);
 
@@ -807,9 +751,14 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::Pen borderPen(borderColor, 1.0f);
         g.DrawPath(&borderPen, &bgPath);
 
+        // Header with dynamically calculated duration
+        wchar_t titleBuf[48];
+        int totalSec = (int)((MAX_GRAPH_POINTS * interval) / 1000);
+        wsprintfW(titleBuf, L"Activity (Last %ds)", totalSec);
+
         Gdiplus::Color colText = isLight ? Gdiplus::Color(255, 30, 32, 38) : Gdiplus::Color(255, 240, 242, 246);
         Gdiplus::SolidBrush textBrush(colText);
-        g.DrawString(L"Activity (Last 50s)", -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)ScaleDpi(10, g_currentDpi), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &textBrush);
+        g.DrawString(titleBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)ScaleDpi(10, g_currentDpi), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &textBrush);
 
         wchar_t legBuf[32];
         wsprintfW(legBuf, L"CPU %d%%", g_cpuUsage.load());
@@ -972,33 +921,35 @@ void SyncWindowGeometry() {
 
     HDC screenDC = GetDC(NULL);
     HDC tempDC = CreateCompatibleDC(screenDC);
-    Gdiplus::Graphics measureGraphics(tempDC);
 
-    int padX = ScaleDpi(11, dpi);
-    int sepW = MeasureTextWidth(measureGraphics, L"  ", g_pFontLabel);
     int textW = 0;
-    int items = 0;
-
+    int padX = ScaleDpi(11, dpi);
     bool inStatus = g_statusMessageTime && (GetTickCount64() - g_statusMessageTime < g_statusDuration);
 
-    if (inStatus) {
-        textW = MeasureTextWidth(measureGraphics, g_statusMessage.c_str(), g_pFontValue) + ScaleDpi(8, dpi);
-    } else {
-        if (showCpu) {
-            if (items++ > 0) textW += sepW;
-            textW += MeasureTextWidth(measureGraphics, L"CPU ", g_pFontLabel) + MeasureTextWidth(measureGraphics, cpuVal, g_pFontValue);
-        }
-        if (showRam) {
-            if (items++ > 0) textW += sepW;
-            textW += MeasureTextWidth(measureGraphics, L"RAM ", g_pFontLabel) + MeasureTextWidth(measureGraphics, ramVal, g_pFontValue);
-        }
-        if (showNet) {
-            if (items++ > 0) textW += sepW;
-            textW += MeasureTextWidth(measureGraphics, netVal, g_pFontValue);
-        }
-        if (showPing) {
-            if (items++ > 0) textW += sepW;
-            textW += MeasureTextWidth(measureGraphics, pingVal, g_pFontValue);
+    {
+        Gdiplus::Graphics measureGraphics(tempDC);
+        int sepW = MeasureTextWidth(measureGraphics, L"  ", g_pFontLabel);
+        int items = 0;
+
+        if (inStatus) {
+            textW = MeasureTextWidth(measureGraphics, g_statusMessage.c_str(), g_pFontValue) + ScaleDpi(8, dpi);
+        } else {
+            if (showCpu) {
+                if (items++ > 0) textW += sepW;
+                textW += MeasureTextWidth(measureGraphics, L"CPU ", g_pFontLabel) + MeasureTextWidth(measureGraphics, cpuVal, g_pFontValue);
+            }
+            if (showRam) {
+                if (items++ > 0) textW += sepW;
+                textW += MeasureTextWidth(measureGraphics, L"RAM ", g_pFontLabel) + MeasureTextWidth(measureGraphics, ramVal, g_pFontValue);
+            }
+            if (showNet) {
+                if (items++ > 0) textW += sepW;
+                textW += MeasureTextWidth(measureGraphics, netVal, g_pFontValue);
+            }
+            if (showPing) {
+                if (items++ > 0) textW += sepW;
+                textW += MeasureTextWidth(measureGraphics, pingVal, g_pFontValue);
+            }
         }
     }
     DeleteDC(tempDC);
@@ -1045,7 +996,7 @@ void SyncWindowGeometry() {
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
-        bool isLight = IsTaskbarLight();
+        bool isLight = g_isTaskbarLight;
         Gdiplus::Color bgColor, borderColor;
 
         if (customBg) {
@@ -1153,6 +1104,8 @@ void SyncWindowGeometry() {
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
     UpdateLayeredWindow(hWnd, screenDC, &ptDst, &szDst, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
+    // Keep widget above the taskbar in the topmost band
+    SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (!IsWindowVisible(hWnd)) {
         ShowWindow(hWnd, SW_SHOWNA);
@@ -1171,6 +1124,12 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_NCHITTEST:
             return HTCLIENT;
+
+        case WM_SETTINGCHANGE: {
+            g_isTaskbarLight = ReadTaskbarLightTheme();
+            SyncWindowGeometry();
+            return 0;
+        }
 
         case WM_MOUSEMOVE: {
             if (!g_isHovered) {
@@ -1264,9 +1223,6 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_HUD_UPDATE_UI: {
             SyncWindowGeometry();
-            if (g_hGraphWnd && IsWindowVisible(g_hGraphWnd)) {
-                RenderGraphPopup(g_hGraphWnd);
-            }
             return 0;
         }
 
@@ -1304,22 +1260,14 @@ DWORD WINAPI PingWorkerThread(LPVOID) {
 
     while (g_bRunning) {
         bool needPing;
-        bool isGw;
-        unsigned long targetIp;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             needPing = settings.showPing;
-            isGw = settings.pingIsGateway;
-            targetIp = settings.pingIp;
         }
 
         if (needPing) {
-            if (isGw) {
-                unsigned long gw = GetDefaultGatewayIp();
-                g_pingMs = (gw != 0) ? MeasurePing(gw) : PING_ERROR;
-            } else {
-                g_pingMs = MeasurePing(targetIp);
-            }
+            unsigned long gw = GetDefaultGatewayIp();
+            g_pingMs = (gw != 0) ? MeasurePing(gw) : PING_ERROR;
         }
 
         DWORD r = WaitForMultipleObjects(2, waits, FALSE, needPing ? 1600 : INFINITE);
@@ -1339,22 +1287,15 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
         lastTick = now;
 
         int interval;
-        bool needCpu, needRam, needNet;
+        bool needNet;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             interval = settings.updateInterval;
-            needCpu = settings.showCpu;
-            needRam = settings.showRam;
             needNet = settings.showNetSpeed;
         }
 
-        int cpu = 0;
-        if (needCpu || (!needRam && !needNet)) {
-            cpu = GetCpuUsage();
-            g_cpuUsage = cpu;
-        } else {
-            cpu = GetCpuUsage();
-        }
+        int cpu = GetCpuUsage();
+        g_cpuUsage = cpu;
 
         int ram = 0;
         MEMORYSTATUSEX memInfo = { sizeof(memInfo) };
@@ -1382,6 +1323,11 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
             PostMessageW(hWnd, WM_HUD_UPDATE_UI, 0, 0);
         }
 
+        HWND hGraph = g_hGraphWnd;
+        if (hGraph && IsWindowVisible(hGraph)) {
+            PostMessageW(hGraph, WM_HUD_UPDATE_GRAPH, 0, 0);
+        }
+
         if (WaitForSingleObject(g_hStopEvent, (DWORD)interval) == WAIT_OBJECT_0) {
             break;
         }
@@ -1405,8 +1351,11 @@ DWORD WINAPI GuiWorkerThread(LPVOID) {
     wcGraph.hInstance = wc.hInstance;
     wcGraph.hCursor = LoadCursor(NULL, IDC_ARROW);
     wcGraph.lpszClassName = L"WindhawkTaskbarLiveHudGraph";
-    RegisterClassW(&wcGraph);
+    if (!RegisterClassW(&wcGraph)) {
+        Wh_Log(L"RegisterClassW for graph failed: %u", GetLastError());
+    }
 
+    g_isTaskbarLight = ReadTaskbarLightTheme();
     UpdateCachedFonts(96);
 
     HWND hWnd = CreateWindowExW(
@@ -1538,6 +1487,15 @@ void WhTool_ModSettingsChanged() {
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
