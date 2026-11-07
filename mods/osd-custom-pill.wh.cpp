@@ -12,12 +12,60 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.7
+// @version         4.8
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
 // @compilerOptions -lole32 -lgdi32 -luser32 -ldxva2 -luuid -ldwmapi -ladvapi32
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# OSD Custom Pill
+
+An animated on-screen indicator for volume, brightness and virtual desktops on Windows.
+
+![OSD Custom Pill preview](https://raw.githubusercontent.com/yelloxygene/osd-custom-pill-assets/main/osd%20custom%20pill%20GIF.gif)
+
+## Volume and brightness
+
+Shows an icon, a progress bar and the current value. The indicator expands when it appears and retracts when it closes.
+
+## Elastic deformation
+
+Increasing a value moves and stretches the pill to the right; decreasing it moves the pill to the left. Repeated changes build up the deformation. When you release the key, the pill returns with a spring effect.
+
+The **movement**, **stretching**, **spring damping** and **return strength** can be adjusted independently in the mod settings.
+
+## Compact mode
+
+After several changes in a row, the indicator can become smaller to take up less space. You can choose how many changes activate this mode and when it returns to normal.
+
+## Size and position
+
+Adjust the pill's width, height and distance from the bottom of the screen. Opening and closing delays can also be changed.
+
+## Virtual desktops
+
+Displays the current virtual desktop name or number when switching desktops. This indicator has its own size, position, animation and duration settings.
+
+## Settings
+
+All options are available in Windhawk's **Settings** tab, with translated labels in supported languages. The main groups are:
+
+**Appearance and position** — dimensions and screen placement.
+
+**Opening and closing** — delays and spring response.
+
+**Stretching and rebound** — movement distance, deformation and elastic return.
+
+**Compact mode** — activation threshold and return timing.
+
+**Virtual desktop indicator** — label, dimensions, timing and animation.
+
+Timing values are in milliseconds. Size values are based on 100% display scaling.
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
@@ -942,8 +990,12 @@ static void BeginShow() {
     SetWindowPos(g_ui, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
-static bool Recent(DWORD tick) {
-    return tick != 0 && (LONG)(tick - (g_showTick - 250)) >= 0;
+// Only use events associated with this OSD appearance. Older poll results
+// must not classify a volume-at-limit press as brightness or desktop.
+static bool EventNearShow(DWORD tick, DWORD now, DWORD earlyMs) {
+    return tick != 0 &&
+        (LONG)(tick - (g_showTick - earlyMs)) >= 0 &&
+        (LONG)(now - tick) >= 0;
 }
 
 static void Tick() {
@@ -953,26 +1005,39 @@ static void Tick() {
 
     if (st == S_PENDING) {
         DWORD el = now - stStart;
-        if (g_pendKind == 2 || (g_pendKind == 0 && Recent(g_deskTick))) {
+        const bool volumeKeyHeld =
+            ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
+              GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) != 0;
+        const bool desktopKeysHeld =
+            ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) &&
+            (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+        const bool volumeEvent = EventNearShow(g_volTick, now, 110);
+        const bool brightnessEvent = EventNearShow(g_briTick, now, 110);
+        const bool desktopEvent = EventNearShow(g_deskTick, now, 110);
+
+        // A physically detected volume key always wins, even at 0% or 100%.
+        // Volume at a limit may not generate a new audio event.
+        if (g_pendKind == 1 || volumeKeyHeld) {
+            if ((int)el >= g.startDelayMs) { g_kind = 0; BeginShow(); }
+        } else if (g_pendKind == 2 || (desktopKeysHeld && desktopEvent)) {
             if ((int)el >= g.startDelayMs) { g_kind = 2; BeginShow(); }
-        } else {
-            bool rv = Recent(g_volTick), rb = Recent(g_briTick);
-            if (g_pendKind == 1 || rv || rb) {
-                if ((int)el >= g.startDelayMs) {
-                    if (g_pendKind == 1) g_kind = 0;
-                    else if (rv && rb) g_kind = (LONG)(g_briTick - g_volTick) > 0 ? 1 : 0;
-                    else g_kind = rb ? 1 : 0;
-                    BeginShow();
-                }
-            } else if ((int)el >= g.decideMs) {
-                int bri = g_bri;
-                if (bri >= 100 || (bri >= 0 && bri <= 1)) {    // luminosité en butée
-                    g_kind = 1; g_limitDir = bri >= 100 ? 1 : -1;
-                } else {
-                    g_kind = 2;                                // changement de bureau
-                }
+        } else if (volumeEvent || brightnessEvent || desktopEvent) {
+            if ((int)el >= g.startDelayMs) {
+                // Prefer value changes over a possibly coincidental desktop
+                // event. Use the most recent confirmed value change.
+                if (volumeEvent && brightnessEvent)
+                    g_kind = (LONG)(g_briTick - g_volTick) > 0 ? 1 : 0;
+                else if (volumeEvent) g_kind = 0;
+                else if (brightnessEvent) g_kind = 1;
+                else g_kind = 2;
                 BeginShow();
             }
+        } else if ((int)el >= g.decideMs) {
+            // Unknown OSD: never infer brightness from its current level or
+            // a virtual desktop from the absence of volume changes.
+            // These heuristics caused false indicators at minimum volume.
+            g_kind = 0;
+            BeginShow();
         }
         return;
     }
