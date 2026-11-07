@@ -420,7 +420,7 @@ struct RenderCache {
 // ---------------------------------------------------------------------------
 // Минималистичная реализация IDropSource для системного Drag-and-Drop
 // ---------------------------------------------------------------------------
-class PortalDropSource : public IDropSource {
+class PortalDropSource final : public IDropSource {
     LONG m_ref = 1;
 public:
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
