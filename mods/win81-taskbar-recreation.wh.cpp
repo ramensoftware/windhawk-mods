@@ -24,7 +24,9 @@
 # Windows 7/8/8.1 Taskbar Recreation
 
 This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
-on Windows 10 and 11. This mod has been tested on Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.
+on Windows 10 and 11. The original architecture has been tested on Windows 10
+22H2, Windows 11 24H2 and Windows 11 25H2; the dedicated-process architecture
+has more limited Windows testing.
 The mod is provided on a best-effort basis; appearance and behavior can vary with
 the Windows build, DPI, taskbar replacement and other shell mods.
 
@@ -75,10 +77,15 @@ Windhawk explain their scope and any restart requirements.
 
 ## Behavior and limitations
 
+- The taskbar runs in a separate `explorer.exe` process on a best-effort basis.
+  Notification-page hooks still run in Explorer, and other Explorer mods can
+  load in the separate process. A crash or hang can leave the native taskbar
+  hidden; keep Task Manager available.
+
 - Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.
 - The Windows 8 Start corner is illustrated, not a live Start-screen preview.
 - Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.
-- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into Explorer and stays loaded until Explorer restarts.
+- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
 - The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
 - The Notification Area Icons page uses a private COM provider. Its proxy-based behavior and shutdown with the page open have not been verified on every Windows build; icon preference writes can differ from the native behavior. Close the page before disabling, updating, or reloading the mod.
@@ -1948,6 +1955,8 @@ struct LanguageFlyoutItem {
 struct PrivateIcon {
     HWND owner=nullptr; DWORD ownerPid=0, id=0, callback=0, version=0;
     GUID guid{}; HICON icon=nullptr; std::wstring tip, preferenceKey; bool hidden=false, importedFromNative=false;
+    // CNI-only classification; the tray's own state remains unchanged.
+    bool cniExcludeTaskManager=false;
 };
 
 static bool GuidPresent(const GUID& guid) {
@@ -2055,6 +2064,7 @@ struct State {
     bool preservingTray = true;
     bool desktopBand=false, linksBand=false, addressBand=false,desktopArrowHot=false,linksArrowHot=false;
     int nativeGlomLevel=-1;
+    bool nativeSmallIcons=false;
     UINT shellHookMessage=0;bool shellHookRegistered=false,attentionOn=false;
     std::vector<AttentionItem> attention;
     bool labelMode=false;
@@ -2171,6 +2181,7 @@ std::atomic<bool> useAccent{false}, volumeWheel{false};
 std::atomic<bool> showLanguageIndicator{true}, showJumpShowWindow{true};
 std::atomic<int> jumpCloseStyle{0};
 HANDLE threadHandle = nullptr;
+HANDLE uiQueueReady = nullptr;
 DWORD threadId = 0;
 // One-time migration for renamed settings. Wh_GetIntValue's sentinel preserves
 // an explicit false/0, which Wh_GetIntSetting cannot distinguish from missing.
@@ -4002,29 +4013,72 @@ static std::wstring ProcessApplicationId(DWORD pid) {
     return value;
 }
 
+// Path APIs use heap buffers, grown up to the previous 32768-character bound.
+constexpr DWORD kPathBufferLimit=32768;
+template<typename F>
+static std::wstring ReadPathBuffer(F read,bool includesNull=false) noexcept {
+    try {
+        DWORD capacity=MAX_PATH;
+        while(capacity<=kPathBufferLimit) {
+            std::vector<wchar_t> buffer(capacity,L'\0');
+            DWORD n=read(buffer.data(),capacity);
+            if(!n)return {};
+            if(includesNull?n<=capacity:n<capacity)
+                return std::wstring(buffer.data(),includesNull?n-1:n);
+            if(capacity==kPathBufferLimit || n>kPathBufferLimit)return {};
+            DWORD grown=capacity<=kPathBufferLimit/2?capacity*2:kPathBufferLimit;
+            capacity=std::max(grown,n);
+        }
+    } catch(...) {}
+    return {};
+}
+static std::wstring ExpandPathVariables(const std::wstring& path) noexcept {
+    return ReadPathBuffer([&](wchar_t* p,DWORD n){return ExpandEnvironmentStringsW(path.c_str(),p,n);},true);
+}
+static std::wstring AbsolutePathBuffer(const std::wstring& path) noexcept {
+    return ReadPathBuffer([&](wchar_t* p,DWORD n){return GetFullPathNameW(path.c_str(),n,p,nullptr);});
+}
+static std::wstring LongPathBuffer(const std::wstring& path) noexcept {
+    return ReadPathBuffer([&](wchar_t* p,DWORD n){return GetLongPathNameW(path.c_str(),p,n);});
+}
+static std::wstring ModulePathBuffer(HMODULE module) noexcept {
+    return ReadPathBuffer([&](wchar_t* p,DWORD n){return GetModuleFileNameW(module,p,n);});
+}
+static std::wstring SystemDirectoryBuffer() noexcept {
+    return ReadPathBuffer([&](wchar_t* p,DWORD n){return GetSystemDirectoryW(p,n);});
+}
+static std::wstring WindhawkUiPathSetting(const std::wstring& ini) noexcept {
+    try {
+        DWORD capacity=MAX_PATH;
+        while(capacity<=kPathBufferLimit) {
+            std::vector<wchar_t> buffer(capacity,L'\0');
+            DWORD n=GetPrivateProfileStringW(L"Storage",L"UIPath",L"",buffer.data(),capacity,ini.c_str());
+            if(!n)return {};
+            if(n<capacity-1)return std::wstring(buffer.data(),n);
+            if(capacity==kPathBufferLimit)return {};
+            capacity=std::min(kPathBufferLimit,capacity*2);
+        }
+    } catch(...) {}
+    return {};
+}
 static std::wstring NormalizedMatchPath(const std::wstring& path) {
-    if(path.empty() || path.size()>=32768) return {};
-    wchar_t expanded[32768]={};
-    DWORD needed=ExpandEnvironmentStringsW(path.c_str(),expanded,(DWORD)std::size(expanded));
-    if(!needed || needed>std::size(expanded)) return {};
-    PathUnquoteSpacesW(expanded);
-    // Never probe UNC/network paths or infer a relative path from Explorer's
-    // current directory. Exact comparisons still work when already absolute.
-    if(PathIsRelativeW(expanded)) return {};
-    std::wstring result(expanded);
+    if(path.empty() || path.size()>=kPathBufferLimit) return {};
+    std::wstring expanded=ExpandPathVariables(path);
+    if(expanded.empty())return {};
+    PathUnquoteSpacesW(expanded.data());expanded.resize(wcslen(expanded.c_str()));
+    // Never probe UNC/network paths or resolve a relative path.
+    if(PathIsRelativeW(expanded.c_str()))return {};
+    std::wstring result=std::move(expanded);
     if(result.rfind(L"\\\\",0)!=0) {
-        wchar_t full[32768]={};
-        DWORD n=GetFullPathNameW(result.c_str(),(DWORD)std::size(full),full,nullptr);
-        if(n && n<std::size(full)) result=full;
-        wchar_t longName[32768]={};
-        n=GetLongPathNameW(result.c_str(),longName,(DWORD)std::size(longName));
-        if(n && n<std::size(longName)) result=longName;
+        std::wstring full=AbsolutePathBuffer(result);
+        if(!full.empty())result=std::move(full);
+        std::wstring longName=LongPathBuffer(result);
+        if(!longName.empty())result=std::move(longName);
     }
     std::transform(result.begin(),result.end(),result.begin(),
         [](wchar_t c){return static_cast<wchar_t>(towlower(c));});
     return result;
 }
-
 static std::wstring RelaunchExecutable(const std::wstring& command) {
     if(command.empty() || command.size()>32767) return {};
     int argc=0; LPWSTR* argv=CommandLineToArgvW(command.c_str(),&argc);
@@ -4850,11 +4904,10 @@ static const Task* FindStoredTask(HWND hwnd,DWORD pid) {
 struct WindhawkUiPaths { std::wstring app,ui,legacyCodium,legacyCode; };
 static std::wstring WindhawkFullPath(const std::wstring& path) {
     if(path.empty())return {};
-    wchar_t expanded[32768]{},absolute[32768]{};
-    DWORD n=ExpandEnvironmentStringsW(path.c_str(),expanded,(DWORD)std::size(expanded));
-    if(!n || n>std::size(expanded))return {};
-    n=GetFullPathNameW(expanded,(DWORD)std::size(absolute),absolute,nullptr);
-    if(!n || n>=std::size(absolute))return {};
+    std::wstring expanded=ExpandPathVariables(path);
+    if(expanded.empty())return {};
+    std::wstring absolute=AbsolutePathBuffer(expanded);
+    if(absolute.empty())return {};
     return NormalizedMatchPath(absolute);
 }
 static const std::vector<WindhawkUiPaths>& RunningWindhawkPaths() {
@@ -4875,12 +4928,9 @@ static const std::vector<WindhawkUiPaths>& RunningWindhawkPaths() {
         size_t slash=app.find_last_of(L"\\/");if(slash==std::wstring::npos)continue;
         std::wstring root=app.substr(0,slash),ini=root+L"\\windhawk.ini";
         WindhawkUiPaths item;item.app=app;item.ui=WindhawkFullPath(root+L"\\windhawk-ui.exe");
-        wchar_t configured[32768]{};
-        DWORD len=GetPrivateProfileStringW(L"Storage",L"UIPath",L"",configured,(DWORD)std::size(configured),ini.c_str());
-        if(len && len<std::size(configured)-1) {
-            wchar_t expanded[32768]{};
-            DWORD expandedLen=ExpandEnvironmentStringsW(configured,expanded,(DWORD)std::size(expanded));
-            std::wstring base=(expandedLen && expandedLen<=std::size(expanded))?expanded:L"";
+        std::wstring configured=WindhawkUiPathSetting(ini);
+        if(!configured.empty()) {
+            std::wstring base=ExpandPathVariables(configured);
             if(!base.empty() && PathIsRelativeW(base.c_str()))base=root+L"\\"+base;
             base=WindhawkFullPath(base);
             if(!base.empty()) {
@@ -5229,7 +5279,9 @@ static bool ToggleCompanionStart() {
     HWND h=nullptr;
     for(int i=0;i<32 && (h=FindWindowExW(nullptr,h,L"Win8StartScreenMod8045",nullptr));++i) {
         DWORD pid=0; GetWindowThreadProcessId(h,&pid);
-        if(pid!=GetCurrentProcessId()) continue;
+        HWND shell=GetShellWindow(); DWORD shellPid=0;
+        if(shell) GetWindowThreadProcessId(shell,&shellPid);
+        if(!shellPid || pid!=shellPid) continue;
         PeekOff(false); // Stop an existing Peek before opening the companion Start screen.
         if(PostMessageW(h,WM_APP+1,0,0)) {
             Wh_Log(L"[T81-DIAG] Start: companion toggle posted (private protocol)");
@@ -5249,17 +5301,36 @@ static bool ToggleCompanionStart() {
 static HWND StartDesktopWindow() {
     HWND desktop=FindWindowW(L"Progman",nullptr); DWORD pid=0;
     if(desktop) GetWindowThreadProcessId(desktop,&pid);
-    return pid==GetCurrentProcessId()?desktop:nullptr;
+    HWND shell=GetShellWindow(); DWORD shellPid=0;
+    if(shell) GetWindowThreadProcessId(shell,&shellPid);
+    return shellPid && pid==shellPid?desktop:nullptr;
 }
 static bool OpenShellMenuVisible() {
     HWND h=nullptr;
     while((h=FindWindowExW(nullptr,h,L"OpenShell.CMenuContainer",nullptr))!=nullptr) {
         DWORD pid=0;GetWindowThreadProcessId(h,&pid);
-        if(pid==GetCurrentProcessId() && IsWindowVisible(h)) return true;
+        DWORD shellPid=0;HWND shell=GetShellWindow();if(shell)GetWindowThreadProcessId(shell,&shellPid);
+        if(shellPid && pid==shellPid && IsWindowVisible(h))return true;
     }
     return false;
 }
 static bool PostOpenShellRequest(WPARAM operation) {
+    HWND helper=FindWindowW(L"OpenShellMenu.CStartHookWindow",L"StartHookWindow");
+    HWND owner=FindWindowW(L"OpenShell.COwnerWindow",nullptr);
+    if(s && s->native && (helper || owner)) {
+        DWORD nativePid=0,shellPid=0;HWND shell=GetShellWindow();
+        if(shell)GetWindowThreadProcessId(shell,&shellPid);
+        GetWindowThreadProcessId(s->native,&nativePid);
+        wchar_t cls[64]{};
+        if(shellPid && nativePid==shellPid && s->native!=s->privateHost &&
+           GetClassNameW(s->native,cls,(int)std::size(cls)) && !wcscmp(cls,L"Shell_TrayWnd")) {
+            UINT msg=RegisterWindowMessageW(L"OpenShellMenu.StartMenuMsg");
+            if(msg && PostMessageW(s->native,msg,operation,0)) {
+                Wh_Log(L"[T81-TOOL] Open-Shell request posted to desktop shell (not confirmed)");
+                return true;
+            }
+        }
+    }
     HMODULE module=nullptr;
     if(GetModuleHandleExW(0,L"StartMenuDLL.dll",&module)) {
         auto symbol=GetProcAddress(module,"?g_TaskBar@@3PEAUHWND__@@EA");
@@ -5278,7 +5349,7 @@ static bool PostOpenShellRequest(WPARAM operation) {
         if(posted) return true;
     }
     // This is Open-Shell's own helper window path; WM_USER+10 is private.
-    HWND helper=FindWindowW(L"OpenShellMenu.CStartHookWindow",L"StartHookWindow");
+    helper=FindWindowW(L"OpenShellMenu.CStartHookWindow",L"StartHookWindow");
     if(helper && PostMessageW(helper,WM_USER+10,operation,0)) {
         Wh_Log(L"[T81-DIAG] Open-Shell helper request=%llu posted (not confirmed)",
                (unsigned long long)operation);
@@ -5739,9 +5810,15 @@ struct Layout {
 };
 static void RefreshNativeLabelPreference() {
     if(!s) return; DWORD value=0,size=sizeof(value); int previous=s->nativeGlomLevel;
+    bool previousSmall=s->nativeSmallIcons;
+    DWORD small=0,smallSize=sizeof(small);
+    s->nativeSmallIcons=RegGetValueW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",L"TaskbarSmallIcons",RRF_RT_REG_DWORD,nullptr,&small,&smallSize)==ERROR_SUCCESS && small!=0;
     if(RegGetValueW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",L"TaskbarGlomLevel",RRF_RT_REG_DWORD,nullptr,&value,&size)==ERROR_SUCCESS && value<=2) s->nativeGlomLevel=(int)value;
     else s->nativeGlomLevel=-1;
-    if(previous!=s->nativeGlomLevel) {BuildGroups();if(s->bar)InvalidateRect(s->bar,nullptr,FALSE);}
+    if(previous!=s->nativeGlomLevel || previousSmall!=s->nativeSmallIcons) {
+        BuildGroups();if(s->bar)InvalidateRect(s->bar,nullptr,FALSE);
+        if(previousSmall!=s->nativeSmallIcons)Wh_Log(L"[T81-SMALL] TaskbarSmallIcons=%d",s->nativeSmallIcons?1:0);
+    }
 }
 // Public Win32, WinRT and NLS input-profile contracts. The three-letter NLS
 // language value and its region are kept on separate presentation lines.
@@ -5976,7 +6053,7 @@ Layout GetLayout(int w,int h) {
     int avail=0;Layout L=TaskAreaLayout(w,h,avail);
     int bandRight=L.first+avail;
     L.labels=s->labelMode;
-    L.width=std::max(1,Px(L.labels?150:kTaskButtonLogical));
+    L.width=std::max(1,Px(L.labels?150:(s->nativeSmallIcons?40:kTaskButtonLogical)));
     int capacity=avail/L.width;
     if((int)s->groups.size()>capacity && avail>=Px(34)) {
         int overflowW=Px(34);
@@ -6064,6 +6141,22 @@ static int FindPrivateIcon(HWND owner,DWORD id,const GUID& guid) {
     for(size_t i=0;i<s->trayIcons.size();++i)
         if(MatchesIcon(s->trayIcons[i],owner,id,guid)) return (int)i;
     return -1;
+}
+// Exact executable basename, case insensitive. Fall back to Toolhelp when
+// querying an image path is denied. Unknown owners keep the previous behavior.
+static bool CniExcludedTaskManager(DWORD pid) noexcept {
+    if(!pid)return false;
+    try {
+        std::wstring image=ProcessImage(pid);
+        if(!image.empty())return !_wcsicmp(PathFindFileNameW(image.c_str()),L"taskmgr.exe");
+        ScopedHandle snap(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0));
+        if(!snap.h || snap.h==INVALID_HANDLE_VALUE)return false;
+        PROCESSENTRY32W entry{};entry.dwSize=sizeof(entry);
+        if(!Process32FirstW(snap.h,&entry))return false;
+        do {if(entry.th32ProcessID==pid)return !_wcsicmp(entry.szExeFile,L"taskmgr.exe");}
+        while(Process32NextW(snap.h,&entry));
+    } catch(...) {}
+    return false;
 }
 static std::wstring TrayPreferenceKey(const PrivateIcon& icon) {
     if(GuidPresent(icon.guid)) {
@@ -6242,11 +6335,16 @@ static LRESULT ProcessTrayCopy(const COPYDATASTRUCT* data) {
             if(!owner || !IsWindow(owner) || s->trayIcons.size()>=128) return 0;
             PrivateIcon icon; icon.owner=owner; icon.id=n.id;
             GetWindowThreadProcessId(owner,&icon.ownerPid);
+            icon.cniExcludeTaskManager=CniExcludedTaskManager(icon.ownerPid);
             s->trayIcons.push_back(std::move(icon)); index=(int)s->trayIcons.size()-1;
         }
         PrivateIcon& icon=s->trayIcons[index];
         icon.importedFromNative=false; // actual NIM message takes precedence over snapshots
-        if(owner && IsWindow(owner)) { icon.owner=owner; icon.id=n.id; GetWindowThreadProcessId(owner,&icon.ownerPid); }
+        if(owner && IsWindow(owner)) {
+            DWORD pid=0;GetWindowThreadProcessId(owner,&pid);
+            if(pid!=icon.ownerPid)icon.cniExcludeTaskManager=CniExcludedTaskManager(pid);
+            icon.owner=owner;icon.id=n.id;icon.ownerPid=pid;
+        }
         if(GuidPresent(guid)) icon.guid=guid;
         std::wstring oldKey=icon.preferenceKey;
         icon.preferenceKey=TrayPreferenceKey(icon);
@@ -6324,11 +6422,23 @@ static LRESULT CALLBACK PrivateTrayProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) 
         // be PostMessage'd even with null lParam, so a one-shot timer performs
         // a bounded SendMessageTimeout after the current call has returned.
         if(hwnd==s->privateHost && msg==WM_SETTINGCHANGE && wp==SPI_SETLOGICALDPIOVERRIDE && lp==0) {
+            // In the separate-process configuration Classic Taskbar Properties
+            // already notifies the real taskbar and broadcasts TraySettings.
+            // Do not synchronously bounce this back to its own shell thread:
+            // the sender can be waiting for our current window procedure.
+            DWORD nativePid=0;if(s->native)GetWindowThreadProcessId(s->native,&nativePid);
+            if(nativePid && nativePid!=GetCurrentProcessId()) {
+                Wh_Log(L"[T81-START] skipped redundant cross-process classic setting bounce");
+                return 0;
+            }
             if(s->bar && !SetTimer(s->bar,TIMER_CLASSIC_POSITION_NOTIFY,200,nullptr))
                 Wh_Log(L"[T81-DIAG] cannot defer classic position notification");
             return 0;
         }
-        if(msg==WM_ACTIVATEAPP || msg==WM_COMMAND || msg>=WM_USER) return ForwardShellMessage(msg,wp,lp);
+        // Custom messages are not automatically marshalled cross-process.
+        if(msg==WM_ACTIVATEAPP || msg==WM_COMMAND || msg==WM_USER+372)
+            return ForwardShellMessage(msg,wp,lp);
+        if(msg>=WM_USER) return 0;
     } catch(...) { Wh_Log(L"Private tray C++ exception; forwarding message to native shell"); return ForwardShellMessage(msg,wp,lp); }
     return DefWindowProcW(hwnd,msg,wp,lp);
 }
@@ -6393,12 +6503,14 @@ static void ReadNativeTrayToolbar(HWND toolbar,bool overflow,NativeTrayScan& sca
             PrivateIcon& old=s->trayIcons[existing];
             if(old.icon) DestroyIcon(old.icon);
             old.icon=duplicate; old.callback=raw.callback; old.version=raw.version;
+            if(old.ownerPid!=ownerPid)old.cniExcludeTaskManager=CniExcludedTaskManager(ownerPid);
             old.owner=raw.owner; old.ownerPid=ownerPid; old.id=raw.id;
             old.hidden=(raw.state&NIS_HIDDEN)!=0;
             raw.tip[std::size(raw.tip)-1]=L'\0'; old.tip=raw.tip;
             ++scan.updated; continue;
         }
         PrivateIcon icon; icon.owner=raw.owner; icon.ownerPid=ownerPid; icon.id=raw.id;
+        icon.cniExcludeTaskManager=CniExcludedTaskManager(ownerPid);
         icon.callback=raw.callback; icon.version=raw.version; icon.guid=raw.guid;
         icon.icon=duplicate; icon.hidden=(raw.state&NIS_HIDDEN)!=0; icon.importedFromNative=true;
         raw.tip[std::size(raw.tip)-1]=L'\0'; icon.tip=raw.tip;
@@ -6496,12 +6608,14 @@ static bool StartPrivateTray() {
 // hides a separate Start button on a 100 ms guard. The mod does not change
 // the global Windows taskbar auto-hide setting.
 // Only hide a top-level Explorer Start candidate overlapping the primary bar.
+static DWORD DesktopShellPid();
 static BOOL CALLBACK HideOwnedStart(HWND h, LPARAM) {
     try {
     if(!s || h==s->bar || h==s->native || h==s->privateHost || !IsWindowVisible(h) ||
        GetAncestor(h,GA_ROOT)!=h) return TRUE;
     DWORD pid=0; DWORD tid=GetWindowThreadProcessId(h,&pid);
-    if(pid!=GetCurrentProcessId()) return TRUE;
+    DWORD shellPid=DesktopShellPid();
+    if(!shellPid || pid!=shellPid) return TRUE;
     wchar_t cls[128]={}; GetClassNameW(h,cls,128);
     ATOM atom=(ATOM)GetClassLongPtrW(h,GCW_ATOM);
     // A top-level BUTTON at the Start position may have a localized caption;
@@ -6539,6 +6653,7 @@ static void RestoreHiddenStarts() {
 static void CancelTrayDrag();
 static void RemoveWorkAreaAppBar();
 static bool IsExpectedNativeTray(HWND h);
+static DWORD DesktopShellPid();
 static void StopPrivateTray() {
     if(!s) return;
     DestroyLanguageFlyout();
@@ -6579,7 +6694,8 @@ static bool IsExpectedNativeTray(HWND h) {
     if(!h || !IsWindow(h) || (s && h==s->privateHost)) return false;
     DWORD pid=0;GetWindowThreadProcessId(h,&pid);
     wchar_t cls[64]{};
-    return pid==GetCurrentProcessId() && GetClassNameW(h,cls,(int)std::size(cls)) &&
+    const DWORD shellPid=DesktopShellPid();
+    return shellPid && pid==shellPid && GetClassNameW(h,cls,(int)std::size(cls)) &&
         !wcscmp(cls,L"Shell_TrayWnd");
 }
 static void HideNativeTrayIfVisible() {
@@ -6609,7 +6725,9 @@ static bool AttachClassicClockFrame();
 static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LONG object,LONG child,DWORD,DWORD) {
     try {
     if(!s || !hwnd || object!=OBJID_WINDOW || child!=CHILDID_SELF) return;
-    DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);if(pid!=GetCurrentProcessId())return;
+    DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);
+    DWORD shellPid=DesktopShellPid();
+    if(pid!=GetCurrentProcessId() && (!shellPid || pid!=shellPid))return;
     if(event==EVENT_OBJECT_SHOW && s->peekOn) {
         wchar_t startClass[64]{};
         if(GetClassNameW(hwnd,startClass,(int)std::size(startClass)) &&
@@ -6670,7 +6788,7 @@ static VerticalLayout GetVerticalLayout(int width,int height) {
     VerticalLayout v{}; if(!s || width<=0 || height<Px(280))return v;
     const bool beta8148=useBetaStartLogo.load() && s->betaStartImage;
     int start=Px(startHotCorner.load()?0:(beta8148?54:kVerticalStartLogical)), desk=Px(beta8148?15:8), clock=VerticalClockHeight(), cell=Px(24), arrow=Px(25);
-    const int taskStep=beta8148?50:kVerticalTaskLogical;
+    const int taskStep=s->nativeSmallIcons?32:(beta8148?50:kVerticalTaskLogical);
     int y=height; v.desktop=RECT{0,y-desk,width,y};y-=desk;
     v.clock=RECT{0,y-clock,width,y};y-=clock;
     int language=LanguageIndicatorHeight();
@@ -7795,6 +7913,46 @@ struct CniCallbackScope {
 
 // The private tray's preference exists only during this mod session.
 static std::atomic<DWORD> g_privateAutoTray{1};
+// Session-local, fixed-size lifecycle/boolean bridge. No process pointers are
+// shared; the private CNI interface and callbacks continue to use COM.
+struct CniBridgeState { volatile LONG ready, autoTray, pid; };
+static constexpr wchar_t kCniBridgeName[]=L"Local\\windhawk-t81-cni-" WH_MOD_ID;
+static HANDLE g_cniBridgeHandle=nullptr;
+static CniBridgeState* g_cniBridge=nullptr;
+static thread_local bool g_cniBridgeActivated=false;
+static void StopCniBridge() noexcept {
+    if(g_cniBridge) {InterlockedExchange(&g_cniBridge->ready,0);UnmapViewOfFile(g_cniBridge);g_cniBridge=nullptr;}
+    if(g_cniBridgeHandle) {CloseHandle(g_cniBridgeHandle);g_cniBridgeHandle=nullptr;}
+}
+static bool StartCniBridge(DWORD autoTray) noexcept {
+    StopCniBridge();
+    g_cniBridgeHandle=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(CniBridgeState),kCniBridgeName);
+    if(!g_cniBridgeHandle)return false;
+    if(GetLastError()==ERROR_ALREADY_EXISTS) {CloseHandle(g_cniBridgeHandle);g_cniBridgeHandle=nullptr;return false;}
+    g_cniBridge=(CniBridgeState*)MapViewOfFile(g_cniBridgeHandle,FILE_MAP_WRITE,0,0,sizeof(CniBridgeState));
+    if(!g_cniBridge) {StopCniBridge();return false;}
+    InterlockedExchange(&g_cniBridge->autoTray,autoTray?1:0);
+    InterlockedExchange(&g_cniBridge->pid,(LONG)GetCurrentProcessId());
+    InterlockedExchange(&g_cniBridge->ready,1);
+    return true;
+}
+static bool ReadCniBridge(DWORD* value) noexcept {
+    HANDLE h=OpenFileMappingW(FILE_MAP_WRITE,FALSE,kCniBridgeName);
+    if(!h)return false;
+    auto* state=(CniBridgeState*)MapViewOfFile(h,FILE_MAP_WRITE,0,0,sizeof(CniBridgeState));
+    bool valid=false;
+    if(state) {
+        LONG ready=InterlockedCompareExchange(&state->ready,0,0);
+        DWORD pid=(DWORD)InterlockedCompareExchange(&state->pid,0,0);
+        LONG current=InterlockedCompareExchange(&state->autoTray,0,0);
+        HANDLE process=pid?OpenProcess(SYNCHRONIZE,FALSE,pid):nullptr;
+        valid=ready==1 && process && WaitForSingleObject(process,0)==WAIT_TIMEOUT;
+        if(process)CloseHandle(process);
+        if(valid && value)*value=current?1u:0u;
+        UnmapViewOfFile(state);
+    }
+    CloseHandle(h);return valid;
+}
 
 class CPrivateTrayNotify final : public ITrayNotifyWin8 {
     struct CallbackSlot {
@@ -7821,7 +7979,7 @@ class CPrivateTrayNotify final : public ITrayNotifyWin8 {
 
     bool MakeItem(const PrivateIcon& icon, std::wstring& exe,
                   NOTIFYITEM& item) const {
-        if (!s || icon.preferenceKey.empty()) return false;
+        if (!s || icon.preferenceKey.empty() || icon.cniExcludeTaskManager) return false;
         int system=CniSystemHitFromGuid(icon.guid);
         if(system && (!icon.icon || !icon.owner)) return false;
         // For our private GUIDs taskbarcpl's SetFriendlyName falls back to the
@@ -7990,6 +8148,9 @@ public:
             }
             int index = FindPrivateIcon(item->hWnd, item->uID, item->guidItem);
             if (index < 0) return S_OK;
+            // Defend against a stale/malicious CPL request as well as filtering
+            // enumeration and live notifications via MakeItem.
+            if(s->trayIcons[index].cniExcludeTaskManager) return S_OK;
             const auto& key = s->trayIcons[index].preferenceKey;
             if (key.empty()) return S_OK;
 
@@ -8027,6 +8188,7 @@ public:
         if (!s || !s->privateActive) return E_UNEXPECTED;
         try {
             g_privateAutoTray.store(enabled ? 1u : 0u, std::memory_order_release);
+            if(g_cniBridge)InterlockedExchange(&g_cniBridge->autoTray,enabled?1:0);
             s->trayShowAll = !enabled;
             RefreshPrivateTray();
             Wh_Log(L"[T81-CNI] private EnableAutoTray applied enabled=%d tid=%lu",
@@ -8121,6 +8283,11 @@ static DWORD g_trayCniPrivateCookie = 0;
 // Lifecycle flag for the private registration. Activation attempts may also
 // come from another Explorer process and therefore do not test this local flag.
 static std::atomic<bool> g_trayCniPrivateRegistered{false};
+static DWORD CurrentCniAutoTray() noexcept {
+    DWORD value=0;
+    if(!g_trayCniPrivateRegistered.load(std::memory_order_acquire) && g_cniBridgeActivated && ReadCniBridge(&value))return value;
+    return g_privateAutoTray.load(std::memory_order_acquire);
+}
 static std::atomic<DWORD> g_trayCniUiThreadId{0};
 
 // In-memory read virtualization is limited to the Explorer preference and
@@ -8155,14 +8322,15 @@ static bool CniExplorerKey(HKEY key) noexcept {
     } catch (...) { return false; }
 }
 static bool CniTaskbarCplCaller(void* address) noexcept {
-    if (!g_trayCniPrivateRegistered.load(std::memory_order_acquire)) return false;
+    if (!g_trayCniPrivateRegistered.load(std::memory_order_acquire) &&
+        !(g_cniBridgeActivated && ReadCniBridge(nullptr))) return false;
     HMODULE caller = nullptr, cpl = GetModuleHandleW(L"taskbarcpl.dll");
     return cpl && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(address), &caller) && caller == cpl;
 }
 static LSTATUS CniVirtualAutoTray(DWORD flags, LPDWORD type, void* data, LPDWORD size) noexcept {
-    DWORD value = g_privateAutoTray.load(std::memory_order_acquire);
+    DWORD value = CurrentCniAutoTray();
     if (data && !size) return ERROR_INVALID_PARAMETER;
     DWORD accepted = flags & RRF_RT_ANY;
     if (accepted && !(accepted & RRF_RT_REG_DWORD)) {
@@ -8192,7 +8360,7 @@ static LSTATUS WINAPI CniRegGetValueHook(HKEY key, LPCWSTR subkey, LPCWSTR value
     if (exact) {
         LSTATUS result = CniVirtualAutoTray(flags, type, data, size);
         Wh_Log(L"[T81-CNI] virtual RegGetValue enabled=%lu tid=%lu status=%ld",
-               (unsigned long)g_privateAutoTray.load(), GetCurrentThreadId(), result);
+               (unsigned long)CurrentCniAutoTray(), GetCurrentThreadId(), result);
         return result;
     }
     return g_cniRegGetValue(key, subkey, value, flags, type, data, size);
@@ -8203,7 +8371,7 @@ static LSTATUS WINAPI CniRegQueryValueHook(HKEY key, LPCWSTR value, LPDWORD rese
         CniTaskbarCplCaller(__builtin_return_address(0)) && CniExplorerKey(key)) {
         LSTATUS result = CniVirtualAutoTray(0, type, data, size);
         Wh_Log(L"[T81-CNI] virtual RegQueryValue enabled=%lu tid=%lu status=%ld",
-               (unsigned long)g_privateAutoTray.load(), GetCurrentThreadId(), result);
+               (unsigned long)CurrentCniAutoTray(), GetCurrentThreadId(), result);
         return result;
     }
     return g_cniRegQueryValue(key, value, reserved, type, data, size);
@@ -8217,7 +8385,7 @@ static BOOL WINAPI CniSHRegGetBoolHook(LPCWSTR key, LPCWSTR value, BOOL fallback
         !_wcsicmp(key, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer") &&
         !_wcsicmp(value, L"EnableAutoTray") &&
         CniTaskbarCplCaller(__builtin_return_address(0))) {
-        DWORD result = g_privateAutoTray.load(std::memory_order_acquire);
+        DWORD result = CurrentCniAutoTray();
         Wh_Log(L"[T81-CNI] virtual SHRegGetBool enabled=%lu tid=%lu",
                (unsigned long)result, GetCurrentThreadId());
         return result != 0;
@@ -8371,12 +8539,15 @@ static bool StartTrayNotifyServer() {
     }
     g_trayCniPrivateRegistered.store(true);
     g_trayCniUiThreadId.store(GetCurrentThreadId());
+    if(!StartCniBridge(g_privateAutoTray.load(std::memory_order_acquire)))
+        Wh_Log(L"[T81-CNI] cross-process bridge unavailable error=%lu",GetLastError());
     Wh_Log(L"[T81-CNI] private activation CLSID registered cookie=%lu",
            (unsigned long)g_trayCniPrivateCookie);
     return true;
 }
 
 static void StopTrayNotifyServer() {
+    StopCniBridge();
     g_trayCniUiThreadId.store(0);
     if (s) s->trayShowAll = false;
     if (g_trayCniPrivateRegistered.exchange(false)) {
@@ -8420,6 +8591,327 @@ static void NotifyTrayCni(ULONG event, const PrivateIcon& icon) {
     if (g_trayCni) g_trayCni->NotifyOne(event, icon);
 }
 
+// The Windows 26100.6899 taskbarcpl passes a retained NOTIFYITEM to the
+// out-of-process proxy when a preference changes. Its string pointers can be
+// stale: Ndr64ConformantStringBufferSize then faults in Explorer before our
+// server method is entered. The server only consumes hWnd/uID/GUID/preference.
+// Replace unused strings only while marshalling a verified SetPreference call,
+// in both size and marshal passes. On known builds use checked offsets; on
+// other builds resolve Microsoft PDB symbols and verify the actual instructions.
+// The system COM proxy stays intact: no page-held mod vtable or DLL pinning.
+// If any required symbol or call site cannot be verified, use native CNI.
+using CniNdrStringFn = void (WINAPI*)(void*, unsigned char*, const void*);
+static CniNdrStringFn realCniNdrSize=nullptr,realCniNdrMarshal=nullptr;
+static std::atomic<bool> g_cniNdrHooksRegistered{false};
+static std::atomic<ULONG_PTR> g_cniVerifiedCplBase{0};
+static std::atomic<ULONG_PTR> g_cniPreferenceSites[3]{};
+static SRWLOCK g_cniCplVerifyLock=SRWLOCK_INIT;
+static SRWLOCK g_cniSafetyThreadLock=SRWLOCK_INIT;
+static HANDLE g_cniSafetyStop=nullptr,g_cniSafetyWake=nullptr,g_cniSafetyThread=nullptr;
+static std::atomic<HMODULE> g_cniPendingCpl{nullptr};
+static std::atomic<bool> g_cniSafetyStopping{false};
+static thread_local bool g_cniCplVerifying=false;
+using CniNdr32MarshalFn=unsigned char* (WINAPI*)(void*,unsigned char*,const void*);
+static CniNdrStringFn realCniNdr64NonSize=nullptr,realCniNdr64NonMarshal=nullptr;
+static CniNdrStringFn realCniNdr32Size=nullptr,realCniNdr32NonSize=nullptr;
+static CniNdr32MarshalFn realCniNdr32Marshal=nullptr,realCniNdr32NonMarshal=nullptr;
+static thread_local bool g_cniNdrChecking=false;
+static unsigned char g_cniEmptyString[2]={0,0};
+static std::atomic<bool> g_cniSizeSafetyLogged{false},g_cniMarshalSafetyLogged{false};
+static constexpr DWORD kCniRpcTimestamp=0xD67BAB5A, kCniRpcImageSize=0x118000;
+static constexpr DWORD kCniCplTimestamp=0xEA454DFA, kCniCplImageSize=0x12E000;
+
+static bool CniModuleMatches(HMODULE module,DWORD stamp,DWORD size) noexcept {
+    if(!module)return false;
+    auto* base=reinterpret_cast<const BYTE*>(module);
+    auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if(dos->e_magic!=IMAGE_DOS_SIGNATURE || dos->e_lfanew<=0 || dos->e_lfanew>0x1000)return false;
+    auto* nt=reinterpret_cast<const IMAGE_NT_HEADERS*>(base+dos->e_lfanew);
+    return nt->Signature==IMAGE_NT_SIGNATURE && nt->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64 &&
+        nt->FileHeader.TimeDateStamp==stamp && nt->OptionalHeader.SizeOfImage==size;
+}
+struct CniSymbolQuery { const wchar_t* name; bool prefix; void* address; };
+static bool CniResolveSymbols(HMODULE module,CniSymbolQuery* queries,size_t count) {
+    WH_FIND_SYMBOL_OPTIONS options{};options.optionsSize=sizeof(options);
+    options.noUndecoratedSymbols=TRUE;
+    WH_FIND_SYMBOL symbol{};
+    HANDLE search=Wh_FindFirstSymbol(module,&options,&symbol);
+    if(!search)return false;
+    size_t remaining=count;
+    do {
+        const wchar_t* name=symbol.symbolDecorated;
+        if(!name)continue;
+        for(size_t i=0;i<count;i++) {
+            auto& q=queries[i];if(q.address)continue;
+            size_t len=wcslen(q.name);
+            if((q.prefix && wcsncmp(name,q.name,len)==0) ||
+               (!q.prefix && wcscmp(name,q.name)==0)) {
+                q.address=symbol.address;--remaining;break;
+            }
+        }
+    } while(remaining && Wh_FindNextSymbol(search,&symbol));
+    Wh_FindCloseSymbol(search);return remaining==0;
+}
+static bool CniFindPreferenceCall(HMODULE module,void* method,ULONG_PTR* site) noexcept {
+    ULONG_PTR image=(ULONG_PTR)module;
+    DWORD64 unwindImage=0;
+    auto* fn=RtlLookupFunctionEntry((DWORD64)(ULONG_PTR)method,&unwindImage,nullptr);
+    if(!fn || unwindImage!=image || image+fn->BeginAddress!=(ULONG_PTR)method ||
+       fn->EndAddress<=fn->BeginAddress || fn->EndAddress-fn->BeginAddress>8192)return false;
+    auto* b=(BYTE*)module;
+    auto* nt=(IMAGE_NT_HEADERS*)(b+((IMAGE_DOS_HEADER*)b)->e_lfanew);
+    if(fn->EndAddress>nt->OptionalHeader.SizeOfImage)return false;
+    BYTE* p=b+fn->BeginAddress;BYTE* end=b+fn->EndAddress;
+    unsigned found=0;ULONG_PTR candidate=0;
+    while(p<end) {
+        WH_DISASM_RESULT insn{};
+        if(!Wh_Disasm(p,&insn) || !insn.length || insn.length>(size_t)(end-p))return false;
+        // Restrict to an instruction boundary and the exact vtable slot 5
+        // (ITrayNotify::SetPreference) followed by a CFG dispatch call.
+        const BYTE movSlot[]={0x48,0x8b,0x40,0x28};
+        if(insn.length==4 && end-p>=9 && memcmp(p,movSlot,sizeof(movSlot))==0) {
+            BYTE* call=p+4;
+            // Newer XFG builds may place the item argument setup between
+            // loading the method and calling the guarded dispatcher.
+            const BYTE movArg[]={0x48,0x8b,0xd3},leaArg[]={0x49,0x8d,0x56,0x20};
+            if(end-call>=3 && memcmp(call,movArg,3)==0)call+=3;
+            else if(end-call>=4 && memcmp(call,leaArg,4)==0)call+=4;
+            ULONG_PTR after=0;int32_t displacement=0;
+            if(end-call>=5 && call[0]==0xe8) {
+                memcpy(&displacement,call+1,4);after=(ULONG_PTR)(call+5);
+                int64_t destination=(int64_t)after+displacement;
+                if(destination<(int64_t)image ||
+                   (ULONG_PTR)destination-image+5>nt->OptionalHeader.SizeOfImage)after=0;
+                else {
+                    BYTE* target=(BYTE*)(ULONG_PTR)destination;
+                    if(!(target[0]==0xe9 || (target[0]==0xff && target[1]==0x25) ||
+                         (target[0]==0x48 && target[1]==0xff && target[2]==0x25)))after=0;
+                }
+            } else if(end-call>=6 && call[0]==0xff && call[1]==0x15) {
+                memcpy(&displacement,call+2,4);after=(ULONG_PTR)(call+6);
+                int64_t slot=(int64_t)after+displacement;
+                if(slot<(int64_t)image ||
+                   (ULONG_PTR)slot-image+sizeof(void*)>nt->OptionalHeader.SizeOfImage)after=0;
+                else {
+                    void* dispatch=nullptr;memcpy(&dispatch,(void*)(ULONG_PTR)slot,sizeof(dispatch));
+                    MEMORY_BASIC_INFORMATION mbi{};
+                    if(!dispatch || !VirtualQuery(dispatch,&mbi,sizeof(mbi)) ||
+                       mbi.State!=MEM_COMMIT || !(mbi.Protect &
+                       (PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY)))after=0;
+                }
+            }
+            if(after){candidate=after;++found;}
+        }
+        p+=insn.length;
+    }
+    if(found!=1)return false;
+    *site=candidate;return true;
+}
+static bool CniVerifyTaskbarCpl(bool allowSymbols) noexcept {
+    HMODULE module=GetModuleHandleW(L"taskbarcpl.dll");
+    if(!module || g_cniCplVerifying)return false;
+    if(g_cniVerifiedCplBase.load(std::memory_order_acquire)==(ULONG_PTR)module)return true;
+    // Symbol downloads and disassembly must never block the CPL UI thread.
+    if(!allowSymbols && !CniModuleMatches(module,kCniCplTimestamp,kCniCplImageSize))return false;
+    AcquireSRWLockExclusive(&g_cniCplVerifyLock);g_cniCplVerifying=true;
+    bool result=false;
+    try {
+        if(g_cniVerifiedCplBase.load(std::memory_order_acquire)==(ULONG_PTR)module)result=true;
+        else {
+            ULONG_PTR sites[3]{};
+            auto* b=reinterpret_cast<const BYTE*>(module);
+            if(CniModuleMatches(module,kCniCplTimestamp,kCniCplImageSize)) {
+                const BYTE signature[]={0x48,0x8b,0x40,0x28,0xe8};
+                result=true;DWORD offsets[]={0x3401u,0x3515u,0x36cau};
+                for(size_t i=0;i<3;i++) {
+                    if(memcmp(b+offsets[i],signature,sizeof(signature))!=0) {result=false;break;}
+                    sites[i]=(ULONG_PTR)(b+offsets[i]+9);
+                }
+            } else {
+                CniSymbolQuery queries[]={
+                    {L"?OnButtonPressed@CTaskbarCniCplPage@@",true,nullptr},
+                    {L"?OnCancel@CTaskbarCniCplPage@@",true,nullptr},
+                    {L"?OnComboboxSelectionChange@CTaskbarCniCplPage@@",true,nullptr},
+                };
+                result=CniResolveSymbols(module,queries,std::size(queries));
+                for(size_t i=0;result && i<std::size(queries);++i)
+                    result=CniFindPreferenceCall(module,queries[i].address,&sites[i]);
+                if(result)Wh_Log(L"[T81-CNI] verified taskbarcpl preference call sites using symbols");
+            }
+            if(result) {
+                for(size_t i=0;i<3;i++)g_cniPreferenceSites[i].store(sites[i],std::memory_order_relaxed);
+                g_cniVerifiedCplBase.store((ULONG_PTR)module,std::memory_order_release);
+            } else Wh_Log(L"[T81-CNI] taskbarcpl symbols or call sites could not be verified");
+        }
+    } catch(...) {result=false;}
+    g_cniCplVerifying=false;ReleaseSRWLockExclusive(&g_cniCplVerifyLock);
+    return result;
+}
+static bool CniIsPreferenceString() noexcept {
+    if(!g_cniBridgeActivated || g_cniNdrChecking ||
+       !g_cniNdrHooksRegistered.load(std::memory_order_acquire))return false;
+    ULONG_PTR base=g_cniVerifiedCplBase.load(std::memory_order_acquire);
+    if(!base)return false;
+    g_cniNdrChecking=true;
+    void* frames[64]{};
+    USHORT count=CaptureStackBackTrace(0,(DWORD)std::size(frames),frames,nullptr);
+    g_cniNdrChecking=false;
+    for(USHORT i=0;i<count;++i) {
+        ULONG_PTR address=(ULONG_PTR)frames[i];
+        for(size_t j=0;j<std::size(g_cniPreferenceSites);j++)
+            if(address==g_cniPreferenceSites[j].load(std::memory_order_relaxed))return true;
+    }
+    return false;
+}
+static void WINAPI CniNdrSizeHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString()) {
+        value=g_cniEmptyString;
+        if(!g_cniSizeSafetyLogged.exchange(true))Wh_Log(L"[T81-CNI] safe preference RPC sizing active");
+    }
+    realCniNdrSize(stub,value,format);
+}
+static void WINAPI CniNdrMarshalHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString()) {
+        value=g_cniEmptyString;
+        if(!g_cniMarshalSafetyLogged.exchange(true))Wh_Log(L"[T81-CNI] safe preference RPC marshalling active");
+    }
+    realCniNdrMarshal(stub,value,format);
+}
+static void WINAPI CniNdr64NonSizeHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString())value=g_cniEmptyString;
+    realCniNdr64NonSize(stub,value,format);
+}
+static void WINAPI CniNdr64NonMarshalHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString())value=g_cniEmptyString;
+    realCniNdr64NonMarshal(stub,value,format);
+}
+static void WINAPI CniNdr32SizeHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString())value=g_cniEmptyString;
+    realCniNdr32Size(stub,value,format);
+}
+static unsigned char* WINAPI CniNdr32MarshalHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString())value=g_cniEmptyString;
+    return realCniNdr32Marshal(stub,value,format);
+}
+static void WINAPI CniNdr32NonSizeHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString())value=g_cniEmptyString;
+    realCniNdr32NonSize(stub,value,format);
+}
+static unsigned char* WINAPI CniNdr32NonMarshalHook(void* stub,unsigned char* value,const void* format) {
+    if(CniIsPreferenceString())value=g_cniEmptyString;
+    return realCniNdr32NonMarshal(stub,value,format);
+}
+static void InstallCniNdrSafety(bool applyNow) {
+    if(g_cniSafetyStopping.load(std::memory_order_acquire))return;
+    HMODULE module=GetModuleHandleW(L"rpcrt4.dll");
+    if(!module)return;
+    BYTE* b=reinterpret_cast<BYTE*>(module);
+    void *targets[8]{};size_t targetCount=0;
+    if(CniModuleMatches(module,kCniRpcTimestamp,kCniRpcImageSize)) {
+        const BYTE a[]={0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x57};
+        const BYTE z[]={0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x74,0x24,0x18,0x48,0x89,0x7c,0x24,0x20};
+        if(memcmp(b+0xb050,a,sizeof(a)) || memcmp(b+0x80040,z,sizeof(z))) {
+            Wh_Log(L"[T81-CNI] known RPC signature mismatch; private page disabled");return;
+        }
+        targets[0]=b+0xb050;targets[1]=b+0x80040;targetCount=2;
+    } else {
+        // These four NDR64 names include their exact public-PDB ABI. NDR32
+        // exports have the published BufferSize / Marshall signatures.
+        CniSymbolQuery queries[]={
+            {L"?Ndr64ConformantStringBufferSize@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
+            {L"?Ndr64ConformantStringMarshall@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
+            {L"?Ndr64NonConformantStringBufferSize@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
+            {L"?Ndr64NonConformantStringMarshall@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
+        };
+        if(!CniResolveSymbols(module,queries,std::size(queries))) {
+            Wh_Log(L"[T81-CNI] RPC symbols unavailable; private page bridge disabled");return;
+        }
+        for(size_t i=0;i<4;i++)targets[i]=queries[i].address;
+        const char* names[]={"NdrConformantStringBufferSize","NdrConformantStringMarshall",
+            "NdrNonConformantStringBufferSize","NdrNonConformantStringMarshall"};
+        for(size_t i=0;i<4;i++)targets[i+4]=(void*)GetProcAddress(module,names[i]);
+        targetCount=8;
+    }
+    void* hooks[]={ (void*)CniNdrSizeHook,(void*)CniNdrMarshalHook,
+        (void*)CniNdr64NonSizeHook,(void*)CniNdr64NonMarshalHook,
+        (void*)CniNdr32SizeHook,(void*)CniNdr32MarshalHook,
+        (void*)CniNdr32NonSizeHook,(void*)CniNdr32NonMarshalHook };
+    void** originals[]={ (void**)&realCniNdrSize,(void**)&realCniNdrMarshal,
+        (void**)&realCniNdr64NonSize,(void**)&realCniNdr64NonMarshal,
+        (void**)&realCniNdr32Size,(void**)&realCniNdr32Marshal,
+        (void**)&realCniNdr32NonSize,(void**)&realCniNdr32NonMarshal };
+    bool installed=true;
+    for(size_t i=0;i<targetCount;i++) {
+        if(g_cniSafetyStopping.load(std::memory_order_acquire))return;
+        if(!targets[i] || !Wh_SetFunctionHook(targets[i],hooks[i],originals[i]) || !*originals[i]) {
+            installed=false;break;
+        }
+    }
+    if(!installed) {
+        Wh_Log(L"[T81-CNI] RPC string safety hooks unavailable; private page bridge disabled");return;
+    }
+    if(applyNow && (!Wh_ApplyHookOperations() || g_cniSafetyStopping.load(std::memory_order_acquire))) {
+        Wh_Log(L"[T81-CNI] unable to apply RPC safety hooks; private page bridge disabled");return;
+    }
+    g_cniNdrHooksRegistered.store(true,std::memory_order_release);
+    Wh_Log(L"[T81-CNI] RPC string safety hooks registered count=%u",(unsigned)targetCount);
+}
+static DWORD WINAPI CniSafetyWorker(void*) {
+    HMODULE rpc=GetModuleHandleW(L"rpcrt4.dll");
+    if(!CniModuleMatches(rpc,kCniRpcTimestamp,kCniRpcImageSize))InstallCniNdrSafety(true);
+    HMODULE attempted=nullptr;
+    HANDLE waits[]={g_cniSafetyStop,g_cniSafetyWake};
+    while(!g_cniSafetyStopping.load(std::memory_order_acquire)) {
+        HMODULE module=g_cniPendingCpl.exchange(nullptr,std::memory_order_acq_rel);
+        if(!module && !GetModuleHandleExW(0,L"taskbarcpl.dll",&module))attempted=nullptr;
+        if(module) {
+            if(module!=attempted) {attempted=module;CniVerifyTaskbarCpl(true);}
+            FreeLibrary(module);
+        }
+        if(WaitForMultipleObjects(2,waits,FALSE,500)==WAIT_OBJECT_0)break;
+    }
+    HMODULE pending=g_cniPendingCpl.exchange(nullptr,std::memory_order_acq_rel);
+    if(pending)FreeLibrary(pending);
+    return 0;
+}
+static void StartCniSafetyWorker() {
+    AcquireSRWLockExclusive(&g_cniSafetyThreadLock);
+    if(!g_cniSafetyStopping.load(std::memory_order_acquire) && !g_cniSafetyThread) {
+        g_cniSafetyStop=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        g_cniSafetyWake=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+        if(g_cniSafetyStop && g_cniSafetyWake)g_cniSafetyThread=CreateThread(nullptr,0,CniSafetyWorker,nullptr,0,nullptr);
+        if(!g_cniSafetyThread) {
+            if(g_cniSafetyStop)CloseHandle(g_cniSafetyStop);
+            if(g_cniSafetyWake)CloseHandle(g_cniSafetyWake);
+            g_cniSafetyStop=nullptr;g_cniSafetyWake=nullptr;
+        }
+        if(!g_cniSafetyThread)Wh_Log(L"[T81-CNI] safety worker unavailable; unknown builds use native CNI");
+    }
+    ReleaseSRWLockExclusive(&g_cniSafetyThreadLock);
+}
+static void CniQueueCplVerification() noexcept {
+    AcquireSRWLockExclusive(&g_cniSafetyThreadLock);
+    if(!g_cniSafetyStopping.load(std::memory_order_acquire) && g_cniSafetyThread) {
+        HMODULE module=nullptr;
+        if(GetModuleHandleExW(0,L"taskbarcpl.dll",&module)) {
+            HMODULE old=g_cniPendingCpl.exchange(module,std::memory_order_acq_rel);
+            if(old)FreeLibrary(old);
+            SetEvent(g_cniSafetyWake);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_cniSafetyThreadLock);
+}
+static void StopCniSafetyWorker() {
+    g_cniSafetyStopping.store(true,std::memory_order_release);
+    AcquireSRWLockExclusive(&g_cniSafetyThreadLock);
+    HANDLE worker=g_cniSafetyThread,stop=g_cniSafetyStop,wake=g_cniSafetyWake;
+    if(stop)SetEvent(stop);
+    ReleaseSRWLockExclusive(&g_cniSafetyThreadLock);
+    if(worker)WaitForSingleObject(worker,INFINITE);
+    if(worker)CloseHandle(worker);if(stop)CloseHandle(stop);if(wake)CloseHandle(wake);
+    g_cniSafetyThread=nullptr;g_cniSafetyStop=nullptr;g_cniSafetyWake=nullptr;
+}
+
 // Use the private server through COM's ordinary interface, without returning
 // a page-held object whose vtable resides in this mod. Whether writes marshal
 // correctly on each Windows build must be verified independently.
@@ -8435,17 +8927,31 @@ static HRESULT WINAPI TrayCniCoCreateInstanceHook(
         IsEqualCLSID(rclsid, T81_CLSID_TrayNotify) &&
         IsEqualIID(riid, T81_IID_ITrayNotifyWin8)) {
         *ppv = nullptr;
+        g_cniBridgeActivated=false;
+        if(!g_trayCniPrivateRegistered.load(std::memory_order_acquire) && !ReadCniBridge(nullptr))
+            return realTrayCniCoCreateInstance(rclsid,outer,context,riid,ppv);
+        // Never expose the cross-process proxy when the safety hooks and
+        // the relevant taskbarcpl call sites cannot be verified.
+        if(!g_trayCniPrivateRegistered.load(std::memory_order_acquire) &&
+           (!g_cniNdrHooksRegistered.load(std::memory_order_acquire) || !CniVerifyTaskbarCpl(false))) {
+            // Do not route this page to native CNI while the private tray is
+            // active: that would expose excluded icons and change native state.
+            CniQueueCplVerification();
+            Wh_Log(L"[T81-CNI] private page safety not ready; retry after verification");
+            return HRESULT_FROM_WIN32(ERROR_RETRY);
+        }
         HRESULT hr = realTrayCniCoCreateInstance(T81_CLSID_PrivateTrayNotify,
             nullptr, context, riid, ppv);
         if (SUCCEEDED(hr)) {
+            g_cniBridgeActivated=true;
             Wh_Log(L"[T81-CNI] private COM proxy activation pid=%lu tid=%lu hr=0x%08lx (write not confirmed)",
                    GetCurrentProcessId(),GetCurrentThreadId(),(unsigned long)hr);
             return hr;
         }
-        Wh_Log(L"[T81-CNI] private activation failed hr=0x%08lx; native fallback",
+        Wh_Log(L"[T81-CNI] private activation failed hr=0x%08lx; retry page later",
                (unsigned long)hr);
-        // Preserve the page if the private server is stopping or marshalling
-        // is unavailable: retry the exact original request.
+        // While private tray is active, never expose native CNI as a fallback.
+        return hr;
     }
     return realTrayCniCoCreateInstance(rclsid, outer, context, riid, ppv);
 }
@@ -9352,11 +9858,10 @@ static void RefreshOriginalBatterySnapshot(HMODULE module) {
         Wh_Log(L"[T81-DIAG] battery private snapshot memory unavailable");return;
     }
     ResourceModule os;os.h=LoadLibraryExW(L"batmeter.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);
-    wchar_t systemDir[32768]{},actual[32768]{};
-    UINT sysLen=GetSystemDirectoryW(systemDir,(UINT)std::size(systemDir));
-    DWORD actualLen=os.h?GetModuleFileNameW(os.h,actual,(DWORD)std::size(actual)):0;
-    std::wstring expected=sysLen && sysLen<std::size(systemDir)?std::wstring(systemDir)+L"\\batmeter.dll":L"";
-    if(!actualLen || actualLen>=std::size(actual) || expected.empty() || _wcsicmp(actual,expected.c_str())!=0) {
+    const std::wstring systemDir=SystemDirectoryBuffer();
+    const std::wstring actual=os.h?ModulePathBuffer(os.h):std::wstring{};
+    const std::wstring expected=systemDir.empty()?std::wstring{}:systemDir+L"\\batmeter.dll";
+    if(actual.empty() || expected.empty() || _wcsicmp(actual.c_str(),expected.c_str())!=0) {
         Wh_Log(L"[T81-DIAG] OS battery module path mismatch; skip private snapshot refresh");return;
     }
     using QueryFn=INT_PTR (WINAPI*)(void*,void*);
@@ -9582,8 +10087,8 @@ static bool TryOriginalBatteryFlyout1511() {
     bool loadedHere=module==nullptr;
     if(!module) module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);
     if(!module) { Wh_Log(L"[T81-DIAG] battery 1511 LoadLibrary failed error=%lu",GetLastError());return false; }
-    wchar_t loadedPath[32768]{};DWORD loadedLength=GetModuleFileNameW(module,loadedPath,(DWORD)std::size(loadedPath));
-    if(!loadedLength || loadedLength>=std::size(loadedPath) || _wcsicmp(loadedPath,path.c_str())!=0) {
+    const std::wstring loadedPath=ModulePathBuffer(module);
+    if(loadedPath.empty() || _wcsicmp(loadedPath.c_str(),path.c_str())!=0) {
         Wh_Log(L"[T81-DIAG] battery DLL path mismatch; refusing private RVA");if(loadedHere)FreeLibrary(module);return false;
     }
     HMODULE pinned=nullptr;
@@ -11006,7 +11511,7 @@ static void DrawBarForeground(HDC mem,const Layout& L,int w,int h,
         if(s->linksArrowHot && L.linksBand.right>L.linksBand.left) DrawArrowHover(g,BandArrowRect(L.linksBand));
     }
     // GDI is used only for native HICONs and system-font text on the GDI+ surface.
-    int icon=std::max(1,std::min(Px(32),h-Px(6)));
+    int icon=std::max(1,std::min(Px(s->nativeSmallIcons?16:32),h-Px(6)));
     ScopedSavedDC savedDc(mem);
     IntersectClipRect(mem,L.first,0,L.tray.left,h);
     for(const auto& t:s->buttonTransitions)if(ValidGhost(t,w,h,false) && t.icon) {
@@ -12572,10 +13077,24 @@ static void ReleaseNativeControlOverlays() {
     if(s->aeroClock) { s->aeroClock->Release(); s->aeroClock=nullptr; }
 }
 
+// Reject arbitrary similarly named windows: accept only the current desktop
+// shell process and session. No remote memory access or injection is used.
+static DWORD DesktopShellPid() {
+    HWND shell=GetShellWindow(); DWORD pid=0;
+    if (!shell || !IsWindow(shell) || !GetWindowThreadProcessId(shell,&pid) ||
+        !pid || pid==GetCurrentProcessId()) return 0;
+    DWORD ours=0,theirs=0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(),&ours) ||
+        !ProcessIdToSessionId(pid,&theirs) || ours!=theirs) return 0;
+    const std::wstring image=ProcessImage(pid);
+    if (image.empty() || _wcsicmp(PathFindFileNameW(image.c_str()),L"explorer.exe")) return 0;
+    return pid;
+}
 struct NativeTrayCandidate { HWND best=nullptr; long long score=-1; };
 static BOOL CALLBACK FindOwnedNativeProc(HWND h,LPARAM lp) {
     DWORD pid=0; GetWindowThreadProcessId(h,&pid);
-    if(pid!=GetCurrentProcessId() || (s && h==s->privateHost)) return TRUE;
+    const DWORD shellPid=DesktopShellPid();
+    if(!shellPid || pid!=shellPid || (s && h==s->privateHost)) return TRUE;
     wchar_t cls[64]={};
     if(!GetClassNameW(h,cls,64) || wcscmp(cls,L"Shell_TrayWnd")) return TRUE;
     RECT r{}; if(!GetWindowRect(h,&r)) return TRUE;
@@ -12673,10 +13192,38 @@ static void ObserveExternalBarEdge(int nativeEdge) {
 // Optional AppBar adapter following ManagedShell/RetroBar's documented
 // ABM_NEW -> QUERYPOS -> SETPOS -> REMOVE lifecycle. Never changes Explorer's
 // global auto-hide setting. All coordinates are physical pixels.
+// SHAppBarMessage chooses the first Shell_TrayWnd and allocates its reply
+// buffer for that window's process. Forwarding the message from our private
+// host to Explorer cannot transfer a process-local reply buffer. Direct only
+// our own AppBar calls to the validated real tray before shell32 allocates it.
+// The override is thread-local and exists only during those calls; ordinary
+// FindWindow calls and other applications continue to see the private host.
+static thread_local HWND t81AppbarFindTarget=nullptr;
+static decltype(&FindWindowW) t81RealFindWindowW=nullptr;
+static HWND WINAPI T81AppbarFindWindowW(LPCWSTR cls,LPCWSTR title) {
+    if(t81AppbarFindTarget && !title && cls && !IS_INTRESOURCE(cls) &&
+       wcscmp(cls,L"Shell_TrayWnd")==0) return t81AppbarFindTarget;
+    return t81RealFindWindowW?t81RealFindWindowW(cls,title):nullptr;
+}
+static bool InstallAppbarRoutingHook() {
+    HMODULE user=GetModuleHandleW(L"user32.dll");
+    void* target=user?(void*)GetProcAddress(user,"FindWindowW"):nullptr;
+    bool ok=target && Wh_SetFunctionHook(target,(void*)T81AppbarFindWindowW,
+                                          (void**)&t81RealFindWindowW);
+    if(!ok) Wh_Log(L"[T81-APPBAR] native routing hook unavailable");
+    return ok;
+}
 #ifdef TASKBAR81_TEST
 static decltype(&SHAppBarMessage) t81AppBarMessage=SHAppBarMessage;
 #else
-#define t81AppBarMessage SHAppBarMessage
+static UINT_PTR t81AppBarMessage(DWORD message,PAPPBARDATA data) {
+    if(!t81RealFindWindowW || !s || !IsExpectedNativeTray(s->native)) return 0;
+    HWND previous=t81AppbarFindTarget;
+    t81AppbarFindTarget=s->native;
+    UINT_PTR result=SHAppBarMessage(message,data);
+    t81AppbarFindTarget=previous;
+    return result;
+}
 #endif
 // Microsoft documents QUNS_BUSY for a running fullscreen application and the
 // D3D value for exclusive mode. ABN_FULLSCREENAPP adds immediate transitions
@@ -12727,8 +13274,61 @@ static bool ShouldHideForFullScreen() {
     }
     return !capture;
 }
+// Explorer can continue to reserve its now-hidden native bar. Adjust only
+// when the observed boundary exactly matches that bar, on the same monitor;
+// never widen across an additional reservation. Remember both rectangles and
+// restore only if no other component has subsequently changed the work area.
+struct NativeWorkAreaAdjustment {
+    bool active=false;
+    RECT monitor{}, before{}, applied{};
+};
+static NativeWorkAreaAdjustment t81WorkAreaAdjustment;
+static bool t81ChangingWorkArea=false;
+static void RestoreNativeWorkArea() {
+    if(!t81WorkAreaAdjustment.active || t81ChangingWorkArea)return;
+    NativeWorkAreaAdjustment old=t81WorkAreaAdjustment;
+    t81WorkAreaAdjustment.active=false;
+    MONITORINFO mi{};mi.cbSize=sizeof(mi);
+    HMONITOR mon=MonitorFromRect(&old.monitor,MONITOR_DEFAULTTONULL);
+    if(mon && GetMonitorInfoW(mon,&mi) && EqualRect(&mi.rcMonitor,&old.monitor) &&
+       EqualRect(&mi.rcWork,&old.applied)) {
+        t81ChangingWorkArea=true;
+        BOOL ok=SystemParametersInfoW(SPI_SETWORKAREA,0,&old.before,SPIF_SENDCHANGE);
+        t81ChangingWorkArea=false;
+        Wh_Log(L"[T81-APPBAR] restored native work area=%d",ok?1:0);
+    }
+}
+static void ReleaseHiddenNativeWorkArea(const MONITORINFO& mi) {
+    if(!s || !s->privateActive || !s->appbarRegistered || t81ChangingWorkArea ||
+       !IsExpectedNativeTray(s->native) || IsWindowVisible(s->native))return;
+    if(t81WorkAreaAdjustment.active) {
+        if(EqualRect(&mi.rcMonitor,&t81WorkAreaAdjustment.monitor) &&
+           EqualRect(&mi.rcWork,&t81WorkAreaAdjustment.applied))return;
+        // Another component changed the work area; don't restore stale data.
+        t81WorkAreaAdjustment.active=false;
+    }
+    RECT native{};if(!GetWindowRect(s->native,&native))return;
+    if(MonitorFromRect(&native,MONITOR_DEFAULTTONULL)!=
+       MonitorFromRect(&mi.rcMonitor,MONITOR_DEFAULTTONULL))return;
+    if(native.left>mi.rcMonitor.left || native.right<mi.rcMonitor.right)return;
+    RECT work=mi.rcWork;
+    if(native.bottom==mi.rcMonitor.bottom && native.top>mi.rcMonitor.top &&
+       work.bottom==native.top && s->appbarEdge!=ABE_BOTTOM) work.bottom=mi.rcMonitor.bottom;
+    else if(native.top==mi.rcMonitor.top && native.bottom<mi.rcMonitor.bottom &&
+            work.top==native.bottom && s->appbarEdge!=ABE_TOP) work.top=mi.rcMonitor.top;
+    else return;
+    if(work.left>=work.right || work.top>=work.bottom || EqualRect(&work,&mi.rcWork))return;
+    t81WorkAreaAdjustment={true,mi.rcMonitor,mi.rcWork,work};
+    t81ChangingWorkArea=true;
+    BOOL ok=SystemParametersInfoW(SPI_SETWORKAREA,0,&work,SPIF_SENDCHANGE);
+    t81ChangingWorkArea=false;
+    if(!ok)t81WorkAreaAdjustment.active=false;
+    Wh_Log(L"[T81-APPBAR] release hidden native edge=%d work=%ld,%ld,%ld,%ld",ok?1:0,
+           work.left,work.top,work.right,work.bottom);
+}
 static void RemoveWorkAreaAppBar() {
     if(!s)return;
+    RestoreNativeWorkArea();
     if(s->bar) {KillTimer(s->bar,TIMER_APPBAR_NOTIFY);KillTimer(s->bar,TIMER_APPBAR_VERIFY);}
     if(!s->appbarRegistered)return;
     APPBARDATA abd{};abd.cbSize=sizeof(abd);abd.hWnd=s->bar;
@@ -12754,6 +13354,7 @@ static void ReserveWorkAreaAppBar(RECT& desired,const MONITORINFO& mi) {
         s->appbarRegistered=true;s->appbarDirty=true;Wh_Log(L"[T81-DIAG] work-area AppBar registered");
     }
     if(!s->appbarDirty && s->appbarEdge==edge && EqualRect(&desired,&s->appbarDesired)) {desired=s->appbarApproved;return;}
+    if(s->appbarEdge!=edge || !EqualRect(&desired,&s->appbarDesired))RestoreNativeWorkArea();
     APPBARDATA abd{};abd.cbSize=sizeof(abd);abd.hWnd=s->bar;abd.uEdge=edge;abd.rc=desired;
     int height=desired.bottom-desired.top;
     t81AppBarMessage(ABM_QUERYPOS,&abd);
@@ -12793,6 +13394,7 @@ static void ReserveVerticalAppbar(RECT& desired,const MONITORINFO& mi,int side) 
         s->appbarRegistered=true;s->appbarDirty=true;Wh_Log(L"[T81-DIAG] vertical AppBar registered");
     }
     if(!s->appbarDirty && s->appbarEdge==edge && EqualRect(&desired,&s->appbarDesired)) {desired=s->appbarApproved;return;}
+    if(s->appbarEdge!=edge || !EqualRect(&desired,&s->appbarDesired))RestoreNativeWorkArea();
     APPBARDATA abd{};abd.cbSize=sizeof(abd);abd.hWnd=s->bar;abd.uEdge=edge;abd.rc=desired;int width=desired.right-desired.left;
     UINT_PTR queryResult=t81AppBarMessage(ABM_QUERYPOS,&abd);
     RECT queried=abd.rc;
@@ -12909,6 +13511,12 @@ void UpdatePlacement() {
             if(s->barEdgeOverride==1) {full.top=mi.rcMonitor.top;full.bottom=full.top+height;s->nativeEdge=ABE_TOP;}
             else {full.bottom=mi.rcMonitor.bottom;full.top=full.bottom-height;s->nativeEdge=ABE_BOTTOM;}
         }
+    }
+    if(s->nativeSmallIcons && s->privateActive) {
+        // Compact our own bar only; never resize Explorer's native HWND.
+        int compact=std::min((int)(full.bottom-full.top),std::max(1,Px(30)));
+        if(s->nativeEdge==ABE_TOP)full.bottom=full.top+compact;
+        else full.top=full.bottom-compact;
     }
     int mode=taskbarPlacementMode.load();
     int requested=mode==3?(s->barEdgeOverride==3?1:s->barEdgeOverride==4?2:0):mode;
@@ -13261,14 +13869,21 @@ static bool OpenJumpDocument(HWND owner,IUnknown* object) {
     }
     IShellLinkW* link=nullptr;
     if(SUCCEEDED(object->QueryInterface(IID_PPV_ARGS(&link))) && link) {
-        wchar_t path[32768]={},args[32768]={},work[32768]={}; WIN32_FIND_DATAW fd{};
-        link->GetPath(path,(int)std::size(path),&fd,SLGP_RAWPATH);
-        link->GetArguments(args,(int)std::size(args)); link->GetWorkingDirectory(work,(int)std::size(work));
-        PIDLIST_ABSOLUTE pidl=nullptr; if(!path[0]) link->GetIDList(&pidl); link->Release();
-        SHELLEXECUTEINFOW se{}; se.cbSize=sizeof(se); se.hwnd=owner; se.lpVerb=L"open"; se.nShow=SW_SHOWNORMAL;
-        se.fMask=SEE_MASK_NOASYNC|(pidl?SEE_MASK_IDLIST:0); se.lpIDList=pidl; se.lpFile=path[0]?path:nullptr;
-        se.lpParameters=args[0]?args:nullptr; se.lpDirectory=work[0]?work:nullptr;
-        bool ok=(pidl || path[0]) && ShellExecuteExW(&se); if(pidl) CoTaskMemFree(pidl); return ok;
+        // IShellLinkW provides no size-query contract; retain the old bound,
+        // but allocate off-stack and release the COM object on allocation failure.
+        std::unique_ptr<IShellLinkW,ReleaseCom<IShellLinkW>> linkGuard(link);
+        std::unique_ptr<wchar_t[]> path(new(std::nothrow) wchar_t[kPathBufferLimit]{});
+        std::unique_ptr<wchar_t[]> args(new(std::nothrow) wchar_t[kPathBufferLimit]{});
+        std::unique_ptr<wchar_t[]> work(new(std::nothrow) wchar_t[kPathBufferLimit]{});
+        if(!path || !args || !work)return false;
+        WIN32_FIND_DATAW fd{};
+        link->GetPath(path.get(),kPathBufferLimit,&fd,SLGP_RAWPATH);
+        link->GetArguments(args.get(),kPathBufferLimit);link->GetWorkingDirectory(work.get(),kPathBufferLimit);
+        PIDLIST_ABSOLUTE pidl=nullptr;if(!path[0])link->GetIDList(&pidl);linkGuard.reset();
+        SHELLEXECUTEINFOW se{};se.cbSize=sizeof(se);se.hwnd=owner;se.lpVerb=L"open";se.nShow=SW_SHOWNORMAL;
+        se.fMask=SEE_MASK_NOASYNC|(pidl?SEE_MASK_IDLIST:0);se.lpIDList=pidl;se.lpFile=path[0]?path.get():nullptr;
+        se.lpParameters=args[0]?args.get():nullptr;se.lpDirectory=work[0]?work.get():nullptr;
+        bool ok=(pidl || path[0]) && ShellExecuteExW(&se);if(pidl)CoTaskMemFree(pidl);return ok;
     }
     return false;
 }
@@ -14815,11 +15430,11 @@ static void DrawVerticalForeground(HDC dc,int w,int h) {
         if(index>=0 && (size_t)index<s->trayIcons.size() && s->trayIcons[index].icon)DrawIconEx(dc,(cell.left+cell.right-size)/2,(cell.top+cell.bottom-size)/2,s->trayIcons[index].icon,size,size,0,nullptr,DI_NORMAL);
         }
     for(const auto& t:s->buttonTransitions)if(ValidGhost(t,w,h,true) && t.icon) {
-        int step=t.rect.bottom-t.rect.top,size=std::max(1,std::min(Px(26),std::min(w,step)-Px(6)));
+        int step=t.rect.bottom-t.rect.top,size=std::max(1,std::min(Px(s->nativeSmallIcons?16:26),std::min(w,step)-Px(6)));
         RECT c=ButtonRevealRect(t.rect,1.f-ButtonTransitionFraction(t),true);ScopedSavedDC clip(dc);IntersectClipRect(dc,c.left,c.top,c.right,c.bottom);
         DrawIconEx(dc,(w-size)/2,t.rect.top+(step-size)/2,t.icon.get(),size,size,0,nullptr,DI_NORMAL);
     }
-    for(int slot=0;slot<v.count;slot++) {int i=v.offset+slot;int size=std::max(1,std::min(Px(BetaTextureAvailable(11)?32:26),std::min(w,v.step)-Px(6)));
+    for(int slot=0;slot<v.count;slot++) {int i=v.offset+slot;int size=std::max(1,std::min(Px(s->nativeSmallIcons?16:(BetaTextureAvailable(11)?32:26)),std::min(w,v.step)-Px(6)));
         ScopedSavedDC clip(dc);const auto* t=LiveButtonTransition(s->groups[i].key);
         if(t && t->reveal){RECT cell{0,v.first+slot*v.step,w,v.first+(slot+1)*v.step};
             RECT c=ButtonRevealRect(cell,ButtonTransitionFraction(*t),true);
@@ -15265,7 +15880,13 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
                 bool known=GetMonitorInfoW(MonitorFromRect(&r,MONITOR_DEFAULTTONEAREST),&mi)!=FALSE;
                 bool reserved=known && AppbarWorkAreaObserved(s->appbarEdge,r,mi.rcWork);
                 Wh_Log(L"[T81-DIAG] work-area AppBar work-area observed=%d known=%d",reserved?1:0,known?1:0);
-                if(known && !reserved) {RemoveWorkAreaAppBar();s->appbarRetryAt=GetTickCount64()+30000;UpdatePlacement();}
+                if(reserved) {
+                    ReleaseHiddenNativeWorkArea(mi);
+                    // Recheck after Explorer or another AppBar changes work area.
+                    SetTimer(h,TIMER_APPBAR_VERIFY,2000,nullptr);
+                } else if(known) {
+                    RemoveWorkAreaAppBar();s->appbarRetryAt=GetTickCount64()+30000;UpdatePlacement();
+                }
             }return 0;
         }
         if(wp==TIMER_CLASSIC_POSITION_NOTIFY) {
@@ -15309,7 +15930,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         if(wp==TIMER_REFRESH) {
             // Covers Start opened externally, including in another Explorer process.
             if(s->peekOn && CompanionStartScreenVisible()) PeekOff(false);
-            if(s->ticks%5==0) RefreshNativeLabelPreference();
+            RefreshNativeLabelPreference();
             if(s->privateActive) {
                 RefreshLanguageIndicator();
                 RefreshVolume(); RefreshBattery();
@@ -15874,8 +16495,8 @@ LRESULT CALLBACK BarProc(HWND h,UINT m,WPARAM wp,LPARAM lp) {
 DWORD WINAPI UIThread(LPVOID) {
     // Create the message queue before checking the stop flag: posting WM_QUIT is then safe.
     MSG msg{}; PeekMessageW(&msg,nullptr,WM_USER,WM_USER,PM_NOREMOVE);
-    // Explorer can run as several processes. Only the process that owns the
-    // primary Shell_TrayWnd may create this bar or change its visibility.
+    if(uiQueueReady) SetEvent(uiQueueReady);
+    // Locate the desktop shell's taskbar; do not hide or replace the native tray.
     HWND ownedTray=nullptr;
     for(int i=0;i<120 && !quitting.load();i++) {
         ownedTray=FindOwnedNativeTaskbar();
@@ -15883,7 +16504,7 @@ DWORD WINAPI UIThread(LPVOID) {
         Sleep(500);
     }
     if(quitting.load() || !ownedTray) {
-        Wh_Log(L"No taskbar owned by this Explorer process; no UI created"); return 0;
+        Wh_Log(L"No validated desktop-shell taskbar found; no UI created"); return 0;
     }
     // Let ExplorerPatcher finish creating its taskbar before taking it over.
     if(GetModuleHandleW(L"ExplorerPatcher.amd64.dll") || GetModuleHandleW(L"ExplorerPatcher.arm64.dll") || GetModuleHandleW(L"ExplorerPatcher.dll") ||
@@ -15947,7 +16568,7 @@ DWORD WINAPI UIThread(LPVOID) {
                 ExcludeFromPeek(local.bar);
                 if(SUCCEEDED(com)) RegisterTaskDropTarget(local.bar);
                 local.native=ownedTray;
-                local.visibilityHook=SetWinEventHook(EVENT_OBJECT_CREATE,EVENT_OBJECT_SHOW,nullptr,ShellVisibilityEvent,GetCurrentProcessId(),0,WINEVENT_OUTOFCONTEXT);
+                local.visibilityHook=SetWinEventHook(EVENT_OBJECT_CREATE,EVENT_OBJECT_SHOW,nullptr,ShellVisibilityEvent,0,0,WINEVENT_OUTOFCONTEXT);
                 if(!local.visibilityHook) Wh_Log(L"[T81-DIAG] visibility event hook unavailable error=%lu",GetLastError());
                 UpdatePlacement(); Refresh();
                 if(local.perPixelBar) { InvalidateRect(local.bar,nullptr,FALSE); UpdateWindow(local.bar); }
@@ -16079,56 +16700,86 @@ static void RemoveExceptionLogger() {
     }
 }
 
-// No user32 hooks. The private host periodically hides the native window;
-// normal unload restores its original visibility. Competing mods can conflict.
-BOOL Wh_ModInit() {
-    quitting.store(false);
-    LoadSettings();
-    if(debugExceptionLog.load()) InstallExceptionLogger();
-    InstallTrayCniHook();
-    InstallCniRegistryReadHooks();
-    if(useOriginalBatteryFlyout.load() && Battery1511ArchitectureSupported()) {
+// Taskbar services and the CNI server run in the tool; CPL hooks also run in Explorer.
+static std::atomic<bool> toolRuntimeStarted{false};
+static std::atomic<bool> toolShutdown{false};
+static SRWLOCK toolLifecycleLock=SRWLOCK_INIT;
+struct ToolLifecycleGuard {
+    ToolLifecycleGuard(){AcquireSRWLockExclusive(&toolLifecycleLock);}
+    ~ToolLifecycleGuard(){ReleaseSRWLockExclusive(&toolLifecycleLock);}
+    ToolLifecycleGuard(const ToolLifecycleGuard&)=delete;
+    ToolLifecycleGuard& operator=(const ToolLifecycleGuard&)=delete;
+};
+static bool StartTaskbarWorker() {
+    quitting.store(false);uiQueueReady=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    if(!uiQueueReady)return false;
+    threadHandle=CreateThread(nullptr,0,UIThread,nullptr,0,&threadId);
+    if(!threadHandle){CloseHandle(uiQueueReady);uiQueueReady=nullptr;return false;}
+    if(WaitForSingleObject(uiQueueReady,5000)!=WAIT_OBJECT_0) {
+        // Do not wait indefinitely inside startup. Keep the handles alive:
+        // the caller exits the dedicated process, which owns both handles.
+        quitting.store(true);
+        Wh_Log(L"[T81-START] UI queue readiness timed out; stopping tool process");
+        return false;
+    }
+    CloseHandle(uiQueueReady);uiQueueReady=nullptr;return true;
+}
+static void StopTaskbarWorker() {
+    quitting.store(true);if(!threadHandle)return;
+    HWND owner=w7t::menuOwnerForShutdown.load();if(owner)PostMessageW(owner,WM_CANCELMODE,0,0);
+    HWND bar=barWindow.load();if(bar)PostMessageW(bar,WM_CANCELMODE,0,0);
+    if(!PostThreadMessageW(threadId,WM_QUIT,0,0))
+        Wh_Log(L"[T81-TOOL] worker quit post failed error=%lu",GetLastError());
+    WaitForSingleObject(threadHandle,INFINITE);
+    CloseHandle(threadHandle);threadHandle=nullptr;threadId=0;
+}
+BOOL WhTool_ModInit() {
+    LoadSettings();if(debugExceptionLog.load())InstallExceptionLogger();
+    InstallTrayCniHook();InstallCniRegistryReadHooks();
+    InstallAppbarRoutingHook();
+    if(Battery1511ArchitectureSupported()) {
         HMODULE user=GetModuleHandleW(L"user32.dll");
         void* target=user?(void*)GetProcAddress(user,"LoadStringW"):nullptr;
         if(!target || !Wh_SetFunctionHook(target,(void*)BatteryLoadStringHook,(void**)&realLoadStringW))
-            Wh_Log(L"[T81-DIAG] battery resource bridge hook could not be installed");
+            Wh_Log(L"[T81-TOOL] battery resource bridge hook unavailable");
     }
+    // Hooks are applied by Windhawk after Wh_ModInit returns. Do not start a
+    // worker or wait for its queue during mod initialization: other Explorer
+    // mods are still initializing, and Wh_ApplyHookOperations is invalid here.
     return TRUE;
 }
-void Wh_ModAfterInit() {
-    threadHandle=CreateThread(nullptr,0,UIThread,nullptr,0,&threadId);
-    if(!threadHandle) Wh_Log(L"Unable to create bar thread; native taskbar remains untouched");
+static bool WhTool_StartRuntime() {
+    ToolLifecycleGuard guard;
+    if(toolShutdown.load(std::memory_order_acquire))return false;
+    if(!StartTaskbarWorker()){RemoveExceptionLogger();return false;}
+    toolRuntimeStarted.store(true,std::memory_order_release);
+    Wh_Log(L"[T81-TOOL] worker started after entrypoint hooks; dedicated PID=%lu shell PID=%lu",GetCurrentProcessId(),DesktopShellPid());
+    return true;
 }
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    const bool oldTray=enablePrivateTray.load();
-    const bool oldBattery=useOriginalBatteryFlyout.load();
-    LoadSettings();
-    if(debugExceptionLog.load()) InstallExceptionLogger(); else RemoveExceptionLogger();
-    // These choices require setup normally performed once at initialization:
-    // tray ownership, or LoadStringW hook and battery resource provisioning.
-    const bool needsReload=oldTray!=enablePrivateTray.load() || (!oldBattery && useOriginalBatteryFlyout.load());
-    if(reload)*reload=needsReload?TRUE:FALSE;
-    if(needsReload) Wh_Log(L"[T81-DIAG] settings request Windhawk mod reload; battery DLL guard remains in force");
-    else { HWND h=barWindow.load(); if(h && !PostMessageW(h,WM_UPDATE_SETTINGS,0,0)) Wh_Log(L"[T81-DIAG] settings notification failed error=%lu",GetLastError()); }
-    return TRUE;
+void WhTool_ModSettingsChanged() {
+    ToolLifecycleGuard guard;
+    if(toolShutdown.load(std::memory_order_acquire))return;
+    bool oldTray=enablePrivateTray.load();LoadSettings();
+    if(debugExceptionLog.load())InstallExceptionLogger();else RemoveExceptionLogger();
+    if(!toolRuntimeStarted.load(std::memory_order_acquire))return;
+    if(oldTray!=enablePrivateTray.load()) {
+        StopTaskbarWorker();
+        if(!StartTaskbarWorker()) {
+            Wh_Log(L"[T81-START] worker restart failed; stopping tool process");
+            ExitProcess(1);
+        }
+    } else {HWND h=barWindow.load();if(h)PostMessageW(h,WM_UPDATE_SETTINGS,0,0);}
 }
-void Wh_ModBeforeUninit() {
-    RemoveExceptionLogger();
-    quitting.store(true);
-    if(threadHandle) {
-        // TrackPopupMenuEx has its own modal loop: ask its owner to cancel it
-        // before posting WM_QUIT, or unloading can wait forever on that loop.
-        HWND menuOwner=w7t::menuOwnerForShutdown.load();
-        if(menuOwner) PostMessageW(menuOwner,WM_CANCELMODE,0,0);
-        HWND customBar=barWindow.load();
-        if(customBar) PostMessageW(customBar,WM_CANCELMODE,0,0);
-        PostThreadMessageW(threadId,WM_QUIT,0,0);
-        // The DLL cannot safely be unloaded while its thread executes its code.
-        WaitForSingleObject(threadHandle,INFINITE);
-        CloseHandle(threadHandle); threadHandle=nullptr;
-    }
+static void WhTool_ModBeforeUninit() {
+    // Windhawk calls this while hooks are still installed. Stop and join the
+    // window/COM thread before Windhawk removes hooks or unloads this DLL.
+    toolShutdown.store(true,std::memory_order_release);
+    ToolLifecycleGuard guard;
+    toolRuntimeStarted.store(false,std::memory_order_release);
+    StopTaskbarWorker();RemoveExceptionLogger();
+    batteryStringModule.store(nullptr);batteryStringMui.store(nullptr);
+    Wh_Log(L"[T81-TOOL] worker stopped before hook removal");
 }
-void Wh_ModUninit() { RemoveExceptionLogger(); batteryStringModule.store(nullptr); batteryStringMui.store(nullptr); }
 
 /*
 ManagedShell and RetroBar: Apache License, Version 2.0.
@@ -16576,3 +17227,205 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    // Windhawk applies all queued hooks after Wh_ModInit. Reaching the
+    // executable entry point also keeps the taskbar startup out of the mod
+    // initialization phase, when other Explorer mods are still loading.
+    Wh_Log(L"[T81-START] tool entrypoint reached; starting taskbar worker");
+    if(!WhTool_StartRuntime()) {
+        if(!toolShutdown.load(std::memory_order_acquire)) {
+            Wh_Log(L"[T81-START] worker start failed; leaving the native taskbar alone");
+            ExitProcess(1);
+        }
+    }
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        if (!Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr)) {
+            Wh_Log(L"[T81-START] entrypoint hook registration failed; stopping tool process");
+            ExitProcess(1);
+        }
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    // Limited CPL redirects run in Explorer. Taskbar state and server remain
+    // in the dedicated process; this bridge is not crash-isolated from Explorer.
+    if(CniModuleMatches(GetModuleHandleW(L"rpcrt4.dll"),kCniRpcTimestamp,kCniRpcImageSize))
+        InstallCniNdrSafety(false);
+    InstallTrayCniHook();InstallCniRegistryReadHooks();
+    Wh_Log(L"[T81-CNI] Explorer bridge installed pid=%lu",GetCurrentProcessId());
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    StartCniSafetyWorker();
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModBeforeUninit() {
+    StopCniSafetyWorker();
+    if (!g_isToolModProcessLauncher) WhTool_ModBeforeUninit();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) return;
+    // Worker and COM cleanup completed before Windhawk removed the hooks.
+    ExitProcess(0);
+}
+
