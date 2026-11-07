@@ -5,6 +5,7 @@
 // @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
+// @architecture    x86-64
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -luser32 -luxtheme
 // ==/WindhawkMod==
@@ -25,8 +26,9 @@ This mod fixes the keyboard layout indicator text orientation
 when using the classic (non-modern) Windows taskbar.
 
 When visual themes are enabled, the native background (including the hover
-highlight) is preserved. When themes are disabled, the "Button face" color
-is used.
+highlight) is preserved and the text is white on a dark taskbar and black
+on a light one. When themes are disabled, the "Button face" background and
+"Button text" color are used.
 
 **Note:** This mod only works with the classic taskbar, not the modern 
 Windows 11 taskbar.
@@ -43,10 +45,12 @@ static int g_srcW = 0;
 static int g_srcH = 0;
 static bool g_pending = false;
 static DWORD g_threadId = 0;
+static HDC g_layerDc = nullptr;  // DC, в который нативный код рисовал текст
 static COLORREF g_lastGoodBg = CLR_INVALID;
 static bool g_firstBltDone = false;
 static bool g_alreadyDrawn = false;
 static bool g_themed = false;   // темы были включены в момент начала отрисовки
+static bool g_busy = false;     // идёт дорисовка — вложенные вызовы пропускаем
 
 static bool LooksLikeLayoutText(LPCWSTR s, int len) {
     if (!s || len < 2 || len > 4) return false;
@@ -81,8 +85,14 @@ static void FillSolid(HDC hdc, const RECT* rc, COLORREF color) {
     DeleteObject(hBr);
 }
 
+// Завершение ожидания: сбрасываем всё, по чему блиты признаются «нашими».
+static void ClearPending() {
+    g_pending = false;
+    g_layerDc = nullptr;
+}
+
 // Цвет обычного фона панели под индикатором (через временный битмап).
-// Используется только как запасной вариант для выбора цвета текста.
+// Нужен только как запасной вариант для выбора цвета текста.
 static COLORREF SampleThemeBg(int w, int h) {
     COLORREF result = CLR_INVALID;
 
@@ -115,8 +125,8 @@ static COLORREF SampleThemeBg(int w, int h) {
 }
 
 // Растягиваем столбец пикселей у левого края (там фон/hover правильный)
-// по всей внутренней ширине индикатора. Так «дыра» в середине, закрашенная
-// обычным цветом панели, получает тот же цвет, что и края (включая hover).
+// по всей внутренней ширине индикатора. Так «дыра» в середине получает
+// тот же цвет, что и края (включая hover).
 // Края по 3 пикселя не трогаем, чтобы сохранить рамку подсветки.
 // Возвращает цвет пикселя в центре после исправления.
 static COLORREF RepairBackgroundFromEdge(HDC hdc, int w, int h) {
@@ -133,20 +143,20 @@ static COLORREF RepairBackgroundFromEdge(HDC hdc, int w, int h) {
     return GetPixel(hdc, w / 2, h / 2);
 }
 
+// Цвет текста: без тем — BTNTEXT; с темами — белый на тёмном фоне панели,
+// чёрный на светлом (по яркости реального фона).
 static COLORREF TextColorForBg(COLORREF bg, bool themed) {
-    if (!themed) {
-        return GetSysColor(COLOR_BTNTEXT);
-    }
     int r = GetRValue(bg), g = GetGValue(bg), b = GetBValue(bg);
     int lum = (r * 299 + g * 587 + b * 114) / 1000;
     return (lum > 140) ? RGB(0, 0, 0) : RGB(255, 255, 255);
 }
 
-// Рисует текст горизонтально. При включённых темах и 32-битном DIB-буфере
+// Рисует текст горизонтально. При включённых темах и 32-битном буфере
 // используем DrawThemeTextEx с DTT_COMPOSITED, чтобы корректно записался
 // альфа-канал.
-static void DrawIndicatorText(HDC hdc, RECT* rc, COLORREF textColor, bool themed) {
-    LOGFONTW lfH = g_font;
+static void DrawIndicatorText(HDC hdc, RECT* rc, COLORREF textColor, bool themed,
+                              const wchar_t* text, const LOGFONTW& font) {
+    LOGFONTW lfH = font;
     lfH.lfEscapement = 0;
     lfH.lfOrientation = 0;
 
@@ -168,7 +178,7 @@ static void DrawIndicatorText(HDC hdc, RECT* rc, COLORREF textColor, bool themed
                 opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
                 opts.crText = textColor;
                 HRESULT hr = DrawThemeTextEx(
-                    hTheme, hdc, 0, 0, g_text, -1,
+                    hTheme, hdc, 0, 0, text, -1,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
                     rc, &opts);
                 done = SUCCEEDED(hr);
@@ -181,7 +191,7 @@ static void DrawIndicatorText(HDC hdc, RECT* rc, COLORREF textColor, bool themed
         int oldMode = SetBkMode(hdc, TRANSPARENT);
         COLORREF oldColor = SetTextColor(hdc, textColor);
 
-        DrawTextW(hdc, g_text, -1, rc,
+        DrawTextW(hdc, text, -1, rc,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
         SetTextColor(hdc, oldColor);
@@ -202,25 +212,24 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options,
     int len = (int)c;
     LOGFONTW lf = {};
 
-    if (LooksLikeLayoutText(lpString, len) && IsRotatedFont(hdc, &lf)) {
-        
+    bool nested = g_busy && GetCurrentThreadId() == g_threadId;
+
+    if (!nested && LooksLikeLayoutText(lpString, len) && IsRotatedFont(hdc, &lf)) {
+
         wchar_t newText[8] = {};
         wcsncpy_s(newText, lpString, len);
         newText[len] = 0;
-        
-        bool textChanged = (wcscmp(newText, g_lastDrawnText) != 0);
-        
-        if (textChanged) {
+
+        if (wcscmp(newText, g_lastDrawnText) != 0) {
             g_alreadyDrawn = false;
         }
-        
+
         HBITMAP hbm = (HBITMAP)GetCurrentObject(hdc, OBJ_BITMAP);
         BITMAP bm = {};
         if (hbm && GetObject(hbm, sizeof(bm), &bm)) {
-            
+
             if (!g_pending) {
-                wcsncpy_s(g_text, lpString, len);
-                g_text[len] = 0;
+                wcscpy_s(g_text, newText);
                 g_font = lf;
                 g_srcW = bm.bmWidth;
                 g_srcH = bm.bmHeight;
@@ -228,6 +237,7 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options,
                 g_firstBltDone = false;
                 g_themed = ThemesEnabled();
                 g_threadId = GetCurrentThreadId();
+                g_layerDc = hdc;
             }
 
             // Без тем — заливаем слой цветом BTNFACE, как раньше.
@@ -250,12 +260,19 @@ static BitBlt_t BitBlt_Original = nullptr;
 BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
                          HDC hdcSrc, int xSrc, int ySrc, DWORD rop) {
 
+    // Вложенный блит во время нашей дорисовки — не трогаем.
+    if (g_busy && GetCurrentThreadId() == g_threadId) {
+        return BitBlt_Original(hdcDest, xDest, yDest, w, h, hdcSrc, xSrc, ySrc, rop);
+    }
+
     bool ours = g_pending && g_srcW > 0 && g_srcH > 0 &&
                 GetCurrentThreadId() == g_threadId &&
                 xDest == 0 && yDest == 0;
 
-    // С темами слой с текстом не копируем.
-    if (ours && g_themed && w == g_srcW && h == g_srcH) {
+    // С темами не копируем только слой с текстом (источник — DC, в который
+    // рисовали текст), чтобы не затирать нативный фон и подсветку при
+    // наведении. Остальные блиты не подавляются.
+    if (ours && g_themed && hdcSrc == g_layerDc && w == g_srcW && h == g_srcH) {
         g_firstBltDone = true;
         return TRUE;
     }
@@ -271,22 +288,23 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
         g_firstBltDone = true;
         return result;
     }
-    
+
     if (!g_firstBltDone) {
         return result;
     }
-    
+
     bool isIndicator = (w > g_srcW || h > g_srcH) && (w >= g_srcH);
-    
     if (!isIndicator) {
         return result;
     }
 
     RECT rc = { 0, 0, w, h };
 
+    g_busy = true;
+
     if (g_themed) {
-        // Убираем «дыру» в середине: протягиваем цвет от левого края
-        // (обычный фон или hover — как есть у Windows).
+        // Убираем «дыру» в середине, затем рисуем текст:
+        // белый на тёмной панели, чёрный на светлой.
         COLORREF bg = RepairBackgroundFromEdge(hdcDest, w, h);
         if (bg == CLR_INVALID || bg == RGB(0, 0, 0)) {
             bg = SampleThemeBg(w, h);
@@ -294,26 +312,32 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
             g_lastGoodBg = bg;
         }
 
-        DrawIndicatorText(hdcDest, &rc, TextColorForBg(bg, true), true);
+        DrawIndicatorText(hdcDest, &rc, TextColorForBg(bg, true), true,
+                          g_text, g_font);
 
         wcscpy_s(g_lastDrawnText, g_text);
-        g_pending = false;
+        g_busy = false;
+        ClearPending();
         return result;
     }
 
-    // Темы отключены — прежнее поведение с BTNFACE.
+    // Темы отключены — фон BTNFACE, текст BTNTEXT.
     if (g_alreadyDrawn) {
-        DrawIndicatorText(hdcDest, &rc, GetSysColor(COLOR_BTNTEXT), false);
-        g_pending = false;
+        DrawIndicatorText(hdcDest, &rc, GetSysColor(COLOR_BTNTEXT), false,
+                          g_text, g_font);
+        g_busy = false;
+        ClearPending();
         return result;
     }
 
     FillSolid(hdcDest, &rc, GetSysColor(COLOR_BTNFACE));
-    DrawIndicatorText(hdcDest, &rc, GetSysColor(COLOR_BTNTEXT), false);
+    DrawIndicatorText(hdcDest, &rc, GetSysColor(COLOR_BTNTEXT), false,
+                      g_text, g_font);
 
     wcscpy_s(g_lastDrawnText, g_text);
     g_alreadyDrawn = true;
-    g_pending = false;
+    g_busy = false;
+    ClearPending();
 
     return result;
 }
