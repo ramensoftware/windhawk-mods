@@ -12,7 +12,7 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.9.5
+// @version         4.9.7
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
@@ -1253,8 +1253,12 @@ static void Tick() {
             g_pendingHide = false;
             g_pendingDesktopChange = false;
             BeginShow();
-            if (shortNativeCycle && decidedKind != 2)
-                g_nativeHideDeadline = now + 650;
+            if (shortNativeCycle) {
+                if (decidedKind == 2)
+                    g_hidePending = true; // Native OSD hid before desktop classification ended.
+                else
+                    g_nativeHideDeadline = now + 650;
+            }
         }
         return;
     }
@@ -1314,7 +1318,7 @@ static void Tick() {
                 lastDeskRead = now;
             }
             bool closeNow = dk.durationMs > 0 ? (int)(now - g_deskT0) >= dk.durationMs
-                                              : g_hidePending;
+                                              : g_hidePending || (int)(now - g_deskT0) >= 3000;
             if (closeNow) StartClose();
         }
     } else if (st == S_CLOSING) {
@@ -1570,10 +1574,11 @@ static DWORD WINAPI UiThread(LPVOID) {
                        (LPCWSTR)&UiProc, &hi);
     if (!hi) return 1;
     WNDCLASSW wc{};
-    wc.lpfnWndProc = UiProc; wc.hInstance = hi; wc.lpszClassName = L"WhOsdCustomPill";
+    // Avoid reusing a possibly stale class procedure from an older version.
+    wc.lpfnWndProc = UiProc; wc.hInstance = hi; wc.lpszClassName = L"WhOsdCustomPill497";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        Wh_Log(L"OSD Custom Pill: RegisterClassW failed (error %lu)", GetLastError());
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClassW failed (error %lu)", GetLastError());
         return 1;
     }
 
