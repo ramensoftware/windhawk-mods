@@ -9,7 +9,8 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luxtheme -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
-
+// ==WindhawkMod==
+  
 // ==WindhawkModReadme==
 /*
 # Desktop Folder Portals
