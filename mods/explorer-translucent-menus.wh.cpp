@@ -6,7 +6,7 @@
 // @author          alkali210
 // @github          https://github.com/alkali210
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -ldwmapi -luxtheme -lgdi32 -ladvapi32 -lcomctl32 -lmsimg32
 // @license         GPL-3.0-or-later
 // ==/WindhawkMod==
