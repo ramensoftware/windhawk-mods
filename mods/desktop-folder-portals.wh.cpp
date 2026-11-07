@@ -15,31 +15,31 @@
 /*
 # Desktop Folder Portals (Windows 11)
 
-Desktop Folder Portals is an elegant Windows 11 modification that brings interactive, on-hover folder content previews directly to your desktop without opening separate File Explorer windows.
+Desktop Folder Portals is a Windows 11 modification that brings interactive, on-hover folder content previews directly to your desktop without opening separate File Explorer windows.
 
 ### Key Features
 
-* **Seamless Hover Previews:** Hovering over any desktop folder smoothly expands an interactive mini-window displaying its contents, elegantly collapsing once the cursor moves away.
-* **Native Windows 11 Context Menu:** Full integration with the authentic system right-click menu, enabling quick renaming, property inspection, and standard file operations.
-* **Effortless Drag-and-Drop:** Clean, artifact-free file transfers straight from the preview portal to the desktop, active folders, or third-party applications.
-* **Modern Fluent Design:** Styled with native Mica and Acrylic translucency, rounded corners, soft ambient drop shadows, and fluid transformation animations.
-* **Granular Customization:** Configure hover response delays, visual styling, and behavioral triggers effortlessly via the Windhawk settings interface.
-* **Optimized & Safe Engine:** Written in clean, modern C++ with strict GDI/USER resource management and full Per-Monitor DPI scaling to prevent memory leaks and maintain complete desktop UI responsiveness.
+* **Seamless Hover Previews:** Hovering over any desktop folder smoothly expands an interactive mini-window displaying its contents, collapsing once the cursor moves away.
+* **Classic Shell Context Menu (`IContextMenu`):** Right-clicking an item opens the classic Win32 shell context menu (`TrackPopupMenuEx`) for standard file operations and property inspection, while selecting "Rename" opens the parent folder in File Explorer with the item selected in inline edit mode (`SHOpenFolderAndSelectItems`).
+* **Effortless Drag-and-Drop:** Transfer files straight from the preview portal to the desktop, active folders, or third-party applications via native OLE Drag-and-Drop.
+* **Fluent-Inspired Glass Visuals:** Styled with DWM rounded corners, drop shadows, smooth DWM background blur on levels 1–2, and Acrylic blur (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) on level 3.
+* **Granular Customization:** Configure hover response delays, animation duration, grid columns, and visual styling via the Windhawk settings interface.
+* **Smart Item Filtering & Single-Click Launch:** Displays up to 45 items per folder (sorted with folders first), automatically skips hidden and system files, and opens any file or subfolder with a single left click.
 
 ---
 
 # Desktop Folder Portals для Windows 11 (RU)
 
-Desktop Folder Portals — элегантная модификация для Windows 11, внедряющая интерактивный предпросмотр содержимого папок прямо на рабочем столе без необходимости их открытия в Проводнике.
+Desktop Folder Portals — модификация для Windows 11, внедряющая интерактивный предпросмотр содержимого папок прямо на рабочем столе без необходимости их открытия в Проводнике.
 
 ### Ключевые возможности
 
-* **Интерактивные порталы:** Плавное появление компактного всплывающего окна с файлами при наведении курсора на директорию и его аккуратное исчезновение при отведении мыши.
-* **Нативная интеграция с Windows 11:** Полный доступ к оригинальному системному контекстному меню по правому клику мыши для переименования, открытия свойств и стандартных файловых операций.
-* **Полноценный Drag-and-Drop:** Удобный перенос файлов из окна предпросмотра на рабочий стол или в любые другие открытые окна без графических артефактов.
-* **Современная эстетика Fluent Design:** Скругленные углы, эффект полупрозрачности Acrylic/Mica, мягкие тени и плавная анимация развертывания окна.
-* **Гибкая кастомизация:** Быстрая настройка задержки срабатывания, визуальных эффектов и параметров отображения в панели Windhawk.
-* **Надежность и производительность:** Оптимизированная реализация на C++ с поддержкой масштабирования DPI, контролем выделения системных ресурсов GDI/USER, отсутствием утечек памяти и плавным откликом без задержек `explorer.exe`.
+* **Интерактивные порталы:** Плавное появление компактного всплывающего окна с файлами при наведении курсора на директорию и его исчезновение при отведении мыши.
+* **Классическое контекстное меню оболочки (`IContextMenu`):** Правый клик вызывает классическое системное контекстное меню Win32 (`TrackPopupMenuEx`) для стандартных файловых операций и просмотра свойств, а выбор пункта «Переименовать» открывает родительскую папку в Проводнике с выделением элемента в режиме редактирования имени (`SHOpenFolderAndSelectItems`).
+* **Полноценный Drag-and-Drop:** Удобный перенос файлов из окна предпросмотра на рабочий стол, в открытые папки или сторонние приложения через системный OLE Drag-and-Drop.
+* **Стеклянное оформление в духе Fluent:** Скругленные углы DWM, мягкие тени, гладкое DWM-размытие фона на уровнях 1–2 и эффект Acrylic (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) на 3-м уровне размытия.
+* **Гибкая кастомизация:** Настройка задержки срабатывания, длительности анимации, числа колонок сетки и параметров прозрачности в панели Windhawk.
+* **Умная выборка и запуск в один клик:** Отображает до 45 элементов папки (с приоритетной сортировкой подпапок), автоматически пропускает скрытые и системные файлы и позволяет открывать любые файлы или вложенные папки одиночным левым кликом мыши.
 */
 // ==/WindhawkModReadme==
 
@@ -196,10 +196,23 @@ std::mutex g_stateMutex;
 std::mutex g_subclassMutex;
 std::unordered_set<HWND> g_subclassedWindows;
 std::atomic<bool> g_unloading{false};
+std::atomic<int> g_activeModalCallCount{0};
 ULONG_PTR g_gdiplusToken = 0;
 HINSTANCE g_hInstance = nullptr;
 bool g_portalClassRegistered = false;
 pfnSetWindowCompositionAttribute g_pSetWCA = nullptr;
+
+// RAII-сторож для отслеживания активных модальных циклов (контекстное меню, InvokeCommand, Drag-and-Drop)
+struct ScopedModalCallGuard {
+    ScopedModalCallGuard() noexcept {
+        g_activeModalCallCount.fetch_add(1, std::memory_order_acq_rel);
+    }
+    ~ScopedModalCallGuard() noexcept {
+        g_activeModalCallCount.fetch_sub(1, std::memory_order_acq_rel);
+    }
+    ScopedModalCallGuard(const ScopedModalCallGuard&) = delete;
+    ScopedModalCallGuard& operator=(const ScopedModalCallGuard&) = delete;
+};
 
 // Определение языка интерфейса пользователя для локализации строк внутри портала
 bool IsRussianUILanguage() {
@@ -551,6 +564,7 @@ public:
     STDMETHODIMP TranslateAcceleratorSB(MSG*, WORD) override { return S_FALSE; }
 
     STDMETHODIMP BrowseObject(PCUIDLIST_RELATIVE pidl, UINT) override {
+        ScopedModalCallGuard modalGuard;
         if (pidl) {
             SHELLEXECUTEINFOW sei = {};
             sei.cbSize = sizeof(sei);
@@ -693,6 +707,9 @@ void StartPortalFadeOut();
 
 // Вызов оригинального контекстного меню Windows 11 для элемента внутри портала
 void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
+    if (g_unloading.load()) return;
+    ScopedModalCallGuard modalGuard;
+
     if (itemIndex < 0 || itemIndex >= static_cast<int>(g_portal.items.size())) return;
     const std::wstring& itemPath = g_portal.items[itemIndex].fullPath;
     if (itemPath.empty()) return;
@@ -734,7 +751,7 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
                         g_portal.pActiveCtxMenu3 = nullptr;
                     }
 
-                    if (cmd >= 1 && cmd <= 0x7FFF) {
+                    if (cmd >= 1 && cmd <= 0x7FFF && !g_unloading.load()) {
                         UINT cmdOffset = cmd - 1;
                         wchar_t verbBuf[64] = {};
                         bool isRenameVerb = false;
@@ -762,7 +779,7 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
                         }
 
                         // Обновляем список файлов на случай удаления/изменения
-                        if (g_portal.pShellBrowser && IsWindow(hPortal)) {
+                        if (!g_unloading.load() && g_portal.pShellBrowser && IsWindow(hPortal)) {
                             g_portal.pShellBrowser->PopulateItemsFromDirectory(g_portal.folderPath, g_portal.items, 45);
                             RenderAndPresentPortal(hPortal);
                         }
@@ -781,6 +798,9 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
 
 // Запуск системного переноса файла (OLE Drag-and-Drop) на рабочий стол или в Проводник
 void StartNativeFileDragAndDrop(HWND hPortal, int itemIndex) {
+    if (g_unloading.load()) return;
+    ScopedModalCallGuard modalGuard;
+
     if (itemIndex < 0 || itemIndex >= static_cast<int>(g_portal.items.size())) return;
     std::wstring itemPath = g_portal.items[itemIndex].fullPath;
     if (itemPath.empty()) return;
@@ -814,7 +834,7 @@ void StartNativeFileDragAndDrop(HWND hPortal, int itemIndex) {
             pDataObj->Release();
 
             // Если файл был перемещен из папки, мгновенно обновляем список в портале
-            if (SUCCEEDED(hrDrag) && IsWindow(hPortal) && g_portal.pShellBrowser) {
+            if (!g_unloading.load() && SUCCEEDED(hrDrag) && IsWindow(hPortal) && g_portal.pShellBrowser) {
                 g_portal.pShellBrowser->PopulateItemsFromDirectory(g_portal.folderPath, g_portal.items, 45);
                 RenderAndPresentPortal(hPortal);
             }
@@ -1459,7 +1479,8 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         if (pt.y > headerHitBottom && clickedIndex >= 0 && clickedIndex < static_cast<int>(g_portal.items.size())) {
             if (PtInRect(&g_portal.items[clickedIndex].boundsRect, pt)) {
                 std::wstring targetPath = g_portal.items[clickedIndex].fullPath;
-                if (!targetPath.empty()) {
+                if (!targetPath.empty() && !g_unloading.load()) {
+                    ScopedModalCallGuard modalGuard;
                     PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(targetPath.c_str());
                     if (pidl && g_portal.pShellBrowser) {
                         g_portal.pShellBrowser->BrowseObject(pidl, SBSP_DEFBROWSER);
@@ -1467,7 +1488,9 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     } else {
                         ShellExecuteW(nullptr, L"open", targetPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                     }
-                    StartPortalFadeOut();
+                    if (!g_unloading.load()) {
+                        StartPortalFadeOut();
+                    }
                 }
             }
         }
@@ -1935,7 +1958,7 @@ BOOL Wh_ModInit() {
     wc.lpszClassName = PORTAL_CLASS_NAME;
 
     ATOM classAtom = RegisterClassExW(&wc);
-    if (!classAtom && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!classAtom) {
         Wh_Log(L"Failed to register portal window class (error: %u)", GetLastError());
         GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
@@ -1986,8 +2009,24 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Desktop Folder Portals mod...");
     g_unloading.store(true);
 
+    // Если открыто контекстное меню портала, аккуратно закрываем его перед ожиданием завершения модальных вызовов
+    HWND hPortalSnapshot = g_portal.hPortalWnd;
+    if (hPortalSnapshot && IsWindow(hPortalSnapshot)) {
+        PostMessageW(hPortalSnapshot, WM_CANCELMODE, 0, 0);
+    }
+
+    // Ожидаем полного выхода потока рабочего стола из всех модальных циклов (TrackPopupMenuEx, InvokeCommand, SHDoDragDrop)
+    while (g_activeModalCallCount.load(std::memory_order_acquire) > 0) {
+        Sleep(15);
+    }
+
     // Снимаем сабклассы и уничтожаем окно портала строго в потоке окна рабочего стола
     DetachAllSubclassedDesktopListViewsAndDestroyPortal();
+
+    // Повторная проверка на случай, если модальный вызов завершался в момент переключения контекста
+    while (g_activeModalCallCount.load(std::memory_order_acquire) > 0) {
+        Sleep(15);
+    }
 
     // Освобождаем общие графические ресурсы и деинициализируем GDI+ только после закрытия окна
     g_renderCache.ReleaseAll();
