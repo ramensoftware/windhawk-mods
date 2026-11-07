@@ -17,16 +17,18 @@ Allows pasting text and images from clipboard as files in Explorer,
 on the desktop and in open/save file dialogs.
 
 ## Features
-- Paste text as .txt (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
+- Paste text as a file (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
+- Optionally detect the text type (e.g. JSON, HTML, Python, SQL, Markdown, YAML)
+  and use it as the file extension instead of .txt (works with UTF-8 encoding only)
 - Paste images as .png
+- After pasting, the new file is selected and put into rename mode,
+  like New → Text Document
 - Auto-naming with incrementing number on conflict
 - Works in Explorer folders, on the desktop, in file dialogs
 - Works with network folders (UNC paths)
 - Paste menu item is grayed out in virtual folders (This PC, Network, etc.)
 - Ctrl+V, context menu Paste and menubar Paste all work
 - Shows system error dialog when pasting into a folder without write access
-
-Version 2.0 includes additional features by user Aliipey.
 
 */
 // ==/WindhawkModReadme==
@@ -52,6 +54,7 @@ Version 2.0 includes additional features by user Aliipey.
 */
 // ==/WindhawkModSettings==
 
+#include <mutex>
 #include <windows.h>
 #include <windowsx.h>
 #include <shlobj.h>
@@ -74,7 +77,7 @@ struct {
     std::wstring textEncoding = L"UTF-16";
     bool enableTextPaste = true;
     bool enableImagePaste = true;
-    bool detectTextType = true;  
+    bool detectTextType = true;
 } g_settings;
 
 // ============================================================
@@ -83,12 +86,12 @@ struct {
 void LoadSettings()
 {
     PCWSTR textEncoding = Wh_GetStringSetting(L"textEncoding");
-    g_settings.textEncoding = textEncoding ? textEncoding : L"UTF-16";
+    g_settings.textEncoding = textEncoding;
     Wh_FreeStringSetting(textEncoding);
     
     g_settings.enableTextPaste = Wh_GetIntSetting(L"enableTextPaste");
     g_settings.enableImagePaste = Wh_GetIntSetting(L"enableImagePaste");
-    g_settings.detectTextType = Wh_GetIntSetting(L"detectTextType");  
+    g_settings.detectTextType = Wh_GetIntSetting(L"detectTextType");
 }
 
 // ============================================================
@@ -137,7 +140,8 @@ static std::wstring GetDefaultBaseName()
     std::wstring result;
     HMODULE hMod = LoadLibraryExW(L"explorerframe.dll", nullptr,
                                   LOAD_LIBRARY_AS_DATAFILE |
-                                  LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+                                  LOAD_LIBRARY_AS_IMAGE_RESOURCE |
+                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hMod)
     {
         WCHAR buf[512] = {};
@@ -277,61 +281,6 @@ static DWORD SaveImageFromClipboard(const std::wstring& filePath,
     return errCode;
 }
 
-// ============================================================
-//  Save text
-// ============================================================
-static DWORD SaveTextFromClipboard(const std::wstring& filePath)
-{
-    if (!g_settings.enableTextPaste) return ERROR_NOT_SUPPORTED;
-    if (!OpenClipboard(nullptr)) return GetLastError();
-    DWORD errCode = ERROR_NO_DATA;
-    HANDLE h = GetClipboardData(CF_UNICODETEXT);
-    if (h)
-    {
-        WCHAR* text = (WCHAR*)GlobalLock(h);
-        if (text)
-        {
-            HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_WRITE, 0,
-                                       nullptr, CREATE_ALWAYS,
-                                       FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (hFile != INVALID_HANDLE_VALUE)
-            {
-                DWORD written;
-                const std::wstring& enc = g_settings.textEncoding;
-
-                if (enc == L"UTF-8" || enc == L"UTF-8-BOM")
-                {
-                    if (enc == L"UTF-8-BOM")
-                    {
-                        BYTE bom[3] = {0xEF, 0xBB, 0xBF};
-                        WriteFile(hFile, bom, 3, &written, nullptr);
-                    }
-                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
-                    if (utf8Len > 0)
-                    {
-                        char* utf8Text = new char[utf8Len];
-                        WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8Text, utf8Len, nullptr, nullptr);
-                        WriteFile(hFile, utf8Text, utf8Len - 1, &written, nullptr);
-                        delete[] utf8Text;
-                    }
-                }
-                else // UTF-16 LE with BOM
-                {
-                    WORD bom = 0xFEFF;
-                    WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
-                    WriteFile(hFile, text, (DWORD)(wcslen(text) * sizeof(WCHAR)),
-                              &written, nullptr);
-                }
-                CloseHandle(hFile);
-                errCode = 0;
-            }
-            else errCode = GetLastError();
-            GlobalUnlock(h);
-        }
-    }
-    CloseClipboard();
-    return errCode;
-}
 
 // ============================================================
 //  SHELLDLL_DefView detection
@@ -705,13 +654,64 @@ static bool IsItemFocused(IShellView* pSV, PCUITEMID_CHILD pidl)
     return same;
 }
 
-// returns true when finished (rename mode entered)
-static bool TrySelectAndRename(HWND hwnd, const std::wstring& filePath)
-{
-    ScopedCoInit comInit;
-    IShellView* pSV = GetShellViewForWindow(hwnd);
-    if (!pSV) return false;
+// ============================================================
+//  Run a callback on the thread that owns a window
+//  (thread timers must be stopped from the thread that created them)
+// ============================================================
+using RunFromWindowThreadProc_t = void (WINAPI*)(PVOID);
 
+struct RunFromWindowThreadParam
+{
+    RunFromWindowThreadProc_t proc;
+    PVOID                     procParam;
+};
+
+static UINT g_runFromWindowThreadMsg = 0;
+
+static LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    if (nCode == HC_ACTION)
+    {
+        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+        if (g_runFromWindowThreadMsg && cwp->message == g_runFromWindowThreadMsg)
+        {
+            auto* p = (RunFromWindowThreadParam*)cwp->lParam;
+            p->proc(p->procParam);
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam)
+{
+    if (!g_runFromWindowThreadMsg) return false;
+
+    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (threadId == 0) return false;
+
+    if (threadId == GetCurrentThreadId())
+    {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunFromWindowThreadHookProc,
+                                   nullptr, threadId);
+    if (!hook) return false;
+
+    RunFromWindowThreadParam param = { proc, procParam };
+    SendMessageW(hWnd, g_runFromWindowThreadMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+// ============================================================
+//  Pending "select + rename" state
+// ============================================================
+// returns true when finished (rename mode entered)
+static bool TrySelectAndRename(IShellView* pSV, const std::wstring& filePath)
+{
     bool done = false;
     PIDLIST_ABSOLUTE pidlAbs = nullptr;
     if (SUCCEEDED(SHParseDisplayName(filePath.c_str(), nullptr, &pidlAbs, 0, nullptr)) && pidlAbs)
@@ -732,7 +732,6 @@ static bool TrySelectAndRename(HWND hwnd, const std::wstring& filePath)
         }
         CoTaskMemFree(pidlAbs);
     }
-    pSV->Release();
     return done;
 }
 
@@ -740,41 +739,125 @@ struct PendingSelect
 {
     HWND         hwnd     = nullptr;
     std::wstring path;
+    IShellView*  view     = nullptr;   // AddRef'd, owned by the timer's thread
+    bool         comInit  = false;     // CoInitializeEx succeeded on that thread
     int          attempts = 0;
     UINT_PTR     timerId  = 0;
 };
 static PendingSelect g_pendingSelect;
+static std::mutex    g_pendingSelectMutex;
 
 static const UINT kSelectRetryMs      = 60;
 static const int  kSelectMaxAttempts  = 40;   // ~2.4 s
 
+// MUST run on the thread that created the timer.
 static void StopPendingSelect()
 {
-    if (g_pendingSelect.timerId)
-        KillTimer(nullptr, g_pendingSelect.timerId);
+    UINT_PTR    timerId;
+    IShellView* view;
+    bool        comInit;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingSelectMutex);
+        timerId = g_pendingSelect.timerId;
+        view    = g_pendingSelect.view;
+        comInit = g_pendingSelect.comInit;
+        g_pendingSelect.timerId  = 0;
+        g_pendingSelect.view     = nullptr;
+        g_pendingSelect.comInit  = false;
+        g_pendingSelect.hwnd     = nullptr;
+        g_pendingSelect.attempts = 0;
+        g_pendingSelect.path.clear();
+    }
+    if (timerId) KillTimer(nullptr, timerId);
+    if (view)    view->Release();
+    if (comInit) CoUninitialize();
+}
+
+static void WINAPI StopPendingSelectThunk(PVOID)
+{
+    StopPendingSelect();
+}
+
+// Last resort when the owner window/thread is gone: only reset the state.
+// A stale timer (if any) kills itself on its next tick because its id no
+// longer matches.
+static void AbandonPendingSelect()
+{
+    std::lock_guard<std::mutex> lock(g_pendingSelectMutex);
     g_pendingSelect.timerId  = 0;
+    g_pendingSelect.view     = nullptr;   // intentionally leaked
+    g_pendingSelect.comInit  = false;
     g_pendingSelect.hwnd     = nullptr;
     g_pendingSelect.attempts = 0;
     g_pendingSelect.path.clear();
 }
 
+// Safe to call from any thread (no lock is held while switching threads).
+static void CancelPendingSelect()
+{
+    HWND hwnd;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingSelectMutex);
+        hwnd = g_pendingSelect.timerId ? g_pendingSelect.hwnd : nullptr;
+    }
+    if (!hwnd) return;
+    if (!RunFromWindowThread(hwnd, StopPendingSelectThunk, nullptr))
+        AbandonPendingSelect();
+}
+
 static VOID CALLBACK PendingSelectTimerProc(HWND, UINT, UINT_PTR id, DWORD)
 {
-    if (id != g_pendingSelect.timerId) { KillTimer(nullptr, id); return; }
+    HWND         hwnd;
+    std::wstring path;
+    IShellView*  view;
+    int          attempts;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingSelectMutex);
+        if (id != g_pendingSelect.timerId || !g_pendingSelect.view)
+        {
+            KillTimer(nullptr, id);
+            return;
+        }
+        attempts = ++g_pendingSelect.attempts;
+        hwnd     = g_pendingSelect.hwnd;
+        path     = g_pendingSelect.path;
+        view     = g_pendingSelect.view;
+        view->AddRef();   // keep it alive even if Stop runs during a COM call
+    }
 
-    g_pendingSelect.attempts++;
-    bool finished = !IsWindow(g_pendingSelect.hwnd) ||
-                    TrySelectAndRename(g_pendingSelect.hwnd, g_pendingSelect.path) ||
-                    g_pendingSelect.attempts >= kSelectMaxAttempts;
+    bool finished = !IsWindow(hwnd) ||
+                    TrySelectAndRename(view, path) ||
+                    attempts >= kSelectMaxAttempts;
+    view->Release();
+
     if (finished) StopPendingSelect();
 }
 
 static void ScheduleSelectAndRename(HWND hwnd, const std::wstring& path)
 {
-    StopPendingSelect();
-    g_pendingSelect.hwnd = hwnd;
-    g_pendingSelect.path = path;
-    g_pendingSelect.timerId = SetTimer(nullptr, 0, kSelectRetryMs, PendingSelectTimerProc);
+    CancelPendingSelect();
+
+    bool comInit = SUCCEEDED(CoInitializeEx(nullptr,
+                                            COINIT_APARTMENTTHREADED |
+                                            COINIT_DISABLE_OLE1DDE));
+
+    // Resolve the shell view once; it is reused by every timer tick.
+    IShellView* pSV = GetShellViewForWindow(hwnd);
+    UINT_PTR timerId = pSV ? SetTimer(nullptr, 0, kSelectRetryMs, PendingSelectTimerProc) : 0;
+    if (!timerId)
+    {
+        if (pSV)     pSV->Release();
+        if (comInit) CoUninitialize();
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_pendingSelectMutex);
+    g_pendingSelect.hwnd     = hwnd;
+    g_pendingSelect.path     = path;
+    g_pendingSelect.view     = pSV;
+    g_pendingSelect.comInit  = comInit;
+    g_pendingSelect.attempts = 0;
+    g_pendingSelect.timerId  = timerId;
 }
 
 // ============================================================
@@ -786,6 +869,7 @@ struct LangDef { const WCHAR* ext; const Sig* sigs; int count; bool ci; };
 
 static const int kDetectMaxChars = 4096;
 static const int kMinScore       = 5;
+static const int kStrongWeight   = 6;   // signature weight that is enough on its own
 
 // ---- case-insensitive languages (matched against lowercase copy) ----
 static const Sig kSigHtml[] = {
@@ -959,12 +1043,60 @@ static bool StartsAt1(const std::wstring& h, const WCHAR* p)
     return h.size() >= 1 + n && h.compare(1, n, p) == 0;
 }
 
-static int ScoreSigs(const std::wstring& hay, const Sig* sigs, int n)
+static inline bool IsWordChar(WCHAR c)
+{
+    return c == L'_' || IsCharAlphaNumericW(c);
+}
+
+// Substring search that respects word boundaries on the edges of the signature
+static bool FindSig(const std::wstring& hay, const WCHAR* sig)
+{
+    size_t n = wcslen(sig);
+    if (n == 0) return false;
+    bool needBefore = IsWordChar(sig[0]);
+    bool needAfter  = IsWordChar(sig[n - 1]);
+    size_t pos = 0;
+    while ((pos = hay.find(sig, pos)) != std::wstring::npos)
+    {
+        bool ok = true;
+        if (needBefore && pos > 0 && IsWordChar(hay[pos - 1])) ok = false;
+        if (ok && needAfter && pos + n < hay.size() && IsWordChar(hay[pos + n])) ok = false;
+        if (ok) return true;
+        ++pos;
+    }
+    return false;
+}
+
+static int ScoreSigs(const std::wstring& hay, const Sig* sigs, int n, int* maxWeight)
 {
     int sc = 0;
+    *maxWeight = 0;
     for (int i = 0; i < n; ++i)
-        if (hay.find(sigs[i].s) != std::wstring::npos) sc += sigs[i].w;
+        if (FindSig(hay, sigs[i].s))
+        {
+            sc += sigs[i].w;
+            if (sigs[i].w > *maxWeight) *maxWeight = sigs[i].w;
+        }
     return sc;
+}
+
+// At least one line that ends the way code lines usually do
+static bool HasCodeStructure(const std::wstring& s)
+{
+    size_t i = 0, len = s.size();
+    while (i < len)
+    {
+        while (i < len && s[i] == L'\n') ++i;
+        size_t st = i;
+        while (i < len && s[i] != L'\n') ++i;
+        size_t en = i;
+        while (en > st && (s[en - 1] == L' ' || s[en - 1] == L'\t')) --en;
+        if (en <= st) continue;
+        WCHAR c = s[en - 1];
+        if (c == L';' || c == L'{' || c == L'}' || c == L'>') return true;
+        if (c == L':' && en - st >= 2 && s[en - 2] == L')') return true;
+    }
+    return false;
 }
 
 static const WCHAR* DetectShebang(const std::wstring& s)
@@ -1139,9 +1271,12 @@ static const WCHAR* DetectTextExtension(const WCHAR* text, size_t len)
     // 4) Signature scoring
     const WCHAR* bestExt = nullptr;
     int bestScore = 0;
+    bool structured = HasCodeStructure(s);
     for (const LangDef& L : kLangs)
     {
-        int sc = ScoreSigs(L.ci ? low : s, L.sigs, L.count);
+        int maxW = 0;
+        int sc = ScoreSigs(L.ci ? low : s, L.sigs, L.count, &maxW);
+        if (!structured && maxW < kStrongWeight) continue;   // looks like plain prose
         if (sc > bestScore) { bestScore = sc; bestExt = L.ext; }
     }
 
@@ -1162,22 +1297,62 @@ static const WCHAR* DetectTextExtension(const WCHAR* text, size_t len)
     return L".txt";
 }
 
-static const WCHAR* DetectClipboardTextExt()
+static DWORD ReadClipboardText(std::wstring& out)
 {
-    const WCHAR* ext = L".txt";
-    if (!OpenClipboard(nullptr)) return ext;
+    if (!g_settings.enableTextPaste) return ERROR_NOT_SUPPORTED;
+    if (!OpenClipboard(nullptr)) return GetLastError();
+    DWORD errCode = ERROR_NO_DATA;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
     if (h)
     {
-        WCHAR* text = (WCHAR*)GlobalLock(h);
+        const WCHAR* text = (const WCHAR*)GlobalLock(h);
         if (text)
         {
-            ext = DetectTextExtension(text, wcslen(text));
+            out = text;
             GlobalUnlock(h);
+            errCode = 0;
         }
     }
     CloseClipboard();
-    return ext;
+    return errCode;
+}
+
+static DWORD SaveTextToFile(const std::wstring& filePath, const std::wstring& text)
+{
+    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_WRITE, 0,
+                               nullptr, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return GetLastError();
+
+    DWORD written;
+    const std::wstring& enc = g_settings.textEncoding;
+
+    if (enc == L"UTF-8" || enc == L"UTF-8-BOM")
+    {
+        if (enc == L"UTF-8-BOM")
+        {
+            BYTE bom[3] = {0xEF, 0xBB, 0xBF};
+            WriteFile(hFile, bom, 3, &written, nullptr);
+        }
+        int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+                                          nullptr, 0, nullptr, nullptr);
+        if (utf8Len > 0)
+        {
+            std::string buf(utf8Len, '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+                                &buf[0], utf8Len, nullptr, nullptr);
+            WriteFile(hFile, buf.data(), (DWORD)buf.size(), &written, nullptr);
+        }
+    }
+    else // UTF-16 LE with BOM
+    {
+        WORD bom = 0xFEFF;
+        WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
+        WriteFile(hFile, text.c_str(), (DWORD)(text.size() * sizeof(WCHAR)),
+                  &written, nullptr);
+    }
+    CloseHandle(hFile);
+    return 0;
 }
 
 
@@ -1206,12 +1381,19 @@ static bool PerformPaste(HWND sourceWindow)
           errCode=SaveImageFromClipboard(filePath,targetPath); }
     else if (hasText)
     {
-        bool canDetect = g_settings.detectTextType &&
-                         g_settings.textEncoding == L"UTF-8";
-        const WCHAR* ext = canDetect ? DetectClipboardTextExt() : L".txt";
-        Wh_Log(L"PerformPaste: text extension '%s'", ext);
-        filePath = GetUniquePath(targetPath, baseName, ext);
-        errCode  = SaveTextFromClipboard(filePath);
+        std::wstring text;
+        errCode = ReadClipboardText(text);
+        if (errCode == 0)
+        {
+            bool canDetect = g_settings.detectTextType &&
+                             g_settings.textEncoding == L"UTF-8";
+            const WCHAR* ext = canDetect
+                ? DetectTextExtension(text.c_str(), text.size())
+                : L".txt";
+            Wh_Log(L"PerformPaste: text extension '%s'", ext);
+            filePath = GetUniquePath(targetPath, baseName, ext);
+            errCode  = SaveTextToFile(filePath, text);
+        }
     }
     if (errCode == 0)
     {
@@ -1460,13 +1642,14 @@ BOOL Wh_ModInit()
     Wh_SetFunctionHook((void*)TranslateAcceleratorW,
                        (void*)TranslateAcceleratorW_Hook,
                        (void**)&TranslateAcceleratorW_Orig);
+    g_runFromWindowThreadMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_paste-clipboard-content-to-explorer");
     return TRUE;
 }
 
 void Wh_ModUninit()
 {
     Wh_Log(L"PasteClipboardToExplorer: Uninit");
-    StopPendingSelect();   // NEW
+    CancelPendingSelect();   // stops the timer on the thread that owns it
     if (g_gdiplusToken) { GdiplusShutdown(g_gdiplusToken); g_gdiplusToken = 0; }
     if (g_gdiplusCSInit) { DeleteCriticalSection(&g_gdiplusCS); g_gdiplusCSInit = false; }
 }
