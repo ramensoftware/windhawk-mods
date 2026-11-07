@@ -2,7 +2,7 @@
 // @id              bookmark-bar-for-file-explorer
 // @name            Bookmark Bar for File Explorer
 // @description     Adds a Chrome-style bookmarks bar to File Explorer with nested folders, drag & drop and a full Bookmark Manager
-// @version         2.5.7
+// @version         2.5.8
 // @author          classiclover75-netizen
 // @github          https://github.com/classiclover75-netizen
 // @include         explorer.exe
@@ -187,7 +187,7 @@ namespace wdt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wf = winrt::Windows::Foundation;
 
 // Shown in the Bookmark Manager. Keep in sync with @version in the header above.
-constexpr wchar_t kModVersion[] = L"2.5.7";
+constexpr wchar_t kModVersion[] = L"2.5.8";
 
 constexpr wchar_t kBarName[] = L"WindhawkExplorerChromeBookmarksBar";
 constexpr wchar_t kFrameProperty[] = L"WindhawkExplorerChromeBookmarksFrame";
@@ -5090,6 +5090,7 @@ bool HookExplorerFrame(bool apply) {
     if (!mod) return true;
     bool expected = false;
     if (!g_frameHookAttempted.compare_exchange_strong(expected, true)) return g_frameHooked;
+    // Windows.UI.FileExplorer.dll
     WindhawkUtils::SYMBOL_HOOK windows_ui_fileexplorer_dll_hooks[] = {{
         {LR"(public: virtual long __cdecl XamlIslandViewAdapter::get_DesiredSizeInPhysicalPixels(struct tagSIZE *))"},
         &g_desiredSizeOriginal, DesiredSizeHook}};
@@ -5105,6 +5106,7 @@ bool HookExplorerExtension(bool apply) {
     if (!mod) return true;
     bool expected = false;
     if (!g_extensionHookAttempted.compare_exchange_strong(expected, true)) return g_extensionHooked;
+    // FileExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK fileexplorerextensions_dll_hooks[] = {{
         {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
         &g_commandBarSetterOriginal, CommandBarSetterHook}};
