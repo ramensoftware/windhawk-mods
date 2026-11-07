@@ -469,6 +469,7 @@ bool TurnOffMonitor(HWND hWnd, BOOL useWm = TRUE) {
         // Terminating explorer.exe or running Explorer7 without immersive makes the system makes the sleep behavior random
         // And renaming umpdc.dll and restarting Explorer makes the system never enter the sleep state
         // (Not even by calling NtPowerInformation(ScreenOff), pressing the power button configured to sleep, or closing the lid)
+        // Running powercfg /sleepstudy reveals that it differentiates real idle timer ("Video Idle Timeout") and manual SC_MONITORPOWER called at arbitrary times
         g_keepOrigWndProc.store(true);
         LRESULT res = SendMessageW(hWnd, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
         g_keepOrigWndProc.store(false);
