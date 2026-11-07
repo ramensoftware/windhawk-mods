@@ -10,7 +10,7 @@
 // @description:pt-BR Anima os ícones da barra de tarefas ao passar o mouse, como no macOS
 // @description:it-IT Anima le icone della barra delle applicazioni al passaggio del mouse, come su macOS
 // @version           1.0.1
-// @author            PDSB001 (maintainer), Ph0en1x-dev (original author)
+// @author            PDSB001, Ph0en1x-dev
 // @github            https://github.com/PDSB001
 // @include           explorer.exe
 // @architecture      x86-64
