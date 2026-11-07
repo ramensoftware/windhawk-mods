@@ -2,7 +2,7 @@
 // @id              bookmark-bar-for-file-explorer
 // @name            Bookmark Bar for File Explorer
 // @description     Adds a Chrome-style bookmarks bar to File Explorer with nested folders, drag & drop and a full Bookmark Manager
-// @version         2.5.6
+// @version         2.5.7
 // @author          classiclover75-netizen
 // @github          https://github.com/classiclover75-netizen
 // @include         explorer.exe
@@ -187,7 +187,7 @@ namespace wdt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wf = winrt::Windows::Foundation;
 
 // Shown in the Bookmark Manager. Keep in sync with @version in the header above.
-constexpr wchar_t kModVersion[] = L"2.5.6";
+constexpr wchar_t kModVersion[] = L"2.5.7";
 
 constexpr wchar_t kBarName[] = L"WindhawkExplorerChromeBookmarksBar";
 constexpr wchar_t kFrameProperty[] = L"WindhawkExplorerChromeBookmarksFrame";
@@ -5090,10 +5090,10 @@ bool HookExplorerFrame(bool apply) {
     if (!mod) return true;
     bool expected = false;
     if (!g_frameHookAttempted.compare_exchange_strong(expected, true)) return g_frameHooked;
-    WindhawkUtils::SYMBOL_HOOK hook[] = {{
+    WindhawkUtils::SYMBOL_HOOK windows_ui_fileexplorer_dll_hooks[] = {{
         {LR"(public: virtual long __cdecl XamlIslandViewAdapter::get_DesiredSizeInPhysicalPixels(struct tagSIZE *))"},
         &g_desiredSizeOriginal, DesiredSizeHook}};
-    if (!WindhawkUtils::HookSymbols(mod, hook, ARRAYSIZE(hook)) || !g_desiredSizeOriginal) return false;
+    if (!WindhawkUtils::HookSymbols(mod, windows_ui_fileexplorer_dll_hooks, ARRAYSIZE(windows_ui_fileexplorer_dll_hooks)) || !g_desiredSizeOriginal) return false;
     g_frameHooked = true;
     if (apply) Wh_ApplyHookOperations();
     return true;
@@ -5105,10 +5105,10 @@ bool HookExplorerExtension(bool apply) {
     if (!mod) return true;
     bool expected = false;
     if (!g_extensionHookAttempted.compare_exchange_strong(expected, true)) return g_extensionHooked;
-    WindhawkUtils::SYMBOL_HOOK hook[] = {{
+    WindhawkUtils::SYMBOL_HOOK fileexplorerextensions_dll_hooks[] = {{
         {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
         &g_commandBarSetterOriginal, CommandBarSetterHook}};
-    if (!WindhawkUtils::HookSymbols(mod, hook, ARRAYSIZE(hook)) || !g_commandBarSetterOriginal) return false;
+    if (!WindhawkUtils::HookSymbols(mod, fileexplorerextensions_dll_hooks, ARRAYSIZE(fileexplorerextensions_dll_hooks)) || !g_commandBarSetterOriginal) return false;
     g_extensionHooked = true;
     if (apply) Wh_ApplyHookOperations();
     return true;
