@@ -143,9 +143,7 @@ static COLORREF RepairBackgroundFromEdge(HDC hdc, int w, int h) {
     return GetPixel(hdc, w / 2, h / 2);
 }
 
-// Цвет текста: без тем — BTNTEXT; с темами — белый на тёмном фоне панели,
-// чёрный на светлом (по яркости реального фона).
-static COLORREF TextColorForBg(COLORREF bg, bool themed) {
+static COLORREF TextColorForBg(COLORREF bg) {
     int r = GetRValue(bg), g = GetGValue(bg), b = GetBValue(bg);
     int lum = (r * 299 + g * 587 + b * 114) / 1000;
     return (lum > 140) ? RGB(0, 0, 0) : RGB(255, 255, 255);
@@ -312,7 +310,7 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
             g_lastGoodBg = bg;
         }
 
-        DrawIndicatorText(hdcDest, &rc, TextColorForBg(bg, true), true,
+        DrawIndicatorText(hdcDest, &rc, TextColorForBg(bg), true,
                           g_text, g_font);
 
         wcscpy_s(g_lastDrawnText, g_text);
