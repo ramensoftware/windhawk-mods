@@ -670,6 +670,9 @@ bool CreateAsyncFadeThread() {
 
 DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
     HWND initiatorWindow = (HWND)lpParameter;
+    DWORD pid = NULL;
+    GetWindowThreadProcessId(initiatorWindow, &pid);
+    bool isInitiatorThisProc = GetCurrentProcessId() == pid;
     if (BeginFade()) {
         Wh_Log(L"Initiating monitor off fade...");
 
@@ -691,20 +694,20 @@ DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
             if (g_monitorOffFadeData.monitors) {
                 // Somehow window message stuff failed
                 Wh_Log(L"Overlay window message loop ended unexpectedly, restoring gamma ramps...");
-                RestoreGammaAndMonitorOff(initiatorWindow, !!initiatorWindow);
+                RestoreGammaAndMonitorOff(isInitiatorThisProc ? initiatorWindow: NULL);
             }
         } else {
             Wh_Log(L"Failed to create overlay window, GLE=%d", GetLastError());
             // Just do the fade without the overlay, which will make the screen flash
             if (GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
                 FadeDesktop(GetDeviceRefreshRate(), g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
-                RestoreGammaAndMonitorOff(initiatorWindow, !!initiatorWindow);
+                RestoreGammaAndMonitorOff(isInitiatorThisProc ? initiatorWindow: NULL);
                 EndFade();
             }
         }
         return 0;
     } else {
-        TurnOffMonitor(initiatorWindow, !!initiatorWindow);
+        TurnOffMonitor(isInitiatorThisProc ? initiatorWindow: NULL);
     }
     return 1;
 }
