@@ -166,6 +166,7 @@ HANDLE g_stopEvent = NULL;
 std::atomic<bool> g_isFadeInProgress = false;
 std::atomic<bool> g_isExiting = false;
 std::atomic<HANDLE> g_monitorOffThread = NULL;
+std::atomic<bool> g_keepOrigWndProc = false;
 std::atomic<HANDLE> g_asyncFadeThread = NULL;
 UINT g_monitorOffTaskMsg = 0;
 
@@ -454,8 +455,37 @@ EXTERN_C NTSYSAPI NTSTATUS NTAPI NtPowerInformation(POWER_INFORMATION_LEVEL, PVO
 using NtPowerInformation_t = decltype(&NtPowerInformation);
 NtPowerInformation_t NtPowerInformation_original;
 
+bool TurnOffMonitor(HWND hWnd, BOOL useWm = TRUE) {
+    if (hWnd && useWm) {
+        // On Modern Standby devices, the classic monitor-off state is divided into two (or more) states
+        // First is monitor just being turned off, and second is extra power-saving features being engaged, such as music and mobile hotspot getting paused
+        // It seems that the first simple monitor-off state can only be entered by the idle timer
+        // All traditional methods of turning the monitor off (including the below window msg hack) make the system enter the extra sleep mode (the second state above)
+        // NtPowerInformation(ScreenOff) always enters the sleep state, and SC_MONITORPOWER enters sleep state when called at arbitrary timing
+        // Seems calling DefWindowProc SC_MONITORPOWER while the idle timer is engaging (from any process/window) works for entering the first state, fortunately
+        //
+        // (Entering the sleep state seems to be managed by the Immersive Shell. Terminating explorer.exe or running Explorer7 without immersive makes the system never enter such a state)
+        // (Not even by calling NtPowerInformation(ScreenOff) or pressing the power button configured to sleep)
+        g_keepOrigWndProc.store(true);
+        LRESULT res = SendMessageW(hWnd, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
+        g_keepOrigWndProc.store(false);
+        Wh_Log(L"Sent WM_SYSCOMMAND SC_MONITORPOWER to hWnd %p, result=0x%X", hWnd, res);
+    } else {
+        NTSTATUS res = NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+        Wh_Log(L"Called original NtPowerInformation with ScreenOff, result=0x%X", res);
+        if (res != 0) {
+            Wh_Log(L"NtPowerInformation failed to turn off the monitor");
+            if (hWnd) {
+                return TurnOffMonitor(hWnd, TRUE);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
 // Restore the pre-fade gamma ramps and turn off the monitor, and also clean up the monitor info data.
-void RestoreGammaAndMonitorOff() {
+void RestoreGammaAndMonitorOff(HWND hWnd, BOOL useWm = TRUE) {
     if (g_monitorOffFadeData.monitors) {
         for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
             if (g_monitorOffFadeData.monitors[i].hDC) {
@@ -467,14 +497,14 @@ void RestoreGammaAndMonitorOff() {
         g_monitorOffFadeData.monitors = NULL;
         g_monitorOffFadeData.monitorCount = 0;
     }
-    NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+    TurnOffMonitor(hWnd, useWm);
 }
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == g_monitorOffTaskMsg) {
+    if (uMsg == g_monitorOffTaskMsg) { // lParam: 1 if from SC_MONITORPOWER, 0 otherwise
         Wh_Log(L"OverlayWndProc g_monitorOffTaskMsg");
         if (g_isWinlogon && !BeginFade(100)) {
-            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            TurnOffMonitor(hWnd, lParam);
             return 1;
         }
 
@@ -483,7 +513,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         if (!GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
             while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
             EndFade();
-            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            TurnOffMonitor(hWnd, lParam);
             return 1;
         }
 
@@ -502,7 +532,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
         if (!SetTimer(hWnd, 1, 1500, NULL)) {
             Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
-            RestoreGammaAndMonitorOff();
+            RestoreGammaAndMonitorOff(hWnd, lParam);
             while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
             EndFade();
             g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
@@ -510,7 +540,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         }
 
         Sleep(100); // Needed to prevent flashing when monitor fade is started multiple times in the same process
-        RestoreGammaAndMonitorOff();
+        RestoreGammaAndMonitorOff(hWnd, lParam);
         while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
         EndFade();
         return 0;
@@ -639,12 +669,13 @@ bool CreateAsyncFadeThread() {
 }
 
 DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
+    HWND initiatorWindow = (HWND)lpParameter;
     if (BeginFade()) {
         Wh_Log(L"Initiating monitor off fade...");
 
         HWND overlayWnd = CreateOverlayWindow();
         if (overlayWnd) {
-            PostMessageW(overlayWnd, g_monitorOffTaskMsg, 0, 0);
+            PostMessageW(overlayWnd, g_monitorOffTaskMsg, 0, !!initiatorWindow);
 
             // I don't want extra hassle of managing another thread for the overlay window lol; just make sure the following order of operations is correct:
             // Fade out -> Show overlay -> Restore gamma -> Monitor off -> Wait for monitor off with arbitrary delay -> Hide overlay
@@ -660,25 +691,25 @@ DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
             if (g_monitorOffFadeData.monitors) {
                 // Somehow window message stuff failed
                 Wh_Log(L"Overlay window message loop ended unexpectedly, restoring gamma ramps...");
-                RestoreGammaAndMonitorOff();
+                RestoreGammaAndMonitorOff(initiatorWindow, !!initiatorWindow);
             }
         } else {
             Wh_Log(L"Failed to create overlay window, GLE=%d", GetLastError());
             // Just do the fade without the overlay, which will make the screen flash
             if (GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
                 FadeDesktop(GetDeviceRefreshRate(), g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
-                RestoreGammaAndMonitorOff();
+                RestoreGammaAndMonitorOff(initiatorWindow, !!initiatorWindow);
                 EndFade();
             }
         }
         return 0;
     } else {
-        NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+        TurnOffMonitor(initiatorWindow, !!initiatorWindow);
     }
     return 1;
 }
 
-bool CreateMonitorOffThread() {
+bool CreateMonitorOffThread(HWND initiatorWindow = NULL) {
     if (g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
         // Both NtPowerInformation and DefWindowProc WM_SYSCOMMAND is asynchronous so do it in a separate thread
         HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
@@ -696,7 +727,7 @@ bool CreateMonitorOffThread() {
             }
             CloseHandle(monitorOffThread);
         }
-        monitorOffThread = CreateThread(NULL, 0, MonitorOffThreadProc, 0, 0, NULL);
+        monitorOffThread = CreateThread(NULL, 0, MonitorOffThreadProc, initiatorWindow, 0, NULL);
         if (!monitorOffThread) {
             Wh_Log(L"Failed to create monitor off thread, GLE=%d", GetLastError());
             return false;
@@ -708,7 +739,7 @@ bool CreateMonitorOffThread() {
     return false;
 }
 
-bool RequestFade() {
+bool RequestFade(HWND initiatorWindow = NULL) {
     if (!g_isWinlogon) { // it should barely invoke sleep/monoff fade i think
         HDESK hDesktop = GetThreadDesktop(GetCurrentThreadId());
         if (hDesktop) {
@@ -719,7 +750,7 @@ bool RequestFade() {
                 // Natural fading will fail if a non-SYSTEM process on neither the default desktop nor the secure desktop initiates this on legacy gamma systems without the regkey tweak
                 // But honestly this should be rare...
                 if (_wcsicmp(desktopName, L"default") != 0) {
-                    return CreateMonitorOffThread();
+                    return CreateMonitorOffThread(initiatorWindow);
                 }
             }
         }
@@ -727,7 +758,7 @@ bool RequestFade() {
     if (g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
         HWND overlayWnd = FindWindowW(OVERLAY_WIN_CLASS, NULL);
         if (overlayWnd) {
-            if (!PostMessageW(overlayWnd, g_monitorOffTaskMsg, 0, 0)) {
+            if (!PostMessageW(overlayWnd, g_monitorOffTaskMsg, 0, !!initiatorWindow)) {
                 Wh_Log(L"PostMessageW failed, GLE=%d", GetLastError());
                 return false;
             }
@@ -772,7 +803,11 @@ bool SleepFadeWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 {
                     if (lParam == 2) { // Monitor off
                         Wh_Log(L"WM_SYSCOMMAND SC_MONITORPOWER 2 received");
-                        if (RequestFade()) {
+                        if (g_keepOrigWndProc.load()) {
+                            Wh_Log(L"Bypassing SC_MONITORPOWER hooks as g_keepOrigWndProc is set");
+                            return false;
+                        }
+                        if (RequestFade(hWnd)) {
                             return true;
                         }
                         return false;
@@ -1008,7 +1043,7 @@ LONG WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWOR
 
 HANDLE CreateFadeMutex() {
     static const wchar_t* kMutexName = L"Local\\LsfFadeMutex";
-    static const wchar_t* kSddl = L"D:(A;;GA;;;IU)(A;;GA;;;SY)(A;;GA;;;BA)";
+    static const wchar_t* kMutexSddl = L"D:(A;;GA;;;IU)(A;;GA;;;SY)(A;;GA;;;BA)";
 
     SECURITY_ATTRIBUTES sa = {};
     sa.nLength = sizeof(sa);
@@ -1016,7 +1051,7 @@ HANDLE CreateFadeMutex() {
 
     PSECURITY_DESCRIPTOR securityDescriptor = NULL;
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            kSddl,
+            kMutexSddl,
             SDDL_REVISION_1,
             &securityDescriptor,
             NULL)) {
