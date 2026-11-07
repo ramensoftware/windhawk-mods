@@ -569,6 +569,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
 #include <shellapi.h>
 #include <commctrl.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <gdiplus.h>
 #include <atomic>
 #include <vector>
@@ -691,11 +692,13 @@ static const UiTranslation kUiTranslations[]={
     {L"Show the Language bar",L"Mostrar la barra de idioma",L"Afficher la barre de langue",L"Mostrar a barra de idiomas"},
     {L"Pin to taskbar",L"Anclar a la barra de tareas",L"Épingler à la barre des tâches",L"Fixar na barra de tarefas"},
     {L"Unpin from taskbar",L"Desanclar de la barra de tareas",L"Détacher de la barre des tâches",L"Desafixar da barra de tarefas"},
+    {L"New screen snip",L"Nueva captura de pantalla",L"Nouvelle capture d’écran",L"Nova captura de tela"},
     {L"Unable to update the mod pin. Check the Windhawk log.",L"No se pudo actualizar el elemento anclado del mod. Comprueba el registro de Windhawk.",L"Impossible de modifier l’élément épinglé du mod. Consultez le journal Windhawk.",L"Não foi possível atualizar o item fixado do mod. Verifique o registro do Windhawk."},
     {L"Unable to show the system language bar. Check Windows input settings and the Windhawk log.",L"No se pudo mostrar la barra de idioma del sistema. Comprueba la configuración de entrada de Windows y el registro de Windhawk.",L"Impossible d’afficher la barre de langue du système. Vérifiez les paramètres de saisie Windows et le journal Windhawk.",L"Não foi possível mostrar a barra de idiomas do sistema. Verifique as configurações de entrada do Windows e o registro do Windhawk."},
     {L"Unable to open language preferences. Check the Windhawk log.",L"No se pudieron abrir las preferencias de idioma. Comprueba el registro de Windhawk.",L"Impossible d’ouvrir les préférences de langue. Consultez le journal Windhawk.",L"Não foi possível abrir as preferências de idioma. Verifique o registro do Windhawk."},
     {L"Unable to change the input language. Check the Windhawk log.",L"No se pudo cambiar el idioma de entrada. Comprueba el registro de Windhawk.",L"Impossible de changer la langue d’entrée. Consultez le journal Windhawk.",L"Não foi possível alterar o idioma de entrada. Verifique o registro do Windhawk."},
     {L"Select an input language",L"Selecciona un idioma de entrada",L"Sélectionnez une langue d’entrée",L"Selecione um idioma de entrada"},
+    {L"Show hidden icons",L"Mostrar iconos ocultos",L"Afficher les icônes cachées",L"Mostrar ícones ocultos"},
 };
 static UiLanguage CurrentUiLanguage() {
 #ifdef TASKBAR81_TEST
@@ -751,6 +754,14 @@ struct DestroyIconHandle {void operator()(std::remove_pointer<HICON>::type* p) c
 struct DeleteBitmapHandle {void operator()(std::remove_pointer<HBITMAP>::type* p) const noexcept {if(p) DeleteObject(p);}};
 struct DeleteMemDC {void operator()(std::remove_pointer<HDC>::type* p) const noexcept {if(p) DeleteDC(p);}};
 struct DeleteFontHandle {void operator()(std::remove_pointer<HFONT>::type* p) const noexcept {if(p) DeleteObject(p);}};
+// Own only the DC acquired by GetDC; it must be released with the same HWND.
+struct ScopedWindowDC {
+    HWND window; HDC dc;
+    explicit ScopedWindowDC(HWND h):window(h),dc(GetDC(h)) {}
+    ~ScopedWindowDC(){if(dc)ReleaseDC(window,dc);}
+    ScopedWindowDC(const ScopedWindowDC&)=delete;
+    ScopedWindowDC& operator=(const ScopedWindowDC&)=delete;
+};
 struct ScopedPaintDC {
     HWND window; PAINTSTRUCT paint{}; HDC dc;
     explicit ScopedPaintDC(HWND h):window(h),dc(BeginPaint(h,&paint)) {}
@@ -1875,6 +1886,7 @@ struct Task {
     std::wstring processPath;
     std::wstring relaunchPath;
     ULONGLONG seq=0;
+    bool windhawkIcon=false; // a verified running Windhawk UI, not ordinary VS Code
 };
 struct Pin {
     std::wstring key, path, title, target;
@@ -2106,6 +2118,7 @@ struct State {
          std::wstring jumpGroupKey,jumpDismissKey,jumpPressedKey,jumpLeftDismissKey,jumpLeftPressedKey;
          ULONGLONG jumpDismissAt=0,jumpLeftDismissAt=0;
     HWND tooltip = nullptr;
+    HWND infoTip = nullptr; // native Win32 tooltip (tooltips_class32) for taskbar/tray hover text
     std::wstring tooltipText;
     bool hotCornerPreview=false; ULONGLONG recoveryTooltipUntil=0;
     Gdiplus::Bitmap* tintBeta[2]{}; Gdiplus::Image* tintBetaSource[2]{}; int tintBetaKey[2]{-1,-1};
@@ -4642,7 +4655,7 @@ void BuildGroups() {
     bool identityChanged=next.size()!=s->groups.size();
     if(!identityChanged)for(size_t i=0;i<next.size();++i)if(next[i].key!=s->groups[i].key){identityChanged=true;break;}
     if(identityChanged && s->bar) {
-        if(s->preview || s->tooltip)HidePreview();
+        if(s->preview || s->tooltip || s->infoTip)HidePreview();
         if(s->jumpPopup)CloseJumpPopup(false);
         s->hot=HIT_NONE;s->hover=HIT_NONE;KillTimer(s->bar,TIMER_HOVER);
         if(s->dragCandidate || s->dragActive) {
@@ -4661,6 +4674,8 @@ const Task& GroupTask(size_t i) {
 HICON GroupIcon(size_t i) {
     const Group& g=s->groups[i];
     if(GroupBase(g)==L"app:taskbar81.controlpanel" && !g.tasks.empty() && GroupTask(i).icon) return GroupTask(i).icon;
+    // A live, identified Windhawk window must not revert to a stale editor pin.
+    if(!g.tasks.empty() && GroupTask(i).windhawkIcon && GroupTask(i).icon) return GroupTask(i).icon;
     if(g.pin>=0 && (size_t)g.pin<s->pins.size() && s->pins[g.pin].icon) return s->pins[g.pin].icon;
     if(GroupBase(g).rfind(L"app:",0)==0 && w7t::IsPackagedAumid(GroupBase(g).substr(4)) &&
        !g.tasks.empty() && GroupTask(i).icon) return GroupTask(i).icon;
@@ -4669,7 +4684,7 @@ HICON GroupIcon(size_t i) {
 }
 static std::wstring LocalizeExplorerTitle(const std::wstring& title) {
     if(_wcsicmp(title.c_str(),L"File Explorer") && _wcsicmp(title.c_str(),L"Windows Explorer"))return title;
-    if(ItalianUI())return L"Esplora file";
+    if(ItalianUI())return L"Esplora Risorse";
     LANGID lang=PRIMARYLANGID(GetUserDefaultUILanguage());
     if(lang==LANG_SPANISH)return L"Explorador de archivos";
     if(lang==LANG_FRENCH)return L"Explorateur de fichiers";
@@ -4827,6 +4842,72 @@ static const Task* FindStoredTask(HWND hwnd,DWORD pid) {
         if(stored.hwnd==hwnd && stored.pid==pid)return &stored;
     return nullptr;
 }
+// Windhawk v1.7.3 launches the configured UIPath/VSCodium.exe (or Code.exe)
+// from windhawk.ini. Its newer UI runs as windhawk-ui.exe beside windhawk.exe.
+// Consult only running Windhawk installations; names or window titles alone
+// must not turn a user's unrelated VS Code/VSCodium into Windhawk.
+// Sources: ramensoftware/windhawk app/ui_control.cpp and storage_manager.cpp.
+struct WindhawkUiPaths { std::wstring app,ui,legacyCodium,legacyCode; };
+static std::wstring WindhawkFullPath(const std::wstring& path) {
+    if(path.empty())return {};
+    wchar_t expanded[32768]{},absolute[32768]{};
+    DWORD n=ExpandEnvironmentStringsW(path.c_str(),expanded,(DWORD)std::size(expanded));
+    if(!n || n>std::size(expanded))return {};
+    n=GetFullPathNameW(expanded,(DWORD)std::size(absolute),absolute,nullptr);
+    if(!n || n>=std::size(absolute))return {};
+    return NormalizedMatchPath(absolute);
+}
+static const std::vector<WindhawkUiPaths>& RunningWindhawkPaths() {
+    static std::vector<WindhawkUiPaths> paths;
+    static ULONGLONG lastAttempt=0;
+    ULONGLONG now=GetTickCount64();
+    if(lastAttempt && now-lastAttempt<10000) return paths;
+    lastAttempt=now;
+    std::vector<WindhawkUiPaths> next;
+    ScopedHandle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0));
+    if(!snapshot.h || snapshot.h==INVALID_HANDLE_VALUE) return paths;
+    PROCESSENTRY32W entry{};entry.dwSize=sizeof(entry);
+    if(!Process32FirstW(snapshot.h,&entry))return paths;
+    do {
+        if(_wcsicmp(entry.szExeFile,L"windhawk.exe"))continue;
+        std::wstring app=WindhawkFullPath(ProcessImage(entry.th32ProcessID));
+        if(app.empty())continue;
+        size_t slash=app.find_last_of(L"\\/");if(slash==std::wstring::npos)continue;
+        std::wstring root=app.substr(0,slash),ini=root+L"\\windhawk.ini";
+        WindhawkUiPaths item;item.app=app;item.ui=WindhawkFullPath(root+L"\\windhawk-ui.exe");
+        wchar_t configured[32768]{};
+        DWORD len=GetPrivateProfileStringW(L"Storage",L"UIPath",L"",configured,(DWORD)std::size(configured),ini.c_str());
+        if(len && len<std::size(configured)-1) {
+            wchar_t expanded[32768]{};
+            DWORD expandedLen=ExpandEnvironmentStringsW(configured,expanded,(DWORD)std::size(expanded));
+            std::wstring base=(expandedLen && expandedLen<=std::size(expanded))?expanded:L"";
+            if(!base.empty() && PathIsRelativeW(base.c_str()))base=root+L"\\"+base;
+            base=WindhawkFullPath(base);
+            if(!base.empty()) {
+                item.legacyCodium=WindhawkFullPath(base+L"\\VSCodium.exe");
+                item.legacyCode=WindhawkFullPath(base+L"\\Code.exe");
+            }
+        }
+        next.push_back(std::move(item));
+    } while(Process32NextW(snapshot.h,&entry));
+    paths.swap(next);return paths;
+}
+static std::wstring WindhawkIconSource(HWND hwnd,const std::wstring& image) {
+    if(image.empty())return {};
+    const wchar_t* name=PathFindFileNameW(image.c_str());
+    if(_wcsicmp(name,L"windhawk.exe") && _wcsicmp(name,L"windhawk-ui.exe") &&
+       _wcsicmp(name,L"VSCodium.exe") && _wcsicmp(name,L"Code.exe"))return {};
+    wchar_t cls[96]{};GetClassNameW(hwnd,cls,(int)std::size(cls));
+    for(const auto& path:RunningWindhawkPaths()) {
+        if(!_wcsicmp(image.c_str(),path.app.c_str()))return path.app;
+        if(!path.ui.empty() && !_wcsicmp(image.c_str(),path.ui.c_str()) &&
+           !_wcsicmp(cls,L"WindhawkTauriMainUI"))return path.app;
+        if(!_wcsicmp(cls,L"Chrome_WidgetWin_1") &&
+           ((!path.legacyCodium.empty() && !_wcsicmp(image.c_str(),path.legacyCodium.c_str())) ||
+            (!path.legacyCode.empty() && !_wcsicmp(image.c_str(),path.legacyCode.c_str()))))return path.app;
+    }
+    return {};
+}
 static bool BuildTaskSnapshot(HWND hwnd,const RefreshContext& context,TaskSnapshot& snapshot) {
     DWORD pid=0;
     GetWindowThreadProcessId(hwnd,&pid);
@@ -4852,18 +4933,36 @@ static bool BuildTaskSnapshot(HWND hwnd,const RefreshContext& context,TaskSnapsh
                 identity.rfind(L"app:",0)==0 && w7t::IsPackagedAumid(identity.substr(4))?1:0);
     }
 
+    std::wstring processPath=stored?stored->processPath:NormalizedMatchPath(ProcessImage(pid));
     HICON icon=stored?stored->icon:nullptr;
     bool ownsIcon=stored?stored->ownsIcon:false;
+    bool windhawkIcon=stored?stored->windhawkIcon:false;
     if(!stored || context.refreshIcons) {
         const bool packaged=identity.rfind(L"app:",0)==0 && w7t::IsPackagedAumid(identity.substr(4));
         HICON candidate=nullptr;
-        if(identity==L"app:taskbar81.controlpanel")
+        std::wstring windhawkSource=WindhawkIconSource(hwnd,processPath);
+        if(!windhawkSource.empty()) {
+            SHFILEINFOW info{};
+            if(SHGetFileInfoW(windhawkSource.c_str(),0,&info,sizeof(info),SHGFI_ICON|SHGFI_LARGEICON) && info.hIcon) {
+                candidate=info.hIcon;windhawkIcon=true;
+            } else if(stored && stored->windhawkIcon && stored->icon) {
+                // Preserve an already verified image for this same HWND/PID
+                // if transient access or extraction fails during refresh.
+                candidate=CopyIcon(stored->icon);windhawkIcon=candidate!=nullptr;
+            }
+            if(!stored || s->ticks%30==0)
+                Wh_Log(L"[T81-WINDHAWK] identified UI hwnd=%p pid=%lu icon=%d",hwnd,pid,candidate?1:0);
+        } else if(stored && stored->windhawkIcon && stored->icon) {
+            candidate=CopyIcon(stored->icon);windhawkIcon=candidate!=nullptr;
+        }
+        if(!candidate && identity==L"app:taskbar81.controlpanel")
             candidate=ShellItemIcon(L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}",Px(48));
-        else if(packaged)
+        else if(!candidate && packaged)
             candidate=ShellItemIcon(L"shell:AppsFolder\\"+identity.substr(4),Px(48));
         if(packaged && (!stored || s->ticks%30==0))
             Wh_Log(L"[T81-DIAG] packaged-window hwnd=%p pid=%lu appsfolder-icon=%d",hwnd,pid,candidate?1:0);
         if(!candidate) {
+            windhawkIcon=false;
             HICON source=GetIcon(hwnd);
             candidate=source?CopyIcon(source):nullptr;
         }
@@ -4876,10 +4975,10 @@ static bool BuildTaskSnapshot(HWND hwnd,const RefreshContext& context,TaskSnapsh
             ownsIcon=false;
         }
     }
-    std::wstring processPath=stored?stored->processPath:NormalizedMatchPath(ProcessImage(pid));
     const ULONGLONG sequence=stored?stored->seq:++s->nextTaskSequence;
     snapshot.task=Task{hwnd,pid,icon,ownsIcon,std::move(title),std::move(identity),
                        std::move(processPath),std::move(relaunchPath),sequence};
+    snapshot.task.windhawkIcon=windhawkIcon;
     return true;
 }
 BOOL CALLBACK EnumTask(HWND hwnd,LPARAM parameter) {
@@ -4964,6 +5063,8 @@ static decltype(&SendMessageTimeoutW) taskSendTimeout=SendMessageTimeoutW;
 #define taskSendTimeout SendMessageTimeoutW
 #endif
 static void ShowInfoTooltip(const std::wstring& message,int center);
+static bool InfoTipVisible();
+static void HideInfoTip();
 static void NotifyTaskAccessDenied() {
     if(!s || !s->bar)return;RECT bar{};if(!GetWindowRect(s->bar,&bar))return;
     ShowInfoTooltip(Tr(L"Windows ha bloccato il comando. Usa la finestra originale o verifica i privilegi.",
@@ -5554,6 +5655,12 @@ static void ApplyBatteryStatus(const SYSTEM_POWER_STATUS& p) {
         else s->tooltipText=Tr(L"Batteria: ",L"Battery: ")+std::to_wstring(s->batteryPct)+L"%"+(s->charging?Tr(L" (alimentazione collegata)",L" (plugged in)"):L"");
         InvalidateRect(s->tooltip,nullptr,FALSE);
     }
+    if(InfoTipVisible() && s->hot==HIT_BATTERY) {
+        if(s->batteryPct<0) s->tooltipText=Tr(L"Batteria: stato sconosciuto",L"Battery: unknown status");
+        else s->tooltipText=Tr(L"Batteria: ",L"Battery: ")+std::to_wstring(s->batteryPct)+L"%"+(s->charging?Tr(L" (alimentazione collegata)",L" (plugged in)"):L"");
+        TOOLINFOW ti{};ti.cbSize=sizeof(ti);ti.hwnd=s->bar;ti.uId=1;ti.lpszText=const_cast<wchar_t*>(s->tooltipText.c_str());
+        SendMessageW(s->infoTip,TTM_UPDATETIPTEXTW,0,(LPARAM)&ti);
+    }
     if(s->hasBattery) PublishCniSystemIcon(HIT_BATTERY);
     else RemoveCniSystemIcon(HIT_BATTERY);
 }
@@ -5747,7 +5854,7 @@ static std::vector<HKL> QueryKeyboardLayouts() {
 static bool OwnInputSurface(HWND hwnd) {
     if(!s || !hwnd)return false;
     return hwnd==s->bar || hwnd==s->native || hwnd==s->privateHost || hwnd==s->privateNotify ||
-           hwnd==s->overflowPanel || hwnd==s->preview || hwnd==s->tooltip || hwnd==s->jumpPopup ||
+           hwnd==s->overflowPanel || hwnd==s->preview || hwnd==s->tooltip || hwnd==s->infoTip || hwnd==s->jumpPopup ||
            hwnd==s->desktopPopup || hwnd==s->addressHost || hwnd==s->languageFlyout;
 }
 static HWND InputLanguageTarget(bool remember=true) {
@@ -5769,16 +5876,16 @@ static HKL ActiveInputLanguage() {
 static int MeasureLanguageWidth(const std::wstring& text) {
     if(text.empty())return 0;
     int minimum=Px(34),maximum=Px(96),padding=Px(14),width=minimum;
-    HDC dc=s && s->bar?GetDC(s->bar):nullptr;
-    HFONT font=dc?CreateTaskbarFont(Dpi(),s->perPixelBar):nullptr;
-    if(dc && font) {
-        HGDIOBJ old=SelectObject(dc,font);SIZE size{};
-        if(GetTextExtentPoint32W(dc,text.c_str(),(int)text.size(),&size))
-            width=std::max(minimum,std::min(maximum,(int)size.cx+padding));
-        if(old && old!=HGDI_ERROR)SelectObject(dc,old);
+    if(s && s->bar) {
+        ScopedWindowDC windowDc(s->bar);HDC dc=windowDc.dc;
+        std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> font(
+            dc?CreateTaskbarFont(Dpi(),s->perPixelBar):nullptr);
+        if(dc && font) {
+            ScopedSelection selection(dc,font.get());SIZE size{};
+            if(GetTextExtentPoint32W(dc,text.c_str(),(int)text.size(),&size))
+                width=std::max(minimum,std::min(maximum,(int)size.cx+padding));
+        }
     }
-    if(font)DeleteObject(font);
-    if(dc)ReleaseDC(s->bar,dc);
     return width;
 }
 static void HideLanguageFlyout();
@@ -6965,12 +7072,74 @@ static int OverflowHit(POINT point) {
     }
     return -1;
 }
+#ifndef TTM_GETBUBBLESIZE
+#define TTM_GETBUBBLESIZE (WM_USER+30)
+#endif
+// Safety net for every native tracking tooltip. TTM_GETBUBBLESIZE can report a
+// stale (too small) size for the first show, so a tooltip anchored near a
+// screen edge (e.g. the Show desktop button) could extend off-screen. After the
+// tooltip is activated, measure its REAL window rectangle and move it back
+// inside the monitor if needed. The tooltip is still fully transparent at this
+// point (fade-in starts at alpha 0), so the correction is not visible.
+static void ClampTrackTooltipToMonitor(HWND tip,const RECT& bounds) {
+    if(!tip || !IsWindow(tip) || bounds.right<=bounds.left || bounds.bottom<=bounds.top) return;
+    RECT r{};
+    if(!GetWindowRect(tip,&r)) return;
+    const int w=r.right-r.left,h=r.bottom-r.top;
+    if(w<=0 || h<=0) return;
+    int x=r.left,y=r.top;
+    if(x+w>bounds.right) x=bounds.right-w;
+    if(y+h>bounds.bottom) y=bounds.bottom-h;
+    if(x<bounds.left) x=bounds.left;
+    if(y<bounds.top) y=bounds.top;
+    if(x==r.left && y==r.top) return;
+    SendMessageW(tip,TTM_TRACKPOSITION,0,MAKELPARAM((short)x,(short)y));
+}
+// Native Win32 tooltip look (same approach as win7-network-flyout-recreation):
+// real tooltips_class32 control with a short alpha fade-in.
+static LRESULT CALLBACK NativeTipFadeProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR) {
+    const UINT_PTR kFadeTimer=9100;
+    if(m==WM_SHOWWINDOW && w) {
+        SetPropW(h,L"T81TipAlpha",(HANDLE)(ULONG_PTR)0);
+        SetLayeredWindowAttributes(h,0,0,LWA_ALPHA);
+        SetTimer(h,kFadeTimer,20,nullptr);
+    }
+    if(m==WM_TIMER && w==kFadeTimer) {
+        int a=(int)(ULONG_PTR)GetPropW(h,L"T81TipAlpha")+40;
+        if(a>=255) {a=255;KillTimer(h,kFadeTimer);}
+        SetPropW(h,L"T81TipAlpha",(HANDLE)(ULONG_PTR)a);
+        SetLayeredWindowAttributes(h,0,(BYTE)a,LWA_ALPHA);
+        return 0;
+    }
+    if(m==WM_NCDESTROY) {KillTimer(h,kFadeTimer);RemovePropW(h,L"T81TipAlpha");RemoveWindowSubclass(h,NativeTipFadeProc,1);}
+    return DefSubclassProc(h,m,w,l);
+}
+static void StyleNativeTip(HWND tip) {
+    if(!tip) return;
+    SetLayeredWindowAttributes(tip,0,255,LWA_ALPHA);
+    SetWindowSubclass(tip,NativeTipFadeProc,1,0);
+    SendMessageW(tip,TTM_SETMAXTIPWIDTH,0,Px(300));
+}
+static bool InfoTipVisible() {return s && s->infoTip && IsWindow(s->infoTip) && IsWindowVisible(s->infoTip);}
+static void HideInfoTip() {
+    if(!s || !s->infoTip || !IsWindow(s->infoTip)) return;
+    TOOLINFOW ti{};ti.cbSize=sizeof(ti);ti.hwnd=s->bar;ti.uId=1;
+    SendMessageW(s->infoTip,TTM_TRACKACTIVATE,FALSE,(LPARAM)&ti);
+    ShowWindow(s->infoTip,SW_HIDE);
+}
+static void SetOverflowCloak(bool on) {
+    if(!s || !s->overflowPanel) return;
+    BOOL v=on?TRUE:FALSE; DwmSetWindowAttribute(s->overflowPanel,13/*DWMWA_CLOAK*/,&v,sizeof(v));
+}
 static void HidePrivateOverflow() {
     if(!s) return;
+    SetOverflowCloak(false);
     if(s->overflowTooltip) { TOOLINFOW tool{}; tool.cbSize=sizeof(tool); tool.hwnd=s->overflowPanel; tool.uId=1;
         SendMessageW(s->overflowTooltip,TTM_TRACKACTIVATE,FALSE,(LPARAM)&tool); }
     if(s->overflowPanel) ShowWindow(s->overflowPanel,SW_HIDE);
     s->overflowHot=-1; s->overflowFooterHot=false;
+    // The arrow is drawn "hot" while the panel is open: repaint it right away.
+    if(s->bar && IsWindow(s->bar)) RedrawWindow(s->bar,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW);
 }
 static std::wstring SystemTooltipText(int hit) {
     if(hit==HIT_NETWORK) return NetworkTooltipText();
@@ -7000,15 +7169,35 @@ static void UpdateOverflowTooltip(int index,POINT client) {
     ClientToScreen(s->overflowPanel,&client);
     SendMessageW(s->overflowTooltip,TTM_TRACKPOSITION,0,MAKELPARAM(client.x+Px(12),client.y+Px(18)));
     SendMessageW(s->overflowTooltip,TTM_TRACKACTIVATE,TRUE,(LPARAM)&tool);
+    MONITORINFO omi{sizeof(omi)};
+    if(GetMonitorInfoW(MonitorFromWindow(s->overflowPanel,MONITOR_DEFAULTTONEAREST),&omi))
+        ClampTrackTooltipToMonitor(s->overflowTooltip,omi.rcMonitor);
 }
 static void DismissOverflowOnOutsideClick() {
     if(!s || !s->overflowPanel || !IsWindowVisible(s->overflowPanel)) return;
     int now=((GetAsyncKeyState(VK_LBUTTON)&0x8000)?1:0)|((GetAsyncKeyState(VK_RBUTTON)&0x8000)?2:0);
     if(s->trayDrag.capture) {s->overflowMouseMask=now;return;}
     int newlyPressed=now & ~s->overflowMouseMask; s->overflowMouseMask=now;
+    // Esc closes the panel, like the native overflow.
+    static bool escWas=false; bool esc=(GetAsyncKeyState(VK_ESCAPE)&0x8000)!=0;
+    bool escPressed=esc && !escWas; escWas=esc;
+    if(escPressed) {HidePrivateOverflow();return;}
     if(newlyPressed) {
         POINT p{}; RECT panel{},bar{}; GetCursorPos(&p); GetWindowRect(s->overflowPanel,&panel); GetWindowRect(s->bar,&bar);
-        if(!PtInRect(&panel,p) && !PtInRect(&bar,p)) HidePrivateOverflow();
+        if(PtInRect(&panel,p)) return;
+        // The arrow toggles the panel itself on click; do not close it here or it would reopen on release.
+        if(PtInRect(&s->overflowAnchor,p)) return;
+        // Tray icons in the bar can start a drag into the panel: leave them alone.
+        // Everything else (task buttons, clock, empty bar, desktop, other windows) closes the panel.
+        if(PtInRect(&bar,p)) {
+            RECT bc{}; GetClientRect(s->bar,&bc);
+            RECT tray;
+            if(s->verticalActive) {VerticalLayout vl=GetVerticalLayout(bc.right,bc.bottom);tray=RECT{0,vl.arrow.top,bc.right,vl.clock.top};}
+            else {Layout l=GetLayout(bc.right,bc.bottom);tray=l.tray;}
+            MapWindowPoints(s->bar,nullptr,reinterpret_cast<POINT*>(&tray),2);
+            if(PtInRect(&tray,p)) return;
+        }
+        HidePrivateOverflow();
     }
 }
 // Apply a system non-client frame only for the Windows 7 preset. The frame
@@ -7228,24 +7417,30 @@ static void ShowPrivateOverflow() {
         { BOOL disabled=TRUE;DwmSetWindowAttribute(s->overflowPanel,DWMWA_TRANSITIONS_FORCEDISABLED,&disabled,sizeof(disabled)); }
         ConfigureSystemPopupFrame(s->overflowPanel);
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_WIN95_CLASSES}; InitCommonControlsEx(&controls);
-        s->overflowTooltip=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,nullptr,WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,
+        s->overflowTooltip=CreateWindowExW(WS_EX_TOPMOST|WS_EX_LAYERED,TOOLTIPS_CLASSW,nullptr,WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,
             CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,s->overflowPanel,nullptr,instance,nullptr);
         if(s->overflowTooltip) { TOOLINFOW tool{}; tool.cbSize=sizeof(tool); tool.hwnd=s->overflowPanel; tool.uId=1;
             tool.uFlags=TTF_TRACK|TTF_ABSOLUTE; tool.lpszText=const_cast<wchar_t*>(L"");
             SendMessageW(s->overflowTooltip,TTM_ADDTOOLW,0,(LPARAM)&tool);
-            SendMessageW(s->overflowTooltip,TTM_SETMAXTIPWIDTH,0,Px(300)); }
+            SendMessageW(s->overflowTooltip,TTM_SETMAXTIPWIDTH,0,Px(300)); StyleNativeTip(s->overflowTooltip); }
         EnsureTrayHoverImage();
     }
     s->overflowScroll=0;
     s->overflowMouseMask=((GetAsyncKeyState(VK_LBUTTON)&0x8000)?1:0)|((GetAsyncKeyState(VK_RBUTTON)&0x8000)?2:0);
+    SetOverflowCloak(true); // hidden from DWM until it is sized, placed and painted
     ResizePrivateOverflow();
     RECT client{}; GetClientRect(s->bar,&client); Layout layout=GetLayout(client.right,client.bottom);
     RECT anchor=s->verticalActive?GetVerticalLayout(client.right,client.bottom).arrow:RECT{layout.tray.left,0,layout.tray.left+OverflowButtonWidth(),client.bottom};
     MapWindowPoints(s->bar,nullptr,reinterpret_cast<POINT*>(&anchor),2); s->overflowAnchor=anchor;
     RECT window{}; GetWindowRect(s->overflowPanel,&window); int x=0,y=0;
     ComputeOverflowNear(anchor,window.right-window.left,window.bottom-window.top,x,y);
-    SetWindowPos(s->overflowPanel,HWND_TOPMOST,x,y,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
-    InvalidateRect(s->overflowPanel,nullptr,FALSE);
+    // Move while hidden, then show in place, so the stale old position is never presented.
+    SetWindowPos(s->overflowPanel,HWND_TOPMOST,x,y,0,0,SWP_NOSIZE|SWP_NOACTIVATE);
+    SetWindowPos(s->overflowPanel,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
+    RedrawWindow(s->overflowPanel,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_ERASENOW|RDW_UPDATENOW);
+    DwmFlush();
+    SetOverflowCloak(false);
+    if(s->bar && IsWindow(s->bar)) RedrawWindow(s->bar,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW);
 }
 // Drag capture and the identity are independent of vector indices: NIM_DELETE
 // or NIM_MODIFY may arrive while the mouse is held. Never notify the owner of
@@ -10045,7 +10240,7 @@ static LRESULT CALLBACK LanguageFlyoutProc(HWND hwnd,UINT message,WPARAM wp,LPAR
         if(showRecoverableErrors.load()) {try {HideLanguageFlyout();
             RECT bar{};
             if(s && s->bar && GetWindowRect(s->bar,&bar))ShowInfoTooltip(Tr(L"Errore recuperabile nel flyout lingua. Controlla il log Windhawk.",L"Recoverable language flyout error. Check the Windhawk log."),(bar.left+bar.right)/2);
-            if(s && s->tooltip && IsWindowVisible(s->tooltip))s->recoveryTooltipUntil=GetTickCount64()+5000;
+            if(s && ((s->tooltip && IsWindowVisible(s->tooltip)) || InfoTipVisible()))s->recoveryTooltipUntil=GetTickCount64()+5000;
             } catch(...) {}}
     }
     return DefWindowProcW(hwnd,message,wp,lp);
@@ -10987,6 +11182,7 @@ void HidePreview() {
     s->previewTracking=false;
     if(s->preview && IsWindow(s->preview)) ShowWindow(s->preview,SW_HIDE);
     if(s->tooltip && IsWindow(s->tooltip)) ShowWindow(s->tooltip,SW_HIDE);
+    HideInfoTip();
     s->tooltipText.clear();s->hotCornerPreview=false;s->recoveryTooltipUntil=0;
     if(s->bar) KillTimer(s->bar,TIMER_PREVIEW);
 }
@@ -11442,7 +11638,7 @@ LRESULT CALLBACK PreviewProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         HidePreview();
         if(showRecoverableErrors.load()) {try {RECT bar{};
             if(s && s->bar && GetWindowRect(s->bar,&bar))ShowInfoTooltip(Tr(L"Errore recuperabile nell'anteprima. Controlla il log Windhawk.",L"Recoverable preview error. Check the Windhawk log."),(bar.left+bar.right)/2);
-            if(s && s->tooltip && IsWindowVisible(s->tooltip))s->recoveryTooltipUntil=GetTickCount64()+5000;
+            if(s && ((s->tooltip && IsWindowVisible(s->tooltip)) || InfoTipVisible()))s->recoveryTooltipUntil=GetTickCount64()+5000;
             } catch(...) {}}
         return 0;
     }
@@ -11512,22 +11708,58 @@ static void ShowInfoTooltip(const std::wstring& message,int center) {
     s->hotCornerPreview=false;s->recoveryTooltipUntil=0;
     s->tooltipText=message;
     if(s->tooltipText.empty()) return;
+    if(s->tooltip && IsWindow(s->tooltip)) ShowWindow(s->tooltip,SW_HIDE);
+    if(!s->infoTip || !IsWindow(s->infoTip)) {
+        s->infoTip=CreateWindowExW(WS_EX_TOPMOST|WS_EX_LAYERED,TOOLTIPS_CLASSW,nullptr,WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,
+            CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,s->bar,nullptr,GetModuleHandleW(nullptr),nullptr);
+        if(!s->infoTip) return;
+        StyleNativeTip(s->infoTip);
+        TOOLINFOW add{};add.cbSize=sizeof(add);add.hwnd=s->bar;add.uId=1;add.uFlags=TTF_TRACK|TTF_ABSOLUTE;
+        add.lpszText=const_cast<wchar_t*>(L"");
+        SendMessageW(s->infoTip,TTM_ADDTOOLW,0,(LPARAM)&add);
+    }
+    TOOLINFOW tool{};tool.cbSize=sizeof(tool);tool.hwnd=s->bar;tool.uId=1;
+    SendMessageW(s->infoTip,TTM_TRACKACTIVATE,FALSE,(LPARAM)&tool); // re-run placement and fade on every show
+    tool.lpszText=const_cast<wchar_t*>(s->tooltipText.c_str());
+    SendMessageW(s->infoTip,TTM_UPDATETIPTEXTW,0,(LPARAM)&tool);
+    LRESULT bubble=SendMessageW(s->infoTip,TTM_GETBUBBLESIZE,0,(LPARAM)&tool);
+    int width=std::max(Px(20),(int)LOWORD(bubble)),height=std::max(Px(16),(int)HIWORD(bubble));
+    RECT bar{}; GetWindowRect(s->bar,&bar);
+    MONITORINFO info{}; info.cbSize=sizeof(info);
+    if(!GetMonitorInfoW(MonitorFromWindow(s->bar,MONITOR_DEFAULTTONEAREST),&info)) return;
+    int x=std::max((int)info.rcMonitor.left,std::min(center-width/2,(int)info.rcMonitor.right-width));
+    int y=bar.top-height-Px(3);
+    if(y<info.rcMonitor.top) y=bar.bottom+Px(3);
+    if(s->verticalActive) {POINT cursor{};GetCursorPos(&cursor);x=s->verticalSide==1?bar.right+Px(3):bar.left-width-Px(3);y=cursor.y-height/2;
+        x=std::max((int)info.rcMonitor.left,std::min(x,(int)info.rcMonitor.right-width));y=std::max((int)info.rcMonitor.top,std::min(y,(int)info.rcMonitor.bottom-height));}
+    SendMessageW(s->infoTip,TTM_TRACKPOSITION,0,MAKELPARAM(x,y));
+    SendMessageW(s->infoTip,TTM_TRACKACTIVATE,TRUE,(LPARAM)&tool);
+    ClampTrackTooltipToMonitor(s->infoTip,info.rcMonitor); // prevention: correct using the real size
+    SetTimer(s->bar,TIMER_PREVIEW,350,nullptr);
+}
+// Custom-drawn popup kept only for the Start hot-corner preview.
+static void ShowInfoTooltipCustom(const std::wstring& message,int center) {
+    if(!s || !s->bar || s->trayDrag.capture) return;
+    HideInfoTip();
+    s->hotCornerPreview=false;s->recoveryTooltipUntil=0;
+    s->tooltipText=message;
+    if(s->tooltipText.empty()) return;
     if(!s->tooltip) {
         s->tooltip=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_NOACTIVATE,
             kTooltipClass,L"",WS_POPUP,0,0,1,1,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
     }
     if(!s->tooltip) return;
-    HDC dc=GetDC(s->tooltip);
     SIZE text{};
-    HFONT font=CreateFontW(-MulDiv(9,Dpi(),72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
-        DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    HGDIOBJ old=(dc && font)?SelectObject(dc,font):nullptr;
-    RECT measured{0,0,Px(300),0};
-    if(dc) { DrawTextW(dc,s->tooltipText.c_str(),-1,&measured,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
-             text.cx=measured.right-measured.left; text.cy=measured.bottom-measured.top; }
-    if(dc && old) SelectObject(dc,old);
-    if(font) DeleteObject(font);
-    if(dc) ReleaseDC(s->tooltip,dc);
+    {
+        ScopedWindowDC windowDc(s->tooltip);HDC dc=windowDc.dc;
+        std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> font(
+            CreateFontW(-MulDiv(9,Dpi(),72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+                DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI"));
+        ScopedSelection selection(dc,font.get());
+        RECT measured{0,0,Px(300),0};
+        if(dc) { DrawTextW(dc,s->tooltipText.c_str(),-1,&measured,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+                 text.cx=measured.right-measured.left; text.cy=measured.bottom-measured.top; }
+    }
     int width=std::min(Px(320),std::max(Px(60),(int)text.cx+Px(16)));
     int height=std::max(Px(25),(int)text.cy+Px(8));
     RECT bar{}; GetWindowRect(s->bar,&bar);
@@ -11546,7 +11778,7 @@ static void ShowInfoTooltip(const std::wstring& message,int center) {
 static void ShowHotCornerPreview() {
     if(!s || !s->bar)return;
     RECT bar{};GetWindowRect(s->bar,&bar);
-    ShowInfoTooltip(L"Start",(int)bar.left+Px(35));
+    ShowInfoTooltipCustom(L"Start",(int)bar.left+Px(35));
     if(!s->tooltip)return;
     s->hotCornerPreview=true;
     MONITORINFO mi{};mi.cbSize=sizeof(mi);
@@ -11595,6 +11827,25 @@ static void ShowBarButtonTooltip(int hit) {
     MapWindowPoints(s->bar,nullptr,(POINT*)&cell,2);
     ShowInfoTooltip(hit==HIT_START?Tr(L"Start",L"Start"):Tr(L"Mostra desktop",L"Show desktop"),
                     (cell.left+cell.right)/2);
+}
+// The documented Shell APIs do not specify a stable resource ID for this
+// system tooltip. Use the wording in Microsoft support documentation and the
+// mod's language fallbacks instead of guessing an undocumented DLL resource.
+static void ShowTrayOverflowTooltip() {
+    if(!s || !s->privateActive || !s->bar || s->trayDrag.capture ||
+       (s->overflowPanel && IsWindowVisible(s->overflowPanel)))return;
+    POINT cursor{};
+    if(!GetCursorPos(&cursor) || !ScreenToClient(s->bar,&cursor) ||
+       Hit(cursor.x,cursor.y)!=HIT_TRAY_MORE)return;
+    RECT client{},cell{};GetClientRect(s->bar,&client);
+    if(s->verticalActive)cell=GetVerticalLayout(client.right,client.bottom).arrow;
+    else {
+        auto layout=GetLayout(client.right,client.bottom);
+        cell=RECT{layout.tray.left,0,layout.tray.left+OverflowButtonWidth(),client.bottom};
+    }
+    if(IsRectEmpty(&cell))return;
+    MapWindowPoints(s->bar,nullptr,reinterpret_cast<POINT*>(&cell),2);
+    ShowInfoTooltip(Tr(L"Mostra icone nascoste",L"Show hidden icons"),(cell.left+cell.right)/2);
 }
 static void ShowLanguageTooltip() {
     if(!s || !s->bar || !LanguageIndicatorVisible())return;
@@ -12858,11 +13109,14 @@ static void LogTaskbarDiagnostics(const wchar_t* reason) {
     if(rtl && rtl(&os)==0) Wh_Log(L"[T81-DIAG] windows=%lu.%lu build=%lu",os.dwMajorVersion,os.dwMinorVersion,os.dwBuildNumber);
     DiagStartAllBackVersion();
     {
-        HDC dc=GetDC(s->bar); HFONT font=dc?CreateTaskbarFont(Dpi(),s->perPixelBar):nullptr;
-        HGDIOBJ old=(dc && font)?SelectObject(dc,font):nullptr;
-        wchar_t face[LF_FACESIZE]={}; if(dc && font) GetTextFaceW(dc,LF_FACESIZE,face);
-        if(dc && old && old!=HGDI_ERROR) SelectObject(dc,old);
-        if(font) DeleteObject(font); if(dc) ReleaseDC(s->bar,dc);
+        wchar_t face[LF_FACESIZE]={};
+        {
+            ScopedWindowDC windowDc(s->bar);HDC dc=windowDc.dc;
+            std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> font(
+                dc?CreateTaskbarFont(Dpi(),s->perPixelBar):nullptr);
+            ScopedSelection selection(dc,font.get());
+            if(dc && font) GetTextFaceW(dc,LF_FACESIZE,face);
+        }
         Wh_Log(L"[T81-DIAG] taskbar-GDI-font-requested=Segoe UI 9pt selected=%ls clock-GDIplus-font-requested=Segoe UI 9pt clock-width=%d per-pixel=%d",
                face[0]?face:L"unavailable",s->clockWidthPx,s->perPixelBar?1:0);
     }
@@ -12904,9 +13158,24 @@ static void LogTaskbarDiagnostics(const wchar_t* reason) {
 // This API cannot enumerate pinned items, custom categories or application
 // tasks. Do not infer or modify the user's private destination store. System
 // implicit AppIDs are not retrievable, so only explicit app: keys are queried.
-struct JumpDocument { std::wstring label; std::shared_ptr<IUnknown> object; };
-static std::vector<JumpDocument> ReadJumpDocuments(const std::wstring& appId,bool& frequent) {
-    std::vector<JumpDocument> docs; frequent=true;
+struct JumpDocument { std::wstring label; std::shared_ptr<IUnknown> object; bool frequent; };
+// Compare only objects that both expose IShellItem. Different IShellLink
+// arguments may have different meanings, so never deduplicate links by label
+// or target path. Failure means unknown, not equal.
+static bool SameJumpShellItem(IUnknown* a,IUnknown* b) {
+    if(!a || !b) return false;
+    IShellItem* rawA=nullptr; IShellItem* rawB=nullptr;
+    HRESULT ha=a->QueryInterface(IID_PPV_ARGS(&rawA));
+    std::unique_ptr<IShellItem,ReleaseCom<IShellItem>> itemA(rawA);
+    HRESULT hb=b->QueryInterface(IID_PPV_ARGS(&rawB));
+    std::unique_ptr<IShellItem,ReleaseCom<IShellItem>> itemB(rawB);
+    if(FAILED(ha) || FAILED(hb) || !itemA || !itemB) return false;
+    int order=1;
+    HRESULT hr=itemA->Compare(itemB.get(),SICHINT_CANONICAL,&order);
+    return hr==S_OK && order==0;
+}
+static std::vector<JumpDocument> ReadJumpDocuments(const std::wstring& appId,bool& frequent) try {
+    std::vector<JumpDocument> docs, sections[2]; frequent=true;
     if(appId.empty()) return docs;
     Wh_Log(L"[T81-DIAG] Jump List provider query begin");
     IApplicationDocumentLists* lists=nullptr;
@@ -12914,12 +13183,18 @@ static std::vector<JumpDocument> ReadJumpDocuments(const std::wstring& appId,boo
     std::unique_ptr<IApplicationDocumentLists,ReleaseCom<IApplicationDocumentLists>> listsGuard(lists);
     if(FAILED(hr) || !lists) { Wh_Log(L"[T81-DIAG] Jump List provider unavailable hr=0x%08lx",(unsigned long)hr); return docs; }
     hr=lists->SetAppID(appId.c_str());
-    if(SUCCEEDED(hr)) for(int pass=0;pass<2 && docs.empty();++pass) {
-        frequent=(pass==0); IObjectArray* arr=nullptr;
-        hr=lists->GetList(frequent?ADLT_FREQUENT:ADLT_RECENT,10,IID_PPV_ARGS(&arr));
+    if(FAILED(hr)) Wh_Log(L"[T81-DIAG] Jump List SetAppID failed hr=0x%08lx",(unsigned long)hr);
+    if(SUCCEEDED(hr)) for(int pass=0;pass<2;++pass) {
+        bool isFrequent=(pass==0); IObjectArray* arr=nullptr;
+        hr=lists->GetList(isFrequent?ADLT_FREQUENT:ADLT_RECENT,10,IID_PPV_ARGS(&arr));
         std::unique_ptr<IObjectArray,ReleaseCom<IObjectArray>> arrGuard(arr);
-        if(FAILED(hr) || !arr) continue;
-        UINT count=0; arr->GetCount(&count); count=std::min(count,10u);
+        if(FAILED(hr) || !arr) {
+            Wh_Log(L"[T81-DIAG] Jump List %ls query failed hr=0x%08lx",isFrequent?L"frequent":L"recent",(unsigned long)hr);
+            continue;
+        }
+        UINT count=0; hr=arr->GetCount(&count);
+        if(FAILED(hr)) { Wh_Log(L"[T81-DIAG] Jump List count failed hr=0x%08lx",(unsigned long)hr); continue; }
+        count=std::min(count,10u);
         for(UINT i=0;i<count;i++) {
             IUnknown* raw=nullptr; if(FAILED(arr->GetAt(i,IID_IUnknown,(void**)&raw)) || !raw) continue;
             std::shared_ptr<IUnknown> obj(raw,[](IUnknown* o){o->Release();});
@@ -12940,11 +13215,38 @@ static std::vector<JumpDocument> ReadJumpDocuments(const std::wstring& appId,boo
             }
             for(auto& c:label) if(c<L' ') c=L' ';
             if(label.size()>140) label.resize(140);
-            if(!label.empty()) docs.push_back({label,std::move(obj)});
+            if(!label.empty()) sections[pass].push_back({label,std::move(obj),isFrequent});
         }
     }
-    Wh_Log(L"[T81-DIAG] Jump List automatic entries=%u",(unsigned)docs.size());
+    // Prefer up to five frequent entries, then use the recent list. Compare
+    // with displayed Shell items only; keep ambiguous items rather than hiding
+    // potentially distinct destinations. Fill spare slots from either list.
+    size_t frequentCount=0, recentCount=0, duplicates=0;
+    const bool both=!sections[0].empty() && !sections[1].empty();
+    const size_t initial=both?std::min<size_t>(5,sections[0].size()):sections[0].size();
+    for(size_t i=0;i<initial;++i) { docs.push_back(sections[0][i]); ++frequentCount; }
+    for(const auto& candidate:sections[1]) {
+        if(docs.size()>=10) break;
+        bool duplicate=false;
+        for(const auto& shown:docs) if(SameJumpShellItem(candidate.object.get(),shown.object.get())) {duplicate=true;break;}
+        if(duplicate) {++duplicates;continue;}
+        docs.push_back(candidate);++recentCount;
+    }
+    // To preserve category order, insert remaining frequent items before recent.
+    for(size_t i=initial;i<sections[0].size() && docs.size()<10;++i) {
+        bool duplicate=false;
+        for(const auto& shown:docs) if(SameJumpShellItem(sections[0][i].object.get(),shown.object.get())) {duplicate=true;break;}
+        if(duplicate) {++duplicates;continue;}
+        docs.insert(docs.begin()+frequentCount,sections[0][i]);++frequentCount;
+    }
+    if(!docs.empty()) frequent=docs.front().frequent;
+    Wh_Log(L"[T81-DIAG] Jump List frequent=%u recent=%u selected=%u/%u duplicates=%u",
+           (unsigned)sections[0].size(),(unsigned)sections[1].size(),
+           (unsigned)frequentCount,(unsigned)recentCount,(unsigned)duplicates);
     return docs;
+} catch (...) {
+    Wh_Log(L"[T81-DIAG] Jump List query: C++ exception; showing actions only");
+    frequent=true; return {};
 }
 static bool OpenJumpDocument(HWND owner,IUnknown* object) {
     if(!object) return false;
@@ -13095,7 +13397,7 @@ static bool CreateModPinFromGroup(const std::wstring& key,const std::wstring& ex
 }
 static void RefreshModPinView() {if(s && s->bar){RefreshPins();BuildGroups();InvalidateRect(s->bar,nullptr,FALSE);}}
 
-enum JumpRowKind { JR_DOCUMENT,JR_APP,JR_ACTIVATE,JR_CLOSE,JR_PIN };
+enum JumpRowKind { JR_DOCUMENT,JR_APP,JR_ACTIVATE,JR_CLOSE,JR_PIN,JR_SCREEN_SNIP };
 struct JumpRow { JumpRowKind kind; int document=-1; RECT rect{}; };
 // Legacy 14x14 close artwork (GPL-3.0-or-later).
 constexpr char kJumpClosePng[] =
@@ -13234,13 +13536,14 @@ struct JumpPopupData {
          IStream* referenceStream=nullptr;
     Image* referenceVariants[4]={}; IStream* referenceVariantStreams[4]={};
     std::wstring title,launch,activationAppId,pinKey,pinExe,modPinPath; bool pinAction=false,pinnedForMod=false;
-    HICON pinIcon=nullptr;
+    HICON pinIcon=nullptr, snipIcon=nullptr;
     std::vector<std::pair<HWND,DWORD>> targets;
-    HWND owner=nullptr; bool frequent=true,windowOwns=false; int hot=-1,mouseMask=0,headerHeight=0;
+    HWND owner=nullptr; bool frequent=true,windowOwns=false; int hot=-1,mouseMask=0,headerHeight=0,secondHeaderTop=-1,secondHeaderBottom=-1;
     bool betaCloseHot=false,betaCloseDown=false;
     int animX=0,animFinalY=0,animStartOffset=0,animStartOffsetX=0; ULONGLONG animStart=0;
     bool closing=false; int closeX=0,closeY=0,closeOffset=0,closeOffsetX=0; ULONGLONG closeStart=0;
     ~JumpPopupData() { if(pinIcon)DestroyIcon(pinIcon);
+        if(snipIcon)DestroyIcon(snipIcon);
         for(HICON i:icons) if(i) DestroyIcon(i);
          if(appIcon) DestroyIcon(appIcon);
          for(int i=0;i<4;i++){delete referenceVariants[i];
@@ -13311,6 +13614,31 @@ static void CloseJumpPopup(bool animate=false) {
     }
     DestroyWindow(h);s->jumpPopup=nullptr;s->jumpGroupKey.clear();
 }
+// This is a mod-provided shortcut, not a native Snipping Tool Jump List task.
+// Microsoft documents Win+Shift+S for screen snips and SendInput for synthetic
+// key events. No attempt is made to infer whether the capture UI actually opens.
+static void LaunchScreenSnipShortcut() noexcept {
+    const int modifiers[]={VK_LWIN,VK_RWIN,VK_SHIFT,VK_CONTROL,VK_MENU,'S'};
+    for(int key:modifiers) if(GetAsyncKeyState(key)&0x8000) {
+        Wh_Log(L"[T81-SNIP] shortcut skipped: key held"); return;
+    }
+    INPUT keys[6]{};
+    const WORD vk[]={VK_LWIN,VK_SHIFT,'S','S',VK_SHIFT,VK_LWIN};
+    for(int i=0;i<6;i++) {
+        keys[i].type=INPUT_KEYBOARD;keys[i].ki.wVk=vk[i];
+        if(i>=3) keys[i].ki.dwFlags=KEYEVENTF_KEYUP;
+    }
+    UINT sent=SendInput((UINT)std::size(keys),keys,sizeof(INPUT));
+    if(sent!=std::size(keys)) {
+        // Best effort: release only synthetic keys whose key-up was not sent.
+        INPUT release[3]{};UINT n=0;
+        if(sent>=3 && sent<4){release[n].type=INPUT_KEYBOARD;release[n].ki.wVk='S';release[n++].ki.dwFlags=KEYEVENTF_KEYUP;}
+        if(sent>=2 && sent<5){release[n].type=INPUT_KEYBOARD;release[n].ki.wVk=VK_SHIFT;release[n++].ki.dwFlags=KEYEVENTF_KEYUP;}
+        if(sent>=1 && sent<6){release[n].type=INPUT_KEYBOARD;release[n].ki.wVk=VK_LWIN;release[n++].ki.dwFlags=KEYEVENTF_KEYUP;}
+        if(n) SendInput(n,release,sizeof(INPUT));
+    }
+    Wh_Log(L"[T81-SNIP] shortcut events sent=%u/6; capture not verified",sent);
+}
 static void ActivateJumpRow(HWND h,JumpPopupData* data,int row) {
     if(!data || row<0 || (size_t)row>=data->rows.size()) return;
     JumpRow selected=data->rows[row];
@@ -13321,7 +13649,9 @@ static void ActivateJumpRow(HWND h,JumpPopupData* data,int row) {
     bool pinnedForMod=data->pinnedForMod;
     auto targets=data->targets; HWND owner=data->owner;
     DestroyWindow(h); // data is destroyed by WM_NCDESTROY; copies above remain valid
-    if(selected.kind==JR_DOCUMENT && object) {
+    if(selected.kind==JR_SCREEN_SNIP) {
+        LaunchScreenSnipShortcut();
+    } else if(selected.kind==JR_DOCUMENT && object) {
         if(!OpenJumpDocument(owner,object.get())) Wh_Log(L"[T81-DIAG] Jump List item activation failed");
     } else if(selected.kind==JR_APP) {
         if(!launch.empty()) ShellExecuteW(owner,L"open",launch.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
@@ -13405,19 +13735,21 @@ static void PaintJumpPopup(HWND h,JumpPopupData* d) {
     std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> fontGuard(font);
          ScopedSelection fontSelection(dc,font);
          SetBkMode(dc,TRANSPARENT);
-    if(!d->docs.empty()) {
-        RECT head{Px(15)-contentOffset,win7?Px(5):Px(10),client.right-Px(14)+contentOffset,d->headerHeight}; SetTextColor(dc,RGB(24,83,147));
-        const wchar_t* heading=d->frequent?Tr(L"Frequenti",L"Frequent"):Tr(L"Recenti",L"Recent");
+    auto drawHeading=[&](int top,int bottom,bool frequent) {
+        RECT head{Px(15)-contentOffset,top,client.right-Px(14)+contentOffset,bottom};
+        SetTextColor(dc,RGB(24,83,147));
+        const wchar_t* heading=frequent?Tr(L"Frequenti",L"Frequent"):Tr(L"Recenti",L"Recent");
         DrawTextW(dc,heading,-1,&head,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
         HPEN line=CreatePen(PS_SOLID,1,RGB(165,192,215)); HGDIOBJ pen=SelectObject(dc,line);
         if(win7) {
-            SIZE label{};GetTextExtentPoint32W(dc,heading,(int)wcslen(heading),&label);
-            int lineLeft=head.left+label.cx+Px(4), lineRight=client.right-Px(7);
-            int lineY=(head.top+head.bottom)/2;
-            if(lineLeft<lineRight) {MoveToEx(dc,lineLeft,lineY,nullptr);LineTo(dc,lineRight,lineY);}
-        } else {MoveToEx(dc,Px(15),d->headerHeight,nullptr);LineTo(dc,client.right-Px(15),d->headerHeight);}
+            SIZE label{}; GetTextExtentPoint32W(dc,heading,(int)wcslen(heading),&label);
+            int left=head.left+label.cx+Px(4),right=client.right-Px(7),y=(top+bottom)/2;
+            if(left<right) {MoveToEx(dc,left,y,nullptr);LineTo(dc,right,y);}
+        } else {MoveToEx(dc,Px(15),bottom,nullptr);LineTo(dc,client.right-Px(15),bottom);}
         if(pen) SelectObject(dc,pen); DeleteObject(line);
-    }
+    };
+    if(!d->docs.empty()) drawHeading(win7?Px(5):Px(10),d->headerHeight,d->frequent);
+    if(d->secondHeaderTop>=0) drawHeading(d->secondHeaderTop,d->secondHeaderBottom,false);
     for(size_t i=0;i<d->rows.size();++i) {
         const auto& row=d->rows[i]; RECT rr=row.rect;
         if(row.kind==JR_APP) { HPEN sep=CreatePen(PS_SOLID,1,RGB(210,210,210));
@@ -13435,11 +13767,26 @@ static void PaintJumpPopup(HWND h,JumpPopupData* d) {
         HICON icon=nullptr; std::wstring text;
         if(row.kind==JR_DOCUMENT) { if((size_t)row.document<d->docs.size()) text=d->docs[row.document].label; if((size_t)row.document<d->icons.size()) icon=d->icons[row.document]; }
         else if(row.kind==JR_APP) { text=(d->docs.empty()?Tr(L"Apri ",L"Open "):L"")+d->title; icon=d->appIcon; }
+        else if(row.kind==JR_SCREEN_SNIP) {text=Tr(L"Nuova cattura schermo",L"New screen snip");icon=d->snipIcon;}
         else if(row.kind==JR_ACTIVATE) {text=Tr(L"Mostra finestra",L"Show window");}
         else if(row.kind==JR_PIN) {text=!d->pinnedForMod?Tr(L"Aggiungi alla barra delle applicazioni",L"Pin to taskbar"):Tr(L"Rimuovi dalla barra delle applicazioni",L"Unpin from taskbar");icon=d->pinIcon;}
         else text=d->targets.size()>1?Tr(L"Chiudi tutte le finestre",L"Close all windows"):Tr(L"Chiudi finestra",L"Close window");
         int size=Px(16);
         if(icon) { DrawIconEx(dc,Px(16)-contentOffset,rr.top+((rr.bottom-rr.top)-size)/2,icon,size,size,0,nullptr,DI_NORMAL); }
+        else if(row.kind==JR_SCREEN_SNIP) {
+            // Independent GDI camera fallback when the stock icon is absent.
+            int x=Px(16)-contentOffset,y=rr.top+((rr.bottom-rr.top)-size)/2;
+            Graphics camera(dc); camera.SetSmoothingMode(SmoothingModeAntiAlias);
+            float unit=(float)size/16.0f;
+            Pen outline(Color(255,55,74,88),std::max(1.0f,unit));
+            SolidBrush body(Color(255,91,150,190));
+            SolidBrush lens(Color(255,236,246,252));
+            camera.FillRectangle(&body,(float)x+unit,(float)y+4*unit,14*unit,10*unit);
+            camera.DrawRectangle(&outline,(float)x+unit,(float)y+4*unit,14*unit,10*unit);
+            camera.FillRectangle(&body,(float)x+4*unit,(float)y+2*unit,6*unit,3*unit);
+            camera.FillEllipse(&lens,(float)x+5*unit,(float)y+6*unit,6*unit,6*unit);
+            camera.DrawEllipse(&outline,(float)x+5*unit,(float)y+6*unit,6*unit,6*unit);
+        }
         else if(row.kind==JR_ACTIVATE) {
             RECT iconRect{Px(16)-contentOffset,rr.top+((rr.bottom-rr.top)-size)/2,
                           Px(16)-contentOffset+size,rr.top+((rr.bottom-rr.top)-size)/2+size};
@@ -13554,6 +13901,12 @@ static LRESULT CALLBACK JumpPopupProc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
                  InvalidateRect(h,nullptr,FALSE);
                 } return 0;
                  }
+            // Standard menu navigation; selection never invokes an action.
+            if((wp==VK_HOME || wp==VK_END) && !d->rows.empty()) {
+                d->hot=wp==VK_HOME?0:(int)d->rows.size()-1;
+                d->betaCloseHot=false;
+                InvalidateRect(h,nullptr,FALSE);return 0;
+            }
             if(wp==VK_RETURN) {ActivateJumpRow(h,d,d->hot);return 0;} break;
         case WM_ACTIVATE: if(LOWORD(wp)==WA_INACTIVE && IsWindowVisible(h)) {if(d->closing) return 0;
             MarkJumpDismissFromPointer();
@@ -13608,17 +13961,17 @@ static HICON LoadLegacyPinIcon(bool pinned) {
     (void)pinned;HICON result=nullptr;int resource=0;
     for(int id:{5100,5101}) {
         for(const auto& path:paths) {
-            HMODULE module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_AS_DATAFILE|LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-            if(!module)continue;
-            result=(HICON)LoadImageW(module,MAKEINTRESOURCEW(id),IMAGE_ICON,Px(16),Px(16),0);
-            FreeLibrary(module);if(result){resource=id;break;}
+            ResourceModule module{LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_AS_DATAFILE|LOAD_LIBRARY_AS_IMAGE_RESOURCE)};
+            if(!module.h)continue;
+            result=(HICON)LoadImageW(module.h,MAKEINTRESOURCEW(id),IMAGE_ICON,Px(16),Px(16),0);
+            if(result){resource=id;break;}
         }
         if(result)break;
     }
     Wh_Log(L"[T81-PIN] system icon resource=%d loaded=%d",resource,result?1:0);
     return result;
 }
-static bool ShowJumpList(size_t index,POINT) {
+static bool ShowJumpList(size_t index,POINT) try {
     if(!s || !s->bar || index>=s->groups.size()) return false;
     Group group=s->groups[index]; std::wstring id;
     if(s->jumpPopup && IsWindow(s->jumpPopup) && s->jumpGroupKey==group.key) {CloseJumpPopup(true);return true;}
@@ -13626,12 +13979,24 @@ static bool ShowJumpList(size_t index,POINT) {
     if(id.empty() && !group.tasks.empty() && group.tasks.front()<s->tasks.size()) {
         const auto& key=s->tasks[group.tasks.front()].key; if(key.rfind(L"app:",0)==0) id=key.substr(4);
     }
+    // Restrict the shortcut to the known packaged app or the classic executable
+    // in the Windows system directory, never an arbitrary lookalike filename.
+    bool snipping=!_wcsicmp(id.c_str(),L"Microsoft.ScreenSketch_8wekyb3d8bbwe!App");
+    wchar_t systemDir[MAX_PATH]{};
+    UINT systemLen=GetSystemDirectoryW(systemDir,(UINT)std::size(systemDir));
+    if(!snipping && systemLen && systemLen<std::size(systemDir)) {
+        std::wstring systemSnip=std::wstring(systemDir)+L"\\SnippingTool.exe";
+        if(group.pin>=0 && (size_t)group.pin<s->pins.size())
+            snipping=!_wcsicmp(s->pins[group.pin].target.c_str(),systemSnip.c_str());
+        for(size_t task:group.tasks) if(task<s->tasks.size() &&
+            !_wcsicmp(s->tasks[task].processPath.c_str(),systemSnip.c_str())) snipping=true;
+    }
     KillTimer(s->bar,TIMER_HOVER); HidePreview(); CloseJumpPopup(); auto d=std::make_unique<JumpPopupData>();
     d->owner=s->bar; d->title=GroupTitle(index); if(d->title.empty()) d->title=Tr(L"Applicazione",L"Application");
     if(!_wcsicmp(d->title.c_str(),L"File Explorer") || !_wcsicmp(d->title.c_str(),L"Windows Explorer")) {
         // Same five translations as win81-start-screen-recreation (GPL-3.0-or-later).
         LANGID lang=PRIMARYLANGID(GetUserDefaultUILanguage());
-        if(lang==LANG_ITALIAN) d->title=L"Esplora file";
+        if(lang==LANG_ITALIAN) d->title=L"Esplora Risorse";
         else if(lang==LANG_SPANISH) d->title=L"Explorador de archivos";
         else if(lang==LANG_FRENCH) d->title=L"Explorateur de fichiers";
         else if(lang==LANG_PORTUGUESE) d->title=L"Explorador de Arquivos";
@@ -13686,16 +14051,36 @@ static bool ShowJumpList(size_t index,POINT) {
     else {if((int)index>=l.count)return false;button=RECT{bar.left+l.first+(int)index*l.width,bar.top,bar.left+l.first+((int)index+1)*l.width,bar.bottom};}
     MONITORINFO mi{}; mi.cbSize=sizeof(mi); if(!GetMonitorInfoW(MonitorFromRect(&button,MONITOR_DEFAULTTONEAREST),&mi)) return false;
     // Size bounded by the owning monitor; categories stay real, never invented.
-    int maxDocs=std::max(0,std::min(10,(int)((mi.rcMonitor.bottom-mi.rcMonitor.top)-Px(150))/std::max(1,Px(22))));
+    // Subtract the second header before the ten-item cap: subtracting after
+    // that cap discarded a row even when the monitor had ample space.
+    bool hasBoth=!d->docs.empty() && d->docs.front().frequent && !d->docs.back().frequent;
+    const int extraHeader=hasBoth?Px(taskbarSkin.load()==1?25:29):0;
+    int available=(int)(mi.rcMonitor.bottom-mi.rcMonitor.top)-Px(150)-extraHeader;
+    int maxDocs=std::max(0,std::min(10,available/std::max(1,Px(22))));
     if(d->docs.size()>(size_t)maxDocs) d->docs.resize(maxDocs);
     const bool win7Jump=taskbarSkin.load()==1;
     d->headerHeight=d->docs.empty()?Px(win7Jump?4:12):Px(win7Jump?25:29); int y=d->headerHeight;
     for(size_t i=0;i<d->docs.size();i++) {
+        if(i && d->docs[i-1].frequent && !d->docs[i].frequent) {
+            d->secondHeaderTop=y+Px(3); d->secondHeaderBottom=y+Px(win7Jump?25:29);
+            y=d->secondHeaderBottom;
+        }
         std::unique_ptr<std::remove_pointer<HICON>::type,DestroyIconHandle> icon(JumpDocumentIcon(d->docs[i].object.get()));
         d->icons.push_back(icon.get()); [[maybe_unused]] auto transferred_icon=icon.release();
         d->rows.push_back({JR_DOCUMENT,(int)i,{Px(10),y,Px(242),y+Px(22)}}); y+=Px(22);
     }
-    if(!d->launch.empty() || !d->activationAppId.empty()) {if(!win7Jump || !d->docs.empty())y+=Px(4);
+    if(snipping) {
+        // SIID_DEVICECAMERA is a documented semantic stock icon, not a DLL
+        // resource number. Windows may change its artwork across versions.
+        SHSTOCKICONINFO stock{}; stock.cbSize=sizeof(stock);
+        HRESULT iconHr=SHGetStockIconInfo(SIID_DEVICECAMERA,SHGSI_ICON|SHGSI_SMALLICON,&stock);
+        if(SUCCEEDED(iconHr) && stock.hIcon) d->snipIcon=stock.hIcon;
+        else if(stock.hIcon) DestroyIcon(stock.hIcon);
+        // The shortcut opens the system capture UI; it does not invoke a
+        // private method or reproduce the application's own custom tasks.
+        d->rows.push_back({JR_SCREEN_SNIP,-1,{Px(10),y,Px(242),y+Px(25)}});y+=Px(25);
+    }
+    if(!d->launch.empty() || !d->activationAppId.empty()) {if(!win7Jump || !d->docs.empty() || snipping)y+=Px(4);
          d->rows.push_back({JR_APP,-1,{Px(10),y,Px(242),y+Px(25)}});
          y+=Px(25);
         }
@@ -13704,6 +14089,30 @@ static bool ShowJumpList(size_t index,POINT) {
     if(!d->targets.empty()) {d->rows.push_back({JR_CLOSE,-1,{Px(10),y,Px(242),y+Px(22)}});y+=Px(22);}
     if(d->rows.empty()) return false;
     int width=Px(252),height=y+Px(win7Jump?6:12); RECT frame{0,0,width,height};
+    // Measure the actual localized pin action in the same Segoe UI font as
+    // PaintJumpPopup. GetTextExtentPoint32W uses the font selected into the DC.
+    // Preserve the legacy width unless the text needs more room; document names
+    // remain ellipsized rather than expanding the popup without bound.
+    int pinTextClientWidth=0;
+    if(d->pinAction) {
+        const wchar_t* label=!d->pinnedForMod?
+            Tr(L"Aggiungi alla barra delle applicazioni",L"Pin to taskbar"):
+            Tr(L"Rimuovi dalla barra delle applicazioni",L"Unpin from taskbar");
+        std::unique_ptr<std::remove_pointer<HDC>::type,DeleteMemDC> dc(CreateCompatibleDC(nullptr));
+        std::unique_ptr<std::remove_pointer<HFONT>::type,DeleteFontHandle> font(
+            CreateFontW(-MulDiv(9,Dpi(),72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+                        DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,
+                        DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI"));
+        if(dc && font) {
+            ScopedSelection selection(dc.get(),font.get()); SIZE measured{};
+            if(selection.old && selection.old!=HGDI_ERROR &&
+               GetTextExtentPoint32W(dc.get(),label,(int)wcslen(label),&measured)) {
+                // Match the paint rectangle, with a small rounding allowance.
+                int contentOffset=win7Jump?Px(8):0;
+                pinTextClientWidth=std::max(0,(int)measured.cx+Px(37)+Px(15)-2*contentOffset+Px(3));
+            }
+        }
+    }
     DWORD popupEx=WS_EX_TOOLWINDOW|WS_EX_TOPMOST;
     if(taskbarSkin.load()==1) {
         // Measure and retain the system-provided non-client frame.
@@ -13718,6 +14127,7 @@ static bool ShowJumpList(size_t index,POINT) {
         // Remove the two 8-DIP legacy horizontal content margins in Win7;
         // the real non-client DWM frame is retained and measured separately.
         int desired=std::max(Px(80),MulDiv(318,Dpi(),120)-2*Px(8));
+        if(pinTextClientWidth) desired=std::max(desired,pinTextClientWidth+nonClient);
         int target=std::min(desired,std::max(1,(int)(mi.rcWork.right-mi.rcWork.left)-4));
         width=std::max(1,target-nonClient);
         for(auto& row:d->rows) {
@@ -13725,7 +14135,15 @@ static bool ShowJumpList(size_t index,POINT) {
             row.rect.right=std::max(row.rect.left+1L,(LONG)(width-Px(2)));
         }
         frame=RECT{0,0,width,height};adjustFrame(&frame);
-    } else AdjustWindowRectEx(&frame,TaskbarPopupStyle(),FALSE,popupEx);
+    } else {
+        AdjustWindowRectEx(&frame,TaskbarPopupStyle(),FALSE,popupEx);
+        int nonClient=(frame.right-frame.left)-width;
+        int maxWidth=std::max(1,(int)(mi.rcWork.right-mi.rcWork.left)-4-nonClient);
+        width=std::min(maxWidth,std::max(width,pinTextClientWidth));
+        for(auto& row:d->rows) row.rect.right=std::max(row.rect.left+1L,(LONG)(width-Px(10)));
+        frame=RECT{0,0,width,height};
+        AdjustWindowRectEx(&frame,TaskbarPopupStyle(),FALSE,popupEx);
+    }
     int w=frame.right-frame.left,h=frame.bottom-frame.top;
     int x=button.left+(button.right-button.left-w)/2, top=button.top-h-Px(4);
     x=std::max((int)mi.rcWork.left+2,std::min(x,(int)mi.rcWork.right-w-2));
@@ -13779,6 +14197,9 @@ static bool ShowJumpList(size_t index,POINT) {
         if(IsWindow(popup) && s && s->jumpPopup==popup) SetForegroundWindow(popup);
     }
     return true;
+} catch (...) {
+    Wh_Log(L"[T81-DIAG] Jump List setup: C++ exception");
+    return false;
 }
 
 // RetroBar DelayedActivationHandler.cs (Apache-2.0): delayed hover idea,
@@ -14551,9 +14972,9 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
             s->hover=hit;
             KillTimer(h,TIMER_HOVER);
             HidePreview();
-        if(hit>=0 || hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_CLOCK || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE)SetTimer(h,TIMER_HOVER,450,nullptr);
+        if(hit>=0 || hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_CLOCK || hit==HIT_LANGUAGE || hit==HIT_TRAY_MORE || hit<=HIT_TRAY_ICON_BASE)SetTimer(h,TIMER_HOVER,450,nullptr);
         s->fadeTick=GetTickCount64();SetTimer(h,TIMER_FADE,16,nullptr);InvalidateRect(h,nullptr,FALSE);}return true;}
-    if(m==WM_MOUSELEAVE){if((s->hot==HIT_START || s->hot==HIT_DESKTOP || s->hot==HIT_CLOCK) && !s->hotCornerPreview)HidePreview();
+    if(m==WM_MOUSELEAVE){if((s->hot==HIT_START || s->hot==HIT_DESKTOP || s->hot==HIT_CLOCK || s->hot==HIT_TRAY_MORE) && !s->hotCornerPreview)HidePreview();
         s->tracking=false;
         s->hot=HIT_NONE;
         s->hover=HIT_NONE;
@@ -14566,7 +14987,7 @@ static bool VerticalInput(HWND h,UINT m,WPARAM wp,LPARAM lp,LRESULT& result) {
     if(m==WM_LBUTTONDOWN || m==WM_LBUTTONDBLCLK){
         if(g_languageDismissTick && GetTickCount64()-g_languageDismissTick>200)g_languageDismissTick=0;
         s->verticalPressed=hitAt();int hit=s->verticalPressed;
-        if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_CLOCK){KillTimer(h,TIMER_HOVER);HidePreview();}
+        if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_CLOCK || hit==HIT_TRAY_MORE){KillTimer(h,TIMER_HOVER);HidePreview();}
         if(hit==HIT_NONE && !s->bandsLocked && s->privateActive && taskbarPlacementMode.load()==3) {
             POINT point{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};MONITORINFO mi{};mi.cbSize=sizeof(mi);
             if(ClientToScreen(h,&point) && GetMonitorInfoW(MonitorFromWindow(h,MONITOR_DEFAULTTONEAREST),&mi)) {
@@ -14940,6 +15361,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
              else if(s->hover==HIT_START && startHotCorner.load()) ShowHotCornerPreview();
              else if(s->hover==HIT_START || s->hover==HIT_DESKTOP) ShowBarButtonTooltip(s->hover);
              else if(s->hover==HIT_NETWORK || s->hover==HIT_VOLUME || s->hover==HIT_BATTERY) ShowSystemTooltip(s->hover);
+             else if(s->hover==HIT_TRAY_MORE) ShowTrayOverflowTooltip();
              else if(s->hover==HIT_CLOCK) ShowClockTooltip();
              else if(s->hover==HIT_LANGUAGE) ShowLanguageTooltip();
              else if(s->hover<=HIT_TRAY_ICON_BASE) ShowPrivateIconTooltip(s->hover);
@@ -14957,7 +15379,8 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
                 return 0;
             }
             HWND popup=(s->preview && IsWindowVisible(s->preview))?s->preview:
-                       ((s->tooltip && IsWindowVisible(s->tooltip))?s->tooltip:nullptr);
+                       ((s->tooltip && IsWindowVisible(s->tooltip))?s->tooltip:
+                       (InfoTipVisible()?s->infoTip:nullptr));
             if(popup) {
                 POINT p{}; RECT a{},b{}; GetCursorPos(&p); GetWindowRect(h,&a); GetWindowRect(popup,&b);
                 bool inBar=PtInRect(&a,p);
@@ -15073,14 +15496,14 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
             KillTimer(h,TIMER_HOVER); KillTimer(h,TIMER_DESKTOP_PEEK); PeekOff(true);
             if(hit==HIT_DESKTOP && s->desktopPeekEnabled) { DWORD delay=DesktopPeekDelay(); SetTimer(h,TIMER_DESKTOP_PEEK,std::max<DWORD>(1,delay),nullptr); }
             if(hit>=0) { HidePreview(); if(!(s->jumpPopup && IsWindow(s->jumpPopup))) SetTimer(h,TIMER_HOVER,450,nullptr); }
-            else { HidePreview(); if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_CLOCK || hit==HIT_LANGUAGE || hit<=HIT_TRAY_ICON_BASE) SetTimer(h,TIMER_HOVER,450,nullptr); }
+            else { HidePreview(); if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY || hit==HIT_CLOCK || hit==HIT_LANGUAGE || hit==HIT_TRAY_MORE || hit<=HIT_TRAY_ICON_BASE) SetTimer(h,TIMER_HOVER,450,nullptr); }
             InvalidateRect(h,nullptr,FALSE);
         } return 0;
     }
     case WM_MOUSELEAVE:
         if(gWin7OrbReady && gWin7OrbWindow) {POINT cursor{};RECT orb{};
             if(GetCursorPos(&cursor) && GetWindowRect(gWin7OrbWindow,&orb) && PtInRect(&orb,cursor)) {s->tracking=false;return 0;}}
-        if((s->hot==HIT_START || s->hot==HIT_DESKTOP || s->hot==HIT_CLOCK) && !s->hotCornerPreview)HidePreview();
+        if((s->hot==HIT_START || s->hot==HIT_DESKTOP || s->hot==HIT_CLOCK || s->hot==HIT_TRAY_MORE) && !s->hotCornerPreview)HidePreview();
         s->tracking=false; s->hot=HIT_NONE; s->hover=HIT_NONE; s->desktopArrowHot=false; s->linksArrowHot=false;
         s->fadeTick=GetTickCount64(); SetTimer(h,TIMER_FADE,16,nullptr);
         KillTimer(h,TIMER_HOVER); KillTimer(h,TIMER_DESKTOP_PEEK); PeekOff(true); InvalidateRect(h,nullptr,FALSE); return 0;
@@ -15127,7 +15550,7 @@ LRESULT BarProcImpl(HWND h,UINT m,WPARAM wp,LPARAM lp) {
         if(hit==HIT_NETWORK || hit==HIT_VOLUME || hit==HIT_BATTERY) {
             BeginTrayDrag(h,SystemEntry(hit),false,POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}); return 0;
         }
-        if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_CLOCK){KillTimer(h,TIMER_HOVER);HidePreview();}
+        if(hit==HIT_START || hit==HIT_DESKTOP || hit==HIT_CLOCK || hit==HIT_TRAY_MORE){KillTimer(h,TIMER_HOVER);HidePreview();}
         if(hit==HIT_TRAY_MORE && taskbarSkin.load()==1)InvalidateRect(h,nullptr,FALSE);
         if(hit==HIT_DESKTOP && BetaTextureAvailable(0)) {
             s->betaDesktopPressed=true;SetCapture(h);InvalidateRect(h,nullptr,FALSE);
@@ -15584,6 +16007,7 @@ DWORD WINAPI UIThread(LPVOID) {
             cleanup([&]{FreePins();});cleanup([&]{FreeTaskIcons();});
             cleanup([&]{if(s->preview && IsWindow(s->preview)) DestroyWindow(s->preview);});
             cleanup([&]{if(s->tooltip && IsWindow(s->tooltip)) DestroyWindow(s->tooltip);});
+            cleanup([&]{if(s->infoTip && IsWindow(s->infoTip)) DestroyWindow(s->infoTip);s->infoTip=nullptr;});
             cleanup([&]{DestroyWin7OrbSurface();});
             cleanup([&]{if(s->bar && IsWindow(s->bar)) DestroyWindow(s->bar);});
         }
