@@ -2,14 +2,14 @@
 // @id              taskbar-dock-animation-tray-fix
 // @name              Taskbar Dock Animation – Enhance
 // @name:zh-CN        任务栏 Dock 动画（增强版）
-// @description       Dock zoom on all four taskbar edges, with single-icon mode, Widgets toggle, and tray exclusion
+// @description       Per-app Dock zoom rules with wave, single-icon and off modes; excludes the system tray
 // @description:uk-UA Збільшення значків на чотирьох краях, режим одного значка, вимикач віджетів і виняток для трея
-// @description:zh-CN 四边任务栏 Dock 放大，支持单图标模式和小组件动画开关，排除系统托盘
+// @description:zh-CN 按应用设置 Dock 波浪、单图标放大或关闭动画，排除系统托盘
 // @description:ja-JP 画面の四辺に対応するDock風拡大。単一アイコンモードとウィジェット切替を備え、システムトレイは対象外
 // @description:ko-KR 화면 네 모서리의 작업 표시줄을 확대합니다. 단일 아이콘 모드와 위젯 설정을 지원하며 시스템 트레이는 제외합니다.
 // @description:pt-BR Zoom Dock nos quatro lados, com modo de ícone único, controle de Widgets e exclusão da bandeja
 // @description:it-IT Zoom Dock sui quattro lati, con modalità a icona singola, opzione Widget ed esclusione del tray
-// @version           1.2.0
+// @version           1.3.1
 // @author            PDSB001
 // @github            https://github.com/PDSB001
 // @include           explorer.exe
@@ -45,6 +45,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 # Taskbar Dock Animation – Enhance
 
 Magnifies Windows 11 taskbar app buttons and Widgets on hover. The system tray stays at its normal size, including the input method and volume icons. Use **Enlarge only the hovered icon** for magnification without neighbor movement. Use **Disable Widgets animation** to keep Widgets at their normal size while other buttons still animate.
+
+Under **Per-app animation rules**, add an exact AppUserModelID and choose Wave (0), Single (1), or Off (2). Set the rule's maximum scale to 0 to inherit the global value. For example, use a wave for a browser, single-icon zoom for a terminal, and Off for an adjacent app that should stay fixed. Rules match the taskbar's application ID, not the window title. System tray icons are always excluded.
 
 Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](https://github.com/Ph0en1x-dev). Includes four-edge and multi-monitor support from [Taskbar Dock Animation Plus 2.0.1](https://windhawk.net/mods/taskbar-dock-animation-plus) by incconutwo. Maintained by PDSB001 under the MIT license.
 */
@@ -173,6 +175,26 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
   $description:ko-KR: 작업 표시줄에 창 제목(직사각형 버튼)이 표시될 때 애니메이션 중앙 정렬을 수정합니다.
   $description:pt-BR: Ative se a barra mostrar títulos de janelas (ícones retangulares) para corrigir o alinhamento.
   $description:it-IT: Abilita se la barra mostra i titoli delle finestre (pulsanti rettangolari) per correggere la centratura.
+- AppRules:
+  - - AppId: ""
+      $name: Application ID
+      $name:zh-CN: 应用 ID
+      $description: Exact AppUserModelID. Use Get-StartApps to find it.
+      $description:zh-CN: 填写完整 AppUserModelID，可用 Get-StartApps 查找。
+    - Mode: 0
+      $name: Animation mode
+      $name:zh-CN: 动画模式
+      $description: 0 = wave, 1 = hovered icon only, 2 = off
+      $description:zh-CN: 0 = 波浪，1 = 仅悬停图标，2 = 关闭
+    - MaxScale: 0
+      $name: Maximum scale (%)
+      $name:zh-CN: 最大放大倍率（%）
+      $description: 0 inherits the global value. Use 101–220 to override it.
+      $description:zh-CN: 0 表示继承全局设置，101–220 表示自定义。
+  $name: Per-app animation rules
+  $name:zh-CN: 按应用配置动画
+  $description: Up to 256 rules. The last rule for the same app ID wins.
+  $description:zh-CN: 最多 256 条。相同应用 ID 以最后一条规则为准。
 - HoveredIconOnly: false
   $name: Enlarge only the hovered icon
   $name:zh-CN: 仅放大悬停图标
@@ -250,6 +272,7 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
+#include <memory>
 #include <unordered_set>
 #include <cstdint>
 #include <winrt/Windows.UI.Xaml.Automation.h>
@@ -315,12 +338,23 @@ struct IconAnimState {
     double waveTranslateX = 0.0;
 };
 
+enum class AppAnimationMode { Inherit, Wave, Single, Off };
+
+struct AppAnimationRule {
+    AppAnimationMode mode = AppAnimationMode::Inherit;
+    double maxScale = 0.0;
+};
+
+using AppRuleMap = std::unordered_map<std::wstring, AppAnimationRule>;
+std::shared_ptr<const AppRuleMap> g_appRules;
+
 // Per-monitor context
 struct TaskbarIconInfo {
     winrt::weak_ref<FrameworkElement> element;
     double originalCenterX = 0.0;
     double elementWidth = 0.0;
     IconAnimState state;
+    AppAnimationRule rule;
 };
 
 struct HostSignature {
@@ -500,54 +534,66 @@ double CalculateScale(double distance, double radius, double maxScale) {
 
 void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, double dtSec) {
     const double spacingFactor = g_settings.spacingFactor;
-    std::vector<double> scales(ctx.icons.size(), 1.0);
-    std::vector<double> extraWidths(ctx.icons.size());
-    double totalExpansion = 0.0;
+    const size_t count = ctx.icons.size();
+    std::vector<double> scales(count, 1.0);
+    std::vector<double> shifts(count);
+    std::vector<AppAnimationMode> modes;
+    modes.reserve(count);
+    for (const auto& icon : ctx.icons) {
+        modes.push_back(icon.rule.mode == AppAnimationMode::Inherit
+            ? (g_settings.hoveredIconOnly ? AppAnimationMode::Single : AppAnimationMode::Wave)
+            : icon.rule.mode);
+    }
+
     size_t closestIconIndex = (size_t)-1;
     double minDistance = g_settings.effectRadius + 1.0;
-    auto taskbarFrame = ctx.taskbarFrame.get();
-    if (!taskbarFrame) return;
-    for (size_t i = 0; i < ctx.icons.size(); i++) {
-        auto element = ctx.icons[i].element.get();
-        if (!element) continue;
-        double distance = 0.0;
-        if (g_settings.taskbarLabelsMode) {
-            double iconStart = ctx.icons[i].originalCenterX;
-            double iconEnd = iconStart + ctx.icons[i].elementWidth;
-            if (mouseX < iconStart) {
-                distance = iconStart - mouseX;
-            } else if (mouseX > iconEnd) {
-                distance = mouseX - iconEnd;
-            } else {
-                distance = 0.0;
-            }
-        } else {
-            distance = std::abs(mouseX - ctx.icons[i].originalCenterX);
-        }
-        if (g_settings.hoveredIconOnly) {
+    const auto startOf = [&](size_t i) {
+        const auto& icon = ctx.icons[i];
+        return icon.originalCenterX -
+            (g_settings.taskbarLabelsMode ? 0.0 : icon.elementWidth / 2.0);
+    };
+
+    // Fixed buttons divide the wave into independent groups.
+    for (size_t i = 0; i < count;) {
+        if (modes[i] != AppAnimationMode::Wave) {
             const auto& icon = ctx.icons[i];
-            const double start = icon.originalCenterX -
-                (g_settings.taskbarLabelsMode ? 0.0 : icon.elementWidth / 2.0);
-            if (icon.elementWidth > 0 && mouseX >= start && mouseX < start + icon.elementWidth) {
+            if (modes[i] == AppAnimationMode::Single && icon.element.get() &&
+                icon.elementWidth > 0 && mouseX >= startOf(i) &&
+                mouseX < startOf(i) + icon.elementWidth) {
+                scales[i] = icon.rule.maxScale > 0 ? icon.rule.maxScale : g_settings.maxScale;
                 closestIconIndex = i;
                 minDistance = 0.0;
             }
+            ++i;
             continue;
         }
 
-        scales[i] = CalculateScale(distance, (double)g_settings.effectRadius, g_settings.maxScale);
-        double size = ctx.isVertical ? element.ActualHeight() : element.ActualWidth();
-        extraWidths[i] = (scales[i] - 1.0) * size * spacingFactor;
-        totalExpansion += extraWidths[i];
-
-        if (distance < minDistance) {
-            minDistance = distance;
-            closestIconIndex = i;
+        const size_t first = i;
+        while (i < count && modes[i] == AppAnimationMode::Wave) ++i;
+        const size_t end = i;
+        if ((first > 0 && mouseX < startOf(first - 1) + ctx.icons[first - 1].elementWidth) ||
+            (end < count && mouseX >= startOf(end))) {
+            continue;
         }
-    }
 
-    if (g_settings.hoveredIconOnly && closestIconIndex != (size_t)-1) {
-        scales[closestIconIndex] = g_settings.maxScale;
+        double expansion = 0.0;
+        for (size_t j = first; j < end; ++j) {
+            const auto& icon = ctx.icons[j];
+            if (!icon.element.get()) continue;
+            const double distance = g_settings.taskbarLabelsMode
+                ? std::max({0.0, startOf(j) - mouseX, mouseX - startOf(j) - icon.elementWidth})
+                : std::abs(mouseX - icon.originalCenterX);
+            const double maxScale = icon.rule.maxScale > 0 ? icon.rule.maxScale : g_settings.maxScale;
+            scales[j] = CalculateScale(distance, g_settings.effectRadius, maxScale);
+            const double width = (scales[j] - 1.0) * icon.elementWidth * spacingFactor;
+            shifts[j] = expansion + width / 2.0;
+            expansion += width;
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestIconIndex = j;
+            }
+        }
+        for (size_t j = first; j < end; ++j) shifts[j] -= expansion / 2.0;
     }
 
     double bounceScaleFactor = 1.0;
@@ -582,8 +628,6 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
     }
     alpha = std::clamp(alpha, 0.0, 1.0);
 
-    double cumulativeShift = 0.0;
-
     for (size_t i = 0; i < ctx.icons.size(); i++) {
         auto element = ctx.icons[i].element.get();
         if (!element) continue;
@@ -595,12 +639,8 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
         auto bounceTranslate = tg.Children().GetAt(3).try_as<TranslateTransform>();
 
         if (!waveScale || !waveTranslate || !bounceScale || !bounceTranslate) continue;
-        double selfShift = extraWidths[i] / 2.0;
-        double centerOffset = totalExpansion / 2.0;
-        double finalShift = cumulativeShift + selfShift - centerOffset;
-        cumulativeShift += extraWidths[i];
         double targetScale = 1.0 + (scales[i] - 1.0) * intensity;
-        double targetTranslate = finalShift * intensity;
+        double targetTranslate = shifts[i] * intensity;
 
         if (g_settings.lerpSpeed > 0.0) {
             ctx.icons[i].state.waveScale += (targetScale - ctx.icons[i].state.waveScale) * alpha;
@@ -797,6 +837,17 @@ static std::wstring W(winrt::hstring const& s) {
 static std::wstring ToLower(std::wstring s) {
     for (auto& ch : s) ch = (wchar_t)towlower(ch);
     return s;
+}
+
+static std::wstring NormalizeAppId(std::wstring id) {
+    id = ToLower(std::move(id));
+    const auto first = id.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos) return {};
+    id.erase(0, first);
+    if (id.starts_with(L"appid:")) id.erase(0, 6);
+    const auto start = id.find_first_not_of(L" \t\r\n");
+    if (start == std::wstring::npos) return {};
+    return id.substr(start, id.find_last_not_of(L" \t\r\n") - start + 1);
 }
 
 static ButtonKind ClassifyButton(FrameworkElement const& e) {
@@ -1059,6 +1110,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
     };
 
     // Setup & add element (transform + icon geometry)
+    auto rules = std::atomic_load(&g_appRules);
     auto SetupAndAddElement = [&](FrameworkElement element) {
         try {
             if (!element) return;
@@ -1102,6 +1154,36 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
 
             TaskbarIconInfo info;
             info.element = element;
+            if (rules && !rules->empty() && IsTaskListButtonExact(element)) {
+                auto matchId = [&](FrameworkElement const& node) {
+                    auto rawId = W(AutomationProperties::GetAutomationId(node));
+                    auto id = NormalizeAppId(rawId);
+                    auto match = rules->find(id);
+                    if (match == rules->end()) return false;
+                    info.rule = match->second;
+                    return true;
+                };
+
+                bool matched = false;
+                for (auto node = element; node && node != taskbarFrame;
+                     node = VisualTreeHelper::GetParent(node).try_as<FrameworkElement>()) {
+                    if (matchId(node)) {
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    auto matchChild = [&](auto const& self, FrameworkElement const& parent) -> bool {
+                        const int count = VisualTreeHelper::GetChildrenCount(parent);
+                        for (int i = 0; i < count; ++i) {
+                            auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+                            if (child && (matchId(child) || self(self, child))) return true;
+                        }
+                        return false;
+                    };
+                    matchChild(matchChild, element);
+                }
+            }
             info.elementWidth = ctx.isVertical ? element.ActualHeight() : element.ActualWidth();
 
             if (g_settings.taskbarLabelsMode) {
@@ -1543,6 +1625,24 @@ void LoadSettings() {
     if (g_settings.lerpSpeed > 60) g_settings.lerpSpeed = 60;
 
     g_settings.disableBounce = (bool)Wh_GetIntSetting(L"DisableBounce");
+
+    auto rules = std::make_shared<AppRuleMap>();
+    for (int index = 0; index < 256; ++index) {
+        WindhawkUtils::StringSetting configuredId(Wh_GetStringSetting(L"AppRules[%d].AppId", index));
+        auto id = NormalizeAppId(configuredId.get());
+        if (id.empty()) continue;
+
+        AppAnimationMode mode;
+        switch (Wh_GetIntSetting(L"AppRules[%d].Mode", index)) {
+            case 0: mode = AppAnimationMode::Wave; break;
+            case 1: mode = AppAnimationMode::Single; break;
+            case 2: mode = AppAnimationMode::Off; break;
+            default: continue;
+        }
+        const int scale = Wh_GetIntSetting(L"AppRules[%d].MaxScale", index);
+        (*rules)[id] = {mode, scale >= 101 && scale <= 220 ? scale / 100.0 : 0.0};
+    }
+    std::atomic_store(&g_appRules, std::shared_ptr<const AppRuleMap>(std::move(rules)));
 
     Wh_Log(L"DockAnimation: Settings loaded.");
 }
