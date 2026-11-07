@@ -1554,7 +1554,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll or ExplorerExtensions.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
