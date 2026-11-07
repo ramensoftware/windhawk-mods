@@ -18,7 +18,7 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
 
 Note that to enable the menubar you need to install in addition the mod [ExplorerFrame and menubar fixes fork](https://windhawk.net/mods/restore-folder-menubar-25h2).
 
-This mod downloads the classic Explorerframe.dll and stores it into the mod's storage. You need a working internet access at the first mod's activation.
+This mod downloads the classic Explorerframe.dll from the Microsoft's symbols server and stores it into the mod's storage. You need a working internet access at the first mod's activation.
 
 Restart Explorer after enabling or disabling the mod. At the first activation the file is downloaded in the background, so wait a few seconds before restarting, otherwise the mod takes effect only at the following Explorer start.
 
