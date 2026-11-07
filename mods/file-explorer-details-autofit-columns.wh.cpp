@@ -2,10 +2,11 @@
 // @id              file-explorer-details-autofit-columns
 // @name            File Explorer Details Auto-Fit Columns
 // @description     Automatically fits all column widths to their content when refreshing in Details view. Has no effect on other view modes.
-// @version         1.2.0
+// @version         1.3.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lpropsys -lshell32 -lcomctl32 -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
@@ -36,16 +37,16 @@ Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are unt
 
 `Refresh Delay (ms)`: How long the mod waits before auto-fitting columns. The default is 400ms, which gives Explorer enough time to finish loading files before measuring content width. If you notice columns fitting too early in large folders, increase this value. If you want a snappier response in small folders, decrease it.
 
-`Elastic Mode`: Stretches the Name column to fill whatever width is left over in the window after the other columns are sized, macOS Finder-style. Reacts to resizing the Explorer window, settling into place shortly after you finish dragging.
-
 `Scan Entire Folder`: Explorer's built-in auto-fit only measures rows currently rendered on screen, so a long filename further down an unscrolled list can end up truncated even after fitting. Turning this on measures every item in the folder instead, so nothing is left truncated after opening, navigating to, or explicitly refreshing a folder. (Known limitation: scanning the folder adds its own delay on top of the Refresh Delay setting, so fitting can take noticeably longer in large folders.)
 
-`Elastic Mode` and `Scan Entire Folder` combine independently:
+`Elastic Mode`: Stretches the Name column to fill whatever width is left over in the window after the other columns are sized, macOS Finder-style. Reacts to resizing the Explorer window, settling into place shortly after you finish dragging. (Known limitation: on top of the scanning delay, this combination also makes a few extra attempts to find the exact width that avoids a horizontal scrollbar, adding a bit more delay still.)
+
+`Scan Entire Folder` and `Elastic Mode` combine independently:
 
 - Both off: fast, matches Explorer's default auto-fit.
 - Scan on, Elastic Mode off: exact fit for every column, no truncation, slower on large folders.
 - Scan off, Elastic Mode on: fast, Name fills leftover space, other columns keep the visible-rows-only truncation risk.
-- Both on: exact fit for every column, Name fills leftover space, no leftover empty space and no horizontal scrollbar unless the window gets too narrow even for a small minimum Name width. Slowest combination, but nothing is left truncated. (Known limitation: on top of the scanning delay, this combination also makes a few extra attempts to find the exact width that avoids a horizontal scrollbar, adding a bit more delay still.)
+- Both on: exact fit for every column, Name fills leftover space, no leftover empty space and no horizontal scrollbar unless the window gets too narrow even for a small minimum Name width. Slowest combination, but nothing is left truncated.
 
 `Max Items to Scan`: Only used while `Scan Entire Folder` is on. Folders larger than this item count fall back to the visible-rows-only behavior for that folder, to avoid a noticeable delay in very large folders.
 */
@@ -365,7 +366,8 @@ static void ReleaseThreadAutomation() {
 }
 
 // Returns true if pElement currently reports it can scroll horizontally.
-static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement) {
+static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement, double* pViewSize = nullptr) {
+    if (pViewSize) *pViewSize = 100.0;
     if (!pElement) return false;
 
     bool result = false;
@@ -374,12 +376,31 @@ static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement) {
     if (SUCCEEDED(hrPat) && pScroll) {
         BOOL scrollable = FALSE;
         double viewSize = 100.0;
-        // CurrentHorizontallyScrollable is a static capability (almost always
-        // true for a list view), not a "content overflows right now" signal.
-        // CurrentHorizontalViewSize (100 = fully visible) is the real one.
+        // CurrentHorizontallyScrollable alone isn't reliable (it can be true
+        // with no overflow); CurrentHorizontalViewSize (100 = fully visible)
+        // is the real signal.
         if (SUCCEEDED(pScroll->get_CurrentHorizontallyScrollable(&scrollable)) && scrollable &&
             SUCCEEDED(pScroll->get_CurrentHorizontalViewSize(&viewSize)))
             result = (viewSize < 99.5);
+        if (pViewSize) *pViewSize = viewSize;
+        pScroll->Release();
+    }
+    return result;
+}
+
+// True when the list currently shows a vertical scrollbar, whose width is
+// included in the UIA element's bounding rect but isn't usable by columns.
+static bool ElementHasVerticalScrollbar(IUIAutomationElement* pElement) {
+    if (!pElement) return false;
+
+    bool result = false;
+    IUIAutomationScrollPattern* pScroll = nullptr;
+    if (SUCCEEDED(pElement->GetCurrentPatternAs(UIA_ScrollPatternId, IID_PPV_ARGS(&pScroll))) && pScroll) {
+        BOOL scrollable = FALSE;
+        double viewSize = 100.0;
+        if (SUCCEEDED(pScroll->get_CurrentVerticallyScrollable(&scrollable)) && scrollable &&
+            SUCCEEDED(pScroll->get_CurrentVerticalViewSize(&viewSize)))
+            result = (viewSize < 99.99);
         pScroll->Release();
     }
     return result;
@@ -490,8 +511,13 @@ static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomati
         viewportWidth = rc.right - rc.left;
     } else if (pListElement) {
         RECT rcElem = {};
-        if (SUCCEEDED(pListElement->get_CurrentBoundingRectangle(&rcElem)))
+        if (SUCCEEDED(pListElement->get_CurrentBoundingRectangle(&rcElem))) {
             viewportWidth = rcElem.right - rcElem.left;
+            // The element rect includes a vertical scrollbar, which takes
+            // real width away from the columns.
+            if (ElementHasVerticalScrollbar(pListElement))
+                viewportWidth -= GetSystemMetricsForDpi(SM_CXVSCROLL, static_cast<UINT>(96 * dpiScale + 0.5));
+        }
     } else if (hwndView) {
         RECT rc = {};
         GetClientRect(hwndView, &rc);
@@ -510,7 +536,10 @@ static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomati
         otherColumnsTotal += (widths[c] < minColWidth) ? minColWidth : widths[c];
     }
 
-    int initialSafetyMargin = static_cast<int>(8 * dpiScale);
+    // On the UIA path, Explorer's real content runs ~9px wider than the sum of
+    // column widths, so an 8px margin sat on a 1px-overflow knife edge.
+    int marginPx = (!hwndListView && pListElement) ? 16 : 8;
+    int initialSafetyMargin = static_cast<int>(marginPx * dpiScale);
     int nameWidth = viewportWidth - otherColumnsTotal - initialSafetyMargin;
     return (nameWidth < minNameWidth) ? minNameWidth : nameWidth;
 }
@@ -574,6 +603,7 @@ struct FitContext {
 
     int elasticAttempt = 0;
     bool elasticConfirmed = false;
+    double lastUiaViewSize = -1.0;  // UIA reading that last triggered a shrink
     static constexpr int kMaxElasticAttempts = 8;
 
     // Only populated when hwndListView couldn't be found (no classic
@@ -1016,8 +1046,14 @@ static void Step_VerifyElasticFit(FitContext* ctx, HWND hwndOwner) {
     }
 
     bool uiaSaysScrolling = false;
-    if (!ctx->hwndListView && ctx->pElasticListElement)
-        uiaSaysScrolling = ElementHasHorizontalScroll(ctx->pElasticListElement);
+    double uiaViewSize = 100.0;
+    if (!ctx->hwndListView && ctx->pElasticListElement) {
+        uiaSaysScrolling = ElementHasHorizontalScroll(ctx->pElasticListElement, &uiaViewSize);
+        // Some builds report a snapshot that doesn't follow our width changes;
+        // an identical reading right after a shrink means it's stale.
+        if (uiaSaysScrolling && overflow == 0 && uiaViewSize == ctx->lastUiaViewSize)
+            uiaSaysScrolling = false;
+    }
 
     int minNameWidth = static_cast<int>(60 * ctx->dpiScale);
     bool canShrink = ctx->maxWidths[ctx->nameColumnIndex] > minNameWidth;
@@ -1037,6 +1073,7 @@ static void Step_VerifyElasticFit(FitContext* ctx, HWND hwndOwner) {
             ci.uWidth = static_cast<UINT>(newNameWidth);
             ctx->pCM->SetColumnInfo(ctx->keys[ctx->nameColumnIndex], &ci);
 
+            if (overflow == 0) ctx->lastUiaViewSize = uiaViewSize;
             ctx->elasticAttempt++;
             ctx->elasticConfirmed = false;
             SetTimer(hwndOwner, FITSTEP_TIMER_ID, kElasticVerifyDelayMs, nullptr);
