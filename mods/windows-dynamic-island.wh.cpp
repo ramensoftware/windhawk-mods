@@ -6,7 +6,8 @@
 // @author          saahas-karthik
 // @github          https://github.com/saahas-karthik
 // @include         explorer.exe
-// @compilerOptions -lgdiplus -lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -luuid -lwlanapi -lshell32 -lshlwapi -lruntimeobject -DWINRT_NO_MODULE_LOCK
+// @architecture    x86-64
+// @compilerOptions -lgdiplus -lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -luuid -lwlanapi -lshell32 -lshlwapi -lruntimeobject -lwbemuuid -DWINRT_NO_MODULE_LOCK
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -93,6 +94,7 @@ up in the Windows media overlay.
 #include <cstdio>
 #include <ctime>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -117,6 +119,7 @@ using std::max;
 #include <endpointvolume.h>
 #include <wlanapi.h>
 #include <shellapi.h>
+#include <wbemidl.h>
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
@@ -183,7 +186,7 @@ enum {
 };
 
 // ============================================================ runtime state
-static HWND g_hwnd = nullptr;
+static std::atomic<HWND> g_hwnd{nullptr};
 static HANDLE g_thread = nullptr;
 
 static float sc = 1.0f;
@@ -295,53 +298,119 @@ static float PeakNow() {
     return 0;
 }
 
-// ---- brightness (WMI through hidden powershell, throttled)
-static int g_brightPending = -1, g_brightApplied = -2;
-static HANDLE g_brightProc = nullptr;
-static void PumpBrightness() {
-    if (g_brightProc) {
-        if (WaitForSingleObject(g_brightProc, 0) == WAIT_OBJECT_0) { CloseHandle(g_brightProc); g_brightProc = nullptr; }
-        else return;
+// ---- brightness (WMI, in-process, on a mod-owned worker thread)
+static HANDLE g_stopEvt = nullptr;                 // manual-reset; set in uninit, every mod thread waits on it
+static HANDLE g_brightEvt = nullptr;               // auto-reset; wakes the brightness worker
+static HANDLE g_brightThread = nullptr;
+static int g_brightPending = -1, g_brightApplied = -2;   // UI thread only
+static std::atomic<int> g_brightReq{-1};           // UI thread -> worker: value to apply
+static std::atomic<int> g_brightRead{-1};          // worker -> UI thread: value read from the panel
+
+static void WmiBlanket(IUnknown* p) {
+    CoSetProxyBlanket(p, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL,
+                      RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+}
+static int WmiReadBrightness(IWbemServices* svc) {
+    int result = -1;
+    BSTR lang = SysAllocString(L"WQL");
+    BSTR q = SysAllocString(L"SELECT CurrentBrightness FROM WmiMonitorBrightness");
+    IEnumWbemClassObject* en = nullptr;
+    if (SUCCEEDED(svc->ExecQuery(lang, q, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &en)) && en) {
+        WmiBlanket(en);
+        IWbemClassObject* obj = nullptr;
+        ULONG ret = 0;
+        if (SUCCEEDED(en->Next(5000, 1, &obj, &ret)) && ret == 1 && obj) {
+            VARIANT v;
+            VariantInit(&v);
+            if (SUCCEEDED(obj->Get(L"CurrentBrightness", 0, &v, nullptr, nullptr)) &&
+                SUCCEEDED(VariantChangeType(&v, &v, 0, VT_I4)))
+                result = std::max(0, std::min(100, (int)v.lVal));
+            VariantClear(&v);
+            obj->Release();
+        }
+        en->Release();
     }
-    if (g_brightPending >= 0 && g_brightPending != g_brightApplied) {
-        wchar_t cmd[400];
-        swprintf(cmd, 400,
-                 L"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "
-                 L"\"(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods).WmiSetBrightness(1,%d)\"",
-                 g_brightPending);
-        STARTUPINFOW si = {sizeof(si)};
-        PROCESS_INFORMATION pi = {};
-        g_brightApplied = g_brightPending;
-        if (CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread);
-            g_brightProc = pi.hProcess;
+    SysFreeString(lang);
+    SysFreeString(q);
+    return result;
+}
+static void WmiSetBrightness(IWbemServices* svc, int pct) {
+    BSTR lang = SysAllocString(L"WQL");
+    BSTR q = SysAllocString(L"SELECT * FROM WmiMonitorBrightnessMethods");
+    BSTR clsName = SysAllocString(L"WmiMonitorBrightnessMethods");
+    BSTR method = SysAllocString(L"WmiSetBrightness");
+    IWbemClassObject* cls = nullptr;
+    IWbemClassObject* sig = nullptr;
+    IWbemClassObject* in = nullptr;
+    if (SUCCEEDED(svc->GetObject(clsName, 0, nullptr, &cls, nullptr)) && cls &&
+        SUCCEEDED(cls->GetMethod(method, 0, &sig, nullptr)) && sig &&
+        SUCCEEDED(sig->SpawnInstance(0, &in)) && in) {
+        VARIANT v;
+        VariantInit(&v);
+        v.vt = VT_I4;
+        v.lVal = 1;   in->Put(L"Timeout", 0, &v, 0);
+        v.lVal = pct; in->Put(L"Brightness", 0, &v, 0);
+        IEnumWbemClassObject* en = nullptr;
+        if (SUCCEEDED(svc->ExecQuery(lang, q, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &en)) && en) {
+            WmiBlanket(en);
+            for (;;) {
+                IWbemClassObject* obj = nullptr;
+                ULONG ret = 0;
+                if (FAILED(en->Next(5000, 1, &obj, &ret)) || ret != 1 || !obj) break;
+                VARIANT pv;
+                VariantInit(&pv);
+                if (SUCCEEDED(obj->Get(L"__PATH", 0, &pv, nullptr, nullptr)) && pv.vt == VT_BSTR)
+                    svc->ExecMethod(pv.bstrVal, method, 0, nullptr, in, nullptr, nullptr);
+                VariantClear(&pv);
+                obj->Release();
+            }
+            en->Release();
         }
     }
+    if (in) in->Release();
+    if (sig) sig->Release();
+    if (cls) cls->Release();
+    SysFreeString(lang);
+    SysFreeString(q);
+    SysFreeString(clsName);
+    SysFreeString(method);
 }
-static DWORD WINAPI ReadBrightnessThread(LPVOID) {
-    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
-    HANDLE rd = nullptr, wr = nullptr;
-    if (!CreatePipe(&rd, &wr, &sa, 0)) return 0;
-    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
-    wchar_t cmd[] = L"powershell.exe -NoProfile -NonInteractive -Command "
-                    L"\"(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness).CurrentBrightness\"";
-    STARTUPINFOW si = {sizeof(si)};
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = wr; si.hStdError = wr;
-    PROCESS_INFORMATION pi = {};
-    if (CreateProcessW(nullptr, cmd, nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(wr); wr = nullptr;
-        WaitForSingleObject(pi.hProcess, 8000);
-        char buf[64] = {};
-        DWORD n = 0;
-        ReadFile(rd, buf, sizeof(buf) - 1, &n, nullptr);
-        int v = atoi(buf);
-        if (v > 0 || (n > 0 && buf[0] == '0')) { g_bright = (int)Cl((float)v, 0, 100); g_brightKnown = true; g_dirty = true; }
-        CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+// One worker for both directions. Joined in Wh_ModUninit; it never touches UI globals directly.
+static DWORD WINAPI BrightnessThread(LPVOID) {
+    bool comInit = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+    IWbemLocator* loc = nullptr;
+    IWbemServices* svc = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (void**)&loc)) && loc) {
+        BSTR ns = SysAllocString(L"ROOT\\WMI");
+        if (SUCCEEDED(loc->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr, &svc)) && svc)
+            WmiBlanket(svc);
+        else
+            svc = nullptr;
+        SysFreeString(ns);
     }
-    if (wr) CloseHandle(wr);
-    CloseHandle(rd);
+    if (svc) {
+        int v = WmiReadBrightness(svc);
+        if (v >= 0) g_brightRead = v;
+        HANDLE h[2] = {g_stopEvt, g_brightEvt};
+        while (WaitForMultipleObjects(2, h, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
+            int want = g_brightReq.exchange(-1);
+            if (want >= 0) WmiSetBrightness(svc, want);
+        }
+        svc->Release();
+    }
+    if (loc) loc->Release();
+    if (comInit) CoUninitialize();
     return 0;
+}
+// UI thread, called from the timer tick
+static void PumpBrightness() {
+    int r = g_brightRead.exchange(-1);
+    if (r >= 0 && g_brightPending < 0) { g_bright = r; g_brightKnown = true; g_dirty = true; }
+    if (g_brightPending >= 0 && g_brightPending != g_brightApplied) {
+        g_brightApplied = g_brightPending;
+        g_brightReq = g_brightPending;
+        if (g_brightEvt) SetEvent(g_brightEvt);
+    }
 }
 
 // ---- Wi-Fi (WLAN API)
@@ -407,7 +476,6 @@ static volatile LONG g_thumbGen = 0;
 static CRITICAL_SECTION g_mcs;
 static HANDLE g_mediaEvt = nullptr;
 static HANDLE g_mediaThread = nullptr;
-static volatile bool g_mediaRun = false;
 static std::atomic<int> g_cmd{0};        // 1 toggle, 2 next, 3 previous
 static std::atomic<long long> g_seekReq{-1};
 
@@ -445,27 +513,41 @@ static std::wstring PrettyApp(std::wstring id) {
     return id;
 }
 
+// Waits for a WinRT async operation, but gives up after ms or as soon as the mod is stopping,
+// so a slow media app can never keep the thread alive past Wh_ModUninit.
+template <typename A>
+static auto AwaitT(const A& op, DWORD ms = 4000) {
+    auto ev = std::make_shared<winrt::handle>(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    op.Completed([ev](auto&&, auto&&) { SetEvent(ev->get()); });
+    HANDLE hs[2] = {g_stopEvt, ev->get()};
+    if (WaitForMultipleObjects(2, hs, FALSE, ms) != WAIT_OBJECT_0 + 1) {
+        try { op.Cancel(); } catch (...) {}
+        throw winrt::hresult_error(E_ABORT);
+    }
+    return op.GetResults();
+}
+
 static DWORD WINAPI MediaThread(LPVOID) {
     try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
     try {
-        auto mgr = wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        auto mgr = AwaitT(wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync());
         std::wstring lastKey;
         int thumbTries = 0;
         bool haveThumb = false;
-        while (g_mediaRun) {
+        while (WaitForSingleObject(g_stopEvt, 0) == WAIT_TIMEOUT) {
             try {
                 auto ses = mgr.GetCurrentSession();
                 if (ses) {
                     int c = g_cmd.exchange(0);
-                    if (c == 1) ses.TryTogglePlayPauseAsync().get();
-                    else if (c == 2) ses.TrySkipNextAsync().get();
-                    else if (c == 3) ses.TrySkipPreviousAsync().get();
+                    if (c == 1) AwaitT(ses.TryTogglePlayPauseAsync());
+                    else if (c == 2) AwaitT(ses.TrySkipNextAsync());
+                    else if (c == 3) AwaitT(ses.TrySkipPreviousAsync());
                     long long sk = g_seekReq.exchange(-1);
-                    if (sk >= 0) ses.TryChangePlaybackPositionAsync(sk * 10000).get();
+                    if (sk >= 0) AwaitT(ses.TryChangePlaybackPositionAsync(sk * 10000));
 
                     auto pb = ses.GetPlaybackInfo();
                     auto tl = ses.GetTimelineProperties();
-                    auto props = ses.TryGetMediaPropertiesAsync().get();
+                    auto props = AwaitT(ses.TryGetMediaPropertiesAsync());
 
                     MediaInfo ni;
                     ni.has = true;
@@ -505,11 +587,11 @@ static DWORD WINAPI MediaThread(LPVOID) {
                         try {
                             auto ref = props.Thumbnail();
                             if (ref) {
-                                auto st = ref.OpenReadAsync().get();
+                                auto st = AwaitT(ref.OpenReadAsync());
                                 uint32_t size = (uint32_t)st.Size();
                                 if (size > 0 && size < 8u * 1024 * 1024) {
                                     winrt::Windows::Storage::Streams::DataReader rd(st.GetInputStreamAt(0));
-                                    rd.LoadAsync(size).get();
+                                    AwaitT(rd.LoadAsync(size));
                                     bytes.resize(size);
                                     rd.ReadBytes(winrt::array_view<uint8_t>(bytes.data(), bytes.data() + size));
                                 }
@@ -541,7 +623,7 @@ static DWORD WINAPI MediaThread(LPVOID) {
             } catch (...) {
                 // session vanished mid-query; try again on the next loop
             }
-            WaitForSingleObject(g_mediaEvt, 450);
+            { HANDLE hs[2] = {g_stopEvt, g_mediaEvt}; WaitForMultipleObjects(2, hs, FALSE, 450); }
         }
     } catch (...) {}
     try { winrt::uninit_apartment(); } catch (...) {}
@@ -796,6 +878,7 @@ static int DaysIn(int y, int m) {
 static void DrawCalendarPanel(float px, float py, float pw, float ph) {
     time_t t = time(nullptr); tm now = *localtime(&t);
     int mIdx = now.tm_year * 12 + now.tm_mon + g_calOffset;
+    if (mIdx < 0) mIdx = 0;   // never index the month tables with a negative value
     int y = mIdx / 12 + 1900, m = mIdx % 12;
     static const wchar_t* mn[] = {L"January", L"February", L"March", L"April", L"May", L"June", L"July", L"August", L"September", L"October", L"November", L"December"};
     wchar_t buf[64];
@@ -1415,8 +1498,8 @@ static void OnClickId(const Hit& h, float lx) {
     int id = h.id;
     if (id >= H_TAB && id < H_TAB + 7) { OnTab(id - H_TAB); return; }
     switch (id) {
-        case H_PREVMONTH: g_calOffset--; break;
-        case H_NEXTMONTH: g_calOffset++; break;
+        case H_PREVMONTH: g_calOffset = std::max(g_calOffset - 1, -600); break;
+        case H_NEXTMONTH: g_calOffset = std::min(g_calOffset + 1, 600); break;
         case H_MPREV: case H_MNEXT: {
             MediaInfo m = MediaSnap();
             if (m.has) { g_cmd = id == H_MNEXT ? 2 : 3; MediaWake(); }
@@ -1569,7 +1652,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_MOUSEWHEEL:
-            if (g_tab == T_CAL) { g_calOffset += GET_WHEEL_DELTA_WPARAM(wp) > 0 ? -1 : 1; g_dirty = true; }
+            if (g_tab == T_CAL) { g_calOffset = std::max(-600, std::min(600, g_calOffset + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? -1 : 1))); g_dirty = true; }
             return 0;
         case WM_DISPLAYCHANGE: case WM_DPICHANGED: PlaceWindow(); return 0;
         case WM_APP + 1: PlaceWindow(); g_dirty = true; return 0;
@@ -1609,12 +1692,22 @@ static DWORD WINAPI UIThread(LPVOID) {
     if (g_hwnd) {
         PlaceWindow();
         AudioPoll(); WifiPoll();
-        CreateThread(nullptr, 0, ReadBrightnessThread, nullptr, 0, nullptr);
         ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
         Render();
         g_timerPeriod = 200; SetTimer(g_hwnd, 1, 200, nullptr);
-        MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+        // Wait on the stop event inside the message loop, so stopping never depends on g_hwnd.
+        for (bool quit = false; !quit;) {
+            if (MsgWaitForMultipleObjects(1, &g_stopEvt, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0)
+                break;
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) { quit = true; break; }
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        if (IsWindow(g_hwnd)) DestroyWindow(g_hwnd);
+        g_hwnd = nullptr;
     }
 
     AudioRelease();
@@ -1631,28 +1724,42 @@ static DWORD WINAPI UIThread(LPVOID) {
 }
 
 // ============================================================ Windhawk entry points
+// Stops every mod thread, waits for all of them (they all watch g_stopEvt), then frees the handles.
+static void StopAndJoinAll() {
+    if (g_stopEvt) SetEvent(g_stopEvt);
+    if (g_thread) { WaitForSingleObject(g_thread, INFINITE); CloseHandle(g_thread); g_thread = nullptr; }
+    if (g_mediaThread) { WaitForSingleObject(g_mediaThread, INFINITE); CloseHandle(g_mediaThread); g_mediaThread = nullptr; }
+    if (g_brightThread) { WaitForSingleObject(g_brightThread, INFINITE); CloseHandle(g_brightThread); g_brightThread = nullptr; }
+    if (g_mediaEvt) { CloseHandle(g_mediaEvt); g_mediaEvt = nullptr; }
+    if (g_brightEvt) { CloseHandle(g_brightEvt); g_brightEvt = nullptr; }
+    if (g_stopEvt) { CloseHandle(g_stopEvt); g_stopEvt = nullptr; }
+    DeleteCriticalSection(&g_mcs);
+}
+
 BOOL Wh_ModInit() {
     LoadSettings();
     InitializeCriticalSection(&g_mcs);
+    g_stopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_mediaEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_mediaRun = true;
+    g_brightEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvt || !g_mediaEvt || !g_brightEvt) { StopAndJoinAll(); return FALSE; }
     g_mediaThread = CreateThread(nullptr, 0, MediaThread, nullptr, 0, nullptr);
+    g_brightThread = CreateThread(nullptr, 0, BrightnessThread, nullptr, 0, nullptr);
     g_thread = CreateThread(nullptr, 0, UIThread, nullptr, 0, nullptr);
-    return g_thread != nullptr;
+    if (!g_thread) {
+        // Wh_ModUninit is not called when init fails, so stop the threads started above here.
+        StopAndJoinAll();
+        return FALSE;
+    }
+    return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    if (g_hwnd) PostMessageW(g_hwnd, WM_APP + 1, 0, 0);
+    HWND h = g_hwnd;
+    if (h) PostMessageW(h, WM_APP + 1, 0, 0);
 }
 
 void Wh_ModUninit() {
-    g_mediaRun = false;
-    MediaWake();
-    if (g_hwnd) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
-    if (g_thread) { WaitForSingleObject(g_thread, 4000); CloseHandle(g_thread); g_thread = nullptr; }
-    if (g_mediaThread) { WaitForSingleObject(g_mediaThread, 4000); CloseHandle(g_mediaThread); g_mediaThread = nullptr; }
-    if (g_mediaEvt) { CloseHandle(g_mediaEvt); g_mediaEvt = nullptr; }
-    if (g_brightProc) { CloseHandle(g_brightProc); g_brightProc = nullptr; }
-    DeleteCriticalSection(&g_mcs);
+    StopAndJoinAll();
 }
