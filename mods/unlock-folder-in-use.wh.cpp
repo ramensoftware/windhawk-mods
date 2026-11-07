@@ -28,7 +28,8 @@ If Explorer windows are open inside the item being processed, they are moved up 
 
 * The mod runs as a tool in its own dedicated process, not inside Explorer, so a problem in it can't affect the taskbar or the desktop.
 * The warning is detected through its internal UI Automation identifiers instead of its text, so it works with any display language.
-* The blocked item is identified from the name shown in the warning. Only the selected items (or entries inside selected folders) that match that name are scanned.
+* The blocked item is identified from the name shown in the warning. Only the text elements of the interrupt panel itself are read (starting from the *Try Again* button), never the rest of the progress window, and names are compared in full. Only the selected items (or entries inside selected folders) whose name matches exactly are scanned.
+* The matched paths are listed in the details of the prompt, so you can see what was scanned before ending anything.
 * Blockers are found with the Restart Manager, the current directory of each process, and the system handle table. Every Explorer process is excluded.
 * Processes are opened while scanning and terminated through those same handles, so a process that exits and whose PID is reused is never terminated by mistake.
 
@@ -217,24 +218,59 @@ static bool InterruptActive(IUIAutomation* ua, HWND h) {
     return FindRetry(ua, h, nullptr);
 }
 
+// Reads only the text elements of the interrupt panel. It starts from the
+// Try Again button and walks up to the first container that holds text, never
+// reaching the window root (which also holds the other operations).
 static void CollectDialogTexts(IUIAutomation* ua, HWND h, std::vector<std::wstring>& out) {
+    Com<IUIAutomationElement> btn;
+    if (!FindRetry(ua, h, &btn) || !btn) return;
+
     Com<IUIAutomationElement> root;
     if (FAILED(ua->ElementFromHandle(h, &root)) || !root) return;
-    Com<IUIAutomationCondition> all;
-    if (FAILED(ua->CreateTrueCondition(&all)) || !all) return;
-    Com<IUIAutomationElementArray> arr;
-    if (FAILED(root->FindAll(TreeScope_Descendants, all.p, &arr)) || !arr) return;
-    int n = 0;
-    arr->get_Length(&n);
-    for (int i = 0; i < n && i < 300; i++) {
-        Com<IUIAutomationElement> el;
-        if (FAILED(arr->GetElement(i, &el)) || !el) continue;
-        BSTR name = nullptr;
-        if (SUCCEEDED(el->get_CurrentName(&name)) && name) {
-            if (name[0]) out.push_back(name);
-            SysFreeString(name);
+
+    Com<IUIAutomationTreeWalker> walker;
+    if (FAILED(ua->get_ControlViewWalker(&walker)) || !walker) return;
+
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_I4;
+    v.lVal = UIA_TextControlTypeId;
+    Com<IUIAutomationCondition> textCond;
+    HRESULT hr = ua->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &textCond);
+    VariantClear(&v);
+    if (FAILED(hr) || !textCond) return;
+
+    IUIAutomationElement* cur = btn.p;
+    cur->AddRef();
+
+    for (int depth = 0; depth < 8; depth++) {
+        IUIAutomationElement* parent = nullptr;
+        if (FAILED(walker->GetParentElement(cur, &parent)) || !parent) break;
+        cur->Release();
+        cur = parent;
+
+        BOOL isRoot = FALSE;
+        if (SUCCEEDED(ua->CompareElements(cur, root.p, &isRoot)) && isRoot) break;
+
+        Com<IUIAutomationElementArray> arr;
+        if (FAILED(cur->FindAll(TreeScope_Descendants, textCond.p, &arr)) || !arr) continue;
+
+        int n = 0;
+        arr->get_Length(&n);
+        if (n <= 0) continue;
+
+        for (int i = 0; i < n && i < 50; i++) {
+            Com<IUIAutomationElement> el;
+            if (FAILED(arr->GetElement(i, &el)) || !el) continue;
+            BSTR name = nullptr;
+            if (SUCCEEDED(el->get_CurrentName(&name)) && name) {
+                if (name[0]) out.push_back(name);
+                SysFreeString(name);
+            }
         }
+        break;
     }
+    cur->Release();
 }
 
 static bool InvokeElement(IUIAutomationElement* el) {
@@ -364,6 +400,7 @@ static Choice ShowChoice(const std::wstring& instruction, const std::wstring& co
 
     std::wstring text = instruction;
     if (!content.empty()) text += L"\n\n" + content;
+    if (!details.empty()) text += L"\n\n" + details;
     if (hasSecondary) {
         text += L"\n\nYes: end processes and continue\nNo: only end processes\nCancel: do nothing";
         int r = MessageBoxW(nullptr, text.c_str(), L"Unlock",
@@ -448,14 +485,10 @@ static void CollectFiles(const std::wstring& path, std::vector<std::wstring>& fi
     }
 }
 
+// Whole-name comparison only: the text must be exactly the item name.
 static bool TextMatchesName(const std::wstring& text, const std::wstring& name) {
     if (name.empty() || text.empty()) return false;
-    if (_wcsicmp(text.c_str(), name.c_str()) == 0) return true;
-    if (text.size() <= name.size()) return false;
-    size_t off = text.size() - name.size();
-    if (_wcsicmp(text.c_str() + off, name.c_str()) != 0) return false;
-    wchar_t before = text[off - 1];
-    return before == L'\\' || before == L'/' || before == L':' || before == L' ';
+    return _wcsicmp(text.c_str(), name.c_str()) == 0;
 }
 
 static std::vector<std::wstring> ResolveTargets(const std::vector<std::wstring>& sel,
@@ -1017,6 +1050,12 @@ static DWORD WorkerMain(LPVOID param) {
     }
 
     std::wstring details;
+    details += L"Matched items (" + std::to_wstring(targets.size()) + L"):\n";
+    for (size_t i = 0; i < targets.size() && i < 10; i++)
+        details += L"    " + targets[i] + L"\n";
+    if (targets.size() > 10)
+        details += L"    ... and " + std::to_wstring(targets.size() - 10) + L" more\n";
+    details += L"\n";
     if (!lockers.empty()) {
         details += L"Processes:\n";
         for (auto& kv : lockers) {
