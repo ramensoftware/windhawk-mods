@@ -908,34 +908,46 @@ bool CursorOnTaskbarThread(HWND taskbar) {
     return root && GetWindowThreadProcessId(root, nullptr) == GetWindowThreadProcessId(taskbar, nullptr);
 }
 
-bool IsTaskbarWindowClass(HWND hWnd);   // painter section
-bool IsTaskViewWindowClass(HWND hwnd);  // full-screen covers
+bool IsTaskbarWindowClass(HWND hWnd);  // painter section
 
 // A visible popup of the taskbar's thread (a thumbnail flyout, hovered or
 // reached with Win+T) or a visible switcher host: something Explorer shows
-// that can keep Peek alive without the cursor being anywhere near it.
+// that can keep Peek alive without the cursor being anywhere near it. If a
+// window of either kind ever stayed up for good (another mod's window on the
+// taskbar thread, a host Explorer keeps visible between uses), the stale-Peek
+// reset would never fire, so the window keeping Peek alive is logged once per
+// Peek: a permanent one shows up there as the same class every time.
+HWND g_peekKeeperLogged = nullptr;  // tracker thread only; reset when Peek ends
+
+bool ShowsPeekSource(HWND hwnd) {
+    RECT r;
+    return IsWindowVisible(hwnd) && !IsWindowCloaked(hwnd) && GetWindowRect(hwnd, &r) && r.right > r.left &&
+           r.bottom > r.top;
+}
+
 bool ExplorerShowsPeekSource(HWND taskbar) {
     struct Ctx {
-        bool found = false;
+        HWND found = nullptr;
     } ctx;
     EnumThreadWindows(
         GetWindowThreadProcessId(taskbar, nullptr),
         [](HWND hwnd, LPARAM lp) -> BOOL {
-            RECT r;
-            if (IsWindowVisible(hwnd) && !IsTaskbarWindowClass(hwnd) && GetWindowRect(hwnd, &r) && r.right > r.left &&
-                r.bottom > r.top) {
-                reinterpret_cast<Ctx*>(lp)->found = true;
+            if (!IsTaskbarWindowClass(hwnd) && ShowsPeekSource(hwnd)) {
+                reinterpret_cast<Ctx*>(lp)->found = hwnd;
                 return FALSE;
             }
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&ctx));
-    if (ctx.found) return true;
-    for (HWND hwnd = FindWindowExW(nullptr, nullptr, L"XamlExplorerHostIslandWindow", nullptr); hwnd;
+    for (HWND hwnd = FindWindowExW(nullptr, nullptr, L"XamlExplorerHostIslandWindow", nullptr); !ctx.found && hwnd;
          hwnd = FindWindowExW(nullptr, hwnd, L"XamlExplorerHostIslandWindow", nullptr)) {
-        if (IsWindowVisible(hwnd) && !IsWindowCloaked(hwnd)) return true;
+        if (ShowsPeekSource(hwnd)) ctx.found = hwnd;
     }
-    return false;
+    if (ctx.found && g_peekKeeperLogged != ctx.found) {
+        g_peekKeeperLogged = ctx.found;
+        Wh_Log(L"peek kept alive by %s", DescribeWindow(ctx.found).c_str());
+    }
+    return ctx.found != nullptr;
 }
 
 // Clears a Peek state that can no longer be true (see the notes above): the
@@ -944,6 +956,7 @@ bool ExplorerShowsPeekSource(HWND taskbar) {
 void CheckStalePeek(const std::vector<HWND>& taskbars, ULONGLONG now) {
     if (!g_peekActive || taskbars.empty()) {
         g_peekAwaySince = 0;
+        g_peekKeeperLogged = nullptr;
         return;
     }
     if (CursorOnTaskbarThread(taskbars.front()) || ExplorerShowsPeekSource(taskbars.front())) {
@@ -2433,14 +2446,20 @@ void VerifyIsland(Island& isl) try {
     // desired state (settings, dock) is then applied quietly.
     bool strokeHidden, fillHidden;
     DesiredBackgroundState(isl, strokeHidden, fillHidden);
+    // Whoever changed a hidden element set the value that should come back
+    // when the mod lets go (a transparency mod disabled while the fill was
+    // hidden has just restored the fill to 1.0: that, not the 0 saved when
+    // the hide began, is the original now).
     if (auto stroke = isl.stroke.get();
         stroke && isl.strokeHidden && strokeHidden && stroke.Visibility() != wux::Visibility::Collapsed) {
+        isl.strokeOriginal = stroke.Visibility();
         Wh_Log(L"taskbar %p: background stroke was shown again, re-hidden", isl.hwnd);
         stroke.Visibility(wux::Visibility::Collapsed);
     }
     SetStrokeHidden(isl, strokeHidden);
     if (auto fill = isl.fill.get(); fill && isl.fillHidden && fillHidden && fill.Opacity() > 0.01) {
-        Wh_Log(L"taskbar %p: taskbar background was shown again, re-hidden", isl.hwnd);
+        isl.fillOriginal = fill.Opacity();
+        Wh_Log(L"taskbar %p: taskbar background was shown again (%.2f), re-hidden", isl.hwnd, isl.fillOriginal);
         fill.Opacity(0.0);
     }
     SetFillHidden(isl, fillHidden);
