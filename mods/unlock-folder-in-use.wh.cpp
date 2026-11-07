@@ -16,7 +16,7 @@
 
 When Explorer refuses to delete, move or rename something because it is in use ("Folder In Use" / "File In Use"), this mod finds out which processes are blocking it and lets you decide what to do.
 
-![Screenshot](https://i.imgur.com/A0Dnrn5.png)
+![Screenshot](https://i.imgur.com/goeqtLD.png)
 
 When the warning appears, a small dialog lists the blocking processes and offers:
 
