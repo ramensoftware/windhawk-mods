@@ -5306,19 +5306,16 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": 3.020971040714679,
-        "updated": 1793541744000,
+        "updated": 1794070940000,
         "users": 125
       },
       "metadata": {
         "author": "ArvindSaini978",
-        "compilerOptions": "-luser32 -lgdi32 -lcrypt32",
-        "description": "Hold Ctrl + Right-Click and drag to scroll smoothly in desktop applications with adaptive line precision, dynamic velocity, and hands-free cruising.",
+        "compilerOptions": "-luser32 -lgdi32 -lcrypt32 -ladvapi32",
+        "description": "Hold Ctrl + Right-Click (or pure Right-Click) and drag to scroll smoothly across browsers, documents, editors, and File Explorer—with flick speed boost and hands-free cruising.",
         "exclude": [
           "unsecapp.exe",
-          "svchost.exe",
-          "dwm.exe",
           "sihost.exe",
-          "taskhostw.exe",
           "TextInputHost.exe",
           "RuntimeBroker.exe",
           "UserOOBEBroker.exe",
@@ -5326,15 +5323,19 @@
           "SearchHost.exe",
           "FileCoAuth.exe",
           "OneDrive.exe",
-          "OneDrive.Sync.Service.exe"
+          "OneDrive.Sync.Service.exe",
+          "conhost.exe",
+          "ShellExperienceHost.exe",
+          "Widgets.exe"
         ],
         "github": "https://github.com/ArvindSaini978",
+        "homepage": "https://github.com/ArvindSaini978/my-windhawk-mods",
         "include": [
           "*"
         ],
         "license": "MIT",
         "name": "Drag to Scroll",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "dropbox-reduce-explorer-cpu-usage": {
@@ -7873,7 +7874,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 0, 3],
         "ratingUsers": 3,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0,
         "updated": 1785605718000,
         "users": 59
@@ -11022,20 +11023,20 @@
         "ratingUsers": 78,
         "reviews": 0,
         "trendingSorting": -0.18279530720615353,
-        "updated": 1790964213000,
+        "updated": 1794070944000,
         "users": 906
       },
       "metadata": {
         "author": "MCheng404",
         "compilerOptions": "-ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser -ldwrite",
-        "description": "Customizable cursor trail: D3D11 + DirectComposition, 23 color modes, 10 trail styles, low idle CPU.",
+        "description": "A highly customizable mouse trail effect.",
         "github": "https://github.com/MCheng404",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Mouse Trail",
-        "version": "3.4.5.3"
+        "version": "3.4.5.9"
       }
     },
     "move-quietly": {

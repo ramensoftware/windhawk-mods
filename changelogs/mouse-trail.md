@@ -1,3 +1,12 @@
+## 3.4.5.9 ([Nov 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5dd4e2c3ce42ed1ae7064effebeda1b2a05c8487/mods/mouse-trail.wh.cpp))
+
+- Add：Desktop-only drawing mode, which draws the trail only while the desktop has focus, with three layering options — hide and clear (default), keep drawing above windows, or drop behind windows so they occlude the trail
+- Add：Foreground state is now tracked with a WinEvent hook (`EVENT_SYSTEM_FOREGROUND`) instead of polling, with automatic 40 ms polling fallback when the hook cannot be installed
+- Change：Unified the duplicated settings parsing into a single string-enum reader and shared clamp helpers
+- Change：Deduplicated desktop/shell window detection and overlay show/hide handling into single helpers
+- Change：Removed dead code and write-only state left behind by earlier cleanups, which also cut the mod from 801 KB to 620 KB
+- Fix：Idle overhead and possible stutter caused by redundant per-frame polling and leftover bookkeeping
+
 ## 3.4.5.3 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8630d6bf9b605f1cd3dff532975d62a8deeec28f/mods/mouse-trail.wh.cpp))
 
 - Add：4 new color modes with optimizations to existing modes

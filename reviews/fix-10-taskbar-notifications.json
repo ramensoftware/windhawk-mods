@@ -1,0 +1,14 @@
+{
+  "modId": "fix-10-taskbar-notifications",
+  "reviews": [
+    {
+      "authorName": "Anixx",
+      "content": "It seems there is no such issue in 26H2 any more. At least, here the notifications work just well with no crashes.",
+      "id": 106,
+      "modVersion": "0.1",
+      "parentId": null,
+      "timestamp": 1794052042,
+      "votes": 0
+    }
+  ]
+}

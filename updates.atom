@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-07T16:00:42.000Z</updated>
+    <updated>2026-11-07T17:02:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mouse Trail 3.4.5.9]]></title>
+        <id>https://windhawk.net/mods/mouse-trail#5dd4e2c3ce42ed1ae7064effebeda1b2a05c8487</id>
+        <link href="https://windhawk.net/mods/mouse-trail"/>
+        <updated>2026-11-07T17:02:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add：Desktop-only drawing mode, which draws the trail only while the desktop has focus, with three layering options — hide and clear (default), keep drawing above windows, or drop behind windows so they occlude the trail</li>
+<li>Add：Foreground state is now tracked with a WinEvent hook (<code>EVENT_SYSTEM_FOREGROUND</code>) instead of polling, with automatic 40 ms polling fallback when the hook cannot be installed</li>
+<li>Change：Unified the duplicated settings parsing into a single string-enum reader and shared clamp helpers</li>
+<li>Change：Deduplicated desktop/shell window detection and overlay show/hide handling into single helpers</li>
+<li>Change：Removed dead code and write-only state left behind by earlier cleanups, which also cut the mod from 801 KB to 620 KB</li>
+<li>Fix：Idle overhead and possible stutter caused by redundant per-frame polling and leftover bookkeeping</li>
+</ul>
+]]></content>
+        <author>
+            <name>MCheng404</name>
+            <uri>https://github.com/MCheng404</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Drag to Scroll 1.2.0]]></title>
+        <id>https://windhawk.net/mods/drag-to-scroll#d1647770bf67559be8d1eb209b6a9876a1c56f32</id>
+        <link href="https://windhawk.net/mods/drag-to-scroll"/>
+        <updated>2026-11-07T17:02:20.000Z</updated>
+        <content type="html"><![CDATA[<h3>✨ New Features</h3>
+<ul>
+<li><strong>Right-Click Only Trigger Mode:</strong> Added a <code>trigger_mode</code> setting to switch between <code>Ctrl + Right-Click</code> and <code>Right-Click Only</code> (cruising is automatically disabled in Right-Click Only mode).</li>
+<li><strong>5-Tier Dynamic Velocity Mode:</strong> Replaced the old <code>enable_velocity</code> toggle with <code>velocity_mode</code> (<code>Off</code>, <code>Gentle</code>, <code>Standard</code>, <code>Fast</code>, <code>UltraFast</code>). <em>Note for upgrading users: the new <code>Standard</code> default is gentler and more controlled than v1.1.0; select <code>Ultra Fast</code> if you prefer the stronger v1.1.0 flick boost.</em></li>
+<li><strong>Configurable Cruising Anchor:</strong> Added <code>cruise_anchor</code> to start hands-free cruising by holding <code>Right-Click</code> (default), <code>Ctrl</code>, or <code>Either</code>. <em>Note for upgrading users: If you used cruising in v1.1.0, select Hold Ctrl to keep the old gesture.</em></li>
+<li><strong>Out-of-Bounds Dragging:</strong> Added <code>allow_out_of_bounds</code> to keep scrolling even when the cursor leaves the target window.</li>
+</ul>
+<h3>🛠️ Bug Fixes &amp; Stability</h3>
+<ul>
+<li><strong>Cross-Process Cruise Cancellation:</strong> Added per-session shared-memory coordination so clicking on other hooked desktop apps during <code>Ctrl</code>-anchored cruising stops the glide cleanly and swallows the stop-click (with instant fallback for unhooked, UWP, or elevated surfaces).</li>
+<li><strong>Swapped Mouse Button Support:</strong> Added <code>SM_SWAPBUTTON</code> handling so right-click tap replay, RMB-anchored cruising, and cancel checks work properly for left-handed mouse setups.</li>
+<li><strong>Scroll Target &amp; Capture Reliability:</strong> Locked wheel scroll delivery to the initial target window via <code>PostMessageW</code>, deferred window activation until past the deadzone, and added <code>GetCapture()</code> loss recovery (e.g., on <code>Alt+Tab</code> or modal dialogs) without rogue context menus.</li>
+<li><strong>Cursor &amp; Modifier Polish:</strong> Suppressed deadzone cursor changes in Right-Click Only mode, improved arrow cursor restoration when scrolling ends, and refined <code>Ctrl</code> masking during scroll drain to prevent accidental browser zooming.</li>
+<li><strong>Thread &amp; Unload Safety:</strong> Refactored state synchronization with <code>CRITICAL_SECTION</code> and atomics, hardened Base64 cursor bounds and alignment checks, joined the cruise worker in <code>Wh_ModBeforeUninit</code>, and updated <code>@exclude</code> entries (<code>conhost.exe</code>, <code>ShellExperienceHost.exe</code>, <code>Widgets.exe</code>).</li>
+</ul>
+<h3>📝 Documentation</h3>
+<ul>
+<li>Added a <strong>Recommended Settings</strong> section to the README (highlighting why the <code>Hold Right-Click</code> cruising anchor prevents click leaks across elevated, UWP, and system windows) and updated settings descriptions to cover trigger trade-offs and compatibility notes.</li>
+</ul>
+]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.2]]></title>
         <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#cda8376695f4e5390fa76ce4ac7566d9e9db99e2</id>
@@ -788,57 +837,6 @@ keys or selecting text works, but isn't shown on the card.</li>
         <author>
             <name>Wheatlay</name>
             <uri>https://github.com/Wheatlay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 4.0.101]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#fee6d20e88618018c299d1d4bf18008a916798c8</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-11-05T06:03:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added manual Run dialog size and font customization: adjust dialog width (<code>360</code>–<code>1200 px</code>), command bar/total height (<code>36</code>–<code>96 px</code> / <code>150</code>–<code>600 px</code>), and font size (<code>9</code>–<code>24 pt</code>) with live preview via inline <code>-</code> / <code>[value]</code> / <code>+</code> controls in the in-app <code>⚙️</code> quick settings menu or Windhawk settings.</li>
-<li>Enhanced <strong>Liquid Glass</strong> optical rendering (3D Snell's-law edge refraction, chromatic dispersion, and adjustable tint from <code>-100</code> to <code>100</code>) and inline numeric controls in the <code>⚙️</code> quick settings menu.</li>
-<li>Added instant web search prefixes (<code>ggsearch:</code> for Google in Chrome/default browser and <code>msesearch:</code> for Microsoft Edge) alongside real-time app suggestions and full 21-language localization across both the Run dialog and <code>⚙️</code> quick settings menu.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caotu2k5</name>
-            <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Utilities 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-utilities#48e23bd6b1d7ceb1fb47f261ffdd36ec211a7dd3</id>
-        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
-        <updated>2026-11-05T06:03:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar System Utilities</h1>
-<p>System utilities integrated into the Windows 11 Taskbar XAML context menu with
-<strong>native XAML flyout cards</strong>, <strong>synchronous UI thread safety</strong>, and <strong>zero UAC
-prompts</strong>.</p>
-<p><img src="https://i.imgur.com/RquNZCE.gif" alt="Taskbar System Utilities Screenshot"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Restart Explorer</strong>: Instantly restarts the <code>explorer.exe</code> shell process from the
-taskbar context menu.</li>
-<li><strong>Clean Temp</strong>: Comprehensive temporary file cleaner for <code>%TEMP%</code> and
-accessible files in <code>%WINDIR%\Temp</code>. Deletes all unlocked temporary files
-regardless of age (relying on Windows file sharing locks to protect actively
-opened files) and displays a XAML summary card.</li>
-<li><strong>Clean DNS Cache</strong>: Flushes the Windows DNS resolver cache via
-<code>dnsapi.dll!DnsFlushResolverCache</code>.</li>
-<li><strong>Restart Graphics Driver</strong>: Triggers the <code>Win + Ctrl + Shift + B</code> display
-driver reset shortcut.</li>
-<li><strong>Get Local IP</strong>: Lists active local IPv4 and IPv6 addresses across network
-adapters using <code>GetAdaptersAddresses</code> (<code>iphlpapi.dll</code>) with optional clipboard
-copy.</li>
-</ul>
-<h2>Credits &amp; Licensing</h2>
-<p>Taskbar context menu injection hooks adapted from <code>taskbar-restart-explorer</code> by
-<strong>Mgrmjp</strong>. This project is distributed under the MIT license.</p>
-]]></content>
-        <author>
-            <name>Marco Petrucci</name>
-            <uri>https://github.com/marco00petrucci</uri>
         </author>
     </entry>
 </feed>
