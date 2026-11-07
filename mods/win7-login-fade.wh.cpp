@@ -464,8 +464,11 @@ bool TurnOffMonitor(HWND hWnd, BOOL useWm = TRUE) {
         // NtPowerInformation(ScreenOff) always enters the sleep state, and SC_MONITORPOWER enters sleep state when called at arbitrary timing
         // Seems calling DefWindowProc SC_MONITORPOWER while the idle timer is engaging (from any process/window) works for entering the former state, fortunately
         //
-        // (Entering the sleep state seems to be managed by the Immersive Shell. Terminating explorer.exe or running Explorer7 without immersive makes the system never enter such a state)
-        // (Not even by calling NtPowerInformation(ScreenOff) or pressing the power button configured to sleep)
+        // Unrelated research:
+        // Entering the sleep state seems to be managed by the Immersive Shell, done by using umpdc.dll (which communicates with pdc.sys)
+        // Terminating explorer.exe or running Explorer7 without immersive makes the system makes the sleep behavior random
+        // And renaming umpdc.dll and restarting Explorer makes the system never enter the sleep state
+        // (Not even by calling NtPowerInformation(ScreenOff), pressing the power button configured to sleep, or closing the lid)
         g_keepOrigWndProc.store(true);
         LRESULT res = SendMessageW(hWnd, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
         g_keepOrigWndProc.store(false);
@@ -623,7 +626,7 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
                 if (hDefDesktop) {
                     CloseDesktop(hDefDesktop);
                 }
-                return 1;
+                return 0;
             } else if (result == WAIT_OBJECT_0 + 1) {
                 while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
                     if (msg.message == WM_QUIT) {
@@ -670,7 +673,7 @@ bool CreateAsyncFadeThread() {
 
 DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
     HWND initiatorWindow = (HWND)lpParameter;
-    DWORD pid = NULL;
+    DWORD pid = 0;
     GetWindowThreadProcessId(initiatorWindow, &pid);
     bool isInitiatorThisProc = GetCurrentProcessId() == pid;
     if (BeginFade()) {
@@ -899,9 +902,6 @@ NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWE
                     break;
                 }
                 Sleep(100);
-            }
-            if (!IsFadeInProgress()) {
-                return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, Asynchronous);
             }
             WaitForFade();
         }
