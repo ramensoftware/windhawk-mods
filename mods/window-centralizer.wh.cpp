@@ -2,12 +2,12 @@
 // @id              window-centralizer
 // @name            Window Centralizer
 // @description     Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.
-// @version         1.0.0
+// @version         1.1.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         *
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lshell32
+// @compilerOptions -lgdi32 -lshell32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +16,7 @@
 
 New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.
 
-The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.
+The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. It is also kept invisible for a moment while it draws its contents, so dialogs don't flash blank while loading. Elevated programs are covered as well.
 
 ## Modes
 
@@ -62,6 +62,9 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 - maxAreaPercent: 10
   $name: Window size limit to target — % of the monitor area
   $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
+- revealWhenDrawn: true
+  $name: Show windows after complete UI load
+  $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Turn it off if windows seem slow to appear.
 - ignoreHotkey: Win+Alt+I
   $name: Ignore hotkey
   $description: Add/remove the active window to the list. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Alt+I). Leave empty for no hotkey.
@@ -72,6 +75,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <windhawk_utils.h>
 #include <atomic>
 #include <stdio.h>
@@ -92,6 +96,7 @@ enum Mode { MODE_PARENT, MODE_MONITOR, MODE_MOUSE };
 // Read by the hooks on application threads while Wh_ModSettingsChanged rewrites them.
 std::atomic<int> g_mode{MODE_PARENT};
 std::atomic<int> g_maxAreaPercent{10};
+std::atomic<bool> g_revealWhenDrawn{true};
 
 // Tool process only, read and written on the host thread.
 wchar_t g_ignoreHotkey[64];
@@ -113,6 +118,7 @@ void LoadCenteringSettings() {
     Wh_FreeStringSetting(mode);
     int pct = Wh_GetIntSetting(L"maxAreaPercent");
     g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
+    g_revealWhenDrawn = Wh_GetIntSetting(L"revealWhenDrawn") != 0;
 }
 
 void LoadHotkeySettings() {
@@ -524,18 +530,129 @@ bool RecentCenter(HWND hwnd, POINT* c) {
     return true;
 }
 
-void CenterNow(HWND hwnd) {
+/// Centers the window if it is a candidate under the size threshold. True if it was centered.
+bool CenterNow(HWND hwnd) {
     if (!IsCandidate(hwnd))
-        return;
+        return false;
     RECT rc;
     GetWindowRect(hwnd, &rc);
     int x, y;
     POINT c;
     if (!ComputeTarget(hwnd, rc, &x, &y, &c))
-        return;
+        return false;
     if (x != rc.left || y != rc.top)
         SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
     RememberCenter(hwnd, c);
+    return true;
+}
+
+// ───────────── Showing windows already drawn ─────────────
+//
+// A centered window is cloaked (DWM leaves it off the screen, while it is still shown, active and
+// receiving input) until it has painted, so it doesn't flash a blank frame while its contents load.
+// It is revealed once it and its children have no pending paint for two checks in a row, after at
+// least kRevealMinMs, and at the latest after kRevealMaxMs.
+
+constexpr DWORD kRevealMinMs = 80;
+constexpr DWORD kRevealMaxMs = 500;
+constexpr DWORD kRevealCheckMs = 15;
+
+struct PendingReveal {
+    HWND hwnd;
+    DWORD start;
+    int quietChecks;
+};
+
+// All guarded by g_revealLock. The timer runs on a thread pool thread, so no callback is left on
+// application threads when the mod unloads.
+SRWLOCK g_revealLock = SRWLOCK_INIT;
+PendingReveal g_pendingReveal[16];
+int g_pendingRevealCount;
+PTP_TIMER g_revealTimer;
+
+bool SetCloak(HWND hwnd, BOOL cloak) {
+    return SUCCEEDED(DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloak, sizeof(cloak)));
+}
+
+BOOL CALLBACK FindPendingPaint(HWND child, LPARAM found) {
+    if (IsWindowVisible(child) && GetUpdateRect(child, nullptr, FALSE)) {
+        *(bool*)found = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+bool HasPendingPaint(HWND hwnd) {
+    if (GetUpdateRect(hwnd, nullptr, FALSE))
+        return true;
+    bool found = false;
+    EnumChildWindows(hwnd, FindPendingPaint, (LPARAM)&found);
+    return found;
+}
+
+void CALLBACK RevealCheck(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER timer) {
+    AcquireSRWLockExclusive(&g_revealLock);
+    DWORD now = GetTickCount();
+    int kept = 0;
+    for (int i = 0; i < g_pendingRevealCount; i++) {
+        PendingReveal p = g_pendingReveal[i];
+        if (!IsWindow(p.hwnd))
+            continue;
+        DWORD elapsed = now - p.start;
+        p.quietChecks = IsWindowVisible(p.hwnd) && !HasPendingPaint(p.hwnd) ? p.quietChecks + 1 : 0;
+        if ((elapsed >= kRevealMinMs && p.quietChecks >= 2) || elapsed >= kRevealMaxMs) {
+            SetCloak(p.hwnd, FALSE);
+            continue;
+        }
+        g_pendingReveal[kept++] = p;
+    }
+    g_pendingRevealCount = kept;
+    if (!kept)
+        SetThreadpoolTimer(timer, nullptr, 0, 0);
+    ReleaseSRWLockExclusive(&g_revealLock);
+}
+
+/// Cloaks a window that was just centered, until RevealCheck finds it drawn.
+void HideUntilDrawn(HWND hwnd) {
+    if (!g_revealWhenDrawn)
+        return;
+    AcquireSRWLockExclusive(&g_revealLock);
+    bool listed = false;
+    for (int i = 0; i < g_pendingRevealCount; i++)
+        listed = listed || g_pendingReveal[i].hwnd == hwnd;
+    if (!listed && g_revealTimer && g_pendingRevealCount < (int)ARRAYSIZE(g_pendingReveal) && SetCloak(hwnd, TRUE)) {
+        g_pendingReveal[g_pendingRevealCount++] = {hwnd, GetTickCount(), 0};
+        if (g_pendingRevealCount == 1) {
+            ULARGE_INTEGER due;
+            due.QuadPart = (ULONGLONG)(-(LONGLONG)kRevealCheckMs * 10000);  // negative: relative time
+            FILETIME ft = {due.LowPart, due.HighPart};
+            SetThreadpoolTimer(g_revealTimer, &ft, kRevealCheckMs, 0);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_revealLock);
+}
+
+void StartRevealing() {
+    g_revealTimer = CreateThreadpoolTimer(RevealCheck, nullptr, nullptr);
+}
+
+/// Stops the timer and reveals every window still cloaked.
+void StopRevealing() {
+    AcquireSRWLockExclusive(&g_revealLock);
+    PTP_TIMER timer = g_revealTimer;
+    g_revealTimer = nullptr;
+    ReleaseSRWLockExclusive(&g_revealLock);
+    if (timer) {
+        SetThreadpoolTimer(timer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(timer, TRUE);
+        CloseThreadpoolTimer(timer);
+    }
+    AcquireSRWLockExclusive(&g_revealLock);
+    for (int i = 0; i < g_pendingRevealCount; i++)
+        if (IsWindow(g_pendingReveal[i].hwnd))
+            SetCloak(g_pendingReveal[i].hwnd, FALSE);
+    g_pendingRevealCount = 0;
+    ReleaseSRWLockExclusive(&g_revealLock);
 }
 
 bool IsUwpFrame(HWND hwnd) {
@@ -556,8 +673,8 @@ bool IsShowCommand(int cmd) {
 using NtUserShowWindow_t = BOOL(WINAPI*)(HWND, int);
 NtUserShowWindow_t NtUserShowWindow_Original;
 BOOL WINAPI NtUserShowWindow_Hook(HWND hwnd, int cmd) {
-    if (hwnd && IsShowCommand(cmd) && !IsWindowVisible(hwnd))
-        CenterNow(hwnd);
+    if (hwnd && IsShowCommand(cmd) && !IsWindowVisible(hwnd) && CenterNow(hwnd))
+        HideUntilDrawn(hwnd);
     return NtUserShowWindow_Original(hwnd, cmd);
 }
 
@@ -579,6 +696,7 @@ BOOL WINAPI NtUserSetWindowPos_Hook(HWND hwnd, HWND after, int x, int y, int cx,
             y = ny;
             flags &= ~SWP_NOMOVE;
             RememberCenter(hwnd, c);
+            HideUntilDrawn(hwnd);
         }
     } else if (hwnd && !(flags & SWP_NOMOVE) && IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd)) {
         DWORD pid = 0;
@@ -606,8 +724,8 @@ CreateWindowExW_t CreateWindowExW_Original;
 HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR cls, LPCWSTR name, DWORD style, int x, int y, int w, int h,
                                  HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
     HWND hwnd = CreateWindowExW_Original(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
-    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD))
-        CenterNow(hwnd);
+    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD) && CenterNow(hwnd))
+        HideUntilDrawn(hwnd);
     return hwnd;
 }
 
@@ -616,8 +734,8 @@ CreateWindowExA_t CreateWindowExA_Original;
 HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD style, int x, int y, int w, int h,
                                  HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
     HWND hwnd = CreateWindowExA_Original(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
-    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD))
-        CenterNow(hwnd);
+    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD) && CenterNow(hwnd))
+        HideUntilDrawn(hwnd);
     return hwnd;
 }
 
@@ -1609,6 +1727,7 @@ BOOL Wh_ModInit() {
     }
 
     LoadCenteringSettings();
+    StartRevealing();
     if (HMODULE win32u = GetModuleHandleW(L"win32u.dll")) {
         if (auto p = (NtUserShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"))
             WindhawkUtils::SetFunctionHook(p, NtUserShowWindow_Hook, &NtUserShowWindow_Original);
@@ -1637,6 +1756,7 @@ void Wh_ModUninit() {
         ToolMod_Uninit();
         return;
     }
+    StopRevealing();
     if (g_ignore.text)
         HeapFree(GetProcessHeap(), 0, g_ignore.text);
     g_ignore.text = nullptr;
