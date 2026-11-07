@@ -43,18 +43,13 @@ can therefore be rendered as:
 
     original font -> Bengali fallback -> original font -> CJK fallback
 
-| Before            | After           |
-| ----------------- | --------------- |
-| ![Before][before] | ![After][after] |
+### Before
 
-## Notice
+![Before](https://raw.githubusercontent.com/RagibHasin/font-fallback-override.wh.cpp/master/assets/before.png)
 
-This mod only works on Windows 8.1 or later.
+### After
 
-[before]:
-https://raw.githubusercontent.com/RagibHasin/font-fallback-override.wh.cpp/master/assets/before.png
-[after]:
-https://raw.githubusercontent.com/RagibHasin/font-fallback-override.wh.cpp/master/assets/after.png
+![After](https://raw.githubusercontent.com/RagibHasin/font-fallback-override.wh.cpp/master/assets/after.png)
 */
 // ==/WindhawkModReadme==
 
@@ -882,11 +877,11 @@ static std::shared_ptr<FallbackRule> FindRule(char32_t codePoint) {
 
 using winrt::com_ptr;
 
-static const Mutex<com_ptr<IDWriteFontFallback1>> g_dwriteFallback;
+static const Mutex<com_ptr<IDWriteFontFallback>> g_dwriteFallback;
 
 using GetSystemFontFallback_t = HRESULT(STDMETHODCALLTYPE*)(
     IDWriteFactory8* self,
-    IDWriteFontFallback1** fallback
+    IDWriteFontFallback** fallback
 );
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
@@ -894,13 +889,13 @@ static GetSystemFontFallback_t g_originalGetSystemFontFallback = nullptr;
 
 STDMETHODIMP GetSystemFontFallback_Hook(
     IDWriteFactory8* self,
-    IDWriteFontFallback1** fallback
+    IDWriteFontFallback** fallback
 ) {
     Wh_Log(L"GetSystemFontFallback");
     auto dwriteFallback = g_dwriteFallback.lock_mut();
 
     if (*dwriteFallback == nullptr) {
-        com_ptr<IDWriteFontFallback1> fallback0;
+        com_ptr<IDWriteFontFallback> fallback0;
         auto hr = g_originalGetSystemFontFallback(self, fallback0.put());
 
         com_ptr<IDWriteFontFallbackBuilder> builder;
@@ -933,12 +928,7 @@ STDMETHODIMP GetSystemFontFallback_Hook(
             *fallback = fallback0.detach();
             return hr;
         };
-        if (!fallback1.try_as(*dwriteFallback)) {
-            Wh_Log(L"CreateFontFallback did not return IDWriteFontFallback1");
-
-            *fallback = fallback0.detach();
-            return E_NOINTERFACE;
-        }
+        *dwriteFallback = std::move(fallback1);
 
         Wh_Log(L"Injected overrides");
     }
@@ -2781,7 +2771,7 @@ void Wh_ModSettingsChanged() {
 //   "files": [
 //     {
 //       "path": "src/font-fallback-override.cpp",
-//       "hash": "8bc41dfd8e3d00af6718e8b5d43e36483ef78b13ba9d6e13ad94847a12cc463e",
+//       "hash": "f98584115bbda3cd8e683e48e63b0fe4d266bbfbdf59c9679cfc274aa9f716b0",
 //       "bom": false
 //     },
 //     {
@@ -2796,7 +2786,7 @@ void Wh_ModSettingsChanged() {
 //     },
 //     {
 //       "path": "src/includes/dwrite/hooks/GetSystemFontFallback.h",
-//       "hash": "4f8c9f0602327ba5ca50ffafabcc33b325768b4c714bc98d205c7b47dd617ecd",
+//       "hash": "21e4f2586e9c38aecf572c22a3f3e44fc577df679dc31f33e894b9da94539640",
 //       "bom": false
 //     },
 //     {
