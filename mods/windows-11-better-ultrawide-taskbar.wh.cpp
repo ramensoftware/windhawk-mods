@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.4.4
+// @version         0.4.5
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -86,8 +86,10 @@ With Separate, the facing sides of the two bars meet the screen edge straight;
 **Arc the inner edges** curves them out along it too, each arc at most half the
 12-DIP gap.
 **Smaller tray** lowers the tray's side of the dock by **Tray height reduction**
-(1 to 16 DIP, 8 by default) on the side away from the screen edge, keeping the
-tray band at least 24 DIP tall. In Unified one long S curve joins the two
+(8 DIP by default) on the side away from the screen edge. The limit is the
+dock's height less 24 DIP, so the tray band stays at least 24 DIP tall: 16 DIP
+on a standard 48-DIP taskbar, more on a taller one. A shorter taskbar applies
+as much of a saved reduction as it can. In Unified one long S curve joins the two
 heights in the gap before the tray; in Separate the tray bar is simply shorter.
 The tray icons and their highlights center in the shorter band.
 **Whole group**, the default, centers the buttons, the gap, and the tray
@@ -774,7 +776,7 @@ constexpr SettingField kSettingFields[]{
     {L"layout", L"Layout", SettingKind::Segmented, 0, 0, 0, 0, kLayoutChoices},
     {L"innerArcs", L"Arc the inner edges", SettingKind::Toggle, 0, 0},
     {L"smallerTray", L"Smaller tray", SettingKind::Toggle, 0, 0},
-    {L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 16},
+    {L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 100},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -848,11 +850,13 @@ struct DockStyle {
     double trayReduction{}; // 0 with Smaller tray off.
 };
 DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
+    auto const& reduction = SettingDefinition(L"trayReduction");
     return {DockShape(LocalChoice(values, L"shape")),
             DockAlignment(LocalChoice(values, L"alignment")),
             DockLayout(LocalChoice(values, L"layout")),
             LocalBool(values, L"innerArcs"),
-            LocalBool(values, L"smallerTray") ? std::clamp(LocalInt(values, L"trayReduction"), 1, 16) : 0.0};
+            LocalBool(values, L"smallerTray") ?
+                std::clamp(LocalInt(values, reduction.key), reduction.minimum, reduction.maximum) : 0.0};
 }
 DockStyle g_dockStyle;
 
@@ -1808,6 +1812,7 @@ void ApplyEditorLayout(SettingsEditor& editor, double width, double textScale);
 void UpdatePreviewForeground(SettingsEditor& editor);
 void RequestPreviewMetrics(SettingsEditor& editor);
 void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& metrics);
+void UpdateTrayReductionMaximum(SettingsEditor& editor, settingsjson::JsonObject const& saved);
 void RequestTrayCatalog(SettingsEditor& editor);
 void RebuildTrayRows(SettingsEditor& editor);
 void ChooseTrayImage(SettingsEditor& editor, std::wstring const& key);
@@ -2560,6 +2565,7 @@ void ReloadEditor(SettingsEditor& editor) {
         }
         auto values = ParseSettingsToml(SettingsDocument(local));
         editor.trayOverrides = ReadTrayOverrides(local);
+        UpdateTrayReductionMaximum(editor, values);
         for (size_t i = 0; i < std::size(kSettingFields); ++i) {
             auto const& field = kSettingFields[i];
             auto const& control = editor.controls[i];
@@ -2677,6 +2683,7 @@ bool SaveEditor(SettingsEditor& editor) {
         editor.originalDocument = document;
     }
     editor.savedValues = values;
+    UpdateTrayReductionMaximum(editor, values);
     UpdateEditorSurface(editor);
     editor.dirty = false;
     UpdateEditorEnabled(editor);
@@ -3446,7 +3453,7 @@ void CreateEditorContent(SettingsEditor& editor) {
             i == 110 ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab." :
             i == 113 ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, each arc at most half the gap between the bars." :
             i == 114 ? L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar." :
-            i == 115 ? L"How much lower the tray side is. The tray band keeps at least 24 DIP." :
+            i == 115 ? L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP." :
             i == 111 ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
             i == 112 ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar 12 DIP apart." :
             i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
@@ -9213,7 +9220,20 @@ void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& me
     }
     if (metrics.frameMeasured) label += L"  ·  " + number(scale * 100) + L"%";
     preview.measurement.Text(label);
+    UpdateTrayReductionMaximum(editor, editor.savedValues);
     UpdateEditorPreview(editor);
+}
+
+// The slider reaches what this taskbar's band leaves the tray, and never drops below the saved value: a shorter
+// taskbar clamps that at runtime, and the editor must not rewrite it.
+void UpdateTrayReductionMaximum(SettingsEditor& editor, settingsjson::JsonObject const& saved) {
+    auto const& field = kSettingFields[115];
+    double fit = std::floor(editor.preview.metrics.dockHeight - kMinTrayBand);
+    // A lower maximum coerces the slider, which is not an edit: the number beside it stays, and that is what saves.
+    bool syncing = std::exchange(editor.syncing, true);
+    editor.controls[115].slider.Maximum(std::clamp(std::max<double>(LocalInt(saved, field.key), fit),
+                                                   double(field.minimum), double(field.maximum)));
+    editor.syncing = syncing;
 }
 
 winrt::Windows::UI::Color PreviewHighlightColor(bool dark,bool highContrast) {
