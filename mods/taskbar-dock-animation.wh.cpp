@@ -13,7 +13,7 @@
 // @description:ko-KR macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다
 // @description:pt-BR Anima os ícones da barra de tarefas ao passar o mouse, como no macOS
 // @description:it-IT Anima le icone della barra delle applicazioni al passaggio del mouse, come su macOS
-// @version           1.9.2
+// @version           1.9.2.1
 // @author            Ph0en1x-dev
 // @github            https://github.com/Ph0en1x-dev
 // @include           explorer.exe
@@ -844,10 +844,57 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
         return false;
     };
 
+    // A host child can wrap the entire tray on newer taskbar layouts.
+    // Never transform that wrapper, since its transform affects every icon inside.
+    auto IsTrayNode = [](FrameworkElement const& element) {
+        auto className = winrt::get_class_name(element);
+        return std::wstring_view(className).starts_with(L"SystemTray.") ||
+               element.Name() == L"SystemTrayFrameGrid";
+    };
+
+    auto ContainsTray = [&](auto const& self, FrameworkElement const& root) -> bool {
+        if (IsTrayNode(root)) return true;
+        int count = VisualTreeHelper::GetChildrenCount(root);
+        for (int i = 0; i < count; ++i) {
+            auto child = VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
+            if (child && self(self, child)) return true;
+        }
+        return false;
+    };
+
+    auto FindWidgets = [&](auto const& self, FrameworkElement const& root) -> FrameworkElement {
+        if (IsTrayNode(root)) return nullptr;
+        auto className = ToLower(W(winrt::get_class_name(root)));
+        auto name = ToLower(W(root.Name()));
+        if ((className == L"taskbar.widgetsbutton" || name == L"widgetsbutton") &&
+            !ContainsTray(ContainsTray, root)) {
+            return root;
+        }
+        int count = VisualTreeHelper::GetChildrenCount(root);
+        for (int i = 0; i < count; ++i) {
+            auto child = VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
+            if (child) {
+                if (auto widget = self(self, child)) return widget;
+            }
+        }
+        return nullptr;
+    };
+
     // Setup & add element (transform + icon geometry)
-    auto SetupAndAddElement = [&](FrameworkElement const& element) {
+    auto SetupAndAddElement = [&](FrameworkElement element) {
         try {
             if (!element) return;
+            for (auto parent = VisualTreeHelper::GetParent(element); parent;
+                 parent = VisualTreeHelper::GetParent(parent)) {
+                auto ancestor = parent.try_as<FrameworkElement>();
+                if (ancestor && IsTrayNode(ancestor)) return;
+                if (ancestor == taskbarFrame) break;
+            }
+            if (ContainsTray(ContainsTray, element)) {
+                if (g_settings.excludeSystemButtonsMode >= 2) return;
+                element = FindWidgets(FindWidgets, element);
+                if (!element) return;
+            }
 
             auto tg = element.RenderTransform().try_as<TransformGroup>();
             if (!tg || tg.Children().Size() < 4) {
