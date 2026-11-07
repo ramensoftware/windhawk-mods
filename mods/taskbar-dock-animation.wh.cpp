@@ -13,7 +13,7 @@
 // @description:ko-KR macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다
 // @description:pt-BR Anima os ícones da barra de tarefas ao passar o mouse, como no macOS
 // @description:it-IT Anima le icone della barra delle applicazioni al passaggio del mouse, come su macOS
-// @version           1.9.2
+// @version           1.9.3
 // @author            Ph0en1x-dev
 // @github            https://github.com/Ph0en1x-dev
 // @include           explorer.exe
@@ -29,6 +29,9 @@ This mod adds a macOS-like taskbar animation.
 The current version is **Beta-Testing** and not yet fully stable.
 
 **Requires Windows 11 or newer to function.**
+
+Vertical taskbars (docked left or right) are detected automatically: icons
+magnify and spread along the vertical axis and pop out away from the screen edge.
 
 ---
 
@@ -166,7 +169,7 @@ You can experiment with the **radius** value to achieve the best result for your
   $name:ko-KR: 수직 바운스 애니메이션 비활성화
   $name:pt-BR: Desativar bounce vertical
   $name:it-IT: Disattiva bounce verticale
-  $description: Disables the up/down "breathing" animation. Useful for vertical taskbars.
+  $description: Disables the "breathing" movement away from the screen edge (up/down on horizontal taskbars, left/right on vertical taskbars) and scales icons from their center.
   $description:uk-UA: Вимикає анімацію "дихання" вгору/вниз. Корисно для вертикальних панелей.
   $description:zh-CN: 禁用上下“呼吸”动画。对垂直任务栏有用。
   $description:ja-JP: 上下の「呼吸」アニメを無効化します。縦型タスクバーに便利です。
@@ -306,20 +309,25 @@ std::chrono::steady_clock::time_point g_lastRenderTime;
 
 struct IconAnimState {
     double waveScale = 1.0;
-    double waveTranslateX = 0.0;
+    double waveTranslate = 0.0; // along the main (icon-flow) axis
 };
 
 // Per-monitor context
+//
+// All icon geometry is stored along the taskbar's "main axis": X for a
+// horizontal taskbar, Y for a vertical one. The "cross axis" is the other one
+// (the direction icons pop out / bounce away from the screen edge).
 struct TaskbarIconInfo {
     winrt::weak_ref<FrameworkElement> element;
-    double originalCenterX = 0.0;
-    double elementWidth = 0.0;
+    double originalCenter = 0.0; // main-axis center (or start, in labels mode)
+    double elementLength = 0.0;  // main-axis size
     IconAnimState state;
 };
 
 struct HostSignature {
     int count = -1;
     double width = -1.0;
+    double height = -1.0;
     uint64_t orderHash = 0;
 };
 
@@ -329,9 +337,46 @@ struct DockAnimationContext {
     winrt::weak_ref<FrameworkElement> iconHost;
     std::vector<TaskbarIconInfo> icons;
 
+    // Orientation of this taskbar. For vertical taskbars, edgeAtStart is true
+    // when docked to the left edge of the monitor, false for the right edge.
+    bool isVertical = false;
+    bool edgeAtStart = false;
+
     HostSignature lastSig;
     std::chrono::steady_clock::time_point lastDirtyCheck{};
 };
+
+static double MainAxisLength(DockAnimationContext const& ctx, FrameworkElement const& e) {
+    return ctx.isVertical ? e.ActualHeight() : e.ActualWidth();
+}
+
+static double MainAxisPos(DockAnimationContext const& ctx, winrt::Windows::Foundation::Point const& p) {
+    return ctx.isVertical ? p.Y : p.X;
+}
+
+// Where icons scale from. Horizontal: centered on X, anchored at the screen
+// edge on Y. Vertical: centered on Y, anchored at the screen edge on X.
+static winrt::Windows::Foundation::Point ComputeTransformOrigin(
+    DockAnimationContext const& ctx, FrameworkElement const& e) {
+    if (ctx.isVertical) {
+        float xOrigin = g_settings.disableVerticalBounce
+            ? 0.5f
+            : (ctx.edgeAtStart ? 0.0f : 1.0f);
+        return { xOrigin, 0.5f };
+    }
+
+    float yOrigin = g_settings.disableVerticalBounce
+        ? 0.5f
+        : (g_settings.mirrorAnimation ? 0.0f : 1.0f);
+
+    float xOrigin = 0.5f;
+    if (g_settings.taskbarLabelsMode) {
+        double w = e.ActualWidth();
+        float iconCenterPx = 24.0f;
+        xOrigin = (w > 0.0) ? (iconCenterPx / (float)w) : 0.5f;
+    }
+    return { xOrigin, yOrigin };
+}
 
 // One context per monitor (keyed by XAML instance pointer)
 std::map<void*, DockAnimationContext> g_contexts;
@@ -409,8 +454,8 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
         if (!element) continue;
         double distance = 0.0;
         if (g_settings.taskbarLabelsMode) {
-            double iconStart = ctx.icons[i].originalCenterX; 
-            double iconEnd = iconStart + ctx.icons[i].elementWidth; 
+            double iconStart = ctx.icons[i].originalCenter; 
+            double iconEnd = iconStart + ctx.icons[i].elementLength; 
             if (mouseX < iconStart) {
                 distance = iconStart - mouseX; 
             } else if (mouseX > iconEnd) {
@@ -419,10 +464,10 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
                 distance = 0.0; 
             }
         } else {
-            distance = std::abs(mouseX - ctx.icons[i].originalCenterX);
+            distance = std::abs(mouseX - ctx.icons[i].originalCenter);
         }
         scales[i] = CalculateScale(distance, (double)g_settings.effectRadius, g_settings.maxScale);
-        extraWidths[i] = (scales[i] - 1.0) * element.ActualWidth() * spacingFactor;
+        extraWidths[i] = (scales[i] - 1.0) * MainAxisLength(ctx, element) * spacingFactor;
         totalExpansion += extraWidths[i];
 
         if (distance < minDistance) {
@@ -442,9 +487,14 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
         double t = std::fmod(elapsed_ms, BOUNCE_PERIOD_MS) / BOUNCE_PERIOD_MS;
         double normalizedWave = std::sin(t * 3.14159);
         bounceScaleFactor = 1.0 + (normalizedWave * BOUNCE_SCALE_AMOUNT);
-        bounceTranslateY = normalizedWave * BOUNCE_TRANSLATE_Y;       
-        if (g_settings.mirrorAnimation) {
-            bounceTranslateY *= -1.0;
+        // Positive magnitude = away from the screen edge the taskbar is docked to.
+        double awayFromEdge = normalizedWave * -BOUNCE_TRANSLATE_Y;
+        if (ctx.isVertical) {
+            // Left edge: move right (+X). Right edge: move left (-X).
+            bounceTranslateY = ctx.edgeAtStart ? awayFromEdge : -awayFromEdge;
+        } else {
+            // Bottom edge: move up (-Y). Top edge (mirrored): move down (+Y).
+            bounceTranslateY = g_settings.mirrorAnimation ? awayFromEdge : -awayFromEdge;
         }
     }
 
@@ -477,29 +527,44 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
 
         if (g_settings.lerpSpeed > 0.0) {
             ctx.icons[i].state.waveScale += (targetScale - ctx.icons[i].state.waveScale) * alpha;
-            ctx.icons[i].state.waveTranslateX += (targetTranslateX - ctx.icons[i].state.waveTranslateX) * alpha;
+            ctx.icons[i].state.waveTranslate += (targetTranslateX - ctx.icons[i].state.waveTranslate) * alpha;
         } else {
             ctx.icons[i].state.waveScale = targetScale;
-            ctx.icons[i].state.waveTranslateX = targetTranslateX;
+            ctx.icons[i].state.waveTranslate = targetTranslateX;
         }
 
         waveScale.ScaleX(ctx.icons[i].state.waveScale);
         waveScale.ScaleY(ctx.icons[i].state.waveScale);
-        waveTranslate.X(ctx.icons[i].state.waveTranslateX);
 
+        // Spread icons along the main axis; keep the cross axis untouched.
+        if (ctx.isVertical) {
+            waveTranslate.X(0.0);
+            waveTranslate.Y(ctx.icons[i].state.waveTranslate);
+        } else {
+            waveTranslate.X(ctx.icons[i].state.waveTranslate);
+            waveTranslate.Y(0.0);
+        }
+
+        // The idle bounce moves along the cross axis (away from the edge).
+        double bounceOffset = 0.0;
         if (i == closestIconIndex && g_isBouncing) {
             bounceScale.ScaleX(bounceScaleFactor);
             bounceScale.ScaleY(bounceScaleFactor);
 
             if (!g_settings.disableVerticalBounce) {
-                bounceTranslate.Y(bounceTranslateY);
-            } else {
-                bounceTranslate.Y(0.0);
+                bounceOffset = bounceTranslateY;
             }
         } else {
             bounceScale.ScaleX(1.0);
             bounceScale.ScaleY(1.0);
+        }
+
+        if (ctx.isVertical) {
+            bounceTranslate.X(bounceOffset);
             bounceTranslate.Y(0.0);
+        } else {
+            bounceTranslate.X(0.0);
+            bounceTranslate.Y(bounceOffset);
         }
     }
 }
@@ -523,17 +588,60 @@ void ResetAllIconScales(std::vector<TaskbarIconInfo>& icons) {
             }
             if (waveTranslate) {
                 waveTranslate.X(0.0);
+                waveTranslate.Y(0.0);
             }
             if (bounceScale) {
                 bounceScale.ScaleX(1.0);
                 bounceScale.ScaleY(1.0);
             }
             if (bounceTranslate) {
+                bounceTranslate.X(0.0);
                 bounceTranslate.Y(0.0);
             }
         }
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"DockAnimation: HRESULT error in ResetAllIconScales: %s", e.message().c_str());
+    }
+}
+
+// Detects whether this taskbar is vertical (Windows 11 left/right taskbar) and,
+// if so, which screen edge it's docked to. If the layout changed since the
+// icon list was built, the stale transforms are reset and the list rebuilt.
+static void UpdateContextOrientation(DockAnimationContext& ctx, FrameworkElement const& frame) {
+    double w = frame.ActualWidth();
+    double h = frame.ActualHeight();
+    if (w <= 0.0 || h <= 0.0) return;
+
+    bool vertical = h > w;
+    bool edgeAtStart = ctx.edgeAtStart;
+
+    if (vertical) {
+        // The pointer is over this taskbar right now, so whichever half of the
+        // monitor the cursor is in tells us the docked edge.
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi{ sizeof(mi) };
+            if (mon && GetMonitorInfo(mon, &mi)) {
+                edgeAtStart = pt.x < (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
+            }
+        }
+    } else {
+        edgeAtStart = false;
+    }
+
+    if (vertical != ctx.isVertical || edgeAtStart != ctx.edgeAtStart) {
+        Wh_Log(L"DockAnimation: Taskbar orientation: %s%s",
+               vertical ? L"vertical" : L"horizontal",
+               vertical ? (edgeAtStart ? L" (left)" : L" (right)") : L"");
+        ResetAllIconScales(ctx.icons);
+        ctx.icons.clear();
+        ctx.iconHost = nullptr;
+        ctx.isInitialized = false;
+        ctx.lastSig = HostSignature{};
+        ctx.isVertical = vertical;
+        ctx.edgeAtStart = edgeAtStart;
+        g_lastMouseX = -1.0;
     }
 }
 
@@ -544,10 +652,12 @@ void OnTaskbarPointerMoved(void* pThis_key, Input::PointerRoutedEventArgs const&
         if (it == g_contexts.end()) return;
         auto& ctx = it->second;
         auto frame = ctx.taskbarFrame.get();
-        if (!frame) return;       
+        if (!frame) return;
+        UpdateContextOrientation(ctx, frame);
         g_isMouseInside = true;
         g_activeContextKey = pThis_key;
-        double mouseX = args.GetCurrentPoint(frame).Position().X;
+        // Pointer position along the main axis (X horizontal, Y vertical).
+        double mouseX = MainAxisPos(ctx, args.GetCurrentPoint(frame).Position());
         if (std::abs(mouseX - g_lastMouseX.load()) > MOUSE_STOP_THRESHOLD) {
             g_lastSignificantMoveTime = std::chrono::steady_clock::now();
         }
@@ -599,6 +709,7 @@ static HostSignature ComputeHostSignature(FrameworkElement const& host) {
     HostSignature sig;
     sig.count = VisualTreeHelper::GetChildrenCount(host);
     sig.width = host.ActualWidth();
+    sig.height = host.ActualHeight();
 
     uint64_t h = 1469598103934665603ULL;
     for (int i = 0; i < sig.count; i++) {
@@ -606,6 +717,7 @@ static HostSignature ComputeHostSignature(FrameworkElement const& host) {
         if (!child) continue;
         h = Fnv1aMix(h, (uint64_t)winrt::get_abi(child));
         h = Fnv1aMix(h, (uint64_t)(child.ActualWidth() * 10.0));
+        h = Fnv1aMix(h, (uint64_t)(child.ActualHeight() * 10.0));
     }
     sig.orderHash = h;
     return sig;
@@ -614,6 +726,7 @@ static HostSignature ComputeHostSignature(FrameworkElement const& host) {
 static bool SigDifferent(HostSignature const& a, HostSignature const& b) {
     if (a.count != b.count) return true;
     if (std::abs(a.width - b.width) > 0.5) return true;
+    if (std::abs(a.height - b.height) > 0.5) return true;
     if (a.orderHash != b.orderHash) return true;
     return false;
 }
@@ -694,9 +807,9 @@ static void ResetElementTransforms(FrameworkElement const& element) {
     auto bounceTranslate = tg.Children().GetAt(3).try_as<TranslateTransform>();
 
     if (waveScale) { waveScale.ScaleX(1.0); waveScale.ScaleY(1.0); }
-    if (waveTranslate) { waveTranslate.X(0.0); }
+    if (waveTranslate) { waveTranslate.X(0.0); waveTranslate.Y(0.0); }
     if (bounceScale) { bounceScale.ScaleX(1.0); bounceScale.ScaleY(1.0); }
-    if (bounceTranslate) { bounceTranslate.Y(0.0); }
+    if (bounceTranslate) { bounceTranslate.X(0.0); bounceTranslate.Y(0.0); }
 }
 
 static bool RebaseIconGeometryFast(DockAnimationContext& ctx) {
@@ -719,35 +832,20 @@ static bool RebaseIconGeometryFast(DockAnimationContext& ctx) {
         if (!e) continue;
 
         try {
-            double oldX = info.originalCenterX;
-            double oldW = info.elementWidth;
+            double oldX = info.originalCenter;
+            double oldW = info.elementLength;
 
             auto t = e.TransformToVisual(frame);
             auto pt = t.TransformPoint({0, 0});
-            double w = e.ActualWidth();
-            info.elementWidth = w;
+            double w = MainAxisLength(ctx, e);
+            double start = MainAxisPos(ctx, pt);
+            info.elementLength = w;
 
-            float yOrigin = g_settings.disableVerticalBounce
-                ? 0.5f
-                : (g_settings.mirrorAnimation ? 0.0f : 1.0f);
+            e.RenderTransformOrigin(ComputeTransformOrigin(ctx, e));
 
-            if (g_settings.taskbarLabelsMode) {
-                double newStartX = pt.X;
-                info.originalCenterX = newStartX;
-
-                float iconCenterPx = 24.0f;
-                float iconCenterProportion = (w > 0.0) ? (iconCenterPx / (float)w) : 0.5f;
-                e.RenderTransformOrigin({ iconCenterProportion, yOrigin });
-
-                if (std::abs(newStartX - oldX) > 0.5) changed = true;
-            } else {
-                double newCenterX = pt.X + (w / 2.0);
-                info.originalCenterX = newCenterX;
-
-                e.RenderTransformOrigin({ 0.5f, yOrigin });
-
-                if (std::abs(newCenterX - oldX) > 0.5) changed = true;
-            }
+            double newPos = g_settings.taskbarLabelsMode ? start : start + (w / 2.0);
+            info.originalCenter = newPos;
+            if (std::abs(newPos - oldX) > 0.5) changed = true;
 
             if (std::abs(w - oldW) > 0.5) changed = true;
         } catch (...) {
@@ -757,7 +855,7 @@ static bool RebaseIconGeometryFast(DockAnimationContext& ctx) {
     if (changed && ctx.icons.size() > 1) {
         std::sort(ctx.icons.begin(), ctx.icons.end(),
             [](TaskbarIconInfo const& a, TaskbarIconInfo const& b) {
-                return a.originalCenterX < b.originalCenterX;
+                return a.originalCenter < b.originalCenter;
             });
     }
 
@@ -859,28 +957,19 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
                 element.RenderTransform(tg);
             }
 
-            float yOrigin = g_settings.disableVerticalBounce
-                ? 0.5f
-                : (g_settings.mirrorAnimation ? 0.0f : 1.0f);
-
             auto transform = element.TransformToVisual(taskbarFrame);
             auto point = transform.TransformPoint({0, 0});
 
             TaskbarIconInfo info;
             info.element = element;
-            info.elementWidth = element.ActualWidth();
+            info.elementLength = MainAxisLength(ctx, element);
 
-            if (g_settings.taskbarLabelsMode) {
-                float iconCenterPx = 24.0f;
-                float iconCenterProportion =
-                    (info.elementWidth > 0) ? (iconCenterPx / (float)info.elementWidth) : 0.5f;
+            element.RenderTransformOrigin(ComputeTransformOrigin(ctx, element));
 
-                element.RenderTransformOrigin({ iconCenterProportion, yOrigin });
-                info.originalCenterX = point.X;
-            } else {
-                element.RenderTransformOrigin({ 0.5f, yOrigin });
-                info.originalCenterX = point.X + (info.elementWidth / 2.0);
-            }
+            double start = MainAxisPos(ctx, point);
+            info.originalCenter = g_settings.taskbarLabelsMode
+                ? start
+                : start + (info.elementLength / 2.0);
 
             void* key = winrt::get_abi(element);
 
@@ -895,7 +984,13 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
                     waveScale.ScaleY(info.state.waveScale);
                 }
                 if (waveTranslate) {
-                    waveTranslate.X(info.state.waveTranslateX);
+                    if (ctx.isVertical) {
+                        waveTranslate.X(0.0);
+                        waveTranslate.Y(info.state.waveTranslate);
+                    } else {
+                        waveTranslate.X(info.state.waveTranslate);
+                        waveTranslate.Y(0.0);
+                    }
                 }
             }
 
@@ -958,7 +1053,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
             }
 
             if (hits >= 3) {
-                double w = (double)n.ActualWidth();
+                double w = MainAxisLength(ctx, n);
                 if (hits > bestHits || (hits == bestHits && w > bestWidth)) {
                     best = n;
                     bestHits = hits;
@@ -1045,7 +1140,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
 
         std::sort(newIcons.begin(), newIcons.end(),
             [](TaskbarIconInfo const& a, TaskbarIconInfo const& b) {
-                return a.originalCenterX < b.originalCenterX;
+                return a.originalCenter < b.originalCenter;
             });
 
         ctx.icons = std::move(newIcons);
