@@ -2,7 +2,7 @@
 // @id              explorer-steam-games
 // @name            Steam Games in Explorer
 // @description     Your Steam games in the File Explorer navigation pane: launch, open folders, playtime, collections (Epic, GOG and Xbox experimental)
-// @version         1.1
+// @version         1.2
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -81,6 +81,11 @@ library.
 With "Game icons: Cover", Steam and Xbox games use their cover art as icon:
 with "Large icons" view the folder looks like a game library.
 
+## Navigation pane icons
+The Steam, Epic, GOG, Xbox and "Games" entries can use your own icons: in
+"Navigation pane icons", enter an .ico file or an .exe/.dll with an icon
+index. If the file doesn't exist, the default icon is used.
+
 ## Language
 Folder names, menu entries and comments follow the Windows display language:
 English, Italian, Spanish, French, German, Portuguese, Polish and Russian.
@@ -139,6 +144,21 @@ new File Explorer window (or restart File Explorer once).
 - singleNodeName: ""
   $name: Name of the single entry
   $description: Leave empty for "Games" in the Windows language
+- navIcons:
+  - steam: ""
+    $name: Steam
+  - epic: ""
+    $name: Epic Games
+  - gog: ""
+    $name: GOG
+  - xbox: ""
+    $name: Xbox
+  - games: ""
+    $name: Single entry
+  $name: Navigation pane icons
+  $description: >-
+    Optional. An .ico file, or an .exe/.dll with an icon index (for example
+    %SystemRoot%\System32\imageres.dll,177). Leave empty for the default icon.
 - steam: true
   $name: Steam
 - epic: false
@@ -373,6 +393,8 @@ struct Settings {
     bool singleNode = false;
     DWORD sortBase = 0x42;
     std::wstring singleNodeName;
+    std::wstring navIcon[P_COUNT];
+    std::wstring navIconAll;
     bool enabled[P_COUNT] = {};
     LangId lang = L_EN;
     bool coverIcons = false;
@@ -961,6 +983,30 @@ void RegisterFileTypes(const Settings& s) {
     RegisterLibraryType(s.enabled[P_STEAM] && s.showNotInstalled);
 }
 
+// Icon chosen in the settings ("file" or "file,index"), or the default icon
+// if it's empty or the file doesn't exist.
+std::wstring CustomIcon(std::wstring icon, const std::wstring& fallback) {
+    while (!icon.empty() && iswspace(icon.back())) icon.pop_back();
+    while (!icon.empty() && iswspace(icon.front())) icon.erase(0, 1);
+    if (icon.size() >= 2 && icon.front() == L'"') {
+        size_t q = icon.find(L'"', 1);
+        if (q != std::wstring::npos) icon.erase(q, 1);
+        icon.erase(0, 1);
+    }
+    if (icon.empty()) return fallback;
+    std::wstring file = icon;
+    size_t comma = icon.find_last_of(L',');
+    if (comma != std::wstring::npos) {
+        std::wstring index = icon.substr(comma + 1);
+        bool numeric = !index.empty();
+        for (size_t i = 0; i < index.size(); i++) {
+            if (!iswdigit(index[i]) && !(i == 0 && index[i] == L'-')) numeric = false;
+        }
+        if (numeric) file = icon.substr(0, comma);
+    }
+    return FileExists(ExpandEnv(file)) ? icon : fallback;
+}
+
 // Hive keys of the navigation pane folders. All of them are always present
 // in the hive; the NameSpace hook decides which ones Explorer lists.
 void RegisterNode(const std::wstring& clsid, const std::wstring& name,
@@ -993,9 +1039,10 @@ bool BuildHive(const Settings& s) {
     // SortOrderIndex sets where the entries go in the navigation pane.
     DWORD sortBase = s.sortBase;
     RegisterNode(kClsidAll, s.singleNodeName.empty() ? Tr(S_GAMES) : s.singleNodeName,
-                 PlatformIcon(firstEnabled), root, sortBase);
+                 CustomIcon(s.navIconAll, PlatformIcon(firstEnabled)), root, sortBase);
     for (int p = 0; p < P_COUNT; p++) {
-        RegisterNode(kPlatforms[p].clsid, kPlatforms[p].folder, PlatformIcon(p),
+        RegisterNode(kPlatforms[p].clsid, kPlatforms[p].folder,
+                     CustomIcon(s.navIcon[p], PlatformIcon(p)),
                      root + L"\\" + kPlatforms[p].folder, sortBase + p);
     }
     // Empty stand-ins, used when the real keys don't exist (see the hooks).
@@ -2847,7 +2894,9 @@ void LoadSettings() {
     s.singleNodeName = StringSetting(L"singleNodeName");
     for (int p = 0; p < P_COUNT; p++) {
         s.enabled[p] = Wh_GetIntSetting(kPlatforms[p].setting) != 0;
+        s.navIcon[p] = StringSetting((L"navIcons." + std::wstring(kPlatforms[p].setting)).c_str());
     }
+    s.navIconAll = StringSetting(L"navIcons.games");
     s.coverIcons = StringSetting(L"iconStyle") == L"cover";
     s.lang = LanguageFromWindows();
     s.showRecent = Wh_GetIntSetting(L"showRecent") != 0;
