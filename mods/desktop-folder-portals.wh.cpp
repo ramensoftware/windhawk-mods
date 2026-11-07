@@ -3,7 +3,7 @@
 // @name            Desktop Folder Portals (Windows 11)
 // @description     Интерактивные папки-порталы на рабочем столе с плавной морфинг-анимацией, эффектом стекла и сеткой файлов.
 // @version         1.2.0
-// @author          Windhawk Developer
+// @author          // @github [https://github.com/Eswerd2324](https://github.com/Eswerd2324)
 // @github          https://github.com/windhawkmods
 // @include         explorer.exe
 // @compilerOptions -luxtheme -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
@@ -13,7 +13,42 @@
 /*
 # Desktop Folder Portals для Windows 11
 
-Интерактивные папки-порталы на рабочем столе. При наведении курсора на папку плавно раскрывается мини-окно предпросмотра с эффектом чистого стекла и сеткой файлов.
+Desktop Folder Portals — элегантная модификация для Windows 11, внедряющая интерактивный предпросмотр содержимого папок прямо на рабочем столе без необходимости их открытия в Проводнике.
+
+Ключевые возможности:
+
+Интерактивные порталы: плавное появление компактного всплывающего окна с файлами при наведении курсора на директорию и его аккуратное исчезновение при отведении мыши.
+
+Нативная интеграция с Windows 11: полный доступ к оригинальному системному контекстному меню по правому клику мыши для переименования, открытия свойств и стандартных файловых операций.
+
+Полноценный Drag-and-Drop: удобный перенос файлов из окна предпросмотра на рабочий стол или в любые другие открытые окна без графических артефактов.
+
+Современная эстетика Fluent Design: скругленные углы, эффект полупрозрачности Acrylic/Mica, мягкие тени и плавная анимация развертывания окна.
+
+Гибкая кастомизация: быстрая настройка задержки срабатывания, визуальных эффектов и параметров отображения в панели Windhawk.
+
+Надежность и производительность: оптимизированная реализация на C++ с контролем выделения системных ресурсов GDI/USER, отсутствием утечек памяти и плавным откликом без задержек explorer.exe.
+
+Мод существенно ускоряет ежедневную навигацию и организует рабочее пространство, избавляя от лишних окон и кликов.
+
+Description in English
+Desktop Folder Portals is an elegant Windows 11 modification that brings interactive, on-hover folder content previews directly to your desktop without opening separate File Explorer windows.
+
+Key Features:
+
+Seamless Hover Previews: hovering over any desktop folder smoothly expands an interactive mini-window displaying its contents, elegantly collapsing once the cursor moves away.
+
+Native Windows 11 Context Menu: full integration with the authentic system right-click menu, enabling quick renaming, property inspection, and standard file operations.
+
+Effortless Drag-and-Drop: clean, artifact-free file transfers straight from the preview portal to the desktop, active folders, or third-party applications.
+
+Modern Fluent Design: styled with native Mica and Acrylic translucency, rounded corners, soft ambient drop shadows, and fluid transformation animations.
+
+Granular Customization: configure hover response delays, visual styling, and behavioral triggers effortlessly via the Windhawk settings interface.
+
+Optimized & Safe Engine: written in clean, modern C++ with strict GDI/USER resource management to prevent memory leaks and maintain complete desktop UI responsiveness.
+
+A refined productivity tool designed to streamline file access, minimize desktop clutter, and reduce unnecessary navigation clicks.
 */
 // ==/WindhawkModReadme==
 
