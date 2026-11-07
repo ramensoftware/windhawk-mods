@@ -2,12 +2,141 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-06T22:03:18.000Z</updated>
+    <updated>2026-11-07T19:00:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Super Shortcuts for Mouse 1.0]]></title>
+        <id>https://windhawk.net/mods/super-mouse-shortcuts#321695c7119455bea8b3de7bfc2f32e6062f27c8</id>
+        <link href="https://windhawk.net/mods/super-mouse-shortcuts"/>
+        <updated>2026-11-07T19:00:18.000Z</updated>
+        <content type="html"><![CDATA[<h1>Super Shortcuts for Mouse</h1>
+<p><strong>English</strong> · <a href="#t%C3%BCrk%C3%A7e">Türkçe</a> · <a href="#deutsch">Deutsch</a> · <a href="#fran%C3%A7ais">Français</a> · <a href="#%D1%80%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9">Русский</a></p>
+<p>Hold a mouse button, then click or scroll with another one to run an action on
+the <strong>window under the cursor</strong>: close, minimize, maximize or restore it, snap
+it, toggle always-on-top, skip to the next / previous track, play / pause,
+change the volume, show the desktop, switch virtual desktops, take a screenshot
+and more.</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>Hold button</strong> (choose in the settings):
+<ul>
+<li>Right mouse button (default)</li>
+<li>Back (side) mouse button</li>
+<li>Forward (side) mouse button</li>
+</ul>
+</li>
+<li>While it is held, these inputs are available as triggers, and each can be
+assigned any action in the settings: left click, middle click, scroll wheel up /
+down, the other side button, and the right button (side-button mode only).</li>
+<li>Window actions always apply to the window under the mouse cursor, not to the
+active window.</li>
+<li>Default mapping: left click = close, middle click = play / pause, wheel up =
+maximize, wheel down = minimize, Back = previous track, Forward = next track,
+right click (side-button mode) = always on top.</li>
+<li>If you press and release the hold button without using any trigger, it works as a
+normal click (context menu, browser back / forward...). Right-button drags are
+detected and passed through to the application unchanged.</li>
+<li>The language (English, Turkish, German, French, Russian) follows your Windows
+display language automatically. Other languages fall back to English.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>The mod runs in <code>windhawk.exe</code> and uses a global low-level mouse hook.</li>
+<li>Windows that run as administrator ignore requests from a non-elevated process.
+To control them, run Windhawk as administrator.</li>
+<li>Synthetic mouse events from other programs are not affected, and the mod is
+disabled while a fullscreen app / game is active (can be turned off).</li>
+<li>&quot;None&quot; assigned to a trigger blocks that input while the hold button is down.</li>
+</ul>
+<hr>
+<h2>Türkçe</h2>
+<p>Bir fare tuşunu basılı tutup başka bir tuşa tıklayarak ya da tekerleği çevirerek
+<strong>imlecin altındaki pencerede</strong> işlev çalıştırın: kapat, simge durumuna küçült,
+büyüt, eski boyuta getir, yasla, her zaman üstte, sonraki / önceki şarkı,
+oynat / duraklat, ses, masaüstünü göster, sanal masaüstü değiştir, ekran
+görüntüsü ve daha fazlası.</p>
+<ul>
+<li>Basılı tutulacak tuş: sağ fare tuşu (varsayılan), Geri veya İleri yan tuşu.</li>
+<li>Tuş basılıyken sol tık, orta tık, tekerlek yukarı / aşağı, diğer yan tuş ve
+(yalnızca yan tuş modunda) sağ tık tetikleyici olarak kullanılabilir; her birine
+ayarlardan istediğiniz işlevi atayabilirsiniz.</li>
+<li>Pencere işlevleri her zaman etkin pencereye değil, fare imlecinin altındaki
+pencereye uygulanır.</li>
+<li>Tuşa hiçbir tetikleyici kullanmadan basıp bırakırsanız normal tıklama gibi çalışır.</li>
+<li>Dil, Windows görüntü dilinize göre otomatik seçilir; desteklenmeyen diller için
+İngilizce kullanılır.</li>
+<li>Yönetici olarak çalışan pencereleri de kontrol etmek için Windhawk'u yönetici
+olarak çalıştırın. Tam ekran uygulama / oyun açıkken mod devre dışı kalır.</li>
+</ul>
+<hr>
+<h2>Deutsch</h2>
+<p>Halten Sie eine Maustaste gedrückt und klicken oder scrollen Sie mit einer anderen,
+um eine Aktion für das <strong>Fenster unter dem Mauszeiger</strong> auszuführen: schließen,
+minimieren, maximieren, andocken, immer im Vordergrund, Titel überspringen,
+Wiedergabe/Pause, Lautstärke, Desktop anzeigen, virtuelle Desktops wechseln,
+Screenshot und mehr. Die Sprache folgt automatisch der Windows-Anzeigesprache
+(sonst Englisch).</p>
+<hr>
+<h2>Français</h2>
+<p>Maintenez un bouton de la souris, puis cliquez ou faites défiler avec un autre
+pour exécuter une action sur la <strong>fenêtre située sous le curseur</strong> : fermer,
+réduire, agrandir, ancrer, toujours au premier plan, changer de piste,
+lecture/pause, volume, afficher le bureau, changer de bureau virtuel, capture
+d'écran, etc. La langue suit automatiquement celle de Windows (sinon l'anglais).</p>
+<hr>
+<h2>Русский</h2>
+<p>Удерживайте одну кнопку мыши и щёлкайте или прокручивайте колесо другой, чтобы
+выполнить действие над <strong>окном под курсором</strong>: закрыть, свернуть, развернуть,
+прикрепить, поверх всех окон, переключить трек, воспроизведение/пауза, громкость,
+показать рабочий стол, сменить виртуальный рабочий стол, снимок экрана и другое.
+Язык выбирается автоматически по языку интерфейса Windows (иначе английский).</p>
+]]></content>
+        <author>
+            <name>DahaSakinOlamazdim</name>
+            <uri>https://github.com/DahaSakinOlamazdim</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.0.0]]></title>
+        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#e1b866d715515ef71cec20eb25ef4eb437c26cfe</id>
+        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
+        <updated>2026-11-07T19:00:12.000Z</updated>
+        <content type="html"><![CDATA[<h1>Touchpad Relaxed Hand Tracking</h1>
+<p>Move the pointer with more fingers resting on the precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>Trigger:</strong> with 5 (or as few as configured) fingers touching the pad.</li>
+<li><strong>Disarm:</strong> after all fingers leave the touchpad. Lifting some keeps the glide going.</li>
+<li><strong>Movement:</strong> each finger weighs as much as it moves, so resting fingers drop out and one which lags (usually the thumb) doesn't fight the others. With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.</li>
+<li><strong>Click:</strong> you don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad.</li>
+<li><strong>Scrolling:</strong> Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll, while &quot;inside&quot; the more-fingers action (or with 2 fingers detection enabled). <strong>Both will get activated if you start with 2 and rest more on the touchpad.</strong></li>
+</ul>
+<h2>4 and 3 fingers detection</h2>
+<p>The options to start with four or three fingers conflict with the respective Windows swipes. <strong>Disable them in Settings → Bluetooth &amp; devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing</strong>. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.</p>
+<h2>2 fingers detection</h2>
+<p>When active, two fingers do everything: glide, right click (tap) and scroll (tap-drag). Windows' own two-finger gestures have to be disabled in <strong>Settings → Bluetooth &amp; devices → Touchpad</strong>: uncheck <strong>Scroll &amp; zoom → Drag two fingers to scroll</strong> and <strong>Taps → Tap with two fingers to right-click</strong>. Otherwise both commands respond. On Windhawk 1.x, with two-finger detection active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.</p>
+<h2>Speed</h2>
+<p>The mod learns the touchpad's native speed and acceleration by watching ordinary one-finger use: for each range of finger speed, it compares how far the finger moved with how far Windows moved the pointer. The glide reproduces that curve, and the multipliers apply on top of it: <strong>1.0 is the same as native</strong>, 1.5 is 50% faster. When the touchpad speed is changed in Windows settings, the curve adjusts with use.</p>
+<p>Right after installing, before anything is learned, the glide uses a default speed. Using the touchpad normally for a few minutes, with slow and fast movements, is enough for it to learn.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Requires a precision touchpad.</li>
+<li>Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. <strong>Disabling Windows three and four fingers swipes removes the conflict.</strong></li>
+<li><strong>Programs running as administrator need Windhawk 2.</strong> On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.</li>
+<li>Movements against the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.</li>
+</ul>
+<h2>Credits</h2>
+<p>Reading the touchpad follows the approach of the <a href="https://windhawk.net/mods/three-finger-drag">Three Finger Drag</a> mod by RodrigoThomazi, under the GPL v3.</p>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Eject Dialog 1.0]]></title>
         <id>https://windhawk.net/mods/better-eject-dialog#1419d1c0a9a1ae204c3ca2dbba1858c6a80e9f8b</id>
@@ -1206,177 +1335,6 @@ clipboard tips, this mod is.</p>
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Copy File Contents 1.4]]></title>
-        <id>https://windhawk.net/mods/copy-file-contents#0cb1e6720db42338d92199f507ca84c4b23c7fcc</id>
-        <link href="https://windhawk.net/mods/copy-file-contents"/>
-        <updated>2026-11-04T01:04:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Copy File Contents</h1>
-<p>Adds two actions to File Explorer, so a file can be read without opening it:</p>
-<ul>
-<li><strong>Copy contents</strong> puts the text of the selected file on the clipboard.</li>
-<li><strong>Copy SHA-256</strong> puts the hash of the selected file on the clipboard.</li>
-</ul>
-<p>Several files can be selected at once. Contents are copied one after another with
-the file name above each, and hashes are copied one per line. A setting can put
-each file on the clipboard as its own item instead, which keeps them apart in
-Windows clipboard history, so Win+V offers each file on its own.</p>
-<h2>Two ways to reach it</h2>
-<p><strong>Keyboard.</strong> Select files, then press Ctrl+Shift+T for the contents or
-Ctrl+Shift+H for the hash. This works with the new Windows 11 menu, because it
-does not go through the menu at all. The shortcut is only live while a File
-Explorer window has the focus and the file view is the one being pointed at, and
-it is ignored while the rename box, the address bar or the search box has the
-focus, so it never eats a letter you are typing. Every key combination here can
-be changed in the settings. Do not reuse Ctrl+Shift+C or Ctrl+Shift+N, which are
-File Explorer's own Copy as path and New folder, because the mod would take the
-key from Explorer.</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/copy-file-contents-shots/screenshots/copy-file-contents-menu.png" alt="Classic File Explorer menu with both entries"></p>
-<p><strong>Right-click.</strong> The two entries are also added to the classic menu, reached
-with <strong>Show more options</strong> or Shift+F10. They are added at the bottom of that
-menu, below Properties, and removed again once the menu closes, so the menu is
-never left modified. The new Windows 11 menu belongs to a different component and
-cannot be extended by injected code without registering a handler in the
-registry, which a mod must not do. To get the entries on a plain right-click, use
-the separate mod <strong>Classic context menu on Windows 11</strong>. If the classic menu
-cannot be reached on your build, the keyboard shortcuts are the whole of the mod
-and they do not need the menu at all.</p>
-<h2>What it will and will not copy</h2>
-<p>A file is copied only if it looks like text. Files that look binary are refused
-rather than pasted as garbage, and files larger than the size limit are refused
-the same way. When nothing at all could be copied, an optional prompt shows the
-reason. For an oversized local file up to 32 MB whose prefix looks like text, it offers
-to open it in Notepad instead. This prefix check is only a heuristic. Network and
-offline files are not opened for the offer. The path is passed quoted so a path
-with a space in it still opens.</p>
-<p>The size limit is 8 MB by default, with the unit chosen next to it, megabytes or
-kilobytes. A large selection is copied file by file, so one file over the limit is
-skipped and the rest are still copied. That partial copy is silent, because a
-dialog in the middle of copying five files is worse than a missing one. When
-nothing at all can be copied, the optional prompt explains why instead.</p>
-<p>The whole selection is also held to a 32 MB budget, so selecting a whole folder of
-logs cannot make File Explorer allocate without bound. A file bigger than what is
-left of that budget cannot fit in any encoding, so it is skipped without being
-opened, and once the budget is used up the rest of the selection is not read at
-all, which keeps a large Ctrl+A quick instead of slow. A file smaller than that is
-read and measured: its text is the same size on disk for UTF-16, and up to twice
-that for ASCII, so only the read itself can say.</p>
-<p>The ceilings are 64 MB per file and 32 MB per selection whatever the settings
-say. In practice the per selection budget is the one that binds: no single file is
-copied beyond 32 MB of text, which is the same as saying that a 20 MB UTF-16 file
-is copied and a 20 MB ASCII file is not. A text file that big is already beyond
-what a clipboard is good for, and the mod refuses rather than trying.</p>
-<p>When nothing in the selection can be copied, <strong>Copy contents</strong> is left out of the
-menu instead of being offered and then refusing. To decide that, the first 4 KiB
-of each file are read when the menu opens, stopping at the first file that
-passes, and looking at no more than 16 files. Files that are offline or stored
-online only are not read at all, because reading one would start a download; such
-a file is assumed copyable and the copy itself decides. Files on a network share
-are treated the same way, whether they are reached by a <code>\\server\share</code> path or
-through a drive letter mapped to one, because reading from a share that has
-stopped answering would hang the menu. A mixed selection still shows the entry
-and copies the files that can be copied.</p>
-<p>Encoding is detected rather than assumed: a byte order mark is honored, then the
-file is checked for UTF-16 without a mark, then for strict UTF-8, and finally read
-as the system code page. UTF-16 is checked before UTF-8 on purpose: the zero bytes
-of a UTF-16 file are valid UTF-8, so the other order would decode such a file as
-text with invisible gaps. Line endings are copied as they are.</p>
-<h2>Large hashes</h2>
-<p>Hashing reads every byte, and the work runs on the same thread that owns the File
-Explorer window, so that window does not repaint until it is done. For a normal
-file that is instant; a gigabyte on a hard disk is about ten seconds. Above the
-size set in the settings, 256 MB by default, the mod asks first, and says how many
-files and how much data are involved, counting the whole selection rather than one
-file at a time. Answer no and nothing happens. The setting can be raised to where
-hashing a whole disk in one go is on you, or set to 0 to be asked every time.</p>
-<h2>Known limits</h2>
-<ul>
-<li>Only files. A selection of folders, or the desktop, does nothing.</li>
-<li>The shortcuts act in File Explorer windows only. They do nothing in other
-programs and nothing on the desktop.</li>
-<li>The contents are put on the clipboard as text. Nothing is written to disk, and
-no temporary file is created.</li>
-<li>If the mod is turned off while its own prompt is open, the prompt is answered
-No for you and the copy stops, because the mod cannot be unloaded with its code
-still waiting on that dialog. Unloading waits about two seconds for work to
-finish. The wait between separate clipboard items ends as soon as unloading
-starts, but a single read from a share that has stopped answering cannot be
-interrupted, only waited out.</li>
-<li>With separate clipboard items turned on, Ctrl+V pastes only the last file. The
-earlier ones are reachable through Windows clipboard history (Win+V), and only
-there, and clipboard history has to be turned on for them to be kept.</li>
-<li>Clipboard history keeps 25 entries and about 4 MB per entry, which for text is
-roughly two million characters. A file bigger than that cannot be a history
-entry however it is copied; Windows drops it and tells no one. So in separate
-items mode those files are written last: the history keeps the files it can
-hold, and Ctrl+V gives the big one.</li>
-<li>Windows clipboard history is a separate service and it needs a moment between
-copies, so the files are written with a short wait, 250 ms by default and
-adjustable. The wait runs on File Explorer's thread, so a large selection takes
-that much longer to finish copying, and the window is briefly unresponsive
-while it does.</li>
-<li>A file being written by another program while it is read may be copied partially.
-That is a race no reader can win, and it is not worth a lock for this.</li>
-</ul>
-]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MMC Dark Mode 1.0]]></title>
-        <id>https://windhawk.net/mods/mmc-dark-mode#8bd77f398d1d27555aba6471b90a5034c0fd69e9</id>
-        <link href="https://windhawk.net/mods/mmc-dark-mode"/>
-        <updated>2026-11-04T01:04:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>MMC Dark Mode</h1>
-<p>A dark theme for the Microsoft Management Console: Device Manager, Services,
-Event Viewer, Task Scheduler, Disk Management and anything else hosted by
-<code>mmc.exe</code>.</p>
-<h2>Screenshots</h2>
-<p>Device Manager with the mod off:</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-before.png" alt="Device Manager with the mod off"></p>
-<p>Device Manager with the mod on:</p>
-<p><img src="https://raw.githubusercontent.com/Metanoid18/windhawk-mods/mmc-dark-mode-shots/screenshots/mmc-dark-mode-after.png" alt="Device Manager with the mod on"></p>
-<h2>What it does</h2>
-<p>The mod themes MMC windows in the <code>mmc.exe</code> process, including common trees,
-list views, property sheets and chrome. It also contains targeted handling for
-Services, Event Viewer, Task Scheduler and Disk Management. Existing menus and
-toolbars remain available. Some embedded content draws itself and is not themed.</p>
-<p>Switching the mod off requests restoration of native styles, colours and
-painting. The system-wide colour table is not changed.</p>
-<h2>Known limits</h2>
-<ul>
-<li>MMC hosts many snap-ins and not every control or embedded page is covered.
-Layouts, visual styles and Windows builds may differ from those tested.</li>
-<li>The Actions pane caption adjustment is x64-only and uses private DirectUI
-interfaces. If the required interfaces or hooks are unavailable, the native
-appearance is retained. Other custom-drawn content may remain light.</li>
-<li>Disk Management's selected partition frame adjustment is x64-only and checks
-an exact native drawing-code signature. On an unknown or changed build it
-leaves that frame unchanged rather than guessing. The blue partition colour
-is adjusted only when the native renderer requests the observed stock navy.
-Any region or legend configured to that same navy will also be recoloured;
-other brush colours and native patterns are left unchanged.</li>
-<li>The mod checks high contrast at load and does not activate when it is already
-enabled. Switching high contrast while MMC is running is not guaranteed to
-update every themed control; restart the console or disable the mod.</li>
-<li>Some GDI brushes are deliberately retained until the MMC process exits because
-native controls may cache them. Repeatedly reloading the mod in the same
-process can increase GDI handle use.</li>
-<li>The property-sheet tab strip is custom-painted; other tab layouts keep their
-native drawing. Push buttons generally keep native visuals, with a scoped
-dark face for the Task Scheduler summary Refresh button.</li>
-<li>The maximized child window's menu-row buttons use scoped custom drawing.
-Other layouts may keep the native appearance. Restored child-window captions
-and their buttons can remain light.</li>
-</ul>
-]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
         </author>
     </entry>
 </feed>

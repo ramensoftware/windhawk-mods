@@ -3769,13 +3769,13 @@
         "ratingUsers": 0,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1780137987000,
+        "updated": 1794078022000,
         "users": 40
       },
       "metadata": {
         "author": "Kitsune",
         "compilerOptions": "-lcomctl32",
-        "description": "Temporarily pauses the Auto-Refresh function whenever the application's main window is visible",
+        "description": "Temporarily pauses the Auto-Refresh function while the application's main window is visible",
         "github": "https://github.com/AromaKitsune",
         "include": [
           "DiskInfo32.exe",
@@ -3792,7 +3792,7 @@
           "DiskInfoA64S.exe"
         ],
         "name": "CrystalDiskInfo Smart Auto-Refresh",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "ctrl-backspace-fix-for-win32-text-boxes": {
@@ -6935,7 +6935,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793664266000,
+        "updated": 1794078027000,
         "users": 65
       },
       "metadata": {
@@ -6952,7 +6952,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Tab Router",
-        "version": "1.1.1"
+        "version": "1.1.2"
       }
     },
     "explorer-tab-utility-window-hider": {
@@ -15547,6 +15547,30 @@
         "version": "1.0.0"
       }
     },
+    "super-mouse-shortcuts": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794078018000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794078018000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DahaSakinOlamazdim",
+        "compilerOptions": "-lgdi32",
+        "description": "Hold the right (or a side) mouse button and click or scroll to close, minimize, maximize the window under the cursor, skip tracks and more",
+        "github": "https://github.com/DahaSakinOlamazdim",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Super Shortcuts for Mouse",
+        "version": "1.0"
+      }
+    },
     "suppress-run-box-error-message": {
       "details": {
         "defaultSorting": 469,
@@ -19092,6 +19116,33 @@
           "TortoiseGitProc.exe"
         ],
         "name": "TortoiseGit progress animation background fix for classic dark theme",
+        "version": "1.0.0"
+      }
+    },
+    "touchpad-relaxed-hand-tracking": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794078012000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794078012000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "3DDinosaur",
+        "compilerOptions": "-lhid -lwtsapi32",
+        "description": "Enables 5-2 fingers mouse pointer tracking for improved hand ergonomics (admin windows need Windhawk 2)",
+        "github": "https://github.com/3DDinosaur",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Touchpad Relaxed Hand Tracking",
         "version": "1.0.0"
       }
     },

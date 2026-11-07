@@ -2,12 +2,172 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-07T17:02:24.000Z</updated>
+    <updated>2026-11-07T19:00:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tab Router 1.1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-tab-router#6a2eda932f27a788ca5627e4e817b0a6f9f9c568</id>
+        <link href="https://windhawk.net/mods/explorer-tab-router"/>
+        <updated>2026-11-07T19:00:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix brief switches through unrelated tabs when activating an existing folder tab from an external open or file-reveal request.</li>
+<li>Resolve the exact target HWND on the owning frame thread and issue one verified selection command, including after tab reordering.</li>
+<li>Remove sequential ordinal probing; retain file selection and fail safely if direct activation is unavailable.</li>
+</ul>
+]]></content>
+        <author>
+            <name>afate123</name>
+            <uri>https://github.com/afate123</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CrystalDiskInfo Smart Auto-Refresh 1.0.2]]></title>
+        <id>https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh#c66c7167c67d7dec778940cf6a20ec20f29ba878</id>
+        <link href="https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh"/>
+        <updated>2026-11-07T19:00:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Resolved an issue where the Auto-Refresh filter unintentionally interfered with the Power-On Hours calculation.</li>
+<li>Fixed a crash when the mod was unloaded after Auto-Refresh had been turned off.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Super Shortcuts for Mouse 1.0]]></title>
+        <id>https://windhawk.net/mods/super-mouse-shortcuts#321695c7119455bea8b3de7bfc2f32e6062f27c8</id>
+        <link href="https://windhawk.net/mods/super-mouse-shortcuts"/>
+        <updated>2026-11-07T19:00:18.000Z</updated>
+        <content type="html"><![CDATA[<h1>Super Shortcuts for Mouse</h1>
+<p><strong>English</strong> · <a href="#t%C3%BCrk%C3%A7e">Türkçe</a> · <a href="#deutsch">Deutsch</a> · <a href="#fran%C3%A7ais">Français</a> · <a href="#%D1%80%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9">Русский</a></p>
+<p>Hold a mouse button, then click or scroll with another one to run an action on
+the <strong>window under the cursor</strong>: close, minimize, maximize or restore it, snap
+it, toggle always-on-top, skip to the next / previous track, play / pause,
+change the volume, show the desktop, switch virtual desktops, take a screenshot
+and more.</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>Hold button</strong> (choose in the settings):
+<ul>
+<li>Right mouse button (default)</li>
+<li>Back (side) mouse button</li>
+<li>Forward (side) mouse button</li>
+</ul>
+</li>
+<li>While it is held, these inputs are available as triggers, and each can be
+assigned any action in the settings: left click, middle click, scroll wheel up /
+down, the other side button, and the right button (side-button mode only).</li>
+<li>Window actions always apply to the window under the mouse cursor, not to the
+active window.</li>
+<li>Default mapping: left click = close, middle click = play / pause, wheel up =
+maximize, wheel down = minimize, Back = previous track, Forward = next track,
+right click (side-button mode) = always on top.</li>
+<li>If you press and release the hold button without using any trigger, it works as a
+normal click (context menu, browser back / forward...). Right-button drags are
+detected and passed through to the application unchanged.</li>
+<li>The language (English, Turkish, German, French, Russian) follows your Windows
+display language automatically. Other languages fall back to English.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>The mod runs in <code>windhawk.exe</code> and uses a global low-level mouse hook.</li>
+<li>Windows that run as administrator ignore requests from a non-elevated process.
+To control them, run Windhawk as administrator.</li>
+<li>Synthetic mouse events from other programs are not affected, and the mod is
+disabled while a fullscreen app / game is active (can be turned off).</li>
+<li>&quot;None&quot; assigned to a trigger blocks that input while the hold button is down.</li>
+</ul>
+<hr>
+<h2>Türkçe</h2>
+<p>Bir fare tuşunu basılı tutup başka bir tuşa tıklayarak ya da tekerleği çevirerek
+<strong>imlecin altındaki pencerede</strong> işlev çalıştırın: kapat, simge durumuna küçült,
+büyüt, eski boyuta getir, yasla, her zaman üstte, sonraki / önceki şarkı,
+oynat / duraklat, ses, masaüstünü göster, sanal masaüstü değiştir, ekran
+görüntüsü ve daha fazlası.</p>
+<ul>
+<li>Basılı tutulacak tuş: sağ fare tuşu (varsayılan), Geri veya İleri yan tuşu.</li>
+<li>Tuş basılıyken sol tık, orta tık, tekerlek yukarı / aşağı, diğer yan tuş ve
+(yalnızca yan tuş modunda) sağ tık tetikleyici olarak kullanılabilir; her birine
+ayarlardan istediğiniz işlevi atayabilirsiniz.</li>
+<li>Pencere işlevleri her zaman etkin pencereye değil, fare imlecinin altındaki
+pencereye uygulanır.</li>
+<li>Tuşa hiçbir tetikleyici kullanmadan basıp bırakırsanız normal tıklama gibi çalışır.</li>
+<li>Dil, Windows görüntü dilinize göre otomatik seçilir; desteklenmeyen diller için
+İngilizce kullanılır.</li>
+<li>Yönetici olarak çalışan pencereleri de kontrol etmek için Windhawk'u yönetici
+olarak çalıştırın. Tam ekran uygulama / oyun açıkken mod devre dışı kalır.</li>
+</ul>
+<hr>
+<h2>Deutsch</h2>
+<p>Halten Sie eine Maustaste gedrückt und klicken oder scrollen Sie mit einer anderen,
+um eine Aktion für das <strong>Fenster unter dem Mauszeiger</strong> auszuführen: schließen,
+minimieren, maximieren, andocken, immer im Vordergrund, Titel überspringen,
+Wiedergabe/Pause, Lautstärke, Desktop anzeigen, virtuelle Desktops wechseln,
+Screenshot und mehr. Die Sprache folgt automatisch der Windows-Anzeigesprache
+(sonst Englisch).</p>
+<hr>
+<h2>Français</h2>
+<p>Maintenez un bouton de la souris, puis cliquez ou faites défiler avec un autre
+pour exécuter une action sur la <strong>fenêtre située sous le curseur</strong> : fermer,
+réduire, agrandir, ancrer, toujours au premier plan, changer de piste,
+lecture/pause, volume, afficher le bureau, changer de bureau virtuel, capture
+d'écran, etc. La langue suit automatiquement celle de Windows (sinon l'anglais).</p>
+<hr>
+<h2>Русский</h2>
+<p>Удерживайте одну кнопку мыши и щёлкайте или прокручивайте колесо другой, чтобы
+выполнить действие над <strong>окном под курсором</strong>: закрыть, свернуть, развернуть,
+прикрепить, поверх всех окон, переключить трек, воспроизведение/пауза, громкость,
+показать рабочий стол, сменить виртуальный рабочий стол, снимок экрана и другое.
+Язык выбирается автоматически по языку интерфейса Windows (иначе английский).</p>
+]]></content>
+        <author>
+            <name>DahaSakinOlamazdim</name>
+            <uri>https://github.com/DahaSakinOlamazdim</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.0.0]]></title>
+        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#e1b866d715515ef71cec20eb25ef4eb437c26cfe</id>
+        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
+        <updated>2026-11-07T19:00:12.000Z</updated>
+        <content type="html"><![CDATA[<h1>Touchpad Relaxed Hand Tracking</h1>
+<p>Move the pointer with more fingers resting on the precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>Trigger:</strong> with 5 (or as few as configured) fingers touching the pad.</li>
+<li><strong>Disarm:</strong> after all fingers leave the touchpad. Lifting some keeps the glide going.</li>
+<li><strong>Movement:</strong> each finger weighs as much as it moves, so resting fingers drop out and one which lags (usually the thumb) doesn't fight the others. With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.</li>
+<li><strong>Click:</strong> you don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad.</li>
+<li><strong>Scrolling:</strong> Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll, while &quot;inside&quot; the more-fingers action (or with 2 fingers detection enabled). <strong>Both will get activated if you start with 2 and rest more on the touchpad.</strong></li>
+</ul>
+<h2>4 and 3 fingers detection</h2>
+<p>The options to start with four or three fingers conflict with the respective Windows swipes. <strong>Disable them in Settings → Bluetooth &amp; devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing</strong>. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.</p>
+<h2>2 fingers detection</h2>
+<p>When active, two fingers do everything: glide, right click (tap) and scroll (tap-drag). Windows' own two-finger gestures have to be disabled in <strong>Settings → Bluetooth &amp; devices → Touchpad</strong>: uncheck <strong>Scroll &amp; zoom → Drag two fingers to scroll</strong> and <strong>Taps → Tap with two fingers to right-click</strong>. Otherwise both commands respond. On Windhawk 1.x, with two-finger detection active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.</p>
+<h2>Speed</h2>
+<p>The mod learns the touchpad's native speed and acceleration by watching ordinary one-finger use: for each range of finger speed, it compares how far the finger moved with how far Windows moved the pointer. The glide reproduces that curve, and the multipliers apply on top of it: <strong>1.0 is the same as native</strong>, 1.5 is 50% faster. When the touchpad speed is changed in Windows settings, the curve adjusts with use.</p>
+<p>Right after installing, before anything is learned, the glide uses a default speed. Using the touchpad normally for a few minutes, with slow and fast movements, is enough for it to learn.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Requires a precision touchpad.</li>
+<li>Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. <strong>Disabling Windows three and four fingers swipes removes the conflict.</strong></li>
+<li><strong>Programs running as administrator need Windhawk 2.</strong> On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.</li>
+<li>Movements against the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.</li>
+</ul>
+<h2>Credits</h2>
+<p>Reading the touchpad follows the approach of the <a href="https://windhawk.net/mods/three-finger-drag">Three Finger Drag</a> mod by RodrigoThomazi, under the GPL v3.</p>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mouse Trail 3.4.5.9]]></title>
         <id>https://windhawk.net/mods/mouse-trail#5dd4e2c3ce42ed1ae7064effebeda1b2a05c8487</id>
@@ -662,181 +822,6 @@ live capture is used automatically.</li>
         <author>
             <name>Soham</name>
             <uri>https://github.com/Soham-Barate</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Large Icons View for File Explorer 2.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-large-icons-view#a26e2956e4c66bab4a5b54df88463a7e8703cd3b</id>
-        <link href="https://windhawk.net/mods/explorer-large-icons-view"/>
-        <updated>2026-11-06T02:03:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>Large Icons View for File Explorer</h1>
-<p>Keeps File Explorer folders in <strong>Large icons</strong> view. The icon size is
-configurable: 96 pixels matches Windows' own Large icons.</p>
-<p><img src="https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/large-icons-before-after.png" alt="The same folder in Details view and with the mod enabled"></p>
-<h2>How it works</h2>
-<p>The view is switched when a folder opens in a File Explorer window, without
-waiting or polling.</p>
-<ul>
-<li><strong>Keep enforcing</strong> (default): if you switch a folder to another view, it is
-switched back to large icons.</li>
-<li>With <strong>Keep enforcing</strong> off, every folder opens in large icons, but a view
-you pick manually stays until you navigate to another folder.</li>
-</ul>
-<p>It applies to file-system folders (local, removable and network drives). The
-desktop, Open/Save dialogs, Home, This PC, the Recycle Bin and other virtual
-folders are not affected. Folder contents are never read, moved or changed.</p>
-<h2>Disabling the mod and restoring views</h2>
-<p>When <em>Remember each folder's view settings</em> is on (the Windows default),
-Explorer saves the view of each folder you open. Every folder opened while the
-mod is enabled is therefore saved in large icons, and keeps that view after the
-mod is disabled or removed.</p>
-<p>To restore the default view of all folders, open <strong>Folder Options &gt; View</strong> and
-select <strong>Reset Folders</strong>.</p>
-<h2>Credits and links</h2>
-<p>Original project by <strong>Dev_Maycon</strong>, developed with AI assistance. Licensed
-under <strong>GPL-3.0-only</strong>.</p>
-<ul>
-<li>Repository: <a href="https://github.com/MayconDIS/Windhawk_Mods">MayconDIS/Windhawk_Mods</a>.</li>
-<li>GitHub profile: <a href="https://github.com/MayconDIS">MayconDIS</a>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev_Maycon</name>
-            <uri>https://github.com/MayconDIS</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Separate System Tray Icons 1.2.0]]></title>
-        <id>https://windhawk.net/mods/separate-system-tray-icons#19a199cce5803268c81d35b593bb0cb0319e58fd</id>
-        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
-        <updated>2026-11-06T02:03:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <em><strong>Volume percentage</strong></em> to the Sound context menu, displaying the volume beside the glyph with a <code>%</code> sign.</li>
-<li>Added <em><strong>Constant width with volume percentage</strong></em>, keeping the Sound button width steady and the percentage right-aligned.</li>
-<li>Added middle-click action dropdowns for Bluetooth, Network, and Battery buttons with additional actions:
-<ul>
-<li><em><strong>Toggle Bluetooth</strong></em></li>
-<li><em><strong>Toggle Wi-Fi</strong></em></li>
-<li><em><strong>Toggle Energy saver</strong></em></li>
-</ul>
-</li>
-<li><em><strong>Increase chevron size</strong>:</em> enlarges the glyph to 16 px to match the tray icons.</li>
-<li>Control Center’s <em><strong>Open Project</strong></em> action now replaces <em><strong>Taskbar settings</strong></em> with <em><strong>Display settings</strong></em> in its context menu.</li>
-<li><em><strong>Sound output</strong></em> flyout is now triggered with command instead of keyboard shortcut</li>
-</ul>
-]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Media Widget 0.3.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-media-widget#919085cc24243abf840904675e9d8507f027c8f8</id>
-        <link href="https://windhawk.net/mods/taskbar-media-widget"/>
-        <updated>2026-11-06T02:02:59.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Media Widget</h1>
-<p>A compact media widget for the Windows 10 and Windows 11 taskbar. It reads
-metadata and controls playback through Global System Media Transport Controls.
-The <a href="https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager">media API</a>
-requires Windows 10 version 1809 or newer, including Windows 11.</p>
-<p>On Windows 11, the widget is inserted into the native tray XAML layout and
-tracks the taskbar height automatically. On the classic 64-bit Windows 10
-taskbar, including ExplorerPatcher configurations, it uses a DPI-aware Win32
-child window because that taskbar has no XAML tree. It reserves space beside
-the native task buttons and restores that space when hidden or unloaded.</p>
-<p>Widgets are created on the primary and secondary taskbars enabled in Windows.
-Each taskbar has independent layout and UI state; media polling and audio
-capture remain shared. On Windows 11 an unavailable XAML host is retried rather
-than replaced by a floating desktop overlay.</p>
-<p>The Taskbar monitors setting selects all monitors, the primary monitor, or one
-display device. For Selected monitor, the display number identifies the Windows
-device name (for example, 2 selects <code>\\.\DISPLAY2</code>), not the enumeration order.
-If that display is disconnected or has no taskbar, the widget stays hidden.
-Windows can renumber display devices after a connection or driver change.</p>
-<p>The native Windows 11 bottom, top, left and right taskbar positions are
-supported. Left and right taskbars use a compact vertical player that keeps
-the artwork, playback time, transport controls and progress inside the bar.</p>
-<h2>Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/assets/taskbar-media-widget/horizontal-top.png" alt="Horizontal widget on the top taskbar"></p>
-<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/assets/taskbar-media-widget/vertical.png" alt="Compact widget on the left taskbar"></p>
-<p>Features:</p>
-<ul>
-<li>album art, title and artist</li>
-<li>always-visible previous / play-pause / next controls</li>
-<li>always-visible playback time</li>
-<li>seekable progress bar with a moving time tooltip</li>
-<li>title / artist marquee when text overflows</li>
-<li>artwork-derived progress and visualizer colors</li>
-<li>a real WASAPI loopback visualizer across the widget background</li>
-<li>mouse wheel app-volume control with a system-volume fallback</li>
-<li>compact idle launchers for configured music apps that skip pinned apps</li>
-<li>automatic layout updates when the taskbar edge or thickness changes</li>
-<li>per-monitor taskbar instances and DPI-aware classic layouts</li>
-</ul>
-<p>Taskbar Fluent Media Player and Island Media Controls already provide rich
-Windows 11 playback widgets, including audio visualization. This mod focuses
-on a different compatibility and layout scope: the same UI also supports the
-64-bit Windows 10/classic taskbar, native top/left/right taskbar positions, and
-an idle state that becomes a compact launcher for unpinned music apps. Those
-features require a second Win32 rendering backend and a distinct launcher
-state rather than a small option in either Windows 11-only layout.</p>
-]]></content>
-        <author>
-            <name>uMk0</name>
-            <uri>https://github.com/umk0</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact Notifications 1.0]]></title>
-        <id>https://windhawk.net/mods/compact-notifications#0103a40ca706a04c726b234d5147a648e4ca256a</id>
-        <link href="https://windhawk.net/mods/compact-notifications"/>
-        <updated>2026-11-05T06:03:26.000Z</updated>
-        <content type="html"><![CDATA[<h1>Compact Notifications</h1>
-<p>Replaces Windows toast banners with compact chat-style cards: black (or white) rounded
-cards with a round avatar, the sender in bold and up to a few lines of text, sliding in from the screen edge.</p>
-<p><img src="https://raw.githubusercontent.com/Wheatlay/compact-notifications/master/docs/screenshot.png" alt="Cards"></p>
-<h2>What works</h2>
-<ul>
-<li><strong>Click</strong> a card to do what clicking the original notification does (open the app or the conversation).</li>
-<li><strong>×</strong> (on hover) closes the card; the notification stays in the notification center.</li>
-<li><strong>Buttons</strong> from the notification (for example <em>Reply</em>, <em>Snooze</em>, <em>Dismiss</em>) are shown under the text.</li>
-<li><strong>Reply box</strong>: click it and type, then press the app's send button. The text goes to the original reply
-box, so the app receives it as usual.</li>
-<li><strong>Avatars</strong>: the notification's image (local files and images from Store apps), or a thumbnail of its
-large picture (e.g. a screenshot); otherwise the app's registered icon (e.g. Firefox), and the first
-letter of the app as the last resort. Web images aren't downloaded.</li>
-<li><strong>Priority notifications</strong> (reminders, alarms, incoming calls) get a colored outline and stay until handled.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Appearance</strong>: theme, size, lines of text, card width, corner radius, background opacity, your own card
-and text colors, distance from the screen edge.</li>
-<li><strong>Avatars</strong>: on or off, circle, rounded square or square, the app's name before the sender.</li>
-<li><strong>Animation</strong>: on or off, speed, how many cards show at once.</li>
-<li><strong>Position</strong>: monitor and corner.</li>
-<li><strong>Per-app rules</strong>: for a single app (by the name shown on its notifications), hide the buttons, the reply
-box or the avatar, or don't show cards for it at all; its notifications still go to the notification center.</li>
-</ul>
-<h2>How long a card stays</h2>
-<p>A card stays exactly as long as the original notification would. Windows sets this time in
-<em>Settings &gt; Accessibility &gt; Visual effects &gt; Dismiss notifications after this amount of time</em>.</p>
-<h2>How it works</h2>
-<p>Windows still creates its own banner, but the mod moves it off the screen and reads it (UI Automation and
-the notification database). Clicks and typing on a card go to the hidden banner, so every app action
-works as before. Turning the mod off brings the original banners back.</p>
-<h2>Limitations</h2>
-<ul>
-<li>Text styles, progress bars and large (hero) images are not shown.</li>
-<li>While a full-screen app or <em>Do not disturb</em> is on, Windows doesn't show notifications at all, so there are
-no cards either.</li>
-<li>The reply box on a card shows the typed text with the caret at the end; moving the caret with the arrow
-keys or selecting text works, but isn't shown on the card.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Wheatlay</name>
-            <uri>https://github.com/Wheatlay</uri>
         </author>
     </entry>
 </feed>
