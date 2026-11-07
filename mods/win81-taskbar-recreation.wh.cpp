@@ -24,9 +24,8 @@
 # Windows 7/8/8.1 Taskbar Recreation
 
 This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
-on Windows 10 and 11. The original architecture has been tested on Windows 10
-22H2, Windows 11 24H2 and Windows 11 25H2; the dedicated-process architecture
-has more limited Windows testing.
+on Windows 10 and 11. The mod has been tested on Windows 10
+22H2, Windows 11 24H2 and Windows 11 25H2.
 The mod is provided on a best-effort basis; appearance and behavior can vary with
 the Windows build, DPI, taskbar replacement and other shell mods.
 
@@ -563,6 +562,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <windhawk_utils.h>
 #include <roapi.h>
 #include <winstring.h>
 #include <windows.globalization.h>
@@ -8630,29 +8630,32 @@ static bool CniModuleMatches(HMODULE module,DWORD stamp,DWORD size) noexcept {
     return nt->Signature==IMAGE_NT_SIGNATURE && nt->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64 &&
         nt->FileHeader.TimeDateStamp==stamp && nt->OptionalHeader.SizeOfImage==size;
 }
-struct CniSymbolQuery { const wchar_t* name; bool prefix; void* address; };
-static bool CniResolveSymbols(HMODULE module,CniSymbolQuery* queries,size_t count) {
-    WH_FIND_SYMBOL_OPTIONS options{};options.optionsSize=sizeof(options);
-    options.noUndecoratedSymbols=TRUE;
-    WH_FIND_SYMBOL symbol{};
-    HANDLE search=Wh_FindFirstSymbol(module,&options,&symbol);
-    if(!search)return false;
-    size_t remaining=count;
-    do {
-        const wchar_t* name=symbol.symbolDecorated;
-        if(!name)continue;
-        for(size_t i=0;i<count;i++) {
-            auto& q=queries[i];if(q.address)continue;
-            size_t len=wcslen(q.name);
-            if((q.prefix && wcsncmp(name,q.name,len)==0) ||
-               (!q.prefix && wcscmp(name,q.name)==0)) {
-                q.address=symbol.address;--remaining;break;
-            }
-        }
-    } while(remaining && Wh_FindNextSymbol(search,&symbol));
-    Wh_FindCloseSymbol(search);return remaining==0;
+// Resolve public PDB names through Windhawk's symbol cache. Only addresses are
+// requested here; the actual hooks are installed after all checks succeed.
+// Exact prototypes make signature changes fail closed instead of guessing.
+static bool CniResolveCplSymbols(HMODULE module,void* (&addresses)[3]) {
+    try {
+        WindhawkUtils::SYMBOL_HOOK taskbarcplDllHooks[]={
+            {{L"protected: virtual bool __cdecl CTaskbarCniCplPage::OnButtonPressed(class DirectUI::Button *)"}, &addresses[0]},
+            {{L"protected: virtual void __cdecl CTaskbarCniCplPage::OnCancel(void)"}, &addresses[1]},
+            {{L"protected: virtual bool __cdecl CTaskbarCniCplPage::OnComboboxSelectionChange(class DirectUI::Combobox *)"}, &addresses[2]},
+        };
+        return WindhawkUtils::HookSymbols(module,taskbarcplDllHooks,std::size(taskbarcplDllHooks));
+    } catch(...) {return false;}
+}
+static bool CniResolveRpcSymbols(HMODULE module,void* (&addresses)[4]) {
+    try {
+        WindhawkUtils::SYMBOL_HOOK rpcrt4DllHooks[]={
+            {{L"void __cdecl Ndr64ConformantStringBufferSize(struct _MIDL_STUB_MESSAGE *,unsigned char *,void const *)"}, &addresses[0]},
+            {{L"void __cdecl Ndr64ConformantStringMarshall(struct _MIDL_STUB_MESSAGE *,unsigned char *,void const *)"}, &addresses[1]},
+            {{L"void __cdecl Ndr64NonConformantStringBufferSize(struct _MIDL_STUB_MESSAGE *,unsigned char *,void const *)"}, &addresses[2]},
+            {{L"void __cdecl Ndr64NonConformantStringMarshall(struct _MIDL_STUB_MESSAGE *,unsigned char *,void const *)"}, &addresses[3]},
+        };
+        return WindhawkUtils::HookSymbols(module,rpcrt4DllHooks,std::size(rpcrt4DllHooks));
+    } catch(...) {return false;}
 }
 static bool CniFindPreferenceCall(HMODULE module,void* method,ULONG_PTR* site) noexcept {
+#if defined(__x86_64__) || defined(_M_X64)
     ULONG_PTR image=(ULONG_PTR)module;
     DWORD64 unwindImage=0;
     auto* fn=RtlLookupFunctionEntry((DWORD64)(ULONG_PTR)method,&unwindImage,nullptr);
@@ -8706,6 +8709,11 @@ static bool CniFindPreferenceCall(HMODULE module,void* method,ULONG_PTR* site) n
     }
     if(found!=1)return false;
     *site=candidate;return true;
+#else
+    // The disassembler and unwind layout below are AMD64-specific. ARM64 is
+    // not an enabled architecture for this mod; never scan it as x86 code.
+    (void)module;(void)method;(void)site;return false;
+#endif
 }
 static bool CniVerifyTaskbarCpl(bool allowSymbols) noexcept {
     HMODULE module=GetModuleHandleW(L"taskbarcpl.dll");
@@ -8728,14 +8736,10 @@ static bool CniVerifyTaskbarCpl(bool allowSymbols) noexcept {
                     sites[i]=(ULONG_PTR)(b+offsets[i]+9);
                 }
             } else {
-                CniSymbolQuery queries[]={
-                    {L"?OnButtonPressed@CTaskbarCniCplPage@@",true,nullptr},
-                    {L"?OnCancel@CTaskbarCniCplPage@@",true,nullptr},
-                    {L"?OnComboboxSelectionChange@CTaskbarCniCplPage@@",true,nullptr},
-                };
-                result=CniResolveSymbols(module,queries,std::size(queries));
-                for(size_t i=0;result && i<std::size(queries);++i)
-                    result=CniFindPreferenceCall(module,queries[i].address,&sites[i]);
+                void* addresses[3]{};
+                result=CniResolveCplSymbols(module,addresses);
+                for(size_t i=0;result && i<std::size(addresses);++i)
+                    result=CniFindPreferenceCall(module,addresses[i],&sites[i]);
                 if(result)Wh_Log(L"[T81-CNI] verified taskbarcpl preference call sites using symbols");
             }
             if(result) {
@@ -8802,6 +8806,10 @@ static unsigned char* WINAPI CniNdr32NonMarshalHook(void* stub,unsigned char* va
     return realCniNdr32NonMarshal(stub,value,format);
 }
 static void InstallCniNdrSafety(bool applyNow) {
+#if !defined(__x86_64__) && !defined(_M_X64)
+    // ARM64 is not supported by the x64 RPC safety analysis.
+    (void)applyNow;return;
+#else
     if(g_cniSafetyStopping.load(std::memory_order_acquire))return;
     HMODULE module=GetModuleHandleW(L"rpcrt4.dll");
     if(!module)return;
@@ -8817,16 +8825,11 @@ static void InstallCniNdrSafety(bool applyNow) {
     } else {
         // These four NDR64 names include their exact public-PDB ABI. NDR32
         // exports have the published BufferSize / Marshall signatures.
-        CniSymbolQuery queries[]={
-            {L"?Ndr64ConformantStringBufferSize@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
-            {L"?Ndr64ConformantStringMarshall@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
-            {L"?Ndr64NonConformantStringBufferSize@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
-            {L"?Ndr64NonConformantStringMarshall@@YAXPEAU_MIDL_STUB_MESSAGE@@PEAEPEBX@Z",false,nullptr},
-        };
-        if(!CniResolveSymbols(module,queries,std::size(queries))) {
+        void* addresses[4]{};
+        if(!CniResolveRpcSymbols(module,addresses)) {
             Wh_Log(L"[T81-CNI] RPC symbols unavailable; private page bridge disabled");return;
         }
-        for(size_t i=0;i<4;i++)targets[i]=queries[i].address;
+        for(size_t i=0;i<4;i++)targets[i]=addresses[i];
         const char* names[]={"NdrConformantStringBufferSize","NdrConformantStringMarshall",
             "NdrNonConformantStringBufferSize","NdrNonConformantStringMarshall"};
         for(size_t i=0;i<4;i++)targets[i+4]=(void*)GetProcAddress(module,names[i]);
@@ -8855,6 +8858,7 @@ static void InstallCniNdrSafety(bool applyNow) {
     }
     g_cniNdrHooksRegistered.store(true,std::memory_order_release);
     Wh_Log(L"[T81-CNI] RPC string safety hooks registered count=%u",(unsigned)targetCount);
+#endif
 }
 static DWORD WINAPI CniSafetyWorker(void*) {
     HMODULE rpc=GetModuleHandleW(L"rpcrt4.dll");
