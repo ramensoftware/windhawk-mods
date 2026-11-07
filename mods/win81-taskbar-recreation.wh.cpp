@@ -24,10 +24,9 @@
 # Windows 7/8/8.1 Taskbar Recreation
 
 This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
-on Windows 10 and 11. The mod has been tested on Windows 10
-22H2, Windows 11 24H2 and Windows 11 25H2.
-The mod is provided on a best-effort basis; appearance and behavior can vary with
-the Windows build, DPI, taskbar replacement and other shell mods.
+on Windows 10 and 11. The taskbar runs in a dedicated Explorer process on a
+best-effort basis. Appearance and behavior can vary with
+the Windows build, DPI, taskbar replacement and other shell mods. This modification has been tested on Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.
 
 ## Features
 
@@ -38,7 +37,7 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 - Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.
 - Static taskbar textures and system colors; the textures do not blur live windows behind the bar.
 - Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.
-- An advanced original battery flyout option; compatibility may vary between Windows builds.
+- An advanced battery flyout option; compatibility may vary between Windows builds.
 
 ## Themes
 
@@ -78,8 +77,8 @@ Windhawk explain their scope and any restart requirements.
 
 - The taskbar runs in a separate `explorer.exe` process on a best-effort basis.
   Notification-page hooks still run in Explorer, and other Explorer mods can
-  load in the separate process. A crash or hang can leave the native taskbar
-  hidden; keep Task Manager available.
+  load in the separate process. A watchdog attempts to restore the native taskbar
+  after an unexpected exit; recovery from a hang or other failure is not guaranteed.
 
 - Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.
 - The Windows 8 Start corner is illustrated, not a live Start-screen preview.
@@ -87,7 +86,7 @@ Windhawk explain their scope and any restart requirements.
 - On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
 - The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
-- The Notification Area Icons page uses a private COM provider. Its proxy-based behavior and shutdown with the page open have not been verified on every Windows build; icon preference writes can differ from the native behavior. Close the page before disabling, updating, or reloading the mod.
+- The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.
 - Keep a way to disable the mod or restart Explorer.
 - Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
 
@@ -6399,11 +6398,85 @@ static LRESULT ForwardShellMessage(UINT msg,WPARAM wp,LPARAM lp) {
         return 0;
     }
 }
+// SHAppBarMessage output uses a shared block owned by the process of the
+// first Shell_TrayWnd. When this host is first, Explorer cannot use that
+// process-specific handle unchanged. Translate it to Explorer's process and
+// copy the response back. The 40-byte structure is shell32's common wire form;
+// the enclosing packet has a 64-bit or 32-bit handle according to the sender.
+static bool IsExpectedNativeTray(HWND h);
+static bool ReadableSharedBlock(void* p,size_t bytes) {
+    MEMORY_BASIC_INFORMATION mbi{};
+    if(!p || !VirtualQuery(p,&mbi,sizeof(mbi)) || mbi.State!=MEM_COMMIT ||
+       (mbi.Protect & (PAGE_GUARD|PAGE_NOACCESS)))return false;
+    ULONG_PTR start=(ULONG_PTR)p,base=(ULONG_PTR)mbi.BaseAddress;
+    return start>=base && start-base<=mbi.RegionSize && bytes<=mbi.RegionSize-(start-base);
+}
+static LRESULT ForwardPrivateAppBar(WPARAM sender,const COPYDATASTRUCT* data) {
+    if(!s || !data || !data->lpData || !IsExpectedNativeTray(s->native))return 0;
+    if(data->cbData!=64 && data->cbData!=56)
+        return ForwardShellMessage(WM_COPYDATA,sender,(LPARAM)data);
+    BYTE packet[64]{};memcpy(packet,data->lpData,data->cbData);
+    DWORD cb=0,operation=0,pid=0;memcpy(&cb,packet,4);memcpy(&operation,packet+40,4);
+    const size_t handleOffset=data->cbData==64?48:44;
+    const size_t pidOffset=data->cbData==64?56:48;
+    ULONG_PTR raw=0;memcpy(&raw,packet+handleOffset,data->cbData==64?8:4);
+    memcpy(&pid,packet+pidOffset,4);
+    if(cb!=40)return 0;
+    if(!raw || pid!=GetCurrentProcessId())
+        return ForwardShellMessage(WM_COPYDATA,sender,(LPARAM)data);
+    HMODULE shlwapi=GetModuleHandleW(L"shlwapi.dll");
+    using Lock=void* (WINAPI*)(HANDLE,DWORD);
+    using Unlock=BOOL (WINAPI*)(void*);
+    using Alloc=HANDLE (WINAPI*)(const void*,DWORD,DWORD);
+    using Free=BOOL (WINAPI*)(HANDLE,DWORD);
+    auto lock=shlwapi?(Lock)GetProcAddress(shlwapi,"SHLockShared"):nullptr;
+    auto unlock=shlwapi?(Unlock)GetProcAddress(shlwapi,"SHUnlockShared"):nullptr;
+    auto alloc=shlwapi?(Alloc)GetProcAddress(shlwapi,"SHAllocShared"):nullptr;
+    auto freeShared=shlwapi?(Free)GetProcAddress(shlwapi,"SHFreeShared"):nullptr;
+    if(!lock || !unlock || !alloc || !freeShared)return 0;
+    void* original=lock((HANDLE)raw,pid);
+    if(!ReadableSharedBlock(original,40)) {if(original)unlock(original);return 0;}
+    if(operation==ABM_GETTASKBARPOS && s->privateActive && s->bar && IsWindow(s->bar)) {
+        RECT rect{};LRESULT result=0;
+        if(GetWindowRect(s->bar,&rect) && rect.right>rect.left && rect.bottom>rect.top) {
+            DWORD edge=s->verticalActive?(s->verticalSide==1?ABE_LEFT:ABE_RIGHT):s->nativeEdge;
+            memcpy((BYTE*)original+12,&edge,sizeof(edge));
+            memcpy((BYTE*)original+16,&rect,sizeof(rect));result=TRUE;
+        }
+        unlock(original);return result;
+    }
+    DWORD explorerPid=0;GetWindowThreadProcessId(s->native,&explorerPid);
+    HANDLE translated=explorerPid?alloc(original,40,explorerPid):nullptr;
+    if(!translated || (data->cbData==56 && ((ULONG_PTR)translated>>32))) {
+        if(translated)freeShared(translated,explorerPid);
+        unlock(original);return 0;
+    }
+    ULONG_PTR translatedValue=(ULONG_PTR)translated;
+    memcpy(packet+handleOffset,&translatedValue,data->cbData==64?8:4);
+    memcpy(packet+pidOffset,&explorerPid,4);
+    COPYDATASTRUCT copy{0,data->cbData,packet};DWORD_PTR result=0;
+    BOOL delivered=SendMessageTimeoutW(s->native,WM_COPYDATA,sender,(LPARAM)&copy,
+                                        SMTO_ABORTIFHUNG|SMTO_BLOCK,500,&result);
+    if(delivered) {
+        void* answer=lock(translated,explorerPid);
+        if(ReadableSharedBlock(answer,40))memcpy(original,answer,40);
+        else result=0;
+        if(answer)unlock(answer);
+        freeShared(translated,explorerPid);
+    } else {
+        // Explorer may still be using its handle after timeout. Retain it until
+        // that process exits rather than freeing memory still in use.
+        Wh_Log(L"[T81-APPBAR] forwarded request timed out; shared block retained");
+        result=0;
+    }
+    unlock(original);return (LRESULT)result;
+}
 static LRESULT CALLBACK PrivateTrayProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     if(!s) return DefWindowProcW(hwnd,msg,wp,lp);
     try {
         if(msg==WM_COPYDATA && lp) {
             auto* data=(const COPYDATASTRUCT*)lp;
+            if(data->dwData==0) return ForwardPrivateAppBar(wp,data);
             if(data->dwData==1) {
                 LRESULT own=ProcessTrayCopy(data);
                 // Keep Explorer informed: system shell services may depend on
@@ -6558,6 +6631,153 @@ static unsigned ImportNativeTraySnapshot() {
     if((scan.imported || scan.updated) && s->overflowPanel && IsWindowVisible(s->overflowPanel)) ResizePrivateOverflow();
     return scan.imported+scan.updated;
 }
+// Recovery state is separate from the CNI provider: recovery must still work
+// when COM registration or symbol downloads fail. Only handles and copied
+// rectangles cross the process boundary; no pointers refer to the tool's memory.
+struct T81RecoveryWindow { ULONG_PTR hwnd; DWORD pid,tid,atom,topmost; };
+struct T81RecoveryState {
+    DWORD size,version,toolPid,toolTid;
+    volatile LONG ready,watching,nativeHidden,startCount,workActive;
+    T81RecoveryWindow native;
+    T81RecoveryWindow starts[32];
+    RECT workMonitor,workBefore,workApplied;
+};
+static constexpr wchar_t kT81RecoveryName[]=L"Local\\windhawk-t81-recovery-" WH_MOD_ID;
+static HANDLE g_t81RecoveryMapping=nullptr;
+static T81RecoveryState* g_t81Recovery=nullptr;
+static HANDLE g_t81WatchStop=nullptr,g_t81WatchThread=nullptr;
+static T81RecoveryWindow T81RecoveryIdentity(HWND h) {
+    T81RecoveryWindow w{};w.hwnd=(ULONG_PTR)h;
+    w.tid=GetWindowThreadProcessId(h,&w.pid);w.atom=(DWORD)GetClassLongPtrW(h,GCW_ATOM);
+    w.topmost=(GetWindowLongPtrW(h,GWL_EXSTYLE)&WS_EX_TOPMOST)?1u:0u;return w;
+}
+static bool T81SameRecoveryWindow(const T81RecoveryWindow& w) {
+    HWND h=(HWND)w.hwnd;DWORD pid=0;DWORD tid=GetWindowThreadProcessId(h,&pid);
+    return h && IsWindow(h) && pid==w.pid && tid==w.tid &&
+           (DWORD)GetClassLongPtrW(h,GCW_ATOM)==w.atom;
+}
+static void T81RestoreRecovery(const T81RecoveryState* r) {
+    if(!r)return;
+    if(InterlockedCompareExchange((LONG*)&r->workActive,0,0)) {
+        MONITORINFO mi{};mi.cbSize=sizeof(mi);
+        HMONITOR monitor=MonitorFromRect(&r->workMonitor,MONITOR_DEFAULTTONULL);
+        if(monitor && GetMonitorInfoW(monitor,&mi) && EqualRect(&mi.rcMonitor,&r->workMonitor) &&
+           EqualRect(&mi.rcWork,&r->workApplied)) {
+            RECT restore=r->workBefore;
+            SystemParametersInfoW(SPI_SETWORKAREA,0,&restore,SPIF_SENDCHANGE);
+        }
+    }
+    if(InterlockedCompareExchange((LONG*)&r->nativeHidden,0,0) && T81SameRecoveryWindow(r->native)) {
+        HWND h=(HWND)r->native.hwnd;
+        ShowWindowAsync(h,SW_SHOWNA);
+        SetWindowPos(h,r->native.topmost?HWND_TOPMOST:HWND_NOTOPMOST,0,0,0,0,
+                     SWP_SHOWWINDOW|SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS);
+    }
+    LONG count=InterlockedCompareExchange((LONG*)&r->startCount,0,0);
+    count=std::max<LONG>(0,std::min<LONG>(count,(LONG)std::size(r->starts)));
+    for(LONG i=0;i<count;++i)if(T81SameRecoveryWindow(r->starts[i]))
+        SetWindowPos((HWND)r->starts[i].hwnd,nullptr,0,0,0,0,
+                     SWP_SHOWWINDOW|SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER|SWP_ASYNCWINDOWPOS);
+    UINT created=RegisterWindowMessageW(L"TaskbarCreated");
+    if(created)SendNotifyMessageW(HWND_BROADCAST,created,0,0);
+}
+static DWORD WINAPI T81RecoveryWatchdog(void*) {
+    while(WaitForSingleObject(g_t81WatchStop,100)==WAIT_TIMEOUT) {
+        HWND shell=GetShellWindow();DWORD shellPid=0;
+        if(!shell || !GetWindowThreadProcessId(shell,&shellPid) || shellPid!=GetCurrentProcessId())continue;
+        HANDLE mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,kT81RecoveryName);
+        if(!mapping)continue;
+        auto* r=(T81RecoveryState*)MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(T81RecoveryState));
+        if(!r) {CloseHandle(mapping);continue;}
+        DWORD pid=r->toolPid;
+        HANDLE process=pid?OpenProcess(SYNCHRONIZE,FALSE,pid):nullptr;
+        if(r->size!=sizeof(*r) || r->version!=1 || !process ||
+           InterlockedCompareExchange(&r->ready,0,0)!=1 || WaitForSingleObject(process,0)!=WAIT_TIMEOUT) {
+            if(process)CloseHandle(process);UnmapViewOfFile(r);CloseHandle(mapping);continue;
+        }
+        InterlockedExchange(&r->watching,1);
+        HANDLE handles[]={g_t81WatchStop,process};
+        DWORD result=WAIT_TIMEOUT;
+        while((result=WaitForMultipleObjects(2,handles,FALSE,100))==WAIT_TIMEOUT &&
+              InterlockedCompareExchange(&r->ready,0,0)==1) {}
+        if(result==WAIT_OBJECT_0+1 && InterlockedCompareExchange(&r->ready,0,0)==1) {
+            T81RestoreRecovery(r);
+            InterlockedExchange(&r->ready,0);
+            Wh_Log(L"[T81-RECOVERY] tool exited unexpectedly; native taskbar restore requested");
+        }
+        InterlockedExchange(&r->watching,0);
+        CloseHandle(process);UnmapViewOfFile(r);CloseHandle(mapping);
+        if(result==WAIT_OBJECT_0)break;
+    }
+    return 0;
+}
+static void StartT81RecoveryWatchdog() {
+    if(g_t81WatchThread)return;
+    g_t81WatchStop=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    if(g_t81WatchStop)g_t81WatchThread=CreateThread(nullptr,0,T81RecoveryWatchdog,nullptr,0,nullptr);
+    if(!g_t81WatchThread) {if(g_t81WatchStop)CloseHandle(g_t81WatchStop);g_t81WatchStop=nullptr;}
+}
+static void T81RequestToolShutdown() {
+    HWND shell=GetShellWindow();DWORD shellPid=0;
+    if(!shell || !GetWindowThreadProcessId(shell,&shellPid) || shellPid!=GetCurrentProcessId())return;
+    HANDLE mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,kT81RecoveryName);
+    if(!mapping)return;
+    auto* r=(T81RecoveryState*)MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(T81RecoveryState));
+    if(r && r->size==sizeof(*r) && r->version==1 && InterlockedCompareExchange(&r->ready,0,0)==1) {
+        HANDLE process=OpenProcess(SYNCHRONIZE,FALSE,r->toolPid);
+        HANDLE thread=OpenThread(THREAD_QUERY_LIMITED_INFORMATION,FALSE,r->toolTid);
+        if(process && thread && GetProcessIdOfThread(thread)==r->toolPid &&
+           WaitForSingleObject(process,0)==WAIT_TIMEOUT) {
+            PostThreadMessageW(r->toolTid,WM_QUIT,0,0);
+            ULONGLONG deadline=GetTickCount64()+5000;
+            while(InterlockedCompareExchange(&r->ready,0,0)==1 &&
+                  WaitForSingleObject(process,100)==WAIT_TIMEOUT && GetTickCount64()<deadline) {}
+            if(InterlockedCompareExchange(&r->ready,0,0)==1 && WaitForSingleObject(process,0)==WAIT_TIMEOUT) {
+                // A hung tool must not immediately hide windows that we show.
+                InterlockedExchange(&r->watching,0);
+                T81RestoreRecovery(r);
+                Wh_Log(L"[T81-RECOVERY] tool did not stop promptly; requested native taskbar restoration");
+            }
+        }
+        if(thread)CloseHandle(thread);if(process)CloseHandle(process);
+    }
+    if(r)UnmapViewOfFile(r);CloseHandle(mapping);
+}
+static void StopT81RecoveryWatchdog() {
+    if(g_t81WatchStop)SetEvent(g_t81WatchStop);
+    if(g_t81WatchThread)WaitForSingleObject(g_t81WatchThread,INFINITE);
+    if(g_t81WatchThread)CloseHandle(g_t81WatchThread);
+    if(g_t81WatchStop)CloseHandle(g_t81WatchStop);
+    g_t81WatchThread=nullptr;g_t81WatchStop=nullptr;
+}
+static bool StartT81RecoveryBridge(HWND native) {
+    if(g_t81Recovery)return false;
+    // A just-stopped watchdog can briefly retain the previous mapping. Let it
+    // observe ready=0 before giving up, rather than breaking settings reload.
+    for(int attempt=0;attempt<20;++attempt) {
+        g_t81RecoveryMapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,
+                                                 sizeof(T81RecoveryState),kT81RecoveryName);
+        if(!g_t81RecoveryMapping)return false;
+        if(GetLastError()!=ERROR_ALREADY_EXISTS)break;
+        CloseHandle(g_t81RecoveryMapping);g_t81RecoveryMapping=nullptr;Sleep(50);
+    }
+    if(!g_t81RecoveryMapping)return false;
+    g_t81Recovery=(T81RecoveryState*)MapViewOfFile(g_t81RecoveryMapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(T81RecoveryState));
+    if(!g_t81Recovery) {CloseHandle(g_t81RecoveryMapping);g_t81RecoveryMapping=nullptr;return false;}
+    *g_t81Recovery=T81RecoveryState{};
+    g_t81Recovery->size=sizeof(T81RecoveryState);g_t81Recovery->version=1;
+    g_t81Recovery->toolPid=GetCurrentProcessId();g_t81Recovery->toolTid=GetCurrentThreadId();
+    g_t81Recovery->native=T81RecoveryIdentity(native);
+    InterlockedExchange(&g_t81Recovery->ready,1);return true;
+}
+static void StopT81RecoveryBridge() {
+    if(g_t81Recovery) {InterlockedExchange(&g_t81Recovery->ready,0);UnmapViewOfFile(g_t81Recovery);g_t81Recovery=nullptr;}
+    if(g_t81RecoveryMapping) {CloseHandle(g_t81RecoveryMapping);g_t81RecoveryMapping=nullptr;}
+}
+static bool T81RecoveryReady() {
+    return g_t81Recovery && InterlockedCompareExchange(&g_t81Recovery->watching,0,0)==1;
+}
+static void StopPrivateTray();
 static bool StartPrivateTray() {
     if(!s || !s->bar || !s->native || !IsWindow(s->native)) return false;
     HMODULE module=nullptr;
@@ -6591,6 +6811,10 @@ static bool StartPrivateTray() {
     s->nativeWasVisible=IsWindowVisible(s->native)!=FALSE;
     s->nativeWasTopmost=(GetWindowLongPtrW(s->native,GWL_EXSTYLE)&WS_EX_TOPMOST)!=0;
     s->privateActive=true;
+    if(!StartT81RecoveryBridge(s->native)) {
+        Wh_Log(L"[T81-RECOVERY] recovery bridge unavailable; native taskbar remains visible");
+        StopPrivateTray();return false;
+    }
     RefreshLanguageIndicator();
     // Broadcasting at the same time as importing can make some apps register
     // with a new ID and duplicate. Broadcast only if this backend yielded no
@@ -6634,6 +6858,18 @@ static BOOL CALLBACK HideOwnedStart(HWND h, LPARAM) {
     if(!it->lastLogged || now-it->lastLogged>=10000) {
         Wh_Log(L"[T81-DIAG] hiding-start hwnd=%p class=%ls pid=%lu rect=%ld,%ld,%ld,%ld",h,cls,pid,r.left,r.top,r.right,r.bottom);
         it->lastLogged=now;
+    }
+    // Record each window before hiding it, so a process crash can undo it.
+    if(!T81RecoveryReady())return TRUE;
+    LONG count=InterlockedCompareExchange(&g_t81Recovery->startCount,0,0);
+    bool recorded=false;
+    for(LONG i=0;i<count && i<(LONG)std::size(g_t81Recovery->starts);++i)
+        if(g_t81Recovery->starts[i].hwnd==(ULONG_PTR)h && g_t81Recovery->starts[i].pid==pid &&
+           g_t81Recovery->starts[i].tid==tid && g_t81Recovery->starts[i].atom==atom)recorded=true;
+    if(!recorded) {
+        if(count<0 || count>=(LONG)std::size(g_t81Recovery->starts))return TRUE;
+        g_t81Recovery->starts[count]=T81RecoveryIdentity(h);
+        InterlockedExchange(&g_t81Recovery->startCount,count+1);
     }
     // Both asynchronous requests avoid blocking Explorer's taskbar thread.
     ShowWindowAsync(h,SW_HIDE);
@@ -6687,6 +6923,7 @@ static void StopPrivateTray() {
     }
     s->nativeHiddenByUs=false;
     RestoreHiddenStarts();
+    StopT81RecoveryBridge();
     if(active) SendTaskbarCreated();
 }
 static void SyncPrivateHostGeometry();
@@ -6701,12 +6938,13 @@ static bool IsExpectedNativeTray(HWND h) {
 static void HideNativeTrayIfVisible() {
     if(!s || !s->privateActive || !s->bar || !IsWindow(s->bar) ||
        !s->privateHost || !IsWindow(s->privateHost)) return;
-    if(IsExpectedNativeTray(s->native) && IsWindowVisible(s->native)) {
+    if(T81RecoveryReady() && s->nativeWasVisible && IsExpectedNativeTray(s->native) && IsWindowVisible(s->native)) {
         ULONGLONG now=GetTickCount64();
         if(!s->nativeHideLastLogged || now-s->nativeHideLastLogged>=10000) {
             Wh_Log(L"[T81-DIAG] hiding-native hwnd=%p",s->native); s->nativeHideLastLogged=now;
         }
         s->nativeHiddenByUs=true;
+        InterlockedExchange(&g_t81Recovery->nativeHidden,1);
         ShowWindowAsync(s->native,SW_HIDE);
         SetWindowPos(s->native,HWND_BOTTOM,0,0,0,0,SWP_HIDEWINDOW|SWP_ASYNCWINDOWPOS|SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
     }
@@ -6717,7 +6955,7 @@ static void GuardPrivateTray() {
     SetWindowPos(s->privateHost,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
     SyncPrivateHostGeometry();
     HideNativeTrayIfVisible();
-    EnumWindows(HideOwnedStart,0);
+    if(T81RecoveryReady())EnumWindows(HideOwnedStart,0);
 }
 // Event-based repair reduces the interval in which Explorer's own bar can
 // reappear after a balloon/notification. A periodic guard remains as backup.
@@ -8921,6 +9159,63 @@ static void StopCniSafetyWorker() {
 // correctly on each Windows build must be verified independently.
 using TrayCniCoCreateInstance_t = decltype(&CoCreateInstance);
 static TrayCniCoCreateInstance_t realTrayCniCoCreateInstance = nullptr;
+// The private proxy can outlive the hooks if its page remains open. Record
+// its containing UI window before handing out a proxy. On unload, stop new
+// activations and close the recorded windows while the RPC hooks still exist.
+struct T81CniPageWindow { HWND hwnd; DWORD thread,pid,atom; ULONG_PTR token; };
+static constexpr wchar_t kT81CniPageMarker[]=L"Windhawk.T81.CniPage." WH_MOD_ID;
+static LONG g_t81CniPageSerial=0;
+static SRWLOCK g_t81CniPageLock=SRWLOCK_INIT;
+static T81CniPageWindow g_t81CniPages[16]{};
+static std::atomic<bool> g_t81CniPagesClosing{false};
+static std::atomic<unsigned> g_t81CniActivations{0};
+static bool T81CurrentCniPageWindow(T81CniPageWindow* out) {
+    DWORD tid=GetCurrentThreadId();GUITHREADINFO gui{};gui.cbSize=sizeof(gui);
+    if(!GetGUIThreadInfo(tid,&gui))return false;
+    HWND candidate=gui.hwndActive?gui.hwndActive:gui.hwndFocus;
+    HWND root=candidate?GetAncestor(candidate,GA_ROOT):nullptr;
+    DWORD pid=0;DWORD owner=root?GetWindowThreadProcessId(root,&pid):0;
+    if(!root || !IsWindow(root) || pid!=GetCurrentProcessId() || owner!=tid)return false;
+    wchar_t cls[64]{};if(!GetClassNameW(root,cls,(int)std::size(cls)))return false;
+    if(wcscmp(cls,L"CabinetWClass") && wcscmp(cls,L"ExploreWClass") && wcscmp(cls,L"#32770"))return false;
+    *out={root,tid,pid,(DWORD)GetClassLongPtrW(root,GCW_ATOM),0};return true;
+}
+static bool T81RecordCniPage(const T81CniPageWindow& page) {
+    T81CniPageWindow* slot=nullptr;
+    for(auto& entry:g_t81CniPages) {
+        if(entry.hwnd==page.hwnd && entry.thread==page.thread && entry.pid==page.pid && entry.atom==page.atom &&
+           (ULONG_PTR)GetPropW(entry.hwnd,kT81CniPageMarker)==entry.token)return true;
+        if(!slot && (!entry.hwnd || !IsWindow(entry.hwnd) ||
+                     (ULONG_PTR)GetPropW(entry.hwnd,kT81CniPageMarker)!=entry.token))slot=&entry;
+    }
+    if(!slot)return false;
+    ULONG_PTR token=(ULONG_PTR)(DWORD)InterlockedIncrement(&g_t81CniPageSerial);
+    if(!token)token=(ULONG_PTR)(DWORD)InterlockedIncrement(&g_t81CniPageSerial);
+    if(!SetPropW(page.hwnd,kT81CniPageMarker,(HANDLE)token))return false;
+    *slot=page;slot->token=token;return true;
+}
+static void T81CloseCniPages() {
+    T81CniPageWindow pages[std::size(g_t81CniPages)]{};
+    AcquireSRWLockExclusive(&g_t81CniPageLock);
+    g_t81CniPagesClosing.store(true,std::memory_order_release);
+    ReleaseSRWLockExclusive(&g_t81CniPageLock);
+    // Let calls already in COM finish before taking the final page snapshot.
+    // Unloading code while one of these calls is still executing is unsafe.
+    while(g_t81CniActivations.load(std::memory_order_acquire))Sleep(10);
+    AcquireSRWLockExclusive(&g_t81CniPageLock);
+    memcpy(pages,g_t81CniPages,sizeof(pages));
+    ReleaseSRWLockExclusive(&g_t81CniPageLock);
+    for(const auto& page:pages) {
+        if(!page.hwnd || !IsWindow(page.hwnd))continue;
+        DWORD pid=0,tid=GetWindowThreadProcessId(page.hwnd,&pid);
+        if(pid!=page.pid || tid!=page.thread || (DWORD)GetClassLongPtrW(page.hwnd,GCW_ATOM)!=page.atom ||
+           (ULONG_PTR)GetPropW(page.hwnd,kT81CniPageMarker)!=page.token)continue;
+        RemovePropW(page.hwnd,kT81CniPageMarker);
+        DWORD_PTR result=0;
+        BOOL ok=SendMessageTimeoutW(page.hwnd,WM_CLOSE,0,0,SMTO_ABORTIFHUNG|SMTO_BLOCK,5000,&result);
+        Wh_Log(L"[T81-CNI] close page before unload hwnd=%p delivered=%d still-open=%d",page.hwnd,ok?1:0,IsWindow(page.hwnd)?1:0);
+    }
+}
 
 static HRESULT WINAPI TrayCniCoCreateInstanceHook(
     REFCLSID rclsid, LPUNKNOWN outer, DWORD context, REFIID riid, LPVOID* ppv) {
@@ -8944,10 +9239,32 @@ static HRESULT WINAPI TrayCniCoCreateInstanceHook(
             Wh_Log(L"[T81-CNI] private page safety not ready; retry after verification");
             return HRESULT_FROM_WIN32(ERROR_RETRY);
         }
+        T81CniPageWindow page{};
+        if(!g_trayCniPrivateRegistered.load(std::memory_order_acquire) && !T81CurrentCniPageWindow(&page)) {
+            Wh_Log(L"[T81-CNI] page window not identified; proxy activation deferred");
+            return HRESULT_FROM_WIN32(ERROR_RETRY);
+        }
+        AcquireSRWLockExclusive(&g_t81CniPageLock);
+        if(g_t81CniPagesClosing.load(std::memory_order_acquire)) {
+            ReleaseSRWLockExclusive(&g_t81CniPageLock);
+            return HRESULT_FROM_WIN32(ERROR_RETRY);
+        }
+        g_t81CniActivations.fetch_add(1,std::memory_order_acq_rel);
+        ReleaseSRWLockExclusive(&g_t81CniPageLock);
+        // COM may reenter; never hold the page lock across activation.
         HRESULT hr = realTrayCniCoCreateInstance(T81_CLSID_PrivateTrayNotify,
             nullptr, context, riid, ppv);
+        AcquireSRWLockExclusive(&g_t81CniPageLock);
+        bool reject=SUCCEEDED(hr) && (g_t81CniPagesClosing.load(std::memory_order_acquire) ||
+                                     (page.hwnd && !T81RecordCniPage(page)));
+        if(SUCCEEDED(hr) && !reject)g_cniBridgeActivated=true;
+        ReleaseSRWLockExclusive(&g_t81CniPageLock);
+        if(reject) {
+            if(*ppv)static_cast<IUnknown*>(*ppv)->Release();
+            *ppv=nullptr;hr=HRESULT_FROM_WIN32(ERROR_RETRY);
+        }
+        g_t81CniActivations.fetch_sub(1,std::memory_order_acq_rel);
         if (SUCCEEDED(hr)) {
-            g_cniBridgeActivated=true;
             Wh_Log(L"[T81-CNI] private COM proxy activation pid=%lu tid=%lu hr=0x%08lx (write not confirmed)",
                    GetCurrentProcessId(),GetCurrentThreadId(),(unsigned long)hr);
             return hr;
@@ -13292,6 +13609,7 @@ static void RestoreNativeWorkArea() {
     if(!t81WorkAreaAdjustment.active || t81ChangingWorkArea)return;
     NativeWorkAreaAdjustment old=t81WorkAreaAdjustment;
     t81WorkAreaAdjustment.active=false;
+    if(g_t81Recovery)InterlockedExchange(&g_t81Recovery->workActive,0);
     MONITORINFO mi{};mi.cbSize=sizeof(mi);
     HMONITOR mon=MonitorFromRect(&old.monitor,MONITOR_DEFAULTTONULL);
     if(mon && GetMonitorInfoW(mon,&mi) && EqualRect(&mi.rcMonitor,&old.monitor) &&
@@ -13310,6 +13628,7 @@ static void ReleaseHiddenNativeWorkArea(const MONITORINFO& mi) {
            EqualRect(&mi.rcWork,&t81WorkAreaAdjustment.applied))return;
         // Another component changed the work area; don't restore stale data.
         t81WorkAreaAdjustment.active=false;
+        if(g_t81Recovery)InterlockedExchange(&g_t81Recovery->workActive,0);
     }
     RECT native{};if(!GetWindowRect(s->native,&native))return;
     if(MonitorFromRect(&native,MONITOR_DEFAULTTONULL)!=
@@ -13323,10 +13642,23 @@ static void ReleaseHiddenNativeWorkArea(const MONITORINFO& mi) {
     else return;
     if(work.left>=work.right || work.top>=work.bottom || EqualRect(&work,&mi.rcWork))return;
     t81WorkAreaAdjustment={true,mi.rcMonitor,mi.rcWork,work};
+    if(g_t81Recovery) {
+        RECT afterCrash=mi.rcWork, bar=s->appbarApproved;
+        // Remove our own bar from the saved recovery rectangle, while keeping
+        // any other AppBars which were outside its approved rectangle.
+        switch(s->appbarEdge) {
+        case ABE_TOP:if(afterCrash.top==bar.bottom)afterCrash.top=bar.top;break;
+        case ABE_BOTTOM:if(afterCrash.bottom==bar.top)afterCrash.bottom=bar.bottom;break;
+        case ABE_LEFT:if(afterCrash.left==bar.right)afterCrash.left=bar.left;break;
+        case ABE_RIGHT:if(afterCrash.right==bar.left)afterCrash.right=bar.right;break;
+        }
+        g_t81Recovery->workMonitor=mi.rcMonitor;g_t81Recovery->workBefore=afterCrash;
+        g_t81Recovery->workApplied=work;InterlockedExchange(&g_t81Recovery->workActive,1);
+    }
     t81ChangingWorkArea=true;
     BOOL ok=SystemParametersInfoW(SPI_SETWORKAREA,0,&work,SPIF_SENDCHANGE);
     t81ChangingWorkArea=false;
-    if(!ok)t81WorkAreaAdjustment.active=false;
+    if(!ok) {t81WorkAreaAdjustment.active=false;if(g_t81Recovery)InterlockedExchange(&g_t81Recovery->workActive,0);}
     Wh_Log(L"[T81-APPBAR] release hidden native edge=%d work=%ld,%ld,%ld,%ld",ok?1:0,
            work.left,work.top,work.right,work.bottom);
 }
@@ -17357,6 +17689,7 @@ void Wh_ModAfterInit() {
         return;
     }
     StartCniSafetyWorker();
+    StartT81RecoveryWatchdog();
 
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
@@ -17423,8 +17756,10 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
+    if(g_isToolModProcessLauncher)T81CloseCniPages();
     StopCniSafetyWorker();
-    if (!g_isToolModProcessLauncher) WhTool_ModBeforeUninit();
+    if (g_isToolModProcessLauncher) {T81RequestToolShutdown();StopT81RecoveryWatchdog();}
+    else WhTool_ModBeforeUninit();
 }
 
 void Wh_ModUninit() {
