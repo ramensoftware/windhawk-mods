@@ -21,7 +21,7 @@ Bluetooth device is detected.
 Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g.,
 Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or
 degraded state on fresh system boots even when Windows displays them as
-"connected" causing audio silence, latency, No absolute volume or connection
+"connected" causing audio silence, latency, no absolute volume or connection
 drops unless Bluetooth is power-cycled. This mod automates that process by
 waiting until a device is connected, pausing a configurable few seconds for the
 driver stack to settle, and cleanly cycling the Bluetooth radio off and then
@@ -67,20 +67,20 @@ reload, and instant cancellation on shutdown.
 // clang-format off
 // ==WindhawkModSettings==
 /*
-- startupBluetoothState: on
+- startupBluetoothState: unchanged
   $name: Startup Bluetooth State
   $description: Choose whether Bluetooth should be forced ON or OFF when Windows starts (regardless of state before shutdown).
   $options:
+  - unchanged: Keep previous Windows state (do not force ON or OFF)
   - on: Turn Bluetooth ON at startup
   - off: Turn Bluetooth OFF at startup (triggers fast toggle if turned ON later)
-  - unchanged: Keep previous Windows state (do not force ON or OFF)
 
-- activationMode: startup
+- activationMode: deviceConnected
   $name: Activation Mode
-  $description: Choose when the Bluetooth cycle occurs (on startup / manual turn-on, or only after a device is connected).
+  $description: Choose when the Bluetooth cycle occurs (only after a connected Bluetooth device is detected, or on startup / manual turn-on).
   $options:
-  - startup: On startup (cycle if ON, or on manual turn-on if OFF)
   - deviceConnected: Only when a device is connected
+  - startup: On startup (cycle if ON, or on manual turn-on if OFF)
 
 - delayAfterDeviceConnectedMs: 2000
   $name: Delay After Device Found (ms)
@@ -116,10 +116,18 @@ reload, and instant cancellation on shutdown.
 */
 // ==/WindhawkModSettings==
 
+#ifndef UNICODE
+#define UNICODE
+#endif
+#ifndef _UNICODE
+#define _UNICODE
+#endif
+
 #include <windows.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -165,7 +173,6 @@ static HANDLE g_hStopEvent = NULL;
 static HANDLE g_hTriggerEvent = NULL;
 static std::atomic<bool> g_forceNextRun{false};
 static std::atomic<bool> g_isCycling{false};
-static std::atomic<bool> g_startupStateEnforced{false};
 
 struct RadioSubscription {
   Radio radio{nullptr};
@@ -191,39 +198,27 @@ static void UnsubscribeRadioStateChanged() {
 static void LoadSettings() {
   AcquireSRWLockExclusive(&g_settingsLock);
 
-  PCWSTR stateStr = Wh_GetStringSetting(L"startupBluetoothState");
-  if (stateStr && *stateStr) {
-    if (wcscmp(stateStr, L"off") == 0) {
-      g_settings.startupBluetoothState = StartupBluetoothState::Off;
-    } else if (wcscmp(stateStr, L"unchanged") == 0) {
-      g_settings.startupBluetoothState = StartupBluetoothState::Unchanged;
-    } else {
-      g_settings.startupBluetoothState = StartupBluetoothState::On;
-    }
-    Wh_FreeStringSetting(stateStr);
+  WindhawkUtils::StringSetting state =
+      WindhawkUtils::StringSetting::make(L"startupBluetoothState");
+  if (wcscmp(state, L"on") == 0) {
+    g_settings.startupBluetoothState = StartupBluetoothState::On;
+  } else if (wcscmp(state, L"off") == 0) {
+    g_settings.startupBluetoothState = StartupBluetoothState::Off;
   } else {
-    int ensureOn = Wh_GetIntSetting(L"ensureBluetoothOnAtStartup");
-    if (ensureOn == 0 &&
-        Wh_GetStringSetting(L"ensureBluetoothOnAtStartup") != nullptr) {
-      g_settings.startupBluetoothState = StartupBluetoothState::Unchanged;
-    } else {
-      g_settings.startupBluetoothState = StartupBluetoothState::On;
-    }
+    g_settings.startupBluetoothState = StartupBluetoothState::Unchanged;
   }
 
-  PCWSTR modeStr = Wh_GetStringSetting(L"activationMode");
-  if (modeStr && *modeStr) {
-    if (wcscmp(modeStr, L"deviceConnected") == 0) {
-      g_settings.activationMode = ActivationMode::DeviceConnected;
-    } else {
-      g_settings.activationMode = ActivationMode::Startup;
-    }
-    Wh_FreeStringSetting(modeStr);
+  WindhawkUtils::StringSetting mode =
+      WindhawkUtils::StringSetting::make(L"activationMode");
+  if (wcscmp(mode, L"startup") == 0) {
+    g_settings.activationMode = ActivationMode::Startup;
+  } else if (wcscmp(mode, L"deviceConnected") == 0) {
+    g_settings.activationMode = ActivationMode::DeviceConnected;
   } else {
     g_settings.activationMode =
-        (Wh_GetIntSetting(L"onlyWhenDeviceConnected") == 1)
-            ? ActivationMode::DeviceConnected
-            : ActivationMode::Startup;
+        (Wh_GetIntSetting(L"onlyWhenDeviceConnected") == 0)
+            ? ActivationMode::Startup
+            : ActivationMode::DeviceConnected;
   }
 
   g_settings.delayAfterDeviceConnectedMs =
@@ -263,7 +258,7 @@ static void LoadSettings() {
          g_settings.toggleDelayMs, (int)g_settings.onlyOncePerSession);
 }
 
-static bool GetLogonMarker(WCHAR (&valueName)[64], LONGLONG *logonTime) {
+static bool GetLogonTime(LONGLONG *logonTime, DWORD *outSessionId = nullptr) {
   DWORD sessionId;
   WTSINFOW *info;
   DWORD bytes;
@@ -273,24 +268,55 @@ static bool GetLogonMarker(WCHAR (&valueName)[64], LONGLONG *logonTime) {
     return false;
   }
   *logonTime = info->LogonTime.QuadPart;
+  if (outSessionId) {
+    *outSessionId = sessionId;
+  }
   WTSFreeMemory(info);
-  swprintf_s(valueName, L"toggledLogon_%u", sessionId);
   return true;
 }
 
 static bool HasToggledInThisSession() {
-  WCHAR valueName[64];
   LONGLONG logonTime, stored = 0;
-  return GetLogonMarker(valueName, &logonTime) &&
-         Wh_GetBinaryValue(valueName, &stored, sizeof(stored)) ==
+  DWORD sessionId;
+  if (!GetLogonTime(&logonTime, &sessionId)) {
+    return false;
+  }
+  WCHAR valueName[64];
+  swprintf_s(valueName, L"toggledLogon_%u", sessionId);
+  return Wh_GetBinaryValue(valueName, &stored, sizeof(stored)) ==
              sizeof(stored) &&
          stored == logonTime;
 }
 
 static void MarkToggledInThisSession() {
-  WCHAR valueName[64];
   LONGLONG logonTime;
-  if (GetLogonMarker(valueName, &logonTime)) {
+  DWORD sessionId;
+  if (GetLogonTime(&logonTime, &sessionId)) {
+    WCHAR valueName[64];
+    swprintf_s(valueName, L"toggledLogon_%u", sessionId);
+    Wh_SetBinaryValue(valueName, &logonTime, sizeof(logonTime));
+  }
+}
+
+static bool HasAppliedStartupStateInThisSession() {
+  LONGLONG logonTime, stored = 0;
+  DWORD sessionId;
+  if (!GetLogonTime(&logonTime, &sessionId)) {
+    return false;
+  }
+  WCHAR valueName[64];
+  swprintf_s(valueName, L"startupStateLogon_%u", sessionId);
+  return Wh_GetBinaryValue(valueName, &stored, sizeof(stored)) ==
+             sizeof(stored) &&
+         stored == logonTime;
+}
+
+static void MarkAppliedStartupStateInThisSession() {
+  LONGLONG logonTime;
+  DWORD sessionId;
+  if (GetLogonTime(&logonTime, &sessionId)) {
+    WCHAR valueName[64];
+    swprintf_s(valueName, L"startupStateLogon_%u", sessionId);
     Wh_SetBinaryValue(valueName, &logonTime, sizeof(logonTime));
   }
 }
@@ -387,7 +413,9 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
     return;
   }
 
-  if (!isManualTest && !g_startupStateEnforced.exchange(true)) {
+  if (!isManualTest &&
+      cfg.startupBluetoothState != StartupBluetoothState::Unchanged &&
+      !HasAppliedStartupStateInThisSession()) {
     if (cfg.startupBluetoothState == StartupBluetoothState::On) {
       for (const auto &radio : targetRadios) {
         try {
@@ -396,10 +424,15 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
             Wh_Log(L"Adapter \"%s\" is not ON at startup. Powering ON as "
                    L"configured...",
                    name.c_str());
-            radio.SetStateAsync(RadioState::On).get();
-            Sleep(200);
+            RadioAccessStatus res = radio.SetStateAsync(RadioState::On).get();
+            if (res != RadioAccessStatus::Allowed) {
+              Wh_Log(L"Adapter \"%s\" -> SetStateAsync(On) status: %d",
+                     name.c_str(), (int)res);
+            }
           }
-        } catch (...) {
+        } catch (const winrt::hresult_error &ex) {
+          Wh_Log(L"Exception powering ON adapter: 0x%08X (%s)",
+                 (unsigned int)ex.code(), ex.message().c_str());
         }
       }
     } else if (cfg.startupBluetoothState == StartupBluetoothState::Off) {
@@ -410,13 +443,19 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
             Wh_Log(L"Adapter \"%s\" is ON at startup. Powering OFF as "
                    L"configured...",
                    name.c_str());
-            radio.SetStateAsync(RadioState::Off).get();
-            Sleep(100);
+            RadioAccessStatus res = radio.SetStateAsync(RadioState::Off).get();
+            if (res != RadioAccessStatus::Allowed) {
+              Wh_Log(L"Adapter \"%s\" -> SetStateAsync(Off) status: %d",
+                     name.c_str(), (int)res);
+            }
           }
-        } catch (...) {
+        } catch (const winrt::hresult_error &ex) {
+          Wh_Log(L"Exception powering OFF adapter: 0x%08X (%s)",
+                 (unsigned int)ex.code(), ex.message().c_str());
         }
       }
     }
+    MarkAppliedStartupStateInThisSession();
   }
 
   bool anyRadioOn = false;
@@ -438,10 +477,12 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
     for (const auto &radio : targetRadios) {
       try {
         winrt::event_token token =
-            radio.StateChanged([](Radio const &sender, auto const &) {
+            radio.StateChanged([onlyOnce = cfg.onlyOncePerSession](
+                                   Radio const &sender, auto const &) {
               try {
                 if (sender.State() == RadioState::On) {
-                  if (!g_isCycling.load() && !HasToggledInThisSession()) {
+                  if (!g_isCycling.load() &&
+                      (!onlyOnce || !HasToggledInThisSession())) {
                     Wh_Log(L"Bluetooth radio was manually turned ON later! "
                            L"Triggering fast toggle...");
                     SetEvent(g_hTriggerEvent);
@@ -563,12 +604,12 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
     }
   }
 
-  g_isCycling.store(false);
-
   if (!isManualTest) {
     MarkToggledInThisSession();
     UnsubscribeRadioStateChanged();
   }
+
+  g_isCycling.store(false);
   Wh_Log(L"Bluetooth automatic toggle cycle completed successfully.");
 }
 
@@ -599,6 +640,8 @@ static DWORD WINAPI BluetoothWorkerThread(LPVOID lpParam) {
     }
   }
 
+  UnsubscribeRadioStateChanged();
+
   try {
     winrt::uninit_apartment();
   } catch (...) {
@@ -611,7 +654,6 @@ static DWORD WINAPI BluetoothWorkerThread(LPVOID lpParam) {
 BOOL WhTool_ModInit() {
   Wh_Log(L"Bluetooth Auto Toggle tool mod initializing...");
 
-  g_startupStateEnforced.store(false);
   LoadSettings();
 
   g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -645,8 +687,6 @@ BOOL WhTool_ModInit() {
 void WhTool_ModUninit() {
   Wh_Log(L"Bluetooth Auto Toggle tool mod uninitializing...");
 
-  UnsubscribeRadioStateChanged();
-
   if (g_hStopEvent) {
     SetEvent(g_hStopEvent);
   }
@@ -673,7 +713,6 @@ void WhTool_ModUninit() {
 void WhTool_ModSettingsChanged() {
   Wh_Log(L"Settings changed notification received.");
   LoadSettings();
-  g_startupStateEnforced.store(false);
 
   AcquireSRWLockShared(&g_settingsLock);
   bool force = g_settings.forceToggleOnSettingsChange;
