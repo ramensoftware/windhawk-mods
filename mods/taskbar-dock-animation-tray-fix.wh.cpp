@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-dock-animation-tray-fix
-// @name              Taskbar Dock Animation – Tray Fix
-// @name:zh-CN        任务栏 Dock 动画（托盘修复版）
+// @name              Taskbar Dock Animation – Enhance
+// @name:zh-CN        任务栏 Dock 动画（增强版）
 // @description       Dock-style hover zoom with a Widgets toggle and system tray exclusion
 // @description:uk-UA Анімація іконок панелі завдань, як в macOS, при наведенні
 // @description:zh-CN 任务栏 Dock 悬停动画，可单独关闭小组件动画，排除系统托盘
@@ -41,7 +41,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Dock Animation – Tray Fix
+# Taskbar Dock Animation – Enhance
 
 Magnifies Windows 11 taskbar app buttons and Widgets on hover. The system tray stays at its normal size, including the input method and volume icons. Use **Disable Widgets animation** to keep Widgets at their normal size while other buttons still animate.
 
