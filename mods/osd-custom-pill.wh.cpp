@@ -12,7 +12,7 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.9.8
+// @version         4.9.9
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
@@ -240,16 +240,16 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
   $name:zh-CN: "方向运动：最大水平拉伸（%）"
 - returnPowerPct: 155
   $name: "Elastic return: rebound strength (%, 100 = standard, 155 = stronger, 0 = soft)"
-  $name:fr-FR: "Retour élastique : puissance du rebond (%, 100 = comme la standard, 155 = plus marqué, 0 = retour doux)"
-  $name:de-DE: "Elastische Rückkehr: Rückfederstärke (%, 100 = wie standard, 155 = stärker, 0 = sanft)"
-  $name:es-ES: "Retorno elástico: fuerza del rebote (%, 100 = como standard, 155 = más fuerte, 0 = suave)"
-  $name:it-IT: "Ritorno elastico: intensità del rimbalzo (%, 100 = come standard, 155 = più forte, 0 = delicato)"
-  $name:pt-BR: "Retorno elástico: força do rebote (%, 100 = como na standard, 155 = mais forte, 0 = suave)"
-  $name:pl-PL: "Sprężysty powrót: siła odbicia (%, 100 = jak w standard, 155 = mocniej, 0 = łagodnie)"
-  $name:ru-RU: "Упругий возврат: сила отскока (%, 100 = как в standard, 155 = сильнее, 0 = плавно)"
-  $name:ja-JP: "弾性復帰: 跳ね返りの強さ (%、100 = standard相当、155 = 強め、0 = 穏やか)"
-  $name:ko-KR: "탄성 복귀: 반동 강도(%, 100 = standard와 동일, 155 = 더 강함, 0 = 부드럽게)"
-  $name:zh-CN: "弹性复位：回弹力度（%，100 = 与 standard 相同，155 = 更强，0 = 柔和）"
+  $name:fr-FR: "Retour élastique : puissance du rebond (%, 100 = normal, 155 = plus marqué, 0 = retour doux)"
+  $name:de-DE: "Elastische Rückkehr: Rückfederstärke (%, 100 = normal, 155 = stärker, 0 = sanft)"
+  $name:es-ES: "Retorno elástico: fuerza del rebote (%, 100 = normal, 155 = más fuerte, 0 = suave)"
+  $name:it-IT: "Ritorno elastico: intensità del rimbalzo (%, 100 = normale, 155 = più forte, 0 = delicato)"
+  $name:pt-BR: "Retorno elástico: força do rebote (%, 100 = padrão, 155 = mais forte, 0 = suave)"
+  $name:pl-PL: "Sprężysty powrót: siła odbicia (%, 100 = standardowo, 155 = mocniej, 0 = łagodnie)"
+  $name:ru-RU: "Упругий возврат: сила отскока (%, 100 = стандартный, 155 = сильнее, 0 = плавно)"
+  $name:ja-JP: "弾性復帰: 跳ね返りの強さ (%、100 = 標準、155 = 強め、0 = 穏やか)"
+  $name:ko-KR: "탄성 복귀: 반동 강도(%, 100 = 기본, 155 = 더 강함, 0 = 부드럽게)"
+  $name:zh-CN: "弹性复位：回弹力度（%，100 = 标准，155 = 更强，0 = 柔和）"
 - compactEnabled: true
   $name: "Compact mode: enable compact mode"
   $name:fr-FR: "Mode compact : activer le mode compact"
@@ -421,6 +421,9 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
 #include <cwchar>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
+#include <mutex>
+#include <vector>
 
 // ---------------------------------------------------------------- état global
 struct {
@@ -450,7 +453,45 @@ static volatile DWORD g_wantDdcUntil = 0;
 static int g_limitDir = 0;              // luminosité en butée : +1 max, -1 min
 static int g_bumpDir = 0;               // sens de la secousse à jouer à l'ouverture
 static HWND g_ui = nullptr;
-static HWND g_osd = nullptr;
+static HWND g_osd = nullptr; // dernier OSD natif pour l'etat visuel
+// Chaque OSD masque doit etre restaure, meme si un autre s'affiche ensuite.
+static std::mutex g_hiddenOsdMutex;
+static std::vector<HWND> g_hiddenOsdWindows;
+
+static bool IsTrackedHiddenOsd(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_hiddenOsdMutex);
+    return std::find(g_hiddenOsdWindows.begin(), g_hiddenOsdWindows.end(), hwnd) !=
+           g_hiddenOsdWindows.end();
+}
+
+static void TrackHiddenOsd(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_hiddenOsdMutex);
+    if (std::find(g_hiddenOsdWindows.begin(), g_hiddenOsdWindows.end(), hwnd) ==
+        g_hiddenOsdWindows.end()) {
+        g_hiddenOsdWindows.push_back(hwnd);
+    }
+}
+
+static bool UntrackHiddenOsd(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_hiddenOsdMutex);
+    auto it = std::find(g_hiddenOsdWindows.begin(), g_hiddenOsdWindows.end(), hwnd);
+    if (it == g_hiddenOsdWindows.end()) return false;
+    g_hiddenOsdWindows.erase(it);
+    return true;
+}
+
+static void RestoreAllHiddenOsdWindows() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_hiddenOsdMutex);
+        windows.swap(g_hiddenOsdWindows);
+    }
+    // Ne pas garder le mutex durant SetWindowRgn : Windows envoie des messages
+    // synchrones sur le thread de la fenetre.
+    for (HWND hwnd : windows) {
+        if (IsWindow(hwnd)) SetWindowRgn(hwnd, nullptr, TRUE);
+    }
+}
 static HANDLE g_uiThread = nullptr, g_pollThread = nullptr;
 static float g_fontScale = 0.0f;
 
@@ -1647,17 +1688,20 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
 
     if (cmd == SW_HIDE) {
         BOOL r = ShowWindow_Orig(hwnd, cmd);
-        if (hwnd == g_osd) {
-            SetWindowRgn(hwnd, nullptr, FALSE);
-            PostMessageW(g_ui, MSG_HIDE, 0, 0);
-        }
+        // Restaurer CHAQUE fenetre native que le mod a masquee, pas seulement
+        // la derniere dans g_osd. Retirer l'entree sous verrou, puis restaurer
+        // la region hors verrou pour eviter un blocage avec le thread Explorer.
+        const bool wasHidden = UntrackHiddenOsd(hwnd);
+        if (wasHidden && IsWindow(hwnd)) SetWindowRgn(hwnd, nullptr, FALSE);
+        if (hwnd == g_osd) PostMessageW(g_ui, MSG_HIDE, 0, 0);
         return r;
     }
     if (IsWindowVisible(hwnd)) {
         // Windows may re-use an already-visible XAML host. In that case
         // the native OSD has been given an empty region by this mod, so
         // still refresh the corresponding custom pill on a new show call.
-        if (hwnd == g_osd) {
+        if (hwnd == g_osd || IsTrackedHiddenOsd(hwnd)) {
+            g_osd = hwnd;
             int hint = 0;
             if ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
                  GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) hint = 1;
@@ -1700,7 +1744,15 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
     }
 
     g_osd = hwnd;
-    SetWindowRgn(hwnd, CreateRectRgn(0, 0, 0, 0), FALSE);       // original invisible
+    HRGN emptyRegion = CreateRectRgn(0, 0, 0, 0);
+    if (emptyRegion) {
+        // Apres succes, Windows possede la region; en cas d'echec, la liberer.
+        if (SetWindowRgn(hwnd, emptyRegion, FALSE)) {
+            TrackHiddenOsd(hwnd);
+        } else {
+            DeleteObject(emptyRegion);
+        }
+    }
     BOOL r = ShowWindow_Orig(hwnd, cmd);
     PostMessageW(g_ui, MSG_SHOW, (WPARAM)pend, 0);
     if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
@@ -1811,7 +1863,8 @@ void Wh_ModUninit() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_uiThread) { WaitForSingleObject(g_uiThread, INFINITE); CloseHandle(g_uiThread); g_uiThread = nullptr; }
     if (g_pollThread) { WaitForSingleObject(g_pollThread, INFINITE); CloseHandle(g_pollThread); g_pollThread = nullptr; }
-    if (g_osd && IsWindow(g_osd)) SetWindowRgn(g_osd, nullptr, TRUE);
+    // Les hooks sont deja retires : restaurer toutes les regions modifiees.
+    RestoreAllHiddenOsdWindows();
     g_osd = nullptr;
     if (g_pollWakeEvent) CloseHandle(g_pollWakeEvent);
     if (g_stopEvent) CloseHandle(g_stopEvent);
