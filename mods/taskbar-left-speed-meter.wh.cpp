@@ -2,7 +2,7 @@
 // @id              taskbar-left-speed-meter
 // @name            Taskbar Left Speed Meter
 // @description     Displays real-time Internet download and upload speed on the bottom-left corner of the taskbar with custom colors and fonts.
-// @version         1.1.0
+// @version         1.1.1
 // @author          RAKIBUL ISLAM SANI
 // @github          https://github.com/rakibulislamsani
 // @include         windhawk.exe
@@ -20,7 +20,7 @@ A dedicated, lightweight network traffic monitor docked on the bottom-left corne
 - **taskbar-system-info:** Displays multi-resource readouts (CPU/GPU/RAM/Network) together. If you only want a standalone network speed monitor without system resource counters, this mod provides that focused experience.
 
 ### Features
-- Real-time download and upload speed monitoring.
+- Real-time download and upload speed monitoring with accurate 64-bit interface accounting.
 - Deep visual styling via the Settings tab:
   - Custom arbitrary text color (HEX code support).
   - Custom font family (e.g. Segoe UI, Consolas, Arial, Tahoma).
@@ -60,18 +60,21 @@ On Windows 11 with centered taskbar icons, this docks in the empty bottom-left c
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <netioapi.h>
 #include <iphlpapi.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <atomic>
+#include <windhawk_utils.h>
 
 #define TIMER_ID 1001
 #define WM_REFRESH_SETTINGS (WM_APP + 1)
-#define TRANSPARENT_COLOR RGB(255, 0, 255)
+#define TRANSPARENT_COLOR RGB(254, 0, 254)
 
-HWND hOverlayWnd = NULL;
+std::atomic<HWND> hOverlayWnd{ NULL };
 HANDLE hThread = NULL;
 DWORD dwThreadId = 0;
-BOOL bRunning = TRUE;
+std::atomic<BOOL> bRunning{ TRUE };
 
 COLORREF g_textColor = RGB(0, 255, 127);
 wchar_t g_fontName[64] = L"Segoe UI";
@@ -80,7 +83,8 @@ int g_fontSize = 13;
 int g_posX = 20;
 BOOL g_hideOnFullscreen = TRUE;
 
-DWORD prevInBytes = 0, prevOutBytes = 0;
+ULONGLONG prevInBytes = 0, prevOutBytes = 0;
+ULONGLONG prevSampleTime = 0;
 wchar_t displayText[128] = L"▼ 0.0 KB/s\n▲ 0.0 KB/s";
 
 HINSTANCE GetCurrentModuleHandle() {
@@ -112,25 +116,19 @@ COLORREF HexToColorRef(PCWSTR hexColor) {
     if (*p == L'#') p++;
     unsigned int r = 0, g = 0, b = 0;
     if (swscanf(p, L"%02x%02x%02x", &r, &g, &b) == 3) {
-        return RGB(r, g, b);
+        COLORREF c = RGB(r, g, b);
+        if (c == TRANSPARENT_COLOR) return RGB(r, 1, b);
+        return c;
     }
     return RGB(0, 255, 127);
 }
 
 void LoadSettings() {
-    PCWSTR colorStr = Wh_GetStringSetting(L"textColor");
-    if (colorStr) {
-        g_textColor = HexToColorRef(colorStr);
-        Wh_FreeStringSetting(colorStr);
-    }
+    WindhawkUtils::StringSetting colorStr = WindhawkUtils::StringSetting::make(L"textColor");
+    g_textColor = HexToColorRef(colorStr.get());
 
-    PCWSTR fontStr = Wh_GetStringSetting(L"fontName");
-    if (fontStr && wcslen(fontStr) > 0) {
-        wcsncpy_s(g_fontName, 64, fontStr, _TRUNCATE);
-        Wh_FreeStringSetting(fontStr);
-    } else {
-        wcsncpy_s(g_fontName, 64, L"Segoe UI", _TRUNCATE);
-    }
+    WindhawkUtils::StringSetting fontStr = WindhawkUtils::StringSetting::make(L"fontName");
+    wcsncpy_s(g_fontName, 64, (fontStr.get() && *fontStr.get()) ? fontStr.get() : L"Segoe UI", _TRUNCATE);
 
     g_isBold = Wh_GetIntSetting(L"isBold") != 0;
 
@@ -143,24 +141,23 @@ void LoadSettings() {
     g_hideOnFullscreen = Wh_GetIntSetting(L"hideOnFullscreen") != 0;
 }
 
-void FetchNetworkTraffic(DWORD *inBytes, DWORD *outBytes) {
+void FetchNetworkTraffic(ULONGLONG *inBytes, ULONGLONG *outBytes) {
     *inBytes = 0;
     *outBytes = 0;
-    ULONG size = 0;
 
-    if (GetIfTable(NULL, &size, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
-        PMIB_IFTABLE table = (PMIB_IFTABLE)malloc(size);
-        if (table) {
-            if (GetIfTable(table, &size, FALSE) == NO_ERROR) {
-                for (DWORD i = 0; i < table->dwNumEntries; i++) {
-                    if (table->table[i].dwType != MIB_IF_TYPE_LOOPBACK) {
-                        *inBytes += table->table[i].dwInOctets;
-                        *outBytes += table->table[i].dwOutOctets;
-                    }
-                }
+    PMIB_IF_TABLE2 table = NULL;
+    if (GetIfTable2(&table) == NO_ERROR && table) {
+        for (ULONG i = 0; i < table->NumEntries; i++) {
+            const MIB_IF_ROW2& row = table->Table[i];
+            if (row.InterfaceAndOperStatusFlags.HardwareInterface &&
+                row.OperStatus == IfOperStatusUp &&
+                row.Type != IF_TYPE_SOFTWARE_LOOPBACK &&
+                row.MediaConnectState == MediaConnectStateConnected) {
+                *inBytes += row.InOctets;
+                *outBytes += row.OutOctets;
             }
-            free(table);
         }
+        FreeMibTable(table);
     }
 }
 
@@ -199,79 +196,98 @@ BOOL ShouldHideMeter(HWND hTaskbar) {
 }
 
 void UpdatePosition(HWND hTaskbar) {
-    if (!hTaskbar || !hOverlayWnd) return;
+    HWND hWnd = hOverlayWnd.load();
+    if (!hTaskbar || !hWnd) return;
 
     RECT rcTaskbar;
     GetWindowRect(hTaskbar, &rcTaskbar);
 
     UINT dpi = GetTaskbarDpi(hTaskbar);
-    int width = MulDiv(140, dpi, 96);
-    int height = MulDiv(40, dpi, 96);
+    int width = MulDiv(150, dpi, 96);
+    int height = MulDiv(42, dpi, 96);
     int posXScaled = MulDiv(g_posX, dpi, 96);
 
     int x = rcTaskbar.left + posXScaled;
     int y = rcTaskbar.top + ((rcTaskbar.bottom - rcTaskbar.top - height) / 2);
 
-    SetWindowPos(hOverlayWnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(hWnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 }
 
-void RefreshSpeed() {
+void RefreshSpeed(BOOL isSettingsChange = FALSE) {
+    HWND hWnd = hOverlayWnd.load();
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     if (!hTaskbar) {
-        if (IsWindowVisible(hOverlayWnd)) {
-            ShowWindow(hOverlayWnd, SW_HIDE);
+        if (hWnd && IsWindowVisible(hWnd)) {
+            ShowWindow(hWnd, SW_HIDE);
         }
+        prevSampleTime = 0;
         return;
     }
 
-    DWORD curIn = 0, curOut = 0;
+    ULONGLONG curIn = 0, curOut = 0;
     FetchNetworkTraffic(&curIn, &curOut);
+    ULONGLONG curTime = GetTickCount64();
 
-    double downSpeed = (double)(DWORD)(curIn - prevInBytes) / 1024.0;
-    double upSpeed = (double)(DWORD)(curOut - prevOutBytes) / 1024.0;
+    if (prevSampleTime == 0 || curIn < prevInBytes || curOut < prevOutBytes) {
+        prevInBytes = curIn;
+        prevOutBytes = curOut;
+        prevSampleTime = curTime;
+        if (hWnd && !isSettingsChange) return;
+    }
 
-    prevInBytes = curIn;
-    prevOutBytes = curOut;
+    double elapsedSec = (double)(curTime - prevSampleTime) / 1000.0;
+    if (elapsedSec < 0.1) elapsedSec = 1.0;
+
+    double downSpeed = 0.0;
+    double upSpeed = 0.0;
+
+    if (!isSettingsChange) {
+        downSpeed = (double)(curIn - prevInBytes) / (1024.0 * elapsedSec);
+        upSpeed = (double)(curOut - prevOutBytes) / (1024.0 * elapsedSec);
+        prevInBytes = curIn;
+        prevOutBytes = curOut;
+        prevSampleTime = curTime;
+
+        wchar_t downStr[64], upStr[64];
+        if (downSpeed >= 1024.0)
+            swprintf(downStr, 64, L"▼ %.2f MB/s", downSpeed / 1024.0);
+        else
+            swprintf(downStr, 64, L"▼ %.1f KB/s", downSpeed);
+
+        if (upSpeed >= 1024.0)
+            swprintf(upStr, 64, L"▲ %.2f MB/s", upSpeed / 1024.0);
+        else
+            swprintf(upStr, 64, L"▲ %.1f KB/s", upSpeed);
+
+        swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
+    }
 
     if (ShouldHideMeter(hTaskbar)) {
-        if (IsWindowVisible(hOverlayWnd)) {
-            ShowWindow(hOverlayWnd, SW_HIDE);
+        if (hWnd && IsWindowVisible(hWnd)) {
+            ShowWindow(hWnd, SW_HIDE);
         }
         return;
     } else {
-        if (!IsWindowVisible(hOverlayWnd)) {
-            ShowWindow(hOverlayWnd, SW_SHOWNOACTIVATE);
+        if (hWnd && !IsWindowVisible(hWnd)) {
+            ShowWindow(hWnd, SW_SHOWNOACTIVATE);
         }
     }
 
-    wchar_t downStr[64], upStr[64];
-    if (downSpeed >= 1024.0)
-        swprintf(downStr, 64, L"▼ %.2f MB/s", downSpeed / 1024.0);
-    else
-        swprintf(downStr, 64, L"▼ %.1f KB/s", downSpeed);
-
-    if (upSpeed >= 1024.0)
-        swprintf(upStr, 64, L"▲ %.2f MB/s", upSpeed / 1024.0);
-    else
-        swprintf(upStr, 64, L"▲ %.1f KB/s", upSpeed);
-
-    swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
-
     UpdatePosition(hTaskbar);
-    InvalidateRect(hOverlayWnd, NULL, TRUE);
+    if (hWnd) InvalidateRect(hWnd, NULL, TRUE);
 }
 
 LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_TIMER:
             if (wParam == TIMER_ID) {
-                RefreshSpeed();
+                RefreshSpeed(FALSE);
             }
             return 0;
 
         case WM_REFRESH_SETTINGS:
             LoadSettings();
-            RefreshSpeed();
+            RefreshSpeed(TRUE);
             return 0;
 
         case WM_PAINT: {
@@ -333,33 +349,36 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     UINT dpi = GetTaskbarDpi(hTaskbar);
-    int width = MulDiv(140, dpi, 96);
-    int height = MulDiv(40, dpi, 96);
+    int width = MulDiv(150, dpi, 96);
+    int height = MulDiv(42, dpi, 96);
 
-    hOverlayWnd = CreateWindowEx(
+    HWND hWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"",
         WS_POPUP, 0, 0, width, height,
         NULL, NULL, hInst, NULL
     );
 
-    if (hOverlayWnd) {
-        SetLayeredWindowAttributes(hOverlayWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
+    hOverlayWnd.store(hWnd);
+
+    if (hWnd) {
+        SetLayeredWindowAttributes(hWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
         FetchNetworkTraffic(&prevInBytes, &prevOutBytes);
-        RefreshSpeed();
-        SetTimer(hOverlayWnd, TIMER_ID, 1000, NULL);
+        prevSampleTime = GetTickCount64();
+        RefreshSpeed(FALSE);
+        SetTimer(hWnd, TIMER_ID, 1000, NULL);
     }
 
     MSG msg;
-    while (bRunning && GetMessage(&msg, NULL, 0, 0)) {
+    while (bRunning.load() && GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    if (hOverlayWnd) {
-        KillTimer(hOverlayWnd, TIMER_ID);
-        DestroyWindow(hOverlayWnd);
-        hOverlayWnd = NULL;
+    if (hWnd) {
+        KillTimer(hWnd, TIMER_ID);
+        DestroyWindow(hWnd);
+        hOverlayWnd.store(NULL);
     }
 
     UnregisterClass(wc.lpszClassName, hInst);
@@ -369,19 +388,20 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 // Tool Mod callbacks
 BOOL WhTool_ModInit() {
     LoadSettings();
-    bRunning = TRUE;
+    bRunning.store(TRUE);
     hThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &dwThreadId);
     return (hThread != NULL);
 }
 
 void WhTool_ModSettingsChanged() {
-    if (hOverlayWnd) {
-        PostMessage(hOverlayWnd, WM_REFRESH_SETTINGS, 0, 0);
+    HWND hWnd = hOverlayWnd.load();
+    if (hWnd) {
+        PostMessage(hWnd, WM_REFRESH_SETTINGS, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
-    bRunning = FALSE;
+    bRunning.store(FALSE);
     if (dwThreadId) {
         PostThreadMessage(dwThreadId, WM_QUIT, 0, 0);
     }
@@ -393,19 +413,7 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-
+// Windhawk tool mod implementation
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
