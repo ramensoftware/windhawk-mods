@@ -103927,10 +103927,14 @@ void Island::ApplyClickThrough() {
                                     : style & ~WS_EX_TRANSPARENT);
     if (g_clickThrough) {
         CloseAllPanels();
-        // (A line auto-hide made comes back: letting clicks through, the
-        // window gets no hover to bring it back.)
+        // (A line auto-hide made, or the Bar hidden to its small pill with
+        // the time, comes back: letting clicks through, the window gets no
+        // hover to bring it back.)
         if (m_minimized && m_autoHidden) {
             SetMinimized(false, false);
+        }
+        if (m_bar && m_barHidden && g_settings.islandHideClock) {
+            SetBarHidden(false);
         }
     }
 }
