@@ -4,8 +4,8 @@
 // @name:pt         Rolagem Suave para Win32
 // @name:es         Desplazamiento Suave para Win32
 // @description     Adds smooth scrolling with spring physics to legacy Win32 apps
-// @description:pt  Adiciona rolagem suave com fisica de mola a aplicativos Win32 antigos
-// @description:es  Anade desplazamiento suave con fisica de resorte a aplicaciones Win32
+// @description:pt  Adiciona rolagem suave com física de mola a aplicativos Win32 antigos
+// @description:es  Añade desplazamiento suave con física de resorte a aplicaciones Win32
 // @version         1.0.4
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
@@ -15,48 +15,21 @@
 // @include         control.exe
 // @include         wordpad.exe
 // @include         taskmgr.exe
-// @compilerOptions -luser32 -lgdi32 -lcomctl32 -lole32 -loleaut32
+// @compilerOptions -luser32 -lgdi32 -lcomctl32 -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Smooth Scroll for Win32
 
+| Native | Smooth Scroll for Win32 |
+|---|---|
+| ![Native scrolling in File Explorer](https://raw.githubusercontent.com/crazyboyybs/assets/main/smooth-scroll-win32-native.gif) | ![Smooth scrolling in File Explorer](https://raw.githubusercontent.com/crazyboyybs/assets/main/smooth-scroll-win32-smooth.gif) |
+
 ## English
 
 Adds smooth scrolling with spring physics to legacy Win32 applications.
 Only modifies legacy controls — modern WinUI windows are not affected.
-
-### What's new in 1.0.4
-
-- **Native pixel scrolling in File Explorer** — the folder view now scrolls
-  through Explorer's own pixel-precise pan path instead of UI Automation.
-  Each notch travels the distance of the Windows wheel step (at most a third
-  of the view, so large icons stay easy to follow), works in grouped views
-  and no longer brings background windows to the front. It uses Explorer's
-  symbols, which Windhawk downloads once; until they are available, UI
-  Automation is used as before.
-- **Task Manager and Control Panel** — their DirectUI pages now scroll
-  smoothly by pixels, and Control Panel pages no longer ignore the wheel
-  from time to time.
-- **Pixel scrolling in classic Win32 controls** — tree views, list boxes,
-  multi-line text boxes and Details-view lists still move by whole lines
-  underneath, but every frame is drawn at its pixel offset, so they glide
-  instead of jumping a line at a time. A control whose drawing doesn't match
-  what it shows keeps line scrolling, and a click or key press during the
-  animation finishes it at once. RichEdit boxes and icon views scroll by
-  pixels directly, with the native distance per notch.
-- **No more legacy list box animation** — list boxes no longer play the old
-  per-line Windows animation underneath the mod's.
-- **Refresh-rate pacing** — frames follow the compositor clock (or a
-  high-resolution timer at the monitor's refresh rate) and each step uses
-  the real elapsed time, instead of a ~60 Hz timer.
-- **WinUI-style Smooth Only mode** — scrolling eases out with the
-  exponential shape of WinUI inertia and settles in about a quarter second.
-- **Steady finish** — the last pixels of every scroll move at an even pace
-  instead of stepping one pixel every few frames.
-- **Simpler settings** — Scroll Multiplier and Smooth Speed were removed.
-  The scroll distance follows the Windows "lines per notch" setting.
 
 ### Scroll modes (auto-detected per window)
 
@@ -97,40 +70,6 @@ inside any included process are automatically skipped.
 Adiciona rolagem suave com física de mola a aplicativos Win32 antigos.
 Só modifica controles legados. Janelas WinUI não são afetadas.
 
-### Novidades na 1.0.4
-
-- **Rolagem nativa em pixels no Explorador de Arquivos** — a lista de
-  arquivos agora rola pelo próprio caminho de pan em pixels do Explorer, em
-  vez de UI Automation. Cada notch percorre a distância do passo da roda do
-  Windows (no máximo um terço da área visível, para ícones grandes ficarem
-  fáceis de acompanhar), funciona em exibições agrupadas e não traz mais
-  janelas em segundo plano para a frente. Usa os símbolos do Explorer, que o
-  Windhawk baixa uma vez; enquanto não estão disponíveis, a UI Automation é
-  usada como antes.
-- **Gerenciador de Tarefas e Painel de Controle** — as páginas DirectUI
-  agora rolam suave, em pixels, e as páginas do Painel de Controle não
-  ignoram mais a roda de vez em quando.
-- **Rolagem em pixels nos controles Win32 clássicos** — árvores, caixas de
-  lista, caixas de texto de várias linhas e listas em Detalhes continuam
-  andando por linhas inteiras por baixo, mas cada quadro é desenhado no seu
-  deslocamento em pixels, então deslizam em vez de pular uma linha por vez.
-  Um controle cujo desenho não bate com o que ele mostra continua rolando por
-  linhas, e um clique ou tecla durante a animação a termina na hora. Caixas
-  RichEdit e exibições de ícones rolam direto em pixels, com a distância
-  nativa por notch.
-- **Fim da animação antiga das caixas de lista** — as caixas de lista não
-  tocam mais a animação por linha antiga do Windows por baixo da do mod.
-- **Ritmo pela taxa de atualização** — os quadros seguem o relógio do
-  compositor (ou um timer de alta resolução na frequência do monitor) e cada
-  passo usa o tempo real decorrido, em vez de um timer de ~60 Hz.
-- **Modo Apenas Suave no estilo WinUI** — a rolagem desacelera com a forma
-  exponencial da inércia do WinUI e assenta em cerca de um quarto de segundo.
-- **Final estável** — os últimos pixels de cada rolagem andam em ritmo
-  uniforme, em vez de avançar um pixel a cada vários quadros.
-- **Configurações mais simples** — Multiplicador de rolagem e Velocidade
-  Suave foram removidos. A distância segue a configuração do Windows de
-  linhas por notch.
-
 ### Modos de rolagem (detectados por janela)
 
 | Controle | Método | Granularidade |
@@ -170,43 +109,6 @@ dentro de qualquer processo incluído são ignoradas automaticamente.
 
 Añade desplazamiento suave con física de resorte a las aplicaciones Win32 antiguas.
 Solo modifica los controles antiguos. Las ventanas de WinUI no se ven afectadas.
-
-### Novedades en 1.0.4
-
-- **Desplazamiento nativo en píxeles en el Explorador de archivos** — la
-  vista de carpetas ahora se desplaza por la propia ruta de paneo en píxeles
-  del Explorador, en lugar de UI Automation. Cada notch recorre la distancia
-  del paso de la rueda de Windows (como máximo un tercio de la vista, para
-  que los iconos grandes sean fáciles de seguir), funciona en vistas
-  agrupadas y ya no trae al frente las ventanas en segundo plano. Usa los
-  símbolos del Explorador, que Windhawk descarga una vez; mientras no están
-  disponibles, se usa UI Automation como antes.
-- **Administrador de tareas y Panel de control** — sus páginas DirectUI
-  ahora se desplazan suavemente, en píxeles, y las páginas del Panel de
-  control ya no ignoran la rueda de vez en cuando.
-- **Desplazamiento en píxeles en los controles Win32 clásicos** — árboles,
-  cuadros de lista, cuadros de texto de varias líneas y listas en Detalles
-  siguen moviéndose por líneas enteras por debajo, pero cada fotograma se
-  dibuja en su desplazamiento en píxeles, así que se deslizan en lugar de
-  saltar una línea a la vez. Un control cuyo dibujo no coincide con lo que
-  muestra sigue desplazándose por líneas, y un clic o una tecla durante la
-  animación la termina al instante. Los cuadros RichEdit y las vistas de
-  iconos se desplazan directamente en píxeles, con la distancia nativa por
-  notch.
-- **Adiós a la animación antigua de los cuadros de lista** — los cuadros de
-  lista ya no reproducen la antigua animación por línea de Windows debajo de
-  la del mod.
-- **Ritmo según la frecuencia de actualización** — los fotogramas siguen el
-  reloj del compositor (o un temporizador de alta resolución a la frecuencia
-  del monitor) y cada paso usa el tiempo real transcurrido, en lugar de un
-  temporizador de ~60 Hz.
-- **Modo Solo Suave al estilo WinUI** — el desplazamiento desacelera con la
-  forma exponencial de la inercia de WinUI y se asienta en cerca de un cuarto
-  de segundo.
-- **Final estable** — los últimos píxeles de cada desplazamiento avanzan a
-  ritmo uniforme, en lugar de un píxel cada varios fotogramas.
-- **Ajustes más simples** — se eliminaron Multiplicador de desplazamiento y
-  Velocidad Suave. La distancia sigue el ajuste de Windows de líneas por notch.
 
 ### Modos de desplazamiento (detectados por ventana)
 
@@ -294,6 +196,7 @@ WinUI dentro de cualquier proceso incluido se omiten automáticamente.
 #include <cmath>
 #include <initializer_list>
 #include <map>
+#include <optional>
 #include <thread>
 
 #ifndef UIA_ScrollPatternNoScroll
@@ -597,27 +500,25 @@ static bool REMetrics(HWND h, int* y, int* maxY, int* lineH) {
 // UI Automation
 // ---------------------------------------------------------------------------
 
-static thread_local IUIAutomation* g_uia = nullptr;
-static thread_local bool g_uiaInit = false;
-
-static IUIAutomation* UIA() {
-    if (g_uiaInit) return g_uia;
-    g_uiaInit = true;
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
-                     __uuidof(IUIAutomation), (void**)&g_uia);
-    return g_uia;
-}
-
+// Once per window, as the pattern is cached in State. COM belongs to the
+// host: a thread without it keeps the native wheel.
 static IUIAutomationScrollPattern* GetPattern(HWND h) {
-    IUIAutomation* u = UIA();
-    if (!u) return nullptr;
-    IUIAutomationElement* e = nullptr;
-    if (FAILED(u->ElementFromHandle(h, &e)) || !e) return nullptr;
+    APTTYPE type;
+    APTTYPEQUALIFIER qualifier;
+    if (FAILED(CoGetApartmentType(&type, &qualifier)))
+        return nullptr;
+    IUIAutomation* u = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
+                                __uuidof(IUIAutomation), (void**)&u)) || !u)
+        return nullptr;
     IUIAutomationScrollPattern* p = nullptr;
-    e->GetCurrentPatternAs(UIA_ScrollPatternId,
-                            __uuidof(IUIAutomationScrollPattern), (void**)&p);
-    e->Release();
+    IUIAutomationElement* e = nullptr;
+    if (SUCCEEDED(u->ElementFromHandle(h, &e)) && e) {
+        e->GetCurrentPatternAs(UIA_ScrollPatternId,
+                               __uuidof(IUIAutomationScrollPattern), (void**)&p);
+        e->Release();
+    }
+    u->Release();
     return p;
 }
 
@@ -822,16 +723,22 @@ static void PruneStates() {
 // Load settings
 // ---------------------------------------------------------------------------
 
+// Read on every wheel so a change in Windows settings applies at once.
+static UINT WheelLines() {
+    UINT ln = 3;
+    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &ln, 0);
+    if (ln == 0) ln = 3;
+    if (ln == WHEEL_PAGESCROLL) ln = 20;
+    return ln;
+}
+
 static void LoadSettings() {
     int k = Wh_GetIntSetting(L"spring.springConstant");
     int d = Wh_GetIntSetting(L"spring.dampingX10");
     bool sm = Wh_GetIntSetting(L"smoothOnly") != 0;
     bool ov = Wh_GetIntSetting(L"spring.overshoot") != 0;
 
-    UINT ln = 3;
-    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &ln, 0);
-    if (ln == 0) ln = 3;
-    if (ln == WHEEL_PAGESCROLL) ln = 20;
+    UINT ln = WheelLines();
 
     double logK, logD;
     AcquireSRWLockExclusive(&g_cfgLock);
@@ -887,15 +794,18 @@ static ScrollViewer_GetVScroll_t g_styledSvGetVScroll = nullptr;
 // (-1 when unset, as LineScroller initializes it), +0x20 valid,
 // +0x58 row index, +0x64 row RECT in viewer coordinates.
 struct alignas(16) RowInfoBuf {
-    BYTE b[0x80] = {};
+    BYTE b[0x400] = {};  // room for a RowInfo that grows in later builds
     RowInfoBuf() { *(int*)(b + 0x18) = -1; }
 };
 #endif
 
 // Lifetime (Element::OnDestroy) and ScrollViewer hooks need only dui70;
 // the items view also needs ExplorerFrame's symbols.
+#ifdef _WIN64
 static std::atomic<bool> g_duiCoreDone{false};
 static std::atomic<bool> g_duiItemsDone{false};
+static std::atomic<ULONGLONG> g_duiRetryAt{0};  // items view symbols, after a failed resolve
+#endif
 static HMODULE g_explorerFrameRef = nullptr;
 static HMODULE g_dui70Ref = nullptr;
 
@@ -1241,6 +1151,14 @@ static bool DuiItemsStage() {
                g_lsOnInputOrig != nullptr, g_lsScrollPreciseDelta != nullptr,
                g_lsGetVirtualDirection != nullptr, g_lsRowFromY != nullptr,
                g_lsNextRow != nullptr);
+        // Nothing staged usually means the download failed (offline): try
+        // again later, a few times, instead of staying on UIA until restart.
+        static int retries = 0;
+        if (!g_lsOnInputOrig && retries++ < 10) {
+            g_explorerFrameRef = nullptr;
+            FreeLibrary(ef);
+            g_duiRetryAt.store(GetTickCount64() + 60000, std::memory_order_release);
+        }
         return false;
     }
     return true;
@@ -1277,10 +1195,12 @@ static void DuiSetup(bool apply) {
 #endif
 }
 
+#ifdef _WIN64
 static bool DuiSetupPending() {
     return (!g_duiCoreDone.load(std::memory_order_acquire) && GetModuleHandleW(L"dui70.dll")) ||
            (!g_duiItemsDone.load(std::memory_order_acquire) && GetModuleHandleW(L"ExplorerFrame.dll"));
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // Frame pacing
@@ -1297,7 +1217,9 @@ static double g_qpcFreq = 1.0;
 static HANDLE g_pacerStop = nullptr;
 static HANDLE g_pacerWake = nullptr;
 static HANDLE g_duiSetupEvent = nullptr;
-static std::thread* g_pacer = nullptr;
+[[clang::no_destroy]] static std::optional<std::thread> g_pacer;
+[[clang::no_destroy]] static std::optional<std::thread> g_setup;
+static std::atomic<bool> g_pacerUp{false};
 static HMODULE g_dcomp = nullptr;
 static WaitForCompositorClock_t g_waitForCompositorClock = nullptr;
 
@@ -1309,7 +1231,7 @@ static LONGLONG QpcNow() {
 
 // Called under g_cs.
 static bool StartAnimation(State& s, HWND hwnd) {
-    if (!g_pacer || g_unloading.load(std::memory_order_acquire))
+    if (!g_pacerUp.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire))
         return false;
     if (!s.active) {
         s.active = true;
@@ -1383,23 +1305,9 @@ static void PacerLoop() {
                                           TIMER_ALL_ACCESS);
     if (!timer) timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
 
-    // A new Explorer window process loads ExplorerFrame shortly after the
-    // mod starts; watch for it briefly so the first wheel already takes the
-    // native path. Later loads (file dialogs) are caught by RequestDuiSetup.
-    constexpr ULONGLONG kSetupWatchMs = 15000;
-    ULONGLONG watchUntil = GetTickCount64() + kSetupWatchMs;
-
     for (;;) {
-        bool watching = GetTickCount64() < watchUntil &&
-                        !(g_duiCoreDone.load(std::memory_order_acquire) &&
-                          g_duiItemsDone.load(std::memory_order_acquire));
-        HANDLE idle[3] = { g_pacerStop, g_pacerWake, g_duiSetupEvent };
-        DWORD w = WaitForMultipleObjects(3, idle, FALSE, watching ? 250 : INFINITE);
-        if (w == WAIT_TIMEOUT || w == WAIT_OBJECT_0 + 2) {
-            if (DuiSetupPending()) DuiSetup(true);
-            continue;
-        }
-        if (w != WAIT_OBJECT_0 + 1) break;
+        HANDLE idle[2] = { g_pacerStop, g_pacerWake };
+        if (WaitForMultipleObjects(2, idle, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) break;
 
         bool stop = false;
         for (;;) {
@@ -1413,10 +1321,36 @@ static void PacerLoop() {
     if (timer) CloseHandle(timer);
 }
 
-static void RequestDuiSetup() {
-    if (g_duiSetupEvent && DuiSetupPending())
-        SetEvent(g_duiSetupEvent);
+#ifdef _WIN64
+// DirectUI modules that load later are staged here, off the pacer and off
+// the loading thread: resolving symbols may download them first.
+static void SetupLoop() {
+    for (;;) {
+        ULONGLONG retryAt = g_duiRetryAt.load(std::memory_order_acquire);
+        ULONGLONG now = GetTickCount64();
+        DWORD timeout = INFINITE;
+        if (retryAt) timeout = retryAt > now ? (DWORD)(retryAt - now) : 0;
+        HANDLE hs[2] = { g_pacerStop, g_duiSetupEvent };
+        DWORD w = WaitForMultipleObjects(2, hs, FALSE, timeout);
+        if (w == WAIT_OBJECT_0 || w == WAIT_FAILED) break;
+        if (w == WAIT_TIMEOUT) {
+            g_duiRetryAt.store(0, std::memory_order_release);
+            g_duiItemsDone.store(false, std::memory_order_release);
+        }
+        if (DuiSetupPending()) DuiSetup(true);
+    }
 }
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t g_loadLibraryExWOrig;
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    HMODULE module = g_loadLibraryExWOrig(name, file, flags);
+    if (module && g_duiSetupEvent && DuiSetupPending())
+        SetEvent(g_duiSetupEvent);
+    return module;
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Line composition
@@ -2282,10 +2216,6 @@ static bool Handle(const MSG* m) {
     GetWindowThreadProcessId(tgt, &pid);
     if (pid != GetCurrentProcessId()) return false;
 
-    // The items view may be reachable natively once ExplorerFrame's
-    // symbols are resolved; UI Automation covers it until then.
-    if (mt == Method::UIAPercent) RequestDuiSetup();
-
     // SysListView32 horizontal-only (Icon/Tile) or with nothing to scroll:
     // pass through. A bar never set up reports 0-100 with no page.
     if (mt == Method::PixelLV && vert) {
@@ -2295,7 +2225,7 @@ static bool Handle(const MSG* m) {
             return false;
     }
 
-    double lines = ((double)delta / WHEEL_DELTA) * cfg.sysLines;
+    double lines = ((double)delta / WHEEL_DELTA) * WheelLines();
     int lh = (mt == Method::PixelLV) ? LVLineH(tgt) : 0;
 
     // RichEdit wheels on its own timer, so there's no synchronous step to
@@ -2442,6 +2372,12 @@ static bool Handle(const MSG* m) {
                 g_noCompNext = (g_noCompNext + 1) % ARRAYSIZE(g_noComp);
                 LeaveCriticalSection(&g_cs);
                 return Handle(m);  // plain line steps
+            }
+            if (g_unloading.load(std::memory_order_acquire)) {
+                // Unload's scan may have run already; nothing else would end it.
+                LeaveCriticalSection(&g_cs);
+                CompEnd(c, false);
+                return false;
             }
             State& sc = g_st[tgt];
             Release(sc);
@@ -2681,16 +2617,25 @@ BOOL Wh_ModInit() {
         g_scrollHooks = false;
     }
 
-    // Whatever DirectUI modules are loaded now are hooked here; the pacer
-    // thread stages the rest when they load.
+    g_pacerStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_pacerWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_duiSetupEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
+#ifdef _WIN64
+    // Modules loaded from here on signal the setup thread; whatever DirectUI
+    // modules are loaded now are staged right away.
+    if (auto kb = GetModuleHandleW(L"kernelbase.dll")) {
+        auto load = (LoadLibraryExW_t)GetProcAddress(kb, "LoadLibraryExW");
+        if (!load || !WindhawkUtils::SetFunctionHook(load, LoadLibraryExW_Hook,
+                                                     &g_loadLibraryExWOrig))
+            Wh_Log(L"LoadLibraryExW hook failed; DirectUI loaded later stays on UIA");
+    }
+#endif
     DuiSetup(false);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    g_pacerStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_pacerWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_duiSetupEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_pacerStop || !g_pacerWake || !g_duiSetupEvent) {
         Wh_Log(L"Pacer events failed; scrolling stays native");
         return;
@@ -2701,16 +2646,19 @@ void Wh_ModAfterInit() {
         g_waitForCompositorClock = (WaitForCompositorClock_t)
             GetProcAddress(g_dcomp, "DCompositionWaitForCompositorClock");
 
-    g_pacer = new std::thread(PacerLoop);
+    g_pacer.emplace(PacerLoop);
+    g_pacerUp.store(true, std::memory_order_release);
+#ifdef _WIN64
+    g_setup.emplace(SetupLoop);
+#endif
 }
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
-    if (g_pacer) {
-        SetEvent(g_pacerStop);
-        if (g_pacer->joinable()) g_pacer->join();
-        delete g_pacer;
-        g_pacer = nullptr;
+    if (g_pacerStop) SetEvent(g_pacerStop);
+    for (auto* t : { &g_pacer, &g_setup }) {
+        if (*t && (*t)->joinable()) (*t)->join();
+        t->reset();
     }
 
     // Compositions end on their windows' threads, with the hooks still in
