@@ -2,7 +2,7 @@
 // @id              win7-uac-recreation
 // @name            Windows 7/8.1/10 UAC Recreation
 // @description     This mod recreates the Windows 7, 8.1 and 10 UAC prompts on Windows 10/11 without changing UAC behavior or disabling the secure desktop
-// @version         1.1.0
+// @version         1.2.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         consent.exe
@@ -1920,16 +1920,55 @@ static const WCHAR* kNoNames[]  = {L"no", L"nein", L"non", L"n\u00e3o", L"nao", 
                                    L"\u3044\u3044\u3048", L"\uc544\ub2c8\uc694", L"\u5426",
                                    L"hay\u0131r", L"\u0644\u0627", L"\u062e\u06cc\u0631", L"\u0928\u0939\u0940\u0902"};
 
+// Compare whole button labels with Windows Unicode ordinal case folding rather
+// than the CRT's locale-sensitive towlower. In particular, a process in the C
+// locale can otherwise fail to match uppercase Cyrillic against lowercase names.
+// This does not infer an answer from position, order, or an undocumented ID.
+static bool ButtonLabelEquals(const std::wstring& label, const WCHAR* expected) {
+    return !label.empty() && expected && *expected &&
+        CompareStringOrdinal(label.c_str(), (int)label.size(), expected, -1, TRUE) == CSTR_EQUAL;
+}
 static bool NameIsYes(const std::wstring& name) {
-    std::wstring n = ToLower(Trim(name));
-    for (auto* t : kYesNames) if (n == t) return true;
+    const std::wstring n = Trim(name);
+    for (auto* t : kYesNames) if (ButtonLabelEquals(n, t)) return true;
     return false;
 }
 
 static bool NameIsNo(const std::wstring& name) {
-    std::wstring n = ToLower(Trim(name));
-    for (auto* t : kNoNames) if (n == t) return true;
+    const std::wstring n = Trim(name);
+    for (auto* t : kNoNames) if (ButtonLabelEquals(n, t)) return true;
     return false;
+}
+
+// user32's generic MessageBox labels are an undocumented implementation detail.
+// IDs 805/806 were observed in an Italian Windows 11 24H2 user32 MUI and in
+// public examples, but Microsoft does not promise their identity across builds.
+// They can only corroborate our existing named Yes/No dictionaries, never act
+// as an independent authority for an elevation decision.
+// LoadStringW uses the resource language selection of the current thread.
+static std::wstring UnmarkButtonMnemonic(const std::wstring& input) {
+    std::wstring out;
+    for (size_t i=0; i<input.size(); ++i) {
+        if (input[i]==L'&') {
+            if (i+1<input.size() && input[i+1]==L'&') { out.push_back(L'&'); ++i; }
+            // A single ampersand is an accelerator marker.
+        } else out.push_back(input[i]);
+    }
+    return Trim(out);
+}
+static bool LoadCorroboratedUser32Labels(std::wstring& yes, std::wstring& no) {
+    HMODULE module=GetModuleHandleW(L"user32.dll");
+    if(!module)return false;
+    WCHAR y[128]={}, n[128]={};
+    int yc=LoadStringW(module,805,y,(int)ARRAYSIZE(y));
+    int nc=LoadStringW(module,806,n,(int)ARRAYSIZE(n));
+    // Reject possibly truncated, empty, conflicting, or independently unknown
+    // resources. If Windows changes the IDs, this fallback simply remains off.
+    if(yc<=0 || nc<=0 || yc >= (int)ARRAYSIZE(y)-1 || nc >= (int)ARRAYSIZE(n)-1)return false;
+    yes=UnmarkButtonMnemonic(std::wstring(y,yc));
+    no=UnmarkButtonMnemonic(std::wstring(n,nc));
+    return !yes.empty() && !no.empty() && !ButtonLabelEquals(yes,no.c_str()) &&
+           NameIsYes(yes) && NameIsNo(no) && !NameIsNo(yes) && !NameIsYes(no);
 }
 
 // -- Source 1: plain Win32 child enumeration (no COM, works across processes) -----
@@ -3351,6 +3390,28 @@ static void ResolveButtons(PromptInfo& info) {
         if (!info.yes && NameIsYes(e.name)) info.yes = &e;
         else if (!info.no && NameIsNo(e.name)) info.no = &e;
     }
+    // Only a supplementary match. Require a uniquely matching native pair,
+    // existing-dictionary corroboration of BOTH resource labels, and agreement
+    // with any name-based match already found. No geometry or control order.
+    if (!info.yes || !info.no) {
+        std::wstring systemYes, systemNo;
+        if (LoadCorroboratedUser32Labels(systemYes, systemNo)) {
+            UiElement* muiYes=nullptr; UiElement* muiNo=nullptr;
+            unsigned yesCount=0, noCount=0;
+            for (auto& e : info.elements) {
+                if (e.type!=UIA_ButtonControlTypeId || e.name.empty()) continue;
+                std::wstring label=UnmarkButtonMnemonic(e.name);
+                if (ButtonLabelEquals(label,systemYes.c_str())) { muiYes=&e; ++yesCount; }
+                if (ButtonLabelEquals(label,systemNo.c_str())) { muiNo=&e; ++noCount; }
+            }
+            if (yesCount==1 && noCount==1 && muiYes!=muiNo &&
+                (!info.yes || info.yes==muiYes) && (!info.no || info.no==muiNo)) {
+                if (!info.yes) info.yes=muiYes;
+                if (!info.no) info.no=muiNo;
+                Dbg(L"buttons: corroborated user32 MUI labels used for native pair");
+            }
+        }
+    }
     if (!info.yes && !info.no) {
         for (auto& e : info.elements) {
             if (e.type != UIA_ButtonControlTypeId) continue;
@@ -3369,9 +3430,16 @@ static void ResolveButtons(PromptInfo& info) {
             Dbg(L"buttons: '%s' is not the native default button - the identity check disagrees",
                 info.no->name.c_str());
     }
-    if (!info.yes || !info.no)
+    if (!info.yes || !info.no) {
         Log(L"buttons: the native pair could not be identified by name (yes=%d no=%d) - the mod "
             L"fails open rather than guessing", info.yes ? 1 : 0, info.no ? 1 : 0);
+        // Debug log is opt-in: UIA names and identifiers can contain personal data.
+        for (const auto& e : info.elements) {
+            if (e.type == UIA_ButtonControlTypeId)
+                Dbg(L"button candidate: name='%s' automationId='%s' enabled=%d", e.name.c_str(),
+                    e.automationId.c_str(), e.enabled ? 1 : 0);
+        }
+    }
 }
 
 // The publisher shown is the one in the native publisher row. The only presentation exception is
