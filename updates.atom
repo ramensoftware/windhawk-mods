@@ -2,12 +2,300 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-08T04:00:25.000Z</updated>
+    <updated>2026-11-08T05:01:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-live-wallpaper#deb9248a6196aefbbdbd52149d5fba59a6ae0dd8</id>
+        <link href="https://windhawk.net/mods/lock-screen-live-wallpaper"/>
+        <updated>2026-11-08T05:01:41.000Z</updated>
+        <content type="html"><![CDATA[<h1>Lock Screen Live Wallpaper</h1>
+<p>Plays a video as the background of the Windows 11 <strong>lock screen</strong> and the <strong>password / sign-in screen</strong>.</p>
+<p><img src="https://i.imgur.com/cCjmOzL.gif" alt="preview"></p>
+<p><em>Preview video: &quot;Stelle Cosmic Cheerleader&quot; by u/iTaiizor, <a href="https://www.reddit.com/r/iSucrose/comments/1xirh99/stelle_cosmic_cheerleader/">source</a>. Character © HoYoverse. The video is not included in this mod.</em></p>
+<p>The mod runs inside <code>LogonUI.exe</code>, decodes your video with Media Foundation, and feeds the frames into the XAML image elements that Windows normally uses for the lock screen wallpaper. If something looks wrong, a built-in fail-safe restores the original wallpaper.</p>
+<h2>⚠️ Before you start ⚠️</h2>
+<p><code>LogonUI.exe</code> is a protected system process, so Windhawk does not inject into it by default. For this mod to work you must add it to Windhawk's process inclusion list:</p>
+<ol>
+<li>Open Windhawk and go to <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
+<li>Add <code>LogonUI.exe</code> to the <strong>Process inclusion list</strong> and save.</li>
+</ol>
+<p><img src="https://i.imgur.com/9Biip4G.png" alt="Windhawk advanced settings: process inclusion list"></p>
+<h2>📋 Requirements</h2>
+<ul>
+<li>Windows 11</li>
+<li><code>LogonUI.exe</code> added to Windhawk's process inclusion list (see above)</li>
+<li>A video file that the <strong>SYSTEM</strong> account can read. <code>LogonUI.exe</code> runs as SYSTEM, so network locations, encrypted folders, and cloud-only (not downloaded) files may not work.</li>
+</ul>
+<h2>⚙️ Features</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Video source</td>
+<td>One video file, or a folder (a random video is picked on every lock)</td>
+</tr>
+<tr>
+<td>Formats</td>
+<td><code>mp4</code>, <code>m4v</code>, <code>mov</code>, <code>wmv</code>, <code>avi</code>, <code>mkv</code> (anything Media Foundation can decode on your system; H.264 MP4 is recommended)</td>
+</tr>
+<tr>
+<td>Fit modes</td>
+<td>Cover, fill, fit (letterbox), center</td>
+</tr>
+<tr>
+<td>Playback speed</td>
+<td>25% to 400%</td>
+</tr>
+<tr>
+<td>Hardware decoding</td>
+<td>Decodes on the GPU (D3D11/DXVA) when possible, with automatic fallback to software decoding</td>
+</tr>
+<tr>
+<td>Color adjustments</td>
+<td>Hue, saturation, brightness, contrast, gamma</td>
+</tr>
+<tr>
+<td>Audio</td>
+<td>Plays the video's audio track when the volume is above 0</td>
+</tr>
+<tr>
+<td>Power saving</td>
+<td>Still-frame mode, pause when idle, and optional pause on the password screen</td>
+</tr>
+<tr>
+<td>Boot behavior</td>
+<td>Optionally show the last frame right after boot instead of decoding</td>
+</tr>
+<tr>
+<td>Shutdown screen</td>
+<td>Optionally show the video on the &quot;Shutting down&quot; / &quot;Restarting&quot; screen (off by default, so Windows' own black screen is shown)</td>
+</tr>
+<tr>
+<td>Fail-safe</td>
+<td>Restores the original wallpaper if the lock screen UI changes or the mod misbehaves</td>
+</tr>
+<tr>
+<td>Debug log</td>
+<td>Optional CPU and decode statistics and a UI tree dump</td>
+</tr>
+</tbody>
+</table>
+<h2>📝 Notes on some settings</h2>
+<ul>
+<li><strong>Render width</strong>: internal canvas width (320 to 1920). The height follows your screen's aspect ratio. This is the biggest CPU lever.</li>
+<li><strong>Hardware video decoding</strong>: on (default) decodes with the GPU when possible, which greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. If the GPU path cannot produce a frame, the mod falls back to software decoding by itself. Changing this setting also re-enables playback if the crash guard turned it off.</li>
+<li><strong>Behavior right after boot</strong>: with <strong>Show last frame</strong>, the first 3 minutes after boot show the last saved frame without decoding. Needs at least one earlier session where the video was playing.</li>
+<li><strong>Audio volume</strong>: 0 means muted. Above 0, audio only plays at 100% speed while the video is playing (not paused, idle-paused, or showing the boot still frame).</li>
+<li><strong>Pause when idle</strong>: freezes the video and mutes the audio after the chosen time without input, and resumes on the next input.</li>
+<li><strong>Play video on the password screen</strong>: on (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen.</li>
+<li><strong>Debug log</strong>: also writes <code>debug.log</code> in the mod's storage folder, with CPU and decode statistics every 5 seconds and one UI tree dump. Basic events always go to Windhawk's log (enable logging for the mod in Windhawk to see them).</li>
+<li><strong>Long playback</strong>: the video loops without any time limit. By default it freezes after 5 minutes without input (see <strong>Pause when idle</strong>); set that to 0 if you want it to keep playing while nobody is at the PC.</li>
+</ul>
+<h2>📈 Performance tips</h2>
+<ul>
+<li>Lower <strong>Render width</strong> (the default is 1920; for example try 1280 or 960).</li>
+<li>Videos at 4K or 60 fps are decoded on the GPU when <strong>Hardware video decoding</strong> is on (the default). With it off they are decoded on the CPU and can use several cores; prefer 1080p at 30 fps then.</li>
+<li>Use <strong>Pause</strong> if you only want a still image.</li>
+<li>Keep <strong>Pause when idle</strong> enabled so nothing is decoded while nobody is at the PC.</li>
+<li>If the video stutters while you type your password, turn off <strong>Play video on the password screen</strong>.</li>
+<li>The password screen blurs the wallpaper behind it. A constantly changing background makes Windows redo that blur every frame, which costs some GPU time.</li>
+</ul>
+<h2>🔧 Troubleshooting</h2>
+<ul>
+<li><strong>Normal wallpaper is shown</strong>: make sure <code>LogonUI.exe</code> is in the process inclusion list and the video path is correct, then turn on <strong>Debug log</strong> and read <code>debug.log</code> in the mod's storage folder (see &quot;Files written by the mod&quot;). Look for <code>Failed to open video</code>, <code>Unsupported video format</code>, or <code>FAIL-SAFE TRIPPED</code>. Enable <strong>Debug log</strong> for more detail.</li>
+<li><strong>Video will not open</strong>: try an H.264 MP4 stored somewhere the SYSTEM account can read.</li>
+<li><strong>No sound</strong>: set <strong>Audio volume</strong> above 0 and see the notes above.</li>
+<li><strong>Stuttering</strong>: lower the render width and enable <strong>Debug log</strong>, then check the <code>CPU</code> and <code>UI stalls</code> lines in the log.</li>
+</ul>
+<h2>🤔 How it works</h2>
+<ol>
+<li>A worker thread finds the <code>LogonUI Logon Window</code> and installs a <code>WH_GETMESSAGE</code> hook on its UI thread.</li>
+<li>A decoder thread reads the video as RGB32 through Media Foundation, scales each frame according to the fit mode, applies the color settings, and publishes it to a shared buffer.</li>
+<li>On the UI thread, the newest frame is copied into a <code>WriteableBitmap</code>, which is set as the source of the <code>LockLogonImage</code> and <code>SwapLockLogonImage</code> elements.</li>
+<li>When the mod is unloaded, the original image sources are restored.</li>
+</ol>
+<h2>🛡️ Fail-safe</h2>
+<p>The mod stops itself and restores the original wallpaper for the rest of that <code>LogonUI.exe</code> process when:</p>
+<ul>
+<li>the video decoder fails before producing any frame,</li>
+<li>no video frame is produced within 30 seconds,</li>
+<li>the lock screen elements (<code>LockLogonImage</code> / <code>SwapLockLogonImage</code>) are never found, which usually means a Windows update changed the UI, or</li>
+<li>the UI throws repeated errors (3 within 30 seconds).</li>
+</ul>
+<p>Separately, a crash guard protects the sign-in screen. If two <code>LogonUI.exe</code> sessions in a row end before the decoder shows its first frame (for example because a codec crashes on your video), the mod turns playback off and the normal wallpaper is shown. To turn it back on, change <strong>Video file or folder</strong>, <strong>Render width</strong>, <strong>Fit mode</strong> or <strong>Hardware video decoding</strong> to a different value and keep it. Very short sessions (for example two Ctrl+Alt+Del screens in a row) can also trip it; the same fix applies.</p>
+<h2>📁 Files written by the mod</h2>
+<p>Everything is stored in the mod's own storage folder inside Windhawk's data folder (the path below is for a regular install; a portable Windhawk keeps it elsewhere):</p>
+<p><code>C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper</code></p>
+<p><code>ProgramData</code> is a hidden folder, so paste the path above into the File Explorer address bar to open it. The files are:</p>
+<ul>
+<li><code>debug.log</code>: log file, trimmed automatically after 2 MB</li>
+<li><code>frame_*.bgra</code>: cached first frame, so the lock screen can show something immediately</li>
+<li><code>last.bgra</code>: last shown frame, used by the <strong>Show last frame</strong> boot mode</li>
+</ul>
+<p>You can delete these files at any time; the mod recreates what it needs. The folder is removed automatically when the mod is uninstalled.</p>
+<h2>☕ Support</h2>
+<p>If you enjoy this mod, you can support its development:</p>
+<ul>
+<li><a href="https://ko-fi.com/grn15rens">Ko-fi</a></li>
+<li><a href="https://saweria.co/grn15RenS">Saweria</a> (for Indonesia)</li>
+</ul>
+<h2>ℹ️ Disclaimer</h2>
+<p>Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI process (<code>LogonUI.exe</code>), so it includes a fail-safe that restores the original wallpaper if anything goes wrong. As a precaution, keep another way to sign in available while trying it out.</p>
+<hr>
+<h1>Bahasa Indonesia</h1>
+<p>Memutar video sebagai latar belakang <strong>lock screen</strong> dan <strong>layar password / sign-in</strong> Windows 11.</p>
+<p><img src="https://i.imgur.com/cCjmOzL.gif" alt="preview"></p>
+<p><em>Pratinjau video: &quot;Stelle Cosmic Cheerleader&quot; oleh u/iTaiizor, <a href="https://www.reddit.com/r/iSucrose/comments/1xirh99/stelle_cosmic_cheerleader/">sumber</a>. Karakter © HoYoverse. Videonya tidak disertakan dalam mod ini.</em></p>
+<p>Mod ini berjalan di dalam <code>LogonUI.exe</code>, men-decode videomu dengan Media Foundation, lalu memasukkan frame-nya ke elemen gambar XAML yang biasanya dipakai Windows untuk wallpaper lock screen. Jika ada yang tidak beres, fail-safe bawaan akan mengembalikan wallpaper asli.</p>
+<h2>⚠️ Sebelum mulai ⚠️</h2>
+<p><code>LogonUI.exe</code> adalah proses sistem yang dilindungi, jadi Windhawk tidak meng-inject ke dalamnya secara default. Agar mod ini berfungsi, kamu harus menambahkannya ke daftar inklusi proses Windhawk:</p>
+<ol>
+<li>Buka Windhawk lalu pergi ke <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
+<li>Tambahkan <code>LogonUI.exe</code> ke <strong>Process inclusion list</strong> lalu simpan.</li>
+</ol>
+<p><img src="https://i.imgur.com/9Biip4G.png" alt="pengaturan lanjutan"></p>
+<h2>📋 Persyaratan</h2>
+<ul>
+<li>Windows 11</li>
+<li><code>LogonUI.exe</code> sudah ditambahkan ke daftar inklusi proses Windhawk (lihat di atas)</li>
+<li>File video yang bisa dibaca akun <strong>SYSTEM</strong>. <code>LogonUI.exe</code> berjalan sebagai SYSTEM, sehingga lokasi jaringan, folder terenkripsi, dan file cloud-only (belum diunduh) mungkin tidak berfungsi.</li>
+</ul>
+<h2>⚙️ Fitur</h2>
+<table>
+<thead>
+<tr>
+<th>Fitur</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sumber video</td>
+<td>Satu file video, atau satu folder (video dipilih acak setiap kali dikunci)</td>
+</tr>
+<tr>
+<td>Format</td>
+<td><code>mp4</code>, <code>m4v</code>, <code>mov</code>, <code>wmv</code>, <code>avi</code>, <code>mkv</code> (apa pun yang bisa di-decode Media Foundation di sistemmu; MP4 H.264 disarankan)</td>
+</tr>
+<tr>
+<td>Mode fit</td>
+<td>Cover, fill, fit (letterbox), center</td>
+</tr>
+<tr>
+<td>Kecepatan putar</td>
+<td>25% sampai 400%</td>
+</tr>
+<tr>
+<td>Decoding hardware</td>
+<td>Men-decode di GPU (D3D11/DXVA) jika memungkinkan, dengan fallback otomatis ke decoding software</td>
+</tr>
+<tr>
+<td>Penyesuaian warna</td>
+<td>Hue, saturasi, kecerahan, kontras, gamma</td>
+</tr>
+<tr>
+<td>Audio</td>
+<td>Memutar audio video jika volume di atas 0</td>
+</tr>
+<tr>
+<td>Hemat daya</td>
+<td>Mode gambar diam, jeda saat idle, dan opsi jeda di layar password</td>
+</tr>
+<tr>
+<td>Perilaku saat boot</td>
+<td>Opsional menampilkan frame terakhir tepat setelah boot tanpa decoding</td>
+</tr>
+<tr>
+<td>Layar shutdown</td>
+<td>Opsional menampilkan video di layar &quot;Shutting down&quot; / &quot;Restarting&quot; (mati secara default, sehingga layar hitam bawaan Windows yang tampil)</td>
+</tr>
+<tr>
+<td>Fail-safe</td>
+<td>Mengembalikan wallpaper asli jika UI lock screen berubah atau mod bermasalah</td>
+</tr>
+<tr>
+<td>Debug log</td>
+<td>Opsional: statistik CPU dan decode serta dump UI tree</td>
+</tr>
+</tbody>
+</table>
+<h2>📝 Catatan beberapa pengaturan</h2>
+<ul>
+<li><strong>Render width</strong>: lebar kanvas internal (320 sampai 1920). Tinggi mengikuti rasio aspek layarmu. Ini pengaturan yang paling berpengaruh pada CPU.</li>
+<li><strong>Hardware video decoding</strong>: aktif (default) berarti video di-decode oleh GPU jika memungkinkan, sehingga pemakaian CPU turun jauh untuk video 4K atau 60 fps. Matikan jika pemutaran bermasalah atau layar sign-in bermasalah. Jika jalur GPU gagal menghasilkan frame, mod otomatis beralih ke decoding software. Mengubah setting ini juga menyalakan kembali pemutaran jika crash guard sempat mematikannya.</li>
+<li><strong>Behavior right after boot</strong>: dengan <strong>Show last frame</strong>, 3 menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Butuh minimal satu sesi sebelumnya di mana video sempat diputar.</li>
+<li><strong>Audio volume</strong>: 0 berarti senyap. Di atas 0, audio hanya diputar pada kecepatan 100% dan hanya saat video benar-benar berjalan (bukan saat dijeda, dijeda karena idle, atau menampilkan frame diam setelah boot).</li>
+<li><strong>Pause when idle</strong>: membekukan video dan membisukan audio setelah waktu tertentu tanpa input, lalu lanjut saat ada input berikutnya.</li>
+<li><strong>Play video on the password screen</strong>: aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen.</li>
+<li><strong>Debug log</strong>: juga menulis <code>debug.log</code> di folder penyimpanan mod, berisi statistik CPU dan decode setiap 5 detik dan satu kali dump UI tree. Peristiwa dasar selalu masuk ke log Windhawk (aktifkan logging untuk mod ini di Windhawk untuk melihatnya).</li>
+<li><strong>Pemutaran lama</strong>: video diulang tanpa batas waktu. Secara default video dibekukan setelah 5 menit tanpa input (lihat <strong>Pause when idle</strong>); setel ke 0 kalau kamu ingin video terus berjalan saat tidak ada orang di depan PC.</li>
+</ul>
+<h2>📈 Tips performa</h2>
+<ul>
+<li>Turunkan <strong>Render width</strong> (defaultnya 1920; misalnya coba 1280 atau 960).</li>
+<li>Video 4K atau 60 fps di-decode oleh GPU saat <strong>Hardware video decoding</strong> aktif (default). Jika dimatikan, video di-decode oleh CPU dan bisa memakai beberapa core; pilih 1080p dengan 30 fps.</li>
+<li>Gunakan <strong>Pause</strong> jika kamu hanya ingin gambar diam.</li>
+<li>Biarkan <strong>Pause when idle</strong> aktif agar tidak ada decoding saat tidak ada orang di depan PC.</li>
+<li>Jika video patah-patah saat mengetik password, matikan <strong>Play video on the password screen</strong>.</li>
+<li>Layar password mem-blur wallpaper di belakangnya. Latar yang terus berubah membuat Windows mengulang blur itu di setiap frame, yang memakan sebagian GPU.</li>
+</ul>
+<h2>🔧 Pemecahan masalah</h2>
+<ul>
+<li><strong>Wallpaper normal yang tampil</strong>: pastikan <code>LogonUI.exe</code> ada di daftar inklusi proses dan path video benar, lalu aktifkan <strong>Debug log</strong> dan baca <code>debug.log</code> di folder penyimpanan mod (lihat &quot;File yang ditulis oleh mod&quot;). Cari <code>Failed to open video</code>, <code>Unsupported video format</code>, atau <code>FAIL-SAFE TRIPPED</code>. Aktifkan <strong>Debug log</strong> untuk detail lebih banyak.</li>
+<li><strong>Video tidak mau terbuka</strong>: coba MP4 H.264 yang disimpan di tempat yang bisa dibaca akun SYSTEM.</li>
+<li><strong>Tidak ada suara</strong>: setel <strong>Audio volume</strong> di atas 0 dan baca catatan di atas.</li>
+<li><strong>Patah-patah</strong>: turunkan render width dan aktifkan <strong>Debug log</strong>, lalu cek baris <code>CPU</code> dan <code>UI stalls</code> di log.</li>
+</ul>
+<h2>🤔 Cara kerja</h2>
+<ol>
+<li>Worker thread mencari <code>LogonUI Logon Window</code> dan memasang hook <code>WH_GETMESSAGE</code> pada UI thread-nya.</li>
+<li>Decoder thread membaca video sebagai RGB32 lewat Media Foundation, mengubah ukuran tiap frame sesuai mode fit, menerapkan pengaturan warna, lalu menaruhnya di buffer bersama.</li>
+<li>Di UI thread, frame terbaru disalin ke <code>WriteableBitmap</code>, yang dipasang sebagai source elemen <code>LockLogonImage</code> dan <code>SwapLockLogonImage</code>.</li>
+<li>Saat mod di-unload, source gambar asli dikembalikan.</li>
+</ol>
+<h2>🛡️ Fail-safe</h2>
+<p>Mod berhenti sendiri dan mengembalikan wallpaper asli sampai proses <code>LogonUI.exe</code> itu berakhir, jika:</p>
+<ul>
+<li>decoder video gagal sebelum menghasilkan frame apa pun,</li>
+<li>tidak ada frame video yang dihasilkan dalam 30 detik,</li>
+<li>elemen lock screen (<code>LockLogonImage</code> / <code>SwapLockLogonImage</code>) tidak pernah ditemukan, yang biasanya berarti update Windows mengubah UI, atau</li>
+<li>UI melempar error berulang (3 kali dalam 30 detik).</li>
+</ul>
+<p>Selain itu, ada pelindung crash untuk layar sign-in. Jika dua sesi <code>LogonUI.exe</code> berturut-turut berakhir sebelum decoder menampilkan frame pertama (misalnya karena codec crash pada videomu), mod mematikan pemutaran dan wallpaper normal yang tampil. Untuk menyalakannya lagi, ubah <strong>Video file or folder</strong>, <strong>Render width</strong>, <strong>Fit mode</strong> atau <strong>Hardware video decoding</strong> ke nilai yang berbeda dan biarkan begitu. Sesi yang sangat singkat (misalnya dua kali layar Ctrl+Alt+Del berturut-turut) juga bisa memicunya; solusinya sama.</p>
+<h2>📁 File yang ditulis oleh mod</h2>
+<p>Semuanya disimpan di folder penyimpanan milik mod sendiri, di dalam folder data Windhawk (path di bawah untuk instalasi biasa; Windhawk portabel menyimpannya di tempat lain):</p>
+<p><code>C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper</code></p>
+<p><code>ProgramData</code> adalah folder tersembunyi, jadi tempel path di atas ke address bar File Explorer untuk membukanya. Isinya:</p>
+<ul>
+<li><code>debug.log</code>: file log, dipangkas otomatis setelah 2 MB</li>
+<li><code>frame_*.bgra</code>: cache frame pertama, agar lock screen bisa langsung menampilkan sesuatu</li>
+<li><code>last.bgra</code>: frame terakhir yang ditampilkan, dipakai oleh mode boot <strong>Show last frame</strong></li>
+</ul>
+<p>Kamu boleh menghapus file-file ini kapan saja; mod akan membuat ulang yang dibutuhkan. Folder ini dihapus otomatis saat mod di-uninstall.</p>
+<h2>☕ Dukungan</h2>
+<p>Kalau kamu suka mod ini, kamu bisa mendukung pengembangannya lewat:</p>
+<ul>
+<li><a href="https://saweria.co/grn15RenS">Saweria</a> (untuk Indonesia)</li>
+<li><a href="https://ko-fi.com/grn15rens">Ko-fi</a> (internasional)</li>
+</ul>
+<h2>ℹ️ Peringatan</h2>
+<p>Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sistem (<code>LogonUI.exe</code>), jadi sudah dilengkapi fail-safe yang mengembalikan wallpaper asli jika ada yang tidak beres. Sebagai langkah berjaga-jaga, siapkan cara lain untuk masuk ke Windows saat mencobanya.</p>
+]]></content>
+        <author>
+            <name>grn15RenS</name>
+            <uri>https://github.com/grn15RenS</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Share Flyout 1.0.0]]></title>
         <id>https://windhawk.net/mods/quick-share-flyout#3cef2b9dd0957a2340d46f0aa5f7d14206680a7d</id>
@@ -1063,22 +1351,6 @@ However I did ask Claude to check for security vulnerabilities.</p>
         <author>
             <name>wa0dim</name>
             <uri>https://github.com/wa0dim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Copy File Contents 1.4.1]]></title>
-        <id>https://windhawk.net/mods/copy-file-contents#50e514baec095cd9fa07354bcefc3b82dc121306</id>
-        <link href="https://windhawk.net/mods/copy-file-contents"/>
-        <updated>2026-11-06T20:00:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix SHA-256 read errors being mistaken for end-of-file, which could produce a hash of incomplete data.</li>
-<li>Report complete hash and clipboard-write failures, and identify successful files in joined partial multi-file results.</li>
-<li>Improve unload handling, attempt to cancel tracked synchronous file calls, clean up resources and synchronize settings; correct the initialization version log and documentation.</li>
-</ul>
-]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
         </author>
     </entry>
 </feed>

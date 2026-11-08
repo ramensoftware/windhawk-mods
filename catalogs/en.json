@@ -10072,6 +10072,35 @@
         "version": "0.6.0"
       }
     },
+    "lock-screen-live-wallpaper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794114101000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794114101000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "grn15RenS",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid -ld3d11",
+        "description": "Play a video as the lock screen and password screen background",
+        "donateUrl": "https://ko-fi.com/grn15rens",
+        "github": "https://github.com/grn15RenS",
+        "include": [
+          "LogonUI.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Lock Screen Live Wallpaper",
+        "version": "1.0.0"
+      }
+    },
     "lockscreen-datetime-format": {
       "details": {
         "defaultSorting": 11930,
