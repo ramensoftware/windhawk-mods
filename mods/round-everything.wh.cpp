@@ -30,17 +30,51 @@ Works with the taskbar on any edge (top, bottom, left, right) and on every
 monitor. A monitor without a taskbar ("Show my taskbar on all displays" off)
 gets the frame on all four edges.
 
-![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/round-everything/demo.gif)
+## Themes
+
+Pick a **Theme** and you are done: each one sets everything - the frame, its
+fill, the bevel, the inner shadow, the monitor corners, and the window
+corners, borders and shadows inside `dwm.exe`.
+
+* **Slate** (the default) - a dark solid frame that takes the active window's
+  title-bar color, a soft inner shadow, rounded windows with shadows.
+* **Colored film** - a thin acrylic film in the active window's color, a
+  soft inner shadow, rounded windows with borders.
+* **Frost ink** - a thicker acrylic frame with a lit bevel along its
+  edge, blurred and tinted with the window's color.
+* **Crescents fade** - the acrylic film along the taskbar's edge and the
+  one opposite only; the two sides stay open. Rounded windows with borders.
+* **Modern Windows** - the taskbar's own light or dark acrylic with a fine
+  rim, Windows' 8 px corners on every window, maximized ones bordered.
+* **Rectangular frame** - a square frame in the active window's color with a
+  bright edge line, square windows with borders.
+* **Crescent adaptive** - no frame to speak of: the rounded screen corners in
+  the active window's color, a hairline along them and the taskbar's edge,
+  rounded windows with borders.
+
+The few values worth changing on a theme without leaving it are under
+**Overrides** - inward offset, screen corner radius, frame color and its
+source, fill, work-area inset, window corner radius - each applying only when
+set. **General** (DPI scaling, monitors, battery saver) applies with every theme.
+Everything else in the settings belongs to the **Custom** theme, which uses
+every setting as it is. To start a Custom theme from a ready-made one, apply
+that theme once: the mod logs its values as Custom theme settings, in the
+form Windhawk's settings editor takes in its text (YAML) mode, and writes
+the same to `%TEMP%\round-everything-theme-<id>.yaml` - paste them in and
+tweak.
 
 ## How it works
 
 The mod runs inside the taskbar's `explorer.exe` and creates one always-on-top
-window per monitor: the frame shape - three bands of the configured offset
-with the rounded corners - is drawn with GDI+ (anti-aliased); the inner area
-is fully transparent and lets the mouse through, while the painted frame is
-solid to the mouse, like the taskbar. No explorer function is hooked: the
-taskbar's XAML tree is reached through a few `taskbar.dll` symbol lookups (no
-XAML diagnostics, so it coexists with Taskbar Styler).
+composition window per monitor, lying under the taskbar as well: the frame
+shape - the taskbar's band and three bands of the configured offset, with
+the rounded corners - is rasterized once (anti-aliased) as a mask over the
+fill; the inner area is fully transparent and lets the mouse through, while
+the frame is solid to the mouse, like the taskbar. No explorer function is
+hooked: the taskbar's XAML tree is reached through a few `taskbar.dll` symbol
+lookups (no XAML diagnostics, so it coexists with Taskbar Styler); the one
+hook in this process is on the `dwmapi.dll` call the taskbar makes for Aero
+Peek, to learn which window is being peeked.
 
 * **Fill** – *Custom acrylic* makes the frame and the taskbar one live
   acrylic surface: whatever is behind them - wallpaper, live wallpaper,
@@ -54,27 +88,35 @@ XAML diagnostics, so it coexists with Taskbar Styler).
   is made transparent, so the four sides are one surface without a seam. It
   stops one pixel short of the monitor edges (a topmost window covering a
   whole monitor is a full-screen app to the shell, which would lower the
-  taskbar); that one-pixel ring is the bezel line. *Solid* (the default) is
-  the same surface filled with the plain frame color at the chosen opacity
-  - under the taskbar too, so the bevel and the corners run along the
-  taskbar's edge as along the others. *Windows' default* is the taskbar's own acrylic
-  look - the light or the dark tint, following the Windows mode as it
-  changes - and ignores the frame color and the acrylic values. *Frosty
-  slab* is a ready-made acrylic look (DWM's own blur, the content's
-  brightness drawn 30% towards a dark grey, a little extra saturation, a fine
-  grain) that ignores the acrylic values too. The taskbar's own background is
-  restored when the mod is turned off.
+  taskbar); that one-pixel ring is the bezel line, and the inward offset is
+  measured from its inside, as if the ring were the screen's edge. *Solid*
+  (the default) is the same surface filled with the plain frame color at the
+  chosen opacity - under the taskbar too, so the bevel and the corners run
+  along the taskbar's edge as along the others. *Windows' default* is the
+  taskbar's own acrylic look - the light or the dark tint, following the
+  Windows mode as it changes - and ignores the frame color and the acrylic
+  values. *Frosty slab* is a ready-made acrylic look (DWM's own blur, the
+  content's brightness drawn 30% towards the frame color, a little extra
+  saturation, a fine grain) that ignores the acrylic values too. The
+  taskbar's own background is restored when the mod is turned off.
 * **Frame color source** – instead of the one frame color, each monitor's
   frame can take the color of the *title bar* of the maximized window on
-  it: the window's fourth row, read off the screen the way Top Taskbar Bleed
-  reads it and reduced to its dominant color (caption text and buttons are
-  too few pixels to count; columns covered by a dialog or a flyout are left
-  out, and no row is read while a taskbar thumbnail preview is showing). A
-  row that differs from the color in use is read again every other frame
-  until two readings agree, so switching windows takes effect within about
-  70 ms while a window still zooming into place can't commit a wrong
-  color; with no maximized window the frame color is
-  used. The color goes wherever the frame color goes - the solid fill, the
+  it: the window's fourth row inside the rounded screen (past the inner
+  shadow where the title bar is tall enough), copied from the window's own
+  rendering as DWM holds it - so a dialog or a flyout over it, a thumbnail
+  preview, or the window still zooming into place (the screen shows what is
+  behind it until the animation lands) make no difference - and reduced to
+  its dominant color (caption text and buttons are too few pixels to
+  count). A window whose rendering can't be copied is read off the screen
+  the way Top Taskbar Bleed reads it, with whatever covers it left out. A
+  row that differs from the color in use is read again every frame until
+  two readings agree - the color a window read as the last time counts as
+  one, so a window seen before switches on its first reading - and the
+  frame follows within a frame or two of the window event; with no
+  maximized window the frame color is used. Hovering a taskbar thumbnail
+  until Aero Peek shows the window gives the frame that window's color for
+  as long as it shows, if it is a maximized window (or one minimized from
+  maximized). The color goes wherever the frame color goes - the solid fill, the
   acrylic's tint and luminosity, the taskbar's background - and eases from
   one color to the next over a third of a second rather than switching
   (the acrylic's colors are animated by the compositor, the solid
@@ -110,24 +152,30 @@ XAML diagnostics, so it coexists with Taskbar Styler).
   back together when it closes.
 * **Full-screen apps** – the frame hides on a monitor while a full-screen
   window (game, video, F11 browser) is showing there, and comes back
-  afterwards.
-* **Work area** – *Shrink the work area to the rounded screen* (on by
-  default) pushes the work area inwards so maximized and snapped windows stay
-  inside the frame; turned off, the frame is purely visual: it overlaps the
-  edges of maximized windows and lets the mouse through. Shrinking registers
-  one invisible appbar per frame edge (the same mechanism the taskbar uses),
-  so the shell reserves the space itself; the appbars are removed and the
-  work area returns to normal when the option or the mod is turned off. *Extra
-  work-area inset* shrinks it further, on all four sides, so a strip of
-  wallpaper stays visible between the frame/taskbar and your windows.
-* **Monitor corners** – the four outer corners of each monitor are rounded
-  too, and a one-pixel black line runs along all four screen edges, so the
-  whole screen reads as a rounded panel with a bezel: the sliver outside a
-  quarter circle, tangent to that line, is painted black. The two corners
-  away from the taskbar (and the line on those edges) are part of the frame
-  itself; the two on the taskbar, and the line along it, are XAML shapes
-  added inside the taskbar (no extra windows, so nothing to fight over
-  z-order with), click-through, removed when the mod is disabled.
+  afterwards. When the shell takes the taskbar off the top of the z-order
+  for something it counts as full-screen that the mod doesn't - a screen
+  recorder's full-screen overlay, say - the frame follows the taskbar down
+  and stays right under it, so the icons stay on top and the frame keeps
+  working.
+* **Work area** – the work area is pushed inwards to the rounded screen, so
+  maximized and snapped windows stay inside the frame and nothing is hidden
+  under it. This is done with one invisible appbar per frame edge (the same
+  mechanism the taskbar uses), so the shell reserves the space itself; the
+  one on the taskbar's edge covers the taskbar's own strip (see the
+  auto-hide note below). The appbars are removed and the work area returns
+  to normal when the mod is turned off. *Extra work-area inset* shrinks it
+  further, on all four sides, so a strip of wallpaper stays visible between
+  the frame/taskbar and your windows.
+* **Monitor corners** – a one-pixel black line runs along all four screen
+  edges, and with this option the four outer corners of each monitor are
+  rounded too, so the whole screen reads as a rounded panel with a bezel:
+  the sliver outside a quarter circle, tangent to that line, is painted
+  black. The two corners away from the taskbar are part of the frame itself
+  (the line is four one-pixel windows around the monitor); the two on the
+  taskbar, and the line along it, are XAML shapes added inside the taskbar
+  (which lies above everything), click-through, removed when the mod is
+  disabled - with an auto-hide taskbar, which takes its shapes with it when
+  it slides out, the frame paints those two corners as well.
 * **Inner shadow** – the frame and the taskbar can cast a soft shadow onto
   the screen content along all four edges of the rounded screen, following
   its corners, so the screen reads as recessed behind the frame. Blur, color,
@@ -141,25 +189,26 @@ XAML diagnostics, so it coexists with Taskbar Styler).
   frame. The mod sets that line's opacity to 0 and restores it when disabled.
 * Offsets, radii and the blur are in pixels at 100% scaling and scaled per
   monitor (configurable).
-* Both fills are rendered by DWM through Windows.UI.Composition; if that
+* The fills are rendered by DWM through Windows.UI.Composition; if that
   can't be set up on a machine, the mod logs why and falls back to a plain
   layered frame that stops at the taskbar, whose background is then painted
-  in the frame color. Like
-  Windows' own acrylic it is solid (the frame color) while transparency
-  effects are off in the system's personalization settings or, with *Solid
-  while battery saver is on*, while battery saver is on, and comes back when
-  they change.
+  in the frame color. Like Windows' own acrylic, the acrylic fills are solid
+  (the frame color) while transparency effects are off in the system's
+  personalization settings or, with *Solid while battery saver is on*, while
+  battery saver is on, and come back when they change.
 
 ## Window corners (dwm.exe)
 
 Windows 11 rounds normal windows with a fixed 8 px radius and draws maximized
-windows square. With **Round window corners** on, the mod also runs inside
+windows square. With any option of this group on, the mod also runs inside
 `dwm.exe` and hooks the corner-radius decision
-(`CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle`): every window that
-Windows would round - normal, snapped or maximized - gets the one **Window
-corner radius** you set, and maximized windows are rounded too, so they sit in
+(`CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle`). With a **Window
+corner radius** set, every window that Windows would round - normal, snapped
+or maximized - gets that one radius (0 draws them square; -1 leaves the
+corners to Windows), and maximized windows are rounded too, so they sit in
 the rounded screen like cards. With **Border on maximized windows** and
-**Shadow on maximized windows** on, maximized windows also keep the one-pixel
+**Shadow on maximized windows** on - with or without a radius - maximized
+windows also keep the one-pixel
 border Windows drops while a window is maximized, and the topmost one on each
 monitor keeps the drop shadow (the border color and shadow style DWM hands
 its border are swapped for a floating window's, in
@@ -205,18 +254,22 @@ contributed there; use one mod or the other for window corners, not both.
 
 * Shell flyouts (Start, notification center, Task View, …) live above the
   frame, so they are never covered.
-* With the work area reserved, the frame is solid to the mouse, like the
-  taskbar: clicks on it (and on the extra work-area inset strip) go nowhere,
-  which keeps the invisible resize borders of maximized windows underneath
-  from being hit. Without it the frame lets the mouse through.
-* An auto-hide taskbar isn't supported: the design is the taskbar's edge
-  extended around the screen, and a work area that grew and shrank with
-  every slide would resize every window with it. The mod turns
-  *Automatically hide the taskbar* off while it runs (and back on when it is
-  disabled, if it was on), so mods that toggle auto-hide themselves (Taskbar
-  auto-hide when maximized) can't be used alongside it.
-* Setting all offsets to 0 and keeping a radius gives you just the rounded
-  screen corners against the taskbar.
+* The frame is solid to the mouse, like the taskbar: clicks on it (and on
+  the extra work-area inset strip) go nowhere, which keeps the invisible
+  resize borders of maximized windows underneath from being hit.
+* With *Automatically hide the taskbar* on, the frame and the work area stay
+  exactly as they are with the taskbar docked: the band the taskbar sits on
+  stays part of the frame, the work area keeps clear of it, and the taskbar
+  slides in and out over it - only its icons come and go. The mod keeps an
+  invisible appbar of its own over the taskbar's strip at all times: a
+  docked taskbar reserves the same strip,
+  so nothing changes, and when auto-hide releases it the strip stays
+  reserved, so no window moves; mods that toggle auto-hide themselves, such
+  as Taskbar auto-hide when maximized, work the same way. The plain layered
+  fallback frame stops at the taskbar's strip, so there the wallpaper shows
+  while the taskbar is hidden.
+* An offset of 0 with a radius gives you just the rounded screen corners
+  against the taskbar (the *Crescent adaptive* theme, give or take a hairline).
 
 ## Credits
 
@@ -230,38 +283,101 @@ same license.
 
 // ==WindhawkModSettings==
 /*
-- offset: 16
-  $name: Inward offset
-  $description: How far (in pixels) the frame extends inwards from the three screen edges that don't carry the taskbar. The taskbar edge gets no offset, so the rounded screen sits flush against the taskbar.
-- edgeOffsetsClockwise: "-1,-1,-1,-1"
-  $name: Per-edge offset overrides
-  $description: Four values in pixels - the taskbar's edge first, then the other three clockwise (with the taskbar at the bottom, for example, bottom,left,top,right; a value of 24 first leaves a 24 px gap between the taskbar and the rounded screen). A value of 0 or more overrides the inward offset of that edge; -1 keeps the default. Monitors without a taskbar use the inward offset on all four edges.
-- radius: 28
-  $name: Screen corner radius (px)
-  $description: Radius of the four corners of the rounded screen, including the two where the frame meets the taskbar.
-- customColor: "#3C3C3C"
-  $name: Frame color
-  $description: Hex color (#RRGGBB) of the frame - the acrylic's tint, or the solid fill, under the taskbar too.
-- colorSource: titlebar
-  $name: Frame color source
-  $description: Where the frame color comes from. "Title bar" replaces the frame color above, on each monitor with a maximized window, with the color of that window's title bar (its fourth row of pixels, as on screen) - the solid fill, the acrylic's tint and luminosity, and the taskbar's background follow it, easing from one color to the next, and the taskbar switches to the light or the dark theme to stay readable on it. Ignored by the Windows' default fill.
+- theme: slate
+  $name: Theme
+  $description: A ready-made theme sets everything - frame, fill, bevel, shadow, corners, the window corners, borders and shadows inside dwm.exe - and the settings further down are ignored, except the few under "Overrides". Custom uses every setting below as it is.
   $options:
-  - custom: The frame color above
-  - titlebar: Title bar - the maximized window's title bar color, the frame color when there is none
-- opacity: 100
-  $name: Opacity (%)
-  $description: Solid fill only - opacity of the frame, under the taskbar too (the taskbar's background is transparent, so the two are one surface).
-- fill: solid
-  $name: Fill
-  $description: What the frame - and the taskbar's background with it - is filled with. Solid, Windows' default and Frosty slab are complete on their own; Custom acrylic is the one to pick to tune the acrylic yourself, with the values under "Custom acrylic values" below.
-  $options:
-  - acrylic: Custom acrylic - a live blur of what is behind the frame and the taskbar, tinted with the frame color, tuned with the values below
-  - solid: Solid - the frame color at the opacity above
-  - system: Windows' default - the taskbar's own acrylic look, light or dark with the Windows mode
-  - frosty: Frosty slab - a ready-made acrylic look (the content's own blur, its brightness drawn 30% towards the frame color, a little extra saturation, a fine grain)
-- batterySaverSolid: true
-  $name: Solid while battery saver is on
-  $description: Like Windows' own acrylic, the acrylic fills turn into the solid fill (the frame color) while battery saver is on, and come back when it is off.
+  - slate: Slate - a dark solid frame in the active window's color, soft inner shadow, rounded windows with shadows (the default)
+  - film: Colored film - a thin acrylic film in the active window's color, soft inner shadow, rounded windows with borders
+  - ink: Frost ink - a thicker acrylic frame with a lit bevel along its edge, blurred and tinted with the window's color
+  - fade: Crescents fade - the acrylic film along the taskbar's edge and the opposite one only, the sides open, rounded windows with borders
+  - modern: Modern Windows - the taskbar's own light or dark acrylic with a fine rim, Windows' 8 px corners on every window, maximized ones bordered
+  - rectangle: Rectangular frame - a square frame in the active window's color with a bright edge line, square windows with borders
+  - crescent: Crescent adaptive - no frame to speak of, just the rounded screen corners in the active window's color with a hairline along them and the taskbar's edge, rounded windows with borders
+  - custom: Custom - every setting below, as it is
+- overrides:
+  - offset: -1
+    $name: Inward offset (px)
+    $description: How far the frame extends inwards from the three screen edges without the taskbar, measured from the inside of the one-pixel bezel line. -1 keeps the theme's.
+  - radius: -1
+    $name: Screen corner radius (px)
+    $description: Radius of the rounded screen's corners. -1 keeps the theme's.
+  - customColor: ""
+    $name: Frame color
+    $description: Hex color (#RRGGBB) for the frame instead of the theme's; the frame then shows it rather than the title bar's color (set the source below to Title bar to keep that and use this color only where there is no maximized window). Empty keeps the theme's.
+  - colorSource: theme
+    $name: Frame color source
+    $description: Whether the frame takes the active window's title bar color (and the taskbar its theme) or stays the frame color.
+    $options:
+    - theme: The theme's
+    - titlebar: Title bar
+    - custom: The frame color
+  - fill: theme
+    $name: Fill
+    $description: Solid, Windows' default and Frosty slab are complete on their own; Custom acrylic uses the "Custom acrylic values" group below (the theme's own acrylic values are set aside).
+    $options:
+    - theme: The theme's
+    - solid: Solid
+    - acrylic: Custom acrylic
+    - system: Windows' default
+    - frosty: Frosty slab
+  - workAreaInset: -1
+    $name: Extra work-area inset (px)
+    $description: A strip of wallpaper left between the frame and your windows, on all four sides. -1 keeps the theme's.
+  - windowCornerRadius: -2
+    $name: Window corner radius (px)
+    $description: The radius of every window's corners, inside dwm.exe. -2 keeps the theme's; -1 is Windows' own; 0 draws windows square.
+  $name: Overrides
+  $description: The few values worth changing on a ready-made theme without going Custom. Each applies only when set; with the Custom theme they are ignored.
+- general:
+  - scaleWithDpi: true
+    $name: Scale sizes with the monitor DPI
+    $description: Treat offsets, radii and the blur as values at 100% scaling and scale them for each monitor.
+  - monitors: all
+    $name: Monitors
+    $description: With the primary monitor only, the other monitors keep their own taskbar, and their windows keep Windows' corners, border and shadow.
+    $options:
+    - all: Every monitor
+    - primary: Primary monitor only
+  - batterySaverSolid: true
+    $name: Solid while battery saver is on
+    $description: Like Windows' own acrylic, the acrylic fills turn into the solid fill (the frame color) while battery saver is on, and come back when it is off.
+  $name: General
+  $description: Applies with every theme.
+- frame:
+  - offset: 16
+    $name: Inward offset
+    $description: How far (in pixels) the frame extends inwards from the three screen edges that don't carry the taskbar, measured from the inside of the one-pixel bezel line (0 leaves no frame along those edges, 1 one pixel of it). The taskbar edge gets no offset, so the rounded screen sits flush against the taskbar.
+  - edgeOffsetsClockwise: "-1,-1,-1,-1"
+    $name: Per-edge offset overrides
+    $description: Four values in pixels - the taskbar's edge first, then the other three clockwise (with the taskbar at the bottom, for example, bottom,left,top,right; a value of 24 first leaves a 24 px gap between the taskbar and the rounded screen). A value of 0 or more overrides the inward offset of that edge; -1 keeps the default. Monitors without a taskbar use the inward offset on all four edges.
+  - radius: 28
+    $name: Screen corner radius (px)
+    $description: Radius of the four corners of the rounded screen, including the two where the frame meets the taskbar.
+  - customColor: "#3C3C3C"
+    $name: Frame color
+    $description: Hex color (#RRGGBB) of the frame - the acrylic's tint, or the solid fill, under the taskbar too.
+  - colorSource: titlebar
+    $name: Frame color source
+    $description: Where the frame color comes from. "Title bar" replaces the frame color above, on each monitor with a maximized window, with the color of that window's title bar (its fourth row of pixels, taken from the window's own rendering) - the solid fill, the acrylic's tint and luminosity, and the taskbar's background follow it, easing from one color to the next, and the taskbar switches to the light or the dark theme to stay readable on it. Ignored by the Windows' default fill.
+    $options:
+    - custom: The frame color above
+    - titlebar: Title bar - the maximized window's title bar color, the frame color when there is none
+  - opacity: 100
+    $name: Opacity (%)
+    $description: Solid fill only - opacity of the frame, under the taskbar too (the taskbar's background is transparent, so the two are one surface).
+  - fill: solid
+    $name: Fill
+    $description: What the frame - and the taskbar's background with it - is filled with. Solid, Windows' default and Frosty slab are complete on their own; Custom acrylic is the one to pick to tune the acrylic yourself, with the values under "Custom acrylic values" below.
+    $options:
+    - acrylic: Custom acrylic - a live blur of what is behind the frame and the taskbar, tinted with the frame color, tuned with the values below
+    - solid: Solid - the frame color at the opacity above
+    - system: Windows' default - the taskbar's own acrylic look, light or dark with the Windows mode
+    - frosty: Frosty slab - a ready-made acrylic look (the content's own blur, its brightness drawn 30% towards the frame color, a little extra saturation, a fine grain)
+  - workAreaInset: 12
+    $name: Extra work-area inset (px)
+    $description: Shrinks the work area this many extra pixels inwards beyond the colored frame, on all four sides (next to the taskbar too), leaving a strip of wallpaper around maximized and snapped windows. 0 ends the work area exactly at the frame's inner edge.
+  $name: Custom theme - frame
 - customAcrylic:
   - blur: 0
     $name: Extra blur (px)
@@ -281,7 +397,7 @@ same license.
   - noiseDensity: 0
     $name: Noise density (%)
     $description: Share of the pixels that carry a grain.
-  $name: Custom acrylic values
+  $name: Custom theme - custom acrylic values
   $description: Used by the Custom acrylic fill only. Windows' default and Frosty slab bring their own values; Solid has none.
 - bevel:
   - enabled: false
@@ -318,7 +434,7 @@ same license.
   - edgeShade: 80
     $name: Edge shade (%)
     $description: Darkens the acrylic glass towards its inner edge.
-  $name: Acrylic glass bevel
+  $name: Custom theme - acrylic glass bevel
 - innerShadow:
   - enabled: true
     $name: Inner shadow
@@ -337,41 +453,24 @@ same license.
   - offsetY: 0
     $name: Vertical offset (px)
     $description: Positive values make the shadow thicker on the top edge and thinner on the bottom; negative values the other way round (-60 to 60).
-  $name: Inner shadow
+  $name: Custom theme - inner shadow
 - monitorCorners:
   - enabled: true
     $name: Round the monitor corners
     $description: Paint the four outer corners of each monitor (over the taskbar as well) so the whole screen looks like a rounded panel.
   - radius: 20
     $name: Monitor corner radius (px)
-  $name: Monitor corners
-- reserveWorkArea: true
-  $name: Shrink the work area to the rounded screen
-  $description: Also push the work area inwards so maximized and snapped windows stay inside the frame instead of being covered by it. Done with invisible appbars, one per frame edge; removed when the option or the mod is turned off.
-- workAreaInset: 12
-  $name: Extra work-area inset (px)
-  $description: Only with the option above. Shrinks the work area this many extra pixels inwards beyond the colored frame, on all four sides (next to the taskbar too), leaving a strip of wallpaper around maximized and snapped windows. 0 ends the work area exactly at the frame's inner edge.
-- scaleWithDpi: true
-  $name: Scale sizes with the monitor DPI
-  $description: Treat offsets, radii and the blur as values at 100% scaling and scale them for each monitor.
-- monitors: all
-  $name: Monitors
-  $options:
-  - all: Every monitor
-  - primary: Primary monitor only
+  $name: Custom theme - monitor corners
 - windowCorners:
-  - enabled: true
-    $name: Round window corners
-    $description: Round the corners of every window Windows would round - normal, snapped and maximized - with one radius. Maximized windows, which Windows draws square, become rounded like the screen. Runs inside dwm.exe, which Windhawk only injects into once dwm.exe is on the process inclusion list in its advanced settings (udwm.dll symbols are downloaded on first use).
   - radius: 20
     $name: Window corner radius (px)
-    $description: Corner radius for all windows at 100% scaling. 0 keeps Windows' own radius (8 px) for normal windows and gives maximized windows that same radius.
+    $description: One corner radius, at 100% scaling, for every window Windows would round - normal, snapped and maximized, the last of which Windows draws square. -1 leaves the corners to Windows; 0 draws every window square. The options below work with either. This group runs inside dwm.exe, which Windhawk only injects into once dwm.exe is on the process inclusion list in its advanced settings (udwm.dll symbols are downloaded on first use).
   - maximizedShadow: false
     $name: Shadow on maximized windows
     $description: Windows drops a window's drop shadow while it is maximized. With this on, maximized (and snapped) windows keep the drop shadow floating windows have - the topmost one on each monitor, so the shadows of maximized windows stacked on one monitor don't pile up.
   - maximizedBorder: false
     $name: Border on maximized windows
-    $description: Windows drops a window's one-pixel border while it is maximized. With this on, maximized (and snapped) windows keep the border floating windows have - which suits windows sitting inside the frame with the work area shrunk (see above).
+    $description: Windows drops a window's one-pixel border while it is maximized. With this on, maximized (and snapped) windows keep the border floating windows have - which suits windows sitting inside the frame.
   - borderColors: false
     $name: Custom border colors
     $description: Color every window's one-pixel border yourself - floating, snapped and maximized windows alike (maximized ones need "Border on maximized windows") - with the two colors below instead of the gray Windows uses. Menus and tooltips are left alone.
@@ -381,7 +480,7 @@ same license.
   - inactiveBorderColor: "#80FFFFFF"
     $name: Inactive window border color
     $description: Same format. Leave empty to use the active color for inactive windows too.
-  $name: Windows (DWM)
+  $name: Custom theme - windows (DWM)
 */
 // ==/WindhawkModSettings==
 
@@ -564,7 +663,6 @@ struct Settings {
     COLORREF shadowColor = RGB(0, 0, 0);
     int shadowOffsetX = 0;
     int shadowOffsetY = 0;
-    bool reserveWorkArea = true;
     int workAreaInset = 12;
     bool primaryOnly = false;
 };
@@ -584,9 +682,11 @@ struct Layout {
     HMONITOR monitor = nullptr;
     HWND taskbar = nullptr;  // null on a monitor without a (live) taskbar window
     RECT monitorRect{};
-    RECT taskbarRect{};   // the taskbar strip (empty when there is none)
+    RECT taskbarRect{};   // the taskbar strip, where the taskbar sits when shown (empty when
+                          // there is none)
     RECT baseWorkArea{};  // monitor minus the taskbar strip
-    RECT overlayRect{};   // the frame window (baseWorkArea, minus the auto-hide reveal strip)
+    RECT overlayRect{};   // the frame window
+    bool autoHide = false;  // the taskbar slides in and out over the strip
     RECT innerRect{};     // the rounded "screen" rectangle, screen coordinates
     int edge = kEdgeNone;
     UINT dpi = 96;
@@ -608,6 +708,7 @@ struct AppBar {
     HWND hwnd = nullptr;
     UINT edge = ABE_BOTTOM;
     int thickness = 0;
+    bool anchored = false;  // kept at the monitor's edge, over the taskbar (see SetAppBarPosition)
 };
 
 // Rasterized shape of one frame window, built once per layout. A repaint
@@ -743,6 +844,7 @@ struct AppBarSet {
     HMONITOR monitor = nullptr;
     RECT baseWorkArea{};
     int thickness[4] = {0, 0, 0, 0};  // left, top, right, bottom
+    int taskbarEdge = kEdgeNone;
     std::vector<AppBar> bars;
     RECT workAreaAfterApply{};  // rcWork observed right after the last ABM_SETPOS pass
 };
@@ -752,6 +854,7 @@ struct AppBarWish {
     HMONITOR monitor = nullptr;
     RECT baseWorkArea{};
     int thickness[4] = {0, 0, 0, 0};
+    int taskbarEdge = kEdgeNone;  // the edge whose appbar is anchored over the taskbar
 };
 
 // What the appbar thread has in place on one monitor.
@@ -780,6 +883,96 @@ enum XamlPass { kPassStroke = 0, kPassCorners = 1, kPassFill = 2, kPassTheme = 3
 
 enum class HostProcess { Explorer, Dwm };
 
+// The ready-made themes: each sets the frame, the fill, the bevel, the inner
+// shadow, the monitor corners and the dwm.exe options outright. The same
+// table serves both processes. The "custom" theme leaves every setting as
+// it is.
+struct Bevel {
+    bool enabled = false;
+    int width = 8, curvature = 20;
+    int light = 70, lightAngle = 90, light2 = 70, light2Angle = 270;
+    int specular = 50, shininess = 55, fresnel = 50;
+    int edgeLine = 5, edgeShade = 80;  // the edge line white
+};
+struct ThemeDef {
+    PCWSTR id;
+    int offset;
+    int edgeOffset[4] = {-1, -1, -1, -1};  // the taskbar's edge, then clockwise; -1 the offset
+    int radius;
+    COLORREF color;
+    int colorSource;  // 0 the frame color, 1 the title bar
+    int fill;         // 0 solid, 1 custom acrylic, 2 Windows' default, 3 Frosty slab
+    int blur, tint, luminosity, saturation, noiseOpacity, noiseDensity;
+    Bevel bevel;
+    bool shadow;
+    int shadowBlur;
+    bool monitorCorners;
+    int monitorCornerRadius;
+    int workAreaInset;
+    int windowRadius;  // -1 Windows' own corners, 0 square
+    bool maximizedShadow, maximizedBorder;
+};
+// A bevel reduced to its rim: no lighting, the full Fresnel edge, an edge
+// shade - the minimum width and curvature the settings allow.
+constexpr Bevel kRimBevel{.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+                          .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1,
+                          .fresnel = 100, .edgeLine = 0, .edgeShade = 80};
+constexpr ThemeDef kThemes[] = {
+    {.id = L"slate", .offset = 16, .radius = 28, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0, .bevel = {}, .shadow = true, .shadowBlur = 12, .monitorCorners = true,
+     .monitorCornerRadius = 20, .workAreaInset = 12, .windowRadius = 20, .maximizedShadow = true,
+     .maximizedBorder = false},
+    {.id = L"film", .offset = 16, .radius = 28, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 1, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0, .bevel = {}, .shadow = true, .shadowBlur = 12, .monitorCorners = true,
+     .monitorCornerRadius = 20, .workAreaInset = 12, .windowRadius = 20, .maximizedShadow = false,
+     .maximizedBorder = true},
+    {.id = L"ink", .offset = 20, .radius = 32, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 1, .blur = 12, .tint = 20, .luminosity = 40, .saturation = 110, .noiseOpacity = 2,
+     .noiseDensity = 100, .bevel = {.enabled = true}, .shadow = true, .shadowBlur = 16,
+     .monitorCorners = true, .monitorCornerRadius = 24, .workAreaInset = 12, .windowRadius = 24,
+     .maximizedShadow = true, .maximizedBorder = false},
+    // Only the taskbar's edge and the one opposite carry the frame; the two
+    // between them sit at the screen edge.
+    {.id = L"fade", .offset = 16, .edgeOffset = {-1, 0, -1, 0}, .radius = 20,
+     .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1, .fill = 1, .blur = 0, .tint = 0,
+     .luminosity = 50, .saturation = 80, .noiseOpacity = 0, .noiseDensity = 0, .bevel = {},
+     .shadow = false, .shadowBlur = 12, .monitorCorners = true, .monitorCornerRadius = 16,
+     .workAreaInset = 8, .windowRadius = 16, .maximizedShadow = false, .maximizedBorder = true},
+    {.id = L"modern", .offset = 16, .radius = 10, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 2, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0, .bevel = kRimBevel, .shadow = false, .shadowBlur = 12,
+     .monitorCorners = false, .monitorCornerRadius = 20, .workAreaInset = 12, .windowRadius = 8,
+     .maximizedShadow = false, .maximizedBorder = true},
+    {.id = L"rectangle", .offset = 16, .radius = 0, .color = RGB(0x3C, 0x3C, 0x3C),
+     .colorSource = 1, .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80,
+     .noiseOpacity = 0, .noiseDensity = 0,
+     .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 100,
+               .edgeLine = 50, .edgeShade = 100},
+     .shadow = false, .shadowBlur = 12, .monitorCorners = false, .monitorCornerRadius = 0,
+     .workAreaInset = 0, .windowRadius = 0, .maximizedShadow = false, .maximizedBorder = true},
+    // A one-pixel frame inside the bezel ring: the edge line runs along it,
+    // around the rounded screen corners and along the taskbar's edge.
+    {.id = L"crescent", .offset = 1, .radius = 20, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0,
+     .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 0,
+               .edgeLine = 50, .edgeShade = 0},
+     .shadow = false, .shadowBlur = 12, .monitorCorners = true, .monitorCornerRadius = 20,
+     .workAreaInset = 0, .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true},
+};
+const ThemeDef* FindTheme(PCWSTR id) {
+    for (const ThemeDef& theme : kThemes) {
+        if (wcscmp(id, theme.id) == 0) {
+            return &theme;
+        }
+    }
+    return nullptr;  // "custom", or anything else
+}
+
 Settings g_settings;
 // The color a monitor's frame is painted with: the frame color, or the
 // maximized window's title bar's (defined with the color source code).
@@ -803,7 +996,6 @@ HANDLE g_taskbarRestored = nullptr;    // taskbar thread -> UI thread: hand-back
 HANDLE g_shellStateReady = nullptr;    // first shell state fetched
 std::mutex g_shellMutex;               // guards the four below
 std::vector<AppBarWish> g_appBarWishes;
-bool g_appBarsWanted = true;           // reserveWorkArea
 std::vector<AppBarStatus> g_appBarStatus;
 ShellState g_shellState;
 std::atomic<bool> g_appBarsDirty{false};    // ABN_POSCHANGED: re-query positions
@@ -1058,73 +1250,199 @@ bool SystemUsesLightTheme() {
 // the theme-change broadcast doesn't reach it).
 std::atomic<bool> g_systemLightTheme{false};
 
+// The fill setting's value as an index: 0 solid, 1 custom acrylic,
+// 2 Windows' default, 3 Frosty slab.
+int FillIndex(PCWSTR value) {
+    if (wcscmp(value, L"acrylic") == 0) {
+        return 1;
+    }
+    if (wcscmp(value, L"system") == 0) {
+        return 2;
+    }
+    if (wcscmp(value, L"frosty") == 0) {
+        return 3;
+    }
+    return 0;
+}
+
+// A ready-made theme as the Custom theme's settings, in Windhawk's YAML, so
+// it can be pasted into the settings editor's text mode and tweaked from
+// there (a mod can't write its own settings). Written to the user's temp
+// folder each time a theme is applied; the path is logged.
+std::wstring HexColor(COLORREF c) {
+    WCHAR text[16];
+    swprintf_s(text, L"'#%02X%02X%02X'", GetRValue(c), GetGValue(c), GetBValue(c));
+    return text;
+}
+void WriteThemeAsYaml(const ThemeDef& theme, const Settings& s, int fill) {
+    static const PCWSTR fillNames[] = {L"solid", L"acrylic", L"system", L"frosty"};
+    std::wstring y;
+    y += L"# Round Everything Interface - the \"";
+    y += theme.id;
+    y += L"\" theme as Custom theme settings.\n# Paste over the settings in Windhawk's text "
+         L"(YAML) editor, then tweak.\n";
+    y += L"theme: custom\n";
+    y += L"overrides:\n  offset: -1\n  radius: -1\n  customColor: ''\n  colorSource: theme\n"
+         L"  fill: theme\n  workAreaInset: -1\n  windowCornerRadius: -2\n";
+    y += L"general:\n";
+    y += L"  scaleWithDpi: " + std::wstring(s.scaleWithDpi ? L"true" : L"false") + L"\n";
+    y += L"  monitors: " + std::wstring(s.primaryOnly ? L"primary" : L"all") + L"\n";
+    y += L"  batterySaverSolid: " + std::wstring(s.batterySaverSolid ? L"true" : L"false") + L"\n";
+    y += L"frame:\n";
+    y += L"  offset: " + std::to_wstring(s.offset) + L"\n";
+    y += L"  edgeOffsetsClockwise: " + std::to_wstring(s.edgeOffset[0]) + L"," +
+         std::to_wstring(s.edgeOffset[1]) + L"," + std::to_wstring(s.edgeOffset[2]) + L"," +
+         std::to_wstring(s.edgeOffset[3]) + L"\n";
+    y += L"  radius: " + std::to_wstring(s.radius) + L"\n";
+    y += L"  customColor: " + HexColor(s.customColor) + L"\n";
+    y += L"  colorSource: " + std::wstring(s.colorSource ? L"titlebar" : L"custom") + L"\n";
+    y += L"  opacity: " + std::to_wstring(s.opacity) + L"\n";
+    y += L"  fill: " + std::wstring(fillNames[std::clamp(fill, 0, 3)]) + L"\n";
+    y += L"  workAreaInset: " + std::to_wstring(s.workAreaInset) + L"\n";
+    y += L"customAcrylic:\n";
+    y += L"  blur: " + std::to_wstring(s.backdropBlur) + L"\n";
+    y += L"  tintOpacity: " + std::to_wstring(s.tintOpacity) + L"\n";
+    y += L"  luminosityOpacity: " + std::to_wstring(s.luminosityOpacity) + L"\n";
+    y += L"  saturation: " + std::to_wstring(s.saturation) + L"\n";
+    y += L"  noiseOpacity: " + std::to_wstring(s.noiseOpacity) + L"\n";
+    y += L"  noiseDensity: " + std::to_wstring(s.noiseDensity) + L"\n";
+    y += L"bevel:\n";
+    y += L"  enabled: " + std::wstring(s.bevel ? L"true" : L"false") + L"\n";
+    y += L"  width: " + std::to_wstring(s.bevelWidth) + L"\n";
+    y += L"  curvature: " + std::to_wstring(s.bevelCurvature) + L"\n";
+    y += L"  light: " + std::to_wstring(s.light) + L"\n";
+    y += L"  lightAngle: " + std::to_wstring(s.lightAngle) + L"\n";
+    y += L"  light2: " + std::to_wstring(s.light2) + L"\n";
+    y += L"  light2Angle: " + std::to_wstring(s.light2Angle) + L"\n";
+    y += L"  specular: " + std::to_wstring(s.specular) + L"\n";
+    y += L"  shininess: " + std::to_wstring(s.shininess) + L"\n";
+    y += L"  fresnel: " + std::to_wstring(s.fresnel) + L"\n";
+    y += L"  edgeLine: " + std::to_wstring(s.edgeLine) + L"\n";
+    y += L"  edgeLineColor: " + HexColor(s.edgeLineColor) + L"\n";
+    y += L"  edgeShade: " + std::to_wstring(s.edgeShade) + L"\n";
+    y += L"innerShadow:\n";
+    y += L"  enabled: " + std::wstring(s.shadow ? L"true" : L"false") + L"\n";
+    y += L"  blur: " + std::to_wstring(s.shadowBlur) + L"\n";
+    y += L"  opacity: " + std::to_wstring(s.shadowOpacity) + L"\n";
+    y += L"  color: " + HexColor(s.shadowColor) + L"\n";
+    y += L"  offsetX: " + std::to_wstring(s.shadowOffsetX) + L"\n";
+    y += L"  offsetY: " + std::to_wstring(s.shadowOffsetY) + L"\n";
+    y += L"monitorCorners:\n";
+    y += L"  enabled: " + std::wstring(s.monitorCorners ? L"true" : L"false") + L"\n";
+    y += L"  radius: " + std::to_wstring(s.monitorCornerRadius) + L"\n";
+    y += L"windowCorners:\n";
+    y += L"  radius: " + std::to_wstring(theme.windowRadius) + L"\n";
+    y += L"  maximizedShadow: " + std::wstring(theme.maximizedShadow ? L"true" : L"false") + L"\n";
+    y += L"  maximizedBorder: " + std::wstring(theme.maximizedBorder ? L"true" : L"false") + L"\n";
+    y += L"  borderColors: false\n  activeBorderColor: '#FFFFFFFF'\n"
+         L"  inactiveBorderColor: '#80FFFFFF'\n";
+
+    // Into the log as well, ready to copy: the settings without the comment
+    // lines, each part starting on a line of its own. A log message has a
+    // length limit, so the block goes out in parts of whole sections; the
+    // log's own prefix lines between them are to be left out when copying.
+    Wh_Log(L"theme \"%s\" as Custom theme settings (YAML) - copy the lines below, "
+           L"without the log prefix lines:",
+           theme.id);
+    {
+        std::wstring body;
+        for (size_t at = 0; at < y.size();) {
+            size_t end = y.find(L'\n', at);
+            end = end == std::wstring::npos ? y.size() : end + 1;
+            if (y[at] != L'#') {
+                body.append(y, at, end - at);
+            }
+            at = end;
+        }
+        std::wstring part;
+        for (size_t at = 0; at < body.size();) {
+            // One top-level section: its key line and the indented lines under it.
+            size_t end = body.find(L'\n', at);
+            end = end == std::wstring::npos ? body.size() : end + 1;
+            while (end < body.size() && body[end] == L' ') {
+                size_t next = body.find(L'\n', end);
+                end = next == std::wstring::npos ? body.size() : next + 1;
+            }
+            if (!part.empty() && part.size() + (end - at) > 700) {
+                if (part.back() == L'\n') {
+                    part.pop_back();
+                }
+                Wh_Log(L"\n%s", part.c_str());
+                part.clear();
+            }
+            part.append(body, at, end - at);
+            at = end;
+        }
+        if (!part.empty()) {
+            if (part.back() == L'\n') {
+                part.pop_back();
+            }
+            Wh_Log(L"\n%s", part.c_str());
+        }
+    }
+
+    WCHAR temp[MAX_PATH];
+    DWORD len = GetTempPathW(ARRAYSIZE(temp), temp);
+    if (len == 0 || len >= ARRAYSIZE(temp)) {
+        return;
+    }
+    std::wstring path = std::wstring(temp) + L"round-everything-theme-" + theme.id + L".yaml";
+    int bytes = WideCharToMultiByte(CP_UTF8, 0, y.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 1) {
+        return;
+    }
+    std::string utf8(static_cast<size_t>(bytes), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, y.c_str(), -1, utf8.data(), bytes, nullptr, nullptr);
+    utf8.pop_back();  // the terminator
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"theme YAML not written to %s: %u", path.c_str(), GetLastError());
+        return;
+    }
+    DWORD written = 0;
+    WriteFile(file, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr);
+    CloseHandle(file);
+    Wh_Log(L"theme \"%s\" written as Custom theme settings (YAML) to %s", theme.id, path.c_str());
+}
+
 void LoadSettings() {
     Settings s;
 
-    s.offset = std::max(0, Wh_GetIntSetting(L"offset"));
+    // The custom theme's values, read first; a ready-made theme replaces
+    // most of them below, and the overrides come last.
+    s.offset = std::max(0, Wh_GetIntSetting(L"frame.offset"));
 
     // A new key for 2.0.0: the order changed from left,top,right,bottom to
     // taskbar edge first, then clockwise, so 1.0.0 values aren't reread
     // with the new meaning.
-    auto edgeOffsets = WindhawkUtils::StringSetting::make(L"edgeOffsetsClockwise");
+    auto edgeOffsets = WindhawkUtils::StringSetting::make(L"frame.edgeOffsetsClockwise");
     ParseEdgeOffsets(edgeOffsets.get(), s.edgeOffset);
 
-    s.radius = std::max(0, Wh_GetIntSetting(L"radius"));
+    s.radius = std::max(0, Wh_GetIntSetting(L"frame.radius"));
 
     s.monitorCorners = Wh_GetIntSetting(L"monitorCorners.enabled") != 0;
     s.monitorCornerRadius = std::max(0, Wh_GetIntSetting(L"monitorCorners.radius"));
 
-    s.scaleWithDpi = Wh_GetIntSetting(L"scaleWithDpi") != 0;
+    s.scaleWithDpi = Wh_GetIntSetting(L"general.scaleWithDpi") != 0;
 
-    auto customColor = WindhawkUtils::StringSetting::make(L"customColor");
+    auto customColor = WindhawkUtils::StringSetting::make(L"frame.customColor");
     s.customColor = ParseHexColor(customColor.get(), RGB(0x3C, 0x3C, 0x3C));
-    auto colorSource = WindhawkUtils::StringSetting::make(L"colorSource");
+    auto colorSource = WindhawkUtils::StringSetting::make(L"frame.colorSource");
     s.colorSource = wcscmp(colorSource.get(), L"titlebar") == 0 ? 1 : 0;
 
-    s.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
+    s.opacity = std::clamp(Wh_GetIntSetting(L"frame.opacity"), 0, 100);
 
-    auto backdropMode = WindhawkUtils::StringSetting::make(L"fill");
-    s.backdrop = wcscmp(backdropMode.get(), L"solid") != 0;
-    s.systemLook = wcscmp(backdropMode.get(), L"system") == 0;
-    s.frostySlab = wcscmp(backdropMode.get(), L"frosty") == 0;
+    auto fillSetting = WindhawkUtils::StringSetting::make(L"frame.fill");
+    int fill = FillIndex(fillSetting.get());
     s.backdropBlur = std::clamp(Wh_GetIntSetting(L"customAcrylic.blur"), 0, 250);
     s.tintOpacity = std::clamp(Wh_GetIntSetting(L"customAcrylic.tintOpacity"), 0, 100);
     s.luminosityOpacity = std::clamp(Wh_GetIntSetting(L"customAcrylic.luminosityOpacity"), 0, 100);
     s.saturation = std::clamp(Wh_GetIntSetting(L"customAcrylic.saturation"), 0, 300);
     s.noiseOpacity = std::clamp(Wh_GetIntSetting(L"customAcrylic.noiseOpacity"), 0, 100);
     s.noiseDensity = std::clamp(Wh_GetIntSetting(L"customAcrylic.noiseDensity"), 0, 100);
-    s.batterySaverSolid = Wh_GetIntSetting(L"batterySaverSolid") != 0;
-    if (s.systemLook) {
-        // The taskbar's own acrylic, over DWM's blur as it comes. Dark: the
-        // values matched against the dark taskbar. Light: Windows' light
-        // acrylic lets more of the content's color and brightness through
-        // (its tint is lighter and thinner), so less tint and luminosity,
-        // with the saturation boost Windows' acrylic applies.
-        bool light = SystemUsesLightTheme();
-        s.customColor = light ? RGB(0xF3, 0xF3, 0xF3) : RGB(0x20, 0x20, 0x20);
-        s.backdropBlur = 0;
-        s.tintOpacity = light ? 5 : 40;
-        s.luminosityOpacity = light ? 88 : 90;
-        s.saturation = light ? 160 : 100;
-        s.noiseOpacity = 2;
-        s.noiseDensity = 100;
-        g_systemLightTheme = light;
-    }
 
     s.bevel = Wh_GetIntSetting(L"bevel.enabled") != 0;
-    if (s.frostySlab) {
-        // The look of the mod's demo: the content with DWM's blur as it
-        // comes, its brightness drawn a little towards a dark grey, a touch
-        // more saturated, with a fine grain and no bevel.
-        s.customColor = RGB(0x3C, 0x3C, 0x3C);
-        s.backdropBlur = 0;
-        s.tintOpacity = 0;
-        s.luminosityOpacity = 30;
-        s.saturation = 125;
-        s.noiseOpacity = 2;
-        s.noiseDensity = 100;
-        s.bevel = false;
-    }
     s.bevelWidth = std::clamp(Wh_GetIntSetting(L"bevel.width"), 1, 200);
     s.bevelCurvature = std::clamp(Wh_GetIntSetting(L"bevel.curvature"), 1, 100);
     s.light = std::clamp(Wh_GetIntSetting(L"bevel.light"), 0, 100);
@@ -1147,11 +1465,139 @@ void LoadSettings() {
     s.shadowOffsetX = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetX"), -60, 60);
     s.shadowOffsetY = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetY"), -60, 60);
 
-    s.reserveWorkArea = Wh_GetIntSetting(L"reserveWorkArea") != 0;
-    s.workAreaInset = std::max(0, Wh_GetIntSetting(L"workAreaInset"));
+    s.batterySaverSolid = Wh_GetIntSetting(L"general.batterySaverSolid") != 0;
+    s.workAreaInset = std::max(0, Wh_GetIntSetting(L"frame.workAreaInset"));
 
-    auto monitors = WindhawkUtils::StringSetting::make(L"monitors");
+    auto monitors = WindhawkUtils::StringSetting::make(L"general.monitors");
     s.primaryOnly = wcscmp(monitors.get(), L"primary") == 0;
+
+    // A ready-made theme: its values over the custom ones.
+    auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
+    const ThemeDef* theme = FindTheme(themeSetting.get());
+    std::wstring applied;  // the overrides in effect, for the log
+    if (theme) {
+        // The overrides are read first: a fill override of "Custom acrylic"
+        // keeps the custom acrylic values rather than the theme's.
+        int offset = Wh_GetIntSetting(L"overrides.offset");
+        int radius = Wh_GetIntSetting(L"overrides.radius");
+        auto color = WindhawkUtils::StringSetting::make(L"overrides.customColor");
+        COLORREF overrideColor = 0xFFFFFFFF;
+        if (color.get() && *color.get()) {
+            overrideColor = ParseHexColor(color.get(), 0xFFFFFFFF);
+        }
+        auto source = WindhawkUtils::StringSetting::make(L"overrides.colorSource");
+        int sourceOverride = wcscmp(source.get(), L"titlebar") == 0 ? 1
+                             : wcscmp(source.get(), L"custom") == 0 ? 0
+                                                                      : -1;
+        auto fillOverride = WindhawkUtils::StringSetting::make(L"overrides.fill");
+        int fillWanted = (*fillOverride.get() && wcscmp(fillOverride.get(), L"theme") != 0)
+                             ? FillIndex(fillOverride.get())
+                             : -1;
+        int inset = Wh_GetIntSetting(L"overrides.workAreaInset");
+
+        s.offset = theme->offset;
+        for (int k = 0; k < 4; k++) {
+            s.edgeOffset[k] = theme->edgeOffset[k];
+        }
+        s.radius = theme->radius;
+        s.customColor = theme->color;
+        s.colorSource = theme->colorSource;
+        fill = theme->fill;
+        s.opacity = 100;
+        if (fillWanted != 1) {
+            s.backdropBlur = theme->blur;
+            s.tintOpacity = theme->tint;
+            s.luminosityOpacity = theme->luminosity;
+            s.saturation = theme->saturation;
+            s.noiseOpacity = theme->noiseOpacity;
+            s.noiseDensity = theme->noiseDensity;
+        }
+        s.bevel = theme->bevel.enabled;
+        s.bevelWidth = theme->bevel.width;
+        s.bevelCurvature = theme->bevel.curvature;
+        s.light = theme->bevel.light;
+        s.lightAngle = theme->bevel.lightAngle;
+        s.light2 = theme->bevel.light2;
+        s.light2Angle = theme->bevel.light2Angle;
+        s.specular = theme->bevel.specular;
+        s.shininess = theme->bevel.shininess;
+        s.fresnel = theme->bevel.fresnel;
+        s.edgeLine = theme->bevel.edgeLine;
+        s.edgeLineColor = RGB(255, 255, 255);
+        s.edgeShade = theme->bevel.edgeShade;
+        s.shadow = theme->shadow;
+        s.shadowBlur = theme->shadowBlur;
+        s.shadowOpacity = 100;
+        s.shadowColor = RGB(0, 0, 0);
+        s.shadowOffsetX = 0;
+        s.shadowOffsetY = 0;
+        s.monitorCorners = theme->monitorCorners;
+        s.monitorCornerRadius = theme->monitorCornerRadius;
+        s.workAreaInset = theme->workAreaInset;
+        WriteThemeAsYaml(*theme, s, theme->fill);  // the theme itself, before the overrides
+
+        // The overrides, each where set. A frame color override is meant to
+        // be seen: it also takes the color source off the title bar, unless
+        // the source override says otherwise.
+        if (offset >= 0) {
+            s.offset = offset;
+            applied += L" offset " + std::to_wstring(offset);
+        }
+        if (radius >= 0) {
+            s.radius = radius;
+            applied += L" radius " + std::to_wstring(radius);
+        }
+        if (overrideColor != 0xFFFFFFFF) {
+            s.customColor = overrideColor;
+            s.colorSource = 0;
+            applied += L" color";
+        }
+        if (sourceOverride >= 0) {
+            s.colorSource = sourceOverride;
+            applied += sourceOverride ? L" source=titlebar" : L" source=custom";
+        }
+        if (fillWanted >= 0) {
+            fill = fillWanted;
+            applied += L" fill=" + std::wstring(fillOverride.get());
+        }
+        if (inset >= 0) {
+            s.workAreaInset = inset;
+            applied += L" inset " + std::to_wstring(inset);
+        }
+    }
+    Wh_Log(L"theme: %s%s%s", theme ? theme->id : L"custom", applied.empty() ? L"" : L", overrides:",
+           applied.c_str());
+
+    s.backdrop = fill != 0;
+    s.systemLook = fill == 2;
+    s.frostySlab = fill == 3;
+    if (s.systemLook) {
+        // The taskbar's own acrylic, over DWM's blur as it comes. Dark: the
+        // values matched against the dark taskbar. Light: Windows' light
+        // acrylic lets more of the content's color and brightness through
+        // (its tint is lighter and thinner), so less tint and luminosity,
+        // with the saturation boost Windows' acrylic applies.
+        bool light = SystemUsesLightTheme();
+        s.customColor = light ? RGB(0xF3, 0xF3, 0xF3) : RGB(0x20, 0x20, 0x20);
+        s.backdropBlur = 0;
+        s.tintOpacity = light ? 5 : 40;
+        s.luminosityOpacity = light ? 88 : 90;
+        s.saturation = light ? 160 : 100;
+        s.noiseOpacity = 2;
+        s.noiseDensity = 100;
+        g_systemLightTheme = light;
+    }
+    if (s.frostySlab) {
+        // The look of the mod's demo: the content with DWM's blur as it
+        // comes, its brightness drawn a little towards the frame color, a
+        // touch more saturated, with a fine grain.
+        s.backdropBlur = 0;
+        s.tintOpacity = 0;
+        s.luminosityOpacity = 30;
+        s.saturation = 125;
+        s.noiseOpacity = 2;
+        s.noiseDensity = 100;
+    }
 
     g_settings = s;
     g_compositionUnavailable = false;  // a new configuration gets a new try
@@ -1641,6 +2087,7 @@ struct TaskbarWants {
     float earInsetDips = 0.0f;  // the bezel ring the arcs start from (acrylic)
     DWORD earRgb = 0;
     bool lastReady = false;  // everything wanted was in place at the last check
+    int loggedEdge = kEdgeNone;  // the edge the last "tree whole" line was logged for
     // The background is kept transparent - from the start, and again from
     // the moment the window moves in a layout change - until the UI thread
     // asks for the color once everything has settled, together with showing
@@ -2135,14 +2582,8 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
 
     auto& corners = *g_xamlCorners;
     auto it = corners.find(op->taskbar);
-
-    if (op->radiusDips <= 0.0f) {
-        if (it != corners.end()) {
-            RemoveEars(it->second);
-            corners.erase(it);
-        }
-        return;
-    }
+    // (A radius of 0 - monitor corners off - keeps the bezel lines, with
+    // each ear reduced to the line's corner pixel.)
 
     wuxc::Grid host = it != corners.end() ? it->second.host.get() : nullptr;
     bool attached = host && host.IsLoaded() && it->second.ear[0] && it->second.ear[0].Parent() &&
@@ -2289,6 +2730,31 @@ int DetectEdge(const RECT& taskbar, const RECT& monitor) {
     return centerX < (monitor.left + monitor.right) / 2 ? kEdgeLeft : kEdgeRight;
 }
 
+// Where the taskbar sits when shown: its window moved to the monitor's edge
+// and clipped to the monitor. A docked taskbar is already there; an auto-hide
+// one slides off the edge, keeping its size, and the strip stays put so the
+// frame and the work area don't follow the slide.
+RECT DockedStrip(const RECT& taskbar, int edge, const RECT& monitor) {
+    RECT strip = monitor;
+    LONG thickness = (edge == kEdgeTop || edge == kEdgeBottom) ? taskbar.bottom - taskbar.top
+                                                                : taskbar.right - taskbar.left;
+    switch (edge) {
+        case kEdgeTop:
+            strip.bottom = std::min(monitor.bottom, monitor.top + thickness);
+            break;
+        case kEdgeBottom:
+            strip.top = std::max(monitor.top, monitor.bottom - thickness);
+            break;
+        case kEdgeLeft:
+            strip.right = std::min(monitor.right, monitor.left + thickness);
+            break;
+        default:
+            strip.left = std::max(monitor.left, monitor.right - thickness);
+            break;
+    }
+    return strip;
+}
+
 void AppendRect(std::wstring& s, const RECT& r) {
     s += std::to_wstring(r.left) + L',' + std::to_wstring(r.top) + L',' +
          std::to_wstring(r.right) + L',' + std::to_wstring(r.bottom);
@@ -2426,26 +2892,37 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
                 g_cloakedSince.erase(taskbar);
             }
         }
-        if (taskbar && GetWindowRect(taskbar, &taskbarRect) && IsWindowVisible(taskbar) &&
+        // An auto-hide taskbar that has slid out is hidden (the shell hides
+        // the window once it is off the screen): still the taskbar of this
+        // monitor, on the strip it left - the frame and the work area stay.
+        bool shown = taskbar && IsWindowVisible(taskbar);
+        if (taskbar && GetWindowRect(taskbar, &taskbarRect) && (shown || autoHide) &&
             !cloakedTooLong && taskbarRect.right > taskbarRect.left &&
             taskbarRect.bottom > taskbarRect.top) {
             usable = true;
-            edge = (taskbar == primaryTaskbar && primaryEdge >= 0)
-                       ? primaryEdge
-                       : DetectEdge(taskbarRect, mon.rect);
             SeenTaskbar& seen = g_seenTaskbars[mon.handle];
+            if (!shown && seen.hwnd == taskbar && seen.edge != kEdgeNone &&
+                !IsRectEmpty(&seen.rect)) {
+                edge = seen.edge;
+                taskbarRect = seen.rect;
+            } else {
+                edge = (taskbar == primaryTaskbar && primaryEdge >= 0)
+                           ? primaryEdge
+                           : DetectEdge(taskbarRect, mon.rect);
+                // An auto-hide taskbar's slide doesn't count as a move: the
+                // strip it slides over is what the layout is built on.
+                taskbarRect = DockedStrip(taskbarRect, edge, mon.rect);
+            }
             if (seen.hwnd != taskbar || !EqualRect(&seen.rect, &taskbarRect) || seen.edge != edge) {
-                bool change = !autoHide || seen.hwnd != taskbar;
-                if (change) {
-                    Wh_Log(L"taskbar %p: %s (%ld,%ld,%ld,%ld), edge %d", taskbar,
-                           seen.hwnd == taskbar ? L"moved/resized" : L"in use", taskbarRect.left,
-                           taskbarRect.top, taskbarRect.right, taskbarRect.bottom, edge);
-                }
+                Wh_Log(L"taskbar %p: %s (%ld,%ld,%ld,%ld), edge %d%s", taskbar,
+                       seen.hwnd == taskbar ? L"moved/resized" : L"in use", taskbarRect.left,
+                       taskbarRect.top, taskbarRect.right, taskbarRect.bottom, edge,
+                       autoHide ? L" (auto-hide)" : L"");
                 // A re-created window is cloaked until its tree is whole (not
                 // at startup, where the taskbar has been fine all along). A
                 // window that merely moved is handled inside its own thread:
                 // the content stays at opacity 0 until the tree is whole.
-                if (change && seen.hwnd != taskbar && g_taskbarXamlAvailable &&
+                if (seen.hwnd != taskbar && g_taskbarXamlAvailable &&
                     now - g_threadStartTick >= 3000) {
                     StartVeil(taskbar, edge, now);
                 }
@@ -2468,24 +2945,25 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
             taskbarRect = RECT{};
         }
 
+        // The taskbar's strip is taken off the monitor whether the taskbar
+        // is docked or slides in and out of it (auto-hide): the frame and
+        // the work area are the same either way, and an auto-hide taskbar
+        // slides over the frame's band.
         RECT base = mon.rect;
-        if (usable && !autoHide) {
-            RECT clipped{};
-            if (IntersectRect(&clipped, &taskbarRect, &mon.rect)) {
-                switch (edge) {
-                    case kEdgeTop:
-                        base.top = clipped.bottom;
-                        break;
-                    case kEdgeBottom:
-                        base.bottom = clipped.top;
-                        break;
-                    case kEdgeLeft:
-                        base.left = clipped.right;
-                        break;
-                    default:
-                        base.right = clipped.left;
-                        break;
-                }
+        if (usable) {
+            switch (edge) {
+                case kEdgeTop:
+                    base.top = taskbarRect.bottom;
+                    break;
+                case kEdgeBottom:
+                    base.bottom = taskbarRect.top;
+                    break;
+                case kEdgeLeft:
+                    base.left = taskbarRect.right;
+                    break;
+                default:
+                    base.right = taskbarRect.left;
+                    break;
             }
         }
 
@@ -2493,26 +2971,8 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
             continue;
         }
 
-        // The frame window covers the area next to the taskbar. With an
-        // auto-hide taskbar it leaves the reveal strip to the taskbar so the
-        // shell never mistakes the frame for a full-screen window.
+        // The layered frame covers the area next to the taskbar.
         RECT overlayRect = base;
-        if (usable && autoHide) {
-            switch (edge) {
-                case kEdgeTop:
-                    overlayRect.top += 1;
-                    break;
-                case kEdgeBottom:
-                    overlayRect.bottom -= 1;
-                    break;
-                case kEdgeLeft:
-                    overlayRect.left += 1;
-                    break;
-                default:
-                    overlayRect.right -= 1;
-                    break;
-            }
-        }
 
         // The acrylic frame lies under the taskbar as well (one surface, no
         // seam) and stops one pixel short of every monitor edge: a topmost
@@ -2529,11 +2989,8 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
         layout.monitor = mon.handle;
         layout.taskbar = taskbar;
         layout.monitorRect = mon.rect;
-        RECT strip{};
-        if (usable && !autoHide) {
-            IntersectRect(&strip, &taskbarRect, &mon.rect);
-        }
-        layout.taskbarRect = strip;
+        layout.taskbarRect = usable ? taskbarRect : RECT{};
+        layout.autoHide = usable && autoHide;
         layout.baseWorkArea = base;
         layout.overlayRect = overlayRect;
         layout.edge = edge;
@@ -2562,6 +3019,16 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
                 value = (e == edge) ? 0 : g_settings.offset;
             }
             layout.offset[e] = ScaleForDpi(value, layout.dpi);
+            // The offsets are measured from the inside of the one-pixel bezel
+            // ring, not from the monitor's edge: the ring is taken off the
+            // screen, and an offset of 1 leaves one pixel of frame inside it.
+            bool onMonitorEdge = e == kEdgeLeft     ? base.left == mon.rect.left
+                                 : e == kEdgeTop    ? base.top == mon.rect.top
+                                 : e == kEdgeRight  ? base.right == mon.rect.right
+                                                    : base.bottom == mon.rect.bottom;
+            if (onMonitorEdge) {
+                layout.offset[e] += 1;
+            }
         }
         layout.workAreaInset = ScaleForDpi(g_settings.workAreaInset, layout.dpi);
 
@@ -2610,7 +3077,8 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
         entry += L':';
         AppendRect(entry, layout.taskbarRect);
         entry += L':' + std::to_wstring(edge) + L':' + std::to_wstring(layout.dpi) + L':' +
-                 std::to_wstring(reinterpret_cast<ULONG_PTR>(taskbar)) + L';';
+                 std::to_wstring(reinterpret_cast<ULONG_PTR>(taskbar)) +
+                 (layout.autoHide ? L":autohide;" : L";");
         layout.signature = entry;
         signature += entry;
 
@@ -2706,11 +3174,12 @@ void DrawMonitorEars(Gdiplus::Graphics& graphics, const RECT& rect, const Layout
     // The two corners on the taskbar's edge belong to the XAML ears inside
     // the taskbar (the acrylic frame reaches those corners too, under the
     // taskbar; a second arc there, a pixel off the XAML one, would show
-    // through the transparent background as a jagged edge).
-    // (An auto-hide taskbar takes its ears away with it, so with one the
-    // frame keeps painting those corners.)
+    // through the transparent background as a jagged edge). An auto-hide
+    // taskbar takes its ears away with it when it slides out, so with one
+    // the frame paints those corners and the taskbar gets no ears (its
+    // bezel lines only).
     int taskbarCorners[2] = {-1, -1};
-    if (layout.edge != kEdgeNone && !IsRectEmpty(&layout.taskbarRect)) {
+    if (layout.edge != kEdgeNone && !IsRectEmpty(&layout.taskbarRect) && !layout.autoHide) {
         TaskbarEdgeCorners(layout.edge, taskbarCorners);
     }
     // The arc is tangent to the inner edge of the one-pixel bezel ring, not
@@ -2777,7 +3246,7 @@ void DrawStaticLayer(Gdiplus::Graphics& graphics, const Layout& layout) {
     // Extra work-area inset strip: visually wallpaper, but it holds the
     // resize borders of maximized windows, so give it 1/255 alpha to make
     // it hit-testable (zero-alpha pixels would let the mouse through).
-    int hitInset = g_settings.reserveWorkArea ? layout.workAreaInset : 0;
+    int hitInset = layout.workAreaInset;
     if (hitInset > 0) {
         RECT hole = inner;
         InflateRect(&hole, -hitInset, -hitInset);
@@ -2828,10 +3297,12 @@ void RoundedRectDistance(double px, double py, double hx, double hy, double r, d
 // from the other side lights the rest): a Blinn-Phong highlight per light,
 // a Fresnel rim as white over the frame, an edge line in its own color on
 // top, an edge shade as black under them, blended into the static layer
-// under the ears. Geometry only,
-// so it is rasterized once with the frame: the lighting doesn't move with
-// the screen content. The bevel is a dome along the edge (`curve` is 1 at
-// the edge and falls to 0 where the acrylic glass goes flat).
+// under the ears. Geometry only, so it is rasterized once with the frame:
+// the lighting doesn't move with the screen content. The bevel is a dome
+// along the edge (`curve` is 1 at the edge and falls to 0 where the acrylic
+// glass goes flat). Under the taskbar the frame's inner edge is the
+// taskbar's inner edge, so the bevel runs along it there as well, seen
+// through the taskbar's transparent background.
 void DrawBevelLighting(const Layout& layout, const std::vector<BYTE>& coverage,
                        std::vector<DWORD>& staticLayer) {
     if (layout.bevelWidth <= 0) {
@@ -3813,13 +4284,39 @@ bool WindowAbove(HWND above, HWND below) {
     return false;
 }
 
+// Whether the shell has taken the taskbar off the top of the z-order: what
+// it does to a monitor's taskbar while it sees a full-screen app there -
+// including one the mod's own detection leaves alone, such as a screen
+// recorder's layered, click-through overlay. The frame then can't stay
+// topmost (it would sit over the taskbar's icons): it goes right under the
+// taskbar wherever the taskbar is, and back on top with it.
+bool TaskbarDemoted(HWND taskbar) {
+    return taskbar && IsWindowVisible(taskbar) && !IsTopmost(taskbar);
+}
+
 // UI thread. Frame topmost, the shadow right above it, the bezel ring right
 // below it, and the taskbar - when it is topmost; it is never made so here
 // - on top of them all. The mod's own windows are placed synchronously; the
 // taskbar, which belongs to another thread, asynchronously and last, so
 // this thread never waits on the taskbar thread and the order still ends
-// with the taskbar on top.
+// with the taskbar on top. With the taskbar demoted (see TaskbarDemoted)
+// the same stack is built right under it instead, off the top as well: a
+// window inserted after a non-topmost one loses the topmost bit.
 void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
+    if (TaskbarDemoted(e.taskbar)) {
+        SetWindowPos(e.frame, e.taskbar, 0, 0, 0, 0, flags);
+        for (HWND shadow : e.shadow) {
+            if (shadow) {
+                SetWindowPos(shadow, e.taskbar, 0, 0, 0, 0, flags);  // between taskbar and frame
+            }
+        }
+        for (HWND strip : e.strips) {
+            if (strip) {
+                SetWindowPos(strip, e.frame, 0, 0, 0, 0, flags);
+            }
+        }
+        return;
+    }
     SetWindowPos(e.frame, HWND_TOPMOST, 0, 0, 0, 0, flags);
     for (HWND shadow : e.shadow) {
         if (shadow) {
@@ -3839,8 +4336,20 @@ void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
 }
 
 // The frame lost its topmost bit, got above its (topmost) taskbar, or got
-// above its shadow.
+// above its shadow. With the taskbar demoted: the frame is still topmost,
+// or no longer right under the taskbar.
 bool AcrylicOrderBroken(const FollowEntry& e) {
+    if (TaskbarDemoted(e.taskbar)) {
+        if (IsTopmost(e.frame) || !WindowAbove(e.taskbar, e.frame)) {
+            return true;
+        }
+        for (HWND shadow : e.shadow) {
+            if (shadow && IsWindowVisible(shadow) && !WindowAbove(shadow, e.frame)) {
+                return true;
+            }
+        }
+        return false;
+    }
     if (!IsTopmost(e.frame)) {
         return true;
     }
@@ -4795,16 +5304,14 @@ Overlay* FindOverlay(HMONITOR monitor) {
     return nullptr;
 }
 
-// With the work area reserved the frame is solid to the mouse where it is
-// painted, like the taskbar (the layered window passes the mouse through
-// wherever its pixels have zero alpha anyway; the acrylic window's region
-// is its painted shape): nothing that needs clicks is under it, and the
-// resize borders of maximized windows stay unreachable. Without the work
-// area the frame overlaps windows, so it lets the mouse through everywhere.
+// The frame is solid to the mouse where it is painted, like the taskbar
+// (the layered window passes the mouse through wherever its pixels have
+// zero alpha anyway; the acrylic window's region is its painted shape): the
+// work area keeps windows out from under it, so nothing that needs clicks
+// is there, and the resize borders of maximized windows stay unreachable.
 void ApplyFrameMouseStyle(HWND hwnd) {
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    LONG_PTR wanted = g_settings.reserveWorkArea ? (exStyle & ~WS_EX_TRANSPARENT)
-                                                 : (exStyle | WS_EX_TRANSPARENT);
+    LONG_PTR wanted = exStyle & ~WS_EX_TRANSPARENT;
     if (wanted != exStyle) {
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, wanted);
     }
@@ -4894,14 +5401,23 @@ bool SyncShadowWindows(Overlay& overlay) {
 void WaitForTaskbar(Overlay& overlay, ULONGLONG now, PCWSTR why);  // defined with the visibility code
 void RaiseFrame(Overlay& overlay, bool show);
 
+void HandBackTaskbar(HWND taskbar);  // defined with the taskbar-side code
+
 void SyncOverlays(const std::vector<Layout>& layouts) {
-    // Frames of monitors that are gone.
+    // Frames of monitors that are gone - their taskbars, when no layout
+    // uses them any more, are handed back (ears, background, stroke, theme).
     for (Overlay& overlay : *g_overlays) {
         bool present = false;
+        bool taskbarUsed = false;
         for (const Layout& layout : layouts) {
             present = present || layout.monitor == overlay.layout.monitor;
+            taskbarUsed = taskbarUsed || (overlay.layout.taskbar &&
+                                          layout.taskbar == overlay.layout.taskbar);
         }
         if (!present) {
+            if (overlay.layout.taskbar && !taskbarUsed) {
+                HandBackTaskbar(overlay.layout.taskbar);
+            }
             DestroyOverlay(overlay);
         }
     }
@@ -5060,6 +5576,7 @@ void WaitForTaskbar(Overlay& overlay, ULONGLONG now, PCWSTR why) {
 }
 
 bool AppBarSetInPlace(HMONITOR monitor, const RECT& baseWorkArea);  // appbar code, below
+RECT AppBarBase(const Layout& layout);
 
 // Defined with the taskbar-side code: asks the taskbar thread to paint the
 // background again in its next rendering pass, revealing the frame registered
@@ -5146,7 +5663,7 @@ bool TaskbarReadyFor(Overlay& overlay, ULONGLONG now) {
                L"to color",
                overlay.layout.monitor, IsWindowCloaked(taskbar) ? L"still cloaked" : L"uncloaked",
                ready.tick >= overlay.waitSince ? L"whole" : L"not reported whole",
-               AppBarSetInPlace(overlay.layout.monitor, overlay.layout.baseWorkArea) ? L"in place"
+               AppBarSetInPlace(overlay.layout.monitor, AppBarBase(overlay.layout)) ? L"in place"
                                                                                      : L"pending");
         if (!UsesHandshake()) {
             return true;
@@ -5155,7 +5672,9 @@ bool TaskbarReadyFor(Overlay& overlay, ULONGLONG now) {
         overlay.recolorSerial = BeginReveal(overlay);
         return false;
     }
-    if (IsWindowCloaked(taskbar) || !IsWindowVisible(taskbar)) {
+    // (An auto-hide taskbar that has slid out is hidden, and stays so until
+    // the mouse asks for it: not waited for.)
+    if (IsWindowCloaked(taskbar) || (!IsWindowVisible(taskbar) && !overlay.layout.autoHide)) {
         return false;
     }
     const TaskbarReady& ready = g_taskbarReady[taskbar];
@@ -5163,8 +5682,7 @@ bool TaskbarReadyFor(Overlay& overlay, ULONGLONG now) {
         (ready.edge != kEdgeNone && ready.edge != overlay.layout.edge)) {
         return false;
     }
-    if (g_settings.reserveWorkArea &&
-        !AppBarSetInPlace(overlay.layout.monitor, overlay.layout.baseWorkArea)) {
+    if (!AppBarSetInPlace(overlay.layout.monitor, AppBarBase(overlay.layout))) {
         return false;
     }
     if (!UsesHandshake()) {
@@ -5463,7 +5981,13 @@ void SetAppBarPosition(const RECT& base, AppBar& bar) {
     SHAppBarMessage(ABM_QUERYPOS, &abd);
 
     // The shell may have shifted the strip (e.g. past the taskbar); keep the
-    // thickness and the far edge where the query left them.
+    // thickness and the far edge where the query left them. The appbar on
+    // the taskbar's edge is the exception: it is meant to lie over the
+    // taskbar's strip, so it stays where it was proposed - were it shifted
+    // past the strip the shell still reserves, the two would stack.
+    if (bar.anchored) {
+        abd.rc = ProposedAppBarRect(base, bar.edge, bar.thickness);
+    }
     switch (bar.edge) {
         case ABE_LEFT:
             abd.rc.right = abd.rc.left + bar.thickness;
@@ -5500,17 +6024,35 @@ void SetAppBarPositions(AppBarSet& set) {
     RecordWorkArea(set);
 }
 
-// Frame strip plus the extra inset per edge; the taskbar edge gets only the
-// extra inset (the shell stacks that appbar right next to the taskbar).
+// The rectangle the appbars are measured from: the monitor. The appbar on
+// the taskbar's edge covers the taskbar's own strip (anchored there, over
+// the taskbar) whether the taskbar is docked or auto-hides: a docked
+// taskbar reserves that strip itself, so the two overlap and the work area
+// is the same; an auto-hide taskbar reserves nothing, and the strip stays
+// reserved all the same. Toggling auto-hide then moves no window, and the
+// shell's own handover (which reaches secondary taskbars later than the
+// primary) can't stack a strip of its own next to the mod's.
+RECT AppBarBase(const Layout& layout) {
+    return layout.monitorRect;
+}
+
+// The frame strip and the extra inset on every edge, plus the taskbar's
+// strip on its edge.
 void DesiredThickness(const Layout& layout, int out[4]) {
     for (int e = 0; e < 4; e++) {
         out[e] = layout.offset[e] + layout.workAreaInset;
+    }
+    if (layout.edge != kEdgeNone && !IsRectEmpty(&layout.taskbarRect)) {
+        const RECT& strip = layout.taskbarRect;
+        out[layout.edge] += (layout.edge == kEdgeTop || layout.edge == kEdgeBottom)
+                                ? strip.bottom - strip.top
+                                : strip.right - strip.left;
     }
 }
 
 // Registers one appbar on one edge and positions it.
 bool CreateAppBar(const RECT& base, UINT edge, int thickness, AppBar& bar) {
-    bar.edge = edge;  // kEdge* values match ABE_*
+    bar.edge = edge;  // kEdge* values match ABE_* (bar.anchored is the caller's)
     bar.thickness = thickness;
 
     RECT rc = ProposedAppBarRect(base, bar.edge, thickness);
@@ -5558,6 +6100,7 @@ void RemoveAppBar(AppBar& bar) {
 // so the fewer the better.
 void UpdateAppBarSet(AppBarSet& set, const AppBarWish& wish) {
     set.baseWorkArea = wish.baseWorkArea;
+    set.taskbarEdge = wish.taskbarEdge;
     for (int e = 0; e < 4; e++) {
         int wanted = wish.thickness[e];
         AppBar* bar = nullptr;
@@ -5567,6 +6110,7 @@ void UpdateAppBarSet(AppBarSet& set, const AppBarWish& wish) {
                 break;
             }
         }
+        bool anchored = e == wish.taskbarEdge;
         if (wanted <= 0) {
             if (bar) {
                 RemoveAppBar(*bar);
@@ -5574,9 +6118,11 @@ void UpdateAppBarSet(AppBarSet& set, const AppBarWish& wish) {
             }
         } else if (bar) {
             bar->thickness = wanted;
+            bar->anchored = anchored;
             SetAppBarPosition(set.baseWorkArea, *bar);
         } else {
             AppBar created;
+            created.anchored = anchored;
             if (CreateAppBar(set.baseWorkArea, static_cast<UINT>(e), wanted, created)) {
                 set.bars.push_back(created);
             }
@@ -5619,19 +6165,9 @@ void PublishAppBarStatus(const std::vector<AppBarSet>& sets) {
 void ReconcileAppBars(std::vector<AppBarSet>& sets, ULONGLONG& lastWorkAreaTick,
                       std::vector<AppBarWish>& lastWishes) {
     std::vector<AppBarWish> wishes;
-    bool wanted;
     {
         std::lock_guard<std::mutex> lock(g_shellMutex);
         wishes = g_appBarWishes;
-        wanted = g_appBarsWanted;
-    }
-    if (!wanted) {
-        if (!sets.empty()) {
-            RemoveAllAppBars(sets);
-            PublishAppBarStatus(sets);
-        }
-        lastWishes.clear();
-        return;
     }
 
     // A changed wish list gets its positions right away, not after the
@@ -5641,7 +6177,8 @@ void ReconcileAppBars(std::vector<AppBarSet>& sets, ULONGLONG& lastWorkAreaTick,
         wishesChanged = wishes[i].monitor != lastWishes[i].monitor ||
                         !EqualRect(&wishes[i].baseWorkArea, &lastWishes[i].baseWorkArea) ||
                         !std::equal(wishes[i].thickness, wishes[i].thickness + 4,
-                                    lastWishes[i].thickness);
+                                    lastWishes[i].thickness) ||
+                        wishes[i].taskbarEdge != lastWishes[i].taskbarEdge;
     }
     if (wishesChanged) {
         lastWorkAreaTick = 0;
@@ -5668,7 +6205,8 @@ void ReconcileAppBars(std::vector<AppBarSet>& sets, ULONGLONG& lastWorkAreaTick,
             continue;
         }
         if (!EqualRect(&set->baseWorkArea, &wish.baseWorkArea) ||
-            !std::equal(wish.thickness, wish.thickness + 4, set->thickness)) {
+            !std::equal(wish.thickness, wish.thickness + 4, set->thickness) ||
+            set->taskbarEdge != wish.taskbarEdge) {
             UpdateAppBarSet(*set, wish);
             continue;
         }
@@ -5683,6 +6221,12 @@ void ReconcileAppBars(std::vector<AppBarSet>& sets, ULONGLONG& lastWorkAreaTick,
         }
         bool changed = !EqualRect(&mi.rcWork, &set->workAreaAfterApply);
         if ((changed || dirty) && now - lastWorkAreaTick >= kWorkAreaRetryMs) {
+            if (changed) {
+                Wh_Log(L"monitor %p: work area changed under the appbars to (%ld,%ld,%ld,%ld), "
+                       L"re-applying",
+                       wish.monitor, mi.rcWork.left, mi.rcWork.top, mi.rcWork.right,
+                       mi.rcWork.bottom);
+            }
             SetAppBarPositions(*set);
             lastWorkAreaTick = now;
         }
@@ -5709,32 +6253,19 @@ void ReconcileAppBars(std::vector<AppBarSet>& sets, ULONGLONG& lastWorkAreaTick,
 // ABM_GETSTATE / ABM_GETTASKBARPOS, for the UI thread to read. Two
 // synchronous calls into the taskbar thread, so only when something asked
 // (a taskbar event, an ABN_* notification) or as a slow fallback.
-// Auto-hide isn't supported (see the readme): the option is turned off
-// here whenever it is found on - at startup, or turned on since by the user
-// or by another mod - and turned back on when the mod is disabled, if it
-// was on when the mod found it first.
-bool g_autoHideRestore = false;  // appbar thread
 void RefreshShellState() {
     ShellState state;
     APPBARDATA stateData{};
     stateData.cbSize = sizeof(stateData);
     UINT shellFlags = static_cast<UINT>(SHAppBarMessage(ABM_GETSTATE, &stateData));
-    if (shellFlags & ABS_AUTOHIDE) {
-        static bool everTurnedOff = false;
-        static ULONGLONG lastLog = 0;
-        if (!everTurnedOff) {
-            everTurnedOff = true;
-            g_autoHideRestore = true;
-        }
-        stateData.lParam = shellFlags & ~ABS_AUTOHIDE;
-        SHAppBarMessage(ABM_SETSTATE, &stateData);
-        ULONGLONG now = GetTickCount64();
-        if (now - lastLog >= 10000) {
-            lastLog = now;
-            Wh_Log(L"taskbar auto-hide turned off (not supported by the frame)");
+    state.autoHide = (shellFlags & ABS_AUTOHIDE) != 0;
+    {
+        static int lastLogged = -1;
+        if (lastLogged != static_cast<int>(state.autoHide)) {
+            lastLogged = state.autoHide;
+            Wh_Log(L"taskbar auto-hide %s", state.autoHide ? L"on" : L"off");
         }
     }
-    state.autoHide = false;
 
     APPBARDATA posData{};
     posData.cbSize = sizeof(posData);
@@ -5787,13 +6318,6 @@ DWORD WINAPI AppBarThreadProc(LPVOID) {
 
     RemoveAllAppBars(sets);
     PublishAppBarStatus(sets);
-    if (g_autoHideRestore) {
-        APPBARDATA stateData{};
-        stateData.cbSize = sizeof(stateData);
-        stateData.lParam = SHAppBarMessage(ABM_GETSTATE, &stateData) | ABS_AUTOHIDE;
-        SHAppBarMessage(ABM_SETSTATE, &stateData);
-        Wh_Log(L"taskbar auto-hide turned back on");
-    }
     return 0;
 }
 
@@ -5805,14 +6329,14 @@ void PublishAppBarWishes() {
         const Layout& layout = overlay.layout;
         AppBarWish wish;
         wish.monitor = layout.monitor;
-        wish.baseWorkArea = layout.baseWorkArea;
+        wish.baseWorkArea = AppBarBase(layout);
         DesiredThickness(layout, wish.thickness);
+        wish.taskbarEdge = IsRectEmpty(&layout.taskbarRect) ? kEdgeNone : layout.edge;
         wishes.push_back(wish);
     }
     {
         std::lock_guard<std::mutex> lock(g_shellMutex);
         g_appBarWishes = std::move(wishes);
-        g_appBarsWanted = g_settings.reserveWorkArea;
     }
     if (g_appBarWake) {
         SetEvent(g_appBarWake);
@@ -6271,7 +6795,12 @@ bool ReapplyWants(HWND taskbar, bool requested) try {
     wants.lastWhole = whole;
 
     if (whole && (!wants.lastReady || requested)) {
-        Wh_Log(L"taskbar %p: tree whole (ears for edge %d)", taskbar, edge);
+        // Logged when the tree becomes whole or its edge changes, not for
+        // every requested pass (a color animation requests one per step).
+        if (!wants.lastReady || edge != wants.loggedEdge) {
+            Wh_Log(L"taskbar %p: tree whole (ears for edge %d)", taskbar, edge);
+            wants.loggedEdge = edge;
+        }
         ReportReadyAfterRender(taskbar, edge);
     }
     wants.lastReady = whole;
@@ -6525,24 +7054,82 @@ void WINAPI RestoreTaskbarsOnTaskbarThread(void*) try {
     }
 }
 
+// One taskbar handed back while the mod runs: its monitor dropped out of
+// the layouts (Monitors set to the primary one, a monitor unplugged while
+// its taskbar window lives on) - ears, background, stroke and theme
+// restored, the handlers off, as at unload but for this window alone.
+void WINAPI RestoreTaskbarOnTaskbarThread(void* param) try {
+    HWND taskbar = static_cast<HWND>(param);
+    if (auto it = g_wants->find(taskbar); it != g_wants->end()) {
+        TaskbarWants& wants = it->second;
+        try {
+            if (auto watched = wants.watched.get(); watched && wants.layoutToken) {
+                watched.LayoutUpdated(wants.layoutToken);
+            }
+            if (auto root = wants.rootWatched.get(); root && wants.rootToken) {
+                root.Changed(wants.rootToken);
+            }
+            if (wants.hidden && IsWindow(taskbar)) {
+                SetContentHidden(taskbar, wants, false);
+            }
+        } catch (...) {
+            Wh_Log(L"taskbar %p: hand-back unsubscribe threw %08X", taskbar,
+                   winrt::to_hresult().value);
+        }
+        g_wants->erase(it);
+    }
+    if (auto it = g_xamlCorners->find(taskbar); it != g_xamlCorners->end()) {
+        RemoveEars(it->second);
+        g_xamlCorners->erase(it);
+    }
+    if (auto it = g_fills->find(taskbar); it != g_fills->end()) {
+        RestoreFillOnTaskbarThread(taskbar, it->second);
+        g_fills->erase(it);
+    }
+    if (auto it = g_strokes->find(taskbar); it != g_strokes->end()) {
+        StrokeState& state = it->second;
+        if (state.hidden) {
+            if (auto stroke = state.element.get()) {
+                stroke.Opacity(state.originalOpacity);
+            }
+        }
+        g_strokes->erase(it);
+    }
+    if (g_themes) {
+        if (auto it = g_themes->find(taskbar); it != g_themes->end()) {
+            ThemeState& state = it->second;
+            if (state.forced != kThemeNone) {
+                if (auto root = state.root.get()) {
+                    root.RequestedTheme(RestoreThemeValue(state));
+                }
+            }
+            g_themes->erase(it);
+        }
+    }
+    g_readyPending.erase(std::remove_if(g_readyPending.begin(), g_readyPending.end(),
+                                        [taskbar](const std::pair<HWND, int>& p) {
+                                            return p.first == taskbar;
+                                        }),
+                         g_readyPending.end());
+    Wh_Log(L"taskbar %p: handed back (no frame on its monitor)", taskbar);
+} catch (...) {
+    Wh_Log(L"RestoreTaskbarOnTaskbarThread: exception %08X", winrt::to_hresult().value);
+}
+
+// UI thread: hands one taskbar back and forgets what the UI side kept on it.
+void HandBackTaskbar(HWND taskbar) {
+    if (!IsWindow(taskbar)) {
+        return;
+    }
+    if (!RunFromWindowThreadTimeout(taskbar, RestoreTaskbarOnTaskbarThread, taskbar, 1000)) {
+        Wh_Log(L"taskbar %p: hand-back not run (thread busy)", taskbar);
+    }
+    g_taskbarReady.erase(taskbar);
+}
+
 // ---------------------------------------------------------------------------
 // Taskbar XAML drivers (mod UI thread -> taskbar thread)
 // ---------------------------------------------------------------------------
-
-// Runs a restore procedure on the taskbar thread (all taskbars share it). The
-// `owned` flag is cleared either way; a missing taskbar window means Explorer
-// is going away and there is no tree left to restore.
-void RestoreOnTaskbarThread(RunFromWindowThreadProc_t proc, bool& owned, PCWSTR what) {
-    if (!g_taskbarXamlAvailable || !owned) {
-        return;
-    }
-    if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
-        RunFromWindowThreadTimeout(taskbar, proc, nullptr, 2000);
-    } else {
-        Wh_Log(L"no taskbar window, skipping %s restore", what);
-    }
-    owned = false;
-}
 
 // A pass is requested on a taskbar (posted to its thread) unless a request is
 // already out; the answer arrives through kMsgPassResult. A pass is re-sent
@@ -6684,7 +7271,8 @@ void ApplyFills(ULONGLONG now) {
 
 // Radius in DIPs for the XAML ears (XAML scales by the taskbar's DPI itself).
 float XamlCornerRadiusDips(const Layout& layout) {
-    if (!g_settings.monitorCorners || layout.monitorCornerRadius <= 0) {
+    // An auto-hide taskbar's corners are the frame's (see DrawMonitorEars).
+    if (!g_settings.monitorCorners || layout.monitorCornerRadius <= 0 || layout.autoHide) {
         return 0.0f;
     }
     if (g_settings.scaleWithDpi) {
@@ -6711,7 +7299,7 @@ void ApplyXamlCorners(ULONGLONG now) {
         DWORD rgb = kMonitorCornerColor;
         RequestPass(kPassCorners, taskbar, now, false, [taskbar, edge, radius, inset, rgb] {
             TaskbarWants& wants = (*g_wants)[taskbar];
-            wants.ears = radius > 0.0f;
+            wants.ears = true;  // the bezel lines at least; the ears with a radius
             wants.edge = edge;
             wants.radiusDips = radius;
             wants.earInsetDips = inset;
@@ -6724,10 +7312,6 @@ void ApplyXamlCorners(ULONGLONG now) {
             return op.found;
         });
     }
-}
-
-void RemoveXamlCorners() {
-    RestoreOnTaskbarThread(RemoveXamlCornersOnTaskbarThread, g_xamlCornersOwned, L"corner ear");
 }
 
 // ---------------------------------------------------------------------------
@@ -6919,18 +7503,17 @@ void OnRefreshTimer(HWND ctrl) {
 // Frame color source: the maximized window's title bar
 // ---------------------------------------------------------------------------
 // With the "Title bar" source, each monitor's frame takes the color of the
-// title bar of the maximized window on it: the fourth row of the window,
-// read off the screen (the way Top Taskbar Bleed reads it), reduced to its
-// dominant color - caption text and buttons are too few pixels to win -
-// with the columns covered by other windows (a dialog, a flyout) left out.
-// A row that differs from the color in use is read again every other
-// frame until two readings agree, then the frame eases to it; so a switch
-// of windows takes effect within about 70 milliseconds, while the
-// zoom of a window being maximized (the row shows what is behind it until
-// the zoom lands) can't commit a wrong color. With no maximized window the
-// frame has the frame color. The color goes wherever the frame color goes:
-// the solid fill, the acrylic's tint and luminosity, the taskbar's
-// background.
+// title bar of the maximized window on it (or of the window Aero Peek shows
+// from a taskbar thumbnail): the fourth row of the window inside the rounded
+// screen, copied from the window's own DWM surface (PrintWindow), reduced to
+// its dominant color - caption text and buttons are too few pixels to win.
+// A window whose surface can't be copied is read off the screen the way Top
+// Taskbar Bleed reads it, with the columns covered by other windows left
+// out. A row that differs from the color in use is read again every frame
+// until two readings agree - the color the window read as last time counts
+// as one - then the frame eases to it. With no maximized window the frame
+// has the frame color. The color goes wherever the frame color goes: the
+// solid fill, the acrylic's tint and luminosity, the taskbar's background.
 
 // Whether a window is cloaked (on another virtual desktop, mostly).
 bool IsCloakedWindow(HWND hwnd) {
@@ -7031,11 +7614,22 @@ struct AdaptiveMonitor {
     COLORREF committed = 0;
 };
 std::vector<AdaptiveMonitor> g_adaptive;
+// The color each window's title bar read as the last time it was the
+// maximized window, with whether it was the foreground window then (many
+// apps color an inactive title bar differently). It counts as a reading: a
+// window seen before commits on its first reading when that agrees with
+// what it read before, at the event itself rather than one reading later.
+// Entries of windows gone are dropped at the regular tick.
+struct TitleColorMemory {
+    COLORREF color;
+    bool active;
+};
+std::unordered_map<HWND, TitleColorMemory> g_titleColors;
 constexpr UINT_PTR kSampleTimerId = 5;  // the fast readings while a color settles
-// The fast readings: every other frame. The first reading after a window
-// event often still sees the frame DWM composed before the change, so the
-// second and third readings are what commit, about 70 ms after the event.
-constexpr UINT kSampleFastMs = 33;
+// The fast readings: every frame. The row comes from the window's own
+// surface, so the first reading after a window event is already the
+// window's; the second confirms it a frame later.
+constexpr UINT kSampleFastMs = 16;
 // Two consecutive readings agree when they are within this many levels: a
 // title bar at rest reads the same to the level, while the tail of a
 // window's zoom animation, slow as it is, still moves more than this
@@ -7045,6 +7639,9 @@ constexpr int kAgreeDistance = 3;
 constexpr int kChangeDistance = 6;
 constexpr LONG kSampleRows = 1;
 constexpr LONG kSampleSkipRows = 3;  // the first three rows are skipped: the fourth is read
+// Rows a title bar can be counted on for (at 100% scaling): the inner shadow
+// is skipped only while the row read stays within them.
+constexpr int kTitleBarRows = 28;
 
 bool AdaptiveSource() {
     return g_settings.colorSource != 0 && !g_settings.systemLook;
@@ -7087,25 +7684,35 @@ HWND MaximizedWindowOn(HMONITOR monitor) {
     return nullptr;
 }
 
-// The row sampled: the fourth visible row of the window - its frame clipped
-// to the work area (the maximized frame extends under it by the invisible
-// border width), three rows in, past any line an app paints along its top
-// - kept off the taskbar window where the two overlap.
-RECT TitleBarStrip(HWND window, const RECT& work, HWND taskbar) {
-    RECT frame{}, wr{};
-    if (!GetWindowRect(window, &frame) || !IntersectRect(&wr, &frame, &work)) {
+// The row sampled: the fourth row of the window that shows - the window
+// clipped to the work area (the maximized frame extends under it by the
+// invisible border width) and to the rounded screen, since the frame paints
+// over whatever lies outside it and would be read as the title bar's color
+// (its own, when a window reaches under it) - three rows in, past any line
+// an app paints along its top, kept off the taskbar window where the two
+// overlap. The inner shadow darkens the rows it falls on, so where the
+// title bar is tall enough the row is taken past it.
+RECT TitleBarStrip(HWND window, const RECT& work, const Layout& layout) {
+    RECT frame{}, wr{}, shown{};
+    if (!GetWindowRect(window, &frame) || !IntersectRect(&wr, &frame, &work) ||
+        !IntersectRect(&shown, &wr, &layout.innerRect)) {
         return RECT{};
     }
-    LONG top = wr.top;
+    LONG top = shown.top;
     RECT tb{};
-    if (taskbar && GetWindowRect(taskbar, &tb) && top < tb.bottom && top + kSampleRows > tb.top &&
-        wr.left < tb.right && wr.right > tb.left) {
+    if (layout.taskbar && GetWindowRect(layout.taskbar, &tb) && top < tb.bottom &&
+        top + kSampleRows > tb.top && shown.left < tb.right && shown.right > tb.left) {
         top = tb.bottom;
     }
+    LONG pastShadow = layout.innerRect.top + layout.shadowBlur;
+    LONG titleBottom = wr.top + ScaleForDpi(kTitleBarRows, layout.dpi);
+    if (pastShadow > top && pastShadow + kSampleSkipRows + kSampleRows <= titleBottom) {
+        top = pastShadow;
+    }
     top += kSampleSkipRows;
-    RECT strip{wr.left, top, wr.right, top + kSampleRows};
+    RECT strip{shown.left, top, shown.right, top + kSampleRows};
     RECT clipped{};
-    if (!IntersectRect(&clipped, &strip, &work)) {
+    if (!IntersectRect(&clipped, &strip, &shown)) {
         return RECT{};
     }
     return clipped;
@@ -7253,16 +7860,183 @@ bool ThumbnailPreviewShowing() {
 
 // One reading of a monitor's title-bar row; true when the row could be
 // read. Sets `color` to its dominant color.
+// The row read off the window's own surface - what DWM holds for it -
+// rather than off the screen: the same pixels whether the window is still
+// zooming into place (the screen shows what is behind it until the
+// animation lands), under another window, a flyout or a thumbnail preview.
+// PrintWindow with PW_RENDERFULLCONTENT copies DWM's surface into the DC,
+// clipped to the bitmap, so only the rows down to the one wanted are
+// copied: the window's width by a dozen rows or so.
+#ifndef PW_RENDERFULLCONTENT
+#define PW_RENDERFULLCONTENT 0x00000002
+#endif
+// `frame` is where the window's surface lies, in the coordinates of `strip`
+// (its window rectangle unless given: a minimized window's is a placeholder).
+// A hung window isn't asked: PrintWindow could wait on it.
+bool CaptureWindowRow(HWND window, const RECT& strip, std::vector<uint32_t>& px,
+                      const RECT* frame = nullptr) {
+    if (IsHungAppWindow(window)) {
+        return false;
+    }
+    RECT wr{};
+    if (frame) {
+        wr = *frame;
+    } else if (!GetWindowRect(window, &wr)) {
+        return false;
+    }
+    int w = static_cast<int>(wr.right - wr.left);
+    int rows = static_cast<int>(strip.bottom - wr.top);  // the window's top down to the row
+    int left = static_cast<int>(strip.left - wr.left), right = static_cast<int>(strip.right - wr.left);
+    int top = static_cast<int>(strip.top - wr.top);
+    if (w <= 0 || rows <= 0 || rows > 256 || left < 0 || right > w || left >= right || top < 0 ||
+        static_cast<long long>(w) * rows > 8192LL * 256) {
+        return false;
+    }
+    HDC screen = GetDC(nullptr);
+    if (!screen) {
+        return false;
+    }
+    bool ok = false;
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -rows;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP dib = CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    HDC mem = CreateCompatibleDC(screen);
+    if (dib && bits && mem) {
+        HGDIOBJ old = SelectObject(mem, dib);
+        ok = PrintWindow(window, mem, PW_RENDERFULLCONTENT) != FALSE;
+        if (ok) {
+            GdiFlush();
+            auto* p = static_cast<const uint32_t*>(bits);
+            px.clear();
+            for (int y = top; y < rows; y++) {
+                px.insert(px.end(), p + static_cast<size_t>(y) * w + left,
+                          p + static_cast<size_t>(y) * w + right);
+            }
+            ok = !px.empty();
+        }
+        SelectObject(mem, old);
+    }
+    if (mem) {
+        DeleteDC(mem);
+    }
+    if (dib) {
+        DeleteObject(dib);
+    }
+    ReleaseDC(nullptr, screen);
+    return ok;
+}
+
+// Aero Peek from a taskbar thumbnail: the taskbar asks DWM to show the
+// hovered window alone (DwmpActivateLivePreview, dwmapi.dll ordinal 113,
+// called from the taskbar's own XAML in this process), and the frame takes
+// that window's color while it shows, as if it had been brought to the
+// front. The hook keeps the window peeked, if any; the color code picks it
+// over the monitor's maximized window when it is a maximized one.
+std::atomic<HWND> g_peekWindow{nullptr};
+using DwmpActivateLivePreview_t = HRESULT(WINAPI*)(BOOL activate, HWND exclude, HWND insertBefore,
+                                                   UINT trigger, void* finalRect);
+DwmpActivateLivePreview_t DwmpActivateLivePreview_Original;
+HRESULT WINAPI DwmpActivateLivePreview_Hook(BOOL activate, HWND exclude, HWND insertBefore,
+                                            UINT trigger, void* finalRect) {
+    g_peekWindow = activate ? exclude : nullptr;
+    if (HWND ctrl = g_ctrlWnd.load()) {
+        PostMessageW(ctrl, kMsgTaskbarEvent, 0, 0);  // a tick, fast readings
+    }
+    return DwmpActivateLivePreview_Original(activate, exclude, insertBefore, trigger, finalRect);
+}
+void HookLivePreview() {
+    HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
+    FARPROC proc = dwmapi ? GetProcAddress(dwmapi, MAKEINTRESOURCEA(113)) : nullptr;
+    if (!proc) {
+        Wh_Log(L"DwmpActivateLivePreview not found: no color while peeking");
+        return;
+    }
+    Wh_SetFunctionHook(reinterpret_cast<void*>(proc),
+                       reinterpret_cast<void*>(DwmpActivateLivePreview_Hook),
+                       reinterpret_cast<void**>(&DwmpActivateLivePreview_Original));
+}
+
+// Whether a window is maximized, or minimized from maximized (a thumbnail
+// peeks at those too; they come back maximized).
+bool MaximizedOrWasMaximized(HWND hwnd) {
+    if (IsZoomed(hwnd)) {
+        return true;
+    }
+    WINDOWPLACEMENT wp{sizeof(wp)};
+    return IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp) && (wp.flags & WPF_RESTORETOMAXIMIZED);
+}
+
+// The window peeked from a thumbnail, for this monitor: a maximized window
+// on it, or one minimized from maximized that would come back to it.
+HWND PeekedWindowOn(HMONITOR monitor) {
+    HWND peek = g_peekWindow.load();
+    if (!peek || !IsWindow(peek) || !MaximizedOrWasMaximized(peek)) {
+        return nullptr;
+    }
+    HMONITOR on = nullptr;
+    if (IsIconic(peek)) {
+        WINDOWPLACEMENT wp{sizeof(wp)};
+        if (GetWindowPlacement(peek, &wp)) {
+            on = MonitorFromRect(&wp.rcNormalPosition, MONITOR_DEFAULTTONEAREST);
+        }
+    } else {
+        on = MonitorFromWindow(peek, MONITOR_DEFAULTTONEAREST);
+    }
+    return on == monitor ? peek : nullptr;
+}
+
 bool ReadTitleBar(const Overlay& overlay, HWND window, COLORREF& color) {
     MONITORINFO mi{sizeof(mi)};
     if (!GetMonitorInfoW(overlay.layout.monitor, &mi)) {
         return false;
     }
-    RECT strip = TitleBarStrip(window, mi.rcWork, overlay.layout.taskbar);
+    // A minimized window (peeked from its thumbnail) sits at -32000 with a
+    // placeholder rectangle, while its surface keeps the maximized size it
+    // comes back to - the work area plus the invisible border on each side.
+    // The row is taken from that surface at the window's own offsets - past
+    // the border, then the skipped rows - and only the pixels the surface
+    // filled count.
+    if (IsIconic(window)) {
+        UINT dpi = GetWindowDpi(window);
+        int border = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) +
+                     GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        LONG width = (mi.rcWork.right - mi.rcWork.left) + 2 * border;
+        RECT frame{0, 0, width, border + kSampleSkipRows + kSampleRows};
+        RECT strip{border, border + kSampleSkipRows, width - border,
+                   border + kSampleSkipRows + kSampleRows};
+        std::vector<uint32_t> px;
+        if (strip.right <= strip.left || !CaptureWindowRow(window, strip, px, &frame)) {
+            return false;
+        }
+        px.erase(std::remove_if(px.begin(), px.end(), [](uint32_t p) { return (p >> 24) == 0; }),
+                 px.end());
+        if (px.empty()) {
+            return false;
+        }
+        color = DominantColor(px);
+        return true;
+    }
+    RECT strip = TitleBarStrip(window, mi.rcWork, overlay.layout);
     if (IsRectEmpty(&strip)) {
         return false;
     }
     std::vector<uint32_t> px;
+    if (CaptureWindowRow(window, strip, px)) {
+        color = DominantColor(px);  // the window's own pixels: nothing covers them
+        return true;
+    }
+    // A window whose surface can't be copied (display affinity, a window DWM
+    // doesn't redirect): the row as on screen, with whatever covers it
+    // masked out, and not while a thumbnail preview hangs over it.
+    if (ThumbnailPreviewShowing()) {
+        return false;
+    }
     if (!CaptureStrip(strip, px) || px.empty()) {
         return false;
     }
@@ -7279,19 +8053,26 @@ bool ReadTitleBar(const Overlay& overlay, HWND window, COLORREF& color) {
     return true;
 }
 
-// Every tick, and every other frame while a monitor's color settles: the
-// maximized window's title-bar row. A reading that differs from the color
+// Every tick, and every frame while a monitor's color settles: the
+// maximized (or peeked) window's title-bar row. A reading that differs from the color
 // in use starts the fast readings; two consecutive readings that agree
 // commit (the frame eases to the color, see AnimateFrameColor).
 void UpdateAdaptiveColors(ULONGLONG now, bool fast) {
     if (!AdaptiveSource()) {
         g_adaptive.clear();
+        g_titleColors.clear();
         return;
     }
     bool anySettling = false;
     for (Overlay& overlay : *g_overlays) {
         AdaptiveMonitor& a = AdaptiveFor(overlay.layout.monitor);
-        HWND window = overlay.shown && !overlay.fullscreen ? MaximizedWindowOn(a.monitor) : nullptr;
+        HWND window = nullptr;
+        if (overlay.shown && !overlay.fullscreen) {
+            window = PeekedWindowOn(a.monitor);
+            if (!window) {
+                window = MaximizedWindowOn(a.monitor);
+            }
+        }
         if (window != a.window) {
             a.window = window;
             a.haveSample = false;
@@ -7309,33 +8090,43 @@ void UpdateAdaptiveColors(ULONGLONG now, bool fast) {
         if (fast && !a.settling) {
             continue;  // the fast readings are for monitors settling
         }
-        if (ThumbnailPreviewShowing()) {
-            anySettling = anySettling || a.settling;
-            continue;  // the row would show the preview: read again once it is gone
-        }
         a.sampledAt = now;
         COLORREF color = 0;
         if (!ReadTitleBar(overlay, window, color)) {
+            anySettling = anySettling || a.settling;  // read again once it can be
             continue;
         }
-        bool agrees = a.haveSample && ColorDistance(color, a.lastSample) <= kAgreeDistance;
+        HWND foreground = GetForegroundWindow();
+        bool active = foreground && (foreground == window ||
+                                     GetAncestor(foreground, GA_ROOTOWNER) == window);
+        auto remembered = g_titleColors.find(window);
+        bool agrees = (a.haveSample && ColorDistance(color, a.lastSample) <= kAgreeDistance) ||
+                      (remembered != g_titleColors.end() && remembered->second.active == active &&
+                       ColorDistance(color, remembered->second.color) <= kAgreeDistance);
         a.lastSample = color;
         a.haveSample = true;
         bool differs = !a.committedKnown || ColorDistance(color, a.committed) > kChangeDistance;
         if (!differs) {
             a.settling = false;
+            g_titleColors[window] = {color, active};
             continue;
         }
         if (agrees) {
             a.committed = color;
             a.committedKnown = true;
             a.settling = false;
+            g_titleColors[window] = {color, active};
             Wh_Log(L"monitor %p: frame color #%02X%02X%02X from the title bar", a.monitor,
                    GetRValue(color), GetGValue(color), GetBValue(color));
         } else {
             a.settling = true;  // read again soon
         }
         anySettling = anySettling || a.settling;
+    }
+    if (!fast) {
+        for (auto it = g_titleColors.begin(); it != g_titleColors.end();) {
+            it = IsWindow(it->first) ? std::next(it) : g_titleColors.erase(it);
+        }
     }
     if (HWND ctrl = g_ctrlWnd.load()) {
         if (anySettling) {
@@ -7630,11 +8421,9 @@ void Tick(bool forceRebuild) {
     // tree or another mod may reset a value). Nothing here waits.
     HideStrokes(now);
 
-    if (g_settings.monitorCorners) {
-        ApplyXamlCorners(now);
-    } else if (g_xamlCornersOwned) {
-        RemoveXamlCorners();
-    }
+    // The taskbar's bezel lines, and its two monitor corners when they are
+    // on (the frame paints its own either way).
+    ApplyXamlCorners(now);
 
     ApplyFills(now);
 
@@ -8167,6 +8956,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     g_cloakedSince.clear();
     g_layoutSignature.clear();
     g_adaptive.clear();
+    g_titleColors.clear();
 
     DestroyWindow(ctrl);
     UnregisterClassW(kFrameClassName, g_module);
@@ -8184,11 +8974,19 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 
 namespace dwm {
 
-std::atomic<bool> g_enabled{true};
-std::atomic<int> g_radius{20};
+// The dwm.exe part is active with any of its options on; the corner
+// radius is changed only when one is set (-1 leaves the corners to
+// Windows). (The radius query is what tells the border hook a window is
+// maximized, so it is followed - not answered - for the border and shadow
+// options alone.)
+std::atomic<bool> g_enabled{true};  // any option on
+std::atomic<int> g_radius{20};      // -1 Windows' corners, 0 square, else the radius
 std::atomic<bool> g_maximizedBorder{false};
 std::atomic<bool> g_maximizedShadow{false};
 std::atomic<bool> g_customBorderColors{false};
+// Monitors set to the primary one: windows on the other monitors, where
+// there is no frame, keep Windows' corners, border and shadow.
+std::atomic<bool> g_primaryOnly{false};
 std::atomic<uint32_t> g_activeBorderArgb{0xFFFFFFFF};
 std::atomic<uint32_t> g_inactiveBorderArgb{0x80FFFFFF};
 
@@ -8253,12 +9051,28 @@ bool LoadBorderColor(PCWSTR key, std::atomic<uint32_t>& into, std::atomic<bool>&
 constexpr float kFullRoundRadius = 8.0f;
 
 void LoadDwmSettings() {
-    g_enabled = Wh_GetIntSetting(L"windowCorners.enabled") != 0;
     int radius = Wh_GetIntSetting(L"windowCorners.radius");
-    g_radius = radius < 0 ? 0 : radius;
     g_maximizedBorder = Wh_GetIntSetting(L"windowCorners.maximizedBorder") != 0;
     g_maximizedShadow = Wh_GetIntSetting(L"windowCorners.maximizedShadow") != 0;
     g_customBorderColors = Wh_GetIntSetting(L"windowCorners.borderColors") != 0;
+    // A ready-made theme sets these outright (the border colors stay off);
+    // the window corner radius can be overridden.
+    auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
+    if (const ThemeDef* theme = FindTheme(themeSetting.get())) {
+        radius = theme->windowRadius;
+        g_maximizedShadow = theme->maximizedShadow;
+        g_maximizedBorder = theme->maximizedBorder;
+        g_customBorderColors = false;
+        int wanted = Wh_GetIntSetting(L"overrides.windowCornerRadius");
+        if (wanted >= -1) {
+            radius = wanted;
+        }
+        Wh_Log(L"[dwm] theme: %s", theme->id);
+    }
+    g_radius = radius < 0 ? -1 : radius;
+    auto monitors = WindhawkUtils::StringSetting::make(L"general.monitors");
+    g_primaryOnly = wcscmp(monitors.get(), L"primary") == 0;
+    g_enabled = g_radius >= 0 || g_maximizedBorder || g_maximizedShadow || g_customBorderColors;
     if (g_customBorderColors) {
         bool active = LoadBorderColor(L"windowCorners.activeBorderColor", g_activeBorderArgb,
                                       g_activeBorderIsAccent, 0xFFFFFFFF);
@@ -8274,9 +9088,9 @@ void LoadDwmSettings() {
                g_inactiveBorderArgb.load(),
                inactive ? L"" : L" (setting empty or not understood, active color used)");
     }
-    Wh_Log(L"[dwm] window corners %s, radius %d (0 = Windows default), maximized border %s, "
-           L"maximized shadow %s, custom border colors %s",
-           g_enabled ? L"on" : L"off", g_radius.load(), g_maximizedBorder ? L"on" : L"off",
+    Wh_Log(L"[dwm] window corner radius %d (-1 = Windows' corners, 0 = square), maximized "
+           L"border %s, maximized shadow %s, custom border colors %s",
+           g_radius.load(), g_maximizedBorder ? L"on" : L"off",
            g_maximizedShadow ? L"on" : L"off", g_customBorderColors ? L"on" : L"off");
 }
 
@@ -8297,6 +9111,7 @@ struct LastRadiusQuery {
     bool squared = false;    // DWM answered 0: maximized or full-screen
     HWND hwnd = nullptr;     // the window, when DWM's data gives it away
     void* window = nullptr;  // its CTopLevelWindow
+    float radius = 0.0f;     // the corner radius the window was given
 };
 thread_local LastRadiusQuery g_lastRadiusQuery;
 
@@ -8305,6 +9120,15 @@ thread_local LastRadiusQuery g_lastRadiusQuery;
 // and that moment is when DWM sets its border.
 HMONITOR MonitorOf(HWND hwnd) {
     return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+}
+
+// Whether the window is on a monitor the frame is on (every monitor, or the
+// primary one only). A window without a handle counts as framed.
+bool OnFramedMonitor(HWND hwnd) {
+    if (!g_primaryOnly || !hwnd) {
+        return true;
+    }
+    return MonitorOf(hwnd) == MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
 }
 
 // The window's HWND, read from DWM's CWindowData the way Custom Window
@@ -8362,19 +9186,25 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
 
     float base = GetRadiusFromCornerStyle(self);
     if (base < kFullRoundRadius) {
-        g_lastRadiusQuery = {true, false, WindowHandleOf(self), self};
+        g_lastRadiusQuery = {true, false, WindowHandleOf(self), self, r};
         return r;  // DONOTROUND or the small style: not ours to change
     }
 
-    int radius = g_radius;
-    if (r == 0.0f) {
-        // Maximized (or full-screen): Windows squares it, round it instead.
-        g_lastRadiusQuery = {true, true, WindowHandleOf(self), self};
-        return radius > 0 ? static_cast<float>(radius) : base;
+    HWND hwnd = WindowHandleOf(self);
+    if (!OnFramedMonitor(hwnd)) {
+        // No frame on this monitor: Windows' corners, and the border hook
+        // treats the window as one of DWM's own (not squared by us).
+        g_lastRadiusQuery = {true, false, hwnd, self, r};
+        return r;
     }
-    // Normal / snapped window: same radius.
-    g_lastRadiusQuery = {true, false, WindowHandleOf(self), self};
-    return radius > 0 ? static_cast<float>(radius) : r;
+
+    bool squared = r == 0.0f;  // maximized or full-screen: Windows squares it
+    int radius = g_radius;
+    // -1: the corners are Windows' (the query still serves the border and
+    // shadow); otherwise the one radius, maximized or not (0: square).
+    float given = radius < 0 ? r : static_cast<float>(radius);
+    g_lastRadiusQuery = {true, squared, hwnd, self, given};
+    return given;
 }
 
 // Border and shadow on maximized windows, and the border colors. DWM
@@ -8457,21 +9287,20 @@ StyleTally g_inactiveShadowStyles;  // floating windows that were not
 // session has shown its own.
 constexpr int kUsualActiveShadowStyle = 3;
 constexpr int kUsualInactiveShadowStyle = 5;
-// The style DWM gives a window while it is dragged or minimized, which
-// draws nothing on a maximized window. Maximized windows that cast no
-// shadow get this instead of style 0, so their shadow visual stays alive:
-// a handover then changes a parameter of two visuals rather than creating
-// one, and a visual created mid-session showed up white for a frame under
-// the acrylic frame.
-constexpr int kNoShadowStyle = 4;
+// The style DWM gives a window while it is dragged or minimized. It once
+// drew nothing on a maximized window and served as the "no shadow" style
+// (keeping the shadow visual alive across handovers); on current builds it
+// draws a shadow, so maximized windows that cast none get DWM's own style
+// 0, as DWM gives maximized windows itself.
+constexpr int kTransitionalShadowStyle = 4;
+constexpr int kNoShadowStyle = 0;
 bool ShadowShown(int style) {
-    return style != 0 && style != kNoShadowStyle;
+    return style != kNoShadowStyle && style != kTransitionalShadowStyle;
 }
 
 // Only ordinary app frames at rest teach the tallies: a hidden, layered or
 // tool window gets a shadow style of its own, and so does a window while
-// it is being dragged or minimized (style 4 on 10.0.26100, which shows no
-// shadow on a maximized window).
+// it is being dragged or minimized (style 4 on 10.0.26100).
 bool IsOrdinaryFrame(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd)) {
         return false;
@@ -8814,6 +9643,9 @@ struct Decision {
 Decision Decide(HWND hwnd) {
     Decision d;
     d.active = hwnd && IsForegroundWindow(hwnd);
+    if (!OnFramedMonitor(hwnd)) {
+        return d;  // DWM's own border and shadow (a maximized window moved off the frame's monitor)
+    }
     // A maximized window (or one without a handle, taken as maximized) gets
     // a border only with the option on; a snapped window has DWM's own
     // border, which only the custom colors have anything to say about.
@@ -8926,6 +9758,13 @@ void DecorPass(HMONITOR urgent) {
             // What the hooks will decide; so a second pass before DWM gets
             // to it doesn't ask again. A border set by hand doesn't pass
             // through the hook, so the record carries the new values itself.
+            if (shadowDiffers) {
+                // The shadow handover, the one thing worth a line here.
+                Wh_Log(L"[dwm] window %p (%s): shadow style %d -> %d (%s)%s", hwnd,
+                       d.active ? L"active" : L"inactive", record.shadowStyle, d.shadowStyle,
+                       ShadowShown(d.shadowStyle) ? L"shown" : L"none",
+                       rushed ? L", rushed" : L"");
+            }
             record.shadowStyle = d.shadowStyle;
             record.colorKnown = d.colorKnown;
             if (d.colorKnown) {
@@ -9114,16 +9953,17 @@ HRESULT WINAPI SetBorderParameters_Hook(void* self, const RECT* rect, float radi
             bool active = IsForegroundWindow(hwnd);
             // Style 4 is the transitional style (a window being minimized
             // is still visible, not yet iconic, for its first update): never
-            // learned, or it would be given to maximized windows as "no
-            // shadow" until a floating window at rest taught otherwise.
-            if (shadowStyle > 0 && shadowStyle != kNoShadowStyle) {
+            // learned, or the shadow holder would be given it until a
+            // floating window at rest taught otherwise.
+            if (shadowStyle > 0 && shadowStyle != kTransitionalShadowStyle) {
                 (active ? g_activeShadowStyles : g_inactiveShadowStyles).See(shadowStyle, hwnd);
             }
             (active ? g_activeBorderColors : g_inactiveBorderColors).See(used, hwnd);
         }
         // Custom colors replace DWM's for app frames that have a border (a
         // window that hid its own border, alpha 0, keeps it hidden).
-        if (g_enabled && g_customBorderColors && used.a > 0.0f && known && IsAppFrame(hwnd)) {
+        if (g_enabled && g_customBorderColors && used.a > 0.0f && known && IsAppFrame(hwnd) &&
+            OnFramedMonitor(hwnd)) {
             used = CustomBorderColor(IsForegroundWindow(hwnd));
         }
         // A window that was maximized a moment ago has been restored: the
@@ -9156,6 +9996,11 @@ HRESULT WINAPI SetBorderParameters_Hook(void* self, const RECT* rect, float radi
     if (d.colorKnown && (used.a <= 0.0f || g_customBorderColors)) {
         used = d.color;
     }
+    // The border follows the corners the window was given: square with the
+    // rounding off (DWM hands the border its style's radius even then,
+    // which never showed while the border was invisible), the one radius
+    // with it on.
+    radius = query.radius;
     if (shadowStyle == 0 && d.shadowStyle > 0) {
         shadowStyle = d.shadowStyle;
     }
@@ -9408,6 +10253,7 @@ BOOL Wh_ModInit() {
     if (!g_taskbarXamlAvailable) {
         Wh_Log(L"taskbar.dll symbols unavailable - the taskbar is left as it is");
     }
+    HookLivePreview();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
