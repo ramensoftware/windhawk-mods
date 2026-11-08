@@ -32,6 +32,16 @@ authentication, and the secure desktop.
 - Optional Windows 7 background: the dimmed screenshot of the whole screen behind the prompt, instead of the
   wallpaper that Windows 8 and later leave there.
 
+## Prompt languages
+
+Button recognition uses a list of localized Yes/No labels. The list includes labels used in
+English, Italian, German, French, Spanish, Portuguese, Dutch, Polish, Czech, Hungarian, Bulgarian,
+Russian, Norwegian, Danish, Swedish, Icelandic, Latvian, Japanese, Korean, Chinese, Turkish, Arabic,
+Persian and Hindi. This is not a guarantee for every Windows version or prompt wording: replacement
+depends on the actual labels and a reliable match, not just the display language. If the buttons
+cannot be recognized confidently, the mod returns to the native prompt instead. Other languages or
+unlisted wordings generally keep the native prompt. The background setting may still apply.
+
 ## Emergency shortcut
 
 Press `Ctrl+Shift+F10` to close the recreated dialog and return to the native prompt without approving or denying the request.
@@ -1924,10 +1934,10 @@ struct PromptInfo {
 };
 
 static const WCHAR* kYesNames[] = {L"yes", L"s\u00ec", L"si", L"ja", L"oui", L"s\u00ed",
-                                   L"sim", L"tak", L"igen", L"j\u00e1", L"\u0434\u0430",
+                                   L"sim", L"tak", L"igen", L"j\u00e1", L"j\u0101", L"\u0434\u0430",
                                    L"\u306f\u3044", L"\uc608", L"\u662f", L"ano",
                                    L"evet", L"\u0646\u0639\u0645", L"\u0628\u0644\u0647", L"\u0939\u093e\u0901"};
-static const WCHAR* kNoNames[]  = {L"no", L"nein", L"non", L"n\u00e3o", L"nao", L"niet",
+static const WCHAR* kNoNames[]  = {L"no", L"nein", L"non", L"n\u00e3o", L"nao", L"nee", L"ne", L"nem", L"nei", L"\u043d\u0435",
                                    L"nie", L"n\u0113", L"nej", L"\u043d\u0435\u0442",
                                    L"\u3044\u3044\u3048", L"\uc544\ub2c8\uc694", L"\u5426",
                                    L"hay\u0131r", L"\u0644\u0627", L"\u062e\u06cc\u0631", L"\u0928\u0939\u0940\u0902"};
