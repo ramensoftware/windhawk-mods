@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              middle-click-minimize
 // @name            Middle Click Minimize
-// @description     Minimiza a janela ao clicar com o botão do meio (scroll) na barra de título.
+// @description     Minimizes the window when middle-clicking (scroll wheel) on the title bar.
 // @version         1.1.2
 // @author          Ar4ujo_009
 // @github          Ar4ujo009
@@ -11,8 +11,8 @@
 // ==WindhawkModSettings==
 /*
 - blacklist: "windhawk.exe"
-  $name: "Aplicativos Ignorados (Lista Negra)"
-  $description: "Nomes dos executáveis separados por vírgula. O mod NÃO funcionará nestes programas. (Exemplo: steam.exe, vivaldi.exe)"
+  $name: "Blacklisted Applications"
+  $description: "Comma-separated list of executable names to ignore. (Example: steam.exe, vivaldi.exe)"
 */
 // ==/WindhawkModSettings==
 
@@ -75,7 +75,7 @@ LRESULT WINAPI DispatchMessageA_Hook(const MSG *lpMsg) {
 
 BOOL Wh_ModInit() {
     if (IsProcessBlacklisted()) {
-        Wh_Log(L"Processo na blacklist. O mod Middle Click Minimize foi ignorado aqui.");
+        Wh_Log(L"Process is blacklisted. Middle Click Minimize ignored.");
         return FALSE;
     }
 
@@ -96,5 +96,5 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Mod Middle Click Minimize descarregado.");
+    Wh_Log(L"Middle Click Minimize unloaded.");
 }
