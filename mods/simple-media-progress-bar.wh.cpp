@@ -17,7 +17,7 @@ Adds a seek bar to the media card of the Windows 11 (24H2 and newer) Quick
 Settings panel, so the playback position can be changed without opening the
 media app.
 
-![Simple Media Progress Bar in Quick Settings](https://raw.githubusercontent.com/n3thshan/wh-simple-media-progress-bar/main/assets/quick-settings.png?v=2)
+![Simple Media Progress Bar in Quick Settings](https://raw.githubusercontent.com/n3thshan/wh-simple-media-progress-bar/main/assets/quick-settings.png)
 
 The bar is inserted into the card itself, so it uses the real XAML control, the
 real accent color, the real hover and press animations, and the real
@@ -1944,7 +1944,7 @@ bool HookControlCenter(HMODULE module, bool applyNow) {
         return expected != 3;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         // OnGotFocus is the reliable trigger: it fires every time the panel is
         // shown. Connect is a bonus that fires earlier while the tree is built,
         // so it is optional, exactly like in the published mod this follows.
@@ -1965,7 +1965,7 @@ bool HookControlCenter(HMODULE module, bool applyNow) {
          true},
     };
 
-    bool ok = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    bool ok = WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks));
     if (ok && applyNow) {
         ok = Wh_ApplyHookOperations();
     }
