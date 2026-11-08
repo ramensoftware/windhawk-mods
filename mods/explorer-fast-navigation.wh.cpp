@@ -9,7 +9,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lshell32
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -31,7 +31,7 @@ When Microsoft introduced the Ribbon in Windows 8, File Explorer navigation beca
 
 This mod optimizes the navigation pipeline:
 - **Deferred UI Updates**: Defers and deduplicates heavy Ribbon, XAML command bar, and navigation bar refreshes using
-  an adaptive 40 ms batch-progress monitor, flushing immediately once file enumeration completes
+  an adaptive 45 ms batch-progress monitor, flushing immediately once file enumeration completes
   (`DISPID_FILELISTENUMDONE`) or batch processing settles.
 - **Redraw Suppression**: Suppresses intermediate redraw flushes and window clears during view transitions.
 
@@ -48,6 +48,8 @@ This mod optimizes the navigation pipeline:
 - **Defer classic ribbon updates**: Delay classic ribbon refreshes during navigation.
 - **Defer XAML command bar updates**: Delay modern command bar refreshes during navigation.
 - **Defer navigation bar updates**: Delay navigation state updates in classic and modern navigation bars.
+- **Safety fallback ceiling (ms)**: Maximum time (in ms) to wait before forcing a deferred UI update to flush if
+  navigation stalls or on slow storage.
 
 ## Support
 
@@ -77,6 +79,9 @@ If you find this mod useful, you can support its development and maintenance:
 - navigationBar: true
   $name: Defer navigation bar updates
   $description: Delay navigation state updates in both the classic and modern navigation bars.
+- safetyCeilingMs: 2000
+  $name: Safety fallback ceiling (ms)
+  $description: Maximum time in milliseconds before forcing pending UI updates to flush if navigation stalls or on slow network drives.
 */
 // ==/WindhawkModSettings==
 
@@ -105,6 +110,7 @@ struct Settings {
     bool classicRibbon = true;
     bool xamlCommandBar = true;
     bool navigationBar = true;
+    int safetyCeilingMs = 2000;
 };
 
 // Admit window work and stop it under the same lock. Never hold this lock
@@ -260,6 +266,7 @@ static bool trackBatchActions;
 static decltype(&UpdateWindow) updateWindowOriginal;
 static decltype(&RedrawWindow) redrawWindowOriginal;
 static decltype(&SetWindowPos) setWindowPosOriginal;
+static decltype(&LoadLibraryExW) loadLibraryExWOriginal;
 
 static HMODULE frame;
 static HMODULE shell;
@@ -267,18 +274,17 @@ static HMODULE duser;
 
 // Shared helpers.
 
-static void LoadSettings(decltype(&Wh_GetIntSetting) readSetting = Wh_GetIntSetting) {
-    settings.navigationPaint = readSetting(L"navigationPaint") != 0;
-    settings.classicRibbon = readSetting(L"classicRibbon") != 0;
-    settings.xamlCommandBar = readSetting(L"xamlCommandBar") != 0;
-    settings.navigationBar = readSetting(L"navigationBar") != 0;
-}
-
-template <class T>
-static bool Hook(T& original, T replacement) {
-    return original && Wh_SetFunctionHook(reinterpret_cast<void*>(original),
-                                          reinterpret_cast<void*>(replacement),
-                                          reinterpret_cast<void**>(&original));
+static void LoadSettings() {
+    settings.navigationPaint = Wh_GetIntSetting(L"navigationPaint") != 0;
+    settings.classicRibbon = Wh_GetIntSetting(L"classicRibbon") != 0;
+    settings.xamlCommandBar = Wh_GetIntSetting(L"xamlCommandBar") != 0;
+    settings.navigationBar = Wh_GetIntSetting(L"navigationBar") != 0;
+    settings.safetyCeilingMs = Wh_GetIntSetting(L"safetyCeilingMs");
+    if (settings.safetyCeilingMs < 200) {
+        settings.safetyCeilingMs = 200;
+    } else if (settings.safetyCeilingMs > 10000) {
+        settings.safetyCeilingMs = 10000;
+    }
 }
 
 static bool CanDeferInvoke(REFIID iid, WORD flags, const DISPPARAMS* args) {
@@ -339,7 +345,6 @@ extern thread_local ULONGLONG started;
 // Track view completion for deferred UI work without taking over file painting.
 namespace FileTransition {
 static constexpr UINT kAdaptiveCheckMs = 45;
-static constexpr ULONGLONG kSafetyCeilingMs = 5000;
 
 struct State {
     void* itemsView{};
@@ -381,7 +386,8 @@ static bool DeferNavigationPaint() {
         return false;
     }
     if (RibbonWork::started &&
-        (GetTickCount64() - RibbonWork::started >= kSafetyCeilingMs)) {
+        (GetTickCount64() - RibbonWork::started >=
+         static_cast<ULONGLONG>(settings.safetyCeilingMs))) {
         return false;
     }
     return true;
@@ -620,6 +626,19 @@ static void Flush() {
     }
 }
 
+static void DropTasksForTarget(void* target) {
+    if (!queue || !target) {
+        return;
+    }
+    std::erase_if(queue->tasks, [target](const Task& t) {
+        return t.target == target;
+    });
+    if (queue->tasks.empty() && queue->timerActive) {
+        KillTimer(queue->hwnd, 1);
+        queue->timerActive = false;
+    }
+}
+
 static LRESULT CALLBACK InputHook(int code, WPARAM wp, LPARAM lp) {
     WindowLifetime::Callback callback(lifetime);
     if (code >= 0 && wp == PM_REMOVE && queue && !queue->tasks.empty()) {
@@ -638,6 +657,9 @@ static LRESULT CALLBACK OwnerSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
     WindowLifetime::Callback callback(lifetime);
     if (msg == WM_DESTROY) {
         auto q = reinterpret_cast<Queue*>(data);
+        if (!q->draining) {
+            Flush();
+        }
         q->closing = true;
         Flush();
     }
@@ -655,7 +677,7 @@ static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_TIMER && wp == 1) {
         if ((ready && !FileTransition::navigationDepth && !FileTransition::processingBatch) ||
             !FileTransition::HasActiveWork() ||
-            (GetTickCount64() - started >= FileTransition::kSafetyCeilingMs)) {
+            (GetTickCount64() - started >= static_cast<ULONGLONG>(settings.safetyCeilingMs))) {
             ready = true;
             Flush();
         }
@@ -666,6 +688,9 @@ static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (!q) {
             DestroyWindow(hwnd);
             return 0;
+        }
+        if (!q->draining) {
+            Flush();
         }
         q->closing = true;
         Flush();
@@ -698,7 +723,7 @@ static bool Enqueue(IUnknown* object, TaskKind kind, ULONG param, std::function<
     }
     if (!queue) {
         HWND root = FindThreadBrowserWindow();
-        if (!root || IsShellDesktopOrTrayWindow(root)) {
+        if (!root) {
             return false;
         }
         auto q = std::make_unique<Queue>();
@@ -766,14 +791,18 @@ static void ViewReady() {
 }
 
 static bool Pending() {
-    return started && !ready && (GetTickCount64() - started < FileTransition::kSafetyCeilingMs);
+    return started && !ready &&
+           (GetTickCount64() - started < static_cast<ULONGLONG>(settings.safetyCeilingMs));
 }
 
 static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
                         const DISPPARAMS* args) {
     if (!destroyOriginal || !settings.classicRibbon || !CanDeferInvoke(iid, flags, args) ||
         !Pending() ||
-        (id != 200 && id != 201 && id != 205 && id != 207 && id != 212 && id != 215 && id != 220)) {
+        (id != DISPID_SELECTIONCHANGED && id != DISPID_FILELISTENUMDONE &&
+         id != DISPID_VIEWMODECHANGED && id != DISPID_CONTENTSCHANGED &&
+         id != DISPID_COLUMNSCHANGED && id != DISPID_ICONSIZECHANGED &&
+         id != DISPID_SELECTEDITEMCHANGED)) {
         return false;
     }
     return Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicInvoke,
@@ -804,10 +833,7 @@ static HRESULT __fastcall ChangedHook(void* self) {
 }
 
 static HRESULT __fastcall DestroyHook(void* self, BOOL final) {
-    if (queue && queue->draining) {
-        queue->closing = true;
-    }
-    Flush();
+    DropTasksForTarget(self);
     if (connected == self) {
         connected = nullptr;
     }
@@ -859,9 +885,10 @@ using Notification = HRESULT(__fastcall*)(void*);
 using StateChange = HRESULT(__fastcall*)(void*, ULONG);
 using Invoke = FileTransition::Invoke;
 
-static HMODULE module = nullptr;
-static bool moduleLoadedByUs = false;
-static bool enabled;
+static constexpr ULONG NAVSTATE_LOCATION = 0x4;
+
+static std::atomic<bool> enabled{false};
+static std::atomic<bool> hooksInstalled{false};
 static thread_local void* connected;
 static Notification navigatedOriginal;
 static Notification changedOriginal;
@@ -872,7 +899,7 @@ static StateChange invalidateOriginal;
 static Invoke invokeOriginal;
 
 static bool Pending() {
-    return enabled && RibbonWork::Pending();
+    return enabled.load(std::memory_order_relaxed) && RibbonWork::Pending();
 }
 
 static HRESULT Run(Notification original, void* self, const wchar_t* label) {
@@ -912,7 +939,7 @@ static HRESULT __fastcall InvalidatedHook(void* self) {
 }
 
 static HRESULT __fastcall StateHook(void* self, ULONG flags) {
-    if (settings.navigationBar && (flags & 4) && Pending() &&
+    if (settings.navigationBar && (flags & NAVSTATE_LOCATION) && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), RibbonWork::TaskKind::XamlNavState,
                             flags, [self, flags] {
                                 HRESULT hr = stateOriginal(self, flags);
@@ -940,8 +967,10 @@ static HRESULT __fastcall InvalidateHook(void* self, ULONG commands) {
 static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
                                      DISPPARAMS* args, VARIANT* result, EXCEPINFO* exception,
                                      UINT* argError) {
-    bool invalidation = id == 200 || id == 201 || id == 205 || id == 207 || id == 211 ||
-                        id == 212 || id == 215 || id == 220;
+    bool invalidation = id == DISPID_SELECTIONCHANGED || id == DISPID_FILELISTENUMDONE ||
+                        id == DISPID_VIEWMODECHANGED || id == DISPID_CONTENTSCHANGED ||
+                        id == DISPID_VIEWPAINTDONE || id == DISPID_COLUMNSCHANGED ||
+                        id == DISPID_ICONSIZECHANGED || id == DISPID_SELECTEDITEMCHANGED;
     HRESULT hr;
     if (settings.xamlCommandBar && invalidation && CanDeferInvoke(iid, flags, args) && Pending() &&
         RibbonWork::Enqueue(
@@ -964,33 +993,22 @@ static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID loc
 }
 
 static HRESULT __fastcall CleanupHook(void* self) {
-    if (RibbonWork::queue && RibbonWork::queue->draining) {
-        RibbonWork::queue->closing = true;
-    }
-    RibbonWork::Flush();
+    RibbonWork::DropTasksForTarget(self);
     connected = nullptr;
     return cleanupOriginal(self);
 }
 
-static void Initialize() {
+static void HookWindowsUiFileExplorerIfLoaded(HMODULE mod) {
     if (!settings.xamlCommandBar && !settings.navigationBar) {
         return;
     }
-
-    // Prefer using already loaded module to avoid forcing heavy WinRT/XAML dependencies
-    // into explorer.exe during early shell/desktop startup.
-    module = GetModuleHandleW(L"Windows.UI.FileExplorer.dll");
-    if (!module) {
-        if (FindWindowW(L"Shell_TrayWnd", nullptr)) {
-            module = LoadLibraryExW(L"Windows.UI.FileExplorer.dll", nullptr,
-                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
-            if (module) {
-                moduleLoadedByUs = true;
-            }
-        }
+    if (!mod) {
+        mod = GetModuleHandleW(L"Windows.UI.FileExplorer.dll");
     }
-    if (!module) {
-        Wh_Log(L"[XAML] Windows.UI.FileExplorer.dll not loaded or skipped during boot");
+    if (!mod) {
+        return;
+    }
+    if (hooksInstalled.exchange(true)) {
         return;
     }
 
@@ -1040,21 +1058,19 @@ static void Initialize() {
         },
     };
 
-    WindhawkUtils::HookSymbols(module, windowsUiFileExplorerHooks,
+    WindhawkUtils::HookSymbols(mod, windowsUiFileExplorerHooks,
                                ARRAYSIZE(windowsUiFileExplorerHooks));
 
-    enabled = cleanupOriginal && ((navigatedOriginal && changedOriginal) ||
-                                  invalidatedOriginal || stateOriginal ||
-                                  invalidateOriginal || invokeOriginal);
-    Wh_Log(L"[XAML] Modern XAML deferral (enabled=%d)", enabled);
+    bool isEnabled = cleanupOriginal && ((navigatedOriginal && changedOriginal) ||
+                                         invalidatedOriginal || stateOriginal ||
+                                         invalidateOriginal || invokeOriginal);
+    enabled.store(isEnabled, std::memory_order_release);
+    Wh_Log(L"[XAML] Modern XAML deferral (enabled=%d)", isEnabled ? 1 : 0);
 }
 
 static void Uninit() {
-    if (module && moduleLoadedByUs) {
-        FreeLibrary(module);
-    }
-    module = nullptr;
-    moduleLoadedByUs = false;
+    enabled.store(false, std::memory_order_release);
+    hooksInstalled.store(false, std::memory_order_release);
 }
 
 } // namespace XamlWork
@@ -1082,8 +1098,33 @@ static BOOL WINAPI SetWindowPosHook(HWND hwnd, HWND after, int x, int y, int cx,
     bool defer = FileTransition::DeferNavigationPaint() && !(flags & SWP_NOREDRAW) &&
                  GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId() &&
                  (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD);
-    return setWindowPosOriginal(hwnd, after, x, y, cx, cy,
-                                defer ? flags | SWP_NOREDRAW : flags);
+    if (!defer) {
+        return setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags);
+    }
+
+    HWND parent = GetParent(hwnd);
+    RECT beforeRect{};
+    bool hasBefore = false;
+    if (parent && !(flags & SWP_NOMOVE && flags & SWP_NOSIZE)) {
+        if (GetWindowRect(hwnd, &beforeRect)) {
+            MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<LPPOINT>(&beforeRect), 2);
+            hasBefore = true;
+        }
+    }
+
+    BOOL result = setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags | SWP_NOREDRAW);
+
+    if (result && hasBefore && parent) {
+        RECT afterRect{};
+        if (GetWindowRect(hwnd, &afterRect)) {
+            MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<LPPOINT>(&afterRect), 2);
+            RECT dirty{};
+            UnionRect(&dirty, &beforeRect, &afterRect);
+            RedrawWindow(parent, &dirty, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        }
+    }
+
+    return result;
 }
 
 static BOOL WINAPI UpdateWindowHook(HWND hwnd) {
@@ -1101,6 +1142,17 @@ static BOOL WINAPI RedrawWindowHook(HWND hwnd, const RECT* rect, HRGN region, UI
         flags &= ~static_cast<UINT>(RDW_UPDATENOW | RDW_ERASENOW);
     }
     return redrawWindowOriginal(hwnd, rect, region, flags);
+}
+
+static HMODULE WINAPI LoadLibraryExWHook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE hModule = loadLibraryExWOriginal(lpLibFileName, hFile, dwFlags);
+    if (hModule && !XamlWork::hooksInstalled.load(std::memory_order_relaxed)) {
+        if (GetModuleHandleW(L"Windows.UI.FileExplorer.dll") == hModule) {
+            XamlWork::HookWindowsUiFileExplorerIfLoaded(hModule);
+            Wh_ApplyHookOperations();
+        }
+    }
+    return hModule;
 }
 
 static uintptr_t CreateActionHook(const Action* action) {
@@ -1260,11 +1312,23 @@ static BOOL InitializeMod() {
         WindhawkUtils::HookSymbols(shell, shell32Hooks, ARRAYSIZE(shell32Hooks));
     }
 
-    XamlWork::Initialize();
+    if (settings.xamlCommandBar || settings.navigationBar) {
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        if (kernelbase) {
+            auto pfnLoadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
+                GetProcAddress(kernelbase, "LoadLibraryExW"));
+            if (pfnLoadLibraryExW) {
+                WindhawkUtils::SetFunctionHook(pfnLoadLibraryExW, LoadLibraryExWHook,
+                                               &loadLibraryExWOriginal);
+            }
+        }
+        XamlWork::HookWindowsUiFileExplorerIfLoaded(nullptr);
+    }
 
     if (!FileTransition::navigateOriginal && !FileTransition::resetOriginal &&
         !RibbonWork::navigatedOriginal && !RibbonWork::navStateOriginal &&
-        !XamlWork::enabled) {
+        !XamlWork::enabled.load(std::memory_order_relaxed) &&
+        !((settings.xamlCommandBar || settings.navigationBar) && loadLibraryExWOriginal)) {
         Wh_Log(L"[CORE] No usable hooks on this build");
         return FALSE;
     }
@@ -1273,12 +1337,12 @@ static BOOL InitializeMod() {
     bool layoutPaint = false;
     bool positionPaint = false;
     if (settings.navigationPaint) {
-        updateWindowOriginal = UpdateWindow;
-        redrawWindowOriginal = RedrawWindow;
-        setWindowPosOriginal = SetWindowPos;
-        paint = Hook(updateWindowOriginal, UpdateWindowHook);
-        layoutPaint = Hook(redrawWindowOriginal, RedrawWindowHook);
-        positionPaint = Hook(setWindowPosOriginal, SetWindowPosHook);
+        paint = WindhawkUtils::SetFunctionHook(UpdateWindow, UpdateWindowHook,
+                                               &updateWindowOriginal);
+        layoutPaint = WindhawkUtils::SetFunctionHook(RedrawWindow, RedrawWindowHook,
+                                                     &redrawWindowOriginal);
+        positionPaint = WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPosHook,
+                                                       &setWindowPosOriginal);
     }
 
     if (!RibbonWork::Initialize()) {
@@ -1296,8 +1360,11 @@ static BOOL InitializeMod() {
                 reinterpret_cast<CreateAction>(GetProcAddress(duser, "CreateAction"));
             deleteActionOriginal =
                 reinterpret_cast<DeleteAction>(GetProcAddress(duser, "DeleteHandle"));
-            if (Hook(createActionOriginal, CreateActionHook) &&
-                Hook(deleteActionOriginal, DeleteActionHook)) {
+            if (createActionOriginal && deleteActionOriginal &&
+                WindhawkUtils::SetFunctionHook(createActionOriginal, CreateActionHook,
+                                               &createActionOriginal) &&
+                WindhawkUtils::SetFunctionHook(deleteActionOriginal, DeleteActionHook,
+                                               &deleteActionOriginal)) {
                 trackBatchActions = true;
                 batches = true;
             }
