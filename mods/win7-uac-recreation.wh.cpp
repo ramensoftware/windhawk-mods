@@ -349,7 +349,7 @@ typedef int CONTROLTYPEID;
 // two long stretches of reading (UiSessionRun, HarvestDetailsSafely, UiWndProc, WinEventProc and
 // the three thread entry points). If this compiler is built without them, the macro is 0 and those
 // blocks disappear: the same code then runs on plain return values alone. No structured exception
-// handling (no __try/__except), and nothing is ever caught silently.
+// handling is used, and nothing is ever caught silently.
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
 #define W7UAC_HAS_EXCEPTIONS 1
 #else
