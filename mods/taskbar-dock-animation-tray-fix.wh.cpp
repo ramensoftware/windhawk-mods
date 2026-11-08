@@ -529,7 +529,9 @@ struct TaskbarThreadState {
 // Serialize settings publication and lifecycle changes with pointer and render
 // callbacks. Window-thread dispatch must happen outside this lock.
 std::recursive_mutex g_animationMutex;
-std::map<DWORD, TaskbarThreadState> g_taskbarThreads;
+// Explorer can terminate without Wh_ModBeforeUninit. Skip static destruction
+// so it cannot release taskbar-owned visuals from the terminating thread.
+[[clang::no_destroy]] std::map<DWORD, TaskbarThreadState> g_taskbarThreads;
 std::atomic<bool> g_unloading = false;
 uint64_t g_settingsRevision = 0;
 
@@ -1913,7 +1915,8 @@ void Wh_ModBeforeUninit() {
         g_unloading = true;
     }
 
-    for (auto& [threadId, state] : g_taskbarThreads) {
+    for (auto it = g_taskbarThreads.begin(); it != g_taskbarThreads.end();) {
+        auto& [threadId, state] = *it;
         HWND owner = state.renderingWindow;
         if (!owner || GetWindowThreadProcessId(owner, nullptr) != threadId) {
             owner = nullptr;
@@ -1932,13 +1935,17 @@ void Wh_ModBeforeUninit() {
                 for (auto& [key, ctx] : state.contexts) {
                     ResetContext(ctx);
                 }
+                state.contexts.clear();
             }, &state)) {
+            // Keep unreachable state alive rather than release its visuals
+            // from the Windhawk engine thread.
             Wh_Log(L"DockAnimation: Could not reach taskbar thread %lu for cleanup.", threadId);
+            ++it;
+        } else {
+            it = g_taskbarThreads.erase(it);
         }
     }
 
-    std::lock_guard lock(g_animationMutex);
-    g_taskbarThreads.clear();
     g_taskbarViewDllLoaded = false;
 }
 
