@@ -2,7 +2,7 @@
 // @id              taskbar-system-utilities
 // @name            Taskbar System Utilities
 // @description     Native XAML taskbar tools: Restart Explorer, Clean Temp, Reduce Memory, Reset GPU, Get IP, Rebuild Cache and Flush DNS.
-// @version         1.1
+// @version         1.2
 // @author          Marco Petrucci
 // @github          https://github.com/marco00petrucci
 // @donateUrl       https://www.paypal.me/marco00petrucci
@@ -42,6 +42,9 @@ from
   Windows icon cache via `ie4uinit.exe -show`, without restarting Explorer.
 - **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
   `dnsapi.dll!DnsFlushResolverCache`.
+- **Optional submenu**: Utilities can be grouped into a cascading submenu with a
+  custom label and Segoe Fluent Icons glyph. Each utility can individually be
+  placed inside the submenu or at the root of the taskbar menu.
 
 ## Credits & Licensing
 Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
@@ -51,9 +54,23 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 
 // ==WindhawkModSettings==
 /*
+- submenu:
+  - enabled: true
+    $name: Group into submenu
+    $description: Group the selected utilities inside a cascading submenu.
+  - label: System Utilities
+    $name: Submenu label
+  - glyph: E712
+    $name: Submenu icon glyph (Segoe Fluent Icons)
+    $description: Hex code (E712, 0xE712, \uE712) or the glyph itself.
+  $name: Submenu
+  $description: Configure the cascading submenu.
 - restartExplorer:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Restart Explorer
     $name: Menu item label
   $name: Restart Explorer
@@ -61,6 +78,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 - cleanTemp:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Clean Temp
     $name: Menu item label
   - cleanRecycleBin: false
@@ -74,6 +94,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 - reduceMemory:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Reduce Memory
     $name: Menu item label
   - showCard: true
@@ -84,6 +107,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 - restartGpu:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Restart Graphics Driver
     $name: Menu item label
   $name: Restart Graphics Driver
@@ -91,6 +117,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 - getIp:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Get IP Address
     $name: Menu item label
   - queryPublicIp: false
@@ -104,6 +133,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 - rebuildCache:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Rebuild Icon & Thumbnail Cache
     $name: Menu item label
   - showCard: true
@@ -114,6 +146,9 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 - flushDns:
   - enabled: true
     $name: Enable in taskbar menu
+  - inSubmenu: true
+    $name: Place inside submenu
+    $description: Show this item inside the submenu (if enabled).
   - label: Clean DNS Cache
     $name: Menu item label
   - showCard: true
@@ -152,6 +187,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
 #include <atomic>
 #include <cctype>
 #include <cwchar>
+#include <cwctype>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -174,31 +210,42 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 // ============================================================================
 
 struct ModSettings {
+    bool enableSubmenu = true;
+    std::wstring textSubmenu = L"System Utilities";
+    std::wstring glyphSubmenu = L"\xE712";
+
     bool showRestartExplorer = true;
+    bool inSubmenuRestartExplorer = true;
     std::wstring textRestartExplorer = L"Restart Explorer";
 
     bool showCleanTemp = true;
+    bool inSubmenuCleanTemp = true;
     std::wstring textCleanTemp = L"Clean Temp";
     bool cleanRecycleBin = false;
     bool notifyCleanTemp = true;
 
     bool showReduceMemory = true;
+    bool inSubmenuReduceMemory = true;
     std::wstring textReduceMemory = L"Reduce Memory";
     bool notifyReduceMemory = true;
 
     bool showRestartGpu = true;
+    bool inSubmenuRestartGpu = true;
     std::wstring textRestartGpu = L"Restart Graphics Driver";
 
     bool showGetIp = true;
+    bool inSubmenuGetIp = true;
     std::wstring textGetIp = L"Get IP Address";
     bool queryPublicIp = false;
     bool copyIpToClipboard = false;
 
     bool showRebuildCache = true;
+    bool inSubmenuRebuildCache = true;
     std::wstring textRebuildCache = L"Rebuild Icon & Thumbnail Cache";
     bool notifyRebuildCache = true;
 
     bool showFlushDns = true;
+    bool inSubmenuFlushDns = true;
     std::wstring textFlushDns = L"Clean DNS Cache";
     bool notifyFlushDns = true;
 };
@@ -1265,6 +1312,7 @@ MenuFlyoutItemBaseVector_Append_t MenuFlyoutItemBaseVector_Append_Original;
 
 struct MenuItemSpec {
     bool enabled;
+    bool inSubmenu;
     std::wstring text;
     const wchar_t* glyph;
     void (*handler)(wf::IInspectable const&, wux::RoutedEventArgs const&);
@@ -1274,37 +1322,63 @@ void AppendInjectedItems(void* vectorThis) {
     auto cfg = GetSettingsSnapshot();
 
     const MenuItemSpec specs[] = {
-        {cfg.showRestartExplorer, cfg.textRestartExplorer, L"\xE72C",
-         &OnRestartExplorerClick},
-        {cfg.showCleanTemp, cfg.textCleanTemp, L"\xE74D", &OnCleanTempClick},
-        {cfg.showReduceMemory, cfg.textReduceMemory, L"\xE950",
-         &OnReduceMemoryClick},
-        {cfg.showRestartGpu, cfg.textRestartGpu, L"\xE7F4", &OnRestartGpuClick},
-        {cfg.showGetIp, cfg.textGetIp, L"\xE968", &OnGetIpClick},
-        {cfg.showRebuildCache, cfg.textRebuildCache, L"\xE8B9",
-         &OnRebuildCacheClick},
-        {cfg.showFlushDns, cfg.textFlushDns, L"\xE774", &OnFlushDnsClick},
+        {cfg.showRestartExplorer, cfg.inSubmenuRestartExplorer,
+         cfg.textRestartExplorer, L"\xE72C", &OnRestartExplorerClick},
+        {cfg.showCleanTemp, cfg.inSubmenuCleanTemp, cfg.textCleanTemp,
+         L"\xE74D", &OnCleanTempClick},
+        {cfg.showReduceMemory, cfg.inSubmenuReduceMemory, cfg.textReduceMemory,
+         L"\xE950", &OnReduceMemoryClick},
+        {cfg.showRestartGpu, cfg.inSubmenuRestartGpu, cfg.textRestartGpu,
+         L"\xE7F4", &OnRestartGpuClick},
+        {cfg.showGetIp, cfg.inSubmenuGetIp, cfg.textGetIp, L"\xE968",
+         &OnGetIpClick},
+        {cfg.showRebuildCache, cfg.inSubmenuRebuildCache, cfg.textRebuildCache,
+         L"\xE8B9", &OnRebuildCacheClick},
+        {cfg.showFlushDns, cfg.inSubmenuFlushDns, cfg.textFlushDns, L"\xE774",
+         &OnFlushDnsClick},
     };
 
-    bool anyInjected = false;
+    wuxc::MenuFlyoutSubItem subItem{nullptr};
+    if (cfg.enableSubmenu) {
+        subItem = wuxc::MenuFlyoutSubItem();
+        subItem.Text(cfg.textSubmenu);
+        subItem.Icon(CreateFluentIcon(cfg.glyphSubmenu.c_str()));
+    }
+
+    bool anyRootInjected = false;
+    bool anySubmenuItems = false;
+
     for (const auto& spec : specs) {
         if (!spec.enabled) {
             continue;
         }
 
         wuxc::MenuFlyoutItem menuItem;
-        if (!anyInjected) {
-            menuItem.Name(kGuardItemName);
-        }
         menuItem.Text(spec.text);
         menuItem.Icon(CreateFluentIcon(spec.glyph));
         menuItem.Click(wux::RoutedEventHandler{spec.handler});
 
-        MenuFlyoutItemBaseVector_Append_Original(vectorThis, menuItem);
-        anyInjected = true;
+        if (subItem && spec.inSubmenu) {
+            subItem.Items().Append(menuItem);
+            anySubmenuItems = true;
+        } else {
+            if (!anyRootInjected) {
+                menuItem.Name(kGuardItemName);
+            }
+            MenuFlyoutItemBaseVector_Append_Original(vectorThis, menuItem);
+            anyRootInjected = true;
+        }
     }
 
-    if (anyInjected) {
+    if (subItem && anySubmenuItems) {
+        if (!anyRootInjected) {
+            subItem.Name(kGuardItemName);
+        }
+        MenuFlyoutItemBaseVector_Append_Original(vectorThis, subItem);
+        anyRootInjected = true;
+    }
+
+    if (anyRootInjected) {
         wuxc::MenuFlyoutSeparator separator;
         MenuFlyoutItemBaseVector_Append_Original(vectorThis, separator);
         g_currentMenuInjected = true;
@@ -1462,8 +1536,66 @@ std::wstring LoadStringSetting(const wchar_t* name,
     return val.get()[0] != L'\0' ? val.get() : defaultValue;
 }
 
+// Accepts "E712", "0xE712", "\xE712", "\uE712", "U+E712" or a literal glyph.
+std::wstring ParseGlyphString(const std::wstring& raw,
+                              const wchar_t* fallback) {
+    size_t begin = raw.find_first_not_of(L" \t");
+    if (begin == std::wstring::npos) {
+        return fallback;
+    }
+    size_t end = raw.find_last_not_of(L" \t");
+    std::wstring s = raw.substr(begin, end - begin + 1);
+
+    std::wstring_view hex = s;
+    auto startsWithI = [&](const wchar_t* prefix) {
+        size_t n = wcslen(prefix);
+        return hex.size() >= n && _wcsnicmp(hex.data(), prefix, n) == 0;
+    };
+    bool hadPrefix = false;
+    if (startsWithI(L"\\u") || startsWithI(L"\\x") || startsWithI(L"0x") ||
+        startsWithI(L"U+")) {
+        hex.remove_prefix(2);
+        hadPrefix = true;
+    }
+
+    bool allHex = !hex.empty() && hex.size() <= 4;
+    for (wchar_t c : hex) {
+        if (!iswxdigit(c)) {
+            allHex = false;
+            break;
+        }
+    }
+
+    // Without a prefix, treat only 4-digit hex strings as code points so a
+    // literal glyph character (or short text) is used as-is.
+    if (allHex && (hadPrefix || hex.size() == 4)) {
+        unsigned long cp = wcstoul(std::wstring(hex).c_str(), nullptr, 16);
+        if (cp != 0) {
+            return std::wstring(1, static_cast<wchar_t>(cp));
+        }
+        return fallback;
+    }
+
+    return hadPrefix ? std::wstring(fallback) : s;
+}
+
 void LoadSettings() {
     ModSettings fresh;
+    fresh.enableSubmenu = Wh_GetIntSetting(L"submenu.enabled");
+    fresh.textSubmenu =
+        LoadStringSetting(L"submenu.label", L"System Utilities");
+    fresh.glyphSubmenu = ParseGlyphString(
+        LoadStringSetting(L"submenu.glyph", L"E712"), L"\xE712");
+
+    fresh.inSubmenuRestartExplorer =
+        Wh_GetIntSetting(L"restartExplorer.inSubmenu");
+    fresh.inSubmenuCleanTemp = Wh_GetIntSetting(L"cleanTemp.inSubmenu");
+    fresh.inSubmenuReduceMemory = Wh_GetIntSetting(L"reduceMemory.inSubmenu");
+    fresh.inSubmenuRestartGpu = Wh_GetIntSetting(L"restartGpu.inSubmenu");
+    fresh.inSubmenuGetIp = Wh_GetIntSetting(L"getIp.inSubmenu");
+    fresh.inSubmenuRebuildCache = Wh_GetIntSetting(L"rebuildCache.inSubmenu");
+    fresh.inSubmenuFlushDns = Wh_GetIntSetting(L"flushDns.inSubmenu");
+
     fresh.showRestartExplorer = Wh_GetIntSetting(L"restartExplorer.enabled");
     fresh.textRestartExplorer =
         LoadStringSetting(L"restartExplorer.label", L"Restart Explorer");
