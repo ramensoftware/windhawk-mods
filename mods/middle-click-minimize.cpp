@@ -2,7 +2,7 @@
 // @id              middle-click-minimize
 // @name            Middle Click Minimize
 // @description     Minimiza a janela ao clicar com o botão do meio (scroll) na barra de título.
-// @version         1.1.1
+// @version         1.1.2
 // @author          Ar4ujo_009
 // @include         *
 // ==/WindhawkMod==
