@@ -74,6 +74,7 @@ Turning the mod off puts the taskbar back to normal.
 - **File Explorer** is moved to the front of your apps for real, so it stays
   there, and can't be dragged out of that spot. If it's pinned, this changes
   your pinned apps' order, which stays that way after the mod is turned off.
+  To leave your order alone, turn off "Keep File Explorer first".
 - **The Recycle Bin** sits at the far end, past a divider. Its icon shows
   when there's something in it.
   - Click it to open it.
@@ -159,8 +160,9 @@ apply right away.
   pointer, and how quickly.
 - **Spacing:** padding around the icons and the gaps between them. These
   scale with the dock's size, so it keeps its shape.
-- **Dock items:** squircle icons and their tile color, the Recycle Bin, app
-  names, a divider after File Explorer, and high resolution icons.
+- **Dock items:** squircle icons and their tile color, keeping File Explorer
+  first, the Recycle Bin, app names, a divider after File Explorer, and high
+  resolution icons.
 - **Custom icons:** your own File Explorer and Recycle Bin icons, with their
   margin and size.
 - **Hot corners:** what each bottom corner does.
@@ -286,6 +288,12 @@ GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
   - squircleCustomColor: FFFFFF
     $name: Custom squircle color
     $description: Used when Squircle color is Custom, as 6 hex digits. Default is FFFFFF.
+  - explorerFirst: true
+    $name: Keep File Explorer first
+    $description: >-
+      Moves it to the front of your apps and keeps it there. If it's pinned, this
+      changes your pinned apps' order. Turn off to leave your order alone. Default
+      is on.
   - recycleBin: true
     $name: Recycle Bin
     $description: At the right end of the dock. Default is on.
@@ -490,6 +498,7 @@ struct Settings {
     bool squircleIcons;
     TileColor tileColor;
     uint8_t tileCustomColor[3];
+    bool explorerFirst;
     bool recycleBin;
     bool tooltips;
     bool appsDivider;
@@ -588,6 +597,7 @@ void LoadSettings() {
     if (s.tileColor == TileColor::Custom && !hex(L"items.squircleCustomColor", s.tileCustomColor)) {
         s.tileColor = TileColor::Auto;
     }
+    s.explorerFirst = Wh_GetIntSetting(L"items.explorerFirst");
     s.recycleBin = Wh_GetIntSetting(L"items.recycleBin");
     s.tooltips = Wh_GetIntSetting(L"items.tooltips");
     s.appsDivider = Wh_GetIntSetting(L"items.appsDivider");
@@ -3002,10 +3012,12 @@ std::pair<wux::FrameworkElement, wux::FrameworkElement> LayOutButtons(
         if (firstApp == kNone) firstApp = i;
         if (explorer == kNone && IsFileExplorer(icons[i].element)) explorer = i;
     }
-    if (explorer != kNone && explorer != firstApp) {
-        if (!g_dragging) MoveExplorerFirst(icons[explorer].element);
-    } else if (explorer != kNone) {
-        NoteExplorerFirst();
+    if (g_settings.explorerFirst && explorer != kNone) {
+        if (explorer != firstApp) {
+            if (!g_dragging) MoveExplorerFirst(icons[explorer].element);
+        } else {
+            NoteExplorerFirst();
+        }
     }
 
     std::vector<float> left(icons.size()), right(icons.size());
@@ -4640,16 +4652,18 @@ RECT WINAPI ToRawPixelsInDesktopCoordinates_Hook(wf::Rect const& rect, UINT dpi,
 }
 
 // ---- Dragging (as in "Taskbar Multirow") ----
-// File Explorer keeps its spot, so its drag never starts. Other apps go no
-// further than the first and last spots after it, where they'd land if dropped
-// there, so nothing jumps on release. Points are in the button row's coordinates.
+// While File Explorer is kept first, its drag never starts. Other apps go no
+// further than the first and last spots they can take, where they'd land if
+// dropped there, so nothing jumps on release. Points are in the button row's
+// coordinates.
 
 winrt::weak_ref<wux::FrameworkElement> g_blockedDrag;
 float g_dragMinX = 0, g_dragMaxX = 0;
 bool g_dragLimited = false;
 
 // The pointer's range that keeps the dragged icon within those spots: the icons
-// of the second and the last app, as they are when the drag starts.
+// of the first app (the second, after a File Explorer kept first) and the last,
+// as they are when the drag starts.
 void LimitDrag(wux::FrameworkElement const& button, wf::Point start) {
     g_dragLimited = false;
     auto row = wuxm::VisualTreeHelper::GetParent(button).try_as<wux::UIElement>();
@@ -4666,7 +4680,8 @@ void LimitDrag(wux::FrameworkElement const& button, wf::Point start) {
     }
     if (apps.size() < 2 || !dragged) return;
     auto iconLeft = [](Icon const& i) { return i.left + (i.width - g_size.icon) / 2; };
-    g_dragMinX = start.X + iconLeft(apps[1]) - iconLeft(*dragged);
+    bool pastExplorer = g_settings.explorerFirst && IsFileExplorer(apps[0].element);
+    g_dragMinX = start.X + iconLeft(apps[pastExplorer ? 1 : 0]) - iconLeft(*dragged);
     g_dragMaxX = start.X + iconLeft(apps.back()) - iconLeft(*dragged);
     g_dragLimited = g_dragMinX <= g_dragMaxX;
 }
@@ -4687,7 +4702,7 @@ void WINAPI TaskListButton_OnDragStartedGesture_Hook(void* pThis, wf::Point poin
     bool explorer = false;
     if (!g_unloading) Try([&] {
         auto button = ElementFromThis(pThis);
-        explorer = button && IsFileExplorer(button);
+        explorer = g_settings.explorerFirst && button && IsFileExplorer(button);
         if (explorer) g_blockedDrag = winrt::make_weak(button);
     });
     if (explorer) return;
@@ -4780,7 +4795,9 @@ void MoveExplorerNow() {
     auto explorer = g_explorerMoved.get();
     auto name = UserValueName(L"explorerMoves");
     int tries = Wh_GetIntValue(name.c_str(), 0);
-    if (g_dragging || !explorer || !CanMoveExplorer(explorer, tries)) return;
+    if (!g_settings.explorerFirst || g_dragging || !explorer || !CanMoveExplorer(explorer, tries)) {
+        return;
+    }
     Try([&] {
         void* impl = FindButton(explorer)->impl;
         Wh_SetIntValue(name.c_str(), tries + 1);
