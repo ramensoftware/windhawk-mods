@@ -127,6 +127,7 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 - Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.
 - Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.
 - With live glass (and the bar's liquid background), the bar and panels don't show up in screenshots.
+- If Windhawk itself runs as administrator (portable mode started elevated), the bar doesn't show the tray icons: letting the shell's tray data reach an elevated bar would also let any app send it fake icons.
 */
 // ==/WindhawkModReadme==
 
@@ -1084,6 +1085,20 @@ struct PanelThemeScope {
     ~PanelThemeScope() { g_light = saved; }
 };
 static bool g_rebuildScheduled = false;
+
+// Pedido de recarregar (wParam 1 = refazer as barras do zero). Vai para a
+// janela g_owner, e não para a fila da thread: uma caixa de mensagem ou o
+// diálogo de abrir arquivo descartam mensagens de thread, mas despacham as de
+// janela (ver o WM_APP_RELOAD no OwnerWndProc). Pode ser chamado de qualquer
+// thread.
+static void RequestReload(WPARAM rebuild) {
+    HWND owner = g_owner;
+    if (owner && PostMessageW(owner, WM_APP_RELOAD, rebuild, 0)) return;
+    if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, rebuild, 0);
+}
+static bool IsReloadMsg(const MSG& m) {
+    return m.message == WM_APP_RELOAD && (!m.hwnd || m.hwnd == g_owner);
+}
 static bool g_inSetPos = false;
 static bool g_menuOpen = false;
 static bool AnyOtherPanelOpen(HWND closing);  // algum painel/menu aberto além deste
@@ -4028,7 +4043,7 @@ static LRESULT CALLBACK TrayClientProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             static bool firstHello = true;
             if (!firstHello && !g_rebuildScheduled) {
                 g_rebuildScheduled = true;
-                PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+                RequestReload(1);
             }
             firstHello = false;
             TrayRequestIcons();
@@ -4156,19 +4171,26 @@ static DWORD IntegrityOfPid(DWORD pid) {
 // Processo da barra: abre a janela-cliente e pede os ícones a todos os apps.
 static void InstallTrayHook() {
     if (g_trayClient) return;
+    // O windhawk.exe normalmente roda no mesmo nível de integridade do shell, e
+    // o WM_COPYDATA do explorer.exe chega sem mexer no filtro de mensagens
+    // (processos de nível mais baixo continuam bloqueados e não podem criar
+    // ícones falsos na bandeja). Se este processo estiver acima do shell
+    // (Windhawk portátil aberto como administrador), o WM_COPYDATA do shell só
+    // passaria liberando o filtro para todos os níveis, e qualquer programa
+    // poderia mandar registros falsos a uma barra elevada. Nesse caso a barra
+    // fica sem o espelho da bandeja.
+    const DWORD self = IntegrityOf(GetCurrentProcess());
+    const DWORD shell = IntegrityOfPid(ShellPid());
+    if (shell && self > shell) {
+        Wh_Log(L"Tray mirror off: the bar runs above the shell's integrity level (0x%X > 0x%X)", self, shell);
+        return;
+    }
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = TrayClientProc;
     wc.hInstance = g_hInst;
     wc.lpszClassName = kTrayClientClass;
     RegisterClassExW(&wc);
     g_trayClient = CreateWindowExW(0, kTrayClientClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInst, nullptr);
-    // O windhawk.exe normalmente roda no mesmo nível de integridade do shell,
-    // e o WM_COPYDATA dele já passa sem mexer no filtro (processos de nível mais
-    // baixo continuam bloqueados e não podem criar ícones falsos na bandeja).
-    // Só se este processo estiver acima do shell (Windhawk aberto como
-    // administrador), o filtro libera o WM_COPYDATA, senão a bandeja ficaria vazia.
-    if (g_trayClient && IntegrityOf(GetCurrentProcess()) > IntegrityOfPid(ShellPid()))
-        ChangeWindowMessageFilterEx(g_trayClient, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
     TrayRequestIcons();
 }
 
@@ -8989,7 +9011,7 @@ static bool GmFilter(MSG& msg) {
             return false;
         }
     }
-    if (!msg.hwnd && msg.message == WM_APP_RELOAD) {
+    if (IsReloadMsg(msg)) {
         g_gmReloadPending = true;  // repassado quando o menu fechar
         g_gmReloadParam |= msg.wParam;
         g_gmDone = true;
@@ -9066,7 +9088,7 @@ static UINT GlassTrackMenu(HMENU menu, int x, int y, bool alignRight, UINT dpi) 
     g_menuOpen = wasMenuOpen && AnyOtherPanelOpen(nullptr);
     if (g_gmReloadPending) {
         g_gmReloadPending = false;
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD, g_gmReloadParam, 0);
+        RequestReload(g_gmReloadParam);
         g_gmReloadParam = 0;
     }
     return g_gmResult;
@@ -11391,7 +11413,7 @@ static void BsSet(int val, int v) {
         // Só "todos os monitores" e "ocultar automaticamente" precisam refazer as
         // barras; o resto vale na hora, sem a barra piscar.
         if (val == BV_ALLMON || val == BV_AUTOHIDE) {
-            if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+            RequestReload(1);
         } else {
             BarsApplyLive(false);
         }
@@ -11451,7 +11473,7 @@ static void BsSet(int val, int v) {
         if (v == g_langChoice) return;
         SetUiLangChoice(kLangCodes[v]);
         OvrSetStr(L"language", kLangCodes[v]);
-        if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);  // barras e menus no idioma novo
+        RequestReload(0);  // barras e menus no idioma novo
         return;
     }
     if (val == BV_SEARCHTGT) {
@@ -20641,7 +20663,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Cada barra recebe o aviso: uma reconstrução só, para todas.
         if (!g_rebuildScheduled) {
             g_rebuildScheduled = true;
-            PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+            RequestReload(1);
         }
         return 0;
     }
@@ -20877,7 +20899,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (wp == TIMER_REBUILD) {
                 KillTimer(hwnd, TIMER_REBUILD);
-                PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+                RequestReload(1);
             }
             return 0;
 
@@ -20946,9 +20968,31 @@ static void LqLiveTick() {
     if (!any) KillTimer(g_owner, TIMER_LIQUID);
 }
 
+#define TIMER_RELOAD 84
+static bool g_reloadDeferred = false;
+static WPARAM g_reloadDeferredParam = 0;
+
 static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
+        case WM_APP_RELOAD:
+            // O laço principal pega este pedido antes de despachar. Chegar aqui
+            // quer dizer que uma janela modal (caixa de mensagem, diálogo de
+            // arquivo) está com o laço: guarda e tenta de novo daqui a pouco, até
+            // o laço principal voltar.
+            g_reloadDeferred = true;
+            g_reloadDeferredParam |= wp;
+            SetTimer(hwnd, TIMER_RELOAD, 250, nullptr);
+            return 0;
         case WM_TIMER:
+            if (wp == TIMER_RELOAD) {
+                KillTimer(hwnd, TIMER_RELOAD);
+                if (g_reloadDeferred) {
+                    g_reloadDeferred = false;
+                    PostMessageW(hwnd, WM_APP_RELOAD, g_reloadDeferredParam, 0);
+                    g_reloadDeferredParam = 0;
+                }
+                return 0;
+            }
             if (wp == TIMER_LIQUID) {
                 LqLiveTick();
                 return 0;
@@ -21396,7 +21440,7 @@ static DWORD WINAPI BarThread(LPVOID) {
         bool quit = false;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) { quit = true; break; }
-            if (!msg.hwnd && msg.message == WM_APP_RELOAD) {
+            if (IsReloadMsg(msg)) {
                 g_rebuildScheduled = false;
                 Settings before = g_settings;
                 LoadSettings();
@@ -21526,7 +21570,7 @@ void WhTool_ModUninit() {
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L">");
-    if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
+    RequestReload(0);
 }
 
 // A parte que roda no explorer.exe só copia os ícones da bandeja para a barra
