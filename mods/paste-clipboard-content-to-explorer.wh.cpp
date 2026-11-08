@@ -14,7 +14,7 @@
 # Paste Clipboard Content to Explorer
 
 Allows pasting text and images from clipboard as files in Explorer,
-on the desktop and in open/save file dialogs.
+on the desktop and in open/save file dialogs. The version 2.0 has been expanded with features by user Aliipey.
 
 ## Features
 - Paste text as a file (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
@@ -490,6 +490,9 @@ static bool GetPathViaDefViewChild(HWND topLevel, std::wstring& path)
     if (!s.defView) return false;
     HWND defViewParent = GetParent(s.defView);
     if (!defViewParent) return false;
+    // WM_USER + 7 returns a raw pointer valid only on the window's own thread
+    if (GetWindowThreadProcessId(defViewParent, nullptr) != GetCurrentThreadId())
+        return false;
     IShellBrowser* pSB = (IShellBrowser*)SendMessageW(defViewParent, WM_USER+7, 0, 0);
     if (!pSB) return false;
     IShellView* pSV = nullptr;
@@ -540,12 +543,17 @@ static bool GetFolderPathFromShellView(IShellView* pSV, std::wstring& path)
     return found;
 }
 
-// Shell view of the tab/dialog that actually contains hwnd (AddRef'd)
+// Shell view of the tab/dialog that actually contains hwnd (AddRef'd).
+// WM_USER + 7 returns a raw pointer that is only valid on the window's own
+// thread (and in its own process), so windows of other threads/processes
+// are rejected here and fall through to the ShellWindows lookup.
 static IShellView* GetOwnShellView(HWND hwnd)
 {
     HWND defView = FindShellDefViewInChain(hwnd);
     HWND parent  = defView ? GetParent(defView) : nullptr;
-    if (!parent) return nullptr;
+    if (!parent || GetWindowThreadProcessId(parent, nullptr) != GetCurrentThreadId())
+        return nullptr;
+
     IShellBrowser* pSB = (IShellBrowser*)SendMessageW(parent, WM_USER + 7, 0, 0);
     if (!pSB) return nullptr;
     IShellView* pSV = nullptr;
