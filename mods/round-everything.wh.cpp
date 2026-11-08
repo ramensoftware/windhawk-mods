@@ -58,9 +58,8 @@ source, fill, work-area inset, window corner radius - each applying only when
 set. **General** (DPI scaling, monitors, battery saver) applies with every theme.
 Everything else in the settings belongs to the **Custom** theme, which uses
 every setting as it is. To start a Custom theme from a ready-made one, apply
-that theme once: the mod logs its values as Custom theme settings, in the
-form Windhawk's settings editor takes in its text (YAML) mode, and writes
-the same to `%TEMP%\round-everything-theme-<id>.yaml` - paste them in and
+that theme: the mod logs its values as Custom theme settings, in the form
+Windhawk's settings editor takes in its text (YAML) mode - paste them in and
 tweak.
 
 ## How it works
@@ -1079,6 +1078,12 @@ std::unordered_map<HWND, ULONGLONG> g_cloakedSince;
 std::wstring g_layoutSignature;
 bool g_inTick = false;
 bool g_taskbarEventPending = false;  // a kMsgTaskbarEvent is queued
+// Set by the events that can change which window's title bar the frame
+// shows, or what it shows - an activation, a maximize or restore, a
+// minimize starting or ending, a move/resize ending, Aero Peek - and taken
+// by the kMsgTaskbarEvent handler to start the fast readings. A window being
+// dragged or a taskbar sliding only ticks.
+std::atomic<bool> g_titleEventPending{false};
 ULONGLONG g_lastTickTime = 0;        // when the last tick ran (throttles event-driven ticks)
 ULONGLONG g_threadStartTick = 0;
 bool g_xamlCornersOwned = false;  // corner ears were added to at least one taskbar
@@ -1267,20 +1272,22 @@ int FillIndex(PCWSTR value) {
 
 // A ready-made theme as the Custom theme's settings, in Windhawk's YAML, so
 // it can be pasted into the settings editor's text mode and tweaked from
-// there (a mod can't write its own settings). Written to the user's temp
-// folder each time a theme is applied; the path is logged.
+// there (a mod can't write its own settings). Logged when a theme is first
+// applied in the session and whenever another theme is picked - not for
+// every settings load (an override changed, the Windows mode changed).
 std::wstring HexColor(COLORREF c) {
     WCHAR text[16];
     swprintf_s(text, L"'#%02X%02X%02X'", GetRValue(c), GetGValue(c), GetBValue(c));
     return text;
 }
-void WriteThemeAsYaml(const ThemeDef& theme, const Settings& s, int fill) {
+std::wstring g_loggedTheme;  // the theme last logged; cleared while Custom is picked
+void LogThemeAsYaml(const ThemeDef& theme, const Settings& s, int fill) {
+    if (g_loggedTheme == theme.id) {
+        return;
+    }
+    g_loggedTheme = theme.id;
     static const PCWSTR fillNames[] = {L"solid", L"acrylic", L"system", L"frosty"};
     std::wstring y;
-    y += L"# Round Everything Interface - the \"";
-    y += theme.id;
-    y += L"\" theme as Custom theme settings.\n# Paste over the settings in Windhawk's text "
-         L"(YAML) editor, then tweak.\n";
     y += L"theme: custom\n";
     y += L"overrides:\n  offset: -1\n  radius: -1\n  customColor: ''\n  colorSource: theme\n"
          L"  fill: theme\n  workAreaInset: -1\n  windowCornerRadius: -2\n";
@@ -1337,23 +1344,14 @@ void WriteThemeAsYaml(const ThemeDef& theme, const Settings& s, int fill) {
     y += L"  borderColors: false\n  activeBorderColor: '#FFFFFFFF'\n"
          L"  inactiveBorderColor: '#80FFFFFF'\n";
 
-    // Into the log as well, ready to copy: the settings without the comment
-    // lines, each part starting on a line of its own. A log message has a
-    // length limit, so the block goes out in parts of whole sections; the
-    // log's own prefix lines between them are to be left out when copying.
+    // Ready to copy: each part starts on a line of its own. A log message
+    // has a length limit, so the block goes out in parts of whole sections;
+    // the log's own prefix lines between them are to be left out.
     Wh_Log(L"theme \"%s\" as Custom theme settings (YAML) - copy the lines below, "
            L"without the log prefix lines:",
            theme.id);
     {
-        std::wstring body;
-        for (size_t at = 0; at < y.size();) {
-            size_t end = y.find(L'\n', at);
-            end = end == std::wstring::npos ? y.size() : end + 1;
-            if (y[at] != L'#') {
-                body.append(y, at, end - at);
-            }
-            at = end;
-        }
+        const std::wstring& body = y;
         std::wstring part;
         for (size_t at = 0; at < body.size();) {
             // One top-level section: its key line and the indented lines under it.
@@ -1380,30 +1378,6 @@ void WriteThemeAsYaml(const ThemeDef& theme, const Settings& s, int fill) {
             Wh_Log(L"\n%s", part.c_str());
         }
     }
-
-    WCHAR temp[MAX_PATH];
-    DWORD len = GetTempPathW(ARRAYSIZE(temp), temp);
-    if (len == 0 || len >= ARRAYSIZE(temp)) {
-        return;
-    }
-    std::wstring path = std::wstring(temp) + L"round-everything-theme-" + theme.id + L".yaml";
-    int bytes = WideCharToMultiByte(CP_UTF8, 0, y.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (bytes <= 1) {
-        return;
-    }
-    std::string utf8(static_cast<size_t>(bytes), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, y.c_str(), -1, utf8.data(), bytes, nullptr, nullptr);
-    utf8.pop_back();  // the terminator
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"theme YAML not written to %s: %u", path.c_str(), GetLastError());
-        return;
-    }
-    DWORD written = 0;
-    WriteFile(file, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr);
-    CloseHandle(file);
-    Wh_Log(L"theme \"%s\" written as Custom theme settings (YAML) to %s", theme.id, path.c_str());
 }
 
 void LoadSettings() {
@@ -1534,7 +1508,7 @@ void LoadSettings() {
         s.monitorCorners = theme->monitorCorners;
         s.monitorCornerRadius = theme->monitorCornerRadius;
         s.workAreaInset = theme->workAreaInset;
-        WriteThemeAsYaml(*theme, s, theme->fill);  // the theme itself, before the overrides
+        LogThemeAsYaml(*theme, s, theme->fill);  // the theme itself, before the overrides
 
         // The overrides, each where set. A frame color override is meant to
         // be seen: it also takes the color source off the title bar, unless
@@ -1564,6 +1538,9 @@ void LoadSettings() {
             s.workAreaInset = inset;
             applied += L" inset " + std::to_wstring(inset);
         }
+    }
+    if (!theme) {
+        g_loggedTheme.clear();  // picking a theme again logs it again
     }
     Wh_Log(L"theme: %s%s%s", theme ? theme->id : L"custom", applied.empty() ? L"" : L", overrides:",
            applied.c_str());
@@ -7872,10 +7849,21 @@ bool ThumbnailPreviewShowing() {
 #endif
 // `frame` is where the window's surface lies, in the coordinates of `strip`
 // (its window rectangle unless given: a minimized window's is a placeholder).
-// A hung window isn't asked: PrintWindow could wait on it.
+// PrintWindow is answered by the window's own thread, so it is only asked of
+// a window whose thread has just answered a message within a few
+// milliseconds; a busy one is read off the screen instead (the caller's
+// fallback), and the mod's thread never waits on it for more than that.
+constexpr UINT kResponsiveProbeMs = 15;
+bool WindowResponsive(HWND window) {
+    DWORD_PTR result = 0;
+    // SMTO_BLOCK: nothing else is dispatched to this thread while it waits.
+    return SendMessageTimeoutW(window, WM_NULL, 0, 0,
+                               SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+                               kResponsiveProbeMs, &result) != 0;
+}
 bool CaptureWindowRow(HWND window, const RECT& strip, std::vector<uint32_t>& px,
                       const RECT* frame = nullptr) {
-    if (IsHungAppWindow(window)) {
+    if (!WindowResponsive(window)) {
         return false;
     }
     RECT wr{};
@@ -7945,21 +7933,22 @@ DwmpActivateLivePreview_t DwmpActivateLivePreview_Original;
 HRESULT WINAPI DwmpActivateLivePreview_Hook(BOOL activate, HWND exclude, HWND insertBefore,
                                             UINT trigger, void* finalRect) {
     g_peekWindow = activate ? exclude : nullptr;
+    g_titleEventPending = true;
     if (HWND ctrl = g_ctrlWnd.load()) {
         PostMessageW(ctrl, kMsgTaskbarEvent, 0, 0);  // a tick, fast readings
     }
     return DwmpActivateLivePreview_Original(activate, exclude, insertBefore, trigger, finalRect);
 }
 void HookLivePreview() {
-    HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
+    // Already loaded: the mod links dwmapi, and so does Explorer.
+    HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
     FARPROC proc = dwmapi ? GetProcAddress(dwmapi, MAKEINTRESOURCEA(113)) : nullptr;
     if (!proc) {
         Wh_Log(L"DwmpActivateLivePreview not found: no color while peeking");
         return;
     }
-    Wh_SetFunctionHook(reinterpret_cast<void*>(proc),
-                       reinterpret_cast<void*>(DwmpActivateLivePreview_Hook),
-                       reinterpret_cast<void**>(&DwmpActivateLivePreview_Original));
+    WindhawkUtils::SetFunctionHook(reinterpret_cast<DwmpActivateLivePreview_t>(proc),
+                                   DwmpActivateLivePreview_Hook, &DwmpActivateLivePreview_Original);
 }
 
 // Whether a window is maximized, or minimized from maximized (a thumbnail
@@ -8202,9 +8191,10 @@ void AnimateFrameColor(Overlay& overlay, COLORREF to, ULONGLONG now) {
     }
 }
 
-// A window event (an activation, a minimize starting or ending, a move):
-// every monitor's row is read at the fast pace until it agrees with the
-// color in use, so the window behind a minimized one is picked up as the
+// A window event that can change a title bar (an activation, a maximize or
+// restore, a minimize starting or ending, a move ending, Aero Peek - see
+// g_titleEventPending): every monitor's row is read at the fast pace until
+// it agrees with the color in use, so the window behind a minimized one is picked up as the
 // minimize animation ends rather than at the next tick.
 void BeginFastReadings() {
     if (!AdaptiveSource()) {
@@ -8547,15 +8537,30 @@ void HookForegroundLocation(HWND foreground);
 // a tick right away so the frame hides in the same instant.
 void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                      LONG idChild, DWORD, DWORD) {
+    // The foreground window's maximized state as last seen, so a location
+    // change that maximizes or restores it is told from one that moves it.
+    static HWND lastWindow = nullptr;
+    static bool lastZoomed = false;
     if (event == EVENT_SYSTEM_FOREGROUND) {
         HookForegroundLocation(hwnd);
+        lastWindow = hwnd;
+        lastZoomed = hwnd && IsZoomed(hwnd);
+        g_titleEventPending = true;
     } else if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND ||
                event == EVENT_SYSTEM_MOVESIZEEND) {
         // A window leaving or arriving under the frames: the tick (and the
         // backdrop refresh it starts) is wanted whichever window it is.
+        g_titleEventPending = true;
     } else if (event != EVENT_OBJECT_LOCATIONCHANGE || idObject != OBJID_WINDOW ||
                idChild != CHILDID_SELF || !hwnd || hwnd != GetForegroundWindow()) {
         return;  // the other system events in the hooked range, or not the foreground window
+    } else {
+        bool zoomed = IsZoomed(hwnd) != FALSE;
+        if (hwnd != lastWindow || zoomed != lastZoomed) {
+            g_titleEventPending = true;  // maximized or restored
+        }
+        lastWindow = hwnd;
+        lastZoomed = zoomed;
     }
     if (g_taskbarEventPending) {
         return;
@@ -8617,7 +8622,9 @@ LRESULT CALLBACK CtrlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case kMsgTaskbarEvent:
             g_taskbarEventPending = false;
             StartRefreshBurst();
-            BeginFastReadings();
+            if (g_titleEventPending.exchange(false)) {
+                BeginFastReadings();
+            }
             // An auto-hide slide fires location changes every frame: an
             // event right after a tick is coalesced into one tick a moment
             // later rather than dropped.
