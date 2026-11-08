@@ -16,31 +16,24 @@
 /*
 # Explorer Fast Navigation
 
-Eliminates the navigation flicker introduced in Windows 8 and significantly reduces folder switching latency caused
-by the Ribbon and XAML Islands in Windows 10 and Windows 11.
+Makes folder navigation faster and less visually disruptive in File Explorer by removing intermediate redraw flicker
+and deferring toolbar updates until folder contents are loaded.
 
-Folder navigation feels snappy and instantaneous, reminiscent of Windows 7 and earlier, without removing or breaking
-the Ribbon or modern command bar.
+## How it works
 
-## Overview
-
-When Microsoft introduced the Ribbon in Windows 8, File Explorer navigation became noticeably slower due to:
-- Early redraw events ("Working on it..." placeholder followed by clearing and reloading items).
-- Synchronous UI updates before the folder view is ready.
-- Additional overhead from XAML Islands layered on top of the classic frame in Windows 11.
+In Windows 10 and Windows 11, switching folders triggers intermediate window clearing ("Working on it..." placeholder)
+and multiple synchronous redraw events from the Ribbon and XAML command bar before files are enumerated.
 
 This mod optimizes the navigation pipeline:
-- **Deferred UI Updates**: Defers and deduplicates heavy Ribbon, XAML command bar, and navigation bar refreshes using
-  an adaptive 45 ms batch-progress monitor, flushing immediately once file enumeration completes
-  (`DISPID_FILELISTENUMDONE`) or batch processing settles.
-- **Redraw Suppression**: Suppresses intermediate redraw flushes and window clears during view transitions.
+- **Redraw suppression**: Suppresses intermediate window clears and synchronous redraw flushes during folder transitions.
+- **Deferred toolbar updates**: Defers Ribbon and XAML command bar state notifications while files are being enumerated,
+  flushing them once file enumeration completes (`DISPID_FILELISTENUMDONE`) or batch processing settles.
 
 ## Compatibility
 
-- **Windows 11** (21H2, 22H2, 23H2, 24H2)
-- **Windows 10** (1809 and later)
-- **Windows Server 2022**
-- **Architectures**: x86-64 (64-bit Explorer processes)
+- Windows 11 (21H2, 22H2, 23H2, 24H2)
+- Windows 10 (1809 and later)
+- Architectures: 64-bit (x86-64, ARM64)
 
 ## Settings
 
@@ -58,9 +51,8 @@ If you find this mod useful, you can support its development and maintenance:
 
 ## Credits
 
-- **Vivy** ([@VivyVCCS](https://x.com/VivyVCCS) / [enginelesscc](https://github.com/enginelesscc)) for the original
-  discovery of the fullscreen Ribbon decoupling behavior, architectural concepts, and the initial mod prototype.
-- Modernized, refactored, and maintained by **gilnett**.
+- **Vivy** ([@VivyVCCS](https://x.com/VivyVCCS) / [enginelesscc](https://github.com/enginelesscc)) for the original idea
+  and concept.
 */
 // ==/WindhawkModReadme==
 
@@ -309,9 +301,6 @@ static BOOL IsShellDesktopOrTrayWindow(HWND hwnd) {
 }
 
 static BOOL CALLBACK FindBrowserWindowProc(HWND hwnd, LPARAM param) {
-    if (IsShellDesktopOrTrayWindow(hwnd)) {
-        return TRUE;
-    }
     wchar_t name[64];
     if (!GetClassNameW(hwnd, name, ARRAYSIZE(name)) ||
         wcscmp(name, L"CabinetWClass") != 0) {
@@ -657,9 +646,6 @@ static LRESULT CALLBACK OwnerSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
     WindowLifetime::Callback callback(lifetime);
     if (msg == WM_DESTROY) {
         auto q = reinterpret_cast<Queue*>(data);
-        if (!q->draining) {
-            Flush();
-        }
         q->closing = true;
         Flush();
     }
@@ -795,6 +781,9 @@ static bool Pending() {
            (GetTickCount64() - started < static_cast<ULONGLONG>(settings.safetyCeilingMs));
 }
 
+// DISPID_FILELISTENUMDONE is deferred alongside other UI updates so that
+// the Ribbon is notified only after the view settles, while
+// EnumerationDone() uses the event internally as the trigger to flush.
 static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
                         const DISPPARAMS* args) {
     if (!destroyOriginal || !settings.classicRibbon || !CanDeferInvoke(iid, flags, args) ||
@@ -833,7 +822,13 @@ static HRESULT __fastcall ChangedHook(void* self) {
 }
 
 static HRESULT __fastcall DestroyHook(void* self, BOOL final) {
-    DropTasksForTarget(self);
+    if (queue) {
+        if (!queue->draining) {
+            Flush();
+        } else {
+            DropTasksForTarget(self);
+        }
+    }
     if (connected == self) {
         connected = nullptr;
     }
@@ -967,6 +962,9 @@ static HRESULT __fastcall InvalidateHook(void* self, ULONG commands) {
 static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
                                      DISPPARAMS* args, VARIANT* result, EXCEPINFO* exception,
                                      UINT* argError) {
+    // DISPID_FILELISTENUMDONE is deferred alongside other UI updates so that
+    // the XAML command bar is notified only after the view settles, while
+    // EnumerationDone() uses the event internally as the trigger to flush.
     bool invalidation = id == DISPID_SELECTIONCHANGED || id == DISPID_FILELISTENUMDONE ||
                         id == DISPID_VIEWMODECHANGED || id == DISPID_CONTENTSCHANGED ||
                         id == DISPID_VIEWPAINTDONE || id == DISPID_COLUMNSCHANGED ||
@@ -993,7 +991,13 @@ static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID loc
 }
 
 static HRESULT __fastcall CleanupHook(void* self) {
-    RibbonWork::DropTasksForTarget(self);
+    if (RibbonWork::queue) {
+        if (!RibbonWork::queue->draining) {
+            RibbonWork::Flush();
+        } else {
+            RibbonWork::DropTasksForTarget(self);
+        }
+    }
     connected = nullptr;
     return cleanupOriginal(self);
 }
@@ -1058,8 +1062,12 @@ static void HookWindowsUiFileExplorerIfLoaded(HMODULE mod) {
         },
     };
 
-    WindhawkUtils::HookSymbols(mod, windowsUiFileExplorerHooks,
-                               ARRAYSIZE(windowsUiFileExplorerHooks));
+    bool hooked = WindhawkUtils::HookSymbols(mod, windowsUiFileExplorerHooks,
+                                             ARRAYSIZE(windowsUiFileExplorerHooks));
+    if (!hooked) {
+        hooksInstalled.store(false, std::memory_order_release);
+        return;
+    }
 
     bool isEnabled = cleanupOriginal && ((navigatedOriginal && changedOriginal) ||
                                          invalidatedOriginal || stateOriginal ||
@@ -1105,11 +1113,9 @@ static BOOL WINAPI SetWindowPosHook(HWND hwnd, HWND after, int x, int y, int cx,
     HWND parent = GetParent(hwnd);
     RECT beforeRect{};
     bool hasBefore = false;
-    if (parent && !(flags & SWP_NOMOVE && flags & SWP_NOSIZE)) {
-        if (GetWindowRect(hwnd, &beforeRect)) {
-            MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<LPPOINT>(&beforeRect), 2);
-            hasBefore = true;
-        }
+    if (parent && GetWindowRect(hwnd, &beforeRect)) {
+        MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<LPPOINT>(&beforeRect), 2);
+        hasBefore = true;
     }
 
     BOOL result = setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags | SWP_NOREDRAW);
@@ -1121,6 +1127,8 @@ static BOOL WINAPI SetWindowPosHook(HWND hwnd, HWND after, int x, int y, int cx,
             RECT dirty{};
             UnionRect(&dirty, &beforeRect, &afterRect);
             RedrawWindow(parent, &dirty, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        } else {
+            RedrawWindow(parent, &beforeRect, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         }
     }
 
@@ -1389,6 +1397,13 @@ BOOL Wh_ModInit() {
     RibbonWork::Uninit();
     ReleaseModules();
     return FALSE;
+}
+
+void Wh_ModAfterInit() {
+    if (settings.xamlCommandBar || settings.navigationBar) {
+        XamlWork::HookWindowsUiFileExplorerIfLoaded(nullptr);
+        Wh_ApplyHookOperations();
+    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
