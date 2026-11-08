@@ -2,7 +2,7 @@
 // @id              arabic-keyboard-layout-fixer
 // @name            Arabic Keyboard Layout Fixer
 // @description     Instantly converts mistyped Arabic/English text with Alt+Z across any application.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Omar
 // @github          https://github.com/uomr
 // @homepage        https://github.com/uomr/keyboard-layout-fixer
@@ -35,7 +35,7 @@ Fixes the common frustration of typing Arabic text while the keyboard is acciden
 /*
 - hotkey: "Alt + Z"
   $name: "Conversion Hotkey"
-  $description: "The shortcut key used to convert mistyped text (e.g. Alt + Z, Ctrl + Alt + L, Pause, F8). Default: Alt + Z."
+  $description: "The shortcut key used to convert mistyped text. Modifiers: Ctrl, Shift, Alt. Keys: A-Z, 0-9, F1-F24, Pause, Insert, Delete, Home, End, Space. Example: 'Alt + Z', 'Ctrl + Alt + L', or 'Pause'."
 - enable_secondary_hotkey: false
   $name: "Enable Secondary Hotkey (Ctrl + Shift + X)"
   $description: "Enable Ctrl + Shift + X as an alternative conversion hotkey."
@@ -43,11 +43,13 @@ Fixes the common frustration of typing Arabic text while the keyboard is acciden
 // ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <cwctype>
+#include <atomic>
 
 // ── Settings & Hotkey Configuration ─────────────────────────────────────────
 struct HotkeyConfig {
@@ -57,8 +59,24 @@ struct HotkeyConfig {
     WORD vk = 'Z';
 };
 
-static HotkeyConfig g_hotkeyPrimary = { false, false, true, 'Z' }; // Default: Alt + Z
-static bool g_enableSecondaryHotkey = false;
+static DWORD PackHotkey(const HotkeyConfig& cfg) {
+    return (DWORD)(cfg.vk & 0xFFFF) |
+           (cfg.ctrl  ? 0x10000 : 0) |
+           (cfg.shift ? 0x20000 : 0) |
+           (cfg.alt   ? 0x40000 : 0);
+}
+
+static HotkeyConfig UnpackHotkey(DWORD packed) {
+    HotkeyConfig cfg;
+    cfg.vk    = (WORD)(packed & 0xFFFF);
+    cfg.ctrl  = (packed & 0x10000) != 0;
+    cfg.shift = (packed & 0x20000) != 0;
+    cfg.alt   = (packed & 0x40000) != 0;
+    return cfg;
+}
+
+static std::atomic<DWORD> g_hotkeyPrimaryPacked{ PackHotkey({ false, false, true, 'Z' }) }; // Default: Alt + Z
+static std::atomic<bool> g_enableSecondaryHotkey{ false };
 
 static std::wstring ToLowerStr(const std::wstring& s) {
     std::wstring res = s;
@@ -66,54 +84,92 @@ static std::wstring ToLowerStr(const std::wstring& s) {
     return res;
 }
 
-static void ParseHotkey(const std::wstring& str, HotkeyConfig& cfg, bool defCtrl, bool defShift, bool defAlt, WORD defVk) {
-    cfg.ctrl = false; cfg.shift = false; cfg.alt = false; cfg.vk = 0;
-    if (str.empty()) {
-        cfg.ctrl = defCtrl; cfg.shift = defShift; cfg.alt = defAlt; cfg.vk = defVk;
-        return;
-    }
+static bool ParseHotkey(const std::wstring& str, HotkeyConfig& out) {
+    HotkeyConfig cfg{ false, false, false, 0 };
+    if (str.empty()) return false;
+
     size_t start = 0;
     while (start < str.length()) {
         size_t end = str.find(L'+', start);
-        if (end == std::string::npos) end = str.length();
+        if (end == std::wstring::npos) end = str.length();
 
         std::wstring token = str.substr(start, end - start);
         size_t first = token.find_first_not_of(L" \t\r\n");
         size_t last = token.find_last_not_of(L" \t\r\n");
 
-        if (first != std::string::npos && last != std::string::npos) {
-            token = token.substr(first, last - first + 1);
-            std::wstring lower = ToLowerStr(token);
+        if (first == std::wstring::npos || last == std::wstring::npos) {
+            return false;
+        }
 
-            if (lower == L"ctrl" || lower == L"control") cfg.ctrl = true;
-            else if (lower == L"shift") cfg.shift = true;
-            else if (lower == L"alt") cfg.alt = true;
-            else if (lower == L"pause" || lower == L"break") cfg.vk = VK_PAUSE;
-            else if (lower == L"insert") cfg.vk = VK_INSERT;
-            else if (lower == L"delete") cfg.vk = VK_DELETE;
-            else if (lower == L"home") cfg.vk = VK_HOME;
-            else if (lower == L"end") cfg.vk = VK_END;
-            else if (lower == L"space") cfg.vk = VK_SPACE;
-            else if (lower.length() >= 2 && lower[0] == L'f' && iswdigit(lower[1])) {
-                int fNum = _wtoi(lower.c_str() + 1);
-                if (fNum >= 1 && fNum <= 24) cfg.vk = (WORD)(VK_F1 + fNum - 1);
-            } else if (token.length() == 1) {
-                wchar_t ch = towupper(token[0]);
-                if ((ch >= L'A' && ch <= L'Z') || (ch >= L'0' && ch <= L'9')) cfg.vk = (WORD)ch;
+        token = token.substr(first, last - first + 1);
+        std::wstring lower = ToLowerStr(token);
+
+        if (lower == L"ctrl" || lower == L"control") {
+            cfg.ctrl = true;
+        } else if (lower == L"shift") {
+            cfg.shift = true;
+        } else if (lower == L"alt") {
+            cfg.alt = true;
+        } else if (lower == L"pause" || lower == L"break") {
+            if (cfg.vk != 0) return false;
+            cfg.vk = VK_PAUSE;
+        } else if (lower == L"insert") {
+            if (cfg.vk != 0) return false;
+            cfg.vk = VK_INSERT;
+        } else if (lower == L"delete") {
+            if (cfg.vk != 0) return false;
+            cfg.vk = VK_DELETE;
+        } else if (lower == L"home") {
+            if (cfg.vk != 0) return false;
+            cfg.vk = VK_HOME;
+        } else if (lower == L"end") {
+            if (cfg.vk != 0) return false;
+            cfg.vk = VK_END;
+        } else if (lower == L"space") {
+            if (cfg.vk != 0) return false;
+            cfg.vk = VK_SPACE;
+        } else if (lower.length() >= 2 && lower[0] == L'f' && iswdigit(lower[1])) {
+            int fNum = _wtoi(lower.c_str() + 1);
+            if (fNum >= 1 && fNum <= 24) {
+                if (cfg.vk != 0) return false;
+                cfg.vk = (WORD)(VK_F1 + fNum - 1);
+            } else {
+                return false;
             }
+        } else if (token.length() == 1) {
+            wchar_t ch = towupper(token[0]);
+            if ((ch >= L'A' && ch <= L'Z') || (ch >= L'0' && ch <= L'9')) {
+                if (cfg.vk != 0) return false;
+                cfg.vk = (WORD)ch;
+            } else {
+                return false;
+            }
+        } else {
+            return false;
         }
         start = end + 1;
     }
-    if (cfg.vk == 0) cfg.vk = defVk;
+
+    if (!cfg.vk) return false;
+
+    bool standalone = (cfg.vk == VK_PAUSE || (cfg.vk >= VK_F1 && cfg.vk <= VK_F24));
+    if (!standalone && !cfg.ctrl && !cfg.alt) {
+        return false;
+    }
+
+    out = cfg;
+    return true;
 }
 
 static void LoadSettings() {
-    PCWSTR hkStr = Wh_GetStringSetting(L"hotkey");
-    if (hkStr) {
-        ParseHotkey(hkStr, g_hotkeyPrimary, false, false, true, 'Z');
-        Wh_FreeStringSetting(hkStr);
+    WindhawkUtils::StringSetting hkStr(Wh_GetStringSetting(L"hotkey"));
+    HotkeyConfig cfg;
+    if (!hkStr.get() || !ParseHotkey(hkStr.get(), cfg)) {
+        Wh_Log(L"Invalid or empty hotkey \"%s\", defaulting to Alt + Z", hkStr.get() ? hkStr.get() : L"");
+        cfg = { false, false, true, 'Z' };
     }
-    g_enableSecondaryHotkey = Wh_GetIntSetting(L"enable_secondary_hotkey") != 0;
+    g_hotkeyPrimaryPacked.store(PackHotkey(cfg));
+    g_enableSecondaryHotkey.store(Wh_GetIntSetting(L"enable_secondary_hotkey") != 0);
 }
 
 // ── Global State ────────────────────────────────────────────────────────────
@@ -124,74 +180,105 @@ static HANDLE g_hConversionThread = nullptr;
 
 // ── Maps ────────────────────────────────────────────────────────────────────
 static std::unordered_map<wchar_t, std::wstring> g_en2ar;
-static std::unordered_map<wchar_t, wchar_t> g_ar2en;
+static std::unordered_map<wchar_t, wchar_t>      g_ar2en;
 
-static bool IsArabicLetter(wchar_t c) {
+static void InitMaps() {
+    struct KeyDef { wchar_t en; const wchar_t* ar; };
+    static const KeyDef mapEn2Ar[] = {
+        { L'`', L"ذ" },  { L'~', L"ّ" },
+        { L'q', L"ض" },  { L'Q', L"َ" },
+        { L'w', L"ص" },  { L'W', L"ً" },
+        { L'e', L"ث" },  { L'E', L"ُ" },
+        { L'r', L"ق" },  { L'R', L"ٌ" },
+        { L't', L"ف" },  { L'T', L"لإ" },
+        { L'y', L"غ" },  { L'Y', L"إ" },
+        { L'u', L"ع" },  { L'U', L"‘" },
+        { L'i', L"ه" },  { L'I', L"÷" },
+        { L'o', L"خ" },  { L'O', L"×" },
+        { L'p', L"ح" },  { L'P', L"؛" },
+        { L'[', L"ج" },  { L'{', L"<" },
+        { L']', L"د" },  { L'}', L">" },
+        { L'a', L"ش" },  { L'A', L"ِ" },
+        { L's', L"س" },  { L'S', L"ٍ" },
+        { L'd', L"ي" },  { L'D', L"]" },
+        { L'f', L"ب" },  { L'F', L"[" },
+        { L'g', L"ل" },  { L'G', L"لأ" },
+        { L'h', L"ا" },  { L'H', L"أ" },
+        { L'j', L"ت" },  { L'J', L"ـ" },
+        { L'k', L"ن" },  { L'K', L"،" },
+        { L'l', L"م" },  { L'L', L"/" },
+        { L';', L"ك" },  { L':', L":" },
+        { L'\'', L"ط" }, { L'"', L"\"" },
+        { L'z', L"ئ" },  { L'Z', L"~" },
+        { L'x', L"ء" },  { L'X', L"ْ" },
+        { L'c', L"ؤ" },  { L'C', L"}" },
+        { L'v', L"ر" },  { L'V', L"{" },
+        { L'b', L"لا" }, { L'B', L"لآ" },
+        { L'n', L"ى" },  { L'N', L"آ" },
+        { L'm', L"ة" },  { L'M', L"’" },
+        { L',', L"و" },  { L'<', L"," },
+        { L'.', L"ز" },  { L'>', L"." },
+        { L'/', L"ظ" },  { L'?', L"؟" },
+    };
+
+    g_en2ar.clear();
+    g_ar2en.clear();
+
+    for (const auto& k : mapEn2Ar) {
+        g_en2ar[k.en] = k.ar;
+        if (wcslen(k.ar) == 1) {
+            g_ar2en[k.ar[0]] = k.en;
+        }
+    }
+}
+
+static bool IsArabicChar(wchar_t c) {
     return (c >= 0x0600 && c <= 0x06FF);
 }
 
-static void InitMaps() {
-    struct MapEntry { wchar_t en; const wchar_t* ar; };
-    MapEntry entries[] = {
-        { L'`', L"ذ" }, { L'q', L"ض" }, { L'w', L"ص" }, { L'e', L"ث" }, { L'r', L"ق" },
-        { L't', L"ف" }, { L'y', L"غ" }, { L'u', L"ع" }, { L'i', L"ه" }, { L'o', L"خ" },
-        { L'p', L"ح" }, { L'[', L"ج" }, { L']', L"د" }, { L'a', L"ش" }, { L's', L"س" },
-        { L'd', L"ي" }, { L'f', L"ب" }, { L'g', L"ل" }, { L'h', L"ا" }, { L'j', L"ت" },
-        { L'k', L"ن" }, { L'l', L"م" }, { L';', L"ك" }, { L'\'', L"ط" }, { L'z', L"ئ" },
-        { L'x', L"ء" }, { L'c', L"ؤ" }, { L'v', L"ر" }, { L'b', L"لا" }, { L'n', L"ى" },
-        { L'm', L"ة" }, { L',', L"و" }, { L'.', L"ز" }, { L'/', L"ظ" },
-        // Shifted / Uppercase mappings
-        { L'~', L"ّ" }, { L'Q', L"َ" }, { L'W', L"ً" }, { L'E', L"ُ" }, { L'R', L"ٌ" },
-        { L'T', L"لإ" }, { L'Y', L"إ" }, { L'U', L"'" }, { L'I', L"÷" }, { L'O', L"×" },
-        { L'P', L"؛" }, { L'{', L"<" }, { L'}', L">" }, { L'A', L"ِ" }, { L'S', L"ٍ" },
-        { L'D', L"]" }, { L'F', L"[" }, { L'G', L"لأ" }, { L'H', L"أ" }, { L'J', L"ـ" },
-        { L'K', L"،" }, { L'L', L"/" }, { L':', L":" }, { L'\"', L"\"" }, { L'Z', L"~" },
-        { L'X', L"ْ" }, { L'C', L"}" }, { L'V', L"{" }, { L'B', L"لآ" }, { L'N', L"آ" },
-        { L'M', L"'" }, { L'<', L"," }, { L'>', L"." }, { L'?', L"؟" }
-    };
-
-    for (const auto& item : entries) {
-        g_en2ar[item.en] = item.ar;
-        if (wcslen(item.ar) == 1) {
-            g_ar2en[item.ar[0]] = item.en;
-        }
-    }
-    g_ar2en[L'ل'] = L'g'; // Fallback
-}
-
-// ── Conversion Logic ────────────────────────────────────────────────────────
-static std::wstring ArToEn(const std::wstring& text) {
+static std::wstring ArToEn(const std::wstring& s) {
     std::wstring out;
-    size_t len = text.length();
-    for (size_t i = 0; i < len; ++i) {
-        if (text[i] == L'ل' && i + 1 < len) {
-            wchar_t next = text[i + 1];
-            if (next == L'آ') { out += L'B'; ++i; continue; }
-            if (next == L'إ') { out += L'T'; ++i; continue; }
-            if (next == L'أ') { out += L'G'; ++i; continue; }
-            if (next == L'ا') { out += L'b'; ++i; continue; }
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        wchar_t c = s[i];
+        if (c == 0xFEFB) { out += L'b'; continue; } // Lam-Alef
+        if (c == 0xFEF7) { out += L'T'; continue; } // Lam-Alef with Hamza Above
+        if (c == 0xFEF9) { out += L'G'; continue; } // Lam-Alef with Hamza Below
+        if (c == 0xFEF5) { out += L'B'; continue; } // Lam-Alef with Madda Above
+
+        if (c == L'ل' && (i + 1) < s.size()) {
+            wchar_t next = s[i + 1];
+            if      (next == L'ا') { out += L'b'; ++i; continue; }
+            else if (next == L'إ') { out += L'T'; ++i; continue; }
+            else if (next == L'أ') { out += L'G'; ++i; continue; }
+            else if (next == L'آ') { out += L'B'; ++i; continue; }
         }
-        auto it = g_ar2en.find(text[i]);
-        if (it != g_ar2en.end()) out += it->second;
-        else out += text[i];
+
+        auto it = g_ar2en.find(c);
+        out += (it != g_ar2en.end()) ? it->second : c;
     }
     return out;
 }
 
-static std::wstring EnToAr(const std::wstring& text) {
+static std::wstring EnToAr(const std::wstring& s) {
     std::wstring out;
-    for (wchar_t c : text) {
+    out.reserve(s.size() * 2);
+    for (wchar_t c : s) {
         auto it = g_en2ar.find(c);
         if (it != g_en2ar.end()) {
-            std::wstring res = it->second;
-            if (iswupper(c) && !IsArabicLetter(res[0])) {
-                wchar_t lower = towlower(c);
-                auto itLower = g_en2ar.find(lower);
-                if (itLower != g_en2ar.end() && IsArabicLetter(itLower->second[0])) {
-                    res = itLower->second;
+            const std::wstring& mapped = it->second;
+            if (c >= L'A' && c <= L'Z') {
+                bool isNonArabicSymbol = (!mapped.empty() && !IsArabicChar(mapped[0]));
+                if (isNonArabicSymbol) {
+                    wchar_t lower = (wchar_t)towlower(c);
+                    auto itLower = g_en2ar.find(lower);
+                    if (itLower != g_en2ar.end()) {
+                        out += itLower->second;
+                        continue;
+                    }
                 }
             }
-            out += res;
+            out += mapped;
         } else {
             out += c;
         }
@@ -199,230 +286,259 @@ static std::wstring EnToAr(const std::wstring& text) {
     return out;
 }
 
-static std::wstring ConvertSmart(const std::wstring& text) {
-    if (text.empty()) return text;
-    int en = 0, ar = 0;
-    for (wchar_t c : text) {
-        if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z')) en++;
-        else if (IsArabicLetter(c)) ar++;
+static std::wstring ConvertSmart(const std::wstring& s) {
+    int arCount = 0;
+    int enCount = 0;
+    for (wchar_t c : s) {
+        if (IsArabicChar(c)) arCount++;
+        else if ((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z')) enCount++;
     }
-    return (ar >= en && ar > 0) ? ArToEn(text) : EnToAr(text);
+    return (arCount >= enCount) ? ArToEn(s) : EnToAr(s);
 }
 
-// ── Full Clipboard Snapshot & Preservation ──────────────────────────────────
+// ── Multi-Format Clipboard Backup & Restoration ──────────────────────────────
 struct ClipboardSnapshot {
-    struct Entry {
+    struct Item {
         UINT format;
-        std::vector<BYTE> bytes;
+        std::vector<BYTE> data;
     };
-    std::vector<Entry> formats;
+    std::vector<Item> items;
 };
 
-static bool OpenClipboardRetrying(HWND hWnd = nullptr, bool wait = true) {
-    for (int i = 0; i < (wait ? 10 : 1); i++) {
-        if (OpenClipboard(hWnd)) return true;
-        if (wait) Sleep(20);
+static BOOL OpenClipboardRetrying(HWND hwnd = nullptr, int maxAttempts = 10, DWORD delayMs = 20) {
+    for (int i = 0; i < maxAttempts; ++i) {
+        if (OpenClipboard(hwnd)) return TRUE;
+        Sleep(delayMs);
     }
-    return false;
+    return FALSE;
+}
+
+static UINT GetExcludeClipboardFormat() {
+    static UINT s_fmt = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    return s_fmt;
 }
 
 static ClipboardSnapshot SaveClipboard() {
-    constexpr size_t kMaxBytes = 32 * 1024 * 1024;
     ClipboardSnapshot snapshot;
-    if (!OpenClipboardRetrying()) return snapshot;
+    if (!OpenClipboardRetrying(nullptr)) return snapshot;
 
-    size_t total = 0;
-    for (UINT format = 0; (format = EnumClipboardFormats(format)) != 0;) {
-        if (format == CF_BITMAP || format == CF_ENHMETAFILE || format == CF_METAFILEPICT ||
-            format == CF_PALETTE || format == CF_OWNERDISPLAY || format == CF_DSPBITMAP ||
-            format == CF_DSPENHMETAFILE || format == CF_DSPMETAFILEPICT ||
-            format == CF_DIBV5 || format == CF_TEXT || format == CF_OEMTEXT) {
-            continue;
+    UINT fmt = 0;
+    while ((fmt = EnumClipboardFormats(fmt)) != 0) {
+        if (fmt == CF_BITMAP || fmt == CF_ENHMETAFILE || fmt == CF_METAFILEPICT) continue;
+        if (fmt >= 0xC000) {
+            WCHAR name[256];
+            if (GetClipboardFormatNameW(fmt, name, 256) > 0) {
+                if (wcsstr(name, L"ExcludeClipboardContentFromMonitorProcessing") != nullptr) continue;
+            }
         }
-        HANDLE data = GetClipboardData(format);
-        SIZE_T size = data ? GlobalSize(data) : 0;
-        if (!size || total + size > kMaxBytes) continue;
 
-        if (const void* p = GlobalLock(data)) {
-            snapshot.formats.push_back({ format, std::vector<BYTE>((const BYTE*)p, (const BYTE*)p + size) });
-            total += size;
-            GlobalUnlock(data);
+        HANDLE hData = GetClipboardData(fmt);
+        if (!hData) continue;
+
+        SIZE_T size = GlobalSize(hData);
+        if (size == 0 || size > 32 * 1024 * 1024) continue;
+
+        LPVOID ptr = GlobalLock(hData);
+        if (ptr) {
+            ClipboardSnapshot::Item item;
+            item.format = fmt;
+            item.data.resize(size);
+            memcpy(item.data.data(), ptr, size);
+            GlobalUnlock(hData);
+            snapshot.items.push_back(std::move(item));
         }
     }
+
     CloseClipboard();
     return snapshot;
 }
 
 static void RestoreClipboard(const ClipboardSnapshot& snapshot) {
-    if (!OpenClipboardRetrying()) return;
-    EmptyClipboard();
-    for (const auto& entry : snapshot.formats) {
-        if (HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, entry.bytes.size())) {
-            if (void* p = GlobalLock(memory)) {
-                memcpy(p, entry.bytes.data(), entry.bytes.size());
-                GlobalUnlock(memory);
-                if (SetClipboardData(entry.format, memory)) {
-                    continue;
-                }
-            }
-            GlobalFree(memory);
-        }
-    }
-    if (!snapshot.formats.empty()) {
-        static const UINT cfExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
-        if (HGLOBAL flag = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD))) {
-            if (!SetClipboardData(cfExclude, flag)) {
-                GlobalFree(flag);
-            }
-        }
-    }
-    CloseClipboard();
-}
+    if (snapshot.items.empty()) return;
+    if (!OpenClipboardRetrying(nullptr)) return;
 
-static std::wstring GetClipboardText() {
-    std::wstring text;
-    if (!OpenClipboardRetrying()) return text;
-    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-    if (hData) {
-        wchar_t* p = (wchar_t*)GlobalLock(hData);
-        if (p) {
-            text = p;
-            GlobalUnlock(hData);
+    EmptyClipboard();
+
+    UINT excludeFmt = GetExcludeClipboardFormat();
+    if (excludeFmt) {
+        HGLOBAL hEx = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+        if (hEx) {
+            PDWORD p = (PDWORD)GlobalLock(hEx);
+            if (p) { *p = 1; GlobalUnlock(hEx); }
+            SetClipboardData(excludeFmt, hEx);
         }
     }
-    CloseClipboard();
-    return text;
-}
 
-static void SetClipboardText(const std::wstring& text) {
-    if (!OpenClipboardRetrying()) return;
-    EmptyClipboard();
-    if (!text.empty()) {
-        size_t bytes = (text.length() + 1) * sizeof(wchar_t);
-        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    for (const auto& item : snapshot.items) {
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, item.data.size());
         if (hMem) {
-            void* p = GlobalLock(hMem);
-            if (p) {
-                memcpy(p, text.c_str(), bytes);
+            LPVOID dst = GlobalLock(hMem);
+            if (dst) {
+                memcpy(dst, item.data.data(), item.data.size());
                 GlobalUnlock(hMem);
-                if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
-                    GlobalFree(hMem);
-                }
+                SetClipboardData(item.format, hMem);
             } else {
                 GlobalFree(hMem);
             }
         }
     }
-    static const UINT cfExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
-    if (HGLOBAL flag = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD))) {
-        if (!SetClipboardData(cfExclude, flag)) {
-            GlobalFree(flag);
+
+    CloseClipboard();
+}
+
+static std::wstring GetClipboardText() {
+    std::wstring res;
+    if (!OpenClipboardRetrying(nullptr)) return res;
+
+    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+    if (hData) {
+        auto* text = (const wchar_t*)GlobalLock(hData);
+        if (text) {
+            res = text;
+            GlobalUnlock(hData);
+        }
+    }
+    CloseClipboard();
+    return res;
+}
+
+static void SetClipboardText(const std::wstring& text) {
+    if (!OpenClipboardRetrying(nullptr)) return;
+
+    EmptyClipboard();
+
+    UINT excludeFmt = GetExcludeClipboardFormat();
+    if (excludeFmt) {
+        HGLOBAL hEx = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+        if (hEx) {
+            PDWORD p = (PDWORD)GlobalLock(hEx);
+            if (p) { *p = 1; GlobalUnlock(hEx); }
+            SetClipboardData(excludeFmt, hEx);
+        }
+    }
+
+    SIZE_T bytes = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (hMem) {
+        auto* dst = (wchar_t*)GlobalLock(hMem);
+        if (dst) {
+            memcpy(dst, text.c_str(), bytes);
+            GlobalUnlock(hMem);
+            SetClipboardData(CF_UNICODETEXT, hMem);
+        } else {
+            GlobalFree(hMem);
         }
     }
     CloseClipboard();
 }
 
-// ── Target Control Handle (via GetGUIThreadInfo — No AttachThreadInput) ─────
 static HWND GetFocusedControlHandle() {
-    HWND activeWnd = GetForegroundWindow();
-    if (!activeWnd) return nullptr;
+    HWND fg = GetForegroundWindow();
+    if (!fg) return nullptr;
 
-    GUITHREADINFO gti = { sizeof(gti) };
-    if (GetGUIThreadInfo(GetWindowThreadProcessId(activeWnd, nullptr), &gti) && gti.hwndFocus) {
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(fg, &pid);
+    GUITHREADINFO gti = { sizeof(GUITHREADINFO) };
+    if (GetGUIThreadInfo(tid, &gti) && gti.hwndFocus) {
         return gti.hwndFocus;
     }
-    return activeWnd;
+    return fg;
 }
 
-static bool IsConsoleWindow(HWND hWnd) {
-    if (!hWnd) return false;
-    wchar_t className[64];
-    if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
-        if (wcscmp(className, L"ConsoleWindowClass") == 0 ||
-            wcscmp(className, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0) return true;
+static bool IsConsoleWindow(HWND hwnd) {
+    if (!hwnd) return false;
+    WCHAR className[128] = { 0 };
+    if (GetClassNameW(hwnd, className, 127) > 0) {
+        if (_wcsicmp(className, L"ConsoleWindowClass") == 0 ||
+            _wcsicmp(className, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0) {
+            return true;
+        }
     }
     return false;
 }
 
-// ── Keyboard Synthesis via SendInput ────────────────────────────────────────
 static void SendCtrlKey(WORD vk) {
     INPUT inputs[4] = {};
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = VK_CONTROL;
+
     inputs[1].type = INPUT_KEYBOARD;
     inputs[1].ki.wVk = vk;
+
     inputs[2].type = INPUT_KEYBOARD;
     inputs[2].ki.wVk = vk;
     inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+
     inputs[3].type = INPUT_KEYBOARD;
     inputs[3].ki.wVk = VK_CONTROL;
     inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+
     SendInput(4, inputs, sizeof(INPUT));
 }
 
 static void ReleaseModifiers() {
-    INPUT inputs[4] = {};
-    // Tap Ctrl to suppress SC_KEYMENU
+    INPUT inputs[5] = {};
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = VK_CONTROL;
+
     inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = VK_MENU; // Alt
+    inputs[1].ki.wVk = VK_CONTROL;
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
     inputs[2].type = INPUT_KEYBOARD;
-    inputs[2].ki.wVk = VK_CONTROL;
+    inputs[2].ki.wVk = VK_MENU;
     inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+
     inputs[3].type = INPUT_KEYBOARD;
     inputs[3].ki.wVk = VK_SHIFT;
     inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(4, inputs, sizeof(INPUT));
+
+    inputs[4].type = INPUT_KEYBOARD;
+    inputs[4].ki.wVk = VK_RMENU;
+    inputs[4].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    SendInput(5, inputs, sizeof(INPUT));
 }
 
-// ── Conversion Execution Worker ─────────────────────────────────────────────
+// ── Conversion Execution Thread ─────────────────────────────────────────────
 static DWORD WINAPI ExecuteConversionThread(LPVOID) {
-    HWND hForeground = GetForegroundWindow();
-    if (IsConsoleWindow(hForeground)) {
-        return 0; // Skip console/terminal windows
+    HWND hTarget = GetFocusedControlHandle();
+    if (IsConsoleWindow(hTarget) || IsConsoleWindow(GetForegroundWindow())) {
+        return 0; // Avoid terminal interrupt
     }
 
     ReleaseModifiers();
-    Sleep(80);
+    Sleep(50);
 
-    HWND hTarget = GetFocusedControlHandle();
-
-    // 1. Save full clipboard snapshot
+    // 1. Snapshot entire current clipboard
     ClipboardSnapshot backup = SaveClipboard();
     DWORD seqBefore = GetClipboardSequenceNumber();
 
-    // Helper: accept copied text ONLY if clipboard sequence number changed
     auto readCopiedText = [&]() -> std::wstring {
         if (GetClipboardSequenceNumber() == seqBefore) return {};
         return GetClipboardText();
     };
 
-    bool usedWmCopy = false;
-
-    // 2. Send Ctrl+C via SendInput
+    // 2. Perform copy
     SendCtrlKey('C');
 
     std::wstring selected;
-    for (int i = 0; i < 15; ++i) {
+    for (int i = 0; i < 6; ++i) {
         Sleep(25);
         selected = readCopiedText();
         if (!selected.empty()) break;
     }
 
-    // Web input copy retry
     if (selected.empty()) {
-        Sleep(50);
         SendCtrlKey('C');
-        for (int i = 0; i < 15; ++i) {
+        for (int i = 0; i < 4; ++i) {
             Sleep(25);
             selected = readCopiedText();
             if (!selected.empty()) break;
         }
     }
 
-    // ERP WM_COPY fallback with SendMessageTimeout
+    bool usedWmCopy = false;
     if (selected.empty() && hTarget) {
         DWORD_PTR result = 0;
         SendMessageTimeoutW(hTarget, WM_COPY, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result);
@@ -477,13 +593,16 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         bool shft = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
         bool win  = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
 
-        bool isPrimary = (alt == g_hotkeyPrimary.alt &&
-                          ctrl == g_hotkeyPrimary.ctrl &&
-                          shft == g_hotkeyPrimary.shift &&
-                          !win &&
-                          kb->vkCode == g_hotkeyPrimary.vk);
+        HotkeyConfig primaryHk = UnpackHotkey(g_hotkeyPrimaryPacked.load());
+        bool enableSecondary = g_enableSecondaryHotkey.load();
 
-        bool isSecondary = (g_enableSecondaryHotkey &&
+        bool isPrimary = (alt == primaryHk.alt &&
+                          ctrl == primaryHk.ctrl &&
+                          shft == primaryHk.shift &&
+                          !win &&
+                          kb->vkCode == primaryHk.vk);
+
+        bool isSecondary = (enableSecondary &&
                             ctrl && shft && !alt && !win &&
                             kb->vkCode == 'X');
 
@@ -500,15 +619,25 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 }
 
 // ── Worker Thread for Hook Message Loop ─────────────────────────────────────
+static HANDLE g_hHookThreadReadyEvent = nullptr;
+
 static DWORD WINAPI HookThreadProc(LPVOID) {
+    // Force creation of the thread message queue before signaling ready
+    MSG msg;
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+
     g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
     if (!g_hHook) {
         Wh_Log(L"Failed to install hook.");
+        if (g_hHookThreadReadyEvent) SetEvent(g_hHookThreadReadyEvent);
         return 0;
     }
     Wh_Log(L"Hook installed successfully.");
 
-    MSG msg;
+    if (g_hHookThreadReadyEvent) {
+        SetEvent(g_hHookThreadReadyEvent);
+    }
+
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -527,11 +656,24 @@ BOOL WhTool_ModInit() {
     LoadSettings();
     Wh_Log(L"Initializing tool mod...");
 
+    g_hHookThreadReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
     g_hWorkerThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
         Wh_Log(L"Failed to spawn hook thread.");
+        if (g_hHookThreadReadyEvent) {
+            CloseHandle(g_hHookThreadReadyEvent);
+            g_hHookThreadReadyEvent = nullptr;
+        }
         return FALSE;
     }
+
+    if (g_hHookThreadReadyEvent) {
+        WaitForSingleObject(g_hHookThreadReadyEvent, 5000);
+        CloseHandle(g_hHookThreadReadyEvent);
+        g_hHookThreadReadyEvent = nullptr;
+    }
+
     return TRUE;
 }
 
@@ -559,169 +701,236 @@ void WhTool_ModUninit() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+// https://github.com/ramensoftware/windhawk/wiki/Tool-mods
+//
+// The implementation consists of:
+// - Wh_ModInit: Creates a mutex and runs a new windhawk.exe process which runs
+//   WhTool_ModInit.
+// - Wh_ModSettingsChanged: Notifies the tool process about settings changes.
+// - Wh_ModUninit: Requests the tool process to exit and waits for it.
+//
+// Mod code goes to WhTool_ModInit, WhTool_ModSettingsChanged, and
+// WhTool_ModUninit.
 
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
+// The architecture of this mod: 32-bit or 64-bit.
+#if defined(_WIN64)
+#define ARCH_64
+#elif defined(_WIN32)
+#define ARCH_32
+#endif
 
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
+// The architecture of the current windhawk.exe process.
+#if defined(_M_AMD64)
+#define PROCESS_ARCH_64
+#elif defined(_M_IX86)
+#define PROCESS_ARCH_32
+#endif
+
+#if defined(ARCH_64) && defined(PROCESS_ARCH_32)
+#error 64-bit mod can't run in a 32-bit process
+#endif
+
+#define TOOL_MOD_MUTEX_NAME \
+    L"windhawk-tool-mod-" WH_MOD_ID L"-" ARCH_NAME
+
+#define TOOL_MOD_SETTINGS_CHANGED_EVENT_NAME \
+    L"windhawk-tool-mod-settings-changed-" WH_MOD_ID L"-" ARCH_NAME
+
+#if defined(ARCH_64)
+#define ARCH_NAME L"64"
+#elif defined(ARCH_32)
+#define ARCH_NAME L"32"
+#endif
+
+#if defined(ARCH_64) || !defined(PROCESS_ARCH_64)
+#define RUN_SAME_PROCESS
+#endif
+
+#ifdef RUN_SAME_PROCESS
+HANDLE g_hSettingsChangedEvent;
+HANDLE g_hSettingsChangedThread;
+
+DWORD WINAPI SettingsChangedThread(LPVOID lpParam) {
+    HANDLE hEvents[] = {
+        g_hSettingsChangedEvent,
+        WindhawkUtils::GetModUnloadingEvent(),
+    };
+
+    while (TRUE) {
+        DWORD dwWaitResult = WaitForMultipleObjects(
+            ARRAYSIZE(hEvents), hEvents, FALSE, INFINITE);
+        if (dwWaitResult != WAIT_OBJECT_0) {
+            break;
+        }
+
+        WhTool_ModSettingsChanged();
+    }
+
+    return 0;
 }
+#else
+HANDLE g_hProcess;
+#endif
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
+    Wh_Log(L"Init");
+
+    // Don't run in the Windhawk service process.
+    if (WindhawkUtils::IsServiceProcess()) {
         return FALSE;
     }
 
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
+    PCWSTR pszCommandLine = GetCommandLine();
+    int numArgs = 0;
+    LPWSTR* szArglist = CommandLineToArgvW(pszCommandLine, &numArgs);
+    BOOL isToolModProcess = FALSE;
+    if (szArglist) {
+        for (int i = 1; i < numArgs; i++) {
+            if (wcscmp(szArglist[i], L"-tool-mod") == 0) {
+                isToolModProcess = TRUE;
+                break;
             }
-            break;
         }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
+        LocalFree(szArglist);
     }
 
     if (isToolModProcess) {
+        HANDLE hMutex = CreateMutex(nullptr, FALSE, TOOL_MOD_MUTEX_NAME);
+        if (!hMutex) {
+            Wh_Log(L"CreateMutex failed");
+            return FALSE;
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running");
+            CloseHandle(hMutex);
+            return FALSE;
+        }
+
+        return WhTool_ModInit();
+    }
+
+    HANDLE hMutex = OpenMutex(SYNCHRONIZE, FALSE, TOOL_MOD_MUTEX_NAME);
+    if (hMutex) {
+        Wh_Log(L"Tool mod already running");
+        CloseHandle(hMutex);
         return FALSE;
     }
 
-    g_isToolModProcessLauncher = true;
+#ifdef RUN_SAME_PROCESS
+    g_hSettingsChangedEvent = CreateEvent(
+        nullptr, FALSE, FALSE, TOOL_MOD_SETTINGS_CHANGED_EVENT_NAME);
+    if (!g_hSettingsChangedEvent) {
+        Wh_Log(L"CreateEvent failed");
+        return FALSE;
+    }
+
+    g_hSettingsChangedThread = CreateThread(
+        nullptr, 0, SettingsChangedThread, nullptr, 0, nullptr);
+    if (!g_hSettingsChangedThread) {
+        Wh_Log(L"CreateThread failed");
+        CloseHandle(g_hSettingsChangedEvent);
+        return FALSE;
+    }
+
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    WCHAR szModulePath[MAX_PATH];
+    GetModuleFileName(nullptr, szModulePath, ARRAYSIZE(szModulePath));
+    WCHAR szCmdLine[MAX_PATH + 64];
+    wsprintf(szCmdLine, L"\"%s\" -tool-mod \"%s\"", szModulePath, WH_MOD_ID);
+    if (!CreateProcessInternalW(
+        nullptr,
+        szCmdLine,
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_UNICODE_ENVIRONMENT,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+    )) {
+        Wh_Log(L"CreateProcessInternalW failed");
+        SetEvent(WindhawkUtils::GetModUnloadingEvent());
+        WaitForSingleObject(g_hSettingsChangedThread, INFINITE);
+        CloseHandle(g_hSettingsChangedThread);
+        CloseHandle(g_hSettingsChangedEvent);
+        return FALSE;
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+#else
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    WCHAR szSystemDir[MAX_PATH];
+    GetSystemDirectory(szSystemDir, ARRAYSIZE(szSystemDir));
+    WCHAR szCmdLine[MAX_PATH + 64];
+    wsprintf(szCmdLine, L"\"%s\\windhawk.exe\" -tool-mod \"%s\"", szSystemDir, WH_MOD_ID);
+    if (!CreateProcess(
+        nullptr,
+        szCmdLine,
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_UNICODE_ENVIRONMENT,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+    )) {
+        Wh_Log(L"CreateProcess failed");
+        return FALSE;
+    }
+
+    CloseHandle(pi.hThread);
+    g_hProcess = pi.hProcess;
+#endif
+
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
+    Wh_Log(L"SettingsChanged");
 
-    WhTool_ModSettingsChanged();
+    HANDLE hEvent = OpenEvent(
+        EVENT_MODIFY_STATE, FALSE, TOOL_MOD_SETTINGS_CHANGED_EVENT_NAME);
+    if (hEvent) {
+        SetEvent(hEvent);
+        CloseHandle(hEvent);
+    }
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
+    Wh_Log(L"Uninit");
+
+    PCWSTR pszCommandLine = GetCommandLine();
+    int numArgs = 0;
+    LPWSTR* szArglist = CommandLineToArgvW(pszCommandLine, &numArgs);
+    BOOL isToolModProcess = FALSE;
+    if (szArglist) {
+        for (int i = 1; i < numArgs; i++) {
+            if (wcscmp(szArglist[i], L"-tool-mod") == 0) {
+                isToolModProcess = TRUE;
+                break;
+            }
+        }
+        LocalFree(szArglist);
+    }
+
+    if (isToolModProcess) {
+        WhTool_ModUninit();
         return;
     }
 
-    WhTool_ModUninit();
-    ExitProcess(0);
+#ifdef RUN_SAME_PROCESS
+    SetEvent(WindhawkUtils::GetModUnloadingEvent());
+    WaitForSingleObject(g_hSettingsChangedThread, INFINITE);
+    CloseHandle(g_hSettingsChangedThread);
+    CloseHandle(g_hSettingsChangedEvent);
+#else
+    WaitForSingleObject(g_hProcess, INFINITE);
+    CloseHandle(g_hProcess);
+#endif
 }
