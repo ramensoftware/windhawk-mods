@@ -37,14 +37,15 @@ System utilities integrated into the Windows 11 Taskbar XAML context menu with
   network adapters. Optionally queries public IP via `api.ipify.org` if enabled
   in settings (disabled by default for privacy). Includes clipboard copy.
 - **Rebuild Icon & Thumbnail Cache**: Deletes unlocked thumbnail cache files
-from
-  `%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db` and rebuilds the
-  Windows icon cache via `ie4uinit.exe -show`, without restarting Explorer.
+  from `%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db` and rebuilds
+  the Windows icon cache via `ie4uinit.exe -show`, without restarting Explorer.
 - **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
   `dnsapi.dll!DnsFlushResolverCache`.
 - **Optional submenu**: Utilities can be grouped into a cascading submenu with a
   custom label and Segoe Fluent Icons glyph. Each utility can individually be
-  placed inside the submenu or at the root of the taskbar menu.
+  placed inside the submenu or at the root of the taskbar menu. The submenu is
+  on by default; turn off **Submenu → Group into submenu** to restore the
+  previous flat layout.
 
 ## Credits & Licensing
 Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
@@ -70,7 +71,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Restart Explorer
     $name: Menu item label
   $name: Restart Explorer
@@ -80,7 +81,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Clean Temp
     $name: Menu item label
   - cleanRecycleBin: false
@@ -96,7 +97,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Reduce Memory
     $name: Menu item label
   - showCard: true
@@ -109,7 +110,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Restart Graphics Driver
     $name: Menu item label
   $name: Restart Graphics Driver
@@ -119,7 +120,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Get IP Address
     $name: Menu item label
   - queryPublicIp: false
@@ -135,7 +136,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Rebuild Icon & Thumbnail Cache
     $name: Menu item label
   - showCard: true
@@ -148,7 +149,7 @@ Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
     $name: Enable in taskbar menu
   - inSubmenu: true
     $name: Place inside submenu
-    $description: Show this item inside the submenu (if enabled).
+    $description: Show this item in the submenu (when grouping is on).
   - label: Clean DNS Cache
     $name: Menu item label
   - showCard: true
@@ -1339,14 +1340,7 @@ void AppendInjectedItems(void* vectorThis) {
     };
 
     wuxc::MenuFlyoutSubItem subItem{nullptr};
-    if (cfg.enableSubmenu) {
-        subItem = wuxc::MenuFlyoutSubItem();
-        subItem.Text(cfg.textSubmenu);
-        subItem.Icon(CreateFluentIcon(cfg.glyphSubmenu.c_str()));
-    }
-
     bool anyRootInjected = false;
-    bool anySubmenuItems = false;
 
     for (const auto& spec : specs) {
         if (!spec.enabled) {
@@ -1358,9 +1352,13 @@ void AppendInjectedItems(void* vectorThis) {
         menuItem.Icon(CreateFluentIcon(spec.glyph));
         menuItem.Click(wux::RoutedEventHandler{spec.handler});
 
-        if (subItem && spec.inSubmenu) {
+        if (cfg.enableSubmenu && spec.inSubmenu) {
+            if (!subItem) {
+                subItem = wuxc::MenuFlyoutSubItem();
+                subItem.Text(cfg.textSubmenu);
+                subItem.Icon(CreateFluentIcon(cfg.glyphSubmenu.c_str()));
+            }
             subItem.Items().Append(menuItem);
-            anySubmenuItems = true;
         } else {
             if (!anyRootInjected) {
                 menuItem.Name(kGuardItemName);
@@ -1370,7 +1368,7 @@ void AppendInjectedItems(void* vectorThis) {
         }
     }
 
-    if (subItem && anySubmenuItems) {
+    if (subItem) {
         if (!anyRootInjected) {
             subItem.Name(kGuardItemName);
         }
