@@ -1559,14 +1559,9 @@ Made by [Salyts](https://github.com/Salyts) & [GR0UD](https://github.com/GR0UD).
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
-// Windhawk's editor runs a 32-bit clangd (2 GB at most), and this header takes
-// the mod's parse past that: its code help crashed on open. The editor's parse
-// leaves it and the rounded art clip out; the real build has both.
-#ifndef WH_EDITING
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.Foundation.Numerics.h>
-#endif
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Input.h>
@@ -1637,7 +1632,6 @@ using namespace winrt::Windows::UI::Xaml::Input;
 using namespace winrt::Windows::Media::Control;
 using namespace winrt::Windows::Storage::Streams;
 
-#ifndef WH_EDITING
 // ---- Mica for the settings window (same recipe as taskbar-ai-usage's flyout) ----
 // Direct2D effect description read by Compositor::CreateEffectFactory: the few members the
 // compositor calls. Built and used on the settings window's XAML thread only.
@@ -1774,7 +1768,6 @@ static winrt::Windows::UI::Composition::CompositionBrush MakeXsMicaBrush(
     brush.SetSourceParameter(L"BlurredWallpaperBackdrop", backdropBrush);
     return brush;
 }
-#endif  // WH_EDITING
 
 // ===========================================================================
 // Module layout: one .cpp, so each module is a namespace block. Search
@@ -9466,7 +9459,6 @@ COLD_UNOPTIMIZED static Grid BuildAlbumArtContainer() {
     // A composition clip rounds the image (and the crossfade's old cover). It
     // takes one radius: the largest corner set, like the placeholder.
     bool roundedClip = false;
-#ifndef WH_EDITING  // see the Windows.UI.Composition.h include
     try {
         namespace wuc = winrt::Windows::UI::Composition;
         auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(artInnerGrid);
@@ -9483,7 +9475,6 @@ COLD_UNOPTIMIZED static Grid BuildAlbumArtContainer() {
         });
         roundedClip = true;
     } catch (...) { LOG_IGNORED_EXCEPTION(); }
-#endif
 
     if (!roundedClip) {  // square, but at least kept inside its box
         auto clipGeo = winrt::Windows::UI::Xaml::Media::RectangleGeometry();
@@ -20139,10 +20130,8 @@ static bool s_micaOn = false;
 static int  s_materialApplied = -1;  // XS_MATERIAL_*, the DWM backdrop type values apart from Acrylic Thin
 static wuxc::Grid s_micaHost{ nullptr };  // first child of the root: carries the Mica composition visual
 static void UpdateMicaVisual();  // defined with ApplyMica, below BuildUi
-#ifndef WH_EDITING
 static winrt::Windows::UI::Composition::SpriteVisual s_micaSprite{ nullptr };  // the live Mica layer, if any
 static winrt::Windows::UI::Composition::CompositionBrush s_micaFadeBrush{ nullptr };  // for the scroll fades: a blur can't run on a 1px strip
-#endif
 static bool s_micaActive = true;  // window is active: Mica shows; inactive windows show the solid fallback
 
 // The window itself, and the panel that opens inside a card.
@@ -23304,29 +23293,23 @@ struct ScrollFade {
     bool atTop = true;
     double painted = -1.0;
     bool paintedMica = false;
-#ifndef WH_EDITING
     std::vector<winrt::Windows::UI::Composition::SpriteVisual> strips;
-#endif
 };
 static ScrollFade s_fadeTop, s_fadeBottom;
 
 static void PaintScrollFade(ScrollFade& f, double amount) {
     if (!f.host) return;
     bool mica = false;
-#ifndef WH_EDITING
     mica = !f.strips.empty() && s_micaActive;
-#endif
     if (amount == f.painted && mica == f.paintedMica) return;
     f.painted = amount;
     f.paintedMica = mica;
     f.solid.Opacity(mica ? 0.0 : amount);
-#ifndef WH_EDITING
     for (size_t i = 0; i < f.strips.size(); i++) {
         const double t = 1.0 - (i + 0.5) / f.strips.size();  // 1 at the edge, 0 at the page
         const double curve = t * t * (3.0 - 2.0 * t);
         f.strips[i].Opacity(mica ? (float)(curve * amount) : 0.f);
     }
-#endif
 }
 
 static void UpdateScrollFades() {
@@ -23355,7 +23338,6 @@ static void RefreshScrollFade(ScrollFade& f) {
     gradient.GradientStops().Append(page);
     f.solid.Background(gradient);
     f.painted = -1.0;
-#ifndef WH_EDITING
     using wuxh::ElementCompositionPreview;
     namespace wuc = winrt::Windows::UI::Composition;
     f.strips.clear();
@@ -23377,7 +23359,6 @@ static void RefreshScrollFade(ScrollFade& f) {
         f.strips.push_back(strip);
     }
     ElementCompositionPreview::SetElementChildVisual(f.host, container);
-#endif
 }
 
 static void RefreshScrollFades() {
@@ -23581,7 +23562,6 @@ static int WantedMaterial() {
     return 2;
 }
 
-#ifndef WH_EDITING
 static bool XsTransparencyEnabled() {
     DWORD value = 1, size = sizeof(value);
     if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
@@ -23592,14 +23572,12 @@ static bool XsTransparencyEnabled() {
     } catch (...) { LOG_IGNORED_EXCEPTION(); }
     return true;
 }
-#endif
 
 // Puts (or removes) the Mica visual under the XAML content, as taskbar-ai-usage does for its flyout:
 // the wallpaper brush with MicaController's tint recipe lives in the visual tree of a host element,
 // so no DWM client-area tricks are needed and the island stays opaque where it must be.
 static void UpdateMicaVisual() {
     if (!s_micaHost) return;
-#ifndef WH_EDITING
     try {
         using wuxh::ElementCompositionPreview;
         // Off (or no effect possible): hide and empty the old layer explicitly, then detach it and
@@ -23643,7 +23621,6 @@ static void UpdateMicaVisual() {
         LOG_IGNORED_EXCEPTION();
         Wh_Log(L"Settings window Mica: effect brush unavailable; using the fallback color");
     }
-#endif
 }
 
 // Like every Mica window: while inactive, the material gives way to MicaController's solid fallback
@@ -23652,7 +23629,6 @@ static void SetMicaActive(bool active) {
     if (s_micaActive == active) return;
     s_micaActive = active;
     UpdateScrollFades();
-#ifndef WH_EDITING
     try {
         if (!s_micaSprite) return;
         const float target = active ? 1.f : 0.f;
@@ -23666,7 +23642,6 @@ static void SetMicaActive(bool active) {
             s_micaSprite.Opacity(target);
         }
     } catch (...) { LOG_IGNORED_EXCEPTION(); }
-#endif
 }
 
 // The title bar shows just the icon; the name stays for the taskbar and Alt+Tab.
@@ -23882,10 +23857,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             s_island = nullptr;
             s_hostWnd = nullptr;
             s_micaHost = nullptr;
-#ifndef WH_EDITING
             s_micaSprite = nullptr;
             s_micaFadeBrush = nullptr;
-#endif
 
             s_templates = {};
             s_monitorPickers.clear();
