@@ -1938,6 +1938,7 @@ void* GetSecurityDescriptorWithUser(const wchar_t* sddl_string, size_t* size) {
                                           base_sec_desc,
                                           &user_sec_desc_size,
                                           &user_sec_desc);
+    LocalFree(base_sec_desc);
     if (error != ERROR_SUCCESS) {
         SetLastError(error);
         Wh_Log(L"BuildSecurityDescriptor failed");
