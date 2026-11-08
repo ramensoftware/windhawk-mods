@@ -4,6 +4,7 @@
 // @description     Minimiza a janela ao clicar com o botão do meio (scroll) na barra de título.
 // @version         1.1.2
 // @author          Ar4ujo_009
+// @github          Ar4ujo009
 // @include         *
 // ==/WindhawkMod==
 
@@ -19,44 +20,35 @@
 #include <windhawk_api.h>
 #include <string>
 
-// --- Função para ler as configurações da UI e checar a Lista Negra ---
 bool IsProcessBlacklisted() {
-    // Puxa a string digitada pelo usuário nas configurações do Windhawk
     PCWSTR blacklistStr = Wh_GetStringSetting(L"blacklist");
     if (!blacklistStr) return false;
 
     std::wstring list = blacklistStr;
-    Wh_FreeStringSetting(blacklistStr); // Libera a memória alocada pela API
+    Wh_FreeStringSetting(blacklistStr);
 
-    // Descobre o nome do executável atual
     WCHAR exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
     WCHAR* exeName = wcsrchr(exePath, L'\\');
     exeName = exeName ? (exeName + 1) : exePath;
 
-    // Processa a string separada por vírgulas
     size_t pos = 0;
     std::wstring token;
     std::wstring delimiter = L",";
-    std::wstring s = list + L","; // Adiciona vírgula no final para garantir leitura do último item
+    std::wstring s = list + L",";
 
     while ((pos = s.find(delimiter)) != std::wstring::npos) {
         token = s.substr(0, pos);
-        
-        // Remove espaços em branco do início e do fim do nome
         token.erase(0, token.find_first_not_of(L" \t\r\n"));
         token.erase(token.find_last_not_of(L" \t\r\n") + 1);
-        
-        // Compara com o executável atual (ignorando maiúsculas/minúsculas)
         if (!token.empty() && _wcsicmp(exeName, token.c_str()) == 0) {
-            return true; // Está na lista negra!
+            return true;
         }
         s.erase(0, pos + delimiter.length());
     }
     return false;
 }
 
-// --- Hook para DispatchMessageW (Apps modernos) ---
 typedef LRESULT(WINAPI *DispatchMessageW_t)(const MSG *lpMsg);
 DispatchMessageW_t DispatchMessageW_Original;
 
@@ -69,7 +61,6 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG *lpMsg) {
     return DispatchMessageW_Original(lpMsg);
 }
 
-// --- Hook para DispatchMessageA (Apps ANSI legados) ---
 typedef LRESULT(WINAPI *DispatchMessageA_t)(const MSG *lpMsg);
 DispatchMessageA_t DispatchMessageA_Original;
 
@@ -82,12 +73,10 @@ LRESULT WINAPI DispatchMessageA_Hook(const MSG *lpMsg) {
     return DispatchMessageA_Original(lpMsg);
 }
 
-// --- Ponto de Entrada do Mod ---
 BOOL Wh_ModInit() {
-    // Verifica as configurações do usuário antes de injetar os hooks
     if (IsProcessBlacklisted()) {
         Wh_Log(L"Processo na blacklist. O mod Middle Click Minimize foi ignorado aqui.");
-        return FALSE; // Aborta a injeção para este executável específico
+        return FALSE;
     }
 
     HMODULE hUser32 = GetModuleHandle(L"user32.dll");
