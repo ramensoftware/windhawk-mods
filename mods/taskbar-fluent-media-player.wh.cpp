@@ -10,7 +10,8 @@
 // @donateUrl           https://buymeacoffee.com/tfmp
 // @license             MIT
 // @include             explorer.exe
-// @compilerOptions     -lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lgdiplus -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser -ladvapi32 -lwinhttp -lwevtapi
+// @architecture        x86-64
+// @compilerOptions     -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lgdiplus -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -93,7 +94,7 @@ A full media player on your Windows 11 taskbar, styled to fit in with the rest o
 
 ## Good to know
 
-- **Where settings are kept:** in the mod's own storage. Changes saved on Windhawk's Settings tab still come in.
+- **Where settings are kept:** in the mod's own storage, which also works with portable Windhawk. Changes saved on Windhawk's Settings tab still come in, including ones made while the mod was off.
 - **If something goes wrong:** use **Reset to Windhawk's settings** on the Other page of the settings window. The storage is in the registry under `HKEY_LOCAL_MACHINE\SOFTWARE\Windhawk\Engine\ModsWritable\taskbar-fluent-media-player\LocalStorage` (portable Windhawk keeps it in its own data folder), and deleting that key also starts over from Windhawk's Settings tab.
 - **Hex colors in Windhawk's code view:** put quotes around them (`'#1ED760'`), since YAML reads a bare `#` as a comment.
 
@@ -685,7 +686,7 @@ Made by [Salyts](https://github.com/Salyts) & [GR0UD](https://github.com/GR0UD).
     - vizAudioDevice: ""
       #! $showIf: {vizEnabled: true, settingsView: full}
       $name: Audio device
-      $description: 'Leave empty to listen to your default output. Otherwise type part of a device''s name as it shows in Windows sound settings, e.g. "Speakers" or "VoiceMeeter". Recording devices work too.'
+      $description: 'Leave empty to listen to your default output. Otherwise type part of a device''s name as it shows in Windows sound settings, e.g. "Speakers" or "VoiceMeeter". Recording devices work too, though Windows then shows its microphone icon for Explorer.'
     - vizPlacement: "player"
       #! $showIf: {vizEnabled: true, vizDetached: false}
       $name: Placement
@@ -1593,8 +1594,6 @@ Made by [Salyts](https://github.com/Salyts) & [GR0UD](https://github.com/GR0UD).
 #include <propsys.h>
 #include <dwmapi.h>
 #include <sddl.h>
-#include <winhttp.h>
-#include <winevt.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <windhawk_utils.h>
 #include <audiopolicy.h>
@@ -1879,12 +1878,15 @@ struct DetachedWidgetState {
     // The taskbar this widget is injected into right now. Removal has to run on
     // that thread, which can differ from the monitor setting for one apply cycle.
     HWND             injectedOnWnd       = nullptr;
+    // The PlayerPosition it went in with (after any fallback), for removal:
+    // the setting may already hold the next position by then.
+    int              injectedPosition    = -1;
 };
 
-static DetachedWidgetState g_detachedAlbumArt{ .markerName = L"FluentMediaDetachedAlbumArt" };
-static DetachedWidgetState g_detachedInfo{ .markerName = L"FluentMediaDetachedInfo" };
-static DetachedWidgetState g_detachedButtons{ .markerName = L"FluentMediaDetachedButtons" };
-static DetachedWidgetState g_detachedViz{ .markerName = L"FluentMediaDetachedViz" };
+[[clang::no_destroy]] static DetachedWidgetState g_detachedAlbumArt{ .markerName = L"FluentMediaDetachedAlbumArt" };
+[[clang::no_destroy]] static DetachedWidgetState g_detachedInfo{ .markerName = L"FluentMediaDetachedInfo" };
+[[clang::no_destroy]] static DetachedWidgetState g_detachedButtons{ .markerName = L"FluentMediaDetachedButtons" };
+[[clang::no_destroy]] static DetachedWidgetState g_detachedViz{ .markerName = L"FluentMediaDetachedViz" };
 
 } // namespace Taskbar
 
@@ -1937,6 +1939,7 @@ namespace Taskbar {
 namespace SettingsUI {
     static std::wstring Loc(const std::wstring& en);
     static void ShowXamlSettingsWindow();  // native WinUI-style settings (XAML Islands)
+    static void RefreshOpenSettingsWindow();  // shows the current values, if it's open
 } // namespace SettingsUI
 namespace Runtime {
     static void RecoverMissingPlayer(HWND hWnd);
@@ -2402,7 +2405,7 @@ struct DetachedBackgroundSettings {
 
 struct ModSettings {
     int          monitor              = 1;   // which display (Salyts 1.6)
-    PlayerPosition position           = PlayerPosition::TaskbarAfterWidgetsLeft;
+    PlayerPosition position           = PlayerPosition::TrayLeft;
     std::wstring albumArtLeftClick    = L"none";
     std::wstring albumArtRightClick   = L"none";
     std::wstring albumArtMiddleClick  = L"none";
@@ -2478,7 +2481,7 @@ struct ModSettings {
     std::wstring emptyIconGlyph       = L"E189";
     int          emptyIconSize        = 16;
     EmptyIconFont emptyIconFont       = EmptyIconFont::SegoeFluent;
-    std::wstring emptyIconColor       = L"255 255 255";
+    std::wstring emptyIconColor       = L"140 140 140";
     int          emptyIconOpacity     = 100;
     AlbumArtQuality albumArtQuality   = AlbumArtQuality::Medium;
     bool         showPauseOverlay     = true;
@@ -2583,11 +2586,11 @@ struct ModSettings {
     int          gradientBalance      = 50;
     int          acrylicTintOpacity   = 50;
     int          micaOpacity          = 50;
-    std::wstring buttonColor          = L"255 255 255";
+    std::wstring buttonColor          = L"0 0 0$255 255 255";
     int          buttonColorOpacity   = 100;
-    std::wstring titleColor           = L"255 255 255";
+    std::wstring titleColor           = L"0 0 0$255 255 255";
     int          titleColorOpacity    = 100;
-    std::wstring artistColor          = L"255 255 255";
+    std::wstring artistColor          = L"0 0 0$255 255 255";
     int          artistColorOpacity   = 80;
     std::wstring ignoredProcesses     = L"";
     std::wstring allowedProcesses     = L"";
@@ -2620,7 +2623,7 @@ struct ModSettings {
     bool         showOpenWindhawk         = true;
     bool         showSettingsButton       = true;
     IconStyle    contextMenuIconStyle     = IconStyle::AsMediaButtons;
-    std::wstring contextMenuIconColor     = L"255 255 255";
+    std::wstring contextMenuIconColor     = L"0 0 0$255 255 255";
     int          contextMenuIconOpacity   = 100;
     bool         vizEnabled      = false;
     int          vizOrder        = 4;
@@ -2635,7 +2638,7 @@ struct ModSettings {
     VizEQ        vizEq           = VizEQ::Default;
     VizAnchor    vizAnchor       = VizAnchor::Middle;
     VizBarOrientation vizBarOrientation = VizBarOrientation::Auto;
-    std::wstring vizColor        = L"255 255 255";
+    std::wstring vizColor        = L"0 0 0$255 255 255";
     std::wstring vizColor1       = L"30 215 96";
     std::wstring vizColor2       = L"0 180 255";
     int          vizColorOpacity = 100;
@@ -2782,7 +2785,7 @@ static constexpr SettingSpec SList(const wchar_t* key) {
 
 static constexpr SettingSpec SETTINGS[] = {
     SIntRaw(L"MainSettings.PlayerSetting.monitor"),
-    SStr(L"MainSettings.PlayerSetting.position", L"taskbar_after_widgets_left"),
+    SStr(L"MainSettings.PlayerSetting.position", L"tray_left"),
     SStr(L"MainSettings.PlayerSetting.playerWidth", L"0 0"),
     SStr(L"MainSettings.PlayerSetting.playerHeight", L"40 40"),
     SStr(L"MainSettings.PlayerSetting.playerMargin", L"0 0"),
@@ -2942,9 +2945,9 @@ static constexpr SettingSpec SETTINGS[] = {
     SIntRaw(L"AppearanceSettings.MediaButtonsStyleSettings.buttonSpacing", &ModSettings::buttonSpacing),
     SInt(L"AppearanceSettings.MediaButtonsStyleSettings.buttonIconSize", 8, 32, &ModSettings::buttonIconSize),
     SStr(L"AppearanceSettings.MediaButtonsStyleSettings.buttonCornerRadius", L"4"),
-    SStr(L"AppearanceSettings.MediaButtonsStyleSettings.buttonColor", L"255 255 255", &ModSettings::buttonColor),
+    SStr(L"AppearanceSettings.MediaButtonsStyleSettings.buttonColor", L"0 0 0$255 255 255", &ModSettings::buttonColor),
     SInt(L"AppearanceSettings.MediaButtonsStyleSettings.buttonColorOpacity", 0, 100, &ModSettings::buttonColorOpacity),
-    SStr(L"AppearanceSettings.TitleTextStyleSettings.titleColor", L"255 255 255", &ModSettings::titleColor),
+    SStr(L"AppearanceSettings.TitleTextStyleSettings.titleColor", L"0 0 0$255 255 255", &ModSettings::titleColor),
     SInt(L"AppearanceSettings.TitleTextStyleSettings.titleColorOpacity", 0, 100, &ModSettings::titleColorOpacity),
     SStr(L"AppearanceSettings.TitleTextStyleSettings.titleFont", L"segoe_ui_variable"),
     SInt(L"AppearanceSettings.TitleTextStyleSettings.titleFontSize", 7, 24, &ModSettings::titleFontSize),
@@ -2952,7 +2955,7 @@ static constexpr SettingSpec SETTINGS[] = {
     SStrRaw(L"AppearanceSettings.TitleTextStyleSettings.titleFontWeight", &ModSettings::titleFontWeight),
     SStrRaw(L"AppearanceSettings.TitleTextStyleSettings.titleFontStyle", &ModSettings::titleFontStyle),
     SIntRaw(L"AppearanceSettings.TitleTextStyleSettings.titleCharacterSpacing", &ModSettings::titleCharacterSpacing),
-    SStr(L"AppearanceSettings.ArtistTextStyleSettings.artistColor", L"255 255 255", &ModSettings::artistColor),
+    SStr(L"AppearanceSettings.ArtistTextStyleSettings.artistColor", L"0 0 0$255 255 255", &ModSettings::artistColor),
     SInt(L"AppearanceSettings.ArtistTextStyleSettings.artistColorOpacity", 0, 100, &ModSettings::artistColorOpacity),
     SStr(L"AppearanceSettings.ArtistTextStyleSettings.artistFont", L"segoe_ui_variable"),
     SInt(L"AppearanceSettings.ArtistTextStyleSettings.artistFontSize", 7, 24, &ModSettings::artistFontSize),
@@ -2964,7 +2967,7 @@ static constexpr SettingSpec SETTINGS[] = {
     SStr(L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconGlyph", L"E189", &ModSettings::emptyIconGlyph),
     SInt(L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconSize", 1, 256, &ModSettings::emptyIconSize),
     SStr(L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconFont", L"segoe_fluent"),
-    SStr(L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconColor", L"255 255 255", &ModSettings::emptyIconColor),
+    SStr(L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconColor", L"140 140 140", &ModSettings::emptyIconColor),
     SInt(L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconOpacity", 0, 100, &ModSettings::emptyIconOpacity),
     SStr(L"AppearanceSettings.AlbumArtDisplaySettings.albumArtQuality", L"medium"),
     SBool(L"AppearanceSettings.AlbumArtDisplaySettings.showPauseOverlay", &ModSettings::showPauseOverlay),
@@ -2977,7 +2980,7 @@ static constexpr SettingSpec SETTINGS[] = {
     SStr(L"AppearanceSettings.AlbumArtDisplaySettings.appIconCorner", L"bottom_right"),
     SInt(L"AppearanceSettings.AlbumArtDisplaySettings.appIconSize", 8, 32, &ModSettings::appIconSize),
     SStr(L"AppearanceSettings.VisualizerStyleSettings.vizColorMode", L"solid"),
-    SStr(L"AppearanceSettings.VisualizerStyleSettings.vizColor", L"255 255 255", &ModSettings::vizColor),
+    SStr(L"AppearanceSettings.VisualizerStyleSettings.vizColor", L"0 0 0$255 255 255", &ModSettings::vizColor),
     SStr(L"AppearanceSettings.VisualizerStyleSettings.vizColor1", L"30 215 96", &ModSettings::vizColor1),
     SStr(L"AppearanceSettings.VisualizerStyleSettings.vizColor2", L"0 180 255", &ModSettings::vizColor2),
     SInt(L"AppearanceSettings.VisualizerStyleSettings.vizColorOpacity", 0, 100, &ModSettings::vizColorOpacity),
@@ -3030,7 +3033,7 @@ static constexpr SettingSpec SETTINGS[] = {
     SBool(L"ContextMenuSettings.showOpenWindhawk", &ModSettings::showOpenWindhawk),
     SBool(L"ContextMenuSettings.showSettingsButton", &ModSettings::showSettingsButton),
     SStr(L"ContextMenuSettings.contextMenuIconStyle", L"as_media_buttons"),
-    SStrRaw(L"ContextMenuSettings.contextMenuIconColor", L"255 255 255", &ModSettings::contextMenuIconColor),
+    SStrRaw(L"ContextMenuSettings.contextMenuIconColor", L"0 0 0$255 255 255", &ModSettings::contextMenuIconColor),
     SInt(L"ContextMenuSettings.contextMenuIconOpacity", 0, 100, &ModSettings::contextMenuIconOpacity),
     SStrRaw(L"DebugSettings.allowedProcesses", &ModSettings::allowedProcesses),
     SStrRaw(L"DebugSettings.ignoredProcesses", &ModSettings::ignoredProcesses),
@@ -3206,8 +3209,8 @@ COLD_UNOPTIMIZED static void LoadSettings() {
         APP_ICON_CORNERS, AppIconCorner::BottomRight);
     g_settings.hideNativeWidgetsScope = ParseSettingChoice(Str(L"MainSettings.NativeWidgetsSetting.hideNativeWidgetsScope", L"both"),
         WIDGETS_HIDE_SCOPES, WidgetsHideScope::Both);
-    g_settings.miniPlayerPlacementMode = ParseSettingChoice(Str(L"PlayerMenuSettings.placementMode", L"near"),
-        MINI_PLAYER_PLACEMENT_MODES, MiniPlayerPlacementMode::Near);
+    g_settings.miniPlayerPlacementMode = ParseSettingChoice(Str(L"PlayerMenuSettings.placementMode", L"screen"),
+        MINI_PLAYER_PLACEMENT_MODES, MiniPlayerPlacementMode::Screen);
     g_settings.miniPlayerBackground = ParseSettingChoice(Str(L"PlayerMenuSettings.miniPlayerBackground", L"acrylic"),
         MINI_PLAYER_BACKGROUNDS, MiniPlayerBackground::Acrylic);
     g_settings.contextMenuRepeatStyle = ParseSettingChoice(Str(L"ContextMenuSettings.repeatStyle", L"submenu"),
@@ -3240,8 +3243,8 @@ COLD_UNOPTIMIZED static void LoadSettings() {
 
     g_settings.monitor              = GetEffectiveMonitorSetting();
     PublishIgnoredApps(g_settings.ignoredProcesses, g_settings.allowedProcesses);
-    g_settings.position             = ParseSettingChoice(Str(L"MainSettings.PlayerSetting.position", L"taskbar_after_widgets_left"),
-                                                         PLAYER_POSITIONS, PlayerPosition::TaskbarAfterWidgetsLeft);
+    g_settings.position             = ParseSettingChoice(Str(L"MainSettings.PlayerSetting.position", L"tray_left"),
+                                                         PLAYER_POSITIONS, PlayerPosition::TrayLeft);
 
     ParseMargin(L"MainSettings.PlayerSetting.playerMargin", L"0 0", g_settings.playerMarginLeft, g_settings.playerMarginRight);
     ParseMargin(L"MainSettings.PlayerSetting.playerMarginVertical", L"0 0", g_settings.playerMarginTop, g_settings.playerMarginBottom);
@@ -3258,8 +3261,8 @@ COLD_UNOPTIMIZED static void LoadSettings() {
     ParseMargin(L"MainSettings.TextAreaSetting.textAreaMargin", L"5 5", g_settings.textAreaLeftMargin, g_settings.textAreaRightMargin);
 
     // Mini player popup (Player Menu) — merged from Salyts 1.6.0.
-    g_settings.miniPlayerIconStyle  = ParseSettingChoice(Str(L"PlayerMenuSettings.miniPlayerIconStyle", L"as_media_buttons"),
-                                                         ICON_STYLES, IconStyle::AsMediaButtons);
+    g_settings.miniPlayerIconStyle  = ParseSettingChoice(Str(L"PlayerMenuSettings.miniPlayerIconStyle", L"fluent_filled"),
+                                                         ICON_STYLES, IconStyle::FluentFilled);
     g_settings.miniPlayerHorizontalOffsetAbove =
         IntRaw(L"PlayerMenuSettings.PlayerMenuSettingsNear.miniPlayerHorizontalOffsetNear");
     g_settings.miniPlayerVerticalPlacementNear =
@@ -3607,7 +3610,7 @@ static std::atomic<bool> g_applyingSettings{false};
 static std::atomic<bool> g_hookInjectionInProgress{false};
 static std::atomic<int>  g_hookFailCount{0};
 
-static winrt::com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
+[[clang::no_destroy]] static winrt::com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
 
 static const CLSID XIID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 static const IID XIID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -3617,43 +3620,95 @@ static HWND             g_taskbarWnd      = nullptr;
 // The taskbar the player is injected into right now; g_taskbarWnd already
 // points at the new target while the old one is torn down.
 static HWND             g_playerInjectedOnWnd = nullptr;
+// The PlayerPosition it went in with, for the same reason (cast from int: the
+// enum is declared further down).
+static int              g_playerInjectedPosition = -1;
 
-// Detached worker threads, so unload can wait for them (WaitForTrackedWorkers).
-static std::atomic<int> g_activeWorkerThreads{0};
+// Worker threads. Unload waits for every one to exit (WaitForTrackedWorkers):
+// Windhawk frees the DLL as soon as Wh_ModUninit returns.
+static std::mutex          g_workersMtx;
+static std::vector<HANDLE> g_workerHandles;  // guarded by g_workersMtx
+// Calls the system makes into the mod (media session events), so unload can
+// wait for them too: revoking a handler doesn't wait for one already running.
+static std::atomic<int> g_callbacksInFlight{0};
+struct CallbackScope {
+    CallbackScope() { g_callbacksInFlight.fetch_add(1); }
+    ~CallbackScope() { g_callbacksInFlight.fetch_sub(1); }
+};
+
+// False once unload has started: the work doesn't run.
 template <typename F>
-static void SpawnTrackedWorker(F&& fn) {
-    g_activeWorkerThreads.fetch_add(1, std::memory_order_relaxed);
-    std::thread([f = std::forward<F>(fn)]() mutable {
-        struct Decrementer {
-            ~Decrementer() { g_activeWorkerThreads.fetch_sub(1, std::memory_order_relaxed); }
-        } dec;
-        f();
-    }).detach();
+static bool SpawnTrackedWorker(F&& fn) {
+    using Fn = std::decay_t<F>;
+    std::lock_guard<std::mutex> lk(g_workersMtx);
+    if (g_unloading) return false;
+    g_workerHandles.erase(std::remove_if(g_workerHandles.begin(), g_workerHandles.end(), [](HANDLE h) {
+        if (WaitForSingleObject(h, 0) != WAIT_OBJECT_0) return false;
+        CloseHandle(h);
+        return true;
+    }), g_workerHandles.end());
+    auto* job = new Fn(std::forward<F>(fn));
+    HANDLE h = CreateThread(nullptr, 0, [](void* param) -> DWORD {
+        std::unique_ptr<Fn> work(static_cast<Fn*>(param));
+        try { (*work)(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+        return 0;
+    }, job, 0, nullptr);
+    if (!h) { delete job; return false; }
+    g_workerHandles.push_back(h);
+    return true;
 }
-static void WaitForTrackedWorkers() {
-    static constexpr DWORD TIMEOUT_MS = 2000;
-    // Elapsed-time form, not "now < deadline": GetTickCount wraps every 49.7
-    // days, and a deadline past the wrap would end the wait immediately.
-    const DWORD start = GetTickCount();
+
+// Waits on a handle; on the taskbar's own thread it keeps handling sent
+// messages, as workers call into that thread.
+static void WaitPumpingIfUiThread(HANDLE h) {
     HWND hTaskbar = g_taskbarWnd;
-    DWORD tid = GetCurrentThreadId();
-    bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
-    if (isUiThread) {
-        while (g_activeWorkerThreads.load(std::memory_order_relaxed) > 0 &&
-               GetTickCount() - start < TIMEOUT_MS) {
-            MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-            Sleep(10);
-        }
-    } else {
-        while (g_activeWorkerThreads.load(std::memory_order_relaxed) > 0 &&
-               GetTickCount() - start < TIMEOUT_MS) {
-            Sleep(10);
+    const bool isUiThread = hTaskbar && GetWindowThreadProcessId(hTaskbar, nullptr) == GetCurrentThreadId();
+    if (!isUiThread) { WaitForSingleObject(h, INFINITE); return; }
+    while (MsgWaitForMultipleObjects(1, &h, FALSE, INFINITE, QS_SENDMESSAGE) == WAIT_OBJECT_0 + 1) {
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
     }
+}
+
+// Every worker, until it has exited. Call with g_unloading set.
+static void WaitForTrackedWorkers() {
+    for (;;) {
+        std::vector<HANDLE> handles;
+        {
+            std::lock_guard<std::mutex> lk(g_workersMtx);
+            handles.swap(g_workerHandles);
+        }
+        if (handles.empty()) break;
+        for (HANDLE h : handles) {
+            WaitPumpingIfUiThread(h);
+            CloseHandle(h);
+        }
+    }
+    while (g_callbacksInFlight.load() > 0) Sleep(5);
+}
+
+// Work queued with RunAsync on a taskbar's dispatcher. Each item holds one
+// token until the dispatcher lets go of it, run or dropped, and unload waits for
+// all of them. The work itself is skipped once unload has started.
+static std::atomic<int> g_dispatcherWorkPending{0};
+struct DispatcherWorkToken {
+    DispatcherWorkToken() { g_dispatcherWorkPending.fetch_add(1); }
+    ~DispatcherWorkToken() { g_dispatcherWorkPending.fetch_sub(1); }
+};
+template <typename F>
+static void QueueOnDispatcher(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
+                              winrt::Windows::UI::Core::CoreDispatcherPriority priority, F&& fn) {
+    if (!dispatcher || g_unloading) return;
+    auto token = std::make_shared<DispatcherWorkToken>();
+    dispatcher.RunAsync(priority, [token, f = std::forward<F>(fn)]() {
+        if (!g_unloading) f();
+    });
+}
+static void WaitForDispatcherWork() {
+    while (g_dispatcherWorkPending.load() > 0) Sleep(5);
 }
 
 // Sleeps up to `ms` in short slices so a worker never sleeps through an
@@ -3667,6 +3722,21 @@ static bool SleepUnlessUnloading(int ms) {
     return !g_unloading;
 }
 
+// .get() for a WinRT async call made from a worker, except that it cancels the
+// call and throws hresult_canceled once the mod starts unloading: a hung media
+// app must not keep a worker (and so the unload) waiting.
+template <typename Async>
+static auto AwaitOrCancel(Async const& op) {
+    while (op.Status() == winrt::Windows::Foundation::AsyncStatus::Started) {
+        if (g_unloading) {
+            try { op.Cancel(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+            throw winrt::hresult_canceled();
+        }
+        Sleep(2);
+    }
+    return op.GetResults();
+}
+
 // Mini player popup (Player Menu) state — declared early because DispatchMediaUpdate,
 // RemovePlayerGrid and UpdateVisibility reference it (Salyts 1.6.0).
 static std::atomic<bool> g_miniPlayerFlyoutOpen{false};
@@ -3678,14 +3748,12 @@ static std::atomic<bool> g_miniPlayerExplicitCloseRequested{false};
 // Seek bar (Salyts 1.6.1).
 static std::atomic<bool> g_miniPlayerSeekDragging{false};
 static std::atomic<bool> g_miniPlayerTimelineRefreshInProgress{false};
-static std::chrono::steady_clock::time_point g_miniPlayerLastSeekTime{};
 
-static Grid             g_playerGrid      = nullptr;
-static FrameworkElement g_injectionParent = nullptr;
+[[clang::no_destroy]] static Grid             g_playerGrid      = nullptr;
+[[clang::no_destroy]] static FrameworkElement g_injectionParent = nullptr;
 static int              g_playerColumn    = -1;
 // Set by BuildPlayerGrid; lets the mini-player keep the player button visually
 // "active" while the popup is open (Salyts 1.6.0). No-op until wired.
-static std::function<void()> g_playerButtonStateUpdater;
 static std::atomic<bool> g_needsUiUpdate{false};
 
 } // namespace Core
@@ -3769,9 +3837,10 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     { std::lock_guard<std::mutex> lk(s_payloadMtx); s_livePayloads.insert(&pay); }
     SendMessageW(hWnd, RUN_FROM_THREAD_MSG, 0, reinterpret_cast<LPARAM>(&pay));
     // Still in the set if the target thread never handled it (window gone).
-    { std::lock_guard<std::mutex> lk(s_payloadMtx); s_livePayloads.erase(&pay); }
+    bool ran = false;
+    { std::lock_guard<std::mutex> lk(s_payloadMtx); ran = s_livePayloads.erase(&pay) == 0; }
     UnhookWindowsHookEx(hook);
-    return true;
+    return ran;  // false: `proc` never ran
 }
 
 } // namespace Core
@@ -3800,47 +3869,6 @@ static std::wstring TrimCopy(std::wstring value) {
     if (first == std::wstring::npos) return L"";
     size_t last = value.find_last_not_of(ws);
     return value.substr(first, last - first + 1);
-}
-
-} // namespace Core
-
-// ===========================================================================
-// [Core] File logging
-// ===========================================================================
-namespace Core {
-
-// Appends a line to %TEMP%\fmp-crash.log and closes it each time, so the last
-// line survives an Explorer crash.
-static void FmpFileLog(const wchar_t* fmt, ...) {
-    wchar_t line[1024];
-    va_list ap; va_start(ap, fmt);
-    _vsnwprintf_s(line, _countof(line), _TRUNCATE, fmt, ap);
-    va_end(ap);
-
-    SYSTEMTIME st; GetLocalTime(&st);
-    wchar_t full[1200];
-    _snwprintf_s(full, _countof(full), _TRUNCATE, L"%02d:%02d:%02d.%03d  %s\r\n",
-                 st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, line);
-
-    wchar_t path[MAX_PATH];
-    DWORD tp = GetTempPathW(MAX_PATH, path);
-    if (!tp || tp > MAX_PATH) return;
-    wcscat_s(path, MAX_PATH, L"fmp-crash.log");
-
-    HANDLE h = CreateFileW(path, FILE_APPEND_DATA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    LARGE_INTEGER size{};
-    if (GetFileSizeEx(h, &size) && size.QuadPart > 1024 * 1024) {  // starts over rather than growing forever
-        CloseHandle(h);
-        h = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h == INVALID_HANDLE_VALUE) return;
-    }
-    char utf8[2400];
-    int n = WideCharToMultiByte(CP_UTF8, 0, full, -1, utf8, sizeof(utf8), nullptr, nullptr);
-    if (n > 1) { DWORD w = 0; WriteFile(h, utf8, (DWORD)(n - 1), &w, nullptr); }
-    CloseHandle(h);  // close flushes to disk
 }
 
 } // namespace Core
@@ -3961,8 +3989,8 @@ static size_t g_cachedPaletteHash = 0;
 static winrt::Windows::UI::Color g_cachedVizBaseColor{255, 255, 255, 255};
 static bool g_vizBaseColorDirty = true;
 
-static GlobalSystemMediaTransportControlsSessionManager g_sessionMgr     = nullptr;
-static GlobalSystemMediaTransportControlsSession        g_currentSession = nullptr;
+[[clang::no_destroy]] static GlobalSystemMediaTransportControlsSessionManager g_sessionMgr     = nullptr;
+[[clang::no_destroy]] static GlobalSystemMediaTransportControlsSession        g_currentSession = nullptr;
 
 // The app "Only listen to the app in the player" captures (GitHub #93). Set
 // whenever the player changes session; the capture thread sees the change
@@ -4012,35 +4040,35 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
             { std::lock_guard<std::mutex> lk(g_sessionMtx); session = g_currentSession; }
             if (session) {
                 switch (cmd) {
-                    case MediaCommand::Previous: session.TrySkipPreviousAsync().get();    break;
+                    case MediaCommand::Previous: AwaitOrCancel(session.TrySkipPreviousAsync());    break;
                     case MediaCommand::PlayPause: {
                         // Explicit play or pause: the toggle missed half the pauses in Zen/Firefox (GitHub #26).
                         auto info = session.GetPlaybackInfo();
                         const bool playing = info &&
                             info.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-                        if (playing) session.TryPauseAsync().get();
-                        else         session.TryPlayAsync().get();
+                        if (playing) AwaitOrCancel(session.TryPauseAsync());
+                        else         AwaitOrCancel(session.TryPlayAsync());
                         break;
                     }
-                    case MediaCommand::Next: session.TrySkipNextAsync().get();        break;
+                    case MediaCommand::Next: AwaitOrCancel(session.TrySkipNextAsync());        break;
                     case MediaCommand::Stop:
                         try {
                             Wh_Log(L"SendMediaCommandAsync: Attempting to stop playback");
 
-                            auto result = session.TryStopAsync().get();
+                            auto result = AwaitOrCancel(session.TryStopAsync());
                             Wh_Log(L"SendMediaCommandAsync: TryStopAsync returned %d", result);
 
                             if (!result) {
                                 Wh_Log(L"SendMediaCommandAsync: Stop not supported, using pause + seek fallback");
-                                session.TryPauseAsync().get();
-                                session.TryChangePlaybackPositionAsync(0).get();
+                                AwaitOrCancel(session.TryPauseAsync());
+                                AwaitOrCancel(session.TryChangePlaybackPositionAsync(0));
                             }
                         } catch (...) {
                             Wh_Log(L"SendMediaCommandAsync: Stop failed, trying pause + seek fallback");
 
                             try {
-                                session.TryPauseAsync().get();
-                                session.TryChangePlaybackPositionAsync(0).get();
+                                AwaitOrCancel(session.TryPauseAsync());
+                                AwaitOrCancel(session.TryChangePlaybackPositionAsync(0));
                             } catch (...) {
                                 Wh_Log(L"SendMediaCommandAsync: Fallback also failed");
                             }
@@ -4052,7 +4080,7 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
                             auto currentPos = timeline.Position();
                             auto newPos = currentPos - std::chrono::seconds(5);
                             if (newPos.count() < 0) newPos = std::chrono::seconds(0);
-                            session.TryChangePlaybackPositionAsync(newPos.count()).get();
+                            AwaitOrCancel(session.TryChangePlaybackPositionAsync(newPos.count()));
                         } catch (...) { LOG_IGNORED_EXCEPTION(); }
                         break;
                     case MediaCommand::Forward5s:
@@ -4062,13 +4090,13 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
                             auto endTime = timeline.EndTime();
                             auto newPos = currentPos + std::chrono::seconds(5);
                             if (newPos > endTime) newPos = endTime;
-                            session.TryChangePlaybackPositionAsync(newPos.count()).get();
+                            AwaitOrCancel(session.TryChangePlaybackPositionAsync(newPos.count()));
                         } catch (...) { LOG_IGNORED_EXCEPTION(); }
                         break;
                     case MediaCommand::Shuffle:
                         try {
                             bool currentShuffle = g_shuffleEnabled.load();
-                            if (session.TryChangeShuffleActiveAsync(!currentShuffle).get()) {
+                            if (AwaitOrCancel(session.TryChangeShuffleActiveAsync(!currentShuffle))) {
                                 g_shuffleEnabled = !currentShuffle;
                                 DispatchMediaUpdate();
                             }
@@ -4096,7 +4124,7 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
                                     break;
                             }
 
-                            if (session.TryChangeAutoRepeatModeAsync(mode).get()) {
+                            if (AwaitOrCancel(session.TryChangeAutoRepeatModeAsync(mode))) {
                                 g_repeatMode = next;
                                 DispatchMediaUpdate();
                             }
@@ -4107,7 +4135,7 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
                         break;
                     case MediaCommand::RepeatOff:
                         try {
-                            if (session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None).get()) {
+                            if (AwaitOrCancel(session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None))) {
                                 g_repeatMode = RepeatMode::Off;
                                 DispatchMediaUpdate();
                             }
@@ -4115,7 +4143,7 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
                         break;
                     case MediaCommand::RepeatAll:
                         try {
-                            if (session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::List).get()) {
+                            if (AwaitOrCancel(session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::List))) {
                                 g_repeatMode = RepeatMode::All;
                                 DispatchMediaUpdate();
                             }
@@ -4123,7 +4151,7 @@ static void SendMediaCommandAsync(MediaCommand cmd) {
                         break;
                     case MediaCommand::RepeatOne:
                         try {
-                            if (session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::Track).get()) {
+                            if (AwaitOrCancel(session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::Track))) {
                                 g_repeatMode = RepeatMode::One;
                                 DispatchMediaUpdate();
                             }
@@ -4489,6 +4517,15 @@ static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, i
             std::wstring fuzzyPath;
         };
         EnumCtx ctx{ &appUserModelId };
+        // Another app's window: a hung app gets 100 ms, then the class icon.
+        static auto WindowIconNoHang = [](HWND w) -> HICON {
+            for (WPARAM size : { (WPARAM)ICON_BIG, (WPARAM)ICON_SMALL }) {
+                DWORD_PTR r = 0;
+                if (SendMessageTimeoutW(w, WM_GETICON, size, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &r) && r)
+                    return (HICON)r;
+            }
+            return nullptr;
+        };
 
         EnumWindows([](HWND hWnd, LPARAM lParam) CALLBACK -> BOOL {
             if (!IsWindowVisible(hWnd)) return TRUE;
@@ -4508,8 +4545,7 @@ static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, i
                         std::wstring winAumid  = ToLowerCopy(std::wstring(var.pwszVal));
                         std::wstring wantAumid = ToLowerCopy(*c->aumid);
                         if (winAumid == wantAumid) {
-                            HICON icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
-                            if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
+                            HICON icon = WindowIconNoHang(hWnd);
                             if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
                             if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
                             if (icon) {
@@ -4532,8 +4568,7 @@ static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, i
                     DWORD pid = 0;
                     std::wstring procPath;
                     if (AppIdMatchesProcess(*c->aumid, hWnd, &pid, &procPath)) {
-                        HICON icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
-                        if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
+                        HICON icon = WindowIconNoHang(hWnd);
                         if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
                         if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
                         if (icon) {
@@ -4639,7 +4674,7 @@ static std::vector<BYTE> ReadThumbnailBytes(winrt::Windows::Storage::Streams::IR
     std::vector<BYTE> bytes;
     if (!ref) return bytes;
     try {
-        auto stream = ref.OpenReadAsync().get();
+        auto stream = AwaitOrCancel(ref.OpenReadAsync());
         if (!stream) return bytes;
         const UINT64 sz = stream.Size();
         if (sz == 0) { Wh_Log(L"Album art (%s): the app sent an empty image", where); return bytes; }
@@ -4653,7 +4688,7 @@ static std::vector<BYTE> ReadThumbnailBytes(winrt::Windows::Storage::Streams::IR
         size_t got = 0;
         while (got < bytes.size()) {
             const UINT32 want = (UINT32)std::min<size_t>(bytes.size() - got, 1u << 20);
-            const UINT32 n = reader.LoadAsync(want).get();
+            const UINT32 n = AwaitOrCancel(reader.LoadAsync(want));
             if (n == 0) break;
             reader.ReadBytes(winrt::array_view<BYTE>(bytes.data() + got, bytes.data() + got + n));
             got += n;
@@ -4696,7 +4731,7 @@ static void FetchMediaPropertiesAsync() {
             }
 
             try {
-                auto props = session.TryGetMediaPropertiesAsync().get();
+                auto props = AwaitOrCancel(session.TryGetMediaPropertiesAsync());
                 if (!props) {
                     winrt::uninit_apartment();
                     return;
@@ -5029,20 +5064,17 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
         return;
     }
 
-    bool needsReattach = false;
     {
         std::lock_guard<std::mutex> lk(g_sessionMtx);
         if (g_currentSession == session) {
             if (!g_evMediaProps.value || !g_evPlayback.value) {
                 Wh_Log(L"AttachToSession: Same session but events not attached, reattaching");
-                needsReattach = true;
             } else {
                 Wh_Log(L"AttachToSession: Same session already attached, fetching data");
                 goto fetch;
             }
         }
     }
-    (void)needsReattach;
 
     try {
         std::wstring appId = session.SourceAppUserModelId().c_str();
@@ -5068,10 +5100,12 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
         g_currentSession = session;
         try {
             g_evMediaProps = g_currentSession.MediaPropertiesChanged([](auto const&, auto const&) {
+                CallbackScope inFlight;
                 Wh_Log(L"MediaPropertiesChanged event fired");
                 if (!g_unloading) DebouncedFetchMediaProperties();  // debounced: ignore transient hover-preview metadata
             });
             g_evPlayback = g_currentSession.PlaybackInfoChanged([](auto const&, auto const&) {
+                CallbackScope inFlight;
                 Wh_Log(L"PlaybackInfoChanged event fired");
                 if (!g_unloading) FetchPlaybackInfoAsync();
             });
@@ -5230,10 +5264,12 @@ static DWORD WINAPI MediaThreadProc(void*) {
         Wh_Log(L"MediaThreadProc: Session manager obtained");
 
         g_evSessionsChanged = g_sessionMgr.SessionsChanged([](auto const&, auto const&) {
+            CallbackScope inFlight;
             Wh_Log(L"MediaThreadProc: SessionsChanged event fired");
             OnSessionsChanged();
         });
         g_evCurrentChanged  = g_sessionMgr.CurrentSessionChanged([](auto const&, auto const&) {
+            CallbackScope inFlight;
             Wh_Log(L"MediaThreadProc: CurrentSessionChanged event fired");
             OnSessionsChanged();
         });
@@ -5256,7 +5292,10 @@ static DWORD WINAPI MediaThreadProc(void*) {
         Wh_Log(L"MediaThreadProc: Shutting down");
         try { if (g_evSessionsChanged.value) g_sessionMgr.SessionsChanged(g_evSessionsChanged); } catch (...) { Wh_Log(L"MediaThreadProc: Failed to unregister SessionsChanged event"); }
         try { if (g_evCurrentChanged.value)  g_sessionMgr.CurrentSessionChanged(g_evCurrentChanged); } catch (...) { Wh_Log(L"MediaThreadProc: Failed to unregister CurrentSessionChanged event"); }
+        // A callback already running still reads the manager and the session.
+        while (g_callbacksInFlight.load() > 0) Sleep(5);
         DetachCurrentSession();
+        while (g_callbacksInFlight.load() > 0) Sleep(5);
         g_sessionMgr = nullptr;
     done:
         winrt::uninit_apartment();
@@ -5276,7 +5315,7 @@ static void StartMediaThread() {
 }
 static void StopMediaThread() {
     if (g_mediaStopEvent) SetEvent(g_mediaStopEvent);
-    if (g_mediaThread) { WaitForSingleObject(g_mediaThread, 5000); CloseHandle(g_mediaThread); g_mediaThread = nullptr; }
+    if (g_mediaThread) { WaitPumpingIfUiThread(g_mediaThread); CloseHandle(g_mediaThread); g_mediaThread = nullptr; }
     if (g_mediaStopEvent) { CloseHandle(g_mediaStopEvent); g_mediaStopEvent = nullptr; }
 }
 
@@ -5351,12 +5390,12 @@ static winrt::Windows::UI::Color GetSystemButtonBorderPressedColor(HoverEffect m
     return winrt::Windows::UI::Color{0x0A, 0xFF, 0xFF, 0xFF};
 }
 
-static SolidColorBrush g_mediaHoverBrush   = nullptr;
-static SolidColorBrush g_mediaPressedBrush = nullptr;
-static SolidColorBrush g_playerHoverBrush   = nullptr;
-static SolidColorBrush g_playerPressedBrush = nullptr;
-static SolidColorBrush g_playerBorderBrush  = nullptr;
-static SolidColorBrush g_playerBorderPressedBrush = nullptr;
+[[clang::no_destroy]] static SolidColorBrush g_mediaHoverBrush   = nullptr;
+[[clang::no_destroy]] static SolidColorBrush g_mediaPressedBrush = nullptr;
+[[clang::no_destroy]] static SolidColorBrush g_playerHoverBrush   = nullptr;
+[[clang::no_destroy]] static SolidColorBrush g_playerPressedBrush = nullptr;
+[[clang::no_destroy]] static SolidColorBrush g_playerBorderBrush  = nullptr;
+[[clang::no_destroy]] static SolidColorBrush g_playerBorderPressedBrush = nullptr;
 
 static void EnsureHoverBrushes() {
     if (!g_mediaHoverBrush) {
@@ -6578,7 +6617,10 @@ static HICON CreateSettingsAppIcon(int px, COLORREF fgRgb = RGB(255, 255, 255)) 
 
     // The real Windows Settings gear (the Settings app's logo); the glyph only if it's missing.
     {
-        Gdiplus::Bitmap src(L"C:/Windows/ImmersiveControlPanel/images/logo.targetsize-256_altform-unplated.png", FALSE);
+        wchar_t logo[MAX_PATH] = {};
+        GetWindowsDirectoryW(logo, MAX_PATH);
+        wcscat_s(logo, L"\\ImmersiveControlPanel\\images\\logo.targetsize-256_altform-unplated.png");
+        Gdiplus::Bitmap src(logo, FALSE);
         if (src.GetLastStatus() == Gdiplus::Ok && src.GetWidth() > 0) {
             Gdiplus::Bitmap scaled(px, px, PixelFormat32bppARGB);
             {
@@ -6813,7 +6855,7 @@ struct VizCaptureRun {
     std::wstring      device;   // "Audio device", copied when the run starts
     bool              onlyApp = false;  // "Only listen to the app in the player"
 };
-static std::shared_ptr<VizCaptureRun> g_captureRun;  // taskbar UI thread only
+[[clang::no_destroy]] static std::shared_ptr<VizCaptureRun> g_captureRun;  // taskbar UI thread only
 static std::atomic<bool> g_vizDeviceChanged{false};
 
 class VizEndpointNotificationClient final : public IMMNotificationClient {
@@ -7532,16 +7574,17 @@ static void StopVizCaptureThread() {
 // not hold up the taskbar while the audio service releases the device (from
 // 1.6.0, lost in the 1.7 rework). Unload drains the worker.
 static void StopVizCaptureThreadAsync() {
-    if (g_unloading) { StopVizCaptureThread(); return; }  // no workers once unload has drained them
+    if (g_unloading) { StopVizCaptureThread(); return; }
     auto run = std::move(g_captureRun);
     if (!run) return;
     run->running.store(false);
     if (run->event) SetEvent(run->event);
     ClearVizBands();
-    SpawnTrackedWorker([run]() {
+    auto join = [run]() {
         if (run->thread.joinable()) run->thread.join();
         if (run->event) CloseHandle(run->event);
-    });
+    };
+    if (!SpawnTrackedWorker(join)) join();  // unload started: wait here instead
 }
 
 static float g_vizPeak[VIZ_BARS_MAX] = {};
@@ -7666,9 +7709,15 @@ static void ShowSuccessNotification() {
 // Once, after updating: a small bubble over the player pointing at the settings
 // window. Marked as seen in mod storage only once it has actually shown; with
 // the player hidden it tries again on the next load.
+// Kept so unload can stop them and close the tip (UI thread).
+[[clang::no_destroy]] static DispatcherTimer g_settingsTipWait{nullptr};
+[[clang::no_destroy]] static DispatcherTimer g_settingsTipClose{nullptr};
+[[clang::no_destroy]] static Flyout          g_settingsTipFlyout{nullptr};
+
 static void MaybeShowSettingsTip() {
-    if (Wh_GetIntValue(L"SettingsTipShown", 0) || !g_playerGrid) return;
+    if (Wh_GetIntValue(L"SettingsTipShown", 0) || !g_playerGrid || g_settingsTipWait) return;
     DispatcherTimer wait;
+    g_settingsTipWait = wait;
     wait.Interval(std::chrono::seconds(3));  // the player settles in first
     winrt::weak_ref<DispatcherTimer> weakWait = wait;
     wait.Tick([weakWait](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
@@ -7711,9 +7760,11 @@ static void MaybeShowSettingsTip() {
                 if (auto f = weakTip.get()) f.Hide();
             });
             tip.ShowAt(g_playerGrid);
+            g_settingsTipFlyout = tip;
             Wh_SetIntValue(L"SettingsTipShown", 1);
 
             DispatcherTimer close;  // goes away on its own too
+            g_settingsTipClose = close;
             close.Interval(std::chrono::seconds(12));
             winrt::weak_ref<DispatcherTimer> weakClose = close;
             close.Tick([weakClose, weakTip](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
@@ -7835,10 +7886,28 @@ struct TaskbarTimerSlot {
     winrt::event_token& token;
     bool& hasToken;
     HWND& owner;
+    DWORD& ownerThread;  // the timer's thread, for when its window is already gone
 };
+// A window on `tid`'s thread, to reach that thread when the one we knew is gone.
+static HWND AnyWindowOfThread(DWORD tid) {
+    HWND found = nullptr;
+    if (tid) EnumThreadWindows(tid, [](HWND h, LPARAM out) -> BOOL {
+        *reinterpret_cast<HWND*>(out) = h;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+// Where a taskbar timer has to be stopped: its window, or else any window of
+// its thread. Null when that thread is gone (and the timer with it).
+static HWND TimerStopWindow(HWND owner, DWORD ownerThread) {
+    if (owner && IsWindow(owner)) return owner;
+    return AnyWindowOfThread(ownerThread);
+}
 static void RetireTaskbarTimer(TaskbarTimerSlot slot) {
-    if (slot.timer && slot.owner && IsWindow(slot.owner)) {
-        RunFromWindowThread(slot.owner, [](void* p) {
+    HWND runOn = TimerStopWindow(slot.owner, slot.ownerThread);
+    if (slot.timer && !runOn) winrt::detach_abi(slot.timer);  // its thread is gone, and the timer with it
+    if (slot.timer && runOn) {
+        RunFromWindowThread(runOn, [](void* p) {
             auto* s = static_cast<TaskbarTimerSlot*>(p);
             try {
                 s->timer.Stop();
@@ -7850,12 +7919,14 @@ static void RetireTaskbarTimer(TaskbarTimerSlot slot) {
     slot.timer = nullptr;
     slot.hasToken = false;
     slot.owner = nullptr;
+    slot.ownerThread = 0;
 }
 
-static winrt::Windows::UI::Xaml::DispatcherTimer g_scrollDispatcherTimer{nullptr};
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::DispatcherTimer g_scrollDispatcherTimer{nullptr};
 static winrt::event_token                        g_scrollDispatcherTimerToken{};
 static bool                                       g_scrollDispatcherTimerHasToken = false;
 static HWND                                       g_scrollTimerWnd = nullptr;
+static DWORD                                      g_scrollTimerThread = 0;
 
 static void TickScrollState(TextScrollState& s, int stepPx, int pauseMs, TextScrollMode mode) {
     if (!s.active) return;
@@ -7905,8 +7976,13 @@ static void ScrollTimerTick(winrt::Windows::Foundation::IInspectable const&,
                              winrt::Windows::Foundation::IInspectable const&) {
     if (g_unloading || g_applyingSettings) return;
 
+    // Nothing to scroll: stop, rather than waking the taskbar 60 times a second.
+    // UpdateMarqueeLine starts it again when a title or artist stops fitting.
     bool needsScroll = (g_titleScroll.active || g_artistScroll.active);
-    if (!needsScroll) return;
+    if (!needsScroll) {
+        try { if (g_scrollDispatcherTimer) g_scrollDispatcherTimer.Stop(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+        return;
+    }
 
     int stepPx = std::max(1, g_settings.scrollSpeed);
     int pauseMs = g_settings.scrollPauseDuration;
@@ -7922,8 +7998,9 @@ static void StartScrollTimer() {
     HWND hWnd = g_settings.infoDetached && g_detachedInfo.injectedOnWnd ? g_detachedInfo.injectedOnWnd : g_taskbarWnd;
     if (!hWnd || !IsWindow(hWnd)) return;
     if (g_scrollTimerWnd != hWnd) {
-        RetireTaskbarTimer({g_scrollDispatcherTimer, g_scrollDispatcherTimerToken, g_scrollDispatcherTimerHasToken, g_scrollTimerWnd});
+        RetireTaskbarTimer({g_scrollDispatcherTimer, g_scrollDispatcherTimerToken, g_scrollDispatcherTimerHasToken, g_scrollTimerWnd, g_scrollTimerThread});
         g_scrollTimerWnd = hWnd;
+        g_scrollTimerThread = GetWindowThreadProcessId(hWnd, nullptr);
     }
 
     RunFromWindowThread(hWnd, [](void*) {
@@ -7941,7 +8018,7 @@ static void StartScrollTimer() {
 }
 
 static void StopScrollTimer() {
-    HWND hWnd = g_scrollTimerWnd ? g_scrollTimerWnd : g_taskbarWnd;
+    HWND hWnd = g_scrollTimerWnd ? TimerStopWindow(g_scrollTimerWnd, g_scrollTimerThread) : g_taskbarWnd;
 
     auto stop = [](void*) {
         try {
@@ -7958,11 +8035,8 @@ static void StopScrollTimer() {
         } catch (...) { LOG_IGNORED_EXCEPTION(); }
     };
 
-    if (hWnd && IsWindow(hWnd)) {
-        RunFromWindowThread(hWnd, stop, nullptr);
-    } else {
-        stop(nullptr);
-    }
+    // No window left on its thread: that thread, and the timer, are gone.
+    if (hWnd && IsWindow(hWnd)) RunFromWindowThread(hWnd, stop, nullptr);
 }
 
 static void ResetScrollState(TextScrollState& s) {
@@ -8110,14 +8184,14 @@ static bool ShouldVizBarsBeVertical() {
 }
 
 using VizRect = winrt::Windows::UI::Xaml::Shapes::Rectangle;
-static std::vector<VizRect> g_vizBars;
-static std::vector<SolidColorBrush> g_vizBrushes;
+[[clang::no_destroy]] static std::optional<std::vector<VizRect>> g_vizBars{std::in_place};
+[[clang::no_destroy]] static std::optional<std::vector<SolidColorBrush>> g_vizBrushes{std::in_place};
 
 // "Style: Line" (GitHub #16): the bars stay in the tree, invisible, to keep
 // the layout; this one stroke is drawn over them. One gradient stop per bar
 // carries that bar's color, so every color mode works on the line too.
 [[clang::no_destroy]] static winrt::Windows::UI::Xaml::Shapes::Polyline g_vizLine{nullptr};
-static std::vector<winrt::Windows::UI::Xaml::Media::GradientStop> g_vizLineStops;
+[[clang::no_destroy]] static std::optional<std::vector<winrt::Windows::UI::Xaml::Media::GradientStop>> g_vizLineStops{std::in_place};
 static constexpr double VIZ_LINE_THICKNESS = 1.5;
 // Behind the player the line is drawn at the player's size; 0 = its own size.
 static double g_vizLineFillWidth = 0.0, g_vizLineFillHeight = 0.0;
@@ -8125,7 +8199,7 @@ static bool g_vizLineFillChanged = false;
 
 static void ClearVizLine() {
     g_vizLine = nullptr;
-    g_vizLineStops.clear();
+    g_vizLineStops->clear();
     g_vizLineFillWidth = g_vizLineFillHeight = 0.0;
     g_vizLineFillChanged = false;
 }
@@ -8198,7 +8272,7 @@ static double VizZoneExtent(bool vertical) {
 }
 
 static void VizApplyFrame() {
-    if (!g_settings.vizEnabled || g_vizBars.empty())
+    if (!g_settings.vizEnabled || g_vizBars->empty())
         return;
 
     bool vertical = ShouldVizBarsBeVertical();
@@ -8215,7 +8289,7 @@ static void VizApplyFrame() {
         default:                decay += sensBoost; break;
     }
 
-    int barCount = std::min((int)g_vizBars.size(), std::max(1, g_settings.vizBars));
+    int barCount = std::min((int)g_vizBars->size(), std::max(1, g_settings.vizBars));
     double zoneH = VizZoneExtent(vertical);
     double maxBH = std::max(4.0, zoneH - 6.0);
     // Height floor 0, so idle bars can go flat; vizIdleBarSize sets the rest height.
@@ -8273,11 +8347,11 @@ static void VizApplyFrame() {
     static std::vector<uint32_t> s_lastColor;
     static void* s_cacheFirstBar = nullptr;
     static bool  s_cacheVertical = false;
-    void* firstBar = winrt::get_abi(g_vizBars[0]);
-    if (s_lastExtent.size() != g_vizBars.size() || s_cacheFirstBar != firstBar ||
+    void* firstBar = winrt::get_abi((*g_vizBars)[0]);
+    if (s_lastExtent.size() != g_vizBars->size() || s_cacheFirstBar != firstBar ||
         s_cacheVertical != vertical) {
-        s_lastExtent.assign(g_vizBars.size(), -1.0);
-        s_lastColor.assign(g_vizBars.size(), 0);
+        s_lastExtent.assign(g_vizBars->size(), -1.0);
+        s_lastColor.assign(g_vizBars->size(), 0);
         s_cacheFirstBar = firstBar;
         s_cacheVertical = vertical;
     }
@@ -8290,7 +8364,7 @@ static void VizApplyFrame() {
 
     // Line style: the bars keep their resting size (they only hold the
     // layout) and the levels go into the line's points instead.
-    const bool lineStyle = g_vizLine && (int)g_vizLineStops.size() >= barCount;
+    const bool lineStyle = g_vizLine && (int)g_vizLineStops->size() >= barCount;
     bool lineChanged = g_vizLineFillChanged;  // redrawn after a resize, even with nothing playing
     g_vizLineFillChanged = false;
 
@@ -8332,17 +8406,17 @@ static void VizApplyFrame() {
             const bool fresh = s_lastExtent[i] < 0.0;
             if (fresh || bh != s_lastExtent[i]) {
                 if (lineStyle)     lineChanged = true;
-                else if (vertical) g_vizBars[i].Width(bh);
-                else               g_vizBars[i].Height(bh);
+                else if (vertical) (*g_vizBars)[i].Width(bh);
+                else               (*g_vizBars)[i].Height(bh);
                 s_lastExtent[i] = bh;
             }
             const uint32_t packed = packColor(c);
             if (fresh || packed != s_lastColor[i]) {
                 if (lineStyle) {
-                    g_vizLineStops[i].Color(c);
+                    (*g_vizLineStops)[i].Color(c);
                     s_lastColor[i] = packed;
-                } else if (i < (int)g_vizBrushes.size() && g_vizBrushes[i]) {
-                    g_vizBrushes[i].Color(c);
+                } else if (i < (int)g_vizBrushes->size() && (*g_vizBrushes)[i]) {
+                    (*g_vizBrushes)[i].Color(c);
                     s_lastColor[i] = packed;
                 }
             }
@@ -8396,10 +8470,11 @@ static void VizApplyFrame() {
     }
 }
 
-static winrt::Windows::UI::Xaml::DispatcherTimer g_vizDispatcherTimer{nullptr};
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::DispatcherTimer g_vizDispatcherTimer{nullptr};
 static winrt::event_token g_vizDispatcherTimerToken{};
 static bool g_vizDispatcherTimerHasToken = false;
 static HWND g_vizTimerWnd = nullptr;
+static DWORD g_vizTimerThread = 0;
 
 // Frame interval while there's audio, and once it's been quiet for a second.
 // The bars have settled by then, so the slow rate only keeps the timer alive
@@ -8437,8 +8512,9 @@ static void StartVizTimer() {
     HWND hWnd = g_settings.vizDetached && g_detachedViz.injectedOnWnd ? g_detachedViz.injectedOnWnd : g_taskbarWnd;
     if (!hWnd || !IsWindow(hWnd)) return;
     if (g_vizTimerWnd != hWnd) {
-        RetireTaskbarTimer({g_vizDispatcherTimer, g_vizDispatcherTimerToken, g_vizDispatcherTimerHasToken, g_vizTimerWnd});
+        RetireTaskbarTimer({g_vizDispatcherTimer, g_vizDispatcherTimerToken, g_vizDispatcherTimerHasToken, g_vizTimerWnd, g_vizTimerThread});
         g_vizTimerWnd = hWnd;
+        g_vizTimerThread = GetWindowThreadProcessId(hWnd, nullptr);
     }
 
     RunFromWindowThread(hWnd, [](void*) {
@@ -8456,7 +8532,7 @@ static void StartVizTimer() {
 }
 
 static void StopVizTimer() {
-    HWND hWnd = g_vizTimerWnd ? g_vizTimerWnd : g_taskbarWnd;
+    HWND hWnd = g_vizTimerWnd ? TimerStopWindow(g_vizTimerWnd, g_vizTimerThread) : g_taskbarWnd;
 
     auto stop = [](void*) {
         try {
@@ -8473,16 +8549,13 @@ static void StopVizTimer() {
         } catch (...) { LOG_IGNORED_EXCEPTION(); }
     };
 
-    if (hWnd && IsWindow(hWnd)) {
-        RunFromWindowThread(hWnd, stop, nullptr);
-    } else {
-        stop(nullptr);
-    }
+    // No window left on its thread: that thread, and the timer, are gone.
+    if (hWnd && IsWindow(hWnd)) RunFromWindowThread(hWnd, stop, nullptr);
 }
 
 COLD_UNOPTIMIZED static FrameworkElement BuildVisualizerElement(bool hasLeftNeighbor, bool hasRightNeighbor) {
-    g_vizBars.clear();
-    g_vizBrushes.clear();
+    g_vizBars->clear();
+    g_vizBrushes->clear();
     ClearVizLine();
 
     bool vertical = ShouldVizBarsBeVertical();
@@ -8563,8 +8636,8 @@ COLD_UNOPTIMIZED static FrameworkElement BuildVisualizerElement(bool hasLeftNeig
         }
 
         bars.Children().Append(r);
-        g_vizBars.push_back(r);
-        g_vizBrushes.push_back(br);
+        g_vizBars->push_back(r);
+        g_vizBrushes->push_back(br);
     }
 
     winrt::Windows::UI::Xaml::Controls::Canvas lineCanvas{nullptr};
@@ -8587,7 +8660,7 @@ COLD_UNOPTIMIZED static FrameworkElement BuildVisualizerElement(bool hasLeftNeig
             stop.Color({255, 255, 255, 255});
             stop.Offset(barCount > 1 ? (double)i / (barCount - 1) : 0.0);
             stroke.GradientStops().Append(stop);
-            g_vizLineStops.push_back(stop);
+            g_vizLineStops->push_back(stop);
         }
 
         g_vizLine = winrt::Windows::UI::Xaml::Shapes::Polyline();
@@ -9299,7 +9372,7 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
                     g_vizCurrentlyVisible = false;
                     RemovePlayerGrid();
                     auto dispatcher = winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher();
-                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [=]() {
+                    QueueOnDispatcher(dispatcher, winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [=]() {
                         try {
                             InjectPlayerGrid();
                             Wh_Log(L"Restart Player: Player reinjected successfully");
@@ -9322,9 +9395,7 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
 
         if (g_settings.showSettingsButton) {
             menu.Items().Append(MakeActionContextMenuItem(L"\uE115", Loc(L"Settings").c_str(), []() {
-                // Native WinUI-style window (the look GR0UD wants). It spins up a
-                // second WindowsXamlManager in explorer.exe and can restart
-                // Explorer on open. See notes near ThreadProc().
+                // The settings window, on its own thread (xs::Show).
                 ShowXamlSettingsWindow();
             }));
         }
@@ -10190,6 +10261,10 @@ COLD_UNOPTIMIZED static StackPanel BuildButtonsContainer() {
 
 // ---- [UI] Mini player popup ----
 [[clang::no_destroy]] static winrt::Windows::UI::Xaml::Controls::Flyout g_miniPlayerFlyout{nullptr};
+// Its handlers and short fallback timers, so unload can detach and stop them.
+static winrt::event_token g_miniFlyoutOpenedToken{}, g_miniFlyoutClosingToken{}, g_miniFlyoutClosedToken{};
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::DispatcherTimer g_miniRevealTimer{nullptr};
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::DispatcherTimer g_miniClosingTimer{nullptr};
 [[clang::no_destroy]] static Controls::Image g_miniPlayerArtRef{nullptr};
 [[clang::no_destroy]] static Border          g_miniPlayerContentBgRef{nullptr};
 static uint64_t g_miniPlayerBgKey = 0;  // track + palette the background was built for
@@ -10446,7 +10521,6 @@ static void RefreshMiniPlayerTimelineAsync() {
 [[maybe_unused]] static void SeekMiniPlayer(double ratio) {  // called from a generic lambda
     if (g_unloading) return;
     ratio = std::clamp(ratio, 0.0, 1.0);
-    g_miniPlayerLastSeekTime = std::chrono::steady_clock::now();
     SpawnTrackedWorker([ratio]() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         try {
@@ -10470,9 +10544,9 @@ static void RefreshMiniPlayerTimelineAsync() {
                 std::llround(static_cast<double>(durationTicks) * ratio));
             int64_t absoluteTicks = startTicks + relativeTicks;
             try {
-                bool ok = session.TryChangePlaybackPositionAsync(absoluteTicks).get();
+                bool ok = AwaitOrCancel(session.TryChangePlaybackPositionAsync(absoluteTicks));
                 if (!ok && absoluteTicks != relativeTicks)
-                    session.TryChangePlaybackPositionAsync(relativeTicks).get();
+                    AwaitOrCancel(session.TryChangePlaybackPositionAsync(relativeTicks));
                 std::lock_guard<std::mutex> lk(g_mediaMtx);
                 g_media.positionTicks    = relativeTicks;
                 g_mediaPositionTimestamp = std::chrono::steady_clock::now();
@@ -11364,7 +11438,7 @@ static void FetchMiniSessionInfosAsync(HWND taskbarWnd) {
                         MiniSessionInfo info;
                         info.id = sid;
                         try {
-                            auto props = s.TryGetMediaPropertiesAsync().get();
+                            auto props = AwaitOrCancel(s.TryGetMediaPropertiesAsync());
                             if (props) {
                                 info.title  = std::wstring(props.Title());
                                 info.artist = std::wstring(props.Artist());
@@ -12406,10 +12480,9 @@ static void ShowMiniPlayerFlyout(FrameworkElement const& target) {
             winrt::box_value(10000.0)));
         flyout.FlyoutPresenterStyle(flyoutStyle);
 
-        flyout.Opened([content](auto const&, auto const&) {
+        g_miniFlyoutOpenedToken = flyout.Opened([content](auto const&, auto const&) {
             g_miniPlayerFlyoutOpen = true;
             g_miniPlayerClosingAnimStarted.store(false);
-            if (g_playerButtonStateUpdater) g_playerButtonStateUpdater();
             g_miniSessionHoveredIndex.store(-1);
             {
                 std::lock_guard<std::mutex> lk(g_miniSessionMtx);
@@ -12502,6 +12575,7 @@ static void ShowMiniPlayerFlyout(FrameworkElement const& target) {
             });
 
             auto fallbackTimer = DispatcherTimer();
+            g_miniRevealTimer = fallbackTimer;
             fallbackTimer.Interval(
                 winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(80)});
             auto fallbackToken = std::make_shared<winrt::event_token>();
@@ -12515,7 +12589,7 @@ static void ShowMiniPlayerFlyout(FrameworkElement const& target) {
             fallbackTimer.Start();
         });
 
-        flyout.Closing([content](
+        g_miniFlyoutClosingToken = flyout.Closing([content](
             winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBase const& sender,
             winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBaseClosingEventArgs const& e)
         {
@@ -12574,6 +12648,7 @@ static void ShowMiniPlayerFlyout(FrameworkElement const& target) {
                 };
                 sb.Completed([doHide](auto const&, auto const&) { doHide(); });
                 auto closingFallback = DispatcherTimer();
+                g_miniClosingTimer = closingFallback;
                 closingFallback.Interval(winrt::Windows::Foundation::TimeSpan{
                     std::chrono::milliseconds(350)});
                 auto closingFallbackToken = std::make_shared<winrt::event_token>();
@@ -12593,7 +12668,7 @@ static void ShowMiniPlayerFlyout(FrameworkElement const& target) {
             }
         });
 
-        flyout.Closed([](auto const&, auto const&) {
+        g_miniFlyoutClosedToken = flyout.Closed([](auto const&, auto const&) {
             g_miniPlayerFlyoutOpen = false;
             g_miniPlayerClosingAnimStarted.store(false);
             g_miniSessionHoveredIndex.store(-1);
@@ -12614,7 +12689,6 @@ static void ShowMiniPlayerFlyout(FrameworkElement const& target) {
             g_miniPlayerElapsedRef = nullptr;
             g_miniPlayerDurationRef = nullptr;
             g_miniSessionCachedThumbSizes.clear();
-            if (g_playerButtonStateUpdater) g_playerButtonStateUpdater();
         });
 
 
@@ -12921,8 +12995,8 @@ static void RefreshMainArtistTimeText() {
 
 COLD_UNOPTIMIZED static Grid BuildPlayerGrid() {
     try {
-        g_vizBars.clear();
-        g_vizBrushes.clear();
+        g_vizBars->clear();
+        g_vizBrushes->clear();
         ClearVizLine();
 
         auto bgBrush = MakeBackgroundBrush();
@@ -13635,6 +13709,7 @@ static void UpdateMarqueeLine(TextBlock const& tb, TextScrollState& scroll, bool
                 } else if (!wasActive) {
                     scroll.offset = 0.0;
                     scroll.forward = true;
+                    if (!g_unloading) StartScrollTimer();  // the tick stops it when nothing scrolls
                     if (g_settings.scrollMode == TextScrollMode::Loop) {
                         scroll.pausing  = false;
                         scroll.pauseTick = 0;
@@ -14808,7 +14883,7 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 
     void* taskbarHostSharedPtr[2]{};
     getTaskbarHost(taskBandForTaskListWndSite, taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) return nullptr;
+    if (!taskbarHostSharedPtr[0]) return nullptr;
 
     size_t taskbarElementIUnknownOffset = 0x10;
 #if defined(_M_X64) || defined(__x86_64__)
@@ -14816,7 +14891,7 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         // 48:83EC 28 | sub rsp,28
         // 48:83C1 48 | add rcx,48
         const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+        if (b && b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
             b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
             taskbarElementIUnknownOffset = b[7];
         } else {
@@ -14830,7 +14905,7 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         // fd030091 mov fp, sp
         // 080c41f8 ldr x8, [x0, #0x10]!
         const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
-        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        if (p && p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
             p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
             taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
         } else {
@@ -14844,6 +14919,7 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
                       taskbarElementIUnknownOffset);
+    if (!taskbarElementIUnknown) return nullptr;
 
     FrameworkElement taskbarElement{nullptr};
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
@@ -15089,6 +15165,7 @@ static double GetStartButtonAdjustment(FrameworkElement const& root) {
 // One handler per anchor reserves room for every member and stacks them; each
 // writing its own Margin looped layout forever (hang/crash).
 struct TrackingGroup {
+    HWND             hWnd = nullptr;  // the taskbar it's on: its XAML lives on that thread
     FrameworkElement anchorElement = nullptr;
     Thickness        anchorOriginalMargin{};
     bool             hasOriginalMargin = false;
@@ -15114,7 +15191,7 @@ struct TrackingGroup {
 };
 static constexpr int       TRACKING_MAX_UNSETTLED_PASSES = 40;
 static constexpr ULONGLONG TRACKING_UNSETTLED_WINDOW_MS  = 1000;
-static std::unordered_map<std::wstring, TrackingGroup> g_trackingGroups;
+[[clang::no_destroy]] static std::optional<std::unordered_map<std::wstring, TrackingGroup>> g_trackingGroups{std::in_place};
 
 // Anchor to the outer AugmentedEntryPointButton: Windows rewrites the inner
 // panel's Margin constantly, and writing ours there was a crash loop.
@@ -15214,8 +15291,8 @@ static std::wstring PositionAnchorGroupBase(PlayerPosition position) {
 }
 
 static void RecomputeTrackingGroup(const std::wstring& groupKey) {
-    auto it = g_trackingGroups.find(groupKey);
-    if (it == g_trackingGroups.end()) return;
+    auto it = g_trackingGroups->find(groupKey);
+    if (it == g_trackingGroups->end()) return;
     auto& grp = it->second;
     if (!grp.anchorElement || g_unloading || grp.frozen) return;
     try {
@@ -15340,9 +15417,10 @@ static bool AttachTrackingMember(HWND hWnd, PlayerPosition position, Grid const&
     }
 
     std::wstring groupKey = MakeTrackingGroupKey(hWnd, PositionAnchorGroupBase(position));
-    auto it = g_trackingGroups.find(groupKey);
-    if (it == g_trackingGroups.end()) {
+    auto it = g_trackingGroups->find(groupKey);
+    if (it == g_trackingGroups->end()) {
         TrackingGroup grp;
+        grp.hWnd = hWnd;
         grp.vertical = IsVerticalTaskbarEdge(GetTaskbarEdgeForWnd(hWnd));
         grp.anchorElement = anchor;
         grp.anchorOriginalMargin = anchor.Margin();
@@ -15365,7 +15443,7 @@ static bool AttachTrackingMember(HWND hWnd, PlayerPosition position, Grid const&
             [groupKey](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
                 RecomputeTrackingGroup(groupKey);
             });
-        it = g_trackingGroups.emplace(groupKey, std::move(grp)).first;
+        it = g_trackingGroups->emplace(groupKey, std::move(grp)).first;
     } else {
         it->second.members.push_back({memberGrid, side});
     }
@@ -15381,28 +15459,44 @@ static bool AttachTrackingMember(HWND hWnd, PlayerPosition position, Grid const&
     return true;
 }
 
-// Unregisters memberGrid from `position`'s group ON `hWnd`'s taskbar. Once the
-// group is empty, restores the anchor's original margin and detaches the
-// shared LayoutUpdated handler.
-static void DetachTrackingMember(HWND hWnd, PlayerPosition position, Grid const& memberGrid) {
-    std::wstring groupKey = MakeTrackingGroupKey(hWnd, PositionAnchorGroupBase(position));
-    auto it = g_trackingGroups.find(groupKey);
-    if (it == g_trackingGroups.end()) return;
-    auto& grp = it->second;
-    grp.members.erase(std::remove_if(grp.members.begin(), grp.members.end(),
-        [&](TrackingGroup::Member const& mem) { return mem.grid == memberGrid; }), grp.members.end());
-    if (grp.members.empty()) {
+// Unregisters memberGrid from whichever group holds it. Found by the grid, not
+// by position: by removal time the setting can name a different anchor. Once a
+// group is empty, restores the anchor's margin and detaches its LayoutUpdated.
+static void DetachTrackingMember(Grid const& memberGrid) {
+    if (!memberGrid) return;
+    for (auto it = g_trackingGroups->begin(); it != g_trackingGroups->end();) {
+        auto& grp = it->second;
+        const size_t before = grp.members.size();
+        grp.members.erase(std::remove_if(grp.members.begin(), grp.members.end(),
+            [&](TrackingGroup::Member const& mem) { return mem.grid == memberGrid; }), grp.members.end());
+        if (grp.members.size() == before) { ++it; continue; }
+        if (grp.members.empty()) {
+            try { if (grp.targetGrid) grp.targetGrid.LayoutUpdated(grp.layoutUpdateToken); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+            try { if (grp.anchorElement && grp.hasOriginalMargin) grp.anchorElement.Margin(grp.anchorOriginalMargin); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+            it = g_trackingGroups->erase(it);
+        } else {
+            const std::wstring key = it->first;
+            ++it;
+            RecomputeTrackingGroup(key);
+        }
+    }
+}
+
+// Unload: every group left on hWnd's taskbar gives its anchor's margin back and
+// drops its LayoutUpdated handler. Runs on that taskbar's thread.
+static void ReleaseTrackingGroupsOnThread(HWND hWnd) {
+    for (auto it = g_trackingGroups->begin(); it != g_trackingGroups->end();) {
+        auto& grp = it->second;
+        if (grp.hWnd != hWnd) { ++it; continue; }
         try { if (grp.targetGrid) grp.targetGrid.LayoutUpdated(grp.layoutUpdateToken); } catch (...) { LOG_IGNORED_EXCEPTION(); }
         try { if (grp.anchorElement && grp.hasOriginalMargin) grp.anchorElement.Margin(grp.anchorOriginalMargin); } catch (...) { LOG_IGNORED_EXCEPTION(); }
-        g_trackingGroups.erase(it);
-    } else {
-        RecomputeTrackingGroup(groupKey);
+        it = g_trackingGroups->erase(it);
     }
 }
 
 // Forgets the tracking groups without touching XAML, for a rebuilt tree.
 static void ResetTrackingGroupsForTaskbarReinit() {
-    g_trackingGroups.clear();
+    g_trackingGroups->clear();
 }
 
 // SystemTrayFrameGrid is a StackPanel on newer builds (windhawk-mods#5018).
@@ -15820,6 +15914,7 @@ static bool InjectPlayerGrid() {
         if (targetStack) g_injectionParent = targetStack;
         else             g_injectionParent = targetGrid;
         g_playerInjectedOnWnd = hWnd;
+        g_playerInjectedPosition = (int)effectivePosition;
 
         RefreshPlayerContents();
 
@@ -15850,8 +15945,8 @@ static bool InjectPlayerGrid() {
         auto dispatcher = g_playerGrid.Dispatcher();
         if (dispatcher) {
             try {
-                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [=]() {
-                    if (!g_unloading && g_playerGrid) RefreshThemeColors();
+                QueueOnDispatcher(dispatcher, winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [=]() {
+                    if (g_playerGrid) RefreshThemeColors();
                 });
             } catch (...) {
                 Wh_Log(L"InjectPlayerGrid: Failed to dispatch RefreshThemeColors");
@@ -15875,9 +15970,11 @@ static void RemovePlayerGrid() {
     // Its elements only work on their own taskbar's thread, and this can be
     // running on the thread of the monitor it's moving to.
     HWND owner = g_playerInjectedOnWnd;
-    if (owner && IsWindow(owner) && GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId() &&
-        RunFromWindowThread(owner, [](void*) { RemovePlayerGrid(); }, nullptr))
+    if (owner && IsWindow(owner) && GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId()) {
+        // Never from this thread, even if that one couldn't be reached.
+        RunFromWindowThread(owner, [](void*) { RemovePlayerGrid(); }, nullptr);
         return;
+    }
 
     // Tear down the mini player popup so it can't reference the grid we're
     // removing (Salyts 1.6.0).
@@ -15891,7 +15988,7 @@ static void RemovePlayerGrid() {
     } catch (...) { LOG_IGNORED_EXCEPTION(); }
 
     try {
-        DetachTrackingMember(g_playerInjectedOnWnd, g_settings.position, g_playerGrid);
+        DetachTrackingMember(g_playerGrid);
 
         auto targetGrid = g_injectionParent.try_as<Grid>();
         int playerCol = -1;
@@ -15905,7 +16002,10 @@ static void RemovePlayerGrid() {
         RemoveAnchorDebugOverlays(targetGrid);
         playerCol = RemovePlayerGridChildren(targetGrid);
 
-        bool isTrackingPosition = IsTaskbarPosition(g_settings.position);
+        // The position it went in with: the setting may already be the next one.
+        const PlayerPosition injectedAt = g_playerInjectedPosition >= 0
+            ? (PlayerPosition)g_playerInjectedPosition : g_settings.position;
+        bool isTrackingPosition = IsTaskbarPosition(injectedAt);
 
         if (!isTrackingPosition && playerCol >= 0 && playerCol < (int)targetGrid.ColumnDefinitions().Size()) {
             for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
@@ -15926,6 +16026,7 @@ static void RemovePlayerGrid() {
         g_mainProgressFillRef = nullptr;
         g_artistTimeTextRef   = nullptr;
         g_playerInjectedOnWnd = nullptr;
+        g_playerInjectedPosition = -1;
 
         g_cachedAlbumTitle.clear();
         g_cachedAlbumArtist.clear();
@@ -15957,6 +16058,7 @@ static void RemovePlayerGrid() {
         g_mainProgressFillRef = nullptr;
         g_artistTimeTextRef   = nullptr;
         g_playerInjectedOnWnd = nullptr;
+        g_playerInjectedPosition = -1;
 
         g_cachedAlbumTitle.clear();
         g_cachedAlbumArtist.clear();
@@ -16097,6 +16199,7 @@ static void InjectDetachedWidgetOnThread(void* p) {
         if (targetStack) state.injectionParent = targetStack;
         else             state.injectionParent = targetGrid;
         state.injectedOnWnd  = hWnd;
+        state.injectedPosition = (int)position;
 
         wrapGrid.Visibility(Visibility::Visible);
         wrapGrid.UpdateLayout();
@@ -16130,10 +16233,11 @@ struct RemoveDetachedWidgetCtx {
 static void RemoveDetachedWidgetOnThread(void* p) {
     auto* ctx = static_cast<RemoveDetachedWidgetCtx*>(p);
     DetachedWidgetState& state = *ctx->state;
-    PlayerPosition position = *ctx->position;
+    // The position it went in with: the setting may already be the next one.
+    PlayerPosition position = state.injectedPosition >= 0 ? (PlayerPosition)state.injectedPosition : *ctx->position;
 
     try {
-        DetachTrackingMember(state.injectedOnWnd, position, state.grid);
+        DetachTrackingMember(state.grid);
 
         auto targetGrid = state.injectionParent.try_as<Grid>();
         if (!targetGrid) {
@@ -16162,6 +16266,7 @@ static void RemoveDetachedWidgetOnThread(void* p) {
     state.injectionParent = nullptr;
     state.column          = -1;
     state.injectedOnWnd   = nullptr;
+    state.injectedPosition = -1;
 }
 
 // Runs on the taskbar the part is on now, which can differ from its monitor
@@ -16417,6 +16522,7 @@ static void ForgetInjectedTreeState() {
     g_injectionParent     = nullptr;
     g_playerColumn        = -1;
     g_playerInjectedOnWnd = nullptr;
+    g_playerInjectedPosition = -1;
     g_mainProgressFillRef = nullptr;
     g_artistTimeTextRef   = nullptr;
 
@@ -16482,9 +16588,9 @@ static void CheckMonitorTopologyChanged() {
     StopScrollTimer();
     g_vizCurrentlyVisible = false;
 
-    g_applyingSettings = true;
     g_taskbarWnd = desiredWnd;
     bool marshalled = RunFromWindowThread(desiredWnd, [](void*) {
+        g_applyingSettings = true;
         try {
             if (s_treeWasRebuilt) {
                 ForgetInjectedTreeState();
@@ -16539,7 +16645,7 @@ static FrameworkElement GetFrameworkElementFromThis(void* pThis) {
 
 // Every Widgets button we collapsed (several with taskbars on all displays),
 // each restored on unload.
-static std::vector<FrameworkElement> g_hiddenWidgetsButtons;
+[[clang::no_destroy]] static std::optional<std::vector<FrameworkElement>> g_hiddenWidgetsButtons{std::in_place};
 // Reentrancy between the UpdateButtonPadding and RepeatButton::Width hooks:
 // the Widgets button is only known once the nested call unwinds.
 static thread_local unsigned int     g_widgetsPaddingDepth{0};
@@ -16599,8 +16705,8 @@ static int WidgetsButtonScopeState(FrameworkElement const& widgetsButton) {
 static void ApplyNativeWidgetsHideState(FrameworkElement const& widgetsButton) {
     if (!widgetsButton || g_unloading) return;
     try {
-        auto it = std::find(g_hiddenWidgetsButtons.begin(), g_hiddenWidgetsButtons.end(), widgetsButton);
-        bool alreadyHidden = it != g_hiddenWidgetsButtons.end();
+        auto it = std::find(g_hiddenWidgetsButtons->begin(), g_hiddenWidgetsButtons->end(), widgetsButton);
+        bool alreadyHidden = it != g_hiddenWidgetsButtons->end();
 
         bool wantHidden;
         if (!g_settings.hideNativeWidgetsButton) {
@@ -16616,8 +16722,8 @@ static void ApplyNativeWidgetsHideState(FrameworkElement const& widgetsButton) {
 
         widgetsButton.Visibility(wantHidden ? Visibility::Collapsed : Visibility::Visible);
 
-        if (wantHidden) g_hiddenWidgetsButtons.push_back(widgetsButton);
-        else g_hiddenWidgetsButtons.erase(it);
+        if (wantHidden) g_hiddenWidgetsButtons->push_back(widgetsButton);
+        else g_hiddenWidgetsButtons->erase(it);
 
         Wh_Log(L"WidgetsHide: applied hidden=%d", wantHidden ? 1 : 0);
     } catch (...) {
@@ -16628,14 +16734,14 @@ static void ApplyNativeWidgetsHideState(FrameworkElement const& widgetsButton) {
 // Drops the hidden-button list without touching it once its tree is gone
 // (an orientation flip), so the next apply hides the new tree's button.
 static void ForgetHiddenWidgetsBookkeeping() {
-    g_hiddenWidgetsButtons.clear();
+    g_hiddenWidgetsButtons->clear();
 }
 
 static void RestoreStaleHiddenWidgetsOnThisThread() {
-    for (int i = (int)g_hiddenWidgetsButtons.size() - 1; i >= 0; --i) {
-        auto el = g_hiddenWidgetsButtons[i];
+    for (int i = (int)g_hiddenWidgetsButtons->size() - 1; i >= 0; --i) {
+        auto el = (*g_hiddenWidgetsButtons)[i];
         if (!el) {
-            g_hiddenWidgetsButtons.erase(g_hiddenWidgetsButtons.begin() + i);
+            g_hiddenWidgetsButtons->erase(g_hiddenWidgetsButtons->begin() + i);
             continue;
         }
         try {
@@ -16650,7 +16756,7 @@ static void RestoreStaleHiddenWidgetsOnThisThread() {
             if (stillWanted) continue;
 
             el.Visibility(Visibility::Visible);
-            g_hiddenWidgetsButtons.erase(g_hiddenWidgetsButtons.begin() + i);
+            g_hiddenWidgetsButtons->erase(g_hiddenWidgetsButtons->begin() + i);
             Wh_Log(L"WidgetsHide: restored a hidden Widgets button from the kept reference");
         } catch (...) {
             Wh_Log(L"WidgetsHide: RestoreStaleHiddenWidgets failed on one entry");
@@ -16691,8 +16797,7 @@ static void QueueNativeWidgetsHideUpdate(FrameworkElement const& widgetsButton) 
     try {
         auto weakButton = winrt::make_weak(widgetsButton);
         auto dispatcher  = widgetsButton.Dispatcher();
-        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [weakButton]() {
-            if (g_unloading) return;
+        QueueOnDispatcher(dispatcher, winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [weakButton]() {
             if (auto button = weakButton.get()) ApplyNativeWidgetsHideState(button);
         });
     } catch (...) { LOG_IGNORED_EXCEPTION(); }
@@ -16865,6 +16970,11 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                 HWND aumidHwnd = nullptr;
                 HWND processHwnd = nullptr;
                 HWND titleHwnd = nullptr;
+                // Exact matches only: for minimizing and closing, where a
+                // similarly named app's window is the wrong one.
+                HWND exactAumidHwnd = nullptr;
+                HWND exactProcessHwnd = nullptr;
+                std::wstring targetExe;  // the app ID without ".exe", for Win32 apps
             };
             WindowSearch search;
 
@@ -16873,6 +16983,8 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
 
             search.targetAumid = appAumid;
             std::transform(search.targetAumid.begin(), search.targetAumid.end(), search.targetAumid.begin(), ::towlower);
+            search.targetExe = search.targetAumid;
+            if (search.targetExe.ends_with(L".exe")) search.targetExe.resize(search.targetExe.size() - 4);
 
             EnumWindows([](HWND hwnd, LPARAM lParam) CALLBACK -> BOOL {
                 if (!IsWindowVisible(hwnd)) return TRUE;
@@ -16891,9 +17003,10 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                         if (SUCCEEDED(pps->GetValue(PKEY_AppUserModel_ID, &var)) && var.vt == VT_LPWSTR) {
                             std::wstring winAumid(var.pwszVal);
                             std::transform(winAumid.begin(), winAumid.end(), winAumid.begin(), ::towlower);
-                            if (winAumid == s->targetAumid ||
-                                winAumid.find(s->targetAumid) != std::wstring::npos ||
-                                s->targetAumid.find(winAumid) != std::wstring::npos) {
+                            if (!s->exactAumidHwnd && winAumid == s->targetAumid) s->exactAumidHwnd = hwnd;
+                            if (!winAumid.empty() &&
+                                (winAumid.find(s->targetAumid) != std::wstring::npos ||
+                                 s->targetAumid.find(winAumid) != std::wstring::npos)) {
                                 s->aumidHwnd = hwnd;
                             }
                         }
@@ -16920,6 +17033,7 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                             if (dot != std::wstring::npos) stem = stem.substr(0, dot);
                             std::transform(stem.begin(), stem.end(), stem.begin(), ::towlower);
 
+                            if (!s->exactProcessHwnd && !stem.empty() && stem == s->targetExe) s->exactProcessHwnd = hwnd;
                             if (!stem.empty() &&
                                 (s->targetAumid.find(stem) != std::wstring::npos ||
                                  stem.find(s->targetAumid) != std::wstring::npos)) {
@@ -16947,17 +17061,18 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                 ? search.aumidHwnd
                 : (search.processHwnd ? search.processHwnd : search.titleHwnd);
 
+            // Minimizing and closing take the app's own window, matched exactly:
+            // the loose matches above are fine for bringing a window up, but
+            // a similarly named app's window (Chrome's web apps for Chrome) is
+            // not one to close.
+            HWND exactWindow = search.exactAumidHwnd ? search.exactAumidHwnd : search.exactProcessHwnd;
             if (mode == 3) {
-                // Only a window that belongs to the app. The title match is
-                // fine for bringing a window up, but any window with the song
-                // name in its title would do, and closing that one is not.
-                HWND appWindow = search.aumidHwnd ? search.aumidHwnd : search.processHwnd;
-                if (appWindow) PostMessageW(GetAncestor(appWindow, GA_ROOTOWNER), WM_CLOSE, 0, 0);
+                if (exactWindow) PostMessageW(GetAncestor(exactWindow, GA_ROOTOWNER), WM_CLOSE, 0, 0);
                 return;
             }
 
-            if (targetWindow && (mode == 1 || (mode == 2 && IsFrontmostAppWindow(targetWindow)))) {
-                ShowWindow(targetWindow, SW_MINIMIZE);
+            if (exactWindow && (mode == 1 || (mode == 2 && IsFrontmostAppWindow(exactWindow)))) {
+                ShowWindow(exactWindow, SW_MINIMIZE);
                 return;
             }
             if (mode == 1) return;  // nothing open to minimize
@@ -16967,18 +17082,13 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                     ShowWindow(targetWindow, SW_RESTORE);
                 }
                 
-                HWND hCurWnd = GetForegroundWindow();
-                if (hCurWnd && hCurWnd != targetWindow) {
-                    DWORD dwMyID = GetCurrentThreadId();
-                    DWORD dwCurID = GetWindowThreadProcessId(hCurWnd, NULL);
-                    AttachThreadInput(dwCurID, dwMyID, TRUE);
-                    SetForegroundWindow(targetWindow);
-                    BringWindowToTop(targetWindow);
-                    AttachThreadInput(dwCurID, dwMyID, FALSE);
-                } else {
-                    SetForegroundWindow(targetWindow);
-                    BringWindowToTop(targetWindow);
-                }
+                // The click on the player was the last input, so Explorer may
+                // hand over the foreground. An empty SendInput makes that count
+                // here, as in taskbar-button-scroll, without sharing input queues.
+                INPUT input{};
+                SendInput(1, &input, sizeof(INPUT));
+                SetForegroundWindow(targetWindow);
+                BringWindowToTop(targetWindow);
                 return;
             }
 
@@ -17183,32 +17293,23 @@ static void StartTimerThread() {
         StartScrollTimer();
     }
 }
+// g_captureRun belongs to the taskbar's thread, where UpdateVisibility starts
+// and stops it, so it's stopped there from anywhere else too.
+static void StopVizCaptureOnTaskbarThread() {
+    HWND h = g_taskbarWnd;
+    if (h && IsWindow(h) && RunFromWindowThread(h, [](void*) { StopVizCaptureThread(); }, nullptr)) return;
+    StopVizCaptureThread();  // no taskbar thread left that could touch it
+}
+
 static void StopTimerThread() {
     StopScrollTimer();
     StopVizTimer();
-    StopVizCaptureThread();
+    StopVizCaptureOnTaskbarThread();
     if (g_timerStopEvent) SetEvent(g_timerStopEvent);
     if (g_timerThread) {
-        DWORD tid = GetCurrentThreadId();
-        HWND hTaskbar = g_taskbarWnd;
-        bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
-        if (isUiThread) {
-            DWORD result = WAIT_TIMEOUT;
-            const DWORD start = GetTickCount();  // elapsed form: survives the 49.7-day wrap
-            while (result == WAIT_TIMEOUT && GetTickCount() - start < 2000) {
-                result = MsgWaitForMultipleObjects(1, &g_timerThread, FALSE, 50, QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG msg;
-                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                        TranslateMessage(&msg);
-                        DispatchMessageW(&msg);
-                    }
-                    result = WAIT_TIMEOUT;
-                }
-            }
-        } else {
-            WaitForSingleObject(g_timerThread, 2000);
-        }
+        // No timeout: it sends work to the taskbar thread, which keeps handling
+        // those sends while it waits here.
+        WaitPumpingIfUiThread(g_timerThread);
         CloseHandle(g_timerThread);
         g_timerThread = nullptr;
     }
@@ -17247,11 +17348,15 @@ static void ApplySettings() {
 // gets ready (a vertical taskbar did).
 static constexpr int APPLY_SETTINGS_MAX_RETRIES = 50;   // ~5 seconds
 
+// The pending retry, so unload can stop it (UI thread).
+[[clang::no_destroy]] static DispatcherTimer g_applyRetryTimer{nullptr};
+
 static void ApplySettingsWithRetry(FrameworkElement xamlRootContent,
                                     std::function<void()> onApplied = nullptr,
                                     int attempt = 0) {
     auto retry = [&]() {
         auto timer = DispatcherTimer();
+        g_applyRetryTimer = timer;
         timer.Interval(winrt::Windows::Foundation::TimeSpan{
             std::chrono::milliseconds(100)});
         auto tickToken = std::make_shared<winrt::event_token>();
@@ -17611,7 +17716,7 @@ struct ComboOption {
     std::wstring label;
 };
 
-enum class RowKind { Bool, Text, Pair, Combo, Position, Button, Slider, Monitors };
+enum class RowKind { Bool, Text, Pair, Combo, Button, Slider, Monitors };
 
 // One Position dropdown entry: a left/right pair of values, or soloValue for
 // the edge overlays that have no side.
@@ -17633,12 +17738,9 @@ struct SettingRow {
     int sliderMin = 0;                  // Slider only
     int sliderMax = 100;                // Slider only
     std::vector<ComboOption> options;  // Combo only
-    std::vector<PositionAnchor> anchors; // Position only
-    bool posRight = false;             // Position only: which side of the current anchor is selected
-    HWND ctrl  = nullptr;              // Text/Combo/Position control, or Pair's left edit
-    HWND ctrl2 = nullptr;              // Pair's right edit only
-    std::wstring pairLeftLabel = L"Left";   // Pair only: label drawn above/beside ctrl
-    std::wstring pairRightLabel = L"Right"; // Pair only: label drawn above/beside ctrl2
+    std::vector<PositionAnchor> anchors; // the position rows' choices (RowPositionRows)
+    std::wstring pairLeftLabel = L"Left";   // Pair only: label of the left box
+    std::wstring pairRightLabel = L"Right"; // Pair only: label of the right box
     // Bool rows only: extra keys toggled to the same 0/1 value as `key` when this
     // row is clicked (e.g. a category header toggle covering several real settings).
     std::vector<std::wstring> linkedKeys;
@@ -17801,14 +17903,6 @@ static SettingRow RowSlider(const std::wstring& label, const std::wstring& key,
     r.sliderMin = lo; r.sliderMax = hi;
     return r;
 }
-// "Report a bug" posts what the person typed to a Discord webhook, only when they
-// press Send. Empty hides the button. This ships in the public source, so anyone
-// can read it: if it gets abused, delete the webhook in Discord and ship a new one.
-static constexpr const wchar_t* BUG_REPORT_WEBHOOK = L"https://discord.com/api/webhooks/1567621782360555672/UaQszXqFkf97cXsFBeue9DKIGTHB74jgM0yA_augzzhbxWwrE5QMzdcJK5vugnOQJv54";
-static bool BugReportsEnabled() {
-    return wcsncmp(BUG_REPORT_WEBHOOK, L"https://discord.com/api/webhooks/", 33) == 0;
-}
-
 // A row with a button on its right, for doing something rather than setting something.
 static SettingRow RowAction(const std::wstring& label, const std::wstring& actionLabel, const std::wstring& actionId) {
     SettingRow r;
@@ -18194,7 +18288,7 @@ COLD_UNOPTIMIZED static SettingCategory BuildPlayerMenuCategory() {
     SettingCard general;
     general.title = L"General";
     general.rows = {
-        RowCombo(L"Placement mode", L"PlayerMenuSettings.placementMode", L"near",
+        RowCombo(L"Placement mode", L"PlayerMenuSettings.placementMode", L"screen",
                  { {L"near", L"Near the media player"}, {L"screen", L"Fixed on the screen"} }),
         RowBool(L"Keep menu open on click-outside", L"PlayerMenuSettings.keepMiniPlayerOpen"),
     };
@@ -18235,7 +18329,7 @@ COLD_UNOPTIMIZED static SettingCategory BuildPlayerMenuCategory() {
     SettingCard style;
     style.title = L"Style";
     style.rows = {
-        WithDesc(RowCombo(L"Icon style", L"PlayerMenuSettings.miniPlayerIconStyle", L"as_media_buttons", miniPlayerIconStyleOptions),
+        WithDesc(RowCombo(L"Icon style", L"PlayerMenuSettings.miniPlayerIconStyle", L"fluent_filled", miniPlayerIconStyleOptions),
                  L"For the menu's own buttons."),
         WithDesc(RowBool(L"Album gradient seek bar", L"PlayerMenuSettings.miniPlayerSeekBarGradient"),
                  L"Two album colors, left to right."),
@@ -18461,7 +18555,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
             RowText(L"Button icon size", L"AppearanceSettings.MediaButtonsStyleSettings.buttonIconSize", L"12", true),
             RowText(L"Button corner radius", L"AppearanceSettings.MediaButtonsStyleSettings.buttonCornerRadius", L"4"),
             RowCombo(L"Media buttons hover effect", L"AppearanceSettings.BackgroundStyleSettings.enableMediaButtonsHoverEffect", L"auto", hoverOptions),
-            RowColorAlpha(L"Button color", L"AppearanceSettings.MediaButtonsStyleSettings.buttonColor", L"255 255 255",
+            RowColorAlpha(L"Button color", L"AppearanceSettings.MediaButtonsStyleSettings.buttonColor", L"0 0 0$255 255 255",
                           L"Button color opacity", L"AppearanceSettings.MediaButtonsStyleSettings.buttonColorOpacity"),
         };
         SettingCard sidebarButtonsCard;
@@ -18532,7 +18626,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
         SettingCard titleStyle;
         titleStyle.title = L"Top Line Style";
         titleStyle.rows = {
-            RowColorAlpha(L"Color", L"AppearanceSettings.TitleTextStyleSettings.titleColor", L"255 255 255",
+            RowColorAlpha(L"Color", L"AppearanceSettings.TitleTextStyleSettings.titleColor", L"0 0 0$255 255 255",
                           L"Color opacity", L"AppearanceSettings.TitleTextStyleSettings.titleColorOpacity"),
             RowCombo(L"Font", L"AppearanceSettings.TitleTextStyleSettings.titleFont", L"segoe_ui_variable", fontOptions),
             RowText(L"Font size", L"AppearanceSettings.TitleTextStyleSettings.titleFontSize", L"12", true),
@@ -18544,7 +18638,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
         SettingCard artistStyle;
         artistStyle.title = L"Bottom Line Style";
         artistStyle.rows = {
-            RowColorAlpha(L"Color", L"AppearanceSettings.ArtistTextStyleSettings.artistColor", L"255 255 255",
+            RowColorAlpha(L"Color", L"AppearanceSettings.ArtistTextStyleSettings.artistColor", L"0 0 0$255 255 255",
                           L"Color opacity", L"AppearanceSettings.ArtistTextStyleSettings.artistColorOpacity", L"80"),
             RowCombo(L"Font", L"AppearanceSettings.ArtistTextStyleSettings.artistFont", L"segoe_ui_variable", fontOptions),
             RowText(L"Font size", L"AppearanceSettings.ArtistTextStyleSettings.artistFontSize", L"11", true),
@@ -18603,7 +18697,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
             RowText(L"Empty icon glyph (hex)", L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconGlyph", L"E189"),
             RowText(L"Empty icon size", L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconSize", L"16", true),
             RowCombo(L"Empty icon font", L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconFont", L"segoe_fluent", emptyIconFontOptions),
-            RowColorAlpha(L"Empty icon color", L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconColor", L"255 255 255",
+            RowColorAlpha(L"Empty icon color", L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconColor", L"140 140 140",
                           L"Empty icon opacity", L"AppearanceSettings.AlbumArtDisplaySettings.emptyIconOpacity"),
         };
         SettingCard sidebarArtCard;
@@ -18637,7 +18731,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
             RowCombo(L"Anchor", L"MainSettings.VisualizerFunctionsSettings.vizAnchor", L"middle", vizAnchorOptions),
             WithDesc(RowCombo(L"Color mode", L"AppearanceSettings.VisualizerStyleSettings.vizColorMode", L"solid", vizColorModeOptions),
                      L"How the bars are coloured"),
-            RowColorAlpha(L"Color", L"AppearanceSettings.VisualizerStyleSettings.vizColor", L"255 255 255",
+            RowColorAlpha(L"Color", L"AppearanceSettings.VisualizerStyleSettings.vizColor", L"0 0 0$255 255 255",
                           L"Bar opacity", L"AppearanceSettings.VisualizerStyleSettings.vizColorOpacity"),
             RowColorAlpha(L"Gradient color 1", L"AppearanceSettings.VisualizerStyleSettings.vizColor1", L"30 215 96",
                           L"Bar opacity", L"AppearanceSettings.VisualizerStyleSettings.vizColorOpacity"),
@@ -18688,7 +18782,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
             RowMonitors(L"Monitor", L"MainSettings.PlayerSetting.monitor"),
         };
         {
-            auto posRows = RowPositionRows(L"Position", L"MainSettings.PlayerSetting.position", L"taskbar_after_widgets_left", positionAnchors);
+            auto posRows = RowPositionRows(L"Position", L"MainSettings.PlayerSetting.position", L"tray_left", positionAnchors);
             card.rows.insert(card.rows.end(), posRows.begin(), posRows.end());
         }
         {
@@ -18848,7 +18942,7 @@ COLD_UNOPTIMIZED static std::vector<SettingCategory> CollectSettingsForDisplay()
             WithDesc(RowAction(L"Reset to Windhawk's settings", L"Reset", L"reset_settings"),
                      L"Replaces everything here with Windhawk's own settings page."),
         };
-        if (BugReportsEnabled()) {
+        {
             tools.rows.push_back(WithDesc(RowAction(L"Report a bug", L"Report", L"report_bug"),
                                           L"Tell the developers what went wrong."));
             tools.rows.push_back(RowBool(L"Report a bug button in the sidebar", L"SettingsWindowSettings.reportButtonInSidebar"));
@@ -19065,27 +19159,27 @@ static std::atomic<bool> g_svLiveApplied{false};
 namespace SettingsUI {
 
 static void ApplySettingsLiveNow() {
-    FmpFileLog(L"[apply] enter");
+    Wh_Log(L"[apply] enter");
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) hWnd = g_taskbarWnd;
-    if (!hWnd || !IsWindow(hWnd) || g_applyingSettings.load()) { FmpFileLog(L"[apply] early-out (no wnd / already applying)"); return; }
+    if (!hWnd || !IsWindow(hWnd) || g_applyingSettings.load()) { Wh_Log(L"[apply] early-out (no wnd / already applying)"); return; }
     g_svLiveApplied = true;
     RunFromWindowThread(hWnd, [](void*) {
-        FmpFileLog(L"[apply] on player thread: begin");
-        if (g_unloading || g_applyingSettings.load()) { FmpFileLog(L"[apply] on player thread: skip"); return; }
+        Wh_Log(L"[apply] on player thread: begin");
+        if (g_unloading || g_applyingSettings.load()) { Wh_Log(L"[apply] on player thread: skip"); return; }
         g_applyingSettings = true;
         g_vizCurrentlyVisible = false;
         StopVizTimer();
         StopVizCaptureThread();
-        FmpFileLog(L"[apply] LoadSettings...");
-        try { LoadSettings(); } catch (...) { FmpFileLog(L"[apply] LoadSettings threw (C++ exception)"); }
-        FmpFileLog(L"[apply] ApplySettings...");
-        try { ApplySettings(); } catch (...) { FmpFileLog(L"[apply] ApplySettings threw (C++ exception)"); }
+        Wh_Log(L"[apply] LoadSettings...");
+        try { LoadSettings(); } catch (...) { Wh_Log(L"[apply] LoadSettings threw (C++ exception)"); }
+        Wh_Log(L"[apply] ApplySettings...");
+        try { ApplySettings(); } catch (...) { Wh_Log(L"[apply] ApplySettings threw (C++ exception)"); }
         g_applyingSettings = false;
-        FmpFileLog(L"[apply] on player thread: DONE ok");
+        Wh_Log(L"[apply] on player thread: DONE ok");
     }, nullptr);
     EnsureWidgetsHideStateApplied();
-    FmpFileLog(L"[apply] exit (returned from player thread)");
+    Wh_Log(L"[apply] exit (returned from player thread)");
 }
 
 // ---- Settings store ----
@@ -19106,15 +19200,27 @@ static constexpr const wchar_t* STORE_BASELINE = L"WindhawkBaseline";  // same
 static constexpr const wchar_t* STORE_MIGRATED = L"SettingsMigrated";
 static constexpr size_t SAVED_CHUNK_CHARS = 8000;  // per stored value, small enough for any backend
 
-// One "key<TAB>value" line per setting; \\, \t, \n and \r escaped.
+// Stored as "TFMP2;" then "key=value;" per setting, in printable characters
+// only: portable Windhawk keeps mod storage in an INI file, which turns line
+// breaks into spaces (or refuses them) and trims a value's outer spaces and
+// quotes. So \\ ; = space " and control characters are all escaped.
+static constexpr const wchar_t* STORE_FORMAT_TAG = L"TFMP2;";
 static std::wstring EscapeSavedText(const std::wstring& v) {
     std::wstring out;
     for (wchar_t c : v) {
-        if (c == L'\\') out += L"\\\\";
-        else if (c == L'\t') out += L"\\t";
-        else if (c == L'\n') out += L"\\n";
-        else if (c == L'\r') out += L"\\r";
-        else out += c;
+        switch (c) {
+            case L'\\': out += L"\\\\"; break;
+            case L';':  out += L"\\s"; break;
+            case L'=':  out += L"\\e"; break;
+            case L' ':  out += L"\\_"; break;
+            case L'"':  out += L"\\q"; break;
+            case L'\t': out += L"\\t"; break;
+            case L'\n': out += L"\\n"; break;
+            case L'\r': out += L"\\r"; break;
+            default:
+                if (c < 0x20) { wchar_t b[8]; swprintf_s(b, L"\\x%04x", (unsigned)c); out += b; }
+                else out += c;
+        }
     }
     return out;
 }
@@ -19123,18 +19229,59 @@ static std::wstring UnescapeSavedText(const std::wstring& v) {
     for (size_t i = 0; i < v.size(); i++) {
         if (v[i] != L'\\' || i + 1 >= v.size()) { out += v[i]; continue; }
         const wchar_t n = v[++i];
-        out += n == L't' ? L'\t' : n == L'n' ? L'\n' : n == L'r' ? L'\r' : n;
+        switch (n) {
+            case L's': out += L';'; break;
+            case L'e': out += L'='; break;
+            case L'_': out += L' '; break;
+            case L'q': out += L'"'; break;
+            case L't': out += L'\t'; break;
+            case L'n': out += L'\n'; break;
+            case L'r': out += L'\r'; break;
+            case L'x':
+                if (i + 4 < v.size()) { out += (wchar_t)wcstoul(v.substr(i + 1, 4).c_str(), nullptr, 16); i += 4; }
+                break;
+            default: out += n;  // \\ and anything unknown
+        }
     }
     return out;
 }
 
 static std::wstring SerializeSettings(const SettingsMap& m) {
-    std::wstring text;
-    for (const auto& kv : m) text += EscapeSavedText(kv.first) + L"\t" + EscapeSavedText(kv.second) + L"\n";
+    std::wstring text = STORE_FORMAT_TAG;
+    for (const auto& kv : m) text += EscapeSavedText(kv.first) + L"=" + EscapeSavedText(kv.second) + L";";
     return text;
 }
-static SettingsMap ParseSettings(const std::wstring& text) {
+// `ok` is false for text that can't be read back: a store written in the old
+// line-per-setting form that portable Windhawk then flattened into one line.
+static SettingsMap ParseSettings(const std::wstring& text, bool* ok = nullptr) {
     SettingsMap m;
+    if (ok) *ok = true;
+    if (text.starts_with(STORE_FORMAT_TAG)) {
+        for (size_t pos = wcslen(STORE_FORMAT_TAG); pos < text.size();) {
+            size_t end = text.find(L';', pos);
+            if (end == std::wstring::npos) end = text.size();
+            const std::wstring entry = text.substr(pos, end - pos);
+            pos = end + 1;
+            const size_t eq = entry.find(L'=');
+            if (eq != std::wstring::npos && eq > 0)
+                m[UnescapeSavedText(entry.substr(0, eq))] = UnescapeSavedText(entry.substr(eq + 1));
+        }
+        return m;
+    }
+    // 1.7 alphas: one "key<TAB>value" line per setting, \\ \t \n \r escaped.
+    if (text.find(L'\n') == std::wstring::npos && std::count(text.begin(), text.end(), L'\t') > 1) {
+        if (ok) *ok = false;
+        return m;
+    }
+    auto unescapeOld = [](const std::wstring& v) {
+        std::wstring out;
+        for (size_t i = 0; i < v.size(); i++) {
+            if (v[i] != L'\\' || i + 1 >= v.size()) { out += v[i]; continue; }
+            const wchar_t n = v[++i];
+            out += n == L't' ? L'\t' : n == L'n' ? L'\n' : n == L'r' ? L'\r' : n;
+        }
+        return out;
+    };
     for (size_t pos = 0; pos < text.size();) {
         size_t end = text.find(L'\n', pos);
         if (end == std::wstring::npos) end = text.size();
@@ -19142,7 +19289,7 @@ static SettingsMap ParseSettings(const std::wstring& text) {
         pos = end + 1;
         const size_t tab = line.find(L'\t');
         if (tab != std::wstring::npos && tab > 0)
-            m[UnescapeSavedText(line.substr(0, tab))] = UnescapeSavedText(line.substr(tab + 1));
+            m[unescapeOld(line.substr(0, tab))] = unescapeOld(line.substr(tab + 1));
     }
     return m;
 }
@@ -19262,11 +19409,50 @@ static void ResetOverridesToSaved() {
     ApplySavedAsOverrides();
 }
 
+// What changed on Windhawk's page since it was last seen goes into the store
+// (with g_storeMutex held). Returns the keys taken.
+static std::vector<std::wstring> TakeWindhawkPageChanges() {
+    int clicks = 1, wheels = 1;
+    SettingsMap now = WindhawkSettingsSnapshot(&clicks, &wheels);
+    std::vector<std::wstring> taken;
+    bool clickList = false, wheelList = false;
+    for (const auto& kv : now) {
+        auto was = g_windhawkBaseline.find(kv.first);
+        if (was != g_windhawkBaseline.end() && was->second == kv.second) continue;
+        g_savedOverrides[kv.first] = kv.second;
+        taken.push_back(kv.first);
+        clickList = clickList || kv.first.starts_with(L"BehaviorSettings.ClickActionSettings[");
+        wheelList = wheelList || kv.first.starts_with(L"BehaviorSettings.MouseWheelActionSettings[");
+    }
+    if (clickList) g_savedClickLines = clicks;
+    if (wheelList) g_savedWheelLines = wheels;
+    g_windhawkBaseline = std::move(now);
+    return taken;
+}
+
+// The first run (or a first run whose save failed): Windhawk's page is copied
+// in under anything saved before. With g_storeMutex held.
+static void CopyInWindhawkPage(SettingsMap saved, bool keepLines) {
+    int clicks = 1, wheels = 1;
+    g_windhawkBaseline = WindhawkSettingsSnapshot(&clicks, &wheels);
+    for (const auto& kv : g_windhawkBaseline) saved.emplace(kv.first, kv.second);  // keeps what was saved
+    if (!keepLines) { g_savedClickLines = clicks; g_savedWheelLines = wheels; }
+    g_savedOverrides = std::unordered_map<std::wstring, std::wstring>(saved.begin(), saved.end());
+    if (PersistStore()) {
+        Wh_SetIntValue(STORE_MIGRATED, 1);
+        Wh_Log(L"[settings] copied %zu setting(s) from Windhawk's page into mod storage", g_windhawkBaseline.size());
+    } else {
+        Wh_Log(L"[settings] couldn't write mod storage; using Windhawk's page for now");
+    }
+}
+
 // At startup. The first time, everything on Windhawk's page is copied in;
-// anything saved before with Save stays on top of it.
+// anything saved before with Save stays on top of it. After that, edits made on
+// the page while the mod was off come in here.
 static void LoadSavedSettings() {
     std::lock_guard<std::mutex> lk(g_storeMutex);
-    SettingsMap saved = ParseSettings(ReadStoredText(STORE_SAVED));
+    bool savedOk = true, baselineOk = true;
+    SettingsMap saved = ParseSettings(ReadStoredText(STORE_SAVED), &savedOk);
     g_savedClickLines = 3;
     g_savedWheelLines = 2;
     bool hadLines = false;
@@ -19279,49 +19465,57 @@ static void LoadSavedSettings() {
         hadLines = true;
         saved.erase(it);
     }
-    g_windhawkBaseline = ParseSettings(ReadStoredText(STORE_BASELINE));
-    if (!Wh_GetIntValue(STORE_MIGRATED, 0)) {
-        int clicks = 1, wheels = 1;
-        g_windhawkBaseline = WindhawkSettingsSnapshot(&clicks, &wheels);
-        for (const auto& kv : g_windhawkBaseline) saved.emplace(kv.first, kv.second);  // keeps what was saved
-        if (!hadLines) { g_savedClickLines = clicks; g_savedWheelLines = wheels; }
-        g_savedOverrides = std::unordered_map<std::wstring, std::wstring>(saved.begin(), saved.end());
-        if (PersistStore()) {
-            Wh_SetIntValue(STORE_MIGRATED, 1);
-            Wh_Log(L"[settings] copied %zu setting(s) from Windhawk's page into mod storage", g_windhawkBaseline.size());
-        }
+    g_windhawkBaseline = ParseSettings(ReadStoredText(STORE_BASELINE), &baselineOk);
+    if (!savedOk || !baselineOk) {
+        // Flattened by portable Windhawk before this format existed: start over
+        // from Windhawk's page rather than load half a key as a value.
+        Wh_Log(L"[settings] mod storage was unreadable, copying Windhawk's page in again");
+        saved.clear();
+        hadLines = false;
+        CopyInWindhawkPage(std::move(saved), false);
+    } else if (!Wh_GetIntValue(STORE_MIGRATED, 0)) {
+        CopyInWindhawkPage(std::move(saved), hadLines);
     } else {
         g_savedOverrides = std::unordered_map<std::wstring, std::wstring>(saved.begin(), saved.end());
         Wh_Log(L"[settings] %zu setting(s) loaded from mod storage", g_savedOverrides.size());
+        const size_t taken = TakeWindhawkPageChanges().size();
+        if (taken) {
+            PersistStore();
+            Wh_Log(L"[settings] took %zu change(s) made on Windhawk's page while the mod was off", taken);
+        }
     }
     ApplySavedAsOverrides();
 }
 
 // Windhawk's own settings page was saved: what changed there since it was last
 // seen comes into the store, so editing it (or pasting an export) still works.
+// Unsaved changes in an open settings window stay, apart from the keys just
+// taken, and the window is told to show the new values.
 static void AdoptWindhawkEdits() {
-    std::lock_guard<std::mutex> lk(g_storeMutex);
-    if (!Wh_GetIntValue(STORE_MIGRATED, 0)) { ApplySavedAsOverrides(); return; }
-    int clicks = 1, wheels = 1;
-    SettingsMap now = WindhawkSettingsSnapshot(&clicks, &wheels);
-    size_t adopted = 0;
-    bool clickList = false, wheelList = false;
-    for (const auto& kv : now) {
-        auto was = g_windhawkBaseline.find(kv.first);
-        if (was != g_windhawkBaseline.end() && was->second == kv.second) continue;
-        g_savedOverrides[kv.first] = kv.second;
-        adopted++;
-        clickList = clickList || kv.first.starts_with(L"BehaviorSettings.ClickActionSettings[");
-        wheelList = wheelList || kv.first.starts_with(L"BehaviorSettings.MouseWheelActionSettings[");
+    {
+        std::lock_guard<std::mutex> lk(g_storeMutex);
+        if (!Wh_GetIntValue(STORE_MIGRATED, 0)) {
+            // The first copy didn't make it to storage: try again, and the page
+            // is what's in effect meanwhile.
+            CopyInWindhawkPage({}, false);
+            ApplySavedAsOverrides();
+        } else {
+            const std::vector<std::wstring> taken = TakeWindhawkPageChanges();
+            if (taken.empty()) return;
+            PersistStore();
+            Wh_Log(L"[settings] took %zu change(s) from Windhawk's settings page", taken.size());
+            std::lock_guard<std::mutex> ov(g_overrideMutex);
+            for (const auto& k : taken) {
+                if (auto it = g_savedOverrides.find(k); it != g_savedOverrides.end()) g_settingOverrides[k] = it->second;
+                g_editedOverrideKeys.erase(k);
+            }
+            if (std::any_of(taken.begin(), taken.end(), [](const std::wstring& k) { return k.starts_with(L"BehaviorSettings.ClickActionSettings["); }))
+                g_svNumClickActionCards = g_savedClickLines;
+            if (std::any_of(taken.begin(), taken.end(), [](const std::wstring& k) { return k.starts_with(L"BehaviorSettings.MouseWheelActionSettings["); }))
+                g_svNumWheelActionCards = g_savedWheelLines;
+        }
     }
-    if (clickList) g_savedClickLines = clicks;
-    if (wheelList) g_savedWheelLines = wheels;
-    g_windhawkBaseline = std::move(now);
-    if (adopted) {
-        PersistStore();
-        Wh_Log(L"[settings] took %zu change(s) from Windhawk's settings page", adopted);
-    }
-    ApplySavedAsOverrides();
+    RefreshOpenSettingsWindow();
 }
 
 // Settings window > Reset to Windhawk's settings: the store starts over from
@@ -19891,16 +20085,11 @@ static constexpr LocRow LOC_TABLE[] = {
     { L"Report a bug", L"Повідомити про помилку", L"Сообщить об ошибке", L"Fehler melden", L"बग की रिपोर्ट करें", L"报告错误", L"回報錯誤", L"Informar de un error", L"Signaler un bug", L"Relatar um bug", L"Segnala un bug", L"Zgłoś błąd", L"Hata bildir", L"バグを報告", L"버그 신고" },
     { L"Describe what went wrong", L"Опишіть, що пішло не так", L"Опишите, что пошло не так", L"Beschreiben Sie, was schiefgelaufen ist", L"बताएं कि क्या गलत हुआ", L"描述出了什么问题", L"描述發生了什麼問題", L"Describe qué salió mal", L"Décrivez ce qui ne va pas", L"Descreva o que deu errado", L"Descrivi cosa è andato storto", L"Opisz, co poszło nie tak", L"Neyin yanlış gittiğini açıklayın", L"何が起きたかを説明してください", L"무엇이 잘못되었는지 설명해 주세요" },
     { L"Include my settings", L"Додати мої налаштування", L"Приложить мои настройки", L"Meine Einstellungen mitsenden", L"मेरी सेटिंग्स शामिल करें", L"包含我的设置", L"包含我的設定", L"Incluir mi configuración", L"Inclure mes paramètres", L"Incluir minhas configurações", L"Includi le mie impostazioni", L"Dołącz moje ustawienia", L"Ayarlarımı ekle", L"自分の設定を含める", L"내 설정 포함" },
-    { L"Sends what you type, your PC and user name, your mod and Windows versions, and whatever is ticked above to the developers' Discord.", L"Надсилає ваш текст, назву ПК та ім'я користувача, версії мода та Windows і все позначене вище в Discord розробників.", L"Отправляет ваш текст, имя ПК и пользователя, версии мода и Windows и всё отмеченное выше в Discord разработчиков.", L"Sendet Ihren Text, PC- und Benutzernamen, die Mod- und Windows-Version und alles oben Angehakte an den Discord der Entwickler.", L"आपका लिखा हुआ, PC और उपयोगकर्ता का नाम, मॉड व Windows के संस्करण और ऊपर टिक की गई चीज़ें डेवलपर्स के Discord पर भेजता है।", L"将你输入的内容、电脑名和用户名、模组和 Windows 版本以及上面勾选的内容发送到开发者的 Discord。", L"將你輸入的內容、電腦名稱和使用者名稱、模組和 Windows 版本以及上方勾選的內容傳送到開發者的 Discord。", L"Envía lo que escribas, el nombre de tu PC y de usuario, las versiones del mod y de Windows y todo lo marcado arriba al Discord de los desarrolladores.", L"Envoie votre texte, le nom de votre PC et d'utilisateur, les versions du mod et de Windows et tout ce qui est coché ci-dessus sur le Discord des développeurs.", L"Envia o que você digitar, o nome do seu PC e de usuário, as versões do mod e do Windows e tudo o que estiver marcado acima para o Discord dos desenvolvedores.", L"Invia ciò che scrivi, il nome del PC e dell'utente, le versioni della mod e di Windows e tutto ciò che è selezionato sopra al Discord degli sviluppatori.", L"Wysyła Twój tekst, nazwę komputera i użytkownika, wersje moda i Windows oraz wszystko zaznaczone powyżej na Discorda twórców.", L"Yazdıklarınızı, bilgisayar ve kullanıcı adınızı, mod ve Windows sürümlerini ve yukarıda işaretlenenleri geliştiricilerin Discord'una gönderir.", L"入力した内容、PC 名とユーザー名、Mod と Windows のバージョン、上でチェックした項目を開発者の Discord に送信します。", L"입력한 내용, PC 이름과 사용자 이름, 모드 및 Windows 버전, 위에서 선택한 항목을 개발자의 Discord로 보냅니다." },
     { L"Report a bug button in the sidebar", L"Кнопка «Повідомити про помилку» на бічній панелі", L"Кнопка «Сообщить об ошибке» на боковой панели", L"Schaltfläche „Fehler melden“ in der Seitenleiste", L"साइडबार में बग रिपोर्ट बटन", L"侧边栏中的“报告错误”按钮", L"側邊欄中的「回報錯誤」按鈕", L"Botón Informar de un error en la barra lateral", L"Bouton Signaler un bug dans la barre latérale", L"Botão Relatar um bug na barra lateral", L"Pulsante Segnala un bug nella barra laterale", L"Przycisk Zgłoś błąd na pasku bocznym", L"Kenar çubuğunda Hata bildir düğmesi", L"サイドバーのバグ報告ボタン", L"사이드바의 버그 신고 단추" },
+    { L"Copy and open Discord", L"Копіювати й відкрити Discord", L"Скопировать и открыть Discord", L"Kopieren und Discord öffnen", L"कॉपी करें और Discord खोलें", L"复制并打开 Discord", L"複製並開啟 Discord", L"Copiar y abrir Discord", L"Copier et ouvrir Discord", L"Copiar e abrir o Discord", L"Copia e apri Discord", L"Kopiuj i otwórz Discord", L"Kopyala ve Discord'u aç", L"コピーして Discord を開く", L"복사하고 Discord 열기" },
+    { L"Copied", L"Скопійовано", L"Скопировано", L"Kopiert", L"कॉपी किया गया", L"已复制", L"已複製", L"Copiado", L"Copié", L"Copiado", L"Copiato", L"Skopiowano", L"Kopyalandı", L"コピーしました", L"복사됨" },
+    { L"Copies your text, your mod and Windows versions and whatever is ticked above, then opens our Discord. Paste it in a new post in bug-reports. The mod doesn't send anything itself.", L"Копіює ваш текст, версії мода та Windows і все позначене вище, а потім відкриває наш Discord. Вставте це в новий допис у bug-reports. Сам мод нічого не надсилає.", L"Копирует ваш текст, версии мода и Windows и всё отмеченное выше, затем открывает наш Discord. Вставьте это в новый пост в bug-reports. Сам мод ничего не отправляет.", L"Kopiert Ihren Text, die Mod- und Windows-Version und alles oben Angehakte und öffnet dann unseren Discord. Fügen Sie es dort in einen neuen Beitrag in bug-reports ein. Der Mod selbst sendet nichts.", L"आपका लिखा हुआ, मॉड व Windows के संस्करण और ऊपर टिक की गई चीज़ें कॉपी करता है, फिर हमारा Discord खोलता है। उसे bug-reports में एक नई पोस्ट में पेस्ट करें। मॉड खुद कुछ नहीं भेजता।", L"复制你输入的内容、模组和 Windows 版本以及上面勾选的内容，然后打开我们的 Discord。把它粘贴到 bug-reports 的新帖子中。模组本身不会发送任何内容。", L"複製你輸入的內容、模組和 Windows 版本以及上方勾選的內容，然後開啟我們的 Discord。將它貼到 bug-reports 的新貼文中。模組本身不會傳送任何內容。", L"Copia lo que escribas, las versiones del mod y de Windows y todo lo marcado arriba, y luego abre nuestro Discord. Pégalo en una publicación nueva en bug-reports. El mod no envía nada por sí mismo.", L"Copie votre texte, les versions du mod et de Windows et tout ce qui est coché ci-dessus, puis ouvre notre Discord. Collez-le dans un nouveau post dans bug-reports. Le mod n'envoie rien lui-même.", L"Copia o que você digitar, as versões do mod e do Windows e tudo o que estiver marcado acima, depois abre nosso Discord. Cole em uma nova publicação em bug-reports. O mod não envia nada sozinho.", L"Copia ciò che scrivi, le versioni della mod e di Windows e tutto ciò che è selezionato sopra, poi apre il nostro Discord. Incollalo in un nuovo post in bug-reports. La mod non invia nulla da sola.", L"Kopiuje Twój tekst, wersje moda i Windows oraz wszystko zaznaczone powyżej, a potem otwiera nasz Discord. Wklej to w nowym poście w bug-reports. Sam mod niczego nie wysyła.", L"Yazdıklarınızı, mod ve Windows sürümlerini ve yukarıda işaretlenenleri kopyalar, ardından Discord sunucumuzu açar. bug-reports kanalında yeni bir gönderiye yapıştırın. Mod kendisi hiçbir şey göndermez.", L"入力した内容、Mod と Windows のバージョン、上でチェックした項目をコピーしてから、Discord サーバーを開きます。bug-reports の新しい投稿に貼り付けてください。Mod 自体は何も送信しません。", L"입력한 내용, 모드 및 Windows 버전, 위에서 선택한 항목을 복사한 다음 Discord 서버를 엽니다. bug-reports의 새 게시물에 붙여 넣으세요. 모드 자체는 아무것도 보내지 않습니다." },
     { L"Include recent errors", L"Додати нещодавні помилки", L"Приложить недавние ошибки", L"Aktuelle Fehler mitsenden", L"हाल की त्रुटियाँ शामिल करें", L"包含最近的错误", L"包含最近的錯誤", L"Incluir errores recientes", L"Inclure les erreurs récentes", L"Incluir erros recentes", L"Includi gli errori recenti", L"Dołącz ostatnie błędy", L"Son hataları ekle", L"最近のエラーを含める", L"최근 오류 포함" },
-    { L"Include Explorer crashes", L"Додати збої Провідника", L"Приложить сбои Проводника", L"Explorer-Abstürze mitsenden", L"Explorer क्रैश शामिल करें", L"包含资源管理器崩溃信息", L"包含檔案總管當機資訊", L"Incluir fallos del Explorador", L"Inclure les plantages de l'Explorateur", L"Incluir falhas do Explorer", L"Includi i crash di Esplora risorse", L"Dołącz awarie Eksploratora", L"Gezgin kilitlenmelerini ekle", L"エクスプローラーのクラッシュを含める", L"탐색기 충돌 포함" },
-    { L"Include the mod's log", L"Додати журнал мода", L"Приложить журнал мода", L"Mod-Protokoll mitsenden", L"मॉड का लॉग शामिल करें", L"包含模组日志", L"包含模組記錄", L"Incluir el registro del mod", L"Inclure le journal du mod", L"Incluir o log do mod", L"Includi il registro della mod", L"Dołącz dziennik moda", L"Mod günlüğünü ekle", L"Mod のログを含める", L"모드 로그 포함" },
-    { L"Send", L"Надіслати", L"Отправить", L"Senden", L"भेजें", L"发送", L"傳送", L"Enviar", L"Envoyer", L"Enviar", L"Invia", L"Wyślij", L"Gönder", L"送信", L"보내기" },
-    { L"Sending...", L"Надсилання...", L"Отправка...", L"Wird gesendet...", L"भेजा जा रहा है...", L"正在发送...", L"正在傳送...", L"Enviando...", L"Envoi...", L"Enviando...", L"Invio...", L"Wysyłanie...", L"Gönderiliyor...", L"送信中...", L"보내는 중..." },
-    { L"Sent", L"Надіслано", L"Отправлено", L"Gesendet", L"भेज दिया", L"已发送", L"已傳送", L"Enviado", L"Envoyé", L"Enviado", L"Inviato", L"Wysłano", L"Gönderildi", L"送信しました", L"보냄" },
-    { L"Couldn't send", L"Не вдалося надіслати", L"Не удалось отправить", L"Senden fehlgeschlagen", L"भेजा नहीं जा सका", L"无法发送", L"無法傳送", L"No se pudo enviar", L"Échec de l'envoi", L"Não foi possível enviar", L"Impossibile inviare", L"Nie udało się wysłać", L"Gönderilemedi", L"送信できませんでした", L"보낼 수 없음" },
-    { L"Wait a minute", L"Зачекайте хвилину", L"Подождите минуту", L"Bitte eine Minute warten", L"एक मिनट रुकें", L"请稍等一分钟", L"請稍候一分鐘", L"Espera un minuto", L"Patientez une minute", L"Aguarde um minuto", L"Attendi un minuto", L"Poczekaj minutę", L"Bir dakika bekleyin", L"1 分待ってください", L"1분 기다려 주세요" },
     { L"Tools", L"Інструменти", L"Инструменты", L"Werkzeuge", L"टूल", L"工具", L"工具", L"Herramientas", L"Outils", L"Ferramentas", L"Strumenti", L"Narzędzia", L"Araçlar", L"ツール", L"도구" },
     { L"Reset", L"Скинути", L"Сбросить", L"Zurücksetzen", L"रीसेट करें", L"重置", L"重設", L"Restablecer", L"Réinitialiser", L"Redefinir", L"Ripristina", L"Resetuj", L"Sıfırla", L"リセット", L"재설정" },
     { L"Report", L"Повідомити", L"Сообщить", L"Melden", L"रिपोर्ट करें", L"报告", L"回報", L"Informar", L"Signaler", L"Relatar", L"Segnala", L"Zgłoś", L"Bildir", L"報告", L"신고" },
@@ -20064,30 +20253,35 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
 namespace wut  = winrt::Windows::UI::Text;
 
-static wuxh::WindowsXamlManager      s_mgr{ nullptr };
-static wuxh::DesktopWindowXamlSource s_src{ nullptr };
+[[clang::no_destroy]] static wuxh::WindowsXamlManager      s_mgr{ nullptr };
+[[clang::no_destroy]] static wuxh::DesktopWindowXamlSource s_src{ nullptr };
 static HWND s_hostWnd = nullptr;
 static HWND s_island = nullptr;
-static std::thread s_thread;
+// The window's thread: a plain handle, so nothing is destroyed at process exit
+// and unload can keep checking on it while it closes. Guarded by s_launchMtx.
+static HANDLE      s_thread = nullptr;
+static DWORD       s_threadId = 0;
 static std::mutex  s_launchMtx;
 static std::vector<SettingCategory> s_cats;
-static wuxc::StackPanel s_pagePanel{ nullptr };
-static wuxc::StackPanel s_navItems{ nullptr };  // the sidebar's page buttons, in s_cats order
-static wuxc::Border s_navPill{ nullptr };
-static winrt::Windows::UI::Xaml::Media::Animation::Storyboard s_navPillAnim{ nullptr };
+[[clang::no_destroy]] static wuxc::StackPanel s_pagePanel{ nullptr };
+[[clang::no_destroy]] static wuxc::StackPanel s_navItems{ nullptr };  // the sidebar's page buttons, in s_cats order
+[[clang::no_destroy]] static wuxc::Border s_navPill{ nullptr };
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::Media::Animation::Storyboard s_navPillAnim{ nullptr };
 static int s_navSel = -1;
-static winrt::Windows::UI::Xaml::Media::Animation::Storyboard s_pageFade{ nullptr };
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::Media::Animation::Storyboard s_pageFade{ nullptr };
 static int s_pendingPage = -1;
-static wux::DispatcherTimer s_applyTimer{ nullptr };
+[[clang::no_destroy]] static wux::DispatcherTimer s_applyTimer{ nullptr };
 static bool s_light = false;
-static wuxc::Grid s_root{ nullptr };
+[[clang::no_destroy]] static wuxc::Grid s_root{ nullptr };
 static int  s_selectedIdx = 0;
-static wuxc::ScrollViewer s_pageScroll{ nullptr };
+[[clang::no_destroy]] static wuxc::ScrollViewer s_pageScroll{ nullptr };
 
 // Rebuilds the current page where it is, keeping the scroll position.
 static void RebuildPageInPlace();
 [[maybe_unused]] static std::atomic<bool> s_sliderDragging{ false };
 static wchar_t   s_windowClass[64] = {};
+static HBRUSH    s_classBrush = nullptr;                           // the window class's background
+static HBRUSH    s_eraseLight = nullptr, s_eraseDark = nullptr;     // WM_ERASEBKGND
 static HINSTANCE s_classModule = nullptr;
 static bool      s_classRegistered = false;
 
@@ -20122,16 +20316,16 @@ static winrt::Windows::UI::Color ContrastColor(winrt::Windows::UI::Color c) {
                        : winrt::Windows::UI::Color{ 255, 255, 255, 255 };
 }
 
-static wuxm::SolidColorBrush s_accentBrush{ nullptr };
+[[clang::no_destroy]] static wuxm::SolidColorBrush s_accentBrush{ nullptr };
 
 // True while DWM draws Mica / Mica Alt behind the window (see ApplyMica): the XAML surfaces
 // then turn transparent so the material shows through, like the cards of Windows 11 Settings.
 static bool s_micaOn = false;
 static int  s_materialApplied = -1;  // XS_MATERIAL_*, the DWM backdrop type values apart from Acrylic Thin
-static wuxc::Grid s_micaHost{ nullptr };  // first child of the root: carries the Mica composition visual
+[[clang::no_destroy]] static wuxc::Grid s_micaHost{ nullptr };  // first child of the root: carries the Mica composition visual
 static void UpdateMicaVisual();  // defined with ApplyMica, below BuildUi
-static winrt::Windows::UI::Composition::SpriteVisual s_micaSprite{ nullptr };  // the live Mica layer, if any
-static winrt::Windows::UI::Composition::CompositionBrush s_micaFadeBrush{ nullptr };  // for the scroll fades: a blur can't run on a 1px strip
+[[clang::no_destroy]] static winrt::Windows::UI::Composition::SpriteVisual s_micaSprite{ nullptr };  // the live Mica layer, if any
+[[clang::no_destroy]] static winrt::Windows::UI::Composition::CompositionBrush s_micaFadeBrush{ nullptr };  // for the scroll fades: a blur can't run on a 1px strip
 static bool s_micaActive = true;  // window is active: Mica shows; inactive windows show the solid fallback
 
 // The window itself, and the panel that opens inside a card.
@@ -20145,9 +20339,9 @@ static wuxm::SolidColorBrush InsetBackground() {
     if (s_micaOn) return s_light ? Brush(0x66, 243, 243, 243) : Brush(0x33, 0, 0, 0);
     return s_light ? Brush(255, 243, 243, 243) : Brush(255, 34, 34, 34);
 }
-static wuxm::SolidColorBrush s_accentFgBrush{ nullptr };
-static wuxm::SolidColorBrush s_accentHoverBrush{ nullptr };
-static wuxm::SolidColorBrush s_accentPressedBrush{ nullptr };
+[[clang::no_destroy]] static wuxm::SolidColorBrush s_accentFgBrush{ nullptr };
+[[clang::no_destroy]] static wuxm::SolidColorBrush s_accentHoverBrush{ nullptr };
+[[clang::no_destroy]] static wuxm::SolidColorBrush s_accentPressedBrush{ nullptr };
 
 // delta > 0 lightens toward white; delta < 0 darkens toward black.
 static winrt::Windows::UI::Color ShadeColor(winrt::Windows::UI::Color c, double delta) {
@@ -20163,7 +20357,7 @@ static void SetOrMakeBrush(wuxm::SolidColorBrush& brush, winrt::Windows::UI::Col
 }
 
 static winrt::Windows::UI::Color s_accentShown{};  // what the brushes are at, or heading to
-static winrt::Windows::UI::Xaml::Media::Animation::Storyboard s_accentFade{ nullptr };
+[[clang::no_destroy]] static winrt::Windows::UI::Xaml::Media::Animation::Storyboard s_accentFade{ nullptr };
 
 static winrt::Windows::UI::Color AccentTargetColor() {
     auto c = AccentColorValue();
@@ -20218,8 +20412,7 @@ static bool IconsAboveSaveWanted() {
                               g_settings.sidebarIconsAboveSave ? L"1" : L"0") != L"0";
 }
 static bool ReportButtonWanted() {
-    return BugReportsEnabled() &&
-           GetSettingOverride(L"SettingsWindowSettings.reportButtonInSidebar",
+    return GetSettingOverride(L"SettingsWindowSettings.reportButtonInSidebar",
                               g_settings.reportButtonInSidebar ? L"1" : L"0") != L"0";
 }
 
@@ -20756,7 +20949,7 @@ struct FluentTemplates {
     wuxc::ControlTemplate addSlot{ nullptr };
     wuxc::ControlTemplate navItem{ nullptr };
 };
-static FluentTemplates s_templates;
+[[clang::no_destroy]] static FluentTemplates s_templates;
 
 static wuxc::ControlTemplate LoadTemplate(const std::wstring& xaml) {
     try { return wux::Markup::XamlReader::Load(winrt::hstring{ xaml }).as<wuxc::ControlTemplate>(); }
@@ -20943,31 +21136,11 @@ static void FlashButtonLabel(wuxc::Button const& b, const std::wstring& flash, c
 }
 
 // ---- Bug reports ----
+// "Report a bug" puts a report together here, copies it and opens the mod's
+// Discord, where it goes in the bug-reports forum. The mod sends nothing: the
+// person pastes it there if they want.
 static constexpr size_t BUG_TEXT_MAX = 1500;
-static constexpr int BUG_COOLDOWN_SECONDS = 60;  // one report a minute (see BugLastSent in mod storage)
-static constexpr UINT WM_XS_BUG_REPORT_DONE = WM_APP + 0x4C;  // wParam: it was delivered
-
-static std::string BugUtf8(const std::wstring& w) {
-    if (w.empty()) return {};
-    int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
-    std::string out(n, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), out.data(), n, nullptr, nullptr);
-    return out;
-}
-
-static std::wstring BugJsonEscape(const std::wstring& v) {
-    std::wstring out;
-    for (wchar_t c : v) {
-        if (c == L'"') out += L"\\\"";
-        else if (c == L'\\') out += L"\\\\";
-        else if (c == L'\n') out += L"\\n";
-        else if (c == L'\r') out += L"\\r";
-        else if (c == L'\t') out += L"\\t";
-        else if (c < 0x20) { wchar_t b[8]; swprintf_s(b, L"\\u%04x", (unsigned)c); out += b; }
-        else out += c;
-    }
-    return out;
-}
+static constexpr const wchar_t* BUG_REPORT_URL = L"https://discord.gg/vdSrFVMY6J";
 
 static std::wstring BugWindowsBuild() {
     wchar_t build[32]{};
@@ -20981,118 +21154,9 @@ static std::wstring BugWindowsBuild() {
     return out;
 }
 
-// Explorer crashes from the last two weeks, newest first, from Windows' own log:
-// one line each. All of them, as XAML crashes rarely name the mod's own file.
-static std::wstring RecentExplorerCrashes() {
-    std::wstring out;
-    auto field = [](const std::wstring& xml, const wchar_t* name) -> std::wstring {
-        const std::wstring open = std::wstring(L"<Data Name='") + name + L"'>";
-        const std::wstring open2 = std::wstring(L"<Data Name=\"") + name + L"\">";
-        size_t a = xml.find(open), len = open.size();
-        if (a == std::wstring::npos) { a = xml.find(open2); len = open2.size(); }
-        if (a == std::wstring::npos) return {};
-        a += len;
-        const size_t b = xml.find(L"</Data>", a);
-        return b == std::wstring::npos ? std::wstring{} : xml.substr(a, b - a);
-    };
-    EVT_HANDLE query = EvtQuery(nullptr, L"Application",
-        L"*[System[Provider[@Name='Application Error'] and EventID=1000 and TimeCreated[timediff(@SystemTime) <= 1209600000]]]",
-        EvtQueryChannelPath | EvtQueryReverseDirection);
-    if (!query) return out;
-    int found = 0;
-    for (int scanned = 0; scanned < 200 && found < 5; scanned++) {
-        EVT_HANDLE ev = nullptr;
-        DWORD got = 0;
-        if (!EvtNext(query, 1, &ev, 2000, 0, &got) || !got) break;
-        DWORD need = 0, props = 0;
-        EvtRender(nullptr, ev, EvtRenderEventXml, 0, nullptr, &need, &props);
-        std::wstring xml(need / sizeof(wchar_t) + 1, L'\0');
-        if (need && EvtRender(nullptr, ev, EvtRenderEventXml, need, xml.data(), &need, &props)) {
-            std::wstring app = field(xml, L"AppName");
-            for (auto& c : app) c = (wchar_t)towlower(c);
-            if (app == L"explorer.exe") {
-                std::wstring when;
-                const size_t t = xml.find(L"SystemTime=");
-                if (t != std::wstring::npos && t + 31 < xml.size()) when = xml.substr(t + 12, 19);
-                out += when + L"  " + field(xml, L"ModuleName") + L"  " + field(xml, L"ExceptionCode") +
-                       L"  offset " + field(xml, L"FaultingOffset") + L"\n";
-                found++;
-            }
-        }
-        EvtClose(ev);
-    }
-    EvtClose(query);
-    return out;
-}
-
-// The end of %TEMP%\fmp-crash.log: what the mod did just before a crash.
-static std::wstring ModLogTail(int lines) {
-    wchar_t path[MAX_PATH];
-    const DWORD n = GetTempPathW(MAX_PATH, path);
-    if (!n || n > MAX_PATH) return {};
-    wcscat_s(path, MAX_PATH, L"fmp-crash.log");
-    HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return {};
-    LARGE_INTEGER size{};
-    GetFileSizeEx(h, &size);
-    const LONGLONG want = std::min<LONGLONG>(size.QuadPart, 16 * 1024);
-    LARGE_INTEGER from{};
-    from.QuadPart = size.QuadPart - want;
-    SetFilePointerEx(h, from, nullptr, FILE_BEGIN);
-    std::string bytes((size_t)want, '\0');
-    DWORD read = 0;
-    if (want) ReadFile(h, bytes.data(), (DWORD)want, &read, nullptr);
-    CloseHandle(h);
-    bytes.resize(read);
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(), nullptr, 0);
-    std::wstring text(wlen, L'\0');
-    if (wlen) MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(), text.data(), wlen);
-    size_t at = text.size();
-    for (int i = 0; i <= lines && at != std::wstring::npos && at > 0; i++) at = text.rfind(L'\n', at - 1);
-    return at == std::wstring::npos ? text : text.substr(at + 1);
-}
-
-// errors.txt: what went wrong recently, with the user's name taken out.
-static std::wstring BuildBugErrorsText(bool withErrors, bool withCrashes, bool withLog) {
-    std::wstring out;
-    if (withErrors) {
-        std::wstring recent;
-        {
-            std::lock_guard<std::mutex> lk(g_recentErrorsMutex);
-            for (const auto& e : g_recentErrors) recent += e + L"\n";
-        }
-        out += L"== Errors the mod caught since it loaded ==\n" + (recent.empty() ? L"none\n" : recent) + L"\n";
-    }
-    if (withCrashes) {
-        std::wstring crashes;
-        try { crashes = RecentExplorerCrashes(); } catch (...) {}
-        out += L"== Explorer crashes, last 14 days (time UTC, module, code) ==\n" + (crashes.empty() ? L"none\n" : crashes) + L"\n";
-    }
-    if (withLog) {
-        std::wstring tail;
-        try { tail = ModLogTail(40); } catch (...) {}
-        out += L"== Mod log, last lines ==\n" + (tail.empty() ? L"none\n" : tail);
-    }
-    wchar_t buf[MAX_PATH];
-    if (GetEnvironmentVariableW(L"USERPROFILE", buf, MAX_PATH)) out = ReplaceAll(out, buf, L"<profile>");
-    if (GetEnvironmentVariableW(L"USERNAME", buf, MAX_PATH) && buf[0]) out = ReplaceAll(out, buf, L"<user>");
-    return out;
-}
-
-// "DESKTOP-ABC123 / marks": for telling who a report is from. The form says it's sent.
-static std::wstring BugWho() {
-    wchar_t pc[MAX_COMPUTERNAME_LENGTH + 2]{}, user[128]{};
-    DWORD pcLen = ARRAYSIZE(pc), userLen = ARRAYSIZE(user);
-    GetComputerNameW(pc, &pcLen);
-    GetUserNameW(user, &userLen);
-    return std::wstring(pc) + L" / " + user;
-}
-
-// The multipart body Discord takes: the message, the mod's errors as a file, and
-// the settings as another when they were included. Nobody can be pinged through
-// it (allowed_mentions).
-static std::string BuildBugReportBody(std::wstring text, const std::wstring& settingsYaml, const std::wstring& errorsText,
-                                      const std::wstring& who, const std::string& boundary) {
+// The post, in Discord Markdown with the fields of the bug-reports template,
+// with the user's name taken out.
+static std::wstring BuildBugReportText(std::wstring text, bool withErrors, bool withSettings) {
 #ifdef WH_MOD_VERSION
     const std::wstring version = WH_MOD_VERSION;
 #else
@@ -21102,100 +21166,22 @@ static std::string BuildBugReportBody(std::wstring text, const std::wstring& set
         text.resize(BUG_TEXT_MAX);
         if (IS_HIGH_SURROGATE(text.back())) text.pop_back();
     }
-    const std::wstring message = L"**Bug report** | v" + version + L" | Windows build " + BugWindowsBuild() + (who.empty() ? L"" : L" | " + who) + L"\n" + text;
-    const std::string json = BugUtf8(L"{\"username\":\"TFMP bug report\",\"content\":\"" + BugJsonEscape(message) +
-                                     L"\",\"allowed_mentions\":{\"parse\":[]}}");
-    std::string body = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n"
-                       "Content-Type: application/json\r\n\r\n" + json + "\r\n";
-    int fileIndex = 0;
-    auto attach = [&](const char* filename, const std::wstring& content) {
-        if (content.empty()) return;
-        body += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"files[" + std::to_string(fileIndex++) +
-                "]\"; filename=\"" + filename + "\"\r\nContent-Type: text/plain\r\n\r\n" + BugUtf8(content) + "\r\n";
-    };
-    attach("errors.txt", errorsText);
-    attach("settings.yaml", settingsYaml);
-    return body + "--" + boundary + "--\r\n";
-}
-
-// True when the server took it.
-static bool PostBugReport(const wchar_t* url, const std::wstring& text, const std::wstring& settingsYaml,
-                          const std::wstring& errorsText = {}, const std::wstring& who = {}) {
-    static const std::string BOUNDARY = "----tfmpBugReport7d3a9c41e6";
-    const std::string body = BuildBugReportBody(text, settingsYaml, errorsText, who, BOUNDARY);
-
-    wchar_t host[256]{}, path[1024]{};
-    URL_COMPONENTS parts{ sizeof(parts) };
-    parts.lpszHostName = host;
-    parts.dwHostNameLength = ARRAYSIZE(host);
-    parts.lpszUrlPath = path;
-    parts.dwUrlPathLength = ARRAYSIZE(path);
-    if (!WinHttpCrackUrl(url, 0, 0, &parts)) return false;
-
-    bool ok = false;
-    HINTERNET session = WinHttpOpen(L"TaskbarFluentMediaPlayer", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    HINTERNET connect = session ? WinHttpConnect(session, host, parts.nPort, 0) : nullptr;
-    HINTERNET request = connect ? WinHttpOpenRequest(connect, L"POST", path, nullptr, WINHTTP_NO_REFERER,
-                                                     WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                                     parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) : nullptr;
-    if (request) {
-        WinHttpSetTimeouts(request, 5000, 5000, 10000, 10000);
-        const std::wstring headers = L"Content-Type: multipart/form-data; boundary=" +
-                                     std::wstring(BOUNDARY.begin(), BOUNDARY.end());
-        if (WinHttpSendRequest(request, headers.c_str(), (DWORD)-1L, (LPVOID)body.data(), (DWORD)body.size(), (DWORD)body.size(), 0) &&
-            WinHttpReceiveResponse(request, nullptr)) {
-            DWORD status = 0, size = sizeof(status);
-            if (WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                                    WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX))
-                ok = status >= 200 && status < 300;
+    std::wstring out = L"**Mod version:** " + version + L"\n**Windows version:** " + BugWindowsBuild() +
+                       L"\n**What happened:** " + text + L"\n";
+    if (withErrors) {
+        std::wstring recent;
+        {
+            std::lock_guard<std::mutex> lk(g_recentErrorsMutex);
+            for (const auto& e : g_recentErrors) recent += e + L"\n";
         }
+        out += L"**Errors the mod caught:**\n```\n" + (recent.empty() ? L"none\n" : recent) + L"```\n";
     }
-    if (request) WinHttpCloseHandle(request);
-    if (connect) WinHttpCloseHandle(connect);
-    if (session) WinHttpCloseHandle(session);
-    return ok;
-}
-
-// The send outlives a possible unload (which only waits 2 s for workers), so
-// this thread holds a reference to the mod until it's done.
-struct BugReportJob {
-    std::wstring text, settingsYaml, who;
-    bool withErrors, withCrashes, withLog;
-    HWND replyTo;
-    HMODULE self;
-};
-static DWORD WINAPI BugReportThread(void* param) {
-    auto* job = static_cast<BugReportJob*>(param);
-    const HMODULE self = job->self;
-    bool ok = false;
-    try { ok = PostBugReport(BUG_REPORT_WEBHOOK, job->text, job->settingsYaml,
-                                  BuildBugErrorsText(job->withErrors, job->withCrashes, job->withLog), job->who); } catch (...) {}
-    if (job->replyTo) PostMessageW(job->replyTo, WM_XS_BUG_REPORT_DONE, ok ? 1 : 0, 0);
-    delete job;
-    FreeLibraryAndExitThread(self, 0);
-}
-
-static winrt::weak_ref<wuxc::Button> s_bugOpenBtn{ nullptr }, s_bugSendBtn{ nullptr };
-static winrt::weak_ref<wuxc::TextBox> s_bugBox{ nullptr };
-static winrt::weak_ref<wuxc::Flyout> s_bugFlyout{ nullptr };
-
-// WM_XS_BUG_REPORT_DONE, on the window's thread.
-static void OnBugReportDone(bool ok) {
-    auto send = s_bugSendBtn.get();
-    if (send) {
-        send.IsEnabled(true);
-        send.Opacity(1.0);
-    }
-    if (!ok) {
-        if (send) FlashButtonLabel(send, Loc(L"Couldn't send"), Loc(L"Send"));
-        return;
-    }
-    Wh_SetIntValue(L"BugLastSent", (int)time(nullptr));
-    if (send) send.Content(winrt::box_value(winrt::hstring{ Loc(L"Send") }));
-    if (auto box = s_bugBox.get()) box.Text(L"");
-    if (auto fly = s_bugFlyout.get()) fly.Hide();
-    if (auto open = s_bugOpenBtn.get()) FlashButtonLabel(open, L"\u2713  " + Loc(L"Sent"), Loc(L"Report a bug"));
+    if (withSettings)
+        out += L"**Settings:**\n```yaml\n" + BuildSettingsExportYaml() + L"\n```\n";
+    wchar_t buf[MAX_PATH];
+    if (GetEnvironmentVariableW(L"USERPROFILE", buf, MAX_PATH)) out = ReplaceAll(out, buf, L"<profile>");
+    if (GetEnvironmentVariableW(L"USERNAME", buf, MAX_PATH) && buf[0]) out = ReplaceAll(out, buf, L"<user>");
+    return out;
 }
 
 // The form under the "Report a bug" button.
@@ -21221,25 +21207,24 @@ static void AttachBugReportForm(wuxc::Button const& openBtn) {
         return c;
     };
     wuxc::CheckBox withErrors = tick(L"Include recent errors", true);
-    wuxc::CheckBox withCrashes = tick(L"Include Explorer crashes", true);
-    wuxc::CheckBox withLog = tick(L"Include the mod's log", true);
     wuxc::CheckBox withSettings = tick(L"Include my settings", true);
 
     wuxc::TextBlock note;
-    note.Text(hstring{ Loc(L"Sends what you type, your PC and user name, your mod and Windows versions, and whatever is ticked above to the developers' Discord.") });
+    note.Text(hstring{ Loc(L"Copies your text, your mod and Windows versions and whatever is ticked above, then opens our Discord. Paste it in a new post in bug-reports. The mod doesn't send anything itself.") });
     note.TextWrapping(wux::TextWrapping::Wrap);
     note.FontSize(11);
     note.Opacity(0.7);
 
-    wuxc::Button send;
-    StyleAccentButton(send);
-    send.Content(winrt::box_value(hstring{ Loc(L"Send") }));
-    send.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    wuxc::Button copy;
+    StyleAccentButton(copy);
+    copy.Content(winrt::box_value(hstring{ Loc(L"Copy and open Discord") }));
+    copy.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
 
     body.Children().Append(box);
-    for (const auto& c : { withErrors, withCrashes, withLog, withSettings }) body.Children().Append(c);
+    body.Children().Append(withErrors);
+    body.Children().Append(withSettings);
     body.Children().Append(note);
-    body.Children().Append(send);
+    body.Children().Append(copy);
 
     wuxc::Flyout fly;
     fly.Content(body);
@@ -21248,35 +21233,13 @@ static void AttachBugReportForm(wuxc::Button const& openBtn) {
     fly.FlyoutPresenterStyle(presenter);
     openBtn.Flyout(fly);
 
-    winrt::weak_ref<wuxc::Button> weakOpen = openBtn;
-    winrt::weak_ref<wuxc::Flyout> weakFly = fly;
-    send.Click([box, withErrors, withCrashes, withLog, withSettings, weakOpen, weakFly](winrt::Windows::Foundation::IInspectable const& sender, wux::RoutedEventArgs const&) {
-        auto btn = sender.as<wuxc::Button>();
+    copy.Click([box, withErrors, withSettings](winrt::Windows::Foundation::IInspectable const& sender, wux::RoutedEventArgs const&) {
         const std::wstring text = TrimCopy(std::wstring{ box.Text() });
         if (text.empty()) { box.Focus(wux::FocusState::Programmatic); return; }
-        const int lastSent = Wh_GetIntValue(L"BugLastSent", 0);
-        if (lastSent && (int)time(nullptr) - lastSent < BUG_COOLDOWN_SECONDS) {
-            FlashButtonLabel(btn, Loc(L"Wait a minute"), Loc(L"Send"));
-            return;
-        }
-        HMODULE self = nullptr;
-        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<LPCWSTR>(&BugReportThread), &self)) return;
         auto ticked = [](wuxc::CheckBox const& c) { auto v = c.IsChecked(); return v && v.Value(); };
-        auto* job = new BugReportJob{ text, ticked(withSettings) ? BuildSettingsExportYaml() : std::wstring{},
-                                      BugWho(),
-                                      ticked(withErrors), ticked(withCrashes), ticked(withLog), s_hostWnd, self };
-        s_bugOpenBtn = weakOpen;
-        s_bugSendBtn = btn;
-        s_bugBox = box;
-        s_bugFlyout = weakFly;
-        btn.IsEnabled(false);
-        btn.Opacity(0.6);
-        btn.Content(winrt::box_value(winrt::hstring{ Loc(L"Sending...") }));
-        HANDLE t = CreateThread(nullptr, 0, BugReportThread, job, 0, nullptr);
-        if (t) { CloseHandle(t); return; }
-        delete job;
-        FreeLibrary(self);
-        OnBugReportDone(false);
+        CopyTextToClipboard(s_hostWnd, BuildBugReportText(text, ticked(withErrors), ticked(withSettings)));
+        ShellExecuteW(s_hostWnd, L"open", BUG_REPORT_URL, nullptr, nullptr, SW_SHOWNORMAL);
+        FlashButtonLabel(sender.as<wuxc::Button>(), L"\u2713  " + Loc(L"Copied"), Loc(L"Copy and open Discord"));
     });
 }
 
@@ -21498,7 +21461,7 @@ static bool ResolveDisplayColor(const std::wstring& v, winrt::Windows::UI::Color
 
 static void PaintColorDot(wuxc::Border const& dot, const std::wstring& value) {
     const std::wstring v = value.empty()
-        ? GetSettingOverride(L"AppearanceSettings.MediaButtonsStyleSettings.buttonColor", L"255 255 255") : value;
+        ? GetSettingOverride(L"AppearanceSettings.MediaButtonsStyleSettings.buttonColor", L"0 0 0$255 255 255") : value;
     const size_t d = v.find(L'$');
     winrt::Windows::UI::Color c;
     const std::wstring part = d == std::wstring::npos ? v : s_light ? v.substr(0, d) : v.substr(d + 1);
@@ -22168,7 +22131,7 @@ COLD_UNOPTIMIZED static wux::FrameworkElement BuildControl(const SettingRow& row
         holder.Children().Append(readout);
         return holder;
     }
-    if (row.kind == RowKind::Combo || row.kind == RowKind::Position) {
+    if (row.kind == RowKind::Combo) {
         std::wstring realKeyUnused;
         bool isPositionSubRow = row.kind == RowKind::Combo &&
                                  SplitPositionSubKey(key, realKeyUnused) >= 0;
@@ -22499,7 +22462,7 @@ static wuxc::Grid MakeRow(const SettingRow& row) {
     wux::FrameworkElement ctrl = BuildControl(row);
     if (ctrl) {
         ctrl.VerticalAlignment(wux::VerticalAlignment::Center);
-        bool fill = (row.kind == RowKind::Combo || row.kind == RowKind::Position ||
+        bool fill = (row.kind == RowKind::Combo ||
                      row.kind == RowKind::Slider ||
                      (row.kind == RowKind::Text && !row.narrow));
         ctrl.HorizontalAlignment(fill ? wux::HorizontalAlignment::Stretch
@@ -23295,7 +23258,7 @@ struct ScrollFade {
     bool paintedMica = false;
     std::vector<winrt::Windows::UI::Composition::SpriteVisual> strips;
 };
-static ScrollFade s_fadeTop, s_fadeBottom;
+[[clang::no_destroy]] static ScrollFade s_fadeTop, s_fadeBottom;
 
 static void PaintScrollFade(ScrollFade& f, double amount) {
     if (!f.host) return;
@@ -23794,10 +23757,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             break;
         case WM_ERASEBKGND: {
             // The island covers the client area; this only paints gaps while resizing.
-            static HBRUSH sLight = CreateSolidBrush(RGB(243, 243, 243));
-            static HBRUSH sDark  = CreateSolidBrush(RGB(32, 32, 32));
+            if (!s_eraseLight) s_eraseLight = CreateSolidBrush(RGB(243, 243, 243));
+            if (!s_eraseDark)  s_eraseDark  = CreateSolidBrush(RGB(32, 32, 32));
             RECT rc; GetClientRect(h, &rc);
-            FillRect(reinterpret_cast<HDC>(w), &rc, s_light ? sLight : sDark);
+            FillRect(reinterpret_cast<HDC>(w), &rc, s_light ? s_eraseLight : s_eraseDark);
             return 1;
         }
         case WM_SIZE:
@@ -23805,9 +23768,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             return 0;
         case WM_SETFOCUS:
             if (s_island) SetFocus(s_island);
-            return 0;
-        case WM_XS_BUG_REPORT_DONE:
-            try { OnBugReportDone(w != 0); } catch (...) { LOG_IGNORED_EXCEPTION(); }
             return 0;
         case WM_XS_REFRESH:
             try {
@@ -23841,9 +23801,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 if (choice != IDYES) return 0;
             }
             g_settingsDraftDirty = false;
-            ShowWindow(h, SW_HIDE);
             try { if (s_applyTimer) s_applyTimer.Stop(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
             DiscardSettingsDraftOnClose();
+            DestroyWindow(h);  // ends the thread, which releases its XAML
             return 0;
         case WM_DESTROY:
             try { if (s_src) s_src.Close(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
@@ -23854,6 +23814,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             s_navPillAnim = nullptr;
             s_pageFade = nullptr;
             s_root = nullptr;
+            s_pageScroll = nullptr;
             s_island = nullptr;
             s_hostWnd = nullptr;
             s_micaHost = nullptr;
@@ -23873,22 +23834,33 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
-static void ThreadProc() {
-    FmpFileLog(L"[settings] open: starting XAML on its thread");
+static DWORD WINAPI ThreadProc(void*) {
+    Wh_Log(L"[settings] open: starting XAML on its thread");
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     try {
         s_mgr = wuxh::WindowsXamlManager::InitializeForCurrentThread();
     } catch (...) {
         winrt::uninit_apartment();
-        MessageBoxW(nullptr,
+        if (!g_unloading) MessageBoxW(nullptr,
             L"Taskbar Fluent Media Player couldn't open its settings window "
             L"(XAML Islands failed to initialize on this system).",
             L"Taskbar Fluent Media Player", MB_OK | MB_ICONERROR);
-        return;
+        return 0;
+    }
+
+    if (g_unloading) {  // unload began while XAML was starting
+        try { s_mgr.Close(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+        s_mgr = nullptr;
+        winrt::uninit_apartment();
+        return 0;
     }
 
     HICON iconBig   = CreateSettingsAppIcon(32);
     HICON iconSmall = CreateSettingsAppIcon(16);
+    struct IconsGuard {  // destroyed after the window, on every way out
+        HICON big, small;
+        ~IconsGuard() { if (big) DestroyIcon(big); if (small) DestroyIcon(small); }
+    } iconsGuard{ iconBig, iconSmall };
 
     if (!s_classModule) s_classModule = ThisModule();
     if (!s_windowClass[0])
@@ -23898,15 +23870,12 @@ static void ThreadProc() {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = s_classModule;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hIcon = iconBig;
-    wc.hIconSm = iconSmall;
-    static HBRUSH s_bg = CreateSolidBrush(RGB(32, 32, 32));
-    wc.hbrBackground = s_bg;
+    // Icons go on the window (WM_SETICON below): these ones are destroyed when
+    // it closes, and the class lives on until unload.
+    if (!s_classBrush) s_classBrush = CreateSolidBrush(RGB(32, 32, 32));
+    wc.hbrBackground = s_classBrush;
     wc.lpszClassName = s_windowClass;
-    if (!s_classRegistered) {
-        if (RegisterClassExW(&wc)) s_classRegistered = true;
-        else if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) s_classRegistered = true;  // ours, from an earlier open
-    }
+    if (!s_classRegistered && RegisterClassExW(&wc)) s_classRegistered = true;
 
     int dpi = GetCurrentDpi();
     float scale = dpi / 96.0f;
@@ -23920,8 +23889,8 @@ static void ThreadProc() {
     s_hostWnd = CreateWindowExW(WS_EX_APPWINDOW, s_windowClass, L"Taskbar Fluent Media Player",
                              WS_OVERLAPPEDWINDOW, x, y, width, height,
                              nullptr, nullptr, s_classModule, nullptr);
-    if (!s_hostWnd) { try { s_mgr.Close(); } catch (...) { LOG_IGNORED_EXCEPTION(); } s_mgr = nullptr; winrt::uninit_apartment(); return; }
-    FmpFileLog(L"[settings] window created (class %s)", s_windowClass);
+    if (!s_hostWnd) { try { s_mgr.Close(); } catch (...) { LOG_IGNORED_EXCEPTION(); } s_mgr = nullptr; winrt::uninit_apartment(); return 0; }
+    Wh_Log(L"[settings] window created (class %s)", s_windowClass);
     SetTimer(s_hostWnd, WATCH_TIMER, WATCH_TIMER_MS, nullptr);
     HideTitleBarText(s_hostWnd);
 
@@ -23955,26 +23924,26 @@ static void ThreadProc() {
             ApplySettingsLiveNow();
         });
 
-        FmpFileLog(L"[settings] island attached, building UI");
+        Wh_Log(L"[settings] island attached, building UI");
         s_light = IsSystemLightTheme();
         ApplyMica(s_hostWnd);  // before BuildUi: the surfaces are built transparent or solid by it
         BuildUi();
         ApplyMica(s_hostWnd);
-        FmpFileLog(L"[settings] UI built");
+        Wh_Log(L"[settings] UI built");
     } catch (...) {
         DestroyWindow(s_hostWnd);
         try { if (s_mgr) s_mgr.Close(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
         s_mgr = nullptr; winrt::uninit_apartment();
-        MessageBoxW(nullptr,
+        if (!g_unloading) MessageBoxW(nullptr,
             L"Taskbar Fluent Media Player couldn't build its settings window.",
             L"Taskbar Fluent Media Player", MB_OK | MB_ICONERROR);
-        return;
+        return 0;
     }
 
     ShowWindow(s_hostWnd, SW_SHOW);
     UpdateWindow(s_hostWnd);
     SetForegroundWindow(s_hostWnd);
-    FmpFileLog(L"[settings] shown");
+    Wh_Log(L"[settings] shown");
 
     auto native2 = s_src ? s_src.try_as<IDesktopWindowXamlSourceNative2>() : nullptr;
     MSG msg;
@@ -23983,14 +23952,20 @@ static void ThreadProc() {
         if (native2) native2->PreTranslateMessage(&msg, &processed);
         if (!processed) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
+    native2 = nullptr;  // before the apartment goes
 
+    // A WM_QUIT from unload can arrive before the window is gone.
+    if (s_hostWnd && IsWindow(s_hostWnd)) DestroyWindow(s_hostWnd);
     s_applyTimer = nullptr;
     try { if (s_mgr) s_mgr.Close(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
     s_mgr = nullptr;
     winrt::uninit_apartment();
+    return 0;
 }
 
+// Runs on the taskbar's thread, so it never waits on the window's thread.
 static void Show() {
+    if (g_unloading) return;
     std::lock_guard<std::mutex> lk(s_launchMtx);
     if (s_hostWnd && IsWindow(s_hostWnd)) {
         PostMessageW(s_hostWnd, WM_XS_REFRESH, 0, 0);
@@ -23998,26 +23973,66 @@ static void Show() {
         SetForegroundWindow(s_hostWnd);
         return;
     }
-    if (s_thread.joinable()) s_thread.join();
-    s_thread = std::thread(ThreadProc);
+    if (s_thread) {
+        // Still starting (a double click), or still closing: leave it be.
+        if (WaitForSingleObject(s_thread, 0) != WAIT_OBJECT_0) return;
+        CloseHandle(s_thread);
+        s_thread = nullptr;
+        s_threadId = 0;
+    }
+    s_thread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, &s_threadId);
 }
 
+// Unload: closes the window and waits for its thread, however far it got. A
+// dialog it has up is answered No/Cancel first, and a thread with no window yet
+// gets WM_QUIT (ThreadProc also checks g_unloading while it starts).
 static void CloseWindow() {
-    HWND h = s_hostWnd;
-    if (h && IsWindow(h)) PostMessageW(h, WM_CLOSE, 0, 0);
-    if (s_thread.joinable()) s_thread.join();
+    HANDLE thread = nullptr;
+    DWORD tid = 0;
+    {
+        std::lock_guard<std::mutex> lk(s_launchMtx);
+        thread = s_thread;
+        tid = s_threadId;
+        s_thread = nullptr;
+        s_threadId = 0;
+    }
+    if (thread) {
+        while (WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
+            HWND main = s_hostWnd;
+            EnumThreadWindows(tid, [](HWND w, LPARAM mainWnd) -> BOOL {
+                if (w == reinterpret_cast<HWND>(mainWnd)) return TRUE;
+                wchar_t cls[16]{};
+                GetClassNameW(w, cls, ARRAYSIZE(cls));
+                if (wcscmp(cls, L"#32770") == 0) {  // a message box
+                    PostMessageW(w, WM_COMMAND, IDNO, 0);
+                    PostMessageW(w, WM_COMMAND, IDCANCEL, 0);
+                }
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(main));
+            if (main && IsWindow(main)) PostMessageW(main, WM_CLOSE, 0, 0);  // destroys it while unloading
+            else PostThreadMessageW(tid, WM_QUIT, 0, 0);
+        }
+        CloseHandle(thread);
+    }
     UnregisterWindowClass();
+    for (HBRUSH* b : { &s_classBrush, &s_eraseLight, &s_eraseDark }) {
+        if (*b && !s_classRegistered) { DeleteObject(*b); *b = nullptr; }
+    }
 }
 
 }
 
 static void ShowXamlSettingsWindow() { xs::Show(); }
+static void RefreshOpenSettingsWindow() {
+    HWND h = xs::s_hostWnd;
+    if (h && IsWindow(h)) PostMessageW(h, xs::WM_XS_REFRESH, 0, 0);
+}
 
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Wh_ModInit: Starting");
-    FmpFileLog(L"==== Wh_ModInit (mod loaded / reloaded) ====");
+    Wh_Log(L"==== Wh_ModInit (mod loaded / reloaded) ====");
     g_unloading = false;
     g_applyingSettings = false;
     g_hookInjectionInProgress = false;
@@ -24033,7 +24048,7 @@ BOOL Wh_ModInit() {
         // Usually Windhawk's symbol download for a new taskbar.dll failed. It
         // remembers that until Windhawk restarts, so say so where users look.
         Wh_Log(L"Wh_ModInit: HookTaskbarDllSymbols failed");
-        FmpFileLog(L"Wh_ModInit: taskbar.dll symbols didn't load, the mod can't start. "
+        Wh_Log(L"Wh_ModInit: taskbar.dll symbols didn't load, the mod can't start. "
                    L"Usually Windhawk's symbol download failed: exit Windhawk from the tray, reopen it, and let \"Loading symbols\" finish.");
         return FALSE;
     }
@@ -24113,19 +24128,54 @@ void Wh_ModAfterInit() {
     });
 }
 
+// Unload, on a taskbar's thread: stops what the mod scheduled there and unhooks
+// it from Explorer's own XAML, before the player comes out.
+static void StopTaskbarCallbacksOnThread() {
+    for (auto* t : { &g_settingsTipWait, &g_settingsTipClose, &g_applyRetryTimer, &g_miniRevealTimer, &g_miniClosingTimer }) {
+        try { if (*t) t->Stop(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+        *t = nullptr;
+    }
+    try { if (g_settingsTipFlyout) g_settingsTipFlyout.Hide(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+    g_settingsTipFlyout = nullptr;
+    if (g_miniPlayerFlyout) {
+        try {
+            if (g_miniFlyoutOpenedToken.value)  g_miniPlayerFlyout.Opened(g_miniFlyoutOpenedToken);
+            if (g_miniFlyoutClosingToken.value) g_miniPlayerFlyout.Closing(g_miniFlyoutClosingToken);
+            if (g_miniFlyoutClosedToken.value)  g_miniPlayerFlyout.Closed(g_miniFlyoutClosedToken);
+            g_miniPlayerFlyout.Hide();
+        } catch (...) { LOG_IGNORED_EXCEPTION(); }
+        g_miniPlayerFlyout = nullptr;
+        g_miniPlayerFlyoutOpen = false;
+    }
+    g_miniFlyoutOpenedToken = g_miniFlyoutClosingToken = g_miniFlyoutClosedToken = {};
+    for (auto* sb : { &g_mainArtFade, &g_miniArtFade }) {
+        try { if (*sb) sb->Stop(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
+        *sb = nullptr;
+    }
+}
+
 void Wh_ModUninit() {
     g_unloading = true;
     g_hookInjectionInProgress = false;
     g_hookFailCount = 0;
 
+    // First: while open, the window applies settings on the taskbar's thread.
+    xs::CloseWindow();
+
+    // Every thread the mod started, with no timeout: the DLL is freed as soon as
+    // this returns. New workers are refused from here on. Workers go before the
+    // media thread, which releases the session manager they use.
     StopTimerThread();
+    WaitForTrackedWorkers();
     StopMediaThread();
     WaitForTrackedWorkers();
 
-    if (g_taskbarWnd)
+    if (g_taskbarWnd) {
         RunFromWindowThread(g_taskbarWnd, [](void*) {
+            StopTaskbarCallbacksOnThread();
             RemovePlayerGrid();
             RemoveAllDetachedContainers();
+            ReleaseTrackingGroupsOnThread(g_taskbarWnd);
             g_mediaHoverBrush   = nullptr;
             g_mediaPressedBrush = nullptr;
             g_playerHoverBrush  = nullptr;
@@ -24148,30 +24198,42 @@ void Wh_ModUninit() {
             ResetMiniSeekPaint();
             g_miniPlayerElapsedRef        = nullptr;
             g_miniPlayerDurationRef       = nullptr;
+            // The visualizer's elements, here on their own thread (1.6.0 did this).
+            g_vizBars.reset();
+            g_vizBrushes.reset();
+            ClearVizLine();
+            g_vizLineStops.reset();
         }, nullptr);
-    else {
+    } else {
+        // No taskbar thread to release them on: leak rather than release them here.
         for (auto* b : { &g_mediaHoverBrush, &g_mediaPressedBrush, &g_playerHoverBrush,
                          &g_playerPressedBrush, &g_playerBorderBrush, &g_playerBorderPressedBrush })
             winrt::detach_abi(*b);
     }
 
+    // Parts and groups on the other monitors' taskbars, on their threads.
+    std::set<HWND> otherTaskbars;
+    for (auto& [key, grp] : *g_trackingGroups)
+        if (grp.hWnd && grp.hWnd != g_taskbarWnd && IsWindow(grp.hWnd)) otherTaskbars.insert(grp.hWnd);
+    for (HWND h : otherTaskbars)
+        RunFromWindowThread(h, [](void* w) { ReleaseTrackingGroupsOnThread(static_cast<HWND>(w)); }, h);
+
     CleanupAudioDeviceEnumerator();
-    if (!g_hiddenWidgetsButtons.empty()) {
-        if (HWND primaryWnd = FindPrimaryTaskbarWnd()) {
-            RunFromWindowThread(primaryWnd, [](void*) {
-                try {
-                    for (auto& el : g_hiddenWidgetsButtons) {
-                        if (el) el.Visibility(Visibility::Visible);
-                    }
-                } catch (...) { LOG_IGNORED_EXCEPTION(); }
-                g_hiddenWidgetsButtons.clear();
-            }, nullptr);
-        }
-        for (auto& el : g_hiddenWidgetsButtons) winrt::detach_abi(el);
-        g_hiddenWidgetsButtons.clear();
+    if (HWND primaryWnd = FindPrimaryTaskbarWnd()) {
+        RunFromWindowThread(primaryWnd, [](void*) {
+            try {
+                for (auto& el : *g_hiddenWidgetsButtons) {
+                    if (el) el.Visibility(Visibility::Visible);
+                }
+            } catch (...) { LOG_IGNORED_EXCEPTION(); }
+            g_hiddenWidgetsButtons.reset();
+        }, nullptr);
     }
 
-    xs::CloseWindow();
+    // RunAsync work on any taskbar, and system callbacks still on their way out.
+    WaitForDispatcherWork();
+    WaitForTrackedWorkers();
+    if (g_trackingGroups->empty()) g_trackingGroups.reset();  // nothing XAML left in it
     ShutdownGdiplusIfStarted();
 }
 
