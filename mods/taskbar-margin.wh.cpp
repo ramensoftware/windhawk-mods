@@ -52,7 +52,7 @@ _The context menu follows the margin_
 | Right margin (pixels) | 350          | How much empty space to leave between the app list and the system tray.                                                                                                                                                                                       |
 | Follow display DPI    | on           | Scale the margin with the display DPI, so it keeps the same visual size on high-DPI displays. Turn off to keep it at a constant physical pixel size.                                                                                                          |
 | Displays              | All          | Which displays the margin applies to: all, only the primary one, only the secondary ones, or only a specific one. Each display has its own taskbar and its own DPI, so the margin is calculated per display.                                                  |
-| Specific display      | \\.\DISPLAY1 | The device name of the display the margin applies to when Displays is set to "Specific display only". The comparison is case-insensitive, and an empty value matches no display. The device name of the display each taskbar is on is written to the mod log. |
+| Specific display      | `\\.\DISPLAY1` | The device name of the display the margin applies to when Displays is set to "Specific display only". The comparison is case-insensitive, and an empty value matches no display. The device name of the display each taskbar is on is written to the mod log. |
 
 ## Notes
 
@@ -68,7 +68,7 @@ The taskbar is not mirrored correctly on right-to-left display languages: the ma
 ## Compatibility
 
 - **TranslucentTB** is confirmed compatible and can be used alongside this mod.
-- **Windows 11 Taskbar Styler** is not an alternative to this mod. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does.
+- **Windows 11 Taskbar Styler** is not an alternative to this mod for the left placement. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does. For the right placement, a single Styler rule can grow the app list margin in the same way; what this mod adds there is the per-display scope and the option not to follow the display DPI.
 - **Taskbar Styler compatibility**: with themes that customize the taskbar button metrics (e.g. Lucent, or the MacDock themes in ramensoftware/windhawk-mods#6988), Explorer can restart-loop with the right placement on Windows 11 26H2 build 26300 - on secondary taskbars, and on the primary taskbar as well if the Small icon size is set above its default in the Taskbar height and icon size mod. Setting MediumTaskbarButtonExtent=55 does not prevent this. The left placement is not affected.
 - **Taskbar jump list on cursor pos** changes the same anchor point. Both mods offset it, so depending on the hook order the menu can open offset from the cursor. Use one or the other.
 - Tested on Windows 11 26H2.
@@ -244,6 +244,11 @@ struct
     std::wstring specificDisplay;
 } g_settings;
 
+// Guards g_settings.specificDisplay: LoadSettings reassigns the string on
+// the Windhawk engine thread while taskbar threads read it in
+// ShouldApplyToMonitor.
+std::mutex g_settingsMutex;
+
 std::atomic<bool> g_unloading;
 
 // Which property the mod set on an element. The property itself is a WinRT
@@ -257,15 +262,22 @@ enum class AppliedProperty
 };
 
 // Elements whose value the mod set, so it can be cleared again. The app
-// list element used by the right placement is the exception: its margin is
-// restored from the saved original value below, because the value the mod
-// sets is computed from that original rather than being absolute.
+// list element used by the right placement is the exception: the value the
+// mod sets is computed from the element's original margin rather than
+// being absolute, so its record also keeps the value the mod set and
+// whether the replaced value was a local value. The remove pass restores
+// the replaced value only if the element still holds the mod's value,
+// and clears the property instead of writing the saved value back when
+// there was no local value, so that a value which came from the template
+// or a style is not pinned as a local value.
 struct AppliedElement
 {
     winrt::weak_ref<FrameworkElement> element;
     AppliedProperty property;
     bool hasOriginalMargin = false;
     Thickness originalMargin{};
+    Thickness appliedMargin{};
+    bool hadLocalMargin = false;
 };
 
 // The elements the mod set on one taskbar, together with the thread that
@@ -502,9 +514,17 @@ bool ShouldApplyToMonitor(HMONITOR monitor)
 
     case Displays::Specific:
     {
+        // Copied under the lock: the string is reassigned by LoadSettings
+        // on the engine thread while this runs on a taskbar thread.
+        std::wstring specificDisplay;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            specificDisplay = g_settings.specificDisplay;
+        }
+
         // An empty setting matches no display, so that the margin is never
         // applied to an unintended display before a name is set.
-        if (g_settings.specificDisplay.empty())
+        if (specificDisplay.empty())
         {
             return false;
         }
@@ -516,8 +536,7 @@ bool ShouldApplyToMonitor(HMONITOR monitor)
             return false;
         }
 
-        return _wcsicmp(monitorInfo.szDevice,
-                        g_settings.specificDisplay.c_str()) == 0;
+        return _wcsicmp(monitorInfo.szDevice, specificDisplay.c_str()) == 0;
     }
     }
 
@@ -552,42 +571,6 @@ double GetMarginInDips(FrameworkElement const &element, int marginPixels)
     }
 
     return static_cast<double>(marginPixels);
-}
-
-// Finds the app list element (an ItemsRepeater named TaskbarFrameRepeater)
-// below the given element, or null if there is none. The app list is nested
-// deeper than the direct children, so the whole subtree is walked.
-FrameworkElement FindAppListRepeater(FrameworkElement element, int depth)
-{
-    if (!element || depth > 64)
-    {
-        return nullptr;
-    }
-
-    if (element.Name() == L"TaskbarFrameRepeater" &&
-        winrt::get_class_name(element) ==
-            L"Microsoft.UI.Xaml.Controls.ItemsRepeater")
-    {
-        return element;
-    }
-
-    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
-    for (int i = 0; i < childrenCount; i++)
-    {
-        auto child = Media::VisualTreeHelper::GetChild(element, i)
-                         .try_as<FrameworkElement>();
-        if (!child)
-        {
-            continue;
-        }
-
-        if (auto found = FindAppListRepeater(child, depth + 1))
-        {
-            return found;
-        }
-    }
-
-    return nullptr;
 }
 
 // Returns whether the margin was applied to this taskbar.
@@ -683,7 +666,8 @@ bool ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot)
         // The target is always computed from the element's original
         // margin, which the remove pass restores before every apply, so
         // the reservation can never accumulate.
-        auto appList = FindAppListRepeater(content, 0);
+        // The app list is a direct child of the RootGrid.
+        auto appList = FindChildByName(rootGrid, L"TaskbarFrameRepeater");
         if (!appList)
         {
             Wh_Log(L"Failed to find the app list repeater");
@@ -699,6 +683,10 @@ bool ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot)
         applied.property = AppliedProperty::FrameworkElementMargin;
         applied.hasOriginalMargin = true;
         applied.originalMargin = originalMargin;
+        applied.appliedMargin = targetMargin;
+        applied.hadLocalMargin =
+            appList.ReadLocalValue(FrameworkElement::MarginProperty()) !=
+            DependencyProperty::UnsetValue();
 
         if (targetMargin.Right != originalMargin.Right)
         {
@@ -749,7 +737,23 @@ void RemoveAppliedMargins()
                 {
                     if (applied.hasOriginalMargin)
                     {
-                        element.Margin(applied.originalMargin);
+                        // Undo only the mod's own value: another mod may
+                        // have changed the margin in the meantime. If the
+                        // replaced value was not a local value, clear the
+                        // property instead of writing the saved value
+                        // back, so that it is not pinned as a local value.
+                        if (element.Margin() == applied.appliedMargin)
+                        {
+                            if (applied.hadLocalMargin)
+                            {
+                                element.Margin(applied.originalMargin);
+                            }
+                            else
+                            {
+                                element.ClearValue(
+                                    FrameworkElement::MarginProperty());
+                            }
+                        }
                     }
                     else
                     {
@@ -1363,9 +1367,10 @@ void LoadSettings()
 
     WindhawkUtils::StringSetting specificDisplay =
         WindhawkUtils::StringSetting::make(L"specificDisplay");
-    const wchar_t *specificDisplayStr = specificDisplay;
-    g_settings.specificDisplay =
-        specificDisplayStr ? specificDisplayStr : L"";
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        g_settings.specificDisplay = specificDisplay;
+    }
 }
 
 BOOL Wh_ModInit()
