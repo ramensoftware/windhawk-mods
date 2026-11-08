@@ -6,7 +6,7 @@
 // @author          RAKIBUL ISLAM SANI
 // @github          https://github.com/rakibulislamsani
 // @include         windhawk.exe
-// @compilerOptions -liphlpapi -lgdi32 -luser32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -liphlpapi -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,8 +59,13 @@ On Windows 11 with centered taskbar icons, this docks in the empty bottom-left c
 */
 // ==/WindhawkModSettings==
 
-#include <windows.h>
+#include <winsock2.h>
+#include <ws2ipdef.h>
 #include <iphlpapi.h>
+#include <windows.h>
+#include <shellapi.h>
+#include <windhawk_utils.h>
+#include <atomic>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -68,10 +73,10 @@ On Windows 11 with centered taskbar icons, this docks in the empty bottom-left c
 #define WM_REFRESH_SETTINGS (WM_APP + 1)
 #define TRANSPARENT_COLOR RGB(255, 0, 255)
 
-HWND hOverlayWnd = NULL;
+std::atomic<HWND> hOverlayWnd{NULL};
 HANDLE hThread = NULL;
 DWORD dwThreadId = 0;
-BOOL bRunning = TRUE;
+std::atomic<bool> bRunning{true};
 
 COLORREF g_textColor = RGB(0, 255, 127);
 wchar_t g_fontName[64] = L"Segoe UI";
@@ -80,7 +85,9 @@ int g_fontSize = 13;
 int g_posX = 20;
 BOOL g_hideOnFullscreen = TRUE;
 
-DWORD prevInBytes = 0, prevOutBytes = 0;
+ULONG64 prevInBytes = 0, prevOutBytes = 0;
+ULONGLONG prevTickCount = 0;
+bool hasBaseline = false;
 wchar_t displayText[128] = L"▼ 0.0 KB/s\n▲ 0.0 KB/s";
 
 HINSTANCE GetCurrentModuleHandle() {
@@ -112,22 +119,22 @@ COLORREF HexToColorRef(PCWSTR hexColor) {
     if (*p == L'#') p++;
     unsigned int r = 0, g = 0, b = 0;
     if (swscanf(p, L"%02x%02x%02x", &r, &g, &b) == 3) {
-        return RGB(r, g, b);
+        COLORREF color = RGB(r, g, b);
+        if (color == TRANSPARENT_COLOR) {
+            color = RGB(255, 0, 254);
+        }
+        return color;
     }
     return RGB(0, 255, 127);
 }
 
 void LoadSettings() {
-    PCWSTR colorStr = Wh_GetStringSetting(L"textColor");
-    if (colorStr) {
-        g_textColor = HexToColorRef(colorStr);
-        Wh_FreeStringSetting(colorStr);
-    }
+    WindhawkUtils::StringSetting colorSetting(L"textColor");
+    g_textColor = HexToColorRef(colorSetting.get());
 
-    PCWSTR fontStr = Wh_GetStringSetting(L"fontName");
-    if (fontStr && wcslen(fontStr) > 0) {
-        wcsncpy_s(g_fontName, 64, fontStr, _TRUNCATE);
-        Wh_FreeStringSetting(fontStr);
+    WindhawkUtils::StringSetting fontSetting(L"fontName");
+    if (fontSetting.get() && wcslen(fontSetting.get()) > 0) {
+        wcsncpy_s(g_fontName, 64, fontSetting.get(), _TRUNCATE);
     } else {
         wcsncpy_s(g_fontName, 64, L"Segoe UI", _TRUNCATE);
     }
@@ -143,24 +150,22 @@ void LoadSettings() {
     g_hideOnFullscreen = Wh_GetIntSetting(L"hideOnFullscreen") != 0;
 }
 
-void FetchNetworkTraffic(DWORD *inBytes, DWORD *outBytes) {
+void FetchNetworkTraffic(ULONG64 *inBytes, ULONG64 *outBytes) {
     *inBytes = 0;
     *outBytes = 0;
-    ULONG size = 0;
+    PMIB_IF_TABLE2 pTable = NULL;
 
-    if (GetIfTable(NULL, &size, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
-        PMIB_IFTABLE table = (PMIB_IFTABLE)malloc(size);
-        if (table) {
-            if (GetIfTable(table, &size, FALSE) == NO_ERROR) {
-                for (DWORD i = 0; i < table->dwNumEntries; i++) {
-                    if (table->table[i].dwType != MIB_IF_TYPE_LOOPBACK) {
-                        *inBytes += table->table[i].dwInOctets;
-                        *outBytes += table->table[i].dwOutOctets;
-                    }
-                }
+    if (GetIfTable2(&pTable) == NO_ERROR) {
+        for (ULONG i = 0; i < pTable->NumEntries; i++) {
+            const MIB_IF_ROW2& row = pTable->Table[i];
+            if (row.InterfaceAndOperStatusFlags.HardwareInterface &&
+                !row.InterfaceAndOperStatusFlags.FilterInterface &&
+                row.Type != MIB_IF_TYPE_LOOPBACK) {
+                *inBytes += row.InOctets;
+                *outBytes += row.OutOctets;
             }
-            free(table);
         }
+        FreeMibTable(pTable);
     }
 }
 
@@ -199,7 +204,8 @@ BOOL ShouldHideMeter(HWND hTaskbar) {
 }
 
 void UpdatePosition(HWND hTaskbar) {
-    if (!hTaskbar || !hOverlayWnd) return;
+    HWND hWnd = hOverlayWnd.load();
+    if (!hTaskbar || !hWnd) return;
 
     RECT rcTaskbar;
     GetWindowRect(hTaskbar, &rcTaskbar);
@@ -212,35 +218,57 @@ void UpdatePosition(HWND hTaskbar) {
     int x = rcTaskbar.left + posXScaled;
     int y = rcTaskbar.top + ((rcTaskbar.bottom - rcTaskbar.top - height) / 2);
 
-    SetWindowPos(hOverlayWnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(hWnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 void RefreshSpeed() {
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+    HWND hWnd = hOverlayWnd.load();
+
     if (!hTaskbar) {
-        if (IsWindowVisible(hOverlayWnd)) {
-            ShowWindow(hOverlayWnd, SW_HIDE);
+        hasBaseline = false;
+        if (hWnd && IsWindowVisible(hWnd)) {
+            ShowWindow(hWnd, SW_HIDE);
         }
         return;
     }
 
-    DWORD curIn = 0, curOut = 0;
+    ULONG64 curIn = 0, curOut = 0;
     FetchNetworkTraffic(&curIn, &curOut);
+    ULONGLONG curTick = GetTickCount64();
 
-    double downSpeed = (double)(DWORD)(curIn - prevInBytes) / 1024.0;
-    double upSpeed = (double)(DWORD)(curOut - prevOutBytes) / 1024.0;
+    if (!hasBaseline) {
+        prevInBytes = curIn;
+        prevOutBytes = curOut;
+        prevTickCount = curTick;
+        hasBaseline = true;
+    }
+
+    ULONGLONG elapsedMs = curTick - prevTickCount;
+    if (elapsedMs == 0) elapsedMs = 1;
+
+    double downSpeed = 0.0;
+    double upSpeed = 0.0;
+
+    if (curIn >= prevInBytes) {
+        downSpeed = (double)(curIn - prevInBytes) / (elapsedMs / 1000.0) / 1024.0;
+    }
+    if (curOut >= prevOutBytes) {
+        upSpeed = (double)(curOut - prevOutBytes) / (elapsedMs / 1000.0) / 1024.0;
+    }
 
     prevInBytes = curIn;
     prevOutBytes = curOut;
+    prevTickCount = curTick;
 
     if (ShouldHideMeter(hTaskbar)) {
-        if (IsWindowVisible(hOverlayWnd)) {
-            ShowWindow(hOverlayWnd, SW_HIDE);
+        if (hWnd && IsWindowVisible(hWnd)) {
+            ShowWindow(hWnd, SW_HIDE);
         }
         return;
     } else {
-        if (!IsWindowVisible(hOverlayWnd)) {
-            ShowWindow(hOverlayWnd, SW_SHOWNOACTIVATE);
+        if (hWnd && !IsWindowVisible(hWnd)) {
+            ShowWindow(hWnd, SW_SHOWNOACTIVATE);
         }
     }
 
@@ -258,7 +286,9 @@ void RefreshSpeed() {
     swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
 
     UpdatePosition(hTaskbar);
-    InvalidateRect(hOverlayWnd, NULL, TRUE);
+    if (hWnd) {
+        InvalidateRect(hWnd, NULL, TRUE);
+    }
 }
 
 LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -336,30 +366,34 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     int width = MulDiv(140, dpi, 96);
     int height = MulDiv(40, dpi, 96);
 
-    hOverlayWnd = CreateWindowEx(
+    HWND createdWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"",
         WS_POPUP, 0, 0, width, height,
         NULL, NULL, hInst, NULL
     );
 
-    if (hOverlayWnd) {
-        SetLayeredWindowAttributes(hOverlayWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
+    hOverlayWnd.store(createdWnd);
+
+    if (createdWnd) {
+        SetLayeredWindowAttributes(createdWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
         FetchNetworkTraffic(&prevInBytes, &prevOutBytes);
+        prevTickCount = GetTickCount64();
+        hasBaseline = true;
         RefreshSpeed();
-        SetTimer(hOverlayWnd, TIMER_ID, 1000, NULL);
+        SetTimer(createdWnd, TIMER_ID, 1000, NULL);
     }
 
     MSG msg;
-    while (bRunning && GetMessage(&msg, NULL, 0, 0)) {
+    while (bRunning.load() && GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    if (hOverlayWnd) {
-        KillTimer(hOverlayWnd, TIMER_ID);
-        DestroyWindow(hOverlayWnd);
-        hOverlayWnd = NULL;
+    HWND currentWnd = hOverlayWnd.exchange(NULL);
+    if (currentWnd) {
+        KillTimer(currentWnd, TIMER_ID);
+        DestroyWindow(currentWnd);
     }
 
     UnregisterClass(wc.lpszClassName, hInst);
@@ -369,19 +403,20 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 // Tool Mod callbacks
 BOOL WhTool_ModInit() {
     LoadSettings();
-    bRunning = TRUE;
+    bRunning.store(true);
     hThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &dwThreadId);
     return (hThread != NULL);
 }
 
 void WhTool_ModSettingsChanged() {
-    if (hOverlayWnd) {
-        PostMessage(hOverlayWnd, WM_REFRESH_SETTINGS, 0, 0);
+    HWND hWnd = hOverlayWnd.load();
+    if (hWnd) {
+        PostMessage(hWnd, WM_REFRESH_SETTINGS, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
-    bRunning = FALSE;
+    bRunning.store(false);
     if (dwThreadId) {
         PostThreadMessage(dwThreadId, WM_QUIT, 0, 0);
     }
