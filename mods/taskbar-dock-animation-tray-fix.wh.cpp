@@ -9,7 +9,7 @@
 // @description:ko-KR 화면 네 모서리의 작업 표시줄을 확대합니다. 단일 아이콘 모드와 위젯 설정을 지원하며 시스템 트레이는 제외합니다.
 // @description:pt-BR Zoom Dock nos quatro lados, com modo de ícone único, controle de Widgets e exclusão da bandeja
 // @description:it-IT Zoom Dock sui quattro lati, con modalità a icona singola, opzione Widget ed esclusione del tray
-// @version           1.3.1
+// @version           1.4.1
 // @author            PDSB001
 // @github            https://github.com/PDSB001
 // @include           explorer.exe
@@ -46,7 +46,9 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Magnifies Windows 11 taskbar app buttons and Widgets on hover. The system tray stays at its normal size, including the input method and volume icons. Use **Enlarge only the hovered icon** for magnification without neighbor movement. Use **Disable Widgets animation** to keep Widgets at their normal size while other buttons still animate.
 
-Under **Per-app animation rules**, add an exact AppUserModelID and choose Wave (0), Single (1), or Off (2). Set the rule's maximum scale to 0 to inherit the global value. For example, use a wave for a browser, single-icon zoom for a terminal, and Off for an adjacent app that should stay fixed. Rules match the taskbar's application ID, not the window title. System tray icons are always excluded.
+Under **Per-app animation rules**, add an exact AppUserModelID and choose Wave, Single icon, or Off. Set the rule's maximum scale to 0 to inherit the global value. For example, use a wave for a browser, single-icon zoom for a terminal, and Off for an adjacent app that should stay fixed. Rules match the taskbar's application ID, not the window title. System tray icons are always excluded.
+
+Wave buttons share the space between adjacent Single and Off buttons. The layout uses available gaps first, then limits zoom if the group still needs more room. Buttons closer to the cursor get a larger share of the available space.
 
 Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](https://github.com/Ph0en1x-dev). Includes four-edge and multi-monitor support from [Taskbar Dock Animation Plus 2.0.1](https://windhawk.net/mods/taskbar-dock-animation-plus) by incconutwo. Maintained by PDSB001 under the MIT license.
 */
@@ -55,7 +57,7 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
 
 // ==WindhawkModSettings==
 /*
-- AnimationType: 0
+- AnimationType: "0"
   $name: Animation Curve
   $name:uk-UA: Крива анімації
   $name:zh-CN: 动画曲线
@@ -63,13 +65,34 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
   $name:ko-KR: 애니메이션 곡선
   $name:pt-BR: Curva de animação
   $name:it-IT: Curva di animazione
-  $description: Choose the feel of the scaling (0 = Cosine (Smooth), 1 = Linear, 2 = Exponential (Snappy)
-  $description:uk-UA: Оберіть тип анімації (0 = Косинус (Плавно), 1 = Лінійна, 2 = Експоненціальна (Швидко)
-  $description:zh-CN: 选择缩放的动画感觉（0=余弦（平滑），1=线性，2=指数（更灵敏））
-  $description:ja-JP: 拡大縮小の動き方を選択（0=コサイン（滑らか）、1=線形、2=指数（キビキビ））
-  $description:ko-KR: 확대/축소 애니메이션 느낌 선택 (0=코사인(부드러움), 1=선형, 2=지수(빠릿함))
-  $description:pt-BR: Escolha o tipo de escala (0 = Cosseno (suave), 1 = Linear, 2 = Exponencial (rápido))
-  $description:it-IT: Scegli il tipo di scala (0 = Coseno (fluida), 1 = Lineare, 2 = Esponenziale (reattiva))
+  $options:
+  - "0": Cosine (smooth)
+  - "1": Linear
+  - "2": Exponential (snappy)
+  $options:uk-UA:
+  - "0": Косинусна (плавна)
+  - "1": Лінійна
+  - "2": Експоненціальна (швидка)
+  $options:zh-CN:
+  - "0": 余弦（平滑）
+  - "1": 线性
+  - "2": 指数（灵敏）
+  $options:ja-JP:
+  - "0": コサイン（なめらか）
+  - "1": 線形
+  - "2": 指数（素早い）
+  $options:ko-KR:
+  - "0": 코사인(부드럽게)
+  - "1": 선형
+  - "2": 지수(빠르게)
+  $options:pt-BR:
+  - "0": Cosseno (suave)
+  - "1": Linear
+  - "2": Exponencial (rápida)
+  $options:it-IT:
+  - "0": Coseno (fluida)
+  - "1": Lineare
+  - "2": Esponenziale (reattiva)
 - MaxScale: 130
   $name: Maximum scale (%)
   $name:uk-UA: Максимальний розмір (%)
@@ -181,11 +204,37 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
       $name:zh-CN: 应用 ID
       $description: Exact AppUserModelID. Use Get-StartApps to find it.
       $description:zh-CN: 填写完整 AppUserModelID，可用 Get-StartApps 查找。
-    - Mode: 0
+    - Mode: "0"
       $name: Animation mode
       $name:zh-CN: 动画模式
-      $description: 0 = wave, 1 = hovered icon only, 2 = off
-      $description:zh-CN: 0 = 波浪，1 = 仅悬停图标，2 = 关闭
+      $options:
+      - "0": Wave
+      - "1": Single icon
+      - "2": Off
+      $options:uk-UA:
+      - "0": Хвиля
+      - "1": Лише одна іконка
+      - "2": Вимкнено
+      $options:zh-CN:
+      - "0": 波浪
+      - "1": 仅放大悬停图标
+      - "2": 关闭动画
+      $options:ja-JP:
+      - "0": 波状
+      - "1": 単一アイコン
+      - "2": オフ
+      $options:ko-KR:
+      - "0": 물결
+      - "1": 아이콘 하나만
+      - "2": 끄기
+      $options:pt-BR:
+      - "0": Onda
+      - "1": Ícone único
+      - "2": Desativado
+      $options:it-IT:
+      - "0": Onda
+      - "1": Icona singola
+      - "2": Disattivata
     - MaxScale: 0
       $name: Maximum scale (%)
       $name:zh-CN: 最大放大倍率（%）
@@ -205,7 +254,7 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
   $name:zh-CN: 关闭小组件动画
   $description: Keep Widgets at their normal size without changing animation for other buttons.
   $description:zh-CN: 小组件保持原大小，其他按钮的动画设置不受影响。
-- ExcludeSystemButtonsMode: 0
+- ExcludeSystemButtonsMode: "0"
   $name: Exclude system buttons
   $name:uk-UA: Ігнорувати системні кнопки
   $name:zh-CN: 排除系统按钮
@@ -213,13 +262,34 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
   $name:ko-KR: 시스템 버튼 제외
   $name:pt-BR: Excluir botões do sistema
   $name:it-IT: Escludi pulsanti di sistema
-  $description: 0=Animate all, 1=Exclude Start, 2=Animate apps icons only
-  $description:uk-UA: 0=Анімація всього, 1=Без анімації Start, 2=Анімація тільки іконок застосунків
-  $description:zh-CN: 0=全部动画，1=排除开始，2=仅应用图标动画
-  $description:ja-JP: 0=すべてアニメ、1=スタート除外、2=アプリのみ
-  $description:ko-KR: 0=전체, 1=시작 제외, 2=앱만
-  $description:pt-BR: 0=Animar tudo, 1=Excluir Iniciar, 2=Somente apps
-  $description:it-IT: 0=Anima tutto, 1=Escludi Start, 2=Solo app
+  $options:
+  - "0": Animate all eligible buttons
+  - "1": Exclude Start
+  - "2": Animate app buttons only
+  $options:uk-UA:
+  - "0": Усі доступні кнопки
+  - "1": Без кнопки «Пуск»
+  - "2": Лише кнопки застосунків
+  $options:zh-CN:
+  - "0": 所有可用按钮
+  - "1": 排除开始按钮
+  - "2": 仅应用按钮
+  $options:ja-JP:
+  - "0": 対象のボタンすべて
+  - "1": スタートを除外
+  - "2": アプリボタンのみ
+  $options:ko-KR:
+  - "0": 애니메이션 가능한 모든 버튼
+  - "1": 시작 버튼 제외
+  - "2": 앱 버튼만
+  $options:pt-BR:
+  - "0": Todos os botões compatíveis
+  - "1": Excluir o botão Iniciar
+  - "2": Somente botões de aplicativos
+  $options:it-IT:
+  - "0": Tutti i pulsanti compatibili
+  - "1": Escludi il pulsante Start
+  - "2": Solo pulsanti delle app
 - LerpSpeed: 60
   $name: Smoothing (Lerp speed)
   $name:uk-UA: Плавність (швидкість Lerp)
@@ -260,6 +330,8 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -267,6 +339,10 @@ Independent distribution based on Taskbar Dock Animation 1.9.2 by [Ph0en1x-dev](
 #include <vector>
 #include <atomic>
 #include <functional>
+#include <limits>
+#include <mutex>
+#include <optional>
+#include <utility>
 #include <cmath>
 #include <map>
 #include <algorithm>
@@ -301,30 +377,11 @@ struct {
 
 // Global flags
 std::atomic<bool> g_taskbarViewDllLoaded = false;
-std::atomic<bool> g_hooksApplied = false;
 
-// Animation Loop Globals
-winrt::event_token g_renderingToken;
-std::atomic<HWND> g_renderingWindow = nullptr;
-std::atomic<bool> g_unloading = false;
-std::atomic<bool> g_isRenderingHooked = false;
-std::atomic<void*> g_activeContextKey = nullptr;
-std::chrono::steady_clock::time_point g_lastSignificantMoveTime;
-const double MOUSE_STOP_THRESHOLD = 0.5;
-
-// Bounce Animation Globals
-std::atomic<double> g_lastMouseX = -1.0;
-std::atomic<bool> g_isBouncing = false;
-std::atomic<double> g_bounceIntensity = 0.0;
-std::chrono::steady_clock::time_point g_bounceStartTime;
-const double BOUNCE_PERIOD_MS = 1200.0;
-const double BOUNCE_SCALE_AMOUNT = 0.05;
-const double BOUNCE_TRANSLATE_Y = -4.0;
-
-// Focus/Fade Animation Globals
-std::atomic<bool> g_isMouseInside = false;
-std::atomic<double> g_animationIntensity = 0.0;
-std::chrono::steady_clock::time_point g_lastRenderTime;
+constexpr double MOUSE_STOP_THRESHOLD = 0.5;
+constexpr double BOUNCE_PERIOD_MS = 1200.0;
+constexpr double BOUNCE_SCALE_AMOUNT = 0.05;
+constexpr double BOUNCE_TRANSLATE_Y = -4.0;
 
 enum class TaskbarEdge {
     Bottom,
@@ -336,6 +393,7 @@ enum class TaskbarEdge {
 struct IconAnimState {
     double waveScale = 1.0;
     double waveTranslateX = 0.0;
+    double requestedScale = 1.0;
 };
 
 enum class AppAnimationMode { Inherit, Wave, Single, Off };
@@ -348,12 +406,82 @@ struct AppAnimationRule {
 using AppRuleMap = std::unordered_map<std::wstring, AppAnimationRule>;
 std::shared_ptr<const AppRuleMap> g_appRules;
 
+struct DockWaveItem {
+    double start;
+    double width;
+    double pivot;
+    double requestedScale;
+    double priority;
+    IconAnimState result;
+};
+
+struct IconPose {
+    double waveScale = 1.0;
+    double waveX = 0.0;
+    double waveY = 0.0;
+    double bounceScaleX = 1.0;
+    double bounceScaleY = 1.0;
+    double bounceX = 0.0;
+    double bounceY = 0.0;
+};
+
+using winrt::Windows::Foundation::Numerics::float4x4;
+
+struct IconTransforms {
+    winrt::Windows::UI::Composition::Visual visual{nullptr};
+    float4x4 original = float4x4::identity();
+    float4x4 applied = float4x4::identity();
+    float pivotX = 0.0f;
+    float pivotY = 0.0f;
+
+    void Apply(const IconPose& pose) {
+        const float sx = static_cast<float>(pose.waveScale * pose.bounceScaleX);
+        const float sy = static_cast<float>(pose.waveScale * pose.bounceScaleY);
+        const float dx = pivotX * (1.0f - sx) +
+                         static_cast<float>(pose.waveX * pose.bounceScaleX + pose.bounceX);
+        const float dy = pivotY * (1.0f - sy) +
+                         static_cast<float>(pose.waveY * pose.bounceScaleY + pose.bounceY);
+        const float4x4 effect{sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, 1, 0, dx, dy, 0, 1};
+        const auto next = effect * original;
+        if (next != applied) {
+            visual.TransformMatrix(next);
+            applied = next;
+        }
+    }
+
+    void Restore() {
+        const auto current = visual.TransformMatrix();
+        if (current == applied) {
+            if (current != original) visual.TransformMatrix(original);
+        } else {
+            // Explorer or another owner changed the visual since our last write.
+            original = current;
+        }
+        applied = original;
+    }
+};
+
+void SetIconPivot(IconTransforms& transforms, FrameworkElement const& element,
+                  bool vertical, TaskbarEdge edge) {
+    const float width = static_cast<float>(element.ActualWidth());
+    const float height = static_cast<float>(element.ActualHeight());
+    transforms.pivotX = vertical ? (edge == TaskbarEdge::Left ? 0.0f : width)
+        : (g_settings.taskbarLabelsMode && width > 0.0f ? 24.0f : width / 2.0f);
+    transforms.pivotY = vertical
+        ? (g_settings.taskbarLabelsMode && height > 0.0f ? 24.0f : height / 2.0f)
+        : (g_settings.disableVerticalBounce ? height / 2.0f
+                                            : (edge == TaskbarEdge::Top ? 0.0f : height));
+}
+
 // Per-monitor context
 struct TaskbarIconInfo {
     winrt::weak_ref<FrameworkElement> element;
     double originalCenterX = 0.0;
     double elementWidth = 0.0;
+    double footprintStart = 0.0;
+    double footprintEnd = 1.0;
     IconAnimState state;
+    IconTransforms transforms;
     AppAnimationRule rule;
 };
 
@@ -368,62 +496,85 @@ struct DockAnimationContext {
     winrt::weak_ref<FrameworkElement> taskbarFrame;
     winrt::weak_ref<FrameworkElement> iconHost;
     std::vector<TaskbarIconInfo> icons;
+    std::vector<DockWaveItem> waveScratch;
+    bool needsFrame = true;
+    double lastLayoutMouse = -1.0;
 
     HostSignature lastSig;
     std::chrono::steady_clock::time_point lastDirtyCheck{};
 
     TaskbarEdge edge = TaskbarEdge::Bottom;
+    TaskbarEdge lastLayoutEdge = TaskbarEdge::Bottom;
     bool isVertical = false;
     HWND hWnd = nullptr;
     RECT lastTrayRect = {0, 0, 0, 0};
 };
 
-// One context per monitor (keyed by XAML instance pointer)
-std::map<void*, DockAnimationContext> g_contexts;
+struct TaskbarThreadState {
+    std::map<void*, DockAnimationContext> contexts;
+    HWND renderingWindow = nullptr;
+    winrt::event_token renderingToken{};
+    void* activeContextKey = nullptr;
+    bool mouseInside = false;
+    bool bouncing = false;
+    double mouseX = -1.0;
+    double intensity = 0.0;
+    double bounceIntensity = 0.0;
+    std::chrono::steady_clock::time_point lastMove{};
+    std::chrono::steady_clock::time_point lastRender{};
+    std::chrono::steady_clock::time_point bounceStart{};
+    uint64_t settingsRevision = 0;
+};
 
-// Prototypes
-void LoadSettings();
-void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, double dtSec);
-void InitializeAnimationHooks(void* pThis, FrameworkElement const& taskbarFrame);
-void OnTaskbarPointerMoved(void* pThis_key, Input::PointerRoutedEventArgs const& args);
-void OnTaskbarPointerExited(void* pThis_key);
+// Serialize settings publication and lifecycle changes with pointer and render
+// callbacks. Window-thread dispatch must happen outside this lock.
+std::recursive_mutex g_animationMutex;
+std::map<DWORD, TaskbarThreadState> g_taskbarThreads;
+std::atomic<bool> g_unloading = false;
+uint64_t g_settingsRevision = 0;
+
 void ResetAllIconScales(std::vector<TaskbarIconInfo>& icons);
 void RefreshIconPositions(DockAnimationContext& ctx);
-void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const&,
-                                  winrt::Windows::Foundation::IInspectable const&);
+void OnCompositionTargetRendering();
+
+void StopRendering(TaskbarThreadState& state) {
+    if (state.renderingWindow) {
+        Media::CompositionTarget::Rendering(state.renderingToken);
+        state.renderingWindow = nullptr;
+    }
+}
+
+void ResetContext(DockAnimationContext& ctx) {
+    ResetAllIconScales(ctx.icons);
+    ctx.isInitialized = false;
+    ctx.needsFrame = true;
+    ctx.icons.clear();
+}
 
 HMODULE GetTaskbarViewModuleHandle();
 bool HookTaskbarViewDllSymbols(HMODULE module);
 static bool RebaseIconGeometryFast(DockAnimationContext& ctx);
 
 HWND GetCurrentThreadTrayWindow() {
-    DWORD currentThreadId = GetCurrentThreadId();
-    HWND hPrimary = FindWindow(L"Shell_TrayWnd", NULL);
-    if (hPrimary && GetWindowThreadProcessId(hPrimary, nullptr) == currentThreadId) {
-        return hPrimary;
+    const DWORD thread = GetCurrentThreadId();
+    POINT cursor{};
+    const HMONITOR monitor = GetCursorPos(&cursor)
+        ? MonitorFromPoint(cursor, MONITOR_DEFAULTTONULL)
+        : nullptr;
+    HWND fallback = nullptr;
+    const auto matchesMonitor = [&](HWND window) {
+        if (!window || GetWindowThreadProcessId(window, nullptr) != thread) return false;
+        if (!fallback) fallback = window;
+        return monitor && MonitorFromWindow(window, MONITOR_DEFAULTTONULL) == monitor;
+    };
+
+    HWND primary = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (matchesMonitor(primary)) return primary;
+    HWND secondary = nullptr;
+    while ((secondary = FindWindowEx(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr))) {
+        if (matchesMonitor(secondary)) return secondary;
     }
-    HWND hSec = nullptr;
-    while ((hSec = FindWindowEx(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) != nullptr) {
-        if (GetWindowThreadProcessId(hSec, nullptr) == currentThreadId) {
-            return hSec;
-        }
-    }
-    POINT pt;
-    if (GetCursorPos(&pt)) {
-        HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-        if (hMonitor) {
-            if (hPrimary && MonitorFromWindow(hPrimary, MONITOR_DEFAULTTONULL) == hMonitor) {
-                return hPrimary;
-            }
-            hSec = nullptr;
-            while ((hSec = FindWindowEx(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) != nullptr) {
-                if (MonitorFromWindow(hSec, MONITOR_DEFAULTTONULL) == hMonitor) {
-                    return hSec;
-                }
-            }
-        }
-    }
-    return hPrimary;
+    return fallback;
 }
 
 void UpdateTaskbarEdge(DockAnimationContext& ctx) {
@@ -532,79 +683,188 @@ double CalculateScale(double distance, double radius, double maxScale) {
     return (maxScale - 1.0) * factor + 1.0;
 }
 
-void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, double dtSec) {
-    const double spacingFactor = g_settings.spacingFactor;
-    const size_t count = ctx.icons.size();
-    std::vector<double> scales(count, 1.0);
-    std::vector<double> shifts(count);
-    std::vector<AppAnimationMode> modes;
-    modes.reserve(count);
-    for (const auto& icon : ctx.icons) {
-        modes.push_back(icon.rule.mode == AppAnimationMode::Inherit
-            ? (g_settings.hoveredIconOnly ? AppAnimationMode::Single : AppAnimationMode::Wave)
-            : icon.rule.mode);
+// Work in one dimension so the same layout serves all four taskbar edges.
+// Layout uses painted icon widths when available and native slot widths for
+// fixed buttons. Gaps can shrink before any requested zoom is sacrificed.
+void SolveDockWave(std::vector<DockWaveItem>& items, double lower, double upper,
+                   double spacingFactor) {
+    const double nativeStart = items.front().start;
+    const double nativeEnd = items.back().start + items.back().width;
+    lower = std::min(lower, nativeStart);
+    upper = std::max(upper, nativeEnd);
+    const double capacity = upper - lower;
+
+    double minimumWidth = 0.0;
+    double requestedGrowth = 0.0;
+    double lastEnd = nativeStart;
+    for (auto& item : items) {
+        minimumWidth += item.width + std::min(0.0, item.start - lastEnd);
+        requestedGrowth += item.width * (item.requestedScale - 1.0);
+        lastEnd = item.start + item.width;
+    }
+    const double growthBudget = std::max(0.0, capacity - minimumWidth);
+
+    // Find the largest weighted allocation that fits. Nearer buttons get a
+    // larger share while the allocation remains continuous as the cursor moves.
+    double fraction = 1.0;
+    if (requestedGrowth > growthBudget) {
+        double low = 0.0;
+        double high = 1.0;
+        for (int step = 0; step < 24; ++step) {
+            const double trial = (low + high) / 2.0;
+            double used = 0.0;
+            for (const auto& item : items) {
+                used += item.width * (item.requestedScale - 1.0) *
+                        std::min(1.0, trial * item.priority);
+            }
+            if (used <= growthBudget) low = trial;
+            else high = trial;
+        }
+        fraction = low;
     }
 
-    size_t closestIconIndex = (size_t)-1;
-    double minDistance = g_settings.effectRadius + 1.0;
-    const auto startOf = [&](size_t i) {
-        const auto& icon = ctx.icons[i];
+    double preferredGaps = 0.0;
+    double occupied = minimumWidth;
+    lastEnd = nativeStart;
+    double lastGrowth = 0.0;
+    for (auto& item : items) {
+        item.result.waveScale = 1.0 + (item.requestedScale - 1.0) *
+                                      std::min(1.0, fraction * item.priority);
+        const double growth = item.width * (item.result.waveScale - 1.0);
+        if (&item != &items.front()) {
+            preferredGaps += std::max(0.0, item.start - lastEnd) +
+                             (lastGrowth + growth) * spacingFactor / 2.0;
+        }
+        occupied += growth;
+        lastEnd = item.start + item.width;
+        lastGrowth = growth;
+    }
+    const double gapRatio = preferredGaps > 0.0
+        ? std::clamp((capacity - occupied) / preferredGaps, 0.0, 1.0)
+        : 0.0;
+    const double layoutWidth = occupied + preferredGaps * gapRatio;
+
+    double cursor = nativeStart - (layoutWidth - (nativeEnd - nativeStart)) / 2.0;
+    if (std::isfinite(lower) && !std::isfinite(upper)) cursor = nativeStart;
+    if (!std::isfinite(lower) && std::isfinite(upper)) cursor = nativeEnd - layoutWidth;
+    cursor = std::clamp(cursor, lower, std::max(lower, upper - layoutWidth));
+
+    lastEnd = nativeStart;
+    lastGrowth = 0.0;
+    for (auto& item : items) {
+        const double growth = item.width * (item.result.waveScale - 1.0);
+        if (&item != &items.front()) {
+            const double gap = item.start - lastEnd;
+            cursor += std::min(0.0, gap) + gapRatio *
+                      (std::max(0.0, gap) + (lastGrowth + growth) * spacingFactor / 2.0);
+        }
+        item.result.waveTranslateX = cursor - item.start +
+                                    item.pivot * (item.result.waveScale - 1.0);
+        cursor += item.width + growth;
+        lastEnd = item.start + item.width;
+        lastGrowth = growth;
+    }
+}
+
+bool ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity,
+                    double dtSec, const TaskbarThreadState& state) {
+    const size_t count = ctx.icons.size();
+    const double alpha = g_settings.lerpSpeed > 0.0
+        ? std::clamp(1.0 - std::exp(-g_settings.lerpSpeed * dtSec), 0.0, 1.0)
+        : 1.0;
+    const auto modeOf = [](const TaskbarIconInfo& icon) {
+        return icon.rule.mode == AppAnimationMode::Inherit
+            ? (g_settings.hoveredIconOnly ? AppAnimationMode::Single : AppAnimationMode::Wave)
+            : icon.rule.mode;
+    };
+    const auto startOf = [](const TaskbarIconInfo& icon) {
         return icon.originalCenterX -
             (g_settings.taskbarLabelsMode ? 0.0 : icon.elementWidth / 2.0);
     };
+    const auto maxScaleOf = [](const TaskbarIconInfo& icon) {
+        return icon.rule.maxScale > 0 ? icon.rule.maxScale : g_settings.maxScale;
+    };
+    bool settling = false;
+    const auto requestedScale = [&](const TaskbarIconInfo& icon, double scale) {
+        const double target = 1.0 + (scale - 1.0) * intensity;
+        const double previous = icon.state.requestedScale;
+        const double next = previous + (target - previous) * alpha;
+        if (std::abs(next - target) < 0.0001) return target;
+        settling = true;
+        return next;
+    };
 
-    // Fixed buttons divide the wave into independent groups.
+    size_t closestIconIndex = (size_t)-1;
+    double minDistance = g_settings.effectRadius + 1.0;
+    constexpr double unbounded = std::numeric_limits<double>::infinity();
+    auto& group = ctx.waveScratch;
     for (size_t i = 0; i < count;) {
-        if (modes[i] != AppAnimationMode::Wave) {
-            const auto& icon = ctx.icons[i];
-            if (modes[i] == AppAnimationMode::Single && icon.element.get() &&
-                icon.elementWidth > 0 && mouseX >= startOf(i) &&
-                mouseX < startOf(i) + icon.elementWidth) {
-                scales[i] = icon.rule.maxScale > 0 ? icon.rule.maxScale : g_settings.maxScale;
-                closestIconIndex = i;
-                minDistance = 0.0;
+        auto& icon = ctx.icons[i];
+        const auto mode = modeOf(icon);
+        if (mode != AppAnimationMode::Wave) {
+            if (mode == AppAnimationMode::Off) {
+                icon.state = {};
+            } else {
+                const double start = startOf(icon);
+                const bool hovered = mouseX >= start && mouseX < start + icon.elementWidth;
+                if (hovered) {
+                    closestIconIndex = i;
+                    minDistance = 0.0;
+                }
+                const double scale = requestedScale(icon, hovered ? maxScaleOf(icon) : 1.0);
+                icon.state = {scale, 0.0, scale};
             }
             ++i;
             continue;
         }
 
         const size_t first = i;
-        while (i < count && modes[i] == AppAnimationMode::Wave) ++i;
-        const size_t end = i;
-        if ((first > 0 && mouseX < startOf(first - 1) + ctx.icons[first - 1].elementWidth) ||
-            (end < count && mouseX >= startOf(end))) {
-            continue;
-        }
-
-        double expansion = 0.0;
-        for (size_t j = first; j < end; ++j) {
-            const auto& icon = ctx.icons[j];
-            if (!icon.element.get()) continue;
+        while (i < count && modeOf(ctx.icons[i]) == AppAnimationMode::Wave) ++i;
+        const double lower = first > 0
+            ? startOf(ctx.icons[first - 1]) + ctx.icons[first - 1].elementWidth : -unbounded;
+        const double upper = i < count ? startOf(ctx.icons[i]) : unbounded;
+        const bool active = mouseX >= lower && mouseX < upper;
+        group.clear();
+        for (size_t j = first; j < i; ++j) {
+            const auto& button = ctx.icons[j];
+            const double start = startOf(button);
             const double distance = g_settings.taskbarLabelsMode
-                ? std::max({0.0, startOf(j) - mouseX, mouseX - startOf(j) - icon.elementWidth})
-                : std::abs(mouseX - icon.originalCenterX);
-            const double maxScale = icon.rule.maxScale > 0 ? icon.rule.maxScale : g_settings.maxScale;
-            scales[j] = CalculateScale(distance, g_settings.effectRadius, maxScale);
-            const double width = (scales[j] - 1.0) * icon.elementWidth * spacingFactor;
-            shifts[j] = expansion + width / 2.0;
-            expansion += width;
-            if (distance < minDistance) {
+                ? std::max({0.0, start - mouseX, mouseX - start - button.elementWidth})
+                : std::abs(mouseX - button.originalCenterX);
+            const double scale = active ? CalculateScale(distance, g_settings.effectRadius,
+                                                         maxScaleOf(button)) : 1.0;
+            const double proximity = std::max(0.0, 1.0 - distance / g_settings.effectRadius);
+            const double inset = button.footprintStart * button.elementWidth;
+            group.push_back({
+                start + inset,
+                (button.footprintEnd - button.footprintStart) * button.elementWidth,
+                (g_settings.taskbarLabelsMode ? 24.0 : button.elementWidth / 2.0) - inset,
+                requestedScale(button, scale),
+                1.0 + 12.0 * proximity * proximity * proximity * proximity,
+                {},
+            });
+            if (active && button.elementWidth > 0.0 && distance < minDistance) {
                 minDistance = distance;
                 closestIconIndex = j;
             }
         }
-        for (size_t j = first; j < end; ++j) shifts[j] -= expansion / 2.0;
+        SolveDockWave(group, lower, upper, g_settings.spacingFactor);
+        for (size_t j = first; j < i; ++j) {
+            const auto& item = group[j - first];
+            ctx.icons[j].state = item.result;
+            ctx.icons[j].state.requestedScale = item.requestedScale;
+        }
     }
 
     double bounceScaleFactor = 1.0;
     double bounceTranslateOffset = 0.0;
 
-    double currentBounceIntensity = g_bounceIntensity.load();
+    double currentBounceIntensity = state.bounceIntensity;
 
     if (currentBounceIntensity > 0.0 && closestIconIndex != (size_t)-1 &&
         minDistance < (g_settings.effectRadius / 2.0)) {
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now() - g_bounceStartTime)
+                            std::chrono::steady_clock::now() - state.bounceStart)
                             .count();
         double t = std::fmod(elapsed_ms, BOUNCE_PERIOD_MS) / BOUNCE_PERIOD_MS;
         double normalizedWave = std::sin(t * 3.14159);
@@ -622,156 +882,70 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
         }
     }
 
-    double alpha = 1.0;
-    if (g_settings.lerpSpeed > 0.0) {
-        alpha = 1.0 - std::exp(-g_settings.lerpSpeed * dtSec);
-    }
-    alpha = std::clamp(alpha, 0.0, 1.0);
-
-    for (size_t i = 0; i < ctx.icons.size(); i++) {
-        auto element = ctx.icons[i].element.get();
-        if (!element) continue;
-        auto tg = element.RenderTransform().try_as<TransformGroup>();
-        if (!tg || tg.Children().Size() < 4) continue;
-        auto waveScale = tg.Children().GetAt(0).try_as<ScaleTransform>();
-        auto waveTranslate = tg.Children().GetAt(1).try_as<TranslateTransform>();
-        auto bounceScale = tg.Children().GetAt(2).try_as<ScaleTransform>();
-        auto bounceTranslate = tg.Children().GetAt(3).try_as<TranslateTransform>();
-
-        if (!waveScale || !waveTranslate || !bounceScale || !bounceTranslate) continue;
-        double targetScale = 1.0 + (scales[i] - 1.0) * intensity;
-        double targetTranslate = shifts[i] * intensity;
-
-        if (g_settings.lerpSpeed > 0.0) {
-            ctx.icons[i].state.waveScale += (targetScale - ctx.icons[i].state.waveScale) * alpha;
-            ctx.icons[i].state.waveTranslateX += (targetTranslate - ctx.icons[i].state.waveTranslateX) * alpha;
-        } else {
-            ctx.icons[i].state.waveScale = targetScale;
-            ctx.icons[i].state.waveTranslateX = targetTranslate;
-        }
-
-        waveScale.ScaleX(ctx.icons[i].state.waveScale);
-        waveScale.ScaleY(ctx.icons[i].state.waveScale);
-
-        if (ctx.isVertical) {
-            waveTranslate.X(0.0);
-            waveTranslate.Y(ctx.icons[i].state.waveTranslateX);
-        } else {
-            waveTranslate.X(ctx.icons[i].state.waveTranslateX);
-            waveTranslate.Y(0.0);
-        }
+    for (size_t i = 0; i < count; ++i) {
+        auto& icon = ctx.icons[i];
+        IconPose pose;
+        pose.waveScale = icon.state.waveScale;
+        if (ctx.isVertical) pose.waveY = icon.state.waveTranslateX;
+        else pose.waveX = icon.state.waveTranslateX;
 
         if (i == closestIconIndex && currentBounceIntensity > 0.0) {
-            bounceScale.ScaleX(bounceScaleFactor);
-            bounceScale.ScaleY(bounceScaleFactor);
+            // Wave layout owns the main axis. Bounce can grow across the taskbar.
+            const bool wave = modeOf(icon) == AppAnimationMode::Wave;
+            if (!wave || ctx.isVertical) pose.bounceScaleX = bounceScaleFactor;
+            if (!wave || !ctx.isVertical) pose.bounceScaleY = bounceScaleFactor;
 
             if (!g_settings.disableBounce && !g_settings.disableVerticalBounce) {
-                if (ctx.isVertical) {
-                    bounceTranslate.X(bounceTranslateOffset);
-                    bounceTranslate.Y(0.0);
-                } else {
-                    bounceTranslate.X(0.0);
-                    bounceTranslate.Y(bounceTranslateOffset);
-                }
-            } else {
-                bounceTranslate.X(0.0);
-                bounceTranslate.Y(0.0);
+                if (ctx.isVertical) pose.bounceX = bounceTranslateOffset;
+                else pose.bounceY = bounceTranslateOffset;
             }
-        } else {
-            bounceScale.ScaleX(1.0);
-            bounceScale.ScaleY(1.0);
-            bounceTranslate.X(0.0);
-            bounceTranslate.Y(0.0);
         }
+        icon.transforms.Apply(pose);
     }
+    return settling;
 }
 
 void ResetAllIconScales(std::vector<TaskbarIconInfo>& icons) {
-    if (icons.empty()) return;
-    try {
-        for (auto& iconInfo : icons) {
-            auto element = iconInfo.element.get();
-            if (!element) continue;
-            auto tg = element.RenderTransform().try_as<TransformGroup>();
-            if (!tg || tg.Children().Size() < 4) continue;
-            auto waveScale = tg.Children().GetAt(0).try_as<ScaleTransform>();
-            auto waveTranslate = tg.Children().GetAt(1).try_as<TranslateTransform>();
-            auto bounceScale = tg.Children().GetAt(2).try_as<ScaleTransform>();
-            auto bounceTranslate = tg.Children().GetAt(3).try_as<TranslateTransform>();
-
-            if (waveScale) {
-                waveScale.ScaleX(1.0);
-                waveScale.ScaleY(1.0);
-            }
-            if (waveTranslate) {
-                waveTranslate.X(0.0);
-                waveTranslate.Y(0.0);
-            }
-            if (bounceScale) {
-                bounceScale.ScaleX(1.0);
-                bounceScale.ScaleY(1.0);
-            }
-            if (bounceTranslate) {
-                bounceTranslate.X(0.0);
-                bounceTranslate.Y(0.0);
-            }
+    for (auto& icon : icons) {
+        try {
+            icon.transforms.Restore();
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"DockAnimation: Could not reset icon transforms: %s", e.message().c_str());
         }
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: HRESULT error in ResetAllIconScales: %s", e.message().c_str());
     }
 }
 
 // Event handlers
-void OnTaskbarPointerMoved(void* pThis_key, Input::PointerRoutedEventArgs const& args) {
-    try {
-        auto it = g_contexts.find(pThis_key);
-        if (it == g_contexts.end()) return;
-        auto& ctx = it->second;
-        auto frame = ctx.taskbarFrame.get();
-        if (!frame) return;
-        g_isMouseInside = true;
-        g_activeContextKey = pThis_key;
+void OnTaskbarPointerMoved(TaskbarThreadState& state, void* key,
+                           DockAnimationContext& ctx, Input::PointerRoutedEventArgs const& args) {
+    UpdateTaskbarEdge(ctx);
+    auto frame = ctx.taskbarFrame.get();
+    if (!frame || !ctx.hWnd || GetWindowThreadProcessId(ctx.hWnd, nullptr) != GetCurrentThreadId()) return;
 
-        UpdateTaskbarEdge(ctx);
-
-        double mousePos = ctx.isVertical
-            ? args.GetCurrentPoint(frame).Position().Y
-            : args.GetCurrentPoint(frame).Position().X;
-
-        if (std::abs(mousePos - g_lastMouseX.load()) > MOUSE_STOP_THRESHOLD) {
-            g_lastSignificantMoveTime = std::chrono::steady_clock::now();
+    const double mousePos = ctx.isVertical
+        ? args.GetCurrentPoint(frame).Position().Y
+        : args.GetCurrentPoint(frame).Position().X;
+    const auto now = std::chrono::steady_clock::now();
+    if (state.activeContextKey != key) {
+        if (auto previous = state.contexts.find(state.activeContextKey); previous != state.contexts.end()) {
+            ResetContext(previous->second);
         }
-        g_lastMouseX = mousePos;
-        if (!g_isRenderingHooked.exchange(true)) {
-            g_lastRenderTime = std::chrono::steady_clock::now();
-            HWND owner = ctx.hWnd;
-            if (!owner || GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId()) {
-                g_isRenderingHooked = false;
-                return;
-            }
-            try {
-                g_renderingToken = Media::CompositionTarget::Rendering(OnCompositionTargetRendering);
-                g_renderingWindow = owner;
-            } catch (...) {
-                g_isRenderingHooked = false;
-                throw;
-            }
-            g_lastSignificantMoveTime = std::chrono::steady_clock::now();
-            Wh_Log(L"DockAnimation: Started render loop (FocusIn).");
-        }
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: HRESULT Error in OnTaskbarPointerMoved: %s", e.message().c_str());
+        state.activeContextKey = key;
+        state.intensity = 0.0;
+        state.bounceIntensity = 0.0;
+        state.bouncing = false;
+        state.lastMove = now;
     }
-}
+    if (std::abs(mousePos - state.mouseX) > MOUSE_STOP_THRESHOLD) state.lastMove = now;
+    state.mouseInside = true;
+    state.mouseX = mousePos;
 
-void OnTaskbarPointerExited(void* pThis_key) {
-    try {
-        if (g_activeContextKey.load() == pThis_key) {
-            g_isMouseInside = false;
-            g_isBouncing = false;
-        }
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: HRESULT Error in OnTaskbarPointerExited: %s", e.message().c_str());
+    if (!state.renderingWindow) {
+        state.renderingToken = Media::CompositionTarget::Rendering(
+            [](auto const&, auto const&) { OnCompositionTargetRendering(); });
+        state.renderingWindow = ctx.hWnd;
+        state.lastRender = now;
+        state.lastMove = now;
     }
 }
 
@@ -893,21 +1067,6 @@ static bool ShouldAnimateElement(FrameworkElement const& e) {
     return true;
 }
 
-static void ResetElementTransforms(FrameworkElement const& element) {
-    auto tg = element.RenderTransform().try_as<TransformGroup>();
-    if (!tg || tg.Children().Size() < 4) return;
-
-    auto waveScale = tg.Children().GetAt(0).try_as<ScaleTransform>();
-    auto waveTranslate = tg.Children().GetAt(1).try_as<TranslateTransform>();
-    auto bounceScale = tg.Children().GetAt(2).try_as<ScaleTransform>();
-    auto bounceTranslate = tg.Children().GetAt(3).try_as<TranslateTransform>();
-
-    if (waveScale) { waveScale.ScaleX(1.0); waveScale.ScaleY(1.0); }
-    if (waveTranslate) { waveTranslate.X(0.0); waveTranslate.Y(0.0); }
-    if (bounceScale) { bounceScale.ScaleX(1.0); bounceScale.ScaleY(1.0); }
-    if (bounceTranslate) { bounceTranslate.X(0.0); bounceTranslate.Y(0.0); }
-}
-
 static bool RebaseIconGeometryFast(DockAnimationContext& ctx) {
     auto frame = ctx.taskbarFrame.get();
     if (!frame) return false;
@@ -928,50 +1087,25 @@ static bool RebaseIconGeometryFast(DockAnimationContext& ctx) {
         if (!e) continue;
 
         try {
-            double oldX = info.originalCenterX;
-            double oldW = info.elementWidth;
-
-            auto t = e.TransformToVisual(frame);
-            auto pt = t.TransformPoint({0, 0});
-            double w = ctx.isVertical ? e.ActualHeight() : e.ActualWidth();
-            info.elementWidth = w;
-
-            float xOrigin = 0.5f;
-            float yOrigin = 0.5f;
-            if (ctx.isVertical) {
-                xOrigin = (ctx.edge == TaskbarEdge::Left) ? 0.0f : 1.0f;
-            } else {
-                bool isTop = (ctx.edge == TaskbarEdge::Top);
-                yOrigin = g_settings.disableVerticalBounce ? 0.5f : (isTop ? 0.0f : 1.0f);
+            auto& transforms = info.transforms;
+            const auto previous = transforms.applied;
+            transforms.Restore();
+            winrt::Windows::Foundation::Point pt;
+            try {
+                pt = e.TransformToVisual(frame).TransformPoint({0, 0});
+            } catch (...) {
+                if (previous != transforms.applied) ctx.needsFrame = true;
+                throw;
             }
-
-            if (g_settings.taskbarLabelsMode) {
-                double newStartX = ctx.isVertical ? pt.Y : pt.X;
-                info.originalCenterX = newStartX;
-
-                float iconCenterPx = 24.0f;
-                float iconCenterProportion = (w > 0.0) ? (iconCenterPx / (float)w) : 0.5f;
-                if (ctx.isVertical) {
-                    e.RenderTransformOrigin({ xOrigin, iconCenterProportion });
-                } else {
-                    e.RenderTransformOrigin({ iconCenterProportion, yOrigin });
-                }
-
-                if (std::abs(newStartX - oldX) > 0.5) changed = true;
-            } else {
-                double newCenterX = ctx.isVertical ? (pt.Y + (w / 2.0)) : (pt.X + (w / 2.0));
-                info.originalCenterX = newCenterX;
-
-                if (ctx.isVertical) {
-                    e.RenderTransformOrigin({ xOrigin, yOrigin });
-                } else {
-                    e.RenderTransformOrigin({ 0.5f, yOrigin });
-                }
-
-                if (std::abs(newCenterX - oldX) > 0.5) changed = true;
-            }
-
-            if (std::abs(w - oldW) > 0.5) changed = true;
+            const double width = ctx.isVertical ? e.ActualHeight() : e.ActualWidth();
+            const double center = (ctx.isVertical ? pt.Y : pt.X) +
+                                  (g_settings.taskbarLabelsMode ? 0.0 : width / 2.0);
+            changed |= previous != transforms.applied ||
+                       std::abs(center - info.originalCenterX) > 0.001 ||
+                       std::abs(width - info.elementWidth) > 0.001;
+            info.elementWidth = width;
+            info.originalCenterX = center;
+            SetIconPivot(transforms, e, ctx.isVertical, ctx.edge);
         } catch (...) {
         }
     }
@@ -988,15 +1122,15 @@ static bool RebaseIconGeometryFast(DockAnimationContext& ctx) {
 
 // Builds or refreshes the icon list and sets up transforms for animation (scale + translate).
 void RefreshIconPositions(DockAnimationContext& ctx) {
-    // preserve state
+    ctx.needsFrame = true;
+    // Preserve smoothing state across a visual tree refresh.
     std::unordered_map<void*, IconAnimState> prevStates;
-    std::unordered_set<void*> prevElements;
 
+    ResetAllIconScales(ctx.icons);
     for (auto& old : ctx.icons) {
         if (auto e = old.element.get()) {
             void* key = winrt::get_abi(e);
             prevStates[key] = old.state;
-            prevElements.insert(key);
         }
     }
 
@@ -1130,30 +1264,19 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
             }
             if (g_settings.disableWidgetsAnimation && FindWidgets(FindWidgets, element)) return;
 
-            auto tg = element.RenderTransform().try_as<TransformGroup>();
-            if (!tg || tg.Children().Size() < 4) {
-                tg = TransformGroup();
-                tg.Children().Append(ScaleTransform());       // 0 waveScale
-                tg.Children().Append(TranslateTransform());   // 1 waveTranslate
-                tg.Children().Append(ScaleTransform());       // 2 bounceScale
-                tg.Children().Append(TranslateTransform());   // 3 bounceTranslate
-                element.RenderTransform(tg);
-            }
-
-            float xOrigin = 0.5f;
-            float yOrigin = 0.5f;
-            if (ctx.isVertical) {
-                xOrigin = (ctx.edge == TaskbarEdge::Left) ? 0.0f : 1.0f;
-            } else {
-                bool isTop = (ctx.edge == TaskbarEdge::Top);
-                yOrigin = g_settings.disableVerticalBounce ? 0.5f : (isTop ? 0.0f : 1.0f);
-            }
+            IconTransforms transforms;
+            transforms.visual = Hosting::ElementCompositionPreview::GetElementVisual(element);
+            if (!transforms.visual) return;
+            transforms.original = transforms.visual.TransformMatrix();
+            transforms.applied = transforms.original;
+            SetIconPivot(transforms, element, ctx.isVertical, ctx.edge);
 
             auto transform = element.TransformToVisual(taskbarFrame);
             auto point = transform.TransformPoint({0, 0});
 
             TaskbarIconInfo info;
             info.element = element;
+            info.transforms = std::move(transforms);
             if (rules && !rules->empty() && IsTaskListButtonExact(element)) {
                 auto matchId = [&](FrameworkElement const& node) {
                     auto rawId = W(AutomationProperties::GetAutomationId(node));
@@ -1186,45 +1309,40 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
             }
             info.elementWidth = ctx.isVertical ? element.ActualHeight() : element.ActualWidth();
 
-            if (g_settings.taskbarLabelsMode) {
-                float iconCenterPx = 24.0f;
-                float iconCenterProportion =
-                    (info.elementWidth > 0) ? (iconCenterPx / (float)info.elementWidth) : 0.5f;
-
-                if (ctx.isVertical) {
-                    element.RenderTransformOrigin({ xOrigin, iconCenterProportion });
-                } else {
-                    element.RenderTransformOrigin({ iconCenterProportion, yOrigin });
-                }
-                info.originalCenterX = ctx.isVertical ? point.Y : point.X;
-            } else {
-                if (ctx.isVertical) {
-                    element.RenderTransformOrigin({ xOrigin, yOrigin });
-                } else {
-                    element.RenderTransformOrigin({ 0.5f, yOrigin });
-                }
-                info.originalCenterX = ctx.isVertical ? (point.Y + (info.elementWidth / 2.0)) : (point.X + (info.elementWidth / 2.0));
+            if (!g_settings.taskbarLabelsMode && info.elementWidth > 0.0 &&
+                IsTaskListButtonExact(element)) {
+                double largestArea = 0.0;
+                const auto findFootprint = [&](auto const& self, FrameworkElement const& parent) -> void {
+                    EnumChildElements(parent, [&](FrameworkElement child) {
+                        if (child.Visibility() != Visibility::Visible) return false;
+                        if (child.try_as<Controls::Image>() || child.try_as<Controls::IconElement>()) {
+                            const auto bounds = child.TransformToVisual(element).TransformBounds({
+                                0.0f, 0.0f, static_cast<float>(child.ActualWidth()),
+                                static_cast<float>(child.ActualHeight())});
+                            const double start = ctx.isVertical ? bounds.Y : bounds.X;
+                            const double width = ctx.isVertical ? bounds.Height : bounds.Width;
+                            const double area = static_cast<double>(bounds.Width) * bounds.Height;
+                            if (area > largestArea && width >= 12.0 &&
+                                start >= 0.0 && start + width <= info.elementWidth) {
+                                largestArea = area;
+                                info.footprintStart = start / info.elementWidth;
+                                info.footprintEnd = (start + width) / info.elementWidth;
+                            }
+                        }
+                        self(self, child);
+                        return false;
+                    });
+                };
+                findFootprint(findFootprint, element);
             }
+
+            info.originalCenterX = (ctx.isVertical ? point.Y : point.X) +
+                                   (g_settings.taskbarLabelsMode ? 0.0 : info.elementWidth / 2.0);
 
             void* key = winrt::get_abi(element);
 
-            auto it = prevStates.find(key);
-            if (it != prevStates.end()) {
+            if (auto it = prevStates.find(key); it != prevStates.end()) {
                 info.state = it->second;
-
-                auto waveScale = tg.Children().GetAt(0).try_as<ScaleTransform>();
-                auto waveTranslate = tg.Children().GetAt(1).try_as<TranslateTransform>();
-                if (waveScale) {
-                    waveScale.ScaleX(info.state.waveScale);
-                    waveScale.ScaleY(info.state.waveScale);
-                }
-                if (waveTranslate) {
-                    if (ctx.isVertical) {
-                        waveTranslate.Y(info.state.waveTranslateX);
-                    } else {
-                        waveTranslate.X(info.state.waveTranslateX);
-                    }
-                }
             }
 
             newIcons.push_back(info);
@@ -1324,14 +1442,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
                 FrameworkElement target = FindFirstTaskListButton(child);
                 if (!target) target = child;
 
-                if (!animate) {
-                    void* kT = winrt::get_abi(target);
-                    if (prevElements.contains(kT)) ResetElementTransforms(target);
-
-                    void* kC = winrt::get_abi(child);
-                    if (prevElements.contains(kC)) ResetElementTransforms(child);
-                    continue;
-                }
+                if (!animate) continue;
 
                 SetupAndAddElement(target);
             }
@@ -1353,12 +1464,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
                     FrameworkElement target = FindFirstTaskListButton(element);
                     if (!target) target = element;
 
-                    if (!animate) {
-                        void* k = winrt::get_abi(target);
-                        if (prevElements.contains(k)) ResetElementTransforms(target);
-                    } else {
-                        SetupAndAddElement(target);
-                    }
+                    if (animate) SetupAndAddElement(target);
                 }
 
                 int c = VisualTreeHelper::GetChildrenCount(element);
@@ -1383,39 +1489,28 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
     }
 }
 
-void InitializeAnimationHooks(void* pThis, FrameworkElement const& taskbarFrame) {
-    try {
-        DockAnimationContext ctx;
-        ctx.taskbarFrame = taskbarFrame;
-        ctx.isInitialized = false;
-        ctx.hWnd = GetCurrentThreadTrayWindow();
-        UpdateTaskbarEdge(ctx);
-        g_contexts[pThis] = std::move(ctx);
-        Wh_Log(L"DockAnimation: Monitor %p registered (hook-based). Edge: %d, HWND: %p", pThis, (int)ctx.edge, ctx.hWnd);
-    }
-    catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: Failed to initialize context for %p: %s",
-               pThis, e.message().c_str());
-    }
-}
-
 // Main animation loop (pulse)
-void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const&,
-                                  winrt::Windows::Foundation::IInspectable const&) {
+void OnCompositionTargetRendering() {
+    std::lock_guard lock(g_animationMutex);
+    if (g_unloading) return;
+    auto thread = g_taskbarThreads.find(GetCurrentThreadId());
+    if (thread == g_taskbarThreads.end() || !thread->second.renderingWindow) return;
+    auto& state = thread->second;
     try {
         auto now = std::chrono::steady_clock::now();
 
         double deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                now - g_lastRenderTime)
+                                now - state.lastRender)
                                 .count();
-        g_lastRenderTime = now;
+        state.lastRender = now;
 
         double dtSec = std::max(0.0, deltaTime) / 1000.0;
 
         double intensityChange = deltaTime / g_settings.focusDuration;
-        double currentIntensity = g_animationIntensity.load();
+        const double previousIntensity = state.intensity;
+        double currentIntensity = previousIntensity;
 
-        if (g_isMouseInside) {
+        if (state.mouseInside) {
             // FocusIn
             currentIntensity = std::min(1.0, currentIntensity + intensityChange);
         } else {
@@ -1423,46 +1518,41 @@ void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const
             currentIntensity = std::max(0.0, currentIntensity - intensityChange);
         }
 
-        g_animationIntensity = currentIntensity;
+        state.intensity = currentIntensity;
 
-        void* pThis_key = g_activeContextKey.load();
-        if (pThis_key == nullptr) {
-            if (currentIntensity <= 0.0) {
-                Media::CompositionTarget::Rendering(g_renderingToken);
-                g_isRenderingHooked = false;
-                Wh_Log(L"DockAnimation: Stopped render loop (Key=null, Intensity=0).");
-            }
+        auto it = state.contexts.find(state.activeContextKey);
+        if (it == state.contexts.end()) {
+            StopRendering(state);
+            return;
+        }
+        auto& ctx = it->second;
+
+        if (!state.mouseInside && currentIntensity <= 0.0) {
+            ResetContext(ctx);
+            StopRendering(state);
+            state.activeContextKey = nullptr;
+            state.mouseX = -1.0;
+            state.bouncing = false;
+            state.bounceIntensity = 0.0;
             return;
         }
 
-        auto it = g_contexts.find(pThis_key);
-        if (it == g_contexts.end()) return;
-
-        auto& ctx = it->second;
-
-        if (!g_isMouseInside && currentIntensity <= 0.0) {
-            Media::CompositionTarget::Rendering(g_renderingToken);
-            g_isRenderingHooked = false;
-
-            ResetAllIconScales(ctx.icons);
-            ctx.isInitialized = false;
-            ctx.icons.clear();
-
-            g_activeContextKey = nullptr;
-            g_lastMouseX = -1.0;
-            g_isBouncing = false;
-
-            Wh_Log(L"DockAnimation: Stopped render loop (FocusOut complete).");
-            return;
+        if (state.settingsRevision != g_settingsRevision) {
+            ResetContext(ctx);
+            state.settingsRevision = g_settingsRevision;
+            state.bouncing = false;
+            state.bounceIntensity = 0.0;
+            state.lastMove = now;
         }
 
         if (!ctx.isInitialized) {
             RefreshIconPositions(ctx);
             ctx.isInitialized = true;
+            ctx.lastDirtyCheck = now;
         }
 
         // Dirty-check
-        if (g_isMouseInside) {
+        if (state.mouseInside) {
             auto sinceCheck = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now - ctx.lastDirtyCheck).count();
 
@@ -1482,60 +1572,72 @@ void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const
                     if (host) {
                         HostSignature sig = ComputeHostSignature(host, ctx.isVertical);
 
-                        if (SigDifferent(sig, ctx.lastSig)) {
+                        if (ctx.icons.empty() || SigDifferent(sig, ctx.lastSig)) {
                             RefreshIconPositions(ctx);
                         } else {
-                            RebaseIconGeometryFast(ctx);
+                            if (RebaseIconGeometryFast(ctx)) ctx.needsFrame = true;
                         }
 
                         ctx.lastSig = sig;
+                    } else if (ctx.icons.empty()) {
+                        RefreshIconPositions(ctx);
                     }
                 }
             }
         }
 
-        if (ctx.icons.empty()) {
-            if (ctx.isInitialized) {
-                RefreshIconPositions(ctx);
-            }
-            if (ctx.icons.empty()) return;
-        }
+        if (ctx.icons.empty()) return;
 
         if (g_settings.disableBounce) {
-            g_isBouncing = false;
+            state.bouncing = false;
         } else {
             auto elapsedSinceMove =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - g_lastSignificantMoveTime)
+                    now - state.lastMove)
                     .count();
 
-            if (g_isMouseInside && elapsedSinceMove > g_settings.bounceDelay) {
-                if (!g_isBouncing.exchange(true)) {
-                    g_bounceStartTime = now;
+            if (state.mouseInside && elapsedSinceMove > g_settings.bounceDelay) {
+                if (!state.bouncing) {
+                    state.bouncing = true;
+                    state.bounceStart = now;
                 }
             } else {
-                g_isBouncing = false;
+                state.bouncing = false;
             }
         }
 
-        double targetBounceIntensity = g_isBouncing ? 1.0 : 0.0;
+        double targetBounceIntensity = state.bouncing ? 1.0 : 0.0;
         double bounceFadeDuration = g_settings.focusDuration / 1000.0;
         double bounceIntensityChange = dtSec / bounceFadeDuration;
-        double currentBounceIntensity = g_bounceIntensity.load();
+        const double previousBounceIntensity = state.bounceIntensity;
+        double currentBounceIntensity = previousBounceIntensity;
         if (targetBounceIntensity > currentBounceIntensity) {
             currentBounceIntensity = std::min(targetBounceIntensity, currentBounceIntensity + bounceIntensityChange);
         } else {
             currentBounceIntensity = std::max(targetBounceIntensity, currentBounceIntensity - bounceIntensityChange);
         }
-        g_bounceIntensity = currentBounceIntensity;
+        state.bounceIntensity = currentBounceIntensity;
 
-        double mouseX = g_lastMouseX.load();
+        double mouseX = state.mouseX;
         if (mouseX == -1.0) mouseX = 0.0;
 
-        ApplyAnimation(mouseX, ctx, currentIntensity, dtSec);
+        // The callback still checks for geometry changes and delayed bounce.
+        // A settled hover needs no layout solve or transform writes.
+        if (ctx.needsFrame || mouseX != ctx.lastLayoutMouse || ctx.edge != ctx.lastLayoutEdge ||
+            currentIntensity != previousIntensity ||
+            currentBounceIntensity > 0.0 || previousBounceIntensity > 0.0) {
+            ctx.needsFrame = ApplyAnimation(mouseX, ctx, currentIntensity, dtSec, state);
+            ctx.lastLayoutMouse = mouseX;
+            ctx.lastLayoutEdge = ctx.edge;
+        }
     } catch (...) {
-        if (g_isRenderingHooked.exchange(false)) {
-            Media::CompositionTarget::Rendering(g_renderingToken);
+        if (auto it = state.contexts.find(state.activeContextKey); it != state.contexts.end()) {
+            ResetContext(it->second);
+        }
+        try {
+            StopRendering(state);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"DockAnimation: Could not stop rendering after an error: %s", e.message().c_str());
         }
     }
 }
@@ -1561,13 +1663,24 @@ int WINAPI TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
     ((IUnknown*)pArgs)->QueryInterface(winrt::guid_of<Input::PointerRoutedEventArgs>(), winrt::put_abi(args));
     if (!args)
         return original();
-    auto context = g_contexts.find(pThis);
-    if (context == g_contexts.end() || context->second.taskbarFrame.get() != element) {
-        InitializeAnimationHooks(pThis, element);
-        Wh_Log(L"DockAnimation: Initialized via OnPointerMoved (%s)", className.c_str());
+    {
+        std::lock_guard lock(g_animationMutex);
+        if (!g_unloading) {
+            try {
+                auto& state = g_taskbarThreads[GetCurrentThreadId()];
+                auto& ctx = state.contexts[pThis];
+                if (ctx.taskbarFrame.get() != element) {
+                    ResetContext(ctx);
+                    ctx = {};
+                    ctx.taskbarFrame = element;
+                    ctx.hWnd = GetCurrentThreadTrayWindow();
+                }
+                OnTaskbarPointerMoved(state, pThis, ctx, args);
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"DockAnimation: Pointer move failed: %s", e.message().c_str());
+            }
+        }
     }
-    // Forward event to existing logic
-    OnTaskbarPointerMoved(pThis, args);
     return original();
 }
 
@@ -1586,8 +1699,29 @@ int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
     auto className = winrt::get_class_name(element);
     if (className != L"Taskbar.TaskbarFrame")
         return original();
-    OnTaskbarPointerExited(pThis);
+    {
+        std::lock_guard lock(g_animationMutex);
+        if (!g_unloading) {
+            auto thread = g_taskbarThreads.find(GetCurrentThreadId());
+            if (thread != g_taskbarThreads.end() && thread->second.activeContextKey == pThis) {
+                thread->second.mouseInside = false;
+                thread->second.bouncing = false;
+            }
+        }
+    }
     return original();
+}
+
+template <typename... Args>
+int ReadChoice(PCWSTR key, Args... args) {
+    WindhawkUtils::StringSetting setting(Wh_GetStringSetting(key, args...));
+    std::wstring_view value(setting.get());
+    // Existing installations store the same option IDs as integers.
+    if (value.empty()) return Wh_GetIntSetting(key, args...);
+    if (value.size() == 1 && value[0] >= L'0' && value[0] <= L'2') {
+        return value[0] - L'0';
+    }
+    return -1;
 }
 
 void LoadSettings() {
@@ -1599,7 +1733,7 @@ void LoadSettings() {
         rawScale = 220;
     }
 
-    g_settings.animationType = Wh_GetIntSetting(L"AnimationType");
+    g_settings.animationType = ReadChoice(L"AnimationType");
     g_settings.maxScale = (double)rawScale / 100.0;
 
     g_settings.effectRadius = Wh_GetIntSetting(L"EffectRadius");
@@ -1616,7 +1750,7 @@ void LoadSettings() {
 
     g_settings.disableVerticalBounce = (bool)Wh_GetIntSetting(L"DisableVerticalBounce");
     g_settings.taskbarLabelsMode = (bool)Wh_GetIntSetting(L"TaskbarLabelsMode");
-    g_settings.excludeSystemButtonsMode = Wh_GetIntSetting(L"ExcludeSystemButtonsMode");
+    g_settings.excludeSystemButtonsMode = ReadChoice(L"ExcludeSystemButtonsMode");
     g_settings.disableWidgetsAnimation = Wh_GetIntSetting(L"DisableWidgetsAnimation") != 0;
     g_settings.hoveredIconOnly = Wh_GetIntSetting(L"HoveredIconOnly") != 0;
 
@@ -1633,7 +1767,7 @@ void LoadSettings() {
         if (id.empty()) continue;
 
         AppAnimationMode mode;
-        switch (Wh_GetIntSetting(L"AppRules[%d].Mode", index)) {
+        switch (ReadChoice(L"AppRules[%d].Mode", index)) {
             case 0: mode = AppAnimationMode::Wave; break;
             case 1: mode = AppAnimationMode::Single; break;
             case 2: mode = AppAnimationMode::Off; break;
@@ -1691,10 +1825,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         if (!g_taskbarViewDllLoaded.exchange(true)) {
             Wh_Log(L"DockAnimation: Taskbar.View.dll loaded, hooking symbols...");
             if (HookTaskbarViewDllSymbols(module)) {
-                if (!g_hooksApplied.exchange(true)) {
-                    Wh_ApplyHookOperations();
-                    Wh_Log(L"DockAnimation: Hooks applied (slow path).");
-                }
+                Wh_ApplyHookOperations();
+                Wh_Log(L"DockAnimation: Hooks applied (slow path).");
             }
         }
     }
@@ -1721,15 +1853,6 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    Wh_Log(L"DockAnimation: Wh_ModAfterInit");
-
-    if (g_taskbarViewDllLoaded) {
-        g_hooksApplied = true;
-        Wh_Log(L"DockAnimation: Hooks already applied by Windhawk (fast path).");
-    }
-}
-
 typedef void (*RunFromWindowThreadProc_t)(PVOID);
 
 bool RunFromWindowThread(HWND hWnd,
@@ -1740,10 +1863,12 @@ bool RunFromWindowThread(HWND hWnd,
     struct RUN_FROM_WINDOW_THREAD_PARAM {
         RunFromWindowThreadProc_t proc;
         PVOID procParam;
+        bool called = false;
     };
 
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
+    DWORD processId = 0;
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &processId);
+    if (!dwThreadId || processId != GetCurrentProcessId()) {
         return false;
     }
 
@@ -1760,6 +1885,7 @@ bool RunFromWindowThread(HWND hWnd,
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
                     RUN_FROM_WINDOW_THREAD_PARAM* param =
                         (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->called = true;
                     param->proc(param->procParam);
                 }
             }
@@ -1776,103 +1902,49 @@ bool RunFromWindowThread(HWND hWnd,
     SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
-    return true;
+    return param.called;
 }
 
 void Wh_ModBeforeUninit() {
-    g_unloading = true;
-    if (HWND owner = g_renderingWindow.load()) {
-        if (!RunFromWindowThread(
-                owner,
-                [](PVOID) {
-                    try {
-                        if (g_isRenderingHooked.load()) {
-                            Media::CompositionTarget::Rendering(g_renderingToken);
-                            g_isRenderingHooked = false;
-                        }
-                    } catch (winrt::hresult_error const& e) {
-                        Wh_Log(L"DockAnimation: Could not unsubscribe from rendering: %s",
-                               e.message().c_str());
-                    }
-                },
-                nullptr)) {
-            Wh_Log(L"DockAnimation: Could not reach the rendering window for cleanup.");
-        }
+    // Closing the gate under the callback lock waits for any in-flight event
+    // registration. The thread-state entries stay alive during UI cleanup.
+    {
+        std::lock_guard lock(g_animationMutex);
+        g_unloading = true;
     }
 
-    // Group elements by the thread/window that owns them to prevent COM thread violations
-    std::map<HWND, std::vector<winrt::weak_ref<FrameworkElement>>> windowIcons;
-    for (auto& pair : g_contexts) {
-        auto& ctx = pair.second;
-        HWND hWnd = ctx.hWnd ? ctx.hWnd : FindWindow(L"Shell_TrayWnd", NULL);
-        if (hWnd) {
-            auto& vec = windowIcons[hWnd];
-            for (auto& icon : ctx.icons) {
-                vec.push_back(icon.element);
-            }
+    for (auto& [threadId, state] : g_taskbarThreads) {
+        HWND owner = state.renderingWindow;
+        if (!owner || GetWindowThreadProcessId(owner, nullptr) != threadId) {
+            owner = nullptr;
+            EnumThreadWindows(threadId, [](HWND window, LPARAM param) -> BOOL {
+                *reinterpret_cast<HWND*>(param) = window;
+                return FALSE;
+            }, reinterpret_cast<LPARAM>(&owner));
         }
-    }
-
-    for (auto& pair : windowIcons) {
-        HWND hWnd = pair.first;
-        std::vector<winrt::weak_ref<FrameworkElement>> elements = std::move(pair.second);
-        std::function<void()> action = [elements = std::move(elements)]() {
-            try {
-                for (auto& weak_el : elements) {
-                    if (auto element = weak_el.get()) {
-                        ResetElementTransforms(element);
-                    }
+        if (!owner || !RunFromWindowThread(owner, [](PVOID param) {
+                auto& state = *static_cast<TaskbarThreadState*>(param);
+                try {
+                    StopRendering(state);
+                } catch (const winrt::hresult_error& e) {
+                    Wh_Log(L"DockAnimation: Could not unsubscribe from rendering: %s", e.message().c_str());
                 }
-            }
-            catch (...) {}
-        };
-        RunFromWindowThread(
-            hWnd,
-            [](PVOID p) {
-                auto* fn = static_cast<std::function<void()>*>(p);
-                (*fn)();
-            },
-            &action);
+                for (auto& [key, ctx] : state.contexts) {
+                    ResetContext(ctx);
+                }
+            }, &state)) {
+            Wh_Log(L"DockAnimation: Could not reach taskbar thread %lu for cleanup.", threadId);
+        }
     }
 
-    g_contexts.clear();
+    std::lock_guard lock(g_animationMutex);
+    g_taskbarThreads.clear();
     g_taskbarViewDllLoaded = false;
-    g_hooksApplied = false;
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"DockAnimation: Settings changed.");
+    std::lock_guard lock(g_animationMutex);
+    if (g_unloading) return;
     LoadSettings();
-
-    // Group context pointers by their HWND to prevent COM thread violations
-    std::map<HWND, std::vector<DockAnimationContext*>> windowContexts;
-    for (auto& pair : g_contexts) {
-        auto& ctx = pair.second;
-        HWND hWnd = ctx.hWnd ? ctx.hWnd : FindWindow(L"Shell_TrayWnd", NULL);
-        if (hWnd) {
-            windowContexts[hWnd].push_back(&ctx);
-        }
-    }
-
-    for (auto& pair : windowContexts) {
-        HWND hWnd = pair.first;
-        std::vector<DockAnimationContext*> ctxs = std::move(pair.second);
-        std::function<void()> action = [ctxs = std::move(ctxs)]() {
-            try {
-                for (auto* ctx : ctxs) {
-                    ResetAllIconScales(ctx->icons);
-                    ctx->isInitialized = false;
-                    ctx->icons.clear();
-                }
-            } catch (...) {}
-        };
-        RunFromWindowThread(
-            hWnd,
-            [](PVOID p) {
-                auto* fn = static_cast<std::function<void()>*>(p);
-                (*fn)();
-            },
-            &action);
-    }
-    g_isBouncing = false;
+    ++g_settingsRevision;
 }
