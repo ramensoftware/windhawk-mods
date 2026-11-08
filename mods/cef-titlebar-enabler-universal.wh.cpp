@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.9
+// @version         2.0
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -37,13 +37,13 @@
 * Screenshot with this mod's native title bar option + transparency option + [WMPotify](https://github.com/Ingan121/WMPotify) + [Aero10](https://www.deviantart.com/vaporvance/art/Aero10-Vista-Seven-909711949) + [OpenGlass](https://github.com/ALTaleX531/OpenGlass) (Windows 10 LTSC 2021)
 ![Screenshot](https://raw.githubusercontent.com/Ingan121/WMPotify/refs/heads/master/screenshots/home_aero.png)
 ## Notes
-* Supported CEF versions: 90.4 to 151
+* Supported CEF versions: 90.4 to 156
     * This mod won't work with versions before 90.4
     * Newer versions may work, but they have not been tested.
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.3.3
+* Supported Spotify versions: 1.1.60 to 1.3.9
     * Newer versions may work, especially when the CEF version is within the supported versions above.
     * If some features, such as transparency or the theme JavaScript integration, don't work on a newly released Spotify version, it's because the CEF version has been updated to a version not yet supported by this mod,
     and thus those features have been disabled for stability and safety. You can try enabling the `Use unsafe methods on untested CEF versions` switch in the mod settings page to disable the safety feature,
@@ -265,7 +265,8 @@
 143: 1.2.80-1.2.82
 144: 1.2.83-1.2.87
 146: 1.2.88-1.3.1
-151: 1.3.2-1.3.3
+151: 1.3.2-1.3.8
+156: 1.3.9
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -298,7 +299,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 151
+#define LAST_TESTED_CEF_VERSION 156
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 struct cte_settings {
