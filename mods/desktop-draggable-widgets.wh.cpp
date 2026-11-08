@@ -2,11 +2,11 @@
 // @id              desktop-draggable-widgets
 // @name            JonaOS Draggable Desktop Widgets
 // @description     Interactive desktop widgets with shortcuts to Wi-Fi, Hotspot and Bluetooth quick settings, music playback controls, live state indicators, and a one-click system-wide light/dark mode toggle.
-// @version         7.3
+// @version         7.7
 // @author          Jona like it, code it
 // @github          https://github.com/Stunning-dev
 // @include         windhawk.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32 -lpropsys -lwlanapi -lbthprops -ladvapi32 -liphlpapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -ldwmapi -lgdiplus -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lpropsys -lwlanapi -lbthprops -ladvapi32 -liphlpapi
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -27,7 +27,7 @@ View your Date and Time easily, Battery and Volume level, access your custom Mus
 *Choose between Month or Day calendar styles*
 
 ![image](https://i.imgur.com/T9ueXuM.gif)
-*Music Visualizers animate when audio is detected, Pause and play music, click music icon to open folder*
+*Music Visualizers animate when audio is detected. Play opens your music folder when no media session is active. Previous and Next follow the exact order currently shown by an open File Explorer window for the configured music folder, including its selected sort and grouping.*
 
 ![image](https://i.imgur.com/QsdEEBq.png)
 *The Volume and Battery widgets can be made Horizontal, Vertical or Round*
@@ -187,7 +187,7 @@ View your Date and Time easily, Battery and Volume level, access your custom Mus
   $description: Optional custom color for Liquid Glass accents, icons, sliders, and controls. Use #RRGGBB, RRGGBB, 0xRRGGBB, or #AARRGGBB. This setting applies only to Liquid Glass. Acrylic keeps its built-in colors.
 - musicFolderPath: ""
   $name: Music folder path
-  $description: Paste a folder path here (e.g. D:\Music) to open that folder when you click the music note button. Leave empty to open the default Music folder.
+  $description: Paste a folder path here (e.g. D:\Music). Keep this folder open in File Explorer. Previous and Next identify the active file and directly launch the adjacent supported audio or video file in exactly the order currently displayed by Explorer (including its sort and grouping). Leave empty to use the default Music folder.
 */
 // ==/WindhawkModSettings==
 
@@ -216,6 +216,10 @@ static const PROPERTYKEY kPkeyDeviceFriendlyName = {
 #include <bluetoothapis.h>
 #include <iphlpapi.h>
 #include <shlobj.h>
+#include <shobjidl.h>
+#include <shlguid.h>
+#include <servprov.h>
+#include <exdisp.h>
 #include <shellapi.h>
 
 // Windhawk currently builds with MinGW headers where IAudioMeterInformation
@@ -240,6 +244,7 @@ public:
 #include <algorithm>
 #include <cmath>
 #include <cwchar>
+#include <string>
 #include <vector>
 
 using namespace Gdiplus;
@@ -609,6 +614,13 @@ LiveState g_darkModeState = LiveState::Unavailable;
 wchar_t g_outputDeviceName[128] = L"Output device";
 bool g_mediaAudioActive = false;
 bool g_mediaControlAvailable = false;
+bool g_mediaSessionApiAvailable = false;
+bool g_mediaSessionApiInitialized = false;
+bool g_mediaSessionAvailable = false;
+bool g_mediaSessionPlaying = false;
+std::vector<std::wstring> g_musicPlaylist;
+std::wstring g_musicCurrentPath;
+int g_musicCurrentIndex = -1;
 wchar_t g_mediaTitle[96] = L"";
 // "Media on " plus the full device name needs more space than either field alone.
 wchar_t g_mediaSubtitle[ARRAYSIZE(g_outputDeviceName) + 16] = L"";
@@ -620,6 +632,7 @@ IAudioEndpointVolume*         g_endpointVolume = nullptr;
 IAudioMeterInformation*       g_audioMeter = nullptr;
 IAudioEndpointVolumeCallback* g_volumeCallback = nullptr;
 IMMNotificationClient*        g_audioNotificationClient = nullptr;
+void*                         g_mediaSessionManager = nullptr;
 
 constexpr int kMusicBarCount = 7;
 constexpr float kMusicRestHeights[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
@@ -1389,17 +1402,27 @@ bool PtInVolumeMuteButton(PointF pt) {
 bool PtInMusicPlayButton(PointF pt) {
     if (!IsWidgetEnabled(WidgetMusic)) return false;
     RectF rc = g_widgets[WidgetMusic].rc;
-    const float px = rc.X + 62.0f;
+    const float px = rc.X + 82.5f;
     const float py = rc.Y + 125.0f;
     const float dx = pt.X - px;
     const float dy = pt.Y - py;
     return dx * dx + dy * dy <= 22.0f * 22.0f;
 }
 
-bool PtInMusicFolderButton(PointF pt) {
+bool PtInMusicPreviousButton(PointF pt) {
     if (!IsWidgetEnabled(WidgetMusic)) return false;
     RectF rc = g_widgets[WidgetMusic].rc;
-    const float px = rc.X + 112.0f;
+    const float px = rc.X + 35.0f;
+    const float py = rc.Y + 125.0f;
+    const float dx = pt.X - px;
+    const float dy = pt.Y - py;
+    return dx * dx + dy * dy <= 22.0f * 22.0f;
+}
+
+bool PtInMusicNextButton(PointF pt) {
+    if (!IsWidgetEnabled(WidgetMusic)) return false;
+    RectF rc = g_widgets[WidgetMusic].rc;
+    const float px = rc.X + 130.0f;
     const float py = rc.Y + 125.0f;
     const float dx = pt.X - px;
     const float dy = pt.Y - py;
@@ -1610,6 +1633,12 @@ void ToggleSystemMute() {
     }
 }
 
+void OpenMusicFolder();
+bool IsMusicFolderOpenInExplorer();
+bool PlayAdjacentMusicFile(int direction);
+bool RefreshMediaSessionState();
+bool TryMediaSessionAction(int methodSlot);
+
 float NextMusicRandom01() {
     g_musicRandomSeed = g_musicRandomSeed * 1664525u + 1013904223u;
     return static_cast<float>((g_musicRandomSeed >> 8) & 0x00FFFFFFu) / 16777215.0f;
@@ -1623,8 +1652,12 @@ bool RefreshMusicVisualizer() {
         g_audioMeter &&
         SUCCEEDED(g_audioMeter->GetPeakValue(&peak)) &&
         peak > 0.015f;
+    const bool oldAudioActive = g_mediaAudioActive;
     g_mediaAudioActive = audioActive;
-    g_mediaControlAvailable = audioActive;
+    const bool mediaSessionChanged = RefreshMediaSessionState();
+    // A session is the authoritative control source. The audio meter remains
+    // useful as a fallback for players that do not publish a media session.
+    g_mediaControlAvailable = g_mediaControlAvailable || audioActive;
     if (audioActive) {
         wcscpy_s(g_mediaTitle, ARRAYSIZE(g_mediaTitle), L"Now playing");
         swprintf_s(g_mediaSubtitle, L"Media on %s", g_outputDeviceName);
@@ -1650,16 +1683,43 @@ bool RefreshMusicVisualizer() {
         g_musicBarHeights[i] += (g_musicBarTargets[i] - g_musicBarHeights[i]) * smoothing;
         if (std::fabs(g_musicBarHeights[i] - oldHeight) > 0.1f) changed = true;
     }
-    return changed;
+    return changed || oldAudioActive != audioActive || mediaSessionChanged;
 }
 
-void ToggleMediaPlayPause() {
+void SendMediaVirtualKey(WORD key) {
     INPUT inputs[2] = {};
     inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_MEDIA_PLAY_PAUSE;
+    inputs[0].ki.wVk = key;
     inputs[1] = inputs[0];
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(2, inputs, sizeof(INPUT));
+}
+
+void HandleMusicPlayPause() {
+    // Folder visibility is the first state of the Play button. Query the
+    // actual Explorer windows every click: a cached "opened once" flag cannot
+    // know that the user later closed the folder.
+    if (!IsMusicFolderOpenInExplorer()) {
+        OpenMusicFolder();
+        return;
+    }
+
+    // Once the configured folder is open, Play works as the normal media
+    // toggle: it pauses a playing session or resumes a paused one.
+    if (TryMediaSessionAction(13)) {  // TryTogglePlayPauseAsync.
+        RefreshMusicVisualizer();
+        return;
+    }
+    // Retain a fallback for media players which do not expose a GSMTC session.
+    SendMediaVirtualKey(VK_MEDIA_PLAY_PAUSE);
+}
+
+void HandleMusicPrevious() {
+    PlayAdjacentMusicFile(-1);
+}
+
+void HandleMusicNext() {
+    PlayAdjacentMusicFile(1);
 }
 
 bool RefreshBattery() {
@@ -1785,6 +1845,7 @@ constexpr GUID kIidRadioStatics =
 
 using WindowsCreateString_t = HRESULT (WINAPI*)(const wchar_t*, UINT32, HSTRING*);
 using WindowsDeleteString_t = HRESULT (WINAPI*)(HSTRING);
+using WindowsGetStringRawBuffer_t = PCWSTR (WINAPI*)(HSTRING, UINT32*);
 using RoGetActivationFactory_t = HRESULT (WINAPI*)(HSTRING, REFIID, void**);
 
 void ReleaseWinRtObject(void* object) {
@@ -1804,6 +1865,149 @@ bool WaitForAsyncOperation(void* operation) {
         Sleep(20);
     }
     return false;
+}
+
+// Windows.Media.Control has no C++ headers in Windhawk's MinGW SDK. Use the
+// published WinRT ABI directly, following the same pattern as the Radio API.
+constexpr GUID kIidMediaSessionManagerStatics =
+    {0x2050c4ee, 0x11a0, 0x57de, {0xae, 0xd7, 0xc9, 0x7c, 0x70, 0x33, 0x82, 0x45}};
+
+void ShutdownMediaSessionManager() {
+    ReleaseWinRtObject(g_mediaSessionManager);
+    g_mediaSessionManager = nullptr;
+    g_mediaSessionApiAvailable = false;
+    g_mediaSessionApiInitialized = false;
+    g_mediaSessionAvailable = false;
+    g_mediaSessionPlaying = false;
+}
+
+void InitMediaSessionManager() {
+    if (g_mediaSessionApiInitialized) return;
+    g_mediaSessionApiInitialized = true;
+
+    HMODULE combase = LoadLibraryW(L"combase.dll");
+    if (!combase) return;
+    const auto createString = reinterpret_cast<WindowsCreateString_t>(
+        GetProcAddress(combase, "WindowsCreateString"));
+    const auto deleteString = reinterpret_cast<WindowsDeleteString_t>(
+        GetProcAddress(combase, "WindowsDeleteString"));
+    const auto getFactory = reinterpret_cast<RoGetActivationFactory_t>(
+        GetProcAddress(combase, "RoGetActivationFactory"));
+    if (!createString || !deleteString || !getFactory) { FreeLibrary(combase); return; }
+
+    constexpr wchar_t classNameText[] =
+        L"Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager";
+    HSTRING className = nullptr;
+    void* factory = nullptr;
+    void* operation = nullptr;
+    if (SUCCEEDED(createString(classNameText, ARRAYSIZE(classNameText) - 1, &className)) &&
+        SUCCEEDED(getFactory(className, kIidMediaSessionManagerStatics, &factory))) {
+        // IGlobalSystemMediaTransportControlsSessionManagerStatics::RequestAsync.
+        auto requestAsync = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+            (*reinterpret_cast<void***>(factory))[6]);
+        if (SUCCEEDED(requestAsync(factory, &operation)) && WaitForAsyncOperation(operation)) {
+            // IAsyncOperation<...>::GetResults is vtable slot 13.
+            auto getResults = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+                (*reinterpret_cast<void***>(operation))[13]);
+            if (SUCCEEDED(getResults(operation, &g_mediaSessionManager)) && g_mediaSessionManager)
+                g_mediaSessionApiAvailable = true;
+        }
+    }
+    ReleaseWinRtObject(operation);
+    ReleaseWinRtObject(factory);
+    if (className) deleteString(className);
+    FreeLibrary(combase);
+}
+
+void* GetCurrentMediaSession() {
+    if (!g_mediaSessionManager) return nullptr;
+    void* session = nullptr;
+    // IGlobalSystemMediaTransportControlsSessionManager::GetCurrentSession.
+    auto getCurrentSession = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+        (*reinterpret_cast<void***>(g_mediaSessionManager))[6]);
+    return SUCCEEDED(getCurrentSession(g_mediaSessionManager, &session)) ? session : nullptr;
+}
+
+bool GetActiveMediaSessionTitle(std::wstring* title) {
+    title->clear();
+    InitMediaSessionManager();
+    void* session = GetCurrentMediaSession();
+    if (!session) return false;
+
+    void* operation = nullptr;
+    // GlobalSystemMediaTransportControlsSession::TryGetMediaPropertiesAsync.
+    auto getMediaPropertiesAsync = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+        (*reinterpret_cast<void***>(session))[16]);
+    bool success = SUCCEEDED(getMediaPropertiesAsync(session, &operation)) && operation &&
+                   WaitForAsyncOperation(operation);
+    void* properties = nullptr;
+    if (success) {
+        auto getResults = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+            (*reinterpret_cast<void***>(operation))[13]);
+        success = SUCCEEDED(getResults(operation, &properties)) && properties;
+    }
+    if (success) {
+        HSTRING mediaTitle = nullptr;
+        // GlobalSystemMediaTransportControlsSessionMediaProperties::get_Title.
+        auto getTitle = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, HSTRING*)>(
+            (*reinterpret_cast<void***>(properties))[6]);
+        HMODULE combase = LoadLibraryW(L"combase.dll");
+        const auto getStringBuffer = combase ? reinterpret_cast<WindowsGetStringRawBuffer_t>(
+            GetProcAddress(combase, "WindowsGetStringRawBuffer")) : nullptr;
+        UINT32 length = 0;
+        if (SUCCEEDED(getTitle(properties, &mediaTitle)) && getStringBuffer) {
+            const wchar_t* buffer = getStringBuffer(mediaTitle, &length);
+            if (buffer && length) *title = std::wstring(buffer, length);
+        }
+        if (combase) FreeLibrary(combase);
+    }
+    ReleaseWinRtObject(properties);
+    ReleaseWinRtObject(operation);
+    ReleaseWinRtObject(session);
+    return !title->empty();
+}
+
+bool TryMediaSessionAction(int methodSlot) {
+    void* session = GetCurrentMediaSession();
+    if (!session) return false;
+    void* operation = nullptr;
+    auto action = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+        (*reinterpret_cast<void***>(session))[methodSlot]);
+    const bool accepted = SUCCEEDED(action(session, &operation));
+    ReleaseWinRtObject(operation);
+    ReleaseWinRtObject(session);
+    return accepted;
+}
+
+bool RefreshMediaSessionState() {
+    const bool oldAvailable = g_mediaSessionAvailable;
+    const bool oldPlaying = g_mediaSessionPlaying;
+    g_mediaSessionPlaying = false;
+    bool hasSession = false;
+
+    InitMediaSessionManager();
+    void* session = GetCurrentMediaSession();
+    if (session) {
+        hasSession = true;
+        void* playbackInfo = nullptr;
+        // GlobalSystemMediaTransportControlsSession::GetPlaybackInfo.
+        auto getPlaybackInfo = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, void**)>(
+            (*reinterpret_cast<void***>(session))[14]);
+        if (SUCCEEDED(getPlaybackInfo(session, &playbackInfo)) && playbackInfo) {
+            INT playbackStatus = 0;
+            // GlobalSystemMediaTransportControlsSessionPlaybackInfo::get_PlaybackStatus.
+            auto getPlaybackStatus = reinterpret_cast<HRESULT (STDMETHODCALLTYPE*)(void*, INT*)>(
+                (*reinterpret_cast<void***>(playbackInfo))[7]);
+            if (SUCCEEDED(getPlaybackStatus(playbackInfo, &playbackStatus))) {
+                // GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing.
+                g_mediaSessionPlaying = playbackStatus == 4;
+            }
+        }
+        ReleaseWinRtObject(playbackInfo);
+        ReleaseWinRtObject(session);
+    }
+    g_mediaSessionAvailable = hasSession;
+    return oldAvailable != g_mediaSessionAvailable || oldPlaying != g_mediaSessionPlaying;
 }
 
 void* GetRadioView(bool requestAccess = false) {
@@ -1954,8 +2158,289 @@ void OpenQuickSettingsDirect(const wchar_t* primaryUri,
     }
 }
 
+std::wstring ResolveMusicFolderPath() {
+    if (g_musicFolderPath[0] != L'\0') {
+        const DWORD attributes = GetFileAttributesW(g_musicFolderPath);
+        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return g_musicFolderPath;
+    }
+
+    wchar_t defaultMusicFolder[MAX_PATH] = L"";
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_MYMUSIC, nullptr,
+                                   SHGFP_TYPE_CURRENT, defaultMusicFolder))) {
+        return defaultMusicFolder;
+    }
+    return std::wstring();
+}
+
+bool IsSupportedMusicMediaFile(const wchar_t* fileName) {
+    const wchar_t* extension = wcsrchr(fileName, L'.');
+    if (!extension) return false;
+    static const wchar_t* const kSupportedExtensions[] = {
+        L".mp3", L".wav", L".flac", L".aac", L".m4a", L".wma", L".ogg", L".opus",
+        L".mp4", L".m4v", L".mkv", L".avi", L".mov", L".wmv", L".webm"
+    };
+    for (const wchar_t* supported : kSupportedExtensions) {
+        if (_wcsicmp(extension, supported) == 0) return true;
+    }
+    return false;
+}
+
+const wchar_t* MusicFileName(const std::wstring& path) {
+    const size_t separator = path.find_last_of(L"\\/");
+    return separator == std::wstring::npos ? path.c_str() : path.c_str() + separator + 1;
+}
+
+std::wstring MusicFileTitle(const std::wstring& pathOrTitle) {
+    const wchar_t* name = MusicFileName(pathOrTitle);
+    std::wstring title(name);
+    const size_t extension = title.find_last_of(L'.');
+    if (extension != std::wstring::npos) title.erase(extension);
+    return title;
+}
+
+std::wstring TrimTrailingSeparators(std::wstring path) {
+    // Preserve a drive root such as C:\\ while making ordinary folder paths
+    // compare identically whether the setting has a final slash or not.
+    while (path.size() > 3 && (path.back() == L'\\' || path.back() == L'/'))
+        path.pop_back();
+    return path;
+}
+
+bool IsConfiguredMusicFolder(const std::wstring& explorerFolder,
+                             const std::wstring& configuredFolder) {
+    return _wcsicmp(TrimTrailingSeparators(explorerFolder).c_str(),
+                    TrimTrailingSeparators(configuredFolder).c_str()) == 0;
+}
+
+// Do not cache this state. The user can close an Explorer window at any time,
+// and the next Play-button click must reopen the configured folder.
+bool IsMusicFolderOpenInExplorer() {
+    const std::wstring configuredFolder = ResolveMusicFolderPath();
+    if (configuredFolder.empty()) return false;
+
+    IShellWindows* shellWindows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(&shellWindows)))) {
+        return false;
+    }
+
+    bool isOpen = false;
+    long windowCount = 0;
+    shellWindows->get_Count(&windowCount);
+    for (long index = 0; index < windowCount && !isOpen; ++index) {
+        VARIANT itemIndex;
+        VariantInit(&itemIndex);
+        itemIndex.vt = VT_I4;
+        itemIndex.lVal = index;
+
+        IDispatch* dispatch = nullptr;
+        IWebBrowserApp* browser = nullptr;
+        IServiceProvider* serviceProvider = nullptr;
+        IShellBrowser* shellBrowser = nullptr;
+        IShellView* shellView = nullptr;
+        IFolderView2* folderView = nullptr;
+        IShellFolder* shellFolder = nullptr;
+        IPersistFolder2* persistFolder = nullptr;
+        PIDLIST_ABSOLUTE folderPidl = nullptr;
+
+        do {
+            if (FAILED(shellWindows->Item(itemIndex, &dispatch)) || !dispatch ||
+                FAILED(dispatch->QueryInterface(IID_PPV_ARGS(&browser))) ||
+                FAILED(browser->QueryInterface(IID_PPV_ARGS(&serviceProvider))) ||
+                FAILED(serviceProvider->QueryService(SID_STopLevelBrowser,
+                                                     IID_PPV_ARGS(&shellBrowser))) ||
+                FAILED(shellBrowser->QueryActiveShellView(&shellView)) ||
+                FAILED(shellView->QueryInterface(IID_PPV_ARGS(&folderView))) ||
+                FAILED(folderView->GetFolder(IID_PPV_ARGS(&shellFolder))) ||
+                FAILED(shellFolder->QueryInterface(IID_PPV_ARGS(&persistFolder))) ||
+                FAILED(persistFolder->GetCurFolder(&folderPidl))) {
+                break;
+            }
+
+            wchar_t explorerFolder[MAX_PATH] = L"";
+            isOpen = SHGetPathFromIDListW(folderPidl, explorerFolder) &&
+                     IsConfiguredMusicFolder(explorerFolder, configuredFolder);
+        } while (false);
+
+        if (folderPidl) CoTaskMemFree(folderPidl);
+        if (persistFolder) persistFolder->Release();
+        if (shellFolder) shellFolder->Release();
+        if (folderView) folderView->Release();
+        if (shellView) shellView->Release();
+        if (shellBrowser) shellBrowser->Release();
+        if (serviceProvider) serviceProvider->Release();
+        if (browser) browser->Release();
+        if (dispatch) dispatch->Release();
+    }
+    shellWindows->Release();
+    return isOpen;
+}
+
+// Reads one *open File Explorer window* through its actual IFolderView2.
+// IFolderView2::Item uses Explorer's displayed item index, so it retains the
+// view's current sort column, direction, grouping, and manual arrangement.
+bool AppendPlaylistFromExplorerView(IWebBrowserApp* browser,
+                                    const std::wstring& configuredFolder) {
+    IServiceProvider* serviceProvider = nullptr;
+    IShellBrowser* shellBrowser = nullptr;
+    IShellView* shellView = nullptr;
+    IFolderView2* folderView = nullptr;
+    IShellFolder* shellFolder = nullptr;
+    IPersistFolder2* persistFolder = nullptr;
+    PIDLIST_ABSOLUTE folderPidl = nullptr;
+    bool success = false;
+
+    do {
+        if (FAILED(browser->QueryInterface(IID_PPV_ARGS(&serviceProvider))) ||
+            FAILED(serviceProvider->QueryService(SID_STopLevelBrowser,
+                                                 IID_PPV_ARGS(&shellBrowser))) ||
+            FAILED(shellBrowser->QueryActiveShellView(&shellView)) ||
+            FAILED(shellView->QueryInterface(IID_PPV_ARGS(&folderView))) ||
+            FAILED(folderView->GetFolder(IID_PPV_ARGS(&shellFolder))) ||
+            FAILED(shellFolder->QueryInterface(IID_PPV_ARGS(&persistFolder))) ||
+            FAILED(persistFolder->GetCurFolder(&folderPidl))) {
+            break;
+        }
+
+        wchar_t explorerFolder[MAX_PATH] = L"";
+        if (!SHGetPathFromIDListW(folderPidl, explorerFolder) ||
+            !IsConfiguredMusicFolder(explorerFolder, configuredFolder)) {
+            break;
+        }
+
+        int itemCount = 0;
+        if (FAILED(folderView->ItemCount(SVGIO_ALLVIEW, &itemCount)))
+            break;
+
+        for (int index = 0; index < itemCount; ++index) {
+            PITEMID_CHILD childPidl = nullptr;
+            if (FAILED(folderView->Item(index, &childPidl)) || !childPidl)
+                continue;
+
+            PIDLIST_ABSOLUTE absolutePidl = ILCombine(folderPidl, childPidl);
+            CoTaskMemFree(childPidl);
+            if (!absolutePidl)
+                continue;
+
+            wchar_t mediaPath[MAX_PATH] = L"";
+            const bool isFile = SHGetPathFromIDListW(absolutePidl, mediaPath) &&
+                                (GetFileAttributesW(mediaPath) & FILE_ATTRIBUTE_DIRECTORY) == 0;
+            CoTaskMemFree(absolutePidl);
+            if (isFile && IsSupportedMusicMediaFile(mediaPath))
+                g_musicPlaylist.emplace_back(mediaPath);
+        }
+        success = !g_musicPlaylist.empty();
+    } while (false);
+
+cleanup:
+    if (folderPidl) CoTaskMemFree(folderPidl);
+    if (persistFolder) persistFolder->Release();
+    if (shellFolder) shellFolder->Release();
+    if (folderView) folderView->Release();
+    if (shellView) shellView->Release();
+    if (shellBrowser) shellBrowser->Release();
+    if (serviceProvider) serviceProvider->Release();
+    return success;
+}
+
+bool BuildMusicPlaylist() {
+    const std::wstring folder = ResolveMusicFolderPath();
+    g_musicPlaylist.clear();
+    g_musicCurrentIndex = -1;
+    if (folder.empty()) return false;
+
+    IShellWindows* shellWindows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(&shellWindows)))) {
+        return false;
+    }
+
+    long windowCount = 0;
+    shellWindows->get_Count(&windowCount);
+    for (long index = 0; index < windowCount; ++index) {
+        VARIANT itemIndex;
+        VariantInit(&itemIndex);
+        itemIndex.vt = VT_I4;
+        itemIndex.lVal = index;
+
+        IDispatch* dispatch = nullptr;
+        if (SUCCEEDED(shellWindows->Item(itemIndex, &dispatch)) && dispatch) {
+            IWebBrowserApp* browser = nullptr;
+            if (SUCCEEDED(dispatch->QueryInterface(IID_PPV_ARGS(&browser)))) {
+                // Do not enumerate or sort the directory ourselves. This is
+                // deliberately the exact item order supplied by Explorer.
+                if (AppendPlaylistFromExplorerView(browser, folder)) {
+                    browser->Release();
+                    dispatch->Release();
+                    break;
+                }
+                browser->Release();
+            }
+            dispatch->Release();
+        }
+    }
+    shellWindows->Release();
+
+    for (size_t i = 0; i < g_musicPlaylist.size(); ++i) {
+        if (_wcsicmp(g_musicPlaylist[i].c_str(), g_musicCurrentPath.c_str()) == 0) {
+            g_musicCurrentIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    return !g_musicPlaylist.empty();
+}
+
+void UpdateMusicCurrentFileFromActiveSession() {
+    std::wstring activeTitle;
+    if (!GetActiveMediaSessionTitle(&activeTitle)) return;
+    const std::wstring expectedTitle = MusicFileTitle(activeTitle);
+    int matchingIndex = -1;
+    for (size_t i = 0; i < g_musicPlaylist.size(); ++i) {
+        if (_wcsicmp(MusicFileTitle(g_musicPlaylist[i]).c_str(), expectedTitle.c_str()) == 0) {
+            // Do not guess when duplicate filenames would make the target
+            // ambiguous; the last widget-launched file remains authoritative.
+            if (matchingIndex >= 0) return;
+            matchingIndex = static_cast<int>(i);
+        }
+    }
+    if (matchingIndex >= 0) {
+        g_musicCurrentIndex = matchingIndex;
+        g_musicCurrentPath = g_musicPlaylist[matchingIndex];
+    }
+}
+
+bool PlayAdjacentMusicFile(int direction) {
+    if (!BuildMusicPlaylist()) {
+        OpenMusicFolder();
+        return false;
+    }
+
+    UpdateMusicCurrentFileFromActiveSession();
+    const int count = static_cast<int>(g_musicPlaylist.size());
+    int index = g_musicCurrentIndex;
+    if (index < 0) {
+        index = direction < 0 ? count - 1 : 0;
+    } else {
+        index = (index + direction + count) % count;
+    }
+
+    for (int attempt = 0; attempt < count; ++attempt) {
+        const std::wstring& path = g_musicPlaylist[index];
+        if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", path.c_str(),
+                                                     nullptr, nullptr, SW_SHOWNORMAL)) > 32) {
+            g_musicCurrentIndex = index;
+            g_musicCurrentPath = path;
+            return true;
+        }
+        index = (index + direction + count) % count;
+    }
+    return false;
+}
+
 void OpenMusicFolder() {
-    if (g_musicFolderPath[0] != L'\0' && TryOpenUri(g_musicFolderPath)) return;
+    const std::wstring folder = ResolveMusicFolderPath();
+    if (!folder.empty() && TryOpenUri(folder.c_str())) return;
     ShellExecuteW(nullptr, L"open", L"explorer.exe", L"shell:My Music", nullptr, SW_SHOWNORMAL);
 }
 
@@ -2415,17 +2900,18 @@ void DrawClock(Graphics& g, const Widget& widget, FontFamily& family) {
     }
 }
 
-void DrawBeamNotesIcon(Graphics& g, float cx, float cy, Color color) {
-    Pen pen(color, 3.0f);
-    pen.SetStartCap(LineCapRound);
-    pen.SetEndCap(LineCapRound);
+void DrawMusicPreviousIcon(Graphics& g, float cx, float cy, Color color) {
     SolidBrush brush(color);
-    g.DrawLine(&pen, cx - 8.0f, cy - 13.0f, cx - 8.0f, cy + 8.0f);
-    g.DrawLine(&pen, cx + 8.0f, cy - 17.0f, cx + 8.0f, cy + 4.0f);
-    g.DrawLine(&pen, cx - 8.0f, cy - 13.0f, cx + 8.0f, cy - 17.0f);
-    g.DrawLine(&pen, cx - 8.0f, cy - 8.0f, cx + 8.0f, cy - 12.0f);
-    FillEllipseF(g, &brush, cx - 18.0f, cy + 5.0f, 13.0f, 10.0f);
-    FillEllipseF(g, &brush, cx - 2.0f, cy + 1.0f, 13.0f, 10.0f);
+    g.FillRectangle(&brush, cx - 10.0f, cy - 10.0f, 3.0f, 20.0f);
+    PointF first[] = {PointF(cx - 5.0f, cy), PointF(cx + 7.0f, cy - 9.0f), PointF(cx + 7.0f, cy + 9.0f)};
+    g.FillPolygon(&brush, first, ARRAYSIZE(first));
+}
+
+void DrawMusicNextIcon(Graphics& g, float cx, float cy, Color color) {
+    SolidBrush brush(color);
+    g.FillRectangle(&brush, cx + 7.0f, cy - 10.0f, 3.0f, 20.0f);
+    PointF first[] = {PointF(cx + 5.0f, cy), PointF(cx - 7.0f, cy - 9.0f), PointF(cx - 7.0f, cy + 9.0f)};
+    g.FillPolygon(&brush, first, ARRAYSIZE(first));
 }
 
 void DrawMusic(Graphics& g, const Widget& widget) {
@@ -2460,28 +2946,32 @@ void DrawMusic(Graphics& g, const Widget& widget) {
             DrawRoundedRectangle(g, bar, 4, (i % 2) ? cyan : blue);
         }
     }
-    const float px = rc.X + 62.0f;
+    const float previousX = rc.X + 35.0f;
+    const float px = rc.X + 82.5f;
     const float py = rc.Y + 125;
-    const float nx = rc.X + 112.0f;
-    const float ny = py;
+    const float nextX = rc.X + 130.0f;
     if (jp) {
         SolidBrush jplayFrame(jp->musicPlayFrame);
+        FillEllipseF(g, &jplayFrame, previousX - 18.0f, py - 18.0f, 36.0f, 36.0f);
         FillEllipseF(g, &jplayFrame, px - 18.0f, py - 18.0f, 36.0f, 36.0f);
-        FillEllipseF(g, &jplayFrame, nx - 18.0f, ny - 18.0f, 36.0f, 36.0f);
+        FillEllipseF(g, &jplayFrame, nextX - 18.0f, py - 18.0f, 36.0f, 36.0f);
     } else {
+        FillEllipseF(g, &yellow, previousX - 18.0f, py - 18.0f, 36.0f, 36.0f);
         FillEllipseF(g, &yellow, px - 18.0f, py - 18.0f, 36.0f, 36.0f);
-        FillEllipseF(g, &yellow, nx - 18.0f, ny - 18.0f, 36.0f, 36.0f);
+        FillEllipseF(g, &yellow, nextX - 18.0f, py - 18.0f, 36.0f, 36.0f);
     }
     Color playGlyphColor = jp ? jp->musicPlayGlyph : theme ? theme->textOnHeader : liquidGlass ? MaterialAccentColor() : Color(255, 35, 35, 35);
     SolidBrush playGlyph(playGlyphColor);
-    if (g_mediaControlAvailable && g_mediaAudioActive) {
+    const bool playing = g_mediaSessionAvailable ? g_mediaSessionPlaying : g_mediaAudioActive;
+    if (playing) {
         DrawRoundedRectangle(g, RectF(px - 8.0f, py - 10.0f, 6.0f, 20.0f), 2.0f, playGlyph);
         DrawRoundedRectangle(g, RectF(px + 3.0f, py - 10.0f, 6.0f, 20.0f), 2.0f, playGlyph);
     } else {
         PointF points[] = {PointF(px - 5, py - 9), PointF(px - 5, py + 9), PointF(px + 10, py)};
         g.FillPolygon(&playGlyph, points, 3);
     }
-    DrawBeamNotesIcon(g, nx, ny, playGlyphColor);
+    DrawMusicPreviousIcon(g, previousX, py, playGlyphColor);
+    DrawMusicNextIcon(g, nextX, py, playGlyphColor);
 }
 
 void DrawVolumeIcon(Graphics& g, float cx, float cy, Color color);
@@ -3089,7 +3579,10 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 InitAudio();
                 RefreshVolume();
             }
-            if (IsWidgetEnabled(WidgetMusic)) RefreshMusicVisualizer();
+            if (IsWidgetEnabled(WidgetMusic)) {
+                InitMediaSessionManager();
+                RefreshMusicVisualizer();
+            }
             if (IsWidgetEnabled(WidgetBattery)) RefreshBattery();
             RefreshSlowSystemStates();
             if (IsWidgetEnabled(WidgetMode)) g_darkModeState = QueryDarkModeState();
@@ -3157,6 +3650,9 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             const bool hadAudioWidgets = IsWidgetEnabled(WidgetMusic) ||
                                          IsWidgetEnabled(WidgetVolume);
             LoadSettings();
+            g_musicPlaylist.clear();
+            g_musicCurrentPath.clear();
+            g_musicCurrentIndex = -1;
             UpdateVisualizerTimer(hwnd);
             const bool hasAudioWidgets = IsWidgetEnabled(WidgetMusic) ||
                                          IsWidgetEnabled(WidgetVolume);
@@ -3164,6 +3660,11 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 InitAudio();
             } else if (!hasAudioWidgets && hadAudioWidgets) {
                 ShutdownAudio();
+            }
+            if (IsWidgetEnabled(WidgetMusic)) {
+                InitMediaSessionManager();
+            } else {
+                ShutdownMediaSessionManager();
             }
             if (IsWidgetEnabled(WidgetMode))
                 g_darkModeState = QueryDarkModeState();
@@ -3256,10 +3757,14 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                     ToggleSystemMute();
                     Render();
                 } else if (relWidget == WidgetMusic && PtInMusicPlayButton(pt)) {
-                    ToggleMediaPlayPause();
+                    HandleMusicPlayPause();
                     Render();
-                } else if (relWidget == WidgetMusic && PtInMusicFolderButton(pt)) {
-                    OpenMusicFolder();
+                } else if (relWidget == WidgetMusic && PtInMusicPreviousButton(pt)) {
+                    HandleMusicPrevious();
+                    Render();
+                } else if (relWidget == WidgetMusic && PtInMusicNextButton(pt)) {
+                    HandleMusicNext();
+                    Render();
                 } else if (relWidget == WidgetMusic) {
                     return 0;
                 } else {
@@ -3290,6 +3795,7 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             KillTimer(hwnd, kVisualizerTimer);
             KillTimer(hwnd, kShortcutStateTimer);
             ShutdownAudio();
+            ShutdownMediaSessionManager();
             DestroyRenderSurface();
             g_hwnd = nullptr;
             PostQuitMessage(0);
