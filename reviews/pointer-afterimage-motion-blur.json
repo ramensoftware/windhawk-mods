@@ -9,6 +9,15 @@
       "parentId": null,
       "timestamp": 1792158153,
       "votes": 0
+    },
+    {
+      "authorName": "mayanksh3khar",
+      "content": "Makes the cursor appear smoother",
+      "id": 108,
+      "modVersion": "1.2",
+      "parentId": null,
+      "timestamp": 1794088509,
+      "votes": 0
     }
   ]
 }

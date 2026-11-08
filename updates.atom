@@ -2,12 +2,541 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-07T21:03:11.000Z</updated>
+    <updated>2026-11-08T01:03:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.3.1]]></title>
+        <id>https://windhawk.net/mods/overhaulded-alt-tab#5b1d0cdb276170cb6da30d20e314813571cd9b5a</id>
+        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
+        <updated>2026-11-08T01:03:57.000Z</updated>
+        <content type="html"><![CDATA[<h3>Added</h3>
+<ul>
+<li>Added configurable card motion speed (100% by default).</li>
+<li>Added independent animation controls for navigation and selector transitions.</li>
+<li>Added a toggle for the background mouse spotlight.</li>
+<li>Added Dots and Squares shapes to Pattern Waves.</li>
+<li>Added Fullscreen background</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>Refined carousel motion styles: Smooth, Linear, and Bouncy.</li>
+<li>Improved card transitions, animation timing, and synchronization with background effects.</li>
+<li>Adjusted Pattern Waves animation speed and reorganized animation settings.</li>
+<li>Made card visibility fully automatic, replacing the Visible Cards and Single Window Card settings.</li>
+<li>Optimized card layouts based on window count, displaying up to five cards in the carousel.</li>
+</ul>
+]]></content>
+        <author>
+            <name>IMiloDev</name>
+            <uri>https://github.com/IMiloDev</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Brave Acrylic 4.0]]></title>
+        <id>https://windhawk.net/mods/brave-acrylic#bb165c126f8428fa76189e2ae85861359379e2cb</id>
+        <link href="https://windhawk.net/mods/brave-acrylic"/>
+        <updated>2026-11-08T01:03:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add independent Toolbar and Address bar settings. The Address bar option is on by default and removes Brave’s hover shadow on supported builds. If you previously disabled Toolbar to keep the address field opaque, turn Address bar off separately.</li>
+<li>Enable Hide duplicate Windows buttons by default on fresh installs so affected users get a single set of controls without another setup step. The option can affect Alt+Space and taskbar menus. Turn it off to restore the original Windows window style.</li>
+<li>Clear the backing around rounded webpage content while preserving its clipping and thin outline.</li>
+<li>Add acrylic to Site information, Recent downloads and Media controls. Clear the download quick-action strip while preserving its controls.</li>
+<li>Add adjustable popup tint opacity and use a short matching fade for supported bubbles and their backdrop.</li>
+<li>Recognize Chromium 157’s virtual popup opacity setter and check for new stable Brave builds every hour.</li>
+<li>Add an opt-in fallback to the official Brave symbol server. Windhawk checks the small cache first and can download the full PDB if needed. The fallback is off by default.</li>
+</ul>
+]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Category Manager 1.0.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-category-manager#1bb17c4ae49310a35d19326a4c90aba02985a594</id>
+        <link href="https://windhawk.net/mods/start-menu-category-manager"/>
+        <updated>2026-11-08T01:03:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Start Menu Category Manager</h1>
+<p><img src="https://raw.githubusercontent.com/feuerdraws/start-menu-category-manager-assets/207a45adaff2a86e29031de2c1bafdd93ea6810f/Assets/Start_Menu_Category_Manager_Demonstration.gif" alt="Demonstration:"></p>
+<blockquote>
+<p><strong>Disclaimer:</strong> this mod is vibe coded. It was written with an AI assistant and tested only by its author on
+one setup. It changes what the Start menu reads from its category settings and restarts the Start menu process, so
+use it at your own risk and keep a backup of your layout (<strong>Export</strong> saves one).</p>
+</blockquote>
+<p>Adds a <strong>Manage Categories</strong> item to the Windows 11 Start menu's context menu
+(right-click an empty area of the Start menu, next to <strong>Start settings</strong>).</p>
+<p>Choosing <strong>Manage Categories</strong> closes the Start menu and opens the manager window.</p>
+<p>The manager window always runs inside <code>explorer.exe</code>. The small part of the mod that runs
+inside the Start menu process only adds the menu item and asks Explorer to open the window.
+If the item does not show up, the Windhawk log (lines starting with <code>[start]</code>) shows whether
+the Start menu process found the <strong>Start settings</strong> item.</p>
+<p>Whenever the mod is loaded (installed, updated, switched on again, or Explorer restarted), it restarts the Start menu
+process if that process started before the mod. The new process loads with the mod from its start, so the new menu
+item appears without restarting Explorer.</p>
+<p><strong>Your layout lives in this mod.</strong> The mod never writes to Windows' registry. It keeps the categories you
+choose in its own storage, and the part of the mod that runs inside the Start menu process gives Start your category
+when Start reads an app's category. If you disable or uninstall the mod, every category goes back to the one Windows
+chose, so keep the mod installed to keep your layout. <strong>Export</strong> saves a copy of it to a file. The layout belongs to
+the Windows account that made it: other accounts on the same PC keep their own.</p>
+<p><strong>Empty categories.</strong> In the category view of <strong>All apps</strong>, a category with no apps still shows up as an empty tile.
+The <strong>Hide empty category tiles</strong> option (on by default) hides those tiles, shows them again as soon as an app is
+assigned to the category, and lets the tiles after them move up to fill the gap. A tile counts as empty when its
+category holds no apps, so this does not depend on the display language, and pinned items and other tiles are never
+touched. This includes the empty <em>Other</em> container Windows 11 shows when you move every app out of <em>Other</em>. The option
+does not change any category and does not write to the registry. Changing it, like disabling the mod, restarts the
+Start menu process, because Start does not rebuild its category list every time the menu opens.</p>
+<p><strong>Export</strong> saves the category changes the mod applies (not Windows' own categories), including apps that are not
+installed, to a text file. <strong>Import</strong> adds such a file to your current changes. Export, Import and Reset all ask for
+confirmation first.</p>
+<p><strong>Reset all</strong> removes every change the mod applies, so every app goes back to the category Windows chose. It first
+writes a copy of your current layout to the mod's storage folder, which <strong>Import</strong> can load. Windhawk removes that
+folder together with the mod, so use <strong>Export</strong> if you want a copy that stays.</p>
+<p>The manager lists every app the Start menu knows about (desktop apps and Microsoft
+Store apps, taken from <code>shell:AppsFolder</code>) and lets you assign a Start menu category
+to an app or to a whole Start menu folder.</p>
+<h2>Notes</h2>
+<ul>
+<li>Shortcuts inside a folder that contains two or more shortcuts are treated as a
+group: changing one changes the whole folder, because the Start menu groups them.</li>
+<li>Choosing <strong>Windows default</strong> removes the mod's change for the app, so it goes back to the category Windows chose.</li>
+<li>Applying a change restarts StartMenuExperienceHost so it takes effect immediately.</li>
+<li>Windows keeps its categories under <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Start\TileProperties</code>. The mod
+only reads that key and never writes to it; its own changes are in the mod's storage.</li>
+<li>Start sometimes keeps several keys for the same app (a <code>P~</code> and a <code>W~</code> twin, and one
+key per Start menu shortcut). The mod gives the app's main key and all of its other keys the same category,
+so they can never disagree. Apps whose keys currently disagree (Windows' own values, for apps you have not changed)
+get a yellow <strong>*</strong> after their name; hover it for details.</li>
+<li>A heading with a red <strong>*</strong> after its name has 1 or 2 apps assigned to it, so Start folds those apps into a broader
+heading (see <strong>Category IDs</strong> below). A Start folder counts as one app, and <em>Other</em> is never marked. Hover the name
+for the same explanation. The list reloads by itself when a change makes a heading reach or leave that range.</li>
+<li>A folder whose apps are in different categories shows <strong>Mixed</strong> in its drop-down. Click a folder's card, or its
+arrow, to expand or collapse it.</li>
+<li>Press <strong>F5</strong> (or click the refresh button) to reload the app list. The refresh icon turns once and the status text
+blinks once, so you can see it went through.</li>
+<li>Hover any drop-down and turn the mouse wheel to go through its options. In a row's drop-down the new category is
+applied once the wheel has rested for about a second.</li>
+<li>The ID box at the bottom only appears after you choose <strong>Custom ID...</strong> in the bottom drop-down. Press <strong>Enter</strong>
+in it to apply the ID to the ticked apps straight away.</li>
+<li>Click an app's row (not its check box or drop-down) to see the registry key it uses in the status bar, below
+<code>TileProperties</code>, and how many other keys it has. A Start folder has no key of its own, so clicking its card shows how
+many apps it holds; each app inside shows its own key.</li>
+<li>The window follows the Windows display language: English, or Brazilian Portuguese
+(including the right-click menu item, <strong>Gerenciar Categorias</strong>).</li>
+<li>The drop-down next to the search box filters the list by the category assigned to each
+app. <strong>Check all</strong> ticks or unticks everything shown, and <strong>Expand all</strong> / <strong>Collapse all</strong>
+opens or closes every folder.</li>
+<li>Each entry of the category filter shows how many apps are assigned to it. The numbers count every
+app, not only the ones the search currently shows. Apps whose stored ID is not in the list are
+counted only under <em>All categories</em>.</li>
+<li>The <strong>Sort</strong> drop-down orders the list: A to Z, Z to A, by category ID (low to high or high to
+low), by category name, or with apps whose keys disagree first. Apps that have no override
+(<em>Windows default</em>) have no ID and are listed last in the ID and category orders. A folder is
+placed by the lowest ID among its apps (the highest for &quot;high to low&quot;). The order also applies
+inside each folder.</li>
+<li>Tick the boxes next to apps or folders to change many at once, then pick a category in the bottom drop-down and
+press <strong>Apply to ticked apps</strong>. It acts on every ticked app.</li>
+<li>Right-click an app or a folder card and choose <strong>Open file location</strong> to open the Start menu folder that holds its
+shortcut in File Explorer. For an app, the shortcut is selected. Apps without a Start menu shortcut (most Microsoft
+Store apps) have the item greyed out; clicking it says why in the status bar.</li>
+<li>Start stores a number per app. Choose <strong>Custom ID...</strong> to try any number from 0 to 999. The list shows
+each app's stored ID, so you can see which number Start itself used for an app that already sits under
+the heading you want.</li>
+</ul>
+<h2>Category IDs</h2>
+<p>Microsoft publishes no list of the numbers Start uses, so these were found by testing on Windows 11 26H2
+(build 26300), with Windows in Brazilian Portuguese. The names below are translations of the headings Start showed,
+so they may differ from what Start shows in English.</p>
+<table>
+<thead>
+<tr>
+<th>Heading</th>
+<th>IDs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Accessibility</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Business</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Creativity</td>
+<td>6, 7, 22, 23, 30</td>
+</tr>
+<tr>
+<td>Developer Tools</td>
+<td>15</td>
+</tr>
+<tr>
+<td>Education</td>
+<td>19</td>
+</tr>
+<tr>
+<td>Entertainment</td>
+<td>16</td>
+</tr>
+<tr>
+<td>Food &amp; Dining</td>
+<td>29</td>
+</tr>
+<tr>
+<td>Games</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Health &amp; Fitness</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Information &amp; Reading</td>
+<td>14, 21, 24, 25, 31</td>
+</tr>
+<tr>
+<td>Kids &amp; Family</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Lifestyle</td>
+<td>27</td>
+</tr>
+<tr>
+<td>Medical</td>
+<td>11</td>
+</tr>
+<tr>
+<td>Music</td>
+<td>17</td>
+</tr>
+<tr>
+<td>Other</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Personal Finance</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Productivity</td>
+<td>2, 5, 13</td>
+</tr>
+<tr>
+<td>Shopping</td>
+<td>28</td>
+</tr>
+<tr>
+<td>Social</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Sports</td>
+<td>26</td>
+</tr>
+<tr>
+<td>Travel</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Utilities &amp; Tools</td>
+<td>9</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Several IDs lead to the same heading (for example 2, 5 and 13 all show under <em>Productivity</em>).</li>
+<li><strong>Start only shows a heading as its own tile when at least 3 apps are assigned to it.</strong> With fewer, those apps
+are shown under a broader heading, even though their ID is unchanged: <em>Games</em>, <em>Music</em> and <em>Sports</em> fall under
+<em>Entertainment</em>, and <em>Travel</em>, <em>Medical</em>, <em>Health &amp; Fitness</em>, <em>Personal Finance</em>, <em>Shopping</em> and
+<em>Food &amp; Dining</em> fall under <em>Lifestyle</em>. Give a third app the same ID and the tile appears by itself.</li>
+<li>An app inside a Start menu folder seems to count as one app, however many apps the folder holds.</li>
+<li>IDs above 31 have no name. An ID above 31 with 3 or more apps gets a heading with no title, and with fewer apps
+those apps fall under <em>Other</em>, so stay with the IDs above.</li>
+</ul>
+<h2>Start menu restarts</h2>
+<p>Applying a change, <strong>Import</strong>, <strong>Reset all</strong>, loading the mod and disabling or removing it all restart the Start menu
+process, so Start can flash or close for a moment each time. A restart is skipped when nothing actually changed, and
+a Start process that started within the last second is left alone.</p>
+<h2>Uninstalling or disabling</h2>
+<p>The mod makes no permanent change to Windows' own category values. When it is disabled, uninstalled or updated, the
+Start menu process restarts and reads its own values again, so every category goes back to the one Windows chose. Your
+layout stays in the mod's storage while the mod is installed, so disabling and enabling the mod (or updating it) brings
+your categories back. Windhawk removes the storage together with the mod, so use <strong>Export</strong> first if you want to keep
+your layout.</p>
+<h2>Tested on</h2>
+<p>Only Windows 11 build 26300, on one x64 computer, with Windows in Brazilian Portuguese. The mod has not been
+tested on ARM64, because I have no ARM64 device. On any other build the mod may
+fail to attach to the Start menu (see below).</p>
+<h2>If a Windows update breaks the mod</h2>
+<p>The mod depends on private parts of the Start menu that Microsoft can change without notice. It was written and tested
+on Windows 11 build 26300. When something stops matching, the mod keeps running and only the affected part stops
+working. What you may see:</p>
+<ul>
+<li><strong>No &quot;Manage Categories&quot; item in the Start menu's right-click menu.</strong> The menu hook did not attach. Windows then also
+shows a one-time message per Windows build.</li>
+<li><strong>Your categories stop applying</strong> (the manager still opens and lists them). The hook on <code>RegGetValueW</code> in
+<code>kernelbase.dll</code>, which gives Start your category, is not being used by this build of Start. The log lines starting
+with <code>[start]</code> say whether it was installed and whether it served a category.</li>
+<li><strong>Empty tiles are not hidden, or are hidden but the other tiles do not move up.</strong> The hooks for the <strong>Hide empty
+category tiles</strong> option were not found (all of them are optional). If only the <code>ReplaceAll</code> hook is missing, the
+empty tiles are still hidden and only the gaps return. The menu item and your categories are not affected.</li>
+</ul>
+<p>Where to look: the Windhawk log (lines starting with <code>[start]</code>) says whether the hooks were found. The function the
+mod needs in the Start menu DLL (<code>StartMenu.dll</code>, or <code>StartUI.dll</code> on some builds) is
+<code>consume_..._IVector&lt;IVector&lt;MenuFlyoutItemBase&gt;&gt;::Append</code>, which adds the menu item. The empty-tile option also uses
+<code>CategoryProvider::PruneAndCombineCategories</code>, <code>StartBlendedFlexFrame::OnContextRequested</code> and the <code>ReplaceAll</code> of the
+category list (<code>AllAppsGroupViewModel</code>), all optional. To find their new names after an update, search the Start menu
+DLL's symbols in Windhawk for those class and function names. The mod also hooks
+<code>RegGetValueW</code> in <code>kernelbase.dll</code> inside the Start menu process, which <code>StartTileData.dll</code> uses to read each app's
+<code>Category</code> value.</p>
+<hr>
+<h1>Gerenciador de Categorias do Menu Iniciar</h1>
+<blockquote>
+<p><strong>Aviso:</strong> este mod foi feito com &quot;vibe coding&quot;. Foi escrito com um assistente de IA e testado apenas pelo autor,
+em uma única configuração. Ele altera o que o menu Iniciar lê das suas configurações de categoria e reinicia o
+processo do menu Iniciar, então use por sua conta e risco e guarde um backup do seu layout (<strong>Exportar</strong> salva um).</p>
+</blockquote>
+<p>Adiciona o item <strong>Gerenciar Categorias</strong> ao menu de contexto do menu Iniciar do Windows 11
+(clique com o botão direito em uma área vazia do menu Iniciar, ao lado do item de configurações do Iniciar).</p>
+<p>Ao escolher <strong>Gerenciar Categorias</strong>, o menu Iniciar fecha e a janela do gerenciador abre.</p>
+<p>A janela do gerenciador sempre roda dentro do <code>explorer.exe</code>. A pequena parte do mod que roda
+dentro do processo do menu Iniciar apenas adiciona o item de menu e pede ao Explorer que abra a janela.
+Se o item não aparecer, o log do Windhawk (linhas que começam com <code>[start]</code>) mostra se
+o processo do menu Iniciar encontrou o item de configurações do Iniciar.</p>
+<p>Sempre que o mod é carregado (instalado, atualizado, ativado novamente ou com o Explorer reiniciado), ele reinicia o
+processo do menu Iniciar caso esse processo tenha começado antes do mod. O novo processo já carrega o mod desde o início,
+então o novo item de menu aparece sem reiniciar o Explorer.</p>
+<p><strong>Seu layout fica neste mod.</strong> O mod nunca grava no registro do Windows. Ele guarda as categorias que você
+escolhe no seu próprio armazenamento, e a parte do mod que roda dentro do processo do menu Iniciar entrega a sua
+categoria ao Iniciar quando ele lê a categoria de um app. Se você desativar ou desinstalar o mod, todas as categorias
+voltam para a que o Windows escolheu, então mantenha o mod instalado para manter o seu layout. <strong>Exportar</strong> salva uma
+cópia dele em um arquivo. O layout pertence à conta do Windows que o criou: outras contas no mesmo PC mantêm as suas.</p>
+<p><strong>Categorias vazias.</strong> Na visualização por categorias de <strong>Todos os aplicativos</strong>, uma categoria sem apps ainda aparece
+como um bloco vazio. A opção <strong>Hide empty category tiles</strong> (ocultar blocos de categorias vazias, ativada por padrão)
+oculta esses blocos, mostra-os de novo assim que um app é atribuído à categoria e faz os blocos seguintes subirem para
+preencher o espaço. Um bloco conta como vazio quando a categoria não contém apps, então isso não depende do idioma de
+exibição, e itens fixados e outros blocos nunca são alterados. Isso inclui o contêiner <em>Outro</em> vazio que o Windows 11
+mostra quando você move todos os apps para fora de <em>Outro</em>. A opção não altera nenhuma categoria e não grava no
+registro. Alterá-la, assim como desativar o mod, reinicia o processo do menu Iniciar, porque o Iniciar não reconstrói
+a lista de categorias toda vez que o menu abre.</p>
+<p><strong>Exportar</strong> salva em um arquivo de texto as alterações de categoria que o mod aplica (não as categorias do próprio
+Windows), incluindo apps que não estão instalados. <strong>Importar</strong> adiciona esse arquivo às suas alterações atuais.
+Exportar, Importar e Redefinir tudo pedem confirmação antes.</p>
+<p><strong>Redefinir tudo</strong> remove todas as alterações que o mod aplica, então todos os apps voltam para a categoria que o
+Windows escolheu. Antes, ele grava uma cópia do seu layout atual na pasta de armazenamento do mod, que o <strong>Importar</strong>
+consegue carregar. O Windhawk remove essa pasta junto com o mod, então use <strong>Exportar</strong> se quiser uma cópia que fique.</p>
+<p>O gerenciador lista todos os apps que o menu Iniciar conhece (apps da área de trabalho e apps da Microsoft
+Store, obtidos de <code>shell:AppsFolder</code>) e permite atribuir uma categoria do menu Iniciar
+a um app ou a uma pasta inteira do menu Iniciar.</p>
+<h2>Observações</h2>
+<ul>
+<li>Atalhos dentro de uma pasta que contém dois ou mais atalhos são tratados como um
+grupo: alterar um altera a pasta inteira, porque o menu Iniciar os agrupa.</li>
+<li>Escolher <strong>Padrão do Windows</strong> remove a alteração do mod para o app, que volta para a categoria que o Windows escolheu.</li>
+<li>Aplicar uma alteração reinicia o StartMenuExperienceHost para que ela tenha efeito imediatamente.</li>
+<li>O Windows guarda suas categorias em <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Start\TileProperties</code>. O mod
+apenas lê essa chave e nunca grava nela; as alterações do mod ficam no armazenamento do próprio mod.</li>
+<li>O Iniciar às vezes mantém várias chaves para o mesmo app (uma gêmea <code>P~</code> e outra <code>W~</code>, e uma
+chave por atalho do menu Iniciar). O mod dá à chave principal do app e a todas as outras chaves a mesma categoria,
+para que nunca divirjam. Apps cujas chaves divergem no momento (valores do próprio Windows, para apps que você não
+alterou) recebem um <strong>*</strong> amarelo depois do nome; passe o mouse sobre ele para ver detalhes.</li>
+<li>Um título com um <strong>*</strong> vermelho depois do nome tem 1 ou 2 apps atribuídos, então o Iniciar dobra esses apps em um
+título mais amplo (veja <strong>IDs de categoria</strong> abaixo). Uma pasta do Iniciar conta como um app, e <em>Outro</em> nunca é
+marcado. Passe o mouse sobre o nome para ver a mesma explicação. A lista recarrega sozinha quando uma alteração faz
+um título entrar ou sair dessa faixa.</li>
+<li>Uma pasta cujos apps estão em categorias diferentes mostra <strong>Misto</strong> na lista suspensa. Clique no cartão da pasta,
+ou na seta dela, para expandir ou recolher.</li>
+<li>Pressione <strong>F5</strong> (ou clique no botão de atualizar) para recarregar a lista de apps. O ícone de atualizar gira uma vez
+e o texto de status pisca uma vez, para você ver que funcionou.</li>
+<li>Passe o mouse sobre qualquer lista suspensa e gire a roda do mouse para percorrer as opções. Na lista suspensa de uma
+linha, a nova categoria é aplicada quando a roda fica parada por cerca de um segundo.</li>
+<li>A caixa de ID na parte de baixo só aparece depois que você escolhe <strong>ID personalizado...</strong> na lista suspensa de
+baixo. Pressione <strong>Enter</strong> nela para aplicar o ID aos apps marcados imediatamente.</li>
+<li>Clique na linha de um app (não na caixa de seleção nem na lista suspensa) para ver na barra de status a chave de
+registro que ele usa, abaixo de <code>TileProperties</code>, e quantas outras chaves ele tem. Uma pasta do Iniciar não tem
+chave própria, então clicar no cartão dela mostra quantos apps ela contém; cada app dentro mostra a sua própria chave.</li>
+<li>A janela segue o idioma de exibição do Windows: inglês ou português do Brasil
+(incluindo o item do menu de contexto, <strong>Gerenciar Categorias</strong>).</li>
+<li>A lista suspensa ao lado da caixa de pesquisa filtra a lista pela categoria atribuída a cada
+app. <strong>Marcar tudo</strong> marca ou desmarca tudo o que está sendo exibido, e <strong>Expandir tudo</strong> / <strong>Recolher tudo</strong>
+abre ou fecha todas as pastas.</li>
+<li>Cada entrada do filtro de categorias mostra quantos apps estão atribuídos a ela. Os números contam todos os
+apps, não apenas os que a pesquisa mostra no momento. Apps cujo ID armazenado não está na lista são
+contados apenas em <em>todas as categorias</em>.</li>
+<li>A lista suspensa <strong>Ordem</strong> organiza a lista: A a Z, Z a A, por ID de categoria (crescente ou
+decrescente), por nome da categoria, ou com os apps de chaves divergentes primeiro. Apps sem alteração
+(<em>Padrão do Windows</em>) não têm ID e ficam por último nas ordens por ID e por categoria. Uma pasta é
+posicionada pelo menor ID entre seus apps (o maior, em &quot;decrescente&quot;). A ordem também vale
+dentro de cada pasta.</li>
+<li>Marque as caixas ao lado de apps ou pastas para alterar vários de uma vez, depois escolha uma categoria na lista
+suspensa de baixo e clique em <strong>Aplicar aos marcados</strong>. Isso vale para todos os apps marcados.</li>
+<li>Clique com o botão direito em um app ou no cartão de uma pasta e escolha <strong>Abrir local do arquivo</strong> para abrir no
+Explorador de Arquivos a pasta do menu Iniciar que guarda o atalho dele. Para um app, o atalho fica selecionado.
+Apps sem atalho no menu Iniciar (a maioria dos apps da Microsoft Store) têm o item desabilitado; clicar nele
+explica o motivo na barra de status.</li>
+<li>O Iniciar guarda um número por app. Escolha <strong>ID personalizado...</strong> para testar qualquer número de 0 a 999. A lista
+mostra o ID armazenado de cada app, para você ver qual número o próprio Iniciar usou para um app que já está
+sob o título que você quer.</li>
+</ul>
+<h2>IDs de categoria</h2>
+<p>A Microsoft não publica uma lista dos números que o Iniciar usa, então estes foram encontrados por testes no
+Windows 11 26H2 (build 26300). Os nomes abaixo são os títulos exatamente como o Iniciar os mostra em português do
+Brasil.</p>
+<table>
+<thead>
+<tr>
+<th>Título</th>
+<th>IDs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Acessibilidade</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Bares e Restaurantes</td>
+<td>29</td>
+</tr>
+<tr>
+<td>Comercial</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Compras</td>
+<td>28</td>
+</tr>
+<tr>
+<td>Crianças + Família</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Criatividade</td>
+<td>6, 7, 22, 23, 30</td>
+</tr>
+<tr>
+<td>Educação</td>
+<td>19</td>
+</tr>
+<tr>
+<td>Entretenimento</td>
+<td>16</td>
+</tr>
+<tr>
+<td>Esportes</td>
+<td>26</td>
+</tr>
+<tr>
+<td>Estilo de vida</td>
+<td>27</td>
+</tr>
+<tr>
+<td>Ferramentas de Desenvolvedor</td>
+<td>15</td>
+</tr>
+<tr>
+<td>Finanças Pessoais</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Informações e Leitura</td>
+<td>14, 21, 24, 25, 31</td>
+</tr>
+<tr>
+<td>Jogos</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Medicina</td>
+<td>11</td>
+</tr>
+<tr>
+<td>Música</td>
+<td>17</td>
+</tr>
+<tr>
+<td>Outro</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Produtividade</td>
+<td>2, 5, 13</td>
+</tr>
+<tr>
+<td>Saúde e Bem-estar</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Social</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Utilitários e Ferramentas</td>
+<td>9</td>
+</tr>
+<tr>
+<td>Viagem</td>
+<td>4</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Vários IDs levam ao mesmo título (por exemplo, 2, 5 e 13 aparecem todos em <em>Produtividade</em>).</li>
+<li><strong>O Iniciar só mostra um título como bloco próprio quando pelo menos 3 apps estão atribuídos a ele.</strong> Com menos,
+esses apps aparecem sob um título mais amplo, mesmo que o ID não mude: <em>Jogos</em>, <em>Música</em> e <em>Esportes</em> ficam em
+<em>Entretenimento</em>, e <em>Viagem</em>, <em>Medicina</em>, <em>Saúde e Bem-estar</em>, <em>Finanças Pessoais</em>, <em>Compras</em> e
+<em>Bares e Restaurantes</em> ficam em <em>Estilo de vida</em>. Dê o mesmo ID a um terceiro app e o bloco aparece sozinho.</li>
+<li>Um app dentro de uma pasta do menu Iniciar parece contar como um app, não importa quantos apps a pasta contenha.</li>
+<li>IDs acima de 31 não têm nome. Um ID acima de 31 com 3 ou mais apps ganha um título sem nome, e com menos apps
+esses apps ficam em <em>Outro</em>, então use os IDs até 31.</li>
+</ul>
+<h2>Reinicializações do menu Iniciar</h2>
+<p>Aplicar uma alteração, <strong>Importar</strong>, <strong>Redefinir tudo</strong>, carregar o mod e desativá-lo ou removê-lo reiniciam o
+processo do menu Iniciar, então o Iniciar pode piscar ou fechar por um instante a cada vez. A reinicialização é
+ignorada quando nada mudou de fato, e um processo do Iniciar que começou há menos de um segundo é deixado em paz.</p>
+<h2>Desinstalar ou desativar</h2>
+<p>O mod não faz nenhuma alteração permanente nos valores de categoria do próprio Windows. Quando ele é desativado,
+desinstalado ou atualizado, o processo do menu Iniciar reinicia e lê seus próprios valores de novo, então todas as
+categorias voltam para a que o Windows escolheu. Seu layout fica no armazenamento do mod enquanto ele estiver
+instalado, então desativar e ativar o mod (ou atualizá-lo) traz suas categorias de volta. O Windhawk remove o
+armazenamento junto com o mod, então use <strong>Exportar</strong> antes se quiser guardar o seu layout.</p>
+<h2>Testado em</h2>
+<p>Apenas no Windows 11 build 26300, em um computador x64, com o Windows em português do Brasil. O mod não foi
+testado em ARM64, porque não tenho um dispositivo ARM64. Em qualquer outro build, o mod pode
+não conseguir se conectar ao menu Iniciar (veja abaixo).</p>
+<h2>Se uma atualização do Windows quebrar o mod</h2>
+<p>O mod depende de partes privadas do menu Iniciar que a Microsoft pode alterar sem aviso. Ele foi escrito e testado
+no Windows 11 build 26300. Quando algo deixa de corresponder, o mod continua rodando e apenas a parte afetada
+deixa de funcionar. O que você pode ver:</p>
+<ul>
+<li><strong>Sem o item &quot;Gerenciar Categorias&quot; no menu de contexto do menu Iniciar.</strong> O hook do menu não foi conectado. O
+Windows também mostra uma mensagem única por build do Windows.</li>
+<li><strong>Suas categorias deixam de ser aplicadas</strong> (o gerenciador ainda abre e as lista). O hook em <code>RegGetValueW</code> na
+<code>kernelbase.dll</code>, que entrega a sua categoria ao Iniciar, não está sendo usado por este build do Iniciar. As linhas
+de log que começam com <code>[start]</code> dizem se ele foi instalado e se entregou uma categoria.</li>
+<li><strong>Blocos vazios não são ocultados, ou são ocultados mas os outros blocos não sobem.</strong> Os hooks da opção
+<strong>Hide empty category tiles</strong> não foram encontrados (todos são opcionais). Se apenas o hook de <code>ReplaceAll</code> estiver
+faltando, os blocos vazios continuam ocultos e só os espaços voltam. O item de menu e suas categorias não são afetados.</li>
+</ul>
+<p>Onde procurar: o log do Windhawk (linhas que começam com <code>[start]</code>) diz se os hooks foram encontrados. A função que o
+mod precisa na DLL do menu Iniciar (<code>StartMenu.dll</code>, ou <code>StartUI.dll</code> em alguns builds) é
+<code>consume_..._IVector&lt;IVector&lt;MenuFlyoutItemBase&gt;&gt;::Append</code>, que adiciona o item de menu. A opção de blocos vazios também
+usa <code>CategoryProvider::PruneAndCombineCategories</code>, <code>StartBlendedFlexFrame::OnContextRequested</code> e o <code>ReplaceAll</code> da
+lista de categorias (<code>AllAppsGroupViewModel</code>), todos opcionais. Para encontrar os novos nomes depois de uma
+atualização, procure os símbolos da DLL do menu Iniciar no Windhawk por esses nomes de classe e função. O mod também
+conecta <code>RegGetValueW</code> na <code>kernelbase.dll</code> dentro do processo do menu Iniciar, que a <code>StartTileData.dll</code> usa para
+ler o valor <code>Category</code> de cada app.</p>
+]]></content>
+        <author>
+            <name>Feuer</name>
+            <uri>https://github.com/feuerdraws</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Outlook Refined 0.6.1]]></title>
         <id>https://windhawk.net/mods/outlook-refined#e4a1aeceacc4da99b4b2f1848ef84b6655ee5250</id>
@@ -680,90 +1209,6 @@ animation and the card are skipped then as well, whether Quiet mode is on or off
         <author>
             <name>DpakB</name>
             <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 1.0.4]]></title>
-        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#5a52fd297ff23b70877e27fb8d5860b53c3e5002</id>
-        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
-        <updated>2026-11-06T04:00:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added full touchscreen support, including scrolling, pinch-to-zoom, gestures, and drag-and-drop.</li>
-<li>Added mouse and touch shortcuts: double-click empty space to go up a folder, middle-click folders to open new tabs, and two-finger tap to open context menus.</li>
-<li>Improved file tooltips with detailed metadata, including file sizes, dates, dimensions, and localized relative dates.</li>
-<li>Added selection checkboxes, including a Select All checkbox.</li>
-<li>Redesigned drag-and-drop previews with stacked icons, thumbnails, and smooth animations.</li>
-<li>Added support for native Windows 11 context menus.</li>
-<li>Added persistent folder sorting, synchronized with Explorer's native view.</li>
-<li>Fixed blurry interface elements and inconsistent DPI scaling.</li>
-<li>Fixed cloud, network, and virtual folders incorrectly appearing empty.</li>
-<li>Fixed folders occasionally failing to open or losing selections.</li>
-<li>Fixed Select All occasionally clearing the selection instead.</li>
-<li>Fixed missing icons and incorrect shortcut or cloud status overlays.</li>
-<li>Fixed flickering during window resizing, file renaming, and folder navigation.</li>
-<li>Fixed Explorer's native view not restoring correctly when switching views.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DarkionAvey</name>
-            <uri>https://github.com/DarkionAvey</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Centralizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-centralizer#877a07f2d63957f5bd9ce4329762e847731fdf8c</id>
-        <link href="https://windhawk.net/mods/window-centralizer"/>
-        <updated>2026-11-06T04:00:18.000Z</updated>
-        <content type="html"><![CDATA[<h1>Window Centralizer</h1>
-<p>New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.</p>
-<p>The window is placed <strong>before</strong> it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.</p>
-<h2>Modes</h2>
-<ul>
-<li><strong>Parent window / monitor</strong>: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.</li>
-<li><strong>Parent monitor only</strong>: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.</li>
-<li><strong>Mouse cursor</strong>: centered on the mouse cursor.</li>
-</ul>
-<p>In every mode the window is kept inside the monitor's work area.</p>
-<h2>Which windows are moved</h2>
-<ul>
-<li>Only windows with a title bar that are smaller than the <strong>window size limit to target</strong> setting (a percentage of the monitor's work area). Large main windows keep their assigned position.</li>
-<li>Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.</li>
-<li>Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, so they can be seen jumping after appearing.</li>
-<li>Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.</li>
-<li>A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.</li>
-<li>Some programs move their window again right after showing it (Firefox). The mod takes care of that. Initial moves by other tools (FancyZones), and the user's own dragging, are left alone.</li>
-</ul>
-<h2>Ignoring windows</h2>
-<p>Press <strong>Win+Alt+I</strong> while a window is active to stop centering that kind of window. Press it again to undo. A short notification confirms the option.</p>
-<p>It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.</p>
-<p>The <strong>Ignored windows</strong> list opens with <strong>Win+Ctrl+Alt+I</strong>, and entries can be reviewed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.</p>
-<p>Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.</p>
-<h2>Compatibility</h2>
-<p>Don't use this mod together with <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp">Center New Windows</a>. Both reposition windows as they are shown, so the same window would be moved twice, especially dialogs when that mod's &quot;Always center dialogs&quot; option is on.</p>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinTips OSD 1.4.1]]></title>
-        <id>https://windhawk.net/mods/wintips-osd#85f2f9f7fe7d0488db6034e8d1a8cbb3e6fe4465</id>
-        <link href="https://windhawk.net/mods/wintips-osd"/>
-        <updated>2026-11-06T03:04:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New &quot;Language&quot; setting: follow Windows (simplified Chinese on a Chinese Windows, English on every other language), or pin the card to English or Chinese.</li>
-<li>Setting names, descriptions and the drop-down option labels are now fully bilingual, so a Chinese Windhawk no longer shows English options next to Chinese labels.</li>
-<li>Follow an auto-hidden taskbar: the card lifts as the bar slides out and settles back to the screen edge as it retracts, instead of being pinned to the work area.</li>
-<li>New &quot;Card size&quot; setting (60–200%) that scales the text, icon, accent bar and the ×N badge together.</li>
-<li>&quot;Show on&quot; now defaults to the display with the active window; &quot;Cursor&quot; and &quot;Primary&quot; are still available.</li>
-<li>The follow loop caches the taskbar window and monitor handle instead of walking top-level windows 17 times a second.</li>
-<li>Per-monitor DPI is now read with GetDpiForMonitor, and the taskbar cache is dropped on display or DPI changes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DoYouNatureQ</name>
-            <uri>https://github.com/DoYouNatureQ</uri>
         </author>
     </entry>
 </feed>
