@@ -14,12 +14,12 @@
 # Paste Clipboard Content to Explorer
 
 Allows pasting text and images from clipboard as files in Explorer,
-on the desktop and in open/save file dialogs. The version 2.0 has been expanded with features by user Aliipey.
+on the desktop and in open/save file dialogs. Version 2.0 adds features by user Aliipey.
 
 ## Features
 - Paste text as a file (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
 - Optionally detect the text type (e.g. JSON, HTML, Python, SQL, Markdown, YAML)
-  and use it as the file extension instead of .txt (works with UTF-8 encoding only)
+  and use it as the file extension instead of .txt
 - Paste images as .png
 - After pasting, the new file is selected and put into rename mode,
   like New → Text Document
@@ -813,20 +813,23 @@ struct PendingSelect
 };
 static std::map<DWORD, PendingSelect> g_pending;   // key: thread that called SetTimer
 static std::mutex                     g_pendingMutex;
-static std::atomic<bool>              g_unloading{false};
+static std::atomic<bool>              g_unloading{false};   // written under g_pendingMutex
 
 static const UINT kSelectRetryMs     = 60;
 static const int  kSelectMaxAttempts = 40;   // ~2.4 s
 
 // MUST run on the thread that created the timer. Only touches that thread's entry.
-static void StopPendingSelect()
+// If onlyTimerId != 0, the entry is removed only while it still belongs to that timer
+// (a nested paste may have replaced it in the meantime).
+static void StopPendingSelect(UINT_PTR onlyTimerId = 0)
 {
     PendingSelect entry;
     {
         std::lock_guard<std::mutex> lock(g_pendingMutex);
         auto it = g_pending.find(GetCurrentThreadId());
         if (it == g_pending.end()) return;
-        entry = it->second;
+        if (onlyTimerId && it->second.timerId != onlyTimerId) return;
+        entry = std::move(it->second);
         g_pending.erase(it);
     }
     if (entry.timerId) KillTimer(nullptr, entry.timerId);
@@ -847,11 +850,12 @@ static BOOL CALLBACK FirstThreadWindowProc(HWND hwnd, LPARAM lParam)
 // Called from Wh_ModUninit (engine thread): stop every timer on its own thread.
 static void CancelAllPendingSelects()
 {
-    g_unloading = true;
-
     std::vector<std::pair<DWORD, HWND>> targets;
     {
+        // Flag and snapshot in one critical section: every insert either
+        // happened before this block (and is in the snapshot) or sees the flag.
         std::lock_guard<std::mutex> lock(g_pendingMutex);
+        g_unloading = true;
         for (auto& kv : g_pending) targets.emplace_back(kv.first, kv.second.hwnd);
     }
 
@@ -897,7 +901,7 @@ static VOID CALLBACK PendingSelectTimerProc(HWND, UINT, UINT_PTR id, DWORD)
             hwnd     = it->second.hwnd;
             path     = it->second.path;
             view     = it->second.view;
-            view->AddRef();   // stays valid even if a nested paste stops us
+            view->AddRef();   // stays valid even if a nested paste replaces the entry
         }
     }
     if (stale) { KillTimer(nullptr, id); return; }
@@ -907,12 +911,14 @@ static VOID CALLBACK PendingSelectTimerProc(HWND, UINT, UINT_PTR id, DWORD)
                     attempts >= kSelectMaxAttempts;
     view->Release();
 
-    if (finished) StopPendingSelect();
+    // Stop only our own entry: a nested paste may have replaced it already
+    // (and killed our timer in the process).
+    if (finished) StopPendingSelect(id);
 }
 
 static void ScheduleSelectAndRename(HWND hwnd, const std::wstring& path)
 {
-    if (g_unloading) return;
+    if (g_unloading) return;   // fast path, the real check is under the lock below
 
     // The SendMessage/PostMessage hooks run on the caller's thread. The timer
     // and the window must belong to the same thread, otherwise skip.
@@ -936,8 +942,19 @@ static void ScheduleSelectAndRename(HWND hwnd, const std::wstring& path)
     e.view    = pSV;
     e.timerId = timerId;
 
-    std::lock_guard<std::mutex> lock(g_pendingMutex);
-    g_pending[GetCurrentThreadId()] = e;
+    bool unloading = false;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        unloading = g_unloading;
+        if (!unloading) g_pending[GetCurrentThreadId()] = e;
+    }
+    if (unloading)
+    {
+        // Mod is being unloaded and the snapshot is already taken: undo everything
+        // here, on the thread that owns the timer and the view.
+        KillTimer(nullptr, timerId);
+        pSV->Release();
+    }
 }
 
 // ============================================================
@@ -1752,7 +1769,10 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
 BOOL Wh_ModInit()
 {
     Wh_Log(L"PasteClipboardToExplorer: Init");
-    g_unloading = false;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        g_unloading = false;
+    }
     LoadSettings();
 
     InitializeCriticalSection(&g_gdiplusCS);
