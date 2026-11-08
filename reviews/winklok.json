@@ -1,0 +1,14 @@
+{
+  "modId": "winklok",
+  "reviews": [
+    {
+      "authorName": "goOSe",
+      "content": "I stumbled across this windhawk mod earlier today, and it's honestly been a game changer, I used to use windows clock but that requires the notifications service to be running (which I did not want running because it's quite resource intensive). However, now I can set all my reminders, tasks, etc and add notes in a handy and fluent menu just one click away! And what I love is that this does not invoke the notifications service at all and instead runs it's own UI and stuff which makes it light and fast.",
+      "id": 112,
+      "modVersion": "1.1.0",
+      "parentId": null,
+      "timestamp": 1794163859,
+      "votes": 0
+    }
+  ]
+}

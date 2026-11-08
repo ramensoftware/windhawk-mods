@@ -2,12 +2,272 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-08T19:01:48.000Z</updated>
+    <updated>2026-11-08T22:01:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Musician's Toolkit 1.0.0]]></title>
+        <id>https://windhawk.net/mods/musicians-toolkit#20099316d68c751106c23fccedb148c6f3543bbf</id>
+        <link href="https://windhawk.net/mods/musicians-toolkit"/>
+        <updated>2026-11-08T22:01:31.000Z</updated>
+        <content type="html"><![CDATA[<h1>Musician's Toolkit</h1>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot.png" alt="Sample Screenshot"></p>
+<p>A chord library, a tuner, a metronome, a strumming trainer, a circle of
+fifths, a tap tempo and a note drill, for guitar, ukulele and piano. All of
+it lives in one small panel that stays on top of your other windows, so you
+can keep it beside your DAW, tab app or video lesson.</p>
+<p>Press <strong>Win+Y</strong> to open it and pick a tool from the menu in the top left.
+<strong>Ctrl+Tab</strong> cycles through them. Close it with the <strong>x</strong>, with <strong>Esc</strong>, or
+with the shortcut again (the shortcut itself is under Settings &gt; Shortcut).
+If you would rather it close whenever you click elsewhere, turn that on under
+Settings &gt; Placement.</p>
+<h2>Chords</h2>
+<p>Start typing and the chord appears as you go: the list narrows with every
+letter, and the one you settle on is drawn underneath.</p>
+<ul>
+<li><strong>Guitar and ukulele</strong> get a fretboard, with barre positions, open strings
+and muted strings all marked.</li>
+<li><strong>Piano</strong> lights up the keys you would hold.</li>
+<li><strong>Fingerings</strong> - the arrow keys, or the slider under the diagram, step
+through the other ways to play the same chord.</li>
+<li><strong>Hear it</strong> - the speaker on the card plays the chord, strummed on an
+acoustic guitar or played on a piano.</li>
+</ul>
+<h2>Tap Tempo</h2>
+<p>Tap the big circle with the mouse, a touchpad or <strong>Space</strong>, and the panel
+works the tempo out from the timing. The bars beneath it show how steady you
+are being, so you can watch yourself settle.</p>
+<ul>
+<li><strong>Half</strong> and <strong>Double</strong> jump to half time or double time.</li>
+<li><strong>Reset</strong> clears the taps and starts a fresh count.</li>
+<li>The scroll wheel nudges the BPM a step at a time.</li>
+</ul>
+<h2>Metronome</h2>
+<p>Set a meter and a tempo, and you have a click that keeps time while you play.</p>
+<ul>
+<li><strong>Meters</strong> - the chips cover 4/4, 3/4, 2/4, 5/4, 6/8, 7/8, 9/8 and 12/8;
+the steppers reach the rest, such as 5/8, 11/8 or 7/16.</li>
+<li><strong>Sound</strong> - a bright click marks the downbeat, a lower one each beat and a
+soft tick the subdivisions, so the bar reads as a pulse.</li>
+<li><strong>Tempo</strong> - the arrows or the wheel step the BPM, or click the number (or
+just start typing) and enter an exact one. <strong>Enter</strong> sets it, <strong>Esc</strong>
+leaves it as it was.</li>
+<li><strong>Background</strong> - the metronome keeps playing after you close the panel,
+which is what you want mid-piece. Switch it off under Settings &gt; Metronome.</li>
+</ul>
+<h2>Tuner</h2>
+<p>Play a note and the needle tells you where you are. The display names the
+note and the arc shows how far off it is, so you can watch it settle in.</p>
+<ul>
+<li><strong>Tunings</strong> - standard, drop and open guitar tunings, several basses,
+ukuleles, mandolins, banjos, the violin family, lap steel, dobro and
+bouzouki.</li>
+<li><strong>Anything else</strong> - the tuner falls back to a chromatic scale, so a
+restrung or homemade instrument tunes just as well.</li>
+<li><strong>Pitch</strong> - concert pitch is adjustable from 415 to 466 Hz (A4 = 440 by
+default) under Settings &gt; Tuner.</li>
+</ul>
+<h2>Strumming Pattern</h2>
+<p>Lay out a bar of strums on a one-measure grid and hear it back in the same
+acoustic voice as the chord library, in time with the tempo.</p>
+<ul>
+<li><strong>Pattern</strong> - the list is grouped by the grid each pattern is written in,
+and holds the ones people actually play: downstrokes, steady eighths,
+D DU D DU, the folk D DU UDU, D D D U D U, the reggae skank, a muted chug,
+a shuffle and straight sixteenths, plus the 2+2+3 and 3+2+2 groupings that
+odd meters are counted in. Picking a pattern moves the grid chips to the
+grid it was notated in, so it arrives ready to play.</li>
+<li><strong>Grid</strong> - click a cell to cycle rest, down, up, muted down and muted up,
+or walk the bar with the arrow keys and type one letter: <strong>D</strong> down, <strong>U</strong>
+up, <strong>X</strong> muted downstroke, <strong>M</strong> muted upstroke, <strong>R</strong> rest.</li>
+<li><strong>Marks</strong> - <strong>A</strong> accents a stroke, <strong>G</strong> turns it into a ghost note and
+<strong>T</strong> ties it into the next cell so it rings on past the beat. <strong>C</strong> clears
+the bar. None of the keys need a modifier, and every one of them is hinted
+along the foot of the card.</li>
+<li><strong>Strings</strong> - pick guitar or ukulele, then fret a chord from the list or
+leave the strings open, so the pattern rings with a voicing you would really
+use.</li>
+<li><strong>Sound</strong> - open strums ring out, palm mute damps them into a rhythm and
+muted turns every stroke into a scratch. A stroke written as a mute stays a
+scratch whatever the sound is set to.</li>
+<li><strong>Meter</strong> - 4/4, 3/4, 2/4, 5/4, 6/8, 7/8, 9/8 or 12/8. The grid chips read
+against the meter's own unit, so 6/8 counts in eighths and its chips offer
+1/8, 1/16, triplet and 1/32.</li>
+<li><strong>Practice</strong> - count-in, loop, and practice mode, which lifts the tempo a
+little at the start of every bar until you reach your target.</li>
+<li><strong>Tempo</strong> - the minus and plus buttons nudge the BPM, or click the number
+(or start typing) to enter one. <strong>Enter</strong> sets it, <strong>Esc</strong> cancels.</li>
+</ul>
+<h2>Circle of Fifths</h2>
+<p>All twelve keys around a ring, each a fifth on from the last. Click either
+ring to select a key and hear it, and the rest of the wheel reads back from
+that selection.</p>
+<ul>
+<li><strong>Wheel</strong> - the majors on the outer ring, their relative minors inside on
+the same spoke. Scroll or use the arrow keys to walk the circle, and press
+<strong>Up / Down</strong> (or <strong>M</strong>) to hop between the rings without leaving the
+fifth.</li>
+<li><strong>Chords of the key</strong> - I, IV and V carry their numeral outside, ii, iii
+and vi inside, so the six chords you would normally play are always in
+view. A minor key lights them the other way round.</li>
+<li><strong>Centre</strong> - the tonic and its seven notes. A minor key uses the natural
+minor, so A minor reads A B C D E F G rather than the major scale of A.</li>
+<li><strong>Theory</strong> - the key signature, the relative and parallel keys, and the
+mode built on each degree.</li>
+<li><strong>Instrument</strong> - pick guitar, piano or ukulele (or press <strong>Tab</strong>) to hear
+the scales and chords in that voice.</li>
+<li><strong>Hear it</strong> - click one of the seven diatonic chips, or press <strong>1</strong>–<strong>7</strong>.</li>
+</ul>
+<h2>Note Trainer</h2>
+<p>A drill for knowing your instrument. A note name appears, the microphone
+listens and you play it before the clock runs out.</p>
+<ul>
+<li><strong>Round</strong> - <strong>Space</strong> starts and stops, and each prompt gets its own timer
+of 2–20 seconds per note, set under Settings &gt; Note trainer.</li>
+<li><strong>Listening</strong> - a note counts the moment it settles in tune, and the
+readout under the prompt shows what the microphone hears right now.</li>
+<li><strong>Feedback</strong> - a correct note flashes green with the points it earned; a
+miss shows the note it was looking for before the next prompt appears.</li>
+<li><strong>Score</strong> - a quick answer is worth up to twice a slow one, and the panel
+keeps your streak, best streak and accuracy. <strong>R</strong> resets it.</li>
+<li><strong>Voices</strong> - <strong>Tab</strong> cycles guitar, ukulele and piano, and <strong>N</strong> (or the
+Naturals chip) keeps the drill to the white notes.</li>
+</ul>
+<h2>Keyboard Shortcuts</h2>
+<ul>
+<li><strong>Win+Y</strong> - open or close the panel.</li>
+<li><strong>Ctrl+Tab</strong> - switch tools.</li>
+<li><strong>Tab</strong> - switch instruments.</li>
+<li><strong>Up / Down</strong> - move through search results, step the metronome, hop
+between the rings of the circle.</li>
+<li><strong>Left / Right</strong> - step through fingerings, halve or double a tap tempo,
+change the metronome's meter.</li>
+<li><strong>D U X M R, A G T, C</strong> - lay strokes in the strumming grid, add accents,
+ghosts and ties, clear the bar.</li>
+<li><strong>Esc</strong> - clear the search, or close the panel when the search is empty.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Startup</strong> - the tool and instrument the panel opens with.</li>
+<li><strong>Appearance</strong> - follow Windows or fix light or dark, pick an accent
+colour, set the opacity.</li>
+<li><strong>Placement</strong> - corner, monitor, fine offsets, and whether the panel closes
+when it loses focus.</li>
+<li><strong>Shortcut</strong> - the key and modifiers that open the panel.</li>
+<li><strong>Metronome</strong> - volume, background playback, default meter and subdivision.</li>
+<li><strong>Chords</strong> - hide the finger numbers.</li>
+<li><strong>Tap tempo</strong> - how long a pause resets the taps, and whether Space or
+Enter count as taps.</li>
+<li><strong>Tuner</strong> - reference pitch.</li>
+<li><strong>Strumming</strong> - default grid, count-in, loop, and the practice ramp.</li>
+<li><strong>Circle of fifths</strong> - which ring opens, and whether selecting a key plays
+its scale.</li>
+<li><strong>Note trainer</strong> - seconds per note, chromatic or naturals.</li>
+</ul>
+<p>The chord library comes from <a href="https://github.com/tombatossals/chords-db">chords-db</a>
+by David Rubert (MIT). It is packed into the mod, so there is nothing to
+download and no internet connection needed.</p>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Turn Off Display Without Sleep 1.0.0]]></title>
+        <id>https://windhawk.net/mods/screen-off-no-sleep#167960e458b2b64fa5953d1af0dafc2248bc6583</id>
+        <link href="https://windhawk.net/mods/screen-off-no-sleep"/>
+        <updated>2026-11-08T22:01:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Turn Off Display Without Sleep</h1>
+<p>On Modern Standby (S0ix) laptops, user-initiated actions—such as clicking &quot;Sleep&quot;
+in the Start menu, pressing a power button configured for sleep, or invoking
+display-off shortcuts—instruct the Windows Power Dependency Coordinator (PDC) to
+transition to sleep. This suspends desktop apps (DAM) and disconnects mobile hotspots.</p>
+<p>However, when Windows turns the display off through a <strong>natural idle timeout</strong>, Modern
+Standby keeps audio streams, downloads, and mobile hotspots running indefinitely.</p>
+<p><strong>Turn Off Display Without Sleep</strong> triggers this natural idle path on demand:</p>
+<ol>
+<li><strong>Instant Pitch-Black Screen</strong>: Creates an instant fullscreen topmost blackout
+overlay across all monitors so the screen appears turned off immediately.</li>
+<li><strong>Dynamic 1-Second Timeout</strong>: Saves your current timeouts and temporarily injects
+a 1-second display idle timeout (<code>VIDEOIDLE</code>) into the active power scheme. Windows
+naturally powers down the monitors via the idle path within ~1–2 seconds without
+suspending background tasks.</li>
+<li><strong>Automatic Restoration</strong>: When hardware display-off (<code>GUID_CONSOLE_DISPLAY_STATE == 0</code>)
+is detected, the original display timeout is immediately restored, and the overlay
+is dismissed.</li>
+<li><strong>Direct-to-Desktop Wake or Optional Lock</strong>:
+<ul>
+<li>By default, your workstation stays unlocked so you return directly to your active
+desktop upon waking the screen—no PIN or Windows Hello delay.</li>
+<li>If desired, enable <strong>Lock workstation after display turns off</strong> to silently lock the
+session in the dark once the screen is powered down.</li>
+</ul>
+</li>
+<li><strong>Failsafe Watchdog</strong>: If the display does not power down within 3 seconds (e.g. due
+to mouse movement or an application holding <code>ES_DISPLAY_REQUIRED</code> / active video playback),
+the overlay is removed and timeouts are restored automatically.</li>
+</ol>
+<h3>What happens on an unclean exit?</h3>
+<p>The 1-second timeout only exists in the power plan for the 1–3 seconds between trigger
+and display power-down. If the tool process is forcefully terminated during those few
+seconds (system crash, power loss, or process kill), the 1-second timeout remains in the
+active power plan until the mod runs again and automatically restores it from storage.
+If the screen turns off after one second of idle while the mod is disabled or uninstalled,
+simply re-adjust &quot;Turn off my screen after&quot; in Windows Settings.</p>
+<hr>
+<h2>Prerequisites</h2>
+<p>To allow this mod to take control of lid-close or power button events, Windows native actions
+must be set to &quot;Do nothing&quot; (0) so Windows does not trigger its built-in sleep transition.</p>
+<p>Run this in an elevated Command Prompt:</p>
+<pre><code class="language-cmd">powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 0
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 0
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+powercfg /setactive SCHEME_CURRENT
+</code></pre>
+<blockquote>
+<p><strong>Warning</strong>: With the lid action set to &quot;Do nothing&quot;, closing the lid and putting the laptop
+into a backpack or bag will keep the system running (until the regular system sleep timeout).
+Make sure to explicitly sleep or shut down your laptop before bagging it.</p>
+</blockquote>
+<h3>Reverting prerequisites</h3>
+<p>If you disable or uninstall this mod and want to restore the native sleep behavior:</p>
+<pre><code class="language-cmd">powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 1
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 1
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1
+powercfg /setactive SCHEME_CURRENT
+</code></pre>
+<hr>
+<h2>Triggers</h2>
+<ul>
+<li><strong>Keyboard Shortcut</strong>: Default is <code>Win+Alt+L</code>. Customizable in settings.</li>
+<li><strong>Lid Close</strong>: Triggered automatically when closing the laptop lid. Requires native lid
+close action set to &quot;Do nothing&quot;.</li>
+<li><strong>Power Button</strong>: Supported on devices where the power button is exposed via HID System Control
+(Usage Page <code>0x01</code>, Usages <code>0x80</code>/<code>0x81</code>/<code>0x82</code> or <code>0x0D</code>, such as Microsoft Surface Pro).
+Requires native power button action set to &quot;Do nothing&quot;.
+Not detectable on laptops with ACPI-only power buttons, use Trigger hotkey or Lid close instead.</li>
+<li><strong>External Window Message</strong>: Broadcast <code>WindhawkScreenOffNoSleep_Trigger</code> from external scripts or taskbar shortcuts.</li>
+</ul>
+<hr>
+<h2>Settings</h2>
+<ul>
+<li><strong>Lock workstation after display turns off</strong>: Silently lock in the dark after screen is off.</li>
+<li><strong>Trigger hotkey</strong>: Global hotkey to turn off display (default <code>Win+Alt+L</code>).</li>
+<li><strong>Turn off display on lid close</strong>: Trigger when laptop lid closes.</li>
+<li><strong>Turn off display on power button (HID devices)</strong>: Capture HID power button events.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mirukurusan</name>
+            <uri>https://github.com/mirukurusan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Logitech Battery Tray 0.1.2]]></title>
         <id>https://windhawk.net/mods/logitech-battery-tray#f70719f6c2867dd2743e24eab6b2fa36972e0b71</id>
@@ -1743,89 +2003,6 @@ copy.</li>
         <author>
             <name>Marco Petrucci</name>
             <uri>https://github.com/marco00petrucci</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Zones 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-zones#257552e34e2175c3c1b58df047f3d0e23cf1491d</id>
-        <link href="https://windhawk.net/mods/taskbar-zones"/>
-        <updated>2026-11-05T06:03:11.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Zones</h1>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/taskbar-zones/main/assets/taskbar-zones-cover.png" alt="Taskbar Zones"></p>
-<p>Keep your apps on the <strong>left or right side</strong> of the Windows 11 taskbar. Each app stays on the side you choose, even when you open or close it.</p>
-<h2>Features</h2>
-<ul>
-<li><strong>Two fixed zones:</strong> Choose the left or right side for each app.</li>
-<li><strong>Easy drag and drop:</strong> Move apps between zones or change their order.</li>
-<li><strong>Saved layout:</strong> Keep your app positions after restarting Explorer or your PC.</li>
-<li><strong>Custom layout:</strong> Adjust spacing and the size of icons on the right.</li>
-<li><strong>Multiple monitors:</strong> Supports compatible secondary taskbars.</li>
-</ul>
-<h2>How to use</h2>
-<ol>
-<li>Set your Windows 11 taskbar alignment to <strong>Left</strong>.</li>
-<li>Drag an app icon across the middle gap to move it to the other side.</li>
-<li>Drag icons within the same zone to reorder them.</li>
-<li>Open the mod settings to adjust the layout.</li>
-</ol>
-<h2>Notes</h2>
-<ul>
-<li>Your Windows pinned apps are not changed.</li>
-<li>Do not enable <strong>Taskbar Split</strong> or other mods that reposition the same icons at the same time.</li>
-<li>If the taskbar is too crowded to fit both zones, Windows' normal layout is used until space is available again.</li>
-<li>Secondary monitors show only the app buttons that Windows puts on each taskbar.</li>
-<li>Windows updates may affect compatibility.</li>
-</ul>
-<h2>Credits</h2>
-<p><strong>Taskbar Zones</strong> is maintained by <strong>Luiz Bizzio</strong>. It is a separate, modified version of <a href="https://github.com/Artllex/taskbar-split">Taskbar Split by Arkadiusz (Artllex)</a>, with persistent per-app zones, cross-zone dragging and secondary taskbar support.</p>
-<p>Licensed under <strong>GPL-3.0</strong>. Additional code credits and copyright notices are in the source file.</p>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Live HUD 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-live-hud-radar#08e84491fa69a919455b948e06fd1539ca6c8963</id>
-        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
-        <updated>2026-11-05T05:01:50.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Live HUD</h1>
-<p>A compact system monitoring widget for the Windows 11 taskbar.
-Displays real-time CPU usage, RAM load, network traffic, and optional latency,
-with an optional process memory trimmer.</p>
-<p>This is a tool mod: it runs in its own dedicated process instead of being
-injected into <code>explorer.exe</code>, so it cannot affect the shell's stability and
-survives Explorer restarts.</p>
-<p><img src="https://i.imgur.com/dDy0BoL.png" alt="Screenshot"></p>
-<h3>Features</h3>
-<ul>
-<li><strong>Real-time monitoring:</strong> CPU load, RAM usage and active network speed.</li>
-<li><strong>Windows 11 look:</strong> blends with the taskbar, configurable corner style.</li>
-<li><strong>Auto-hide:</strong> hides itself when a fullscreen game or application is active.</li>
-<li><strong>Ping (opt-in, off by default):</strong> when enabled, an ICMP echo request is sent
-to the selected public DNS resolver (Cloudflare 1.1.1.1, Google 8.8.8.8 or
-Quad9 9.9.9.9) roughly every 1.6 seconds. Nothing is sent while it is disabled.</li>
-<li><strong>Process Memory Trimmer (opt-in, off by default):</strong> trims the working sets
-of all user processes that can be opened with the current privileges. Trimmed
-pages move to the standby list and programs page the data back in when they
-need it, so this does not free memory in a lasting way and may cause a short
-slowdown.</li>
-</ul>
-<h3>Controls</h3>
-<ul>
-<li><strong>Ctrl + Left Click:</strong> trim memory (only if enabled in settings).</li>
-<li><strong>Alt + Left Click and drag:</strong> adjust the horizontal position on the taskbar.</li>
-</ul>
-<h3>Known limitations</h3>
-<ul>
-<li>Only the primary taskbar is supported (no secondary monitors).</li>
-<li>Network speed is the sum of all active non-loopback adapters.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lemon</name>
-            <uri>https://github.com/lemon-web-stack</uri>
         </author>
     </entry>
 </feed>

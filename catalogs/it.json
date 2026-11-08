@@ -1281,7 +1281,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793660551000,
+        "updated": 1794175287000,
         "users": 64
       },
       "metadata": {
@@ -1293,7 +1293,7 @@
           "windhawk.exe"
         ],
         "name": "Bluetooth Auto Toggle",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "borderless-fullscreen": {
@@ -11354,6 +11354,34 @@
         "version": "1.13.59"
       }
     },
+    "musicians-toolkit": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794175291000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794175291000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DpakB",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -lwinmm",
+        "description": "An all-in-one toolkit flyout for musicians, containing a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, an interactive circle of fifths and a timed note trainer for guitar, ukulele and piano.",
+        "donateUrl": "https://buymeacoffee.com/dpakb",
+        "github": "https://github.com/DeepakBalaraman",
+        "homepage": "https://dpakb.com",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Musician's Toolkit",
+        "twitter": "https://twitter.com/dpakb_",
+        "version": "1.0.0"
+      }
+    },
     "mute-focused-window": {
       "details": {
         "defaultSorting": 243,
@@ -14503,6 +14531,34 @@
         "version": "1.1.0"
       }
     },
+    "screen-off-no-sleep": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794175282000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794175282000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mirukurusan",
+        "compilerOptions": "-lpowrprof -luser32 -lhid -lgdi32",
+        "description": "Turns the display off without entering Modern Standby sleep, keeping background audio playback, downloads, and mobile hotspots alive.",
+        "github": "https://github.com/mirukurusan",
+        "homepage": "https://github.com/mirukurusan/screen-off-no-sleep",
+        "include": [
+          "windhawk-mod-uiaccess.exe",
+          "windhawk-mod.exe",
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Turn Off Display Without Sleep",
+        "version": "1.0.0"
+      }
+    },
     "screenshot-path-to-clipboard": {
       "details": {
         "defaultSorting": 590,
@@ -14934,7 +14990,7 @@
         "ratingUsers": 47,
         "reviews": 0,
         "trendingSorting": 65.3,
-        "updated": 1793549105000,
+        "updated": 1794175277000,
         "users": 653
       },
       "metadata": {
@@ -14951,7 +15007,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Siri Plus Launchpad",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "slick-window-arrangement": {
@@ -22872,7 +22928,7 @@
         "rating": 9,
         "ratingBreakdown": [0, 1, 3, 5, 19],
         "ratingUsers": 28,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 12.791707170938832,
         "updated": 1794160818000,
         "users": 334
