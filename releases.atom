@@ -2,12 +2,232 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-08T05:01:41.000Z</updated>
+    <updated>2026-11-08T19:01:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Logitech Battery Tray 0.1.2]]></title>
+        <id>https://windhawk.net/mods/logitech-battery-tray#f70719f6c2867dd2743e24eab6b2fa36972e0b71</id>
+        <link href="https://windhawk.net/mods/logitech-battery-tray"/>
+        <updated>2026-11-08T19:01:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Logitech Battery Tray</h1>
+<p>Battery indicators for supported Logitech devices, with automatic discovery,
+charging status and optional percentage labels.</p>
+<h2>Screenshots</h2>
+<p>Horizontal taskbar with a battery tooltip:</p>
+<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/horizontal.png" alt="Logitech battery indicators on a horizontal taskbar"></p>
+<p>Vertical taskbar with stacked device indicators:</p>
+<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/vertical.png" alt="Logitech battery indicators on a vertical taskbar"></p>
+<h2>Compatibility and scope</h2>
+<p>Windows 10/11: standard notification icons provide the compatibility backend.
+On supported Windows 11 x64/ARM64 taskbars, Auto uses native XAML battery buttons
+on the primary taskbar. Unrecognized taskbar layouts use notification icons
+instead of an overlay. 32-bit Windows uses notification icons only.
+Native icons show the percentage and a tooltip; charging is green. Windows
+controls their placement and overflow visibility. XAML placement, button styling
+and click-to-open settings do not apply to notification icons.</p>
+<p>Select <strong>Native notification icons</strong> to test or force the compatibility backend.
+Successful compilation is not a claim of runtime testing on every Windows build.</p>
+<p>Unlike BT Battery Monitor (generic Bluetooth battery reporting), this mod reads
+Logitech G HUB and Logitech HID++ battery data, including supported USB receivers.
+It runs in Explorer because its optional XAML backend modifies Explorer's own
+taskbar visual tree. No pairing, firmware or device configuration is changed.</p>
+<h2>Battery sources</h2>
+<p>The XAML backend uses built-in Segoe Fluent Icons and standard Windows buttons
+and tooltips. Its battery glyph changes with the reported charge level, with an
+optional smaller icon indicating the device type.</p>
+<p>G HUB must be running to use its data; direct HID++ reading works independently.
+The G HUB client connects only to 127.0.0.1:9010. It requests /devices/list and
+/battery/&lt;deviceId&gt;/state, subscribes to /battery/state/changed, and uses a
+persistent query connection with a 30-second fallback poll by default. Failed
+connections retry with exponential backoff, up to 60 seconds. Events update
+readings independently of fallback polling.
+Updates cannot arrive earlier than G HUB reports them.</p>
+<p>The HID++ provider reads compatible Logitech devices through Unifying, Bolt,
+LIGHTSPEED, USB and accessible Bluetooth HID++ interfaces. It supports battery
+features 0x1004, 0x1000, 0x1001, 0x1F20 and legacy HID++ 1.0 registers.
+Voltage-based and coarse readings are marked with an approximation sign.
+G HUB readings take priority when available. Models using other protocols may
+not report a battery level; support for every Logitech model is not guaranteed.</p>
+<h2>Discovery and language</h2>
+<p>All detected, supported battery devices are shown by default. No model-specific
+rules are shipped. Optional visibility rules match a device name or model;
+empty rules are ignored, * and ? are supported, and the last match wins.
+The user-facing tooltip contains no internal IDs or provider diagnostics.
+Tooltip translations follow the preferred Windows UI languages, with English
+as fallback. Reload the mod after changing Windows display languages.
+The mod description and settings default to English, with Russian localization
+for Windhawk's Russian interface. Tooltips follow Windows UI languages independently.</p>
+<p>When G HUB stops, HID++ provides readings for compatible devices. Fully
+disconnected devices are hidden; confirmed charging remains visible even when
+the device is inactive. Repeated explicit HID++ offline reports and failed G HUB
+queries use a five-second grace. Missing HID++ replies are treated as an unknown
+connection state, retaining the last reading for up to thirty seconds of failed
+communication. A hidden HID++ device needs two valid readings at
+least one second apart before reappearing, with no intervening failed reading.
+These windows absorb temporary failures, not indefinitely cache charging state.
+Provider requests run outside the taskbar UI thread. Reconnection is automatic.
+Windows HID arrival/removal and receiver notifications trigger rediscovery;
+three-minute scanning also handles devices that do not send connection events.
+An already-open device that missed its initial probe is retried separately,
+with increasing delays up to 60 seconds, without rescanning every HID interface.
+Event-capable HID++ features use the configured fallback interval. ADC (0x1F20)
+and legacy register devices use a two-second poll because they may lack events.
+Presence confirmation temporarily uses a short interval to avoid delayed recovery.
+The XAML UI updates on data, size and theme changes, without a periodic repaint.
+In Auto mode, a transient XAML failure must last 30 seconds before notification
+icons appear; missing taskbar symbols select the compatibility backend immediately.
+While the native fallback is active, unsuccessful XAML attachment attempts back
+off up to 60 seconds. Layout, DPI and theme changes trigger an immediate retry.
+On supported left/right taskbars, indicators are stacked vertically and the
+percentage is placed below the icons. Button width follows the taskbar width;
+the configured button width applies to horizontal taskbars only.</p>
+<h2>Credits and limitations</h2>
+<p>Disable direct HID++ reading before updating device firmware. Persistent HID
+handles are read-only; write access is opened only for each battery/probe request.
+This reduces sharing conflicts, but cannot guarantee compatibility with tools
+that require exclusive access. Firmware updates with this mod have not been tested.</p>
+<p>The G HUB interface is unofficial and may change with G HUB updates.
+XAML root access is adapted from Taskbar Folder Menus by sb4ssman:
+https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp
+G HUB protocol: https://github.com/someweirdhuman/LogiBAT
+G HUB events: https://github.com/bmrussell/LGBattery
+Icons: https://learn.microsoft.com/windows/apps/design/iconography/segoe-fluent-icons-font
+HID++: https://github.com/Logitech/cpg-docs/tree/master/hidpp20
+Battery features: https://github.com/pwr-Solaar/Solaar</p>
+]]></content>
+        <author>
+            <name>uMk0</name>
+            <uri>https://github.com/umk0</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorerframe for 24H2 and later 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-explorerframe#d2a11c71d707fe8e7c32b56e5cfa23de18e70f61</id>
+        <link href="https://windhawk.net/mods/classic-explorerframe"/>
+        <updated>2026-11-08T19:01:44.000Z</updated>
+        <content type="html"><![CDATA[<p>Restores classic Explorerframe.dll on Windows 11 24H2 and later. This allows to restore the toolbars in the folder windows, including
+the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar and the toolbars provided by the mod
+<a href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe">Flexible Explorer Toolbars Deluxe</a>, such as the Search bar.</p>
+<p>Note that to enable the menubar you need to install in addition the mod <a href="https://windhawk.net/mods/restore-folder-menubar-25h2">ExplorerFrame and menubar fixes fork</a>.</p>
+<p>This mod downloads the classic Explorerframe.dll from the Microsoft's symbols server and stores it into the mod's storage. You need a working internet access at the first mod's activation.</p>
+<p>Restart Explorer after enabling or disabling the mod. At the first activation the file is downloaded in the background, so wait a few seconds before restarting, otherwise the mod takes effect only at the following Explorer start.</p>
+<p>Mods that hook ExplorerFrame.dll and happen to load before this mod might have no effect, because folder windows don't use the copy they hooked.</p>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Snowfall 1.0]]></title>
+        <id>https://windhawk.net/mods/desktop-snowfall#be5856fcd480efbfe0843219dea54843673763fe</id>
+        <link href="https://windhawk.net/mods/desktop-snowfall"/>
+        <updated>2026-11-08T19:01:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>Desktop Snowfall</h1>
+<p>Snow falls over your desktop. Flakes land on the top edge of your windows and on
+the taskbar and slowly build up snow drifts of different heights.</p>
+<p><img src="https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif" alt="Desktop Snowfall demo"></p>
+<ul>
+<li>The snow follows the window. Toss a window up and the snow flies up in loose
+clumps and lands back with a little bounce. Pull it down or shrink it from
+the top and the snow hangs in the air for a moment before it falls back onto
+the window.</li>
+<li>Make a window narrower and the snow on the cut-off part falls down.</li>
+<li>Optionally, the snow slides off windows moved sideways: it stays where it is,
+and the part the window slides out from under falls down.</li>
+<li>Sweep the snow off with the mouse cursor - it falls down to the windows below
+or to the taskbar.</li>
+<li>The wind blows powder off the drifts, and now and then a lump slides off a
+window corner.</li>
+<li>Works with the default taskbar, an auto-hidden taskbar (the snow rides along
+when it slides in and out) and custom taskbar styles (for example, floating
+&quot;dock&quot; themes of the Windows 11 Taskbar Styler mod): the snow lies on the
+visible taskbar parts.</li>
+</ul>
+<p>The snow is drawn on the GPU on a transparent, click-through overlay, so it
+never gets in the way of mouse input. The overlay is hidden automatically while
+a fullscreen app (a game or a video) is in the foreground. The mod runs in its
+own process, separately from Explorer.</p>
+<p>The overlay is redrawn every frame, so the snow keeps the GPU a little busy even
+when nothing else on the screen changes. On a laptop running on battery, a lower
+frame rate limit (for example, 30) saves power.</p>
+]]></content>
+        <author>
+            <name>mikybuilds</name>
+            <uri>https://github.com/mikybuilds</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Ubuntu Unity Desktop 1.0]]></title>
+        <id>https://windhawk.net/mods/ubuntu-unity-desktop#c5baa1f5353722223213b7b0379a4b1d9019de07</id>
+        <link href="https://windhawk.net/mods/ubuntu-unity-desktop"/>
+        <updated>2026-11-08T19:01:35.000Z</updated>
+        <content type="html"><![CDATA[<h1>Ubuntu Unity Desktop</h1>
+<p>Turns Windows 11 into the <strong>Ubuntu Unity 7</strong> desktop (Ubuntu 12.04 - 16.04): a panel along the top, the launcher
+along the left and the Dash instead of the Start menu. Everything runs inside Explorer: there is no separate
+program to install, and turning the mod off gives you the normal Windows desktop back right away.</p>
+<h2>What you get</h2>
+<p><strong>The panel (top bar)</strong></p>
+<ul>
+<li>The title of the window in front, and for a maximized window its minimize / restore / close buttons: the
+window loses its own title bar, like in Unity.</li>
+<li><strong>Tabs in the panel</strong>: maximize a browser (Brave, Chrome, Edge, ...) or another window with tabs and its
+whole tab row moves into the panel, with the sites' icons. Click a tab to switch, x to close it, + for a new one.</li>
+<li>Drag a maximized window down out of the panel to restore it, and drop it back on the panel to maximize it.</li>
+<li>Indicators on the right: background apps (tray icons), keyboard language, network, messages, volume (with a
+slider), clock (with a calendar) and the session menu (lock, log out, restart, shut down).</li>
+</ul>
+<p><strong>The launcher (left bar)</strong></p>
+<ul>
+<li>Pinned and running apps, with a pip per open window and an arrow for the app in front. Click to open, switch
+or minimize; right-click to pin / unpin, run as administrator, open the file location or quit.</li>
+<li>Hover for the app's name and live previews of its windows.</li>
+<li>Drag icons to reorder them, onto each other to make a group, or off the launcher to unpin them.</li>
+<li><strong>Music controls</strong> (cover, play / pause, previous / next) slide open under the app that plays music.</li>
+<li><strong>Discord call buttons</strong> (mute, deafen, hang up) slide open under Discord while you're in a call.</li>
+<li>Drag the launcher's right edge to make it (and its icons) bigger or smaller. The trash sits at the bottom.</li>
+</ul>
+<p><strong>The Dash (Start menu)</strong></p>
+<ul>
+<li>Opens with the Windows key, Ctrl+Esc or the button at the top of the launcher.</li>
+<li>Type to search apps, settings and files; lenses and filters like Unity's; widgets (clock, music, weather app, system, disks) on Home.</li>
+<li>Resize it with the grip in its corner (the size is remembered) or maximize it.</li>
+</ul>
+<p><strong>And more</strong></p>
+<ul>
+<li>Unity's animations: windows fly into the launcher when minimized, the launcher icons pop and wiggle, the panel
+and launcher slide away for full-screen games and videos.</li>
+<li>Glass (blur or acrylic), your accent colour or any colour, dark (Ambiance) or light (Radiance) panel.</li>
+</ul>
+<h2>Settings</h2>
+<p>Everything can be adjusted in the mod's settings, grouped by panel, launcher, Dash, look, windows and Windows
+integration: sizes, opacity, glass, clock format, which indicators show, animation speed, tabs in the panel, and
+whether the Windows taskbar is hidden.</p>
+<h2>Good to know</h2>
+<ul>
+<li>Windows 11, 64-bit. The shell lives on the main screen. With the taskbar hidden, other screens have no taskbar
+(and no launcher) at all; their windows stay where they are.</li>
+<li><strong>The taskbar's &quot;automatically hide&quot; setting is turned on while the mod runs</strong> (that gives its room on the screen
+back) and is set back as it was when you turn the mod off. If Explorer is killed or crashes and the mod is
+removed before it runs again, it may stay on: switch it off under Settings &gt; Personalization &gt; Taskbar.</li>
+<li>The Windows key and Ctrl+Esc open the Dash; shortcuts like Win+E, Win+R and Win+Shift+S keep working. If
+Windows' own Start menu opens anyway, the mod closes it and shows the Dash.</li>
+<li>Tabs in the panel read the window's tabs through Windows' accessibility interface. They work best with
+Chromium browsers (Brave, Chrome, Edge, Vivaldi, Opera). The new-tab button and the Discord call buttons are
+found by their names in English and Dutch apps.</li>
+<li>The shell's texts are in English, or in Dutch when Windows is.</li>
+<li>The Dash's weather card opens Windows' own Weather app: the mod itself never connects to the internet.</li>
+</ul>
+]]></content>
+        <author>
+            <name>dion</name>
+            <uri>https://github.com/dismedan-dion</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.0.0]]></title>
         <id>https://windhawk.net/mods/lock-screen-live-wallpaper#deb9248a6196aefbbdbd52149d5fba59a6ae0dd8</id>
@@ -1606,254 +1826,6 @@ slowdown.</li>
         <author>
             <name>Lemon</name>
             <uri>https://github.com/lemon-web-stack</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Overflow on Hover 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win11-taskbar-overflow-hover#8a36fa8d78e5834e3ef4039b816a3b33fdb06681</id>
-        <link href="https://windhawk.net/mods/win11-taskbar-overflow-hover"/>
-        <updated>2026-11-05T05:01:45.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Overflow on Hover 🚀</h1>
-<p>A zero-click QoL upgrade for Windows 11. Hover over the taskbar overflow button
-to open the hidden Apps icons.</p>
-<p><img src="https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png" alt="Hover overflow menu"></p>
-<p>✨ Features:</p>
-<ul>
-<li>Zero-Click Open: Auto-expands the hidden icons menu just by hovering.</li>
-<li>Auto-Dismiss: Gracefully closes the menu automatically the moment your mouse leaves the overflow button or the flyout.</li>
-<li>Instant App Launch: Instantly dismisses the overflow flyout the exact millisecond you click an app inside it, completely bypassing the native Windows UI lag.</li>
-</ul>
-<p>Developed by Cougar16 for the Windows customization community.</p>
-]]></content>
-        <author>
-            <name>Cougar16</name>
-            <uri>https://github.com/Cougar16</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win Duo Bar 1.1.4]]></title>
-        <id>https://windhawk.net/mods/win-duo-bar#8547431ba5abfd36a44820fed01031f532886fd8</id>
-        <link href="https://windhawk.net/mods/win-duo-bar"/>
-        <updated>2026-11-05T05:01:39.000Z</updated>
-        <content type="html"><![CDATA[<h1>Win Duo Bar</h1>
-<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/hero.png" alt="Win Duo Bar in the notification area"></p>
-<p>A compact, minimal ring widget that replaces the Windows 11 notification-area
-clock. It shows the device status at a glance:</p>
-<ul>
-<li><strong>Battery ring</strong> - a 263 degree gauge with round caps and a translucent track.
-The filled part follows the battery level; the ring is green while plugged in,
-red when the battery is low (20% or less), yellow in battery saver mode and
-uses the taskbar text colour otherwise.</li>
-<li><strong>Wi-Fi symbol</strong> in the middle - two thick rounded arcs plus a solid dot,
-traced from the original 09 Wi-Fi icon. It switches to the wired/VPN icon
-when the active connection is not wireless and dims when offline.</li>
-<li><strong>Time and date</strong> - two rows of four bold digits (<code>1427</code> = 14:27, <code>1102</code> =
-November 2nd), no separators.</li>
-<li><strong>Charging animation</strong> - a notch opens at the top of the ring, a white bolt
-grows out of it, the Wi-Fi symbol slides down a little and the colours
-cross-fade (about 0.5 s, 60 fps).</li>
-<li><strong>One widget per taskbar</strong> - every taskbar clock gets its own widget, so
-multi-monitor setups keep a clock on every taskbar.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/Felinyu/win-duo-bar/main/screenshots/states.png" alt="Win Duo Bar states"></p>
-<p>Every visual parameter (ring diameter/thickness/gauge span/track opacity/notch
-angle/bolt size, Wi-Fi size/thickness/opening/position, digits size and row
-positions) can be adjusted in the mod settings. The settings are localized
-(English and Simplified Chinese).</p>
-<p>The widget is 38 DIP by default. The DIP geometry values below are relative to
-that default size and scale together with the &quot;Widget size&quot; setting.</p>
-<p>This mod replaces the clock only. To hide the system battery and network tray
-icons, which the widget makes redundant, use the
-<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
-mod instead.</p>
-<p>Only Windows 11 is supported.</p>
-<h1>中文说明</h1>
-<p>Win Duo Bar 是一个替换 Windows 11 通知区域时钟的圆环小组件：</p>
-<ul>
-<li><strong>电量圆环</strong>：263° 圆环，圆头、带半透明轨道；电量部分随电量变化，插电时绿色、
-低电量（≤20%）红色、节电模式黄色，其他情况跟随任务栏文字颜色。</li>
-<li><strong>Wi-Fi 图标</strong>：中间两条粗圆头弧线 + 实心圆点（按原版 09 图标描出）；当前连接
-不是无线时显示有线/VPN 图标，断网时变暗。</li>
-<li><strong>时间日期</strong>：下方两行四位数字（<code>1427</code>=14:27、<code>1102</code>=11月2日），无分隔符。</li>
-<li><strong>充电动画</strong>：充电时顶部张开豁口、白色闪电长出、Wi-Fi 图标下移、颜色渐变，
-约 0.5 秒 60fps。</li>
-<li><strong>每个任务栏一个小组件</strong>：每个任务栏时钟都有独立的小组件，多显示器任务栏
-都会显示。</li>
-</ul>
-<p>所有视觉参数（圆环外径/粗细/弧度范围/轨道透明度/豁口角度/闪电大小、Wi-Fi 尺寸/
-粗细/开口/位置、数字字号和两行位置）都能在设置里调整，设置项已本地化
-（英文/简体中文）。</p>
-<p>小组件默认 38 DIP；下面的 DIP 几何参数以该默认尺寸为基准，并随「小组件尺寸」
-设置一起缩放。</p>
-<p>本模组只替换时钟。如需隐藏系统托盘的电量和网络图标（小组件已替代它们），
-请使用
-<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
-模组。</p>
-<p>仅支持 Windows 11。</p>
-<h2>Credits / 致谢</h2>
-<p>The taskbar XAML access code (XamlRoot lookup, symbol hooks, running code on the
-taskbar thread) is derived from the Windhawk mods by
-<a href="https://m417z.com/">m417z</a> (GPLv3), including the
-<a href="https://github.com/m417z/my-windhawk-mods">Taskbar tray system icon tweaks</a>
-mod. The Wi-Fi symbol geometry is traced from a &quot;09&quot;-style Wi-Fi icon reference.</p>
-<p>任务栏 XAML 访问代码（XamlRoot 获取、符号挂钩、任务栏线程执行）派生自
-<a href="https://m417z.com/">m417z</a> 的 Windhawk 模组（GPLv3）。Wi-Fi 图标几何按 09 风格
-参考图标描出。</p>
-]]></content>
-        <author>
-            <name>Felinyu</name>
-            <uri>https://github.com/Felinyu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Outlook Refined 0.6]]></title>
-        <id>https://windhawk.net/mods/outlook-refined#990c27e145efb3be3be4a934663578ea209ed651</id>
-        <link href="https://windhawk.net/mods/outlook-refined"/>
-        <updated>2026-11-05T05:01:34.000Z</updated>
-        <content type="html"><![CDATA[<h1>Outlook Refined</h1>
-<p>Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
-adds one script to each Outlook window when the window is created, and the
-script stops at once unless the page is one of Outlook's own. It opens no ports
-and brings nothing of its own down from the network: every asset it draws with
-is in this file. It reads your account addresses from Outlook's own storage, to
-label the folder tree, and with the agenda, month grid or Other card on it calls
-Outlook's mail service as described below.</p>
-<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/folder-pane.png" alt="Folder pane"></p>
-<p>Restart Outlook after enabling the mod or changing a setting.</p>
-<p><strong>What it asks Outlook for.</strong> The agenda, month grid and Other inbox card read
-your calendar and inbox through Outlook's own mail service, from inside its
-page, signed with the session Outlook already holds: the mod keeps the request
-headers Outlook sets, in memory, and reuses them. Those features refresh every
-few minutes while they are on, and each is off until you turn it on. Nothing is
-stored, logged or sent anywhere else, and no credential is written down.</p>
-<p><strong>Where your edits are kept.</strong> Groups, renames, folds, account order and the
-pane and card sizes are saved in Windhawk's own storage for this mod, so they
-leave when the mod does. State an earlier version wrote into Outlook's own local
-storage is moved across the first time this one runs. Other Outlook windows
-that are already open pick up a change as soon as you move into them.</p>
-<p><strong>Folder pane:</strong> Favorites in groups that fold (right-click a group header for
-its menu, drag a favorite to move it, Shift+right-click it to rename or move
-it), per-account compose buttons, a resizable pane, account trees under one
-foldable heading, accounts reordered by dragging.</p>
-<p><strong>Agenda:</strong> today and the next days from every account's calendar at the bottom
-of the folder pane, with a join button for online meetings, under a month grid
-shaded by booked hours. <strong>Other inbox:</strong> the newest Other conversations below
-the Focused list.</p>
-<p><img src="https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/other-inbox.png" alt="Agenda and the Other inbox card"></p>
-<p><strong>Calendar:</strong> one row per account, compact time zones, start and end times on
-event tiles, overlapping events cascaded or merged.</p>
-<p><strong>Reading pane:</strong> To and Cc on one line, a compact blocked-content bar, a
-readable body width. <strong>Ribbon:</strong> the group-name row under the buttons goes.</p>
-<p><strong>Print:</strong> printing a message prints the message, not the whole window: the
-panes, ribbon and buttons go, panes that scroll are released so nothing is cut
-off, quoted replies can be lightened or dropped, pictures and tables are kept
-whole, and anything too wide for the page is scaled down to fit.</p>
-<p><strong>Known limits.</strong> Most features find Outlook's own elements by English labels
-(&quot;Focused&quot;, &quot;Other&quot;, &quot;Navigation pane&quot;, &quot;Reading Pane&quot;) and read times written
-as 1:30 PM, so in another display language, or with a 24-hour clock, those
-parts quietly do nothing. The folder pane, the agenda and the print layout are
-the parts that depend on this most.</p>
-]]></content>
-        <author>
-            <name>Analytic Endeavors</name>
-            <uri>https://github.com/ae-reid-havens</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ThinkPad Battery Controls 0.9.17]]></title>
-        <id>https://windhawk.net/mods/thinkpad-battery-controls#5a3110472be3b0f634f91538af4cdcede6ba7a79</id>
-        <link href="https://windhawk.net/mods/thinkpad-battery-controls"/>
-        <updated>2026-11-05T05:01:30.000Z</updated>
-        <content type="html"><![CDATA[<h1>ThinkPad Battery Controls</h1>
-<p>Right-click the Windows battery icon to set charging limits, apply saved presets,
-or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.</p>
-<p>The manufacturer should have made these everyday controls part of the Windows
-battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.</p>
-<h2>Screenshots</h2>
-<p><strong>Battery menu</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-menu.png" alt="Battery menu"></p>
-<p><strong>Charge thresholds</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charge-thresholds.png" alt="Charge thresholds"></p>
-<p><strong>Quick charging presets</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charging-presets.png" alt="Quick charging presets"></p>
-<p><strong>Manage presets</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/manage-presets.png" alt="Manage presets"></p>
-<p><strong>Battery health</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-health.png" alt="Battery health"></p>
-<p><strong>Power controls</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/power-controls.png" alt="Power controls"></p>
-<p><strong>Calibration confirmation</strong></p>
-<p><img src="https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/calibration-confirmation.png" alt="Calibration confirmation"></p>
-<h2>Setup</h2>
-<p>Choose a backend in Windhawk Settings:</p>
-<ul>
-<li><strong>Integrated Lenovo service</strong> (default): no utility download. Requires compatible
-Lenovo Power Manager service and drivers.</li>
-<li><strong>Lenovo ChargeThreshold.exe</strong>: <a href="https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/ChargeThreshold.exe">download Lenovo's utility</a>,
-save it wherever you prefer on a local drive, and enter its full path in Settings.
-The mod verifies the reviewed executable before running it. It never downloads,
-installs or elevates anything. Setup and diagnostics includes the download link.
-Only Lenovo's version 1.0.0.2 build is accepted; a newer Lenovo build needs a mod
-update. Choose a folder that other accounts cannot change.</li>
-</ul>
-<p>The gear beside the charge summary opens diagnostics and a driver link based on
-this machine's detected model. No serial number is read or sent. Drivers are installed separately.</p>
-<h2>Charging and presets</h2>
-<p>Save up to 20 named presets and choose up to five quick favorites. Manage presets
-is available in Set charge threshold and at the bottom of Apply charging preset.
-Quick presets apply to both batteries. Set charge threshold can edit each battery
-separately or link their limits with the integrated backend. Each result is read back.</p>
-<p>Charge to full saves the original limits, disables them temporarily, then restores
-at 100% or after eight hours. Cancel restores immediately. A newer enabled range
-from Vantage is preserved. The integrated backend restores each battery separately;
-Lenovo's executable cannot restore different ranges on two batteries. Select the
-integrated backend for that situation. Present batteries restore independently; recovery for a missing battery is retained.</p>
-<p>Charging limits belong to the laptop, not to one Windows account. Signed-in
-sessions share recovery records and normally coordinate through a machine-wide
-lock. If the lock cannot be used, charging commands and recovery continue without
-coordination immediately. If a holder blocks ten consecutive periodic checks
-(about five minutes), they also continue without coordination. The menu then says
-(not coordinated). The mod retries the lock and resumes coordination when it
-acquires it. During fallback, simultaneous changes in different sessions can
-overwrite one another. This favors restoring charge limits over waiting indefinitely.</p>
-<p><strong>Thresholds persist after this mod is disabled or removed.</strong> Disabling or updating
-the mod ends a pending full-charge request early: it tries to restore your limits
-first. Signing out, restarting, shutting down or an Explorer crash skips that step;
-the saved request is then restored the next time the mod runs, at 100% or once its
-eight hours have passed. If restoration fails, or the mod is removed while it cannot
-run, limits may remain off and charging can continue to 100% until the mod runs
-again or you set limits in Vantage. Removing the mod also removes its Windhawk
-recovery data. Restore protection before removal.</p>
-<p>If an initiated write is cancelled before completion, or its utility process is
-terminated while running, further changes and recovery pause to avoid racing
-a command still running in Lenovo's service. Ordinary launch failures and completed
-errors do not trigger this warning. The menu header links the paused state to setup. Saved limits are retained. Restart
-Windows, then use Setup and diagnostics to acknowledge the restart and resume
-recovery. This applies to both backends; cancelling a client cannot undo a server write.</p>
-<h2>Advanced controls</h2>
-<p>Battery health shows supported readings. Power offers the verified three-state USB
-control. Always-on USB settings persist after disabling or removing the mod.
-Advanced &gt; Experimental groups calibration and independent two-battery limits.
-Both have simulated coverage, not complete physical validation. Set charge threshold
-applies one range to both batteries; separate ranges are available only through
-Experimental. Calibration requires a separate confirmation and connected power; it saves
-current limits and blocks charging edits while running. Cancellation also requires
-confirmation. Removing the mod during calibration loses saved recovery: check its
-state and charging limits in Vantage. Cooling and airplane controls remain omitted
-until supported behavior is verified. Calibration is not a battery-health treatment.</p>
-<h2>Compatibility</h2>
-<p>Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
-mock coverage only and is experimental until a two-battery hardware test is completed. The executable backend
-requires English output. Private taskbar symbols can change after Windows updates.
-The tray icon hook is placed in SystemTray.dll, an older Taskbar.View.dll or
-ExplorerExtensions.dll, as Taskbar tray system icon tweaks does.</p>
-<p>Author/publisher: Bill Bauman. Apache-2.0. Project-name trademark and attribution
-terms are in the source repository; Lenovo's executable remains separately licensed.
-No Lenovo or Microsoft endorsement is implied.</p>
-]]></content>
-        <author>
-            <name>Bill Bauman</name>
-            <uri>https://github.com/billbauman</uri>
         </author>
     </entry>
 </feed>

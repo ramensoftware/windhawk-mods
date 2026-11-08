@@ -2,12 +2,232 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-08T18:00:34.000Z</updated>
+    <updated>2026-11-08T19:01:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Logitech Battery Tray 0.1.2]]></title>
+        <id>https://windhawk.net/mods/logitech-battery-tray#f70719f6c2867dd2743e24eab6b2fa36972e0b71</id>
+        <link href="https://windhawk.net/mods/logitech-battery-tray"/>
+        <updated>2026-11-08T19:01:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Logitech Battery Tray</h1>
+<p>Battery indicators for supported Logitech devices, with automatic discovery,
+charging status and optional percentage labels.</p>
+<h2>Screenshots</h2>
+<p>Horizontal taskbar with a battery tooltip:</p>
+<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/horizontal.png" alt="Logitech battery indicators on a horizontal taskbar"></p>
+<p>Vertical taskbar with stacked device indicators:</p>
+<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/vertical.png" alt="Logitech battery indicators on a vertical taskbar"></p>
+<h2>Compatibility and scope</h2>
+<p>Windows 10/11: standard notification icons provide the compatibility backend.
+On supported Windows 11 x64/ARM64 taskbars, Auto uses native XAML battery buttons
+on the primary taskbar. Unrecognized taskbar layouts use notification icons
+instead of an overlay. 32-bit Windows uses notification icons only.
+Native icons show the percentage and a tooltip; charging is green. Windows
+controls their placement and overflow visibility. XAML placement, button styling
+and click-to-open settings do not apply to notification icons.</p>
+<p>Select <strong>Native notification icons</strong> to test or force the compatibility backend.
+Successful compilation is not a claim of runtime testing on every Windows build.</p>
+<p>Unlike BT Battery Monitor (generic Bluetooth battery reporting), this mod reads
+Logitech G HUB and Logitech HID++ battery data, including supported USB receivers.
+It runs in Explorer because its optional XAML backend modifies Explorer's own
+taskbar visual tree. No pairing, firmware or device configuration is changed.</p>
+<h2>Battery sources</h2>
+<p>The XAML backend uses built-in Segoe Fluent Icons and standard Windows buttons
+and tooltips. Its battery glyph changes with the reported charge level, with an
+optional smaller icon indicating the device type.</p>
+<p>G HUB must be running to use its data; direct HID++ reading works independently.
+The G HUB client connects only to 127.0.0.1:9010. It requests /devices/list and
+/battery/&lt;deviceId&gt;/state, subscribes to /battery/state/changed, and uses a
+persistent query connection with a 30-second fallback poll by default. Failed
+connections retry with exponential backoff, up to 60 seconds. Events update
+readings independently of fallback polling.
+Updates cannot arrive earlier than G HUB reports them.</p>
+<p>The HID++ provider reads compatible Logitech devices through Unifying, Bolt,
+LIGHTSPEED, USB and accessible Bluetooth HID++ interfaces. It supports battery
+features 0x1004, 0x1000, 0x1001, 0x1F20 and legacy HID++ 1.0 registers.
+Voltage-based and coarse readings are marked with an approximation sign.
+G HUB readings take priority when available. Models using other protocols may
+not report a battery level; support for every Logitech model is not guaranteed.</p>
+<h2>Discovery and language</h2>
+<p>All detected, supported battery devices are shown by default. No model-specific
+rules are shipped. Optional visibility rules match a device name or model;
+empty rules are ignored, * and ? are supported, and the last match wins.
+The user-facing tooltip contains no internal IDs or provider diagnostics.
+Tooltip translations follow the preferred Windows UI languages, with English
+as fallback. Reload the mod after changing Windows display languages.
+The mod description and settings default to English, with Russian localization
+for Windhawk's Russian interface. Tooltips follow Windows UI languages independently.</p>
+<p>When G HUB stops, HID++ provides readings for compatible devices. Fully
+disconnected devices are hidden; confirmed charging remains visible even when
+the device is inactive. Repeated explicit HID++ offline reports and failed G HUB
+queries use a five-second grace. Missing HID++ replies are treated as an unknown
+connection state, retaining the last reading for up to thirty seconds of failed
+communication. A hidden HID++ device needs two valid readings at
+least one second apart before reappearing, with no intervening failed reading.
+These windows absorb temporary failures, not indefinitely cache charging state.
+Provider requests run outside the taskbar UI thread. Reconnection is automatic.
+Windows HID arrival/removal and receiver notifications trigger rediscovery;
+three-minute scanning also handles devices that do not send connection events.
+An already-open device that missed its initial probe is retried separately,
+with increasing delays up to 60 seconds, without rescanning every HID interface.
+Event-capable HID++ features use the configured fallback interval. ADC (0x1F20)
+and legacy register devices use a two-second poll because they may lack events.
+Presence confirmation temporarily uses a short interval to avoid delayed recovery.
+The XAML UI updates on data, size and theme changes, without a periodic repaint.
+In Auto mode, a transient XAML failure must last 30 seconds before notification
+icons appear; missing taskbar symbols select the compatibility backend immediately.
+While the native fallback is active, unsuccessful XAML attachment attempts back
+off up to 60 seconds. Layout, DPI and theme changes trigger an immediate retry.
+On supported left/right taskbars, indicators are stacked vertically and the
+percentage is placed below the icons. Button width follows the taskbar width;
+the configured button width applies to horizontal taskbars only.</p>
+<h2>Credits and limitations</h2>
+<p>Disable direct HID++ reading before updating device firmware. Persistent HID
+handles are read-only; write access is opened only for each battery/probe request.
+This reduces sharing conflicts, but cannot guarantee compatibility with tools
+that require exclusive access. Firmware updates with this mod have not been tested.</p>
+<p>The G HUB interface is unofficial and may change with G HUB updates.
+XAML root access is adapted from Taskbar Folder Menus by sb4ssman:
+https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp
+G HUB protocol: https://github.com/someweirdhuman/LogiBAT
+G HUB events: https://github.com/bmrussell/LGBattery
+Icons: https://learn.microsoft.com/windows/apps/design/iconography/segoe-fluent-icons-font
+HID++: https://github.com/Logitech/cpg-docs/tree/master/hidpp20
+Battery features: https://github.com/pwr-Solaar/Solaar</p>
+]]></content>
+        <author>
+            <name>uMk0</name>
+            <uri>https://github.com/umk0</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorerframe for 24H2 and later 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-explorerframe#d2a11c71d707fe8e7c32b56e5cfa23de18e70f61</id>
+        <link href="https://windhawk.net/mods/classic-explorerframe"/>
+        <updated>2026-11-08T19:01:44.000Z</updated>
+        <content type="html"><![CDATA[<p>Restores classic Explorerframe.dll on Windows 11 24H2 and later. This allows to restore the toolbars in the folder windows, including
+the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar and the toolbars provided by the mod
+<a href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe">Flexible Explorer Toolbars Deluxe</a>, such as the Search bar.</p>
+<p>Note that to enable the menubar you need to install in addition the mod <a href="https://windhawk.net/mods/restore-folder-menubar-25h2">ExplorerFrame and menubar fixes fork</a>.</p>
+<p>This mod downloads the classic Explorerframe.dll from the Microsoft's symbols server and stores it into the mod's storage. You need a working internet access at the first mod's activation.</p>
+<p>Restart Explorer after enabling or disabling the mod. At the first activation the file is downloaded in the background, so wait a few seconds before restarting, otherwise the mod takes effect only at the following Explorer start.</p>
+<p>Mods that hook ExplorerFrame.dll and happen to load before this mod might have no effect, because folder windows don't use the copy they hooked.</p>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Snowfall 1.0]]></title>
+        <id>https://windhawk.net/mods/desktop-snowfall#be5856fcd480efbfe0843219dea54843673763fe</id>
+        <link href="https://windhawk.net/mods/desktop-snowfall"/>
+        <updated>2026-11-08T19:01:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>Desktop Snowfall</h1>
+<p>Snow falls over your desktop. Flakes land on the top edge of your windows and on
+the taskbar and slowly build up snow drifts of different heights.</p>
+<p><img src="https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif" alt="Desktop Snowfall demo"></p>
+<ul>
+<li>The snow follows the window. Toss a window up and the snow flies up in loose
+clumps and lands back with a little bounce. Pull it down or shrink it from
+the top and the snow hangs in the air for a moment before it falls back onto
+the window.</li>
+<li>Make a window narrower and the snow on the cut-off part falls down.</li>
+<li>Optionally, the snow slides off windows moved sideways: it stays where it is,
+and the part the window slides out from under falls down.</li>
+<li>Sweep the snow off with the mouse cursor - it falls down to the windows below
+or to the taskbar.</li>
+<li>The wind blows powder off the drifts, and now and then a lump slides off a
+window corner.</li>
+<li>Works with the default taskbar, an auto-hidden taskbar (the snow rides along
+when it slides in and out) and custom taskbar styles (for example, floating
+&quot;dock&quot; themes of the Windows 11 Taskbar Styler mod): the snow lies on the
+visible taskbar parts.</li>
+</ul>
+<p>The snow is drawn on the GPU on a transparent, click-through overlay, so it
+never gets in the way of mouse input. The overlay is hidden automatically while
+a fullscreen app (a game or a video) is in the foreground. The mod runs in its
+own process, separately from Explorer.</p>
+<p>The overlay is redrawn every frame, so the snow keeps the GPU a little busy even
+when nothing else on the screen changes. On a laptop running on battery, a lower
+frame rate limit (for example, 30) saves power.</p>
+]]></content>
+        <author>
+            <name>mikybuilds</name>
+            <uri>https://github.com/mikybuilds</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Ubuntu Unity Desktop 1.0]]></title>
+        <id>https://windhawk.net/mods/ubuntu-unity-desktop#c5baa1f5353722223213b7b0379a4b1d9019de07</id>
+        <link href="https://windhawk.net/mods/ubuntu-unity-desktop"/>
+        <updated>2026-11-08T19:01:35.000Z</updated>
+        <content type="html"><![CDATA[<h1>Ubuntu Unity Desktop</h1>
+<p>Turns Windows 11 into the <strong>Ubuntu Unity 7</strong> desktop (Ubuntu 12.04 - 16.04): a panel along the top, the launcher
+along the left and the Dash instead of the Start menu. Everything runs inside Explorer: there is no separate
+program to install, and turning the mod off gives you the normal Windows desktop back right away.</p>
+<h2>What you get</h2>
+<p><strong>The panel (top bar)</strong></p>
+<ul>
+<li>The title of the window in front, and for a maximized window its minimize / restore / close buttons: the
+window loses its own title bar, like in Unity.</li>
+<li><strong>Tabs in the panel</strong>: maximize a browser (Brave, Chrome, Edge, ...) or another window with tabs and its
+whole tab row moves into the panel, with the sites' icons. Click a tab to switch, x to close it, + for a new one.</li>
+<li>Drag a maximized window down out of the panel to restore it, and drop it back on the panel to maximize it.</li>
+<li>Indicators on the right: background apps (tray icons), keyboard language, network, messages, volume (with a
+slider), clock (with a calendar) and the session menu (lock, log out, restart, shut down).</li>
+</ul>
+<p><strong>The launcher (left bar)</strong></p>
+<ul>
+<li>Pinned and running apps, with a pip per open window and an arrow for the app in front. Click to open, switch
+or minimize; right-click to pin / unpin, run as administrator, open the file location or quit.</li>
+<li>Hover for the app's name and live previews of its windows.</li>
+<li>Drag icons to reorder them, onto each other to make a group, or off the launcher to unpin them.</li>
+<li><strong>Music controls</strong> (cover, play / pause, previous / next) slide open under the app that plays music.</li>
+<li><strong>Discord call buttons</strong> (mute, deafen, hang up) slide open under Discord while you're in a call.</li>
+<li>Drag the launcher's right edge to make it (and its icons) bigger or smaller. The trash sits at the bottom.</li>
+</ul>
+<p><strong>The Dash (Start menu)</strong></p>
+<ul>
+<li>Opens with the Windows key, Ctrl+Esc or the button at the top of the launcher.</li>
+<li>Type to search apps, settings and files; lenses and filters like Unity's; widgets (clock, music, weather app, system, disks) on Home.</li>
+<li>Resize it with the grip in its corner (the size is remembered) or maximize it.</li>
+</ul>
+<p><strong>And more</strong></p>
+<ul>
+<li>Unity's animations: windows fly into the launcher when minimized, the launcher icons pop and wiggle, the panel
+and launcher slide away for full-screen games and videos.</li>
+<li>Glass (blur or acrylic), your accent colour or any colour, dark (Ambiance) or light (Radiance) panel.</li>
+</ul>
+<h2>Settings</h2>
+<p>Everything can be adjusted in the mod's settings, grouped by panel, launcher, Dash, look, windows and Windows
+integration: sizes, opacity, glass, clock format, which indicators show, animation speed, tabs in the panel, and
+whether the Windows taskbar is hidden.</p>
+<h2>Good to know</h2>
+<ul>
+<li>Windows 11, 64-bit. The shell lives on the main screen. With the taskbar hidden, other screens have no taskbar
+(and no launcher) at all; their windows stay where they are.</li>
+<li><strong>The taskbar's &quot;automatically hide&quot; setting is turned on while the mod runs</strong> (that gives its room on the screen
+back) and is set back as it was when you turn the mod off. If Explorer is killed or crashes and the mod is
+removed before it runs again, it may stay on: switch it off under Settings &gt; Personalization &gt; Taskbar.</li>
+<li>The Windows key and Ctrl+Esc open the Dash; shortcuts like Win+E, Win+R and Win+Shift+S keep working. If
+Windows' own Start menu opens anyway, the mod closes it and shows the Dash.</li>
+<li>Tabs in the panel read the window's tabs through Windows' accessibility interface. They work best with
+Chromium browsers (Brave, Chrome, Edge, Vivaldi, Opera). The new-tab button and the Discord call buttons are
+found by their names in English and Dutch apps.</li>
+<li>The shell's texts are in English, or in Dutch when Windows is.</li>
+<li>The Dash's weather card opens Windows' own Weather app: the mod itself never connects to the internet.</li>
+</ul>
+]]></content>
+        <author>
+            <name>dion</name>
+            <uri>https://github.com/dismedan-dion</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Window Centralizer 1.1.0]]></title>
         <id>https://windhawk.net/mods/window-centralizer#7a79ece1171c8f82c517e577bdcd2ac5466e63ed</id>
@@ -1181,110 +1401,6 @@ d'écran, etc. La langue suit automatiquement celle de Windows (sinon l'anglais)
         <author>
             <name>DahaSakinOlamazdim</name>
             <uri>https://github.com/DahaSakinOlamazdim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.0.0]]></title>
-        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#e1b866d715515ef71cec20eb25ef4eb437c26cfe</id>
-        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
-        <updated>2026-11-07T19:00:12.000Z</updated>
-        <content type="html"><![CDATA[<h1>Touchpad Relaxed Hand Tracking</h1>
-<p>Move the pointer with more fingers resting on the precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.</p>
-<h2>How it works</h2>
-<ul>
-<li><strong>Trigger:</strong> with 5 (or as few as configured) fingers touching the pad.</li>
-<li><strong>Disarm:</strong> after all fingers leave the touchpad. Lifting some keeps the glide going.</li>
-<li><strong>Movement:</strong> each finger weighs as much as it moves, so resting fingers drop out and one which lags (usually the thumb) doesn't fight the others. With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.</li>
-<li><strong>Click:</strong> you don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad.</li>
-<li><strong>Scrolling:</strong> Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll, while &quot;inside&quot; the more-fingers action (or with 2 fingers detection enabled). <strong>Both will get activated if you start with 2 and rest more on the touchpad.</strong></li>
-</ul>
-<h2>4 and 3 fingers detection</h2>
-<p>The options to start with four or three fingers conflict with the respective Windows swipes. <strong>Disable them in Settings → Bluetooth &amp; devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing</strong>. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.</p>
-<h2>2 fingers detection</h2>
-<p>When active, two fingers do everything: glide, right click (tap) and scroll (tap-drag). Windows' own two-finger gestures have to be disabled in <strong>Settings → Bluetooth &amp; devices → Touchpad</strong>: uncheck <strong>Scroll &amp; zoom → Drag two fingers to scroll</strong> and <strong>Taps → Tap with two fingers to right-click</strong>. Otherwise both commands respond. On Windhawk 1.x, with two-finger detection active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.</p>
-<h2>Speed</h2>
-<p>The mod learns the touchpad's native speed and acceleration by watching ordinary one-finger use: for each range of finger speed, it compares how far the finger moved with how far Windows moved the pointer. The glide reproduces that curve, and the multipliers apply on top of it: <strong>1.0 is the same as native</strong>, 1.5 is 50% faster. When the touchpad speed is changed in Windows settings, the curve adjusts with use.</p>
-<p>Right after installing, before anything is learned, the glide uses a default speed. Using the touchpad normally for a few minutes, with slow and fast movements, is enough for it to learn.</p>
-<h2>Limitations</h2>
-<ul>
-<li>Requires a precision touchpad.</li>
-<li>Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. <strong>Disabling Windows three and four fingers swipes removes the conflict.</strong></li>
-<li><strong>Programs running as administrator need Windhawk 2.</strong> On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.</li>
-<li>Movements against the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.</li>
-</ul>
-<h2>Credits</h2>
-<p>Reading the touchpad follows the approach of the <a href="https://windhawk.net/mods/three-finger-drag">Three Finger Drag</a> mod by RodrigoThomazi, under the GPL v3.</p>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Trail 3.4.5.9]]></title>
-        <id>https://windhawk.net/mods/mouse-trail#5dd4e2c3ce42ed1ae7064effebeda1b2a05c8487</id>
-        <link href="https://windhawk.net/mods/mouse-trail"/>
-        <updated>2026-11-07T17:02:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add：Desktop-only drawing mode, which draws the trail only while the desktop has focus, with three layering options — hide and clear (default), keep drawing above windows, or drop behind windows so they occlude the trail</li>
-<li>Add：Foreground state is now tracked with a WinEvent hook (<code>EVENT_SYSTEM_FOREGROUND</code>) instead of polling, with automatic 40 ms polling fallback when the hook cannot be installed</li>
-<li>Change：Unified the duplicated settings parsing into a single string-enum reader and shared clamp helpers</li>
-<li>Change：Deduplicated desktop/shell window detection and overlay show/hide handling into single helpers</li>
-<li>Change：Removed dead code and write-only state left behind by earlier cleanups, which also cut the mod from 801 KB to 620 KB</li>
-<li>Fix：Idle overhead and possible stutter caused by redundant per-frame polling and leftover bookkeeping</li>
-</ul>
-]]></content>
-        <author>
-            <name>MCheng404</name>
-            <uri>https://github.com/MCheng404</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Scroll 1.2.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-scroll#d1647770bf67559be8d1eb209b6a9876a1c56f32</id>
-        <link href="https://windhawk.net/mods/drag-to-scroll"/>
-        <updated>2026-11-07T17:02:20.000Z</updated>
-        <content type="html"><![CDATA[<h3>✨ New Features</h3>
-<ul>
-<li><strong>Right-Click Only Trigger Mode:</strong> Added a <code>trigger_mode</code> setting to switch between <code>Ctrl + Right-Click</code> and <code>Right-Click Only</code> (cruising is automatically disabled in Right-Click Only mode).</li>
-<li><strong>5-Tier Dynamic Velocity Mode:</strong> Replaced the old <code>enable_velocity</code> toggle with <code>velocity_mode</code> (<code>Off</code>, <code>Gentle</code>, <code>Standard</code>, <code>Fast</code>, <code>UltraFast</code>). <em>Note for upgrading users: the new <code>Standard</code> default is gentler and more controlled than v1.1.0; select <code>Ultra Fast</code> if you prefer the stronger v1.1.0 flick boost.</em></li>
-<li><strong>Configurable Cruising Anchor:</strong> Added <code>cruise_anchor</code> to start hands-free cruising by holding <code>Right-Click</code> (default), <code>Ctrl</code>, or <code>Either</code>. <em>Note for upgrading users: If you used cruising in v1.1.0, select Hold Ctrl to keep the old gesture.</em></li>
-<li><strong>Out-of-Bounds Dragging:</strong> Added <code>allow_out_of_bounds</code> to keep scrolling even when the cursor leaves the target window.</li>
-</ul>
-<h3>🛠️ Bug Fixes &amp; Stability</h3>
-<ul>
-<li><strong>Cross-Process Cruise Cancellation:</strong> Added per-session shared-memory coordination so clicking on other hooked desktop apps during <code>Ctrl</code>-anchored cruising stops the glide cleanly and swallows the stop-click (with instant fallback for unhooked, UWP, or elevated surfaces).</li>
-<li><strong>Swapped Mouse Button Support:</strong> Added <code>SM_SWAPBUTTON</code> handling so right-click tap replay, RMB-anchored cruising, and cancel checks work properly for left-handed mouse setups.</li>
-<li><strong>Scroll Target &amp; Capture Reliability:</strong> Locked wheel scroll delivery to the initial target window via <code>PostMessageW</code>, deferred window activation until past the deadzone, and added <code>GetCapture()</code> loss recovery (e.g., on <code>Alt+Tab</code> or modal dialogs) without rogue context menus.</li>
-<li><strong>Cursor &amp; Modifier Polish:</strong> Suppressed deadzone cursor changes in Right-Click Only mode, improved arrow cursor restoration when scrolling ends, and refined <code>Ctrl</code> masking during scroll drain to prevent accidental browser zooming.</li>
-<li><strong>Thread &amp; Unload Safety:</strong> Refactored state synchronization with <code>CRITICAL_SECTION</code> and atomics, hardened Base64 cursor bounds and alignment checks, joined the cruise worker in <code>Wh_ModBeforeUninit</code>, and updated <code>@exclude</code> entries (<code>conhost.exe</code>, <code>ShellExperienceHost.exe</code>, <code>Widgets.exe</code>).</li>
-</ul>
-<h3>📝 Documentation</h3>
-<ul>
-<li>Added a <strong>Recommended Settings</strong> section to the README (highlighting why the <code>Hold Right-Click</code> cruising anchor prevents click leaks across elevated, UWP, and system windows) and updated settings descriptions to cover trigger trade-offs and compatibility notes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.2]]></title>
-        <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#cda8376695f4e5390fa76ce4ac7566d9e9db99e2</id>
-        <link href="https://windhawk.net/mods/pointer-afterimage-motion-blur"/>
-        <updated>2026-11-07T16:00:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>No more trail across the screen when the pointer jumps across a large part of the screen, such as with PowerToys Cursor Wrap.</li>
-<li>Fixes flickering hover highlights in Office menus (such as Excel's recent files) while the blur is drawn. The overlay window used to move and resize with the blur on every frame, and Windows reports each of those changes to the window under the pointer as a mouse move. Now the window stays put while the pointer is still and only its picture changes.</li>
-<li>The blur is now the same size as the pointer at 125% and 175% scaling; it was drawn up to 25% larger there. Windows scales the pointer in steps (the same size at 100% and 125%), not by the exact scaling.</li>
-<li>A new pointer size is picked up the next time the mouse moves after a pause; before, the blur kept the old size until the mod was restarted.</li>
-<li>A little less CPU for the mod and dwm.exe while the blur is drawn. Memory goes up to 7-8 MB (more on larger screens) for short bursts while the blur is drawn (the window is now larger than the blur) and drops back once the mouse stops.</li>
-</ul>
-]]></content>
-        <author>
-            <name>sidlikesgrapess</name>
-            <uri>https://github.com/sidlikesgrapess</uri>
         </author>
     </entry>
 </feed>

@@ -2372,6 +2372,33 @@
         "version": "1.1.3"
       }
     },
+    "classic-explorerframe": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794164504000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794164504000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Anixx",
+        "compilerOptions": "-lwininet -lshell32 -lbcrypt",
+        "description": "Restores classic Explorerframe.dll on Win11 24H2 and later",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Classic Explorerframe for 24H2 and later",
+        "version": "1.0"
+      }
+    },
     "classic-file-picker-dialog": {
       "details": {
         "defaultSorting": 7317,
@@ -4615,6 +4642,30 @@
           "explorer.exe"
         ],
         "name": "2D Rectangular Selection for Desktop",
+        "version": "1.0"
+      }
+    },
+    "desktop-snowfall": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794164499000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794164499000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mikybuilds",
+        "compilerOptions": "-ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32",
+        "description": "Snow falls over your desktop and settles on top of windows and the taskbar",
+        "github": "https://github.com/mikybuilds",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Desktop Snowfall",
         "version": "1.0"
       }
     },
@@ -10150,6 +10201,35 @@
         "license": "GPL-3.0",
         "name": "Lock Screen Date and Time Format",
         "version": "1.0.1"
+      }
+    },
+    "logitech-battery-tray": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794164508000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794164508000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64",
+          "x86"
+        ],
+        "author": "uMk0",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32 -lwinhttp -lshell32 -lsetupapi -lhid -lgdi32",
+        "description": "Native taskbar battery indicators for Logitech G HUB and HID++ devices.",
+        "github": "https://github.com/umk0",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Logitech Battery Tray",
+        "version": "0.1.2"
       }
     },
     "logon-logoff-shutdown-sounds": {
@@ -19559,6 +19639,33 @@
         ],
         "name": "Two-sided snapping in Win11",
         "version": "1.0.0"
+      }
+    },
+    "ubuntu-unity-desktop": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794164495000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794164495000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "dion",
+        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -ldwmapi -lcomctl32 -lgdi32 -lshcore -lpdh -lruntimeobject",
+        "description": "Turns Windows 11 into Ubuntu's Unity desktop: a top panel with menus and window tabs, the launcher on the left and the Dash as Start menu",
+        "github": "https://github.com/dismedan-dion",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Ubuntu Unity Desktop",
+        "version": "1.0"
       }
     },
     "uifile-override": {
