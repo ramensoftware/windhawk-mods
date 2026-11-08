@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              crystaldiskinfo-smart-auto-refresh
 // @name            CrystalDiskInfo Smart Auto-Refresh
-// @description     Temporarily pauses the Auto-Refresh function whenever the application's main window is visible
-// @version         1.0
+// @description     Temporarily pauses the Auto-Refresh function while the application's main window is visible
+// @version         1.0.2
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         DiskInfo32.exe
@@ -25,20 +25,20 @@
 # CrystalDiskInfo Smart Auto-Refresh
 CrystalDiskInfo includes an optional Auto-Refresh feature that updates disk
 information at specified intervals, which is useful for background monitoring
-while the application is minimized to the system tray. However, when the
+while the application is minimized to the system tray. However, while the
 application's main window is visible, automatic refreshes can interfere with the
 analysis of current disk status, as shifting attribute values make tracking
 specific metrics more difficult.
 
 This mod temporarily pauses the Auto-Refresh function by blocking its disk
-polling cycle whenever the application's main window is visible, allowing for an
+polling cycle while the application's main window is visible, allowing for an
 uninterrupted analysis of current disk status.
 
 The Auto-Refresh function resumes once the application is minimized to the
 taskbar or system tray.
 
 **Note:** If CrystalDiskInfo is already running when the mod is loaded, pick one
-of the following options to activate it:
+of the following options for the mod to take effect:
 * Restart the application completely.
 * Select an interval in **Function** → **Auto Refresh**, including the one
   currently set.
@@ -48,15 +48,16 @@ of the following options to activate it:
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <commctrl.h>
-#include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-std::mutex g_timerMutex;
+std::shared_mutex g_timerMutex;
 std::unordered_map<HWND, std::unordered_set<UINT_PTR>> g_timerMap;
 
-// Subclass procedure
+// Subclass procedure for the background timer: Pause the Auto-Refresh function
+// while the main window is visible
 LRESULT CALLBACK AutoRefreshSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     LPARAM lParam, DWORD_PTR dwRefData)
 {
@@ -64,9 +65,9 @@ LRESULT CALLBACK AutoRefreshSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     {
         bool isAutoRefreshTimer = false;
         {
-            std::lock_guard<std::mutex> lock(g_timerMutex);
+            std::shared_lock lock(g_timerMutex);
             auto it = g_timerMap.find(hWnd);
-            if (it != g_timerMap.end() && it->second.count(wParam))
+            if (it != g_timerMap.end() && it->second.contains(wParam))
             {
                 isAutoRefreshTimer = true;
             }
@@ -90,7 +91,7 @@ LRESULT CALLBACK AutoRefreshSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
             AutoRefreshSubclassProc);
-        std::lock_guard<std::mutex> lock(g_timerMutex);
+        std::unique_lock lock(g_timerMutex);
         g_timerMap.erase(hWnd);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -102,15 +103,14 @@ SetTimer_t SetTimer_Original;
 UINT_PTR WINAPI SetTimer_Hook(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse,
     TIMERPROC lpTimerFunc)
 {
-    // CrystalDiskInfo's minimum Auto-Refresh interval is 1 minute
-    // This threshold avoids interfering with unrelated functions by filtering
-    // out high-frequency timers, ensuring only the application's disk polling
-    // cycle is targeted.
-    if (hWnd && uElapse >= 60000)
+    // CrystalDiskInfo's minimum Auto-Refresh interval is 1 minute.
+    // Filtering for an exact multiple of this interval avoids interfering with
+    // the 130-second timer used for the Power-On Hours calculation.
+    if (hWnd && (uElapse >= 60000) && (uElapse % 60000) == 0)
     {
         bool isSubclassRequired = false;
         {
-            std::lock_guard<std::mutex> lock(g_timerMutex);
+            std::unique_lock lock(g_timerMutex);
             auto [it, inserted] = g_timerMap.try_emplace(hWnd);
             if (inserted)
             {
@@ -135,7 +135,7 @@ BOOL WINAPI KillTimer_Hook(HWND hWnd, UINT_PTR nIDEvent)
 {
     if (hWnd)
     {
-        std::lock_guard<std::mutex> lock(g_timerMutex);
+        std::unique_lock lock(g_timerMutex);
         auto it = g_timerMap.find(hWnd);
         if (it != g_timerMap.end())
         {
@@ -172,7 +172,7 @@ void Wh_ModUninit()
 
     std::vector<HWND> windowsToDetach;
     {
-        std::lock_guard<std::mutex> lock(g_timerMutex);
+        std::unique_lock lock(g_timerMutex);
         for (const auto& timerEntry : g_timerMap)
         {
             windowsToDetach.push_back(timerEntry.first);

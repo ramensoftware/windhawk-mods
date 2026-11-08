@@ -2,7 +2,7 @@
 // @id              window-border-customizer
 // @name            Window Border Customizer
 // @description     Replaces DWM stock borders with custom ARGB translucent borders.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         dwm.exe
@@ -131,7 +131,10 @@ DWORD WINAPI ExplorerThemeWorker(LPVOID lpParam) {
     while (true) {
         if (ShouldAppsUseDarkMode) {
             LONG darkState = ShouldAppsUseDarkMode() ? 1 : 0;
-            InterlockedExchange(&g_isDarkTheme, darkState);
+            LONG oldState = InterlockedExchange(&g_isDarkTheme, darkState);
+            if (oldState != darkState) {
+                PostMessageW(HWND_BROADCAST, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+            }
         }
 
         DWORD waitRes = MsgWaitForMultipleObjects(1, &g_hStopEvent, FALSE, 500, QS_ALLINPUT);
@@ -496,9 +499,6 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
     if (g_ModUnloading) return SetBorderParameters_Orig(pThis, borderRect, cornerRadius, dpi, color, borderStyle, shadowStyle);
     HWND hwnd = NULL;
     WindowKind popupKind = CheckWindowCache(pThis, borderRect, &hwnd);
-    if (popupKind == WindowKind::Pending) {
-        return SetBorderParameters_Orig(pThis, borderRect, cornerRadius, dpi, color, borderStyle, shadowStyle);
-    }
 
     bool isDarkTheme = (g_isDarkTheme == 1);
     bool isFocused = true; 

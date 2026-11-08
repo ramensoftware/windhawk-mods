@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.2.5
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,14 +26,13 @@
 Define alternative files for loading various resources (e.g. icons in
 imageres.dll) for simple theming without having to modify system files.
 
-**Note**: This mod requires Windhawk v1.6 or newer.
-
 ## Icon themes
 
-A collection of community contributed icon theme packs can be found in the
-[Resource Redirect icon
-themes](https://github.com/ramensoftware/resource-redirect-icon-themes)
-repository. An icon theme can be selected in the mod's settings.
+An icon theme from the collection of community-contributed icon theme packs can
+be selected in the mod's settings. Screenshots of some of the icon themes can be
+found in the [Resource Redirect icon
+themes](https://github.com/ramensoftware/resource-redirect-icon-themes#themes)
+repository.
 
 An icon theme can also be installed manually by downloading it and specifying
 its path in the mod's settings. For details, refer to the guide in the
@@ -42,10 +41,24 @@ repository.
 A short demonstration can be found [here on
 YouTube](https://youtu.be/irzVmKHB83E).
 
+## Disable folder thumbnails
+
+The mod has an option to disable thumbnails in Explorer folders, making folders
+use a generic folder icon instead of showing a preview of their contents. Some
+icon themes may look better with this option enabled, while other themes have
+proper support for styling folder thumbnails. Folder thumbnails are only
+replaced when the "Redirect all loaded resources" option is enabled (see below).
+
+## Redirect all loaded resources (experimental)
+
+The option to redirect all resources can be enabled in the settings. In this
+case, redirection won't be limited to the resource types and loading methods
+listed above. This option might become the default in the future.
+
 ## Theme paths
 
 Theme paths can be set in the settings. A theme path is a folder with
-alternative resource files, and the `theme.ini` file that contains redirection
+alternative resource files and a `theme.ini` file that contains redirection
 rules. For example, the `theme.ini` file may contain the following:
 
 ```
@@ -54,8 +67,8 @@ rules. For example, the `theme.ini` file may contain the following:
 %SystemRoot%\System32\imageres.dll=imageres.dll
 ```
 
-In this case, the folder must also contain the `explorer.exe`, `imageres.dll`
-files which will be used as the redirection resource files.
+In this case, the folder must also contain the `explorer.exe` and `imageres.dll`
+files, which will be used as the redirection resource files.
 
 Alternatively, the theme path can be the `.ini` file itself.
 
@@ -69,18 +82,12 @@ The mod supports the following resource types and loading methods:
 * Cursors loaded with the `LoadCursorW` function.
 * Bitmaps loaded with the `LoadBitmapW` function.
 * Menus loaded with the `LoadMenuW` function.
-* Dialogs loaded with the `DialogBoxParamW`, `CreateDialogParamW` functions.
+* Dialogs loaded with the `DialogBoxParamW` and `CreateDialogParamW` functions.
 * Strings loaded with the `LoadStringW` function.
 * GDI+ images (e.g. PNGs) loaded with the `SHCreateStreamOnModuleResourceW`
   function.
 * DirectUI resources (usually `UIFILE` and `XML`) loaded with the
   `SetXMLFromResource` function.
-
-## Redirect all loaded resources (experimental)
-
-The option to redirect all resources can be enabled in the settings. In this
-case, redirection won't be limited to the resource types and loading methods
-listed above. This option might become the default in the future.
 
 ## Choosing the redirected resource file
 
@@ -279,7 +286,27 @@ The resource lookup order then becomes:
   - Windows 11 New Folders Purple|themes/icons/niivu/Windows%2011%20New%20Folders%20Purple.zip: Windows 11 New Folders Purple (by niivu)
   - Windows 11 New Folders Slate|themes/icons/niivu/Windows%2011%20New%20Folders%20Slate.zip: Windows 11 New Folders Slate (by niivu)
   - Windows 11 New Folders Yellow|themes/icons/niivu/Windows%2011%20New%20Folders%20Yellow.zip: Windows 11 New Folders Yellow (by niivu)
+  - PaneVista|themes/icons/SoftwareType/PaneVista.zip: 'PaneVista (by SoftwareType, credit: ImSwordQueen)'
   - Pane7|themes/icons/ImSwordQueen/Pane7.zip: Pane7 (by ImSwordQueen)
+  - Pane8.1|themes/icons/NicSonic/Pane8.1.zip: Pane8.1 (by NicSonic)
+  - Minecraft Axolotle|themes/icons/Wasiabbas4pk/Minecraft%20Axolotle.zip: 'Minecraft Axolotle (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Fox|themes/icons/Wasiabbas4pk/Minecraft%20Fox.zip: 'Minecraft Fox (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft TNT|themes/icons/Wasiabbas4pk/Minecraft%20TNT.zip: 'Minecraft TNT (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Panda|themes/icons/Wasiabbas4pk/Minecraft%20Panda.zip: 'Minecraft Panda (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Creeper|themes/icons/Wasiabbas4pk/Minecraft%20Creeper.zip: 'Minecraft Creeper (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Ender Dragon|themes/icons/Wasiabbas4pk/Minecraft%20Ender%20Dragon.zip: 'Minecraft Ender Dragon (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Shulker (Blue)|themes/icons/Wasiabbas4pk/Minecraft%20Shulker%28Blue%29.zip: 'Minecraft Shulker (Blue) (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Shulker (Black)|themes/icons/Wasiabbas4pk/Minecraft%20Shulker%28Black%29.zip: 'Minecraft Shulker (Black) (by WasiXGamer, credit: dalps/minecraft11)'
+- disableThumbnails: false
+  $name: Disable folder thumbnails
+  $description: >-
+    Make Explorer folders use a generic folder icon instead of showing
+    thumbnails of their contents. This works better with some icon themes.
+- allResourceRedirect: false
+  $name: Redirect all loaded resources (experimental)
+  $description: >-
+    Try to redirect all loaded resources, not only the supported resources
+    that are listed in the description.
 - themePaths: [""]
   $name: Theme paths
   $description: >-
@@ -296,17 +323,12 @@ The resource lookup order then becomes:
       $name: The redirection resource file
       $description: The custom resource file that will be used instead.
   $name: Redirection resource paths
-- allResourceRedirect: false
-  $name: Redirect all loaded resources (experimental)
-  $description: >-
-    Try to redirect all loaded resources, not only the supported resources
-    that are listed in the description.
 - themeFolder: ""
   $name: Theme folder (deprecated)
   $description: >-
     A folder with alternative resource files and theme.ini.
 
-    This option will be removed in the future, please use the new "Theme paths"
+    This option will be removed in the future. Please use the new "Theme paths"
     option above.
 */
 // ==/WindhawkModSettings==
@@ -332,12 +354,23 @@ The resource lookup order then becomes:
 #include <unordered_map>
 #include <vector>
 
+using namespace std::string_view_literals;
+
 #ifndef LR_EXACTSIZEONLY
 #define LR_EXACTSIZEONLY 0x10000
 #endif
 
+#ifndef STATUS_SUCCESS
+#define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
+#endif
+
+#ifndef STATUS_BUFFER_TOO_SMALL
+#define STATUS_BUFFER_TOO_SMALL ((NTSTATUS)0xC0000023L)
+#endif
+
 struct {
     WindhawkUtils::StringSetting iconTheme;
+    std::atomic<bool> disableThumbnails;
     bool allResourceRedirect;
 } g_settings;
 
@@ -2553,8 +2586,180 @@ std::wstring GetIconThemePath(std::wstring_view iconTheme) {
     return targetPath;
 }
 
+bool StartsWithCaseInsensitive(std::wstring_view str,
+                               std::wstring_view prefix) {
+    return str.size() >= prefix.size() &&
+           _wcsnicmp(str.data(), prefix.data(), prefix.size()) == 0;
+}
+
+// https://github.com/valinet/wh-mods/blob/61319815c7e018e392a08077dc364559548ade02/mods/valinet-unserver.wh.cpp#L95
+// https://stackoverflow.com/questions/937044/determine-path-to-registry-key-from-hkey-handle-in-c
+std::wstring GetPathFromHKEY(HKEY key) {
+    if (!key) {
+        return {};
+    }
+
+    using NtQueryKey_t = NTSTATUS(NTAPI*)(
+        HANDLE KeyHandle, int KeyInformationClass, PVOID KeyInformation,
+        ULONG Length, PULONG ResultLength);
+    static NtQueryKey_t pNtQueryKey = []() {
+        HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+        if (hNtdll) {
+            return (NtQueryKey_t)GetProcAddress(hNtdll, "NtQueryKey");
+        }
+        return (NtQueryKey_t) nullptr;
+    }();
+
+    if (!pNtQueryKey) {
+        return {};
+    }
+
+    constexpr int kKeyNameInformation = 3;
+
+    ULONG size = 0;
+    NTSTATUS result = pNtQueryKey(key, kKeyNameInformation, nullptr, 0, &size);
+    if (result != STATUS_BUFFER_TOO_SMALL) {
+        return {};
+    }
+
+    std::vector<BYTE> buffer(size);
+    result = pNtQueryKey(key, kKeyNameInformation, buffer.data(), size, &size);
+    if (result != STATUS_SUCCESS || size < sizeof(ULONG)) {
+        return {};
+    }
+
+    // The buffer contains a KEY_NAME_INFORMATION structure:
+    // ULONG NameLength (4 bytes) + WCHAR Name[1].
+    ULONG nameLength = *reinterpret_cast<ULONG*>(buffer.data());
+    if (size < sizeof(ULONG) + nameLength) {
+        return {};
+    }
+
+    PCWSTR name = reinterpret_cast<PCWSTR>(buffer.data() + sizeof(ULONG));
+    return std::wstring(name, nameLength / sizeof(WCHAR));
+}
+
+bool MatchesClassSubkey(HKEY hKey, std::wstring_view classSubKey) {
+    std::wstring keyPath = GetPathFromHKEY(hKey);
+    std::wstring_view keyPathSuffix = keyPath;
+
+    constexpr std::wstring_view kRegistryMachinePrefix =
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\"sv;
+    constexpr std::wstring_view kRegistryUserPrefix = L"\\REGISTRY\\USER\\"sv;
+
+    if (StartsWithCaseInsensitive(keyPathSuffix, kRegistryMachinePrefix)) {
+        // Remove "\REGISTRY\MACHINE\SOFTWARE\Classes\" prefix.
+        keyPathSuffix.remove_prefix(kRegistryMachinePrefix.size());
+    } else if (StartsWithCaseInsensitive(keyPathSuffix, kRegistryUserPrefix)) {
+        // Remove "\REGISTRY\USER\" prefix.
+        keyPathSuffix.remove_prefix(kRegistryUserPrefix.size());
+
+        // Remove "<SID>_Classes\" prefix for non-empty SID.
+        size_t firstBackslash = keyPathSuffix.find(L'\\');
+        if (firstBackslash == std::wstring_view::npos) {
+            return false;
+        }
+
+        constexpr std::wstring_view kClassesSuffix = L"_Classes"sv;
+        if (firstBackslash > kClassesSuffix.size() &&
+            _wcsnicmp(
+                keyPathSuffix.data() + firstBackslash - kClassesSuffix.size(),
+                kClassesSuffix.data(), kClassesSuffix.size()) == 0) {
+            keyPathSuffix.remove_prefix(firstBackslash + 1);
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    return keyPathSuffix.size() == classSubKey.size() &&
+           _wcsnicmp(keyPathSuffix.data(), classSubKey.data(),
+                     classSubKey.size()) == 0;
+}
+
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+RegQueryValueExW_t RegQueryValueExW_Original;
+LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
+                                     LPCWSTR lpValueName,
+                                     LPDWORD lpReserved,
+                                     LPDWORD lpType,
+                                     LPBYTE lpData,
+                                     LPDWORD lpcbData) {
+    // Disable thumbnails in Explorer folders by providing the "Logo" value for
+    // the "AllFolders\Shell" key. When this value is present, Explorer uses a
+    // generic folder icon instead of showing thumbnails of the folder contents.
+    // This is equivalent to setting the "Logo" value below to "imageres.dll,-3"
+    // (REG_SZ), but is applied dynamically by the mod:
+    //
+    // HKCU\Software\Classes\Local
+    // Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell
+    if (!g_settings.disableThumbnails) {
+        return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType,
+                                         lpData, lpcbData);
+    }
+
+    constexpr WCHAR kValueName[] = L"Logo";
+    constexpr std::wstring_view kClassSubkey =
+        L"Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell"sv;
+    constexpr std::wstring_view kReplacementData = L"imageres.dll,-3"sv;
+
+    // Save the original buffer size before calling the original function, as
+    // lpcbData is overwritten with the actual data size on output.
+    DWORD dataBufferSize = (lpData && lpcbData) ? *lpcbData : 0;
+
+    LSTATUS ret = RegQueryValueExW_Original(hKey, lpValueName, lpReserved,
+                                            lpType, lpData, lpcbData);
+    if (ret != ERROR_SUCCESS && ret != ERROR_MORE_DATA &&
+        ret != ERROR_FILE_NOT_FOUND) {
+        return ret;
+    }
+
+    if (!lpValueName || _wcsicmp(lpValueName, kValueName) != 0) {
+        return ret;
+    }
+
+    if (!MatchesClassSubkey(hKey, kClassSubkey)) {
+        return ret;
+    }
+
+    Wh_Log(L"Providing %s value to disable folder thumbnails", kValueName);
+
+    DWORD requiredSize = (kReplacementData.size() + 1) * sizeof(WCHAR);
+
+    if (lpType) {
+        *lpType = REG_SZ;
+    }
+
+    if (!lpData || !lpcbData) {
+        if (lpData && !lpcbData) {
+            // Shouldn't happen per documentation.
+            return ret;
+        }
+        if (lpcbData) {
+            *lpcbData = requiredSize;
+        }
+        return ERROR_SUCCESS;
+    }
+
+    if (dataBufferSize < requiredSize) {
+        Wh_Log(L"Not enough space for %s, available=%u", kValueName,
+               dataBufferSize);
+        *lpcbData = requiredSize;
+        return ERROR_MORE_DATA;
+    }
+
+    memcpy(lpData, kReplacementData.data(),
+           kReplacementData.size() * sizeof(WCHAR));
+    reinterpret_cast<PWSTR>(lpData)[kReplacementData.size()] = L'\0';
+    *lpcbData = requiredSize;
+
+    return ERROR_SUCCESS;
+}
+
 void LoadSettings() {
     g_settings.iconTheme = WindhawkUtils::StringSetting::make(L"iconTheme");
+    g_settings.disableThumbnails = Wh_GetIntSetting(L"disableThumbnails");
     g_settings.allResourceRedirect = Wh_GetIntSetting(L"allResourceRedirect");
 
     std::unordered_map<std::wstring, std::vector<std::wstring>> paths;
@@ -2831,6 +3036,16 @@ BOOL Wh_ModInit() {
         }
     }
 
+    if (kernelBaseModule) {
+        auto pRegQueryValueExW = (RegQueryValueExW_t)GetProcAddress(
+            kernelBaseModule, "RegQueryValueExW");
+        if (pRegQueryValueExW) {
+            WindhawkUtils::SetFunctionHook(pRegQueryValueExW,
+                                           RegQueryValueExW_Hook,
+                                           &RegQueryValueExW_Original);
+        }
+    }
+
     // The functions below use FindResourceEx, LoadResource, SizeofResource.
     HMODULE shcoreModule =
         LoadLibraryEx(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2925,6 +3140,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
     auto prevIconTheme = std::move(g_settings.iconTheme);
+    bool prevDisableThumbnails = g_settings.disableThumbnails;
     int prevAllResourceRedirect = g_settings.allResourceRedirect;
 
     LoadSettings();
@@ -2937,7 +3153,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     FreeAndClearRedirectedModules();
 
     if (DoesCurrentProcessOwnTaskbar()) {
-        if (wcscmp(g_settings.iconTheme, prevIconTheme) != 0) {
+        if (wcscmp(g_settings.iconTheme, prevIconTheme) != 0 ||
+            g_settings.disableThumbnails != prevDisableThumbnails) {
             PromptToClearCache();
         }
 

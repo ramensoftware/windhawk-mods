@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control
 // @name            Taskbar Volume Control
 // @description     Control the system volume by scrolling over the taskbar or anywhere with modifier keys
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @include         SndVol.exe
-// @compilerOptions -DWINVER=0x0A00 -lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion
+// @compilerOptions -lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -202,7 +202,7 @@ enum class Target {
 
 Target g_target;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_initialized;
 bool g_inputSiteProcHooked;
 std::unordered_set<HWND> g_secondaryTaskbarWindows;
@@ -528,7 +528,11 @@ bool SvToInt(std::wstring_view s, int* result) {
         if (c < L'0' || c > L'9') {
             return false;
         }
-        value = value * 10 + (c - L'0');
+        int digit = c - L'0';
+        if (value > (INT_MAX - digit) / 10) {
+            return false;
+        }
+        value = value * 10 + digit;
     }
 
     *result = value;
@@ -592,7 +596,11 @@ bool IsPointInsideAdditionalRegion(HWND hMMTaskbarWnd, POINT pt) {
     int cursorOffset;
     if (isHorizontal) {
         taskbarLength = rc.right - rc.left;
-        cursorOffset = pt.x - rc.left;
+        if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
+            cursorOffset = rc.right - 1 - pt.x;
+        } else {
+            cursorOffset = pt.x - rc.left;
+        }
     } else {
         taskbarLength = rc.bottom - rc.top;
         cursorOffset = pt.y - rc.top;
@@ -1590,8 +1598,8 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd) {
     // but the inputsite.dll code checks that the value wasn't changed, and
     // crashes otherwise.
     auto wndProc = (WNDPROC)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
-    WindhawkUtils::Wh_SetFunctionHookT(wndProc, InputSiteWindowProc_Hook,
-                                       &InputSiteWindowProc_Original);
+    WindhawkUtils::SetFunctionHook(wndProc, InputSiteWindowProc_Hook,
+                                   &InputSiteWindowProc_Original);
 
     if (g_initialized) {
         Wh_ApplyHookOperations();
@@ -1845,40 +1853,69 @@ void LoadSettings() {
     Wh_FreeStringSetting(additionalScrollRegions);
 }
 
+// The return type is int to match the produce<> COM thunk variant below, which
+// returns an HRESULT. For the standalone implementation variant (which returns
+// void), its caller is a thin thunk that overwrites the return value, so the
+// returned value is harmlessly discarded.
 using VolumeSystemTrayIconDataModel_OnIconClicked_t =
-    void(WINAPI*)(void* pThis, void* iconClickedEventArgs);
+    int(WINAPI*)(void* pThis, void* param1);
 VolumeSystemTrayIconDataModel_OnIconClicked_t
     VolumeSystemTrayIconDataModel_OnIconClicked_Original;
-void WINAPI
-VolumeSystemTrayIconDataModel_OnIconClicked_Hook(void* pThis,
-                                                 void* iconClickedEventArgs) {
+int WINAPI VolumeSystemTrayIconDataModel_OnIconClicked_Hook(void* pThis,
+                                                            void* param1) {
     Wh_Log(L">");
 
     if (g_settings.middleClickToMute && GetKeyState(VK_MBUTTON) < 0) {
         ToggleVolMuted();
-        return;
+        return 0;  // S_OK
     }
 
-    VolumeSystemTrayIconDataModel_OnIconClicked_Original(pThis,
-                                                         iconClickedEventArgs);
+    return VolumeSystemTrayIconDataModel_OnIconClicked_Original(pThis, param1);
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+bool HookSystemTraySymbols(HMODULE module) {
+    // In SystemTray.dll, the implementation function was inlined into the
+    // produce<> COM thunk, so hook that.
+    bool isSystemTrayDll = module == GetModuleHandle(L"SystemTray.dll");
+
+    // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::OnIconClicked(struct winrt::SystemTray::IconClickedEventArgs const &))"},
+            {isSystemTrayDll
+                 ? LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel,struct winrt::SystemTray::IIconDataModel>::OnIconClicked(void *))"
+                 : LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::OnIconClicked(struct winrt::SystemTray::IconClickedEventArgs const &))"},
             &VolumeSystemTrayIconDataModel_OnIconClicked_Original,
             VolumeSystemTrayIconDataModel_OnIconClicked_Hook,
             true,
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // Starting with Taskbar.View.dll 2604.8002.200.6000, the SystemTray
+            // types moved out of Taskbar.View.dll into SystemTray.dll, so don't
+            // hook Taskbar.View.dll at this version and above.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
+    }
     if (!module) {
         module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
@@ -1886,17 +1923,17 @@ HMODULE GetTaskbarViewModuleHandle() {
     return module;
 }
 
-bool ShouldHookTaskbarViewDllSymbols() {
+bool ShouldHookSystemTraySymbols() {
     return g_nWinVersion >= WIN_VERSION_11_22H2 && g_settings.middleClickToMute;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (ShouldHookTaskbarViewDllSymbols() && !g_taskbarViewDllLoaded &&
-        GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (ShouldHookSystemTraySymbols() && !g_systemTrayModuleHooked &&
+        GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
+        if (HookSystemTraySymbols(module)) {
             Wh_ApplyHookOperations();
         }
     }
@@ -1961,7 +1998,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         HandleLoadedModuleIfExplorerPatcher(module);
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
     }
 
     return module;
@@ -1992,6 +2029,102 @@ bool AreScrollAnywhereModifiersHeld() {
            g_settings.scrollAnywhereKeys.win == winKeyState;
 }
 
+// Using the Win or Alt key as a scroll-anywhere modifier would trigger a menu
+// on release: a lone Win tap opens the Start menu, and a lone Alt tap activates
+// the window's menu bar. To prevent this, the mouse hook flags the key as used
+// for scrolling, and the keyboard hook below masks its release: it suppresses
+// the real key-up and re-injects a dummy key (0xE8, unassigned) before it, so
+// Windows sees a non-modifier key and skips the menu. 0xE8 is the masking key
+// recommended by AutoHotkey for exactly this, both for Win and Alt:
+// https://www.autohotkey.com/docs/v2/lib/A_MenuMaskKey.htm
+//
+// Masking must happen at release time, not during the scroll, since holding the
+// key auto-repeats key-down events that would re-arm the lone-tap detection.
+struct ModifierMaskState {
+    bool down;
+    bool usedForScroll;
+};
+
+ModifierMaskState g_winMaskState;
+ModifierMaskState g_altMaskState;
+
+// Returns true if the original key-up was suppressed and re-sent masked, in
+// which case the caller should swallow it.
+bool MaskModifierKeyEvent(ModifierMaskState* state,
+                          WPARAM wParam,
+                          KBDLLHOOKSTRUCT* pKbdStruct) {
+    if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+        // Reset the flag on the initial press, but not on auto-repeat events
+        // (which keep firing while the key is held).
+        if (!state->down) {
+            state->down = true;
+            state->usedForScroll = false;
+        }
+    } else if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+        state->down = false;
+
+        // Ignore injected key-ups (such as the one we re-send below) to avoid
+        // masking them again.
+        if (state->usedForScroll && !(pKbdStruct->flags & LLKHF_INJECTED)) {
+            state->usedForScroll = false;
+
+            INPUT input[3] = {};
+            input[0].type = INPUT_KEYBOARD;
+            input[0].ki.wVk = 0xE8;
+            input[1].type = INPUT_KEYBOARD;
+            input[1].ki.wVk = 0xE8;
+            input[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            // Faithfully replay the original key-up. The extended-key flag must
+            // be preserved, otherwise extended modifiers (right Alt/AltGr and
+            // the Win keys) may not be released correctly and could get stuck
+            // down.
+            input[2].type = INPUT_KEYBOARD;
+            input[2].ki.wVk = (WORD)pKbdStruct->vkCode;
+            input[2].ki.wScan = (WORD)pKbdStruct->scanCode;
+            input[2].ki.dwFlags = KEYEVENTF_KEYUP;
+            if (pKbdStruct->flags & LLKHF_EXTENDED) {
+                input[2].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+            }
+
+            // Only suppress the original key-up if we managed to re-send the
+            // whole sequence, otherwise the key would get stuck down (e.g. when
+            // SendInput is blocked by an elevated foreground window).
+            if (SendInput(ARRAYSIZE(input), input, sizeof(INPUT)) ==
+                ARRAYSIZE(input)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode != HC_ACTION) {
+        return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    KBDLLHOOKSTRUCT* pKbdStruct = (KBDLLHOOKSTRUCT*)lParam;
+
+    ModifierMaskState* state = nullptr;
+    switch (pKbdStruct->vkCode) {
+        case VK_LWIN:
+        case VK_RWIN:
+            state = &g_winMaskState;
+            break;
+        case VK_LMENU:
+        case VK_RMENU:
+            state = &g_altMaskState;
+            break;
+    }
+
+    if (state && MaskModifierKeyEvent(state, wParam, pKbdStruct)) {
+        return 1;
+    }
+
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode != HC_ACTION || wParam != WM_MOUSEWHEEL) {
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -2006,6 +2139,14 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     // Scroll anywhere: modifier keys held.
     if (IsScrollAnywhereEnabled() && AreScrollAnywhereModifiersHeld()) {
+        // Mark the Win/Alt keys as used so that the keyboard hook masks their
+        // release and no menu (Start menu / menu bar) opens.
+        if (g_settings.scrollAnywhereKeys.win) {
+            g_winMaskState.usedForScroll = true;
+        }
+        if (g_settings.scrollAnywhereKeys.alt) {
+            g_altMaskState.usedForScroll = true;
+        }
         PostMessage(hTaskbarWnd, g_scrollAnywhereMsg,
                     MAKEWPARAM(0, HIWORD(pMouseStruct->mouseData)),
                     MAKELPARAM(pMouseStruct->pt.x, pMouseStruct->pt.y));
@@ -2075,12 +2216,26 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 DWORD WINAPI ScrollAnywhereThread(LPVOID lpParameter) {
     HANDLE hReadyEvent = (HANDLE)lpParameter;
 
-    HHOOK hook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+    g_winMaskState = {};
+    g_altMaskState = {};
+
+    HHOOK mouseHook =
+        SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+
+    // Only needed to mask the Win/Alt key release, see LowLevelKeyboardProc.
+    HHOOK keyboardHook = nullptr;
+    if (g_settings.scrollAnywhereKeys.win || g_settings.scrollAnywhereKeys.alt) {
+        keyboardHook =
+            SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
+    }
 
     SetEvent(hReadyEvent);
 
-    if (!hook) {
+    if (!mouseHook) {
         Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
+        if (keyboardHook) {
+            UnhookWindowsHookEx(keyboardHook);
+        }
         return 1;
     }
 
@@ -2100,7 +2255,10 @@ DWORD WINAPI ScrollAnywhereThread(LPVOID lpParameter) {
         DispatchMessage(&msg);
     }
 
-    UnhookWindowsHookEx(hook);
+    if (keyboardHook) {
+        UnhookWindowsHookEx(keyboardHook);
+    }
+    UnhookWindowsHookEx(mouseHook);
     return 0;
 }
 
@@ -2150,7 +2308,7 @@ BOOL Wh_ModInit() {
         case 0:
         case ARRAYSIZE(moduleFilePath):
             Wh_Log(L"GetModuleFileName failed");
-            break;
+            return FALSE;
 
         default:
             if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
@@ -2162,6 +2320,7 @@ BOOL Wh_ModInit() {
                 }
             } else {
                 Wh_Log(L"GetModuleFileName returned an unsupported path");
+                return FALSE;
             }
             break;
     }
@@ -2194,7 +2353,7 @@ BOOL Wh_ModInit() {
             auto pFunc = (ForceFocusBasedMouseWheelRouting_t)GetProcAddress(
                 user32Module, MAKEINTRESOURCEA(2575));
             if (pFunc) {
-                WindhawkUtils::Wh_SetFunctionHookT(
+                WindhawkUtils::SetFunctionHook(
                     pFunc, ForceFocusBasedMouseWheelRouting_Hook,
                     &ForceFocusBasedMouseWheelRouting_Original);
             }
@@ -2209,19 +2368,19 @@ BOOL Wh_ModInit() {
         g_nExplorerVersion = WIN_VERSION_10_20H1;
     }
 
-    if (ShouldHookTaskbarViewDllSymbols()) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            g_taskbarViewDllLoaded = true;
-            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+    if (ShouldHookSystemTraySymbols()) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            g_systemTrayModuleHooked = true;
+            if (!HookSystemTraySymbols(systemTrayModule)) {
                 return FALSE;
             }
         } else {
-            Wh_Log(L"Taskbar view module not loaded yet");
+            Wh_Log(L"System tray module not loaded yet");
         }
     }
 
-    WindhawkUtils::Wh_SetFunctionHookT(CreateWindowExW, CreateWindowExW_Hook,
-                                       &CreateWindowExW_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
 
     HMODULE user32Module =
         LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2229,9 +2388,9 @@ BOOL Wh_ModInit() {
         auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
             user32Module, "CreateWindowInBand");
         if (pCreateWindowInBand) {
-            WindhawkUtils::Wh_SetFunctionHookT(pCreateWindowInBand,
-                                               CreateWindowInBand_Hook,
-                                               &CreateWindowInBand_Original);
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
+                                           CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
         }
     }
 
@@ -2240,9 +2399,9 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     g_initialized = true;
 
@@ -2256,12 +2415,12 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    if (ShouldHookTaskbarViewDllSymbols() && !g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
+    if (ShouldHookSystemTraySymbols() && !g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
 
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (HookSystemTraySymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
                 }
             }
@@ -2344,10 +2503,9 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11 ||
                g_settings.middleClickToMute != prevMiddleClickToMute;
     if (!*bReload) {
+        ScrollAnywhereThreadUninit();
         if (IsMouseHookNeeded()) {
             ScrollAnywhereThreadInit();
-        } else {
-            ScrollAnywhereThreadUninit();
         }
     }
 

@@ -2,7 +2,7 @@
 // @id             theme-toggler-tray
 // @name           Theme Toggler Tray
 // @description    Add a system tray button to toggle between Light and Dark mode instantly.
-// @version        1.2.1
+// @version        1.2.2
 // @author         Husam-Abdulraheem
 // @github         https://github.com/Husam-Abdulraheem
 // @include        windhawk.exe
@@ -79,7 +79,6 @@ void ApplySettingsToTray() {
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_uMsgTaskbarCreated != 0 && uMsg == g_uMsgTaskbarCreated) {
-        Shell_NotifyIconW(NIM_ADD, &g_nid);
         ApplySettingsToTray();
         return 0;
     }
@@ -107,7 +106,7 @@ DWORD WINAPI TrayThread(LPVOID lpParam) {
     wc.lpszClassName = L"ThemeTogglerToolWindow";
     RegisterClassW(&wc);
     
-    g_hWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
+    g_hWnd = CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
     if (g_hWnd) {
         g_nid.cbSize = sizeof(g_nid);
         g_nid.hWnd = g_hWnd;
