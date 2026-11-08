@@ -2,7 +2,7 @@
 // @id              explorer-translucent-menus
 // @name            Explorer Translucent Menus
 // @description     Translucent materials and optional borderless classic context menus for File Explorer
-// @version         1.0.0
+// @version         1.0.1
 // @author          alkali210
 // @github          https://github.com/alkali210
 // @include         explorer.exe
@@ -19,7 +19,6 @@
 // For pull requests, development takes place here:
 // https://github.com/alkali210/windhawk-mods
 
-
 // clang-format off
 // ==WindhawkModReadme==
 /*
@@ -29,9 +28,15 @@ Apply translucent materials to classic Win32 popup menus in File Explorer.
 Windows continues to provide menu items, layout, commands, keyboard navigation,
 and shell extensions. Windows 11's modern context menu is left unchanged.
 
+This is an Explorer-only, menu-focused alternative to the archived
+[TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts) project.
+It covers classic popup menus hosted by `explorer.exe`, including desktop and
+File Explorer context menus. It leaves the main Explorer window background,
+ordinary controls, and other processes unchanged.
+
 ## Requirements
 
-- Windows 11 22H2 or later (build 22621+), AMD64.
+- Windows 11 22H2 or later (build 22621+), 64-bit.
 - Desktop composition and Windows transparency effects enabled.
 - No other renderer modifying the same Explorer menus.
 
@@ -67,7 +72,51 @@ Legacy icon repair converts copied RGB bitmaps to premultiplied alpha. Optional
 background removal clears only matching corner-connected white, black, or
 magenta regions. Disable background removal for icons with intentional borders.
 
+## Scope and rendering approach
+
+This mod keeps the Shell's immersive owner-draw enabled and preserves native
+menu layout, commands, and shell extensions. Effects are scoped to supported
+classic popups while a menu is tracked, with per-menu state restored afterward.
+GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
+a tracked menu. The scope is the popup effect, rather than a replacement for
+Explorer's overall interface rendering.
+
+[Translucent Windows](https://windhawk.net/mods/translucent-windows) and
+[Win32 UI Modernizer](https://windhawk.net/mods/win32-ui-modernizer) already
+offer translucent classic menus. Translucent Windows shares background-effect
+configuration between windows and flyouts, with menu drawing integrated into
+its broader theme-rendering path. Win32 UI Modernizer lets users disable its
+Explorer section and other general features, but its modern menu modes disable
+immersive owner-draw and also modernize ComboBox dropdowns.
+
+The purpose of this separate implementation is to provide a dedicated popup
+renderer that retains the Shell's owner-draw path and can accompany a separate
+Explorer background renderer. Restricting process targets or adding material
+presets alone does not provide that rendering behavior. An equivalent mode in
+a broader UI mod would need to isolate menu rendering and preserve immersive
+owner-draw as well.
+
 ## Compatibility
+
+Menu effects from these mods conflict when enabled on the same Explorer popups:
+
+- [Translucent Windows](https://windhawk.net/mods/translucent-windows):
+  **Flyout effects** also renders classic menus, dropdowns, and tooltips.
+  Disable that option to remove its flyout effects.
+- [Win32 UI Modernizer](https://windhawk.net/mods/win32-ui-modernizer): set
+  **Menus and dropdowns** to **Native (no modernization)**. Both modern modes
+  apply their own acrylic rendering and disable immersive owner-draw.
+
+These settings turn off their direct menu features. Their remaining Explorer
+effects and shared drawing hooks depend on other settings, so compatibility
+must be evaluated with the configuration in use. To avoid their remaining hooks
+in Explorer while continuing to use them in other applications, exclude
+`explorer.exe` from their targets in Windhawk's Advanced tab.
+
+This mod is also compatible with 
+[ExplorerBlurMica](https://github.com/Maplespe/ExplorerBlurMica), which supplies
+the main Explorer window backdrop. This mod keeps its effects confined to classic
+popup menus and leaves the main window backdrop to ExplorerBlurMica.
 
 Unknown owner-drawn menus, custom background brushes, high contrast, remote
 sessions, disabled transparency, and recognized conflicting renderers are
@@ -153,9 +202,7 @@ This implementation is distributed under GPL-3.0-or-later.
 #include <cmath>
 #include <cwchar>
 
-#ifndef ETM_TEST
-#include <windhawk_api.h>
-#endif
+#include <windhawk_utils.h>
 
 namespace etm {
 
@@ -489,8 +536,9 @@ bool ApplyBackdrop(Popup& popup) {
         DWORD backdrop = DWMSBT_NONE;
         DwmSetWindowAttribute(popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
                               sizeof(backdrop));
-        int opacity = g_settings.material == Material::Solid
-                          ? 100
+        int opacity = g_settings.material == Material::Solid ? 100
+                      : g_settings.material == Material::ModernAcrylic
+                          ? 35  // Fixed recipe; do not vary its input alpha.
                           : ClampPercent(g_settings.tintOpacity);
         // Alpha=0 has special semantics on some builds, so keep it nonzero.
         unsigned alpha = (opacity * 255 + 50) / 100;
@@ -886,6 +934,10 @@ HRESULT WINAPI DwmSetWindowAttributeHook(HWND hwnd,
                                          DWORD attribute,
                                          LPCVOID value,
                                          DWORD size) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_dwmSetWindowAttribute(hwnd, attribute,
+                                                           value, size);
+    }
     CallGuard call;
     COLORREF hidden = DWMWA_COLOR_NONE;
     Popup* popup = nullptr;
@@ -1234,6 +1286,10 @@ HRESULT WINAPI DrawThemeBackgroundHook(HTHEME theme,
                                        int state,
                                        const RECT* rect,
                                        const RECT* clip) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_drawThemeBackground(theme, dc, part, state,
+                                                         rect, clip);
+    }
     CallGuard call;
     if (PaintHotItem(theme, dc, part, state, rect, clip))
         return S_OK;
@@ -1252,6 +1308,10 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
                                          int state,
                                          const RECT* rect,
                                          const DTBGOPTS* opts) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_drawThemeBackgroundEx(theme, dc, part,
+                                                           state, rect, opts);
+    }
     CallGuard call;
     // Preserve uncommon omit-border/content and mirrored drawing options.
     if ((!opts || (opts->dwSize == sizeof(*opts) &&
@@ -1333,6 +1393,10 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
                                  DWORD flags,
                                  DWORD flags2,
                                  const RECT* rect) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_drawThemeText(theme, dc, part, state, text,
+                                                   length, flags, flags2, rect);
+    }
     CallGuard call;
     RECT bounds = rect ? *rect : RECT{};
     HRESULT result;
@@ -1352,6 +1416,10 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
                                    DWORD flags,
                                    RECT* rect,
                                    const DTTOPTS* options) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_drawThemeTextEx(
+            theme, dc, part, state, text, length, flags, rect, options);
+    }
     CallGuard call;
     HRESULT result;
     if (DrawCompositedText(theme, dc, part, state, text, length, flags, rect,
@@ -1377,7 +1445,12 @@ struct IconSurface {
 
 // Work only on an owned copy obtained through public GDI. Never modify a menu
 // bitmap, the selected source bitmap, or Shell's private item-data structures.
-bool PrepareIcon(HDC source, IconSurface& target) {
+bool PrepareIcon(HDC source,
+                 int sx,
+                 int sy,
+                 int width,
+                 int height,
+                 IconSurface& target) {
     HBITMAP original =
         static_cast<HBITMAP>(GetCurrentObject(source, OBJ_BITMAP));
     BITMAP sourceInfo{};
@@ -1386,25 +1459,61 @@ bool PrepareIcon(HDC source, IconSurface& target) {
             sizeof(sourceInfo) ||
         sourceInfo.bmBitsPixel <= 1 || sourceInfo.bmWidth < 2 ||
         sourceInfo.bmHeight < 2 || sourceInfo.bmWidth > 256 ||
-        sourceInfo.bmHeight > 256)
+        sourceInfo.bmHeight > 256 || width < 2 || height < 2 ||
+        GetMapMode(source) != MM_TEXT)
+        return false;
+    // Restrict repair to an unscaled source rectangle. Leave transformed and
+    // mirrored transfers to GDI instead of guessing which bitmap pixels apply.
+    if (GetGraphicsMode(source) == GM_ADVANCED) {
+        XFORM transform{};
+        if (!GetWorldTransform(source, &transform) || transform.eM11 != 1 ||
+            transform.eM22 != 1 || transform.eM12 != 0 || transform.eM21 != 0 ||
+            transform.eDx != 0 || transform.eDy != 0)
+            return false;
+    }
+    POINT origin{sx, sy};
+    if ((GetLayout(source) & LAYOUT_RTL) || !LPtoDP(source, &origin, 1) ||
+        origin.x < 0 || origin.y < 0 || width > sourceInfo.bmWidth ||
+        height > sourceInfo.bmHeight || origin.x > sourceInfo.bmWidth - width ||
+        origin.y > sourceInfo.bmHeight - height)
         return false;
     HBITMAP copy = static_cast<HBITMAP>(
         CopyImage(original, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
     if (!copy)
         return false;
-    int width = sourceInfo.bmWidth, height = sourceInfo.bmHeight;
     BITMAPINFO info{};
-    info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
-    RGBQUAD* pixels = nullptr;
-    target.bitmap =
-        CreateDIBSection(nullptr, &info, DIB_RGB_COLORS,
-                         reinterpret_cast<void**>(&pixels), nullptr, 0);
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER),
+                      sourceInfo.bmWidth,
+                      -sourceInfo.bmHeight,
+                      1,
+                      32,
+                      BI_RGB};
+    auto sourcePixels = static_cast<RGBQUAD*>(
+        HeapAlloc(GetProcessHeap(), 0,
+                  sourceInfo.bmWidth * sourceInfo.bmHeight * sizeof(RGBQUAD)));
     // The copied bitmap is not selected into any DC (GetDIBits requirement).
-    bool read = target.bitmap && pixels &&
-                GetDIBits(source, copy, 0, height, pixels, &info,
-                          DIB_RGB_COLORS) == height;
+    bool read = sourcePixels &&
+                GetDIBits(source, copy, 0, sourceInfo.bmHeight, sourcePixels,
+                          &info, DIB_RGB_COLORS) == sourceInfo.bmHeight;
     DeleteObject(copy);
-    if (!read)
+    RGBQUAD* pixels = nullptr;
+    if (read) {
+        info.bmiHeader.biWidth = width;
+        info.bmiHeader.biHeight = -height;
+        info.bmiHeader.biSizeImage = 0;
+        target.bitmap =
+            CreateDIBSection(nullptr, &info, DIB_RGB_COLORS,
+                             reinterpret_cast<void**>(&pixels), nullptr, 0);
+        if (target.bitmap && pixels)
+            for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x)
+                    pixels[y * width + x] =
+                        sourcePixels[(origin.y + y) * sourceInfo.bmWidth +
+                                     origin.x + x];
+    }
+    if (sourcePixels)
+        HeapFree(GetProcessHeap(), 0, sourcePixels);
+    if (!read || !target.bitmap || !pixels)
         return false;
     bool anyAlpha = false, allOpaque = true, straightAlpha = false;
     for (int i = 0; i < width * height; ++i) {
@@ -1503,14 +1612,18 @@ BOOL WINAPI BitBltHook(HDC destination,
                        int sx,
                        int sy,
                        DWORD operation) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_bitBlt(destination, x, y, width, height,
+                                            source, sx, sy, operation);
+    }
     CallGuard call;
     if (operation == SRCCOPY &&
         IsIconTransfer(destination, source, width, height)) {
         BitmapGuard guard;
         IconSurface icon;
-        if (PrepareIcon(source, icon)) {
+        if (PrepareIcon(source, sx, sy, width, height, icon)) {
             BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-            if (g_alphaBlend(destination, x, y, width, height, icon.dc, sx, sy,
+            if (g_alphaBlend(destination, x, y, width, height, icon.dc, 0, 0,
                              width, height, blend)) {
                 if (Popup* popup = DrawingPopupForDC(destination))
                     ++popup->iconRepairs;
@@ -1533,14 +1646,19 @@ BOOL WINAPI StretchBltHook(HDC destination,
                            int sw,
                            int sh,
                            DWORD operation) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_stretchBlt(destination, x, y, width,
+                                                height, source, sx, sy, sw, sh,
+                                                operation);
+    }
     CallGuard call;
     if (operation == SRCCOPY &&
         IsIconTransfer(destination, source, width, height)) {
         BitmapGuard guard;
         IconSurface icon;
-        if (PrepareIcon(source, icon)) {
+        if (PrepareIcon(source, sx, sy, sw, sh, icon)) {
             BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-            if (g_alphaBlend(destination, x, y, width, height, icon.dc, sx, sy,
+            if (g_alphaBlend(destination, x, y, width, height, icon.dc, 0, 0,
                              sw, sh, blend)) {
                 if (Popup* popup = DrawingPopupForDC(destination))
                     ++popup->iconRepairs;
@@ -1563,15 +1681,19 @@ BOOL WINAPI AlphaBlendHook(HDC destination,
                            int sw,
                            int sh,
                            BLENDFUNCTION blend) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_alphaBlend(
+            destination, x, y, width, height, source, sx, sy, sw, sh, blend);
+    }
     CallGuard call;
     if (IsIconTransfer(destination, source, width, height) &&
         blend.BlendOp == AC_SRC_OVER && !blend.BlendFlags) {
         BitmapGuard guard;
         IconSurface icon;
-        if (PrepareIcon(source, icon)) {
+        if (PrepareIcon(source, sx, sy, sw, sh, icon)) {
             BLENDFUNCTION repairedBlend = blend;
             repairedBlend.AlphaFormat = AC_SRC_ALPHA;
-            if (g_alphaBlend(destination, x, y, width, height, icon.dc, sx, sy,
+            if (g_alphaBlend(destination, x, y, width, height, icon.dc, 0, 0,
                              sw, sh, repairedBlend)) {
                 if (Popup* popup = DrawingPopupForDC(destination))
                     ++popup->iconRepairs;
@@ -1584,8 +1706,16 @@ BOOL WINAPI AlphaBlendHook(HDC destination,
 }
 
 int WINAPI FillRectHook(HDC dc, const RECT* rect, HBRUSH brush) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_fillRect(dc, rect, brush);
+    }
     CallGuard call;
-    Popup* popup = !t_textDepth && rect ? DrawingPopupForDC(dc) : nullptr;
+    // An unrelated double-buffered control can repaint during the menu loop.
+    // Only accept the DC from the verified, synchronous WM_DRAWITEM context.
+    Popup* popup = !t_textDepth && rect && t_scope && t_scope->drawingItem &&
+                           t_scope->drawingItem->hDC == dc
+                       ? DrawingPopupForDC(dc)
+                       : nullptr;
     if (popup && brush) {
         const DRAWITEMSTRUCT* item = t_scope->drawingItem;
         bool selected = item && (item->itemState & ODS_SELECTED);
@@ -1618,6 +1748,9 @@ int WINAPI FillRectHook(HDC dc, const RECT* rect, HBRUSH brush) {
 
 int WINAPI
 DrawTextHook(HDC dc, PCWSTR text, int length, RECT* rect, UINT flags) {
+    if (!t_scope) {
+        [[clang::musttail]] return g_drawText(dc, text, length, rect, flags);
+    }
     CallGuard call;
     Popup* popup =
         !t_textDepth && rect && !IsRectEmpty(rect) &&
@@ -1743,12 +1876,6 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU menu,
 
 BOOL Wh_ModInit() {
     using namespace etm;
-    wchar_t path[MAX_PATH]{};
-    if (!GetModuleFileNameW(nullptr, path, ARRAYSIZE(path)))
-        return FALSE;
-    const wchar_t* name = wcsrchr(path, L'\\');
-    if (_wcsicmp(name ? name + 1 : path, L"explorer.exe") != 0)
-        return FALSE;
     // DWMWA_SYSTEMBACKDROP_TYPE requires Windows 11 22H2. RtlGetVersion avoids
     // manifest-dependent version virtualization; no symbol lookup is involved.
     using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
@@ -1760,10 +1887,8 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Requires Windows 11 22H2, build 22621 or newer");
         return FALSE;
     }
-    PCWSTR backend = Wh_GetStringSetting(L"backgroundEffect");
-    g_settings.material = ParseMaterial(backend);
-    if (backend)
-        Wh_FreeStringSetting(backend);
+    g_settings.material =
+        ParseMaterial(WindhawkUtils::StringSetting::make(L"backgroundEffect"));
     if (g_settings.material == Material::Native) {
         Wh_Log(L"Native mode: no hooks registered, no window effects changed");
         return TRUE;
@@ -1797,20 +1922,14 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Adjustable Acrylic is unavailable; choose System Acrylic");
         return FALSE;
     }
-    PCWSTR lightTint = Wh_GetStringSetting(L"lightTint");
-    g_settings.lightTint = ParseTint(lightTint, RGB(245, 245, 245));
-    if (lightTint)
-        Wh_FreeStringSetting(lightTint);
-    PCWSTR darkTint = Wh_GetStringSetting(L"darkTint");
-    g_settings.darkTint = ParseTint(darkTint, RGB(32, 32, 32));
-    if (darkTint)
-        Wh_FreeStringSetting(darkTint);
-    PCWSTR themeSetting = Wh_GetStringSetting(L"theme");
-    g_settings.theme = themeSetting && !_wcsicmp(themeSetting, L"dark")    ? 2
-                       : themeSetting && !_wcsicmp(themeSetting, L"light") ? 1
-                                                                           : 0;
-    if (themeSetting)
-        Wh_FreeStringSetting(themeSetting);
+    g_settings.lightTint = ParseTint(
+        WindhawkUtils::StringSetting::make(L"lightTint"), RGB(245, 245, 245));
+    g_settings.darkTint = ParseTint(
+        WindhawkUtils::StringSetting::make(L"darkTint"), RGB(32, 32, 32));
+    auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
+    g_settings.theme = !_wcsicmp(themeSetting, L"dark")    ? 2
+                       : !_wcsicmp(themeSetting, L"light") ? 1
+                                                           : 0;
     g_settings.highlightOpacity =
         ClampPercent(Wh_GetIntSetting(L"highlightOpacity"));
     g_settings.repairIcons = Wh_GetIntSetting(L"repairIcons") != 0;
@@ -1822,29 +1941,33 @@ BOOL Wh_ModInit() {
     g_settings.debugLogging = Wh_GetIntSetting(L"debugLogging") != 0;
     g_stopping.store(false, std::memory_order_relaxed);
 
-#define ETM_HOOK(api, hook, original)                             \
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(api),         \
-                            reinterpret_cast<void*>(hook),        \
-                            reinterpret_cast<void**>(&original))) \
-    return FALSE
-    ETM_HOOK(TrackPopupMenu, TrackPopupMenuHook, g_trackPopupMenu);
-    ETM_HOOK(TrackPopupMenuEx, TrackPopupMenuExHook, g_trackPopupMenuEx);
-    ETM_HOOK(DrawThemeBackground, DrawThemeBackgroundHook,
-             g_drawThemeBackground);
-    ETM_HOOK(DrawThemeBackgroundEx, DrawThemeBackgroundExHook,
-             g_drawThemeBackgroundEx);
-    ETM_HOOK(DrawThemeText, DrawThemeTextHook, g_drawThemeText);
-    ETM_HOOK(DrawThemeTextEx, DrawThemeTextExHook, g_drawThemeTextEx);
-    ETM_HOOK(DrawTextW, DrawTextHook, g_drawText);
-    ETM_HOOK(FillRect, FillRectHook, g_fillRect);
-    ETM_HOOK(BitBlt, BitBltHook, g_bitBlt);
-    ETM_HOOK(StretchBlt, StretchBltHook, g_stretchBlt);
-    ETM_HOOK(AlphaBlend, AlphaBlendHook, g_alphaBlend);
-    if (g_settings.hideMenuBorder) {
-        ETM_HOOK(DwmSetWindowAttribute, DwmSetWindowAttributeHook,
-                 g_dwmSetWindowAttribute);
-    }
-#undef ETM_HOOK
+    if (!WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenuHook,
+                                        &g_trackPopupMenu) ||
+        !WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuExHook,
+                                        &g_trackPopupMenuEx) ||
+        !WindhawkUtils::SetFunctionHook(DrawThemeBackground,
+                                        DrawThemeBackgroundHook,
+                                        &g_drawThemeBackground) ||
+        !WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx,
+                                        DrawThemeBackgroundExHook,
+                                        &g_drawThemeBackgroundEx) ||
+        !WindhawkUtils::SetFunctionHook(DrawThemeText, DrawThemeTextHook,
+                                        &g_drawThemeText) ||
+        !WindhawkUtils::SetFunctionHook(DrawThemeTextEx, DrawThemeTextExHook,
+                                        &g_drawThemeTextEx) ||
+        !WindhawkUtils::SetFunctionHook(DrawTextW, DrawTextHook, &g_drawText) ||
+        !WindhawkUtils::SetFunctionHook(FillRect, FillRectHook, &g_fillRect) ||
+        !WindhawkUtils::SetFunctionHook(BitBlt, BitBltHook, &g_bitBlt) ||
+        !WindhawkUtils::SetFunctionHook(StretchBlt, StretchBltHook,
+                                        &g_stretchBlt) ||
+        !WindhawkUtils::SetFunctionHook(AlphaBlend, AlphaBlendHook,
+                                        &g_alphaBlend))
+        return FALSE;
+    if (g_settings.hideMenuBorder &&
+        !WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute,
+                                        DwmSetWindowAttributeHook,
+                                        &g_dwmSetWindowAttribute))
+        return FALSE;
     Wh_Log(L"Initialized on Windows build %lu; only Explorer Win32 popups",
            version.dwBuildNumber);
     return TRUE;
