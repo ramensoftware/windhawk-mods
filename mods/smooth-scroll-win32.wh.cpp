@@ -57,6 +57,8 @@ inside any included process are automatically skipped.
   message loop inside Windows, which the mod doesn't see, so they keep
   native scrolling.
 - Task Manager's WinUI frame, header and settings page are not affected.
+- File Explorer's pixel scrolling needs Explorer's symbols, which Windhawk
+  downloads once; until then the folder view uses UI Automation.
 - The pixel paths for File Explorer and DirectUI are 64-bit only;
   32-bit programs use UI Automation for `DirectUIHWND` content.
 - Where UI Automation is used, scrolling a background window brings it to
@@ -97,6 +99,8 @@ dentro de qualquer processo incluído são ignoradas automaticamente.
   enxerga, então mantêm a rolagem nativa.
 - A moldura, o cabeçalho e a página de configurações do Gerenciador de
   Tarefas, que são WinUI, não são afetados.
+- A rolagem em pixels do Explorador precisa dos símbolos do Explorer, que
+  o Windhawk baixa uma vez; até lá a lista de arquivos usa UI Automation.
 - Os caminhos em pixels do Explorador e do DirectUI são só de 64 bits;
   programas de 32 bits usam UI Automation no conteúdo `DirectUIHWND`.
 - Onde a UI Automation é usada, rolar uma janela em segundo plano a traz
@@ -137,6 +141,9 @@ WinUI dentro de cualquier proceso incluido se omiten automáticamente.
   ve, así que mantienen el desplazamiento nativo.
 - El marco, el encabezado y la página de configuración del Administrador de
   tareas, que son WinUI, no se ven afectados.
+- El desplazamiento en píxeles del Explorador necesita los símbolos del
+  Explorador, que Windhawk descarga una vez; hasta entonces la vista de
+  carpetas usa UI Automation.
 - Las rutas en píxeles del Explorador y de DirectUI son solo de 64 bits;
   los programas de 32 bits usan UI Automation en el contenido `DirectUIHWND`.
 - Donde se usa UI Automation, desplazar una ventana en segundo plano la trae
@@ -222,10 +229,9 @@ constexpr double kSmoothRate = 11.98292909421596;
 // visibly stutter.
 constexpr double kTailMinPxPerSec = 160.0;
 
-// Protects g_cfg and g_sysLines against concurrent reads (Tick thread)
+// Protects g_cfg against concurrent reads (Tick thread)
 // and writes (LoadSettings called from Wh_ModSettingsChanged).
 static SRWLOCK g_cfgLock = SRWLOCK_INIT;
-static UINT g_sysLines_g = 3; // renamed to avoid collision with local in LoadSettings
 
 // Snapshot of settings read atomically under shared lock.
 // Tick and Handle call this once per invocation to avoid repeated lock acquires.
@@ -233,7 +239,6 @@ struct CfgSnap {
     double springK, damping;
     bool smoothOnly;
     bool overshoot;
-    UINT sysLines;
 };
 
 static CfgSnap SnapCfg() {
@@ -243,7 +248,6 @@ static CfgSnap SnapCfg() {
     s.damping    = g_cfg.damping;
     s.smoothOnly = g_cfg.smoothOnly;
     s.overshoot  = g_cfg.overshoot;
-    s.sysLines   = g_sysLines_g;
     ReleaseSRWLockShared(&g_cfgLock);
     return s;
 }
@@ -738,19 +742,15 @@ static void LoadSettings() {
     bool sm = Wh_GetIntSetting(L"smoothOnly") != 0;
     bool ov = Wh_GetIntSetting(L"spring.overshoot") != 0;
 
-    UINT ln = WheelLines();
-
     double logK, logD;
     AcquireSRWLockExclusive(&g_cfgLock);
     g_cfg.springK    = logK = (k >= 50 && k <= 1000) ? (double)k : 700.0;
     g_cfg.damping    = logD = (d >= 3  && d <= 30)   ? d / 10.0  : 1.2;
     g_cfg.smoothOnly = sm;
     g_cfg.overshoot  = ov;
-    g_sysLines_g     = ln;
     ReleaseSRWLockExclusive(&g_cfgLock);
 
-    Wh_Log(L"Cfg: k=%.0f d=%.2f ov=%d sm=%d sl=%u",
-            logK, logD, (int)ov, (int)sm, ln);
+    Wh_Log(L"Cfg: k=%.0f d=%.2f ov=%d sm=%d", logK, logD, (int)ov, (int)sm);
 }
 
 // ---------------------------------------------------------------------------
@@ -1151,10 +1151,12 @@ static bool DuiItemsStage() {
                g_lsOnInputOrig != nullptr, g_lsScrollPreciseDelta != nullptr,
                g_lsGetVirtualDirection != nullptr, g_lsRowFromY != nullptr,
                g_lsNextRow != nullptr);
-        // Nothing staged usually means the download failed (offline): try
-        // again later, a few times, instead of staying on UIA until restart.
+        // Nothing resolved means the download failed (offline): try again
+        // later, a few times, instead of staying on UIA until restart.
         static int retries = 0;
-        if (!g_lsOnInputOrig && retries++ < 10) {
+        bool none = !g_lsOnInputOrig && !g_lsScrollPreciseDelta && !g_lsGetVirtualDirection &&
+                    !g_lsRowFromY && !g_lsNextRow;
+        if (none && retries++ < 10) {
             g_explorerFrameRef = nullptr;
             FreeLibrary(ef);
             g_duiRetryAt.store(GetTickCount64() + 60000, std::memory_order_release);
@@ -2376,6 +2378,7 @@ static bool Handle(const MSG* m) {
             if (g_unloading.load(std::memory_order_acquire)) {
                 // Unload's scan may have run already; nothing else would end it.
                 LeaveCriticalSection(&g_cs);
+                c->land = top;  // nothing has moved the control yet
                 CompEnd(c, false);
                 return false;
             }
