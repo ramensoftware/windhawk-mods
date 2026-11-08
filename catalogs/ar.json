@@ -8044,19 +8044,22 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1782106865000,
+        "updated": 1794157454000,
         "users": 45
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "Anixx",
-        "compilerOptions": "-lgdi32 -luser32",
+        "compilerOptions": "-lgdi32 -luser32 -luxtheme",
         "description": "Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+",
         "github": "https://github.com/Anixx",
         "include": [
           "explorer.exe"
         ],
         "name": "Fix language indicator in Win10 taskbar under Win11 24H2+",
-        "version": "1.5"
+        "version": "2.0"
       }
     },
     "fix-missing-taskbar-icons": {
@@ -15822,7 +15825,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": -0.5133497465167423,
-        "updated": 1789671594000,
+        "updated": 1794157444000,
         "users": 131
       },
       "metadata": {
@@ -15830,15 +15833,15 @@
           "x86-64"
         ],
         "author": "Cleroth",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32",
-        "description": "Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -luuid -ld2d1 -ldwrite -ldwmapi -lwindowscodecs",
+        "description": "Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar",
         "github": "https://github.com/Cleroth",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
-        "name": "Taskbar AI Quota Bars",
-        "version": "1.6.5"
+        "name": "Taskbar AI Quota",
+        "version": "2.18.1"
       }
     },
     "taskbar-ai-usage": {
@@ -17350,12 +17353,12 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793854910000,
+        "updated": 1794157449000,
         "users": 48
       },
       "metadata": {
         "author": "Lemon",
-        "compilerOptions": "-luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus",
+        "compilerOptions": "-luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus -ladvapi32",
         "description": "Compact system monitoring widget for the taskbar: CPU, RAM, network speed, optional ping and a working set trimmer",
         "github": "https://github.com/lemon-web-stack",
         "homepage": "https://github.com/lemon-web-stack",
@@ -17364,7 +17367,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Live HUD",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "taskbar-margin": {

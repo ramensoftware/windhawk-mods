@@ -2,12 +2,103 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-08T05:01:41.000Z</updated>
+    <updated>2026-11-08T17:04:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 2.0]]></title>
+        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#dd9dab4ae94f445b9b3b07600b3a31f959640e8d</id>
+        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
+        <updated>2026-11-08T17:04:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Better support for themes</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#df8b56732c81d756c4f32247780be4448a6f11c1</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-08T17:04:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added real-time CPU &amp; RAM history mini-graph (Ctrl + Right Click).</li>
+<li>Added default gateway (local router) ping option with zero internet traffic.</li>
+<li>Switched network speed units to Mbps / Kbps.</li>
+<li>Added custom background color setting (HEX).</li>
+<li>Improved background transparency via per-pixel alpha (text and bars remain crisp).</li>
+<li>Added font fallback for Windows 10 support.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/lemon-web-stack</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Quota 2.18.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-quota#ad20837f5bc018842c571112b1e60019e831e4a4</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
+        <updated>2026-11-08T17:04:04.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Taskbar</strong></p>
+<ul>
+<li>Add eight tile styles: usage graph, segmented ring, concentric rings, gauge, clock pies, rounded square, headline % and quota matrix.</li>
+<li>Add provider logos as account identity, with number badges for accounts that share a provider.</li>
+<li>Add a Position setting for where the bars sit on the taskbar, and support for left and right taskbars.</li>
+<li>Add warning marks on accounts while their provider's status page reports a problem.</li>
+<li>Improve clicks: click a column to refresh it, and right-click it to hide the account or open its history.</li>
+</ul>
+<p><strong>Details flyout</strong></p>
+<ul>
+<li>Add a details flyout on hover, replacing the tooltip, with usage charts, reset times, pace and when each limit is projected to run out.</li>
+<li>Add model and extra limits, the Claude plan, free resets and Antigravity's other quotas.</li>
+</ul>
+<p><strong>Usage history</strong></p>
+<ul>
+<li>Add usage history, recorded on this PC and on by default.</li>
+<li>Add a history window that charts accounts together, overlays the previous week and exports CSV.</li>
+</ul>
+<p><strong>Providers</strong></p>
+<ul>
+<li>Add GitHub Copilot support for its monthly AI credits.</li>
+<li>Add OpenCode Go support with its 5-hour, weekly and monthly limits.</li>
+<li>Add Antigravity's Gemini Argon weekly quota.</li>
+</ul>
+<p><strong>Sign-in</strong></p>
+<ul>
+<li>Improve sign-in with a window to open or copy the link, Anthropic sign-in without pasting a code, and one-button Copilot sign-in.</li>
+<li>Improve sign-in security by never following HTTP redirects.</li>
+<li>Fix a new sign-in being overwritten by a token refresh that was already running.</li>
+</ul>
+<p><strong>Settings and notifications</strong></p>
+<ul>
+<li>Improve settings with a redesigned window and a live taskbar preview.</li>
+<li>Add a custom usage color palette and a choice of window material.</li>
+<li>Add notification levels; notifications now show under the mod's name, include the projected limit time and open the provider's dashboard.</li>
+</ul>
+<p><strong>Languages</strong></p>
+<ul>
+<li>Add German, Spanish, French, Japanese, Portuguese (Brazil), Russian and Chinese translations.</li>
+<li>Improve numbers to follow your Windows regional format.</li>
+</ul>
+<p><strong>Fixes</strong></p>
+<ul>
+<li>Fix duplicate polls, duplicate notifications and lost sign-ins when Explorer runs extra processes.</li>
+<li>Fix a possible Explorer crash when the mod is disabled while a link opens.</li>
+</ul>
+<p>Note: settings and sign-ins carry over, and the mod is renamed Taskbar AI Quota. Usage history recording is on by default; samples stay on this PC, and Settings &gt; History turns it off.</p>
+]]></content>
+        <author>
+            <name>Cleroth</name>
+            <uri>https://github.com/Cleroth</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.0.0]]></title>
         <id>https://windhawk.net/mods/lock-screen-live-wallpaper#deb9248a6196aefbbdbd52149d5fba59a6ae0dd8</id>
@@ -1226,131 +1317,6 @@ the drive. Use it only if you can't close the programs.</li>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Utilities 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-utilities#86a896f7ddd20f2bf60d0798e487701f009f6595</id>
-        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
-        <updated>2026-11-06T21:01:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <strong>Reduce Memory</strong> tool to trim working sets of non-elevated processes.</li>
-<li>Added <strong>Rebuild Icon &amp; Thumbnail Cache</strong> tool (<code>thumbcache_*.db</code> cleanup + <code>ie4uinit.exe -show</code>).</li>
-<li>Added optional <strong>Public IP</strong> lookup in Get IP Address (<code>getIp.queryPublicIp</code>, disabled by default for privacy).</li>
-<li>Reorganized settings into structured groups for better UX (<strong>Note:</strong> existing settings are reset to defaults due to the new grouped key structure and need to be reconfigured).</li>
-<li>Filtered out non-preferred and APIPA (<code>169.254.x.x</code>) local network addresses.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Marco Petrucci</name>
-            <uri>https://github.com/marco00petrucci</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.2]]></title>
-        <id>https://windhawk.net/mods/start-everything#1e59c5e80950f4b2f82b43edcb31e3eedf6c592a</id>
-        <link href="https://windhawk.net/mods/start-everything"/>
-        <updated>2026-11-06T20:00:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>
-<p>Size the first Apps and Files batches to the panel height and append 40 results near the bottom. The installed inventory also appends 40 results; remove the initial-result settings.</p>
-</li>
-<li>
-<p>Warm app and custom-command icons in the background before the first search window opens.</p>
-</li>
-<li>
-<p>Show files for empty searches and preserve Everything's current or saved sort order. Updating Everything's run history is a separate opt-in setting, off by default.</p>
-</li>
-<li>
-<p>Keep Files totals consistent with exclusions and duplicates, marking provisional totals until the final page is reached.</p>
-</li>
-<li>
-<p>Match Cyrillic and other Unicode app names independently of the process locale.</p>
-</li>
-<li>
-<p>Preserve typing in Start's editable fields, including pinned-folder names.</p>
-</li>
-<li>
-<p>Add Windows-provided Pin/Unpin actions, including original-shortcut fallback for desktop apps, while keeping search open after pinning.</p>
-</li>
-<li>
-<p>Open the selected supported app's Advanced options page through App settings, with translations in all 50 interface languages.</p>
-</li>
-<li>
-<p>Automatically show decimal, hexadecimal, binary and octal conversions for standalone whole numbers, preserving exact 64-bit magnitudes and negative values.</p>
-</li>
-<li>
-<p>Improve the Swedish package-bundle label and update the documentation.</p>
-</li>
-<li>
-<p>Add scrolling to <code>/services</code> in batches of 40, remove its 100-result cap, and preserve expanded rows during live status updates.</p>
-</li>
-<li>
-<p>Discover Windows menu actions in the background, show a localized Checking pins status, and keep Apps and Files menus free of opening and closing animations.</p>
-</li>
-<li>
-<p>Preserve learned favorites and captured theme data in portable Windhawk, and improve cleanup when the mod is disabled or updated.</p>
-</li>
-<li>
-<p>Keep excluded paths out of all file batches, use Unicode-aware path matching, and cache safe Everything sort preferences per search-window session.</p>
-</li>
-</ul>
-]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Automatic WhatsApp Audio Ducking 1.0]]></title>
-        <id>https://windhawk.net/mods/automatic-whatsapp-audio-ducking#0e5cd2eed2bcbee826399b14c5a77ce0306fd307</id>
-        <link href="https://windhawk.net/mods/automatic-whatsapp-audio-ducking"/>
-        <updated>2026-11-06T20:00:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Automatic WhatsApp Audio Ducking</h1>
-<p>While WhatsApp or other chosen apps (voice messages, videos, calls' media, ...) produce sound, the
-per-app volume of the configured target apps (default: Spotify) is lowered to
-a fixed percentage. When WhatsApp or the specified apps have been silent for a short moment, the
-original volume is restored.</p>
-<p>This only changes the per-app volume slider of the Windows volume mixer, not
-the system volume.</p>
-<h2>Choosing messengers</h2>
-<p>In the settings under &quot;Messengers&quot; you can switch on WhatsApp (default),
-Telegram, Signal, Discord, Microsoft Teams, Zoom, Slack, Viber and Element.
-Any other app can be added by its process name under &quot;Additional trigger apps&quot;
-(e.g. <code>Threema.exe</code>).</p>
-<h2>Calls</h2>
-<p>Windows lowers other apps by itself during calls (communication streams) unless
-&quot;Do nothing&quot; is selected in the Sound control panel (Communications tab). The
-mod detects such calls via the Windows ducking notification and stays out of
-the way, so the volume is not lowered twice (changeable with &quot;Also duck calls
-that Windows already ducks&quot;). If a call is not flagged by Windows but a
-selected messenger has an open microphone stream, the mod ducks for the whole
-call, also between ringtones and beeps. The log shows who handles the call.</p>
-<h2>Notes</h2>
-<ul>
-<li>Messengers are detected by process name. Audio from <code>msedgewebview2.exe</code>
-helper processes started by a selected messenger counts as well; other child
-processes (e.g. a browser opened from a link) do not.</li>
-<li>If nothing happens, check the Windhawk log: the mod logs the process name of
-every audio session it sees when a new one appears.</li>
-<li>If you change the volume of a target app yourself while it is ducked, your
-value is taken as the new &quot;original&quot; volume.</li>
-<li>All active playback devices are handled.</li>
-<li>The mod only works while audio is involved: it waits for Windows audio events
-and does not poll while no trigger app has an open audio stream.</li>
-<li>Windows remembers the volume of each app. While an app is ducked, the mod
-keeps a record of its original volume in Windhawk's storage, so the volume is
-restored after a restart of the mod, a closed and reopened app or a changed
-playback device. If an app stays closed while the mod is turned off, Windows
-can keep its lowered volume until you raise it in the volume mixer.</li>
-</ul>
-<h2>Warning:</h2>
-<p>I used AI (Claude Sonnet 5.5) to create this mod. I am not responsible for any damage using this mod may cause. Use at your own risk.
-However I did ask Claude to check for security vulnerabilities.</p>
-]]></content>
-        <author>
-            <name>wa0dim</name>
-            <uri>https://github.com/wa0dim</uri>
         </author>
     </entry>
 </feed>
