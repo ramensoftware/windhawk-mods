@@ -953,9 +953,21 @@ static void NoteBackgroundOutcome() {
 //------------------------------------------------------------------------------
 
 static std::wstring ToLower(const std::wstring& s) {
-    std::wstring r = s;
-    for (auto& c : r) c = towlower(c);
-    return r;
+    if (s.empty()) return {};
+    // Invariant Windows Unicode mapping does not depend on the CRT locale.
+    // Query the output length first: case mapping can change string length.
+    int required=LCMapStringEx(LOCALE_NAME_INVARIANT,LCMAP_LOWERCASE,s.data(),
+                               (int)s.size(),nullptr,0,nullptr,nullptr,0);
+    if (required>0) {
+        std::wstring result((size_t)required,L'\0');
+        int written=LCMapStringEx(LOCALE_NAME_INVARIANT,LCMAP_LOWERCASE,s.data(),
+                                  (int)s.size(),result.data(),required,nullptr,nullptr,0);
+        if(written==required)return result;
+    }
+    // Preserve the previous conservative behavior if Windows mapping fails.
+    std::wstring result=s;
+    for(auto& c:result)c=towlower(c);
+    return result;
 }
 
 static bool ContainsI(const std::wstring& haystack, const std::wstring& needle) {
@@ -2155,7 +2167,7 @@ static bool LooksLikePublisher(const std::wstring& t) {
         L"publisher", L"editore", L"autore", L"author", L"autor", L"auteur",
         L"verlag", L"\u00e9diteur", L"editor", L"verificato",
         L"verified", L"signiert", L"firmado", L"unknown", L"sconosciuto", L"unbekannt",
-        L"inconnu", L"desconocido", L"desconhecido",
+        L"inconnu", L"desconocido", L"desconhecido", L"\u0438\u0437\u0434\u0430\u0442\u0435\u043b\u044c",
     };
     std::wstring l = ToLower(t);
     for (const WCHAR* w : kWords) {
@@ -2243,7 +2255,7 @@ static const WCHAR* kAppRowWords[] = {
 static const WCHAR* kPubRowWords[] = {
     L"editore", L"autore", L"author", L"autor", L"auteur", L"publisher",
     L"herausgeber", L"\u00e9diteur", L"editeur", L"editor",
-    L"uitgever", L"wydawca",
+    L"uitgever", L"wydawca", L"\u0438\u0437\u0434\u0430\u0442\u0435\u043b\u044c",
 };
 static const WCHAR* kLinkWords[] = {
     L"show details", L"hide details", L"mostra dettagli", L"nascondi dettagli", L"dettagli",
@@ -9333,21 +9345,33 @@ static void RestoreNativePrompt() {
         Log(L"restoring the native prompt window");
         // The bypass was set under g_nativeCs before this move. All watcher state uses
         // that same recursive lock, so a late location event cannot start a new takeover.
-        BOOL restored;
-        if (g_nativeRectValid) {
-            restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST, g_nativeOriginalRect.left,
-                         g_nativeOriginalRect.top,
-                         g_nativeOriginalRect.right - g_nativeOriginalRect.left,
-                         g_nativeOriginalRect.bottom - g_nativeOriginalRect.top,
-                         SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        // The saved location can be an intermediate XAML host placement. Use it
+        // only to identify a monitor and as a size fallback, not as coordinates.
+        RECT cur={}, wa={}; GetWindowRect(g_hNativePrompt,&cur);
+        int width=cur.right-cur.left, height=cur.bottom-cur.top;
+        if ((width<160 || height<90) && g_nativeRectValid) {
+            width=g_nativeOriginalRect.right-g_nativeOriginalRect.left;
+            height=g_nativeOriginalRect.bottom-g_nativeOriginalRect.top;
+        }
+        POINT cursor{};
+        HMONITOR monitor=nullptr;
+        if(g_nativeRectValid)monitor=MonitorFromRect(&g_nativeOriginalRect,MONITOR_DEFAULTTONEAREST);
+        else if(GetCursorPos(&cursor))monitor=MonitorFromPoint(cursor,MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};mi.cbSize=sizeof(mi);
+        if(monitor && GetMonitorInfoW(monitor,&mi))wa=mi.rcWork;
+        else SystemParametersInfoW(SPI_GETWORKAREA,0,&wa,0);
+        BOOL restored=FALSE;
+        if(width>0 && height>0 && wa.right>wa.left && wa.bottom>wa.top) {
+            int x=wa.left+std::max(0,((int)(wa.right-wa.left)-width)/2);
+            int y=wa.top+std::max(0,((int)(wa.bottom-wa.top)-height)/2);
+            // Leave the current size alone when it is usable; if the host is
+            // still zero-sized, restore the last captured usable size instead.
+            UINT flags=SWP_SHOWWINDOW|SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS;
+            if(cur.right-cur.left>=160 && cur.bottom-cur.top>=90)flags|=SWP_NOSIZE;
+            restored=SetWindowPos(g_hNativePrompt,HWND_TOPMOST,x,y,width,height,flags);
         } else {
-            RECT cur = {}, wa = {};
-            GetWindowRect(g_hNativePrompt, &cur);
-            SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
-            restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST,
-                         wa.left + ((wa.right - wa.left) - (cur.right - cur.left)) / 2,
-                         wa.top + ((wa.bottom - wa.top) - (cur.bottom - cur.top)) / 2, 0, 0,
-                         SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            // No trustworthy geometry: show in place rather than invent a size.
+            restored=ShowWindowAsync(g_hNativePrompt,SW_SHOW);
         }
         SetForegroundWindow(g_hNativePrompt);
         if (restored) g_nativeMoved = false;
@@ -9759,6 +9783,9 @@ static DWORD WINAPI UiSessionRunInner() {
     bool haveInfo = false;
     bool infoOurs = false;
     bool confident = false;
+    bool shortFailOpen = false;
+    DWORD unresolvedSince = 0;
+    HWND unresolvedWindow = nullptr;
     DWORD overallDeadline = GetTickCount() + (DWORD)g_settings.detectTimeoutMs;
     int nDesktops = desktops.empty() ? 1 : (int)desktops.size();
     DWORD sliceMs = (DWORD)g_settings.detectTimeoutMs / (DWORD)nDesktops;
@@ -9775,7 +9802,7 @@ static DWORD WINAPI UiSessionRunInner() {
             Log(L"window not usable: hwnd=%p class='%s' (%s)", h, cls, why);
     };
 
-    for (size_t di = 0; di < desktops.size() && !confident && !StopRequested(); di++) {
+    for (size_t di = 0; di < desktops.size() && !confident && !shortFailOpen && !StopRequested(); di++) {
         DWORD sliceDeadline = GetTickCount() + sliceMs;
         if ((LONG)(sliceDeadline - overallDeadline) > 0) sliceDeadline = overallDeadline;
         if (!SetThreadDesktop(desktops[di])) {
@@ -9864,9 +9891,22 @@ static DWORD WINAPI UiSessionRunInner() {
                 }
                 FinishHarvest(attempt);
 
-                int btnCount = 0;
+                int btnCount = 0, namedButtons = 0;
                 for (const auto& e : attempt.elements)
-                    if (e.type == UIA_ButtonControlTypeId) btnCount++;
+                    if (e.type == UIA_ButtonControlTypeId) {
+                        ++btnCount; if (!Trim(e.name).empty()) ++namedButtons;
+                    }
+                // Once our known prompt has a populated but unrecognized pair,
+                // give the UIA tree a short grace period, then hand Windows back.
+                // Do not shorten observation/dump mode or unrelated windows.
+                if (ours && IsKnownPromptClass(it->cls) && !attempt.credentialVariant &&
+                    !attempt.buttonsConfident && namedButtons>=2 &&
+                    g_settings.relayMode==1 && !g_settings.dumpUiTree) {
+                    if (unresolvedWindow!=it->hwnd) {
+                        unresolvedWindow=it->hwnd;
+                        unresolvedSince=GetTickCount();
+                    }
+                }
                 bool usable = attempt.buttonsConfident ||
                               (btnCount >= 2 && attempt.texts.size() >= 2);
                 if (!usable) continue;
@@ -9888,6 +9928,12 @@ static DWORD WINAPI UiSessionRunInner() {
                 if (confident) break;
             }
             if (confident) break;
+            if (haveInfo && infoOurs && unresolvedWindow &&
+                info.hNative==unresolvedWindow && GetTickCount()-unresolvedSince>=1000) {
+                Log(L"buttons still unrecognized after grace period -> returning native prompt");
+                shortFailOpen=true;
+                break;
+            }
             if ((LONG)(GetTickCount() - overallDeadline) > 0) break;
             if (!haveInfo && (LONG)(GetTickCount() - sliceDeadline) > 0) {
                 Dbg(L"nothing usable on desktop '%s' in %lu ms -> next desktop",
