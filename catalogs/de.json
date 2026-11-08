@@ -1015,12 +1015,12 @@
         "ratingUsers": 12,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793675032000,
+        "updated": 1794160825000,
         "users": 61
       },
       "metadata": {
         "author": "3DDinosaur",
-        "compilerOptions": "-lcomctl32 -lcomdlg32 -lgdi32 -lgdiplus -lshell32",
+        "compilerOptions": "-lcomctl32 -lcomdlg32 -ldwmapi -lgdi32 -lgdiplus -lshell32",
         "description": "Dims unfocused windows with a solid tint, pattern or image, tuned live in a secondary configuration window",
         "github": "https://github.com/3DDinosaur",
         "include": [
@@ -1029,7 +1029,7 @@
           "windhawk.exe"
         ],
         "name": "Background Dimmer",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "balloon-sound-fix": {
@@ -19199,7 +19199,7 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 7.52663125706851,
-        "updated": 1793127702000,
+        "updated": 1794160830000,
         "users": 216
       },
       "metadata": {
@@ -19215,7 +19215,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Top Taskbar Bleed",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "tortoisegit-progress-animation-background-fix": {
@@ -22019,12 +22019,12 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793937618000,
+        "updated": 1794160834000,
         "users": 79
       },
       "metadata": {
         "author": "3DDinosaur",
-        "compilerOptions": "-lgdi32 -lshell32",
+        "compilerOptions": "-lgdi32 -lshell32 -ldwmapi",
         "description": "Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.",
         "github": "https://github.com/3DDinosaur",
         "include": [
@@ -22032,7 +22032,7 @@
           "windhawk.exe"
         ],
         "name": "Window Centralizer",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "window-geometry-memory": {
@@ -22781,7 +22781,7 @@
         "ratingUsers": 28,
         "reviews": 0,
         "trendingSorting": 12.791707170938832,
-        "updated": 1793365401000,
+        "updated": 1794160818000,
         "users": 334
       },
       "metadata": {
@@ -22798,7 +22798,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinKlok",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "winrar-tweaks": {

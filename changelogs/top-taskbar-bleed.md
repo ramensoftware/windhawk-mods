@@ -1,3 +1,23 @@
+## 1.1.1 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6913ece9a195fd9b8c2492b74f6004c2a2e0df5b/mods/top-taskbar-bleed.wh.cpp))
+
+* Periodic (10 s) island health check on the taskbar thread: detached panels are re-attached and committed to again, live ones repaired (position above the background, visibility, opacity, stroke and fill state), each repair logged; the check touches only what the mod itself placed or changed, so Styler themes, Dynamic Taskbar Transparency and the Opacity Tuner are left alone
+
+* An update that finds its panel detached prunes the island and triggers the discovery retry instead of dropping silently
+
+* A Peek state that can no longer be alive (cursor away from the taskbar and nothing of Explorer’s showing a thumbnail or switcher for 1 s) is cleared; the Peek hook logs on/off and what kept a Peek alive
+
+* New setting “Transparent taskbar when nothing is maximized”: the taskbar’s own background and border line are hidden, so the wallpaper shows through whenever no bleed is showing - the taskbar is either bled or transparent, never stock. The mod saves and restores the elements’ own values rather than writing Visible / 1.0, so other mods’ settings survive; taskbars the mod leaves idle (a bottom taskbar without Any taskbar position) keep their background
+
+* Task View (Win+Tab) and any window opaque over the top 16 px of the title bar (a full-screen app or overlay) hide the panel until they are gone, recovering one frame after
+
+* The Alt+Tab switcher, taskbar flyouts, light-dismiss overlays, the input-language switcher and other shell chrome never count as covers
+
+* Screen-recorder frames (region-shaped windows, like ShareX’s) no longer count as covers; a thin border lying on the sampled row moves the sample down past it
+
+* The sampled row is now the 4th row of the title bar
+
+* README updated
+
 ## 1.1.0 ([Oct 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/115a3db9089965b3a37c711a88b166ef3fc27321/mods/top-taskbar-bleed.wh.cpp))
 
 ### Fixed

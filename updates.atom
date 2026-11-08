@@ -2,12 +2,108 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-08T17:04:14.000Z</updated>
+    <updated>2026-11-08T18:00:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Window Centralizer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/window-centralizer#7a79ece1171c8f82c517e577bdcd2ac5466e63ed</id>
+        <link href="https://windhawk.net/mods/window-centralizer"/>
+        <updated>2026-11-08T18:00:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New toggle to show windows only after complete UI load, avoiding the native elements flicker of some interfaces.</li>
+</ul>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Top Taskbar Bleed 1.1.1]]></title>
+        <id>https://windhawk.net/mods/top-taskbar-bleed#6913ece9a195fd9b8c2492b74f6004c2a2e0df5b</id>
+        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
+        <updated>2026-11-08T18:00:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>
+<p>Periodic (10 s) island health check on the taskbar thread: detached panels are re-attached and committed to again, live ones repaired (position above the background, visibility, opacity, stroke and fill state), each repair logged; the check touches only what the mod itself placed or changed, so Styler themes, Dynamic Taskbar Transparency and the Opacity Tuner are left alone</p>
+</li>
+<li>
+<p>An update that finds its panel detached prunes the island and triggers the discovery retry instead of dropping silently</p>
+</li>
+<li>
+<p>A Peek state that can no longer be alive (cursor away from the taskbar and nothing of Explorer’s showing a thumbnail or switcher for 1 s) is cleared; the Peek hook logs on/off and what kept a Peek alive</p>
+</li>
+<li>
+<p>New setting “Transparent taskbar when nothing is maximized”: the taskbar’s own background and border line are hidden, so the wallpaper shows through whenever no bleed is showing - the taskbar is either bled or transparent, never stock. The mod saves and restores the elements’ own values rather than writing Visible / 1.0, so other mods’ settings survive; taskbars the mod leaves idle (a bottom taskbar without Any taskbar position) keep their background</p>
+</li>
+<li>
+<p>Task View (Win+Tab) and any window opaque over the top 16 px of the title bar (a full-screen app or overlay) hide the panel until they are gone, recovering one frame after</p>
+</li>
+<li>
+<p>The Alt+Tab switcher, taskbar flyouts, light-dismiss overlays, the input-language switcher and other shell chrome never count as covers</p>
+</li>
+<li>
+<p>Screen-recorder frames (region-shaped windows, like ShareX’s) no longer count as covers; a thin border lying on the sampled row moves the sample down past it</p>
+</li>
+<li>
+<p>The sampled row is now the 4th row of the title bar</p>
+</li>
+<li>
+<p>README updated</p>
+</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Background Dimmer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/background-dimmer#2e774e506b47ba68e529a535f0ed50ac9b4d7152</id>
+        <link href="https://windhawk.net/mods/background-dimmer"/>
+        <updated>2026-11-08T18:00:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Taskbar, Start, Alt+Tab and notification center now count as focused: while one of them has focus, every regular window is dimmed. Previously they left the layer where it was, so the last active window stayed lit behind them.</li>
+<li>A dialog now can dim the window that owns it (enabled by default). The new option &quot;Dim a window while one of its dialogs has focus&quot; can be turned off to keep them lit together, as in 1.0.0.</li>
+<li>New option &quot;Dim everything behind an open menu&quot; (off by default). It works with standard Windows menus; apps that draw their own menus aren't detected. Without it, a menu keeps the window that opened it lit.</li>
+<li>&quot;Hide the layer from screenshots and screen sharing&quot; is now on by default. Existing users keep their saved choice.</li>
+<li>Optional tray icon (new &quot;Tray icon&quot; setting, off by default): click to open the configuration window, right-click to toggle dimming on and off.</li>
+<li>Patterns simplified to Solid, Checkerboard, Stripes and Image, with a new Rotation slider for stripes and checkerboard (any angle, antialiased). Saved horizontal, vertical and diagonal stripes are converted to Stripes at 0°, 90° and 45°.</li>
+</ul>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinKlok 1.1.0]]></title>
+        <id>https://windhawk.net/mods/winklok#feee2cb5f06585c57516ef3071b4d4be1ae23968</id>
+        <link href="https://windhawk.net/mods/winklok"/>
+        <updated>2026-11-08T18:00:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a custom notification panel.</li>
+<li>Improved animations for smoother transitions.</li>
+<li>Fixed the taskbar auto-hide bug.</li>
+<li>Added the Tasks tab.</li>
+<li>Updated the About section.</li>
+<li>Added the ability to hide individual tabs.</li>
+<li>Fixed interruptions affecting the notification bell icon.</li>
+<li>Fixed inline math rendering in Notes.</li>
+<li>Added week numbers to the calendar.</li>
+<li>Added support for multiple time zones, following Windows' additional clock settings.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Shifting Whistler</name>
+            <uri>https://github.com/shifting-whistler</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 2.0]]></title>
         <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#dd9dab4ae94f445b9b3b07600b3a31f959640e8d</id>
@@ -1189,134 +1285,6 @@ d'écran, etc. La langue suit automatiquement celle de Windows (sinon l'anglais)
         <author>
             <name>sidlikesgrapess</name>
             <uri>https://github.com/sidlikesgrapess</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinTips OSD 1.5.0]]></title>
-        <id>https://windhawk.net/mods/wintips-osd#1492292686dabfa975d4165614a4eb3707ce300d</id>
-        <link href="https://windhawk.net/mods/wintips-osd"/>
-        <updated>2026-11-07T16:00:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Eight card languages: Simplified and Traditional Chinese, English, German, Japanese, Russian, Spanish, Portuguese, plus automatic detection from the Windows display language.</li>
-<li>New &quot;Tint opacity&quot; setting for the acrylic material (20-90%, default 55%). The default is more transparent than before - raise it to 85 to get the 1.4.x look.</li>
-<li>The acrylic card border now uses a top-lit gradient stroke instead of a flat color.</li>
-<li>&quot;Language&quot; option labels are now localized; existing language settings keep working.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DoYouNatureQ</name>
-            <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Clock Styler 0.6.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-clock-styler#7a2157258d4698ee9eb809ea45719051a62ed99a</id>
-        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
-        <updated>2026-11-06T22:03:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added 3 brand-new Vertical Stack Clock styles (Pixel / Nothing OS, Modern Dual Weight, Heavy Poster Impact) with bespoke 2-row line spacing and weight hierarchy.</li>
-<li>Fixed black lock screen background after laptop wakes up from sleep (#6978) via native display and power state callbacks (<code>PowerSettingRegisterNotification</code> &amp; <code>RegisterSuspendResumeNotification</code>) to pause background polling during quiesce.</li>
-<li>Added a 1000 ms stabilization delay upon wake before resuming clock ticks, preventing contention while LockApp's COM and DXGI pipelines restore wallpaper.</li>
-<li>Added window and element visibility guards (<code>IsWindowVisible</code> &amp; <code>Window::Current().Visible()</code>) before inspecting or modifying the visual tree.</li>
-<li>Reordered theme selection options across all 14 supported languages to place vertical themes right after Classic Flip Clock (positions 4, 5, 6).</li>
-<li>Closed startup settings synchronization race conditions to ensure preferences apply immediately on shell launch.</li>
-<li>Updated README and mod header previews with new vertical clock screenshots.</li>
-</ul>
-]]></content>
-        <author>
-            <name>ali0zdas</name>
-            <uri>https://github.com/ali0zdas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Eject Dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/better-eject-dialog#1419d1c0a9a1ae204c3ca2dbba1858c6a80e9f8b</id>
-        <link href="https://windhawk.net/mods/better-eject-dialog"/>
-        <updated>2026-11-06T22:03:18.000Z</updated>
-        <content type="html"><![CDATA[<h1>Better Eject Dialog</h1>
-<p>When a USB drive is in use, Windows refuses to eject it with a message like
-<em>&quot;Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device. This device is
-currently in use. Close any programs or windows that might be using the device,
-and then try again.&quot;</em> It doesn't say which program is using the drive.</p>
-<table>
-<thead>
-<tr>
-<th>Before</th>
-<th>After</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/19e0943aaf3ddeb2f8e8457875f4ed6cd588fe90/windhawk-mods/better-eject-dialog/preview-before.png" alt="Before"></td>
-<td><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/e826e35bed4c5f0b2a36bec47168b76a7d263676/windhawk-mods/better-eject-dialog/preview-after.png" alt="After"></td>
-</tr>
-</tbody>
-</table>
-<p>This mod replaces that message with a dialog that:</p>
-<ul>
-<li><strong>Lists the programs that are using the drive</strong>, with their name, process ID,
-path and command line. Background helpers get a clearer name, for example
-<em>COM Surrogate (Plan9FileSystem)</em> for the server that WSL uses to access
-Windows drives.</li>
-<li><strong>Explains common causes</strong>, such as WSL, Windows Search, Microsoft Defender
-and File Explorer.</li>
-<li><strong>Closes or ends a program</strong> with one click. Programs with windows are asked
-to close, so they can still ask you to save your work. Background processes
-are ended. Programs that run as administrator get a UAC prompt.</li>
-<li><strong>Ejects automatically</strong> once the blocking programs exit, so you can leave the
-dialog open and close them yourself. If the drive keeps being used, it stops
-after 5 attempts in a row until you click a button.</li>
-<li><strong>Force ejects</strong> as a last resort. After a confirmation and a UAC prompt, the
-drive is flushed and dismounted so that programs lose access to it, and then
-it's ejected. Programs may lose unsaved changes to files on the drive.</li>
-<li>Keeps Windows' usual <strong>Safe To Remove Hardware</strong> notification when the drive
-is ejected.</li>
-</ul>
-<p>It works when you eject from the <em>Safely Remove Hardware and Eject Media</em> tray
-icon and from <em>Eject</em> in File Explorer.</p>
-<h2>How it finds the programs</h2>
-<p>Every time an eject fails, Windows writes an event to the System event log
-(Kernel-PnP, event ID 225) for each process that has the drive open. The mod
-reads those events, so it can also name programs that run as administrator,
-services and Windows itself.</p>
-<h2>What it doesn't close</h2>
-<ul>
-<li><strong>System</strong> means that Windows or a driver has the drive open, for example for
-indexing, virus scanning, WSL or a mounted disk image. It usually lets go once
-the other programs are closed. If it doesn't, use <strong>Force eject</strong>.</li>
-<li><strong>File Explorer</strong> can't be closed from the dialog, because the dialog runs
-inside it. Close File Explorer windows or previews that show the drive.</li>
-<li><strong>Windows services and core Windows processes</strong> are listed so that you know
-what's using the drive, but they aren't closed from the dialog.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>Ejects started by other programs, such as third-party eject tools, aren't
-changed.</li>
-<li>Force eject can lose unsaved changes that programs still have for files on
-the drive. Use it only if you can't close the programs.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ender</name>
-            <uri>https://github.com/EnderDragonEP</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0.3]]></title>
-        <id>https://windhawk.net/mods/file-explorer-content-animation#9b70a24771cfbad240c70881b7b1e97baf57b20a</id>
-        <link href="https://windhawk.net/mods/file-explorer-content-animation"/>
-        <updated>2026-11-06T21:01:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Keep DirectUI text visible during animations: in light mode it could vanish or turn into faint white artifacts until the animation ended.</li>
-<li>Move only the scrollable area on page entrance, so the column header no longer turns opaque or changes color during the animation with translucent backgrounds.</li>
-<li>Hand the content back under a copy that follows the scroll when scrolling during an animation, so it no longer flashes empty, also with smooth scrolling mods.</li>
-<li>Add an optional Styler text compatibility setting, off by default. It's only needed if the text changes after the animation ends with the entire-window effect of Windows 11 File Explorer Styler.</li>
-</ul>
-]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
