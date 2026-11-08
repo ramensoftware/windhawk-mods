@@ -113,7 +113,7 @@ must be evaluated with the configuration in use. To avoid their remaining hooks
 in Explorer while continuing to use them in other applications, exclude
 `explorer.exe` from their targets in Windhawk's Advanced tab.
 
-This mod is also compatible with 
+This mod is also compatible with
 [ExplorerBlurMica](https://github.com/Maplespe/ExplorerBlurMica), which supplies
 the main Explorer window backdrop. This mod keeps its effects confined to classic
 popup menus and leaves the main window backdrop to ExplorerBlurMica.
@@ -127,6 +127,13 @@ The implementation uses version-dependent Windows interfaces: the composition
 attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
 message 0x1e2, and Shell window properties. It does not read private Shell item
 structures, patch instructions, download symbols, or replace the menu loop.
+
+## Troubleshooting
+
+Enable log output in Windhawk's Advanced tab to record menu preparation,
+material and border application results, native fallback reasons, and cleanup.
+There is no separate logging setting in this mod. Native mode registers no
+menu hooks, so it reports initialization rather than individual menu openings.
 
 ## Credits and license
 
@@ -185,9 +192,6 @@ This implementation is distributed under GPL-3.0-or-later.
 - ctrlBypass: false
   $name: Hold Ctrl to bypass
   $description: Hold Ctrl before opening a menu to keep its complete native appearance and behavior.
-- debugLogging: false
-  $name: Diagnostic logging
-  $description: Log preparation, geometry, and native frame state. Also enable log output in the Advanced tab. At most 64 geometry events and 4 late border overrides per popup.
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -203,6 +207,15 @@ This implementation is distributed under GPL-3.0-or-later.
 #include <cwchar>
 
 #include <windhawk_utils.h>
+
+// Keep logging transparent to callers of the hooked Windows APIs. Wh_Log
+// supplies Windhawk's enable switch and lazy argument evaluation.
+#define ETM_LOG(...)                       \
+    do {                                   \
+        DWORD savedError = GetLastError(); \
+        Wh_Log(__VA_ARGS__);               \
+        SetLastError(savedError);          \
+    } while (false)
 
 namespace etm {
 
@@ -220,6 +233,14 @@ enum class Material {
     Mica,
     MicaAlt
 };
+
+PCWSTR MaterialName(Material material) {
+    constexpr PCWSTR names[] = {
+        L"native",         L"solid",          L"transparent", L"acrylic",
+        L"modern-acrylic", L"system-acrylic", L"mica",        L"mica-alt"};
+    unsigned index = static_cast<unsigned>(material);
+    return index < ARRAYSIZE(names) ? names[index] : L"unknown";
+}
 
 Material ParseMaterial(PCWSTR value) {
     if (!value)
@@ -267,7 +288,6 @@ COLORREF ParseTint(PCWSTR value, COLORREF fallback) {
 struct Settings {
     bool roundedCorners;
     bool ctrlBypass;
-    bool debugLogging;
     Material material = Material::Acrylic;
     int tintOpacity = 35;
     COLORREF lightTint = RGB(245, 245, 245);
@@ -354,7 +374,6 @@ struct Popup {
     COLORREF oldBorderColor;
     bool haveBorderColor;
     bool borderColorChanged;
-    unsigned borderOverrides;
     AccentPolicy oldAccent;
     bool haveAccent;
     bool accentChanged;
@@ -363,47 +382,7 @@ struct Popup {
     bool subclassed;
     bool preparing;
     bool layingOut;
-    unsigned geometryEvents;
-    ULONGLONG observedAt;
-    unsigned backgroundDraws;
-    unsigned shellTextDraws;
-    unsigned themeTextDraws;
-    unsigned iconRepairs;
-    unsigned highlights;
 };
-
-void TracePopupGeometry(Popup& popup,
-                        PCWSTR phase,
-                        const WINDOWPOS* position = nullptr) {
-    if (!g_settings.debugLogging || !popup.active ||
-        !IsSystemMaterial(g_settings.material) || popup.geometryEvents >= 64)
-        return;
-    ++popup.geometryEvents;
-    RECT window{}, frame{};
-    BOOL haveWindow = GetWindowRect(popup.hwnd, &window);
-    HRESULT haveFrame = DwmGetWindowAttribute(
-        popup.hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame));
-    BOOL ncEnabled = FALSE;
-    UINT border = 0;
-    HRESULT haveNc = DwmGetWindowAttribute(
-        popup.hwnd, DWMWA_NCRENDERING_ENABLED, &ncEnabled, sizeof(ncEnabled));
-    HRESULT haveBorder =
-        DwmGetWindowAttribute(popup.hwnd, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS,
-                              &border, sizeof(border));
-    Wh_Log(
-        L"Geometry %p +%llu ms %s visible=%d dpi=%u winOk=%d "
-        L"win=(%ld,%ld,%ld,%ld) frameHr=0x%08lx frame=(%ld,%ld,%ld,%ld) "
-        L"ncHr=0x%08lx nc=%d borderHr=0x%08lx border=%u flags=0x%x "
-        L"proposed=(%d,%d,%d,%d)",
-        popup.hwnd, GetTickCount64() - popup.observedAt, phase,
-        IsWindowVisible(popup.hwnd), GetDpiForWindow(popup.hwnd), haveWindow,
-        window.left, window.top, window.right, window.bottom,
-        static_cast<ULONG>(haveFrame), frame.left, frame.top, frame.right,
-        frame.bottom, static_cast<ULONG>(haveNc), ncEnabled,
-        static_cast<ULONG>(haveBorder), border, position ? position->flags : 0,
-        position ? position->x : 0, position ? position->y : 0,
-        position ? position->cx : 0, position ? position->cy : 0);
-}
 
 struct MenuScope;
 thread_local MenuScope* t_scope = nullptr;
@@ -426,21 +405,34 @@ bool ConflictingModuleLoaded() {
     return false;
 }
 
-bool EffectsAllowed() {
+bool EffectsAllowed(PCWSTR* reason = nullptr) {
+    auto reject = [reason](PCWSTR value) {
+        if (reason)
+            *reason = value;
+        return false;
+    };
+    if (reason)
+        *reason = L"allowed";
     if (g_settings.material == Material::Native)
-        return false;
-    if (g_stopping.load(std::memory_order_relaxed) || ConflictingModuleLoaded())
-        return false;
+        return reject(L"native material");
+    if (g_stopping.load(std::memory_order_relaxed))
+        return reject(L"mod stopping");
+    if (ConflictingModuleLoaded())
+        return reject(L"conflicting renderer");
     if (g_settings.ctrlBypass && (GetAsyncKeyState(VK_CONTROL) & 0x8000))
-        return false;
+        return reject(L"Ctrl bypass");
     HIGHCONTRASTW hc{sizeof(hc)};
     BOOL composition = FALSE;
-    if (!SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) ||
-        (hc.dwFlags & HCF_HIGHCONTRASTON) ||
-        GetSystemMetrics(SM_REMOTESESSION) ||
-        FAILED(DwmIsCompositionEnabled(&composition)) || !composition ||
-        !IsAppThemed())
-        return false;
+    if (!SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0))
+        return reject(L"high-contrast query failed");
+    if (hc.dwFlags & HCF_HIGHCONTRASTON)
+        return reject(L"high contrast");
+    if (GetSystemMetrics(SM_REMOTESESSION))
+        return reject(L"remote session");
+    if (FAILED(DwmIsCompositionEnabled(&composition)) || !composition)
+        return reject(L"composition unavailable");
+    if (!IsAppThemed())
+        return reject(L"visual styles unavailable");
 
     DWORD enabled = 1;
     DWORD size = sizeof(enabled);
@@ -449,8 +441,11 @@ bool EffectsAllowed() {
         HKEY_CURRENT_USER,
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         L"EnableTransparency", RRF_RT_REG_DWORD, nullptr, &enabled, &size);
-    return status == ERROR_FILE_NOT_FOUND ||
-           (status == ERROR_SUCCESS && enabled);
+    if (status == ERROR_FILE_NOT_FOUND)
+        return true;
+    if (status != ERROR_SUCCESS)
+        return reject(L"transparency setting unreadable");
+    return enabled ? true : reject(L"transparency disabled");
 }
 
 bool UsesDarkMenus() {
@@ -500,8 +495,11 @@ bool ApplyBackdrop(Popup& popup) {
     BOOL dark = popup.dark;
     // Apply theme before the material; changing it afterwards can invalidate
     // the DWM recipe that was just configured.
-    DwmSetWindowAttribute(popup.hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
-                          sizeof(dark));
+    HRESULT darkResult = DwmSetWindowAttribute(
+        popup.hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    if (FAILED(darkResult))
+        ETM_LOG(L"Theme hwnd=%p dark=%d hr=0x%08lx", popup.hwnd, dark,
+                darkResult);
     if (IsSystemMaterial(g_settings.material)) {
         // Preserve the menu's native non-client policy. Forcing DWMNCRP_ENABLED
         // adds a delayed DWM frame: at 144 DPI an owned child contracted by one
@@ -513,20 +511,33 @@ bool ApplyBackdrop(Popup& popup) {
             g_settings.material == Material::Mica      ? DWMSBT_MAINWINDOW
             : g_settings.material == Material::MicaAlt ? DWMSBT_TABBEDWINDOW
                                                        : DWMSBT_TRANSIENTWINDOW;
-        popup.frameExtended =
-            SUCCEEDED(DwmExtendFrameIntoClientArea(popup.hwnd, &margins));
-        success = popup.frameExtended &&
-                  SUCCEEDED(DwmSetWindowAttribute(popup.hwnd,
-                                                  DWMWA_SYSTEMBACKDROP_TYPE,
-                                                  &backdrop, sizeof(backdrop)));
+        HRESULT frameResult =
+            DwmExtendFrameIntoClientArea(popup.hwnd, &margins);
+        popup.frameExtended = SUCCEEDED(frameResult);
+        HRESULT backdropResult = S_FALSE;
+        if (popup.frameExtended) {
+            backdropResult =
+                DwmSetWindowAttribute(popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                                      &backdrop, sizeof(backdrop));
+            success = SUCCEEDED(backdropResult);
+        }
+        ETM_LOG(
+            L"Material hwnd=%p material=%s backdrop=%lu frameHr=0x%08lx "
+            L"backdropAttempted=%d backdropHr=0x%08lx applied=%d",
+            popup.hwnd, MaterialName(g_settings.material), backdrop,
+            frameResult, popup.frameExtended, backdropResult, success);
         // Backdrop/alpha first, Accent disabled last. A menu never activates,
         // so notify DWM of the active appearance without requesting another
         // window-position/frame calculation after native menu layout.
         if (g_setComposition) {
             AccentPolicy disabled{};
             CompositionData data{19, &disabled, sizeof(disabled)};
-            if (g_setComposition(popup.hwnd, &data))
+            BOOL applied = g_setComposition(popup.hwnd, &data);
+            DWORD error = applied ? ERROR_SUCCESS : GetLastError();
+            if (applied)
                 popup.accentChanged = true;
+            ETM_LOG(L"AccentDisabled hwnd=%p applied=%d lastError=%lu",
+                    popup.hwnd, applied, error);
         }
         if (success) {
             DefWindowProcW(popup.hwnd, WM_NCACTIVATE, TRUE, 0);
@@ -534,8 +545,11 @@ bool ApplyBackdrop(Popup& popup) {
     } else if (g_setComposition) {
         // Do not stack the fixed, bright system Acrylic recipe with Accent.
         DWORD backdrop = DWMSBT_NONE;
-        DwmSetWindowAttribute(popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
-                              sizeof(backdrop));
+        HRESULT clearResult = DwmSetWindowAttribute(
+            popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+        if (FAILED(clearResult))
+            ETM_LOG(L"BackdropClear hwnd=%p hr=0x%08lx", popup.hwnd,
+                    clearResult);
         int opacity = g_settings.material == Material::Solid ? 100
                       : g_settings.material == Material::ModernAcrylic
                           ? 35  // Fixed recipe; do not vary its input alpha.
@@ -564,17 +578,35 @@ bool ApplyBackdrop(Popup& popup) {
         AccentPolicy accent{state, flags, (alpha << 24) | tint, 0};
         CompositionData data{19, &accent, sizeof(accent)};
         success = g_setComposition(popup.hwnd, &data) != FALSE;
+        DWORD error = success ? ERROR_SUCCESS : GetLastError();
         if (success)
             popup.accentChanged = true;
+        ETM_LOG(
+            L"Material hwnd=%p material=%s state=%d flags=0x%x "
+            L"color=0x%08lx applied=%d lastError=%lu",
+            popup.hwnd, MaterialName(g_settings.material), state, flags,
+            accent.color, success, error);
+    } else {
+        ETM_LOG(
+            L"Material hwnd=%p material=%s unavailable: composition export "
+            L"missing",
+            popup.hwnd, MaterialName(g_settings.material));
     }
     DWORD corner =
         g_settings.roundedCorners ? DWMWCP_ROUNDSMALL : DWMWCP_DONOTROUND;
-    DwmSetWindowAttribute(popup.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner,
-                          sizeof(corner));
+    HRESULT cornerResult = DwmSetWindowAttribute(
+        popup.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    ETM_LOG(L"Corner hwnd=%p rounded=%d hr=0x%08lx", popup.hwnd,
+            g_settings.roundedCorners, cornerResult);
     if (g_settings.hideMenuBorder) {
         COLORREF border = DWMWA_COLOR_NONE;
-        popup.borderColorChanged = SUCCEEDED(DwmSetWindowAttribute(
-            popup.hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border)));
+        HRESULT borderResult = DwmSetWindowAttribute(
+            popup.hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
+        popup.borderColorChanged = SUCCEEDED(borderResult);
+        ETM_LOG(L"Border hwnd=%p action=hide hr=0x%08lx", popup.hwnd,
+                borderResult);
+    } else {
+        ETM_LOG(L"Border hwnd=%p action=keep-native", popup.hwnd);
     }
     popup.applying = false;
     return success;
@@ -583,12 +615,6 @@ bool ApplyBackdrop(Popup& popup) {
 void RestorePopup(Popup& popup, bool destroying = false) {
     if (!popup.active)
         return;
-    if (g_settings.debugLogging)
-        Wh_Log(
-            L"Restore %p backgrounds=%u shellText=%u themeText=%u icons=%u "
-            L"highlights=%u",
-            popup.hwnd, popup.backgroundDraws, popup.shellTextDraws,
-            popup.themeTextDraws, popup.iconRepairs, popup.highlights);
     popup.active =
         false;  // Do not intercept reentrant painting during restoration.
     if (popup.palette) {
@@ -606,8 +632,11 @@ void RestorePopup(Popup& popup, bool destroying = false) {
     }
     // A dying popup loses its DWM state with the HWND. Restoring bright/native
     // attributes while it is still visible can expose a final flash.
-    if (destroying || !IsWindow(popup.hwnd))
+    if (destroying || !IsWindow(popup.hwnd)) {
+        ETM_LOG(L"Cleanup hwnd=%p menu=%p window-destroyed", popup.hwnd,
+                popup.menu);
         return;
+    }
     if (popup.accentChanged && g_setComposition) {
         AccentPolicy accent =
             popup.haveAccent ? popup.oldAccent : AccentPolicy{};
@@ -633,9 +662,13 @@ void RestorePopup(Popup& popup, bool destroying = false) {
     if (popup.borderColorChanged) {
         COLORREF border =
             popup.haveBorderColor ? popup.oldBorderColor : DWMWA_COLOR_DEFAULT;
-        DwmSetWindowAttribute(popup.hwnd, DWMWA_BORDER_COLOR, &border,
-                              sizeof(border));
+        HRESULT borderResult = DwmSetWindowAttribute(
+            popup.hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
+        ETM_LOG(L"Border hwnd=%p action=restore color=0x%08lx hr=0x%08lx",
+                popup.hwnd, border, borderResult);
     }
+    ETM_LOG(L"Cleanup hwnd=%p menu=%p state-restore-complete", popup.hwnd,
+            popup.menu);
 }
 
 LRESULT CALLBACK MenuMessages(int code, WPARAM wParam, LPARAM lParam);
@@ -678,7 +711,8 @@ struct MenuScope {
         messageHook = SetWindowsHookExW(WH_CALLWNDPROC, MenuMessages, nullptr,
                                         GetCurrentThreadId());
         if (!messageHook) {
-            Wh_Log(L"Could not observe this menu thread: %lu", GetLastError());
+            DWORD error = GetLastError();
+            ETM_LOG(L"Could not observe this menu thread: %lu", error);
             return;
         }
         // The owner is on this UI thread while its menu is tracked. A real
@@ -689,6 +723,9 @@ struct MenuScope {
             !SetWindowSubclass(owner, MenuOwnerSubclass,
                                reinterpret_cast<UINT_PTR>(this),
                                reinterpret_cast<DWORD_PTR>(this))) {
+            DWORD error = GetLastError();
+            ETM_LOG(L"Menu callbacks unavailable owner=%p lastError=%lu", owner,
+                    error);
             UnhookWindowsHookEx(messageHook);
             messageHook = nullptr;
             return;
@@ -749,17 +786,20 @@ struct MenuScope {
             popup = &popups[count++];
             *popup = {};
             popup->hwnd = hwnd;
-            popup->observedAt = GetTickCount64();
         }
         if (!popup->subclassed)
             popup->subclassed =
                 SetWindowSubclass(hwnd, MenuPopupSubclass,
                                   reinterpret_cast<UINT_PTR>(this),
                                   reinterpret_cast<DWORD_PTR>(this)) != FALSE;
+        if (!popup->subclassed) {
+            DWORD error = GetLastError();
+            ETM_LOG(L"Menu subclass failed hwnd=%p lastError=%lu", hwnd, error);
+        }
         return popup->subclassed ? popup : nullptr;
     }
 
-    void Prepare(HWND hwnd, PCWSTR phase = L"owner-draw-fallback") {
+    void Prepare(HWND hwnd) {
         Popup* reusable = Watch(hwnd);
         if (!reusable || reusable->active || reusable->preparing ||
             reusable->layingOut)
@@ -776,35 +816,47 @@ struct MenuScope {
         // During early layout the HWND can exist before it has a valid HMENU.
         // Do not cache that transient failure as a permanently skipped popup.
         if (!GetMenuBarInfo(hwnd, OBJID_CLIENT, 0, &bar) || !bar.hMenu ||
-            GetMenuItemCount(bar.hMenu) <= 0)
+            GetMenuItemCount(bar.hMenu) <= 0) {
+            ETM_LOG(L"Preparation pending hwnd=%p: menu handle/items not ready",
+                    hwnd);
             return;
+        }
         if (!IsSupportedMenu(bar.hMenu, owner, &shellOwnerDraw)) {
-            if (g_settings.debugLogging)
-                Wh_Log(L"Native fallback: unsupported menu %p", hwnd);
+            ETM_LOG(
+                L"Native fallback hwnd=%p menu=%p: unsupported menu/owner-draw",
+                hwnd, bar.hMenu);
             return;
         }
         MENUINFO info{sizeof(info)};
         info.fMask = MIM_BACKGROUND;
-        if (!GetMenuInfo(bar.hMenu, &info))
+        if (!GetMenuInfo(bar.hMenu, &info)) {
+            DWORD error = GetLastError();
+            ETM_LOG(
+                L"Preparation failed hwnd=%p menu=%p stage=GetMenuInfo "
+                L"lastError=%lu",
+                hwnd, bar.hMenu, error);
             return;
+        }
         if (!shellOwnerDraw && info.hbrBack &&
             info.hbrBack != GetSysColorBrush(COLOR_MENU) &&
             info.hbrBack != reinterpret_cast<HBRUSH>(COLOR_MENU + 1)) {
-            if (g_settings.debugLogging)
-                Wh_Log(L"Native fallback: custom brush %p", hwnd);
+            ETM_LOG(L"Native fallback hwnd=%p menu=%p: custom background brush",
+                    hwnd, bar.hMenu);
             return;
         }
         Popup& popup = *reusable;
         bool subclassed = popup.subclassed;
-        ULONGLONG observedAt = popup.observedAt;
         popup = {};
         popup.subclassed = subclassed;
-        popup.observedAt = observedAt;
         popup.preparing = true;
         popup.hwnd = hwnd;
         popup.menu = bar.hMenu;
         popup.oldBrush = info.hbrBack;
         popup.dark = UsesDarkMenus();
+        ETM_LOG(
+            L"Preparing hwnd=%p menu=%p material=%s theme=%s shellOwnerDraw=%d",
+            hwnd, popup.menu, MaterialName(g_settings.material),
+            popup.dark ? L"dark" : L"light", shellOwnerDraw);
         popup.haveBackdrop = SUCCEEDED(DwmGetWindowAttribute(
             hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &popup.oldBackdrop,
             sizeof(popup.oldBackdrop)));
@@ -826,11 +878,19 @@ struct MenuScope {
         popup.palette =
             OpenThemeData(hwnd, popup.dark ? L"DarkMode::Menu" : L"Menu");
         if (!popup.palette) {
+            DWORD error = GetLastError();
+            ETM_LOG(
+                L"Preparation failed hwnd=%p stage=OpenThemeData lastError=%lu",
+                hwnd, error);
             RestorePopup(popup);
             return;
         }
         HRGN region = CreateRectRgn(0, 0, -1, -1);
         if (!region) {
+            DWORD error = GetLastError();
+            ETM_LOG(
+                L"Preparation failed hwnd=%p stage=CreateRectRgn lastError=%lu",
+                hwnd, error);
             RestorePopup(popup);
             return;
         }
@@ -839,29 +899,33 @@ struct MenuScope {
         HRESULT result = DwmEnableBlurBehindWindow(hwnd, &blur);
         DeleteObject(region);
         if (FAILED(result)) {
+            ETM_LOG(
+                L"Preparation failed hwnd=%p stage=DwmEnableBlurBehindWindow "
+                L"hr=0x%08lx",
+                hwnd, result);
             RestorePopup(popup);
             return;
         }
         info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
         if (!SetMenuInfo(popup.menu, &info)) {
+            DWORD error = GetLastError();
+            ETM_LOG(
+                L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
+                hwnd, error);
             RestorePopup(popup);
             return;
         }
         popup.brushChanged = true;
         if (!ApplyBackdrop(popup)) {
+            ETM_LOG(L"Preparation failed hwnd=%p stage=material", hwnd);
             RestorePopup(popup);
             return;
         }
-        if (g_settings.debugLogging)
-            Wh_Log(
-                L"Prepared %p menu=%p material=%d shell=%d tint=%d "
-                L"phase=%s visible=%d hideBorder=%d "
-                L"borderSet=%d",
-                hwnd, popup.menu, static_cast<int>(g_settings.material),
-                shellOwnerDraw, g_settings.tintOpacity, phase,
-                IsWindowVisible(hwnd), g_settings.hideMenuBorder,
-                popup.borderColorChanged);
-        TracePopupGeometry(popup, phase);
+        ETM_LOG(
+            L"Prepared hwnd=%p menu=%p material=%s hideBorder=%d "
+            L"borderApplied=%d",
+            hwnd, popup.menu, MaterialName(g_settings.material),
+            g_settings.hideMenuBorder, popup.borderColorChanged);
     }
 
     void PrepareMenu(HMENU menu) {
@@ -907,7 +971,7 @@ LRESULT CALLBACK MenuMessages(int code, WPARAM wParam, LPARAM lParam) {
                 message.message == WM_ERASEBKGND ||
                 message.message == WM_PRINT ||
                 message.message == WM_PRINTCLIENT)
-                scope->Prepare(message.hwnd, L"client-fallback");
+                scope->Prepare(message.hwnd);
             // Keep the actual owner-draw context intact across internal menu
             // queries performed during a WM_DRAWITEM call.
             if (!scope->drawingItem)
@@ -951,21 +1015,15 @@ HRESULT WINAPI DwmSetWindowAttributeHook(HWND hwnd,
     // Shell/UxTheme can set the border again after post-layout preparation,
     // including when showing a child. Protect only an already modified HWND;
     // native/bypassed/unsupported menus and unrelated windows pass through.
-    COLORREF requested = popup ? *static_cast<const COLORREF*>(value) : 0;
     HRESULT result =
         g_dwmSetWindowAttribute(hwnd, attribute, popup ? &hidden : value, size);
-    if (popup && SUCCEEDED(result)) {
+    if (popup && SUCCEEDED(result))
         popup->borderColorChanged = true;
-        if (requested != hidden && popup->borderOverrides++ < 4 &&
-            g_settings.debugLogging) {
-            DWORD error = GetLastError();
-            Wh_Log(
-                L"BorderOverride %p requested=0x%08lx effective=0x%08lx "
-                L"result=0x%08lx visible=%d",
-                hwnd, requested, hidden, result, IsWindowVisible(hwnd));
-            SetLastError(error);
-        }
-    }
+    // Initial application is logged by ApplyBackdrop. Record subsequent native
+    // writes here without tracing paints or querying window geometry.
+    if (popup && !popup->applying)
+        ETM_LOG(L"Border hwnd=%p action=protect effective=0x%08lx hr=0x%08lx",
+                hwnd, hidden, result);
     return result;
 }
 
@@ -1063,30 +1121,12 @@ LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
         LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
         popup->layingOut = wasLayingOut;
         if (!wasLayingOut)
-            scope->Prepare(hwnd, L"post-layout");
+            scope->Prepare(hwnd);
         return result;
     }
     if (message == WM_WINDOWPOSCHANGING && lParam &&
         (reinterpret_cast<const WINDOWPOS*>(lParam)->flags & SWP_SHOWWINDOW))
-        scope->Prepare(hwnd, L"pre-show");
-    if (message == WM_WINDOWPOSCHANGED && lParam) {
-        WINDOWPOS position = *reinterpret_cast<const WINDOWPOS*>(lParam);
-        bool showing = (position.flags & SWP_SHOWWINDOW) != 0;
-        TracePopupGeometry(
-            *popup, showing ? L"show-before-native" : L"position-before-native",
-            &position);
-        LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
-        TracePopupGeometry(
-            *popup, showing ? L"show-after-native" : L"position-after-native",
-            &position);
-        return result;
-    } else if (message == WM_NCCALCSIZE) {
-        TracePopupGeometry(*popup, L"nc-calc");
-    } else if (message == WM_NCACTIVATE) {
-        TracePopupGeometry(*popup, wParam ? L"nc-active" : L"nc-inactive");
-    } else if (message == WM_PAINT) {
-        TracePopupGeometry(*popup, L"paint");
-    }
+        scope->Prepare(hwnd);
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
@@ -1224,11 +1264,7 @@ bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
                rect->bottom - rect->top, BLACKNESS);
     HRESULT end = EndBufferedPaint(buffer, SUCCEEDED(result));
     RestoreDC(dc, saved);
-    if (SUCCEEDED(result) && SUCCEEDED(end)) {
-        ++popup.highlights;
-        return true;
-    }
-    return false;
+    return SUCCEEDED(result) && SUCCEEDED(end);
 }
 
 bool PaintHotItem(HTHEME theme,
@@ -1271,7 +1307,6 @@ bool ClearBackground(HTHEME theme,
     Popup* popup = DrawingPopup(theme, dc);
     if (!popup)
         return false;
-    ++popup->backgroundDraws;
     RECT area = *rect;
     if (clip && !IntersectRect(&area, rect, clip))
         return true;
@@ -1379,8 +1414,6 @@ bool DrawCompositedText(HTHEME theme,
     *result = g_drawThemeTextEx(theme, bufferDC, part, state, text, length,
                                 flags, &bounds, &opts);
     HRESULT end = EndBufferedPaint(buffer, SUCCEEDED(*result));
-    if (SUCCEEDED(*result) && SUCCEEDED(end))
-        ++popup->themeTextDraws;
     return SUCCEEDED(*result) && SUCCEEDED(end);
 }
 
@@ -1625,8 +1658,6 @@ BOOL WINAPI BitBltHook(HDC destination,
             BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
             if (g_alphaBlend(destination, x, y, width, height, icon.dc, 0, 0,
                              width, height, blend)) {
-                if (Popup* popup = DrawingPopupForDC(destination))
-                    ++popup->iconRepairs;
                 return TRUE;
             }
         }
@@ -1660,8 +1691,6 @@ BOOL WINAPI StretchBltHook(HDC destination,
             BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
             if (g_alphaBlend(destination, x, y, width, height, icon.dc, 0, 0,
                              sw, sh, blend)) {
-                if (Popup* popup = DrawingPopupForDC(destination))
-                    ++popup->iconRepairs;
                 return TRUE;
             }
         }
@@ -1695,8 +1724,6 @@ BOOL WINAPI AlphaBlendHook(HDC destination,
             repairedBlend.AlphaFormat = AC_SRC_ALPHA;
             if (g_alphaBlend(destination, x, y, width, height, icon.dc, 0, 0,
                              sw, sh, repairedBlend)) {
-                if (Popup* popup = DrawingPopupForDC(destination))
-                    ++popup->iconRepairs;
                 return TRUE;
             }
         }
@@ -1736,7 +1763,6 @@ int WINAPI FillRectHook(HDC dc, const RECT* rect, HBRUSH brush) {
         if (selected && fullRow && DrawHighlight(*popup, dc, rect, nullptr))
             return 1;
         if (background && !selected) {
-            ++popup->backgroundDraws;
             return PatBlt(dc, rect->left, rect->top, rect->right - rect->left,
                           rect->bottom - rect->top, BLACKNESS)
                        ? 1
@@ -1800,7 +1826,6 @@ DrawTextHook(HDC dc, PCWSTR text, int length, RECT* rect, UINT flags) {
     HRESULT end = EndBufferedPaint(buffer, SUCCEEDED(result));
     if (FAILED(result) || FAILED(end))
         return g_drawText(dc, text, length, rect, flags);
-    ++popup->shellTextDraws;
     return height;
 }
 
@@ -1808,7 +1833,8 @@ template <typename Invoke>
 BOOL TrackMenu(HWND owner, UINT flags, Invoke invoke) {
     CallGuard call;
     DWORD incomingError = GetLastError();
-    bool requestEffects = !t_bypassDepth && EffectsAllowed();
+    PCWSTR reason = L"nested bypass";
+    bool requestEffects = !t_bypassDepth && EffectsAllowed(&reason);
     bool buffered = false;
     BOOL result;
     DWORD resultError;
@@ -1816,10 +1842,23 @@ BOOL TrackMenu(HWND owner, UINT flags, Invoke invoke) {
         MenuScope scope(owner, requestEffects);
         // BufferedPaint must be initialized on each rendering thread. Pending
         // callbacks remain inert so initialization cannot modify a popup.
-        if (scope.Ready())
-            buffered = SUCCEEDED(BufferedPaintInit());
-        if (buffered && EffectsAllowed())
+        if (scope.Ready()) {
+            HRESULT paintResult = BufferedPaintInit();
+            buffered = SUCCEEDED(paintResult);
+            if (!buffered) {
+                reason = L"buffered painting unavailable";
+                ETM_LOG(L"BufferedPaintInit owner=%p hr=0x%08lx", owner,
+                        paintResult);
+            }
+        } else if (requestEffects) {
+            reason = L"menu callbacks unavailable";
+        }
+        if (buffered && EffectsAllowed(&reason))
             scope.allowed = true;
+        ETM_LOG(
+            L"Tracking owner=%p material=%s effects=%d reason=%s flags=0x%x",
+            owner, MaterialName(g_settings.material), scope.allowed, reason,
+            flags);
         if (scope.allowed) {
             SetLastError(incomingError);
             result = invoke(flags | TPM_NOANIMATION);
@@ -1844,6 +1883,8 @@ BOOL TrackMenu(HWND owner, UINT flags, Invoke invoke) {
     }
     if (buffered)
         BufferedPaintUnInit();
+    ETM_LOG(L"Tracking ended owner=%p result=%d lastError=%lu", owner, result,
+            resultError);
     SetLastError(resultError);
     return result;
 }
@@ -1884,13 +1925,13 @@ BOOL Wh_ModInit() {
     OSVERSIONINFOW version{sizeof(version)};
     if (!versionFn || versionFn(&version) < 0 ||
         version.dwBuildNumber < 22621) {
-        Wh_Log(L"Requires Windows 11 22H2, build 22621 or newer");
+        ETM_LOG(L"Requires Windows 11 22H2, build 22621 or newer");
         return FALSE;
     }
     g_settings.material =
         ParseMaterial(WindhawkUtils::StringSetting::make(L"backgroundEffect"));
     if (g_settings.material == Material::Native) {
-        Wh_Log(L"Native mode: no hooks registered, no window effects changed");
+        ETM_LOG(L"Native mode: no hooks registered, no window effects changed");
         return TRUE;
     }
     HMODULE theme = GetModuleHandleW(L"uxtheme.dll");
@@ -1908,7 +1949,7 @@ BOOL Wh_ModInit() {
     if (probe)
         CloseThemeData(probe);
     if (!valid) {
-        Wh_Log(L"Menu theme identification unavailable");
+        ETM_LOG(L"Menu theme identification unavailable");
         return FALSE;
     }
     g_settings.tintOpacity = Wh_GetIntSetting(L"tintOpacity");
@@ -1919,7 +1960,7 @@ BOOL Wh_ModInit() {
         GetProcAddress(user, "GetWindowCompositionAttribute"));
     if (!IsSystemMaterial(g_settings.material) &&
         g_settings.material != Material::Native && !g_setComposition) {
-        Wh_Log(L"Adjustable Acrylic is unavailable; choose System Acrylic");
+        ETM_LOG(L"Adjustable Acrylic is unavailable; choose System Acrylic");
         return FALSE;
     }
     g_settings.lightTint = ParseTint(
@@ -1938,7 +1979,6 @@ BOOL Wh_ModInit() {
     g_settings.roundedCorners = Wh_GetIntSetting(L"roundedCorners") != 0;
     g_settings.hideMenuBorder = Wh_GetIntSetting(L"hideMenuBorder") != 0;
     g_settings.ctrlBypass = Wh_GetIntSetting(L"ctrlBypass") != 0;
-    g_settings.debugLogging = Wh_GetIntSetting(L"debugLogging") != 0;
     g_stopping.store(false, std::memory_order_relaxed);
 
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenuHook,
@@ -1968,8 +2008,8 @@ BOOL Wh_ModInit() {
                                         DwmSetWindowAttributeHook,
                                         &g_dwmSetWindowAttribute))
         return FALSE;
-    Wh_Log(L"Initialized on Windows build %lu; only Explorer Win32 popups",
-           version.dwBuildNumber);
+    ETM_LOG(L"Initialized on Windows build %lu; only Explorer Win32 popups",
+            version.dwBuildNumber);
     return TRUE;
 }
 
@@ -2000,3 +2040,5 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         TRUE;  // Never mutate settings concurrently with Explorer painting.
     return TRUE;
 }
+
+#undef ETM_LOG
