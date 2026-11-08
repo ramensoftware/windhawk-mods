@@ -3908,6 +3908,8 @@ static bool HostSend(HWND client, ULONG_PTR kind, const void* data, DWORD size) 
     return SendMessageTimeoutW(client, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &r) != 0;
 }
 
+static DWORD WINAPI BarWatchProc(LPVOID);
+
 // Thread do shell: acha a barra de tarefas deste processo, instala o gancho e
 // encaminha os registros. Uma barra nova (o processo dela reiniciou) recebe um
 // "olá", e ela pede aos apps que registrem os ícones de novo.
@@ -3920,6 +3922,9 @@ static DWORD WINAPI HostThreadProc(LPVOID) {
             g_trayWnd = tray;
             g_trayHook = SetWindowsHookExW(WH_CALLWNDPROC, TrayCallWndProc, g_hInst, tid);
             if (!g_trayHook) Wh_Log(L"Hook da bandeja falhou: %u", GetLastError());
+            // Só o explorer.exe do shell abre e vigia a barra (não as janelas de
+            // pasta em processo separado nem outras instâncias curtas).
+            g_watchThread = CreateThread(nullptr, 0, BarWatchProc, nullptr, 0, nullptr);
             break;
         }
         // Outro explorer.exe (pastas em processo separado) ou sem barra ainda.
@@ -3963,15 +3968,16 @@ static void HostUnhook() {
 }
 static void HostStop() {
     if (g_hostStop) SetEvent(g_hostStop);
-    if (g_watchThread) {
-        WaitForSingleObject(g_watchThread, INFINITE);
-        CloseHandle(g_watchThread);
-        g_watchThread = nullptr;
-    }
+    // Primeiro a thread do shell (é ela que abre o vigia), depois o vigia.
     if (g_hostThread) {
         WaitForSingleObject(g_hostThread, INFINITE);
         CloseHandle(g_hostThread);
         g_hostThread = nullptr;
+    }
+    if (g_watchThread) {
+        WaitForSingleObject(g_watchThread, INFINITE);
+        CloseHandle(g_watchThread);
+        g_watchThread = nullptr;
     }
     HostUnhook();  // (se a thread instalou o gancho depois do BeforeUninit)
     if (g_hostStop) { CloseHandle(g_hostStop); g_hostStop = nullptr; }
@@ -3994,6 +4000,16 @@ static LRESULT CALLBACK TrayClientProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         auto* cds = reinterpret_cast<COPYDATASTRUCT*>(lp);
         if (!cds) return FALSE;
         if (cds->dwData == kTrayHello) {
+            // O primeiro "olá" é o do shell que já existia quando a barra abriu.
+            // Os seguintes vêm de um shell novo (o Explorer reiniciou): a barra se
+            // refaz para registrar a área dela nesse shell, sem depender do aviso
+            // TaskbarCreated (que pode cair na janela em que a barra o ignora).
+            static bool firstHello = true;
+            if (!firstHello && !g_rebuildScheduled) {
+                g_rebuildScheduled = true;
+                PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+            }
+            firstHello = false;
             TrayRequestIcons();
             return TRUE;
         }
@@ -21572,9 +21588,7 @@ static DWORD WINAPI BarWatchProc(LPVOID) {
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isHost) return;
-    HostStart();
-    if (g_hostStop) g_watchThread = CreateThread(nullptr, 0, BarWatchProc, nullptr, 0, nullptr);
+    if (g_isHost) HostStart();  // a barra abre quando a thread acha a barra de tarefas deste processo
 }
 
 void Wh_ModSettingsChanged() {
