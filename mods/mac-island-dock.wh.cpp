@@ -662,7 +662,8 @@ or only its apps).
 * **Windows' settings**: the control center changes them itself, like
   Windows' quick settings (dark mode, night light, the power plan and mode,
   the microphone's mute, the output device, Wi-Fi networks, accessibility,
-  the display mode, brightness, the radios); they stay as set.
+  the display mode, brightness, the radios), and a virtual desktop's name
+  given with the pencil in the desktops list; they stay as set.
 * **"The island handles notifications and their sounds"** (off by default):
   Windows' "Do not disturb" stays on while the island runs ("alarms only"
   while the island's own is on), so Windows stays quiet and the island shows
@@ -7605,14 +7606,17 @@ DWORD WINAPI BigIconThreadProc(LPVOID) {
                 break;
             }
             // (A pinned shortcut's icon of its own first: the taskbar shows
-            // that one. Then the shell's, and after its entries its window's
-            // program, for an app without one like TeamViewer; not for a
+            // that one. Then the shell's, its windows' relaunch icon among
+            // them (a browser profile's picture); only then its window's
+            // program, for an app without any like TeamViewer; not for a
             // packaged app: its window may be the frame of another process.)
             HBITMAP bitmap = PinnedShortcutIconBitmap(appId, pixels);
             if (!bitmap) {
-                bitmap = LoadAppIconBitmap(
-                    appId.find(L'!') == std::wstring::npos ? window : nullptr,
-                    appId, pixels);
+                bitmap = LoadAppIconBitmap(nullptr, appId, pixels);
+            }
+            if (!bitmap && window &&
+                appId.find(L'!') == std::wstring::npos) {
+                bitmap = LoadAppIconBitmap(window, appId, pixels);
             }
             // (None from the shell: its window's own, as the taskbar shows.)
             if (!bitmap) {
@@ -14139,8 +14143,8 @@ HWND FindTaskbarAppWindow(const std::wstring& appId) {
     return search.found;
 }
 
-// Whether a process runs elevated (also when it can't be told).
-bool ProcessElevated(DWORD processId) {
+// Whether a process runs elevated (`unknown` when it can't be told).
+bool ProcessElevated(DWORD processId, bool unknown = true) {
     HANDLE process =
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     HANDLE token = nullptr;
@@ -14156,14 +14160,15 @@ bool ProcessElevated(DWORD processId) {
     if (process) {
         CloseHandle(process);
     }
-    return !known || elevation.TokenIsElevated;
+    return known ? elevation.TokenIsElevated != 0 : unknown;
 }
 
-// Whether explorer runs elevated: with UAC off, every process does.
+// Whether explorer runs elevated: with UAC off, every process does. (Only
+// when read as elevated: it lifts the block on elevated tray icons' owners.)
 bool ExplorerElevated() {
     DWORD explorer = 0;
     return GetWindowThreadProcessId(FindTaskbarWnd(), &explorer) &&
-           ProcessElevated(explorer);
+           ProcessElevated(explorer, false);
 }
 
 // CLSID_ShellWindows and SID_STopLevelBrowser.
@@ -26112,15 +26117,25 @@ std::atomic<bool> g_externalBrightness{true};
 // notice (see CheckDdcCrash).
 SRWLOCK g_ddcLock = SRWLOCK_INIT;
 bool g_ddcCrashNotice = false;
+// Kept ("ddcCrashed") once Windows stopped during a call: the option stays
+// off whatever a profile, an app's profile or a backup put back holds (each
+// has its own copy of it), until the user turns it on in the settings (see
+// SetIslandPref).
+std::atomic<bool> g_ddcCrashed{false};
 // Set as Windows ends the session: no call starts then (see WM_ENDSESSION).
 std::atomic<bool> g_ddcSessionEnding{false};
 
+// The mark's file, this Windows session's (each session's island makes its
+// own calls).
 std::wstring DdcMarkPath() {
     WCHAR storage[MAX_PATH];
-    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
+    DWORD session = 0;
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) ||
+        !ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
         return {};
     }
-    return std::wstring(storage) + L"\\ddc-call.mark";
+    return std::wstring(storage) + L"\\ddc-call-" + std::to_wstring(session) +
+           L".mark";
 }
 
 // When this start of Windows began, in seconds (the same through its whole
@@ -26142,9 +26157,9 @@ void DdcMark(bool calling) {
         return;
     }
     const HANDLE file =
-        CreateFile(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                   OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
-                   nullptr);
+        CreateFile(path.c_str(), GENERIC_WRITE,
+                   FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         return;
     }
@@ -26179,30 +26194,54 @@ BOOL DdcCall(F&& call) {
 // process that ended in the middle of one: the same start) turns DDC/CI off
 // for good, stored, and the main island tells it (see g_ddcCrashNotice).
 void CheckDdcCrash() {
-    const std::wstring path = DdcMarkPath();
-    if (path.empty()) {
+    WCHAR storage[MAX_PATH];
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
         return;
     }
-    const HANDLE file = CreateFile(path.c_str(), GENERIC_READ,
-                                   FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
-                                   nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
+    // (Every session's mark, and the older single one: a stop of Windows
+    // ends them all.)
+    const std::wstring folder = std::wstring(storage) + L"\\";
+    WIN32_FIND_DATA found;
+    const HANDLE search =
+        FindFirstFile((folder + L"ddc-call*.mark").c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE) {
         return;
     }
-    char text[40] = {};
-    DWORD read = 0;
-    ReadFile(file, text, sizeof(text) - 1, &read, nullptr);
-    CloseHandle(file);
-    int calling = 0;
-    long long start = 0;
-    if (sscanf_s(text, "%d %lld", &calling, &start) == 2 && calling == 1 &&
-        std::llabs(start - WindowsStartSeconds()) > 120) {
+    bool crashed = false;
+    do {
+        const std::wstring path = folder + found.cFileName;
+        const HANDLE file = CreateFile(path.c_str(), GENERIC_READ,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                       nullptr, OPEN_EXISTING,
+                                       FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+        char text[40] = {};
+        DWORD read = 0;
+        ReadFile(file, text, sizeof(text) - 1, &read, nullptr);
+        CloseHandle(file);
+        int calling = 0;
+        long long start = 0;
+        if (sscanf_s(text, "%d %lld", &calling, &start) != 2 || calling != 1) {
+            continue;
+        }
+        if (std::llabs(start - WindowsStartSeconds()) > 120) {
+            crashed = true;
+            DeleteFile(path.c_str());
+        } else if (_wcsicmp(path.c_str(), DdcMarkPath().c_str()) == 0) {
+            // (This session's process that ended in the middle of a call,
+            // in this same start of Windows: not a stop. Another session's
+            // call may still be running: left alone.)
+            DdcMark(false);
+        }
+    } while (FindNextFile(search, &found));
+    FindClose(search);
+    if (crashed) {
         Wh_SetIntValue(L"islandExternalBrightness", 0);
+        Wh_SetIntValue(L"ddcCrashed", 1);
+        g_ddcCrashed = true;
         g_ddcCrashNotice = true;
-    }
-    if (calling == 1) {
-        DdcMark(false);
     }
 }
 
@@ -65236,6 +65275,23 @@ bool VirtualDesktopIdAt(int index, GUID* id) {
     return true;
 }
 
+// Where the desktop with that ID is now in Windows' order (-1: gone).
+int VirtualDesktopIndexOf(const GUID& id) {
+    BYTE ids[64 * sizeof(GUID)];
+    DWORD size = sizeof(ids);
+    if (RegGetValue(HKEY_CURRENT_USER, kVirtualDesktopsKey,
+                    L"VirtualDesktopIDs", RRF_RT_REG_BINARY, nullptr, ids,
+                    &size) != ERROR_SUCCESS) {
+        return -1;
+    }
+    for (size_t i = 0; (i + 1) * sizeof(GUID) <= size; i++) {
+        if (memcmp(ids + i * sizeof(GUID), &id, sizeof(GUID)) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
 // A desktop to rename, or only the question whether the service is there
 // (`probe`); `notify` is told when it's answered (the panel draws again).
 struct DesktopRenameRequest {
@@ -65427,9 +65483,15 @@ class DesktopsPanel : public EditingPanel {
             return false;
         }
         Load();
-        // (A desktop closed meanwhile: the row being renamed may be gone.)
-        if (m_renaming >= (int)m_desktops.names.size()) {
-            m_renaming = -1;
+        // (A desktop closed or moved meanwhile: the row follows the one
+        // being renamed, and renaming stops if it's gone.)
+        if (m_renaming >= 0) {
+            const int row = VirtualDesktopIndexOf(m_renamingId);
+            if (row < 0 || row >= (int)m_desktops.names.size()) {
+                StopRenaming();
+            } else {
+                m_renaming = row;
+            }
         }
         Layout();
         return true;
@@ -65476,6 +65538,10 @@ class DesktopsPanel : public EditingPanel {
     }
 
     void StartRenaming(int row) {
+        // (Its ID kept: the one renamed even if the rows change meanwhile.)
+        if (!VirtualDesktopIdAt(row, &m_renamingId)) {
+            return;
+        }
         m_renaming = row;
         m_name = m_desktops.names[row];
         m_nameEdit.Reset();
@@ -65499,11 +65565,11 @@ class DesktopsPanel : public EditingPanel {
     // shows it once Windows has it, through the desktops' watch.
     void SaveName() {
         const int row = m_renaming;
+        const GUID id = m_renamingId;
         const std::wstring name = CleanDesktopName(m_name);
         StopRenaming();
-        GUID id;
         if (row < 0 || row >= (int)m_desktops.names.size() ||
-            name == m_desktops.names[row] || !VirtualDesktopIdAt(row, &id)) {
+            name == m_desktops.names[row] || VirtualDesktopIndexOf(id) < 0) {
             return;
         }
         StartRenameThread(new DesktopRenameRequest{id, name, false, m_hwnd});
@@ -65588,8 +65654,10 @@ class DesktopsPanel : public EditingPanel {
     int m_hover = -1;
     bool m_removeHover = false;
     bool m_pencilHover = false;
-    // The row being renamed (-1 none), its text, caret and box.
+    // The row being renamed (-1 none), its desktop's ID, its text, caret
+    // and box.
     int m_renaming = -1;
+    GUID m_renamingId{};
     std::wstring m_name;
     TextEdit m_nameEdit;
     D2D1_RECT_F m_nameBox{};
@@ -67970,6 +68038,9 @@ struct LauncherApp {
     // The program a shortcut opens, on a drive (for its folder button);
     // empty for packaged apps.
     std::wstring file;
+    // Its program on another computer (a share, a mapped drive): no icon
+    // asked, an offline server would hold the icons' thread.
+    bool remote = false;
 };
 constexpr float kLauncherWidth = 360;
 constexpr size_t kMaxLauncherFavorites = 64;
@@ -68138,6 +68209,10 @@ DWORD WINAPI LauncherListThreadProc(LPVOID parameter) {
                                                    &text))) {
                         if (IsLocalDrivePath(text)) {
                             app.file = text;
+                        } else if (text && (wcsncmp(text, L"\\\\", 2) == 0 ||
+                                            (iswalpha(text[0]) &&
+                                             text[1] == L':'))) {
+                            app.remote = true;
                         }
                         CoTaskMemFree(text);
                     }
@@ -68632,8 +68707,10 @@ void LauncherPanel::Draw(ID2D1RenderTarget* target,
         const float left = row.rect.left + std::round(8 * s);
         const D2D1_RECT_F icon{left, middle - iconSize / 2, left + iconSize,
                                middle + iconSize / 2};
-        if (ID2D1Bitmap* bitmap = m_icons.Get(target, m_wic.get(), m_hwnd,
-                                              app.id, (int)iconSize)) {
+        if (ID2D1Bitmap* bitmap =
+                app.remote ? nullptr
+                           : m_icons.Get(target, m_wic.get(), m_hwnd, app.id,
+                                         (int)iconSize)) {
             DrawBitmapSmooth(target, bitmap, icon);
         } else {
             brush->SetColor(Fg(0.35f));
@@ -75637,6 +75714,8 @@ struct ColorHexState {
 // island's settings pick: a color typed or pasted sets the dialog's at once
 // (Enter is its OK), and the dialog's color, picked or typed in its own
 // boxes, shows in it. Not a color: shown in red, and the dialog's stays.
+// (Its state is ColorThreadProc's, given in lCustData: the dialog may end
+// without a WM_DESTROY to the hook.)
 UINT_PTR CALLBACK ColorHookProc(HWND dialog,
                                 UINT message,
                                 WPARAM wParam,
@@ -75645,7 +75724,10 @@ UINT_PTR CALLBACK ColorHookProc(HWND dialog,
     switch (message) {
         case WM_INITDIALOG: {
             const auto* choose = (const CHOOSECOLOR*)lParam;
-            state = new ColorHexState();
+            state = (ColorHexState*)choose->lCustData;
+            if (!state) {
+                return FALSE;
+            }
             state->setColor = RegisterWindowMessage(L"commdlg_SetRGBColor");
             state->badBrush = CreateSolidBrush(RGB(255, 220, 220));
             SetProp(dialog, kColorHexProp, state);
@@ -75741,11 +75823,7 @@ UINT_PTR CALLBACK ColorHookProc(HWND dialog,
             }
             break;
         case WM_DESTROY:
-            if (state) {
-                RemoveProp(dialog, kColorHexProp);
-                DeleteObject(state->badBrush);
-                delete state;
-            }
+            RemoveProp(dialog, kColorHexProp);
             break;
     }
     return FALSE;
@@ -75761,12 +75839,17 @@ DWORD WINAPI ColorThreadProc(LPVOID parameter) {
                            job->value & 0xFF);
     choose.lpCustColors = custom;
     choose.lpfnHook = ColorHookProc;
+    ColorHexState hex;
+    choose.lCustData = (LPARAM)&hex;
     choose.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
     if (ChooseColor(&choose)) {
         job->value = (GetRValue(choose.rgbResult) << 16) |
                      (GetGValue(choose.rgbResult) << 8) |
                      GetBValue(choose.rgbResult);
         job->done = true;
+    }
+    if (hex.badBrush) {
+        DeleteObject(hex.badBrush);
     }
     if (owner) {
         DestroyWindow(owner);
@@ -75793,9 +75876,10 @@ DWORD WINAPI FontThreadProc(LPVOID parameter) {
     CHOOSEFONT choose{sizeof(choose)};
     choose.hwndOwner = owner;
     choose.lpLogFont = &job->font;
+    // (Scalable fonts only: DirectWrite draws no raster ones.)
     choose.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_NOSIZESEL |
                    CF_NOSTYLESEL | CF_NOSCRIPTSEL | CF_NOVERTFONTS |
-                   CF_FORCEFONTEXIST;
+                   CF_FORCEFONTEXIST | CF_SCALABLEONLY;
     if (ChooseFont(&choose)) {
         job->done = true;
     }
@@ -97195,6 +97279,17 @@ void SetIslandPref(IslandPref pref, int value) {
             g_settings.islandTimerLine = on;
             break;
         case IslandPref::ExternalBrightness:
+            // After Windows stopped during a call (g_ddcCrashed), a profile
+            // or a backup put back keeps it off; the user turning it on here
+            // brings it back.
+            if (on && g_ddcCrashed) {
+                if (g_applyingProfile) {
+                    StoreProfileInt(L"islandExternalBrightness", 0);
+                    break;
+                }
+                g_ddcCrashed = false;
+                Wh_SetIntValue(L"ddcCrashed", 0);
+            }
             g_settings.islandExternalBrightness = on;
             // (The monitors' lists read so far are old: read again.)
             if (g_externalBrightness.exchange(on) != on && g_island) {
@@ -103832,6 +103927,11 @@ void Island::ApplyClickThrough() {
                                     : style & ~WS_EX_TRANSPARENT);
     if (g_clickThrough) {
         CloseAllPanels();
+        // (A line auto-hide made comes back: letting clicks through, the
+        // window gets no hover to bring it back.)
+        if (m_minimized && m_autoHidden) {
+            SetMinimized(false, false);
+        }
     }
 }
 
@@ -119850,8 +119950,10 @@ void LoadSettings() {
         Wh_GetIntValue(L"islandFolderThumbnails", 1) != 0;
     g_settings.islandShelf = Wh_GetIntValue(L"islandShelf", 0) != 0;
     g_settings.islandTimerLine = Wh_GetIntValue(L"islandTimerLine", 1) != 0;
+    // (Off after Windows stopped during a call, see g_ddcCrashed.)
+    g_ddcCrashed = Wh_GetIntValue(L"ddcCrashed", 0) != 0;
     g_settings.islandExternalBrightness =
-        Wh_GetIntValue(L"islandExternalBrightness", 1) != 0;
+        !g_ddcCrashed && Wh_GetIntValue(L"islandExternalBrightness", 1) != 0;
     g_settings.islandGlassLight = Wh_GetIntValue(L"islandGlassLight", 0) != 0;
     g_settings.islandLyricsIcon = Wh_GetIntValue(L"islandLyricsIcon", 0) != 0;
     g_settings.islandArrowPins = Wh_GetIntValue(L"islandArrowPins", 0) != 0;
