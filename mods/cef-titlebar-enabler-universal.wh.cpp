@@ -299,7 +299,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 156
+#define LAST_TESTED_CEF_VERSION 156 // Update this whenever Spotify bumps the CEF version (after verifying everything works)
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 struct cte_settings {
