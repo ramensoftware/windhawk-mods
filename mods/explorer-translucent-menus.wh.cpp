@@ -1,7 +1,9 @@
 // ==WindhawkMod==
 // @id              explorer-translucent-menus
 // @name            Explorer Translucent Menus
+// @name:zh-CN      Explorer 上下文菜单半透明
 // @description     Translucent materials and optional borderless classic context menus for File Explorer
+// @description:zh-CN 对 Explorer 经典上下文菜单应用半透明材质和可选无边框
 // @version         1.0.1
 // @author          alkali210
 // @github          https://github.com/alkali210
@@ -34,6 +36,20 @@ It covers classic popup menus hosted by `explorer.exe`, including desktop and
 File Explorer context menus. It leaves the main Explorer window background,
 ordinary controls, and other processes unchanged.
 
+## Screenshots
+
+Materials in light and dark themes
+
+![materials](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/01-materials-light-dark.png)
+
+Tint and transparency adjustments
+
+![tint](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/02-tint-transparency.png)
+
+Borders and submenus
+
+![borders](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png)
+
 ## Requirements
 
 - Windows 11 22H2 or later (build 22621+), 64-bit.
@@ -41,8 +57,9 @@ ordinary controls, and other processes unchanged.
 - No other renderer modifying the same Explorer menus.
 
 To open a classic context menu on Windows 11, select **Show more options** or
-use **Shift+F10**. Select **Native** to disable all hooks, or hold **Ctrl** before
-opening a menu to bypass its modifications.
+use **Shift+F10**. Select **Native** to disable all hooks. For a temporary bypass,
+enable **Hold Ctrl to bypass** in the settings, then hold **Ctrl** before opening
+a menu.
 
 ## Materials
 
@@ -141,6 +158,7 @@ Informed by [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyout
 [Translucent Windows](https://windhawk.net/mods/translucent-windows), and
 [Custom Cached Context Menu](https://github.com/Bolt-Scripts/custom-cached-context-menu).
 This implementation is distributed under GPL-3.0-or-later.
+
 */
 // ==/WindhawkModReadme==
 
