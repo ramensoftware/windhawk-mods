@@ -6,8 +6,8 @@
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-27-Finder-Bar
+// @include         windhawk.exe
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -ldwmapi -ld2d1 -ldwrite -lversion -lshcore -lshell32 -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lwlanapi -lbthprops -lpowrprof -ladvapi32 -lwindowscodecs -lwbemuuid -ldxva2 -lruntimeobject -lwinhttp -lcfgmgr32
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -117,7 +117,7 @@ The copy pill only says "Copied" or "Cut": it never shows what was copied, and i
 
 ## How it runs
 
-The bar runs in its own process, so if it ever fails, the taskbar and desktop keep working. The mod starts that process from Explorer. Explorer keeps only a small hook that copies the tray icons' registrations to the bar.
+The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so if it ever fails, the taskbar and desktop keep working. Explorer keeps only a small hook that copies the tray icons' registrations to the bar. If that process is ended by hand, turn the mod off and on again in Windhawk to bring the bar back.
 
 ## Known limitations
 
@@ -1116,8 +1116,29 @@ static std::wstring FileNameOf(const std::wstring& path) {
 
 static bool IEquals(const std::wstring& a, PCWSTR b) { return _wcsicmp(a.c_str(), b) == 0; }
 
+// A barra roda no windhawk.exe, que no Windhawk 1.7 é de 32 bits: num Windows
+// de 64 bits, "System32" é redirecionado para SysWOW64, onde nem todo programa
+// do Windows existe (osk.exe, magnify.exe). Um .exe sem caminho que exista em
+// Sysnative (o System32 de verdade) abre de lá, e o explorer.exe da pasta do Windows.
+static std::wstring NativeSystemExe(PCWSTR name) {
+    BOOL wow = FALSE;
+    if (!wcschr(name, L'\\') && wcslen(name) > 4 && _wcsicmp(name + wcslen(name) - 4, L".exe") == 0 &&
+        IsWow64Process(GetCurrentProcess(), &wow) && wow) {
+        wchar_t win[MAX_PATH];
+        UINT n = GetWindowsDirectoryW(win, ARRAYSIZE(win));
+        if (n && n < ARRAYSIZE(win)) {
+            for (PCWSTR dir : {L"\\Sysnative\\", L"\\"}) {  // System32 de verdade, depois o próprio Windows (explorer.exe)
+                std::wstring p = std::wstring(win) + dir + name;
+                if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) return p;
+            }
+        }
+    }
+    return name;
+}
+
 static void OpenUri(PCWSTR uri, PCWSTR params = nullptr) {
-    ShellExecuteW(nullptr, L"open", uri, params, nullptr, SW_SHOWNORMAL);
+    std::wstring target = NativeSystemExe(uri);
+    ShellExecuteW(nullptr, L"open", target.c_str(), params, nullptr, SW_SHOWNORMAL);
 }
 
 static bool Confirm(PCWSTR text) {
@@ -1352,7 +1373,22 @@ static std::wstring GetProcessPath(DWORD pid) {
     return path;
 }
 
-static std::wstring GetFileDescription(const std::wstring& path) {
+// Num processo de 32 bits, "<Windows>\System32\..." é redirecionado para
+// SysWOW64; o mesmo arquivo por "Sysnative" é o de verdade.
+static std::wstring NativeFilePath(const std::wstring& path) {
+    BOOL wow = FALSE;
+    if (!IsWow64Process(GetCurrentProcess(), &wow) || !wow) return path;
+    wchar_t win[MAX_PATH];
+    UINT n = GetWindowsDirectoryW(win, ARRAYSIZE(win));
+    if (!n || n >= ARRAYSIZE(win)) return path;
+    std::wstring sys = std::wstring(win) + L"\\System32\\";
+    if (path.size() > sys.size() && _wcsnicmp(path.c_str(), sys.c_str(), sys.size()) == 0)
+        return std::wstring(win) + L"\\Sysnative\\" + path.substr(sys.size());
+    return path;
+}
+
+static std::wstring GetFileDescription(const std::wstring& filePath) {
+    const std::wstring path = NativeFilePath(filePath);
     DWORD dummy = 0;
     DWORD size = GetFileVersionInfoSizeW(path.c_str(), &dummy);
     if (!size) return L"";
@@ -3855,18 +3891,13 @@ static TrayPopup& g_tray = *g_trayStore;
 static HWND HandleFrom32(DWORD v) { return (HWND)(LONG_PTR)(LONG)v; }
 
 // ===========================================================================
-// Dois processos. A barra roda num explorer.exe próprio ("-tool-mod"); se ela
-// falhar, a barra de tarefas e a área de trabalho continuam. No explorer.exe
-// do shell fica só o que precisa estar lá: um gancho na thread da barra de
-// tarefas que copia os registros de ícones da bandeja (Shell_NotifyIcon) e os
-// manda para a barra por WM_COPYDATA, para a janela-cliente abaixo.
+// Dois processos. A barra roda num processo próprio do Windhawk (windhawk.exe
+// "-tool-mod"); se ela falhar, a barra de tarefas e a área de trabalho
+// continuam. No explorer.exe do shell fica só o que precisa estar lá: um gancho
+// na thread da barra de tarefas que copia os registros de ícones da bandeja
+// (Shell_NotifyIcon) e os manda para a barra por WM_COPYDATA, para a
+// janela-cliente abaixo.
 // ===========================================================================
-static bool g_isHost = false;  // este é o explorer.exe do shell (só a bandeja)
-// Códigos de saída do processo da barra (o vigia do shell decide se reabre).
-// Valores próprios: um processo fechado de fora (o "Reiniciar" ou "Finalizar
-// tarefa" do Gerenciador de Tarefas) sai com 0 ou 1, e esse a barra reabre.
-static const UINT kExitClean = 0x46544230, kExitDuplicate = 0x46544231, kExitFailed = 0x46544232;
-static HANDLE g_watchThread = nullptr;
 static const wchar_t kTrayClientClass[] = L"WhFinderTopBarTrayClient";
 static const ULONG_PTR kTrayFwd = 0x46544231;    // um registro de ícone
 static const ULONG_PTR kTrayHello = 0x46544232;  // o gancho acabou de ser instalado
@@ -3908,8 +3939,6 @@ static bool HostSend(HWND client, ULONG_PTR kind, const void* data, DWORD size) 
     return SendMessageTimeoutW(client, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &r) != 0;
 }
 
-static DWORD WINAPI BarWatchProc(LPVOID);
-
 // Thread do shell: acha a barra de tarefas deste processo, instala o gancho e
 // encaminha os registros. Uma barra nova (o processo dela reiniciou) recebe um
 // "olá", e ela pede aos apps que registrem os ícones de novo.
@@ -3922,9 +3951,6 @@ static DWORD WINAPI HostThreadProc(LPVOID) {
             g_trayWnd = tray;
             g_trayHook = SetWindowsHookExW(WH_CALLWNDPROC, TrayCallWndProc, g_hInst, tid);
             if (!g_trayHook) Wh_Log(L"Hook da bandeja falhou: %u", GetLastError());
-            // Só o explorer.exe do shell abre e vigia a barra (não as janelas de
-            // pasta em processo separado nem outras instâncias curtas).
-            g_watchThread = CreateThread(nullptr, 0, BarWatchProc, nullptr, 0, nullptr);
             break;
         }
         // Outro explorer.exe (pastas em processo separado) ou sem barra ainda.
@@ -3967,19 +3993,14 @@ static void HostUnhook() {
     while (InterlockedCompareExchange(&g_hostHookBusy, 0, 0) > 0) Sleep(10);
 }
 static void HostStop() {
+    HostUnhook();  // primeiro o gancho: depois disto nada do mod roda na thread da barra de tarefas
     if (g_hostStop) SetEvent(g_hostStop);
-    // Primeiro a thread do shell (é ela que abre o vigia), depois o vigia.
     if (g_hostThread) {
         WaitForSingleObject(g_hostThread, INFINITE);
         CloseHandle(g_hostThread);
         g_hostThread = nullptr;
     }
-    if (g_watchThread) {
-        WaitForSingleObject(g_watchThread, INFINITE);
-        CloseHandle(g_watchThread);
-        g_watchThread = nullptr;
-    }
-    HostUnhook();  // (se a thread instalou o gancho depois do BeforeUninit)
+    HostUnhook();  // (se a thread instalou o gancho enquanto parava)
     if (g_hostStop) { CloseHandle(g_hostStop); g_hostStop = nullptr; }
     if (g_hostWake) { CloseHandle(g_hostWake); g_hostWake = nullptr; }
     AcquireSRWLockExclusive(&g_trayLock);
@@ -4110,6 +4131,28 @@ static void PurgeDeadTrayIcons() {
     if (changed && g_tray.hwnd) LayoutTrayPopup();
 }
 
+// Nível de integridade de um processo (0 se não der para ler).
+static DWORD IntegrityOf(HANDLE process) {
+    HANDLE token;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) return 0;
+    DWORD level = 0;
+    alignas(TOKEN_MANDATORY_LABEL) BYTE buf[sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buf, sizeof(buf), &size)) {
+        PSID sid = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buf)->Label.Sid;
+        level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return level;
+}
+static DWORD IntegrityOfPid(DWORD pid) {
+    HANDLE h = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+    if (!h) return 0;
+    DWORD l = IntegrityOf(h);
+    CloseHandle(h);
+    return l;
+}
+
 // Processo da barra: abre a janela-cliente e pede os ícones a todos os apps.
 static void InstallTrayHook() {
     if (g_trayClient) return;
@@ -4119,9 +4162,13 @@ static void InstallTrayHook() {
     wc.lpszClassName = kTrayClientClass;
     RegisterClassExW(&wc);
     g_trayClient = CreateWindowExW(0, kTrayClientClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInst, nullptr);
-    // Sem liberar o filtro de mensagens: o shell roda no mesmo nível de
-    // integridade e o WM_COPYDATA dele já passa; processos de nível mais baixo
-    // continuam bloqueados (não podem criar ícones falsos na bandeja).
+    // O windhawk.exe normalmente roda no mesmo nível de integridade do shell,
+    // e o WM_COPYDATA dele já passa sem mexer no filtro (processos de nível mais
+    // baixo continuam bloqueados e não podem criar ícones falsos na bandeja).
+    // Só se este processo estiver acima do shell (Windhawk aberto como
+    // administrador), o filtro libera o WM_COPYDATA, senão a bandeja ficaria vazia.
+    if (g_trayClient && IntegrityOf(GetCurrentProcess()) > IntegrityOfPid(ShellPid()))
+        ChangeWindowMessageFilterEx(g_trayClient, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
     TrayRequestIcons();
 }
 
@@ -16694,7 +16741,7 @@ static void IslandRunAction(const IslandNote& n) {
     if (n.open.empty()) return;
     if (n.select) {
         std::wstring args = L"/select,\"" + n.open + L"\"";
-        ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        OpenUri(L"explorer.exe", args.c_str());
     } else {
         OpenUri(n.open.c_str());
     }
@@ -17688,7 +17735,8 @@ static bool FindActivator(const std::wstring& aumid, CLSID* out) {
     std::wstring key = L"Software\\Classes\\AppUserModelId\\" + aumid;
     for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
         size = sizeof(buf);
-        if (RegGetValueW(root, key.c_str(), L"CustomActivator", RRF_RT_REG_SZ, nullptr, buf, &size) == ERROR_SUCCESS &&
+        if (RegGetValueW(root, key.c_str(), L"CustomActivator", RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr, buf,
+                         &size) == ERROR_SUCCESS &&
             SUCCEEDED(CLSIDFromString(buf, out)))
             return true;
     }
@@ -21444,20 +21492,25 @@ static DWORD WINAPI BarThread(LPVOID) {
 // ===========================================================================
 
 // ---- Entrada do mod ----
-// No explorer.exe do shell: a bandeja (HostThreadProc) e o lançamento do
-// processo da barra. No processo "explorer.exe -tool-mod <id>": a barra; o
-// código do Explorer nesse processo nunca roda (o ponto de entrada é trocado).
-static HANDLE g_toolMutex = nullptr;
 
-static void WINAPI EntryPointHook() { ExitThread(0); }
+// A barra (processo windhawk.exe "-tool-mod", ver o código da ferramenta abaixo).
 
-static BOOL BarInit() {
+// O HMODULE do mod (classes de janela, recursos e o gancho da bandeja).
+static void InitModuleHandle() {
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&InitModuleHandle), reinterpret_cast<HMODULE*>(&g_hInst));
+}
+
+BOOL WhTool_ModInit() {
+    Wh_Log(L">");
+    InitModuleHandle();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, BarThread, nullptr, 0, &g_threadId);
     return g_thread != nullptr;
 }
 
-static void BarUninit() {
+void WhTool_ModUninit() {
+    Wh_Log(L">");
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
         // WM_QUIT também tira a thread de uma caixa de mensagem ou do diálogo de
@@ -21471,144 +21524,37 @@ static void BarUninit() {
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
 }
 
-BOOL Wh_ModInit() {
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), reinterpret_cast<HMODULE*>(&g_hInst));
-    DWORD session = 0;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &session) && session == 0) return FALSE;
-
-    bool excluded = false, toolProcess = false, ourTool = false;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) return FALSE;
-    for (int i = 1; i < argc; i++)
-        if (!wcscmp(argv[i], L"-service") || !wcscmp(argv[i], L"-service-start") || !wcscmp(argv[i], L"-service-stop"))
-            excluded = true;
-    for (int i = 1; i < argc - 1; i++) {
-        if (!wcscmp(argv[i], L"-tool-mod")) {
-            toolProcess = true;
-            ourTool = !wcscmp(argv[i + 1], WH_MOD_ID);
-            break;
-        }
-    }
-    LocalFree(argv);
-    if (excluded) return FALSE;
-
-    if (ourTool) {
-        Wh_Log(L"Mac OS 27 Finder Bar: processo da barra");
-        g_toolMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(kExitDuplicate);  // já está rodando
-        if (!BarInit()) ExitProcess(kExitFailed);
-        // O Explorer deste processo não deve iniciar: o ponto de entrada só sai da thread.
-        auto* dos = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
-        auto* nt = (IMAGE_NT_HEADERS*)((BYTE*)dos + dos->e_lfanew);
-        void* entry = (BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entry, (void*)EntryPointHook, nullptr);
-        return TRUE;
-    }
-    if (toolProcess) return FALSE;  // processo de ferramenta de outro mod
-    g_isHost = true;
-    return TRUE;
-}
-
-// Abre o processo da barra; devolve o handle dele (ou nullptr).
-static HANDLE LaunchBarProcess() {
-    wchar_t exe[MAX_PATH];
-    DWORD n = GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
-    if (!n || n >= ARRAYSIZE(exe)) return nullptr;
-    std::wstring cmd = L"\"" + std::wstring(exe) + L"\" -tool-mod \"" WH_MOD_ID L"\"";
-    HMODULE k = GetModuleHandleW(L"kernelbase.dll");
-    if (!k) k = GetModuleHandleW(L"kernel32.dll");
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-                                                   BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION,
-                                                   PHANDLE);
-    // CreateProcessInternalW: o CreateProcessW do Explorer pode estar sob ganchos de outros mods.
-    auto create = k ? (CreateProcessInternalW_t)GetProcAddress(k, "CreateProcessInternalW") : nullptr;
-    if (!create) return nullptr;
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    if (!create(nullptr, exe, cmd.data(), nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi,
-                nullptr)) {
-        Wh_Log(L"Processo da barra não abriu: %u", GetLastError());
-        return nullptr;
-    }
-    CloseHandle(pi.hThread);
-    return pi.hProcess;
-}
-
-// O processo da barra que já está rodando (aberto por um shell anterior).
-static HANDLE OpenRunningBarProcess() {
-    HWND c = FindTrayClient();
-    DWORD pid = 0;
-    if (c) GetWindowThreadProcessId(c, &pid);
-    return pid ? OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
-}
-
-// Vigia o processo da barra: se ele sair sem ser pelo fim normal do mod
-// (travou, ou foi fechado pelo Gerenciador de Tarefas), abre de novo. No
-// máximo 5 vezes por minuto, para não ficar em laço se algo der errado.
-static DWORD WINAPI BarWatchProc(LPVOID) {
-    HANDLE proc = LaunchBarProcess();
-    ULONGLONG windowStart = GetTickCount64();
-    int launches = 1;
-    while (proc) {
-        HANDLE hs[2] = {g_hostStop, proc};
-        DWORD r = WaitForMultipleObjects(2, hs, FALSE, INFINITE);
-        if (r != WAIT_OBJECT_0 + 1) break;  // o mod está saindo
-        DWORD code = 0;
-        GetExitCodeProcess(proc, &code);
-        CloseHandle(proc);
-        proc = nullptr;
-        if (code == kExitClean) break;  // o mod foi desativado: o processo saiu de propósito
-        if (code == kExitDuplicate) {
-            // Já havia uma barra (o shell reiniciou e ela continuou): vigia aquela.
-            for (int i = 0; i < 20 && !proc; i++) {
-                proc = OpenRunningBarProcess();
-                if (!proc && WaitForSingleObject(g_hostStop, 500) == WAIT_OBJECT_0) return 0;
-            }
-            continue;
-        }
-        ULONGLONG now = GetTickCount64();
-        if (now - windowStart > 60000) {
-            windowStart = now;
-            launches = 0;
-        }
-        if (++launches > 5) {
-            Wh_Log(L"Processo da barra saiu 5 vezes em um minuto; não abre de novo");
-            break;
-        }
-        Wh_Log(L"Processo da barra saiu (código %u); abrindo de novo", code);
-        if (WaitForSingleObject(g_hostStop, 1000) == WAIT_OBJECT_0) break;
-        proc = LaunchBarProcess();
-    }
-    if (proc) CloseHandle(proc);
-    return 0;
-}
-
-void Wh_ModAfterInit() {
-    if (g_isHost) HostStart();  // a barra abre quando a thread acha a barra de tarefas deste processo
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isHost) return;
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L">");
     if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
 }
 
-void Wh_ModBeforeUninit() {
-    if (g_isHost) HostUnhook();
+// A parte que roda no explorer.exe só copia os ícones da bandeja para a barra
+// (ver HostThreadProc).
+
+bool g_isExplorer;
+
+bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH];
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length == ARRAYSIZE(path)) return false;
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, L"explorer.exe") == 0;
 }
 
-void Wh_ModUninit() {
-    if (g_isHost) {
-        HostStop();
-        return;
-    }
-    Wh_Log(L"Mac OS 27 Finder Bar: fim do processo da barra");
-    BarUninit();
-    ExitProcess(kExitClean);
+BOOL ExplorerModInit() {
+    Wh_Log(L">");
+    InitModuleHandle();
+    HostStart();  // a thread só instala o gancho no explorer.exe dono da barra de tarefas
+    return TRUE;
 }
+
+void ExplorerModUninit() {
+    Wh_Log(L">");
+    HostStop();
+}
+
 
 // ===========================================================================
 // Traduções: português (chave), inglês, espanhol, francês, alemão, italiano e
@@ -22214,3 +22160,202 @@ const UiTr kUiTr[] = {
     {L"Laranja e verde quando um app usa o microfone ou a câmera; clique para ver quem está usando e silenciar o microfone", L"Orange and green when an app uses the microphone or camera; click to see who's using them and mute the microphone", L"Naranja y verde cuando una app usa el micrófono o la cámara; haz clic para ver quién los usa y silenciar el micrófono", L"Orange et vert quand une app utilise le micro ou la caméra ; cliquez pour voir qui les utilise et couper le micro", L"Orange und grün, wenn eine App Mikrofon oder Kamera nutzt; klicken, um zu sehen, wer sie nutzt, und das Mikrofon stummzuschalten", L"Arancione e verde quando un’app usa il microfono o la fotocamera; fai clic per vedere chi li usa e disattivare il microfono", L"有应用使用麦克风或相机时显示橙色和绿色；点击可查看使用者并将麦克风静音"},
 };
 const size_t kUiTrCount = ARRAYSIZE(kUiTr);
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// This mod also targets explorer.exe: there, each callback calls the explorer
+// part instead (the lines marked "explorer.exe part").
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    // explorer.exe part.
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        return ExplorerModInit();
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        ExplorerModUninit();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
