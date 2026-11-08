@@ -1561,7 +1561,7 @@ Made by [Salyts](https://github.com/Salyts) & [GR0UD](https://github.com/GR0UD).
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 // Windhawk's editor runs a 32-bit clangd (2 GB at most), and this header takes
 // the mod's parse past that: its code help crashed on open. The editor's parse
-// (WH_EDITING) leaves it and the rounded art clip out; the real build has both.
+// leaves it and the rounded art clip out; the real build has both.
 #ifndef WH_EDITING
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.Graphics.Effects.h>
@@ -17569,6 +17569,7 @@ static bool HookTaskbarViewDllSymbols() {
     if (!h) h = GetModuleHandleW(L"ExplorerExtensions.dll");
     if (!h) { Wh_Log(L"HookTaskbarViewDllSymbols: module not found"); return FALSE; }
 
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::AugmentedEntryPointButton::UpdateButtonPadding(void))"},
