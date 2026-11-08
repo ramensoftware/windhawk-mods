@@ -4,7 +4,7 @@
 // @name:zh-CN      Explorer 上下文菜单半透明
 // @description     Translucent materials and optional borderless classic context menus for File Explorer
 // @description:zh-CN 对 Explorer 经典上下文菜单应用半透明材质和可选无边框
-// @version         1.0.1
+// @version         1.0.2
 // @author          alkali210
 // @github          https://github.com/alkali210
 // @include         explorer.exe
@@ -88,12 +88,19 @@ while the modified menu is being tracked.
 Legacy icon repair converts copied RGB bitmaps to premultiplied alpha. Optional
 background removal clears only matching corner-connected white, black, or
 magenta regions. Disable background removal for icons with intentional borders.
+Transfers that declare per-pixel alpha, and bitmaps with ambiguous partial
+alpha, retain the original GDI behavior. The mod does not guess whether an
+existing alpha bitmap is straight or premultiplied.
 
 ## Scope and rendering approach
 
 This mod keeps the Shell's immersive owner-draw enabled and preserves native
 menu layout, commands, and shell extensions. Effects are scoped to supported
-classic popups while a menu is tracked, with per-menu state restored afterward.
+classic popups while a menu is tracked. Preparation validates resources before
+applying effects and exposes the popup to drawing hooks only after commit.
+Only successful state changes are recorded for cleanup. Unassociated memory
+DCs are left to Windows; owner-draw memory DCs require an exact synchronous
+WM_DRAWITEM match.
 GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
 a tracked menu. The scope is the popup effect, rather than a replacement for
 Explorer's overall interface rendering.
@@ -139,6 +146,15 @@ Unknown owner-drawn menus, custom background brushes, high contrast, remote
 sessions, disabled transparency, and recognized conflicting renderers are
 left unchanged. Settings changes reload the mod. Active effects suppress the
 native bitmap opening animation to avoid an opaque initial snapshot.
+
+Menus whose previous system-backdrop value cannot be read stay native. Unreadable
+optional dark-mode and corner preferences are left unchanged. Recorded values
+are restored on live-window cleanup; failed restores remain pending for retry.
+There are no public getters for prior blur regions or extended-frame margins,
+and the Accent getter is unavailable on some builds. Cleanup of those states is
+best-effort, not a lossless restoration guarantee for an unknown renderer. A
+missing border-color snapshot likewise uses the Windows default on cleanup.
+Destroyed popup HWNDs release their window-owned effects without extra resets.
 
 The implementation uses version-dependent Windows interfaces: the composition
 attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
@@ -381,6 +397,11 @@ struct Popup {
     HBRUSH oldBrush;
     HTHEME palette;
     bool brushChanged;
+    bool blurChanged;
+    bool frameChanged;
+    bool backdropChanged;
+    bool cornerChanged;
+    bool darkChanged;
     bool active;
     bool dark;
     bool haveBackdrop;
@@ -395,7 +416,6 @@ struct Popup {
     AccentPolicy oldAccent;
     bool haveAccent;
     bool accentChanged;
-    bool frameExtended;
     bool applying;
     bool subclassed;
     bool preparing;
@@ -513,11 +533,17 @@ bool ApplyBackdrop(Popup& popup) {
     BOOL dark = popup.dark;
     // Apply theme before the material; changing it afterwards can invalidate
     // the DWM recipe that was just configured.
-    HRESULT darkResult = DwmSetWindowAttribute(
-        popup.hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-    if (FAILED(darkResult))
+    if (popup.haveDark) {
+        HRESULT darkResult = DwmSetWindowAttribute(
+            popup.hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+        popup.darkChanged |= SUCCEEDED(darkResult);
         ETM_LOG(L"Theme hwnd=%p dark=%d hr=0x%08lx", popup.hwnd, dark,
                 darkResult);
+    } else {
+        ETM_LOG(
+            L"Theme hwnd=%p: previous value unreadable; keeping native state",
+            popup.hwnd);
+    }
     if (IsSystemMaterial(g_settings.material)) {
         // Preserve the menu's native non-client policy. Forcing DWMNCRP_ENABLED
         // adds a delayed DWM frame: at 144 DPI an owned child contracted by one
@@ -531,23 +557,25 @@ bool ApplyBackdrop(Popup& popup) {
                                                        : DWMSBT_TRANSIENTWINDOW;
         HRESULT frameResult =
             DwmExtendFrameIntoClientArea(popup.hwnd, &margins);
-        popup.frameExtended = SUCCEEDED(frameResult);
+        bool extended = SUCCEEDED(frameResult);
+        popup.frameChanged |= extended;
         HRESULT backdropResult = S_FALSE;
-        if (popup.frameExtended) {
+        if (extended) {
             backdropResult =
                 DwmSetWindowAttribute(popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE,
                                       &backdrop, sizeof(backdrop));
             success = SUCCEEDED(backdropResult);
+            popup.backdropChanged |= success;
         }
         ETM_LOG(
             L"Material hwnd=%p material=%s backdrop=%lu frameHr=0x%08lx "
             L"backdropAttempted=%d backdropHr=0x%08lx applied=%d",
             popup.hwnd, MaterialName(g_settings.material), backdrop,
-            frameResult, popup.frameExtended, backdropResult, success);
+            frameResult, extended, backdropResult, success);
         // Backdrop/alpha first, Accent disabled last. A menu never activates,
         // so notify DWM of the active appearance without requesting another
         // window-position/frame calculation after native menu layout.
-        if (g_setComposition) {
+        if (success && g_setComposition) {
             AccentPolicy disabled{};
             CompositionData data{19, &disabled, sizeof(disabled)};
             BOOL applied = g_setComposition(popup.hwnd, &data);
@@ -565,9 +593,13 @@ bool ApplyBackdrop(Popup& popup) {
         DWORD backdrop = DWMSBT_NONE;
         HRESULT clearResult = DwmSetWindowAttribute(
             popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-        if (FAILED(clearResult))
+        popup.backdropChanged |= SUCCEEDED(clearResult);
+        if (FAILED(clearResult)) {
             ETM_LOG(L"BackdropClear hwnd=%p hr=0x%08lx", popup.hwnd,
                     clearResult);
+            popup.applying = false;
+            return false;
+        }
         int opacity = g_settings.material == Material::Solid ? 100
                       : g_settings.material == Material::ModernAcrylic
                           ? 35  // Fixed recipe; do not vary its input alpha.
@@ -610,12 +642,24 @@ bool ApplyBackdrop(Popup& popup) {
             L"missing",
             popup.hwnd, MaterialName(g_settings.material));
     }
+    if (!success) {
+        popup.applying = false;
+        return false;
+    }
     DWORD corner =
         g_settings.roundedCorners ? DWMWCP_ROUNDSMALL : DWMWCP_DONOTROUND;
-    HRESULT cornerResult = DwmSetWindowAttribute(
-        popup.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
-    ETM_LOG(L"Corner hwnd=%p rounded=%d hr=0x%08lx", popup.hwnd,
-            g_settings.roundedCorners, cornerResult);
+    if (popup.haveCorner) {
+        HRESULT cornerResult =
+            DwmSetWindowAttribute(popup.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                                  &corner, sizeof(corner));
+        popup.cornerChanged |= SUCCEEDED(cornerResult);
+        ETM_LOG(L"Corner hwnd=%p rounded=%d hr=0x%08lx", popup.hwnd,
+                g_settings.roundedCorners, cornerResult);
+    } else {
+        ETM_LOG(
+            L"Corner hwnd=%p: previous value unreadable; keeping native state",
+            popup.hwnd);
+    }
     if (g_settings.hideMenuBorder) {
         COLORREF border = DWMWA_COLOR_NONE;
         HRESULT borderResult = DwmSetWindowAttribute(
@@ -630,27 +674,43 @@ bool ApplyBackdrop(Popup& popup) {
     return success;
 }
 
+bool HasPopupChanges(const Popup& popup) {
+    return popup.brushChanged || popup.blurChanged || popup.frameChanged ||
+           popup.accentChanged || popup.backdropChanged ||
+           popup.cornerChanged || popup.darkChanged || popup.borderColorChanged;
+}
+
 void RestorePopup(Popup& popup, bool destroying = false) {
-    if (!popup.active)
+    if (!popup.active && !popup.palette && !HasPopupChanges(popup))
         return;
-    popup.active =
-        false;  // Do not intercept reentrant painting during restoration.
+    popup.active = false;  // Rendering stays inert throughout rollback.
     if (popup.palette) {
         CloseThemeData(popup.palette);
         popup.palette = nullptr;
     }
-    if (popup.brushChanged && IsMenu(popup.menu)) {
-        MENUINFO info{sizeof(info)};
-        info.fMask = MIM_BACKGROUND;
-        if (GetMenuInfo(popup.menu, &info) &&
-            info.hbrBack == GetStockObject(BLACK_BRUSH)) {
-            info.hbrBack = popup.oldBrush;
-            SetMenuInfo(popup.menu, &info);
+    if (popup.brushChanged) {
+        if (!IsMenu(popup.menu)) {
+            popup.brushChanged = false;
+        } else {
+            MENUINFO info{sizeof(info)};
+            info.fMask = MIM_BACKGROUND;
+            if (GetMenuInfo(popup.menu, &info)) {
+                if (info.hbrBack != GetStockObject(BLACK_BRUSH)) {
+                    popup.brushChanged = false;  // Another writer owns it now.
+                } else {
+                    info.hbrBack = popup.oldBrush;
+                    if (SetMenuInfo(popup.menu, &info))
+                        popup.brushChanged = false;
+                }
+            }
         }
     }
-    // A dying popup loses its DWM state with the HWND. Restoring bright/native
-    // attributes while it is still visible can expose a final flash.
+    // Window-owned effects die with the HWND. Do not expose a native/bright
+    // last frame by resetting attributes during WM_DESTROY/WM_NCDESTROY.
     if (destroying || !IsWindow(popup.hwnd)) {
+        popup.blurChanged = popup.frameChanged = popup.accentChanged = false;
+        popup.backdropChanged = popup.cornerChanged = popup.darkChanged = false;
+        popup.borderColorChanged = false;
         ETM_LOG(L"Cleanup hwnd=%p menu=%p window-destroyed", popup.hwnd,
                 popup.menu);
         return;
@@ -659,34 +719,69 @@ void RestorePopup(Popup& popup, bool destroying = false) {
         AccentPolicy accent =
             popup.haveAccent ? popup.oldAccent : AccentPolicy{};
         CompositionData data{19, &accent, sizeof(accent)};
-        g_setComposition(popup.hwnd, &data);
+        if (g_setComposition(popup.hwnd, &data))
+            popup.accentChanged = false;
+        if (!popup.haveAccent)
+            ETM_LOG(
+                L"Cleanup hwnd=%p accent reset is best-effort: previous policy "
+                L"unreadable",
+                popup.hwnd);
     }
-    if (popup.frameExtended) {
+    // No public getters exist for the prior frame margins or blur region.
+    // Undo only our successful writes; these two inverses are best-effort,
+    // not restoration of an unknown third-party configuration.
+    if (popup.frameChanged) {
         MARGINS margins{};
-        DwmExtendFrameIntoClientArea(popup.hwnd, &margins);
+        if (SUCCEEDED(DwmExtendFrameIntoClientArea(popup.hwnd, &margins)))
+            popup.frameChanged = false;
+        ETM_LOG(L"Cleanup hwnd=%p frame reset is best-effort", popup.hwnd);
     }
-    DWM_BLURBEHIND blur{};
-    blur.dwFlags = DWM_BB_ENABLE;
-    DwmEnableBlurBehindWindow(popup.hwnd, &blur);
-    DWORD backdrop = popup.haveBackdrop ? popup.oldBackdrop : DWMSBT_AUTO;
-    DwmSetWindowAttribute(popup.hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
-                          sizeof(backdrop));
-    if (popup.haveCorner)
-        DwmSetWindowAttribute(popup.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                              &popup.oldCorner, sizeof(popup.oldCorner));
-    if (popup.haveDark)
-        DwmSetWindowAttribute(popup.hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                              &popup.oldDark, sizeof(popup.oldDark));
+    if (popup.blurChanged) {
+        DWM_BLURBEHIND blur{};
+        blur.dwFlags = DWM_BB_ENABLE;
+        if (SUCCEEDED(DwmEnableBlurBehindWindow(popup.hwnd, &blur)))
+            popup.blurChanged = false;
+        ETM_LOG(L"Cleanup hwnd=%p blur reset is best-effort", popup.hwnd);
+    }
+    if (popup.backdropChanged) {
+        DWORD backdrop = popup.haveBackdrop ? popup.oldBackdrop : DWMSBT_AUTO;
+        if (SUCCEEDED(DwmSetWindowAttribute(popup.hwnd,
+                                            DWMWA_SYSTEMBACKDROP_TYPE,
+                                            &backdrop, sizeof(backdrop))))
+            popup.backdropChanged = false;
+        if (!popup.haveBackdrop)
+            ETM_LOG(
+                L"Cleanup hwnd=%p backdrop reset is best-effort: previous "
+                L"value unreadable",
+                popup.hwnd);
+    }
+    if (popup.cornerChanged && popup.haveCorner &&
+        SUCCEEDED(
+            DwmSetWindowAttribute(popup.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                                  &popup.oldCorner, sizeof(popup.oldCorner))))
+        popup.cornerChanged = false;
+    if (popup.darkChanged && popup.haveDark &&
+        SUCCEEDED(DwmSetWindowAttribute(popup.hwnd,
+                                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                        &popup.oldDark, sizeof(popup.oldDark))))
+        popup.darkChanged = false;
     if (popup.borderColorChanged) {
         COLORREF border =
             popup.haveBorderColor ? popup.oldBorderColor : DWMWA_COLOR_DEFAULT;
-        HRESULT borderResult = DwmSetWindowAttribute(
-            popup.hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
-        ETM_LOG(L"Border hwnd=%p action=restore color=0x%08lx hr=0x%08lx",
-                popup.hwnd, border, borderResult);
+        HRESULT result = DwmSetWindowAttribute(popup.hwnd, DWMWA_BORDER_COLOR,
+                                               &border, sizeof(border));
+        if (SUCCEEDED(result))
+            popup.borderColorChanged = false;
+        ETM_LOG(
+            L"Border hwnd=%p action=restore color=0x%08lx hr=0x%08lx saved=%d",
+            popup.hwnd, border, result, popup.haveBorderColor);
     }
-    ETM_LOG(L"Cleanup hwnd=%p menu=%p state-restore-complete", popup.hwnd,
-            popup.menu);
+    ETM_LOG(
+        L"Cleanup hwnd=%p menu=%p pending brush=%d blur=%d frame=%d accent=%d "
+        L"backdrop=%d corner=%d dark=%d border=%d",
+        popup.hwnd, popup.menu, popup.brushChanged, popup.blurChanged,
+        popup.frameChanged, popup.accentChanged, popup.backdropChanged,
+        popup.cornerChanged, popup.darkChanged, popup.borderColorChanged);
 }
 
 LRESULT CALLBACK MenuMessages(int code, WPARAM wParam, LPARAM lParam);
@@ -822,6 +917,16 @@ struct MenuScope {
         if (!reusable || reusable->active || reusable->preparing ||
             reusable->layingOut)
             return;
+        if (HasPopupChanges(*reusable) || reusable->palette) {
+            RestorePopup(*reusable);
+            if (HasPopupChanges(*reusable)) {
+                ETM_LOG(
+                    L"Preparation deferred hwnd=%p: previous cleanup is still "
+                    L"pending",
+                    hwnd);
+                return;
+            }
+        }
         struct Preparation {
             Popup* popup;
             explicit Preparation(Popup* value) : popup(value) {
@@ -878,6 +983,11 @@ struct MenuScope {
         popup.haveBackdrop = SUCCEEDED(DwmGetWindowAttribute(
             hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &popup.oldBackdrop,
             sizeof(popup.oldBackdrop)));
+        if (!popup.haveBackdrop) {
+            ETM_LOG(L"Native fallback hwnd=%p: previous backdrop is unreadable",
+                    hwnd);
+            return;
+        }
         popup.haveCorner = SUCCEEDED(
             DwmGetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
                                   &popup.oldCorner, sizeof(popup.oldCorner)));
@@ -892,7 +1002,6 @@ struct MenuScope {
             CompositionData data{19, &popup.oldAccent, sizeof(popup.oldAccent)};
             popup.haveAccent = g_getComposition(hwnd, &data) != FALSE;
         }
-        popup.active = true;
         popup.palette =
             OpenThemeData(hwnd, popup.dark ? L"DarkMode::Menu" : L"Menu");
         if (!popup.palette) {
@@ -912,10 +1021,23 @@ struct MenuScope {
             RestorePopup(popup);
             return;
         }
+        info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+        if (!SetMenuInfo(popup.menu, &info)) {
+            DWORD error = GetLastError();
+            ETM_LOG(
+                L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
+                hwnd, error);
+            DeleteObject(region);
+            RestorePopup(popup);
+            return;
+        }
+        popup.brushChanged = true;
         DWM_BLURBEHIND blur{DWM_BB_ENABLE | DWM_BB_BLURREGION, TRUE, region,
                             FALSE};
         HRESULT result = DwmEnableBlurBehindWindow(hwnd, &blur);
         DeleteObject(region);
+        if (SUCCEEDED(result))
+            popup.blurChanged = true;
         if (FAILED(result)) {
             ETM_LOG(
                 L"Preparation failed hwnd=%p stage=DwmEnableBlurBehindWindow "
@@ -924,21 +1046,17 @@ struct MenuScope {
             RestorePopup(popup);
             return;
         }
-        info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-        if (!SetMenuInfo(popup.menu, &info)) {
-            DWORD error = GetLastError();
-            ETM_LOG(
-                L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
-                hwnd, error);
-            RestorePopup(popup);
-            return;
-        }
-        popup.brushChanged = true;
         if (!ApplyBackdrop(popup)) {
             ETM_LOG(L"Preparation failed hwnd=%p stage=material", hwnd);
             RestorePopup(popup);
             return;
         }
+        if (!IsClassicPopup(hwnd) || !popup.subclassed ||
+            g_stopping.load(std::memory_order_relaxed)) {
+            RestorePopup(popup);
+            return;
+        }
+        popup.active = true;  // Commit only a complete, live popup.
         ETM_LOG(
             L"Prepared hwnd=%p menu=%p material=%s hideBorder=%d "
             L"borderApplied=%d",
@@ -990,10 +1108,6 @@ LRESULT CALLBACK MenuMessages(int code, WPARAM wParam, LPARAM lParam) {
                 message.message == WM_PRINT ||
                 message.message == WM_PRINTCLIENT)
                 scope->Prepare(message.hwnd);
-            // Keep the actual owner-draw context intact across internal menu
-            // queries performed during a WM_DRAWITEM call.
-            if (!scope->drawingItem)
-                scope->paintingWindow = message.hwnd;
             if (message.message == WM_DESTROY) {
                 if (Popup* popup = scope->Find(message.hwnd))
                     RestorePopup(*popup, true);
@@ -1187,8 +1301,8 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
-// Gate every drawing hook by BOTH a live classic popup and its theme class.
-// A DC belonging to another window must never fall back to the memory-DC path.
+// Require a positive DC association, never the last observed popup. A memory
+// DC is accepted only as the exact synchronous WM_DRAWITEM target.
 Popup* DrawingPopupForDC(HDC dc) {
     MenuScope* scope = t_scope;
     if (!scope || !scope->allowed || g_stopping.load(std::memory_order_relaxed))
@@ -1198,12 +1312,12 @@ Popup* DrawingPopupForDC(HDC dc) {
     HWND hwnd = scope->drawingItem && dc == scope->drawingItem->hDC
                     ? scope->paintingWindow
                     : WindowFromDC(dc);
-    if (hwnd && !IsClassicPopup(hwnd))
+    if (!hwnd || !IsClassicPopup(hwnd))
         return nullptr;
-    if (!hwnd)
-        hwnd = scope->paintingWindow;
     Popup* popup = scope->Find(hwnd);
-    return popup && popup->active ? popup : nullptr;
+    return popup && popup->active && !popup->preparing && !popup->applying
+               ? popup
+               : nullptr;
 }
 
 Popup* DrawingPopup(HTHEME theme, HDC dc) {
@@ -1217,6 +1331,20 @@ Popup* DrawingPopup(HTHEME theme, HDC dc) {
     return popup;
 }
 
+struct IconSurface {
+    HBITMAP bitmap = nullptr;
+    HDC dc = nullptr;
+    HGDIOBJ old = nullptr;
+    ~IconSurface() {
+        if (old && old != HGDI_ERROR)
+            SelectObject(dc, old);
+        if (dc)
+            DeleteDC(dc);
+        if (bitmap)
+            DeleteObject(bitmap);
+    }
+};
+
 bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
     if (!rect || IsRectEmpty(rect) || !g_settings.highlightOpacity)
         return false;
@@ -1228,8 +1356,8 @@ bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
         IntersectClipRect(dc, clip->left, clip->top, clip->right, clip->bottom);
     BP_PAINTPARAMS params{sizeof(params)};
     params.dwFlags = BPPF_ERASE;
-    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    params.pBlendFunction = &blend;
+    // NULL blend function commits raw ARGB by copy. Repainting a hot item
+    // replaces its alpha instead of accumulating it over the previous frame.
     HDC bufferDC = nullptr;
     HPAINTBUFFER buffer =
         BeginBufferedPaint(dc, rect, BPBF_TOPDOWNDIB, &params, &bufferDC);
@@ -1240,13 +1368,15 @@ bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
     RGBQUAD* bits = nullptr;
     int stride = 0;
     HRESULT result = GetBufferedPaintBits(buffer, &bits, &stride);
-    if (SUCCEEDED(result) && bits) {
+    int width = rect->right - rect->left, height = rect->bottom - rect->top;
+    if (SUCCEEDED(result) && (!bits || stride < width))
+        result = E_FAIL;
+    if (SUCCEEDED(result)) {
         UINT dpi = GetDpiForWindow(popup.hwnd);
         if (!dpi)
             dpi = 96;
         float inset = static_cast<float>(MulDiv(2, dpi, 96));
         float radius = static_cast<float>(MulDiv(4, dpi, 96));
-        int width = rect->right - rect->left, height = rect->bottom - rect->top;
         COLORREF color = popup.dark ? RGB(128, 192, 255) : RGB(0, 105, 190);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x) {
@@ -1276,13 +1406,42 @@ bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
                     static_cast<BYTE>(alpha)};
             }
     }
-    // Replace the background rather than repeatedly accumulating hover alpha.
-    if (SUCCEEDED(result))
-        PatBlt(dc, rect->left, rect->top, rect->right - rect->left,
-               rect->bottom - rect->top, BLACKNESS);
-    HRESULT end = EndBufferedPaint(buffer, SUCCEEDED(result));
+    if (FAILED(result)) {
+        EndBufferedPaint(buffer, FALSE);
+        RestoreDC(dc, saved);
+        return false;
+    }
+    // Keep a rollback image before the sole target-writing operation. Even a
+    // partially failed commit can then be undone without an exposed clear.
+    IconSurface backup;
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
+    void* backupBits = nullptr;
+    backup.bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS,
+                                     &backupBits, nullptr, 0);
+    backup.dc = CreateCompatibleDC(dc);
+    if (backup.bitmap && backup.dc)
+        backup.old = SelectObject(backup.dc, backup.bitmap);
+    bool captured = backupBits && backup.old && backup.old != HGDI_ERROR &&
+                    g_bitBlt(backup.dc, 0, 0, width, height, dc, rect->left,
+                             rect->top, SRCCOPY);
+    if (!captured) {
+        EndBufferedPaint(buffer, FALSE);
+        RestoreDC(dc, saved);
+        return false;
+    }
+    HRESULT end = EndBufferedPaint(buffer, TRUE);
+    if (FAILED(end)) {
+        BOOL restored = g_bitBlt(dc, rect->left, rect->top, width, height,
+                                 backup.dc, 0, 0, SRCCOPY);
+        ETM_LOG(L"Highlight commit failed hwnd=%p hr=0x%08lx rollback=%d",
+                popup.hwnd, end, restored);
+        if (!restored)
+            RedrawWindow(popup.hwnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ERASE | RDW_NOCHILDREN);
+    }
     RestoreDC(dc, saved);
-    return SUCCEEDED(result) && SUCCEEDED(end);
+    return SUCCEEDED(end);
 }
 
 bool PaintHotItem(HTHEME theme,
@@ -1480,110 +1639,105 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
                              options);
 }
 
-struct IconSurface {
-    HBITMAP bitmap = nullptr;
-    HDC dc = nullptr;
-    HGDIOBJ old = nullptr;
-    ~IconSurface() {
-        if (old)
-            SelectObject(dc, old);
-        if (dc)
-            DeleteDC(dc);
-        if (bitmap)
-            DeleteObject(bitmap);
-    }
-};
-
 // Work only on an owned copy obtained through public GDI. Never modify a menu
 // bitmap, the selected source bitmap, or Shell's private item-data structures.
-bool PrepareIcon(HDC source,
-                 int sx,
-                 int sy,
-                 int width,
-                 int height,
-                 IconSurface& target) {
-    HBITMAP original =
-        static_cast<HBITMAP>(GetCurrentObject(source, OBJ_BITMAP));
-    BITMAP sourceInfo{};
-    if (!original ||
-        GetObjectW(original, sizeof(sourceInfo), &sourceInfo) !=
-            sizeof(sourceInfo) ||
-        sourceInfo.bmBitsPixel <= 1 || sourceInfo.bmWidth < 2 ||
-        sourceInfo.bmHeight < 2 || sourceInfo.bmWidth > 256 ||
-        sourceInfo.bmHeight > 256 || width < 2 || height < 2 ||
-        GetMapMode(source) != MM_TEXT)
+bool PrepareIconBitmap(HDC source,
+                       HBITMAP original,
+                       const BITMAP& sourceInfo,
+                       POINT origin,
+                       int width,
+                       int height,
+                       IconSurface& target) {
+    DIBSECTION originalSection{};
+    bool originalDib =
+        GetObjectW(original, sizeof(originalSection), &originalSection) ==
+            sizeof(originalSection) &&
+        originalSection.dsBm.bmBits;
+    HBITMAP copy = static_cast<HBITMAP>(CopyImage(
+        original, IMAGE_BITMAP, 0, 0, originalDib ? LR_CREATEDIBSECTION : 0));
+    if (!copy || copy == original)
         return false;
-    // Restrict repair to an unscaled source rectangle. Leave transformed and
-    // mirrored transfers to GDI instead of guessing which bitmap pixels apply.
-    if (GetGraphicsMode(source) == GM_ADVANCED) {
-        XFORM transform{};
-        if (!GetWorldTransform(source, &transform) || transform.eM11 != 1 ||
-            transform.eM22 != 1 || transform.eM12 != 0 || transform.eM21 != 0 ||
-            transform.eDx != 0 || transform.eDy != 0)
-            return false;
-    }
-    POINT origin{sx, sy};
-    if ((GetLayout(source) & LAYOUT_RTL) || !LPtoDP(source, &origin, 1) ||
-        origin.x < 0 || origin.y < 0 || width > sourceInfo.bmWidth ||
-        height > sourceInfo.bmHeight || origin.x > sourceInfo.bmWidth - width ||
-        origin.y > sourceInfo.bmHeight - height)
-        return false;
-    HBITMAP copy = static_cast<HBITMAP>(
-        CopyImage(original, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
-    if (!copy)
-        return false;
+    DIBSECTION section{};
+    int objectSize = GetObjectW(copy, sizeof(section), &section);
     BITMAPINFO info{};
-    info.bmiHeader = {sizeof(BITMAPINFOHEADER),
-                      sourceInfo.bmWidth,
-                      -sourceInfo.bmHeight,
-                      1,
-                      32,
-                      BI_RGB};
-    auto sourcePixels = static_cast<RGBQUAD*>(
-        HeapAlloc(GetProcessHeap(), 0,
-                  sourceInfo.bmWidth * sourceInfo.bmHeight * sizeof(RGBQUAD)));
-    // The copied bitmap is not selected into any DC (GetDIBits requirement).
-    bool read = sourcePixels &&
-                GetDIBits(source, copy, 0, sourceInfo.bmHeight, sourcePixels,
-                          &info, DIB_RGB_COLORS) == sourceInfo.bmHeight;
-    DeleteObject(copy);
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
     RGBQUAD* pixels = nullptr;
-    if (read) {
-        info.bmiHeader.biWidth = width;
-        info.bmiHeader.biHeight = -height;
-        info.bmiHeader.biSizeImage = 0;
-        target.bitmap =
-            CreateDIBSection(nullptr, &info, DIB_RGB_COLORS,
-                             reinterpret_cast<void**>(&pixels), nullptr, 0);
-        if (target.bitmap && pixels)
+    target.bitmap =
+        CreateDIBSection(nullptr, &info, DIB_RGB_COLORS,
+                         reinterpret_cast<void**>(&pixels), nullptr, 0);
+    bool read = false;
+    GdiFlush();  // Synchronize GDI before CPU reads from the owned copy.
+    if (target.bitmap && pixels && objectSize == sizeof(DIBSECTION) &&
+        section.dsBm.bmBits) {
+        const BITMAP& bitmap = section.dsBm;
+        int bytes = bitmap.bmBitsPixel / 8;
+        bool rgb = section.dsBmih.biCompression == BI_RGB ||
+                   (section.dsBmih.biCompression == BI_BITFIELDS &&
+                    bytes == 4 && section.dsBitfields[0] == 0x00ff0000 &&
+                    section.dsBitfields[1] == 0x0000ff00 &&
+                    section.dsBitfields[2] == 0x000000ff);
+        if (rgb && bitmap.bmPlanes == 1 && (bytes == 3 || bytes == 4) &&
+            bitmap.bmWidth == sourceInfo.bmWidth &&
+            bitmap.bmHeight == sourceInfo.bmHeight &&
+            bitmap.bmWidthBytes >= bitmap.bmWidth * bytes &&
+            (section.dsBmih.biHeight == bitmap.bmHeight ||
+             section.dsBmih.biHeight == -bitmap.bmHeight)) {
+            const auto data = static_cast<const BYTE*>(bitmap.bmBits);
+            for (int y = 0; y < height; ++y) {
+                int row = section.dsBmih.biHeight < 0
+                              ? origin.y + y
+                              : bitmap.bmHeight - 1 - origin.y - y;
+                for (int x = 0; x < width; ++x) {
+                    const BYTE* pixel = data + row * bitmap.bmWidthBytes +
+                                        (origin.x + x) * bytes;
+                    pixels[y * width + x] = {pixel[0], pixel[1], pixel[2],
+                                             bytes == 4 ? pixel[3] : BYTE{0}};
+                }
+            }
+            read = true;
+        }
+    } else if (target.bitmap && pixels && objectSize == sizeof(BITMAP) &&
+               !section.dsBm.bmBits) {
+        // Only an unselected DDB is passed to GetDIBits. DIB sections above
+        // are read directly, using their explicit orientation and stride.
+        auto sourcePixels = static_cast<RGBQUAD*>(HeapAlloc(
+            GetProcessHeap(), 0,
+            sourceInfo.bmWidth * sourceInfo.bmHeight * sizeof(RGBQUAD)));
+        info.bmiHeader.biWidth = sourceInfo.bmWidth;
+        info.bmiHeader.biHeight = -sourceInfo.bmHeight;
+        read = sourcePixels &&
+               GetDIBits(source, copy, 0, sourceInfo.bmHeight, sourcePixels,
+                         &info, DIB_RGB_COLORS) == sourceInfo.bmHeight;
+        if (read)
             for (int y = 0; y < height; ++y)
                 for (int x = 0; x < width; ++x)
                     pixels[y * width + x] =
                         sourcePixels[(origin.y + y) * sourceInfo.bmWidth +
                                      origin.x + x];
+        if (sourcePixels)
+            HeapFree(GetProcessHeap(), 0, sourcePixels);
     }
-    if (sourcePixels)
-        HeapFree(GetProcessHeap(), 0, sourcePixels);
-    if (!read || !target.bitmap || !pixels)
+    DeleteObject(copy);
+    if (!read)
         return false;
-    bool anyAlpha = false, allOpaque = true, straightAlpha = false;
-    for (int i = 0; i < width * height; ++i) {
-        const auto& p = pixels[i];
-        anyAlpha |= p.rgbReserved != 0;
-        allOpaque &= p.rgbReserved == 255;
-        if (p.rgbReserved && p.rgbReserved < 255 &&
-            (p.rgbRed > p.rgbReserved || p.rgbGreen > p.rgbReserved ||
-             p.rgbBlue > p.rgbReserved))
-            straightAlpha = true;
+    // Neither DIB metadata nor channel values identify straight vs.
+    // premultiplied alpha. Only RGB transfers with uniformly absent/opaque
+    // alpha can be repaired; preserve all other representations natively.
+    if (sourceInfo.bmBitsPixel == 32) {
+        bool anyAlpha = false, allOpaque = true;
+        for (int i = 0; i < width * height; ++i) {
+            anyAlpha |= pixels[i].rgbReserved != 0;
+            allOpaque &= pixels[i].rgbReserved == 255;
+        }
+        if (anyAlpha && !allOpaque)
+            return false;
     }
-    bool legacy = sourceInfo.bmBitsPixel < 32 || !anyAlpha;
-    if (legacy)
-        for (int i = 0; i < width * height; ++i)
-            pixels[i].rgbReserved = 255;
+    for (int i = 0; i < width * height; ++i)
+        pixels[i].rgbReserved = 255;
 
     // Remove only a connected corner background, never interior white/black
     // details. Existing semi-transparent assets keep their original alpha.
-    if (g_settings.removeIconBackground && (legacy || allOpaque)) {
+    if (g_settings.removeIconBackground) {
         RGBQUAD key = pixels[0];
         auto matchesKey = [key](const RGBQUAD& p) {
             return std::abs(int(p.rgbRed) - key.rgbRed) <= 8 &&
@@ -1629,13 +1783,6 @@ bool PrepareIcon(HDC source,
             }
         }
     }
-    if (straightAlpha && !legacy)
-        for (int i = 0; i < width * height; ++i) {
-            auto& p = pixels[i];
-            p.rgbRed = (p.rgbRed * p.rgbReserved + 127) / 255;
-            p.rgbGreen = (p.rgbGreen * p.rgbReserved + 127) / 255;
-            p.rgbBlue = (p.rgbBlue * p.rgbReserved + 127) / 255;
-        }
     for (int i = 0; i < width * height; ++i)
         if (!pixels[i].rgbReserved)
             pixels[i] = {};
@@ -1646,10 +1793,47 @@ bool PrepareIcon(HDC source,
     return target.old && target.old != HGDI_ERROR;
 }
 
+bool PrepareIcon(HDC source,
+                 int sx,
+                 int sy,
+                 int width,
+                 int height,
+                 IconSurface& target) {
+    HBITMAP original =
+        static_cast<HBITMAP>(GetCurrentObject(source, OBJ_BITMAP));
+    BITMAP sourceInfo{};
+    if (!original ||
+        GetObjectW(original, sizeof(sourceInfo), &sourceInfo) !=
+            sizeof(sourceInfo) ||
+        sourceInfo.bmBitsPixel <= 1 || sourceInfo.bmWidth < 2 ||
+        sourceInfo.bmHeight < 2 || sourceInfo.bmWidth > 256 ||
+        sourceInfo.bmHeight > 256 || width < 2 || height < 2 ||
+        GetMapMode(source) != MM_TEXT)
+        return false;
+    // Restrict repair to an unscaled source rectangle. Leave transformed and
+    // mirrored transfers to GDI instead of guessing which bitmap pixels apply.
+    if (GetGraphicsMode(source) == GM_ADVANCED) {
+        XFORM transform{};
+        if (!GetWorldTransform(source, &transform) || transform.eM11 != 1 ||
+            transform.eM22 != 1 || transform.eM12 != 0 || transform.eM21 != 0 ||
+            transform.eDx != 0 || transform.eDy != 0)
+            return false;
+    }
+    POINT origin{sx, sy};
+    if ((GetLayout(source) & LAYOUT_RTL) || !LPtoDP(source, &origin, 1) ||
+        origin.x < 0 || origin.y < 0 || width > sourceInfo.bmWidth ||
+        height > sourceInfo.bmHeight || origin.x > sourceInfo.bmWidth - width ||
+        origin.y > sourceInfo.bmHeight - height)
+        return false;
+    return PrepareIconBitmap(source, original, sourceInfo, origin, width,
+                             height, target);
+}
+
 bool IsIconTransfer(HDC destination, HDC source, int width, int height) {
     return !t_bitmapDepth && !t_textDepth && g_settings.repairIcons &&
            t_scope && t_scope->drawingItem && destination != source &&
-           width >= 4 && height >= 4 && width <= 128 && height <= 128 &&
+           destination == t_scope->drawingItem->hDC && width >= 4 &&
+           height >= 4 && width <= 128 && height <= 128 &&
            width * 2 >= height && height * 2 >= width &&
            DrawingPopupForDC(destination);
 }
@@ -1734,7 +1918,8 @@ BOOL WINAPI AlphaBlendHook(HDC destination,
     }
     CallGuard call;
     if (IsIconTransfer(destination, source, width, height) &&
-        blend.BlendOp == AC_SRC_OVER && !blend.BlendFlags) {
+        blend.BlendOp == AC_SRC_OVER && !blend.BlendFlags &&
+        !blend.AlphaFormat) {
         BitmapGuard guard;
         IconSurface icon;
         if (PrepareIcon(source, sx, sy, sw, sh, icon)) {
