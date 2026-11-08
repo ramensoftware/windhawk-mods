@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-08T01:03:48.000Z</updated>
+    <updated>2026-11-08T04:00:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Share Flyout 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quick-share-flyout#3cef2b9dd0957a2340d46f0aa5f7d14206680a7d</id>
+        <link href="https://windhawk.net/mods/quick-share-flyout"/>
+        <updated>2026-11-08T04:00:25.000Z</updated>
+        <content type="html"><![CDATA[<h1>Quick Share Flyout</h1>
+<p>Opens Google's <a href="https://www.android.com/better-together/quick-share-app/">Quick Share for Windows</a>
+as a flyout above the system tray, like the Windows 11 quick settings, instead
+of a window in the middle of the screen.</p>
+<p><img src="https://raw.githubusercontent.com/0Allu/quick-share-flyout/main/assets/quick-share-flyout-demo.gif" alt="Quick Share Flyout demo"></p>
+<p>Click the Quick Share tray icon to open or close the flyout. If the icon is in
+the tray overflow menu, the flyout opens beside the menu.</p>
+<h2>Features</h2>
+<ul>
+<li>Opens above the tray icon and slides out from the taskbar</li>
+<li>No title bar, with rounded corners</li>
+<li>Stays above other windows, and closes when you click somewhere else</li>
+<li>Drag files onto it from File Explorer</li>
+<li>Moves notifications out of the way while it's open</li>
+<li>Hidden from the taskbar and Alt+Tab</li>
+<li>Adjustable size</li>
+</ul>
+<h2>Sending files</h2>
+<p>Drag files from File Explorer onto the flyout. It stays open while you drag
+and after you drop, until you click somewhere else. Clicking another window
+closes it, so pick the files first, then open the flyout and drag them in.</p>
+<p>You can also right-click files and choose <strong>Send with Quick Share</strong>, or use
+<strong>Select</strong> in the flyout.</p>
+]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Category Manager 1.0.0]]></title>
         <id>https://windhawk.net/mods/start-menu-category-manager#1bb17c4ae49310a35d19326a4c90aba02985a594</id>
@@ -1650,72 +1684,6 @@ same license.</p>
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windhawk UI Translator 0.1]]></title>
-        <id>https://windhawk.net/mods/windhawk-ui-translator#680d719e41d0ce0736a4cb64b09e4d091977c261</id>
-        <link href="https://windhawk.net/mods/windhawk-ui-translator"/>
-        <updated>2026-11-04T04:03:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windhawk UI Translator</h1>
-<p>Windhawk localizes its own interface, but not the content mods write. This mod
-translates it in place, inside the Windhawk 2.0 window.</p>
-<p><img src="https://raw.githubusercontent.com/Zhanyuanium/windhawk-ui-translator/main/docs/images/details.png" alt=""></p>
-<h2>What it translates</h2>
-<table>
-<thead>
-<tr>
-<th>Where</th>
-<th>What</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Details page</td>
-<td>mod name, summary, README, changelog</td>
-</tr>
-<tr>
-<td>Settings page</td>
-<td>titles, descriptions, tooltips, dropdown values and options, reset labels</td>
-</tr>
-<tr>
-<td>Explore and installed lists</td>
-<td>mod names and one-line summaries</td>
-</tr>
-</tbody>
-</table>
-<p>The Source tab and Windhawk's own interface strings are not translated.</p>
-<h2>Usage</h2>
-<p>Hover a translated block to see the original; on a touch screen, tap once for
-the original and again for the translation. <code>Alt+Q</code> (configurable) or a
-two-finger double-tap toggles translation.</p>
-<h2>Providers</h2>
-<p>Any OpenAI-compatible <code>/chat/completions</code> endpoint is recommended; a glossary
-and batching are built in. Store its API key in Windows Credential Manager:</p>
-<pre><code>cmdkey /generic:windhawk-ui-translator /user:translator /pass:&lt;your key&gt;
-</code></pre>
-<p>The free Microsoft Edge endpoint needs no key and is the fallback; <code>auto</code> picks
-the LLM once a base URL and a key are configured. Google is not offered.</p>
-<h2>Notes</h2>
-<ul>
-<li>Enabled while the UI is already running, the mod does nothing until the UI
-process restarts: close and reopen Windhawk (<code>windhawk-ui.exe</code>), not just the
-tray icon.</li>
-<li>The auto target language follows Windhawk's UI language, then the page or OS
-language (portable builds may not follow their own instance's); changes apply
-on the next page load or settings change.</li>
-<li>If the UI fails to start: <code>windhawk.exe -safe-mode</code>, or
-<code>windhawk-cli.exe mod disable windhawk-ui-translator</code>.</li>
-</ul>
-<h2>Privacy</h2>
-<p>Page text goes to Microsoft's translation service by default, or to the
-configured LLM endpoint. No telemetry, no other network access. The API key is
-read from Windows Credential Manager and never reaches the page; the optional
-plaintext setting is the fallback, stored in Windhawk's own settings.</p>
-]]></content>
-        <author>
-            <name>Zhanyuanium</name>
-            <uri>https://github.com/Zhanyuanium</uri>
         </author>
     </entry>
 </feed>

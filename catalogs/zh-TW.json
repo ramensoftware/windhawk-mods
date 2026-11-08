@@ -13398,6 +13398,36 @@
         "version": "1.2.12"
       }
     },
+    "quick-share-flyout": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794110425000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794110425000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "0Allu",
+        "compilerOptions": "-lcomctl32 -ldwmapi -lshcore -lshlwapi",
+        "description": "Open Google Quick Share as a flyout above the system tray",
+        "donateUrl": "https://ko-fi.com/0allu",
+        "github": "https://github.com/0Allu",
+        "homepage": "https://github.com/0Allu/quick-share-flyout",
+        "include": [
+          "nearby_share.exe"
+        ],
+        "license": "MIT",
+        "name": "Quick Share Flyout",
+        "version": "1.0.0"
+      }
+    },
     "quick-translator-layout-switcher": {
       "details": {
         "defaultSorting": 620,
