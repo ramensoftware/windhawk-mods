@@ -2,11 +2,11 @@
 // @id              gradual-night-light
 // @name            Gradual Night Light
 // @description     Gradually adjust Windows Night light strength using a daily schedule.
-// @version         0.4.0
+// @version         0.4.1
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lgdi32 -lruntimeobject -lshell32 -lwtsapi32
+// @compilerOptions -fms-extensions -ladvapi32 -lgdi32 -lruntimeobject -lshell32 -lwtsapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -113,6 +113,7 @@ research below. No external helper, script, or runtime download is required.
 // clang-format on
 
 #include <asyncinfo.h>
+#include <intrin.h>
 #include <roapi.h>
 #include <winstring.h>
 #include <wrl/client.h>
