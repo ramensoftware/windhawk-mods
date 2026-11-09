@@ -224,8 +224,8 @@ nothing failed.
 /*
 - Style:
     - theme: auto
-      $name: Style
-      $description: Visual theme style for the switcher background.
+      $name: Background Material
+      $description: Material used for the switcher background.
       $options:
       - auto: Auto (Acrylic on Windows 10, Mica on Windows 11)
       - none: None (Solid/Transparent)
@@ -239,17 +239,17 @@ nothing failed.
       - dark: Dark
     - backdropBlurEffect: off
       $name: Backdrop Blur
-      $description: Blur the desktop behind the switcher while it is open. Off by default. Acrylic blurs a snapshot of the live desktop; Wallpaper blurs the desktop wallpaper instead and follows the shell's wallpaper fit mode.
+      $description: Blur the desktop behind the open switcher. Acrylic blurs a snapshot of the desktop; Wallpaper blurs the desktop wallpaper.
       $options:
       - off: Off
       - acrylic: Acrylic
       - acrylicWallpaper: Wallpaper
     - backdropBlurOpacity: 18
       $name: Backdrop Dim Opacity (%)
-      $description: How much the blurred backdrop is darkened (0-100). Higher = darker. 15-25 keeps the switcher readable while leaving the blur visible. Only applies when Backdrop Blur is enabled.
+      $description: How much the blurred backdrop is darkened (0-100). Applies when Backdrop Blur is on.
     - highlightStyle: auto
       $name: Task Highlight Style
-      $description: Style used for the selected task row/tile. Auto uses Background fill only on Windows 11 and Border only on Windows 10.
+      $description: Highlight style of the selected entry. Dock layout has its own highlight style.
       $options:
       - auto: Auto (Fill on Windows 11, Border on Windows 10)
       - border: Border only
@@ -257,14 +257,14 @@ nothing failed.
       - fillOnly: Background fill only
     - opacity: 65
       $name: Background Opacity
-      $description: Background opacity percentage (0-100), applies to None and Acrylic themes for both light and dark themes. Default is 65 for Acrylic.
+      $description: Background opacity (0-100). Applies to the None material and to Acrylic when native Windows 11 Acrylic is not used.
     - showSwitcherBorder: true
       $name: Show Switcher Border
-      $description: Show a 1px border around the entire switcher window. Applies to all themes and corner styles.
+      $description: Show a 1px border around the switcher window.
     - DarkMode:
         - borderColorMode: default
           $name: Border Color
-          $description: Color source for the selected/hovered task border in dark mode.
+          $description: Color source for the selected/hovered task border and the switcher border in dark mode.
           $options:
           - default: Default
           - custom: Custom
@@ -278,7 +278,7 @@ nothing failed.
           - accent: Accent
         - bgColorMode: default
           $name: Switcher Background Color
-          $description: Color source for the switcher window background in dark mode. Applies to None and Acrylic themes.
+          $description: Color source for the switcher background in dark mode. Applies where Background Opacity applies.
           $options:
           - default: Default
           - custom: Custom
@@ -332,7 +332,7 @@ nothing failed.
     - LightMode:
         - borderColorMode: default
           $name: Border Color
-          $description: Color source for the selected/hovered task border in light mode.
+          $description: Color source for the selected/hovered task border and the switcher border in light mode.
           $options:
           - default: Default
           - custom: Custom
@@ -346,7 +346,7 @@ nothing failed.
           - accent: Accent
         - bgColorMode: default
           $name: Switcher Background Color
-          $description: Color source for the switcher window background in light mode. Applies to None and Acrylic themes.
+          $description: Color source for the switcher background in light mode. Applies where Background Opacity applies.
           $options:
           - default: Default
           - custom: Custom
@@ -402,7 +402,7 @@ nothing failed.
     - Layout:
         - switcherLayout: default
           $name: Switcher Layout
-          $description: Choose the active layout style for the window switcher.
+          $description: Active layout. Badge layout requires thumbnails.
           $options:
           - default: Default (Classic Grid)
           - badge: Badge Layout (macOS-style)
@@ -411,7 +411,7 @@ nothing failed.
     - Corners:
         - cornerPreference: default
           $name: Corner Preference
-          $description: Corner radius for the switcher window and its elements.
+          $description: Corner radius of the switcher and its elements. Default follows the Windows corner radius.
           $options:
           - default: Default (Let Windows decide)
           - none: Squared
@@ -420,40 +420,40 @@ nothing failed.
           - custom: Custom
         - customCornerRadius: 8
           $name: Custom Corner Radius (px)
-          $description: Corner radius in pixels, used when Corner Preference is set to Custom. Applies to task borders, close buttons, and thumbnails.
+          $description: Corner radius in pixels (0-32), used when Corner Preference is Custom. Thumbnails use about half of it.
         - taskRoundedCorners: auto
           $name: Round Task Borders and Close Button
           $description: Apply rounded corners to the selected task border and close button.
           $options:
-          - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
+          - auto: Auto (Enabled when Windows rounds window corners)
           - true: Enabled
           - false: Disabled
         - roundThumbnailCorners: auto
           $name: Round Thumbnail Corners
           $description: Round the corners of window thumbnails. Uses the radius from Corner Preference.
           $options:
-          - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
+          - auto: Auto (Enabled when Windows rounds window corners)
           - true: Enabled
           - false: Disabled
         - roundGroupIndicator: auto
           $name: Round Group Indicator
           $description: Round the corners of the group indicator. Uses the radius from Corner Preference.
           $options:
-          - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
+          - auto: Auto (Enabled when Windows rounds window corners)
           - true: Enabled
           - false: Disabled
         - roundBadgeIconBackground: auto
-          $name: Round Icon Background (only for badge-layout)
-          $description: Round the corners of the badge icon background pill. Uses the radius from Corner Preference.
+          $name: Round Badge Icon Background
+          $description: Round the corners of the badge icon background (Badge layout). Uses the radius from Corner Preference.
           $options:
-          - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
+          - auto: Auto (Enabled when Windows rounds window corners)
           - true: Enabled
           - false: Disabled
       $name: Corners
     - Thumbnails:
         - thumbnailPosition: bottom
           $name: Thumbnail Position
-          $description: Change the thumbnail position.
+          $description: Position of the thumbnail within each entry.
           $options:
           - bottom: Bottom
           - top: Top
@@ -461,30 +461,30 @@ nothing failed.
           - right: Right
         - thumbnailAlignment: left
           $name: Thumbnail Alignment
-          $description: Align thumbnail content inside the available thumbnail area.
+          $description: Alignment of the thumbnail inside its area.
           $options:
           - left: Left
           - centered: Center
           - right: Right
         - showThumbnails: true
           $name: Show Thumbnails
-          $description: Show DWM live thumbnail previews of windows.
+          $description: Show live window previews.
         - showCloseButton: true
           $name: Show Close Button
-          $description: Show the 'X' button on hover to close windows.
+          $description: Show a close button when hovering an entry.
         - showCloseButtonBackground: auto
           $name: Close Button Background
-          $description: Show an idle background plate behind the close button.
+          $description: Show a background behind the close button when it is not hovered.
           $options:
           - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
           - true: Enabled
           - false: Disabled
         - showHoverBorder: true
           $name: Show Hover Border
-          $description: Show a colored border around the thumbnail when hovered.
+          $description: Show a border around the hovered thumbnail. Used with the Border hover effect, not in Dock layout.
         - thumbnailHoverEffect: auto
           $name: Thumbnail Hover Effect
-          $description: Visual effect applied to thumbnails when hovered with mouse. Auto uses Zoom on Windows 11 and Border on Windows 10.
+          $description: Effect applied to a thumbnail when hovered with the mouse.
           $options:
           - auto: Auto (Zoom on Windows 11, Border on Windows 10)
           - border: Border Outline
@@ -500,7 +500,7 @@ nothing failed.
     - HeaderContent:
         - iconSize: small
           $name: Icon Size
-          $description: Size of the header icon.
+          $description: Size of the entry icon.
           $options:
           - small: Small (16x16)
           - medium: Medium (32x32)
@@ -508,8 +508,10 @@ nothing failed.
           - xlarge: Extra Large (64x64)
         - showTitle: true
           $name: Show Title Label
+          $description: Show the window title. Stays on if thumbnails and icons are both off.
         - showIcon: true
           $name: Show Icon
+          $description: Show the application icon.
         - centerTaskContent: false
           $name: Center Task Icon and Title
           $description: Center the icon and title together in each task row.
@@ -523,7 +525,7 @@ nothing failed.
           - vertical: Vertical
         - headerContentOrientation: horizontal
           $name: Header Content Orientation
-          $description: Orientation of the task header icon and title.
+          $description: Arrange the icon and title side by side or stacked.
           $options:
           - horizontal: Horizontal
           - vertical: Vertical
@@ -531,7 +533,7 @@ nothing failed.
     - Position:
         - switcherPosition: center
           $name: Switcher Position
-          $description: Where the switcher should appear on the screen.
+          $description: Where the switcher appears on the screen.
           $options:
           - topLeft: Top Left
           - topCenter: Top Center
@@ -544,12 +546,12 @@ nothing failed.
           - bottomRight: Bottom Right
         - switcherPositionMargin: 0
           $name: Switcher Position Margin (px)
-          $description: Offset from the screen edges when using non-centered positions.
+          $description: Distance from the screen edges for non-centered positions.
       $name: Position
     - BadgeLayout:
         - badgeIconPosition: bottomCenter
           $name: Badge Icon Position
-          $description: Where to place the icon overlay on the thumbnail.
+          $description: Position of the icon overlay on the thumbnail.
           $options:
           - topLeft: Top Left
           - topCenter: Top Center
@@ -562,13 +564,13 @@ nothing failed.
           - bottomRight: Bottom Right
         - badgeTitlePosition: bottom
           $name: Badge Title Position
-          $description: Where to place the title label relative to the thumbnail.
+          $description: Position of the title relative to the thumbnail.
           $options:
           - top: Above Thumbnail
           - bottom: Below Thumbnail
         - badgeIconSize: medium
           $name: Badge Icon Size
-          $description: Size of the icon overlay in Badge Layout.
+          $description: Size of the icon overlay.
           $options:
           - small: Small (16x16)
           - medium: Medium (32x32 - Default)
@@ -576,48 +578,48 @@ nothing failed.
           - xlarge: Extra Large (48x48)
         - showBadgeIconBackground: auto
           $name: Show Badge Icon Background
-          $description: Draw a backdrop shape behind the badge icon. Auto is disabled on Windows 11 (drawing soft drop shadows) and enabled on Windows 10.
+          $description: Draw a background shape behind the badge icon.
           $options:
           - auto: Auto (Disabled on Windows 11, Enabled on Windows 10)
           - true: Enabled
           - false: Disabled
         - showBadgeIconBackgroundShadow: auto
           $name: Show Badge Icon Background Shadow
-          $description: Draw a soft drop shadow under the badge icon background pill. Auto is disabled on Windows 10.
+          $description: Draw a soft shadow under the badge icon background. Needs the icon background to be shown.
           $options:
           - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
           - true: Enabled
           - false: Disabled
         - badgeIconPadding: 4
           $name: Badge Icon Padding (px)
-          $description: Extra space between the icon and the edge of its background.
+          $description: Space between the icon and the edge of its background.
         - badgeIconOffsetX: 0
           $name: Badge Icon Offset X (px)
-          $description: Nudge the icon horizontally from its default position.
+          $description: Shift the icon horizontally.
         - badgeIconOffsetY: 0
           $name: Badge Icon Offset Y (px)
-          $description: Nudge the icon vertically from its default position.
+          $description: Shift the icon vertically.
         - badgeSwitcherPadding: 20
           $name: Badge Layout Padding (px)
-          $description: Padding between the switcher window border and the window entries in pixels for Badge Layout (before DPI scaling). Default 20.
+          $description: Padding between the switcher border and the entries, in pixels.
       $name: Badge Layout Settings
-      $description: Configuration options applied when Switcher Layout is set to Badge Layout (macOS-style).
+      $description: Options for the Badge layout.
     - DockLayout:
         - dockIconPosition: top
           $name: Icon Strip Position
-          $description: Placement of the app icon strip. The window title is automatically placed on the opposite side.
+          $description: Position of the icon strip. The title goes on the opposite side.
           $options:
           - top: Top (Icons on Top, Title on Bottom)
           - bottom: Bottom (Icons on Bottom, Title on Top)
         - dockShowPreview: true
           $name: Show Central Live Preview
-          $description: Display a live window thumbnail preview of the selected window in the middle between icons and title.
+          $description: Show a live preview of the selected window between the icons and the title. Requires thumbnails.
         - dockPreviewHeight: 280
           $name: Central Preview Max Height (px)
-          $description: Maximum height for the central preview window. Aspect ratio of the selected window is preserved.
+          $description: Maximum height of the central preview in pixels. The window's aspect ratio is kept.
         - dockIconSize: '48'
           $name: Dock Icon Size (px)
-          $description: Size of application icons in the strip.
+          $description: Size of the icons in the strip.
           $options:
           - '32': 32px (Medium)
           - '40': 40px (Large)
@@ -625,17 +627,17 @@ nothing failed.
           - '64': 64px (Jumbo)
         - dockIconSpacing: 8
           $name: Icon Spacing (px)
-          $description: Horizontal spacing between icon tiles in the strip.
+          $description: Space between icons in the strip, in pixels.
         - dockHighlightStyle: fillOnly
           $name: Selection Highlight Style
-          $description: Highlight style used for the selected icon in the dock strip.
+          $description: Highlight style of the selected icon.
           $options:
           - fillOnly: Background Fill (Default for Dock)
           - border: Border Outline
           - fillAndBorder: Fill and Border
         - dockMaxVisibleIcons: '7'
           $name: Max Visible Icons in Strip
-          $description: Maximum number of window icons displayed simultaneously in the dock strip. Excess windows overflow and can be navigated with scrolling and chevrons. Set to 0 to fit screen width.
+          $description: Number of icons shown at once. Extra windows scroll into view.
           $options:
           - '5': 5 Icons
           - '7': 7 Icons (Default)
@@ -644,10 +646,10 @@ nothing failed.
           - '0': Fit Screen Width
         - dockSwitcherPadding: 11
           $name: Dock Layout Padding (px)
-          $description: Padding between the switcher window border and dock elements in pixels for Dock Layout (before DPI scaling). Default 11.
+          $description: Padding between the switcher border and the dock elements, in pixels.
         - dockCloseButtonPosition: topRight
           $name: Close Button Position
-          $description: Placement of the close button inside the icon area in Dock Layout. Positioned on any side around the icon.
+          $description: Position of the close button around each icon.
           $options:
           - topRight: Top-Right (Default)
           - topLeft: Top-Left
@@ -660,7 +662,7 @@ nothing failed.
           - hidden: Hidden
         - dockGroupIndicatorPosition: bottomRight
           $name: Group Indicator Position
-          $description: Placement of the grouped window count indicator inside the icon area in Dock Layout when "Group Windows by Application" is enabled. Positioned on any side around the icon.
+          $description: Position of the window count indicator around each icon. Applies when grouping is on.
           $options:
           - bottomRight: Bottom-Right (Default)
           - bottomLeft: Bottom-Left
@@ -672,16 +674,17 @@ nothing failed.
           - right: Right-Center
           - hidden: Hidden
       $name: Dock Layout Settings
-      $description: Configuration options applied when Switcher Layout is set to Dock / Strip Layout.
+      $description: Options for the Dock layout.
     - Font:
         - fontFamily: ""
           $name: Font Family
-          $description: Font used for window titles. Leave blank to use system default font (Segoe UI Variable Text on Windows 11, Segoe UI on Windows 10).
+          $description: Font for window titles. Leave blank to use the system font.
         - fontSize: 0
           $name: Font Size
-          $description: Size of the font in points. Set to 0 to use system default (10 on Windows 11, 9 on Windows 10).
+          $description: Font size in points. 0 uses the system size.
         - fontStyle: regular
           $name: Font Style
+          $description: Weight and slant of the title font.
           $options:
           - light: Light
           - regular: Regular
@@ -691,84 +694,86 @@ nothing failed.
           - boldItalic: Bold Italic
         - applyToGroupIndicator: false
           $name: Apply to Group Indicator
-          $description: Use these custom font settings for the grouped window count indicator badge.
+          $description: Also use these font settings for the group count indicator.
       $name: Font
     - showOverflowIndicator: true
       $name: Show Overflow Indicator
-      $description: Show chevron indicators at the edges when there are more windows off-screen.
+      $description: Show chevrons at the edges when more entries are off-screen.
     - Animations:
         - enableAnimations: auto
           $name: Enable Animations
-          $description: Enable smooth WinUI-style animations for the switcher. Automatically respects Windows Accessibility animation settings.
+          $description: Smooth animations for the switcher. Follows the Windows animation setting.
           $options:
           - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
           - true: Enabled
           - false: Disabled
         - enableEntranceAnimation: true
           $name: Window Entrance Animation
-          $description: Smooth fade and entrance transition when the switcher opens.
+          $description: Fade-in transition when the switcher opens.
         - enableSelectionAnimation: true
           $name: Selection Highlight Animation
-          $description: Smooth gliding transition when moving the selection highlight.
+          $description: Glide the selection highlight between entries.
         - enableScrollAnimation: true
           $name: Row and Page Slide Animation
-          $description: Smooth sliding transitions when scrolling overflown rows or switching pages.
+          $description: Slide transition when scrolling rows or switching pages.
         - enableHoverAnimation: true
           $name: Hover Focus Animation
-          $description: Smooth fade and motion when hovering over tasks with the mouse.
+          $description: Fade and motion when hovering an entry with the mouse.
       $name: Animations
   $name: Appearance
 - Dimensions:
     - rowHeight: 230
       $name: Row Height
-      $description: Total height of each thumbnail row in pixels (before DPI scaling). Default 230 matches ExplorerPatcher.
+      $description: Height of each entry row in pixels.
     - rowWidth: 0
       $name: Row Width
-      $description: Width of each thumbnail tile in pixels (before DPI scaling). Set to 0 for automatic width based on window aspect ratio.
+      $description: Width of each entry in pixels. 0 sizes it from the window's aspect ratio.
     - maxWidthPercent: 80
       $name: Maximum Width (percentage of screen width)
+      $description: Largest switcher width, as a percentage of the screen.
     - maxHeightPercent: 80
       $name: Maximum Height (percentage of screen height)
+      $description: Largest switcher height, as a percentage of the screen.
     - stretchThumbnailsToTaskWidth: true
       $name: Stretch Thumbnails to Task Width
-      $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
+      $description: Also stretch thumbnails when a custom Row Width is set. Off keeps the thumbnail aspect ratio.
     - autoFitTasks: false
       $name: Shrink Tasks to Fit
-      $description: Automatically shrink task tiles (thumbnails and icons) in discrete steps as the number of visible windows grows, so more tasks stay visible without being pushed off-screen. Your Row Height and Icon Size act as the maximum size.
+      $description: Shrink entries in steps as more windows are open, so more fit on screen. Not used in Dock layout.
     - switcherPadding: 20
       $name: Default Layout Padding (px)
-      $description: Padding between the switcher window border and the window entries in pixels for Default Layout (before DPI scaling). Default 20.
+      $description: Padding between the switcher border and the entries, in pixels.
     - entryPadding: 16
       $name: Entry Inner Padding (px)
-      $description: Padding between the task entry background (card border/fill) and its inner elements (thumbnail, icon, and title) in pixels (before DPI scaling). Default 16.
+      $description: Padding between an entry's edge and its thumbnail, icon and title, in pixels.
   $name: Dimensions
 - Grouping:
     - showApplications: false
       $name: Group Windows by Application
-      $description: Show one entry per application instead of one per window, similar to macOS Cmd+Tab. Selecting an application switches to its most recently used window. Tap Ctrl while an application is selected to expand it and show all of its windows as thumbnails.
+      $description: Show one entry per application instead of one per window. Tap Ctrl on a selected application to expand its windows.
     - showTitles: windowTitle
       $name: Show Titles
-      $description: Which title text to display for each entry. Only applies when "Group Windows by Application" is enabled.
+      $description: Title text shown for each entry. Applies when grouping is on.
       $options:
       - windowTitle: Window Title
       - appName: Application Name
       - appNameWindowTitle: Application Name - Window Title
     - restoreAllWindows: false
       $name: Restore All Windows
-      $description: When switching to an application, restore all of its minimized windows to their previous state. Only applies when "Group Windows by Application" is enabled. Tip - to act on a single window instead, tap Ctrl while the application is selected to show all of its windows and pick one.
+      $description: Restore all minimized windows of an application when switching to it. Applies when grouping is on.
     - showGroupIndicator: true
       $name: Show Group Indicator
-      $description: Show a count badge on grouped application entries indicating how many windows are in the group. Only visible when Group Windows by Application is enabled.
+      $description: Show a window count badge on grouped entries.
     - showGroupIndicatorShadow: auto
       $name: Show Group Indicator Shadow
-      $description: Show a soft drop shadow behind the group indicator badge. Auto enables shadows on Windows 11 and disables them on Windows 10 and lower.
+      $description: Show a soft shadow behind the group indicator.
       $options:
       - auto: Auto (Enabled on Windows 11, Disabled on Windows 10)
       - true: Enabled
       - false: Disabled
     - groupCloseBehavior: closeRecent
       $name: Group Close Button Behavior
-      $description: Action when closing a grouped application entry.
+      $description: What closing a grouped entry closes.
       $options:
       - closeRecent: Close Most Recent Window
       - closeAll: Close All Windows
@@ -776,10 +781,10 @@ nothing failed.
 - Accessibility:
     - rapidSwitching: true
       $name: Rapid Switching (Hide UI for Quick Actions)
-      $description: Hide the UI during quick normal keyboard and horizontal touchpad switches. Uses at least 125ms for keyboard and touchpad, unless Show Delay is larger. Sticky launches use only Show Delay. Disable to use only Show Delay for every launch.
+      $description: Keep the switcher hidden during quick Alt+Tab and horizontal touchpad switches (125 ms minimum). Sticky launches use only Show Delay.
     - showDelay: 0
       $name: Show Delay (ms)
-      $description: Delay before showing any keyboard or touchpad invocation, including sticky mode. Rapid Switching, when enabled, enforces a minimum of 125ms for normal keyboard and horizontal touchpad launches. With Rapid Switching disabled, 0 shows immediately.
+      $description: Delay in milliseconds before the switcher appears, including sticky mode.
     - scrollWheelBehavior: never
       $name: Scroll Wheel Activation
       $description: When the scroll wheel should be active.
@@ -789,17 +794,20 @@ nothing failed.
       - stickyOnly: Only in sticky mode
     - scrollWheelAction: selection
       $name: Scroll Wheel Action
+      $description: What the scroll wheel does when active.
       $options:
       - selection: Change Selection
       - page: Scroll Pages
     - scrollSecondaryAction: page
       $name: Secondary Scroll Wheel Action (With Modifier)
+      $description: What the scroll wheel does while the modifier key is held.
       $options:
       - none: None
       - selection: Change Selection
       - page: Scroll Pages
     - scrollSecondaryModifier: shift
       $name: Secondary Scroll Wheel Modifier Key
+      $description: Key that switches to the secondary action.
       $options:
       - none: None
       - shift: Shift
@@ -807,27 +815,30 @@ nothing failed.
       - alt: Alt
     - reverseScrollDirection: false
       $name: Reverse Scroll Direction
+      $description: Invert the scroll wheel direction.
     - backwardShortcut: altShiftTab
       $name: Backward Shortcut
-      $description: Shortcut used to move backward in the switcher. Alt+Backtick is not listed here because it has its own action setting below.
+      $description: Shortcut for moving backward. Alt+Backtick has its own setting.
       $options:
       - altShiftTab: Alt+Shift+Tab (default)
       - altShift: Alt+Shift
     - altBacktickBehavior: backward
       $name: Alt+Backtick Behavior
-      $description: Action to perform when pressing Alt+` (Backtick).
+      $description: Action for Alt+` (Backtick).
       $options:
       - none: Disabled / Do Nothing
       - backward: Cycle Backward
       - sameApp: Cycle Between Windows of Current Application
     - switcherDisplayBehavior: cursorMonitor
       $name: Switcher Display Behavior
+      $description: Monitor that shows the switcher.
       $options:
       - primaryOnly: Primary Monitor Only
       - allMonitors: All Monitors
       - cursorMonitor: Monitor Based on Cursor Location
     - perMonitorWindows: false
       $name: Display Windows Only from the Monitor Containing the Cursor
+      $description: List only windows on the cursor's monitor. Not used when the switcher is set to Primary Monitor Only.
     - virtualDesktopBehavior: allDesktops
       $name: Virtual Desktop Behavior
       $description: Choose which virtual desktops to show windows from.
@@ -839,16 +850,16 @@ nothing failed.
       $description: Include the 'Desktop' item at the end of the switcher.
     - hideMinimizedWindows: false
       $name: Hide Minimized Windows
-      $description: Hide minimized windows from the switcher. When "Group Windows by Application" is enabled, an application is only hidden if all of its windows are minimized.
+      $description: Hide minimized windows. With grouping on, an application is hidden only if all its windows are minimized.
     - sortMinimizedWindowsToEnd: true
       $name: Sort Minimized Windows to the End
-      $description: Sort minimized windows after all active windows. Disable this to keep minimized windows in their Z-order.
+      $description: List minimized windows after active ones. Off keeps them in Z-order.
     - showMinimizedIndicator: false
       $name: Show Minimized Window Indicator
-      $description: Display a visual indicator for minimized windows (especially helpful in Dock Layout where minimized windows have no active screen presence).
+      $description: Mark minimized windows, which is useful in Dock layout.
     - minimizedIndicatorStyle: dimIcon
       $name: Minimized Window Indicator Style
-      $description: Visual style used to indicate minimized windows.
+      $description: How minimized windows are marked.
       $options:
       - dimIcon: Dimmed Icon (Translucent)
       - dot: Subtle Pill/Dot Indicator
@@ -857,41 +868,41 @@ nothing failed.
       - dimAndBadge: Dimmed Icon + Minimize Badge
     - minimizedIconOpacity: 55
       $name: Minimized Icon Opacity (%)
-      $description: Opacity percentage applied to minimized window icons when using dimmed icon indicator styles (20-90%).
+      $description: Icon opacity (20-90%) for the dimmed minimized styles.
   $name: Accessibility
 - Touchpad:
     - enabled: true
       $name: Enable Three-Finger Gestures
-      $description: Read precision-touchpad Raw HID reports and request three-finger manipulation and action control while the switcher owns the foreground. Windows Task View, Show desktop, native switching, and three-finger tap actions are blocked during supported active sessions. Raw HID drives continuous tracking; the Explorer-side native PTP boundary fallback handles invocation when Raw HID is temporarily unavailable. Horizontal swipes open the normal switcher; drag to navigate and release the gesture, including with one finger anchored, to select. In sticky mode, dragging never commits; lift and make a fresh stationary three-finger tap to select. Legacy mouse-only touchpads remain unsupported.
+      $description: Open and navigate the switcher with three-finger swipes on a precision touchpad. Drag to move, lift to select. Windows' own three-finger gestures are blocked while it is open.
     - stickyLaunch: true
       $name: Sticky Switcher from Upward Swipe
-      $description: "When enabled, an upward three-finger swipe opens the switcher in sticky mode. Outside a switcher session, downward swipes and taps keep their configured Windows actions. When disabled, Windows also keeps its default outside upward gesture. Horizontal swipes open normal mode in either setting and commit on lift. Gesture takeover during an active session requires a supported foreground-only Windows controller."
+      $description: Open the switcher in sticky mode with an upward three-finger swipe. When off, Windows keeps its upward swipe. Horizontal swipes always open the normal switcher.
   $name: Touchpad
-  $description: Raw HID three-finger support with an optional sticky upward-swipe launcher. Outside an active switcher session, the sticky launcher setting controls whether upward launch and the associated gesture suppression are enabled.
+  $description: Three-finger precision touchpad controls.
 - ExcludedWindows:
     - excludeByTitle: ""
       $name: Exclude by Window Title
-      $description: "Window title patterns to exclude, separated by ';' (wildcards supported: * matches any characters, ? matches one). Example: *Notepad*;*Chrome*"
+      $description: "Window title patterns to exclude, separated by ';'. * and ? are wildcards. Example: *Notepad*;*Chrome*"
     - excludeByExe: ""
       $name: Exclude by Executable Name
-      $description: "Executable name patterns to exclude, separated by ';' (wildcards supported: * matches any characters, ? matches one). Example: notepad.exe;chrome.exe"
+      $description: "Executable name patterns to exclude, separated by ';'. * and ? are wildcards. Example: notepad.exe;chrome.exe"
     - excludeXboxMode: false
       $name: Exclude in Xbox Mode (Gaming Full Screen Experience)
-      $description: When enabled, Simple Window Switcher yields Alt+Tab to the native Windows switcher while Windows is running in Gaming Full Screen Experience (Xbox Mode).
+      $description: Let the native Windows switcher handle Alt+Tab in Gaming Full Screen Experience (Xbox Mode).
   $name: Excluded Windows
   $description: Exclude specific windows from appearing in the switcher.
 - customHeader:
   - - process: ""
       $name: Process Name
-      $description: "Executable name to match (wildcards supported: * matches any characters, ? matches one). Example: chrome.exe or *code.exe"
+      $description: "Executable name to match. * and ? are wildcards. Example: chrome.exe or *code.exe"
     - iconPath: ""
       $name: Icon Path
-      $description: "Full path to an icon source (.ico, .exe or .dll); the first icon in the file is used. Leave empty to keep the default icon. Example: C:\\Icons\\myapp.ico"
+      $description: "Path to an .ico, .exe or .dll; its first icon is used. Leave empty to keep the default icon. Example: C:\\Icons\\myapp.ico"
     - appName: ""
       $name: Application Name
-      $description: "Custom name to display for matching tasks, replacing the detected application name. Leave empty to keep the default. Shown in the 'App name' and 'App name + Window title' title modes (requires 'Group Windows by Application' to be enabled)."
+      $description: "Name shown instead of the detected application name. Leave empty to keep the default. Used by the Application Name title modes when grouping is on."
   $name: Custom Header
-  $description: Assign a custom icon and/or application name to tasks based on their executable name. The first matching rule wins.
+  $description: Set a custom icon and/or name for applications by executable name. The first matching rule wins.
 
 */
 // ==/WindhawkModSettings==
