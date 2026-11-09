@@ -160,7 +160,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
-    g_bthpropsModule = LoadLibraryW(L"bthprops.cpl");
+    g_bthpropsModule = LoadLibraryExW(L"bthprops.cpl", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     g_explorerframeModule = GetModuleHandleW(L"explorerframe.dll");
 
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
