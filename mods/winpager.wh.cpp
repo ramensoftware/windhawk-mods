@@ -42,6 +42,8 @@ The mod runs in its own process; it isn't injected into explorer.exe.
   virtual desktop interfaces, so a Windows update can break it. On a build it doesn't know, it shows an error.
 - The taskbar doesn't reserve space for it. Next to a centered row of buttons it shows only as many desktops as fit
   (at least the current one); on a left-aligned taskbar, a row of buttons long enough to reach the tray runs under it.
+- With "Hide the Windows "Desktop N" popup" on, a volume or brightness popup shown within 0.6 s of a switch is hidden
+  too, since Explorer shows both in the same window.
 - WinPager is also a standalone app, [WinPager.exe](https://github.com/seanmamasde/WinPager), built from the same
   source. Only one of the two runs at a time: if you switch to the mod, quit WinPager.exe and turn off its
   "Start with Windows".
