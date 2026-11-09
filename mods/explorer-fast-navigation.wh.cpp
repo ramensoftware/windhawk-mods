@@ -28,12 +28,19 @@ This mod optimizes the navigation pipeline:
 - **Redraw suppression**: Suppresses intermediate window clears and synchronous redraw flushes during folder transitions.
 - **Deferred toolbar updates**: Defers Ribbon and XAML command bar state notifications while files are being enumerated,
   flushing them once file enumeration completes (`DISPID_FILELISTENUMDONE`) or batch processing settles.
+- **UI freeze reduction**: Prevents the UI thread from locking up during folder switches and column grouping changes,
+  lowering CPU repaint spikes.
+- **Safety fallback**: Incorporates a configurable safety ceiling to ensure pending UI updates always flush even on
+  slow network drives or non-responsive storage.
 
-## Compatibility
+## Observed results
 
-- Windows 11 (21H2, 22H2, 23H2, 24H2)
-- Windows 10 (1809 and later)
-- Architectures: 64-bit (x86-64, ARM64)
+Real-world behavior varies depending on the storage medium and system load:
+- **High-speed NVMe drives**: Windows virtualizes viewports quickly, but the mod noticeably removes the transient white
+  flicker, suppresses UI repaint churn, and keeps window headers responsive.
+- **Mechanical hard drives and laptops**: On rotational HDDs or resource-constrained mobile CPUs where disk seek times
+  and background file enumeration can cause visible stalls, the mod eliminates the intermediate "Working on it..."
+  freeze and keeps the Explorer interface smooth during heavy folder browsing and column grouping operations.
 
 ## Settings
 
@@ -43,6 +50,12 @@ This mod optimizes the navigation pipeline:
 - **Defer navigation bar updates**: Delay navigation state updates in classic and modern navigation bars.
 - **Safety fallback ceiling (ms)**: Maximum time (in ms) to wait before forcing a deferred UI update to flush if
   navigation stalls or on slow storage.
+
+## Compatibility
+
+- Windows 11 (21H2, 22H2, 23H2, 24H2)
+- Windows 10 (1809 and later)
+- Architectures: 64-bit (x86-64, ARM64)
 
 ## Support
 
