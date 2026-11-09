@@ -37,7 +37,7 @@ using this mod: [Classic Explorerframe for 24H2 and later](https://windhawk.net/
 * This mod fixes the compatibility with the mod ```Fluid Window Engine Pro```, in cases where the previous mod would
 whiten out the window content on restore after the minimized state if the option `Classic CabinetWClass background color` was enabled.
 
-* The fix for the folders' background in Classic theme is applied authomatically when Classic theme is detected.
+* The fix for the folders' background in Classic theme is applied automatically when Classic theme is detected.
 
 **Control Panel Color Fix**
 
