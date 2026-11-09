@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.850
+// @version         0.1.880
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -16,16 +16,16 @@
 
 Adds a **"Hide to PWA Center"** item to the window menu of installed Chrome PWA windows (right-click title bar).
 
-![Hide to PWA Center in the window menu](https://i.ibb.co.com/4ZdGLx7Z/RMB-Place.jpg)
+![Hide to PWA Center in the window menu](https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg)
 
 - Hidden windows keep running (music plays, etc.)
 - One tray icon appears for all hidden PWAs (shows with first hidden, disappears when last restored)
 
-![PWA Center flyout](https://i.ibb.co.com/v4pc5n82/Main-app.jpg)
+![PWA Center flyout](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg)
 
 ### Tray Icon
 
-![PWA Center tray icon](https://i.ibb.co.com/DDZP4mjz/Tray-place.jpg)
+![PWA Center tray icon](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Tray%20place.jpg)
 
 - **Left click** → opens PWA Center (Fluent flyout, rounded corners, Mica backdrop)
 - **Right click** → menu: *Show all* / *Quit all*
@@ -110,6 +110,8 @@ constexpr UINT kMenuIdHideToCenter = 0x0B80;
 
 constexpr UINT kMsgListChanged = WM_APP + 1;
 constexpr UINT kMsgMouseHotkey = WM_APP + 4;  // mouse button pressed while the shortcut is chosen (wParam vk, lParam mods)
+constexpr UINT kMsgHookSync = WM_APP + 5;     // hook thread: make the hooks match the settings
+constexpr UINT kMsgOutsidePress = WM_APP + 6; // a mouse press seen by a hook (Hermes closes on an outside press)
 
 constexpr UINT_PTR kHostTimer = 1;
 constexpr UINT kHostTimerMs = 1000;
@@ -603,10 +605,22 @@ bool GetWindowAppUserModelId(HWND hWnd, std::wstring& out) {
     return !out.empty();
 }
 
-// The panel lives on its own thread, so every query to a browser window goes
-// through a timeout: a frozen browser must not freeze the panel.
+// Title of a window, read without sending it a message: InternalGetWindowText
+// does not wait for the window's thread, so a busy browser cannot block the caller.
+// Falls back to a message with a timeout if the export is missing.
 std::wstring GetTitleSafe(HWND hWnd) {
+    using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
+    static InternalGetWindowText_t internalGetText = []() {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 ? (InternalGetWindowText_t)GetProcAddress(user32, "InternalGetWindowText")
+                      : nullptr;
+    }();
     wchar_t buf[512] = {};
+    if (internalGetText) {
+        internalGetText(hWnd, buf, ARRAYSIZE(buf));
+        buf[ARRAYSIZE(buf) - 1] = 0;
+        return buf;
+    }
     DWORD_PTR res = 0;
     if (!SendMessageTimeoutW(hWnd, WM_GETTEXT, ARRAYSIZE(buf), (LPARAM)buf,
                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 150, &res)) {
@@ -1149,10 +1163,10 @@ std::vector<AppInfo> CollectWindowsRaw() {
         if (aumid.empty()) {
             continue;
         }
-        std::wstring title = GetTitleSafe(s.h);
         if (!IsPwaAumid(aumid)) {
             continue;
         }
+        std::wstring title = GetTitleSafe(s.h);
         AppInfo a;
         a.hwnd = s.h;
         a.aumid = aumid;
@@ -1227,11 +1241,22 @@ std::mutex g_workThreadMutex;
 HANDLE g_workThread = nullptr;
 HANDLE g_workWake = nullptr;
 std::atomic<bool> g_workStop{false};
+std::atomic<bool> g_stopping{false};  // set when the mod unloads: no thread is started after this
 std::atomic<ULONGLONG> g_pollUntil{0};
 
 template <typename Op>
 bool WaitFor(Op const& op, int ms = 3000) {
-    return op.wait_for(std::chrono::milliseconds(ms)) == AsyncStatus::Completed;
+    // Waits in short steps, so a stop request (unload) ends the wait at once.
+    const ULONGLONG until = GetTickCount64() + ms;
+    while (true) {
+        if (op.wait_for(std::chrono::milliseconds(100)) == AsyncStatus::Completed) {
+            return true;
+        }
+        if (g_workStop || GetTickCount64() >= until) {
+            op.Cancel();
+            return false;
+        }
+    }
 }
 
 std::wstring ToWide(winrt::hstring const& h) {
@@ -1377,6 +1402,9 @@ struct Worker {
                 newLive;
 
             for (auto const& s : sessions) {
+                if (g_workStop) {
+                    break;
+                }
                 std::wstring id = ToWide(s.SourceAppUserModelId());
                 std::wstring lower = ToLower(id);
                 std::wstring crx;
@@ -1653,6 +1681,9 @@ DWORD WINAPI WorkThreadProc(LPVOID) {
             }
 
             for (const auto& c : commands) {
+                if (g_workStop) {
+                    break;
+                }
                 worker.Execute(c);
             }
             if (!commands.empty()) {
@@ -1682,6 +1713,9 @@ DWORD WINAPI WorkThreadProc(LPVOID) {
 
 void EnsureWorkThread() {
     std::lock_guard<std::mutex> lock(g_workThreadMutex);
+    if (g_stopping) {
+        return;
+    }
     if (g_workThread) {
         return;
     }
@@ -1704,7 +1738,7 @@ void StopWorkThread() {
     }
     g_workStop = true;
     SetEvent(g_workWake);
-    WaitForSingleObject(g_workThread, 8000);
+    WaitForSingleObject(g_workThread, INFINITE);
     CloseHandle(g_workThread);
     CloseHandle(g_workWake);
     g_workThread = nullptr;
@@ -1848,7 +1882,7 @@ constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.850";
+constexpr wchar_t kAppVersion[] = L"v0.1.880";
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
@@ -2217,7 +2251,8 @@ bool CanDragHit(const Panel& p, int hit, float fy) {
     }
 }
 
-HHOOK g_mouseHook = nullptr;
+HHOOK g_mouseHook = nullptr;        // Hermes outside press (hook thread only)
+HHOOK g_mouseHotkeyHook = nullptr;  // mouse shortcut (hook thread only)
 Panel* g_panel = nullptr;
 ULONGLONG g_panelClosedTick = 0;
 ATOM g_panelClass = 0;
@@ -2695,16 +2730,13 @@ int GetMonitorDpi(HMONITOR monitor) {
     return dpi ? (int)dpi : 96;
 }
 
-// A normal SetForegroundWindow from a browser process is often refused, and
-// Mica is drawn only for an active window. Borrow the input of the current
-// foreground thread for a moment to get the focus. `topmost` also lifts the
-// window above the others (used for the panel).
+// Brings a window to the front. A process may take the foreground only after an
+// input event: the empty SendInput below is one (it moves nothing). AttachThreadInput
+// is not used, it would share the input queue with another app. `topmost` also lifts
+// the window above the others (used for the panel).
 void ActivateWindow(HWND hwnd, bool topmost) {
-    HWND fg = GetForegroundWindow();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD me = GetCurrentThreadId();
-    bool attached = fgThread && fgThread != me &&
-                    AttachThreadInput(me, fgThread, TRUE);
+    INPUT input = {};
+    SendInput(1, &input, sizeof(INPUT));
     if (topmost) {
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -2712,9 +2744,6 @@ void ActivateWindow(HWND hwnd, bool topmost) {
     BringWindowToTop(hwnd);
     SetForegroundWindow(hwnd);
     SetActiveWindow(hwnd);
-    if (attached) {
-        AttachThreadInput(me, fgThread, FALSE);
-    }
 }
 
 void ApplyBackdrop(Panel& p) {
@@ -2920,6 +2949,7 @@ void DrawHoverBg(Panel& p, int id, const D2D1_RECT_F& r, float radius) {
 constexpr UINT kMsgFrame = WM_APP + 2;
 std::atomic<HWND> g_frameHwnd{nullptr};   // the open panel, null when closed
 std::atomic<bool> g_framePending{false};  // a redraw request is in the queue
+HANDLE g_frameWake = nullptr;            // set while a panel is open, wakes the frame thread
 std::atomic<bool> g_frameStop{false};
 HANDLE g_frameThread = nullptr;
 
@@ -2929,7 +2959,8 @@ DWORD WINAPI FrameThreadProc(LPVOID) {
     while (!g_frameStop) {
         HWND h = g_frameHwnd.load();
         if (!h) {
-            Sleep(50);
+            // No panel open: sleep until ShowPanel wakes this thread.
+            WaitForSingleObject(g_frameWake, INFINITE);
             continue;
         }
         LARGE_INTEGER t0 = {};
@@ -2949,6 +2980,12 @@ DWORD WINAPI FrameThreadProc(LPVOID) {
 }
 
 void EnsureFrameThread() {
+    if (g_stopping) {
+        return;
+    }
+    if (!g_frameWake) {
+        g_frameWake = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    }
     if (!g_frameThread) {
         g_frameStop = false;
         g_frameThread = CreateThread(nullptr, 0, FrameThreadProc, nullptr, 0, nullptr);
@@ -2957,8 +2994,11 @@ void EnsureFrameThread() {
 
 void StopFrameThread() {
     g_frameStop = true;
+    if (g_frameWake) {
+        SetEvent(g_frameWake);
+    }
     if (g_frameThread) {
-        WaitForSingleObject(g_frameThread, 1000);
+        WaitForSingleObject(g_frameThread, INFINITE);
         CloseHandle(g_frameThread);
         g_frameThread = nullptr;
     }
@@ -3597,7 +3637,7 @@ void DrawTitleBar(Panel& p) {
     DrawTxt(p, kGlyphAllApps, p.fIcon.p, Rc(kPad, iconY, iconSize, iconSize), t.accent);
     
     float titleX = kPad + iconSize + 8.0f;
-    const std::wstring titleText = L"PWA Tray Center";
+    const std::wstring titleText = L"PWA Center";
     float titleW = MeasureW(titleText, p.fBody.p);
     DrawTxt(p, titleText, p.fBody.p, Rc(titleX, 0, titleW + 4, kTitleBarH), t.text);
     
@@ -6092,14 +6132,99 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam);
 
 // Hermes needs the low-level mouse hook (it closes on an outside press), Titan
 // does not. Follows the mode, also while the panel is open.
-void UpdateModeHook() {
-    if (IsHermes() && !g_mouseHook) {
+// ---------------------------------------------------------------------------
+// Mouse hooks run on their own thread, which only pumps messages. A hook proc
+// never waits for anything: it posts to the host window, and the panel's thread
+// decides. So a busy panel or browser cannot make Windows drop the hooks.
+// ---------------------------------------------------------------------------
+
+bool IsMouseVk(UINT vk);
+LRESULT CALLBACK HotkeyMouseHookProc(int code, WPARAM wParam, LPARAM lParam);
+
+std::atomic<bool> g_wantHermesHook{false};  // the panel is open in Hermes mode
+std::atomic<bool> g_hookListening{false};   // the open shortcut is being chosen
+std::atomic<DWORD> g_hookThreadId{0};
+HANDLE g_hookThread = nullptr;
+std::mutex g_hookThreadMutex;
+
+// Makes the hooks match the settings. Hook thread only.
+void SyncHooks() {
+    const bool wantHermes = g_wantHermesHook.load();
+    if (wantHermes && !g_mouseHook) {
         g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc,
                                         GetModuleHandleW(nullptr), 0);
-    } else if (!IsHermes() && g_mouseHook) {
+    } else if (!wantHermes && g_mouseHook) {
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = nullptr;
     }
+
+    const bool wantHotkey =
+        IsMouseVk((UINT)g_hotkey.load() & 0xFFFF) || g_hookListening.load();
+    if (wantHotkey && !g_mouseHotkeyHook) {
+        g_mouseHotkeyHook = SetWindowsHookExW(WH_MOUSE_LL, HotkeyMouseHookProc,
+                                              GetModuleHandleW(nullptr), 0);
+    } else if (!wantHotkey && g_mouseHotkeyHook) {
+        UnhookWindowsHookEx(g_mouseHotkeyHook);
+        g_mouseHotkeyHook = nullptr;
+    }
+}
+
+DWORD WINAPI HookThreadProc(LPVOID) {
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // creates the message queue
+    g_hookThreadId = GetCurrentThreadId();
+    SyncHooks();
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == kMsgHookSync) {
+            SyncHooks();
+        }
+    }
+    // WM_QUIT: the hooks go with this thread.
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+    if (g_mouseHotkeyHook) {
+        UnhookWindowsHookEx(g_mouseHotkeyHook);
+        g_mouseHotkeyHook = nullptr;
+    }
+    g_hookThreadId = 0;
+    return 0;
+}
+
+void EnsureHookThread() {
+    std::lock_guard<std::mutex> lock(g_hookThreadMutex);
+    if (g_stopping || g_hookThread) {
+        return;
+    }
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
+}
+
+// Asks the hook thread to make its hooks match the settings. Any thread.
+void RequestHookSync() {
+    EnsureHookThread();
+    if (DWORD tid = g_hookThreadId.load()) {
+        PostThreadMessageW(tid, kMsgHookSync, 0, 0);
+    }
+}
+
+void StopHookThread() {
+    std::lock_guard<std::mutex> lock(g_hookThreadMutex);
+    if (!g_hookThread) {
+        return;
+    }
+    if (DWORD tid = g_hookThreadId.load()) {
+        PostThreadMessageW(tid, WM_QUIT, 0, 0);
+    }
+    WaitForSingleObject(g_hookThread, INFINITE);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+}
+
+// Hermes needs the outside-press hook while its panel is open. Panel thread.
+void UpdateModeHook() {
+    g_wantHermesHook = g_panel && IsHermes();
+    RequestHookSync();
 }
 
 // Resizes the open panel for the diagnostics strip, keeping its bottom edge.
@@ -6266,8 +6391,8 @@ void ShowNativeMenu(Panel& p, std::vector<MenuItem> items, const MenuCtx& ctx) {
     p.nativeMenuActive = false;
 
     if (p.closeAfterMenu) {
-        // The panel was asked to close meanwhile. `p` is gone after this.
-        DestroyWindow(hwnd);
+        // Destroyed by the message loop, after this call chain has returned.
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
         return;
     }
     if (cmd >= 1 && cmd <= items.size()) {
@@ -6495,7 +6620,6 @@ UINT CurrentMods() {
     return mods;
 }
 
-HHOOK g_mouseHotkeyHook = nullptr;  // separate from g_mouseHook (Hermes closes on an outside press)
 UINT g_swallowUp = 0;               // button whose press was used: its release is swallowed too
 
 LRESULT CALLBACK HotkeyMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
@@ -6534,11 +6658,16 @@ LRESULT CALLBACK HotkeyMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     if (!host) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
-    // While the shortcut is being chosen, the press is the new shortcut (the panel checks it).
-    if (g_panel && g_panel->hotkeyListening) {
-        PostMessageW(host, kMsgMouseHotkey, (WPARAM)vk, (LPARAM)CurrentMods());
-        g_swallowUp = vk;
-        return 1;
+    // While the shortcut is being chosen, a press with a modifier is the new shortcut.
+    // A plain press goes through to the app; the panel decides what it means.
+    if (g_hookListening.load()) {
+        const UINT mods = CurrentMods();
+        PostMessageW(host, kMsgMouseHotkey, (WPARAM)vk, (LPARAM)mods);
+        if (mods & (MOD_CONTROL | MOD_ALT | MOD_WIN)) {
+            g_swallowUp = vk;
+            return 1;
+        }
+        return CallNextHookEx(nullptr, code, wParam, lParam);
     }
     // Otherwise, the shortcut that opens the panel.
     const UINT cur = (UINT)g_hotkey.load();
@@ -6551,17 +6680,10 @@ LRESULT CALLBACK HotkeyMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// The hook runs while a mouse shortcut is set or being chosen. Center thread only.
+// Called on the panel's thread when the shortcut or the capture state changes.
 void UpdateMouseHotkeyHook() {
-    const bool want = IsMouseVk((UINT)g_hotkey.load() & 0xFFFF) ||
-                      (g_panel && g_panel->hotkeyListening);
-    if (want && !g_mouseHotkeyHook) {
-        g_mouseHotkeyHook = SetWindowsHookExW(WH_MOUSE_LL, HotkeyMouseHookProc,
-                                              GetModuleHandleW(nullptr), 0);
-    } else if (!want && g_mouseHotkeyHook) {
-        UnhookWindowsHookEx(g_mouseHotkeyHook);
-        g_mouseHotkeyHook = nullptr;
-    }
+    g_hookListening = g_panel && g_panel->hotkeyListening;
+    RequestHookSync();
 }
 
 // Registers the shortcut on the host window (0 removes it). False if the system
@@ -7010,15 +7132,11 @@ bool EndToggleDrag(Panel& p) {
 // Hermes: a mouse press outside the panel closes it. A low-level hook gets
 // every press as an event, however short it is, unlike polling the buttons.
 LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && g_panel && g_panel->hwnd &&
-        !g_panel->nativeMenuActive &&
-        (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
-         wParam == WM_MBUTTONDOWN)) {
-        const MSLLHOOKSTRUCT* ms =
-            reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        RECT wr = {};
-        if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, ms->pt)) {
-            PostMessageW(g_panel->hwnd, WM_CLOSE, 0, 0);
+    // Runs on the hook thread: it never blocks, it only tells the host about the press.
+    if (code == HC_ACTION && (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+                              wParam == WM_MBUTTONDOWN)) {
+        if (HWND host = g_hostHwnd.load()) {
+            PostMessageW(host, kMsgOutsidePress, 0, 0);
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -7677,11 +7795,10 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_NCDESTROY: {
             KillTimer(hwnd, kTimerData);
             g_frameHwnd = nullptr;
-            g_framePending = false;
-            if (g_mouseHook) {
-                UnhookWindowsHookEx(g_mouseHook);
-                g_mouseHook = nullptr;
+            if (g_frameWake) {
+                ResetEvent(g_frameWake);
             }
+            g_framePending = false;
             if (p->hotkeyListening) {
                 if (HWND host = g_hostHwnd.load()) {
                     ApplyHotkey(host, g_hotkey.load());
@@ -7690,6 +7807,7 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_panelClosedTick = GetTickCount64();
             g_panel = nullptr;
             UpdateMouseHotkeyHook();
+            UpdateModeHook();
             ReleasePanelBitmaps(*p);
             FreeBackBuffer(*p);
             delete p;
@@ -7781,6 +7899,7 @@ void ShowPanel(HWND host) {
     CollectWindowsSnapshot();
     CollectVolumeSnapshot();
     if (!RefreshData(*p)) {
+        ReleasePanelBitmaps(*p);
         delete p;
         return;
     }
@@ -7821,6 +7940,9 @@ void ShowPanel(HWND host) {
     g_framePending = false;
     EnsureFrameThread();
     g_frameHwnd = hwnd;
+    if (g_frameWake) {
+        SetEvent(g_frameWake);
+    }
     // Only presses that start after the panel opened count, so the tray click
     // that opened it does not close it. Titan does not need the hook.
     UpdateModeHook();
@@ -8082,14 +8204,29 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SyncTray(hwnd);
             return 0;
 
+        case kMsgOutsidePress:
+            if (g_panel && g_panel->hwnd && IsHermes() && !g_panel->nativeMenuActive) {
+                POINT pt = {};
+                RECT wr = {};
+                GetCursorPos(&pt);
+                if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, pt)) {
+                    PostMessageW(g_panel->hwnd, WM_CLOSE, 0, 0);
+                }
+            }
+            return 0;
+
         case kMsgMouseHotkey:
             if (g_panel && g_panel->hotkeyListening) {
                 const UINT vk = (UINT)wParam;
                 const UINT mods = (UINT)lParam;
                 if (!(mods & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
-                    PushNote(*g_panel, NotifSeverity::Warning, L"Add Ctrl, Alt or Win",
-                             L"A shortcut needs a modifier key.");
-                    StartAnim(*g_panel);
+                    // A plain click ends the choice when it is outside the panel.
+                    POINT pt = {};
+                    RECT wr = {};
+                    GetCursorPos(&pt);
+                    if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, pt)) {
+                        CancelHotkeyCapture(*g_panel);
+                    }
                 } else {
                     ApplyHotkeyPref(*g_panel, (int)(vk | (mods << 16)));
                 }
@@ -8141,11 +8278,14 @@ DWORD WINAPI CenterThreadProc(LPVOID) {
     wc.lpfnWndProc = HostProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = kHostClass;
-    RegisterClassExW(&wc);
+    // A class left over from an earlier instance would keep its old window procedure.
+    const bool registered = RegisterClassExW(&wc) != 0;
 
-    HWND host = CreateWindowExW(WS_EX_TOOLWINDOW, kHostClass, L"PWA Center",
-                                WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
-                                hInstance, nullptr);
+    HWND host = registered
+                    ? CreateWindowExW(WS_EX_TOOLWINDOW, kHostClass, L"PWA Center",
+                                      WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
+                                      hInstance, nullptr)
+                    : nullptr;
     g_hostHwnd = host;
     if (host) {
         ApplyHotkey(host, g_hotkey.load());
@@ -8161,16 +8301,14 @@ DWORD WINAPI CenterThreadProc(LPVOID) {
         }
     }
 
-    if (g_mouseHotkeyHook) {
-        UnhookWindowsHookEx(g_mouseHotkeyHook);
-        g_mouseHotkeyHook = nullptr;
-    }
     g_hostHwnd = nullptr;
     if (g_panelClass) {
         UnregisterClassW(kPanelClass, hInstance);
         g_panelClass = 0;
     }
     UnregisterClassW(kHostClass, hInstance);
+    // The factories were made on this thread, so they are released before its COM apartment ends.
+    ReleaseFactories();
     if (SUCCEEDED(hrCom)) {
         CoUninitialize();
     }
@@ -8179,6 +8317,9 @@ DWORD WINAPI CenterThreadProc(LPVOID) {
 
 bool EnsureCenter() {
     std::lock_guard<std::mutex> lock(g_centerMutex);
+    if (g_stopping) {
+        return false;
+    }
     HWND host = g_hostHwnd.load();
     if (host && IsWindow(host)) {
         return true;
@@ -8218,7 +8359,7 @@ void StopCenter() {
     if (host) {
         PostMessageW(host, WM_CLOSE, 0, 0);
     }
-    WaitForSingleObject(thread, 8000);
+    WaitForSingleObject(thread, INFINITE);
     CloseHandle(thread);
     if (ready) {
         CloseHandle(ready);
@@ -8461,6 +8602,7 @@ void Wh_ModAfterInit() {
 
 
 void Wh_ModUninit() {
+    g_stopping = true;
     std::vector<HWND> windows;
     std::vector<HWND> hidden;
     {
@@ -8485,13 +8627,7 @@ void Wh_ModUninit() {
     StopCenter();
     StopFrameThread();
     StopWorkThread();
-
-    // Take the added item out of the window menus.
-    for (HWND hWnd : windows) {
-        if (IsWindow(hWnd)) {
-            RemoveWindowMenuItem(hWnd);
-        }
-    }
+    StopHookThread();
 
     // Outside the lock, the helper is a cross-thread SendMessage.
     for (HWND hWnd : windows) {
@@ -8501,10 +8637,16 @@ void Wh_ModUninit() {
         }
     }
 
+    // Take the added item out of the window menus.
+    for (HWND hWnd : windows) {
+        if (IsWindow(hWnd)) {
+            RemoveWindowMenuItem(hWnd);
+        }
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_windows.clear();
     }
 
-    ReleaseFactories();
 }
