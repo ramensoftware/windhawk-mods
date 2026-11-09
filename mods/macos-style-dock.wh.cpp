@@ -126,6 +126,8 @@ If your icon looks too big or small, adjust it:
   window") open right above the icon you right-clicked.
 - **Magnified icons** rise over windows, so the dock never needs extra room
   above it.
+- **Windows stay reachable.** With Auto-hide on Hybrid, drop a window so low
+  that its title bar is under the dock, and it moves back up, as on a Mac.
 
 ## Hot corners
 
@@ -3661,6 +3663,63 @@ void WatchWindows(bool watch) {
     }
 }
 
+// ---- Windows dropped under the dock ----
+// In Hybrid, Windows keeps no room for the dock, so a window can be dragged
+// down until its title bar is under it, where it can't be grabbed again. As on
+// a Mac, one dropped there moves back up until its title bar is just above the
+// dock. With Auto-hide Off, Windows stops title bars above the dock's strip
+// itself; with On, the dock's hidden.
+
+HWINEVENTHOOK g_windowDropHook = nullptr;
+
+void KeepTitleBarAboveDock(HWND w) {
+    RECT r;
+    if (!IsAppWindow(w) || IsZoomed(w) ||
+        (FAILED(DwmGetWindowAttribute(w, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r))) &&
+         !GetWindowRect(w, &r))) {
+        return;
+    }
+    HMONITOR monitor = MonitorFromPoint({(r.left + r.right) / 2, r.top}, MONITOR_DEFAULTTONULL);
+    bool docked = false;
+    ForEachTaskbarWindow([&](HWND tb, bool) {
+        docked = docked || MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST) == monitor;
+    });
+    MONITORINFO mi{sizeof(mi)};
+    UINT dpiX, dpiY;
+    RECT window;
+    if (!monitor || !docked || !GetMonitorInfo(monitor, &mi) ||
+        FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) ||
+        !GetWindowRect(w, &window)) {
+        return;
+    }
+    int titleBar = GetSystemMetricsForDpi(SM_CYCAPTION, dpiY) +
+                   GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpiY) +
+                   GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpiY);
+    LONG lowest = mi.rcMonitor.bottom - StripHeight(dpiY) - titleBar;
+    if (r.top <= lowest) return;
+    SetWindowPos(w, nullptr, window.left, window.top - (r.top - lowest), 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void CALLBACK OnWindowDropped(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD,
+                              DWORD) {
+    if (!g_unloading && hwnd && idObject == OBJID_WINDOW && idChild == CHILDID_SELF) {
+        Try([&] { KeepTitleBarAboveDock(hwnd); });
+    }
+}
+
+// On the taskbar's thread, like WatchWindows.
+void WatchWindowDrops(bool watch) {
+    if (watch == (g_windowDropHook != nullptr)) return;
+    if (!watch) {
+        UnhookWinEvent(g_windowDropHook);
+        g_windowDropHook = nullptr;
+        return;
+    }
+    g_windowDropHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, nullptr,
+                                       OnWindowDropped, 0, 0, WINEVENT_OUTOFCONTEXT);
+}
+
 // ---- Polling ----
 
 void UpdateAutoHide(POINT p, RECT const& m, UINT dpi, bool held, bool fullscreen) {
@@ -4306,6 +4365,7 @@ void UpdatePolling() {
     if (!hybrid) g_windowMaximized = false;
     WatchWindows(hybrid);
     if (hybrid) ScheduleMaximizedCheck();  // as things are now, at the new dock size
+    WatchWindowDrops(hybrid);
 }
 
 // Windows drops keypresses we send while an administrator window is in front.
@@ -4744,6 +4804,7 @@ void ClipTaskbars();
 void ResetAll() {
     StopFrames();
     WatchWindows(false);
+    WatchWindowDrops(false);
     Try(DestroyLabel);
     Try(RemovePlates);
     g_d2d = nullptr;
