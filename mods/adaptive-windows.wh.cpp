@@ -90,7 +90,9 @@ The frame rate can follow the DWM (recommended) or be fixed.
 The usable area is the Windows work area. The screen-edge margin applies to all four sides. If the
 taskbar is hidden, windows only respect the screen edge. The bottom spacing setting (0 = automatic)
 is meant for docks drawn by another mod: enter the distance from the screen edge to the top of
-the dock.
+the dock. The taskbar can be on any edge of any monitor: the grid follows the Windows work
+area, and is re-computed when a monitor is connected or removed, the resolution changes, or the
+taskbar is moved or toggles auto-hide.
 
 ### Corners
 Uses the Windows 11 corner preference (default, rounded, small, square). Windows does not allow an
@@ -178,7 +180,9 @@ sobreposição. A taxa de quadros pode seguir o DWM (recomendado) ou ser fixada.
 A área útil é a área de trabalho do Windows. A **Margem da borda da tela** vale para os quatro
 lados. Se a barra de tarefas estiver escondida, as janelas respeitam apenas a borda da tela.
 **Espaço embaixo** (0 = automático) serve para docks desenhados por outro mod: informe a distância
-da borda da tela até o topo do dock.
+da borda da tela até o topo do dock. A barra de tarefas pode ficar em qualquer lado de qualquer monitor: a grade segue a área
+de trabalho do Windows e é refeita quando um monitor é conectado ou removido, a resolução muda, ou a
+barra é movida ou muda a opção de ocultar automaticamente.
 
 ### Cantos
 Usa a preferência de cantos do próprio Windows 11 (padrão, arredondado, pequeno, quadrado).
@@ -313,9 +317,6 @@ os cantos.
   - ctrlalt: Ctrl+Alt
   - ctrlaltshift: Ctrl+Alt+Shift
   - altshift: Alt+Shift
-- debugLog: false
-  $name: Write detailed information to the Windhawk log
-  $name:pt-BR: Registrar informações detalhadas no log do Windhawk
 - borderColor: "7B8CFF"
   $name: Focused window border color (RGB hex; empty = off)
   $name:pt-BR: Cor da borda da janela em foco (RGB hex; vazio = desligado)
@@ -393,23 +394,19 @@ os cantos.
 // Configuração
 // ---------------------------------------------------------------------------
 
-enum Entry { EN_NONE, EN_RIGHT, EN_LEFT, EN_UP, EN_DOWN };
+enum Entry { EN_NONE, EN_RIGHT, EN_UP, EN_DOWN };
 
 struct Bezier { double x1 = 0.22, y1 = 1.0, x2 = 0.36, y2 = 1.0; };
 
 struct Config {
     int gap = 10;
     int padding = 12;
-    int mTop = 0, mBottom = 0, mLeft = 0, mRight = 0;
-    bool reserveTaskbar = true;
-    bool unmaximize = true;
+    int mBottom = 0;
     int duration = 450;
     Bezier bez;
     Entry entry = EN_RIGHT;
-    bool dropFloat = false;
     int layout = 0;  // 0 auto, 1 colunas, 2 linhas, 3 grade, 4 principal esq., 5 principal em cima
     int hz = 0;    // 0 = sincronizar com o DWM; -1 = maior taxa dos monitores; senão Hz fixo
-    bool debugLog = false;
     bool launchSync = true;
     int corner = -1;  // -1 = não mexer; senão valor de DWM_WINDOW_CORNER_PREFERENCE
     bool borderOn = true;
@@ -417,7 +414,6 @@ struct Config {
     COLORREF borderColor2 = RGB(0xFF, 0x5C, 0xE1);
     int borderStyle = 0;  // 0 fixa, 1 pulsar, 2 arco-íris, 3 degradê
     double borderSpeed = 4.0;
-    bool keepSizes = true;
     int borderWidth = 1;
     int borderGlow = 0;
     int borderRadius = 8;
@@ -429,9 +425,9 @@ static int g_layoutRt = -1;  // layout escolhido pelo atalho (-1 = usar o das co
 static double g_mainFrac = 0;  // fração da janela principal ajustada pelo usuário (0 = padrão)
 
 static std::wstring GetStr(PCWSTR name) {
-    std::wstring out;
     PCWSTR v = Wh_GetStringSetting(name);
-    if (v) { out = v; Wh_FreeStringSetting(v); }
+    std::wstring out = v;
+    Wh_FreeStringSetting(v);
     return out;
 }
 
@@ -494,13 +490,8 @@ static void LoadSettings() {
     Config c;
     c.gap = std::max(0, Wh_GetIntSetting(L"gap"));
     c.padding = std::max(0, Wh_GetIntSetting(L"padding"));
-    c.mTop = 0;
     c.mBottom = std::max(0, Wh_GetIntSetting(L"marginBottom"));
-    c.mLeft = c.mRight = 0;
-    c.reserveTaskbar = false;  // área útil = área de trabalho do Windows + "Espaço embaixo"
-    c.unmaximize = true;
 
-    c.dropFloat = false;  // soltar uma janela sempre a devolve ao layout; para deixá-la solta use Win+Ctrl+T
     {
         std::wstring l = GetStr(L"layout");
         c.layout = l == L"columns" ? 1 : l == L"rows" ? 2 : l == L"grid" ? 3 : l == L"mainleft" ? 4 : l == L"maintop" ? 5 : 0;
@@ -511,7 +502,6 @@ static void LoadSettings() {
         if (f == L"auto") c.hz = -1;
         else if (f.rfind(L"hz", 0) == 0) c.hz = _wtoi(f.c_str() + 2);
         else c.hz = 0;
-        c.debugLog = Wh_GetIntSetting(L"debugLog") != 0;
         c.launchSync = Wh_GetIntSetting(L"launchSync") != 0;
     }
 
@@ -547,7 +537,6 @@ static void LoadSettings() {
         std::wstring st = GetStr(L"borderStyle");
         c.borderStyle = st == L"pulse" ? 1 : st == L"rainbow" ? 2 : st == L"gradient" ? 3 : 0;
         c.borderSpeed = std::max(0.5, (double)Wh_GetIntSetting(L"borderSpeed"));
-        c.keepSizes = true;
         c.borderWidth = std::min(40, std::max(1, Wh_GetIntSetting(L"borderWidth")));
         c.borderGlow = std::min(60, std::max(0, Wh_GetIntSetting(L"borderGlow")));
         c.borderRadius = std::min(80, std::max(0, Wh_GetIntSetting(L"borderRadius")));
@@ -659,7 +648,7 @@ static bool IsManageable(HWND h, bool allowAppCloak = false) {
 
     // diagnóstico: por que uma janela de navegador/app ficou fora da grade (uma vez por janela e motivo)
     auto why = [&](const wchar_t* motivo) {
-        if (!g_cfg.debugLog || GetWindowTextLengthW(h) == 0) return;
+        if (GetWindowTextLengthW(h) == 0) return;
         static HWND lastH = nullptr;
         static const wchar_t* lastM = nullptr;
         if (lastH == h && lastM == motivo) return;
@@ -1211,7 +1200,7 @@ static void QueryMin(Item& it) {
     if (SendMessageTimeoutW(it.h, WM_GETMINMAXINFO, 0, (LPARAM)&mmi, SMTO_ABORTIFHUNG | SMTO_BLOCK, 20, &res)) {
         it.minW = std::max<LONG>(it.minW, mmi.ptMinTrackSize.x);
         it.minH = std::max<LONG>(it.minH, mmi.ptMinTrackSize.y);
-        if (g_cfg.debugLog) {
+        {
             wchar_t cls[64] = L"";
             GetClassNameW(it.h, cls, 64);
             Wh_Log(L"Tamanho minimo [%s]: %ldx%ld", cls, (long)it.minW, (long)it.minH);
@@ -1227,7 +1216,7 @@ static void ScaleMinsToDpi(Item& it) {
     if (it.mDpi && it.mDpi != cur) {
         auto sc = [&](LONG v) { return (LONG)std::lround((double)v * cur / it.mDpi); };
         it.minW = sc(it.minW); it.minH = sc(it.minH); it.lW = sc(it.lW); it.lH = sc(it.lH);
-        if (g_cfg.debugLog) Wh_Log(L"Escala do monitor mudou (%u -> %u DPI): minimos convertidos para %ldx%ld", it.mDpi, cur, (long)std::max(it.minW, it.lW), (long)std::max(it.minH, it.lH));
+        Wh_Log(L"Escala do monitor mudou (%u -> %u DPI): minimos convertidos para %ldx%ld", it.mDpi, cur, (long)std::max(it.minW, it.lW), (long)std::max(it.minH, it.lH));
     }
     it.mDpi = cur;
 }
@@ -1282,7 +1271,6 @@ static void SetTarget(Item& it, RECT slot) {
         LONG w = to.right - to.left, h = to.bottom - to.top;
         switch (g_cfg.entry) {
             case EN_RIGHT: OffsetRect(&from, w / 6, 0); break;
-            case EN_LEFT: OffsetRect(&from, -w / 6, 0); break;
             case EN_UP: OffsetRect(&from, 0, -h / 6); break;
             case EN_DOWN: OffsetRect(&from, 0, h / 6); break;
             default: break;
@@ -1314,36 +1302,10 @@ static void SetTarget(Item& it, RECT slot) {
     it.applied = RECT{0, 0, 0, 0};
 }
 
-// Área útil do monitor: a área de trabalho do Windows, menos a barra de tarefas (se ela não
-// reservou espaço, como quando está escondida ou flutuante) e menos as margens configuradas.
-static RECT UsableArea(HMONITOR m, const MONITORINFO& mi) {
+// Área útil do monitor: a área de trabalho do Windows (que já desconta a barra de tarefas quando ela
+// reserva espaço) e, embaixo, o "Espaço embaixo" configurado (vale o maior entre os dois, não soma).
+static RECT UsableArea(HMONITOR, const MONITORINFO& mi) {
     RECT w = mi.rcWork;
-    if (g_cfg.reserveTaskbar) {
-        auto consider = [&](HWND tb) {
-            if (!tb || !IsWindowVisible(tb) || MonitorFromWindow(tb, MONITOR_DEFAULTTONULL) != m) return;
-            RECT r;
-            if (!GetWindowRect(tb, &r)) return;
-            RECT x;
-            if (!IntersectRect(&x, &r, &w)) return;
-            LONG tw = r.right - r.left, th = r.bottom - r.top;
-            LONG cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
-            LONG mx = (mi.rcMonitor.left + mi.rcMonitor.right) / 2, my = (mi.rcMonitor.top + mi.rcMonitor.bottom) / 2;
-            if (tw >= th) {
-                if (cy > my) w.bottom = std::min(w.bottom, r.top);
-                else w.top = std::max(w.top, r.bottom);
-            } else {
-                if (cx > mx) w.right = std::min(w.right, r.left);
-                else w.left = std::max(w.left, r.right);
-            }
-        };
-        consider(FindWindowW(L"Shell_TrayWnd", nullptr));
-        HWND sec = nullptr;
-        while ((sec = FindWindowExW(nullptr, sec, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) consider(sec);
-    }
-    // margens medidas da borda da tela: vale o maior entre elas e a barra de tarefas (não soma)
-    w.left = std::max(w.left, mi.rcMonitor.left + g_cfg.mLeft);
-    w.top = std::max(w.top, mi.rcMonitor.top + g_cfg.mTop);
-    w.right = std::min(w.right, mi.rcMonitor.right - g_cfg.mRight);
     w.bottom = std::min(w.bottom, mi.rcMonitor.bottom - g_cfg.mBottom);
     return w;
 }
@@ -1395,7 +1357,7 @@ static void UpdateMinimizedPlacements() {
         wp.showCmd = SW_SHOWMINNOACTIVE;  // continua minimizada (o genie ignora janelas já minimizadas)
         SetWindowPlacement(e.h, &wp);
         e.last = to;
-        if (g_cfg.debugLog) {
+        {
             wchar_t cls[64] = L"";
             GetClassNameW(e.h, cls, 64);
             Wh_Log(L"Minimizada [%s]: ao voltar vai para %ldx%ld em (%ld,%ld)", cls, to.right - to.left, to.bottom - to.top, to.left, to.top);
@@ -1429,7 +1391,7 @@ static void Retile() {
             for (auto* it : list) wts.push_back({it->wx, it->wy});
             auto slots = ComputeSlots((int)list.size(), UsableArea(m, mi), mins, &wts);
             for (size_t i = 0; i < list.size(); i++) {
-                if (g_cfg.debugLog) {
+                {
                     wchar_t cls[64] = L"", ttl[40] = L"";
                     GetClassNameW(list[i]->h, cls, 64);
                     GetWindowTextW(list[i]->h, ttl, 40);
@@ -1495,7 +1457,7 @@ static bool VerifyItems() {
         bool bad = std::abs(r.left - t.left) > 4 || std::abs(r.top - t.top) > 4 ||
                    std::abs(r.right - t.right) > 4 || std::abs(r.bottom - t.bottom) > 4;
         if (!bad) { it.verifyAt = 0; continue; }
-        if (g_cfg.debugLog) {
+        {
             wchar_t cls[64] = L"";
             GetClassNameW(it.h, cls, 64);
             MINMAXINFO mm{};
@@ -1524,7 +1486,7 @@ static bool VerifyItems() {
             // nem a posição foi aceita (ex.: app rodando como administrador): solta a janela da grade
             if (!samePos) {
                 it.floating = true;
-                if (g_cfg.debugLog) Wh_Log(L"Janela nao aceita ser posicionada: passa a flutuar (use o atalho de reorganizar para tentar de novo)");
+                Wh_Log(L"Janela nao aceita ser posicionada: passa a flutuar (use o atalho de reorganizar para tentar de novo)");
                 relayout = true;
             }
             continue;
@@ -1602,7 +1564,7 @@ static bool OnAdd(HWND h) {
     it.h = h;
     it.snap = ac;
     it.fresh = !ac;
-    if (g_cfg.debugLog) {
+    {
         wchar_t cls[64] = L"", ttl[48] = L"";
         GetClassNameW(h, cls, 64);
         GetWindowTextW(h, ttl, 48);
@@ -1617,7 +1579,7 @@ static bool OnAdd(HWND h) {
         it.zoomed = true;
         it.fresh = false;
         it.snap = false;
-        if (g_cfg.unmaximize) ShowWindowAsync(h, SW_RESTORE);
+        ShowWindowAsync(h, SW_RESTORE);
     }
     ResetWeights();
     for (size_t i = 0; i < g_minimized.size();)
@@ -1696,9 +1658,9 @@ static void RunScheduledRetile() {
     int i = FindItem(h);
     if (i >= 0) {
         Item& it = g_items[i];
-        if (IsZoomed(h) && g_cfg.unmaximize) {
+        if (IsZoomed(h)) {
             // o arrasto até a borda de cima maximizou a janela: devolve ao modo normal para ela voltar à grade
-            if (g_cfg.debugLog) Wh_Log(L"Arrasto maximizou a janela: restaurando para voltar a grade");
+            Wh_Log(L"Arrasto maximizou a janela: restaurando para voltar a grade");
             ShowWindowAsync(h, SW_RESTORE);
             it.zoomed = false;
             g_retileAt = GetTickCount64() + 150;
@@ -1724,7 +1686,7 @@ static void OnMoveStart(HWND h) {
             const LONG e = 12;
             g_dragEdge = c.x <= vis.left + e || c.x >= vis.right - e || c.y >= vis.bottom - e || c.y <= vis.top + 5;
         }
-        if (g_cfg.debugLog) {
+        {
             wchar_t cls[64] = L"", ttl[48] = L"";
             GetClassNameW(h, cls, 64);
             GetWindowTextW(h, ttl, 48);
@@ -1849,7 +1811,7 @@ static void OnMoveEnd(HWND h) {
     g_dragHwnd = nullptr;
     int i = FindItem(h);
     wchar_t cls[64] = L"", ttl[48] = L"";
-    if (g_cfg.debugLog) {
+    {
         GetClassNameW(h, cls, 64);
         GetWindowTextW(h, ttl, 48);
     }
@@ -1857,7 +1819,7 @@ static void OnMoveEnd(HWND h) {
         // janela que ainda não estava na grade (ex.: já existia ao carregar o mod, ou foi ignorada antes):
         // se ela é elegível agora, passa a fazer parte
         bool ok = GetAncestor(h, GA_ROOT) == h && IsManageable(h) && OnAdd(h);
-        if (g_cfg.debugLog) Wh_Log(L"Arrasto terminou em janela fora da grade [%s] \"%s\": %s", cls, ttl, ok ? L"adotada pela grade" : L"nao elegivel (veja 'Ignorada' acima)");
+        Wh_Log(L"Arrasto terminou em janela fora da grade [%s] \"%s\": %s", cls, ttl, ok ? L"adotada pela grade" : L"nao elegivel (veja 'Ignorada' acima)");
         return;
     }
     {
@@ -1868,7 +1830,7 @@ static void OnMoveEnd(HWND h) {
     }
     RECT nowR{};
     GetWindowRect(h, &nowR);
-    if (g_cfg.debugLog && !g_dragEdge) {
+    if (!g_dragEdge) {
         LONG dw = (nowR.right - nowR.left) - (g_dragStart.right - g_dragStart.left);
         LONG dh = (nowR.bottom - nowR.top) - (g_dragStart.bottom - g_dragStart.top);
         if (std::abs(dw) > 6 || std::abs(dh) > 6)
@@ -1877,12 +1839,11 @@ static void OnMoveEnd(HWND h) {
                    (long)(nowR.right - nowR.left), (long)(nowR.bottom - nowR.top));
     }
     auto logEnd = [&](const wchar_t* decisao) {
-        if (g_cfg.debugLog)
-            Wh_Log(L"Arrasto terminou [%s] \"%s\" em (%ld,%ld) %ldx%ld%s: %s", cls, ttl, (long)nowR.left, (long)nowR.top,
+        Wh_Log(L"Arrasto terminou [%s] \"%s\" em (%ld,%ld) %ldx%ld%s: %s", cls, ttl, (long)nowR.left, (long)nowR.top,
                    (long)(nowR.right - nowR.left), (long)(nowR.bottom - nowR.top), IsZoomed(h) ? L" [maximizada]" : L"", decisao);
     };
 
-    if (!g_items[i].floating && g_cfg.keepSizes && g_dragEdge) {
+    if (!g_items[i].floating && g_dragEdge) {
         if (ApplyResize((size_t)i, nowR)) {
             RECT st = g_dragStart;
             bool resized = std::abs((nowR.right - nowR.left) - (st.right - st.left)) > 6 ||
@@ -1910,17 +1871,6 @@ static void OnMoveEnd(HWND h) {
                 SwapItems((size_t)i, j);
                 logEnd(L"trocou de lugar com outra janela");
                 ScheduleRetile(h, 60);
-                return;
-            }
-        }
-        // modo "deixar solta": se mexeu de verdade, vira flutuante
-        if (g_cfg.dropFloat) {
-            const RECT& t = g_items[i].to;
-            int d = std::max(std::max(std::abs(nowR.left - t.left), std::abs(nowR.top - t.top)),
-                             std::max(std::abs(nowR.right - t.right), std::abs(nowR.bottom - t.bottom)));
-            if (d > 12) {
-                g_items[i].floating = true;
-                logEnd(L"ficou solta (flutuante)");
                 return;
             }
         }
@@ -2011,7 +1961,7 @@ static void OnHotkey(int id) {
     switch (id) {
         case HK_FLOAT: {
             int i = FindItem(fg);
-            if (g_cfg.debugLog) {
+            {
                 wchar_t cls[64] = L"", ttl[48] = L"";
                 GetClassNameW(fg, cls, 64);
                 GetWindowTextW(fg, ttl, 48);
@@ -2021,7 +1971,7 @@ static void OnHotkey(int id) {
                 OnAdd(fg);
                 i = FindItem(fg);
                 if (i < 0) {
-                    if (g_cfg.debugLog) Wh_Log(L"Atalho soltar/prender: essa janela nao e elegivel para a grade (veja 'Ignorada' no log)");
+                    Wh_Log(L"Atalho soltar/prender: essa janela nao e elegivel para a grade (veja 'Ignorada' no log)");
                     return;
                 }
             } else {
@@ -2122,7 +2072,7 @@ static void WaitFrame() {
     Sleep((DWORD)wait);
 }
 
-// Estatísticas (só gravadas no log com a opção "Registrar informações detalhadas" ligada)
+// Estatísticas (só aparecem no log do Windhawk, quando o registro está ligado)
 static struct {
     int frames = 0;
     double start = 0, last = 0, maxDt = 0, maxCost = 0;
@@ -2138,7 +2088,7 @@ static void StatsFrame(double begin, double cost) {
 }
 
 static void StatsFlush() {
-    if (g_stats.frames > 1 && g_cfg.debugLog) {
+    if (g_stats.frames > 1) {
         double total = g_stats.last - g_stats.start;
         Wh_Log(L"Animacao: %d quadros em %.0f ms (media %.1f ms/quadro, pior intervalo %.1f ms, pior custo de mover janelas %.1f ms; fases mais lentas: mensagens %.1f, novas %.1f, conferencia %.1f, espera %.1f ms)",
                g_stats.frames, total, total / (g_stats.frames - 1), g_stats.maxDt, g_stats.maxCost,
@@ -2158,9 +2108,9 @@ static BOOL CALLBACK EnumProc(HWND h, LPARAM) {
         if (IsZoomed(h)) {
             // já estava maximizada quando o mod carregou: devolve ao modo normal para entrar na grade
             it.zoomed = true;
-            if (g_cfg.unmaximize) ShowWindowAsync(h, SW_RESTORE);
+            ShowWindowAsync(h, SW_RESTORE);
         }
-        if (g_cfg.debugLog) {
+        {
             wchar_t cls[64] = L"", ttl[48] = L"";
             GetClassNameW(h, cls, 64);
             GetWindowTextW(h, ttl, 48);
@@ -2169,6 +2119,56 @@ static BOOL CALLBACK EnumProc(HWND h, LPARAM) {
         g_items.push_back(it);
     }
     return TRUE;
+}
+
+// ---------------------------------------------------------------------------
+// Mudanças de tela (monitor conectado/removido, resolução, barra de tarefas movida ou com ocultar
+// automaticamente): o Windows avisa por mensagens enviadas a janelas de nível superior, então a
+// thread de trabalho tem uma janela invisível só para recebê-las e refazer a grade.
+// ---------------------------------------------------------------------------
+
+static ULONGLONG g_displayAt = 0;  // quando refazer a grade depois de uma mudança de tela (0 = nada pendente)
+static HWND g_watcher = nullptr;
+
+static LRESULT CALLBACK WatcherProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    if (m == WM_DISPLAYCHANGE || (m == WM_SETTINGCHANGE && w == SPI_SETWORKAREA)) {
+        g_displayAt = GetTickCount64() + 400;  // espera o Windows terminar de reposicionar as janelas
+        return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+static void CreateWatcher() {
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = WatcherProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"AdaptiveWindowsDisplayWatcher";
+    RegisterClassW(&wc);
+    g_watcher = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, wc.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0,
+                                nullptr, nullptr, wc.hInstance, nullptr);
+    if (!g_watcher) Wh_Log(L"Nao foi possivel criar a janela que observa mudancas de tela (erro %lu)", GetLastError());
+}
+
+static void DestroyWatcher() {
+    if (g_watcher) { DestroyWindow(g_watcher); g_watcher = nullptr; }
+    UnregisterClassW(L"AdaptiveWindowsDisplayWatcher", GetModuleHandleW(nullptr));
+}
+
+static void RunDisplayRetile() {
+    if (!g_displayAt || GetTickCount64() < g_displayAt) return;
+    g_displayAt = 0;
+    // o monitor guardado em cada janela pode ter deixado de existir: relê de onde a janela está agora
+    for (auto& it : g_items) {
+        it.mon = MonitorFromWindow(it.h, MONITOR_DEFAULTTONEAREST);
+        it.to = RECT{0, 0, 0, 0};
+    }
+    for (auto& e : g_minimized) {
+        MONITORINFO mi{sizeof(mi)};
+        if (!GetMonitorInfoW(e.mon, &mi)) e.mon = MonitorFromWindow(e.h, MONITOR_DEFAULTTOPRIMARY);
+        e.last = RECT{0, 0, 0, 0};
+    }
+    Wh_Log(L"Mudanca de tela detectada: refazendo a grade");
+    Retile();
 }
 
 static DWORD WINAPI Worker(LPVOID) {
@@ -2200,7 +2200,7 @@ static DWORD WINAPI Worker(LPVOID) {
     }
     for (auto& k : keys) {
         if (RegisterHotKey(nullptr, k.id, k.mods, k.vk)) {
-            if (g_cfg.debugLog) Wh_Log(L"Atalho registrado (id %d, tecla %u, modificadores %x)", k.id, k.vk, k.mods & 0xff);
+            Wh_Log(L"Atalho registrado (id %d, tecla %u, modificadores %x)", k.id, k.vk, k.mods & 0xff);
         } else
             Wh_Log(L"Atalho (tecla %u) indisponivel (erro %lu; 1409 = ja registrado por outro programa/instancia)",
                    k.vk, GetLastError());
@@ -2210,6 +2210,7 @@ static DWORD WINAPI Worker(LPVOID) {
     g_frameTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     if (!g_frameTimer) g_frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
 
+    CreateWatcher();
     EnumWindows(EnumProc, 0);
     Retile();
     UpdateBorder(GetForegroundWindow());
@@ -2243,6 +2244,7 @@ static DWORD WINAPI Worker(LPVOID) {
         double tD = NowMs();
         TickBorder();
         RunScheduledRetile();
+        RunDisplayRetile();
         if (AnyAnimating()) {
             double t0 = NowMs();
             StepAnimations();
@@ -2259,6 +2261,7 @@ static DWORD WINAPI Worker(LPVOID) {
             DWORD wait = (g_pending.empty() && !verifyPending) ? INFINITE : 20;
             if (BorderAnimated()) wait = std::min<DWORD>(wait, 16);
             if (g_retileAt) wait = std::min<DWORD>(wait, 15);
+            if (g_displayAt) wait = std::min<DWORD>(wait, 50);
             MsgWaitForMultipleObjectsEx(0, nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
     }
@@ -2275,6 +2278,7 @@ static DWORD WINAPI Worker(LPVOID) {
         }
     }
     DestroyOverlay();
+    DestroyWatcher();
     // janelas ainda minimizadas voltam a ter a posição normal que tinham antes do mod
     for (auto& e : g_minimized) {
         WINDOWPLACEMENT wp{sizeof(wp)};
