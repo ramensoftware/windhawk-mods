@@ -1,12 +1,14 @@
 // ==WindhawkMod==
 // @id              adaptive-windows
 // @name            Adaptive Windows
-// @description     Grade automática de janelas com animações fluidas (estilo Nava OS), borda animada e compatível com mods de minimizar/restaurar.
+// @name:pt-BR      Adaptive Windows
+// @description     Automatic window grid with fluid animations (Nava OS style), animated focus border, and compatible with minimize/restore animation mods.
+// @description:pt-BR Grade automática de janelas com animações fluidas (estilo Nava OS), borda animada e compatível com mods de minimizar/restaurar.
 // @version         1.0.0
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
-// @include         explorer.exe
-// @compilerOptions -ldwmapi -luser32 -lgdi32
+// @include         windhawk.exe
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -45,14 +47,14 @@ and works together with minimize / restore / open animation mods: a window is an
 ### Hotkeys
 | Hotkey | Action |
 |--------|--------|
-| Alt + G (default) | Cycle the layout: auto, columns, rows, grid, main left, main top |
-| Alt + T (default) | Take the focused window out of the grid (it stays where it is and the others use the space); press again to put it back |
+| Win + Ctrl + G (default) | Cycle the layout: auto, columns, rows, grid, main left, main top |
+| Win + Ctrl + T (default) | Take the focused window out of the grid (it stays where it is and the others use the space); press again to put it back |
 | Win + Alt + F | Focus mode: every window on the monitor fills the screen |
 | Win + Alt + ← / → | Swap the focused window with the previous / next one |
 | Win + Alt + ↓ | Re-arrange everything and put all windows back in the grid |
 
 The Win + Alt hotkeys can use another modifier in the settings (Ctrl+Alt, Ctrl+Alt+Shift or
-Alt+Shift) if another program already uses them; restart the mod after changing. Alt+G and Alt+T
+Alt+Shift) if another program already uses them; restart the mod after changing. Win+Ctrl+G and Win+Ctrl+T
 are the defaults and can be changed in the settings (text fields such as "Ctrl+Alt+G" or
 "Win+T"; leave empty to turn the hotkey off). Unavailable hotkeys are reported in the Windhawk
 log (error 1409 = already in use).
@@ -99,7 +101,6 @@ Radius"), leave this option on "do not touch" so the two do not fight over the c
   separated by semicolons). The list is empty by default.
 - Windows that refuse to be positioned (a likely case is programs running as administrator) float
   after a few attempts; Win + Alt + ↓ tries again.
-- The settings screen is currently in Brazilian Portuguese only.
 
 ---
 
@@ -132,14 +133,14 @@ e funciona junto com os mods de animação de minimizar, restaurar e abrir janel
 ### Atalhos
 | Atalho | Ação |
 |--------|------|
-| Alt + G (padrão) | Troca o layout: automático, colunas, linhas, grade, principal à esquerda, principal em cima |
-| Alt + T (padrão) | Tira a janela em foco da grade (ela fica onde está e as outras ocupam o espaço); apertar de novo devolve à grade |
+| Win + Ctrl + G (padrão) | Troca o layout: automático, colunas, linhas, grade, principal à esquerda, principal em cima |
+| Win + Ctrl + T (padrão) | Tira a janela em foco da grade (ela fica onde está e as outras ocupam o espaço); apertar de novo devolve à grade |
 | Win + Alt + F | Modo foco: todas as janelas do monitor ocupam a tela toda |
 | Win + Alt + ← / → | Troca a janela em foco com a anterior / a próxima |
 | Win + Alt + ↓ | Reorganiza tudo e devolve todas as janelas à grade |
 
 Os atalhos com Win + Alt podem trocar de modificador nas configurações (Ctrl+Alt, Ctrl+Alt+Shift
-ou Alt+Shift) caso outro programa já os use; reinicie o mod depois de mudar. Alt+G e Alt+T são
+ou Alt+Shift) caso outro programa já os use; reinicie o mod depois de mudar. Win+Ctrl+G e Win+Ctrl+T são
 os padrões e podem ser trocados nas configurações (campos de texto como "Ctrl+Alt+G" ou "Win+T";
 deixe vazio para desligar o atalho). Atalhos indisponíveis aparecem no log do Windhawk
 (erro 1409 = já em uso).
@@ -193,16 +194,29 @@ os cantos.
 // ==WindhawkModSettings==
 /*
 - gap: 10
-  $name: Espaço entre janelas (px)
+  $name: Gap between windows (px)
+  $name:pt-BR: Espaço entre janelas (px)
 - padding: 12
-  $name: Margem da borda da tela (px)
+  $name: Screen edge margin (px)
+  $name:pt-BR: Margem da borda da tela (px)
 - marginBottom: 0
-  $name: "Espaço embaixo (px, a partir da borda da tela)"
-  $description: "0 = automático: acompanha a barra de tarefas/dock do Windows; se ela estiver escondida, só respeita a borda da tela. Use um valor (distância da borda da tela até o topo do seu dock) só se o dock for desenhado por outro mod e as janelas ficarem longe ou por cima dele. Vale o maior entre este valor e a barra de tarefas."
+  $name: "Bottom spacing (px, from the screen edge)"
+  $name:pt-BR: "Espaço embaixo (px, a partir da borda da tela)"
+  $description: "0 = automatic: follows the Windows taskbar/dock; if the taskbar is hidden, only the screen edge is respected. Use a value (distance from the screen edge to the top of your dock) only if the dock is drawn by another mod and windows end up far from it or on top of it. The larger of this value and the taskbar applies."
+  $description:pt-BR: "0 = automático: acompanha a barra de tarefas/dock do Windows; se ela estiver escondida, só respeita a borda da tela. Use um valor (distância da borda da tela até o topo do seu dock) só se o dock for desenhado por outro mod e as janelas ficarem longe ou por cima dele. Vale o maior entre este valor e a barra de tarefas."
 - layout: auto
-  $name: Layout da grade
-  $description: "Alt+G troca de layout na hora. Se os tamanhos mínimos dos apps não couberem, o mod ajusta o formato sozinho."
+  $name: Grid layout
+  $name:pt-BR: Layout da grade
+  $description: "Win+Ctrl+G (default hotkey) switches the layout instantly. If the apps' minimum sizes don't fit, the mod adjusts the shape by itself."
+  $description:pt-BR: "Win+Ctrl+G (atalho padrão) troca de layout na hora. Se os tamanhos mínimos dos apps não couberem, o mod ajusta o formato sozinho."
   $options:
+  - auto: Automatic (columns up to 3 windows, then grid)
+  - columns: Columns side by side
+  - rows: Stacked rows
+  - grid: Square grid
+  - mainleft: Main window on the left, the rest stacked on the right
+  - maintop: Main window on top, the rest in columns below
+  $options:pt-BR:
   - auto: Automático (colunas até 3 janelas, depois grade)
   - columns: Colunas lado a lado
   - rows: Linhas empilhadas
@@ -210,27 +224,56 @@ os cantos.
   - mainleft: Principal à esquerda, o resto empilhado à direita
   - maintop: Principal em cima, o resto em colunas embaixo
 - corners: default
-  $name: Cantos das janelas organizadas
+  $name: Corners of arranged windows
+  $name:pt-BR: Cantos das janelas organizadas
   $options:
+  - default: Don't touch (Windows default)
+  - round: Rounded
+  - small: Small rounded
+  - square: Square
+  $options:pt-BR:
   - default: Não mexer (padrão do Windows)
   - round: Arredondado
   - small: Arredondado pequeno
   - square: Quadrado
 - preset: nava
-  $name: Estilo de animação
+  $name: Animation style
+  $name:pt-BR: Estilo de animação
   $options:
+  - nava: Nava OS (based on the video)
+  - smooth: Smooth
+  - snappy: Snappy
+  - playful: Playful (overshoot)
+  $options:pt-BR:
   - nava: Nava OS (base do vídeo)
   - smooth: Suave
   - snappy: Rápido
   - playful: Elástico (overshoot)
 - fps: dwm
-  $name: Taxa de quadros da animação
+  $name: Animation frame rate
+  $name:pt-BR: Taxa de quadros da animação
   $description: >-
+    "Sync with DWM" follows the Windows compositor refresh (recommended).
+    Fixed rates use a high-resolution timer: capping the rate (for example 60 Hz
+    on a 144 Hz monitor) reduces the load on heavy apps. "Highest monitor rate"
+    reads the current refresh rate of each monitor and uses the highest one.
+  $description:pt-BR: >-
     "Sincronizar com o DWM" acompanha a atualização do compositor do Windows (recomendado).
     As taxas fixas usam um temporizador de alta resolução: limitar a taxa (por exemplo 60 Hz
     num monitor de 144 Hz) reduz a carga em apps pesados. "Maior taxa dos monitores" lê a
     taxa de atualização atual de cada monitor e usa a mais alta.
   $options:
+  - dwm: Sync with DWM (recommended)
+  - auto: Highest refresh rate among the monitors
+  - hz30: 30 Hz
+  - hz60: 60 Hz
+  - hz75: 75 Hz
+  - hz90: 90 Hz
+  - hz120: 120 Hz
+  - hz144: 144 Hz
+  - hz165: 165 Hz
+  - hz240: 240 Hz
+  $options:pt-BR:
   - dwm: Sincronizar com o DWM (recomendado)
   - auto: Maior taxa de atualização entre os monitores
   - hz30: 30 Hz
@@ -242,52 +285,80 @@ os cantos.
   - hz165: 165 Hz
   - hz240: 240 Hz
 - launchSync: true
-  $name: "Sincronizar com animações de abrir/fechar (ex.: MacOS Minimize Animation, Windows Animations)"
-  $description: "Se uma janela nova aparece escondida por outro mod (cloak do DWM), ela é posicionada no lugar final na hora, sem animação própria, enquanto as outras abrem espaço ao mesmo tempo. Assim a animação do outro mod acontece já no lugar certo."
-- layoutHotkey: "Alt+G"
-  $name: Atalho para trocar de layout (reinicie o mod ao mudar)
-  $description: "Escreva modificadores e tecla, como Alt+G, Ctrl+Alt+L ou Win+Shift+G. Modificadores aceitos: Ctrl, Alt, Shift, Win. Deixe vazio para desligar. Se aparecer como indisponível no log (erro 1409), outro programa já usa essa combinação."
-- floatHotkey: "Alt+T"
-  $name: Atalho para soltar/prender a janela em foco (reinicie o mod ao mudar)
-  $description: "Mesmo formato do atalho de layout. Deixe vazio para desligar."
+  $name: "Sync with open/close animations (e.g. MacOS Minimize Animation, Windows Animations)"
+  $name:pt-BR: "Sincronizar com animações de abrir/fechar (ex.: MacOS Minimize Animation, Windows Animations)"
+  $description: "If a new window appears hidden by another mod (DWM cloak), it is placed in its final slot right away, without its own animation, while the other windows make room at the same time. This way the other mod's animation already lands in the right place."
+  $description:pt-BR: "Se uma janela nova aparece escondida por outro mod (cloak do DWM), ela é posicionada no lugar final na hora, sem animação própria, enquanto as outras abrem espaço ao mesmo tempo. Assim a animação do outro mod acontece já no lugar certo."
+- layoutHotkey: "Win+Ctrl+G"
+  $name: Hotkey to cycle the layout (restart the mod after changing)
+  $name:pt-BR: Atalho para trocar de layout (reinicie o mod ao mudar)
+  $description: "Write modifiers and a key, such as Win+Ctrl+G, Ctrl+Alt+L or Win+Shift+G. Accepted modifiers: Ctrl, Alt, Shift, Win. Leave empty to turn it off. If it shows as unavailable in the log (error 1409), another program already uses that combination. Avoid combinations without Win or Ctrl: they take the key away from every other app."
+  $description:pt-BR: "Escreva modificadores e tecla, como Win+Ctrl+G, Ctrl+Alt+L ou Win+Shift+G. Modificadores aceitos: Ctrl, Alt, Shift, Win. Deixe vazio para desligar. Se aparecer como indisponível no log (erro 1409), outro programa já usa essa combinação. Evite combinações sem Win ou Ctrl: elas tiram a tecla de todos os outros apps."
+- floatHotkey: "Win+Ctrl+T"
+  $name: Hotkey to float/re-tile the focused window (restart the mod after changing)
+  $name:pt-BR: Atalho para soltar/prender a janela em foco (reinicie o mod ao mudar)
+  $description: "Same format as the layout hotkey. Leave empty to turn it off."
+  $description:pt-BR: "Mesmo formato do atalho de layout. Deixe vazio para desligar."
 - hotkeys: winalt
-  $name: Modificadores dos atalhos (reinicie o mod ao mudar)
-  $description: "Se os atalhos aparecerem como indisponíveis no log (erro 1409), outro programa já usa essas teclas. Troque aqui."
+  $name: Modifiers of the other hotkeys (restart the mod after changing)
+  $name:pt-BR: Modificadores dos atalhos (reinicie o mod ao mudar)
+  $description: "If the hotkeys show as unavailable in the log (error 1409), another program already uses these keys. Change them here."
+  $description:pt-BR: "Se os atalhos aparecerem como indisponíveis no log (erro 1409), outro programa já usa essas teclas. Troque aqui."
   $options:
   - winalt: Win+Alt
   - ctrlalt: Ctrl+Alt
   - ctrlaltshift: Ctrl+Alt+Shift
   - altshift: Alt+Shift
 - debugLog: false
-  $name: Registrar informações detalhadas no log do Windhawk
+  $name: Write detailed information to the Windhawk log
+  $name:pt-BR: Registrar informações detalhadas no log do Windhawk
 - borderColor: "7B8CFF"
-  $name: Cor da borda da janela em foco (RGB hex; vazio = desligado)
+  $name: Focused window border color (RGB hex; empty = off)
+  $name:pt-BR: Cor da borda da janela em foco (RGB hex; vazio = desligado)
 - borderStyle: static
-  $name: Efeito da borda da janela em foco
-  $description: "A borda é a do próprio Windows (1 px, acompanha os cantos). Pulsar, arco-íris e degradê animam a cor continuamente."
+  $name: Focused window border effect
+  $name:pt-BR: Efeito da borda da janela em foco
+  $description: "The border is Windows' own (1 px, follows the corners). Pulse, rainbow and gradient animate the color continuously."
+  $description:pt-BR: "A borda é a do próprio Windows (1 px, acompanha os cantos). Pulsar, arco-íris e degradê animam a cor continuamente."
   $options:
+  - static: Solid
+  - pulse: Pulse (breathing light)
+  - rainbow: Rainbow
+  - gradient: Gradient between two colors
+  $options:pt-BR:
   - static: Fixa
   - pulse: Pulsar (luz que respira)
   - rainbow: Arco-íris
   - gradient: Degradê entre duas cores
 - borderColor2: "FF5CE1"
-  $name: Segunda cor do degradê (RGB hex)
+  $name: Second gradient color (RGB hex)
+  $name:pt-BR: Segunda cor do degradê (RGB hex)
 - borderSpeed: 4
-  $name: Segundos por ciclo da animação da borda
+  $name: Seconds per border animation cycle
+  $name:pt-BR: Segundos por ciclo da animação da borda
 - borderWidth: 1
-  $name: Largura da linha da borda (px)
-  $description: "1 = borda nativa do Windows (fina). Acima de 1, o mod desenha a borda por cima, fora da janela, com a espessura escolhida e o efeito girando em volta da janela. Use até o valor do espaço entre janelas."
+  $name: Border line width (px)
+  $name:pt-BR: Largura da linha da borda (px)
+  $description: "1 = native Windows border (thin). Above 1, the mod draws the border on top, outside the window, with the chosen thickness and the effect running around the window. Use up to the value of the gap between windows."
+  $description:pt-BR: "1 = borda nativa do Windows (fina). Acima de 1, o mod desenha a borda por cima, fora da janela, com a espessura escolhida e o efeito girando em volta da janela. Use até o valor do espaço entre janelas."
 - borderGlow: 0
-  $name: Brilho em volta da borda (px, 0 = sem brilho)
+  $name: Glow around the border (px, 0 = no glow)
+  $name:pt-BR: Brilho em volta da borda (px, 0 = sem brilho)
 - borderRadius: 8
-  $name: Raio dos cantos da borda (px)
-  $description: "Só vale com a borda desenhada por cima (largura acima de 1 ou brilho). Ajuste para ficar igual ao raio do seu mod de cantos arredondados (por exemplo 8 é o padrão do Windows 11; 0 = cantos retos)."
+  $name: Border corner radius (px)
+  $name:pt-BR: Raio dos cantos da borda (px)
+  $description: "Only applies to the drawn border (width above 1, or glow). Match it to the radius of your rounded corners mod (for example 8 is the Windows 11 default; 0 = square corners)."
+  $description:pt-BR: "Só vale com a borda desenhada por cima (largura acima de 1 ou brilho). Ajuste para ficar igual ao raio do seu mod de cantos arredondados (por exemplo 8 é o padrão do Windows 11; 0 = cantos retos)."
 - borderOffset: 0
-  $name: Deslocamento da borda (px)
-  $description: "0 = colada na borda da janela, por fora. Positivo afasta para fora; negativo puxa para dentro da janela. Serve para alinhar com o mod de cantos."
+  $name: Border offset (px)
+  $name:pt-BR: Deslocamento da borda (px)
+  $description: "0 = flush against the window edge, outside. Positive moves it outward; negative pulls it inside the window. Useful to align it with the corners mod."
+  $description:pt-BR: "0 = colada na borda da janela, por fora. Positivo afasta para fora; negativo puxa para dentro da janela. Serve para alinhar com o mod de cantos."
 - ignoreList: ""
-  $name: "Janelas a ignorar (separe por ponto e vírgula; vale para parte do título ou da classe)"
-  $description: "Essas janelas ficam livres, fora da grade. Útil para barras e painéis de outros mods. Exemplo: Finder Bar;minha-janela. Vazio por padrão."
+  $name: "Windows to ignore (separate with semicolons; matches part of the title or class)"
+  $name:pt-BR: "Janelas a ignorar (separe por ponto e vírgula; vale para parte do título ou da classe)"
+  $description: "These windows stay free, outside the grid. Useful for bars and panels from other mods. Example: Finder Bar;my-window. Empty by default."
+  $description:pt-BR: "Essas janelas ficam livres, fora da grade. Útil para barras e painéis de outros mods. Exemplo: Finder Bar;minha-janela. Vazio por padrão."
 */
 // ==/WindhawkModSettings==
 
@@ -428,7 +499,7 @@ static void LoadSettings() {
     c.reserveTaskbar = false;  // área útil = área de trabalho do Windows + "Espaço embaixo"
     c.unmaximize = true;
 
-    c.dropFloat = false;  // soltar uma janela sempre a devolve ao layout; para deixá-la solta use Alt+T
+    c.dropFloat = false;  // soltar uma janela sempre a devolve ao layout; para deixá-la solta use Win+Ctrl+T
     {
         std::wstring l = GetStr(L"layout");
         c.layout = l == L"columns" ? 1 : l == L"rows" ? 2 : l == L"grid" ? 3 : l == L"mainleft" ? 4 : l == L"maintop" ? 5 : 0;
@@ -827,12 +898,15 @@ static void SetBorder(HWND h, bool on) {
     DwmSetWindowAttribute(h, DWMWA_BORDER_COLOR, &c, sizeof(c));
 }
 
+// Only the animated styles (pulse, rainbow, gradient) need a periodic tick. A static border, drawn by
+// the mod or by DWM, is updated from events (focus change, EVENT_OBJECT_LOCATIONCHANGE).
 static bool BorderAnimated() {
     if (!g_cfg.borderOn || !g_borderHwnd || !IsWindow(g_borderHwnd)) return false;
-    return UseOverlay() || g_cfg.borderStyle != 0;
+    return g_cfg.borderStyle != 0;
 }
 
 static void TickBorder() {
+    if (g_cfg.borderStyle == 0) return;
     static double last = 0;
     double n = NowMs();
     if (n - last < 15) return;  // ~60 atualizações por segundo bastam para uma cor
@@ -853,6 +927,7 @@ static void UpdateBorder(HWND focus) {
     if (g_cfg.borderOn && focus && FindItem(focus) >= 0) {
         SetBorder(focus, true);
         g_borderHwnd = focus;
+        if (UseOverlay()) DrawOverlay(focus);  // static overlay: no tick, so draw it here
     }
 }
 
@@ -1477,18 +1552,17 @@ static bool AnyAnimating() {
 
 static bool OnAdd(HWND h);
 
-// Detecta janelas que mudaram entre maximizada e normal e refaz a grade.
-static void PollZoom() {
-    bool changed = false;
-    for (auto& it : g_items) {
-        bool z = IsZoomed(it.h) != 0;
-        if (z != it.zoomed) {
-            it.zoomed = z;
-            it.to = RECT{0, 0, 0, 0};
-            changed = true;
-        }
-    }
-    if (changed) Retile();
+// Detecta uma janela que mudou entre maximizada e normal e refaz a grade.
+// Chamada a partir de EVENT_OBJECT_LOCATIONCHANGE (que também informa maximizar/restaurar).
+static void CheckZoom(HWND h) {
+    int i = FindItem(h);
+    if (i < 0) return;
+    Item& it = g_items[i];
+    bool z = IsZoomed(h) != 0;
+    if (z == it.zoomed) return;
+    it.zoomed = z;
+    it.to = RECT{0, 0, 0, 0};
+    Retile();
 }
 
 // processa janelas novas que já "assentaram" (título/estilo definidos)
@@ -1570,7 +1644,19 @@ static void OnRemove(HWND h) {
         if (!have)
             g_minimized.push_back(MinEntry{h, g_items[i].mon, std::max(g_items[i].minW, g_items[i].lW), std::max(g_items[i].minH, g_items[i].lH), g_items[i].lastInset, RECT{0, 0, 0, 0}});
     }
-    if (g_borderHwnd == h) g_borderHwnd = nullptr;
+    // the window leaves the grid: give back everything the mod changed on it (focus border, corner preference)
+    if (g_borderHwnd == h) {
+        SetBorder(h, false);
+        g_borderHwnd = nullptr;
+        if (g_ov) HideOverlay();
+    }
+    {
+        Item& gone = g_items[i];
+        if (gone.cornerApplied >= 0 && gone.cornerApplied != gone.origCorner) {
+            DWORD v = (DWORD)gone.origCorner;
+            DwmSetWindowAttribute(h, 33, &v, sizeof(v));
+        }
+    }
     if (g_dragHwnd == h) g_dragHwnd = nullptr;
     g_items.erase(g_items.begin() + i);
     ResetWeights();
@@ -1839,7 +1925,7 @@ static void OnMoveEnd(HWND h) {
         }
         logEnd(L"voltando ao layout");
     } else {
-        logEnd(L"janela flutuante: ignorada pelo layout (Alt+T ou 'reorganizar tudo' a prende de novo)");
+        logEnd(L"janela flutuante: ignorada pelo layout (Win+Ctrl+T ou 'reorganizar tudo' a prende de novo)");
         return;
     }
     // padrão: volta ao layout animando a partir de onde foi solta
@@ -1886,6 +1972,11 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObj
             break;
         case EVENT_SYSTEM_FOREGROUND:
             UpdateBorder(hwnd);
+            break;
+        case EVENT_OBJECT_LOCATIONCHANGE:
+            // a static drawn border follows its window from here; animated styles redraw on their tick
+            if (hwnd == g_borderHwnd && g_cfg.borderStyle == 0 && UseOverlay()) DrawOverlay(hwnd);
+            CheckZoom(hwnd);
             break;
         case EVENT_SYSTEM_MOVESIZESTART:
             OnMoveStart(hwnd);
@@ -2084,21 +2175,13 @@ static DWORD WINAPI Worker(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // cria a fila de mensagens
 
-    // só a instância do explorer.exe que é dona da barra de tarefas deve rodar
-    DWORD pid = 0;
-    for (int i = 0; i < 120 && !g_stop; i++) {
-        HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (tb) { GetWindowThreadProcessId(tb, &pid); break; }
-        Sleep(500);
-    }
-    if (g_stop || pid != GetCurrentProcessId()) return 0;
-
-    HWINEVENTHOOK hooks[5] = {};
+    HWINEVENTHOOK hooks[6] = {};
     hooks[0] = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     hooks[1] = SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     hooks[2] = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     hooks[3] = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);  // DESTROY, SHOW, HIDE
     hooks[4] = SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    hooks[5] = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
 
     std::wstring hk = GetStr(L"hotkeys");
     UINT mods = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
@@ -2110,9 +2193,9 @@ static DWORD WINAPI Worker(LPVOID) {
     {
         UINT m2, k2;
         if (ParseHotkey(GetStr(L"layoutHotkey"), &m2, &k2)) keys.push_back({HK_LAYOUT, m2, k2});
-        else if (!GetStr(L"layoutHotkey").empty()) Wh_Log(L"Atalho de layout invalido: use algo como Alt+G");
+        else if (!GetStr(L"layoutHotkey").empty()) Wh_Log(L"Atalho de layout invalido: use algo como Win+Ctrl+G");
         if (ParseHotkey(GetStr(L"floatHotkey"), &m2, &k2)) keys.push_back({HK_FLOAT, m2, k2});
-        else if (!GetStr(L"floatHotkey").empty()) Wh_Log(L"Atalho de soltar janela invalido: use algo como Alt+T");
+        else if (!GetStr(L"floatHotkey").empty()) Wh_Log(L"Atalho de soltar janela invalido: use algo como Win+Ctrl+T");
     }
     for (auto& k : keys) {
         if (RegisterHotKey(nullptr, k.id, k.mods, k.vk)) {
@@ -2151,8 +2234,6 @@ static DWORD WINAPI Worker(LPVOID) {
         }
         if (g_stop) break;
 
-        static double lastPoll = 0;
-        if (NowMs() - lastPoll > 250) { lastPoll = NowMs(); PollZoom(); }
         double tB = NowMs();
         ProcessPending();
         double tC = NowMs();
@@ -2173,7 +2254,7 @@ static DWORD WINAPI Worker(LPVOID) {
         } else {
             StatsFlush();
             g_nextFrame = 0;
-            DWORD wait = (g_pending.empty() && !verifyPending) ? (g_items.empty() ? INFINITE : 250) : 20;
+            DWORD wait = (g_pending.empty() && !verifyPending) ? INFINITE : 20;
             if (BorderAnimated()) wait = std::min<DWORD>(wait, 16);
             if (g_retileAt) wait = std::min<DWORD>(wait, 15);
             MsgWaitForMultipleObjectsEx(0, nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
@@ -2209,10 +2290,10 @@ static DWORD WINAPI Worker(LPVOID) {
 }
 
 // ---------------------------------------------------------------------------
-// Pontos de entrada do Windhawk
+// Pontos de entrada da mod (tool mod: roda no processo windhawk.exe dedicado)
 // ---------------------------------------------------------------------------
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Adaptive Windows 1.0.0 carregado");
     LoadSettings();
     g_stop = false;
@@ -2220,19 +2301,199 @@ BOOL Wh_ModInit() {
     return g_thread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
     if (g_thread) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_stop = true;
     if (g_thread) {
-        for (int i = 0; i < 30; i++) {
+        // Repete até a fila de mensagens da thread existir; depois espera ela terminar, sem limite de tempo
+        // (descarregar a DLL com a thread ainda rodando derrubaria o processo).
+        do {
             PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-            if (WaitForSingleObject(g_thread, 100) == WAIT_OBJECT_0) break;
-        }
+        } while (WaitForSingleObject(g_thread, 100) == WAIT_TIMEOUT);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
