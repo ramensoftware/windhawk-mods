@@ -4,9 +4,20 @@
 // @description     Minimizes the window when middle-clicking (scroll wheel) on the title bar.
 // @version         1.1.2
 // @author          Ar4ujo_009
-// @github          Ar4ujo009
+// @github          https://github.com/Ar4ujo009
 // @include         *
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Middle Click Minimize
+This mod allows you to minimize windows by middle-clicking (using the scroll wheel) directly on the title bar.
+
+## Features
+* **Universal Support:** Works seamlessly across most native Windows applications and modern frameworks that report the HTCAPTION hit test.
+* **Configurable Blacklist:** Specify executable names (e.g., `steam.exe`, `vivaldi.exe`) in the mod settings to prevent injection in incompatible or custom-drawn applications.
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
