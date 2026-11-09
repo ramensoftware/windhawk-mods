@@ -483,6 +483,7 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
 
     pFreeMibTable(pTable);
 
+    // Decimal kilobits per second: (bytes * 8 * 1000) / (elapsedMs * 1000) = (bytes * 8) / elapsedMs
     g_netDownKbps = (DWORD)((diffIn * 8ULL) / elapsedMs);
     g_netUpKbps   = (DWORD)((diffOut * 8ULL) / elapsedMs);
     s_prevNetCounters.swap(cur);
@@ -712,6 +713,15 @@ bool IsFullscreenAppActive(HWND hTaskbar) {
         if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
             return false;
         }
+    }
+
+    // With an auto-hide taskbar the work area is the whole monitor, so a
+    // maximized window's rect (including its invisible resize borders) covers
+    // the monitor too. A maximized window that still has a caption isn't
+    // fullscreen.
+    if (IsZoomed(hFg) &&
+        (GetWindowLongPtrW(hFg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION) {
+        return false;
     }
 
     HMONITOR hMonTray = MonitorFromWindow(hTaskbar ? hTaskbar : hHud, MONITOR_DEFAULTTOPRIMARY);
@@ -979,11 +989,14 @@ void FastRepositionOnly() {
         return;
     }
 
-    SetWindowPos(hWnd, NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-
+    // Reassert topmost when showing from hidden state so it never gets obscured by taskbar
     if (!IsWindowVisible(hWnd)) {
-        ShowWindow(hWnd, SW_SHOWNA);
+        SetWindowPos(hWnd, HWND_TOPMOST, posX, posY, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        return;
     }
+
+    SetWindowPos(hWnd, NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 // GUI thread only: computes dimensions and paints with per-pixel alpha via UpdateLayeredWindow
@@ -1181,7 +1194,7 @@ void SyncWindowGeometry() {
                 if (showBars) {
                     Gdiplus::Color barCol = (ram > 85) ? Gdiplus::Color(255, 255, 85, 85) :
                                            ((ram > 70) ? Gdiplus::Color(255, 255, 190, 50) : Gdiplus::Color(255, 165, 130, 255));
-                    DrawRoundedMiniBarGDIPlus(g, ramStartX, yPos + ScaleDpi(16, dpi), ramEndX - ramStartX, ScaleDpi(3, dpi), ram, barCol);
+                    DrawRoundedMiniBarGDIPlus(g, ramStartX, yPos + ScaleDpi(16, dpi), ramEndX - ramStartX, ScaleDpi(3, dpi), cpu, barCol);
                 }
             }
 
