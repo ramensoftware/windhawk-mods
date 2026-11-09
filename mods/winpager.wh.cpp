@@ -7,7 +7,7 @@
 // @github          https://github.com/seanmamasde
 // @homepage        https://github.com/seanmamasde/WinPager
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -luxtheme -lcomctl32 -lshcore -lshlwapi -lruntimeobject -lole32 -loleaut32 -luuid -lgdi32
+// @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshcore -lruntimeobject -lole32 -luuid -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -107,7 +107,8 @@ The mod runs in its own process; it isn't injected into explorer.exe.
 // Source: https://github.com/seanmamasde/WinPager. This mod is windhawk/winpager.wh.cpp there, with the files it
 // #includes inlined by tools/make-windhawk-mod.ps1; WinPager.exe is built from the same files.
 
-#include <commctrl.h>
+#include <windhawk_utils.h>
+
 #include <cwchar>
 
 // ---- src/vdapi.cpp ----
@@ -602,12 +603,8 @@ struct Settings {
     Hotkey moveRight{MOD_CONTROL | MOD_SHIFT | MOD_WIN, VK_RIGHT};
 
     void load();
-    void save() const;
     bool operator==(const Settings&) const = default;
 };
-
-bool startupEnabled();
-void setStartup(bool on);
 
 struct Palette {
     bool dark;
@@ -617,14 +614,9 @@ struct Palette {
 
 DWORD readDword(const wchar_t* key, const wchar_t* name, DWORD def);  // HKCU value, def when missing
 bool systemDark();  // taskbar ("Windows mode")
-bool appsDark();    // app windows ("App mode")
 COLORREF accentColor(int shade);  // 0 = Light3 ... 3 = accent ... 6 = Dark3
 Palette pagerPalette(const Settings& s);
 
-// Settings dialog (modeless). onApply runs after OK/Apply; hotkeyOk[2] reports registration afterwards; desktops is how
-// many exist, the largest useful "Desktops shown" limit being one less.
-void showSettings(HWND owner, Settings& s, int desktops, const bool* hotkeyOk, void (*onApply)(void*), void* ctx);
-HWND settingsWindow();  // for IsDialogMessage; null when closed
 
 // ---- src/theme.cpp, continued ----
 namespace {
@@ -642,10 +634,6 @@ DWORD readDword(const wchar_t* key, const wchar_t* name, DWORD def) {
 
 bool systemDark() {
     return readDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", 1) == 0;
-}
-
-bool appsDark() {
-    return readDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", 1) == 0;
 }
 
 COLORREF accentColor(int shade) {
@@ -917,6 +905,7 @@ enum : UINT {
     WM_APP_VD = WM_APP + 1,  // vd::Change in wParam
     WM_APP_SETTINGS,         // sent by a second instance
     WM_APP_TASKBARS,         // a pager's taskbar went away
+    WM_APP_ICON,             // a window's icon, looked up off this thread (app.cpp fetchIcon)
 };
 
 inline constexpr wchar_t kControllerClass[] = L"WinPager.Controller";
@@ -947,7 +936,6 @@ public:
     void moveWindow(HWND hwnd, int desktop);
     void contextMenu(POINT screen);
     ID2D1Bitmap* icon(HWND hwnd);
-    void applySettings();  // after the settings dialog changed `settings`
 
 private:
     static LRESULT CALLBACK proc(HWND, UINT, WPARAM, LPARAM);
@@ -1468,8 +1456,9 @@ Pager::Pager(App& app, HWND taskbar) : app_(app), taskbar_(taskbar), tip_(app) {
     wchar_t cls[32];
     primary_ = GetClassNameW(taskbar, cls, 32) && !wcscmp(cls, L"Shell_TrayWnd");
     registerClass(app.inst, kPagerClass, proc);
-    hwnd_ = CreateWindowExW(WS_EX_LAYERED, kPagerClass, L"WinPager", WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 1, 1,
-                            taskbar_, nullptr, app.inst, this);
+    // NOPARENTNOTIFY: no WM_PARENTNOTIFY sent into explorer, which could hang us, on create, destroy and clicks
+    hwnd_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOPARENTNOTIFY, kPagerClass, L"WinPager", WS_CHILD | WS_CLIPSIBLINGS, 0, 0,
+                            1, 1, taskbar_, nullptr, app.inst, this);
     if (!hwnd_) return;  // taskbar in a shell band right now; App retries
     drop_.Attach(new DropTarget(*this));
     RegisterDragDrop(hwnd_, drop_.Get());
@@ -1830,62 +1819,7 @@ LRESULT Pager::handle(UINT msg, WPARAM wp, LPARAM lp) {
 }
 // ---- src/app.cpp ----
 
-// ---- res/resource.h ----
-#define IDI_APP 1
-#define IDD_SETTINGS 100
 
-#define IDC_NAV 1000
-#define IDC_TITLE 1001
-#define IDC_APPLY 1002
-
-// General (KDE options)
-#define IDC_LBL_GENERAL 1100
-#define IDC_OUTLINES 1101
-#define IDC_ICONS 1102
-#define IDC_CURSCREEN 1103
-#define IDC_WRAP 1104
-#define IDC_LBL_TEXT 1110
-#define IDC_TEXT0 1111  // number
-#define IDC_TEXT1 1112  // name
-#define IDC_TEXT2 1113  // none
-#define IDC_LBL_SELECT 1120
-#define IDC_SEL0 1121  // nothing
-#define IDC_SEL1 1122  // show desktop
-#define IDC_SEL2 1123  // Task View
-
-// Windows
-#define IDC_LBL_POS 1200
-#define IDC_POS0 1201
-#define IDC_POS1 1202
-#define IDC_LBL_THEME 1210
-#define IDC_THEME0 1211
-#define IDC_THEME1 1212
-#define IDC_THEME2 1213
-#define IDC_LBL_COLORS 1220
-#define IDC_ACCENT 1221
-#define IDC_LBL_STARTUP 1230
-#define IDC_STARTUP 1231
-#define IDC_LBL_SWITCH 1240
-#define IDC_SWITCHOSD 1241
-#define IDC_HIDESYSOSD 1242
-#define IDC_LBL_MAXDESK 1250
-#define IDC_MAXDESK_LESS 1251
-#define IDC_MAXDESK 1252
-#define IDC_MAXDESK_MORE 1253
-
-// Keyboard shortcuts
-#define IDC_LBL_HK0 1300
-#define IDC_HK0 1301
-#define IDC_LBL_HK1 1302
-#define IDC_HK1 1303
-#define IDC_HK_NOTE 1304
-
-// About
-#define IDC_ABOUT_ICON 1400
-#define IDC_ABOUT_NAME 1401
-#define IDC_ABOUT_TEXT 1402
-
-// ---- src/app.cpp, continued ----
 #include <shellapi.h>
 #include <shlobj.h>
 // clang-format off
@@ -1932,6 +1866,46 @@ HBITMAP packagedAppIcon(HWND h) {
         f->GetImage({32, 32}, SIIGBF_ICONONLY, &bmp);
     PropVariantClear(&v);
     return bmp;
+}
+
+// A window's icon, looked up on the thread pool and posted back as WM_APP_ICON: WM_GETICON waits on the window's app
+// and the packaged-app lookup on the shell, and the pagers share the taskbar's input queue, so neither may block here.
+struct IconRequest {
+    HWND controller, window;
+    HICON icon = nullptr;
+    HBITMAP bitmap = nullptr;
+};
+
+void CALLBACK fetchIcon(PTP_CALLBACK_INSTANCE, void* p) {
+    auto* r = static_cast<IconRequest*>(p);
+    HICON ic = nullptr;
+    for (WPARAM type : {WPARAM(ICON_BIG), WPARAM(ICON_SMALL2)}) {
+        DWORD_PTR res = 0;
+        if (!ic && SendMessageTimeoutW(r->window, WM_GETICON, type, 0, SMTO_ABORTIFHUNG, 50, &res) && res) ic = reinterpret_cast<HICON>(res);
+    }
+    if (!ic) ic = reinterpret_cast<HICON>(GetClassLongPtrW(r->window, GCLP_HICON));
+    if (ic) {
+        r->icon = CopyIcon(ic);  // the app may destroy its own before the controller converts it
+    } else if (SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
+        r->bitmap = packagedAppIcon(r->window);
+        CoUninitialize();
+    }
+    if (!PostMessageW(r->controller, WM_APP_ICON, 0, reinterpret_cast<LPARAM>(r))) {  // the controller is gone
+        if (r->icon) DestroyIcon(r->icon);
+        if (r->bitmap) DeleteObject(r->bitmap);
+        delete r;
+    }
+}
+
+// The mod's pager starts at every sign-in and settings change: report a Windows build it doesn't know once, not each time.
+bool unsupportedNoticeDue() {
+    wchar_t build[16] = L"", seen[16] = L"";
+    DWORD cb = sizeof build;
+    RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuild", RRF_RT_REG_SZ, nullptr, build, &cb);
+    Wh_GetStringValue(L"unsupportedBuild", seen, ARRAYSIZE(seen));
+    if (!wcscmp(build, seen)) return false;
+    Wh_SetStringValue(L"unsupportedBuild", build);
+    return true;
 }
 
 // shared OSD host from explorer (from modernflyout repo)
@@ -1985,7 +1959,6 @@ int App::run(HINSTANCE hinst) {
     wc.lpfnWndProc = proc;
     wc.hInstance = inst;
     wc.lpszClassName = kControllerClass;
-    wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(IDI_APP));
     RegisterClassExW(&wc);
     if (!CreateWindowExW(WS_EX_TOOLWINDOW, kControllerClass, L"WinPager", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, this))
         return 1;
@@ -2008,7 +1981,6 @@ int App::run(HINSTANCE hinst) {
 
     MSG msg{};
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (HWND dlg = settingsWindow(); dlg && IsDialogMessageW(dlg, &msg)) continue;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -2064,6 +2036,21 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_SETTINGS:
         openSettings();
         return 0;
+    case WM_APP_ICON: {  // fetchIcon's answer; its handles are ours to free
+        const std::unique_ptr<IconRequest> r(reinterpret_cast<IconRequest*>(lp));
+        ComPtr<IWICBitmap> wb;
+        if (r->icon) wic->CreateBitmapFromHICON(r->icon, &wb);
+        else if (r->bitmap) wic->CreateBitmapFromHBITMAP(r->bitmap, nullptr, WICBitmapUsePremultipliedAlpha, &wb);
+        if (r->icon) DestroyIcon(r->icon);
+        if (r->bitmap) DeleteObject(r->bitmap);
+        const auto it = icons_.find(r->window);  // gone if the window closed meanwhile
+        ComPtr<IWICFormatConverter> cv;
+        if (it != icons_.end() && wb && SUCCEEDED(wic->CreateFormatConverter(&cv)) &&
+            SUCCEEDED(cv->Initialize(wb.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)) &&
+            SUCCEEDED(rt->CreateBitmapFromWicBitmap(cv.Get(), &it->second)))
+            for (auto& p : pagers_) p->update(false, true);
+        return 0;
+    }
     case WM_TIMER:
         if (wp == kTimerRefresh) {
             refresh();
@@ -2212,10 +2199,11 @@ void App::initApi() {
     const HRESULT hr = api.init(hwnd_, WM_APP_VD);
     if (SUCCEEDED(hr)) return schedule(kDesktops | kWindows | kLayout);
     if (hr == E_NOINTERFACE) {
-        MessageBoxW(nullptr,
-                    L"This Windows build exposes a virtual desktop interface WinPager doesn't know.\n"
-                    L"WinPager targets Windows 11 24H2/25H2 (build 26100 and later).",
-                    L"WinPager", MB_ICONERROR);
+        if (unsupportedNoticeDue())
+            MessageBoxW(nullptr,
+                        L"This Windows build exposes a virtual desktop interface WinPager doesn't know.\n"
+                        L"WinPager targets Windows 11 24H2/25H2 (build 26100 and later).",
+                        L"WinPager", MB_ICONERROR);
         DestroyWindow(hwnd_);
         return;
     }
@@ -2255,12 +2243,6 @@ void App::hideSystemOsd() {
     if (systemOsd_ && IsWindowVisible(systemOsd_)) ShowWindowAsync(systemOsd_, SW_HIDE);
 }
 
-void App::applySettings() {
-    settings.save();
-    registerHotkeys();
-    applyTheme();
-    schedule(kTaskbars | kLayout | kWindows);
-}
 
 void App::rebuildPagers() {
     std::vector<HWND> bars;
@@ -2288,6 +2270,7 @@ void App::registerHotkeys() {
     for (int i = 0; i < 2; ++i) {
         UnregisterHotKey(hwnd_, kHotkeyLeft + i);
         hotkeyOk[i] = !keys[i]->vk || RegisterHotKey(hwnd_, kHotkeyLeft + i, keys[i]->mods | MOD_NOREPEAT, keys[i]->vk);
+        if (!hotkeyOk[i]) Wh_Log(L"%s: another app already uses this shortcut", i ? L"moveRight" : L"moveLeft");
     }
 }
 
@@ -2338,7 +2321,6 @@ void App::contextMenu(POINT pt) {
     AppendMenuW(m, MF_STRING, IDM_CONFIGURE_VD, L"Configure Virtual Desktops…");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, IDM_SETTINGS, L"Configure WinPager…");
-    AppendMenuW(m, MF_STRING, IDM_EXIT, L"Exit");
     SetForegroundWindow(hwnd_);
     const UINT cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, hwnd_, nullptr);
     PostMessageW(hwnd_, WM_NULL, 0, 0);
@@ -2356,37 +2338,22 @@ void App::contextMenu(POINT pt) {
     case IDM_SETTINGS:
         openSettings();
         break;
-    case IDM_EXIT:
-        DestroyWindow(hwnd_);
-        break;
     }
 }
 
 void App::openSettings() {
-    showSettings(hwnd_, settings, static_cast<int>(model.desktops.size()), hotkeyOk,
-                 [](void* ctx) { static_cast<App*>(ctx)->applySettings(); }, this);
+    std::wstring exe(MAX_PATH, L'\0');
+    exe.resize(GetModuleFileNameW(nullptr, exe.data(), MAX_PATH));
+    exe = exe.substr(0, exe.rfind(L'\\') + 1) + L"windhawk.exe";
+    ShellExecuteW(nullptr, nullptr, exe.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 ID2D1Bitmap* App::icon(HWND h) {
     auto [it, fresh] = icons_.try_emplace(h);
-    if (!fresh) return it->second.Get();
-    HICON ic = nullptr;
-    for (WPARAM type : {WPARAM(ICON_BIG), WPARAM(ICON_SMALL2)}) {
-        DWORD_PTR r = 0;
-        if (!ic && SendMessageTimeoutW(h, WM_GETICON, type, 0, SMTO_ABORTIFHUNG, 50, &r) && r) ic = reinterpret_cast<HICON>(r);
+    if (fresh) {  // drawn without one until WM_APP_ICON
+        std::unique_ptr<IconRequest> r(new IconRequest{hwnd_, h});
+        if (TrySubmitThreadpoolCallback(fetchIcon, r.get(), nullptr)) r.release();
     }
-    if (!ic) ic = reinterpret_cast<HICON>(GetClassLongPtrW(h, GCLP_HICON));
-    ComPtr<IWICBitmap> wb;
-    if (ic) {
-        wic->CreateBitmapFromHICON(ic, &wb);
-    } else if (HBITMAP hb = packagedAppIcon(h)) {
-        wic->CreateBitmapFromHBITMAP(hb, nullptr, WICBitmapUsePremultipliedAlpha, &wb);
-        DeleteObject(hb);
-    }
-    ComPtr<IWICFormatConverter> cv;
-    if (wb && SUCCEEDED(wic->CreateFormatConverter(&cv)) &&
-        SUCCEEDED(cv->Initialize(wb.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)))
-        rt->CreateBitmapFromWicBitmap(cv.Get(), &it->second);
     return it->second.Get();
 }
 
@@ -2396,20 +2363,20 @@ ID2D1Bitmap* App::icon(HWND h) {
 // thread of the tool mod process.
 
 void Settings::load() {
+    using WindhawkUtils::StringSetting;
     auto flag = [](const wchar_t* name, bool& v) { v = Wh_GetIntSetting(name) != 0; };
     auto choice = [](const wchar_t* name, int& v, std::initializer_list<const wchar_t*> options) {
-        const wchar_t* s = Wh_GetStringSetting(name);
+        const StringSetting s = StringSetting::make(name);
         for (int i = 0; const wchar_t* o : options) {
             if (!wcscmp(s, o)) v = i;
             ++i;
         }
-        Wh_FreeStringSetting(s);
     };
     auto hotkey = [](const wchar_t* name, Hotkey& h) {
-        const wchar_t* s = Wh_GetStringSetting(name);
+        const StringSetting s = StringSetting::make(name);
         const auto [mods, vk] = parseHotkey(s);
+        if (!vk && *s.get()) Wh_Log(L"%s: can't read \"%s\", expected a virtual-key code like ctrl+shift+win+37", name, s.get());
         h = {mods, vk};
-        Wh_FreeStringSetting(s);
     };
     flag(L"showWindowOutlines", showWindowOutlines);
     flag(L"showWindowIcons", showWindowIcons);
@@ -2425,20 +2392,6 @@ void Settings::load() {
     flag(L"hideSystemOsd", hideSystemOsd);
     hotkey(L"moveLeft", moveLeft);
     hotkey(L"moveRight", moveRight);
-}
-
-void Settings::save() const {}  // Windhawk keeps them
-
-// "Configure WinPager…" opens Windhawk, where the settings are (Windhawk 2.0 hosts tool mods in windhawk-mod.exe beside it)
-void showSettings(HWND, Settings&, int, const bool*, void (*)(void*), void*) {
-    std::wstring exe(MAX_PATH, L'\0');
-    exe.resize(GetModuleFileNameW(nullptr, exe.data(), MAX_PATH));
-    exe = exe.substr(0, exe.rfind(L'\\') + 1) + L"windhawk.exe";
-    ShellExecuteW(nullptr, nullptr, exe.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-}
-
-HWND settingsWindow() {
-    return nullptr;
 }
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
@@ -2462,8 +2415,6 @@ DWORD WINAPI pagerThread(void*) {
         CloseHandle(single);
         return 0;
     }
-    const INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_LISTVIEW_CLASSES};
-    InitCommonControlsEx(&icc);
     if (SUCCEEDED(OleInitialize(nullptr))) {  // STA + OLE drag and drop
         {
             App app;
