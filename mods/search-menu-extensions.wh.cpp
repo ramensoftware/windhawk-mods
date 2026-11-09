@@ -6,7 +6,8 @@
 // @author          TurtlesMaster1
 // @github          https://github.com/TurtlesMaster1
 // @include         shellhost.exe
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -26,7 +27,7 @@ or Windows 10.
 ![Demo provider items mixed into the new Windows search](https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/demo.png)
 
 A **dependency mod**: on its own it only adds an optional demo provider (type
-`wh hello`). Other mods (or any program/script) use it to put items into the new
+`wh hello` to see an echo/copy item, a toggle, a "run" item and a card). Other mods (or any program/script) use it to put items into the new
 search box. Providers see every query and decide for themselves when to answer,
 so no prefix is needed.
 
@@ -70,18 +71,29 @@ BOOL   WINAPI WSE_SubmitResults(UINT64 queryHandle, PCWSTR itemsJson, BOOL done)
 BOOL   WINAPI WSE_SetStaticItems(UINT64 provider, PCWSTR itemsJson);     // items always offered (GetItems)
 BOOL   WINAPI WSE_UpdateCard(UINT64 provider, PCWSTR itemId, PCWSTR dataJson); // live-update a card's data
 BOOL   WINAPI WSE_NotifyChanged(UINT64 provider);                        // ask search to re-query
-BOOL   WINAPI WSE_UnregisterProvider(UINT64 provider);
+BOOL   WINAPI WSE_UnregisterProvider(UINT64 provider);                   // waits for running callbacks
 ```
 
-Finding the library: enumerate the modules of the process and pick the one whose
-file name starts with `search-menu-extensions_`, then `GetProcAddress`. Mods load
-in any order, so retry for a few seconds if it isn't there yet.
+Finding the library: enumerate the modules of the process and use the first one
+that exports `WSE_GetApiVersion`. Mods load in any order, so retry for a few
+seconds if it isn't there yet (and again later: the library can be disabled,
+updated or re-enabled while your mod is running; `onDetach` tells you it's going).
+
+Callbacks run on the library's worker threads, never on Windows' own threads.
+Call `WSE_UnregisterProvider` in your `Wh_ModUninit`: it returns once none of
+your callbacks is running any more, so your DLL can unload safely. (Calling it
+from inside one of your own callbacks is fine too; it then waits for the others.)
 
 ### 2. From any process (named pipe)
 
-Connect to `\\.\pipe\WindhawkSearchExtensions` and exchange **newline-delimited
-UTF-8 JSON** messages. Each connection can register any number of providers.
-They're removed automatically when the connection closes.
+Connect to `\\.\pipe\WindhawkSearchExtensions-<session id>` (the Windows
+session id of your process, e.g. `ProcessIdToSessionId`) and exchange
+**newline-delimited UTF-8 JSON** messages. Each connection can register any
+number of providers. They're removed automatically when the connection closes.
+
+Only processes running as the same user can open the pipe. Any of them can
+register a provider, and a provider sees the text typed into search. Turn off
+**Named pipe API** if you don't use it.
 
 Client to library:
 
@@ -151,6 +163,9 @@ Library to client:
   (setting **Restart search when enabled late**). The composer comes back the
   next time you open search. Providers registered later (other mods, pipe
   clients) are picked up live.
+* When the mod is disabled or updated, Windows may still hold some of its
+  objects (items it's showing, finished queries). The library then restarts the
+  composer instead of unloading under them; search reopens normally next time.
 * **Card buttons:** cards render under the selected row and you can update them
   live (`WSE_UpdateCard` / `updateCard`). But Windows ignores Action.Submit
   buttons in that inline preview ("slot previews do not support card actions").
@@ -160,8 +175,8 @@ Library to client:
   thread while another is blocked reading. Windows serializes I/O on
   synchronous handles and the write waits forever. Either answer from the
   reading thread or open the pipe overlapped.
-* Turn on **Debug logging** and open the Windhawk log to see the queries and
-  what Windows asks of the providers.
+* Enable logging for the mod in Windhawk to see the queries and what Windows
+  asks of the providers.
 */
 // ==/WindhawkModReadme==
 
@@ -169,18 +184,16 @@ Library to client:
 /*
 - demoProvider: true
   $name: Demo provider
-  $description: Adds sample items when you type "wh" (echo, toggle, card, launcher). Handy to check the library works.
+  $description: Adds sample items when you type "wh" (echo, toggle, card, run). Handy to check the library works.
 - pipeServer: true
   $name: Named pipe API
-  $description: Let other processes and scripts add items through \\.\pipe\WindhawkSearchExtensions
+  $description: Let other processes and scripts (same user only) add items through \\.\pipe\WindhawkSearchExtensions-<session id>
 - queryTimeoutMs: 2500
   $name: Provider timeout (ms)
   $description: How long to wait for a provider's results before showing what it has so far
 - restartIfLate: true
   $name: Restart search when enabled late
   $description: If the mod is enabled while the search composer is already running, restart it (it reopens on next use) so Windows picks up the providers
-- debugLog: false
-  $name: Debug logging
 */
 // ==/WindhawkModSettings==
 
@@ -190,8 +203,10 @@ Library to client:
 #include <winstring.h>
 #include <shellapi.h>
 #include <shlwapi.h>
+#include <sddl.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <map>
 #include <memory>
@@ -204,9 +219,16 @@ Library to client:
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Data.Json.h>
 
+// combaseapi.h only declares these for NTDDI_VERSION >= Windows 8, and windows.h is already
+// included (by windhawk_api.h) before this file could raise it.
+#if !defined(NTDDI_VERSION) || NTDDI_VERSION < 0x06020000
+DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
+extern "C" DECLSPEC_IMPORT HRESULT WINAPI CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE* cookie);
+extern "C" DECLSPEC_IMPORT HRESULT WINAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE cookie);
+#endif
+
 
 #define LOG(fmt, ...) Wh_Log(fmt, ##__VA_ARGS__)
-#define DLOG(fmt, ...) do { if (g_settings.debugLog) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
 
 namespace wf = winrt::Windows::Foundation;
 namespace wfc = winrt::Windows::Foundation::Collections;
@@ -216,7 +238,6 @@ struct Settings {
     bool demoProvider = true;
     bool pipeServer = true;
     int queryTimeoutMs = 2500;
-    bool debugLog = false;
     bool restartIfLate = true;
 } g_settings;
 
@@ -276,24 +297,24 @@ struct IconResourceDelegate;
 struct PaletteContentDelegate;
 struct PaletteItemInvokeDelegate;
 struct PaletteTemplateActionInvokeDelegate;
-constexpr GUID IID_ExecutePaletteQueryDelegate = {0xD28C2DE0, 0x91DB, 0x55D2, {0xB3, 0x00, 0x27, 0x60, 0x4B, 0xAA, 0xC8, 0x19}};
+[[maybe_unused]] constexpr GUID IID_ExecutePaletteQueryDelegate = {0xD28C2DE0, 0x91DB, 0x55D2, {0xB3, 0x00, 0x27, 0x60, 0x4B, 0xAA, 0xC8, 0x19}};
 struct ExecutePaletteQueryDelegate : IUnknown { virtual HRESULT STDMETHODCALLTYPE Invoke(Pal::IPaletteItemFactory* factory, Pal::IPaletteQuery* query, IInspectable** operation) = 0; };
-constexpr GUID IID_IconResourceDelegate = {0x7BE9EF24, 0x7260, 0x5189, {0x83, 0x14, 0x1D, 0x9F, 0x3E, 0xF9, 0xC1, 0xE5}};
+[[maybe_unused]] constexpr GUID IID_IconResourceDelegate = {0x7BE9EF24, 0x7260, 0x5189, {0x83, 0x14, 0x1D, 0x9F, 0x3E, 0xF9, 0xC1, 0xE5}};
 struct IconResourceDelegate : IUnknown { virtual HRESULT STDMETHODCALLTYPE Invoke(IInspectable* qualifierValues, IInspectable** result) = 0; };
-constexpr GUID IID_PaletteContentDelegate = {0xAA523F7D, 0xE64D, 0x514F, {0x8F, 0xD7, 0x35, 0xD6, 0x5E, 0x86, 0x6E, 0xE7}};
+[[maybe_unused]] constexpr GUID IID_PaletteContentDelegate = {0xAA523F7D, 0xE64D, 0x514F, {0x8F, 0xD7, 0x35, 0xD6, 0x5E, 0x86, 0x6E, 0xE7}};
 struct PaletteContentDelegate : IUnknown { virtual HRESULT STDMETHODCALLTYPE Invoke(HSTRING itemId, IInspectable** operation) = 0; };
-constexpr GUID IID_PaletteItemInvokeDelegate = {0xA2335A2E, 0xABC8, 0x5C1D, {0x8B, 0x62, 0x89, 0xC7, 0xF3, 0x9B, 0x0E, 0x0A}};
+[[maybe_unused]] constexpr GUID IID_PaletteItemInvokeDelegate = {0xA2335A2E, 0xABC8, 0x5C1D, {0x8B, 0x62, 0x89, 0xC7, 0xF3, 0x9B, 0x0E, 0x0A}};
 struct PaletteItemInvokeDelegate : IUnknown { virtual HRESULT STDMETHODCALLTYPE Invoke(Pal::IPaletteQuery* query) = 0; };
-constexpr GUID IID_PaletteTemplateActionInvokeDelegate = {0xD3A63B88, 0xA52B, 0x59A7, {0x9E, 0x44, 0x50, 0xA5, 0x7A, 0x7F, 0x6E, 0xBF}};
+[[maybe_unused]] constexpr GUID IID_PaletteTemplateActionInvokeDelegate = {0xD3A63B88, 0xA52B, 0x59A7, {0x9E, 0x44, 0x50, 0xA5, 0x7A, 0x7F, 0x6E, 0xBF}};
 struct PaletteTemplateActionInvokeDelegate : IUnknown { virtual HRESULT STDMETHODCALLTYPE Invoke(Pal::IPaletteTemplateContent* content, HSTRING actionId, HSTRING data, HSTRING inputs) = 0; };
-constexpr GUID IID_IPaletteCatalog = {0x75D4E7E7, 0x9B3E, 0x577D, {0x9C, 0x34, 0x86, 0x76, 0x43, 0xFD, 0x71, 0x1A}};
+[[maybe_unused]] constexpr GUID IID_IPaletteCatalog = {0x75D4E7E7, 0x9B3E, 0x577D, {0x9C, 0x34, 0x86, 0x76, 0x43, 0xFD, 0x71, 0x1A}};
 struct IPaletteCatalog : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE GetPalette(HSTRING extensionId, Pal::IPaletteExtensionDefinition** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetPalettes(UINT32* __resultSize, Pal::IPaletteExtensionDefinition*** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE add_Changed(IInspectable* handler, INT64* token) = 0;
   virtual HRESULT STDMETHODCALLTYPE remove_Changed(INT64 token) = 0;
 };
-constexpr GUID IID_IPaletteCatalogStatics = {0x084D2066, 0x3184, 0x50F3, {0xA0, 0xFF, 0x98, 0x04, 0xFF, 0x4C, 0x00, 0x02}};
+[[maybe_unused]] constexpr GUID IID_IPaletteCatalogStatics = {0x084D2066, 0x3184, 0x50F3, {0xA0, 0xFF, 0x98, 0x04, 0xFF, 0x4C, 0x00, 0x02}};
 struct IPaletteCatalogStatics : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE Parse(HSTRING input, UINT32* __resultSize, Pal::IPaletteItemView*** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE Parse2(HSTRING input, Pal::IPaletteExtensionHost* host, UINT32* __resultSize, Pal::IPaletteItemView*** result) = 0;
@@ -305,16 +326,16 @@ struct IPaletteCatalogStatics : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE IsCallerIdentityAccessSystemFor(IInspectable* calledObject, boolean* result) = 0;
   virtual HRESULT STDMETHODCALLTYPE TryGetItem(HSTRING extensionId, HSTRING itemId, Pal::IPaletteItemView** result) = 0;
 };
-constexpr GUID IID_IPaletteContent = {0x42CD7936, 0x3FDD, 0x59CF, {0xAF, 0x35, 0x55, 0x84, 0x42, 0x89, 0x12, 0x5F}};
+[[maybe_unused]] constexpr GUID IID_IPaletteContent = {0x42CD7936, 0x3FDD, 0x59CF, {0xAF, 0x35, 0x55, 0x84, 0x42, 0x89, 0x12, 0x5F}};
 struct IPaletteContent : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Kind(INT32* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetView(Pal::IPaletteContentView** result) = 0;
 };
-constexpr GUID IID_IPaletteDelegateInvokerFactory = {0xE7898783, 0xCE65, 0x5218, {0xB5, 0x94, 0x9A, 0x6E, 0x9D, 0xBC, 0x5E, 0x6F}};
+[[maybe_unused]] constexpr GUID IID_IPaletteDelegateInvokerFactory = {0xE7898783, 0xCE65, 0x5218, {0xB5, 0x94, 0x9A, 0x6E, 0x9D, 0xBC, 0x5E, 0x6F}};
 struct IPaletteDelegateInvokerFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(Pal::PaletteItemInvokeDelegate* handler, Pal::IPaletteDelegateInvoker** value) = 0;
 };
-constexpr GUID IID_IPaletteExtensionDefinition = {0xCA5CC86A, 0x8C7E, 0x5DB6, {0xB4, 0x6E, 0xD5, 0x88, 0xDE, 0xEE, 0x0A, 0xE7}};
+[[maybe_unused]] constexpr GUID IID_IPaletteExtensionDefinition = {0xCA5CC86A, 0x8C7E, 0x5DB6, {0xB4, 0x6E, 0xD5, 0x88, 0xDE, 0xEE, 0x0A, 0xE7}};
 struct IPaletteExtensionDefinition : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateExtension(Pal::IPaletteExtensionHost* host, Pal::IPaletteItemSourceExtension** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_ItemFactory(Pal::IPaletteItemFactory** value) = 0;
@@ -330,7 +351,7 @@ struct IPaletteExtensionDefinition : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Kinds(Pal::IPaletteKinds** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_ContainedKinds(Pal::IPaletteKinds** value) = 0;
 };
-constexpr GUID IID_IPaletteExtensionHost = {0x3E789EFC, 0x49DD, 0x5670, {0x84, 0x58, 0x7F, 0xB5, 0x8C, 0x45, 0x72, 0x65}};
+[[maybe_unused]] constexpr GUID IID_IPaletteExtensionHost = {0x3E789EFC, 0x49DD, 0x5670, {0x84, 0x58, 0x7F, 0xB5, 0x8C, 0x45, 0x72, 0x65}};
 struct IPaletteExtensionHost : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE ReportStatusAsync(Pal::IPaletteStatus* status, IInspectable** operation) = 0;
   virtual HRESULT STDMETHODCALLTYPE ReportStatusAsyncWithMessage(HSTRING message, INT32 severity, IInspectable** operation) = 0;
@@ -342,7 +363,7 @@ struct IPaletteExtensionHost : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE remove_Dismissed(INT64 token) = 0;
   virtual HRESULT STDMETHODCALLTYPE RequestUnload() = 0;
 };
-constexpr GUID IID_IPaletteIconData = {0xA2C917A5, 0x6B93, 0x5D6D, {0xA3, 0xBB, 0x44, 0x3B, 0x82, 0xBE, 0x5B, 0x5C}};
+[[maybe_unused]] constexpr GUID IID_IPaletteIconData = {0xA2C917A5, 0x6B93, 0x5D6D, {0xA3, 0xBB, 0x44, 0x3B, 0x82, 0xBE, 0x5B, 0x5C}};
 struct IPaletteIconData : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_IconUri(IInspectable** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_IconGlyph(HSTRING* value) = 0;
@@ -351,7 +372,7 @@ struct IPaletteIconData : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Bitmap(IInspectable** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetBitmapAsync(IInspectable* qualifierValues, IInspectable** operation) = 0;
 };
-constexpr GUID IID_IPaletteIconDataStatics = {0xBDE0245B, 0x9389, 0x565C, {0x8B, 0xF2, 0x09, 0x49, 0xA7, 0xBE, 0x7C, 0xD4}};
+[[maybe_unused]] constexpr GUID IID_IPaletteIconDataStatics = {0xBDE0245B, 0x9389, 0x565C, {0x8B, 0xF2, 0x09, 0x49, 0xA7, 0xBE, 0x7C, 0xD4}};
 struct IPaletteIconDataStatics : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE FromResourceQualifier(Pal::IconResourceDelegate* handler, Pal::IPaletteIconData** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE FromBitmap(IInspectable* bitmap, Pal::IPaletteIconData** result) = 0;
@@ -360,11 +381,11 @@ struct IPaletteIconDataStatics : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE FromGlyph2(HSTRING iconGlyph, HSTRING fontFamily, Pal::IPaletteIconData** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE FromStreamReference(IInspectable* streamReference, Pal::IPaletteIconData** result) = 0;
 };
-constexpr GUID IID_IPaletteInvoker = {0x4DCE3641, 0xD67A, 0x5402, {0x82, 0xE6, 0xF7, 0x7B, 0xE4, 0x62, 0xC9, 0x42}};
+[[maybe_unused]] constexpr GUID IID_IPaletteInvoker = {0x4DCE3641, 0xD67A, 0x5402, {0x82, 0xE6, 0xF7, 0x7B, 0xE4, 0x62, 0xC9, 0x42}};
 struct IPaletteInvoker : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE Invoke(Pal::IPaletteQuery* query) = 0;
 };
-constexpr GUID IID_IPaletteItem = {0x095B1F54, 0x5206, 0x5F2B, {0xAC, 0xC5, 0xAE, 0x72, 0xBE, 0x80, 0x1E, 0x11}};
+[[maybe_unused]] constexpr GUID IID_IPaletteItem = {0x095B1F54, 0x5206, 0x5F2B, {0xAC, 0xC5, 0xAE, 0x72, 0xBE, 0x80, 0x1E, 0x11}};
 struct IPaletteItem : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Id(HSTRING* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_ExtensionId(HSTRING* value) = 0;
@@ -392,13 +413,13 @@ struct IPaletteItem : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE add_PropertyChanged(IInspectable* handler, INT64* token) = 0;
   virtual HRESULT STDMETHODCALLTYPE remove_PropertyChanged(INT64 token) = 0;
 };
-constexpr GUID IID_IPaletteItemFactory = {0x72784ABE, 0xDA8A, 0x5F48, {0x89, 0x5C, 0xD8, 0xE3, 0x1D, 0x03, 0xAE, 0x40}};
+[[maybe_unused]] constexpr GUID IID_IPaletteItemFactory = {0x72784ABE, 0xDA8A, 0x5F48, {0x89, 0x5C, 0xD8, 0xE3, 0x1D, 0x03, 0xAE, 0x40}};
 struct IPaletteItemFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_ExtensionId(HSTRING* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE Create(HSTRING id, Pal::IPaletteItem** result) = 0;
   virtual HRESULT STDMETHODCALLTYPE Create2(HSTRING id, Pal::IPaletteKinds* kinds, Pal::IPaletteItem** result) = 0;
 };
-constexpr GUID IID_IPaletteItemSourceExtension = {0x2F89BC97, 0x3238, 0x5E81, {0x8E, 0x02, 0x5D, 0xAA, 0x9C, 0x56, 0x3F, 0x81}};
+[[maybe_unused]] constexpr GUID IID_IPaletteItemSourceExtension = {0x2F89BC97, 0x3238, 0x5E81, {0x8E, 0x02, 0x5D, 0xAA, 0x9C, 0x56, 0x3F, 0x81}};
 struct IPaletteItemSourceExtension : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE Initialize(Pal::IPaletteItemFactory* factory, Pal::IPaletteExtensionHost* host) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetItem(HSTRING id, Pal::IPaletteItemView** result) = 0;
@@ -409,7 +430,7 @@ struct IPaletteItemSourceExtension : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE add_ItemsChanged(IInspectable* handler, INT64* token) = 0;
   virtual HRESULT STDMETHODCALLTYPE remove_ItemsChanged(INT64 token) = 0;
 };
-constexpr GUID IID_IPaletteItemView = {0x49D58C99, 0x5BBF, 0x5745, {0xA6, 0x93, 0x67, 0xC1, 0x67, 0x15, 0xF0, 0xC0}};
+[[maybe_unused]] constexpr GUID IID_IPaletteItemView = {0x49D58C99, 0x5BBF, 0x5745, {0xA6, 0x93, 0x67, 0xC1, 0x67, 0x15, 0xF0, 0xC0}};
 struct IPaletteItemView : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Id(HSTRING* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_ExtensionId(HSTRING* value) = 0;
@@ -430,22 +451,22 @@ struct IPaletteItemView : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE add_PropertyChanged(IInspectable* handler, INT64* token) = 0;
   virtual HRESULT STDMETHODCALLTYPE remove_PropertyChanged(INT64 token) = 0;
 };
-constexpr GUID IID_IPaletteKinds = {0x666CB275, 0x1764, 0x5016, {0xA7, 0x30, 0x1B, 0xF7, 0xE9, 0xE1, 0xD1, 0xBC}};
+[[maybe_unused]] constexpr GUID IID_IPaletteKinds = {0x666CB275, 0x1764, 0x5016, {0xA7, 0x30, 0x1B, 0xF7, 0xE9, 0xE1, 0xD1, 0xBC}};
 struct IPaletteKinds : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Values(UINT32* __valueSize, HSTRING** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetPrimaryKind(HSTRING* result) = 0;
   virtual HRESULT STDMETHODCALLTYPE IsOfKind(HSTRING kindSpec, boolean* result) = 0;
   virtual HRESULT STDMETHODCALLTYPE IsOfKinds(UINT32 __kindSpecsSize, HSTRING* kindSpecs, INT32 selector, boolean* result) = 0;
 };
-constexpr GUID IID_IPaletteKindsFactory = {0xBE554067, 0x0C61, 0x5273, {0xB6, 0x6E, 0xDC, 0x14, 0x2F, 0x6E, 0x01, 0xA9}};
+[[maybe_unused]] constexpr GUID IID_IPaletteKindsFactory = {0xBE554067, 0x0C61, 0x5273, {0xB6, 0x6E, 0xDC, 0x14, 0x2F, 0x6E, 0x01, 0xA9}};
 struct IPaletteKindsFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(UINT32 __valuesSize, HSTRING* values, Pal::IPaletteKinds** value) = 0;
 };
-constexpr GUID IID_IPaletteProgressStateFactory = {0xDBC1B51F, 0x0FD4, 0x5C73, {0x9F, 0x3E, 0xD1, 0xDE, 0x7E, 0x18, 0x5B, 0x72}};
+[[maybe_unused]] constexpr GUID IID_IPaletteProgressStateFactory = {0xDBC1B51F, 0x0FD4, 0x5C73, {0x9F, 0x3E, 0xD1, 0xDE, 0x7E, 0x18, 0x5B, 0x72}};
 struct IPaletteProgressStateFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(boolean isIndeterminate, FLOAT progress, Pal::IPaletteProgressState** value) = 0;
 };
-constexpr GUID IID_IPaletteQuery = {0xA3D9EE47, 0x0151, 0x5A33, {0x96, 0x4A, 0xD2, 0xD4, 0xC9, 0x1E, 0x97, 0xEA}};
+[[maybe_unused]] constexpr GUID IID_IPaletteQuery = {0xA3D9EE47, 0x0151, 0x5A33, {0x96, 0x4A, 0xD2, 0xD4, 0xC9, 0x1E, 0x97, 0xEA}};
 struct IPaletteQuery : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE ToJson(HSTRING* result) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_QueryId(GUID* value) = 0;
@@ -465,11 +486,11 @@ struct IPaletteQuery : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Mode(INT32* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE put_Mode(INT32 value) = 0;
 };
-constexpr GUID IID_IPaletteQueryProgressFactory = {0x16412CF9, 0x3F5E, 0x5E6C, {0x85, 0xCD, 0x8F, 0xE5, 0x7F, 0x1B, 0xC5, 0x38}};
+[[maybe_unused]] constexpr GUID IID_IPaletteQueryProgressFactory = {0x16412CF9, 0x3F5E, 0x5E6C, {0x85, 0xCD, 0x8F, 0xE5, 0x7F, 0x1B, 0xC5, 0x38}};
 struct IPaletteQueryProgressFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(UINT32 __itemsSize, Pal::IPaletteItemView** items, Pal::IPaletteProgressState* progressState, Pal::IPaletteQueryProgress** value) = 0;
 };
-constexpr GUID IID_IPaletteQueryResults = {0x587B3BED, 0x2C37, 0x53AF, {0xB4, 0x79, 0xC2, 0x98, 0x6B, 0xCA, 0x59, 0xDC}};
+[[maybe_unused]] constexpr GUID IID_IPaletteQueryResults = {0x587B3BED, 0x2C37, 0x53AF, {0xB4, 0x79, 0xC2, 0x98, 0x6B, 0xCA, 0x59, 0xDC}};
 struct IPaletteQueryResults : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_QueryId(GUID* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_Items(UINT32* __valueSize, Pal::IPaletteItemView*** value) = 0;
@@ -478,29 +499,29 @@ struct IPaletteQueryResults : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE put_HasMoreItems(boolean value) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetView(Pal::IPaletteQueryResultsView** result) = 0;
 };
-constexpr GUID IID_IPaletteQueryResultsFactory = {0x3C262865, 0xA9E4, 0x5C17, {0xB3, 0x03, 0xEC, 0xC3, 0x10, 0xF5, 0xEB, 0x71}};
+[[maybe_unused]] constexpr GUID IID_IPaletteQueryResultsFactory = {0x3C262865, 0xA9E4, 0x5C17, {0xB3, 0x03, 0xEC, 0xC3, 0x10, 0xF5, 0xEB, 0x71}};
 struct IPaletteQueryResultsFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(Pal::IPaletteQuery* query, Pal::IPaletteQueryResults** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE CreateInstance2(Pal::IPaletteQuery* query, Pal::ExecutePaletteQueryDelegate* getNextDelegate, Pal::IPaletteQueryResults** value) = 0;
 };
-constexpr GUID IID_IPaletteQueryResultsView = {0xE11F2FF3, 0x5F5B, 0x503F, {0x84, 0x4F, 0xFD, 0x2B, 0xB9, 0xF0, 0x63, 0x3D}};
+[[maybe_unused]] constexpr GUID IID_IPaletteQueryResultsView = {0xE11F2FF3, 0x5F5B, 0x503F, {0x84, 0x4F, 0xFD, 0x2B, 0xB9, 0xF0, 0x63, 0x3D}};
 struct IPaletteQueryResultsView : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_QueryId(GUID* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_Items(UINT32* __valueSize, Pal::IPaletteItemView*** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_HasMoreItems(boolean* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE GetMoreItemsAsync(IInspectable** operation) = 0;
 };
-constexpr GUID IID_IPaletteTag = {0xEF42C037, 0xBC6B, 0x5802, {0xA6, 0xAE, 0xD4, 0xB4, 0x33, 0x2A, 0xBD, 0x32}};
+[[maybe_unused]] constexpr GUID IID_IPaletteTag = {0xEF42C037, 0xBC6B, 0x5802, {0xA6, 0xAE, 0xD4, 0xB4, 0x33, 0x2A, 0xBD, 0x32}};
 struct IPaletteTag : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_Icon(Pal::IPaletteIconData** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_Text(HSTRING* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE get_ToolTip(HSTRING* value) = 0;
 };
-constexpr GUID IID_IPaletteTagFactory = {0x64702731, 0x160E, 0x580F, {0xAD, 0xD9, 0xC6, 0xA8, 0xB7, 0x78, 0x86, 0xC3}};
+[[maybe_unused]] constexpr GUID IID_IPaletteTagFactory = {0x64702731, 0x160E, 0x580F, {0xAD, 0xD9, 0xC6, 0xA8, 0xB7, 0x78, 0x86, 0xC3}};
 struct IPaletteTagFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(Pal::IPaletteIconData* icon, HSTRING text, HSTRING tooltip, Pal::IPaletteTag** value) = 0;
 };
-constexpr GUID IID_IPaletteTemplateContent = {0xA2561B14, 0x488B, 0x5B78, {0xAC, 0x4B, 0x00, 0x13, 0x9C, 0xCE, 0x94, 0x99}};
+[[maybe_unused]] constexpr GUID IID_IPaletteTemplateContent = {0xA2561B14, 0x488B, 0x5B78, {0xAC, 0x4B, 0x00, 0x13, 0x9C, 0xCE, 0x94, 0x99}};
 struct IPaletteTemplateContent : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE get_TemplateJson(HSTRING* value) = 0;
   virtual HRESULT STDMETHODCALLTYPE put_TemplateJson(HSTRING value) = 0;
@@ -509,15 +530,15 @@ struct IPaletteTemplateContent : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE add_PropertyChanged(IInspectable* handler, INT64* token) = 0;
   virtual HRESULT STDMETHODCALLTYPE remove_PropertyChanged(INT64 token) = 0;
 };
-constexpr GUID IID_IPaletteTemplateContentFactory = {0x1AFD3A97, 0x0151, 0x5E70, {0xA9, 0x6A, 0xFF, 0xD7, 0x14, 0xE9, 0xD8, 0x2D}};
+[[maybe_unused]] constexpr GUID IID_IPaletteTemplateContentFactory = {0x1AFD3A97, 0x0151, 0x5E70, {0xA9, 0x6A, 0xFF, 0xD7, 0x14, 0xE9, 0xD8, 0x2D}};
 struct IPaletteTemplateContentFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(Pal::PaletteTemplateActionInvokeDelegate* invokeAction, Pal::IPaletteTemplateContent** value) = 0;
 };
-constexpr GUID IID_IPaletteToggleInvokerFactory = {0x48CFA05A, 0x6C07, 0x5DEE, {0xA3, 0x63, 0x1F, 0x5A, 0x48, 0xBB, 0x5A, 0x8B}};
+[[maybe_unused]] constexpr GUID IID_IPaletteToggleInvokerFactory = {0x48CFA05A, 0x6C07, 0x5DEE, {0xA3, 0x63, 0x1F, 0x5A, 0x48, 0xBB, 0x5A, 0x8B}};
 struct IPaletteToggleInvokerFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(Pal::IPaletteInvoker* invoker, boolean isToggled, Pal::IPaletteToggleInvoker** value) = 0;
 };
-constexpr GUID IID_IPaletteUriInvokerFactory = {0x8F2D6F1B, 0x4B0D, 0x5D77, {0xA4, 0x65, 0x6F, 0xD9, 0x67, 0x31, 0x70, 0x9D}};
+[[maybe_unused]] constexpr GUID IID_IPaletteUriInvokerFactory = {0x8F2D6F1B, 0x4B0D, 0x5D77, {0xA4, 0x65, 0x6F, 0xD9, 0x67, 0x31, 0x70, 0x9D}};
 struct IPaletteUriInvokerFactory : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE CreateInstance(IInspectable* uri, Pal::IPaletteUriInvoker** value) = 0;
   virtual HRESULT STDMETHODCALLTYPE CreateInstance2(IInspectable* uri, IInspectable* launcherOptions, Pal::IPaletteUriInvoker** value) = 0;
@@ -536,7 +557,6 @@ constexpr GUID IID_IAsyncAction_ = {0x5a648006, 0x843a, 0x4da9, {0x86, 0x5b, 0x9
 constexpr GUID IID_AsyncOpResults = {0xcb62b7ba, 0x8e45, 0x55c1, {0xbd, 0x2e, 0x81, 0xb7, 0xf5, 0x13, 0xd1, 0x35}};
 // IAsyncOperation<PaletteContent>
 constexpr GUID IID_AsyncOpContent = {0xcb73ad0d, 0x69fd, 0x5ae3, {0x98, 0x8c, 0xad, 0x2b, 0xf6, 0x8a, 0x16, 0x60}};
-constexpr GUID IID_IMapStringObject = {0x1b0d3570, 0x0877, 0x5ec2, {0x8a, 0x2c, 0x3b, 0x95, 0x39, 0x50, 0x6a, 0xca}};
 constexpr GUID IID_IPaletteCatalogPrivate = {0xdcaa0cae, 0x03e9, 0x40b2, {0x94, 0x96, 0x67, 0x6c, 0xd0, 0x56, 0x82, 0x78}};
 constexpr GUID IID_IValueUnmarshalByPropertySet = {0xecabe149, 0x4833, 0x452b, {0x81, 0x12, 0x3e, 0xee, 0xc6, 0xd2, 0x0c, 0xb0}};
 
@@ -592,7 +612,17 @@ struct IPaletteCatalogPrivate : ::IInspectable {
     virtual void STDMETHODCALLTYPE SetItemSourceEnabled(HSTRING id, BOOL enabled) = 0;
 };
 
+// Every object handed to Windows carries a LiveToken, so uninit knows whether Windows still holds
+// code from this DLL (and must restart the composer instead of letting it unload).
+static std::atomic<int> g_liveObjects{0};
+struct LiveToken {
+    LiveToken() { ++g_liveObjects; }
+    LiveToken(LiveToken const&) = delete;
+    ~LiveToken() { --g_liveObjects; }
+};
+
 #define IMPL_REFCOUNT                                                         \
+    LiveToken m_live;                                                         \
     std::atomic<ULONG> m_ref{1};                                              \
     ULONG STDMETHODCALLTYPE AddRef() override { return ++m_ref; }             \
     ULONG STDMETHODCALLTYPE Release() override {                              \
@@ -626,13 +656,62 @@ static HRESULT DupH(winrt::hstring const& s, HSTRING* out) {
 
 static std::atomic<bool> g_alive{false};
 
-static void PinModule() {
-    static std::once_flag once;
-    std::call_once(once, [] {
-        HMODULE m;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           (LPCWSTR)&PinModule, &m);
-    });
+// ---------------------------------------------------------------------------
+// Worker pool. Everything that runs off Windows' threads goes through here, so uninit can drain
+// it (CloseThreadpoolCleanupGroupMembers waits for every submitted callback and timer).
+// ---------------------------------------------------------------------------
+static TP_CALLBACK_ENVIRON g_tpEnv;
+static PTP_CLEANUP_GROUP g_tpGroup;
+static std::mutex g_tpLock;
+static bool g_tpOpen;
+
+static bool PoolOpen() {
+    std::lock_guard l(g_tpLock);
+    if (g_tpOpen) return true;
+    g_tpGroup = CreateThreadpoolCleanupGroup();
+    if (!g_tpGroup) return false;
+    InitializeThreadpoolEnvironment(&g_tpEnv);
+    SetThreadpoolCallbackCleanupGroup(&g_tpEnv, g_tpGroup, nullptr);
+    g_tpOpen = true;
+    return true;
+}
+static void PoolClose() {
+    {
+        std::lock_guard l(g_tpLock);
+        if (!g_tpOpen) return;
+        g_tpOpen = false;  // no new work from here on
+    }
+    CloseThreadpoolCleanupGroupMembers(g_tpGroup, FALSE, nullptr);  // waits for all callbacks
+    CloseThreadpoolCleanupGroup(g_tpGroup);
+    DestroyThreadpoolEnvironment(&g_tpEnv);
+    g_tpGroup = nullptr;
+}
+static VOID CALLBACK PoolThunk(PTP_CALLBACK_INSTANCE, PVOID ctx) {
+    std::unique_ptr<std::function<void()>> fn((std::function<void()>*)ctx);
+    try {
+        (*fn)();
+    } catch (...) {
+    }
+}
+static bool Submit(std::function<void()> fn) {
+    auto* heap = new std::function<void()>(std::move(fn));
+    std::lock_guard l(g_tpLock);
+    if (!g_tpOpen || !TrySubmitThreadpoolCallback(PoolThunk, heap, &g_tpEnv)) {
+        delete heap;
+        return false;
+    }
+    return true;
+}
+// A pool timer (closed with the pool). Returns nullptr once the pool is closing.
+static PTP_TIMER PoolTimer(PTP_TIMER_CALLBACK cb, void* ctx) {
+    std::lock_guard l(g_tpLock);
+    return g_tpOpen ? CreateThreadpoolTimer(cb, ctx, &g_tpEnv) : nullptr;
+}
+static void ArmTimer(PTP_TIMER t, int ms) {
+    LARGE_INTEGER due;
+    due.QuadPart = -10000LL * ms;
+    FILETIME ft{due.LowPart, (DWORD)due.HighPart};
+    SetThreadpoolTimer(t, &ft, 0, 0);
 }
 
 // Activation factories are agile; cache them.
@@ -647,10 +726,31 @@ static winrt::com_ptr<T> Factory(const wchar_t* cls, const GUID& iid) {
     if (!out) LOG(L"activation factory %s unavailable", cls);
     return out;
 }
+// Cached in trivially destructible slots and released by ReleaseFactories() at uninit, never by a
+// static destructor (that would run at process exit, after COM is gone).
+static std::mutex g_factoriesLock;
+[[clang::no_destroy]] static std::vector<std::atomic<::IUnknown*>*> g_factorySlots;
+template <class T>
+static T* CachedFactory(std::atomic<::IUnknown*>& slot, const wchar_t* cls, const GUID& iid) {
+    if (auto* f = slot.load()) return (T*)f;
+    auto f = Factory<T>(cls, iid);
+    if (!f) return nullptr;
+    std::lock_guard l(g_factoriesLock);
+    if (auto* cur = slot.load()) return (T*)cur;
+    slot = (::IUnknown*)f.detach();
+    g_factorySlots.push_back(&slot);
+    return (T*)slot.load();
+}
+static void ReleaseFactories() {
+    std::lock_guard l(g_factoriesLock);
+    for (auto* s : g_factorySlots)
+        if (auto* f = s->exchange(nullptr)) f->Release();
+    g_factorySlots.clear();
+}
 #define CACHED_FACTORY(T, cls)                                                \
     ([]() -> T* {                                                             \
-        static winrt::com_ptr<T> f = Factory<T>(cls, IID_##T);                \
-        return f.get();                                                       \
+        static std::atomic<::IUnknown*> slot{nullptr};                        \
+        return CachedFactory<T>(slot, cls, IID_##T);                          \
     }())
 #define IID_IPaletteKindsFactory Pal::IID_IPaletteKindsFactory
 #define IID_IPaletteIconDataStatics Pal::IID_IPaletteIconDataStatics
@@ -845,24 +945,6 @@ struct DoneAction final : IAsyncActionRaw, AsyncBase {
     HRESULT STDMETHODCALLTYPE GetResults() override { return S_OK; }
 };
 
-// Generic delegate implementation: IUnknown + Invoke with a fixed IID.
-template <class Iface>
-struct Delegate final : Iface {
-    IMPL_REFCOUNT
-    GUID iid;
-    std::function<HRESULT(Iface*)> dummy;
-    Delegate(GUID const& i) : iid(i) {}
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == IID_IUnknown || riid == iid || riid == IID_IAgileObject_) {
-            *ppv = static_cast<Iface*>(this);
-            AddRef();
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-};
-
 struct InvokeDelegate final : Pal::PaletteItemInvokeDelegate {
     IMPL_REFCOUNT
     std::function<void(Pal::IPaletteQuery*)> fn;
@@ -960,21 +1042,59 @@ struct Provider {
     bool zeroState = false;
     std::vector<std::wstring> kinds, containedKinds, itemKinds;
     ProviderCallbacks cb;
-    void* owner = nullptr;  // pipe client, for cleanup
 
     winrt::com_ptr<Pal::IPaletteItemFactory> factory;
     winrt::com_ptr<Definition> def;
 
     std::mutex m;
-    std::wstring staticItemsJson = L"[]";
     std::vector<winrt::com_ptr<Pal::IPaletteItemView>> staticItems;
-    std::map<std::wstring, winrt::com_ptr<Pal::IPaletteItemView>> itemCache;
+    // Item lookup (GetItem/TryGetItem): the static items plus the latest query's results only.
+    std::map<std::wstring, winrt::com_ptr<Pal::IPaletteItemView>> staticCache, resultCache;
+    UINT64 resultQuery = 0;  // query whose results are in resultCache
     std::map<std::wstring, CardState> cards;
     std::vector<Extension*> extensions;  // weak, removed in ~Extension
+
+    // Calls into the provider's callbacks, so unregistering can wait for them to finish.
+    std::mutex cbLock;
+    std::condition_variable cbIdle;
+    int inFlight = 0;
+    bool closed = false;
 };
 
+static thread_local Provider* t_inCallbackOf = nullptr;
+
+// Run f (which calls p->cb.*) unless the provider is being unregistered.
+template <class F>
+static void CallProvider(Provider* p, F&& f) {
+    {
+        std::lock_guard l(p->cbLock);
+        if (p->closed) return;
+        p->inFlight++;
+    }
+    Provider* prev = t_inCallbackOf;
+    t_inCallbackOf = p;
+    try {
+        f();
+    } catch (...) {
+    }
+    t_inCallbackOf = prev;
+    {
+        std::lock_guard l(p->cbLock);
+        p->inFlight--;
+    }
+    p->cbIdle.notify_all();
+}
+// Stop new callbacks and wait for running ones. Called from inside one of its own callbacks, it
+// waits for the others only.
+static void CloseProviderCallbacks(Provider* p) {
+    std::unique_lock l(p->cbLock);
+    p->closed = true;
+    int self = t_inCallbackOf == p ? 1 : 0;
+    p->cbIdle.wait(l, [&] { return p->inFlight <= self; });
+}
+
 static std::mutex g_providersLock;
-static std::vector<std::shared_ptr<Provider>> g_providers;
+[[clang::no_destroy]] static std::vector<std::shared_ptr<Provider>> g_providers;  // emptied at uninit
 static std::atomic<UINT64> g_nextHandle{0x5E00};
 
 static std::shared_ptr<Provider> FindProvider(UINT64 h) {
@@ -1067,31 +1187,41 @@ static winrt::com_ptr<Pal::IPaletteIconData> MakeIconJson(wdj::IJsonValue const&
     return nullptr;
 }
 
+// Runs on a pool thread. The clipboard needs an owner window for SetClipboardData to stick.
 static void CopyToClipboard(std::wstring const& text) {
-    if (!OpenClipboard(nullptr)) return;
-    EmptyClipboard();
-    size_t bytes = (text.size() + 1) * sizeof(wchar_t);
-    HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (g) {
-        memcpy(GlobalLock(g), text.c_str(), bytes);
-        GlobalUnlock(g);
-        if (!SetClipboardData(CF_UNICODETEXT, g)) GlobalFree(g);
+    HWND owner = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, nullptr, nullptr);
+    bool opened = false;
+    for (int i = 0; i < 10 && !(opened = OpenClipboard(owner)); i++) Sleep(20);  // another app may hold it
+    if (opened) {
+        EmptyClipboard();
+        size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+        HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if (g) {
+            memcpy(GlobalLock(g), text.c_str(), bytes);
+            GlobalUnlock(g);
+            if (!SetClipboardData(CF_UNICODETEXT, g)) GlobalFree(g);
+        }
+        CloseClipboard();
     }
-    CloseClipboard();
+    if (owner) DestroyWindow(owner);
+}
+
+// Runs on a pool thread, in a temporary STA as ShellExecute expects.
+static void RunCommand(std::wstring const& cmd, std::wstring const& args, std::wstring const& dir) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    ShellExecuteW(nullptr, L"open", cmd.c_str(), args.empty() ? nullptr : args.c_str(),
+                  dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+    if (SUCCEEDED(hr)) CoUninitialize();
 }
 
 static void DispatchInvoke(std::shared_ptr<Provider> const& p, std::wstring const& item, std::wstring const& action,
                            std::wstring const& data, std::wstring const& inputs) {
-    DLOG(L"[%s] invoke item=%s action=%s data=%s inputs=%s", p->id.c_str(), item.c_str(), action.c_str(),
+    LOG(L"[%s] invoke item=%s action=%s data=%s inputs=%s", p->id.c_str(), item.c_str(), action.c_str(),
          data.c_str(), inputs.c_str());
     if (!p->cb.onInvoke) return;
-    auto cb = p->cb.onInvoke;
-    std::thread([cb, item, action, data, inputs] {
-        try {
-            cb(item, action, data, inputs);
-        } catch (...) {
-        }
-    }).detach();
+    Submit([p, item, action, data, inputs] {
+        CallProvider(p.get(), [&] { p->cb.onInvoke(item, action, data, inputs); });
+    });
 }
 
 static winrt::com_ptr<::IUnknown> MakeCardContent(std::shared_ptr<Provider> const& p, std::wstring const& itemId) {
@@ -1123,7 +1253,7 @@ static winrt::com_ptr<::IUnknown> MakeCardContent(std::shared_ptr<Provider> cons
     }
     winrt::com_ptr<::IUnknown> asContent;
     content->QueryInterface(Pal::IID_IPaletteContent, asContent.put_void());
-    DLOG(L"[%s] card content created for %s", p->id.c_str(), itemId.c_str());
+    LOG(L"[%s] card content created for %s", p->id.c_str(), itemId.c_str());
     return asContent;
 }
 
@@ -1232,12 +1362,11 @@ static winrt::com_ptr<Pal::IPaletteItemView> BuildItem(std::shared_ptr<Provider>
     } else if (type == L"run") {
         std::wstring cmd = JStr(action, L"command"), args = JStr(action, L"args"), dir = JStr(action, L"cwd");
         invoker = makeDelegateInvoker([cmd, args, dir](Pal::IPaletteQuery*) {
-            ShellExecuteW(nullptr, L"open", cmd.c_str(), args.empty() ? nullptr : args.c_str(),
-                          dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+            Submit([cmd, args, dir] { RunCommand(cmd, args, dir); });
         });
     } else if (type == L"copy") {
         std::wstring text = JStr(action, L"text", title);
-        invoker = makeDelegateInvoker([text](Pal::IPaletteQuery*) { CopyToClipboard(text); });
+        invoker = makeDelegateInvoker([text](Pal::IPaletteQuery*) { Submit([text] { CopyToClipboard(text); }); });
     } else if (type == L"toggle") {
         bool on = action.HasKey(L"isToggled") && action.GetNamedBoolean(L"isToggled");
         auto inner = makeDelegateInvoker([wp, id, on](Pal::IPaletteQuery*) {
@@ -1275,16 +1404,30 @@ static winrt::com_ptr<Pal::IPaletteItemView> BuildItem(std::shared_ptr<Provider>
     }
 
     if (FAILED(item->GetView(view.put()))) view = nullptr;
-    if (view) {
-        std::lock_guard l(p->m);
-        p->itemCache[id] = view;
-    }
     return view;
 }
 
-static std::vector<winrt::com_ptr<Pal::IPaletteItemView>> BuildItems(std::shared_ptr<Provider> const& p,
-                                                                     std::wstring const& json) {
-    std::vector<winrt::com_ptr<Pal::IPaletteItemView>> out;
+struct BuiltItem {
+    std::wstring id;
+    winrt::com_ptr<Pal::IPaletteItemView> view;
+};
+
+static winrt::com_ptr<Pal::IPaletteItemView> FindItemView(Provider* p, std::wstring const& id) {
+    std::lock_guard l(p->m);
+    if (auto it = p->resultCache.find(id); it != p->resultCache.end()) return it->second;
+    if (auto it = p->staticCache.find(id); it != p->staticCache.end()) return it->second;
+    return nullptr;
+}
+
+// Drop card state for items that are in neither cache any more. Caller holds p->m.
+static void PruneCards(Provider* p) {
+    std::erase_if(p->cards, [&](auto const& kv) {
+        return !p->resultCache.contains(kv.first) && !p->staticCache.contains(kv.first);
+    });
+}
+
+static std::vector<BuiltItem> BuildItems(std::shared_ptr<Provider> const& p, std::wstring const& json) {
+    std::vector<BuiltItem> out;
     try {
         auto v = wdj::JsonValue::Parse(json);
         wdj::JsonArray arr{nullptr};
@@ -1299,8 +1442,12 @@ static std::vector<winrt::com_ptr<Pal::IPaletteItemView>> BuildItems(std::shared
         int i = 0;
         if (arr)
             for (auto e : arr) {
-                if (e.ValueType() == wdj::JsonValueType::Object)
-                    if (auto view = BuildItem(p, e.GetObject(), i)) out.push_back(view);
+                if (e.ValueType() == wdj::JsonValueType::Object) {
+                    auto o = e.GetObject();
+                    std::wstring id = JStr(o, L"id");
+                    if (id.empty()) id = L"item" + std::to_wstring(i) + L"-" + JStr(o, L"title");
+                    if (auto view = BuildItem(p, o, i)) out.push_back({id, view});
+                }
                 i++;
             }
     } catch (winrt::hresult_error const& e) {
@@ -1321,25 +1468,29 @@ struct Query {
     winrt::com_ptr<ResultsOp> op;
     std::mutex m;
     std::vector<winrt::com_ptr<Pal::IPaletteItemView>> items;
-    PTP_TIMER timer = nullptr;
+    std::atomic<PTP_TIMER> timer{nullptr};
     std::atomic<bool> finished{false};
 };
 static std::mutex g_queriesLock;
-static std::map<UINT64, std::shared_ptr<Query>> g_queries;
+[[clang::no_destroy]] static std::map<UINT64, std::shared_ptr<Query>> g_queries;  // emptied at uninit
 static std::atomic<UINT64> g_nextQuery{1};
 
-static void FinishQuery(std::shared_ptr<Query> const& q, const wchar_t* why) {
-    if (q->finished.exchange(true)) return;
+// Remove the query from the table and stop its timeout. Exactly one caller gets true.
+static bool RetireQuery(std::shared_ptr<Query> const& q) {
+    if (q->finished.exchange(true)) return false;
     {
         std::lock_guard l(g_queriesLock);
         g_queries.erase(q->handle);
     }
-    if (q->timer) {
-        SetThreadpoolTimer(q->timer, nullptr, 0, 0);
-        // Can't wait from inside the callback; just close (callback holds a ref).
-        CloseThreadpoolTimer(q->timer);
-        q->timer = nullptr;
+    if (PTP_TIMER t = q->timer.exchange(nullptr)) {
+        SetThreadpoolTimer(t, nullptr, 0, 0);
+        CloseThreadpoolTimer(t);  // safe from inside its own callback too
     }
+    return true;
+}
+
+static void FinishQuery(std::shared_ptr<Query> const& q, const wchar_t* why) {
+    if (!RetireQuery(q)) return;
     std::vector<winrt::com_ptr<Pal::IPaletteItemView>> items;
     {
         std::lock_guard l(q->m);
@@ -1357,8 +1508,8 @@ static void FinishQuery(std::shared_ptr<Query> const& q, const wchar_t* why) {
         hr = results->GetView(view.put());
     }
     auto p = q->provider.lock();
-    DLOG(L"[%s] query %llu finished (%s): %zu items, hr=%08lx", p ? p->id.c_str() : L"?", q->handle, why,
-         items.size(), hr);
+    LOG(L"[%s] query %llu finished (%s): %zu items, hr=%08lx", p ? p->id.c_str() : L"?", q->handle, why,
+        items.size(), hr);
     if (view)
         q->op->Finish(AS_Completed, view.get());
     else
@@ -1376,7 +1527,20 @@ static bool SubmitResults(UINT64 qh, std::wstring const& json, bool done) {
     if (!q) return false;
     auto p = q->provider.lock();
     if (!p) return false;
-    auto items = BuildItems(p, json);
+    auto built = BuildItems(p, json);
+    {
+        // Keep only the newest query's items for lookups (and their cards).
+        std::lock_guard l(p->m);
+        if (q->handle > p->resultQuery) {
+            p->resultQuery = q->handle;
+            p->resultCache.clear();
+        }
+        if (q->handle == p->resultQuery)
+            for (auto& b : built) p->resultCache[b.id] = b.view;
+        PruneCards(p.get());
+    }
+    std::vector<winrt::com_ptr<Pal::IPaletteItemView>> items;
+    for (auto& b : built) items.push_back(b.view);
     {
         std::lock_guard l(q->m);
         for (auto& i : items) q->items.push_back(i);
@@ -1442,10 +1606,7 @@ static std::wstring QueryText(Pal::IPaletteQuery* q, std::wstring& jsonOut) {
 }
 
 static VOID CALLBACK QueryTimeout(PTP_CALLBACK_INSTANCE, PVOID ctx, PTP_TIMER) {
-    auto* sp = (std::shared_ptr<Query>*)ctx;
-    std::shared_ptr<Query> q = *sp;
-    delete sp;
-    FinishQuery(q, L"timeout");
+    if (auto q = FindQuery((UINT64)(UINT_PTR)ctx)) FinishQuery(q, L"timeout");
 }
 
 static IAsyncOpWithProgressRaw* StartQuery(std::shared_ptr<Provider> const& p, Pal::IPaletteQuery* pq) {
@@ -1456,47 +1617,43 @@ static IAsyncOpWithProgressRaw* StartQuery(std::shared_ptr<Provider> const& p, P
     q->op.attach(new ResultsOp());
     std::weak_ptr<Query> wq = q;
     q->op->onCancel = [wq] {
-        if (auto q = wq.lock()) {
-            if (auto p = q->provider.lock())
-                if (p->cb.onCancel) p->cb.onCancel(q->handle);
-            q->finished = true;
-            std::lock_guard l(g_queriesLock);
-            g_queries.erase(q->handle);
+        // Called on Windows' thread: retire here, tell the provider from the pool.
+        auto q = wq.lock();
+        if (!q || !RetireQuery(q)) return;
+        if (auto p = q->provider.lock(); p && p->cb.onCancel) {
+            UINT64 h = q->handle;
+            Submit([p, h] { CallProvider(p.get(), [&] { p->cb.onCancel(h); }); });
         }
     };
     std::wstring json;
     std::wstring text = QueryText(pq, json);
     INT32 mode = 0;
     pq->get_Mode(&mode);
-    DLOG(L"[%s] query %llu mode=%d text='%s' json=%s", p->id.c_str(), q->handle, mode, text.c_str(), json.c_str());
+    LOG(L"[%s] query %llu mode=%d text='%s' json=%s", p->id.c_str(), q->handle, mode, text.c_str(), json.c_str());
 
     IAsyncOpWithProgressRaw* ret = static_cast<IAsyncOpWithProgressRaw*>(q->op.get());
     ret->AddRef();
 
-    if (!g_alive || !p->cb.onQuery || (text.empty() && !p->zeroState)) {
+    bool started = false;
+    if (p->cb.onQuery && (!text.empty() || p->zeroState)) {
+        std::lock_guard l(g_queriesLock);
+        if (g_alive) {  // checked under the lock uninit takes before draining the table
+            g_queries[q->handle] = q;
+            started = true;
+        }
+    }
+    if (!started) {
         FinishQuery(q, L"skipped");
         return ret;
     }
-    {
-        std::lock_guard l(g_queriesLock);
-        g_queries[q->handle] = q;
+    if (PTP_TIMER t = PoolTimer(QueryTimeout, (void*)(UINT_PTR)q->handle)) {
+        q->timer = t;
+        ArmTimer(t, g_settings.queryTimeoutMs);
     }
-    q->timer = CreateThreadpoolTimer(QueryTimeout, new std::shared_ptr<Query>(q), nullptr);
-    if (q->timer) {
-        LARGE_INTEGER due;
-        due.QuadPart = -10000LL * g_settings.queryTimeoutMs;
-        FILETIME ft{due.LowPart, (DWORD)due.HighPart};
-        SetThreadpoolTimer(q->timer, &ft, 0, 0);
-    }
-    auto cb = p->cb.onQuery;
-    UINT64 h = q->handle;
     // Never run provider code on Windows' thread.
-    std::thread([cb, h, text, json] {
-        try {
-            cb(h, text, json);
-        } catch (...) {
-        }
-    }).detach();
+    UINT64 h = q->handle;
+    if (!Submit([p, h, text, json] { CallProvider(p.get(), [&] { p->cb.onQuery(h, text, json); }); }))
+        FinishQuery(q, L"shutting down");
     return ret;
 }
 
@@ -1535,7 +1692,7 @@ struct Extension final : Pal::IPaletteItemSourceExtension {
     HRESULT STDMETHODCALLTYPE Initialize(Pal::IPaletteItemFactory*, Pal::IPaletteExtensionHost* h) override {
         host.copy_from(h);
         auto p = provider.lock();
-        DLOG(L"[%s] Initialize", p ? p->id.c_str() : L"?");
+        LOG(L"[%s] Initialize", p ? p->id.c_str() : L"?");
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetItem(HSTRING id, Pal::IPaletteItemView** result) override {
@@ -1543,10 +1700,8 @@ struct Extension final : Pal::IPaletteItemSourceExtension {
         auto p = provider.lock();
         if (!p) return S_OK;
         std::wstring k(FromH(id));
-        DLOG(L"[%s] GetItem %s", p->id.c_str(), k.c_str());
-        std::lock_guard l(p->m);
-        auto it = p->itemCache.find(k);
-        if (it != p->itemCache.end()) it->second.copy_to(result);
+        LOG(L"[%s] GetItem %s", p->id.c_str(), k.c_str());
+        if (auto v = FindItemView(p.get(), k)) v.copy_to(result);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetItems(UINT32* n, Pal::IPaletteItemView*** result) override {
@@ -1555,7 +1710,7 @@ struct Extension final : Pal::IPaletteItemSourceExtension {
         auto p = provider.lock();
         if (!p || !g_alive) return S_OK;
         std::lock_guard l(p->m);
-        DLOG(L"[%s] GetItems -> %zu", p->id.c_str(), p->staticItems.size());
+        LOG(L"[%s] GetItems -> %zu", p->id.c_str(), p->staticItems.size());
         if (p->staticItems.empty()) return S_OK;
         auto** arr = (Pal::IPaletteItemView**)CoTaskMemAlloc(sizeof(void*) * p->staticItems.size());
         if (!arr) return E_OUTOFMEMORY;
@@ -1615,7 +1770,7 @@ struct Definition final : Pal::IPaletteExtensionDefinition {
     winrt::com_ptr<Pal::IPaletteItemFactory> factory;
     winrt::com_ptr<Pal::IPaletteKinds> kinds, contained;
     winrt::com_ptr<Pal::IPaletteIconData> icon;
-    wfc::IMap<winrt::hstring, wf::IInspectable> props = winrt::single_threaded_map<winrt::hstring, wf::IInspectable>();
+    wfc::IMap<winrt::hstring, wf::IInspectable> props = wfc::PropertySet();  // Windows-implemented, no code of ours
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (riid == IID_IUnknown || riid == kIID_IInspectable || riid == Pal::IID_IPaletteExtensionDefinition ||
@@ -1632,7 +1787,6 @@ struct Definition final : Pal::IPaletteExtensionDefinition {
         auto p = provider.lock();
         LOG(L"CreateExtension for %s (provider %s)", extId.c_str(), p ? L"alive" : L"gone");
         if (!p || !g_alive) return E_ABORT;
-        PinModule();
         auto* e = new Extension(p);
         e->host.copy_from(host);
         *result = e;
@@ -1656,48 +1810,15 @@ struct Definition final : Pal::IPaletteExtensionDefinition {
 };
 
 // ---------------------------------------------------------------------------
-// Catalog hooks (vtable patches inside OSClient.API.dll)
+// Catalog hooks. The functions behind the vtable slots of PaletteCatalog (in OSClient.API.dll)
+// are hooked through Windhawk. Each hook checks that `self` really is the catalog class it was
+// set up for, so a shared (identical-code-folded) function on another class is passed through.
 // ---------------------------------------------------------------------------
-struct VtPatch {
-    void** slot = nullptr;
-    void* orig = nullptr;
-    void* hook = nullptr;
-};
-static std::mutex g_patchLock;
-static std::vector<VtPatch> g_patches;
-
-static void* PatchSlot(void** vtbl, int idx, void* hook) {
-    std::lock_guard l(g_patchLock);
-    void** slot = &vtbl[idx];
-    for (auto& p : g_patches)
-        if (p.slot == slot) return p.orig;  // already patched
-    DWORD old;
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) return nullptr;
-    void* orig = *slot;
-    *slot = hook;
-    VirtualProtect(slot, sizeof(void*), old, &old);
-    g_patches.push_back({slot, orig, hook});
-    return orig;
-}
-static void UnpatchAll() {
-    std::lock_guard l(g_patchLock);
-    for (auto& p : g_patches) {
-        DWORD old;
-        if (VirtualProtect(p.slot, sizeof(void*), PAGE_READWRITE, &old)) {
-            *p.slot = p.orig;
-            VirtualProtect(p.slot, sizeof(void*), old, &old);
-        }
-    }
-    g_patches.clear();
-}
-
 using GetPalette_t = HRESULT(STDMETHODCALLTYPE*)(void*, HSTRING, void**);
 using GetPalettes_t = HRESULT(STDMETHODCALLTYPE*)(void*, UINT32*, void***);
 using AddChanged_t = HRESULT(STDMETHODCALLTYPE*)(void*, ::IUnknown*, INT64*);
 using RemoveChanged_t = HRESULT(STDMETHODCALLTYPE*)(void*, INT64);
 using OpenDefault_t = HRESULT(STDMETHODCALLTYPE*)(void*, void**);
-using OpenWithKinds_t = HRESULT(STDMETHODCALLTYPE*)(void*, void*, void**);
-using OpenWithKindsAndConfig_t = HRESULT(STDMETHODCALLTYPE*)(void*, void*, HSTRING, void**);
 using TryGetItem_t = HRESULT(STDMETHODCALLTYPE*)(void*, HSTRING, HSTRING, void**);
 using GetOrdered_t = void(STDMETHODCALLTYPE*)(void*, HSTRING, UINT32*, void***);
 using IsEnabled_t = BOOL(STDMETHODCALLTYPE*)(void*, HSTRING);
@@ -1706,13 +1827,16 @@ static GetPalette_t o_GetPalette;
 static GetPalettes_t o_GetPalettes;
 static AddChanged_t o_AddChanged;
 static RemoveChanged_t o_RemoveChanged;
-static OpenDefault_t o_OpenDefault;
-static OpenWithKinds_t o_OpenWithKinds;
-static OpenWithKindsAndConfig_t o_OpenWithKindsAndConfig;
 static TryGetItem_t o_TryGetItem;
 static GetOrdered_t o_GetOrdered;
 static IsEnabled_t o_IsEnabled;
 static IsEnabled_t o_IsUserDisabled;
+
+// vtables of the objects the hooks were set up for
+static void* g_staticsVt;
+static void* g_catalogVt;
+static void* g_privateVt;
+static inline bool Is(void* self, void* vt) { return vt && self && *(void**)self == vt; }
 
 struct ChangedSub {
     winrt::com_ptr<::IUnknown> catalog;  // IPaletteCatalog*
@@ -1720,7 +1844,7 @@ struct ChangedSub {
     INT64 token;
 };
 static std::mutex g_subsLock;
-static std::vector<ChangedSub> g_subs;
+[[clang::no_destroy]] static std::vector<ChangedSub> g_subs;  // emptied at uninit
 
 static std::vector<winrt::com_ptr<Definition>> DefinitionsFor(const std::wstring* kind) {
     std::vector<winrt::com_ptr<Definition>> r;
@@ -1751,30 +1875,30 @@ static void AppendDefs(UINT32* n, void*** arr, std::vector<winrt::com_ptr<Defini
     if (*arr) CoTaskMemFree(*arr);
     *arr = na;
     *n = old + (UINT32)defs.size();
-    PinModule();
 }
 
 static HRESULT STDMETHODCALLTYPE h_GetPalettes(void* self, UINT32* n, void*** arr) {
     HRESULT hr = o_GetPalettes(self, n, arr);
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hr) && Is(self, g_catalogVt)) {
         UINT32 before = *n;
         AppendDefs(n, arr, DefinitionsFor(nullptr));
-        DLOG(L"GetPalettes: %u native + %u ours", before, *n - before);
+        LOG(L"GetPalettes: %u native + %u ours", before, *n - before);
     }
     return hr;
 }
 static HRESULT STDMETHODCALLTYPE h_GetPalette(void* self, HSTRING id, void** result) {
-    if (auto p = FindProviderByExtId(FromH(id)); p && p->def && g_alive) {
-        DLOG(L"GetPalette(%s) -> ours", p->extId.c_str());
-        p->def->AddRef();
-        *result = static_cast<Pal::IPaletteExtensionDefinition*>(p->def.get());
-        return S_OK;
-    }
+    if (Is(self, g_catalogVt) && g_alive)
+        if (auto p = FindProviderByExtId(FromH(id)); p && p->def) {
+            LOG(L"GetPalette(%s) -> ours", p->extId.c_str());
+            p->def->AddRef();
+            *result = static_cast<Pal::IPaletteExtensionDefinition*>(p->def.get());
+            return S_OK;
+        }
     return o_GetPalette(self, id, result);
 }
 static HRESULT STDMETHODCALLTYPE h_AddChanged(void* self, ::IUnknown* handler, INT64* token) {
     HRESULT hr = o_AddChanged(self, handler, token);
-    if (SUCCEEDED(hr) && handler) {
+    if (SUCCEEDED(hr) && handler && g_alive && Is(self, g_catalogVt)) {
         ChangedSub s;
         s.catalog.copy_from((::IUnknown*)self);
         s.handler.copy_from(handler);
@@ -1785,7 +1909,7 @@ static HRESULT STDMETHODCALLTYPE h_AddChanged(void* self, ::IUnknown* handler, I
     return hr;
 }
 static HRESULT STDMETHODCALLTYPE h_RemoveChanged(void* self, INT64 token) {
-    {
+    if (Is(self, g_catalogVt)) {
         std::lock_guard l(g_subsLock);
         std::erase_if(g_subs, [&](ChangedSub const& s) { return s.catalog.get() == self && s.token == token; });
     }
@@ -1793,68 +1917,40 @@ static HRESULT STDMETHODCALLTYPE h_RemoveChanged(void* self, INT64 token) {
 }
 static void STDMETHODCALLTYPE h_GetOrdered(void* self, HSTRING kind, UINT32* n, void*** arr) {
     o_GetOrdered(self, kind, n, arr);
+    if (!Is(self, g_privateVt)) return;
     std::wstring k(FromH(kind));
     UINT32 before = *n;
     AppendDefs(n, arr, DefinitionsFor(&k));
-    DLOG(L"GetOrderedSourceDefinitions(%s): %u native + %u ours", k.c_str(), before, *n - before);
+    LOG(L"GetOrderedSourceDefinitions(%s): %u native + %u ours", k.c_str(), before, *n - before);
 }
 static BOOL STDMETHODCALLTYPE h_IsEnabled(void* self, HSTRING id) {
-    if (g_alive && FindProviderByExtId(FromH(id))) return TRUE;
+    if (Is(self, g_privateVt) && g_alive && FindProviderByExtId(FromH(id))) return TRUE;
     return o_IsEnabled(self, id);
 }
 static BOOL STDMETHODCALLTYPE h_IsUserDisabled(void* self, HSTRING id) {
-    if (g_alive && FindProviderByExtId(FromH(id))) return FALSE;
+    if (Is(self, g_privateVt) && g_alive && FindProviderByExtId(FromH(id))) return FALSE;
     return o_IsUserDisabled(self, id);
 }
-
-static void PatchCatalogInstance(void* catalog) {
-    if (!catalog) return;
-    void** vt = *(void***)catalog;  // IPaletteCatalog vtable
-    o_GetPalette = (GetPalette_t)PatchSlot(vt, 6, (void*)h_GetPalette);
-    o_GetPalettes = (GetPalettes_t)PatchSlot(vt, 7, (void*)h_GetPalettes);
-    o_AddChanged = (AddChanged_t)PatchSlot(vt, 8, (void*)h_AddChanged);
-    o_RemoveChanged = (RemoveChanged_t)PatchSlot(vt, 9, (void*)h_RemoveChanged);
-    winrt::com_ptr<::IUnknown> priv;
-    if (SUCCEEDED(((::IUnknown*)catalog)->QueryInterface(IID_IPaletteCatalogPrivate, priv.put_void())) && priv) {
-        void** pvt = *(void***)priv.get();
-        o_GetOrdered = (GetOrdered_t)PatchSlot(pvt, 7, (void*)h_GetOrdered);
-        o_IsEnabled = (IsEnabled_t)PatchSlot(pvt, 8, (void*)h_IsEnabled);
-        o_IsUserDisabled = (IsEnabled_t)PatchSlot(pvt, 9, (void*)h_IsUserDisabled);
-    }
-}
-
-static HRESULT STDMETHODCALLTYPE h_OpenDefault(void* self, void** result) {
-    HRESULT hr = o_OpenDefault(self, result);
-    if (SUCCEEDED(hr) && *result) PatchCatalogInstance(*result);
-    DLOG(L"PaletteCatalog.OpenDefault hr=%08lx", hr);
-    return hr;
-}
-static HRESULT STDMETHODCALLTYPE h_OpenWithKinds(void* self, void* kinds, void** result) {
-    HRESULT hr = o_OpenWithKinds(self, kinds, result);
-    if (SUCCEEDED(hr) && *result) PatchCatalogInstance(*result);
-    DLOG(L"PaletteCatalog.OpenWithKinds hr=%08lx", hr);
-    return hr;
-}
-static HRESULT STDMETHODCALLTYPE h_OpenWithKindsAndConfig(void* self, void* kinds, HSTRING cfg, void** result) {
-    HRESULT hr = o_OpenWithKindsAndConfig(self, kinds, cfg, result);
-    if (SUCCEEDED(hr) && *result) PatchCatalogInstance(*result);
-    DLOG(L"PaletteCatalog.OpenWithKindsAndConfig(%s) hr=%08lx", std::wstring(FromH(cfg)).c_str(), hr);
-    return hr;
-}
 static HRESULT STDMETHODCALLTYPE h_TryGetItem(void* self, HSTRING ext, HSTRING item, void** result) {
-    if (auto p = FindProviderByExtId(FromH(ext)); p && g_alive) {
-        *result = nullptr;
-        std::lock_guard l(p->m);
-        auto it = p->itemCache.find(std::wstring(FromH(item)));
-        if (it != p->itemCache.end()) it->second.copy_to((Pal::IPaletteItemView**)result);
-        return S_OK;
-    }
+    if (Is(self, g_staticsVt) && g_alive)
+        if (auto p = FindProviderByExtId(FromH(ext))) {
+            *result = nullptr;
+            if (auto v = FindItemView(p.get(), std::wstring(FromH(item)))) v.copy_to((Pal::IPaletteItemView**)result);
+            return S_OK;
+        }
     return o_TryGetItem(self, ext, item, result);
 }
 
-static winrt::com_ptr<Pal::IPaletteCatalogStatics> g_statics;
+static bool Hook(void* target, void* hook, void** orig, const wchar_t* name) {
+    if (!target || !Wh_SetFunctionHook(target, hook, orig)) {
+        LOG(L"failed to hook %s", name);
+        return false;
+    }
+    return true;
+}
 
-static bool InstallCatalogHooks() {
+// Called from Wh_ModInit: everything is in place when Windhawk applies the hooks after it returns.
+static bool SetCatalogHooks() {
     HMODULE mod = LoadLibraryExW(L"OSClient.API.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!mod) {
         LOG(L"OSClient.API.dll not found - this build has no Windows.UI.Palettes");
@@ -1866,18 +1962,38 @@ static bool InstallCatalogHooks() {
     winrt::hstring cls = L"Windows.UI.Palettes.PaletteCatalog";
     winrt::com_ptr<::IUnknown> f;
     HRESULT hr = dgaf(H(cls), f.put());
-    if (FAILED(hr) || !f) {
-        LOG(L"DllGetActivationFactory(PaletteCatalog) failed %08lx", hr);
+    winrt::com_ptr<Pal::IPaletteCatalogStatics> statics;
+    if (FAILED(hr) || !f || FAILED(f->QueryInterface(Pal::IID_IPaletteCatalogStatics, statics.put_void())) || !statics) {
+        LOG(L"PaletteCatalog statics unavailable (%08lx)", hr);
         return false;
     }
-    if (FAILED(f->QueryInterface(Pal::IID_IPaletteCatalogStatics, g_statics.put_void())) || !g_statics) return false;
-    void** vt = *(void***)g_statics.get();
-    o_OpenDefault = (OpenDefault_t)PatchSlot(vt, 10, (void*)h_OpenDefault);
-    o_OpenWithKinds = (OpenWithKinds_t)PatchSlot(vt, 11, (void*)h_OpenWithKinds);
-    o_OpenWithKindsAndConfig = (OpenWithKindsAndConfig_t)PatchSlot(vt, 12, (void*)h_OpenWithKindsAndConfig);
-    o_TryGetItem = (TryGetItem_t)PatchSlot(vt, 14, (void*)h_TryGetItem);
-    LOG(L"catalog statics hooked");
-    return true;
+    // One catalog instance, to find the catalog class's methods.
+    void** svt = *(void***)statics.get();
+    winrt::com_ptr<::IUnknown> catalog, priv;
+    hr = ((OpenDefault_t)svt[10])(statics.get(), catalog.put_void());
+    if (FAILED(hr) || !catalog) {
+        LOG(L"PaletteCatalog.OpenDefault failed %08lx", hr);
+        return false;
+    }
+    if (FAILED(catalog->QueryInterface(IID_IPaletteCatalogPrivate, priv.put_void())) || !priv) {
+        LOG(L"IPaletteCatalogPrivate missing - unsupported build");
+        return false;
+    }
+    void** cvt = *(void***)catalog.get();
+    void** pvt = *(void***)priv.get();
+    g_staticsVt = svt;
+    g_catalogVt = cvt;
+    g_privateVt = pvt;
+    bool ok = Hook(svt[14], (void*)h_TryGetItem, (void**)&o_TryGetItem, L"TryGetItem") &&
+              Hook(cvt[6], (void*)h_GetPalette, (void**)&o_GetPalette, L"GetPalette") &&
+              Hook(cvt[7], (void*)h_GetPalettes, (void**)&o_GetPalettes, L"GetPalettes") &&
+              Hook(cvt[8], (void*)h_AddChanged, (void**)&o_AddChanged, L"add_Changed") &&
+              Hook(cvt[9], (void*)h_RemoveChanged, (void**)&o_RemoveChanged, L"remove_Changed") &&
+              Hook(pvt[7], (void*)h_GetOrdered, (void**)&o_GetOrdered, L"GetOrderedSourceDefinitions") &&
+              Hook(pvt[8], (void*)h_IsEnabled, (void**)&o_IsEnabled, L"IsEnabled") &&
+              Hook(pvt[9], (void*)h_IsUserDisabled, (void**)&o_IsUserDisabled, L"IsUserDisabled");
+    if (ok) LOG(L"catalog hooks set");
+    return ok;
 }
 
 // Ask Windows to re-read the catalog (raises PaletteCatalog.Changed on every subscriber we saw).
@@ -1887,7 +2003,7 @@ static void RaiseCatalogChanged() {
         std::lock_guard l(g_subsLock);
         subs = g_subs;
     }
-    DLOG(L"raising PaletteCatalog.Changed to %zu subscribers", subs.size());
+    LOG(L"raising PaletteCatalog.Changed to %zu subscribers", subs.size());
     for (auto& s : subs) {
         try {
             ((IHandler2Ptr*)s.handler.get())->Invoke(s.catalog.get(), nullptr);
@@ -1895,14 +2011,10 @@ static void RaiseCatalogChanged() {
         }
     }
 }
-static std::atomic<bool> g_changePending{false};
+static std::atomic<PTP_TIMER> g_changeTimer{nullptr};  // debounce; a pool timer, closed with the pool
+static VOID CALLBACK ChangeTimerCb(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) { RaiseCatalogChanged(); }
 static void ScheduleCatalogChanged() {
-    if (g_changePending.exchange(true)) return;
-    std::thread([] {
-        Sleep(300);
-        g_changePending = false;
-        RaiseCatalogChanged();
-    }).detach();
+    if (PTP_TIMER t = g_changeTimer.load(); t && g_alive) ArmTimer(t, 300);  // re-arming restarts the delay
 }
 
 // ---------------------------------------------------------------------------
@@ -1926,7 +2038,7 @@ static bool ValidId(std::wstring const& id) {
     return true;
 }
 
-static UINT64 RegisterProvider(std::wstring const& json, ProviderCallbacks cb, void* owner, std::wstring* err) {
+static UINT64 RegisterProvider(std::wstring const& json, ProviderCallbacks cb, std::wstring* err) {
     if (!g_alive) {
         if (err) *err = L"library not running";
         return 0;
@@ -1959,7 +2071,6 @@ static UINT64 RegisterProvider(std::wstring const& json, ProviderCallbacks cb, v
     if (p->containedKinds.empty()) p->containedKinds = p->itemKinds;
     p->extId = L"Windhawk." + p->id;
     p->cb = std::move(cb);
-    p->owner = owner;
 
     {
         std::lock_guard l(g_providersLock);
@@ -2000,6 +2111,8 @@ static UINT64 RegisterProvider(std::wstring const& json, ProviderCallbacks cb, v
     return p->handle;
 }
 
+// Waits for the provider's callbacks that are already running (see CloseProviderCallbacks), so a
+// client may unload right after this returns.
 static bool UnregisterProvider(UINT64 h, bool notifyDetach = false) {
     std::shared_ptr<Provider> p;
     {
@@ -2020,39 +2133,59 @@ static bool UnregisterProvider(UINT64 h, bool notifyDetach = false) {
             if (q->provider.lock() == p) qs.push_back(q);
     }
     for (auto& q : qs) FinishQuery(q, L"unregistered");
+    CloseProviderCallbacks(p.get());
     LOG(L"provider unregistered: %s", p->id.c_str());
     if (notifyDetach && p->cb.onDetach) p->cb.onDetach();
+    {
+        // Let go of the native items (and the delegates of ours they hold) right away.
+        std::lock_guard l(p->m);
+        p->staticItems.clear();
+        p->staticCache.clear();
+        p->resultCache.clear();
+        p->cards.clear();
+    }
     ScheduleCatalogChanged();
     return true;
 }
 
-static bool SetStaticItems(UINT64 h, std::wstring const& json) {
-    auto p = FindProvider(h);
-    if (!p) return false;
-    auto items = BuildItems(p, json);
-    {
-        std::lock_guard l(p->m);
-        p->staticItemsJson = json;
-        p->staticItems = std::move(items);
-    }
-    bool NotifyChanged(UINT64 h);
-    return NotifyChanged(h);
-}
-
-bool NotifyChanged(UINT64 h) {
+static bool NotifyChanged(UINT64 h) {
     auto p = FindProvider(h);
     if (!p) return false;
     std::vector<winrt::com_ptr<Extension>> exts;
     {
         std::lock_guard l(p->m);
         for (auto* e : p->extensions) {
-            winrt::com_ptr<Extension> c;
-            c.copy_from(e);
-            exts.push_back(c);
+            // Only take a reference while Windows still holds one: an Extension at 0 is already in
+            // its destructor (waiting for p->m) and must not be revived.
+            ULONG r = e->m_ref.load();
+            while (r && !e->m_ref.compare_exchange_weak(r, r + 1)) {
+            }
+            if (r) {
+                winrt::com_ptr<Extension> c;
+                c.attach(e);
+                exts.push_back(std::move(c));
+            }
         }
     }
     for (auto& e : exts) e->RaiseItemsChanged();
     return true;
+}
+
+static bool SetStaticItems(UINT64 h, std::wstring const& json) {
+    auto p = FindProvider(h);
+    if (!p) return false;
+    auto built = BuildItems(p, json);
+    {
+        std::lock_guard l(p->m);
+        p->staticItems.clear();
+        p->staticCache.clear();
+        for (auto& b : built) {
+            p->staticItems.push_back(b.view);
+            p->staticCache[b.id] = b.view;
+        }
+        PruneCards(p.get());
+    }
+    return NotifyChanged(h);
 }
 
 static bool UpdateCard(UINT64 h, std::wstring const& itemId, std::wstring const& dataJson) {
@@ -2102,7 +2235,7 @@ __declspec(dllexport) UINT64 WINAPI WSE_RegisterProvider(PCWSTR providerJson, co
     if (cc.onCancel) cb.onCancel = [cc](UINT64 q) { cc.onCancel(cc.ctx, q); };
     if (cc.onDetach) cb.onDetach = [cc] { cc.onDetach(cc.ctx); };
     std::wstring err;
-    UINT64 h = RegisterProvider(providerJson, std::move(cb), nullptr, &err);
+    UINT64 h = RegisterProvider(providerJson, std::move(cb), &err);
     if (!h) LOG(L"WSE_RegisterProvider failed: %s", err.c_str());
     return h;
 }
@@ -2116,13 +2249,19 @@ __declspec(dllexport) BOOL WINAPI WSE_UpdateCard(UINT64 p, PCWSTR itemId, PCWSTR
     return itemId && dataJson && UpdateCard(p, itemId, dataJson);
 }
 __declspec(dllexport) BOOL WINAPI WSE_NotifyChanged(UINT64 p) { return NotifyChanged(p); }
+// Blocks until the provider's running callbacks return, so it's safe to unload right after.
 __declspec(dllexport) BOOL WINAPI WSE_UnregisterProvider(UINT64 p) { return UnregisterProvider(p); }
 }
 
 // ---------------------------------------------------------------------------
 // Named pipe server (out-of-process clients)
 // ---------------------------------------------------------------------------
-static const wchar_t kPipeName[] = L"\\\\.\\pipe\\WindhawkSearchExtensions";
+// One pipe per session: \\.\pipe\WindhawkSearchExtensions-<session id>, current user only.
+static std::wstring PipeName() {
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    return L"\\\\.\\pipe\\WindhawkSearchExtensions-" + std::to_wstring(session);
+}
 
 static std::string ToUtf8(std::wstring const& w) {
     if (w.empty()) return {};
@@ -2144,13 +2283,13 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
     std::mutex writeLock;
     std::mutex provLock;
     std::map<std::wstring, UINT64> providers;  // id -> handle
-    std::map<UINT64, std::wstring> queryProvider;
     std::atomic<bool> closed{false};
 
     void Send(wdj::JsonObject const& o) {
         if (closed) return;
         std::string line = ToUtf8(std::wstring(o.Stringify())) + "\n";
         std::lock_guard l(writeLock);
+        if (pipe == INVALID_HANDLE_VALUE) return;
         OVERLAPPED ov{};
         ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         DWORD w = 0;
@@ -2195,10 +2334,6 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
             cb.onQuery = [self, id](UINT64 q, std::wstring const& text, std::wstring const& json) {
                 auto c = self.lock();
                 if (!c) return;
-                {
-                    std::lock_guard l(c->provLock);
-                    c->queryProvider[q] = id;
-                }
                 wdj::JsonObject m;
                 m.SetNamedValue(L"op", wdj::JsonValue::CreateStringValue(L"query"));
                 m.SetNamedValue(L"provider", wdj::JsonValue::CreateStringValue(id));
@@ -2231,7 +2366,7 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
                 c->Send(m);
             };
             std::wstring err;
-            UINT64 h = RegisterProvider(std::wstring(po.Stringify()), std::move(cb), this, &err);
+            UINT64 h = RegisterProvider(std::wstring(po.Stringify()), std::move(cb), &err);
             if (!h) {
                 Error(L"register failed: " + err);
                 return;
@@ -2278,7 +2413,6 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
     }
 
     void Run(HANDLE stopEvent) {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
         std::string buf;
         char chunk[8192];
         HANDLE ev = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -2318,37 +2452,76 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
             }
         }
         CloseHandle(ev);
-        closed = true;
+        // Unregistering waits for this client's callbacks (which write to the pipe) to finish.
         std::map<std::wstring, UINT64> ps;
         {
             std::lock_guard l(provLock);
             ps.swap(providers);
         }
         for (auto& [id, h] : ps) UnregisterProvider(h);
+        closed = true;
         std::lock_guard l(writeLock);
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         pipe = INVALID_HANDLE_VALUE;
-        winrt::uninit_apartment();
     }
 };
 
+// Raw handles only: nothing here has a destructor that could run at process exit.
 static HANDLE g_pipeStop;
-static std::thread g_pipeThread;
+static HANDLE g_pipeThread;
 static std::mutex g_clientThreadsLock;
-static std::vector<std::thread> g_clientThreads;
+[[clang::no_destroy]] static std::vector<HANDLE> g_clientThreads;
 
-static void PipeListener() {
+static DWORD WINAPI ClientThread(void* ctx) {
+    std::unique_ptr<std::shared_ptr<PipeClient>> c((std::shared_ptr<PipeClient>*)ctx);
+    (*c)->Run(g_pipeStop);
+    return 0;
+}
+
+// Security descriptor for the pipe: the current user and SYSTEM only.
+static bool PipeSecurity(SECURITY_ATTRIBUTES* sa) {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    BYTE buf[256];
+    DWORD len = 0;
+    bool ok = GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len);
+    CloseHandle(token);
+    if (!ok) return false;
+    LPWSTR sid = nullptr;
+    if (!ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) return false;
+    std::wstring sddl = L"D:P(A;;GA;;;" + std::wstring(sid) + L")(A;;GA;;;SY)";
+    LocalFree(sid);
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return false;
+    sa->nLength = sizeof(*sa);
+    sa->lpSecurityDescriptor = sd;  // freed by the listener
+    sa->bInheritHandle = FALSE;
+    return true;
+}
+
+static DWORD WINAPI PipeListener(void*) {
+    std::wstring name = PipeName();
+    SECURITY_ATTRIBUTES sa{};
+    if (!PipeSecurity(&sa)) {
+        LOG(L"pipe: could not build its security descriptor (%lu), not starting", GetLastError());
+        return 0;
+    }
     HANDLE ev = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    bool first = true;
     while (WaitForSingleObject(g_pipeStop, 0) != WAIT_OBJECT_0) {
-        HANDLE pipe = CreateNamedPipeW(kPipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+        DWORD openMode = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | (first ? FILE_FLAG_FIRST_PIPE_INSTANCE : 0);
+        HANDLE pipe = CreateNamedPipeW(name.c_str(), openMode,
                                        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-                                       PIPE_UNLIMITED_INSTANCES, 64 * 1024, 64 * 1024, 0, nullptr);
+                                       PIPE_UNLIMITED_INSTANCES, 64 * 1024, 64 * 1024, 0, &sa);
         if (pipe == INVALID_HANDLE_VALUE) {
-            LOG(L"CreateNamedPipe failed: %lu", GetLastError());
+            // ACCESS_DENIED on the first instance: someone else already owns this name.
+            LOG(L"CreateNamedPipe(%s) failed: %lu", name.c_str(), GetLastError());
             if (WaitForSingleObject(g_pipeStop, 5000) == WAIT_OBJECT_0) break;
             continue;
         }
+        if (first) LOG(L"pipe server listening on %s", name.c_str());
+        first = false;
         OVERLAPPED ov{};
         ov.hEvent = ev;
         ResetEvent(ev);
@@ -2356,12 +2529,13 @@ static void PipeListener() {
         DWORD err = GetLastError();
         if (!connected && err == ERROR_IO_PENDING) {
             HANDLE hs[2] = {ev, g_pipeStop};
+            DWORD dummy;
             if (WaitForMultipleObjects(2, hs, FALSE, INFINITE) != WAIT_OBJECT_0) {
                 CancelIoEx(pipe, &ov);
+                GetOverlappedResult(pipe, &ov, &dummy, TRUE);  // the kernel is done with ov after this
                 CloseHandle(pipe);
                 break;
             }
-            DWORD dummy;
             connected = GetOverlappedResult(pipe, &ov, &dummy, FALSE);
         } else if (!connected && err == ERROR_PIPE_CONNECTED) {
             connected = TRUE;
@@ -2372,28 +2546,50 @@ static void PipeListener() {
         }
         auto c = std::make_shared<PipeClient>();
         c->pipe = pipe;
-        DLOG(L"pipe client connected");
+        LOG(L"pipe client connected");
         std::lock_guard l(g_clientThreadsLock);
-        g_clientThreads.emplace_back([c] { c->Run(g_pipeStop); });
+        // Forget clients that have already disconnected.
+        std::erase_if(g_clientThreads, [](HANDLE t) {
+            if (WaitForSingleObject(t, 0) != WAIT_OBJECT_0) return false;
+            CloseHandle(t);
+            return true;
+        });
+        auto* ctx = new std::shared_ptr<PipeClient>(c);
+        if (HANDLE t = CreateThread(nullptr, 0, ClientThread, ctx, 0, nullptr)) {
+            g_clientThreads.push_back(t);
+        } else {
+            delete ctx;
+            DisconnectNamedPipe(pipe);
+            CloseHandle(pipe);
+        }
     }
     CloseHandle(ev);
+    LocalFree(sa.lpSecurityDescriptor);
+    return 0;
 }
 
 static void StartPipe() {
+    if (g_pipeThread) return;
     g_pipeStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_pipeThread = std::thread(PipeListener);
+    g_pipeThread = CreateThread(nullptr, 0, PipeListener, nullptr, 0, nullptr);
 }
 static void StopPipe() {
     if (!g_pipeStop) return;
     SetEvent(g_pipeStop);
-    if (g_pipeThread.joinable()) g_pipeThread.join();
-    std::vector<std::thread> ts;
+    if (g_pipeThread) {
+        WaitForSingleObject(g_pipeThread, INFINITE);
+        CloseHandle(g_pipeThread);
+        g_pipeThread = nullptr;
+    }
+    std::vector<HANDLE> ts;
     {
         std::lock_guard l(g_clientThreadsLock);
         ts.swap(g_clientThreads);
     }
-    for (auto& t : ts)
-        if (t.joinable()) t.join();
+    for (HANDLE t : ts) {
+        WaitForSingleObject(t, INFINITE);
+        CloseHandle(t);
+    }
     CloseHandle(g_pipeStop);
     g_pipeStop = nullptr;
 }
@@ -2401,7 +2597,7 @@ static void StopPipe() {
 // ---------------------------------------------------------------------------
 // Demo provider
 // ---------------------------------------------------------------------------
-static UINT64 g_demo;
+static std::atomic<UINT64> g_demo{0};
 static std::atomic<bool> g_demoToggle{false};
 static std::atomic<int> g_demoClicks{0};
 
@@ -2425,21 +2621,21 @@ static void DemoQuery(UINT64 q, std::wstring const& text) {
     json += L"{\"id\":\"toggle\",\"title\":\"Demo toggle\",\"subtitle\":\"Flips a value inside the library\","
             L"\"icon\":{\"glyph\":\"\\uE7E8\"},\"kinds\":[\"Toggle\",\"Command\"],"
             L"\"action\":{\"type\":\"toggle\",\"isToggled\":" + std::wstring(g_demoToggle ? L"true" : L"false") + L"}},";
-    json += L"{\"id\":\"open\",\"title\":\"Open Windhawk\",\"subtitle\":\"Runs windhawk.exe\","
-            L"\"icon\":{\"glyph\":\"\\uE8A7\"},"
-            L"\"action\":{\"type\":\"run\",\"command\":\"C:\\\\Program Files\\\\Windhawk\\\\windhawk.exe\"}},";
+    json += L"{\"id\":\"notepad\",\"title\":\"Open Notepad\",\"subtitle\":\"A \\\"run\\\" action\","
+            L"\"icon\":{\"glyph\":\"\\uE70B\"},"
+            L"\"action\":{\"type\":\"run\",\"command\":\"notepad.exe\"}},";
     json += L"{\"id\":\"card\",\"title\":\"Demo card\",\"subtitle\":\"Adaptive Card content from a mod\","
             L"\"icon\":{\"glyph\":\"\\uE9E9\"},"
             L"\"card\":{\"template\":{\"type\":\"AdaptiveCard\",\"version\":\"1.5\",\"body\":["
             L"{\"type\":\"TextBlock\",\"text\":\"${title}\",\"weight\":\"Bolder\",\"size\":\"Large\"},"
-            L"{\"type\":\"TextBlock\",\"text\":\"Clicked ${clicks} times\",\"wrap\":true}],"
-            L"\"actions\":[{\"type\":\"Action.Submit\",\"id\":\"click\",\"title\":\"Click me\",\"data\":{\"x\":1}}]},"
+            L"{\"type\":\"TextBlock\",\"text\":\"Invoked ${clicks} times\",\"wrap\":true}]},"
             L"\"data\":{\"title\":\"Hello from Windhawk\",\"clicks\":" + std::to_wstring(g_demoClicks.load()) + L"}}}";
     json += L"]";
     SubmitResults(q, json, TRUE);
 }
 
 static void RegisterDemo() {
+    if (g_demo) return;
     ProviderCallbacks cb;
     cb.onQuery = [](UINT64 q, std::wstring const& text, std::wstring const&) { DemoQuery(q, text); };
     cb.onInvoke = [](std::wstring const& item, std::wstring const& action, std::wstring const& data, std::wstring const&) {
@@ -2451,10 +2647,14 @@ static void RegisterDemo() {
         LOG(L"demo invoke %s/%s", item.c_str(), action.c_str());
     };
     std::wstring err;
-    g_demo = RegisterProvider(
+    UINT64 h = RegisterProvider(
         L"{\"id\":\"demo\",\"name\":\"Windhawk demo\",\"description\":\"Search Menu Extensions sample items\",\"glyph\":\"\\uE8D4\"}",
-        std::move(cb), nullptr, &err);
-    if (!g_demo) LOG(L"demo registration failed: %s", err.c_str());
+        std::move(cb), &err);
+    if (!h) LOG(L"demo registration failed: %s", err.c_str());
+    g_demo = h;
+}
+static void UnregisterDemo() {
+    if (UINT64 h = g_demo.exchange(0)) UnregisterProvider(h);
 }
 
 // ---------------------------------------------------------------------------
@@ -2465,7 +2665,6 @@ static void LoadSettings() {
     g_settings.pipeServer = Wh_GetIntSetting(L"pipeServer") != 0;
     g_settings.queryTimeoutMs = Wh_GetIntSetting(L"queryTimeoutMs");
     if (g_settings.queryTimeoutMs < 100 || g_settings.queryTimeoutMs > 60000) g_settings.queryTimeoutMs = 2500;
-    g_settings.debugLog = Wh_GetIntSetting(L"debugLog") != 0;
     g_settings.restartIfLate = Wh_GetIntSetting(L"restartIfLate") != 0;
 }
 
@@ -2474,83 +2673,107 @@ static bool IsComposerProcess() {
     return cmd && StrStrIW(cmd, L"SystemComposerControl");
 }
 
+static CO_MTA_USAGE_COOKIE g_mtaCookie;
 static bool g_started;
+static bool g_stopped;
 
-static bool LibInit() {
-    LoadSettings();
-    if (!IsComposerProcess()) {
-        DLOG(L"not the composer shellhost, idle");
-        return true;
-    }
+// Enabled while search was already running: Windows has read its provider list and won't re-read
+// it (we never saw its Changed subscription), so restart the composer. It relaunches the next
+// time search opens, with us in it.
+static VOID CALLBACK LateLoadCheck(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+    bool haveSubs;
     {
-        using IncMta_t = HRESULT(WINAPI*)(void**);
-        static void* cookie;
-        if (auto f = (IncMta_t)GetProcAddress(GetModuleHandleW(L"combase.dll"), "CoIncrementMTAUsage")) f(&cookie);
-    }  // so any thread can use WinRT objects
-    bool lateLoad = GetModuleHandleW(L"RunUX.AOT.dll") != nullptr;
-    (void)lateLoad;
-    g_alive = true;
-    if (!InstallCatalogHooks()) {
-        g_alive = false;
-        return true;  // stay loaded but inactive
+        std::lock_guard l(g_subsLock);
+        haveSubs = !g_subs.empty();
     }
-    g_started = true;
-    // Patch the catalog instance vtables now in case Windows already opened its catalogs.
-    std::thread([] {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        winrt::com_ptr<Pal::IPaletteCatalog> cat;
-        HRESULT hr = g_statics->OpenDefault(cat.put());
-        LOG(L"background OpenDefault hr=%08lx", hr);
-        if (g_settings.demoProvider) RegisterDemo();
-        winrt::uninit_apartment();
-    }).detach();
-    if (g_settings.pipeServer) StartPipe();
-    LOG(L"Search Menu Extensions running (pid %lu)", GetCurrentProcessId());
-    // Enabled while search was already running: Windows has read its provider list and won't
-    // re-read it, so restart the composer (it relaunches the next time search opens, with us in it).
-    if (lateLoad && g_settings.restartIfLate) {
-        std::thread([] {
-            Sleep(1500);
-            bool haveSubs;
-            {
-                std::lock_guard l(g_subsLock);
-                haveSubs = !g_subs.empty();
-            }
-            if (!haveSubs && g_alive) {
-                LOG(L"loaded after search started; restarting the composer so it picks up our providers");
-                TerminateProcess(GetCurrentProcess(), 0);
-            }
-        }).detach();
+    if (!haveSubs && g_alive) {
+        LOG(L"loaded after search started; restarting the composer so it picks up our providers");
+        TerminateProcess(GetCurrentProcess(), 0);
     }
-    return true;
 }
 
-static void LibUninit() {
-    if (!g_started) return;
-    StopPipe();
+BOOL Wh_ModInit() {
+    g_stopped = false;
+    LoadSettings();
+    if (!IsComposerProcess()) return FALSE;  // not the search composer: nothing to do here
+    if (FAILED(CoIncrementMTAUsage(&g_mtaCookie))) g_mtaCookie = nullptr;  // lets any thread use WinRT
+    if (!PoolOpen()) return FALSE;
+    g_alive = true;
+    if (!SetCatalogHooks()) {
+        g_alive = false;
+        PoolClose();
+        if (g_mtaCookie) CoDecrementMTAUsage(g_mtaCookie);
+        return FALSE;
+    }
+    g_changeTimer = PoolTimer(ChangeTimerCb, nullptr);
+    bool lateLoad = GetModuleHandleW(L"RunUX.AOT.dll") != nullptr;
+    if (g_settings.demoProvider) RegisterDemo();
+    if (g_settings.pipeServer) StartPipe();
+    if (lateLoad && g_settings.restartIfLate)
+        if (PTP_TIMER t = PoolTimer(LateLoadCheck, nullptr)) ArmTimer(t, 1500);
+    g_started = true;
+    LOG(L"Search Menu Extensions running (pid %lu)", GetCurrentProcessId());
+    return TRUE;
+}
+
+// Hooks are still active here: take our providers out and tell Windows to re-read the catalog.
+void Wh_ModBeforeUninit() {
+    if (!g_started || g_stopped) return;
+    g_stopped = true;
+    StopPipe();  // pipe clients unregister their providers as they disconnect
     std::vector<UINT64> hs;
     for (auto& p : ProvidersSnapshot()) hs.push_back(p->handle);
-    for (auto h : hs) UnregisterProvider(h, true);
-    g_alive = false;
-    UnpatchAll();
+    for (auto h : hs) UnregisterProvider(h, true);  // in-process clients get onDetach
+    g_demo = 0;
+    std::vector<std::shared_ptr<Query>> qs;
+    {
+        std::lock_guard l(g_queriesLock);
+        g_alive = false;  // under this lock, so no query is added after the snapshot
+        for (auto& [k, q] : g_queries) qs.push_back(q);
+    }
+    for (auto& q : qs) FinishQuery(q, L"unloading");
     RaiseCatalogChanged();
-    // Keep g_subs: if we're re-initialised in this process we can refresh search without a restart.
+}
+
+void Wh_ModUninit() {
+    if (!g_started) return;
+    Wh_ModBeforeUninit();
+    g_changeTimer = nullptr;
+    PoolClose();  // waits for every worker callback and timer
+    {
+        std::lock_guard l(g_subsLock);
+        g_subs.clear();
+    }
+    {
+        std::lock_guard l(g_providersLock);
+        g_providers.clear();
+    }
+    {
+        std::lock_guard l(g_queriesLock);
+        g_queries.clear();
+    }
+    ReleaseFactories();
+    // Windows may still hold objects whose code lives in this DLL (definitions, items' delegates,
+    // finished async operations). Give it a moment to drop them after the Changed event; if it
+    // doesn't, restart the composer rather than let the DLL unload under them. Search relaunches
+    // it on next use.
+    for (int i = 0; i < 40 && g_liveObjects > 0; i++) Sleep(50);
+    if (g_liveObjects > 0) {
+        LOG(L"Windows still holds %d of our objects; restarting the composer", g_liveObjects.load());
+        TerminateProcess(GetCurrentProcess(), 0);
+    }
+    if (g_mtaCookie) CoDecrementMTAUsage(g_mtaCookie);
+    g_mtaCookie = nullptr;
     g_started = false;
     LOG(L"Search Menu Extensions stopped");
 }
 
-BOOL Wh_ModInit() {
-    LOG(L"Init");
-    return LibInit();
-}
-void Wh_ModUninit() { LibUninit(); }
 void Wh_ModSettingsChanged() {
-    bool oldDemo = g_settings.demoProvider;
+    bool oldDemo = g_settings.demoProvider, oldPipe = g_settings.pipeServer;
     LoadSettings();
-    if (!g_started) return;
-    if (g_settings.demoProvider && !g_demo) RegisterDemo();
-    if (!g_settings.demoProvider && oldDemo && g_demo) {
-        UnregisterProvider(g_demo);
-        g_demo = 0;
-    }
+    if (!g_started || g_stopped) return;
+    if (g_settings.demoProvider && !oldDemo) RegisterDemo();
+    if (!g_settings.demoProvider && oldDemo) UnregisterDemo();
+    if (g_settings.pipeServer && !oldPipe) StartPipe();
+    if (!g_settings.pipeServer && oldPipe) StopPipe();
 }
