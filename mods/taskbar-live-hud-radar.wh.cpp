@@ -1194,7 +1194,7 @@ void SyncWindowGeometry() {
                 if (showBars) {
                     Gdiplus::Color barCol = (ram > 85) ? Gdiplus::Color(255, 255, 85, 85) :
                                            ((ram > 70) ? Gdiplus::Color(255, 255, 190, 50) : Gdiplus::Color(255, 165, 130, 255));
-                    DrawRoundedMiniBarGDIPlus(g, ramStartX, yPos + ScaleDpi(16, dpi), ramEndX - ramStartX, ScaleDpi(3, dpi), cpu, barCol);
+                    DrawRoundedMiniBarGDIPlus(g, ramStartX, yPos + ScaleDpi(16, dpi), ramEndX - ramStartX, ScaleDpi(3, dpi), ram, barCol);
                 }
             }
 
