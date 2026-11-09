@@ -1601,6 +1601,11 @@ static bool g_isHidingSwitcher = false;
 static ULONGLONG g_showDelayDeadlineTick = 0;
 static bool g_touchpadInvocation = false;
 static bool g_keyboardPendingForegroundHandoff = false;
+// Keyboard invocation started while a shell surface (Start, Search, Action
+// Center, Quick Settings) owned the foreground. Those surfaces keep the
+// foreground right, so the switcher must claim it while the hotkey grant is
+// still fresh instead of waiting for the visible presentation.
+static bool g_keyboardShellSource = false;
 static bool g_keyboardPendingForegroundHandoffSucceeded = false;
 // Alt release observed before keyboard foreground handoff; recheck after handoff.
 static bool g_keyboardPendingAltRelease = false;
@@ -7943,6 +7948,35 @@ static bool ForegroundRequiresKeyboardHandoff(
     return wcscmp(KeyboardHandoffReason(source, self), L"none") != 0;
 }
 
+// True when the window belongs to one of the shell flyout hosts (Start, Search,
+// Action Center / Notification Center, Quick Settings).
+static bool IsShellSurfaceWindow(HWND hWnd) {
+    if (!hWnd || IsSwitcherWindow(hWnd)) return false;
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hWnd, &pid) || !pid) return false;
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess) return false;
+    WCHAR path[MAX_PATH] = {};
+    DWORD size = ARRAYSIZE(path);
+    bool shell = false;
+    if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+        static const PCWSTR kShellHosts[] = {
+            L"StartMenuExperienceHost.exe", L"SearchHost.exe",
+            L"SearchApp.exe", L"SearchUI.exe",
+            L"ShellExperienceHost.exe", L"ShellHost.exe",
+        };
+        PCWSTR name = PathFindFileNameW(path);
+        for (PCWSTR host : kShellHosts) {
+            if (_wcsicmp(name, host) == 0) {
+                shell = true;
+                break;
+            }
+        }
+    }
+    CloseHandle(hProcess);
+    return shell;
+}
+
 // Raw-frame gesture state; switcher thread only.
 // Three-finger strokes and visible-session two-finger taps are classified here;
 // ordinary panning remains outside this state machine.
@@ -13221,6 +13255,7 @@ static void CancelPendingShow() {
     g_showDelayDeadlineTick = 0;
     g_touchpadInvocation = false;
     g_keyboardPendingForegroundHandoff = false;
+    g_keyboardShellSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
@@ -14039,7 +14074,8 @@ static void PresentSwitcherWindows() {
     BOOL foreground = GetForegroundWindow() == g_hSwitcher;
     if (!foreground) foreground = SetForegroundWindow(g_hSwitcher);
     const bool foregroundFallbackNeeded =
-        (touchpadPresentation || g_keyboardPendingForegroundHandoff) &&
+        (touchpadPresentation || g_keyboardPendingForegroundHandoff ||
+         g_keyboardShellSource) &&
         GetForegroundWindow() != g_hSwitcher;
     if (foregroundFallbackNeeded) {
         // Shell-source keyboard sessions can deny the supported foreground
@@ -14802,6 +14838,8 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_keyboardPendingForegroundHandoff =
         !touchpadInvocation && ForegroundRequiresKeyboardHandoff(
             invocationInput, &keyboardSourceSecurity, &keyboardSelfSecurity);
+    g_keyboardShellSource = !touchpadInvocation &&
+                            IsShellSurfaceWindow(invocationInput);
     if (!touchpadInvocation) {
         SWS_DEBUG_LOG(L"focus",
                       L"keyboard handoff requirement=%d reason=%s source=%p "
@@ -14892,6 +14930,15 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
             SetWindowPos(g_hSwitcher, HWND_TOPMOST, -32000, -32000, g_winW, g_winH, SWP_NOACTIVATE);
         }
         ShowWindow(g_hSwitcher, SW_SHOWNA);
+        if (g_keyboardShellSource) {
+            // Shell flyouts keep the foreground right and swallow the following
+            // Tab/Alt-up input. Claim the foreground now, while the hotkey grant
+            // is fresh, so the commit-time activation of the target is allowed.
+            if (!SetForegroundWindow(g_hSwitcher) &&
+                GetForegroundWindow() != g_hSwitcher) {
+                SwitchToThisWindow(g_hSwitcher, TRUE);
+            }
+        }
         // Keep source window foreground during show-delay. WM_HOTKEY is delivered
         // to this HWND while hidden/off-screen, and the Alt poll timer detects
         // release. Activation happens after visible presentation.
@@ -15082,6 +15129,7 @@ static void HideSwitcher() {
     g_isVisible = false;
     g_isPendingShow = false;
     g_keyboardPendingForegroundHandoff = false;
+    g_keyboardShellSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardReleaseProbeTick = 0;
