@@ -2,11 +2,11 @@
 // @id              gradual-night-light
 // @name            Gradual Night Light
 // @description     Gradually adjust Windows Night light strength using a daily schedule.
-// @version         0.3.1
+// @version         0.4.0
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lshell32 -lwtsapi32
+// @compilerOptions -ladvapi32 -lgdi32 -lruntimeobject -lshell32 -lwtsapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -42,7 +42,7 @@ the schedule repeats daily, including across midnight. All stage times must be
 unique and different from Off time. Invalid settings are reported in the mod
 log; an invalid edit keeps the last valid configuration. If saved settings are
 invalid at startup, the tool stays running without applying a schedule until
-valid settings are saved. Disabling it can still restore a recovered backup.
+valid settings are saved.
 
 Night light switches off at Off time and stays off until the next stage. The
 last stage holds its strength until Off time. To fade in from almost no warmth,
@@ -51,66 +51,32 @@ further stages to create a five-stage schedule or a gradual morning fade.
 
 ## Behavior and restoration
 
-The scheduler runs in a dedicated Windhawk tool process, outside Explorer.
-The schedule is checked every ten seconds and catches up after sleep, sign-in,
-or an Explorer restart. While enabled, the mod replaces the native on/off
-schedule. Manual changes are reapplied from the mod's schedule at the next
-check; active drags of the Windows strength slider are allowed to finish.
-Disable other Night light schedulers while using this mod.
+The scheduler runs in a dedicated Windhawk tool process. Every ten seconds it
+applies the scheduled temperature directly through Windows' display pipeline.
+It also checks after display changes, resume, and session unlock.
 
-Before making changes, the mod saves the original settings in storage isolated
-by the current user's Windows SID. Disabling the mod restores the original
-strength and native schedule enablement. When the original native schedule was
-enabled, Windows determines the current on/off state; otherwise the original
-manual on/off state is restored. Schedule times and unrelated fields are kept.
-If restoration fails, the backup is kept and the failure is logged.
+Settings and Quick Settings show Windows' own Night light configuration.
+Windows continues running its own schedule in the background. Its transitions
+can briefly take precedence until the next mod check. The mod pauses while
+Windows previews its strength slider. Disabling the mod reapplies the
+temperature requested by Windows' current settings.
 
-## Persistent Windows settings
+The mod reads the current user's Night light settings and state from CloudStore.
+It applies all scheduled changes at runtime without writing either record. If
+Windhawk is terminated during a stage, the runtime tint may last until Windows
+next applies Night light or the user signs out.
 
-This mod writes the `Data` values in these two current-user registry keys:
-
-```
-HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings
-HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.bluelightreductionstate\windows.data.bluelightreduction.bluelightreductionstate
-```
-
-It temporarily disables the native schedule, changes color temperature and
-on/off state, and briefly enables then clears the preview flag to apply changes.
-Record timestamps and transition metadata advance and are not rolled back.
-The separate `Cloud` records are read for their timestamps and are never written.
-
-**A clean disable restores the settings described above. Sign-out, shutdown,
-forced termination, uninstall without clean unload, or failed restoration can
-leave the native schedule disabled and the last strength and on/off state on
-disk.** A termination during a preview pulse can also leave preview enabled.
-The next start recovers the SID-specific backup and any owned preview. To
-restore, enable and then disable the mod while Windows is running, or set Night
-light manually in Windows Settings. Do not delete the saved backup first.
-
-Legacy machine-wide backups without a user SID are never imported or deleted
-because their owner cannot be determined.
-
-### Why this implementation retains registry writes
-
-A read hook can substitute a value only when Windows reads it. Scheduled Night
-light changes also require the display consumer to invalidate its cached state
-and reapply it at each stage. No reliable read-only invalidation path has been
-established for this implementation. A read hook in Explorer has not been
-prototyped, so this is not a claim that such an implementation is impossible.
-The current write-based approach, including its persistence limits above,
-requires an explicit acceptance decision by the maintainer.
+If you tested an earlier prerelease, disable it before upgrading so that version
+can restore the settings it saved.
 
 ## Requirements and limitations
 
-The Night light controller was tested on Windows 11 build 26300, x64. Other
-Windows versions and ARM64 have not been verified. The display driver must
-support Night light. The tool launcher supports Windhawk 1.7.3 and newer.
-
-This mod uses undocumented CloudStore records with the modern `Current` layout.
-Unsupported or malformed records are refused. If records are missing, open
-**Settings > System > Display > Night light** once. Windows updates may require
-changes to this mod. Visible warmth, HDR, and multiple displays should be
-verified on the intended hardware.
+The mod uses internal Windows Night light display interfaces and the modern
+CloudStore `Current` layout. The display driver must support Night light.
+The tool launcher supports Windhawk 1.7.3 and newer. The runtime interfaces
+were tested on Windows 11 build 26100, x64, with two displays. HDR and ARM64
+have not been verified. If records are missing, open
+**Settings > System > Display > Night light** once.
 
 ## Technical references
 
@@ -146,12 +112,14 @@ research below. No external helper, script, or runtime download is required.
 // ==/WindhawkModSettings==
 // clang-format on
 
-#include <sddl.h>
+#include <asyncinfo.h>
+#include <roapi.h>
+#include <winstring.h>
+#include <wrl/client.h>
+#include <wil/resource.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <functional>
-#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -169,58 +137,12 @@ void Require(bool condition, const char* message) {
         throw std::runtime_error(message);
 }
 
-std::wstring CurrentUserSid() {
-    HANDLE token = nullptr;
-    Require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token),
-            "Cannot open process token");
-    alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
-    DWORD size = 0;
-    PWSTR sid = nullptr;
-    bool ok =
-        GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
-        ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer)->User.Sid,
-                               &sid);
-    CloseHandle(token);
-    Require(ok, "Cannot get current user's SID");
-    std::wstring result;
-    try {
-        result = sid;
-    } catch (...) {
-        LocalFree(sid);
-        throw;
-    }
-    LocalFree(sid);
-    return result;
-}
-
-// Windhawk mod storage is machine-wide. Every persistent value must carry the
-// owner SID; even preview and timestamp journals must never cross users.
-struct StorageNames {
-    std::wstring baselineSaved, originalSettings, originalState;
-    std::wstring highestSettings, highestState, previewOwned;
-    StorageNames() = default;
-    explicit StorageNames(const std::wstring& sid) {
-        Require(sid.starts_with(L"S-1-"), "Invalid storage owner SID");
-        auto name = [&](PCWSTR base) {
-            return std::wstring(base) + L"_" + sid;
-        };
-        baselineSaved = name(L"BaselineSaved");
-        originalSettings = name(L"OriginalSettings");
-        originalState = name(L"OriginalState");
-        highestSettings = name(L"HighestSettings");
-        highestState = name(L"HighestState");
-        previewOwned = name(L"PreviewOwned");
-    }
-};
-
-// Preserve the bytes of every field we do not own, including nested fields.
-// Fail closed on unsupported types, inheritance, duplicate IDs, and bad
-// lengths.
+// Decode the saved state to resume Windows' requested temperature on unload.
+// Reject unsupported types, duplicate fields, and invalid record lengths.
 struct Field {
     uint16_t id;
     uint8_t type;
     Bytes value;
-    bool operator==(const Field&) const = default;
 };
 using Fields = std::vector<Field>;
 
@@ -326,18 +248,6 @@ struct Reader {
     }
 };
 
-void Varint(Bytes& bytes, uint64_t value) {
-    do {
-        auto b = static_cast<uint8_t>(value & 127);
-        value >>= 7;
-        bytes.push_back(b | (value ? 128 : 0));
-    } while (value);
-}
-Bytes Number(uint64_t value) {
-    Bytes b;
-    Varint(b, value);
-    return b;
-}
 uint64_t Number(const Bytes& value) {
     Reader r{value};
     auto n = r.Varint();
@@ -354,19 +264,6 @@ const Field& Get(const Fields& fields, uint16_t id, uint8_t type) {
     Require(f && f->type == type, "Unexpected Night light schema");
     return *f;
 }
-void Set(Fields& fields, uint16_t id, uint8_t type, Bytes value) {
-    auto it =
-        std::lower_bound(fields.begin(), fields.end(), id,
-                         [](const Field& f, uint16_t n) { return f.id < n; });
-    if (it != fields.end() && it->id == id) {
-        Require(it->type == type, "Unexpected field type");
-        it->value = std::move(value);
-    } else
-        fields.insert(it, {id, type, std::move(value)});
-}
-void Erase(Fields& fields, uint16_t id) {
-    std::erase_if(fields, [id](const Field& f) { return f.id == id; });
-}
 Fields Parse(const Bytes& bytes, bool marshaled = false) {
     Require(bytes.size() <= kMaxRecord, "Night light record too large");
     Reader r{bytes};
@@ -379,73 +276,27 @@ Fields Parse(const Bytes& bytes, bool marshaled = false) {
     Require(r.pos == bytes.size(), "Trailing Bond data");
     return fields;
 }
-Bytes Encode(const Fields& fields, bool marshaled = false) {
-    Bytes result;
-    if (marshaled)
-        result = {0x43, 0x42, 1, 0};
-    for (const auto& f : fields) {
-        if (f.id < 6)
-            result.push_back((f.id << 5) | f.type);
-        else if (f.id <= 255) {
-            result.push_back(0xC0 | f.type);
-            result.push_back(f.id);
-        } else {
-            result.push_back(0xE0 | f.type);
-            result.push_back(f.id & 255);
-            result.push_back(f.id >> 8);
-        }
-        result.insert(result.end(), f.value.begin(), f.value.end());
-    }
-    result.push_back(0);
-    return result;
-}
 bool Bool(const Fields& f, uint16_t id, bool fallback = false) {
     if (!Find(f, id))
         return fallback;
     return Get(f, id, kBool).value.at(0) != 0;
 }
 
-struct Record {
-    Fields outer, container, wrapper, payload;
-    uint64_t timestamp;
-    explicit Record(const Bytes& bytes) {
-        outer = Parse(bytes, true);
-        auto metadata = Parse(Get(outer, 0, kStruct).value);
-        Require(Bool(metadata, 0), "Invalid CloudStore metadata");
-        container = Parse(Get(outer, 1, kStruct).value);
-        timestamp = Number(Get(container, 0, kU64).value);
-        wrapper = Parse(Get(container, 1, kStruct).value);
-        const auto& list = Get(wrapper, 1, kList).value;
-        Reader r{list};
-        Require(r.Byte() == kI8, "Unexpected Night light payload type");
-        auto n = r.Varint();
-        Require(n == list.size() - r.pos, "Invalid Night light payload length");
-        payload = Parse(Bytes(list.begin() + r.pos, list.end()), true);
-    }
-    Bytes EncodeWithTimestamp(uint64_t stamp) const {
-        auto out = outer, c = container, w = wrapper;
-        auto inner = Encode(payload, true);
-        Bytes list{kI8};
-        Varint(list, inner.size());
-        list.insert(list.end(), inner.begin(), inner.end());
-        Set(w, 1, kList, std::move(list));
-        Set(c, 0, kU64, Number(stamp));
-        Set(c, 1, kStruct, Encode(w));
-        Set(out, 1, kStruct, Encode(c));
-        return Encode(out, true);
-    }
-};
-
-void ValidateSettings(const Fields& fields) {
-    Bool(fields, 0);
-    Bool(fields, 10, true);
-    Bool(fields, 70);
-    if (Find(fields, 40)) {
-        auto raw = Number(Get(fields, 40, kI16).value);
-        Require(!(raw & 1) && raw / 2 >= 1200 && raw / 2 <= 6500,
-                "Invalid Night light temperature");
-    }
+Fields ReadPayload(const Bytes& bytes) {
+    auto outer = Parse(bytes, true);
+    auto metadata = Parse(Get(outer, 0, kStruct).value);
+    Require(Bool(metadata, 0), "Invalid CloudStore metadata");
+    auto container = Parse(Get(outer, 1, kStruct).value);
+    Get(container, 0, kU64);
+    auto wrapper = Parse(Get(container, 1, kStruct).value);
+    const auto& list = Get(wrapper, 1, kList).value;
+    Reader r{list};
+    Require(r.Byte() == kI8, "Unexpected Night light payload type");
+    auto n = r.Varint();
+    Require(n == list.size() - r.pos, "Invalid Night light payload length");
+    return Parse(Bytes(list.begin() + r.pos, list.end()), true);
 }
+
 bool IsOn(const Fields& fields) {
     Require(Bool(fields, 30, true),
             "Night light is unavailable for this display driver");
@@ -527,18 +378,17 @@ int Kelvin(double strength) {
     return static_cast<int>(std::lround(6500 - 53 * strength));
 }
 
-std::wstring Key(bool settings, bool cloud = false) {
+std::wstring Key(bool settings) {
     std::wstring name = settings ? L"settings" : L"bluelightreductionstate";
     return std::wstring(
                L"Software\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Stor"
-               L"e\\DefaultAccount\\") +
-           (cloud ? L"Cloud\\" : L"Current\\") +
+               L"e\\DefaultAccount\\Current\\") +
            L"default$windows.data.bluelightreduction." + name +
            L"\\windows.data.bluelightreduction." + name;
 }
-Bytes ReadRegistry(bool settings, bool cloud = false) {
+Bytes ReadRegistry(bool settings) {
     DWORD size = 0;
-    auto key = Key(settings, cloud);
+    auto key = Key(settings);
     auto error = RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"Data",
                               RRF_RT_REG_BINARY, nullptr, nullptr, &size);
     Require(error == ERROR_SUCCESS && size && size <= kMaxRecord,
@@ -551,175 +401,239 @@ Bytes ReadRegistry(bool settings, bool cloud = false) {
     bytes.resize(size);
     return bytes;
 }
-void WriteRegistry(bool settings, const Bytes& bytes) {
-    HKEY key = nullptr;
-    auto error = RegOpenKeyExW(HKEY_CURRENT_USER, Key(settings).c_str(), 0,
-                               KEY_SET_VALUE, &key);
-    Require(error == ERROR_SUCCESS,
-            "Cannot open Night light registry record for writing");
-    error = RegSetValueExW(key, L"Data", 0, REG_BINARY, bytes.data(),
-                           static_cast<DWORD>(bytes.size()));
-    RegCloseKey(key);
-    Require(error == ERROR_SUCCESS, "Night light registry write failed");
-}
-uint64_t FileTimeNow() {
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-    return (uint64_t(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
-}
-
-// This interface also lets tests exercise write failures without touching
-// Windows.
-struct Store {
-    virtual Bytes Read(bool settings) = 0;
-    virtual void Write(bool settings, const Bytes& bytes) = 0;
-    virtual uint64_t CloudStamp(bool settings) = 0;
-    virtual ~Store() = default;
-};
-struct RegistryStore : Store {
-    Bytes Read(bool settings) override { return ReadRegistry(settings); }
-    void Write(bool settings, const Bytes& bytes) override {
-        WriteRegistry(settings, bytes);
-    }
-    uint64_t CloudStamp(bool settings) override {
-        try {
-            return Number(
-                Get(Parse(ReadRegistry(settings, true), true), 1, kU64).value);
-        } catch (...) {
-            return 0;
-        }  // Cloud record can be absent. Never write it.
-    }
+struct NativeNightLight {
+    int temperature;
+    bool preview;
 };
 
-struct Controller {
-    Store& store;
-    uint64_t highest[2]{};
-    bool ownsPreview = false;
-    std::function<void(bool, uint64_t)> saveTimestamp;
-    std::function<void(bool)> savePreview;
-    explicit Controller(Store& s) : store(s) {}
-    void Write(bool settings, Record& record) {
-        auto base = std::max(
-            {record.timestamp, highest[settings], store.CloudStamp(settings)});
-        Require(base <= std::numeric_limits<uint64_t>::max() - 2,
-                "Night light timestamp overflow");
-        auto stamp =
-            std::max(FileTimeNow() / 10000000 - 11644473600ULL, base + 2);
-        if (saveTimestamp)
-            saveTimestamp(settings, stamp);
-        store.Write(settings, record.EncodeWithTimestamp(stamp));
-        highest[settings] = stamp;
+NativeNightLight DecodeNativeNightLight(const Bytes& settingsBytes,
+                                       const Bytes& stateBytes) {
+    auto settings = ReadPayload(settingsBytes);
+    const bool on = IsOn(ReadPayload(stateBytes));
+    const bool preview = Bool(settings, 70);
+    const auto* field = Find(settings, 40);
+    uint64_t raw = field ? Number(Get(settings, 40, kI16).value) : 13000;
+    Require(!(raw & 1) && raw / 2 >= 1200 && raw / 2 <= 6500,
+            "Invalid Night light temperature");
+    return {on || preview ? static_cast<int>(raw / 2) : 6500, preview};
+}
+
+NativeNightLight ReadNativeNightLight() {
+    return DecodeNativeNightLight(ReadRegistry(true), ReadRegistry(false));
+}
+
+// Private ABI used by Windows.Shell.BlueLightReduction.dll. The interface
+// below includes the methods preceding the last one used by the mod.
+struct DisplayEnhancement : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_IsNightLightCapable(BYTE*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_IsNightLightOverridden(BYTE*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE StartNightLightTransition(
+        float kelvin, double durationMs, int transition) = 0;
+    virtual HRESULT STDMETHODCALLTYPE add_IsNightLightOverriddenChanged(
+        IUnknown* handler, INT64* token) = 0;
+    virtual HRESULT STDMETHODCALLTYPE remove_IsNightLightOverriddenChanged(
+        INT64 token) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_EnableModernNightLight(BYTE*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_IsAdaptiveColorCapable(BYTE*) = 0;
+};
+
+struct DisplayEnhancementOperation : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE put_Completed(IUnknown*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Completed(IUnknown**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetResults(DisplayEnhancement**) = 0;
+};
+
+struct DisplayEnhancementStatics : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE FromIdAsync(
+        HSTRING id, DisplayEnhancementOperation**) = 0;
+};
+
+constexpr GUID kDisplayEnhancementStatics = {
+    0x22771028, 0x1658, 0x4e5e,
+    {0xab, 0x77, 0x30, 0x36, 0x91, 0xa8, 0x6f, 0xda}};
+constexpr wchar_t kDisplayEnhancementClass[] =
+    L"Windows.Internal.Graphics.Display.DisplayEnhancementManagement."
+    L"DisplayEnhancementManagement";
+
+using Microsoft::WRL::ComPtr;
+
+using UniqueHString =
+    wil::unique_any<HSTRING, decltype(&WindowsDeleteString), WindowsDeleteString>;
+
+UniqueHString MakeHString(const std::wstring& value) {
+    UniqueHString result;
+    Require(SUCCEEDED(WindowsCreateString(
+                value.c_str(), static_cast<UINT32>(value.size()), result.put())),
+            "Cannot allocate a Windows display string");
+    return result;
+}
+
+ComPtr<DisplayEnhancement> OpenDisplay(DisplayEnhancementStatics* statics,
+                                       const wchar_t* devicePath) {
+    auto path = MakeHString(devicePath);
+    ComPtr<DisplayEnhancementOperation> operation;
+    auto hr = statics->FromIdAsync(path.get(), operation.GetAddressOf());
+    Require(SUCCEEDED(hr) && operation,
+            "Cannot open the Windows display");
+    ComPtr<IAsyncInfo> info;
+    Require(SUCCEEDED(operation.As(&info)), "Cannot query display open status");
+    const auto deadline = GetTickCount64() + 1500;
+    for (;;) {
+        AsyncStatus status;
+        Require(SUCCEEDED(info->get_Status(&status)),
+                "Cannot query display open status");
+        if (status != AsyncStatus::Started)
+            break;
+        if (GetTickCount64() >= deadline) {
+            info->Cancel();
+            throw std::runtime_error("Opening the Windows display timed out");
+        }
+        Sleep(25);
     }
-    void Update(bool settings, const std::function<void(Fields&)>& edit) {
-        Record r(store.Read(settings));
-        if (settings)
-            ValidateSettings(r.payload);
-        else
-            IsOn(r.payload);
-        auto before = r.payload;
-        edit(r.payload);
-        if (r.payload != before)
-            Write(settings, r);
+    ComPtr<DisplayEnhancement> display;
+    Require(SUCCEEDED(operation->GetResults(display.GetAddressOf())) && display,
+            "Cannot get the Windows display");
+    return display;
+}
+
+std::vector<DISPLAYCONFIG_PATH_INFO> ActiveDisplayPaths() {
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        UINT32 pathCount = 0, modeCount = 0;
+        Require(GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount,
+                                            &modeCount) == ERROR_SUCCESS,
+                "Cannot size the active display list");
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        auto result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount,
+                                         paths.data(), &modeCount, modes.data(),
+                                         nullptr);
+        if (result == ERROR_INSUFFICIENT_BUFFER)
+            continue;
+        Require(result == ERROR_SUCCESS, "Cannot enumerate active displays");
+        paths.resize(pathCount);
+        return paths;
     }
-    void SetOn(bool on) {
-        Update(false, [on](Fields& f) {
-            if (IsOn(f) == on)
-                return;
-            if (on)
-                Set(f, 0, kI32, Number(0));
-            else
-                Erase(f, 0);
-            Set(f, 10, kI32, Number(2));  // ZigZag(1): manual transition.
-            Set(f, 20, kU64, Number(FileTimeNow()));
-        });
+    throw std::runtime_error("The display configuration is changing");
+}
+
+class DisplayControl {
+    using SetDeviceTemperature = BOOL(WINAPI*)(HDC, float, DWORD, DWORD);
+
+    struct Target {
+        ComPtr<DisplayEnhancement> display;
+        std::wstring source;
+        bool capable;
+    };
+
+    std::vector<Target> targets_;
+    wil::unique_hmodule mscms_;
+    bool useDisplayService_ = false;
+    bool applied_ = false;
+
+    bool ApplyLegacy(const std::vector<Target>& targets, int kelvin) {
+        if (!mscms_) {
+            mscms_.reset(LoadLibraryExW(L"mscms.dll", nullptr,
+                                       LOAD_LIBRARY_SEARCH_SYSTEM32));
+        }
+        Require(static_cast<bool>(mscms_),
+                "Cannot load Windows color management");
+        auto setTemperature = reinterpret_cast<SetDeviceTemperature>(
+            GetProcAddress(mscms_.get(), "InternalSetDeviceTemperature"));
+        Require(setTemperature,
+                "The Windows Night light color API is unavailable");
+        bool success = true;
+        std::vector<std::wstring> appliedSources;
+        for (const auto& target : targets) {
+            if (!target.capable ||
+                std::find(appliedSources.begin(), appliedSources.end(),
+                          target.source) != appliedSources.end()) {
+                continue;
+            }
+            wil::unique_hdc dc(CreateDCW(L"DISPLAY", target.source.c_str(),
+                                         nullptr, nullptr));
+            if (!dc ||
+                !setTemperature(dc.get(), static_cast<float>(kelvin), 0, 0)) {
+                success = false;
+                continue;
+            }
+            applied_ = true;
+            appliedSources.push_back(target.source);
+        }
+        return success && !appliedSources.empty();
     }
-    void EndPreview() {
-        if (!ownsPreview)
+
+public:
+    bool HasApplied() const { return applied_; }
+
+    void Refresh() {
+        auto name = MakeHString(kDisplayEnhancementClass);
+        ComPtr<DisplayEnhancementStatics> statics;
+        Require(SUCCEEDED(RoGetActivationFactory(
+                    name.get(), kDisplayEnhancementStatics,
+                    reinterpret_cast<void**>(statics.GetAddressOf()))) && statics,
+                "The Windows display enhancement service is unavailable");
+        std::vector<Target> targets;
+        bool useDisplayService = useDisplayService_;
+        for (const auto& path : ActiveDisplayPaths()) {
+            DISPLAYCONFIG_TARGET_DEVICE_NAME target{};
+            target.header = {DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+                             sizeof(target), path.targetInfo.adapterId,
+                             path.targetInfo.id};
+            Require(DisplayConfigGetDeviceInfo(&target.header) == ERROR_SUCCESS,
+                    "Cannot resolve an active display");
+            if (!target.monitorDevicePath[0])
+                continue;
+            auto display = OpenDisplay(statics.Get(), target.monitorDevicePath);
+            BYTE capable = 0, modern = 0, adaptive = 0;
+            Require(SUCCEEDED(display->get_IsNightLightCapable(&capable)) &&
+                        SUCCEEDED(display->get_EnableModernNightLight(&modern)) &&
+                        SUCCEEDED(display->get_IsAdaptiveColorCapable(&adaptive)),
+                    "Cannot read Windows Night light display capabilities");
+            // Windows selects the service path for all displays if any
+            // supports modern Night light or adaptive color.
+            useDisplayService |= modern || adaptive;
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+            source.header = {DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+                             sizeof(source), path.sourceInfo.adapterId,
+                             path.sourceInfo.id};
+            Require(DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS,
+                    "Cannot resolve the display color device");
+            targets.push_back({std::move(display), source.viewGdiDeviceName,
+                               capable != 0});
+        }
+        Require(std::any_of(targets.begin(), targets.end(),
+                            [](const Target& target) { return target.capable; }),
+                "No active display supports Windows Night light");
+        if (useDisplayService && !useDisplayService_ && applied_) {
+            Require(ApplyLegacy(targets, 6500),
+                    "Cannot clear the previous Night light display transform");
+        }
+        useDisplayService_ = useDisplayService;
+        targets_ = std::move(targets);
+    }
+
+    void Apply(int kelvin) {
+        if (!useDisplayService_) {
+            Require(ApplyLegacy(targets_, kelvin),
+                    "Cannot apply the Night light temperature to every display");
             return;
-        for (int attempt = 0;; ++attempt) {
-            try {
-                Update(true, [](Fields& f) { Set(f, 70, kBool, {0}); });
-                if (savePreview)
-                    savePreview(false);
-                ownsPreview = false;
-                return;
-            } catch (...) {
-                if (attempt == 2)
-                    throw;
+        }
+        bool success = true;
+        for (const auto& target : targets_) {
+            if (!target.capable)
+                continue;
+            if (SUCCEEDED(target.display->StartNightLightTransition(
+                    static_cast<float>(kelvin), 0, 0))) {
+                applied_ = true;
+            } else {
+                success = false;
             }
         }
-    }
-    // Returns false while the user is dragging Windows' own strength slider.
-    bool Apply(double strength, bool refresh = false) {
-        EndPreview();
-        Record settings(store.Read(true)), state(store.Read(false));
-        ValidateSettings(settings.payload);
-        bool on = IsOn(state.payload);
-        if (Bool(settings.payload, 70))
-            return false;
-        const bool wantedOn = strength > 0;
-        const int temperature = Kelvin(strength);
-        const auto* current = Find(settings.payload, 40);
-        const bool changed =
-            wantedOn &&
-            (!current || Number(current->value) != uint64_t(temperature * 2));
-        Update(true, [=](Fields& f) {
-            Set(f, 0, kBool, {0});  // The mod owns scheduling while active.
-            if (wantedOn)
-                Set(f, 40, kI16, Number(temperature * 2));
-        });
-        SetOn(wantedOn);
-        if (wantedOn && (changed || !on || refresh)) {
-            // Briefly emulate the native slider so Explorer applies the new
-            // temperature.
-            if (savePreview)
-                savePreview(true);
-            ownsPreview = true;
-            Update(true, [](Fields& f) { Set(f, 70, kBool, {1}); });
-            Sleep(50);  // Runs on the tool's worker thread.
-            EndPreview();
-        }
-        return true;
-    }
-    void Restore(const Bytes& settingsBytes, const Bytes& stateBytes) {
-        EndPreview();
-        Record baseline(settingsBytes), state(stateBytes);
-        ValidateSettings(baseline.payload);
-        bool on = IsOn(state.payload);
-        // Restore owned fields only. Keep any unrelated edits made while
-        // running.
-        Update(true, [&](Fields& f) {
-            for (uint16_t id : {0, 40}) {
-                const auto* original = Find(baseline.payload, id);
-                if (original)
-                    Set(f, id, original->type, original->value);
-                else
-                    Erase(f, id);
-            }
-            Set(f, 70, kBool, {0});
-        });
-        if (Bool(baseline.payload, 0)) {
-            // Do not reinstate a stale manual override (for example, an on
-            // state captured at 22:00 when disabling the mod at noon).
-            // Restoring schedule enablement above notifies Windows to
-            // reevaluate it.
-            Update(false, [](Fields& f) {
-                Erase(f, 10);  // Default transition cause: scheduled.
-            });
-            on = IsOn(Record(store.Read(false)).payload);
-        } else {
-            SetOn(on);
-        }
-        if (on) {
-            if (savePreview)
-                savePreview(true);
-            ownsPreview = true;
-            Update(true, [](Fields& f) { Set(f, 70, kBool, {1}); });
-            Sleep(50);
-            EndPreview();
-        }
+        Require(success,
+                "Cannot apply the Night light temperature to every display");
     }
 };
+
 }  // namespace nightlight
 
 #ifndef NIGHT_LIGHT_TEST
@@ -734,7 +648,6 @@ std::mutex configMutex;
 std::optional<Config>
     config;  // Empty until a valid saved schedule is available.
 HANDLE stopEvent = nullptr, changedEvent = nullptr, worker = nullptr;
-StorageNames storageNames;  // Initialized with the token SID before any I/O.
 UINT taskbarCreatedMessage = 0;
 bool refreshRequested =
     true;  // Only accessed by the worker and its window proc.
@@ -788,37 +701,15 @@ Config LoadConfig() {
     result.schedule = BuildSchedule(std::move(stages), offTime);
     return result;
 }
-Bytes Saved(PCWSTR name) {
-    Bytes bytes(kMaxRecord);
-    auto size = Wh_GetBinaryValue(name, bytes.data(), bytes.size());
-    Require(size > 0 && size <= bytes.size(),
-            "Cannot read saved Night light baseline");
-    bytes.resize(size);
-    return bytes;
-}
-void ClearBaseline() {
-    // Clear the commit marker first; stale blobs are harmless without it.
-    Require(Wh_SetIntValue(storageNames.baselineSaved.c_str(), 0),
-            "Cannot clear Night light backup marker");
-    Wh_DeleteValue(storageNames.originalSettings.c_str());
-    Wh_DeleteValue(storageNames.originalState.c_str());
-}
 DWORD WINAPI Run(void*) {
-    RegistryStore store;
-    Controller controller(store);
-    controller.saveTimestamp = [](bool settings, uint64_t stamp) {
-        Require(Wh_SetBinaryValue((settings ? storageNames.highestSettings
-                                            : storageNames.highestState)
-                                      .c_str(),
-                                  &stamp, sizeof(stamp)),
-                "Cannot save Night light timestamp");
-    };
-    controller.savePreview = [](bool owned) {
-        Require(Wh_SetIntValue(storageNames.previewOwned.c_str(), owned),
-                "Cannot save Night light preview marker");
-    };
-    Bytes originalSettings, originalState;
-    bool saved = false;
+    const auto winrt = RoInitialize(RO_INIT_MULTITHREADED);
+    if (FAILED(winrt)) {
+        Wh_Log(L"Cannot initialize the display runtime (0x%08X)", winrt);
+        return 0;
+    }
+    const auto uninitialize = wil::scope_exit([] { RoUninitialize(); });
+    DisplayControl display;
+    std::optional<int> restoreTemperature;
     HMODULE module = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -844,78 +735,49 @@ DWORD WINAPI Run(void*) {
     std::string lastError;
     while (WaitForSingleObject(stopEvent, 0) == WAIT_TIMEOUT) {
         try {
-            if (!saved) {
-                if (Wh_GetIntValue(storageNames.baselineSaved.c_str(), 0)) {
-                    originalSettings =
-                        Saved(storageNames.originalSettings.c_str());
-                    originalState = Saved(storageNames.originalState.c_str());
-                } else {
-                    originalSettings = store.Read(true);
-                    originalState = store.Read(false);
-                }
-                Record settings(originalSettings), state(originalState);
-                ValidateSettings(settings.payload);
-                IsOn(state.payload);
-                if (Bool(settings.payload, 70)) {
-                    // Do not capture a transient slider preview as the
-                    // baseline.
-                    WaitForWork(1000);
-                    continue;
-                }
-                Require(
-                    Wh_SetBinaryValue(storageNames.originalSettings.c_str(),
-                                      originalSettings.data(),
-                                      originalSettings.size()) &&
-                        Wh_SetBinaryValue(storageNames.originalState.c_str(),
-                                          originalState.data(),
-                                          originalState.size()) &&
-                        Wh_SetIntValue(storageNames.baselineSaved.c_str(), 1),
-                    "Cannot save Night light baseline; no changes made");
-                saved = true;
-                // Keep our high-water marks across tool crashes and mod
-                // reloads.
-                for (int i = 0; i < 2; ++i) {
-                    uint64_t highest = 0;
-                    if (Wh_GetBinaryValue((i ? storageNames.highestSettings
-                                             : storageNames.highestState)
-                                              .c_str(),
-                                          &highest,
-                                          sizeof(highest)) == sizeof(highest))
-                        controller.highest[i] = highest;
-                }
-                controller.ownsPreview =
-                    Wh_GetIntValue(storageNames.previewOwned.c_str(), 0) != 0;
-            }
             std::optional<Config> current;
             {
                 std::lock_guard lock(configMutex);
                 current = config;
             }
-            SYSTEMTIME now;
-            GetLocalTime(&now);
-            double minute = now.wHour * 60 + now.wMinute + now.wSecond / 60.0;
-            if (current &&
-                controller.Apply(
-                    StrengthAt(current->schedule, minute, current->gradual),
-                    refreshRequested)) {
-                refreshRequested = false;
+            if (current) {
+                const auto native = ReadNativeNightLight();
+                if (!native.preview) {
+                    SYSTEMTIME now;
+                    GetLocalTime(&now);
+                    double minute = now.wHour * 60 + now.wMinute +
+                                    now.wSecond / 60.0;
+                    const auto temperature = Kelvin(
+                        StrengthAt(current->schedule, minute, current->gradual));
+                    restoreTemperature = native.temperature;
+                    if (refreshRequested) {
+                        display.Refresh();
+                        refreshRequested = false;
+                    }
+                    if (WaitForSingleObject(stopEvent, 0) == WAIT_TIMEOUT)
+                        display.Apply(temperature);
+                }
             }
             lastError.clear();
         } catch (const std::exception& e) {
+            refreshRequested = true;
             if (lastError != e.what())
                 Wh_Log(L"Night light: %S", e.what());
             lastError = e.what();
         }
         WaitForWork(10000);
     }
-    if (saved) {
+    if (display.HasApplied() && restoreTemperature) {
         try {
-            controller.Restore(originalSettings, originalState);
-            ClearBaseline();
-            Wh_Log(L"Original Night light settings restored");
+            restoreTemperature = ReadNativeNightLight().temperature;
         } catch (const std::exception& e) {
-            Wh_Log(L"Night light restoration failed; backup retained: %S",
+            Wh_Log(L"Using the last readable Windows Night light state: %S",
                    e.what());
+        }
+        try {
+            display.Apply(*restoreTemperature);
+        } catch (const std::exception& e) {
+            Wh_Log(L"Night light runtime restoration failed: %S", e.what());
         }
     }
     if (sessionRegistered)
@@ -929,12 +791,6 @@ DWORD WINAPI Run(void*) {
 }  // namespace
 
 BOOL WhTool_ModInit() {
-    try {
-        storageNames = StorageNames(CurrentUserSid());
-    } catch (const std::exception& e) {
-        Wh_Log(L"Cannot initialize Night light: %S", e.what());
-        return FALSE;
-    }
     config.reset();
     try {
         config = LoadConfig();
