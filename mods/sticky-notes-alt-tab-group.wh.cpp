@@ -200,8 +200,14 @@ HRESULT WINAPI SourceSizeHook(void* self, PreviewSize* size) {
 }
 HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
     HRESULT hr = originalVisible(self, view, visible);
-    if (FAILED(hr) || !*visible) return hr;
     DWORD thread = GetCurrentThreadId();
+    // The initial list can contain no eligible notes after Show desktop. Track
+    // the innermost application-visibility evaluator before eligibility/type
+    // checks, so notes added by a later refresh still receive grouping.
+    if (buildThread == thread && evaluatingDataView && RefreshHooksAvailable()) {
+        TrackDataView(evaluatingDataView);
+    }
+    if (FAILED(hr) || !*visible) return hr;
     // Late queries are filtered only inside an Alt+Tab data view's evaluation.
     // Other callers on the same shell thread keep their normal visibility.
     if (!refreshDepth && buildThread != thread &&
@@ -213,11 +219,6 @@ HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
     else if (table == winrtVtable) windowResult = winrtWindow(view, &window);
     else return hr;
     if (FAILED(windowResult) || !Notes(window)) return hr;
-    // Capture the innermost data view that actually asks about a note during
-    // Alt+Tab creation, not every surrounding/chained view or collection.
-    if (buildThread == thread && evaluatingDataView && RefreshHooksAvailable()) {
-        TrackDataView(evaluatingDataView);
-    }
     HWND expected = representative.load();
     // WS_VISIBLE is not Alt+Tab eligibility. Show desktop/UWP transitions may
     // hide every native window; re-electing on each hidden candidate lets all
