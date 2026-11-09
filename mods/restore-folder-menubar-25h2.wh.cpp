@@ -116,60 +116,42 @@ bool IsExplorerFrameBaseNameW(LPCWSTR path)
             lstrcmpiW(base, L"explorerframe") == 0);
 }
 
-// Lock-free tail check on UNICODE_STRING (may be non-null-terminated).
-// Used as cheap pre-filter inside LdrLoadDll hook to avoid waking
-// the worker for unrelated DLLs.
+// Cheap tail check on UNICODE_STRING (may be non-null-terminated).
+// Used as a pre-filter inside the LdrLoadDll hook to avoid waking
+// the worker for unrelated DLLs. The hook calls GetModuleFileNameW
+// right after this check anyway, so API calls are fine here.
 bool IsExplorerFrameUnicodeName(PUNICODE_STRING s)
 {
-    if (!s || !s->Buffer || s->Length < 13 * (USHORT)sizeof(WCHAR))
+    if (!s || !s->Buffer)
         return false;
 
-    USHORT cch = (USHORT)(s->Length / sizeof(WCHAR));
-    int lastSlash = -1;
-    for (int i = 0; i < cch; i++)
+    int cch = (int)(s->Length / sizeof(WCHAR));
+
+    // Find the start of the file name (after the last path separator).
+    int start = 0;
+    for (int i = cch - 1; i >= 0; --i)
     {
         WCHAR c = s->Buffer[i];
         if (c == L'\\' || c == L'/')
-            lastSlash = i;
-        if (c == L'\0')
         {
-            cch = (USHORT)i;
+            start = i + 1;
             break;
         }
     }
 
-    int start = lastSlash + 1;
-    int len = (int)cch - start;
-    if (len != 13 && len != 17)
-        return false;
-
+    int len = cch - start;
     LPCWSTR tail = s->Buffer + start;
-    if (len == 13)
+
+    if (len == 17) // "explorerframe.dll"
     {
-        static const WCHAR k[] = L"explorerframe";
-        for (int i = 0; i < 13; i++)
-        {
-            WCHAR a = tail[i];
-            if (a >= L'A' && a <= L'Z')
-                a += 32;
-            if (a != k[i])
-                return false;
-        }
-        return true;
+        return CompareStringOrdinal(tail, len, L"explorerframe.dll", -1, TRUE) == CSTR_EQUAL;
     }
-    else
+    if (len == 13) // "explorerframe"
     {
-        static const WCHAR k[] = L"explorerframe.dll";
-        for (int i = 0; i < 17; i++)
-        {
-            WCHAR a = tail[i];
-            if (a >= L'A' && a <= L'Z')
-                a += 32;
-            if (a != k[i])
-                return false;
-        }
-        return true;
+        return CompareStringOrdinal(tail, len, L"explorerframe", -1, TRUE) == CSTR_EQUAL;
     }
+
+    return false;
 }
 
 bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
@@ -686,7 +668,7 @@ LONG WINAPI LdrLoadDll_Hook(PWSTR SearchPath, PULONG DllCharacteristics, PUNICOD
     {
         if (g_hookEvent && !g_stopWorker.load())
         {
-            // Cheap pre-filter on the request name, no API calls.
+            // Cheap pre-filter on the request name.
             if (IsExplorerFrameUnicodeName(DllName))
             {
                 // Confirm against the loaded module. Redirector keeps
