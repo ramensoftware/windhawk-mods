@@ -12,7 +12,7 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.9.9
+// @version         4.9.11
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
@@ -516,6 +516,70 @@ static bool IsKnownNonOsdFlyout(HWND hwnd) {
     }
     CloseHandle(th);
     return excluded;
+}
+
+// Learned native-OSD signature. A desktop-registry notification alone must
+// never teach us the signature: Snap and Task View use the same XAML class.
+// A non-empty thread description is preferred; the Z-band is a fallback.
+static std::mutex g_nativeSignatureMutex;
+static wchar_t g_nativeThreadDescription[128] = L"";
+static DWORD g_nativeWindowBand = 0;
+static bool g_nativeSignatureReady = false;
+static volatile DWORD g_lastNativeCandidateTick = 0;
+
+using GetWindowBandFunc = BOOL (WINAPI*)(HWND, PDWORD);
+static DWORD NativeWindowBand(HWND hwnd) {
+    static auto fn = reinterpret_cast<GetWindowBandFunc>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetWindowBand"));
+    DWORD band = 0;
+    if (fn) fn(hwnd, &band);
+    return band;
+}
+
+static void NativeThreadDescription(HWND hwnd, wchar_t (&out)[128]) {
+    out[0] = 0;
+    DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!tid) return;
+    HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
+    if (!thread) return;
+    PWSTR description = nullptr;
+    if (SUCCEEDED(GetThreadDescription(thread, &description)) && description) {
+        wcsncpy_s(out, description, _TRUNCATE);
+        LocalFree(description);
+    }
+    CloseHandle(thread);
+}
+
+static bool MatchesLearnedNativeOsd(HWND hwnd) {
+    wchar_t description[128];
+    NativeThreadDescription(hwnd, description);
+    DWORD band = NativeWindowBand(hwnd);
+    std::lock_guard<std::mutex> lock(g_nativeSignatureMutex);
+    if (!g_nativeSignatureReady) return true; // Bootstrap before first genuine event.
+    if (g_nativeThreadDescription[0])
+        return wcscmp(description, g_nativeThreadDescription) == 0;
+    return !g_nativeWindowBand || band == g_nativeWindowBand;
+}
+
+static void LearnNativeOsd(HWND hwnd, const wchar_t* reason) {
+    if (!hwnd || !IsWindow(hwnd) || !IsTrackedHiddenOsd(hwnd) ||
+        IsKnownNonOsdFlyout(hwnd)) return;
+    wchar_t description[128];
+    NativeThreadDescription(hwnd, description);
+    DWORD band = NativeWindowBand(hwnd);
+    bool learned = false;
+    {
+        std::lock_guard<std::mutex> lock(g_nativeSignatureMutex);
+        if (!g_nativeSignatureReady && (description[0] || band)) {
+            wcsncpy_s(g_nativeThreadDescription, description, _TRUNCATE);
+            g_nativeWindowBand = band;
+            g_nativeSignatureReady = true;
+            learned = true;
+        }
+    }
+    if (learned)
+        Wh_Log(L"Learned native OSD signature from %s: thread=\"%s\" band=%lu",
+               reason, description, (unsigned long)band);
 }
 
 static bool IsOsd(HWND h) {
@@ -1473,15 +1537,17 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
             g_deskT0 = now;
             return 0;
         }
-        // When brightness is at its limit, Fn+brightness may trigger a new
-        // native ShowWindow without any brightness value-change event.
-        // Treat it as a continuation of the existing brightness pill; never
-        // call BeginShow(), which would reset and replay its opening animation.
-        const bool repeatBrightness = !desktopSwitch && !volumeKeyHeld &&
-            !recentVolume && keyHint != 1 && keyHint != 2 &&
-            (recentBrightness || (g_bri >= 98 && g_bri <= 100));
+        // Brightness Fn keys may hide/show the native XAML host on every
+        // repeat or when reversing direction. A new ShowWindow can arrive
+        // BEFORE the brightness poll has observed the new value. If our
+        // brightness pill is already visible, treat this as its continuation
+        // unless a physical volume key or an actual desktop switch is seen.
+        // A genuine volume callback is handled in MSG_VALUES and can still
+        // replace the brightness pill immediately.
+        const bool continueBrightness = !desktopSwitch && !volumeKeyHeld &&
+            keyHint != 1 && keyHint != 2;
         if ((st == S_OPEN || st == S_CLOSING) && g_kind == 1 &&
-            repeatBrightness) {
+            continueBrightness) {
             g_brightnessHideDeadline = 0;
             g_nativeHideDeadline = 0;
             g_hidePending = false;
@@ -1557,6 +1623,16 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
         const int v = (int)(l & 0xFF);
         const bool mute = (l & 0x100) != 0;
         const DWORD now = GetTickCount();
+        // Brightness polling can report the new value after the native host
+        // appeared. Allow that genuine notification to teach the signature.
+        // Do not learn from a desktop-only notification or an old HWND.
+        const bool desktopShortcutHeld =
+            ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) &&
+            (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+        if (g_lastNativeCandidateTick && now - g_lastNativeCandidateTick <= 650 &&
+            !(g_deskTick && now - g_deskTick <= 650) &&
+            !desktopShortcutHeld && !g_pendingDesktopChange && g_pendKind != 2)
+            LearnNativeOsd(g_osd, kind == 0 ? L"volume callback" : L"brightness callback");
         g_lastConfirmedKind = kind;
         g_lastConfirmedTick = now;
 
@@ -1569,14 +1645,27 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
         }
         if (st == S_OPEN || st == S_CLOSING) {
             g_nativeHideDeadline = 0;
-            if (kind != g_kind || st == S_CLOSING) {
-                // A real volume or brightness change ALWAYS replaces a
-                // visible desktop pill. Do not discard these notifications.
+            if (kind != g_kind) {
+                // A change of indicator type replaces the old pill. Keep
+                // this behavior for volume/brightness/desktop transitions.
                 g_kind = kind;
                 g_pendingDesktopChange = false;
                 g_pendKind = kind == 0 ? 1 : 0;
                 BeginShow();
-            } else if ((float)v != sp_v.t) {
+            } else {
+                // Same kind while closing: reverse the closing spring in
+                // place, rather than resetting the opening animation.
+                if (st == S_CLOSING) {
+                    st = S_OPEN;
+                    stStart = now - (DWORD)a_hold;
+                    g_unfolded = true;
+                    g_phase2 = false;
+                    sp_p.t = 1.0f;
+                    sp_y.t = 0.0f;
+                }
+                if (kind == 1) g_brightnessHideDeadline = 0;
+            }
+            if ((float)v != sp_v.t && g_unfolded) {
                 Bump(v > sp_v.t ? 1 : -1, g.valueShakePct / 100.0f);
                 if (g.compactEnabled) {
                     bool sameSequence = g.compactReleaseMs <= 0 ||
@@ -1728,6 +1817,20 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
         IsKnownNonOsdFlyout(hwnd))
         return ShowWindow_Orig(hwnd, cmd);
 
+    // A real virtual-desktop shortcut/switch is a separate supported OSD.
+    // Keep the previous desktop behavior even if Windows hosts that indicator
+    // on a different thread from the volume/brightness flyout.
+    const bool desktopShortcutHeld =
+        ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) &&
+        (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+    const DWORD checkNow = GetTickCount();
+    const bool recentDesktopSwitch = g_deskTick &&
+        (LONG)(checkNow - g_deskTick) >= 0 && checkNow - g_deskTick <= 650;
+    if (!desktopShortcutHeld && !recentDesktopSwitch &&
+        !MatchesLearnedNativeOsd(hwnd)) {
+        Wh_Log(L"Ignoring XAML flyout: native OSD signature mismatch");
+        return ShowWindow_Orig(hwnd, cmd);
+    }
     Wh_Log(L"Native OSD candidate: size=%dx%d dpi=%u", physicalWidth,
            physicalHeight, GetDpiForWindow(hwnd));
 
@@ -1754,6 +1857,20 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
         }
     }
     BOOL r = ShowWindow_Orig(hwnd, cmd);
+    g_lastNativeCandidateTick = GetTickCount();
+    // Learn only from a real value notification, not from the desktop hint
+    // or the brightness-at-limit guess. Some notifications arrive shortly
+    // AFTER ShowWindow, and MSG_VALUES handles that later case.
+    const DWORD candidateNow = GetTickCount();
+    const bool recentVolumeValue = g_volTick &&
+        (LONG)(candidateNow - g_volTick) >= 0 && candidateNow - g_volTick <= 650;
+    const bool recentBrightnessValue = g_briTick &&
+        (LONG)(candidateNow - g_briTick) >= 0 && candidateNow - g_briTick <= 650;
+    const bool recentDesktopChange = g_deskTick &&
+        (LONG)(candidateNow - g_deskTick) >= 0 && candidateNow - g_deskTick <= 650;
+    if ((recentVolumeValue || recentBrightnessValue) &&
+        !recentDesktopChange && !desktopShortcutHeld && pend != 2)
+        LearnNativeOsd(hwnd, L"recent volume/brightness value change");
     PostMessageW(g_ui, MSG_SHOW, (WPARAM)pend, 0);
     if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
     return r;
