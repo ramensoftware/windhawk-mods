@@ -2,7 +2,7 @@
 // @id              taskbar-clock-to-left
 // @name            Taskbar Clock to Left
 // @description     Move the native Windows 11 clock/notification button to the left without shifting centered taskbar apps
-// @version         2.3.18
+// @version         2.3.19
 // @author          pleromyst
 // @github          https://github.com/pleromyst
 // @license         GPL-3.0
@@ -888,7 +888,11 @@ FrameworkElement FindTaskbarTemplateElement(FrameworkElement parent, PCWSTR name
 
 FrameworkElement FindTaskbarRepeater(Controls::Grid root) {
     auto frame = FindDirectChildByName(root, L"TaskbarFrame");
-    auto repeater = FindTaskbarTemplateElement(frame, L"TaskbarFrameRepeater");
+    auto grid = FindDirectChildByName(frame, L"RootGrid").try_as<Controls::Grid>();
+    auto repeater = FindDirectChildByName(grid, L"TaskbarFrameRepeater");
+    if (IsTaskbarRepeater(repeater, root)) return repeater;
+
+    repeater = FindTaskbarTemplateElement(frame, L"TaskbarFrameRepeater");
     return IsTaskbarRepeater(repeater, root) ? repeater : nullptr;
 }
 
@@ -2174,8 +2178,15 @@ bool ClearClockTrayMetricHooks() {
 ClockTrayLayoutStamp ReadClockTrayLayoutStamp() {
     auto& placement = g_clockTrayPlacement;
     auto root = placement.root.get();
-    // Bounded template discovery; never enumerate taskbar items here.
-    auto repeater = FindTaskbarRepeater(root).as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    // Reuse the watched repeater on ordinary layout passes. Rediscover it
+    // when tracking is invalidated or the old control leaves this taskbar.
+    auto repeater = placement.layoutRepeater.get();
+    if (placement.layoutTrackingDirty || !repeater || !repeater.IsLoaded() ||
+        !IsTaskbarRepeater(repeater, root)) {
+        repeater = FindTaskbarRepeater(root)
+            .try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    }
+    if (!repeater) throw winrt::hresult_error(E_PENDING);
     auto source = repeater.ItemsSourceView();
     auto parent = placement.originalParent.get();
     if (!source || !parent || !parent.IsLoaded() || !root.IsLoaded() ||
@@ -2265,7 +2276,9 @@ void WatchClockTrayMetrics(FrameworkElement clock, uint64_t generation) {
     auto& placement = g_clockTrayPlacement;
     placement.layoutTrackingDirty = false;
     auto root = placement.root.get();
-    auto repeater = FindTaskbarRepeater(root).as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    auto repeater = FindTaskbarRepeater(root)
+        .try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    if (!repeater) throw winrt::hresult_error(E_PENDING);
     auto source = repeater.ItemsSourceView();
     if (!source) throw winrt::hresult_error(E_FAIL);
     placement.layoutRepeater = repeater;
