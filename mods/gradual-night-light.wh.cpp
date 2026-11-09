@@ -2,7 +2,7 @@
 // @id              gradual-night-light
 // @name            Gradual Night Light
 // @description     Gradually adjust Windows Night light strength using a daily schedule.
-// @version         0.4.1
+// @version         0.4.2
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
@@ -121,6 +121,7 @@ research below. No external helper, script, or runtime download is required.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -639,7 +640,6 @@ public:
 
 #ifndef NIGHT_LIGHT_TEST
 #include <shellapi.h>
-#include <windhawk_utils.h>
 #include <wtsapi32.h>
 #include <mutex>
 
@@ -689,17 +689,19 @@ void WaitForWork(DWORD timeout) {
 Config LoadConfig() {
     Config result;
     result.gradual = Wh_GetIntSetting(L"GradualTransitions") != 0;
-    std::wstring offTime = WindhawkUtils::StringSetting::make(L"OffTime").get();
+    using StringSetting = std::unique_ptr<const wchar_t, decltype(&Wh_FreeStringSetting)>;
+    StringSetting offTime(Wh_GetStringSetting(L"OffTime"), Wh_FreeStringSetting);
     std::vector<Entry> stages;
     for (int i = 0; i <= 96; ++i) {
-        std::wstring time =
-            WindhawkUtils::StringSetting::make(L"Stages[%d].Time", i).get();
-        if (time.empty())
+        StringSetting time(Wh_GetStringSetting(L"Stages[%d].Time", i),
+                           Wh_FreeStringSetting);
+        if (!time || !*time)
             break;
         stages.push_back(
-            {ParseTime(time), Wh_GetIntSetting(L"Stages[%d].Strength", i)});
+            {ParseTime(time.get()), Wh_GetIntSetting(L"Stages[%d].Strength", i)});
     }
-    result.schedule = BuildSchedule(std::move(stages), offTime);
+    Require(static_cast<bool>(offTime), "Cannot read off time");
+    result.schedule = BuildSchedule(std::move(stages), offTime.get());
     return result;
 }
 DWORD WINAPI Run(void*) {
