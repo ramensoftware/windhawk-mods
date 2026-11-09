@@ -4,13 +4,13 @@
 // @name:ko         스티커 메모 Alt+Tab 하나로 묶기
 // @description     Group Microsoft Sticky Notes into one Alt+Tab entry, bring open notes forward together, and use compact previews.
 // @description:ko  스티커 메모를 Alt+Tab 한 항목으로 묶고, 전환하면 열린 메모를 함께 표시하며 미리보기를 작게 만듭니다.
-// @version         1.1.4
+// @version         1.1.5
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -ldwmapi -luuid
+// @compilerOptions -lole32 -ldwmapi -luuid -lshell32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -22,6 +22,8 @@ Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
   - Keep notes grouped during delayed refreshes for as long as the switcher is
     open, including refreshes after Show desktop (Win+D). Native window hiding
     does not change the representative; a destroyed window can be replaced.
+  - Recognize minimized UWP note frames by their AppUserModelID even when
+    Windows detaches the note's content window from the frame after Win+D.
 - Switch to Sticky Notes to bring all its open windows on the current virtual
   desktop forward together.
   - Minimized notes are restored; closed notes are not opened.
@@ -104,6 +106,7 @@ SOFTWARE.
 #include <windhawk_utils.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
+#include <propsys.h>
 #include <atomic>
 #include <vector>
 #include <cwchar>
@@ -159,6 +162,23 @@ bool Notes(HWND window) {
     if (NotesProcess(window)) return true;
     wchar_t cls[128];
     if (!GetClassNameW(window, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"ApplicationFrameWindow")) return false;
+    // UWP content windows can be detached from ApplicationFrameWindow while
+    // minimized (for example after Win+D). The frame still carries the app ID;
+    // looking only for a Microsoft.Notes.exe child misclassifies every note.
+    constexpr PROPERTYKEY appIdKey = {
+        {0x9F4C2855, 0x9F79, 0x4B39,
+         {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
+    IPropertyStore* properties = nullptr;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(window, IID_PPV_ARGS(&properties)))) {
+        PROPVARIANT value{};
+        bool notes = SUCCEEDED(properties->GetValue(appIdKey, &value)) &&
+            value.vt == VT_LPWSTR && value.pwszVal &&
+            _wcsicmp(value.pwszVal,
+                     L"Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe!App") == 0;
+        PropVariantClear(&value);
+        properties->Release();
+        if (notes) return true;
+    }
     bool found = false;
     EnumChildWindows(window, [](HWND child, LPARAM data) -> BOOL {
         if (!NotesProcess(child)) return TRUE;
