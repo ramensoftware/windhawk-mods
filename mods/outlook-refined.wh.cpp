@@ -675,7 +675,10 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   // scrollbar. Measured live rather than assumed, because both depend on the pane width and
   // on how the viewer's scrollbars are drawn. The fallbacks are what a default pane measures.
   function agendaInsets() {
-    const fallback = { left: 8, right: 24 };
+    // 8 on both sides: what a default pane measures once the gutter above is released. The
+    // old 24 on the right described the layout before that, and left the agenda's contents
+    // 16px short of the rows above on any pass that fell back.
+    const fallback = { left: 8, right: 8 };
     const pane = document.querySelector(PANE);
     const list = document.querySelector(FAVS);
     if (!pane || !list) return fallback;
