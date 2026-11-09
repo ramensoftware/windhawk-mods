@@ -101,18 +101,16 @@ Peek, to learn which window is being peeked.
 * **Frame color source** – instead of the one frame color, each monitor's
   frame can take the color of the *title bar* of the maximized window on
   it: the window's fourth row inside the rounded screen (past the inner
-  shadow where the title bar is tall enough), copied from the window's own
-  rendering as DWM holds it - so a dialog or a flyout over it, a thumbnail
-  preview, or the window still zooming into place (the screen shows what is
-  behind it until the animation lands) make no difference - and reduced to
-  its dominant color (caption text and buttons are too few pixels to
-  count). A window whose rendering can't be copied is read off the screen
-  the way Top Taskbar Bleed reads it, with whatever covers it left out. A
+  shadow where the title bar is tall enough), read off the screen the way
+  Top Taskbar Bleed reads it - the app is never asked to render - and
+  reduced to its dominant color (caption text and buttons are too few
+  pixels to count; columns covered by a dialog or a flyout are left out, no
+  row is read while a thumbnail preview hangs over it, nor while a window
+  is still zooming in or out with the window animations on). A window seen
+  before gets the color it read as the last time the moment it takes over,
+  before it has even finished zooming in; the readings then confirm it. A
   row that differs from the color in use is read again every frame until
-  two readings agree - the color a window read as the last time counts as
-  one, so a window seen before switches on its first reading - and the
-  frame follows within a frame or two of the window event; with no
-  maximized window the frame color is used. Hovering a taskbar thumbnail
+  two readings agree; with no maximized window the frame color is used. Hovering a taskbar thumbnail
   until Aero Peek shows the window gives the frame that window's color for
   as long as it shows, if it is a maximized window (or one minimized from
   maximized). The color goes wherever the frame color goes - the solid fill, the
@@ -358,7 +356,7 @@ same license.
     $description: Hex color (#RRGGBB) of the frame - the acrylic's tint, or the solid fill, under the taskbar too.
   - colorSource: titlebar
     $name: Frame color source
-    $description: Where the frame color comes from. "Title bar" replaces the frame color above, on each monitor with a maximized window, with the color of that window's title bar (its fourth row of pixels, taken from the window's own rendering) - the solid fill, the acrylic's tint and luminosity, and the taskbar's background follow it, easing from one color to the next, and the taskbar switches to the light or the dark theme to stay readable on it. Ignored by the Windows' default fill.
+    $description: Where the frame color comes from. "Title bar" replaces the frame color above, on each monitor with a maximized window, with the color of that window's title bar (its fourth row of pixels, as on screen) - the solid fill, the acrylic's tint and luminosity, and the taskbar's background follow it, easing from one color to the next, and the taskbar switches to the light or the dark theme to stay readable on it. Ignored by the Windows' default fill.
     $options:
     - custom: The frame color above
     - titlebar: Title bar - the maximized window's title bar color, the frame color when there is none
@@ -1084,6 +1082,10 @@ bool g_taskbarEventPending = false;  // a kMsgTaskbarEvent is queued
 // by the kMsgTaskbarEvent handler to start the fast readings. A window being
 // dragged or a taskbar sliding only ticks.
 std::atomic<bool> g_titleEventPending{false};
+// When the last such event happened: a window zooming into place, or out of
+// it, shows on screen as DWM's animation for a moment, and the row read off
+// the screen then shows what is behind it (see ReadTitleBar).
+std::atomic<ULONGLONG> g_titleEventTick{0};
 ULONGLONG g_lastTickTime = 0;        // when the last tick ran (throttles event-driven ticks)
 ULONGLONG g_threadStartTick = 0;
 bool g_xamlCornersOwned = false;  // corner ears were added to at least one taskbar
@@ -7482,14 +7484,14 @@ void OnRefreshTimer(HWND ctrl) {
 // With the "Title bar" source, each monitor's frame takes the color of the
 // title bar of the maximized window on it (or of the window Aero Peek shows
 // from a taskbar thumbnail): the fourth row of the window inside the rounded
-// screen, copied from the window's own DWM surface (PrintWindow), reduced to
-// its dominant color - caption text and buttons are too few pixels to win.
-// A window whose surface can't be copied is read off the screen the way Top
-// Taskbar Bleed reads it, with the columns covered by other windows left
-// out. A row that differs from the color in use is read again every frame
-// until two readings agree - the color the window read as last time counts
-// as one - then the frame eases to it. With no maximized window the frame
-// has the frame color. The color goes wherever the frame color goes: the
+// screen, read off the screen the way Top Taskbar Bleed reads it, reduced to
+// its dominant color - caption text and buttons are too few pixels to win -
+// with the columns covered by other windows left out (the peeked window is
+// copied from its surface instead, see CaptureWindowRow). A window seen
+// before gets its last color the moment it takes over; a row that differs
+// from the color in use is read again every frame until two readings agree
+// - the color the window read as last time counts as one - then the frame
+// eases to it. With no maximized window the frame has the frame color. The color goes wherever the frame color goes: the
 // solid fill, the acrylic's tint and luminosity, the taskbar's background.
 
 // Whether a window is cloaked (on another virtual desktop, mostly).
@@ -7837,13 +7839,12 @@ bool ThumbnailPreviewShowing() {
 
 // One reading of a monitor's title-bar row; true when the row could be
 // read. Sets `color` to its dominant color.
-// The row read off the window's own surface - what DWM holds for it -
-// rather than off the screen: the same pixels whether the window is still
-// zooming into place (the screen shows what is behind it until the
-// animation lands), under another window, a flyout or a thumbnail preview.
-// PrintWindow with PW_RENDERFULLCONTENT copies DWM's surface into the DC,
-// clipped to the bitmap, so only the rows down to the one wanted are
-// copied: the window's width by a dozen rows or so.
+// The row read off the window's own surface rather than off the screen -
+// only for the window Aero Peek shows from a thumbnail, whose title bar the
+// preview flyout hangs over. PrintWindow with PW_RENDERFULLCONTENT has the
+// app render the window into the DC (some apps' 3D views, Revit's for one,
+// flicker when that happens, which is why it isn't the regular way),
+// clipped to the bitmap: the window's width by a dozen rows or so.
 #ifndef PW_RENDERFULLCONTENT
 #define PW_RENDERFULLCONTENT 0x00000002
 #endif
@@ -7933,7 +7934,7 @@ DwmpActivateLivePreview_t DwmpActivateLivePreview_Original;
 HRESULT WINAPI DwmpActivateLivePreview_Hook(BOOL activate, HWND exclude, HWND insertBefore,
                                             UINT trigger, void* finalRect) {
     g_peekWindow = activate ? exclude : nullptr;
-    g_titleEventPending = true;
+    g_titleEventPending = true;  // no zoom to wait for: the peeked window is read from its surface
     if (HWND ctrl = g_ctrlWnd.load()) {
         PostMessageW(ctrl, kMsgTaskbarEvent, 0, 0);  // a tick, fast readings
     }
@@ -7980,6 +7981,15 @@ HWND PeekedWindowOn(HMONITOR monitor) {
     return on == monitor ? peek : nullptr;
 }
 
+// How long a window takes to zoom into place (maximize, restore) or out of
+// it (minimize) with the window animations on.
+constexpr ULONGLONG kZoomSettleMs = 300;
+bool WindowAnimationsOn() {
+    BOOL on = TRUE;
+    SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &on, 0);
+    return on != FALSE;
+}
+
 bool ReadTitleBar(const Overlay& overlay, HWND window, COLORREF& color) {
     MONITORINFO mi{sizeof(mi)};
     if (!GetMonitorInfoW(overlay.layout.monitor, &mi)) {
@@ -8016,14 +8026,22 @@ bool ReadTitleBar(const Overlay& overlay, HWND window, COLORREF& color) {
         return false;
     }
     std::vector<uint32_t> px;
-    if (CaptureWindowRow(window, strip, px)) {
-        color = DominantColor(px);  // the window's own pixels: nothing covers them
+    // The window Aero Peek shows from a thumbnail: the preview flyout hangs
+    // over the screen, so its surface is copied - once or twice, while the
+    // peek lasts (PrintWindow has the app render, see CaptureWindowRow).
+    if (window == g_peekWindow.load() && CaptureWindowRow(window, strip, px)) {
+        color = DominantColor(px);
         return true;
     }
-    // A window whose surface can't be copied (display affinity, a window DWM
-    // doesn't redirect): the row as on screen, with whatever covers it
-    // masked out, and not while a thumbnail preview hangs over it.
+    // Otherwise the row as on screen, the way Top Taskbar Bleed reads it -
+    // the app is never asked to render (some, like Revit, flicker when they
+    // are) - with whatever covers it masked out; not while a thumbnail
+    // preview hangs over it, nor while a window is still zooming into place
+    // or out of it (the row then shows what is behind it).
     if (ThumbnailPreviewShowing()) {
+        return false;
+    }
+    if (GetTickCount64() - g_titleEventTick.load() < kZoomSettleMs && WindowAnimationsOn()) {
         return false;
     }
     if (!CaptureStrip(strip, px) || px.empty()) {
@@ -8066,6 +8084,25 @@ void UpdateAdaptiveColors(ULONGLONG now, bool fast) {
             a.window = window;
             a.haveSample = false;
             a.settling = window != nullptr;
+            // A window seen before: the color it read as the last time, at
+            // once - before it has even finished zooming in - and the
+            // readings that follow confirm it or correct it.
+            auto remembered = window ? g_titleColors.find(window) : g_titleColors.end();
+            if (remembered != g_titleColors.end()) {
+                HWND foreground = GetForegroundWindow();
+                bool active = foreground && (foreground == window ||
+                                             GetAncestor(foreground, GA_ROOTOWNER) == window);
+                if (remembered->second.active == active &&
+                    (!a.committedKnown ||
+                     ColorDistance(remembered->second.color, a.committed) > kChangeDistance)) {
+                    a.committed = remembered->second.color;
+                    a.committedKnown = true;
+                    Wh_Log(L"monitor %p: frame color #%02X%02X%02X from the title bar "
+                           L"(as last read)",
+                           a.monitor, GetRValue(a.committed), GetGValue(a.committed),
+                           GetBValue(a.committed));
+                }
+            }
         }
         if (!window) {
             // No maximized window: the frame color, at once.
@@ -8545,12 +8582,15 @@ void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
         HookForegroundLocation(hwnd);
         lastWindow = hwnd;
         lastZoomed = hwnd && IsZoomed(hwnd);
-        g_titleEventPending = true;
+        g_titleEventPending = true;  // an activation alone has no zoom to wait for
     } else if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND ||
                event == EVENT_SYSTEM_MOVESIZEEND) {
         // A window leaving or arriving under the frames: the tick (and the
         // backdrop refresh it starts) is wanted whichever window it is.
         g_titleEventPending = true;
+        if (event != EVENT_SYSTEM_MOVESIZEEND) {
+            g_titleEventTick = GetTickCount64();  // the minimize / restore zoom
+        }
     } else if (event != EVENT_OBJECT_LOCATIONCHANGE || idObject != OBJID_WINDOW ||
                idChild != CHILDID_SELF || !hwnd || hwnd != GetForegroundWindow()) {
         return;  // the other system events in the hooked range, or not the foreground window
@@ -8558,6 +8598,7 @@ void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
         bool zoomed = IsZoomed(hwnd) != FALSE;
         if (hwnd != lastWindow || zoomed != lastZoomed) {
             g_titleEventPending = true;  // maximized or restored
+            g_titleEventTick = GetTickCount64();
         }
         lastWindow = hwnd;
         lastZoomed = zoomed;
