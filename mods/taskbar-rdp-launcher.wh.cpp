@@ -2,7 +2,7 @@
 // @id              taskbar-rdp-launcher
 // @name            Taskbar RDP Launcher
 // @description     A taskbar widget that starts Remote Desktop full screen on the number of displays you pick
-// @version         1.3.0
+// @version         1.4.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
@@ -35,6 +35,9 @@ number.
   volume and battery icons, or of the clock, where the taskbar makes room for it. It can also go
   at the left end of the taskbar, over it: that's free when the taskbar's icons are centered and
   the Widgets button is off.
+- **Change icons…**, at the end of the menu, picks other glyphs from the Windows icon font for the
+  computer and the display buttons, and for the icons of Taskbar Snipper and Taskbar Audio Flipper
+  when they're running.
 
 Out of the box, **1** is your main display, **2** adds the display nearest to it, and so on up to
 all of them. The buttons are remembered for each arrangement of displays, so a laptop that's
@@ -117,6 +120,7 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
@@ -126,6 +130,7 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
 #include <windhawk_utils.h>
@@ -139,6 +144,7 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <regex>
 #include <set>
 #include <string>
@@ -1147,6 +1153,191 @@ UINT TaskbarCreatedMessage() {
     return message;
 }
 
+// ---------------------------------------------------------------------------
+// The widget's icons, which can be given other glyphs. Each mod keeps its own in its storage;
+// Change icons… in any of the widgets' menus opens one picker for the icons of every widget running
+// in Explorer. The widgets find each other by their owner windows, which carry kWindowProperty, and
+// ask each other for their icons, and set them, with WM_COPYDATA.
+
+namespace WidgetIcons {
+
+// An icon of the widget's that can be given another glyph.
+struct Icon {
+    const wchar_t* id;    // Its name in the mod's storage, and between the widgets.
+    const wchar_t* name;  // What the picker calls it.
+    wchar_t glyph;        // Its own glyph, unless another is chosen.
+};
+
+constexpr size_t kMaxIcons = 16;
+constexpr const wchar_t* kWindowProperty = L"TaskbarWidgets.Icons";
+
+// What the widgets send each other's owner windows, as WM_COPYDATA's dwData, with UTF-16 text.
+constexpr ULONG_PTR kQuery = 0x54574951;  // Asks for the widget's icons, which come back as kList.
+constexpr ULONG_PTR kList = 0x5457494C;   // The widget's name and order, then its icons, a line each.
+constexpr ULONG_PTR kSet = 0x54574953;    // An icon's ID and its new glyph (0 for its own).
+
+// A glyph of the Windows icon font, whose characters are all in Unicode's private use area.
+bool IsGlyph(int glyph) {
+    return glyph >= 0xE000 && glyph <= 0xF8FF;
+}
+
+const wchar_t* g_widgetName = L"";
+int g_widgetOrder = 0;
+std::span<const Icon> g_icons;
+std::atomic<wchar_t> g_glyphs[kMaxIcons];  // The icons' glyphs now, read on any thread.
+
+std::wstring StorageName(const Icon& icon) {
+    return std::wstring(L"Icon.") + icon.id;
+}
+
+// Takes on the widget's icons, with the glyphs chosen for them (as the mod starts).
+void Load(const wchar_t* widgetName, int widgetOrder, std::span<const Icon> icons) {
+    g_widgetName = widgetName;
+    g_widgetOrder = widgetOrder;
+    g_icons = icons.first(std::min(icons.size(), kMaxIcons));
+    for (size_t i = 0; i < g_icons.size(); i++) {
+        int glyph = Storage::GetInt(StorageName(g_icons[i]).c_str(), 0);
+        g_glyphs[i] = IsGlyph(glyph) ? (wchar_t)glyph : g_icons[i].glyph;
+    }
+}
+
+// The icon's glyph now, as text for XAML or GDI+.
+std::wstring Glyph(size_t icon) {
+    return std::wstring(1, icon < g_icons.size() ? g_glyphs[icon].load() : L' ');
+}
+
+// Gives the icon another glyph, or its own back (0), and keeps it. False without such an icon.
+bool Set(std::wstring_view id, int glyph) {
+    for (size_t i = 0; i < g_icons.size(); i++) {
+        if (id != g_icons[i].id) {
+            continue;
+        }
+        if (IsGlyph(glyph) && glyph != g_icons[i].glyph) {
+            Storage::SetInt(StorageName(g_icons[i]).c_str(), glyph);
+            g_glyphs[i] = (wchar_t)glyph;
+        } else {
+            Storage::Delete(StorageName(g_icons[i]).c_str());
+            g_glyphs[i] = g_icons[i].glyph;
+        }
+        return true;
+    }
+    return false;
+}
+
+// A widget's icons, as the picker shows them.
+struct PickerIcon {
+    std::wstring id;
+    std::wstring name;
+    wchar_t glyph = 0;    // Its own.
+    wchar_t current = 0;  // The one it has now.
+};
+
+struct PickerWidget {
+    HWND window = nullptr;  // Its owner window, to set its icons.
+    std::wstring name;
+    int order = 0;
+    std::vector<PickerIcon> icons;
+};
+
+std::vector<std::wstring_view> SplitText(std::wstring_view text, wchar_t separator) {
+    std::vector<std::wstring_view> parts;
+    while (true) {
+        size_t end = text.find(separator);
+        parts.push_back(text.substr(0, end));
+        if (end == std::wstring_view::npos) {
+            return parts;
+        }
+        text.remove_prefix(end + 1);
+    }
+}
+
+// A whole number, or -1 if the text isn't one.
+int ParseNumber(std::wstring_view text) {
+    if (text.empty() || text.size() > 6) {
+        return -1;
+    }
+    int value = 0;
+    for (wchar_t c : text) {
+        if (c < L'0' || c > L'9') {
+            return -1;
+        }
+        value = value * 10 + (c - L'0');
+    }
+    return value;
+}
+
+// Whether the window is one of this Explorer's: the widgets only listen to each other.
+bool InThisProcess(HWND window) {
+    DWORD process = 0;
+    return window && GetWindowThreadProcessId(window, &process) && process == GetCurrentProcessId();
+}
+
+void Send(HWND to, HWND from, ULONG_PTR kind, const std::wstring& text) {
+    COPYDATASTRUCT data{kind, (DWORD)(text.size() * sizeof(wchar_t)), (void*)text.data()};
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(to, WM_COPYDATA, (WPARAM)from, (LPARAM)&data, SMTO_NORMAL | SMTO_ABORTIFHUNG, 2000, &ignored);
+}
+
+std::vector<PickerWidget>* g_collecting = nullptr;  // While asking the widgets for their icons.
+
+// Answers WM_COPYDATA sent to the owner window (self), on the app's thread. changed is set when one
+// of the widget's icons was given another glyph.
+LRESULT OnCopyData(HWND self, HWND from, const COPYDATASTRUCT& data, bool& changed) {
+    if (!InThisProcess(from) || data.cbData % sizeof(wchar_t) != 0 || (data.cbData && !data.lpData)) {
+        return FALSE;
+    }
+    std::wstring_view text((const wchar_t*)data.lpData, data.cbData / sizeof(wchar_t));
+    switch (data.dwData) {
+        case kQuery: {
+            std::wstring list = std::wstring(g_widgetName) + L"\t" + std::to_wstring(g_widgetOrder);
+            for (size_t i = 0; i < g_icons.size(); i++) {
+                list += std::wstring(L"\n") + g_icons[i].id + L"\t" + g_icons[i].name + L"\t" + std::to_wstring((int)g_icons[i].glyph) +
+                        L"\t" + std::to_wstring((int)g_glyphs[i].load());
+            }
+            Send(from, self, kList, list);
+            return TRUE;
+        }
+        case kList: {
+            if (!g_collecting) {
+                return FALSE;
+            }
+            std::vector<std::wstring_view> lines = SplitText(text, L'\n');
+            std::vector<std::wstring_view> head = SplitText(lines[0], L'\t');
+            if (head.size() != 2) {
+                return FALSE;
+            }
+            PickerWidget widget;
+            widget.window = from;
+            widget.name = head[0];
+            widget.order = ParseNumber(head[1]);
+            for (size_t i = 1; i < lines.size() && widget.icons.size() < kMaxIcons; i++) {
+                std::vector<std::wstring_view> fields = SplitText(lines[i], L'\t');
+                int glyph = fields.size() == 4 ? ParseNumber(fields[2]) : -1;
+                int current = fields.size() == 4 ? ParseNumber(fields[3]) : -1;
+                if (IsGlyph(glyph) && IsGlyph(current)) {
+                    widget.icons.push_back({std::wstring(fields[0]), std::wstring(fields[1]), (wchar_t)glyph, (wchar_t)current});
+                }
+            }
+            if (!widget.icons.empty()) {
+                g_collecting->push_back(std::move(widget));
+            }
+            return TRUE;
+        }
+        case kSet: {
+            std::vector<std::wstring_view> fields = SplitText(text, L'\t');
+            int glyph = fields.size() == 2 ? ParseNumber(fields[1]) : -1;
+            if (glyph != 0 && !IsGlyph(glyph)) {
+                return FALSE;
+            }
+            changed = Set(fields[0], glyph);
+            return changed;
+        }
+    }
+    return FALSE;
+}
+
+}  // namespace WidgetIcons
+
 // A hidden top-level window of the app's thread: it owns the app's dialogs, and hears when a
 // Windows setting or the displays change, which a window for messages only doesn't.
 class OwnerWindow {
@@ -1154,16 +1345,21 @@ public:
     std::function<void()> onSettingChange;
     std::function<void()> onDisplayChange;
     std::function<void()> onTaskbarCreated;  // Explorer made the taskbar (as it started, say).
+    std::function<void()> onIconsChanged;    // The icon picker gave one of the widget's icons another glyph.
 
     bool Create(const wchar_t* className) {
         if (const wchar_t* registered = RegisterForwardingClass<OwnerWindow>(className)) {
             CreateWindowExW(WS_EX_TOOLWINDOW, registered, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), this);
+        }
+        if (hwnd_) {
+            SetPropW(hwnd_, WidgetIcons::kWindowProperty, (HANDLE)1);  // For the other widgets to find.
         }
         return hwnd_ != nullptr;
     }
 
     ~OwnerWindow() {
         if (hwnd_) {
+            RemovePropW(hwnd_, WidgetIcons::kWindowProperty);
             DestroyWindow(hwnd_);
         }
     }
@@ -1177,6 +1373,13 @@ public:
             onDisplayChange();
         } else if (message == TaskbarCreatedMessage() && onTaskbarCreated) {
             onTaskbarCreated();
+        } else if (message == WM_COPYDATA && lParam) {
+            bool changed = false;
+            result = WidgetIcons::OnCopyData(hwnd_, (HWND)wParam, *(const COPYDATASTRUCT*)lParam, changed);
+            if (changed && onIconsChanged) {
+                onIconsChanged();
+            }
+            return true;
         }
         return false;
     }
@@ -1588,6 +1791,8 @@ constexpr UINT kAttachedMessage = WM_APP + 0x300;     // The widget is in the ta
 constexpr UINT kClickMessage = WM_APP + 0x301;        // wParam: the part. lParam: the MouseButton.
 constexpr UINT kWheelMessage = WM_APP + 0x302;        // wParam: the part. lParam: notches (up is positive).
 constexpr UINT kMenuCommandMessage = WM_APP + 0x304;  // wParam: the command chosen in the menu.
+constexpr UINT kChangeIconsMessage = WM_APP + 0x305;  // Change icons… was chosen in the menu.
+constexpr UINT kChooseIconMessage = WM_APP + 0x306;   // wParam: the widget and icon in the picker. lParam: the glyph (0 for its own).
 
 enum class MouseButton { Left, Middle, Right };
 
@@ -1714,6 +1919,8 @@ void ForgetMenu(bool hide) {
     g_menuClicks->clear();
 }
 
+void ForgetIconPicker(bool hide);  // Below.
+
 class WidgetHost {
 public:
     // Puts the view's elements into the slot (once the taskbar's layout is ready, trying again
@@ -1731,6 +1938,7 @@ public:
     void Detach() {
         StopRetrying();
         ForgetMenu(true);
+        ForgetIconPicker(true);
         TakeOut();
         Forget();
     }
@@ -1740,6 +1948,7 @@ public:
     void Forget() {
         StopRetrying();
         ForgetMenu(false);
+        ForgetIconPicker(false);
         g_menuTarget = nullptr;
         element_ = nullptr;
         if (view_) {
@@ -2163,13 +2372,14 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
     }
 }
 
-// Commands of the widget's own, for moving it among the others in its slot.
+// Commands of the widget's own: moving it among the others in its slot, and the widgets' icons.
 constexpr int kMoveLeftCommand = -1;
 constexpr int kMoveRightCommand = -2;
+constexpr int kChangeIconsCommand = -3;
 
 // Opens the menu where the widget was last right-clicked, with Move left and Move right when other
-// widgets share its slot. The chosen item goes to the app once the menu has closed, so what it
-// does (a screenshot, say) doesn't have the menu in it.
+// widgets share its slot, and Change icons…. The chosen item goes to the app once the menu has
+// closed, so what it does (a screenshot, say) doesn't have the menu in it.
 void ShowMenu(const std::vector<MenuEntry>& entries) {
     auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
     if (!target || !target.XamlRoot()) {
@@ -2179,8 +2389,8 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
     auto chosen = std::make_shared<int>(0);
     wuxc::MenuFlyout menu;
     AddMenuEntries(menu.Items(), entries, chosen);
+    menu.Items().Append(wuxc::MenuFlyoutSeparator());
     if (g_host->CanMove(-1) || g_host->CanMove(1)) {
-        menu.Items().Append(wuxc::MenuFlyoutSeparator());
         for (int command : {kMoveLeftCommand, kMoveRightCommand}) {
             wuxc::MenuFlyoutItem item;
             item.Text(command == kMoveLeftCommand ? L"Move left" : L"Move right");
@@ -2189,12 +2399,18 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
             menu.Items().Append(item);
         }
     }
+    wuxc::MenuFlyoutItem icons;
+    icons.Text(L"Change icons…");
+    g_menuClicks->push_back(icons.Click(winrt::auto_revoke, [chosen](auto const&, auto const&) { *chosen = kChangeIconsCommand; }));
+    menu.Items().Append(icons);
     g_menuClosed = menu.Closed([chosen](auto const& sender, auto const&) {
         if (g_menu == sender) {
             ForgetMenu(false);  // This handler too, which runs to its end.
         }
         if (*chosen == kMoveLeftCommand || *chosen == kMoveRightCommand) {
             g_host->Move(*chosen == kMoveLeftCommand ? -1 : 1);
+        } else if (*chosen == kChangeIconsCommand) {
+            PostToApp(kChangeIconsMessage, 0, 0);
         } else if (*chosen) {
             PostToApp(kMenuCommandMessage, *chosen, 0);
         }
@@ -2207,7 +2423,359 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
     menu.ShowAt(target, options);
 }
 
+// ---- The icon picker: the icons of every widget running, and the icon font's glyphs to give them
+
+// The Windows icon font's glyphs, from its own list of its characters (read once).
+const std::vector<wchar_t>& FontGlyphs() {
+    static const std::vector<wchar_t> glyphs = [] {
+        std::vector<wchar_t> found;
+        HDC dc = CreateCompatibleDC(nullptr);
+        HFONT font = CreateFontW(-32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe Fluent Icons");
+        if (dc && font) {
+            HGDIOBJ previous = SelectObject(dc, font);
+            if (DWORD size = GetFontUnicodeRanges(dc, nullptr)) {
+                std::vector<BYTE> buffer(size);
+                auto set = (GLYPHSET*)buffer.data();
+                if (GetFontUnicodeRanges(dc, set)) {
+                    for (DWORD i = 0; i < set->cRanges; i++) {
+                        int low = set->ranges[i].wcLow;
+                        for (int c = low; c < low + set->ranges[i].cGlyphs; c++) {
+                            if (WidgetIcons::IsGlyph(c)) {
+                                found.push_back((wchar_t)c);
+                            }
+                        }
+                    }
+                }
+            }
+            SelectObject(dc, previous);
+        }
+        if (font) {
+            DeleteObject(font);
+        }
+        if (dc) {
+            DeleteDC(dc);
+        }
+        return found;
+    }();
+    return glyphs;
+}
+
+// A flyout over the widget with every running widget's icons: choose one, then a glyph for it from
+// the font's, or type its code. Each choice goes to the app at once, which passes it to the icon's
+// widget.
+class IconPicker {
+public:
+    void Show(std::vector<WidgetIcons::PickerWidget> widgets, wux::FrameworkElement const& target) {
+        Forget(true);
+        widgets_ = std::move(widgets);
+        if (widgets_.empty()) {
+            return;
+        }
+        wuxc::StackPanel panel;
+        panel.Width(420);
+        auto title = Text(L"Icons", 14);
+        title.FontWeight(winrt::Windows::UI::Text::FontWeight{600});
+        panel.Children().Append(title);
+        auto hint = Text(L"Choose an icon, then a glyph for it.", 12);
+        hint.Opacity(0.75);
+        hint.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
+        panel.Children().Append(hint);
+        for (size_t w = 0; w < widgets_.size(); w++) {
+            auto name = Text(widgets_[w].name, 12);
+            name.Opacity(0.75);
+            name.Margin(wux::ThicknessHelper::FromLengths(0, 12, 0, 4));
+            panel.Children().Append(name);
+            wuxc::VariableSizedWrapGrid tiles;
+            tiles.Orientation(wuxc::Orientation::Horizontal);
+            tiles.ItemWidth(70);
+            tiles.ItemHeight(62);
+            for (size_t i = 0; i < widgets_[w].icons.size(); i++) {
+                tiles.Children().Append(MakeTile(w, i));
+            }
+            panel.Children().Append(tiles);
+        }
+
+        // The chosen icon, its glyph's code, and its own glyph back.
+        wuxc::Grid row;
+        row.Margin(wux::ThicknessHelper::FromLengths(0, 12, 0, 6));
+        for (auto width : {wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star), wux::GridLengthHelper::Auto(),
+                           wux::GridLengthHelper::Auto()}) {
+            wuxc::ColumnDefinition column;
+            column.Width(width);
+            row.ColumnDefinitions().Append(column);
+        }
+        selected_ = Text(L"", 12);
+        selected_.VerticalAlignment(wux::VerticalAlignment::Center);
+        selected_.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        row.Children().Append(selected_);
+        code_ = wuxc::TextBox();
+        code_.Width(84);
+        code_.MaxLength(6);
+        code_.PlaceholderText(L"Code");
+        code_.Margin(wux::ThicknessHelper::FromLengths(8, 0, 0, 0));
+        wux::Automation::AutomationProperties::SetName(code_, L"Glyph code");
+        wuxc::Grid::SetColumn(code_, 1);
+        codeKey_ = code_.KeyDown(winrt::auto_revoke, [this](auto const&, wux::Input::KeyRoutedEventArgs const& args) {
+            if (args.Key() == winrt::Windows::System::VirtualKey::Enter) {
+                args.Handled(true);
+                ChooseCode();
+            }
+        });
+        row.Children().Append(code_);
+        wuxc::Button reset;
+        reset.Content(winrt::box_value(L"Default"));
+        reset.Margin(wux::ThicknessHelper::FromLengths(8, 0, 0, 0));
+        wuxc::Grid::SetColumn(reset, 2);
+        resetClick_ = reset.Click(winrt::auto_revoke, [this](auto const&, auto const&) {
+            if (auto icon = Selected()) {
+                Choose(icon->glyph);
+            }
+        });
+        row.Children().Append(reset);
+        panel.Children().Append(row);
+
+        // The font's glyphs. Its own collection holds them, so nothing of the mod's stays in XAML.
+        grid_ = wuxc::GridView();
+        grid_.Height(180);
+        grid_.SelectionMode(wuxc::ListViewSelectionMode::Single);
+        grid_.IsItemClickEnabled(true);
+        grid_.ItemTemplate(wux::Markup::XamlReader::Load(L"<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">"
+                                                         L"<FontIcon Glyph=\"{Binding}\" FontFamily=\"Segoe Fluent Icons\" FontSize=\"20\" "
+                                                         L"Width=\"32\" Height=\"32\"/></DataTemplate>")
+                               .as<wux::DataTemplate>());
+        for (wchar_t glyph : FontGlyphs()) {
+            grid_.Items().Append(winrt::box_value(winrt::hstring(&glyph, 1)));
+        }
+        itemClick_ = grid_.ItemClick(winrt::auto_revoke, [this](auto const&, wuxc::ItemClickEventArgs const& args) {
+            winrt::hstring glyph = winrt::unbox_value_or<winrt::hstring>(args.ClickedItem(), L"");
+            if (glyph.size() == 1) {
+                Choose(glyph[0]);
+            }
+        });
+        panel.Children().Append(grid_);
+
+        flyout_ = wuxc::Flyout();
+        flyout_.ShouldConstrainToRootBounds(false);  // Above the taskbar, outside its XAML.
+        flyout_.Content(panel);
+        closed_ = flyout_.Closed(winrt::auto_revoke, [this](auto const&, auto const&) { Forget(false); });
+        Select(0, 0);
+        wuxc::Primitives::FlyoutShowOptions options;
+        options.Placement(wuxc::Primitives::FlyoutPlacementMode::Top);
+        flyout_.ShowAt(target, options);
+    }
+
+    // Lets go of it, hiding it first if asked, with the mod's handlers taken off: as it closes, or
+    // the widget goes.
+    void Forget(bool hide) {
+        closed_.revoke();
+        if (hide && flyout_) {
+            try {
+                flyout_.Hide();
+            } catch (...) {
+            }
+        }
+        codeKey_.revoke();
+        resetClick_.revoke();
+        itemClick_.revoke();
+        tiles_.clear();
+        flyout_ = nullptr;
+        grid_ = nullptr;
+        code_ = nullptr;
+        selected_ = nullptr;
+        widgets_.clear();
+    }
+
+private:
+    struct Tile {
+        size_t widget = 0;
+        size_t icon = 0;
+        wuxc::Primitives::ToggleButton button{nullptr};
+        wuxc::FontIcon glyph{nullptr};
+        wuxc::Primitives::ButtonBase::Click_revoker click;
+    };
+
+    static wuxc::TextBlock Text(const std::wstring& text, double size) {
+        wuxc::TextBlock block;
+        block.Text(text);
+        block.FontSize(size);
+        return block;
+    }
+
+    static std::wstring HexCode(wchar_t glyph) {
+        std::wstring code;
+        for (int shift = 12; shift >= 0; shift -= 4) {
+            code += L"0123456789ABCDEF"[(glyph >> shift) & 0xF];
+        }
+        return code;
+    }
+
+    wuxc::Primitives::ToggleButton MakeTile(size_t widget, size_t icon) {
+        const WidgetIcons::PickerIcon& item = widgets_[widget].icons[icon];
+        wuxc::StackPanel content;
+        auto glyph = MakeGlyph(std::wstring(1, item.current).c_str(), 20);
+        glyph.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        content.Children().Append(glyph);
+        auto name = Text(item.name, 11);
+        name.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        name.MaxWidth(60);
+        name.Margin(wux::ThicknessHelper::FromLengths(0, 4, 0, 0));
+        content.Children().Append(name);
+        wuxc::Primitives::ToggleButton button;
+        button.Width(66);
+        button.Height(58);
+        button.Padding(wux::ThicknessHelper::FromLengths(3, 4, 3, 4));
+        button.Content(content);
+        wuxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring(item.name)));
+        wux::Automation::AutomationProperties::SetName(button, item.name);
+        Tile tile;
+        tile.widget = widget;
+        tile.icon = icon;
+        tile.button = button;
+        tile.glyph = glyph;
+        tile.click = button.Click(winrt::auto_revoke, [this, widget, icon](auto const&, auto const&) { Select(widget, icon); });
+        tiles_.push_back(std::move(tile));
+        return button;
+    }
+
+    WidgetIcons::PickerIcon* Selected() {
+        if (selectedWidget_ >= widgets_.size() || selectedIcon_ >= widgets_[selectedWidget_].icons.size()) {
+            return nullptr;
+        }
+        return &widgets_[selectedWidget_].icons[selectedIcon_];
+    }
+
+    void Select(size_t widget, size_t icon) {
+        selectedWidget_ = widget;
+        selectedIcon_ = icon;
+        for (Tile& tile : tiles_) {
+            tile.button.IsChecked(tile.widget == widget && tile.icon == icon);
+        }
+        ShowSelected();
+    }
+
+    // The chosen icon's name and glyph, picked out among the font's.
+    void ShowSelected() {
+        WidgetIcons::PickerIcon* icon = Selected();
+        if (!icon) {
+            return;
+        }
+        selected_.Text(icon->name + L" (" + widgets_[selectedWidget_].name + L")");
+        code_.Text(HexCode(icon->current));
+        const std::vector<wchar_t>& glyphs = FontGlyphs();
+        auto found = std::find(glyphs.begin(), glyphs.end(), icon->current);
+        if (found == glyphs.end()) {
+            grid_.SelectedIndex(-1);
+            return;
+        }
+        int index = (int)(found - glyphs.begin());
+        grid_.SelectedIndex(index);
+        grid_.ScrollIntoView(grid_.Items().GetAt(index));
+    }
+
+    // Gives the chosen icon the glyph, and tells the app, which passes it to the icon's widget.
+    void Choose(wchar_t glyph) {
+        WidgetIcons::PickerIcon* icon = Selected();
+        if (!icon || !WidgetIcons::IsGlyph(glyph)) {
+            return;
+        }
+        icon->current = glyph;
+        for (Tile& tile : tiles_) {
+            if (tile.widget == selectedWidget_ && tile.icon == selectedIcon_) {
+                tile.glyph.Glyph(std::wstring(1, glyph));
+            }
+        }
+        ShowSelected();
+        PostToApp(kChooseIconMessage, (selectedWidget_ << 8) | selectedIcon_, glyph == icon->glyph ? 0 : glyph);
+    }
+
+    // The glyph whose code was typed: "E7C8", "U+E7C8" or "0xE7C8".
+    void ChooseCode() {
+        std::wstring text(code_.Text());
+        for (const wchar_t* prefix : {L"U+", L"u+", L"0x", L"0X"}) {
+            if (text.starts_with(prefix)) {
+                text.erase(0, 2);
+            }
+        }
+        wchar_t* end = nullptr;
+        unsigned long code = text.empty() ? 0 : wcstoul(text.c_str(), &end, 16);
+        if (end && *end == 0 && WidgetIcons::IsGlyph((int)code)) {
+            Choose((wchar_t)code);
+        } else {
+            ShowSelected();  // Back to the glyph it has.
+        }
+    }
+
+    std::vector<WidgetIcons::PickerWidget> widgets_;
+    size_t selectedWidget_ = 0;
+    size_t selectedIcon_ = 0;
+    std::vector<Tile> tiles_;
+    wuxc::Flyout flyout_{nullptr};
+    wuxc::GridView grid_{nullptr};
+    wuxc::TextBox code_{nullptr};
+    wuxc::TextBlock selected_{nullptr};
+    wuxc::Primitives::FlyoutBase::Closed_revoker closed_;
+    wux::UIElement::KeyDown_revoker codeKey_;
+    wuxc::Primitives::ButtonBase::Click_revoker resetClick_;
+    wuxc::ListViewBase::ItemClick_revoker itemClick_;
+};
+
+[[clang::no_destroy]] std::optional<IconPicker> g_iconPicker{std::in_place};  // Not destroyed: see g_bridge.
+
+void ForgetIconPicker(bool hide) {
+    if (g_iconPicker) {
+        g_iconPicker->Forget(hide);
+    }
+}
+
+// Opens the icon picker where the widget was last right-clicked, with the icons the app gathered.
+void ShowIconPicker(std::vector<WidgetIcons::PickerWidget> widgets) {
+    auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
+    if (target && target.XamlRoot() && g_iconPicker) {
+        g_iconPicker->Show(std::move(widgets), target);
+    }
+}
+
 }  // namespace TaskbarXaml
+
+namespace WidgetIcons {
+
+std::vector<PickerWidget> g_pickerWidgets;  // The widgets in the picker last opened (on the app's thread).
+
+BOOL CALLBACK FindWidget(HWND window, LPARAM found) {
+    if (GetPropW(window, kWindowProperty) && InThisProcess(window)) {
+        ((std::vector<HWND>*)found)->push_back(window);
+    }
+    return TRUE;
+}
+
+// Asks every widget running in this Explorer for its icons, this one's too, and opens the picker
+// with them. On the app's thread: owner is the app's owner window, where the answers come.
+void OpenPicker(HWND owner) {
+    std::vector<HWND> windows;
+    EnumWindows(FindWidget, (LPARAM)&windows);
+    std::vector<PickerWidget> widgets;
+    g_collecting = &widgets;
+    for (HWND window : windows) {
+        Send(window, owner, kQuery, L"");
+    }
+    g_collecting = nullptr;
+    std::stable_sort(widgets.begin(), widgets.end(), [](const PickerWidget& a, const PickerWidget& b) { return a.order < b.order; });
+    g_pickerWidgets = widgets;
+    TaskbarXaml::g_bridge->Post([widgets]() { TaskbarXaml::ShowIconPicker(widgets); });
+}
+
+// Passes a glyph chosen in the picker (0 for the icon's own) to the icon's widget.
+void Choose(HWND owner, WPARAM which, LPARAM glyph) {
+    size_t widget = which >> 8;
+    size_t icon = which & 0xFF;
+    if (widget < g_pickerWidgets.size() && icon < g_pickerWidgets[widget].icons.size()) {
+        Send(g_pickerWidgets[widget].window, owner, kSet, g_pickerWidgets[widget].icons[icon].id + L"\t" + std::to_wstring((int)glyph));
+    }
+}
+
+}  // namespace WidgetIcons
 
 // Worker threads (reading Remote Desktop's display numbers) whose results come back to the UI
 // thread as messages. Finished ones are closed as new ones start.
@@ -3572,6 +4140,10 @@ const wchar_t* const kGlyphThisPC = L"\uEC4E";
 const wchar_t* const kGlyphMonitor = L"\uE7F4";  // TVMonitor
 const wchar_t* const kGlyphCheckMark = L"\uE73E";
 
+// The widget's icons in kIcons, whose glyphs can be changed.
+constexpr size_t kComputerIcon = 0;
+constexpr size_t kDisplaysIcon = 1;
+
 // ---------------------------------------------------------------------------
 // The widget: the computer's name (over its address, once it's been given a name), then a button
 // for each set of displays ("1", "2", "3"). Click a number to start Remote Desktop on that many
@@ -3681,7 +4253,8 @@ public:
 
         // The This PC icon, then the name over the address, like the weather widget's two lines;
         // just the name without an address.
-        auto icon = TaskbarXaml::MakeGlyph(kGlyphThisPC, 18);
+        auto icon = TaskbarXaml::MakeGlyph(WidgetIcons::Glyph(kComputerIcon).c_str(), 18);
+        computerIcon_ = icon;
         icon.Width(24);
         icon.Margin(wux::ThicknessHelper::FromLengths(8, 0, 0, 0));
         wuxc::StackPanel lines;
@@ -3715,6 +4288,7 @@ public:
         connection_.Forget();
         buttons_.clear();
         row_ = nullptr;
+        computerIcon_ = nullptr;
         title_ = nullptr;
         detail_ = nullptr;
         buttonsPanel_ = nullptr;
@@ -3725,6 +4299,7 @@ public:
         if (!row_) {
             return;
         }
+        computerIcon_.Glyph(WidgetIcons::Glyph(kComputerIcon));
         title_.Text(content_.title);
         detail_.Text(content_.detail);
         detail_.Visibility(content_.detail.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
@@ -3738,6 +4313,7 @@ public:
         for (size_t i = 0; i < buttons_.size(); i++) {
             DisplayButton& button = *buttons_[i];
             size_t count = content_.buttons[i].size();
+            button.glyph.Glyph(WidgetIcons::Glyph(kDisplaysIcon));
             button.number.Text(std::to_wstring(count));
             // Dimmed while its session starts.
             button.icon.Opacity(content_.busyButton == (int)i ? 0.43 : 1.0);
@@ -3756,6 +4332,7 @@ private:
     struct DisplayButton {
         TaskbarXaml::Part part;
         wuxc::Grid icon{nullptr};
+        wuxc::FontIcon glyph{nullptr};
         wuxc::TextBlock number{nullptr};
     };
 
@@ -3764,7 +4341,8 @@ private:
         int index = (int)buttons_.size();
         auto button = std::make_unique<DisplayButton>();
         button->icon = wuxc::Grid();
-        button->icon.Children().Append(TaskbarXaml::MakeGlyph(kGlyphMonitor, 20));
+        button->glyph = TaskbarXaml::MakeGlyph(WidgetIcons::Glyph(kDisplaysIcon).c_str(), 20);
+        button->icon.Children().Append(button->glyph);
         button->number = MakeText(11, true);
         button->number.HorizontalAlignment(wux::HorizontalAlignment::Center);
         button->number.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -4012,6 +4590,7 @@ private:
     WidgetContent content_;
     wuxc::StackPanel row_{nullptr};
     TaskbarXaml::Part connection_;
+    wuxc::FontIcon computerIcon_{nullptr};
     wuxc::TextBlock title_{nullptr};
     wuxc::TextBlock detail_{nullptr};
     wuxc::StackPanel buttonsPanel_{nullptr};
@@ -4146,6 +4725,7 @@ private:
             TaskbarXaml::g_bridge->Post([]() { ForgetAccentColors(); });
         };
         owner_.onTaskbarCreated = []() { AttachIfMissing(); };
+        owner_.onIconsChanged = [this]() { SendContent(); };
         owner_.onDisplayChange = [this]() {
             RefreshDisplays();
             RefreshWidget();
@@ -4313,6 +4893,12 @@ private:
                 if (auto menu = std::move(menu_)) {
                     menu->Run((int)wParam);
                 }
+                return;
+            case TaskbarXaml::kChangeIconsMessage:
+                WidgetIcons::OpenPicker(owner_.Handle());
+                return;
+            case TaskbarXaml::kChooseIconMessage:
+                WidgetIcons::Choose(owner_.Handle(), wParam, lParam);
                 return;
             case kToggleDisplayMessage:
                 if (lParam >= 0 && lParam < (LPARAM)displays_.size()) {
@@ -4641,6 +5227,12 @@ void OnTaskbarStarted(HWND taskbar) {
     }
 }
 
+// The widget's icons that can be given other glyphs: kComputerIcon and kDisplaysIcon.
+const WidgetIcons::Icon kIcons[] = {
+    {L"Computer", L"Computer", kGlyphThisPC[0]},
+    {L"Displays", L"Display buttons", kGlyphMonitor[0]},
+};
+
 void AttachToTaskbar() {
     if (HWND taskbar = OwnTaskbar()) {
         TaskbarXaml::RunOnWindowThread(taskbar, [taskbar]() { AttachWidget(taskbar); });
@@ -4660,6 +5252,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     TaskbarXaml::g_onTaskbarStarted = OnTaskbarStarted;
+    WidgetIcons::Load(L"Taskbar RDP Launcher", kWidgetOrder, kIcons);
     return g_uiThread.Start([]() -> std::shared_ptr<void> {
         auto app = std::make_shared<RdpApp>();
         if (!app->Start()) {
@@ -4691,6 +5284,7 @@ void Wh_ModUninit() {
         TaskbarXaml::RunOnWindowThread(taskbar, []() {
             TaskbarXaml::g_host->Detach();
             TaskbarXaml::g_menuClicks.reset();
+            TaskbarXaml::g_iconPicker.reset();
             TaskbarXaml::g_host.reset();
             g_view.reset();
             TaskbarXaml::g_bridge.reset();

@@ -752,15 +752,22 @@ class ModMetadataValidator:
         if not prop:
             return
 
+        # WIL headers require -fms-extensions.
+        includes_wil = re.search(
+            r'^\s*#\s*include\s*[<"]wil/',
+            blank_comments(self.mod_source),
+            re.MULTILINE,
+        )
+
         def is_allowed_option(option: str) -> bool:
             return bool(
                 option.startswith('-l')
                 or option
                 in [
                     '-DWIN32_LEAN_AND_MEAN',
-                    '-fms-extensions',
                     '-ffp-exception-behavior=maytrap',
                 ]
+                or (option == '-fms-extensions' and includes_wil)
             )
 
         options = prop.value.split()
@@ -843,14 +850,17 @@ class ModMetadataValidator:
     def validate_tool_mod(self):
         """Validate the metadata of a tool mod: one that targets windhawk.exe
         with a WhTool_ModInit entry point or a -tool-mod launcher, or any
-        windhawk-*.exe process."""
+        windhawk-*.exe process other than windhawk-ui.exe and windhawk-cli.exe."""
         prop = self.property('include')
         if not prop:
             return
 
         includes = {x.lower() for x in prop.value.split('\n') if x != ''}
         windhawk_includes = {
-            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            x
+            for x in includes
+            if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            and x not in ('windhawk-ui.exe', 'windhawk-cli.exe')
         }
         defines_tool_mod_init = (
             re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
@@ -1744,6 +1754,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
+        (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
         (r'^\s*#\s*define\s+(?!WH_WINRT_WINUI2\b)W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
     ]
     # fmt: on

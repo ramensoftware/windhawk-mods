@@ -2,7 +2,7 @@
 // @id              winklok
 // @name            WinKlok
 // @description     A calmer, smarter clock mod for the Windows 11 taskbar. Packed with essential time utilities and a powerful notes panel that seamlessly supports rich text and LaTeX.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Shifting Whistler
 // @github          https://github.com/shifting-whistler
 // @homepage        https://github.com/shifting-whistler
@@ -18,12 +18,12 @@
 
 **A calmer, smarter clock mod for Windows 11 taskbar.**
 WinKlok replaces the stock date/time flyout with a fast, native, Fluent-styled panel that
-combines a **Calendar, Stopwatch, Timer, Alarm, Notes** and **Settings** in one place, and puts
+combines a **Calendar, Stopwatch, Timer, Alarm, Tasks, Notes** and **Settings** in one place, plus its own **notification panel**, and puts
 live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktop%20.jpg)
+![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktopv1.1.0.png)
 
 ---
 
@@ -39,19 +39,21 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Panel Layout modes](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/panelmodetable.jpg)
+![Panel Layout modes](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/modetable.jpg)
 
 ---
 
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/alltabs.png)
-
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowone.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowtwo.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthird.png)
 ---
 
 ## Features
 
 ### Calendar
 * Month, year and decade views, with smooth vertical month scrolling like the Windows calendar.
-* Today and the selected date are marked with your accent colour. First day of the week follows Windows.
+* Today and the selected date are marked with your accent colour.
+* Week numbers sit in a narrow column on the left. The first day of the week and the first week of the year follow your Windows regional settings (no hard-coded ISO or Sunday rules).
 
 ### Stopwatch
 * Centisecond precision, up to 200 laps (the newest lap is always on top) and a smooth lap list.
@@ -67,6 +69,16 @@ live stopwatch and timer previews right next to the taskbar clock.
 * If an alarm or timer came due while the PC was off or asleep, it never rings late. One popup lists
   everything you missed, with dates and times.
 
+### Tasks
+* A minimal task list: **+** drops down the input (cursor ready, Enter adds), the trash icon deletes all tasks (two clicks to confirm).
+* Slim cards with the date and time each task was created; edit or delete a task from its card.
+* View: All / Active / Done. Finished tasks sink under a dimmed *Completed tasks* heading with its own Delete button.
+
+### Notification panel
+* The taskbar bell opens WinKlok's own notification panel instead of the Windows one: notifications grouped by app, relative times, dismiss one, dismiss a whole app, clear all, click to open the app.
+* In Settings choose **Separate panel** (the bell opens it on its own) or **Above WinKlok**: then the clock opens the WinKlok panel with the notifications stacked above it, sliding in from the right like the native flyout. A chevron in the tab bar folds the WinKlok panel into a slim strip so the notifications extend, and back (remembered).
+* Notifications are read locally from the Windows notification database (read-only copy, nothing leaves your PC). If Windows ever blocks that, the panel says so and offers the native one.
+
 ### Notes
 * Any number of notes, saved automatically, with a rich preview of Markdown and LaTeX maths.
 * **Paste from ChatGPT, Gemini, Google and the web and keep the structure**: headings, lists,
@@ -75,16 +87,16 @@ live stopwatch and timer previews right next to the taskbar clock.
 * One-tap **Copy** button for the whole note body (the title is not included), adjustable text size.
 
 ### Settings
-* Taskbar previews, preview layout, notification icon, 12/24-hour time (applied everywhere),
+* Choose which tabs are shown, taskbar previews, preview layout, notification icon and panel style, 12/24-hour time (applied everywhere),
   panel material (acrylic or simple) and default timer / alarm sounds.
 * **Sync time now** (Windows asks for administrator permission whenever it is needed).
-* A compact **About** card with the version, developer and project links.
+* A compact **About** card with the version, developer, project links and a bug / feature request button.
 
 
 ---
 
 ## First-run defaults
-Notification bell off, taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the *Windows Alarm*
+Notification icon on when the Windows bell was showing (off otherwise), taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the *Windows Alarm*
 tone for both timers and alarms.
 
 ## Getting started
@@ -96,12 +108,13 @@ tone for both timers and alarms.
 ## Tips
 * Scroll over the tab bar to reveal more tabs, or click a tab to slide it to the centre.
 * Right-click a timer preset to reveal its remove button.
-* The notification bell is optional. Turn it off in Settings if you prefer the stock one.
+* WinKlok always hides the Windows notification bell while it runs. Its own notification icon is optional: turn it off in Settings and, with *Above WinKlok*, the clock still opens the notifications together with the panel.
 
 ## Compatibility
 * Windows 11 with the XAML taskbar, 64-bit only.
 * Do not combine with other mods that rebuild the taskbar clock area (for example *Taskbar Clock
   Customization*) until you have verified they coexist.
+* The panel always rests above the taskbar, even when it is set to auto-hide (it keeps clear of the area the taskbar occupies when shown).
 * WinKlok does not change the taskbar height. Use the *Taskbar height and icon size* mod for that.
 * To turn WinKlok off, disable the mod in Windhawk: the taskbar clock goes back to Windows immediately.
 * If something misbehaves, enable logging for this mod in Windhawk and check the log.
@@ -135,7 +148,9 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <winsvc.h>
+#include <sddl.h>
 #include <dwmapi.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -184,22 +199,24 @@ WinKlok is free and open source software released under the **GNU General Public
 //  3. Native UI primitives: Direct2D/DirectWrite, palette, acrylic, smooth scrolling, input
 //  4. Alarm sound synthesis
 //  5. Rich text + LaTeX engine (notes preview)
-//  6. Panel pages: calendar, stopwatch, timer, alarms, notes (+ HTML paste), settings, about
-//  7. Alert windows, UI-thread lifetime, time sync, and Windhawk entry points
+//  6. Flyout base (slide + material), panel pages: calendar, stopwatch, timer, alarms, tasks, notes (+ HTML paste), settings, about
+//  7. Notification panel (Windows notification database reader + window), alert windows, UI-thread lifetime, time sync, entry points
 //
 //  UI rendering and taskbar/XAML integration stay separate from the engine.
 // ============================================================================
 
 // ---- product information ---------------------------------------------------
 #define WK_NAME L"WinKlok"
-#define WK_VERSION L"1.0.0"
+#define WK_VERSION L"1.1.0"
 #define WK_DEVELOPER L"Shifting Whistler"
 #define WK_COPYRIGHT L"\u00A9 2026 Shifting Whistler"
 #define WK_LICENSE L"GPL-3.0-or-later"
 #define WK_TAGLINE L"A calmer, smarter clock mod for Windows 11 taskbar."
 #define WK_WINDHAWK_URL L"https://windhawk.net/mods/winklok"
+#define WK_GITHUB_URL L"https://github.com/shifting-whistler/WinKlok"
+#define WK_ISSUES_URL L"https://github.com/shifting-whistler/WinKlok/issues/new/choose" // bug reports and feature suggestions
 
-static std::atomic<bool> g_shuttingDown{false};  // mod is being unloaded
+static std::atomic<bool> g_shuttingDown{false}; // mod is being unloaded
 
 // The mod's own module handle. Window classes are registered with it (not with Explorer's handle), so they
 // belong to this image and can never outlive it.
@@ -227,6 +244,9 @@ namespace td
         L"Windows Alarm", L"Crystal Bells", L"Soft Chimes", L"Marimba Morning", L"Golden Harp",
         L"Sunrise", L"Digital Pulse", L"Music Box", L"Zen Gong"};
 
+    // Panel tabs. The ids are stable (settings and code refer to them); the order they are shown in lives in the UI.
+    static const int kTabCount = 7, kSettingsTab = 5, kAllTabsMask = (1 << kTabCount) - 1;
+
     static bool SystemUses24h()
     {
         DWORD v = 0;
@@ -242,11 +262,14 @@ namespace td
         std::atomic<int> showPreviews{1};
         std::atomic<int> stacked{0}; // 0 = side by side, 1 = stopwatch above timer
         std::atomic<int> showBell{0};
+        std::atomic<bool> bellUnset{false};              // never chosen yet: the first run copies the state of the Windows bell
         std::atomic<int> hour24{-1};                     // -1 = follow Windows (default), 0 = 12 h, 1 = 24 h
         std::atomic<int> acrylic{1};                     // 1 = acrylic blur when Windows transparency is on, 0 = simple transparency
         std::atomic<int> timerSound{kTimerSound};        // default sound when a timer ends
         std::atomic<int> alarmSound{kDefaultAlarmSound}; // default sound for new alarms (follows the last saved alarm)
         std::atomic<int> alarmSnooze{10};                // default snooze (minutes) for new alarms (follows the last saved alarm)
+        std::atomic<int> notifMode{0};                   // 0 = own notification panel, 1 = opens above the WinKlok panel
+        std::atomic<int> tabMask{kAllTabsMask};          // bit per tab id: shown in the tab bar (Settings is always shown)
         bool sys24 = false;
 
         bool Use24() const
@@ -258,24 +281,33 @@ namespace td
         {
             showPreviews = Wh_GetIntValue(L"showPreviews", 1);
             stacked = Wh_GetIntValue(L"stacked", 0);
-            showBell = Wh_GetIntValue(L"showBell", 0);
+            {
+                const int bell = Wh_GetIntValue(L"showBell", -1); // -1: first run
+                bellUnset = bell < 0 || Wh_GetIntValue(L"notifMode", -1) < 0; // -1: new install, or an update from v1.0
+                showBell = bell < 0 ? 0 : bell;
+            }
             hour24 = Wh_GetIntValue(L"hour24", -1);
             acrylic = Wh_GetIntValue(L"acrylic", 1);
             timerSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"timerSound", kTimerSound)));
             alarmSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"alarmSound", kDefaultAlarmSound)));
             alarmSnooze = std::min(60, std::max(1, Wh_GetIntValue(L"alarmSnooze", 10)));
+            notifMode = std::min(1, std::max(0, Wh_GetIntValue(L"notifMode", 0)));
+            tabMask = (Wh_GetIntValue(L"tabMask", kAllTabsMask) & kAllTabsMask) | (1 << kSettingsTab);
             sys24 = SystemUses24h();
         }
         void Save()
         {
             Wh_SetIntValue(L"showPreviews", showPreviews);
             Wh_SetIntValue(L"stacked", stacked);
-            Wh_SetIntValue(L"showBell", showBell);
+            if (!bellUnset)
+                Wh_SetIntValue(L"showBell", showBell);
             Wh_SetIntValue(L"hour24", hour24);
             Wh_SetIntValue(L"acrylic", acrylic);
             Wh_SetIntValue(L"timerSound", timerSound);
             Wh_SetIntValue(L"alarmSound", alarmSound);
             Wh_SetIntValue(L"alarmSnooze", alarmSnooze);
+            Wh_SetIntValue(L"notifMode", notifMode);
+            Wh_SetIntValue(L"tabMask", tabMask);
         }
     };
     static Settings g_set;
@@ -361,6 +393,60 @@ namespace td
         return 0;
     }
 
+    // ---- calendar arithmetic (pure integers: no locale, no SYSTEMTIME limits) -----------------------
+    // Days since 1970-01-01 of a proleptic Gregorian date, and back.
+    static long long DaysFromCivil(int y, int m, int d)
+    {
+        y -= m <= 2;
+        const long long era = (y >= 0 ? y : y - 399) / 400;
+        const unsigned yoe = (unsigned)(y - era * 400);
+        const unsigned doy = (unsigned)((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1);
+        const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        return era * 146097 + (long long)doe - 719468;
+    }
+    static void CivilFromDays(long long z, int &y, int &m, int &d)
+    {
+        z += 719468;
+        const long long era = (z >= 0 ? z : z - 146096) / 146097;
+        const unsigned doe = (unsigned)(z - era * 146097);
+        const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        const unsigned mp = (5 * doy + 2) / 153;
+        d = (int)(doy - (153 * mp + 2) / 5 + 1);
+        m = (int)(mp < 10 ? mp + 3 : mp - 9);
+        y = (int)((long long)yoe + era * 400 + (m <= 2));
+    }
+    static int WeekdayFromDays(long long days)
+    { // 0 = Sunday
+        long long w = (days + 4) % 7;
+        return (int)(w < 0 ? w + 7 : w);
+    }
+    // Week numbers follow the Windows regional settings. firstDow: 0 = Sunday ... 6 = Saturday.
+    // rule (LOCALE_IFIRSTWEEKOFYEAR): 0 = the week containing 1 January is week 1, 1 = the first full week,
+    // 2 = the first week with at least four days (ISO 8601 when weeks start on Monday).
+    static long long FirstWeekStart(int year, int firstDow, int rule)
+    {
+        const long long jan1 = DaysFromCivil(year, 1, 1);
+        const int into = (WeekdayFromDays(jan1) - firstDow + 7) % 7; // days of that week before 1 January
+        const int minDays = rule == 1 ? 7 : rule == 2 ? 4
+                                                      : 1;
+        long long start = jan1 - into;
+        if (7 - into < minDays)
+            start += 7;
+        return start;
+    }
+    // Week number of the calendar row that starts on rowStartDays (a day whose weekday is firstDow). The whole row
+    // gets one number: the one of the year that owns the row, so year boundaries and 52/53-week years come out right.
+    static int WeekNumberOfRow(long long rowStartDays, int firstDow, int rule)
+    {
+        int y, m, d;
+        CivilFromDays(rowStartDays + 6, y, m, d);
+        long long s = FirstWeekStart(y, firstDow, rule);
+        if (rowStartDays < s)
+            s = FirstWeekStart(y - 1, firstDow, rule);
+        return (int)((rowStartDays - s) / 7) + 1;
+    }
+
     static std::wstring Esc(const std::wstring &s)
     {
         std::wstring o;
@@ -370,6 +456,8 @@ namespace td
                 o += L"\\\\";
             else if (c == L'|')
                 o += L"\\p";
+            else if (c == L';')
+                o += L"\\s";
             else if (c == L'\n')
                 o += L"\\n";
             else if (c != L'\r')
@@ -387,8 +475,7 @@ namespace td
             if (c == L'\\' && i + 1 < s.size())
             {
                 wchar_t n = s[++i];
-                o += n == L'p' ? L'|' : n == L'n' ? L'\n'
-                                                  : n;
+                o += n == L'p' ? L'|' : n == L's' ? L';' : n == L'n' ? L'\n' : n;
             }
             else
                 o += c;
@@ -428,6 +515,47 @@ namespace td
         wchar_t *e = nullptr;
         long long v = wcstoll(s.c_str(), &e, 10);
         return (e && *e == 0) ? v : def;
+    }
+
+    static const size_t kChunk = 30000; // stay under Windhawk's 32,767-char value limit
+    static std::vector<std::wstring> SplitRecords(const std::wstring &s)
+    { return Split(s, s.find(L'\n') != std::wstring::npos ? L'\n' : L';'); } // old data used line breaks
+
+    static void PutBig(const wchar_t *key, const std::wstring &v)
+    {
+        const std::wstring k = key;
+        const int old = Wh_GetIntValue((k + L"_n").c_str(), 0);
+        int n = 0;
+        for (size_t s = 0; s < v.size(); ++n)
+        {
+            size_t e = std::min(v.size(), s + kChunk);
+            while (e < v.size() && e > s + 1 && (iswspace(v[e - 1]) || iswspace(v[e]))) --e; // INI may trim edge spaces
+            Wh_SetStringValue((k + L"_" + std::to_wstring(n)).c_str(), v.substr(s, e - s).c_str());
+            s = e;
+        }
+        for (int i = n; i < old; ++i) Wh_DeleteValue((k + L"_" + std::to_wstring(i)).c_str());
+        Wh_SetIntValue((k + L"_n").c_str(), n);
+        Wh_DeleteValue(key); // the old single-value copy
+    }
+    static std::wstring GetBig(const wchar_t *key)
+    {
+        const std::wstring k = key;
+        std::wstring v;
+        std::vector<wchar_t> b(kChunk + 2);
+        const int n = Wh_GetIntValue((k + L"_n").c_str(), 0);
+        for (int i = 0; i < n; ++i)
+        {
+            const size_t m = Wh_GetStringValue((k + L"_" + std::to_wstring(i)).c_str(), b.data(), b.size());
+            if (m >= b.size()) return L"";
+            v.append(b.data(), m);
+        }
+        if (n == 0) // data saved by older versions
+        {
+            b.assign(200000, 0);
+            const size_t m = Wh_GetStringValue(key, b.data(), b.size());
+            if (m < b.size()) v.assign(b.data(), m);
+        }
+        return v;
     }
 
     // ---- formatting -------------------------------------------------------------
@@ -619,6 +747,7 @@ namespace td
                 o += L"AL|" + std::to_wstring(a.id) + L"|" + std::to_wstring(a.hh) + L"|" + std::to_wstring(a.mm) + L"|" +
                      std::to_wstring(a.days) + L"|" + (a.enabled ? L"1" : L"0") + L"|" + Esc(a.label) + L"|" +
                      std::to_wstring(a.snoozeMin) + L"|" + std::to_wstring(a.sound) + L"\n";
+            std::replace(o.begin(), o.end(), L'\n', L';'); // fields are escaped, so every '\n' left is a separator
             Wh_SetStringValue(L"state", o.c_str());
         }
 
@@ -632,7 +761,7 @@ namespace td
                 SeedPresetsL();
                 return;
             }
-            auto lines = Split(std::wstring(buf.data(), n), L'\n');
+            auto lines = SplitRecords(std::wstring(buf.data(), n));
             if (lines.empty() || lines[0] != L"v1")
             {
                 SeedPresetsL();
@@ -1151,6 +1280,7 @@ namespace ui
     void Stop();  // stop it and wait
     void RequestTogglePanel(bool noActivate);
     void NotifyTaskbarClockPress();
+    void RequestToggleNotifications(); // the taskbar bell: toggle the notification panel
 } // namespace ui
 
 // ============================================================================
@@ -1172,6 +1302,12 @@ namespace tb
     };
     static const wchar_t kMsgClass[] = L"WinklokTaskbarMsgWnd";
 
+    // With an auto-hidden taskbar, the bar stays on screen for as long as it is the foreground window. A click on one of
+    // WinKlok's taskbar controls (the preview buttons, the bell, the clock) activates the taskbar like any click on it,
+    // and nothing gives the foreground back, so the bar would never slide away again. After such a click, once the pointer
+    // has left the bar, the foreground is handed to the window that was in front before (OnTick -> ReleaseTaskbarFocus).
+    static std::atomic<ULONGLONG> g_tbInteractAt{0}; // GetTickCount64() of the last click on a WinKlok taskbar control
+
     struct Entry
     {
         DWORD tid = 0;
@@ -1188,10 +1324,12 @@ namespace tb
         std::vector<std::function<void()>> revokers;
         std::vector<std::pair<wux::FrameworkElement, wux::Thickness>> shifted;
         std::vector<std::pair<wux::FrameworkElement, wux::Visibility>> bells;
+        wux::FrameworkElement bellLeaf{nullptr};
+        ULONGLONG bellNextSearchMs = 0, bellDeepMs = 0, bellBackoffMs = 250;
         // Every tooltip attached to the native clock (and its ancestors) is removed and remembered here.
         std::vector<std::pair<wux::DependencyObject, wf::IInspectable>> tooltips;
         bool injected = false, bellHidden = false, seenLoaded = false;
-        int injectFailures = 0, layoutKey = -1, bellSearchTries = 0;
+        int injectFailures = 0, layoutKey = -1;
         // Time stamps (ms, GetTickCount64) so the periodic jobs keep their cadence whatever the tick interval is.
         ULONGLONG unloadedSinceMs = 0, lastTipMs = 0, lastMeasureMs = 0, lastBrushMs = 0;
         double shift = 0, nativeH = 0, nativeDy = 0;
@@ -1263,6 +1401,47 @@ namespace tb
             if (WalkVisual(wuxm::VisualTreeHelper::GetChild(root, i), fn, depth + 1, maxDepth))
                 return true;
         return false;
+    }
+
+    // Find the native taskbar content element by its stable XAML class name.
+    static wux::FrameworkElement FindVisualByClass(wux::DependencyObject const &root, const wchar_t *className, int maxDepth = 32)
+    {
+        wux::FrameworkElement found{nullptr};
+        WalkVisual(root, [&](wux::DependencyObject const &o, int)
+                   {
+            auto fe = o.try_as<wux::FrameworkElement>();
+            if (!fe)
+                return false;
+            try
+            {
+                if (winrt::get_class_name(fe) == className)
+                {
+                    found = fe;
+                    return true;
+                }
+            }
+            catch (...)
+            {
+            }
+            return false; }, 0, maxDepth);
+        return found;
+    }
+
+    // Find a named/classed element in the native taskbar XAML tree. These stable
+    // identifiers are more reliable than localized accessibility labels.
+    static wux::FrameworkElement FindVisualByName(wux::DependencyObject const &root, const wchar_t *name, int maxDepth = 32)
+    {
+        wux::FrameworkElement found{nullptr};
+        WalkVisual(root, [&](wux::DependencyObject const &o, int)
+                   {
+            auto fe = o.try_as<wux::FrameworkElement>();
+            if (fe && _wcsicmp(fe.Name().c_str(), name) == 0)
+            {
+                found = fe;
+                return true;
+            }
+            return false; }, 0, maxDepth);
+        return found;
     }
 
     static wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b)
@@ -1442,94 +1621,71 @@ namespace tb
         }
     }
 
-    // ---- notification bell (best effort, strict name match) ------------------------------
+    // Find and hide only the native notification glyph, never its parent button.
+    static wux::FrameworkElement FindNativeBell(Entry &en, bool deep)
+    {
+        constexpr const wchar_t *kLeaf = L"SystemTray.TextIconContent";
+        try
+        {
+            wux::DependencyObject cur = en.clock; // the clock lives inside NotificationCenterButton
+            for (int i = 0; i < 16 && cur; ++i)
+            {
+                cur = wuxm::VisualTreeHelper::GetParent(cur);
+                if (!cur) break;
+                auto fe = cur.try_as<wux::FrameworkElement>();
+                if (fe && fe.Name() == L"NotificationCenterButton")
+                    return FindVisualByClass(fe, kLeaf, 16);
+            }
+            if (deep) // rare full search, at most every 30 s
+                if (auto xr = en.clock.XamlRoot())
+                    if (auto btn = FindVisualByName(xr.Content(), L"NotificationCenterButton", 64))
+                        return FindVisualByClass(btn, kLeaf, 64);
+        }
+        catch (...) {}
+        return nullptr;
+    }
+
     static void ApplyBell(Entry &en)
     {
-        // WinKlok provides its own notification button. Hide the Windows-owned
-        // bell while WinKlok is active to prevent duplicates, then restore it.
-        bool wantHidden = WkActive() && (td::g_set.showBell.load() != 0);
-        if (wantHidden && !en.bellHidden && en.bellSearchTries < 50)
+        if (!WkActive()) return;
+        const ULONGLONG now = GetTickCount64();
+        bool attached = false;
+        if (en.bellLeaf)
+            try { attached = (bool)wuxm::VisualTreeHelper::GetParent(en.bellLeaf); } catch (...) {}
+        if (!attached)
         {
-            en.bellSearchTries++;
-            std::vector<void *> chain;
-            wux::DependencyObject cur = en.clock;
-            for (int i = 0; i < 10 && cur; ++i)
-            {
-                chain.push_back(winrt::get_abi(cur));
-                cur = wuxm::VisualTreeHelper::GetParent(cur);
-            }
-            for (size_t a = 1; a < chain.size() && a <= 8; ++a)
-            {
-                wux::DependencyObject anc = en.clock;
-                for (size_t k = 0; k < a && anc; ++k)
-                    anc = wuxm::VisualTreeHelper::GetParent(anc);
-                if (!anc)
-                    break;
-                WalkVisual(anc, [&](wux::DependencyObject const &o, int depth)
-                           {
-                if (depth > 6) return false;
-                auto fe = o.try_as<wux::FrameworkElement>();
-                if (!fe || StartsWith(fe.Name(), L"Winklok")) return false;
-                if (std::find(chain.begin(), chain.end(), winrt::get_abi(fe)) != chain.end()) return false;
-                std::wstring cls;
-                try { cls = winrt::get_class_name(fe).c_str(); } catch (...) {}
-                winrt::hstring aid;
-                try { aid = wux::Automation::AutomationProperties::GetAutomationId(fe); } catch (...) {}
-                bool bell = ContainsNoCase(fe.Name().c_str(), L"bell") || ContainsNoCase(aid.c_str(), L"bell");
-                if (bell && !ContainsNoCase(cls.c_str(), L"NotificationArea")) {
-                    for (auto& b : en.bells) if (b.first == fe) return false;
-                    en.bells.emplace_back(fe, fe.Visibility());
-                    Wh_Log(L"hiding native notification candidate name='%s' id='%s' class='%s'",
-                           fe.Name().c_str(), aid.c_str(), cls.c_str());
-                }
-                return false; }, 0, 10);
-                if (!en.bells.empty())
-                    break;
-            }
-            for (auto &b : en.bells)
-            {
-                try
-                {
-                    b.first.Visibility(wux::Visibility::Collapsed);
-                }
-                catch (...)
-                {
-                }
-            }
-            en.bellHidden = !en.bells.empty();
-            if (en.bells.empty() && en.bellSearchTries == 50)
-                Wh_Log(L"could not identify the native notification button");
-        }
-        else if (!wantHidden && !en.bells.empty())
-        {
-            for (auto &b : en.bells)
-            {
-                try
-                {
-                    b.first.Visibility(b.second);
-                }
-                catch (...)
-                {
-                }
-            }
-            en.bells.clear();
+            if (en.bellLeaf) { en.bellLeaf = nullptr; en.bellBackoffMs = 250; en.bellNextSearchMs = 0; } // taskbar rebuilt: look again at once
             en.bellHidden = false;
-            en.bellSearchTries = 0;
-        }
-        else if (wantHidden && en.bellHidden)
-        {
-            for (auto &b : en.bells)
+            if (now < en.bellNextSearchMs) return;
+            const bool deep = now >= en.bellDeepMs;
+            if (deep) en.bellDeepMs = now + 30000;
+            en.bellLeaf = FindNativeBell(en, deep);
+            if (!en.bellLeaf)
             {
-                try
+                en.bellNextSearchMs = now + en.bellBackoffMs;
+                en.bellBackoffMs = std::min<ULONGLONG>(en.bellBackoffMs * 2, 2000);
+                return;
+            }
+            const auto orig = en.bellLeaf.Visibility();
+            if (en.bells.empty() || orig != wux::Visibility::Collapsed)
+            {
+                en.bells.clear();
+                en.bells.emplace_back(en.bellLeaf, orig);
+                if (td::g_set.bellUnset.load())
                 {
-                    if (b.first.Visibility() != wux::Visibility::Collapsed)
-                        b.first.Visibility(wux::Visibility::Collapsed);
-                }
-                catch (...)
-                {
+                    td::g_set.bellUnset = false;
+                    td::g_set.showBell = orig == wux::Visibility::Visible ? 1 : 0;
+                    td::g_set.Save();
                 }
             }
         }
+        try
+        {
+            if (en.bellLeaf.Visibility() != wux::Visibility::Collapsed)
+                en.bellLeaf.Visibility(wux::Visibility::Collapsed);
+            en.bellHidden = true;
+        }
+        catch (...) { en.bellLeaf = nullptr; en.bellHidden = false; }
     }
 
     // ---- click handling ------------------------------------------------------------------
@@ -1559,6 +1715,7 @@ namespace tb
         auto t1 = el.PointerPressed([](wf::IInspectable const &s, wuxi::PointerRoutedEventArgs const &e)
                                     {
         if (!WkActive() || !IsLeft(s, e, false)) return;
+        g_tbInteractAt = GetTickCount64();
         // Notify the panel before Windows deactivates it, so the focus-loss handler
         // cannot hide it before the clock-toggle message arrives.
         ui::NotifyTaskbarClockPress();
@@ -1584,10 +1741,13 @@ namespace tb
         try { el.PointerPressed(t1); el.PointerReleased(t2); el.Tapped(t3); el.PointerEntered(t4); } catch (...) {} });
     }
 
-    static void HookButton(Entry &en, wux::UIElement const &el, std::function<void()> action)
+    static void HookButton(Entry &en, wux::UIElement const &el, std::function<void()> action, std::function<void()> onPress = nullptr)
     {
-        auto t1 = el.PointerPressed([](wf::IInspectable const &, wuxi::PointerRoutedEventArgs const &e)
-                                    { e.Handled(true); });
+        auto t1 = el.PointerPressed([onPress](wf::IInspectable const &, wuxi::PointerRoutedEventArgs const &e)
+                                    {
+        e.Handled(true);
+        g_tbInteractAt = GetTickCount64();
+        if (onPress && WkActive()) onPress(); });
         auto t2 = el.PointerReleased([action](wf::IInspectable const &, wuxi::PointerRoutedEventArgs const &e)
                                      {
         e.Handled(true);
@@ -1726,7 +1886,11 @@ namespace tb
 
     static void OpenWindowsNotifications()
     {
-        // Windows 11's Win+N shortcut opens Notification Center.
+        // The Notification Center protocol opens it without synthesising keystrokes (which other apps' keyboard hooks see,
+        // which mix with modifier keys the user is holding and which do nothing when the Win key is disabled or remapped).
+        if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"ms-actioncenter:", nullptr, nullptr, SW_SHOWNORMAL) > 32)
+            return;
+        // Fallback: Windows 11's Win+N shortcut opens Notification Center.
         INPUT keys[4]{};
         keys[0].type = INPUT_KEYBOARD;
         keys[0].ki.wVk = VK_LWIN;
@@ -1830,10 +1994,16 @@ namespace tb
                 {L"WinklokTmCompactToggle", tmToggle},
                 {L"WinklokTmCompactCancel", tmCancel},
                 {L"WinklokBell", []()
-                 { OpenWindowsNotifications(); }},
+                 { ui::RequestToggleNotifications(); }},
             };
             for (auto &d : defs)
-                HookButton(en, Named<wux::UIElement>(en.host, d.name), d.fn);
+            { // the bell announces its press like the clock does, so the panels' focus-loss handling waits for the toggle
+                const bool isBell = wcscmp(d.name, L"WinklokBell") == 0;
+                HookButton(en, Named<wux::UIElement>(en.host, d.name), d.fn,
+                           isBell ? std::function<void()>([]()
+                                                          { ui::NotifyTaskbarClockPress(); })
+                                  : nullptr);
+            }
 
             en.layoutKey = -1;
             en.lastBrushMs = GetTickCount64();
@@ -1874,6 +2044,7 @@ namespace tb
                 }
             }
             en.bells.clear();
+            en.bellLeaf = nullptr;
             en.bellHidden = false;
             RestoreClockTooltips(en);
             RemoveOurChildren(en);
@@ -2001,6 +2172,95 @@ namespace tb
         SetTimer(it->second, 1, ms, nullptr);
     }
 
+    static bool IsTaskbarWindow(HWND w)
+    {
+        wchar_t cls[64] = {};
+        return w && GetClassNameW(w, cls, 64) > 0 && (wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+    }
+    // The window that was in front before the taskbar was clicked: the first normal, visible, uncloaked top-level window
+    // below the taskbar in z-order (not the desktop, not tool windows, not our own flyouts).
+    static HWND PreviousForegroundWindow()
+    {
+        for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT))
+        {
+            if (!IsWindowVisible(w) || IsIconic(w) || GetWindow(w, GW_OWNER))
+                continue;
+            if (GetWindowLongPtrW(w, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST))
+                continue;
+            wchar_t cls[64] = {};
+            if (!GetClassNameW(w, cls, 64) || IsTaskbarWindow(w) || wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0)
+                continue;
+            wchar_t title[2];
+            if (InternalGetWindowText(w, title, ARRAYSIZE(title)) <= 0)
+                continue;
+            DWORD cloaked = 0;
+            if (SUCCEEDED(DwmGetWindowAttribute(w, 14 /*DWMWA_CLOAKED*/, &cloaked, sizeof(cloaked))) && cloaked)
+                continue;
+            return w;
+        }
+        return nullptr;
+    }
+    static bool IsWinKlokWindow(HWND w)
+    {
+        wchar_t cls[64] = {};
+        return w && GetClassNameW(w, cls, ARRAYSIZE(cls)) > 0 && wcscmp(cls, L"WinklokUiWindow") == 0;
+    }
+
+    static void ReleaseTaskbarFocus(ULONGLONG nowMs)
+    {
+        static ULONGLONG outsideSince = 0;
+        const ULONGLONG at = g_tbInteractAt.load();
+        if (!at)
+        {
+            outsideSince = 0;
+            return;
+        }
+        HWND fg = GetForegroundWindow();
+        HWND root = fg ? GetAncestor(fg, GA_ROOT) : nullptr;
+        if (root && IsWinKlokWindow(root))
+        { // keep the click marker while WinKlok owns focus; it is needed when the panel closes
+            outsideSince = 0;
+            return;
+        }
+        if (!root || !IsTaskbarWindow(root))
+        { // another app now owns focus: there is no taskbar focus left to release
+            outsideSince = 0;
+            if (fg)
+                g_tbInteractAt = 0;
+            return;
+        }
+        APPBARDATA abd{};
+        abd.cbSize = sizeof(abd);
+        if (!(SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE))
+        {
+            g_tbInteractAt = 0;
+            return;
+        }
+        RECT r{};
+        POINT cp{};
+        if (!GetWindowRect(root, &r) || !GetCursorPos(&cp))
+            return;
+        InflateRect(&r, 6, 6);
+        if (PtInRect(&r, cp))
+        { // still on the bar: it stays visible anyway
+            outsideSince = 0;
+            return;
+        }
+        if (!outsideSince)
+        {
+            outsideSince = nowMs;
+            return;
+        }
+        if (nowMs - outsideSince < 300)
+            return;
+        outsideSince = 0;
+        g_tbInteractAt = 0;
+        if (HWND prev = PreviousForegroundWindow())
+            SetForegroundWindow(prev);
+        else if (HWND desk = FindWindowW(L"Progman", nullptr))
+            SetForegroundWindow(desk);
+    }
+
     // The tick only runs as fast as what is on screen needs: 100 ms for a running stopwatch preview (tenths),
     // 250 ms for a running timer preview or while the bell is still being set up, 100 ms until the first
     // injection has succeeded, and 1 s otherwise. Engine and settings changes do not wait for the next tick:
@@ -2015,6 +2275,8 @@ namespace tb
         }
         const ULONGLONG nowMs = GetTickCount64();
         const bool active = WkActive();
+        if (active)
+            ReleaseTaskbarFocus(nowMs);
         td::PreviewSnap snap;
         if (active)
             snap = td::g_eng.Preview();
@@ -2052,6 +2314,9 @@ namespace tb
                         Restore(*en);
                     continue;
                 }
+                // Hide the Windows notification control independently of whether the
+                // WinKlok clock/preview overlay has finished injecting successfully.
+                ApplyBell(*en);
                 if (!en->injected)
                 {
                     if (en->injectFailures < 25)
@@ -2060,7 +2325,6 @@ namespace tb
                         continue;
                 }
                 ApplyPreview(*en, snap);
-                ApplyBell(*en);
                 if (nowMs - en->lastTipMs >= 300)
                 {
                     en->lastTipMs = nowMs;
@@ -2082,15 +2346,13 @@ namespace tb
                 want = 100;
             else if (previews && snap.tmOn && snap.tmRun)
                 want = 250;
-            const bool bell = td::g_set.showBell.load() != 0;
             for (auto &en : list)
             {
                 if (!en->clock)
                     continue;
                 if (!en->injected && en->injectFailures < 25)
                     want = std::min(want, 100u); // retry the first injection quickly
-                else if (bell && !en->bellHidden && en->bellSearchTries < 50)
-                    want = std::min(want, 250u); // still looking for the native bell
+                else if (!en->bellHidden && en->bellBackoffMs <= 1000) want = std::min(want, 250u);
             }
         }
         SetTickMs(want);
@@ -2201,7 +2463,6 @@ namespace tb
             { // new template instance: the old ContainerGrid is gone
                 Restore(*en);
                 en->injectFailures = 0;
-                en->bellSearchTries = 0;
             }
             return;
         }
@@ -2423,7 +2684,10 @@ namespace tb
     static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags)
     {
         HMODULE m = g_origLoadLibraryExW(name, file, flags);
-        if (m && name && !g_shuttingDown.load())
+        // A data-file or image-resource load returns a tagged handle (low bits set) that is not a module to hook.
+        const bool dataLoad = (flags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)) != 0 ||
+                              ((ULONG_PTR)m & 3) != 0;
+        if (m && name && !dataLoad && !g_shuttingDown.load())
         {
             const wchar_t *base = wcsrchr(name, L'\\');
             base = base ? base + 1 : name;
@@ -2491,6 +2755,23 @@ namespace tb
 namespace ui
 {
 
+    // ---- time ------------------------------------------------------------------------------------------------------
+    // GetTickCount64 only advances in steps of the system timer tick (10-16 ms), which makes every eased animation
+    // stutter however fast frames are produced. All UI timing uses the performance counter instead.
+    static double MonoMsD()
+    {
+        static const double msPerCount = []
+        {
+            LARGE_INTEGER f{};
+            QueryPerformanceFrequency(&f);
+            return 1000.0 / (double)f.QuadPart;
+        }();
+        LARGE_INTEGER c{};
+        QueryPerformanceCounter(&c);
+        return (double)c.QuadPart * msPerCount;
+    }
+    static ULONGLONG MonoMs() { return (ULONGLONG)MonoMsD(); }
+
     static ID2D1Factory *g_d2d = nullptr;
     static IDWriteFactory *g_dw = nullptr;
     static std::wstring g_uiFont = L"Segoe UI";
@@ -2499,6 +2780,9 @@ namespace ui
     static const wchar_t kUiClass[] = L"WinklokUiWindow";
     static bool g_uiClassRegistered = false;
     static std::atomic<HWND> g_panelWnd{nullptr};
+    static std::atomic<HWND> g_notifWnd{nullptr}; // the notification panel (second flyout)
+    static HDWP g_moveBatch = nullptr;            // while set, flyout moves are queued and applied together (stacked slide)
+    static bool IsFlyoutHwnd(HWND h) { return h && (h == g_panelWnd.load() || h == g_notifWnd.load()); }
     static std::atomic<ULONGLONG> g_clockTogglePendingUntil{0};
     static HANDLE g_thread = nullptr;
     static DWORD g_threadId = 0;
@@ -2510,7 +2794,9 @@ namespace ui
         WM_UI_CLOSEALERT = WM_APP + 22,
         WM_UI_WHEEL = WM_APP + 23,
         WM_UI_HWHEEL = WM_APP + 24,
-        WM_UI_SYNCDONE = WM_APP + 25
+        WM_UI_SYNCDONE = WM_APP + 25,
+        WM_UI_TOGGLE_NOTIF = WM_APP + 26,
+        WM_UI_FRAME = WM_APP + 27 // one compositor frame has passed (posted by the frame clock)
     };
     enum
     {
@@ -2524,7 +2810,10 @@ namespace ui
         TIMER_STATUS_ANIM,
         TIMER_TAB_ANIM,
         TIMER_NOTE_SAVE,
-        TIMER_ABOUT_ANIM
+        TIMER_ABOUT_ANIM,
+        TIMER_NOTIF_REFRESH,
+        TIMER_STACK_ANIM,
+        TIMER_TODO_ANIM
     };
 
     // ---- colors ---------------------------------------------------------------------
@@ -2600,15 +2889,15 @@ namespace ui
         {
             if (!t0)
                 return to;
-            float t = (float)(GetTickCount64() - t0) / durMs;
+            float t = (float)(MonoMsD() - (double)t0) / durMs;
             return from + (to - from) * (out ? EaseOutCubic(t) : EaseInOutCubic(t));
         }
-        bool Running(float durMs) const { return t0 && (float)(GetTickCount64() - t0) < durMs; }
+        bool Running(float durMs) const { return t0 && (float)(MonoMs() - t0) < durMs; }
         void Go(float target, float current)
         {
             from = current;
             to = target;
-            t0 = GetTickCount64();
+            t0 = MonoMs();
         }
         void Set(float v)
         {
@@ -2744,6 +3033,14 @@ namespace ui
             return 0;
         return (v + 1) % 7; // Windows: 0 = Monday
     }
+    static int FirstWeekRule()
+    { // LOCALE_IFIRSTWEEKOFYEAR: 0 = week containing 1 Jan, 1 = first full week, 2 = first week with >= 4 days
+        int v = 0;
+        if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTWEEKOFYEAR | LOCALE_RETURN_NUMBER, (LPWSTR)&v,
+                            sizeof(v) / sizeof(WCHAR)) == 0)
+            return 0;
+        return v >= 0 && v <= 2 ? v : 0;
+    }
     static int DaysInMonth(int y, int m)
     {
         static const int d[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -2771,6 +3068,399 @@ namespace ui
         s.wMonth = 1;
         s.wDay = (WORD)(7 + dow); // 2024-01-07 is a Sunday
         return DateStr(s, fmt);
+    }
+
+    // Windows' taskbar calendar reads these two per-user entries for its secondary clocks.
+    // Keep this read-only: WinKlok follows the clocks configured by Windows and never changes them.
+    struct AdditionalClock
+    {
+        std::wstring label;
+        DYNAMIC_TIME_ZONE_INFORMATION timeZone{};
+    };
+
+    static bool ReadAdditionalClock(int slot, AdditionalClock &out)
+    {
+        const std::wstring key = L"Control Panel\\TimeDate\\AdditionalClocks\\" + std::to_wstring(slot);
+        DWORD enabled = 0, bytes = sizeof(enabled), type = 0;
+        if (RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"Enable", RRF_RT_REG_DWORD,
+                         &type, &enabled, &bytes) != ERROR_SUCCESS ||
+            type != REG_DWORD || enabled == 0)
+            return false;
+
+        wchar_t displayName[128] = {};
+        bytes = sizeof(displayName);
+        type = 0;
+        if (RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"DisplayName", RRF_RT_REG_SZ,
+                         &type, displayName, &bytes) != ERROR_SUCCESS ||
+            type != REG_SZ)
+            displayName[0] = L'\0';
+        displayName[ARRAYSIZE(displayName) - 1] = L'\0';
+
+        wchar_t zoneKey[128] = {};
+        bytes = sizeof(zoneKey);
+        type = 0;
+        if (RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"TzRegKeyName", RRF_RT_REG_SZ,
+                         &type, zoneKey, &bytes) != ERROR_SUCCESS ||
+            type != REG_SZ || !zoneKey[0])
+            return false;
+        zoneKey[ARRAYSIZE(zoneKey) - 1] = L'\0';
+
+        bool found = false;
+        for (DWORD index = 0; index < 512; ++index)
+        {
+            DYNAMIC_TIME_ZONE_INFORMATION candidate{};
+            const DWORD result = EnumDynamicTimeZoneInformation(index, &candidate);
+            if (result == ERROR_NO_MORE_ITEMS)
+                break;
+            if (result != ERROR_SUCCESS)
+                return false;
+            if (_wcsicmp(candidate.TimeZoneKeyName, zoneKey) == 0)
+            {
+                out.timeZone = candidate;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return false;
+
+        out.label = displayName[0] ? displayName : (L"Clock " + std::to_wstring(slot));
+        if (out.label.size() > 40)
+            out.label.resize(40);
+        return true;
+    }
+
+    static std::vector<AdditionalClock> ReadAdditionalClocks()
+    {
+        std::vector<AdditionalClock> clocks;
+        clocks.reserve(2);
+        for (int slot = 1; slot <= 2; ++slot)
+        {
+            AdditionalClock clock;
+            if (ReadAdditionalClock(slot, clock))
+                clocks.push_back(std::move(clock));
+        }
+        return clocks;
+    }
+
+    static std::wstring FormatAdditionalClock(const AdditionalClock &clock, const SYSTEMTIME &utc,
+                                              const SYSTEMTIME &localNow)
+    {
+        SYSTEMTIME target{};
+        if (!SystemTimeToTzSpecificLocalTimeEx(&clock.timeZone, &utc, &target))
+            return L"";
+
+        wchar_t timeText[64] = {};
+        const wchar_t *timeFormat = td::g_set.Use24() ? L"HH:mm" : L"h:mm tt";
+        if (!GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &target, timeFormat,
+                             timeText, ARRAYSIZE(timeText)))
+            wcscpy_s(timeText, ARRAYSIZE(timeText), td::FmtTimeOfDay(target.wHour, target.wMinute).c_str());
+
+        const long long dayDelta = td::DaysFromCivil(target.wYear, target.wMonth, target.wDay) -
+                                   td::DaysFromCivil(localNow.wYear, localNow.wMonth, localNow.wDay);
+        std::wstring dayLabel;
+        if (dayDelta == 0)
+            dayLabel = L"Today";
+        else if (dayDelta == 1)
+            dayLabel = L"Tomorrow";
+        else if (dayDelta == -1)
+            dayLabel = L"Yesterday";
+        else
+            dayLabel = DateStr(target, L"ddd, MMM d");
+
+        return std::wstring(timeText) + (dayLabel.empty() ? L"" : L"  " + dayLabel);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  FRAME CLOCK
+    //  Animations used to be driven by 8-15 ms WM_TIMER ticks. WM_TIMER is the lowest-priority message, is rounded to the
+    //  system timer tick (10-16 ms: an "8 ms" timer cannot beat 100 Hz and drifts against the display), and every step also
+    //  blocked in DwmFlush or in a v-synced present, so a frame took two display refreshes (about 30 fps on a 60 Hz screen,
+    //  uneven on 120 Hz and above). Now one small thread waits for the compositor (DwmFlush returns right after each
+    //  refresh) and posts one WM_UI_FRAME per refresh, only while some animation is running (no CPU when idle) and never
+    //  more than one outstanding (no backlog when the UI thread is busy). On that frame every running animation is stepped
+    //  once and the windows are painted immediately, so a frame = one refresh at any rate (60, 120, 144, 240 Hz...).
+    //  Weak hardware: the cost of the last frames is measured; if they do not fit in one refresh the clock steps on every
+    //  2nd, 3rd... refresh instead (an even 60 fps on a 120 Hz panel rather than an uneven 90), and goes back up when there
+    //  is headroom again. Animations are driven by elapsed time, so skipped refreshes never slow them down.
+    // ---------------------------------------------------------------------------------------------
+    namespace fclk
+    {
+        static std::vector<std::pair<HWND, UINT_PTR>> g_subs; // UI thread only: who wants a frame (window, timer id)
+        static HANDLE g_thread = nullptr, g_wake = nullptr;   // g_wake is set while there is at least one subscriber
+        static HANDLE g_stopEvt = nullptr;                    // set when the thread must end: every wait below also watches it
+        static std::atomic<bool> g_stop{false}, g_pending{false};
+        static std::atomic<float> g_periodMs{16.667f}; // measured compositor refresh interval
+        static int g_divisor = 1, g_skip = 0, g_slow = 0, g_fast = 0;
+        static double g_costMs = 0.0;
+
+        static float PeriodMs() { return g_periodMs.load(); }
+
+        // One frame of pacing that can always be interrupted. DwmFlush() has no timeout and no way to cancel it, so it can
+        // sit forever when the compositor is not presenting (display off, locked or switched session, GPU reset, DWM
+        // restart) and the thread could outlive the module. Instead: the compositor clock with a timeout and the stop event
+        // (dcomp.dll, loaded dynamically), or, where that is missing, a wait until the next v-blank computed from the DWM
+        // timing info. Returns false when the thread must end.
+        using WaitCompClock_t = DWORD(WINAPI *)(UINT, const HANDLE *, DWORD);
+        static WaitCompClock_t g_waitClock = nullptr;
+        static HMODULE g_dcomp = nullptr;
+        static bool g_waitClockTried = false;
+        static bool WaitOneFrame(bool &paced)
+        {
+            paced = false;
+            if (!g_waitClockTried)
+            {
+                g_waitClockTried = true;
+                g_dcomp = LoadLibraryExW(L"dcomp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+                if (g_dcomp)
+                    g_waitClock = reinterpret_cast<WaitCompClock_t>(GetProcAddress(g_dcomp, "DCompositionWaitForCompositorClock"));
+            }
+            if (g_waitClock)
+            {
+                const DWORD r = g_waitClock(1, &g_stopEvt, 100);
+                if (r == WAIT_OBJECT_0 && WaitForSingleObject(g_stopEvt, 0) == WAIT_OBJECT_0)
+                    return false; // stop requested (checked again, so a compositor tick can never be mistaken for it)
+                paced = r != WAIT_TIMEOUT && r != WAIT_FAILED; // the compositor ticked; on a timeout or failure a frame is still posted
+                return true;
+            }
+            DWM_TIMING_INFO ti{};
+            ti.cbSize = sizeof(ti);
+            LARGE_INTEGER qf{}, qn{};
+            QueryPerformanceFrequency(&qf);
+            QueryPerformanceCounter(&qn);
+            DWORD ms = 8;
+            if (qf.QuadPart > 0 && SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti)) && ti.qpcRefreshPeriod > 0)
+            {
+                const double period = (double)ti.qpcRefreshPeriod * 1000.0 / (double)qf.QuadPart;
+                g_periodMs.store((float)std::min(50.0, std::max(2.0, period)));
+                double toNext = period - std::fmod(((double)qn.QuadPart - (double)ti.qpcVBlank) * 1000.0 / (double)qf.QuadPart, period);
+                if (toNext < 0.0 || toNext > period)
+                    toNext = period;
+                ms = (DWORD)std::min(100.0, std::max(1.0, std::floor(toNext)));
+                paced = true;
+            }
+            return WaitForSingleObject(g_stopEvt, ms) != WAIT_OBJECT_0;
+        }
+
+        static DWORD WINAPI ThreadProc(LPVOID)
+        {
+            double last = 0.0;
+            int stable = 0;
+            while (!g_stop.load())
+            {
+                const HANDLE both[2] = {g_stopEvt, g_wake};
+                if (WaitForMultipleObjects(2, both, FALSE, INFINITE) == WAIT_OBJECT_0 || g_stop.load())
+                    break;
+                const double t0 = MonoMsD();
+                bool paced = false;
+                if (!WaitOneFrame(paced))
+                    break;
+                const double t1 = MonoMsD();
+                if (!paced || t1 - t0 < 1.0)
+                {
+                    if (WaitForSingleObject(g_stopEvt, 4) == WAIT_OBJECT_0)
+                        break; // no compositor pacing available (DWM off, remote session): a modest steady rate
+                }
+                // The refresh interval is the spacing of consecutive returns (idle gaps and hiccups are ignored).
+                const double dt = t1 - last;
+                last = t1;
+                if (paced && g_waitClock && dt > 2.0 && dt < 60.0)
+                {
+                    const float cur = g_periodMs.load();
+                    if (stable < 8 || (dt > cur * 0.6 && dt < cur * 1.5))
+                    {
+                        const float next = stable < 8 ? (float)dt : cur * 0.9f + (float)dt * 0.1f;
+                        g_periodMs.store(next);
+                        if (++stable == 8)
+                            Wh_Log(L"frame clock: compositor refresh about %.0f Hz", 1000.0 / next);
+                    }
+                }
+                else if (g_waitClock)
+                    stable = stable < 8 ? 0 : stable;
+                HWND h = g_panelWnd.load();
+                if (h && !g_pending.exchange(true))
+                    PostMessageW(h, WM_UI_FRAME, 0, 0);
+            }
+            return 0;
+        }
+
+        static void Add(HWND h, UINT_PTR id)
+        {
+            if (!h)
+                return;
+            for (auto &s : g_subs)
+                if (s.first == h && s.second == id)
+                    return; // already running
+            g_subs.emplace_back(h, id);
+            if (!g_wake)
+                g_wake = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!g_stopEvt)
+                g_stopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (g_wake && g_stopEvt && !g_thread)
+            {
+                g_stop = false;
+                ResetEvent(g_stopEvt);
+                g_thread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
+            }
+            if (g_wake)
+                SetEvent(g_wake);
+        }
+        static void Remove(HWND h, UINT_PTR id)
+        {
+            for (size_t i = 0; i < g_subs.size(); ++i)
+                if (g_subs[i].first == h && g_subs[i].second == id)
+                {
+                    g_subs.erase(g_subs.begin() + (std::ptrdiff_t)i);
+                    break;
+                }
+            if (g_subs.empty() && g_wake)
+            {
+                ResetEvent(g_wake);
+                g_skip = 0;
+                g_divisor = 1; // a new animation starts at full rate and re-adapts
+                g_costMs = 0.0;
+            }
+        }
+
+        // WM_UI_FRAME: step every running animation once, then paint right away.
+        static void Tick()
+        {
+            g_pending.store(false);
+            if (g_subs.empty())
+                return;
+            if (++g_skip < g_divisor)
+                return; // paced down: only every Nth refresh
+            g_skip = 0;
+            const double t0 = MonoMsD();
+            const std::vector<std::pair<HWND, UINT_PTR>> run = g_subs; // handlers may add or remove subscriptions
+            std::vector<HWND> painted;
+            for (const auto &s : run)
+            {
+                if (!IsWindow(s.first))
+                {
+                    Remove(s.first, s.second);
+                    continue;
+                }
+                SendMessageW(s.first, WM_TIMER, s.second, 0); // the same handler a timer used to call
+                if (std::find(painted.begin(), painted.end(), s.first) == painted.end())
+                    painted.push_back(s.first);
+            }
+            for (HWND h : painted)
+                if (IsWindow(h))
+                    UpdateWindow(h); // render in this frame instead of waiting for a low-priority WM_PAINT
+
+            const double cost = MonoMsD() - t0;
+            g_costMs = g_costMs <= 0.0 ? cost : g_costMs * 0.8 + cost * 0.2;
+            const double period = PeriodMs(), slot = period * g_divisor;
+            if (g_costMs > slot * 0.85)
+            { // frames do not fit: halve / third the rate, evenly
+                if (++g_slow >= 4 && g_divisor < 4)
+                {
+                    ++g_divisor;
+                    g_slow = g_fast = 0;
+                    Wh_Log(L"frame clock: frames take %.1f ms, now stepping every %d refreshes", g_costMs, g_divisor);
+                }
+            }
+            else
+                g_slow = 0;
+            if (g_divisor > 1 && g_costMs < period * (g_divisor - 1) * 0.55)
+            { // plenty of headroom again
+                if (++g_fast >= 90)
+                {
+                    --g_divisor;
+                    g_fast = 0;
+                    Wh_Log(L"frame clock: back to every %d refresh(es)", g_divisor);
+                }
+            }
+            else
+                g_fast = 0;
+        }
+
+        static void Shutdown()
+        {
+            g_stop = true;
+            if (g_stopEvt)
+                SetEvent(g_stopEvt); // every wait in the thread watches this event, so the join below is short
+            if (g_wake)
+                SetEvent(g_wake);
+            if (g_thread)
+            {
+                WaitForSingleObject(g_thread, INFINITE); // no timeout: no thread of this module may outlive Wh_ModUninit
+                CloseHandle(g_thread);
+                g_thread = nullptr;
+            }
+            if (g_wake)
+            {
+                CloseHandle(g_wake);
+                g_wake = nullptr;
+            }
+            if (g_stopEvt)
+            {
+                CloseHandle(g_stopEvt);
+                g_stopEvt = nullptr;
+            }
+            g_waitClock = nullptr; // the thread is gone: release dcomp.dll again
+            g_waitClockTried = false;
+            if (g_dcomp)
+            {
+                FreeLibrary(g_dcomp);
+                g_dcomp = nullptr;
+            }
+            g_subs.clear();
+        }
+    } // namespace fclk
+    // Animation "timers": same ids and handlers as before, but paced by the frame clock.
+    static void StartFrames(HWND h, UINT_PTR id) { fclk::Add(h, id); }
+    static void StopFrames(HWND h, UINT_PTR id) { fclk::Remove(h, id); }
+
+    // Precision touchpad scrolling: content travel per finger travel (1 = the fingers' own distance), and how long after
+    // the last finger movement the content is still driven directly instead of gliding.
+    static const float kTouchpadGain = 2.f;
+    static const float kTouchpadDirectMs = 90.f;
+
+    // ---- taskbar band ---------------------------------------------------------------------------------------
+    // Top edge (screen px) of the area a bottom-docked taskbar occupies when it is fully shown. With a visible taskbar this
+    // is the top of the work area. With an auto-hidden taskbar Windows reports the work area as the whole monitor, but the
+    // taskbar window keeps its full height (only a sliver is on screen), so the band is measured from that window. Flyouts
+    // rest above this line, so the taskbar can slide up without ever covering them, and a taskbar resized by another mod
+    // is followed automatically.
+    // True when another monitor sits directly to the right (a slide in from the right edge must then be clipped).
+    static bool MonitorOnRight(const MONITORINFO &mi)
+    {
+        // A thin strip along the whole right edge: a neighbour that does not cover the vertical middle is found too.
+        const RECT edge{mi.rcMonitor.right, mi.rcMonitor.top, mi.rcMonitor.right + 1, mi.rcMonitor.bottom};
+        return MonitorFromRect(&edge, MONITOR_DEFAULTTONULL) != nullptr;
+    }
+    static int TaskbarBandTop(HMONITOR mon, const MONITORINFO &mi, float scale)
+    {
+        const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        int bandH = 0;
+        auto consider = [&](HWND t)
+        {
+            RECT r{};
+            if (bandH > 0 || !t || !IsWindowVisible(t) || !GetWindowRect(t, &r))
+                return;
+            const int th = r.bottom - r.top;
+            const int overlap = std::min<int>(r.right, mi.rcMonitor.right) - std::max<int>(r.left, mi.rcMonitor.left);
+            if (th < 24 || th > monH / 3 || overlap < monW / 2) // not a bar of this monitor
+                return;
+            if (r.bottom < mi.rcMonitor.bottom - 2 || r.top < mi.rcMonitor.top + monH / 2) // not bottom-docked
+                return;
+            bandH = th;
+        };
+        consider(FindWindowW(L"Shell_TrayWnd", nullptr));
+        for (HWND t = nullptr; bandH == 0 && (t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr));)
+            consider(t);
+        if (bandH == 0)
+        { // no bar window found: an auto-hidden bar still reserves its usual height
+            APPBARDATA abd{};
+            abd.cbSize = sizeof(abd);
+            if ((SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0 && mi.rcWork.bottom >= mi.rcMonitor.bottom - 2)
+                bandH = (int)std::lround(48.f * scale);
+        }
+        (void)mon;
+        const int top = bandH > 0 ? mi.rcMonitor.bottom - bandH : mi.rcWork.bottom;
+        return std::min<int>(top, mi.rcWork.bottom);
     }
 
     // ---- fonts / text -------------------------------------------------------------------------
@@ -2822,6 +3512,23 @@ namespace ui
         return m.widthIncludingTrailingWhitespace;
     }
 
+    // Shortens s with an ellipsis so that it fits in maxW.
+    static std::wstring FitText(const std::wstring &s, float size, int weight, float maxW)
+    {
+        if (s.empty() || MeasureText(s, size, weight) <= maxW)
+            return s;
+        size_t lo = 0, hi = s.size();
+        while (lo < hi)
+        {
+            const size_t mid = (lo + hi + 1) / 2;
+            if (MeasureText(s.substr(0, mid) + L"\u2026", size, weight) <= maxW)
+                lo = mid;
+            else
+                hi = mid - 1;
+        }
+        return s.substr(0, lo) + L"\u2026";
+    }
+
     static void ReleaseFormats()
     {
         for (auto &kv : g_fmt)
@@ -2861,6 +3568,13 @@ namespace ui
         std::map<UINT32, TpContact> tpContacts;
         bool tpHaveCentroid = false, tpScrolling = false;
         float tpCx = 0.f, tpCy = 0.f, tpVelX = 0.f, tpVelY = 0.f, tpLastX = 0.f, tpLastY = 0.f;
+        // Recent centroid movements (DIP), kept for ~120 ms: the release velocity is measured over them.
+        struct TpSample
+        {
+            ULONGLONG t;
+            float dx, dy;
+        };
+        std::vector<TpSample> tpSamples;
         ULONGLONG tpLastMove = 0;
         ULONGLONG lastTouchpadTick = 0; // wheel messages that duplicate a tracked gesture are ignored for a moment
         bool alphaTarget = false;       // per-pixel alpha render target (acrylic panel)
@@ -2904,18 +3618,49 @@ namespace ui
         virtual void OnTouchpadScroll(float /*dxDip*/, float /*dyDip*/, float /*x*/, float /*y*/) {}
         virtual void OnTouchpadScrollEnd(float /*vxDipPerMs*/, float /*vyDipPerMs*/, float /*x*/, float /*y*/) {}
         virtual void OnDpiChanged() {}
+        virtual bool DeferDpiChange() const { return false; } // true: ignore WM_DPICHANGED for now (a flyout sliding across monitors)
         // Maps pointer coordinates into a translated/scrolling content surface before hit-testing.
         virtual float HitTestY(float y) const { return y; }
 
         float Scale() const { return dpi / 96.f; }
 
+        // Velocity (DIP/ms) of the last ~100 ms of finger movement: the displacement after the oldest sample divided by
+        // the time since it. A finger that slowed down or rested before lifting therefore yields little or no momentum,
+        // and one noisy report cannot throw the estimate.
+        void EstimateTouchpadVelocity(float &vx, float &vy) const
+        {
+            vx = vy = 0.f;
+            if (tpSamples.size() < 2)
+                return;
+            const ULONGLONG tEnd = tpSamples.back().t;
+            size_t first = tpSamples.size() - 1;
+            while (first > 0 && tEnd - tpSamples[first - 1].t <= 100)
+                --first;
+            const float span = (float)(tEnd - tpSamples[first].t);
+            if (first + 1 >= tpSamples.size() || span < 12.f)
+                return;
+            float sx = 0.f, sy = 0.f;
+            for (size_t i = first + 1; i < tpSamples.size(); ++i)
+            {
+                sx += tpSamples[i].dx;
+                sy += tpSamples[i].dy;
+            }
+            vx = sx / span;
+            vy = sy / span;
+        }
+
         void EndTouchpadGesture()
         {
             if (tpScrolling)
             {
-                const bool fresh = GetTickCount64() - tpLastMove < 90; // a rested finger carries no momentum
-                OnTouchpadScrollEnd(fresh ? tpVelX : 0.f, fresh ? tpVelY : 0.f, tpLastX, tpLastY);
+                const bool fresh = MonoMs() - tpLastMove < 90; // a rested finger carries no momentum
+                if (fresh)
+                    EstimateTouchpadVelocity(tpVelX, tpVelY);
+                else
+                    tpVelX = tpVelY = 0.f;
+                OnTouchpadScrollEnd(tpVelX, tpVelY, tpLastX, tpLastY);
             }
+            tpSamples.clear();
             tpScrolling = false;
             tpHaveCentroid = false;
             tpVelX = tpVelY = 0.f;
@@ -2936,7 +3681,7 @@ namespace ui
             POINTER_INFO info{};
             if (!GetPointerInfo(id, &info))
                 return true;
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             for (auto it = tpContacts.begin(); it != tpContacts.end();) // forget contacts whose UP was lost
                 if (now - it->second.tick > 600)
                     it = tpContacts.erase(it);
@@ -2972,14 +3717,14 @@ namespace ui
             cy /= (float)tpContacts.size();
             if (tpHaveCentroid)
             {
-                // 2540 HIMETRIC = 1 inch = 96 DIP; the gain makes a short swipe cover a comfortable distance.
-                const float k = 96.f / 2540.f * 2.4f;
+                // 2540 HIMETRIC = 1 inch = 96 DIP. The content follows the fingers 1:1 (kTouchpadGain = 1).
+                const float k = 96.f / 2540.f * kTouchpadGain;
                 const float dx = (cx - tpCx) * k, dy = (cy - tpCy) * k;
                 if (dx != 0.f || dy != 0.f)
                 {
-                    const float dt = (float)std::min<ULONGLONG>(50, std::max<ULONGLONG>(1, now - (tpLastMove ? tpLastMove : now - 8)));
-                    tpVelX = 0.7f * tpVelX + 0.3f * dx / dt;
-                    tpVelY = 0.7f * tpVelY + 0.3f * dy / dt;
+                    tpSamples.push_back(TpSample{now, dx, dy});
+                    while (tpSamples.size() > 1 && now - tpSamples.front().t > 120)
+                        tpSamples.erase(tpSamples.begin());
                     tpLastMove = now;
                     lastTouchpadTick = now;
                     ClientDip(info.ptPixelLocation, tpLastX, tpLastY);
@@ -2993,7 +3738,7 @@ namespace ui
             return true;
         }
 
-        void ReleaseTarget()
+        virtual void ReleaseTarget()
         {
             if (br)
             {
@@ -3019,7 +3764,7 @@ namespace ui
             hp.hwnd = hwnd;
             hp.pixelSize.width = (UINT32)std::max<LONG>(1, rc.right - rc.left);
             hp.pixelSize.height = (UINT32)std::max<LONG>(1, rc.bottom - rc.top);
-            hp.presentOptions = D2D1_PRESENT_OPTIONS_NONE;
+            hp.presentOptions = D2D1_PRESENT_OPTIONS_IMMEDIATELY; // never wait for v-sync inside EndDraw: the frame clock paces us
             for (int attempt = 0; attempt < 2 && !rt; ++attempt)
             {
                 D2D1_RENDER_TARGET_PROPERTIES rtp{};
@@ -3074,7 +3819,7 @@ namespace ui
 
         float TrackValue(const HoverTrack &t) const
         {
-            float v = EaseInOutCubic((float)(GetTickCount64() - t.started) / 115.f);
+            float v = EaseInOutCubic((float)(MonoMsD() - (double)t.started) / 115.f);
             return t.from + (t.to - t.from) * v;
         }
 
@@ -3082,7 +3827,7 @@ namespace ui
         {
             if (id == hoverId && param == hoverParam)
                 return;
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             auto retarget = [&](int i, int p, float to, float defFrom)
             {
                 const auto key = std::make_pair(i, p);
@@ -3097,7 +3842,7 @@ namespace ui
             hoverId = id;
             hoverParam = param;
             if (hwnd)
-                SetTimer(hwnd, TIMER_INTERACTION_ANIM, 15, nullptr);
+                StartFrames(hwnd, TIMER_INTERACTION_ANIM);
             Invalidate();
         }
 
@@ -3113,7 +3858,7 @@ namespace ui
 
         void AdvanceHoverAnimation()
         {
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             bool running = false;
             for (auto it = hoverTracks.begin(); it != hoverTracks.end();)
             {
@@ -3139,7 +3884,7 @@ namespace ui
                 }
             }
             if (!running && hwnd)
-                KillTimer(hwnd, TIMER_INTERACTION_ANIM);
+                StopFrames(hwnd, TIMER_INTERACTION_ANIM);
             Invalidate();
         }
 
@@ -3272,7 +4017,7 @@ namespace ui
             {
                 if (!track.started)
                     return track.to;
-                return track.from + (track.to - track.from) * EaseOutCubic((float)(GetTickCount64() - track.started) / 180.f);
+                return track.from + (track.to - track.from) * EaseOutCubic((float)(MonoMs() - track.started) / 180.f);
             };
             if (!track.initialized)
             {
@@ -3284,12 +4029,12 @@ namespace ui
             {
                 track.from = sample();
                 track.to = target;
-                track.started = GetTickCount64();
+                track.started = MonoMs();
                 if (hwnd)
-                    SetTimer(hwnd, TIMER_INTERACTION_ANIM, 15, nullptr);
+                    StartFrames(hwnd, TIMER_INTERACTION_ANIM);
             }
             float position = sample();
-            if (track.started && GetTickCount64() - track.started >= 180)
+            if (track.started && MonoMs() - track.started >= 180)
             {
                 track.from = track.to;
                 track.started = 0;
@@ -3371,6 +4116,8 @@ namespace ui
                 }
                 return 0;
             case WM_DPICHANGED:
+                if (DeferDpiChange() && (UINT)HIWORD(wp) != dpi)
+                    return 0; // the window only passes over the neighbouring monitor on its way in; it ends on its own one
                 dpi = HIWORD(wp);
                 ReleaseTarget();
                 OnDpiChanged();
@@ -3378,7 +4125,7 @@ namespace ui
                 return 0;
             case WM_MOUSEMOVE:
             {
-                if (hwnd == g_panelWnd.load())
+                if (IsFlyoutHwnd(hwnd))
                     RouteTouchpadTo(hwnd); // the cursor is over the panel surface itself, not a child edit
                 if (!tracking)
                 {
@@ -3410,7 +4157,7 @@ namespace ui
                 const bool horizontal = msg == WM_MOUSEHWHEEL || msg == WM_POINTERHWHEEL || msg == WM_UI_HWHEEL;
                 const bool viaHook = msg == WM_UI_WHEEL || msg == WM_UI_HWHEEL;
                 const int delta = viaHook ? (int)(INT_PTR)wp : (int)GET_WHEEL_DELTA_WPARAM(wp);
-                if (!viaHook && GetTickCount64() - lastTouchpadTick < 350)
+                if (!viaHook && MonoMs() - lastTouchpadTick < 350)
                     return 0; // suppress only a possible OS-generated duplicate, never the physical-mouse hook route
                 static int logged = 0;
                 if (logged < 12)
@@ -3585,13 +4332,13 @@ namespace ui
     {
         if (!target || !g_touchpadPanelWindow || target == g_touchpadCapableWindow)
             return;
-        if (!IsWindowVisible(g_touchpadPanelWindow))
+        if (!IsWindowVisible(target))
             return;
         if (g_touchpadCapableWindow && IsWindow(g_touchpadCapableWindow))
             SetTouchpadWindowCapability(g_touchpadCapableWindow, FALSE);
         if (SetTouchpadWindowCapability(target, TRUE))
             g_touchpadCapableWindow = target;
-        else if (SetTouchpadWindowCapability(g_touchpadPanelWindow, TRUE))
+        else if (IsWindowVisible(g_touchpadPanelWindow) && SetTouchpadWindowCapability(g_touchpadPanelWindow, TRUE))
             g_touchpadCapableWindow = g_touchpadPanelWindow;
         else
         {
@@ -3630,6 +4377,11 @@ namespace ui
             return DefWindowProcW(hwnd, msg, wp, lp);
         if (msg == WM_NCDESTROY)
         {
+            if (hwnd != g_touchpadPanelWindow && hwnd == g_touchpadCapableWindow)
+            { // another flyout (the notification panel) held the touchpad registration
+                SetTouchpadWindowCapability(hwnd, FALSE);
+                g_touchpadCapableWindow = nullptr;
+            }
             // Unregister before the HWND is destroyed. RegisterTouchpadCapableWindow is last-caller-wins,
             // so only undo the registration for the exact panel window we registered.
             if (hwnd == g_touchpadPanelWindow)
@@ -3782,17 +4534,20 @@ namespace ui
     {
         if (code == HC_ACTION && (wp == WM_MOUSEWHEEL || wp == WM_MOUSEHWHEEL))
         {
-            HWND h = g_panelWnd.load();
             const MSLLHOOKSTRUCT *m = (const MSLLHOOKSTRUCT *)lp;
-            RECT r;
-            if (h && IsWindowVisible(h) && GetWindowRect(h, &r) && PtInRect(&r, m->pt))
+            const HWND flyouts[2] = {g_panelWnd.load(), g_notifWnd.load()};
+            for (HWND h : flyouts)
             {
-                HWND at = WindowFromPoint(m->pt);
-                if (at && (at == h || IsChild(h, at)))
+                RECT r;
+                if (h && IsWindowVisible(h) && GetWindowRect(h, &r) && PtInRect(&r, m->pt))
                 {
-                    PostMessageW(h, wp == WM_MOUSEWHEEL ? WM_UI_WHEEL : WM_UI_HWHEEL, (WPARAM)(INT_PTR)(short)HIWORD(m->mouseData),
-                                 MAKELPARAM((WORD)(short)m->pt.x, (WORD)(short)m->pt.y));
-                    return 1; // consumed: the panel scrolls itself
+                    HWND at = WindowFromPoint(m->pt);
+                    if (at && (at == h || IsChild(h, at)))
+                    {
+                        PostMessageW(h, wp == WM_MOUSEWHEEL ? WM_UI_WHEEL : WM_UI_HWHEEL, (WPARAM)(INT_PTR)(short)HIWORD(m->mouseData),
+                                     MAKELPARAM((WORD)(short)m->pt.x, (WORD)(short)m->pt.y));
+                        return 1; // consumed: the flyout scrolls itself
+                    }
                 }
             }
         }
@@ -3947,10 +4702,138 @@ namespace ui
 
         static bool g_ringing = false; // a looping alert sound is playing
 
+        // The sounds play through the mod's own waveOut stream. PlaySound has one channel per process, shared with
+        // Explorer's shell sounds: an Explorer sound (emptying the Recycle Bin...) silently stopped a ringing alarm, and
+        // stopping a preview cut Explorer's own sounds off. PlaySound stays only as a fallback when waveOut cannot be used.
+        static HWAVEOUT g_wo = nullptr;
+        static WAVEHDR g_woHdr{};
+        static std::vector<BYTE> g_woFile; // PCM data of a sound read from a file (must outlive the playback)
+        static bool g_usedPlaySound = false;
+
+        static void WoClose()
+        {
+            if (g_wo)
+            {
+                waveOutReset(g_wo);
+                waveOutUnprepareHeader(g_wo, &g_woHdr, sizeof(WAVEHDR));
+                waveOutClose(g_wo);
+                g_wo = nullptr;
+            }
+            g_woHdr = WAVEHDR{};
+        }
+        static bool WoStart(const WAVEFORMATEX &fmt, const BYTE *data, DWORD bytes, bool loop)
+        {
+            WoClose();
+            if (!data || !bytes)
+                return false;
+            HWND cb = g_panelWnd.load();
+            if (waveOutOpen(&g_wo, WAVE_MAPPER, &fmt, (DWORD_PTR)cb, 0, cb ? CALLBACK_WINDOW : CALLBACK_NULL) != MMSYSERR_NOERROR)
+            {
+                g_wo = nullptr;
+                return false;
+            }
+            g_woHdr = WAVEHDR{};
+            g_woHdr.lpData = (LPSTR)data;
+            g_woHdr.dwBufferLength = bytes;
+            if (waveOutPrepareHeader(g_wo, &g_woHdr, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
+            {
+                waveOutClose(g_wo);
+                g_wo = nullptr;
+                g_woHdr = WAVEHDR{};
+                return false;
+            }
+            if (loop)
+            {
+                g_woHdr.dwFlags |= WHDR_BEGINLOOP | WHDR_ENDLOOP;
+                g_woHdr.dwLoops = 0x7FFFFFFF; // until stopped
+            }
+            if (waveOutWrite(g_wo, &g_woHdr, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
+            {
+                WoClose();
+                return false;
+            }
+            return true;
+        }
+        // The window message of a finished one-shot sound. Stale ones (of a sound that was stopped meanwhile) are ignored.
+        static void OnWaveDone(HWAVEOUT h)
+        {
+            if (g_wo && h == g_wo && (g_woHdr.dwFlags & WHDR_DONE))
+                WoClose();
+        }
+        // Plain PCM .wav only (what the Windows alarm files are); anything else falls back to PlaySound.
+        static bool LoadWavFile(const wchar_t *path, WAVEFORMATEX &fmt, std::vector<BYTE> &pcm)
+        {
+            HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h == INVALID_HANDLE_VALUE)
+                return false;
+            LARGE_INTEGER sz{};
+            if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 44 || sz.QuadPart > 16LL * 1024 * 1024)
+            {
+                CloseHandle(h);
+                return false;
+            }
+            std::vector<BYTE> f((size_t)sz.QuadPart);
+            DWORD got = 0;
+            const bool read = ReadFile(h, f.data(), (DWORD)f.size(), &got, nullptr) && got == f.size();
+            CloseHandle(h);
+            if (!read || memcmp(f.data(), "RIFF", 4) != 0 || memcmp(f.data() + 8, "WAVE", 4) != 0)
+                return false;
+            bool haveFmt = false;
+            size_t p = 12;
+            while (p + 8 <= f.size())
+            {
+                uint32_t len = 0;
+                memcpy(&len, &f[p + 4], 4);
+                const size_t avail = f.size() - (p + 8);
+                if (memcmp(&f[p], "fmt ", 4) == 0 && len >= 16 && len <= avail)
+                {
+                    WAVEFORMATEX w{};
+                    memcpy(&w, &f[p + 8], 16); // wFormatTag .. wBitsPerSample
+                    if (w.wFormatTag != WAVE_FORMAT_PCM || w.nChannels == 0 || w.nBlockAlign == 0)
+                        return false;
+                    w.cbSize = 0;
+                    fmt = w;
+                    haveFmt = true;
+                }
+                else if (memcmp(&f[p], "data", 4) == 0 && haveFmt)
+                {
+                    size_t n = std::min<size_t>(len, avail);
+                    n -= n % fmt.nBlockAlign;
+                    if (!n)
+                        return false;
+                    pcm.assign(f.begin() + (std::ptrdiff_t)(p + 8), f.begin() + (std::ptrdiff_t)(p + 8 + n));
+                    return true;
+                }
+                p += 8 + (size_t)len + (len & 1);
+            }
+            return false;
+        }
+
+        static void Stop()
+        {
+            WoClose();
+            if (g_usedPlaySound)
+            { // only when the fallback was used: otherwise Explorer's own sounds are none of our business
+                PlaySoundW(nullptr, nullptr, 0);
+                g_usedPlaySound = false;
+            }
+        }
+
         static void Play(int sound, bool loop)
         {
+            Stop(); // one sound at a time, as with PlaySound
             if (const auto *w = Wave(sound))
             {
+                WAVEFORMATEX fmt{};
+                fmt.wFormatTag = WAVE_FORMAT_PCM;
+                fmt.nChannels = 1;
+                fmt.nSamplesPerSec = 22050;
+                fmt.wBitsPerSample = 16;
+                fmt.nBlockAlign = 2;
+                fmt.nAvgBytesPerSec = 22050 * 2;
+                if (w->size() > 44 && WoStart(fmt, w->data() + 44, (DWORD)(w->size() - 44), loop))
+                    return;
+                g_usedPlaySound = true;
                 PlaySoundW((LPCWSTR)w->data(), nullptr, SND_MEMORY | SND_ASYNC | SND_NODEFAULT | (loop ? SND_LOOP : 0));
                 return;
             }
@@ -3963,11 +4846,19 @@ namespace ui
                 wcscat(path, L"\\Media\\Ring01.wav");
             }
             if (GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES)
+            {
+                WAVEFORMATEX fmt{};
+                if (LoadWavFile(path, fmt, g_woFile) && WoStart(fmt, g_woFile.data(), (DWORD)g_woFile.size(), loop))
+                    return;
+                g_usedPlaySound = true;
                 PlaySoundW(path, nullptr, SND_FILENAME | SND_ASYNC | SND_NODEFAULT | (loop ? SND_LOOP : 0));
+            }
             else
+            {
+                g_usedPlaySound = true;
                 PlaySoundW(L"SystemExclamation", nullptr, SND_ALIAS | SND_ASYNC | (loop ? SND_LOOP : 0));
+            }
         }
-        static void Stop() { PlaySoundW(nullptr, nullptr, 0); }
 
     } // namespace snd
 
@@ -5224,7 +6115,20 @@ namespace ui
                 return a;
             }
 
+            int atomDepth = 0; // nesting of atoms (unbraced arguments such as \\not\\not\\not... recurse once per command)
             bool ParseAtom(const MCtx &c, MAtom &a)
+            {
+                if (atomDepth >= 64)
+                { // absurdly deep: stop parsing here instead of overflowing the stack
+                    p = s.size();
+                    return false;
+                }
+                ++atomDepth;
+                const bool r = ParseAtomImpl(c, a);
+                --atomDepth;
+                return r;
+            }
+            bool ParseAtomImpl(const MCtx &c, MAtom &a)
             {
                 SkipWs();
                 if (Eof())
@@ -5993,6 +6897,12 @@ namespace ui
                 if (c == L'\\' && p + 1 < n)
                 {
                     const wchar_t d = t[p + 1];
+                    if (d == L'\n')
+                    { // a backslash at the end of a line is a hard line break
+                        push(3, L"");
+                        p += 2;
+                        continue;
+                    }
                     if (d == L'(' || d == L'[')
                     {
                         const size_t e = t.find(d == L'(' ? L"\\)" : L"\\]", p + 2);
@@ -6132,7 +7042,11 @@ namespace ui
                     while (e < n && !iswspace(t[e]) && t[e] != L'<' && t[e] != L'>' && t[e] != L'"')
                         ++e;
                     while (e > p + 8 && wcschr(L".,;:!?)]}'", t[e - 1]))
-                        --e; // trailing punctuation belongs to the sentence
+                    { // trailing punctuation belongs to the sentence (a ")" only when it has no "(" to close, as in wiki links)
+                        if (t[e - 1] == L')' && std::count(t.begin() + p, t.begin() + e, L'(') >= std::count(t.begin() + p, t.begin() + e, L')'))
+                            break;
+                        --e;
+                    }
                     flush();
                     Span sp;
                     sp.s = t.substr(p, e - p);
@@ -6143,6 +7057,23 @@ namespace ui
                     out.push_back(sp);
                     p = e;
                     continue;
+                }
+                if (c == L'<' && (StartsAt(t, p, L"<http://") || StartsAt(t, p, L"<https://")))
+                {
+                    const size_t e = t.find(L'>', p);
+                    if (e != std::wstring::npos && t.find_first_of(L" \t\n", p) > e)
+                    {
+                        flush();
+                        Span sp;
+                        sp.s = t.substr(p + 1, e - p - 1);
+                        sp.url = sp.s;
+                        sp.bold = b;
+                        sp.italic = it;
+                        sp.link = true;
+                        out.push_back(sp);
+                        p = e + 1;
+                        continue;
+                    }
                 }
                 if (c == L'<' && (StartsAt(t, p, L"<br>") || StartsAt(t, p, L"<br/>") || StartsAt(t, p, L"<br />")))
                 {
@@ -6254,7 +7185,7 @@ namespace ui
             const std::wstring t = rest.substr(i);
             if (t.size() >= 2 && (t[0] == L'-' || t[0] == L'*' || t[0] == L'+') && t[1] == L' ')
             {
-                level = std::min(4, indent / 2);
+                level = indent; // raw indentation; ParseBlocks turns it into a nesting level
                 marker = L"*";
                 text = t.substr(2);
                 return true;
@@ -6264,7 +7195,7 @@ namespace ui
                 ++d;
             if (d > 0 && d <= 9 && d + 1 < t.size() && (t[d] == L'.' || t[d] == L')') && t[d + 1] == L' ')
             {
-                level = std::min(4, indent / 2);
+                level = indent;
                 marker = t.substr(0, d) + L".";
                 text = t.substr(d + 2);
                 return true;
@@ -6281,19 +7212,45 @@ namespace ui
                 t.pop_back();
             std::vector<std::wstring> cells;
             std::wstring cur;
-            bool inMath = false;
+            bool inMath = false, inParen = false;
+            // A "$" opens maths only when a closing "$" follows (same rule as the inline parser), so prices do not.
+            auto opensDollar = [&](size_t at)
+            {
+                if (at + 1 >= t.size() || iswspace(t[at + 1]) || t[at + 1] == L'$')
+                    return false;
+                for (size_t e = at + 1; (e = t.find(L'$', e)) != std::wstring::npos; ++e)
+                    if (!iswspace(t[e - 1]) && t[e - 1] != L'\\')
+                        return true;
+                return false;
+            };
             for (size_t i = 0; i < t.size(); ++i)
             {
                 const wchar_t ch = t[i];
-                if (ch == L'\\' && i + 1 < t.size() && t[i + 1] == L'|')
+                if (ch == L'\\' && i + 1 < t.size())
                 {
-                    cur += L'|';
+                    const wchar_t nx = t[i + 1];
+                    if (nx == L'|' && !inMath && !inParen)
+                        cur += L'|'; // \| is a literal bar in a table cell
+                    else
+                    {
+                        if (nx == L'(' && !inMath)
+                            inParen = true;
+                        else if (nx == L')')
+                            inParen = false;
+                        cur += ch;
+                        cur += nx;
+                    }
                     ++i;
                     continue;
                 }
-                if (ch == L'$')
-                    inMath = !inMath;
-                if (ch == L'|' && !inMath)
+                if (ch == L'$' && !inParen)
+                {
+                    if (inMath)
+                        inMath = false;
+                    else if (opensDollar(i))
+                        inMath = true;
+                }
+                if (ch == L'|' && !inMath && !inParen)
                 {
                     cells.push_back(Trim(cur));
                     cur.clear();
@@ -6336,8 +7293,18 @@ namespace ui
         static std::vector<Block> ParseBlocks(const std::wstring &src)
         {
             std::vector<Block> out;
-            const std::vector<std::wstring> lines = SplitLines(src);
+            std::vector<std::wstring> lines = SplitLines(src);
             const size_t N = lines.size();
+            // Nesting of list items follows the indentation actually used (2, 3 or 4 spaces per level all work).
+            std::vector<int> indentStack;
+            auto levelOf = [&](int indent)
+            {
+                while (!indentStack.empty() && indentStack.back() > indent)
+                    indentStack.pop_back();
+                if (indentStack.empty() || indentStack.back() < indent)
+                    indentStack.push_back(indent);
+                return std::min<int>(4, (int)indentStack.size() - 1);
+            };
             std::vector<Span> dummy;
             std::wstring para;
             int paraQ = 0;
@@ -6390,6 +7357,12 @@ namespace ui
                     flushPara();
                     continue;
                 }
+                {
+                    int lv0;
+                    std::wstring mk0, tx0;
+                    if (!ListMarker(rest, lv0, mk0, tx0))
+                        indentStack.clear(); // anything but a list item ends the list
+                }
                 // fenced code
                 if (StartsAt(t, 0, L"```") || StartsAt(t, 0, L"~~~"))
                 {
@@ -6433,13 +7406,14 @@ namespace ui
                     b.type = B_MATH;
                     b.quote = q;
                     size_t j = i;
-                    std::wstring cur = first;
+                    std::wstring cur = first, rem;
                     for (;;)
                     {
                         const size_t e = env ? cur.find(endTag) : cur.find(closer);
                         if (e != std::wstring::npos)
                         {
                             b.text += cur.substr(0, e + (env ? endTag.size() : 0));
+                            rem = cur.substr(e + (env ? endTag.size() : 2)); // what follows the closing delimiter on that line
                             break;
                         }
                         b.text += cur + L'\n';
@@ -6451,6 +7425,15 @@ namespace ui
                         cur = r2;
                     }
                     out.push_back(std::move(b));
+                    if (!Trim(rem).empty() && j < N)
+                    { // "$$x$$ and then more text": the rest of the line is parsed as a line of its own
+                        std::wstring prefix;
+                        for (int k = 0; k < q; ++k)
+                            prefix += L"> ";
+                        lines[j] = prefix + rem;
+                        i = j - 1; // the loop's ++i lands on the remainder (it is shorter than the line it came from)
+                        continue;
+                    }
                     i = std::min(j, N - 1);
                     continue;
                 }
@@ -6528,7 +7511,7 @@ namespace ui
                     flushPara();
                     Block b;
                     b.type = B_LIST;
-                    b.level = lv;
+                    b.level = levelOf(lv);
                     b.quote = q;
                     b.marker = mk;
                     if (StartsAt(tx, 0, L"[ ] "))
@@ -7086,7 +8069,27 @@ namespace ui
         ID_NOTE_COPY,
         ID_NOTE_LINK,
         ID_ALERT_DISMISS,
-        ID_ALERT_SNOOZE
+        ID_ALERT_SNOOZE,
+        ID_ABOUT_ISSUES,
+        ID_ST_TAB,
+        ID_ST_NOTIFMODE,
+        ID_TD_ADD,
+        ID_TD_CHECK,
+        ID_TD_PLUS,
+        ID_TD_TRASH,
+        ID_TD_EDIT,
+        ID_TD_DEL,
+        ID_TD_FILTER,
+        ID_TD_CLEARDONE,
+        ID_TD_ROW,
+        ID_NF_CLEARALL,
+        ID_NF_SETTINGS,
+        ID_NF_GROUP_CLEAR,
+        ID_NF_GROUP_MORE,
+        ID_NF_DISMISS,
+        ID_NF_OPEN,
+        ID_NF_OPENWIN,
+        ID_STACK_TOGGLE
     };
     enum EditSlot
     {
@@ -7099,20 +8102,38 @@ namespace ui
         E_ALABEL,
         E_NTITLE,
         E_NBODY,
+        E_TODO,
         E_COUNT
     };
 
     // Layout grid (DIPs): 16 outer margin, 8 gap between cards, 14 inner card padding.
     static const float kPanelW = 372.f;
-    static const float kPanelH = 488.f; // calendar: last row ends 418, button 436-470, 18 above and below
-    static const float kTabH = 46.f;
+    static const float kCalRow = 44.f;       // height of one week row in the month grid
+    static const float kCalClockRowH = 22.f; // one Windows-style secondary-clock row
+    // Calendar month grid: a narrow week-number column, then seven equal day cells, inside the 16 px side margins.
+    static const float kCalWeekX = 16.f, kCalWeekW = 32.f, kCalGridX = 48.f, kCalCell = 44.f;
+    static const float kPanelH = 488.f;                                                             // calendar: last row ends 418, button 436-470, 18 above and below
+    static const float kTabH = 46.f, kCollapsedH = 46.f;                                            // kCollapsedH: the slim strip the WinKlok panel folds into beside the notifications
+    static const float kTodoDropH = 46.f, kTodoRow = 40.f, kTodoPitch = 44.f, kTodoSectionH = 34.f; // tasks geometry
     static const float kLapRegionTop = 258.f, kLapTop = 292.f, kLapRow = 36.f;
-    static const int kTabs = 6;
-    static const wchar_t *const kTabNames[kTabs] = {L"Calendar", L"Stopwatch", L"Timer", L"Alarm", L"Notes", L"Settings"};
+    // Tab ids are stable (they key the code and the saved "visible tabs" mask); kTabOrder is the order they are shown in.
+    enum TabId
+    {
+        TAB_CAL = 0,
+        TAB_SW,
+        TAB_TIMER,
+        TAB_ALARM,
+        TAB_NOTES,
+        TAB_SETTINGS,
+        TAB_TODO
+    };
+    static const int kTabs = td::kTabCount;
+    static const wchar_t *const kTabNames[kTabs] = {L"Calendar", L"Stopwatch", L"Timer", L"Alarm", L"Notes", L"Settings", L"Tasks"};
+    static const int kTabOrder[kTabs] = {TAB_CAL, TAB_SW, TAB_TIMER, TAB_ALARM, TAB_TODO, TAB_NOTES, TAB_SETTINGS};
+    static bool TabVisible(int id) { return id >= 0 && id < kTabs && ((td::g_set.tabMask.load() >> id) & 1) != 0; }
     static const float kTabAnimMs = 260.f;
-    static const float kGlideMs = 80.f; // scroll glide time constant
+    static const float kGlideMs = 80.f; // scroll glide time constant (mouse wheel, touch, keyboard)
     static const float kWheelPx = 56.f; // pixels per 120-unit wheel notch
-    static const float kFrameMs = 8.f;  // animation timer interval (the display paces the real rate)
     static const float kSlideOpenMs = 250.f, kSlideCloseMs = 210.f;
     static const float kAboutMs = 220.f; // About card expand / collapse
 
@@ -7472,9 +8493,13 @@ namespace ui
 
             static std::wstring Math(const std::wstring &tex, bool display)
             {
-                const std::wstring t = Trim(tex);
+                std::wstring t = Trim(tex);
                 if (t.empty())
                     return L"";
+                if (!display) // the inline parser looks for the closing $ on the same line
+                    for (wchar_t &ch : t)
+                        if (ch == L'\n' || ch == L'\r')
+                            ch = L' ';
                 return display ? L"\n\n$$\n" + t + L"\n$$\n\n" : L"$" + t + L"$";
             }
 
@@ -7758,11 +8783,31 @@ namespace ui
                                 continue;
                             std::wstring txt = Trim(Collapse(Children(c, false, true, depth)));
                             std::wstring flat;
-                            for (wchar_t ch : txt)
+                            // A bar inside $...$ stays a plain bar (the table splitter does not cut inside maths, and \| would
+                            // turn |x| or P(A|B) into a double bar). A "$" opens maths only when a closing "$" follows.
+                            bool inMath = false;
+                            auto opensDollar = [&](size_t at)
                             {
+                                if (at + 1 >= txt.size() || iswspace(txt[at + 1]) || txt[at + 1] == L'$')
+                                    return false;
+                                for (size_t e = at + 1; (e = txt.find(L'$', e)) != std::wstring::npos; ++e)
+                                    if (!iswspace(txt[e - 1]) && txt[e - 1] != L'\\')
+                                        return true;
+                                return false;
+                            };
+                            for (size_t ci = 0; ci < txt.size(); ++ci)
+                            {
+                                const wchar_t ch = txt[ci];
+                                if (ch == L'$' && (ci == 0 || txt[ci - 1] != L'\\'))
+                                {
+                                    if (inMath)
+                                        inMath = false;
+                                    else if (opensDollar(ci))
+                                        inMath = true;
+                                }
                                 if (ch == L'\n')
                                     flat += L' ';
-                                else if (ch == L'|')
+                                else if (ch == L'|' && !inMath)
                                     flat += L"\\|";
                                 else
                                     flat += ch;
@@ -7927,19 +8972,23 @@ namespace ui
                 return false;
             std::string html;
             std::wstring plain;
+            constexpr size_t kMaxClipboardHtmlBytes = 8 * 1024 * 1024;
+            constexpr size_t kMaxClipboardTextChars = 40000; // matches the note editor's EM_LIMITTEXT
             if (IsClipboardFormatAvailable(fmtHtml))
                 if (HANDLE h = GetClipboardData(fmtHtml))
                     if (const char *p = (const char *)GlobalLock(h))
                     {
                         const size_t sz = GlobalSize(h);
-                        html.assign(p, strnlen(p, sz));
+                        if (sz > 0 && sz <= kMaxClipboardHtmlBytes)
+                            html.assign(p, strnlen(p, sz));
                         GlobalUnlock(h);
                     }
             if (IsClipboardFormatAvailable(CF_UNICODETEXT))
                 if (HANDLE h = GetClipboardData(CF_UNICODETEXT))
                     if (const wchar_t *p = (const wchar_t *)GlobalLock(h))
                     {
-                        plain.assign(p, wcsnlen(p, GlobalSize(h) / sizeof(wchar_t)));
+                        const size_t chars = std::min(GlobalSize(h) / sizeof(wchar_t), kMaxClipboardTextChars);
+                        plain.assign(p, wcsnlen(p, chars));
                         GlobalUnlock(h);
                     }
             CloseClipboard();
@@ -8096,7 +9145,7 @@ namespace ui
             bool cancelled = false;
             const bool launched = W32TimeRunning()
                                       ? RunElevated(L"w32tm.exe", L"/resync /force", 20000, ec, cancelled)
-                                      : RunElevated(L"cmd.exe", L"/c net start w32time & w32tm /resync /force", 30000, ec, cancelled);
+                                      : RunElevated(L"cmd.exe", L"/c %SystemRoot%\\System32\\net.exe start w32time & %SystemRoot%\\System32\\w32tm.exe /resync /force", 30000, ec, cancelled);
             if (!launched)
                 result = cancelled ? SYNC_CANCELLED : SYNC_FAILED;
             else
@@ -8130,12 +9179,447 @@ namespace ui
     static LRESULT CALLBACK BodyEditProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR dwRefData); // defined after g_panel
 
     // ---------------------------------------------------------------------------------------------
-    class PanelWindow : public UiWindow
+    //  FlyoutWindow: what the main panel and the notification panel share. The material (acrylic / simple / opaque),
+    //  the slide up from behind the taskbar and the slide back down. The panel slides out from *behind* the taskbar
+    //  (z-order below it) instead of being cut by a window region over it: regions on a DWM-backdrop window flashed a
+    //  grey/white strip over the taskbar and dropped the acrylic.
+    // ---------------------------------------------------------------------------------------------
+    class FlyoutWindow : public UiWindow
+    {
+    public:
+        int panelWorkBottom = 0; // physical px: the line the slide is clipped at (top of the taskbar, or of the band it reserves)
+        bool slideClipped = false;
+        HWND slideTaskbar = nullptr;
+        int slideClipY = 0; // physical px: the flyout is cut at this line (top edge of the taskbar)
+        bool slideUnder = false;
+        // Stacked mode slides in from the right screen edge instead of up from the taskbar.
+        bool slideHorizontal = false;
+        int slideClipX = 0; // physical px: right edge of the monitor, the line a horizontal slide is cut at
+        int panelAnimationStartX = 0, panelAnimationEndX = 0;
+        bool activateAfterOpen = false;
+        bool syncFollower = false; // animation is stepped by another flyout's timer (stacked mode)
+        bool slideUseClip = true;  // a horizontal slide only needs the region clip when another monitor lies to the right
+        // Stacked open: the first window stays cloaked (composed by DWM but invisible, shadow included) until the second is
+        // ready, and both are revealed in the same instant. Otherwise the first sat at the screen edge, shadow and all,
+        // while the other was still being prepared.
+        bool holdCloak = false, cloakHeld = false;
+        bool finishPending = false, finishOpening = false;
+        bool noActMode = false;
+        int compMode = 0; // 0 opaque, 1 simple transparency, 2 acrylic
+        BYTE restingAlpha = 255;
+
+        enum class PanelAnimationState
+        {
+            Idle,
+            Opening,
+            Closing
+        };
+        PanelAnimationState panelAnimation = PanelAnimationState::Idle;
+        ULONGLONG panelAnimationStarted = 0;
+        int panelAnimationX = 0, panelAnimationWidth = 0, panelAnimationHeight = 0, panelAnimationStartY = 0, panelAnimationEndY = 0;
+        float startFade = 0.f, endFade = 1.f, currentFade = 1.f;
+
+        // Hooks for the derived flyouts.
+        virtual void OnCloseBegin() {}
+        virtual void OnHidden() {}                          // the close animation has finished and the window is hidden
+        virtual void OnMaterialApplied(bool /*acrylic*/) {} // palette / composition changed
+        virtual HWND ZAnchor() { return nullptr; }          // a window to stay directly below while sliding (default: taskbar / topmost)
+        bool DeferDpiChange() const override { return slideHorizontal && panelAnimation != PanelAnimationState::Idle; }
+
+        bool IsOpen() const { return hwnd && IsWindowVisible(hwnd) && panelAnimation != PanelAnimationState::Closing; }
+
+        // Picks palette + panel material from the Windows transparency setting and the Settings > Panel material choice.
+        void ApplyComposition()
+        {
+            const bool trans = TransparencyEffectsEnabled();
+            const bool acrylic = trans && td::g_set.acrylic.load() != 0;
+            compMode = acrylic ? 2 : trans ? 1
+                                           : 0;
+            grayText = compMode != 0;
+            if (rt)
+                rt->SetTextAntialiasMode(grayText ? D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE : D2D1_TEXT_ANTIALIAS_MODE_DEFAULT);
+            pal = LoadPalette(acrylic);
+            if (alphaTarget != acrylic)
+            {
+                alphaTarget = acrylic;
+                ReleaseTarget();
+            }
+            DwmStyle(hwnd, pal);
+            restingAlpha = ConfigureComposition(hwnd, pal, compMode);
+            OnMaterialApplied(acrylic);
+            SetPanelFade(currentFade);
+        }
+
+        // ---------------------------------------------------------------- open / close animation
+        // Opacity of the panel. Normally always 1: the open/close animation is a slide, not a fade.
+        void SetPanelFade(float a)
+        {
+            currentFade = a;
+            if (alphaTarget)
+            {
+                masterOpacity = Clamp01(a);
+                Invalidate();
+            }
+            else
+            {
+                masterOpacity = 1.f;
+                if (hwnd)
+                    SetLayeredWindowAttributes(hwnd, 0, (BYTE)std::lround((float)restingAlpha * Clamp01(a)), LWA_ALPHA);
+            }
+        }
+
+        // The panel slides up from behind the taskbar and back down again, exactly like the native flyouts.
+        // There is deliberately no opacity fade: fading the painted surface over a system-owned acrylic
+        // backdrop is what made the panel look whitish for the first and last instants.
+        // While sliding, the window is clipped at the top edge of the taskbar with a window region
+        // (rounded at the top, flat at the taskbar line); the region is removed once fully visible.
+        void ApplySlideClip(int top) // top edge of a vertical slide, left edge of a horizontal one
+        {
+            if (!hwnd)
+                return;
+            const int w = panelAnimationWidth, h = panelAnimationHeight;
+            const int clipY = slideHorizontal ? slideClipX : (slideClipY > 0 ? slideClipY : panelWorkBottom);
+            const int vis = clipY - top; // horizontal slide: `top` is the left edge and `vis` the visible width
+            if (clipY <= 0 || vis >= (slideHorizontal ? w : h) || (slideHorizontal && !slideUseClip))
+            {
+                if (slideClipped && SetWindowRgn(hwnd, nullptr, TRUE))
+                    slideClipped = false;
+                return;
+            }
+            const int r = (int)std::lround(8.f * Scale()) * 2;
+            HRGN full = CreateRoundRectRgn(0, 0, w + 1, h + 1, r, r);
+            if (!full)
+                return;
+            // Never an empty region: DWM stops tracking a window with nothing visible, and a system backdrop (acrylic)
+            // set up in that state comes back flat. A thin sliver always stays visible instead.
+            HRGN cut = slideHorizontal ? CreateRectRgn(0, 0, std::max(1, vis), h + 1) : CreateRectRgn(0, 0, w + 1, std::max(1, vis));
+            if (!cut)
+            {
+                DeleteObject(full);
+                return;
+            }
+            if (CombineRgn(full, full, cut, RGN_AND) == ERROR)
+            {
+                DeleteObject(cut);
+                DeleteObject(full);
+                return;
+            }
+            DeleteObject(cut);
+            if (!SetWindowRgn(hwnd, full, TRUE))
+            { // on failure, ownership stays with us; retain the previous region and state
+                DeleteObject(full);
+                return;
+            }
+            slideClipped = true; // the system owns `full`; redraw each newly exposed strip
+        }
+
+        // Finds the bottom-docked taskbar of the monitor. The panel is kept just below it in z-order while sliding, so
+        // a frame of region lag can never paint over the bar. Returns false for a non-bottom or auto-hidden bar.
+        bool FindSlideTaskbar(HMONITOR mon, const MONITORINFO &mi)
+        {
+            slideTaskbar = nullptr;
+            slideUnder = false;
+            slideClipY = 0;
+            const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+            auto consider = [&](HWND t)
+            {
+                RECT r{};
+                if (!t || slideTaskbar || !IsWindowVisible(t) || !GetWindowRect(t, &r))
+                    return;
+                if (MonitorFromWindow(t, MONITOR_DEFAULTTONULL) != mon)
+                    return;
+                const int th = r.bottom - r.top;
+                if (th < 24 || r.top < mi.rcMonitor.top + monH / 2 || r.top > mi.rcMonitor.bottom - 16 ||
+                    r.bottom < mi.rcMonitor.bottom - 2 || (r.right - r.left) < monW / 2)
+                    return;
+                slideTaskbar = t;
+                slideClipY = r.top; // the panel is cut exactly at the top edge of the bar
+            };
+            consider(FindWindowW(L"Shell_TrayWnd", nullptr));
+            for (HWND t = nullptr; !slideTaskbar && (t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr));)
+                consider(t);
+            slideUnder = slideTaskbar != nullptr;
+            if (!slideUnder)
+                slideClipY = panelWorkBottom;
+            return slideUnder;
+        }
+
+        // Where a flyout rests in the z-order: topmost, or directly below its anchor (the stacked card sits below the panel,
+        // so neither window's shadow ever falls over the other).
+        HWND RestingZ()
+        {
+            HWND anchor = ZAnchor();
+            return (anchor && IsWindow(anchor) && IsWindowVisible(anchor)) ? anchor : HWND_TOPMOST;
+        }
+        HWND SlideZ()
+        {
+            HWND anchor = ZAnchor();
+            if (anchor && IsWindow(anchor) && IsWindowVisible(anchor))
+                return anchor;
+            if (slideUnder && !IsWindow(slideTaskbar))
+                slideUnder = false;
+            return slideUnder ? slideTaskbar : HWND_TOPMOST;
+        }
+
+        int SlideHiddenX() const { return slideClipX - std::max(2, (int)std::lround(3.f * Scale())); }
+
+        // A visible-but-nearly-fully-clipped window is the resting line of the slide: a few pixels stay visible so DWM
+        // keeps the window (and its acrylic) alive.
+        int SlideHiddenY() const
+        {
+            const int clipY = slideClipY > 0 ? slideClipY : panelWorkBottom;
+            return clipY - std::max(2, (int)std::lround(3.f * Scale()));
+        }
+
+        // The same sequence as switching the panel material to Simple and back to Acrylic in Settings, which is the
+        // one thing that reliably produced a live acrylic panel.
+        void WarmUpMaterial()
+        {
+            if (!hwnd)
+                return;
+            alphaTarget = false;
+            ReleaseTarget();
+            restingAlpha = ConfigureComposition(hwnd, pal, 1);
+            SetPanelFade(1.f);
+            Render();
+            DwmFlush();
+            alphaTarget = true;
+            ReleaseTarget();
+            restingAlpha = ConfigureComposition(hwnd, pal, 2);
+            SetPanelFade(1.f);
+            Render();
+            RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
+            DwmFlush();
+            DwmFlush();
+        }
+
+        void BeginOpenAnimation(int x, int y, int w, int h, bool noAct)
+        {
+            if (!hwnd)
+                return;
+            StopFrames(hwnd, TIMER_PANEL_ANIM);
+            const bool wasVisible = IsWindowVisible(hwnd) != FALSE;
+            int startY = SlideHiddenY(), startX = SlideHiddenX();
+            if (wasVisible && panelAnimation == PanelAnimationState::Closing)
+            { // re-opened while sliding away: continue from where it is
+                RECT cur{};
+                GetWindowRect(hwnd, &cur);
+                startY = cur.top;
+                startX = cur.left;
+            }
+
+            // Resize and render while hidden, before applying the slide clip. This primes the
+            // Direct2D surface at its final size so the first visible frame never exposes a blank backdrop.
+            if (!wasVisible)
+            {
+                SetWindowPos(hwnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+                restingAlpha = ConfigureComposition(hwnd, pal, compMode);
+                Render();
+                RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
+            }
+
+            panelAnimation = PanelAnimationState::Opening;
+            panelAnimationX = x;
+            panelAnimationWidth = w;
+            panelAnimationHeight = h;
+            panelAnimationStartY = slideHorizontal ? y : startY;
+            panelAnimationEndY = y;
+            panelAnimationStartX = slideHorizontal ? startX : x;
+            panelAnimationEndX = x;
+            startFade = endFade = 1.f;
+            SetPanelFade(1.f);
+            ApplySlideClip(slideHorizontal ? startX : startY); // only a thin sliver is visible
+            // Beneath the taskbar in z-order and not activated yet: activating a topmost window would lift it over
+            // the taskbar. It is activated once the slide has finished.
+            activateAfterOpen = slideUnder && !noAct;
+            // The acrylic backdrop only ever came up correctly when the material was switched on a window DWM was
+            // already composing (Settings > Simple > Acrylic). Hiding the panel drops that state, so every open
+            // replays exactly that switch. The window is cloaked meanwhile: composed by DWM, never seen.
+            const bool warm = !wasVisible && compMode == 2;
+            const bool hold = holdCloak && !wasVisible;
+            bool cloaked = false;
+            if (warm || hold)
+            {
+                const BOOL on = TRUE; // DWMWA_CLOAK
+                cloaked = SUCCEEDED(DwmSetWindowAttribute(hwnd, 13, &on, sizeof(on)));
+            }
+            SetWindowPos(hwnd, SlideZ(), slideHorizontal ? startX : x, slideHorizontal ? y : startY, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+            if (warm)
+                WarmUpMaterial();
+            if (cloaked && hold)
+                cloakHeld = true; // revealed by ReleaseCloak() once the whole stack is ready
+            else if (cloaked)
+            {
+                const BOOL off = FALSE;
+                DwmSetWindowAttribute(hwnd, 13, &off, sizeof(off));
+            }
+            restingAlpha = ConfigureComposition(hwnd, pal, compMode);
+            SetPanelFade(1.f);
+            Render();
+            RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
+            DwmFlush();
+            panelAnimationStarted = MonoMs();
+            StartFrames(hwnd, TIMER_PANEL_ANIM);
+            if (!noAct && !slideUnder)
+                SetForegroundWindow(hwnd);
+        }
+
+        void ReleaseCloak()
+        {
+            if (!cloakHeld || !hwnd)
+                return;
+            cloakHeld = false;
+            const BOOL off = FALSE;
+            DwmSetWindowAttribute(hwnd, 13, &off, sizeof(off));
+        }
+
+        void BeginCloseAnimation()
+        {
+            OnCloseBegin();
+            if (!hwnd || !IsWindowVisible(hwnd))
+            {
+                noActMode = false;
+                return;
+            }
+            if (panelAnimation == PanelAnimationState::Closing)
+                return;
+            StopFrames(hwnd, TIMER_PANEL_ANIM);
+            RECT r{};
+            GetWindowRect(hwnd, &r);
+            panelAnimation = PanelAnimationState::Closing;
+            panelAnimationStarted = MonoMs();
+            panelAnimationX = r.left;
+            panelAnimationWidth = r.right - r.left;
+            panelAnimationHeight = r.bottom - r.top;
+            panelAnimationStartY = r.top;
+            panelAnimationEndY = std::max(SlideHiddenY(), (int)r.top);
+            panelAnimationStartX = r.left;
+            panelAnimationEndX = std::max(SlideHiddenX(), (int)r.left);
+            if (slideHorizontal)
+                panelAnimationEndY = r.top; // slides to the right, level
+            if (slideUnder)                 // sink beneath the taskbar first (no visible change: the panel rests above the bar)
+                SetWindowPos(hwnd, slideTaskbar, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            activateAfterOpen = false;
+            startFade = endFade = 1.f;
+            noActMode = false;
+            StartFrames(hwnd, TIMER_PANEL_ANIM);
+        }
+
+        // One animation step of the window. Inside a batch (stacked mode) the move is queued so the panel and the card
+        // above it reach the compositor in the same frame.
+        void MoveFlyout(HWND z, int x, int y, int w, int h)
+        {
+            const UINT flags = SWP_NOACTIVATE | SWP_NOSENDCHANGING;
+            if (g_moveBatch)
+            {
+                if (HDWP next = DeferWindowPos(g_moveBatch, hwnd, z, x, y, w, h, flags))
+                {
+                    g_moveBatch = next;
+                    return;
+                }
+                g_moveBatch = nullptr; // the batch is gone: carry on with plain moves
+            }
+            SetWindowPos(hwnd, z, x, y, w, h, flags);
+        }
+
+        // flush: wait for the compositor first. A stacked card driven by the panel's timer passes false, so one
+        // tick (one DwmFlush) moves both windows by exactly the same amount.
+        void AdvancePanelAnimation(bool flush = false, bool deferFinish = false)
+        {
+            if (!hwnd || panelAnimation == PanelAnimationState::Idle)
+            {
+                if (hwnd)
+                    StopFrames(hwnd, TIMER_PANEL_ANIM);
+                return;
+            }
+            const bool opening = panelAnimation == PanelAnimationState::Opening;
+            if (flush)
+                DwmFlush(); // step in time with the compositor so the motion is even
+            const float t = Clamp01((float)(MonoMsD() - (double)panelAnimationStarted) / (opening ? kSlideOpenMs : kSlideCloseMs));
+            const float eased = opening ? EaseOutQuart(t) : EaseInCubic(t);
+            const int y = panelAnimationStartY + (int)std::lround((panelAnimationEndY - panelAnimationStartY) * eased);
+            const int x = slideHorizontal ? panelAnimationStartX + (int)std::lround((panelAnimationEndX - panelAnimationStartX) * eased) : panelAnimationX;
+            const int along = slideHorizontal ? x : y; // the coordinate the slide moves along
+            HWND z = SlideZ();
+            if (opening)
+            { // moving in: widen the visible part after the move, never before it
+                MoveFlyout(z, x, y, panelAnimationWidth, panelAnimationHeight);
+                ApplySlideClip(along);
+            }
+            else
+            { // moving away: shrink the visible part before the move
+                ApplySlideClip(along);
+                MoveFlyout(z, x, y, panelAnimationWidth, panelAnimationHeight);
+            }
+            if (t >= 1.f)
+            {
+                StopFrames(hwnd, TIMER_PANEL_ANIM);
+                panelAnimation = PanelAnimationState::Idle;
+                finishOpening = opening;
+                if (deferFinish)
+                    finishPending = true; // stacked: both windows get to their final place first, then both finish
+                else
+                    FinishAnimation();
+            }
+        }
+
+        // The heavy end of a slide (hide, or re-render at rest). Never runs between the two moves of a stacked pair.
+        void FinishAnimation()
+        {
+            finishPending = false;
+            const bool opening = finishOpening;
+            {
+                if (!opening)
+                {
+                    ShowWindow(hwnd, SW_HIDE);
+                    if (slideClipped)
+                    {
+                        SetWindowRgn(hwnd, nullptr, TRUE);
+                        slideClipped = false;
+                    }
+                    SetPanelFade(1.f);
+                    OnHidden();
+                }
+                else
+                {
+                    SetPanelFade(1.f);
+                    ApplySlideClip(slideHorizontal ? panelAnimationEndX : panelAnimationEndY); // fully visible: removes the region
+                    SetWindowPos(hwnd, RestingZ(), slideHorizontal ? panelAnimationEndX : panelAnimationX, panelAnimationEndY, panelAnimationWidth,
+                                 panelAnimationHeight, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                    if (activateAfterOpen)
+                    { // now clear of the taskbar: safe to take the foreground (and the top of the topmost band)
+                        activateAfterOpen = false;
+                        SetForegroundWindow(hwnd);
+                    }
+                    restingAlpha = ConfigureComposition(hwnd, pal, compMode);
+                    Render();
+                    RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
+                    DwmFlush();
+                }
+            }
+        }
+    };
+
+    // The notification panel (defined after the main panel): opened above the panel, or on its own.
+    static void NotifOpenStacked(HMONITOR mon, const MONITORINFO &mi, int panelX, int panelY, int panelW, int bandTop, bool noAct);
+    static void NotifCloseStacked();                                  // a stacked notification card goes away together with the panel
+    static void NotifCloseStandalone();                               // the panel takes over from a standalone notification panel
+    static void ToggleNotifications();                                // the taskbar bell
+    static void NotifFollowStack(int panelX, int panelY, int panelW); // the card above follows a resizing panel
+    static void StepStackedFlyouts(FlyoutWindow &panel);              // one slide step for the panel and a stacked card together
+
+    // ---------------------------------------------------------------------------------------------
+    class PanelWindow : public FlyoutWindow
     {
     public:
         int tab = 0;
         int calView = 0, calYear = 2025, calMonth = 1, calSelY = 0, calSelM = 0, calSelD = 0, yearBase = 2020;
-        float panelH = kPanelH; // fixed for a given monitor; never follows the selected tab
+        std::vector<AdditionalClock> additionalClocks; // read-only snapshot of the two Windows secondary clocks
+        float panelH = kPanelH;                        // fixed for a given monitor; never follows the selected tab
+        float CalendarClockOffset() const { return (float)additionalClocks.size() * kCalClockRowH; }
+        // Height of the strip the panel folds into beside the notifications: the date row, plus the Windows additional
+        // clocks under it (as the native flyout keeps them when its calendar is collapsed).
+        float CollapsedH() const { return kCollapsedH + (additionalClocks.empty() ? 0.f : CalendarClockOffset() + 4.f); }
         // panelScroll is the visible position; panelScrollTarget is where it is gliding to.
         // panelScrollStarted != 0 marks "gliding".
         float panelScroll = 0.f, panelScrollFrom = 0.f, panelScrollTarget = 0.f;
@@ -8150,30 +9634,11 @@ namespace ui
         ULONGLONG panLastTick = 0;
         bool timerPeriodActive = false;
         std::vector<std::wstring> noteLinks; // link targets of the preview hit areas (rebuilt every paint)
-        int panelWorkBottom = 0;             // physical px: bottom edge of the work area (top of the taskbar), clip line of the slide
-        bool slideClipped = false;
-        // The panel slides out from *behind* the taskbar (z-order below it) instead of being cut by a window region:
-        // regions on a DWM-backdrop window flashed a grey/white strip over the taskbar and dropped the acrylic.
-        HWND slideTaskbar = nullptr;
-        int slideClipY = 0; // physical px: the panel is cut at this line (top edge of the taskbar)
-        bool slideUnder = false;
-        bool activateAfterOpen = false;
         // settings: About card
         bool aboutOpen = false;
         Anim aboutA;
-        float settingsAboutTop = 852.f; // y of the About card (kept in step with PaintSettings)
+        float settingsAboutTop = 854.f; // y of the About card (kept in step with PaintSettings)
         bool syncBusy = false;
-
-        enum class PanelAnimationState
-        {
-            Idle,
-            Opening,
-            Closing
-        };
-        PanelAnimationState panelAnimation = PanelAnimationState::Idle;
-        ULONGLONG panelAnimationStarted = 0;
-        int panelAnimationX = 0, panelAnimationWidth = 0, panelAnimationHeight = 0, panelAnimationStartY = 0, panelAnimationEndY = 0;
-        float startFade = 0.f, endFade = 1.f, currentFade = 1.f;
 
         ULONGLONG contentTransitionStarted = 0, statusStarted = 0, statusUntil = 0, shownAt = 0;
         bool statusTimerActive = false;
@@ -8210,9 +9675,7 @@ namespace ui
         RECT editLast[E_COUNT] = {};
         HFONT fontBig = nullptr, fontNorm = nullptr, fontTitle = nullptr, fontBody = nullptr;
         HBRUSH editBrush = nullptr;
-        bool noActMode = false;
-        int tickCount = 0, compMode = 0;
-        BYTE restingAlpha = 255;
+        int tickCount = 0;
 
         ~PanelWindow() override
         {
@@ -8247,6 +9710,8 @@ namespace ui
                 }
                 if (i == E_NTITLE)
                     limit = 120;
+                if (i == E_TODO)
+                    limit = 200;
                 if (i == E_NBODY)
                 {
                     style = WS_CHILD | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN;
@@ -8265,20 +9730,14 @@ namespace ui
             SendMessageW(edits[E_TNAME], 0x1501 /*EM_SETCUEBANNER*/, TRUE, (LPARAM)L"Timer name (optional)");
             SendMessageW(edits[E_ALABEL], 0x1501, TRUE, (LPARAM)L"Alarm name (optional)");
             SendMessageW(edits[E_NTITLE], 0x1501, TRUE, (LPARAM)L"Title");
+            SendMessageW(edits[E_TODO], 0x1501, TRUE, (LPARAM)L"Add a task");
             SetWindowTextW(edits[E_TH], L"00");
             SetWindowTextW(edits[E_TM], L"05");
             SetWindowTextW(edits[E_TS], L"00");
             LoadNotes();
+            LoadTodos();
 
-            const float pad = 30.f; // text width + horizontal padding per tab; wider than the panel => scrollable
-            float x = 6.f;
-            for (int i = 0; i < kTabs; ++i)
-            {
-                tabX[i] = x;
-                tabW[i] = std::max(64.f, MeasureText(kTabNames[i], 12.5f, 600) + pad);
-                x += tabW[i];
-            }
-            tabTotal = x + 6.f;
+            LayoutTabs();
             ApplyComposition();
             InitTabAnim();
             // Required for Windows to send PT_TOUCHPAD events to this panel. The active handler tracks
@@ -8292,26 +9751,10 @@ namespace ui
             return true;
         }
 
-        // Picks palette + panel material from the Windows transparency setting and the Settings > Panel material choice.
-        void ApplyComposition()
+        // GDI never writes alpha, so on the per-pixel-alpha acrylic surface native edit controls would turn
+        // into see-through boxes. Layered children are composited as fully opaque instead.
+        void OnMaterialApplied(bool acrylic) override
         {
-            const bool trans = TransparencyEffectsEnabled();
-            const bool acrylic = trans && td::g_set.acrylic.load() != 0;
-            compMode = acrylic ? 2 : trans ? 1
-                                           : 0;
-            grayText = compMode != 0;
-            if (rt)
-                rt->SetTextAntialiasMode(grayText ? D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE : D2D1_TEXT_ANTIALIAS_MODE_DEFAULT);
-            pal = LoadPalette(acrylic);
-            if (alphaTarget != acrylic)
-            {
-                alphaTarget = acrylic;
-                ReleaseTarget();
-            }
-            DwmStyle(hwnd, pal);
-            restingAlpha = ConfigureComposition(hwnd, pal, compMode);
-            // GDI never writes alpha, so on the per-pixel-alpha acrylic surface native edit controls would turn
-            // into see-through boxes. Layered children are composited as fully opaque instead.
             for (int i = 0; i < E_COUNT; ++i)
             {
                 if (!edits[i])
@@ -8326,8 +9769,30 @@ namespace ui
                 else if (ex & WS_EX_LAYERED)
                     SetWindowLongPtrW(edits[i], GWL_EXSTYLE, ex & ~(LONG_PTR)WS_EX_LAYERED);
             }
-            SetPanelFade(currentFade);
             RebuildGdi();
+        }
+
+        void OnCloseBegin() override
+        {
+            StopTouchpadFling();
+            StopFrames(hwnd, TIMER_STACK_ANIM);
+        }
+        void OnHidden() override
+        {
+            stackMode = false;
+            if (!IsWindowVisible(g_notifWnd.load()))
+                RemoveWheelHook();
+            ReleaseTouchpadCapability(); // hidden: give the touchpad routing back
+            EndTimerPeriod();
+        }
+
+        void EndTimerPeriod()
+        {
+            if (timerPeriodActive)
+            {
+                timeEndPeriod(1);
+                timerPeriodActive = false;
+            }
         }
 
         void RebuildGdi()
@@ -8436,7 +9901,7 @@ namespace ui
         void SaveNoteData(const Note &n)
         {
             const std::wstring v = std::to_wstring(n.modified) + L"|" + td::Esc(n.title) + L"|" + td::Esc(n.body);
-            Wh_SetStringValue(NoteKey(n.id).c_str(), v.c_str());
+            td::PutBig(NoteKey(n.id).c_str(), v);
         }
         void SortNotes()
         {
@@ -8457,12 +9922,9 @@ namespace ui
                     const int id = (int)td::ToLL(tok, 0);
                     if (id <= 0)
                         continue;
-                    const size_t m = Wh_GetStringValue(NoteKey(id).c_str(), buf.data(), buf.size());
-                    if (m == 0 || m >= buf.size())
-                        continue;
-                    const auto f = td::Split(std::wstring(buf.data(), m), L'|');
-                    if (f.size() < 3)
-                        continue;
+                    const std::wstring v = td::GetBig(NoteKey(id).c_str());
+                    const auto f = td::Split(v, L'|');
+                    if (v.empty() || f.size() < 3) continue;
                     Note note;
                     note.id = id;
                     note.modified = td::ToLL(f[0]);
@@ -8505,7 +9967,7 @@ namespace ui
         {
             panelScroll = panelScrollFrom = panelScrollTarget = 0.f;
             panelScrollStarted = 0;
-            KillTimer(hwnd, TIMER_SCROLL_ANIM);
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
             edSm.Jump(0.f);
             prevSm.Jump(0.f);
             StartContentTransition();
@@ -8565,7 +10027,8 @@ namespace ui
             notes.erase(std::remove_if(notes.begin(), notes.end(), [&](const Note &n)
                                        { return n.id == id; }),
                         notes.end());
-            Wh_DeleteValue(NoteKey(id).c_str());
+            td::PutBig(NoteKey(id).c_str(), L"");
+            Wh_DeleteValue((NoteKey(id) + L"_n").c_str());
             SaveIndex();
             if (curNote == id)
             {
@@ -8614,21 +10077,61 @@ namespace ui
         void SetStatus(const std::wstring &s)
         {
             statusMsg = s;
-            statusStarted = GetTickCount64();
+            statusStarted = MonoMs();
             statusUntil = statusStarted + 4000;
             if (hwnd)
-                SetTimer(hwnd, TIMER_STATUS_ANIM, 15, nullptr);
+                StartFrames(hwnd, TIMER_STATUS_ANIM);
             statusTimerActive = true;
             ResizePanelToContent();
             Invalidate();
         }
 
         // -------------------------- tab bar geometry ---------------------
-        float TabMax() const { return std::max(0.f, tabTotal - kPanelW); }
+        // Positions of the visible tabs, in display order (hidden tabs take no room). Indexed by tab id.
+        void LayoutTabs()
+        {
+            const float pad = 30.f; // text width + horizontal padding per tab; wider than the panel => scrollable
+            float x = 6.f;
+            for (int i = 0; i < kTabs; ++i)
+                tabX[i] = tabW[i] = 0.f;
+            for (int n = 0; n < kTabs; ++n)
+            {
+                const int id = kTabOrder[n];
+                if (!TabVisible(id))
+                    continue;
+                tabX[id] = x;
+                tabW[id] = std::max(64.f, MeasureText(kTabNames[id], 12.5f, 600) + pad);
+                x += tabW[id];
+            }
+            tabTotal = x + 6.f;
+            if (!TabVisible(tab)) // the remembered tab was hidden: fall back to the first shown one
+                for (int n = 0; n < kTabs; ++n)
+                    if (TabVisible(kTabOrder[n]))
+                    {
+                        tab = kTabOrder[n];
+                        break;
+                    }
+        }
+        // Settings > Tabs: show or hide one tab (Settings itself always stays).
+        void ToggleTabVisible(int id)
+        {
+            if (id < 0 || id >= kTabs || id == TAB_SETTINGS)
+                return;
+            td::g_set.tabMask = td::g_set.tabMask.load() ^ (1 << id);
+            td::g_set.Save();
+            LayoutTabs();
+            if (!TabVisible(tab))
+                tab = TAB_SETTINGS;
+            InitTabAnim();
+            Invalidate();
+        }
+        // Stacked mode gives the right end of the tab bar to the collapse chevron.
+        float TabBarW() const { return kPanelW - (stackMode ? 36.f : 0.f); }
+        float TabMax() const { return std::max(0.f, tabTotal - TabBarW()); }
         float TabScrollNow() const { return std::min(TabMax(), std::max(0.f, tabScrollA.Value(kTabAnimMs, true))); }
         float CenterScroll(int i) const
         {
-            return std::min(TabMax(), std::max(0.f, tabX[i] + tabW[i] / 2 - kPanelW / 2));
+            return std::min(TabMax(), std::max(0.f, tabX[i] + tabW[i] / 2 - TabBarW() / 2));
         }
         void InitTabAnim()
         {
@@ -8636,17 +10139,19 @@ namespace ui
             indWA.Set(tabW[tab] * 0.5f);
             tabScrollA.Set(CenterScroll(tab));
             if (hwnd)
-                KillTimer(hwnd, TIMER_TAB_ANIM);
+                StopFrames(hwnd, TIMER_TAB_ANIM);
         }
         void StartTabTimer()
         {
             if (hwnd)
-                SetTimer(hwnd, TIMER_TAB_ANIM, 15, nullptr);
+                StartFrames(hwnd, TIMER_TAB_ANIM);
         }
 
         // Selecting a tab slides the bar so the tab sits in the middle and its neighbours are revealed.
         void SelectTab(int i)
         {
+            if (!TabVisible(i))
+                return;
             const float cs = TabScrollNow(), cx = indXA.Value(kTabAnimMs, false), cw = indWA.Value(kTabAnimMs, false);
             const bool changed = i != tab;
             tab = i;
@@ -8664,7 +10169,7 @@ namespace ui
             panelScrollStarted = 0;
             lapSm.Jump(0.f);
             CalResetSlide();
-            KillTimer(hwnd, TIMER_SCROLL_ANIM);
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
             StartContentTransition();
             ResizePanelToContent();
         }
@@ -8708,7 +10213,7 @@ namespace ui
             switch (tab)
             {
             case 0:
-                return 470.f + 16.f; // calendar: Today button bottom + bottom padding
+                return 470.f + 16.f + CalendarClockOffset(); // calendar: Today button + secondary-clock rows + bottom padding
             case 2:
             {
                 float y = LayoutPresets(nullptr, nullptr, 228.f) + 32.f + 40.f + 18.f;
@@ -8724,7 +10229,9 @@ namespace ui
                 if (noteView == 0)
                     return notes.empty() ? panelH : 92.f + (float)notes.size() * 60.f + 8.f;
                 return panelH;
-            case 5:
+            case TAB_TODO:
+                return std::max(panelH, TodoBottom() + 10.f);
+            case TAB_SETTINGS:
                 return settingsAboutTop + AboutHeight() + 18.f; // settings stack, About card last
             default:
                 return panelH;
@@ -8746,7 +10253,7 @@ namespace ui
 
         float ContentTransitionProgress() const
         {
-            return contentTransitionStarted ? EaseOutCubic((float)(GetTickCount64() - contentTransitionStarted) / 225.f) : 1.f;
+            return contentTransitionStarted ? EaseOutCubic((float)(MonoMs() - contentTransitionStarted) / 225.f) : 1.f;
         }
         float ContentTransitionOffset() const { return contentTransitionStarted ? 9.f * (1.f - ContentTransitionProgress()) : 0.f; }
         float ContentTransitionOpacity() const { return 0.22f + 0.78f * ContentTransitionProgress(); } // never a blank flash
@@ -8755,16 +10262,16 @@ namespace ui
         {
             if (statusMsg.empty())
                 return 0.f;
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             return std::min(EaseOutCubic((float)(now - statusStarted) / 170.f),
                             Clamp01((float)(statusUntil > now ? statusUntil - now : 0) / 190.f));
         }
 
         void StartContentTransition()
         {
-            contentTransitionStarted = GetTickCount64();
+            contentTransitionStarted = MonoMs();
             if (hwnd)
-                SetTimer(hwnd, TIMER_CONTENT_ANIM, 15, nullptr);
+                StartFrames(hwnd, TIMER_CONTENT_ANIM);
             Invalidate();
         }
 
@@ -8774,7 +10281,7 @@ namespace ui
         void KickScroll()
         {
             if (hwnd)
-                SetTimer(hwnd, TIMER_SCROLL_ANIM, (UINT)kFrameMs, nullptr);
+                StartFrames(hwnd, TIMER_SCROLL_ANIM);
             Invalidate();
         }
 
@@ -8787,7 +10294,7 @@ namespace ui
                 panelScrollStarted = 0;
                 return;
             }
-            panelScrollStarted = GetTickCount64();
+            panelScrollStarted = MonoMs();
             KickScroll();
         }
 
@@ -8828,28 +10335,56 @@ namespace ui
             else
                 yearBase += dir * 10;
         }
-        // Wheel / touchpad: whole notches move one page; fine touchpad deltas scroll continuously and settle on a page.
-        void CalWheel(int delta)
+        // First day (days since 1970) of the first grid row of a month: the week that holds its 1st.
+        long long CalBaseDays(int y, int m) const
+        {
+            return td::DaysFromCivil(y, m, 1) - ((WeekdayOf(y, m, 1) - FirstDayOfWeekSun() + 7) % 7);
+        }
+        // Rows between the first grid row of the committed month and that of the month `dir` away (negative for earlier).
+        int CalMonthRows(int dir) const
+        {
+            int y = calYear, m = calMonth + dir;
+            if (m < 1)
+            {
+                m = 12;
+                --y;
+            }
+            else if (m > 12)
+            {
+                m = 1;
+                ++y;
+            }
+            return (int)((CalBaseDays(y, m) - CalBaseDays(calYear, calMonth)) / 7);
+        }
+        // Wheel / touchpad. Month view: one wheel notch scrolls exactly one week row and a precision touchpad moves the
+        // grid as far as the fingers (it settles on a whole row afterwards). Year / decade pages still move a page per notch.
+        void CalWheel(float delta, bool discrete)
         {
             const float H = CalGridH();
-            const bool notch = (delta % WHEEL_DELTA) == 0;
-            calDiscrete = notch;
-            const float t = calSm.target - (float)delta / (float)WHEEL_DELTA * (notch ? H : H * 0.55f);
-            calSm.target = std::min(H * 3.f, std::max(-H * 3.f, t));
-            calLastInput = GetTickCount64();
+            calDiscrete = discrete;
+            float t;
+            if (calView == 0)
+                t = calSm.target - delta / (float)WHEEL_DELTA * (discrete ? kCalRow : kWheelPx);
+            else
+                t = calSm.target - delta / (float)WHEEL_DELTA * (discrete ? H : kWheelPx);
+            const float lim = calView == 0 ? kCalRow * 14.f : H * 3.f;
+            calSm.target = std::min(lim, std::max(-lim, t));
+            calLastInput = MonoMs();
             KickScroll();
         }
         void CalSlide(int dir)
-        { // arrow buttons: slide one page
+        { // arrow buttons: one month (month view) or one page
             calDiscrete = true;
-            calSm.target = std::min(CalGridH() * 3.f, std::max(-CalGridH() * 3.f, calSm.target + (float)dir * CalGridH()));
-            calLastInput = GetTickCount64();
+            const float step = calView == 0 ? (float)CalMonthRows(dir) * kCalRow : (float)dir * CalGridH();
+            const float lim = calView == 0 ? kCalRow * 14.f : CalGridH() * 3.f;
+            calSm.target = std::min(lim, std::max(-lim, calSm.target + step));
+            calLastInput = MonoMs();
             KickScroll();
         }
         void CalResetSlide() { calSm.Jump(0.f); }
 
         // Scrolls the notes editor by lines (a native EDIT can only move whole lines; the glide animates them).
-        void EditorWheel(int delta)
+        void EditorWheel(float delta)
         {
             HWND e = edits[E_NBODY];
             if (!e)
@@ -8859,19 +10394,19 @@ namespace ui
             const int total = (int)SendMessageW(e, EM_GETLINECOUNT, 0, 0);
             const int vis = std::max(1, (int)(RH(editRect[E_NBODY]) / bodyLineH));
             const float maxFirst = (float)std::max(0, total - vis);
-            edSm.target = std::min(maxFirst, std::max(0.f, edSm.target - (float)delta / (float)WHEEL_DELTA * 3.f));
+            edSm.target = std::min(maxFirst, std::max(0.f, edSm.target - delta / (float)WHEEL_DELTA * 3.f));
             KickScroll();
         }
 
         void StepScrollers()
         {
-            const ULONGLONG now = GetTickCount64();
-            const float dt = lastStep ? std::min(50.f, (float)(now - lastStep)) : kFrameMs;
+            const ULONGLONG now = MonoMs();
+            const float dt = lastStep ? std::min(50.f, (float)(now - lastStep)) : fclk::PeriodMs();
             lastStep = now;
             bool any = AdvanceTouchpadFling(dt);
-            // Keep direct touchpad movement close to the fingers. During release momentum, follow its
-            // continuously moving target with a modest smoothing lag instead of a single long target jump.
-            const float tau = tpFlingActive ? 58.f : (now - lastTouchpadTick < 250 ? 42.f : kGlideMs);
+            // Fingers on the pad: the content is the fingers' (1:1, no lag). Momentum after release: a light glide so the
+            // integrated steps look fluid. Everything else keeps the usual glide.
+            const float tau = tpFlingActive ? 30.f : (now - lastTouchpadTick < kTouchpadDirectMs ? 1.f : kGlideMs);
 
             if (panelScrollStarted)
             {
@@ -8911,27 +10446,51 @@ namespace ui
             if (tab == 0 && (calSm.Active() || calSm.pos != 0.f))
             {
                 const float H = CalGridH();
+                const float unit = calView == 0 ? kCalRow : H; // settle on a whole row (month view) or page
                 if (!calDiscrete && now - calLastInput > 110)
-                    calSm.target = std::round(calSm.target / H) * H; // settle on a whole page
+                    calSm.target = std::round(calSm.target / unit) * unit;
                 any |= calSm.Step(dt, tau * 1.15f);
-                while (calSm.pos > H * 0.5f && CalStepAllowed(1))
-                {
-                    CalCommit(1);
-                    calSm.pos -= H;
-                    calSm.target -= H;
+                if (calView == 0)
+                { // the month in the header is the one the middle of the visible weeks belongs to
+                    for (int guard = 0; guard < 4; ++guard)
+                    {
+                        const long long oldBase = CalBaseDays(calYear, calMonth);
+                        const long long rowStart = oldBase + 7LL * (long long)std::floor(calSm.pos / kCalRow + 2.5f);
+                        int ey, em, ed;
+                        td::CivilFromDays(rowStart + 3, ey, em, ed);
+                        if (ey == calYear && em == calMonth)
+                            break;
+                        if (ey < 1601 || ey > 9998)
+                        {
+                            calSm.Jump(0.f);
+                            break;
+                        }
+                        calYear = ey;
+                        calMonth = em;
+                        const float shift = (float)((CalBaseDays(calYear, calMonth) - oldBase) / 7) * kCalRow;
+                        calSm.pos -= shift;
+                        calSm.target -= shift;
+                    }
                 }
-                while (calSm.pos < -H * 0.5f && CalStepAllowed(-1))
+                else
+                    while (calSm.pos > H * 0.5f && CalStepAllowed(1))
+                    {
+                        CalCommit(1);
+                        calSm.pos -= H;
+                        calSm.target -= H;
+                    }
+                while (calView != 0 && calSm.pos < -H * 0.5f && CalStepAllowed(-1))
                 {
                     CalCommit(-1);
                     calSm.pos += H;
                     calSm.target += H;
                 }
-                if (!CalStepAllowed(1))
+                if (calView != 0 && !CalStepAllowed(1))
                 {
                     calSm.target = std::min(calSm.target, 0.f);
                     calSm.pos = std::min(calSm.pos, 0.f);
                 }
-                if (!CalStepAllowed(-1))
+                if (calView != 0 && !CalStepAllowed(-1))
                 {
                     calSm.target = std::max(calSm.target, 0.f);
                     calSm.pos = std::max(calSm.pos, 0.f);
@@ -8941,7 +10500,7 @@ namespace ui
             {
                 lastStep = 0;
                 if (hwnd)
-                    KillTimer(hwnd, TIMER_SCROLL_ANIM);
+                    StopFrames(hwnd, TIMER_SCROLL_ANIM);
             }
         }
 
@@ -8950,7 +10509,7 @@ namespace ui
             if (!hwnd || !IsWindowVisible(hwnd))
             {
                 if (hwnd)
-                    KillTimer(hwnd, TIMER_SCROLL_ANIM);
+                    StopFrames(hwnd, TIMER_SCROLL_ANIM);
                 lastStep = 0;
                 return;
             }
@@ -8958,15 +10517,14 @@ namespace ui
         }
 
         // ---- precision touchpad: raw two-finger movement -> the same OnWheel path as a mouse wheel
-        float tpRemX = 0.f, tpRemY = 0.f;
         bool tpFlingActive = false, tpFlingHorizontal = false;
-        float tpFlingVelocity = 0.f, tpFlingWheelRemainder = 0.f, tpFlingX = 0.f, tpFlingY = 0.f;
+        float tpFlingVelocity = 0.f, tpFlingX = 0.f, tpFlingY = 0.f; // velocity in DIP/ms
         ULONGLONG tpFlingStarted = 0, tpFlingLastTick = 0;
 
         void StopTouchpadFling()
         {
             tpFlingActive = false;
-            tpFlingVelocity = tpFlingWheelRemainder = 0.f;
+            tpFlingVelocity = 0.f;
             tpFlingStarted = tpFlingLastTick = 0;
         }
 
@@ -8976,7 +10534,7 @@ namespace ui
         {
             if (!tpFlingActive)
                 return false;
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             float dt = frameDt;
             if (tpFlingLastTick)
                 dt = std::min(32.f, std::max(1.f, (float)(now - tpFlingLastTick)));
@@ -8984,19 +10542,17 @@ namespace ui
                 dt = std::min(32.f, std::max(1.f, dt));
             tpFlingLastTick = now;
 
-            const float displacementDip = tpFlingVelocity * dt;
-            tpFlingWheelRemainder += displacementDip * ((float)WHEEL_DELTA / kWheelPx);
-            const int wheelDelta = (int)tpFlingWheelRemainder;
-            tpFlingWheelRemainder -= (float)wheelDelta;
-            if (wheelDelta)
-                OnWheel(wheelDelta, tpFlingX, tpFlingY, tpFlingHorizontal);
+            // Distance covered this frame, passed on as a fraction of a wheel step (nothing is rounded away).
+            const float units = tpFlingVelocity * dt * ((float)WHEEL_DELTA / kWheelPx);
+            ScrollUnits(units, tpFlingX, tpFlingY, tpFlingHorizontal, false);
 
-            // A 245 ms velocity time constant gives a natural glide without an abrupt stop or an endless tail.
-            tpFlingVelocity *= std::exp(-dt / 245.f);
-            if (now - tpFlingStarted >= 1250 || std::fabs(tpFlingVelocity) < 0.018f)
+            // Velocity decays exponentially (320 ms time constant): the speed fades out smoothly rather than stopping,
+            // and a flick of ordinary speed coasts a few hundred DIPs.
+            tpFlingVelocity *= std::exp(-dt / 320.f);
+            if (now - tpFlingStarted >= 2200 || std::fabs(tpFlingVelocity) < 0.012f)
             {
                 StopTouchpadFling();
-                return wheelDelta != 0;
+                return true;
             }
             return true;
         }
@@ -9004,41 +10560,28 @@ namespace ui
         void OnTouchpadScroll(float dx, float dy, float x, float y) override
         {
             StopTouchpadFling();                           // a new finger movement always takes control from the old fling
-            const float k = (float)WHEEL_DELTA / kWheelPx; // DIP -> wheel units
-            if (y < 47.f)
-            { // over the tab bar: horizontal movement scrolls the tabs
-                tpRemX += -dx * k;
-                const int d = (int)tpRemX;
-                tpRemX -= (float)d;
-                if (d)
-                    OnWheel(d, x, y, true);
-            }
+            const float k = (float)WHEEL_DELTA / kWheelPx; // DIP -> wheel units (kept fractional)
+            if (y < 47.f)                                  // over the tab bar: horizontal movement scrolls the tabs
+                ScrollUnits(-dx * k, x, y, true, false);
             else
-            {
-                tpRemY += dy * k;
-                const int d = (int)tpRemY;
-                tpRemY -= (float)d;
-                if (d)
-                    OnWheel(d, x, y, false);
-            }
+                ScrollUnits(dy * k, x, y, false, false);
             KickScroll();
         }
         void OnTouchpadScrollEnd(float vx, float vy, float x, float y) override
         {
-            tpRemX = tpRemY = 0.f;
             StopTouchpadFling();
             const bool bar = y < 47.f;
-            // Convert centroid velocity to the wheel-delta direction used by OnWheel.
+            // Convert centroid velocity to the wheel-delta direction used by ScrollUnits.
             const float v = bar ? -vx : vy;
-            if (std::fabs(v) < 0.025f) // under ~7.5 DIPs of predicted travel: settle without a fling
+            if (std::fabs(v) < 0.03f) // a slow release (under ~10 DIPs of coasting) just stops where the fingers left it
                 return;
             tpFlingActive = true;
             tpFlingHorizontal = bar;
-            tpFlingVelocity = std::min(1.35f, std::max(-1.35f, v));
-            tpFlingWheelRemainder = 0.f;
+            tpFlingVelocity = std::min(1.6f, std::max(-1.6f, v)); // coasting distance is about velocity x 320 ms
+
             tpFlingX = x;
             tpFlingY = y;
-            tpFlingStarted = tpFlingLastTick = GetTickCount64();
+            tpFlingStarted = tpFlingLastTick = MonoMs();
             KickScroll();
         }
 
@@ -9066,7 +10609,7 @@ namespace ui
                 Invalidate();
                 return;
             }
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             const float dtMs = panLastTick ? std::max(1.f, (float)(now - panLastTick)) : 16.f;
             panLastTick = now;
             panVelocity = 0.6f * panVelocity + 0.4f * (dy / dtMs);
@@ -9091,7 +10634,7 @@ namespace ui
 
         void OnPointerPanEnd() override
         {
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             const bool fresh = panLastTick && now - panLastTick < 90; // a rested finger carries no momentum
             const float fling = fresh ? -panVelocity * 260.f : 0.f;
             panLastTick = 0;
@@ -9124,308 +10667,13 @@ namespace ui
             {
                 panelScroll = panelScrollTarget;
                 panelScrollStarted = 0;
-                KillTimer(hwnd, TIMER_SCROLL_ANIM);
+                StopFrames(hwnd, TIMER_SCROLL_ANIM);
             }
             Invalidate();
         }
 
-        // ---------------------------------------------------------------- open / close animation
-        // Opacity of the panel. Normally always 1: the open/close animation is a slide, not a fade.
-        void SetPanelFade(float a)
-        {
-            currentFade = a;
-            if (alphaTarget)
-            {
-                masterOpacity = Clamp01(a);
-                Invalidate();
-            }
-            else
-            {
-                masterOpacity = 1.f;
-                if (hwnd)
-                    SetLayeredWindowAttributes(hwnd, 0, (BYTE)std::lround((float)restingAlpha * Clamp01(a)), LWA_ALPHA);
-            }
-        }
-
-        // The panel slides up from behind the taskbar and back down again, exactly like the native flyouts.
-        // There is deliberately no opacity fade: fading the painted surface over a system-owned acrylic
-        // backdrop is what made the panel look whitish for the first and last instants.
-        // While sliding, the window is clipped at the top edge of the taskbar with a window region
-        // (rounded at the top, flat at the taskbar line); the region is removed once fully visible.
-        void ApplySlideClip(int top)
-        {
-            if (!hwnd)
-                return;
-            const int w = panelAnimationWidth, h = panelAnimationHeight;
-            const int clipY = slideClipY > 0 ? slideClipY : panelWorkBottom;
-            const int vis = clipY - top;
-            if (clipY <= 0 || vis >= h)
-            {
-                if (slideClipped && SetWindowRgn(hwnd, nullptr, TRUE))
-                    slideClipped = false;
-                return;
-            }
-            const int r = (int)std::lround(8.f * Scale()) * 2;
-            HRGN full = CreateRoundRectRgn(0, 0, w + 1, h + 1, r, r);
-            if (!full)
-                return;
-            // Never an empty region: DWM stops tracking a window with nothing visible, and a system backdrop (acrylic)
-            // set up in that state comes back flat. A thin sliver always stays visible instead.
-            HRGN cut = CreateRectRgn(0, 0, w + 1, std::max(1, vis));
-            if (!cut)
-            {
-                DeleteObject(full);
-                return;
-            }
-            if (CombineRgn(full, full, cut, RGN_AND) == ERROR)
-            {
-                DeleteObject(cut);
-                DeleteObject(full);
-                return;
-            }
-            DeleteObject(cut);
-            if (!SetWindowRgn(hwnd, full, TRUE))
-            { // on failure, ownership stays with us; retain the previous region and state
-                DeleteObject(full);
-                return;
-            }
-            slideClipped = true; // the system owns `full`; redraw each newly exposed strip
-        }
-
-        void EndTimerPeriod()
-        {
-            if (timerPeriodActive)
-            {
-                timeEndPeriod(1);
-                timerPeriodActive = false;
-            }
-        }
-
-        // Finds the bottom-docked taskbar of the monitor. The panel is kept just below it in z-order while sliding, so
-        // a frame of region lag can never paint over the bar. Returns false for a non-bottom or auto-hidden bar.
-        bool FindSlideTaskbar(HMONITOR mon, const MONITORINFO &mi)
-        {
-            slideTaskbar = nullptr;
-            slideUnder = false;
-            slideClipY = 0;
-            const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
-            auto consider = [&](HWND t)
-            {
-                RECT r{};
-                if (!t || slideTaskbar || !IsWindowVisible(t) || !GetWindowRect(t, &r))
-                    return;
-                if (MonitorFromWindow(t, MONITOR_DEFAULTTONULL) != mon)
-                    return;
-                const int th = r.bottom - r.top;
-                if (th < 24 || r.top < mi.rcMonitor.top + monH / 2 || r.top > mi.rcMonitor.bottom - 16 ||
-                    r.bottom < mi.rcMonitor.bottom - 2 || (r.right - r.left) < monW / 2)
-                    return;
-                slideTaskbar = t;
-                slideClipY = r.top; // the panel is cut exactly at the top edge of the bar
-            };
-            consider(FindWindowW(L"Shell_TrayWnd", nullptr));
-            for (HWND t = nullptr; !slideTaskbar && (t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr));)
-                consider(t);
-            slideUnder = slideTaskbar != nullptr;
-            if (!slideUnder)
-                slideClipY = panelWorkBottom;
-            return slideUnder;
-        }
-
-        HWND SlideZ()
-        {
-            if (slideUnder && !IsWindow(slideTaskbar))
-                slideUnder = false;
-            return slideUnder ? slideTaskbar : HWND_TOPMOST;
-        }
-
-        // A visible-but-nearly-fully-clipped window is the resting line of the slide: a few pixels stay visible so DWM
-        // keeps the window (and its acrylic) alive.
-        int SlideHiddenY() const
-        {
-            const int clipY = slideClipY > 0 ? slideClipY : panelWorkBottom;
-            return clipY - std::max(2, (int)std::lround(3.f * Scale()));
-        }
-
-        // The same sequence as switching the panel material to Simple and back to Acrylic in Settings, which is the
-        // one thing that reliably produced a live acrylic panel.
-        void WarmUpMaterial()
-        {
-            if (!hwnd)
-                return;
-            alphaTarget = false;
-            ReleaseTarget();
-            restingAlpha = ConfigureComposition(hwnd, pal, 1);
-            SetPanelFade(1.f);
-            Render();
-            DwmFlush();
-            alphaTarget = true;
-            ReleaseTarget();
-            restingAlpha = ConfigureComposition(hwnd, pal, 2);
-            SetPanelFade(1.f);
-            Render();
-            RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
-            DwmFlush();
-            DwmFlush();
-        }
-
-        void BeginOpenAnimation(int x, int y, int w, int h, bool noAct)
-        {
-            if (!hwnd)
-                return;
-            KillTimer(hwnd, TIMER_PANEL_ANIM);
-            const bool wasVisible = IsWindowVisible(hwnd) != FALSE;
-            int startY = SlideHiddenY();
-            if (wasVisible && panelAnimation == PanelAnimationState::Closing)
-            { // re-opened while sliding down: continue from where it is
-                RECT cur{};
-                GetWindowRect(hwnd, &cur);
-                startY = cur.top;
-            }
-
-            // Resize and render while hidden, before applying the slide clip. This primes the
-            // Direct2D surface at its final size so the first visible frame never exposes a blank backdrop.
-            if (!wasVisible)
-            {
-                SetWindowPos(hwnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
-                restingAlpha = ConfigureComposition(hwnd, pal, compMode);
-                Render();
-                RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
-            }
-
-            panelAnimation = PanelAnimationState::Opening;
-            panelAnimationX = x;
-            panelAnimationWidth = w;
-            panelAnimationHeight = h;
-            panelAnimationStartY = startY;
-            panelAnimationEndY = y;
-            startFade = endFade = 1.f;
-            SetPanelFade(1.f);
-            ApplySlideClip(startY); // only a thin sliver is visible
-            // Beneath the taskbar in z-order and not activated yet: activating a topmost window would lift it over
-            // the taskbar. It is activated once the slide has finished.
-            activateAfterOpen = slideUnder && !noAct;
-            // The acrylic backdrop only ever came up correctly when the material was switched on a window DWM was
-            // already composing (Settings > Simple > Acrylic). Hiding the panel drops that state, so every open
-            // replays exactly that switch. The window is cloaked meanwhile: composed by DWM, never seen.
-            const bool warm = !wasVisible && compMode == 2;
-            bool cloaked = false;
-            if (warm)
-            {
-                const BOOL on = TRUE; // DWMWA_CLOAK
-                cloaked = SUCCEEDED(DwmSetWindowAttribute(hwnd, 13, &on, sizeof(on)));
-            }
-            SetWindowPos(hwnd, SlideZ(), x, startY, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
-            if (warm)
-                WarmUpMaterial();
-            if (cloaked)
-            {
-                const BOOL off = FALSE;
-                DwmSetWindowAttribute(hwnd, 13, &off, sizeof(off));
-            }
-            restingAlpha = ConfigureComposition(hwnd, pal, compMode);
-            SetPanelFade(1.f);
-            Render();
-            RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
-            DwmFlush();
-            panelAnimationStarted = GetTickCount64();
-            SetTimer(hwnd, TIMER_PANEL_ANIM, (UINT)kFrameMs, nullptr);
-            if (!noAct && !slideUnder)
-                SetForegroundWindow(hwnd);
-        }
-
-        void BeginCloseAnimation()
-        {
-            StopTouchpadFling();
-            if (!hwnd || !IsWindowVisible(hwnd))
-            {
-                noActMode = false;
-                return;
-            }
-            if (panelAnimation == PanelAnimationState::Closing)
-                return;
-            KillTimer(hwnd, TIMER_PANEL_ANIM);
-            RECT r{};
-            GetWindowRect(hwnd, &r);
-            panelAnimation = PanelAnimationState::Closing;
-            panelAnimationStarted = GetTickCount64();
-            panelAnimationX = r.left;
-            panelAnimationWidth = r.right - r.left;
-            panelAnimationHeight = r.bottom - r.top;
-            panelAnimationStartY = r.top;
-            panelAnimationEndY = std::max(SlideHiddenY(), (int)r.top);
-            if (slideUnder) // sink beneath the taskbar first (no visible change: the panel rests above the bar)
-                SetWindowPos(hwnd, slideTaskbar, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            activateAfterOpen = false;
-            startFade = endFade = 1.f;
-            noActMode = false;
-            SetTimer(hwnd, TIMER_PANEL_ANIM, (UINT)kFrameMs, nullptr);
-        }
-
-        void AdvancePanelAnimation()
-        {
-            if (!hwnd || panelAnimation == PanelAnimationState::Idle)
-            {
-                if (hwnd)
-                    KillTimer(hwnd, TIMER_PANEL_ANIM);
-                return;
-            }
-            const bool opening = panelAnimation == PanelAnimationState::Opening;
-            DwmFlush(); // step in time with the compositor so the motion is even
-            const float t = Clamp01((float)(GetTickCount64() - panelAnimationStarted) / (opening ? kSlideOpenMs : kSlideCloseMs));
-            const float eased = opening ? EaseOutQuart(t) : EaseInCubic(t);
-            const int y = panelAnimationStartY + (int)std::lround((panelAnimationEndY - panelAnimationStartY) * eased);
-            HWND z = SlideZ();
-            if (opening)
-            { // moving up: widen the visible part after the move, never before it
-                SetWindowPos(hwnd, z, panelAnimationX, y, panelAnimationWidth, panelAnimationHeight,
-                             SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-                ApplySlideClip(y);
-            }
-            else
-            { // moving down: shrink the visible part before the move
-                ApplySlideClip(y);
-                SetWindowPos(hwnd, z, panelAnimationX, y, panelAnimationWidth, panelAnimationHeight,
-                             SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-            }
-            if (t >= 1.f)
-            {
-                KillTimer(hwnd, TIMER_PANEL_ANIM);
-                panelAnimation = PanelAnimationState::Idle;
-                if (!opening)
-                {
-                    ShowWindow(hwnd, SW_HIDE);
-                    if (slideClipped)
-                    {
-                        SetWindowRgn(hwnd, nullptr, TRUE);
-                        slideClipped = false;
-                    }
-                    SetPanelFade(1.f);
-                    RemoveWheelHook();
-                    ReleaseTouchpadCapability(); // hidden: give the touchpad routing back
-                    EndTimerPeriod();
-                }
-                else
-                {
-                    SetPanelFade(1.f);
-                    ApplySlideClip(panelAnimationEndY); // fully visible: removes the region
-                    SetWindowPos(hwnd, HWND_TOPMOST, panelAnimationX, panelAnimationEndY, panelAnimationWidth,
-                                 panelAnimationHeight, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-                    if (activateAfterOpen)
-                    { // now clear of the taskbar: safe to take the foreground (and the top of the topmost band)
-                        activateAfterOpen = false;
-                        SetForegroundWindow(hwnd);
-                    }
-                    restingAlpha = ConfigureComposition(hwnd, pal, compMode);
-                    Render();
-                    RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
-                    DwmFlush();
-                }
-            }
-        }
-
         // ---------------------------------------------------------------- show / hide
-        void ShowPanel(bool noAct)
+        void ShowPanel(bool noAct, bool withNotif = false)
         {
             POINT cur{};
             GetCursorPos(&cur);
@@ -9444,11 +10692,22 @@ namespace ui
             }
             currentFade = 1.f;
             StopTouchpadFling();
+            StopFrames(hwnd, TIMER_STACK_ANIM);
+            todoDropOpen = false; // a fresh start for the Tasks input
+            todoDropK = 0.f;
+            todoDropStart = 0;
+            todoEditId = 0;
+            SetWindowTextW(edits[E_TODO], L"");
+            StopFrames(hwnd, TIMER_TODO_ANIM);
+            stackMode = withNotif; // stacked: collapse chevron in the tab bar, slides in from the right
+            collapsed = withNotif && Wh_GetIntValue(L"stackCollapsed", 0) != 0;
+            stackK = collapsed ? 1.f : 0.f;
             ApplyComposition();
             snap = td::g_eng.Snapshot();
 
             SYSTEMTIME now;
             GetLocalTime(&now);
+            additionalClocks = ReadAdditionalClocks(); // follow the current Windows Additional Clocks settings
             calView = 0;
             calYear = now.wYear;
             calMonth = now.wMonth;
@@ -9469,18 +10728,18 @@ namespace ui
             InstallWheelHook();
             panelScroll = panelScrollFrom = panelScrollTarget = 0.f;
             panelScrollStarted = 0;
-            KillTimer(hwnd, TIMER_SCROLL_ANIM);
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
             hoverId = hoverParam = 0;
             hoverTracks.clear();
             InitTabAnim();
             noActMode = noAct;
-            shownAt = GetTickCount64();
+            shownAt = MonoMs();
             if (tickMs != 100)
             { // open: back to the fast tick right away
                 tickMs = 100;
                 SetTimer(hwnd, TIMER_TICK, 100, nullptr);
             }
-            panelWorkBottom = (int)mi.rcWork.bottom;
+            panelWorkBottom = TaskbarBandTop(mon, mi, Scale()); // never below the area a (possibly auto-hidden) taskbar occupies
             if (!timerPeriodActive)
             { // finer timer resolution while the panel is open keeps scrolling and sliding even
                 timeBeginPeriod(1);
@@ -9488,16 +10747,30 @@ namespace ui
             }
 
             const float scale = Scale();
-            const float workH = (float)(mi.rcWork.bottom - mi.rcWork.top) / scale;
-            panelH = std::min(kPanelH, std::max(140.f, workH - 24.f));
-            const int w = (int)std::lround(kPanelW * scale), h = (int)std::lround(panelH * scale);
+            const float workH = (float)(panelWorkBottom - mi.rcWork.top) / scale;
+            panelH = std::min(kPanelH + CalendarClockOffset(), std::max(140.f, workH - 24.f));
+            const int w = (int)std::lround(kPanelW * scale), h = (int)std::lround((collapsed ? CollapsedH() : panelH) * scale);
             const int margin = (int)std::lround(12.f * scale);
             const int x = std::max(static_cast<int>(mi.rcWork.left), static_cast<int>(mi.rcWork.right) - w - margin);
-            const int y = std::max(static_cast<int>(mi.rcWork.top), static_cast<int>(mi.rcWork.bottom) - h - margin);
-            if (!(IsWindowVisible(hwnd) && panelAnimation == PanelAnimationState::Closing))
+            const int y = std::max(static_cast<int>(mi.rcWork.top), panelWorkBottom - h - margin);
+            slideHorizontal = withNotif;
+            slideClipX = mi.rcMonitor.right;
+            slideUseClip = !slideHorizontal || MonitorOnRight(mi);
+            if (slideHorizontal)
+            { // the stack slides in from the right edge: no taskbar to slide out from behind
+                slideTaskbar = nullptr;
+                slideUnder = false;
+                slideClipY = panelWorkBottom;
+            }
+            else if (!(IsWindowVisible(hwnd) && panelAnimation == PanelAnimationState::Closing))
                 FindSlideTaskbar(mon, mi); // a panel re-opened mid-close keeps the taskbar it is already sliding behind
+            holdCloak = withNotif;         // stacked: stay invisible until the card above is ready too
             BeginOpenAnimation(x, y, w, h, noAct);
+            holdCloak = false;
             RouteTouchpadTo(hwnd); // the panel is on screen now: take the touchpad registration
+            if (withNotif)
+                NotifOpenStacked(mon, mi, x, y, w, panelWorkBottom, noAct);
+            ReleaseCloak(); // (also when there was no card to wait for)
         }
 
         void HidePanel()
@@ -9505,14 +10778,18 @@ namespace ui
             FlushNote();
             StopPreviewSound();
             BeginCloseAnimation();
+            NotifCloseStacked(); // after the panel's own close has started, so both share one start time
         }
 
         void Toggle(bool noAct)
         {
-            if (IsWindowVisible(hwnd) && panelAnimation != PanelAnimationState::Closing)
+            if (IsOpen())
                 HidePanel();
             else
-                ShowPanel(noAct);
+            {
+                NotifCloseStandalone();
+                ShowPanel(noAct, td::g_set.notifMode.load() == 1); // "Above WinKlok": the clock opens the whole stack
+            }
         }
 
         void StopPreviewSound()
@@ -9529,6 +10806,7 @@ namespace ui
         // ---------------------------------------------------------------- tick
         void AddAlertFor(const td::RingEvent &e);                  // defined below
         void AddMissedAlert(const std::vector<td::MissedItem> &m); // defined below
+        void KeepAlertsPlaced();                                   // defined below
 
         UINT tickMs = 100; // current interval of TIMER_TICK
 
@@ -9560,6 +10838,7 @@ namespace ui
                     AddMissedAlert(missedNow);
             }
             UpdateTickInterval();
+            KeepAlertsPlaced();
             if (!IsWindowVisible(hwnd))
                 return;
             {
@@ -9581,30 +10860,41 @@ namespace ui
                 HWND fg = GetForegroundWindow();
                 if (fg == hwnd || (fg && IsChild(hwnd, fg)))
                     noActMode = false;
-                else if (GetTickCount64() - shownAt > 800 && !IsShellFlyoutWindow(fg))
+                else if (MonoMs() - shownAt > 800 && !IsShellFlyoutWindow(fg))
                 {
                     HidePanel();
                     return;
                 }
             }
-            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG now = MonoMs();
             if (!statusMsg.empty() && now >= statusUntil)
             {
                 statusMsg.clear();
                 statusStarted = 0;
                 statusTimerActive = false;
-                KillTimer(hwnd, TIMER_STATUS_ANIM);
+                StopFrames(hwnd, TIMER_STATUS_ANIM);
                 ResizePanelToContent();
             }
             else if (!statusMsg.empty() && statusUntil - now <= 280 && !statusTimerActive)
             {
-                SetTimer(hwnd, TIMER_STATUS_ANIM, 15, nullptr);
+                StartFrames(hwnd, TIMER_STATUS_ANIM);
                 statusTimerActive = true;
             }
             if (noteDelArmedUntil && now >= noteDelArmedUntil)
             {
                 noteDelArmedUntil = 0;
                 noteDelArmedId = 0;
+                Invalidate();
+            }
+            if ((todoDelArmedUntil && now >= todoDelArmedUntil) || (todoClearArmedUntil && now >= todoClearArmedUntil))
+            {
+                if (todoDelArmedUntil && now >= todoDelArmedUntil)
+                {
+                    todoDelArmedUntil = 0;
+                    todoDelArmedId = 0;
+                }
+                if (todoClearArmedUntil && now >= todoClearArmedUntil)
+                    todoClearArmedUntil = 0;
                 Invalidate();
             }
             if (tab == 1 || tab == 2 || tab == 3 || !statusMsg.empty() || tickCount % 10 == 0)
@@ -9702,6 +10992,12 @@ namespace ui
             for (int i = 0; i < E_COUNT; ++i)
                 editWant[i] = false;
             drawOpacity = 1.f;
+            if (collapsed && stackK > 0.98f)
+            { // folded into the strip: the page and its native text fields are hidden
+                PaintCollapsedStrip();
+                ApplyEdits();
+                return;
+            }
             PaintTabs();
 
             // The page is clipped independently from the fixed tab strip and status line.
@@ -9727,8 +11023,11 @@ namespace ui
             case 3:
                 PaintAlarm();
                 break;
-            case 4:
+            case TAB_NOTES:
                 PaintNotes();
+                break;
+            case TAB_TODO:
+                PaintTodo();
                 break;
             default:
                 PaintSettings();
@@ -9755,9 +11054,12 @@ namespace ui
         void PaintTabs()
         {
             const float sc = TabScrollNow();
-            rt->PushAxisAlignedClip(RF(0, 0, kPanelW, kTabH), D2D1_ANTIALIAS_MODE_ALIASED);
-            for (int i = 0; i < kTabs; ++i)
+            rt->PushAxisAlignedClip(RF(0, 0, TabBarW(), kTabH), D2D1_ANTIALIAS_MODE_ALIASED);
+            for (int n = 0; n < kTabs; ++n)
             {
+                const int i = kTabOrder[n];
+                if (!TabVisible(i))
+                    continue;
                 D2D1_RECT_F r = RF(tabX[i] - sc + 3, 5, tabW[i] - 6, 34);
                 const bool sel = tab == i;
                 const float hov = HoverAmount(ID_TAB, i);
@@ -9766,49 +11068,43 @@ namespace ui
                 Text(kTabNames[i], r, 12.5f, sel ? 600 : 400, sel ? pal.accent : pal.text, 1, 1);
                 D2D1_RECT_F h = r; // only the visible part of a partly scrolled tab is clickable
                 h.left = std::max(h.left, 0.f);
-                h.right = std::min(h.right, kPanelW);
+                h.right = std::min(h.right, TabBarW());
                 if (h.right > h.left)
                     AddHit(h, ID_TAB, i);
             }
             RoundFill(RF(indXA.Value(kTabAnimMs, false) - sc, 40, indWA.Value(kTabAnimMs, false), 3), 1.5f, pal.accent);
             rt->PopAxisAlignedClip();
+            if (stackMode) // fold the panel away so the notifications above get its room
+                FlatIcon(RF(kPanelW - 36.f, 6, 30, 34), ID_STACK_TOGGLE, 0, L"\uE70D", 12.f);
             Line(0, 46.5f, kPanelW, 46.5f, pal.border, 1.f);
         }
 
         // ---- calendar --------------------------------------------------------------------------
-        // One page of the calendar, drawn `shift` px below its resting place so pages can slide.
-        // view 0: month grid of (year, month); view 1: the months of `year`; view 2: the 12 years starting at ybase - 1.
-        void PaintCalPage(int view, int year, int month, int ybase, float shift, const SYSTEMTIME &now, float clipTop, float clipBottom)
+        // Month view: continuous weeks. Row r (0 = the week holding the 1st of the committed month) is drawn at
+        // 158 + 44 r - offset, so the grid moves one week at a time and the next month simply continues below.
+        void PaintCalRows(float offset, const SYSTEMTIME &now, float clipTop, float clipBottom, float layoutOffset)
         {
-            if (view == 0)
+            const int fdow = FirstDayOfWeekSun(), weekRule = FirstWeekRule();
+            const long long base = CalBaseDays(calYear, calMonth);
+            const int r0 = (int)std::floor(offset / kCalRow) - 1;
+            for (int r = r0; r <= r0 + 9; ++r)
             {
-                const int fdow = FirstDayOfWeekSun();
-                const int offset = (WeekdayOf(year, month, 1) - fdow + 7) % 7;
-                const int dim = DaysInMonth(year, month);
-                const int pm = month == 1 ? 12 : month - 1, py = month == 1 ? year - 1 : year;
-                const int nm = month == 12 ? 1 : month + 1, ny = month == 12 ? year + 1 : year;
-                const int pdim = DaysInMonth(py, pm);
-                for (int k = 0; k < 42; ++k)
+                const float cy = 158.f + layoutOffset + (float)r * kCalRow + 22.f - offset;
+                if (cy < clipTop - 22.f || cy > clipBottom + 22.f)
+                    continue; // outside the visible window
+                const long long rowStart = base + 7LL * r;
+                int y0, m0, d0;
+                td::CivilFromDays(rowStart, y0, m0, d0);
+                if (y0 < 1601 || y0 > 9998)
+                    continue;
+                Text(std::to_wstring(td::WeekNumberOfRow(rowStart, fdow, weekRule)), RF(kCalWeekX, cy - 18, kCalWeekW, 36), 12.f, 400,
+                     Fade(pal.accent, 0.8f), 1, 1);
+                for (int c = 0; c < 7; ++c)
                 {
-                    int d = 1 - offset + k, y = year, m = month;
-                    bool inMonth = true;
-                    if (d < 1)
-                    {
-                        d += pdim;
-                        y = py;
-                        m = pm;
-                        inMonth = false;
-                    }
-                    else if (d > dim)
-                    {
-                        d -= dim;
-                        y = ny;
-                        m = nm;
-                        inMonth = false;
-                    }
-                    const float cx = 18.f + (k % 7) * 48 + 24, cy = 158.f + (k / 7) * 44 + 22 + shift;
-                    if (cy < clipTop - 22.f || cy > clipBottom + 22.f)
-                        continue; // entirely outside the visible grid window
+                    int y, m, d;
+                    td::CivilFromDays(rowStart + c, y, m, d);
+                    const bool inMonth = (y == calYear && m == calMonth);
+                    const float cx = kCalGridX + (float)c * kCalCell + kCalCell / 2;
                     const int code = y * 10000 + m * 100 + d;
                     const bool isToday = (y == now.wYear && m == now.wMonth && d == now.wDay);
                     const bool isSel = (y == calSelY && m == calSelM && d == calSelD);
@@ -9823,17 +11119,24 @@ namespace ui
                         Circle(cx, cy, 18.f, Fade(pal.cardHover, hov));
                     if (isSel && !isToday)
                         CircleStroke(cx, cy, 17.f, pal.accent, 2.f);
-                    Text(std::to_wstring(d), RF(cx - 24, cy - 18, 48, 36), 13.5f, isToday ? 600 : 400, fg, 1, 1);
+                    Text(std::to_wstring(d), RF(cx - kCalCell / 2, cy - 18, kCalCell, 36), 13.5f, isToday ? 600 : 400, fg, 1, 1);
                     if (cy > clipTop && cy < clipBottom)
-                        AddHit(RF(cx - 24, cy - 22, 48, 44), ID_CAL_CELL, code);
+                        AddHit(RF(cx - kCalCell / 2, cy - 22, kCalCell, 44), ID_CAL_CELL, code);
                 }
-                return;
             }
+        }
+
+        // One page of the year / decade views, drawn `shift` px below its resting place so pages can slide.
+        // view 1: the months of `year`; view 2: the 12 years starting at ybase - 1.
+        void PaintCalPage(int view, int year, int month, int ybase, float shift, const SYSTEMTIME &now,
+                          float clipTop, float clipBottom, float layoutOffset)
+        {
+            (void)month; // the month view is painted by PaintCalRows; this draws the 4 x 3 year / decade pages
             // 4 x 3 grid: 79-wide cells with 8 gaps fill the 340 content width exactly.
             for (int i = 0; i < 12; ++i)
             {
                 const int c = i % 4, r = i / 4;
-                D2D1_RECT_F cell = RF(16.f + c * 87, 150.f + r * 84 + shift, 79, 76);
+                D2D1_RECT_F cell = RF(16.f + c * 87, 150.f + layoutOffset + r * 84 + shift, 79, 76);
                 if (cell.bottom < clipTop || cell.top > clipBottom)
                     continue;
                 std::wstring label;
@@ -9869,9 +11172,22 @@ namespace ui
 
         void PaintCalendar()
         {
-            SYSTEMTIME now;
+            SYSTEMTIME now{}, utc{};
             GetLocalTime(&now);
+            GetSystemTime(&utc);
+            const float clockOffset = CalendarClockOffset();
             Text(DateStr(now, L"dddd, MMMM d"), RF(16, 56, 340, 32), 20.f, 600, pal.text, 0, 1);
+
+            // Same hierarchy as the Windows 11 flyout: date, additional clocks, then the month calendar.
+            for (size_t i = 0; i < additionalClocks.size(); ++i)
+            {
+                const float y = 88.f + (float)i * kCalClockRowH;
+                const std::wstring value = FormatAdditionalClock(additionalClocks[i], utc, now);
+                Text(FitText(additionalClocks[i].label, 12.5f, 400, 136.f),
+                     RF(16.f, y, 136.f, kCalClockRowH), 12.5f, 400, pal.text, 0, 1);
+                Text(FitText(value, 12.5f, 400, 200.f),
+                     RF(156.f, y, 200.f, kCalClockRowH), 12.5f, 400, pal.text, 2, 1);
+            }
 
             std::wstring title;
             if (calView == 0)
@@ -9886,14 +11202,14 @@ namespace ui
                 title = std::to_wstring(calYear);
             else
                 title = std::to_wstring(yearBase) + L" \u2013 " + std::to_wstring(yearBase + 9);
-            D2D1_RECT_F hdr = RF(10, 94, 230, 34);
+            D2D1_RECT_F hdr = RF(10, 94.f + clockOffset, 230, 34);
             const float hh = HoverAmount(ID_CAL_HDR);
             if (hh > 0.001f)
                 RoundFill(hdr, 6.f, Fade(pal.cardHover, hh));
             Text(title, Inset(hdr, 8, 0), 15.f, 600, pal.text, 0, 1);
             AddHit(hdr, ID_CAL_HDR);
-            FlatIcon(RF(286, 94, 34, 34), ID_CAL_PREV, 0, L"\uE70E");
-            FlatIcon(RF(322, 94, 34, 34), ID_CAL_NEXT, 0, L"\uE70D");
+            FlatIcon(RF(286, 94.f + clockOffset, 34, 34), ID_CAL_PREV, 0, L"\uE70E");
+            FlatIcon(RF(322, 94.f + clockOffset, 34, 34), ID_CAL_NEXT, 0, L"\uE70D");
 
             if (calView == 0)
             {
@@ -9903,35 +11219,23 @@ namespace ui
                     std::wstring n = WeekdayName((fdow + c) % 7, L"ddd");
                     if (n.size() > 2)
                         n.resize(2);
-                    Text(n, RF(18.f + c * 48, 132, 48, 22), 12.f, 400, pal.sub, 1, 1);
+                    Text(n, RF(kCalGridX + c * kCalCell, 132.f + clockOffset, kCalCell, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
                 }
+                Text(L"Wk", RF(kCalWeekX, 132.f + clockOffset, kCalWeekW, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
             }
 
             // Pages above / below the committed one slide through a clipped window, like the Windows calendar.
             const float H = CalGridH();
-            const float clipTop = calView == 0 ? 156.f : 146.f, clipBottom = clipTop + H + (calView == 0 ? 2.f : 8.f);
+            const float clipTop = (calView == 0 ? 156.f : 146.f) + clockOffset;
+            const float clipBottom = clipTop + H + (calView == 0 ? 2.f : 8.f);
             const float off = SnapPx(calSm.pos);
             rt->PushAxisAlignedClip(RF(0, clipTop, kPanelW, clipBottom - clipTop), D2D1_ANTIALIAS_MODE_ALIASED);
-            for (int k = -1; k <= 1; ++k)
+            if (calView == 0)
+                PaintCalRows(off, now, clipTop, clipBottom, clockOffset);
+            for (int k = -1; k <= 1 && calView != 0; ++k)
             {
                 int y = calYear, m = calMonth, yb = yearBase;
-                if (calView == 0)
-                {
-                    m += k;
-                    if (m < 1)
-                    {
-                        m = 12;
-                        --y;
-                    }
-                    if (m > 12)
-                    {
-                        m = 1;
-                        ++y;
-                    }
-                    if (y < 1601 || y > 9998)
-                        continue;
-                }
-                else if (calView == 1)
+                if (calView == 1)
                 {
                     y += k;
                     if (y < 1601 || y > 9998)
@@ -9943,10 +11247,10 @@ namespace ui
                     if (yb < 1600 || yb > 9990)
                         continue;
                 }
-                PaintCalPage(calView, y, m, yb, (float)k * H - off, now, clipTop, clipBottom);
+                PaintCalPage(calView, y, m, yb, (float)k * H - off, now, clipTop, clipBottom, clockOffset);
             }
             rt->PopAxisAlignedClip();
-            Btn(RF(116, 436, 140, 34), ID_CAL_TODAY, 0, L"Go to today", 0, 13.f);
+            Btn(RF(116, 436.f + clockOffset, 140, 34), ID_CAL_TODAY, 0, L"Go to today", 0, 13.f);
         }
 
         void CalClick(int id, int param)
@@ -10203,7 +11507,7 @@ namespace ui
             alarmEditing = true;
             panelScroll = panelScrollFrom = panelScrollTarget = 0.f;
             panelScrollStarted = 0;
-            KillTimer(hwnd, TIMER_SCROLL_ANIM);
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
             ResizePanelToContent();
             StartContentTransition();
         }
@@ -10214,7 +11518,7 @@ namespace ui
             StopPreviewSound();
             panelScroll = panelScrollFrom = panelScrollTarget = 0.f;
             panelScrollStarted = 0;
-            KillTimer(hwnd, TIMER_SCROLL_ANIM);
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
             ResizePanelToContent();
             StartContentTransition();
         }
@@ -10353,7 +11657,7 @@ namespace ui
 
         void DeleteIcon(D2D1_RECT_F r, int noteId)
         {
-            const bool armed = noteDelArmedId == noteId && GetTickCount64() < noteDelArmedUntil;
+            const bool armed = noteDelArmedId == noteId && MonoMs() < noteDelArmedUntil;
             const float hov = HoverAmount(ID_NOTE_DEL, noteId);
             if (armed)
                 RoundFill(r, 6.f, Mix(pal.danger, pal.dangerHover, hov));
@@ -10473,6 +11777,328 @@ namespace ui
             }
         }
 
+        // ---------------------------------------------------------------- stacked mode: collapse / extend
+        // With the notification panel above, the WinKlok panel can fold into a slim strip (date + chevron) and the
+        // notification panel grows into the room it frees, like the native flyout. The choice is remembered.
+        bool stackMode = false, collapsed = false;
+        float stackK = 0.f; // 0 = full panel, 1 = strip
+        float stackAnimFrom = 0.f, stackAnimTo = 0.f;
+        ULONGLONG stackAnimStart = 0;
+        int stackXPx = 0, stackWPx = 0, stackBottomPx = 0;
+
+        float CurPanelH() const { return panelH + (CollapsedH() - panelH) * stackK; }
+        void ApplyStackGeometry()
+        {
+            const int hpx = (int)std::lround(CurPanelH() * Scale()), ypx = stackBottomPx - hpx;
+            SetWindowPos(hwnd, nullptr, stackXPx, ypx, stackWPx, hpx, SWP_NOZORDER | SWP_NOACTIVATE);
+            NotifFollowStack(stackXPx, ypx, stackWPx);
+            Invalidate();
+        }
+        void ToggleCollapse()
+        {
+            if (!stackMode || !IsWindowVisible(hwnd) || panelAnimation != PanelAnimationState::Idle)
+                return;
+            collapsed = !collapsed;
+            Wh_SetIntValue(L"stackCollapsed", collapsed ? 1 : 0);
+            StopTouchpadFling();
+            RECT r{};
+            GetWindowRect(hwnd, &r);
+            stackXPx = r.left;
+            stackWPx = r.right - r.left;
+            stackBottomPx = r.bottom; // the panel stays anchored above the taskbar; its top edge moves
+            stackAnimFrom = stackK;
+            stackAnimTo = collapsed ? 1.f : 0.f;
+            stackAnimStart = MonoMs();
+            StartFrames(hwnd, TIMER_STACK_ANIM);
+        }
+        void AdvanceStack()
+        {
+            const float t = Clamp01((float)(MonoMsD() - (double)stackAnimStart) / 260.f);
+            stackK = stackAnimFrom + (stackAnimTo - stackAnimFrom) * EaseInOutCubic(t);
+            if (t >= 1.f)
+            {
+                stackK = stackAnimTo;
+                StopFrames(hwnd, TIMER_STACK_ANIM);
+            }
+            ApplyStackGeometry();
+        }
+        void PaintCollapsedStrip()
+        {
+            SYSTEMTIME now{}, utc{};
+            GetLocalTime(&now);
+            GetSystemTime(&utc);
+            const float stripH = CollapsedH();
+            const float hov = HoverAmount(ID_STACK_TOGGLE);
+            if (hov > 0.001f)
+                RoundFill(RF(4, 4, kPanelW - 8, stripH - 8), 6.f, Fade(pal.cardHover, hov));
+            Text(DateStr(now, L"dddd, MMMM d"), RF(16, 0, 300, kCollapsedH), 14.5f, 600, pal.text, 0, 1);
+            Text(L"\uE70E", RF(kPanelW - 42, 0, 30, kCollapsedH), 12.f, 400, pal.sub, 1, 1, true);
+            // The additional clocks stay visible under the date, laid out exactly like the calendar page does.
+            for (size_t i = 0; i < additionalClocks.size(); ++i)
+            {
+                const float y = kCollapsedH - 10.f + (float)i * kCalClockRowH;
+                const std::wstring value = FormatAdditionalClock(additionalClocks[i], utc, now);
+                Text(FitText(additionalClocks[i].label, 12.5f, 400, 136.f), RF(16.f, y, 136.f, kCalClockRowH), 12.5f, 400, pal.text, 0, 1);
+                Text(FitText(value, 12.5f, 400, 200.f), RF(156.f, y, 200.f, kCalClockRowH), 12.5f, 400, pal.text, 2, 1);
+            }
+            AddHit(RF(0, 0, kPanelW, stripH), ID_STACK_TOGGLE);
+        }
+
+        // ---------------------------------------------------------------- tasks
+        // Storage: one value ("todos"), a line per task: id|done|0|0|created|text. (The two zero fields belonged to
+        // earlier drafts - starred / due date - and are kept so lists saved by them stay readable.)
+        struct Todo
+        {
+            int id = 0;
+            bool done = false;
+            long long created = 0; // unix seconds
+            std::wstring text;
+        };
+        std::vector<Todo> todos;
+        int nextTodoId = 1, todoFilter = 0 /*0 all, 1 active, 2 done*/, todoEditId = 0, todoDelArmedId = 0;
+        bool todoDropOpen = false; // the "new task" input that drops down under the header
+        float todoDropK = 0.f, todoDropFrom = 0.f;
+        ULONGLONG todoDropStart = 0, todoDelArmedUntil = 0, todoClearArmedUntil = 0;
+        static const size_t kMaxTodos = 300;
+
+        Todo *FindTodo(int id)
+        {
+            for (auto &t : todos)
+                if (t.id == id)
+                    return &t;
+            return nullptr;
+        }
+        static std::wstring TodoStamp(long long created)
+        {
+            if (created <= 0)
+                return L"";
+            const SYSTEMTIME st = td::WallToLocal(created * 1000);
+            return L"Created " + DateStr(st, L"MMM d, yyyy") + L"  \u00B7  " + td::FmtTimeOfDay(st.wHour, st.wMinute);
+        }
+
+        void SaveTodos()
+        {
+            std::wstring o = L"v1\n";
+            for (const Todo &t : todos)
+                o += std::to_wstring(t.id) + L"|" + (t.done ? L"1" : L"0") + L"|0|0|" + std::to_wstring(t.created) + L"|" + td::Esc(t.text) + L"\n";
+            std::replace(o.begin(), o.end(), L'\n', L';');
+            td::PutBig(L"todos", o);
+            Wh_SetIntValue(L"todoNext", nextTodoId);
+        }
+        void LoadTodos()
+        {
+            todos.clear();
+            const auto lines = td::SplitRecords(td::GetBig(L"todos"));
+            int maxId = 0;
+            for (size_t i = 1; i < lines.size() && todos.size() < kMaxTodos; ++i)
+            {
+                const auto f = td::Split(lines[i], L'|');
+                if (f.size() < 6)
+                    continue;
+                Todo t;
+                t.id = (int)td::ToLL(f[0]);
+                if (t.id <= 0)
+                    continue;
+                t.done = f[1] == L"1";
+                t.created = td::ToLL(f[4]);
+                t.text = td::ClampName(td::Unesc(f[5]), 200);
+                maxId = std::max(maxId, t.id);
+                todos.push_back(std::move(t));
+            }
+            nextTodoId = std::max(maxId + 1, Wh_GetIntValue(L"todoNext", 1));
+        }
+
+        // Newest first. Completed tasks are listed separately, below the open ones.
+        std::vector<int> TodoIndices(bool done) const
+        {
+            std::vector<int> idx;
+            for (int i = (int)todos.size() - 1; i >= 0; --i)
+                if (todos[i].done == done)
+                    idx.push_back(i);
+            return idx;
+        }
+        // Bottom edge of the page content (page coordinates), for the scroll range.
+        float TodoBottom() const
+        {
+            const std::vector<int> a = TodoIndices(false), d = TodoIndices(true);
+            float y = 88.f + kTodoDropH * todoDropK + 26.f + 12.f;
+            const bool showA = todoFilter != 2, showD = todoFilter != 1 && !d.empty();
+            if (showA)
+                y += (float)a.size() * kTodoPitch;
+            if (showD)
+                y += kTodoSectionH + (float)d.size() * kTodoPitch;
+            if ((!showA || a.empty()) && !showD)
+                y += 40.f; // the "nothing here" line
+            return y;
+        }
+
+        // The input drops down (open) or folds away (closed) with a short ease.
+        float TodoDrop()
+        {
+            if (todoDropStart)
+            {
+                const float t = Clamp01((float)(MonoMs() - todoDropStart) / 220.f);
+                const float to = todoDropOpen ? 1.f : 0.f;
+                todoDropK = todoDropFrom + (to - todoDropFrom) * EaseInOutCubic(t);
+                if (t >= 1.f)
+                {
+                    todoDropK = to;
+                    todoDropStart = 0;
+                    StopFrames(hwnd, TIMER_TODO_ANIM);
+                }
+            }
+            return todoDropK;
+        }
+        void SetTodoDrop(bool open)
+        {
+            if (open)
+                pendingFocus = E_TODO; // the cursor is in the box straight away, even while it is still dropping
+            if (todoDropOpen == open)
+                return;
+            todoDropOpen = open;
+            todoDropFrom = todoDropK;
+            todoDropStart = MonoMs();
+            StartFrames(hwnd, TIMER_TODO_ANIM);
+            if (open)
+                ScrollTo(0.f);
+            else
+            {
+                todoEditId = 0;
+                SetWindowTextW(edits[E_TODO], L"");
+            }
+        }
+
+        void AddTodoFromInput()
+        {
+            const std::wstring text = td::ClampName(rich::Trim(EditText(E_TODO)), 200);
+            if (text.empty())
+                return;
+            if (todoEditId)
+            { // saving an edit
+                if (Todo *t = FindTodo(todoEditId))
+                    t->text = text;
+                SaveTodos();
+                SetTodoDrop(false);
+                ResizePanelToContent();
+                Invalidate();
+                return;
+            }
+            if (todos.size() >= kMaxTodos)
+            {
+                SetStatus(L"The task list is full");
+                return;
+            }
+            Todo t;
+            t.id = nextTodoId++;
+            t.text = text;
+            t.created = td::WallMs() / 1000;
+            todos.push_back(std::move(t));
+            SetWindowTextW(edits[E_TODO], L"");
+            pendingFocus = E_TODO; // ready for the next task
+            SaveTodos();
+            ResizePanelToContent();
+            Invalidate();
+        }
+
+        // One small icon button (header and task rows share it).
+        void TodoIcon(D2D1_RECT_F r, int id, int param, const wchar_t *glyph, Col c, bool armed = false)
+        {
+            const float hov = HoverAmount(id, param);
+            if (armed)
+                RoundFill(r, 6.f, Mix(pal.danger, pal.dangerHover, hov));
+            else if (hov > 0.001f)
+                RoundFill(r, 6.f, Fade(pal.cardHover, hov));
+            Text(glyph, r, 13.f, 400, armed ? Hex(0xFFFFFF) : c, 1, 1, true);
+            AddHit(r, id, param);
+        }
+
+        void PaintTodoRow(const Todo &t, float y)
+        {
+            const D2D1_RECT_F row = RF(16, y, 340, kTodoRow);
+            RoundFill(row, 8.f, Mix(pal.card, pal.cardHover, HoverAmount(ID_TD_ROW, t.id)));
+            RoundStroke(row, 8.f, pal.border, 1.f);
+            AddHit(row, ID_TD_ROW, t.id);
+
+            const float cx = 36.f, cy = y + kTodoRow / 2;
+            if (t.done)
+            {
+                Circle(cx, cy, 8.5f, pal.accent);
+                Text(L"\uE73E", RF(cx - 8.5f, cy - 8.5f, 17, 17), 9.5f, 400, pal.onAccent, 1, 1, true);
+            }
+            else
+                CircleStroke(cx, cy, 8.f, Mix(pal.sub, pal.accent, HoverAmount(ID_TD_CHECK, t.id)), 1.5f);
+            AddHit(RF(cx - 16, cy - 16, 32, 32), ID_TD_CHECK, t.id);
+
+            const std::wstring title = FitText(t.text, 13.f, 600, 222.f);
+            Text(title, RF(56, y + 4, 226, 18), 13.f, 600, t.done ? pal.sub : pal.text, 0, 1);
+            if (t.done)
+                Line(56, y + 13, 56 + MeasureText(title, 13.f, 600), y + 13, Fade(pal.sub, 0.9f), 1.f);
+            Text(TodoStamp(t.created), RF(56, y + 22, 226, 14), 10.5f, 400, pal.sub, 0, 1);
+
+            const bool armed = todoDelArmedId == t.id && MonoMs() < todoDelArmedUntil;
+            TodoIcon(RF(288, y + 6, 28, 28), ID_TD_EDIT, t.id, L"\uE70F", pal.sub);
+            TodoIcon(RF(320, y + 6, 28, 28), ID_TD_DEL, t.id, L"\uE74D", pal.sub, armed);
+        }
+
+        void PaintTodo()
+        {
+            const float baseOpacity = drawOpacity;
+            const float k = TodoDrop();
+            const ULONGLONG now = MonoMs();
+            const bool clearArmed = todoClearArmedUntil && now < todoClearArmedUntil;
+
+            // header: title, then exactly two icons - add (turns into a cross while the input is open) and delete all
+            Text(L"Tasks", RF(14, 52, 100, 32), 17.f, 600, pal.text, 0, 1);
+            if (clearArmed)
+                Text(L"Click again to delete all tasks", RF(100, 52, 182, 32), 11.5f, 400, pal.danger, 2, 1);
+            TodoIcon(RF(288, 54, 32, 28), ID_TD_PLUS, 0, todoDropOpen ? L"\uE711" : L"\uE710", pal.text);
+            TodoIcon(RF(324, 54, 32, 28), ID_TD_TRASH, 0, L"\uE74D", pal.text, clearArmed);
+
+            // the drop-down input
+            if (k > 0.002f)
+            {
+                const float fh = 34.f * k;
+                UseEdit(E_TODO, RF(16, 88, 292, fh), 10.f, std::min(6.f, fh * 0.18f));
+                IconBtn(339.f, 88.f + fh / 2, 34.f * k, ID_TD_ADD, 0, todoEditId ? L"\uE73E" : L"\uE710", 1, 14.f * k);
+            }
+
+            // "View" label on the left, the filter chips on the right
+            const float fy = 88.f + kTodoDropH * k;
+            Text(L"View", RF(18, fy, 80, 26), 12.f, 400, pal.sub, 0, 1);
+            Chip(RF(190, fy, 44, 26), ID_TD_FILTER, 0, L"All", todoFilter == 0);
+            Chip(RF(240, fy, 58, 26), ID_TD_FILTER, 1, L"Active", todoFilter == 1);
+            Chip(RF(304, fy, 52, 26), ID_TD_FILTER, 2, L"Done", todoFilter == 2);
+
+            float y = fy + 26.f + 12.f;
+            const std::vector<int> active = TodoIndices(false), done = TodoIndices(true);
+            const bool showA = todoFilter != 2, showD = todoFilter != 1 && !done.empty();
+            if (showA)
+                for (int ix : active)
+                {
+                    PaintTodoRow(todos[ix], y);
+                    y += kTodoPitch;
+                }
+            if (showD)
+            { // completed tasks sink below their own sub-header and are shown dimmed
+                Text(L"Completed tasks", RF(18, y, 200, 30), 12.5f, 600, pal.sub, 0, 1);
+                Btn(RF(286, y + 2, 70, 26), ID_TD_CLEARDONE, 0, L"Delete", 0, 12.f);
+                y += kTodoSectionH;
+                drawOpacity = baseOpacity * 0.5f;
+                for (int ix : done)
+                {
+                    PaintTodoRow(todos[ix], y);
+                    y += kTodoPitch;
+                }
+                drawOpacity = baseOpacity;
+            }
+            if ((!showA || active.empty()) && !showD)
+            {
+                const wchar_t *msg = todos.empty() ? L"No tasks yet. Tap + to add one." : todoFilter == 2 ? L"No completed tasks."
+                                                                                                          : L"No active tasks.";
+                Text(msg, RF(24, y + 4, 324, 30), 13.f, 400, pal.sub, 1, 1);
+            }
+        }
+
         // ---- settings ------------------------------------------------------------------------------------------------
         void SettingRow(float y, float h, const wchar_t *title, const wchar_t *desc)
         {
@@ -10499,7 +12125,7 @@ namespace ui
         {
             if (t < 0.f)
                 t = AboutT();
-            return 62.f + (230.f - 62.f) * t;
+            return 62.f + (272.f - 62.f) * t;
         }
 
         void PaintAbout(float y)
@@ -10533,6 +12159,16 @@ namespace ui
                 Text(rowValue[i], RF(122, ry, 220, 22), 12.5f, 400, Fade(pal.text, a1), 0, 1);
             }
 
+            // Icon (16 px) + 8 px + label are centred as one group inside the button, on the button's middle line.
+            auto labelGroup = [&](const D2D1_RECT_F &b, const wchar_t *label, float &iconCx, float &iconCy)
+            {
+                const float iconW = 16.f, gap = 8.f, tw = MeasureText(label, 12.f, 600);
+                const float x0 = b.left + ((b.right - b.left) - (iconW + gap + tw)) / 2;
+                iconCx = x0 + iconW / 2;
+                iconCy = (b.top + b.bottom) / 2;
+                Text(label, RF(x0 + iconW + gap, b.top, tw + 4.f, b.bottom - b.top), 12.f, 600, Fade(pal.text, a1), 0, 1);
+            };
+
             if (a1 > 0.01f)
             {
                 // Two equal-width links, aligned to the same inner margins as the metadata rows.
@@ -10546,17 +12182,17 @@ namespace ui
                 RoundStroke(windhawk, 6.f, Fade(Mix(pal.border, pal.accent, 0.35f + 0.25f * windhawkHover), a1), 1.f);
 
                 // Clean, scalable website/globe icon using the built-in Windows icon font.
-                Text(L"\uE774",
-                     RF(windhawk.left + 7.f, windhawk.top, 23.f, 34.f), 15.f, 400, logoWhite, 1, 1, true);
-                Text(L"Windhawk Page", RF(windhawk.left + 34.f, windhawk.top, 112.f, 34.f), 12.f, 600, Fade(pal.text, a1), 0, 1);
+                float wx, wy;
+                labelGroup(windhawk, L"Windhawk Page", wx, wy);
+                Text(L"\uE774", RF(wx - 11.f, wy - 12.f, 22.f, 24.f), 15.f, 400, logoWhite, 1, 1, true);
 
                 const float githubHover = HoverAmount(ID_ABOUT_GITHUB);
                 RoundFill(github, 6.f, Fade(Mix(pal.cardHover, pal.accent, 0.16f + 0.14f * githubHover), a1));
                 RoundStroke(github, 6.f, Fade(Mix(pal.border, pal.accent, 0.35f + 0.25f * githubHover), a1), 1.f);
 
                 // Small Octocat-inspired GitHub mark, drawn with the existing Direct2D primitives.
-                const float gx = github.left + 18.f;
-                const float gy = github.top + 17.f;
+                float gx, gy;
+                labelGroup(github, L"GitHub Repo", gx, gy);
                 const Col githubBg = Fade(Mix(pal.cardHover, pal.accent, 0.16f + 0.14f * githubHover), a1);
                 Circle(gx, gy, 5.7f, Fade(pal.text, a1));
                 Line(gx - 4.0f, gy - 2.3f, gx - 5.0f, gy - 6.3f, Fade(pal.text, a1), 2.2f);
@@ -10567,7 +12203,6 @@ namespace ui
                 Circle(gx + 1.9f, gy - 0.4f, 0.65f, githubBg);
                 Line(gx - 1.8f, gy + 4.4f, gx - 2.3f, gy + 6.4f, Fade(pal.text, a1), 1.8f);
                 Line(gx + 1.8f, gy + 4.4f, gx + 2.3f, gy + 6.4f, Fade(pal.text, a1), 1.8f);
-                Text(L"GitHub Repo", RF(github.left + 36.f, github.top, 108.f, 34.f), 12.f, 600, Fade(pal.text, a1), 0, 1);
 
                 if (t > 0.6f)
                 {
@@ -10576,8 +12211,23 @@ namespace ui
                 }
             }
 
-            Fill(RF(30, y + 198, 312, 1), Fade(pal.border, a1));
-            Text(WK_COPYRIGHT, RF(30, y + 204, 312, 22), 11.f, 400, Fade(pal.sub, a1), 0, 1);
+            if (a1 > 0.01f)
+            {
+                // Full-width third button, under the two links (same inner margins, same fill and outline).
+                const D2D1_RECT_F issues = RF(30, y + 194, 312, 34);
+                const float issuesHover = HoverAmount(ID_ABOUT_ISSUES);
+                RoundFill(issues, 6.f, Fade(Mix(pal.cardHover, pal.accent, 0.16f + 0.14f * issuesHover), a1));
+                RoundStroke(issues, 6.f, Fade(Mix(pal.border, pal.accent, 0.35f + 0.25f * issuesHover), a1), 1.f);
+                float ix, iy;
+                labelGroup(issues, L"Report a bug or suggest a feature", ix, iy); // a small "!" in a ring
+                CircleStroke(ix, iy, 7.f, Fade(pal.text, a1), 1.5f);
+                Text(L"!", RF(ix - 7, iy - 8, 14, 16), 11.f, 700, Fade(pal.text, a1), 1, 1);
+                if (t > 0.6f)
+                    AddHit(issues, ID_ABOUT_ISSUES);
+            }
+
+            Fill(RF(30, y + 240, 312, 1), Fade(pal.border, a1));
+            Text(WK_COPYRIGHT, RF(30, y + 246, 312, 22), 11.f, 400, Fade(pal.sub, a1), 0, 1);
             rt->PopAxisAlignedClip();
             // Chevron (rotates by swapping glyphs half-way).
             Text(t < 0.5f ? L"\uE70D" : L"\uE70E", RF(316, y + 10, 28, 42), 11.f, 400, pal.sub, 1, 1, true);
@@ -10595,6 +12245,24 @@ namespace ui
             };
             toggleRow(L"Notification icon", L"Show the bell next to the clock", ID_ST_BELL, S.showBell.load() != 0);
             toggleRow(L"Taskbar previews", L"Stopwatch / timer next to the clock", ID_ST_PREVIEW, S.showPreviews.load() != 0);
+
+            SettingRow(y, 70, L"Notification panel", L"");
+            Chip(RF(30, y + 36, 150, 26), ID_ST_NOTIFMODE, 0, L"Separate panel", S.notifMode.load() == 0);
+            Chip(RF(192, y + 36, 150, 26), ID_ST_NOTIFMODE, 1, L"Above WinKlok", S.notifMode.load() == 1);
+            y += 78;
+            SettingRow(y, 108, L"Visible tabs", L"");
+            {
+                int n = 0;
+                for (int k = 0; k < kTabs; ++k)
+                {
+                    const int id = kTabOrder[k];
+                    if (id == TAB_SETTINGS)
+                        continue; // Settings always stays, so it can always be turned back on
+                    Chip(RF(30.f + (float)(n % 3) * 106.f, y + 38.f + (float)(n / 3) * 32.f, 100, 26), ID_ST_TAB, id, kTabNames[id], TabVisible(id));
+                    ++n;
+                }
+            }
+            y += 116;
 
             SettingRow(y, 70, L"Time format", L"");
             Chip(RF(30, y + 36, 150, 26), ID_ST_FORMAT, 0, L"12-hour", !S.Use24());
@@ -10619,18 +12287,25 @@ namespace ui
         }
 
         // ---------------------------------------------------------------- input
-        void TabWheel(int delta, bool horizontal)
+        void TabWheel(float delta, bool horizontal)
         {
             if (TabMax() < 0.5f)
                 return;
-            const float d = horizontal ? (float)delta : -(float)delta; // wheel up scrolls the bar left
+            const float d = horizontal ? delta : -delta; // wheel up scrolls the bar left
             tabScrollA.Go(std::min(TabMax(), std::max(0.f, tabScrollA.to + d * 0.45f)), TabScrollNow());
             StartTabTimer();
         }
 
-        void OnWheel(int delta, float, float y, bool horizontal) override
+        void OnWheel(int delta, float x, float y, bool horizontal) override
         {
-            if (delta == 0)
+            ScrollUnits((float)delta, x, y, horizontal, (delta % WHEEL_DELTA) == 0);
+        }
+
+        // delta is in wheel units (WHEEL_DELTA = one notch = kWheelPx px). Precision touchpads pass fractions straight
+        // through, so slow finger movement is neither rounded to whole steps nor amplified.
+        void ScrollUnits(float delta, float, float y, bool horizontal, bool discrete)
+        {
+            if (delta == 0.f || (collapsed && stackK > 0.5f))
                 return;
             if (y < 47.f)
             {
@@ -10643,14 +12318,14 @@ namespace ui
             { // only the lap list scrolls; the clock and controls stay put
                 if (y < kLapRegionTop || snap.laps.empty())
                     return;
-                lapSm.target = std::min(LapMax(), std::max(0.f, lapSm.target - (float)delta * (kWheelPx / (float)WHEEL_DELTA)));
+                lapSm.target = std::min(LapMax(), std::max(0.f, lapSm.target - delta * (kWheelPx / (float)WHEEL_DELTA)));
                 KickScroll();
                 return;
             }
             if (tab == 4 && noteView == 1)
             {
                 if (y >= 88.f)
-                    PreviewScrollTo(prevSm.target - (float)delta * (kWheelPx / (float)WHEEL_DELTA));
+                    PreviewScrollTo(prevSm.target - delta * (kWheelPx / (float)WHEEL_DELTA));
                 return;
             }
             if (tab == 4 && noteView == 2)
@@ -10661,11 +12336,11 @@ namespace ui
             }
             if (PanelScrollMax() > 0.5f)
             { // continuous: precision touchpads deliver many small deltas
-                ScrollTo(panelScrollTarget - (float)delta * (kWheelPx / (float)WHEEL_DELTA));
+                ScrollTo(panelScrollTarget - delta * (kWheelPx / (float)WHEEL_DELTA));
                 return;
             }
             if (tab == 0)
-                CalWheel(delta); // calendar: pages slide smoothly
+                CalWheel(delta, discrete); // calendar: weeks (month view) or pages slide smoothly
         }
 
         void OnClick(int id, int param, bool right) override
@@ -10819,11 +12494,11 @@ namespace ui
                 aboutOpen = !aboutOpen;
                 aboutA.Go(aboutOpen ? 1.f : 0.f, AboutT());
                 {
-                    SetTimer(hwnd, TIMER_ABOUT_ANIM, 15, nullptr);
+                    StartFrames(hwnd, TIMER_ABOUT_ANIM);
                     if (aboutOpen)
                     { // glide down so the whole expanded card is visible
                         panelScrollTarget = std::max(0.f, settingsAboutTop + AboutHeight(1.f) + 18.f - ContentViewportBottom());
-                        panelScrollStarted = GetTickCount64();
+                        panelScrollStarted = MonoMs();
                         KickScroll();
                     }
                 }
@@ -10832,13 +12507,95 @@ namespace ui
                 ShellExecuteW(nullptr, L"open", WK_WINDHAWK_URL, nullptr, nullptr, SW_SHOWNORMAL);
                 return;
             case ID_ABOUT_GITHUB:
-                ShellExecuteW(nullptr, L"open", L"https://github.com/shifting-whistler/WinKlok", nullptr, nullptr, SW_SHOWNORMAL);
+                ShellExecuteW(nullptr, L"open", WK_GITHUB_URL, nullptr, nullptr, SW_SHOWNORMAL);
                 return;
             case ID_AL_SAVE:
                 SaveAlarmFromEditor();
                 return;
             case ID_AL_CANCEL:
                 CloseAlarmEditor();
+                return;
+            case ID_TD_ADD:
+                AddTodoFromInput();
+                return;
+            case ID_TD_PLUS:
+                SetTodoDrop(!todoDropOpen);
+                break;
+            case ID_TD_TRASH:
+            { // delete all tasks: the first click arms the button, the second deletes
+                const ULONGLONG now = MonoMs();
+                if (todos.empty())
+                    break;
+                if (todoClearArmedUntil && now < todoClearArmedUntil)
+                {
+                    todos.clear();
+                    todoClearArmedUntil = 0;
+                    SetTodoDrop(false);
+                    SaveTodos();
+                }
+                else
+                    todoClearArmedUntil = now + 3000;
+                break;
+            }
+            case ID_TD_FILTER:
+                todoFilter = param;
+                ScrollTo(0.f);
+                break;
+            case ID_TD_CLEARDONE:
+                todos.erase(std::remove_if(todos.begin(), todos.end(), [](const Todo &t)
+                                           { return t.done; }),
+                            todos.end());
+                SaveTodos();
+                if (todoEditId && !FindTodo(todoEditId))
+                    SetTodoDrop(false); // the task being edited was a completed one and is gone: close the input
+                break;
+            case ID_TD_CHECK:
+            case ID_TD_ROW:
+                if (Todo *t = FindTodo(param))
+                {
+                    t->done = !t->done;
+                    SaveTodos();
+                }
+                break;
+            case ID_TD_EDIT:
+                if (Todo *t = FindTodo(param))
+                {
+                    todoEditId = t->id;
+                    SetWindowTextW(edits[E_TODO], t->text.c_str());
+                    SetTodoDrop(true);
+                }
+                break;
+            case ID_TD_DEL:
+            { // two clicks: the first arms the button (red), the second deletes
+                const ULONGLONG now = MonoMs();
+                if (todoDelArmedId == param && now < todoDelArmedUntil)
+                {
+                    todos.erase(std::remove_if(todos.begin(), todos.end(), [&](const Todo &t)
+                                               { return t.id == param; }),
+                                todos.end());
+                    if (todoEditId == param)
+                        SetTodoDrop(false);
+                    todoDelArmedId = 0;
+                    todoDelArmedUntil = 0;
+                    SaveTodos();
+                    break;
+                }
+                todoDelArmedId = param;
+                todoDelArmedUntil = now + 3000;
+                break;
+            }
+            case ID_ST_TAB:
+                ToggleTabVisible(param);
+                return;
+            case ID_STACK_TOGGLE:
+                ToggleCollapse();
+                return;
+            case ID_ST_NOTIFMODE:
+                td::g_set.notifMode = param;
+                td::g_set.Save();
+                break;
+            case ID_ABOUT_ISSUES:
+                ShellExecuteW(nullptr, L"open", WK_ISSUES_URL, nullptr, nullptr, SW_SHOWNORMAL);
                 return;
             case ID_NOTE_ADD:
                 NewNote();
@@ -10848,7 +12605,7 @@ namespace ui
                 return;
             case ID_NOTE_DEL:
             { // two clicks: the first arms the button (red), the second deletes
-                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG now = MonoMs();
                 if (noteDelArmedId == param && now < noteDelArmedUntil)
                 {
                     noteDelArmedId = 0;
@@ -10892,6 +12649,7 @@ namespace ui
                 }
                 break;
             case ID_ST_BELL:
+                td::g_set.bellUnset = false; // an explicit choice: the first-run copy of the Windows bell must not overwrite it
                 td::g_set.showBell = !td::g_set.showBell.load();
                 td::g_set.Save();
                 tb::PostRefreshAll();
@@ -10938,6 +12696,8 @@ namespace ui
                 SaveAlarmFromEditor();
             else if (tab == 4 && noteView == 2)
                 SetFocus(edits[E_NBODY]); // Enter in the title moves on to the body
+            else if (tab == TAB_TODO)
+                AddTodoFromInput();
             ResizePanelToContent();
             Invalidate();
         }
@@ -10950,7 +12710,17 @@ namespace ui
                 switch (wp)
                 {
                 case TIMER_PANEL_ANIM:
-                    AdvancePanelAnimation();
+                    StepStackedFlyouts(*this); // a stacked card moves in the same tick, in the same frame
+                    return 0;
+                case TIMER_STACK_ANIM:
+                    AdvanceStack();
+                    return 0;
+                case TIMER_TODO_ANIM:
+                    TodoDrop(); // advances (and ends) the drop-down even when the Tasks page is not the one being painted
+                    if (IsWindowVisible(hwnd))
+                        Invalidate();
+                    else
+                        StopFrames(hwnd, TIMER_TODO_ANIM);
                     return 0;
                 case TIMER_SCROLL_ANIM:
                     AdvanceScrollAnimation();
@@ -10962,7 +12732,7 @@ namespace ui
                     if (!aboutA.Running(kAboutMs))
                     {
                         aboutA.Set(aboutA.to);
-                        KillTimer(hwnd, TIMER_ABOUT_ANIM);
+                        StopFrames(hwnd, TIMER_ABOUT_ANIM);
                         ResizePanelToContent();
                     }
                     Invalidate();
@@ -10973,19 +12743,19 @@ namespace ui
                         tabScrollA.Set(tabScrollA.to);
                         indXA.Set(indXA.to);
                         indWA.Set(indWA.to);
-                        KillTimer(hwnd, TIMER_TAB_ANIM);
+                        StopFrames(hwnd, TIMER_TAB_ANIM);
                     }
                     Invalidate();
                     return 0;
                 case TIMER_STATUS_ANIM:
                 {
-                    const ULONGLONG now = GetTickCount64();
+                    const ULONGLONG now = MonoMs();
                     if (statusMsg.empty() || now >= statusUntil)
                     {
                         statusMsg.clear();
                         statusStarted = 0;
                         statusTimerActive = false;
-                        KillTimer(hwnd, TIMER_STATUS_ANIM);
+                        StopFrames(hwnd, TIMER_STATUS_ANIM);
                         ResizePanelToContent();
                     }
                     else if (now - statusStarted < 235 || statusUntil - now <= 280)
@@ -10995,15 +12765,15 @@ namespace ui
                     else
                     {
                         statusTimerActive = false;
-                        KillTimer(hwnd, TIMER_STATUS_ANIM);
+                        StopFrames(hwnd, TIMER_STATUS_ANIM);
                     }
                     return 0;
                 }
                 case TIMER_CONTENT_ANIM:
-                    if (!contentTransitionStarted || GetTickCount64() - contentTransitionStarted >= 225)
+                    if (!contentTransitionStarted || MonoMs() - contentTransitionStarted >= 225)
                     {
                         contentTransitionStarted = 0;
-                        KillTimer(hwnd, TIMER_CONTENT_ANIM);
+                        StopFrames(hwnd, TIMER_CONTENT_ANIM);
                     }
                     Invalidate();
                     return 0;
@@ -11016,7 +12786,7 @@ namespace ui
                     // pointer event and its explicit toggle message first.
                     if (IsWindowVisible(hwnd) && !noActMode)
                     {
-                        if (g_clockTogglePendingUntil.load() > GetTickCount64())
+                        if (g_clockTogglePendingUntil.load() > MonoMs())
                         {
                             SetTimer(hwnd, TIMER_DEACTIVATE_CHECK, 180, nullptr);
                         }
@@ -11024,7 +12794,7 @@ namespace ui
                         {
                             g_clockTogglePendingUntil = 0;
                             HWND fg = GetForegroundWindow();
-                            if (fg != hwnd && (!fg || !IsChild(hwnd, fg)))
+                            if (fg != hwnd && (!fg || !IsChild(hwnd, fg)) && !IsFlyoutHwnd(fg))
                                 HidePanel();
                         }
                     }
@@ -11034,6 +12804,16 @@ namespace ui
             case WM_UI_TOGGLE:
                 g_clockTogglePendingUntil = 0;
                 Toggle(wp != 0);
+                return 0;
+            case WM_UI_FRAME:
+                fclk::Tick();
+                return 0;
+            case MM_WOM_DONE: // a one-shot sound (a preview) has finished playing: release the audio device
+                snd::OnWaveDone((HWAVEOUT)wp);
+                return 0;
+            case WM_UI_TOGGLE_NOTIF:
+                g_clockTogglePendingUntil = 0;
+                ToggleNotifications();
                 return 0;
             case WM_UI_QUIT:
                 PostQuitMessage(0);
@@ -11117,7 +12897,7 @@ namespace ui
                 return 0;
             if (isBody && (m == WM_MOUSEWHEEL || m == WM_POINTERWHEEL))
             {
-                if (GetTickCount64() - p->lastTouchpadTick < 350)
+                if (MonoMs() - p->lastTouchpadTick < 350)
                     return 0;
                 const int delta = (int)GET_WHEEL_DELTA_WPARAM(w);
                 if (delta)
@@ -11126,6 +12906,1481 @@ namespace ui
             }
         }
         return DefSubclassProc(h, m, w, l);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  NOTIFICATION PANEL
+    //  WinKlok's own notification flyout. The notifications come from the Windows notification database of the current
+    //  user (wpndatabase.db). It is only ever read, from a private temporary copy that is deleted again straight away,
+    //  through winsqlite3.dll (a Windows system component). Nothing is sent anywhere. Dismissing a notification here
+    //  hides it in WinKlok (the list of hidden ones is kept in the mod's storage); the native notification centre is not
+    //  touched. If the database cannot be read the panel says so and offers the native one.
+    // ---------------------------------------------------------------------------------------------
+    namespace wpn
+    {
+        struct Item
+        {
+            long long id = 0, arrival = 0; // arrival: wall ms
+            long long expiry = 0;          // wall ms, 0 = none (checked again when the rows are built)
+            std::wstring aumid, title, body;
+        };
+
+        // ---- toast payload (XML) -> title / body -------------------------------------------------------------
+        static std::wstring XmlDecode(const std::wstring &s)
+        {
+            std::wstring o;
+            o.reserve(s.size());
+            for (size_t i = 0; i < s.size(); ++i)
+            {
+                if (s[i] != L'&')
+                {
+                    o += s[i];
+                    continue;
+                }
+                size_t e = std::wstring::npos; // an entity is short: look at the next few characters only (no scan to the end)
+                for (size_t k = i + 1; k < s.size() && k <= i + 10; ++k)
+                    if (s[k] == L';')
+                    {
+                        e = k;
+                        break;
+                    }
+                if (e == std::wstring::npos)
+                {
+                    o += s[i];
+                    continue;
+                }
+                const std::wstring ent = s.substr(i + 1, e - i - 1);
+                if (ent == L"lt")
+                    o += L'<';
+                else if (ent == L"gt")
+                    o += L'>';
+                else if (ent == L"amp")
+                    o += L'&';
+                else if (ent == L"quot")
+                    o += L'"';
+                else if (ent == L"apos")
+                    o += L'\'';
+                else if (ent.size() > 1 && ent[0] == L'#')
+                {
+                    const bool hex = ent[1] == L'x' || ent[1] == L'X';
+                    wchar_t *endp = nullptr;
+                    const unsigned long cp = wcstoul(ent.c_str() + (hex ? 2 : 1), &endp, hex ? 16 : 10);
+                    if (endp && *endp == 0 && cp > 0 && cp < 0x110000)
+                    {
+                        if (cp > 0xFFFF && sizeof(wchar_t) == 2)
+                        {
+                            o += (wchar_t)(0xD800 + ((cp - 0x10000) >> 10));
+                            o += (wchar_t)(0xDC00 + ((cp - 0x10000) & 0x3FF));
+                        }
+                        else
+                            o += (wchar_t)cp;
+                    }
+                }
+                else
+                {
+                    o += s[i];
+                    continue;
+                }
+                i = e;
+            }
+            return o;
+        }
+
+        static std::wstring StripTags(const std::wstring &s)
+        {
+            std::wstring o;
+            for (size_t i = 0; i < s.size();)
+            {
+                if (s.compare(i, 9, L"<![CDATA[") == 0)
+                {
+                    const size_t e = s.find(L"]]>", i + 9);
+                    o += s.substr(i + 9, e == std::wstring::npos ? std::wstring::npos : e - i - 9);
+                    i = e == std::wstring::npos ? s.size() : e + 3;
+                }
+                else if (s[i] == L'<')
+                {
+                    const size_t e = s.find(L'>', i);
+                    i = e == std::wstring::npos ? s.size() : e + 1;
+                }
+                else
+                    o += s[i++];
+            }
+            return o;
+        }
+
+        // The first <text> of the toast is its title, the following ones are the body lines. Attribution lines and
+        // everything from <actions> on (buttons, inputs) are left out.
+        static void ParseToast(const std::wstring &xml, std::wstring &title, std::wstring &body)
+        {
+            title.clear();
+            body.clear();
+            size_t end = xml.find(L"<actions");
+            if (end == std::wstring::npos)
+                end = xml.size();
+            std::vector<std::wstring> texts;
+            size_t p = 0;
+            while ((p = xml.find(L"<text", p)) != std::wstring::npos && p < end)
+            {
+                const size_t q = p + 5;
+                if (q >= xml.size())
+                    break;
+                const wchar_t c = xml[q];
+                if (!(c == L'>' || c == L' ' || c == L'/' || c == L'\t' || c == L'\r' || c == L'\n'))
+                {
+                    p = q;
+                    continue;
+                }
+                const size_t gt = xml.find(L'>', q);
+                if (gt == std::wstring::npos)
+                    break;
+                if (xml[gt - 1] == L'/')
+                {
+                    p = gt + 1;
+                    continue;
+                }
+                const size_t close = xml.find(L"</text>", gt + 1);
+                if (close == std::wstring::npos)
+                    break;
+                const bool attribution = xml.substr(p, gt - p).find(L"attribution") != std::wstring::npos;
+                const std::wstring val = XmlDecode(StripTags(xml.substr(gt + 1, close - gt - 1)));
+                if (!attribution && !val.empty())
+                    texts.push_back(val);
+                p = close + 7;
+            }
+            if (texts.empty())
+                return;
+            title = texts[0];
+            for (size_t i = 1; i < texts.size(); ++i)
+                body += (i > 1 ? L"\n" : L"") + texts[i];
+        }
+
+        // ---- winsqlite3.dll ---------------------------------------------------------------------------------------
+        struct Sqlite
+        {
+            HMODULE dll = nullptr;
+            bool tried = false, ok = false;
+            int (*open_v2)(const char *, void **, int, const char *) = nullptr;
+            int (*close)(void *) = nullptr;
+            int (*prepare_v2)(void *, const char *, int, void **, const char **) = nullptr;
+            int (*step)(void *) = nullptr;
+            int (*finalize)(void *) = nullptr;
+            long long (*column_int64)(void *, int) = nullptr;
+            const void *(*column_blob)(void *, int) = nullptr;
+            int (*column_bytes)(void *, int) = nullptr;
+            const unsigned char *(*column_text)(void *, int) = nullptr;
+
+            template <class F>
+            bool Bind(const char *name, F &fn)
+            {
+                fn = reinterpret_cast<F>(GetProcAddress(dll, name));
+                return fn != nullptr;
+            }
+            bool Load()
+            {
+                if (tried)
+                    return ok;
+                tried = true;
+                dll = LoadLibraryExW(L"winsqlite3.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+                if (!dll)
+                    return false;
+                ok = Bind("sqlite3_open_v2", open_v2) && Bind("sqlite3_close", close) && Bind("sqlite3_prepare_v2", prepare_v2) &&
+                     Bind("sqlite3_step", step) && Bind("sqlite3_finalize", finalize) && Bind("sqlite3_column_int64", column_int64) &&
+                     Bind("sqlite3_column_blob", column_blob) && Bind("sqlite3_column_bytes", column_bytes) &&
+                     Bind("sqlite3_column_text", column_text);
+                return ok;
+            }
+            void Release()
+            {
+                if (dll)
+                    FreeLibrary(dll);
+                *this = Sqlite();
+            }
+        };
+        static Sqlite g_sql;
+        static void Release() { g_sql.Release(); }
+
+        static std::wstring DbPath()
+        {
+            wchar_t b[MAX_PATH] = {};
+            const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", b, MAX_PATH);
+            if (!n || n >= MAX_PATH)
+                return L"";
+            return std::wstring(b) + L"\\Microsoft\\Windows\\Notifications\\wpndatabase.db";
+        }
+
+        // Cheap change detector for the database and its write-ahead log.
+        static unsigned long long Signature()
+        {
+            const std::wstring db = DbPath();
+            unsigned long long sig = 0;
+            int k = 1;
+            for (const std::wstring &f : {db, db + L"-wal"})
+            {
+                WIN32_FILE_ATTRIBUTE_DATA d{};
+                if (!f.empty() && GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &d))
+                    sig += (((unsigned long long)d.ftLastWriteTime.dwHighDateTime << 32) | d.ftLastWriteTime.dwLowDateTime) * (unsigned)(2 * k + 1) +
+                           (((unsigned long long)d.nFileSizeHigh << 32) | d.nFileSizeLow) * (unsigned)(7 * k);
+                ++k;
+            }
+            return sig;
+        }
+
+        // Background read state (see "background reading" below). g_cancel is checked inside the long loops.
+        static std::atomic<bool> g_cancel{false}, g_busy{false};
+
+        static const std::wstring &UserSid()
+        {
+            static const std::wstring sid = []
+            {
+                std::wstring s;
+                HANDLE t = nullptr;
+                if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &t))
+                {
+                    DWORD n = 0;
+                    GetTokenInformation(t, TokenUser, nullptr, 0, &n);
+                    std::vector<BYTE> b(n ? n : 1);
+                    LPWSTR str = nullptr;
+                    if (n && GetTokenInformation(t, TokenUser, b.data(), n, &n) &&
+                        ConvertSidToStringSidW(((TOKEN_USER *)b.data())->User.Sid, &str))
+                    {
+                        s = str;
+                        LocalFree(str);
+                    }
+                    CloseHandle(t);
+                }
+                return s;
+            }();
+            return sid;
+        }
+        struct OwnerOnly // security attributes: full access for this user only
+        {
+            SECURITY_ATTRIBUTES sa{};
+            PSECURITY_DESCRIPTOR sd = nullptr;
+            OwnerOnly()
+            {
+                const std::wstring d = L"D:P(A;;FA;;;" + UserSid() + L")";
+                if (!UserSid().empty() && ConvertStringSecurityDescriptorToSecurityDescriptorW(d.c_str(), SDDL_REVISION_1, &sd, nullptr))
+                {
+                    sa.nLength = sizeof(sa);
+                    sa.lpSecurityDescriptor = sd;
+                }
+            }
+            ~OwnerOnly() { if (sd) LocalFree(sd); }
+            SECURITY_ATTRIBUTES *Get() { return sd ? &sa : nullptr; }
+        };
+
+        // The database is in use by Windows, so it is read with every sharing mode allowed.
+        static bool CopyShared(const std::wstring &src, const std::wstring &dst)
+        {
+            OwnerOnly acl;
+            if (!acl.Get()) return false;
+            HANDLE in = CreateFileW(src.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+            if (in == INVALID_HANDLE_VALUE)
+                return false;
+            LARGE_INTEGER size{};
+            if (!GetFileSizeEx(in, &size) || size.QuadPart < 0 || size.QuadPart > 256LL * 1024 * 1024)
+            {
+                CloseHandle(in);
+                return false;
+            }
+            HANDLE out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, acl.Get(), CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+            if (out == INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(in);
+                return false;
+            }
+            std::vector<char> buf(1 << 18);
+            bool ok = true;
+            LONGLONG copied = 0;
+            for (;;)
+            {
+                if (g_cancel.load())
+                {
+                    ok = false;
+                    break;
+                }
+                DWORD got = 0;
+                if (!ReadFile(in, buf.data(), (DWORD)buf.size(), &got, nullptr))
+                {
+                    ok = false;
+                    break;
+                }
+                if (got == 0)
+                    break;
+                DWORD put = 0;
+                if (!WriteFile(out, buf.data(), got, &put, nullptr) || put != got)
+                {
+                    ok = false;
+                    break;
+                }
+                copied += got;
+            }
+            if (copied != size.QuadPart)
+                ok = false; // reject a source file that changed or was truncated during the copy
+            CloseHandle(in);
+            CloseHandle(out);
+            return ok;
+        }
+
+        static std::wstring Utf8ToWide(const char *s, int n)
+        {
+            if (!s || n <= 0)
+                return L"";
+            const int w = MultiByteToWideChar(CP_UTF8, 0, s, n, nullptr, 0);
+            if (w <= 0)
+                return L"";
+            std::wstring o((size_t)w, L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, s, n, &o[0], w);
+            return o;
+        }
+
+        static std::wstring DecodePayload(const void *p, int n)
+        {
+            if (!p || n <= 0)
+                return L"";
+            const unsigned char *b = (const unsigned char *)p;
+            if (n >= 2 && ((b[0] == 0xFF && b[1] == 0xFE) || (b[0] != 0 && b[1] == 0)))
+            { // UTF-16LE, with or without a byte-order mark
+                const int skip = b[0] == 0xFF ? 2 : 0;
+                std::wstring s((size_t)((n - skip) / 2), L'\0');
+                if (!s.empty())
+                    memcpy(&s[0], b + skip, s.size() * 2);
+                return s;
+            }
+            const int off = (n >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) ? 3 : 0;
+            return Utf8ToWide((const char *)b + off, n - off);
+        }
+
+        // The private copy lives in the mod's own storage folder (removed together with the mod), under a fixed name: only
+        // one read runs at a time. Anything left from an interrupted read is deleted before the next one and at start-up.
+        static std::wstring CopyBase()
+        {
+            wchar_t dir[MAX_PATH] = {};
+            if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) || !dir[0])
+                return L"";
+            CreateDirectoryW(dir, nullptr); // (already there in most cases)
+            return UserSid().empty() ? L"" : std::wstring(dir) + L"\\wpndatabase-" + UserSid() + L".db";
+        }
+        static void DeleteCopy(const std::wstring &dst)
+        {
+            if (dst.empty())
+                return;
+            DeleteFileW(dst.c_str());
+            DeleteFileW((dst + L"-wal").c_str());
+            DeleteFileW((dst + L"-shm").c_str());
+            DeleteFileW((dst + L"-journal").c_str());
+        }
+        static void CleanupLeftovers()
+        {
+            DeleteCopy(CopyBase());
+        }
+
+        // Reads the toast notifications currently held by Windows, newest first. False: they could not be read.
+        // Runs on the background reader thread, never on the UI thread (a large database takes a while to copy).
+        static bool ReadAll(std::vector<Item> &out)
+        {
+            out.clear();
+            if (!g_sql.Load())
+                return false;
+            const std::wstring src = DbPath();
+            const std::wstring dst = CopyBase();
+            if (src.empty() || dst.empty())
+                return false;
+            auto cleanup = [&]()
+            { DeleteCopy(dst); };
+            cleanup(); // a leftover of an interrupted read
+            if (!CopyShared(src, dst))
+            {
+                cleanup();
+                return false;
+            }
+            auto copySidecar = [&](const wchar_t *suffix)
+            {
+                const std::wstring sidecar = src + suffix;
+                const DWORD attrs = GetFileAttributesW(sidecar.c_str());
+                if (attrs == INVALID_FILE_ATTRIBUTES)
+                {
+                    const DWORD error = GetLastError();
+                    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+                }
+                return !(attrs & FILE_ATTRIBUTE_DIRECTORY) && CopyShared(sidecar, dst + suffix);
+            };
+            if (!copySidecar(L"-wal") || !copySidecar(L"-journal"))
+            { // an existing WAL/journal is part of the database snapshot, not an optional decoration
+                cleanup();
+                return false;
+            }
+            const std::string path = [&]()
+            {
+                const int n = WideCharToMultiByte(CP_UTF8, 0, dst.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                std::string s((size_t)std::max(n, 1), '\0');
+                WideCharToMultiByte(CP_UTF8, 0, dst.c_str(), -1, &s[0], n, nullptr, nullptr);
+                return s;
+            }();
+            {
+                OwnerOnly a;
+                HANDLE h = CreateFileW(
+                    (dst + L"-shm").c_str(), GENERIC_WRITE, 0, a.Get(),
+                    CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+                if (h != INVALID_HANDLE_VALUE)
+                    CloseHandle(h);
+            }
+            void *db = nullptr;
+            bool ok = false;
+            if (g_sql.open_v2(path.c_str(), &db, 2 /*SQLITE_OPEN_READWRITE: our private copy*/, nullptr) == 0 && db)
+            {
+                void *st = nullptr;
+                const char *sql = "SELECT n.Id, n.ArrivalTime, n.ExpiryTime, h.PrimaryId, n.Payload FROM Notification n "
+                                  "LEFT JOIN NotificationHandler h ON h.RecordId = n.HandlerId WHERE n.Type = 'toast' "
+                                  "ORDER BY n.ArrivalTime DESC LIMIT 300";
+                if (g_sql.prepare_v2(db, sql, -1, &st, nullptr) == 0 && st)
+                {
+                    const long long nowWall = td::WallMs();
+                    size_t totalPayloadBytes = 0;
+                    int stepResult = 0;
+                    while (!g_cancel.load() && (stepResult = g_sql.step(st)) == 100 /*SQLITE_ROW*/)
+                    {
+                        Item it;
+                        it.id = g_sql.column_int64(st, 0);
+                        it.arrival = g_sql.column_int64(st, 1) / 10000 - 11644473600000LL; // FILETIME -> wall ms
+                        const long long expiry = g_sql.column_int64(st, 2);
+                        if (expiry > 0 && expiry / 10000 - 11644473600000LL < nowWall)
+                            continue; // already expired
+                        it.expiry = expiry > 0 ? expiry / 10000 - 11644473600000LL : 0;
+                        const unsigned char *pid = g_sql.column_text(st, 3);
+                        const int aumidBytes = g_sql.column_bytes(st, 3);
+                        if (pid && aumidBytes > 0 && aumidBytes <= 4096)
+                            it.aumid = Utf8ToWide((const char *)pid, aumidBytes);
+                        const int payloadBytes = g_sql.column_bytes(st, 4);
+                        constexpr int kMaxToastPayloadBytes = 1024 * 1024;
+                        constexpr size_t kMaxTotalPayloadBytes = 16 * 1024 * 1024;
+                        if (payloadBytes <= 0 || payloadBytes > kMaxToastPayloadBytes ||
+                            totalPayloadBytes + (size_t)payloadBytes > kMaxTotalPayloadBytes)
+                            continue; // notification payloads come from other apps; keep parsing memory bounded
+                        totalPayloadBytes += (size_t)payloadBytes;
+                        const std::wstring xml = DecodePayload(g_sql.column_blob(st, 4), payloadBytes);
+                        ParseToast(xml, it.title, it.body);
+                        if (it.title.size() > 1024)
+                            it.title.resize(1024);
+                        if (it.body.size() > 8192)
+                            it.body.resize(8192);
+                        if (it.title.empty() && it.body.empty())
+                            continue;
+                        out.push_back(std::move(it));
+                    }
+                    ok = stepResult == 101 /*SQLITE_DONE*/;
+                    g_sql.finalize(st);
+                }
+                g_sql.close(db);
+            }
+            else if (db)
+                g_sql.close(db);
+            cleanup();
+            return ok;
+        }
+
+        // ---- background reading -----------------------------------------------------------------------------------------
+        // One short-lived reader thread at a time. The UI thread asks for a read (StartRead), keeps painting, and gets a
+        // WM_NOTIF_READ when the result is ready (TakeResult). Shutdown() cancels and joins the thread (no timeout), so no
+        // thread of the mod outlives it.
+        enum : UINT
+        {
+            WM_NOTIF_READ = WM_APP + 40
+        };
+        struct ReadResult
+        {
+            bool ready = false, ok = false;
+            unsigned long long sig = 0;
+            std::vector<Item> items;
+        };
+        static std::mutex g_resultMx;
+        static ReadResult g_result;
+        static HANDLE g_readThread = nullptr;
+        struct ReadRequest
+        {
+            HWND wnd;
+            unsigned long long sig;
+        };
+        static DWORD WINAPI ReadThreadProc(LPVOID p)
+        {
+            std::unique_ptr<ReadRequest> rq(static_cast<ReadRequest *>(p));
+            std::vector<Item> v;
+            const bool ok = ReadAll(v);
+            if (!g_cancel.load())
+            {
+                {
+                    std::lock_guard<std::mutex> lk(g_resultMx);
+                    g_result.ok = ok;
+                    g_result.sig = rq->sig;
+                    g_result.items = std::move(v);
+                    g_result.ready = true;
+                }
+                PostMessageW(rq->wnd, WM_NOTIF_READ, 0, 0);
+            }
+            g_busy.store(false);
+            return 0;
+        }
+        static bool Busy() { return g_busy.load(); }
+        // False when a read is already running (the caller asks again when that one is done) or no thread could be made.
+        static bool StartRead(HWND wnd, unsigned long long sig)
+        {
+            if (!wnd || g_busy.load())
+                return false;
+            if (g_readThread)
+            { // the previous reader has finished (g_busy is cleared as its last act): collect it
+                WaitForSingleObject(g_readThread, INFINITE);
+                CloseHandle(g_readThread);
+                g_readThread = nullptr;
+            }
+            g_cancel.store(false);
+            g_busy.store(true);
+            ReadRequest *rq = new ReadRequest{wnd, sig};
+            g_readThread = CreateThread(nullptr, 0, ReadThreadProc, rq, 0, nullptr);
+            if (!g_readThread)
+            {
+                delete rq;
+                g_busy.store(false);
+                return false;
+            }
+            return true;
+        }
+        static bool TakeResult(ReadResult &out)
+        {
+            std::lock_guard<std::mutex> lk(g_resultMx);
+            if (!g_result.ready)
+                return false;
+            out = std::move(g_result);
+            g_result = ReadResult();
+            return true;
+        }
+        static void Shutdown()
+        {
+            g_cancel.store(true);
+            if (g_readThread)
+            {
+                WaitForSingleObject(g_readThread, INFINITE);
+                CloseHandle(g_readThread);
+                g_readThread = nullptr;
+            }
+            g_busy.store(false);
+        }
+
+        // ---- notifications dismissed in WinKlok ("id@seconds" keys) ----------------------------------------------------
+        static std::vector<std::wstring> g_hidden;
+        static std::wstring KeyOf(const Item &it) { return std::to_wstring(it.id) + L"@" + std::to_wstring(it.arrival / 1000); }
+        static bool IsHidden(const Item &it) { return std::find(g_hidden.begin(), g_hidden.end(), KeyOf(it)) != g_hidden.end(); }
+        static void SaveHidden()
+        {
+            std::wstring s;
+            for (const std::wstring &k : g_hidden)
+                s += (s.empty() ? L"" : L",") + k;
+            Wh_SetStringValue(L"nfHidden", s.c_str());
+        }
+        static void LoadHidden()
+        {
+            g_hidden.clear();
+            std::vector<wchar_t> buf(20000);
+            const size_t n = Wh_GetStringValue(L"nfHidden", buf.data(), buf.size());
+            if (n > 0 && n < buf.size())
+                for (const std::wstring &k : td::Split(std::wstring(buf.data(), n), L','))
+                    if (!k.empty() && g_hidden.size() < 600)
+                        g_hidden.push_back(k);
+        }
+        // Adds the key without saving (true: the list changed). Dismissing many at once saves once at the end.
+        static bool HideNoSave(const Item &it)
+        {
+            if (IsHidden(it))
+                return false;
+            if (g_hidden.size() >= 600)
+                g_hidden.erase(g_hidden.begin());
+            g_hidden.push_back(KeyOf(it));
+            return true;
+        }
+        static void Hide(const Item &it)
+        {
+            if (HideNoSave(it))
+                SaveHidden();
+        }
+        // Forget hidden keys whose notification no longer exists, so the list cannot grow without bound.
+        static void Prune(const std::vector<Item> &now)
+        {
+            const size_t before = g_hidden.size();
+            g_hidden.erase(std::remove_if(g_hidden.begin(), g_hidden.end(), [&](const std::wstring &k)
+                                          {
+                for (const Item &it : now)
+                    if (KeyOf(it) == k)
+                        return false;
+                return true; }),
+                           g_hidden.end());
+            if (g_hidden.size() != before)
+                SaveHidden();
+        }
+
+        static std::wstring FallbackName(const std::wstring &id)
+        {
+            std::wstring s = id.substr(0, id.find(L'!'));
+            const size_t slash = s.find_last_of(L"\\/");
+            if (slash != std::wstring::npos)
+                s = s.substr(slash + 1);
+            if (s.size() > 4 && _wcsicmp(s.c_str() + s.size() - 4, L".exe") == 0)
+                s.resize(s.size() - 4);
+            const size_t us = s.find(L'_');
+            if (us != std::wstring::npos && s.find(L'.') != std::wstring::npos)
+                s.resize(us); // package family name
+            const size_t dot = s.find_last_of(L'.');
+            if (dot != std::wstring::npos && dot + 1 < s.size())
+                s = s.substr(dot + 1);
+            return s.empty() ? std::wstring(L"Notification") : s;
+        }
+        // The shell name of the app a notification belongs to. Packaged apps ("Vendor.App_xyz!App") and desktop apps
+        // ("{6D809377-...}\\App\\app.exe") are both AppsFolder parsing names and need the shell:AppsFolder\\ prefix; only a
+        // real file path, a URL or an explicit shell: name is passed on as it is.
+        static std::wstring ParsingName(const std::wstring &id)
+        {
+            const bool drivePath = id.size() >= 3 && iswalpha(id[0]) && id[1] == L':' && (id[2] == L'\\' || id[2] == L'/');
+            if (drivePath || id.compare(0, 2, L"\\\\") == 0 || _wcsnicmp(id.c_str(), L"shell:", 6) == 0 || id.find(L"://") != std::wstring::npos)
+                return id;
+            return L"shell:AppsFolder\\" + id;
+        }
+        // Opens the app a notification belongs to (the same thing the Start menu does). False: the launch failed.
+        static bool LaunchApp(const std::wstring &id)
+        {
+            if (id.empty())
+                return true; // nothing to open
+            const std::wstring target = ParsingName(id);
+            return (INT_PTR)ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL) > 32;
+        }
+    } // namespace wpn
+
+    class NotifWindow : public FlyoutWindow
+    {
+    public:
+        static constexpr float kHeaderH = 56.f, kMaxH = 560.f, kMinH = 220.f;
+        float panelH = 520.f;
+        bool stacked = false; // opened together with the WinKlok panel, above it
+
+        std::vector<wpn::Item> items;
+        bool loaded = false, available = false; // loaded: a first read has finished (the panel stays blank until then)
+        bool rereadPending = false;             // a change was seen while a read was still running
+        int readFailures = 0;
+        unsigned long long sig = 0;
+
+        struct Group
+        {
+            std::wstring aumid, name;
+            std::vector<int> idx; // into items, newest first
+            bool expanded = false;
+        };
+        std::vector<Group> groups;
+        std::vector<std::wstring> expandedIds;
+        struct Row
+        {
+            int kind; // 0 group header, 1 notification card, 2 "show more / less"
+            int group, item;
+            float y, h;
+            int bodyLines;
+        };
+        std::vector<Row> rows;
+        float contentH = 0.f;
+
+        Smooth sm; // scroll position in px
+        ULONGLONG lastStep = 0;
+
+        struct Icon
+        {
+            std::vector<BYTE> px; // premultiplied BGRA
+            int w = 0, h = 0;
+            ID2D1Bitmap *bmp = nullptr;
+            bool tried = false;
+            std::wstring name;
+        };
+        std::map<std::wstring, Icon> icons;
+
+        ~NotifWindow() override { ReleaseBitmaps(); }
+        void ReleaseBitmaps()
+        {
+            for (auto &kv : icons)
+                if (kv.second.bmp)
+                {
+                    kv.second.bmp->Release();
+                    kv.second.bmp = nullptr;
+                }
+        }
+        void ReleaseTarget() override
+        { // D2D bitmaps belong to one render target
+            ReleaseBitmaps();
+            UiWindow::ReleaseTarget();
+        }
+
+        bool Create()
+        {
+            CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED, kUiClass, L"WinKlok notifications", WS_POPUP, 0, 0, 100, 100,
+                            nullptr, nullptr, ModInst(), this);
+            if (!hwnd)
+                return false;
+            dpi = GetDpiForWindow(hwnd);
+            if (!dpi)
+                dpi = 96;
+            wpn::LoadHidden();
+            ApplyComposition();
+            return true;
+        }
+
+        HWND ZAnchor() override { return stacked ? g_panelWnd.load() : nullptr; } // a stacked card rises from behind the panel
+        void OnHidden() override
+        {
+            KillTimer(hwnd, TIMER_NOTIF_REFRESH);
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
+            if (!IsWindowVisible(g_panelWnd.load()))
+                RemoveWheelHook();
+            if (g_touchpadCapableWindow == hwnd)
+                ReleaseTouchpadCapability();
+            stacked = false;
+            syncFollower = false;
+        }
+
+        // ---- icons ------------------------------------------------------------------------------------------------
+        Icon &IconFor(const std::wstring &id)
+        {
+            Icon &ic = icons[id];
+            if (ic.tried)
+                return ic;
+            ic.tried = true;
+            if (id.empty())
+                return ic;
+            const std::wstring parse = wpn::ParsingName(id);
+            IShellItem *si = nullptr;
+            if (FAILED(SHCreateItemFromParsingName(parse.c_str(), nullptr, __uuidof(IShellItem), (void **)&si)) || !si)
+                return ic;
+            LPWSTR nm = nullptr;
+            if (SUCCEEDED(si->GetDisplayName(SIGDN_NORMALDISPLAY, &nm)) && nm)
+            {
+                ic.name = nm;
+                CoTaskMemFree(nm);
+            }
+            HBITMAP hb = nullptr;
+            IShellItemImageFactory *f = nullptr;
+            if (SUCCEEDED(si->QueryInterface(__uuidof(IShellItemImageFactory), (void **)&f)) && f)
+            {
+                f->GetImage(SIZE{48, 48}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &hb);
+                f->Release();
+            }
+            si->Release();
+            if (!hb)
+                return ic;
+            BITMAP bm{};
+            if (GetObjectW(hb, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0 && bm.bmWidth <= 256 && bm.bmHeight <= 256)
+            {
+                BITMAPINFO bi{};
+                bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bi.bmiHeader.biWidth = bm.bmWidth;
+                bi.bmiHeader.biHeight = -bm.bmHeight; // top-down
+                bi.bmiHeader.biPlanes = 1;
+                bi.bmiHeader.biBitCount = 32;
+                bi.bmiHeader.biCompression = BI_RGB;
+                std::vector<BYTE> px((size_t)bm.bmWidth * (size_t)bm.bmHeight * 4);
+                HDC dc = GetDC(nullptr);
+                if (dc && GetDIBits(dc, hb, 0, (UINT)bm.bmHeight, px.data(), &bi, DIB_RGB_COLORS) == bm.bmHeight)
+                {
+                    bool straight = false; // colour above alpha: not premultiplied yet
+                    for (size_t i = 0; i + 3 < px.size() && !straight; i += 4)
+                        straight = px[i] > px[i + 3] || px[i + 1] > px[i + 3] || px[i + 2] > px[i + 3];
+                    if (straight)
+                        for (size_t i = 0; i + 3 < px.size(); i += 4)
+                            for (int c = 0; c < 3; ++c)
+                                px[i + c] = (BYTE)((px[i + c] * px[i + 3] + 127) / 255);
+                    ic.px = std::move(px);
+                    ic.w = bm.bmWidth;
+                    ic.h = bm.bmHeight;
+                }
+                if (dc)
+                    ReleaseDC(nullptr, dc);
+            }
+            DeleteObject(hb);
+            return ic;
+        }
+        ID2D1Bitmap *BitmapOf(Icon &ic)
+        {
+            if (ic.bmp || ic.px.empty() || !rt)
+                return ic.bmp;
+            D2D1_BITMAP_PROPERTIES bp{};
+            bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+            bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+            bp.dpiX = bp.dpiY = 96.f;
+            if (FAILED(rt->CreateBitmap(D2D1_SIZE_U{(UINT32)ic.w, (UINT32)ic.h}, ic.px.data(), (UINT32)ic.w * 4, &bp, &ic.bmp)))
+                ic.bmp = nullptr;
+            return ic.bmp;
+        }
+
+        // ---- data ---------------------------------------------------------------------------------------------------
+        // Asks for a fresh read when the database changed (or force). The read itself runs on a background thread: the
+        // list is replaced in OnReadDone. Until then the panel keeps showing what it has.
+        void Reload(bool force)
+        {
+            const unsigned long long s = wpn::Signature();
+            if (!force && loaded && s == sig)
+                return;
+            if (!wpn::StartRead(hwnd, s) && wpn::Busy())
+                rereadPending = true; // looked at again as soon as the running read is done
+        }
+        void OnReadDone()
+        {
+            wpn::ReadResult r;
+            if (!wpn::TakeResult(r))
+                return;
+            loaded = true;
+            if (r.ok)
+            {
+                readFailures = 0;
+                available = true;
+                sig = r.sig;
+                wpn::Prune(r.items);
+                items = std::move(r.items);
+            }
+            else
+            { // a failed read (for example the WAL grew during the copy) keeps the list that is already there
+                ++readFailures;
+                if (!available || readFailures >= 3)
+                {
+                    sig = r.sig; // do not retry the same state forever
+                    if (!available)
+                        items.clear();
+                }
+            }
+            BuildRows();
+            if (hwnd && IsWindowVisible(hwnd))
+                Invalidate();
+            if (rereadPending)
+            {
+                rereadPending = false;
+                Reload(false);
+            }
+        }
+
+        static bool Expanded(const std::vector<std::wstring> &ids, const std::wstring &id) { return std::find(ids.begin(), ids.end(), id) != ids.end(); }
+
+        static int WrapLines(const std::wstring &s, float size, float width)
+        {
+            if (s.empty())
+                return 0;
+            IDWriteTextFormat *f = GetFormat(size, 400, 0, 0, false, true);
+            IDWriteTextLayout *tl = nullptr;
+            if (!f || FAILED(g_dw->CreateTextLayout(s.c_str(), (UINT32)s.size(), f, width, 1000.f, &tl)) || !tl)
+                return 1;
+            DWRITE_TEXT_METRICS m{};
+            tl->GetMetrics(&m);
+            tl->Release();
+            return (int)std::max<UINT32>(1, m.lineCount);
+        }
+
+        float ViewH() const { return panelH - kHeaderH - 1.f; }
+        float MaxScroll() const { return std::max(0.f, contentH - ViewH()); }
+
+        // Groups the visible notifications by app and lays the rows out in content coordinates.
+        void BuildRows()
+        {
+            groups.clear();
+            rows.clear();
+            const long long nowWall = td::WallMs();
+            for (size_t i = 0; i < items.size(); ++i)
+            {
+                if (wpn::IsHidden(items[i]) || (items[i].expiry > 0 && items[i].expiry < nowWall))
+                    continue;
+                Group *g = nullptr;
+                for (auto &x : groups)
+                    if (x.aumid == items[i].aumid)
+                    {
+                        g = &x;
+                        break;
+                    }
+                if (!g)
+                {
+                    groups.push_back(Group());
+                    g = &groups.back();
+                    g->aumid = items[i].aumid;
+                    const Icon &ic = IconFor(g->aumid);
+                    g->name = ic.name.empty() ? wpn::FallbackName(g->aumid) : ic.name;
+                    g->expanded = Expanded(expandedIds, g->aumid);
+                }
+                g->idx.push_back((int)i);
+            }
+            float y = 8.f;
+            for (size_t gi = 0; gi < groups.size(); ++gi)
+            {
+                const Group &g = groups[gi];
+                rows.push_back({0, (int)gi, -1, y, 34.f, 0});
+                y += 34.f;
+                const size_t shown = g.expanded ? g.idx.size() : std::min<size_t>(3, g.idx.size());
+                for (size_t k = 0; k < shown; ++k)
+                {
+                    const wpn::Item &it = items[g.idx[k]];
+                    const int lines = std::min(3, WrapLines(it.body, 12.f, 340.f - 28.f));
+                    const float h = 14.f + 20.f + (lines ? 2.f + 16.f * (float)lines : 0.f) + 12.f;
+                    rows.push_back({1, (int)gi, g.idx[k], y, h, lines});
+                    y += h + 6.f;
+                }
+                if (g.idx.size() > 3)
+                {
+                    rows.push_back({2, (int)gi, -1, y, 28.f, 0});
+                    y += 28.f + 6.f;
+                }
+                y += 8.f;
+            }
+            contentH = y;
+            sm.target = std::min(sm.target, MaxScroll());
+            sm.pos = std::min(sm.pos, MaxScroll());
+        }
+
+        static std::wstring RelTime(long long arrival)
+        {
+            const long long diff = (td::WallMs() - arrival) / 1000;
+            if (diff < 60)
+                return L"Now";
+            if (diff < 3600)
+                return std::to_wstring(diff / 60) + L" min";
+            if (diff < 86400)
+                return std::to_wstring(diff / 3600) + L" h";
+            if (diff < 172800)
+                return L"Yesterday";
+            return DateStr(td::WallToLocal(arrival), L"MMM d");
+        }
+
+        // ---- opening ----------------------------------------------------------------------------------------------------
+        void Prepare(const MONITORINFO &mi)
+        {
+            if (!IsWindowVisible(hwnd))
+                SetWindowPos(hwnd, nullptr, mi.rcWork.left + 20, mi.rcWork.top + 20, 50, 50, SWP_NOZORDER | SWP_NOACTIVATE);
+            const UINT nd = GetDpiForWindow(hwnd);
+            if (nd && nd != dpi)
+            {
+                dpi = nd;
+                ReleaseTarget();
+            }
+            currentFade = 1.f;
+            ApplyComposition();
+            Reload(false); // only reads again when the database changed since the list was built
+            sm.Jump(0.f);
+            hoverId = hoverParam = 0;
+            hoverTracks.clear();
+            InstallWheelHook();
+            SetTimer(hwnd, TIMER_NOTIF_REFRESH, 3000, nullptr);
+        }
+        void ShowStandalone()
+        {
+            POINT cur{};
+            GetCursorPos(&cur);
+            HMONITOR mon = MonitorFromPoint(cur, MONITOR_DEFAULTTOPRIMARY);
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (!mon || !GetMonitorInfoW(mon, &mi))
+                return;
+            stacked = false;
+            syncFollower = false;
+            slideHorizontal = false; // on its own it rises from the taskbar like the WinKlok panel
+            slideUseClip = true;
+            Prepare(mi);
+            panelWorkBottom = TaskbarBandTop(mon, mi, Scale());
+            const float scale = Scale();
+            panelH = std::min(kMaxH, std::max(kMinH, (float)(panelWorkBottom - mi.rcWork.top) / scale - 24.f));
+            BuildRows();
+            const int w = (int)std::lround(kPanelW * scale), h = (int)std::lround(panelH * scale), margin = (int)std::lround(12.f * scale);
+            const int x = std::max(static_cast<int>(mi.rcWork.left), static_cast<int>(mi.rcWork.right) - w - margin);
+            const int y = std::max(static_cast<int>(mi.rcWork.top), panelWorkBottom - h - margin);
+            if (!(IsWindowVisible(hwnd) && panelAnimation == PanelAnimationState::Closing))
+                FindSlideTaskbar(mon, mi);
+            BeginOpenAnimation(x, y, w, h, false);
+            RouteTouchpadTo(hwnd);
+        }
+        // Above the WinKlok panel (same left edge and width), with the usual gap between two cards.
+        void ShowAbove(HMONITOR mon, const MONITORINFO &mi, int panelX, int panelY, int panelW, int bandTop, bool noAct, bool together = false)
+        {
+            stacked = true;
+            syncFollower = false;
+            Prepare(mi);
+            panelWorkBottom = bandTop;
+            const float scale = Scale();
+            const int gap = (int)std::lround(8.f * scale), margin = (int)std::lround(12.f * scale);
+            const float availDip = (float)(panelY - gap - mi.rcWork.top - margin) / scale;
+            panelH = std::min(StackMaxH(), std::max(120.f, availDip));
+            BuildRows();
+            const int h = (int)std::lround(panelH * scale);
+            const int y = std::max(static_cast<int>(mi.rcWork.top), panelY - gap - h);
+            slideHorizontal = true; // the stack slides in from the right screen edge together with the panel
+            slideClipX = mi.rcMonitor.right;
+            slideUseClip = MonitorOnRight(mi);
+            slideTaskbar = nullptr;
+            slideUnder = false;
+            slideClipY = bandTop;
+            (void)mon;
+            holdCloak = together; // opened together with the panel: stays invisible until NotifOpenStacked reveals both
+            BeginOpenAnimation(panelX, y, panelW, h, noAct);
+            holdCloak = false;
+            RouteTouchpadTo(hwnd);
+        }
+        void Hide()
+        {
+            KillTimer(hwnd, TIMER_NOTIF_REFRESH);
+            syncFollower = false;
+            BeginCloseAnimation();
+        }
+        // Closes the whole stack (through the panel, so both slide away together) or just this card.
+        void Dismiss()
+        {
+            if (stacked && g_panel && g_panel->IsOpen())
+                g_panel->HidePanel();
+            else
+                Hide();
+        }
+
+        // Taller when the WinKlok panel below is folded into its strip: the card extends into the freed room.
+        float StackMaxH() const { return g_panel && g_panel->collapsed ? kMaxH : 460.f; }
+        // The panel below changed height (collapse / extend): keep the card sitting above it, resizing to fit.
+        void FollowStack(int panelX, int panelY, int panelW)
+        {
+            if (!stacked || !IsWindowVisible(hwnd) || panelAnimation != PanelAnimationState::Idle)
+                return;
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi))
+                return;
+            const float scale = Scale();
+            const int gap = (int)std::lround(8.f * scale), margin = (int)std::lround(12.f * scale);
+            const float k = g_panel ? g_panel->stackK : 0.f; // grow smoothly with the panel's animation
+            panelH = std::min(460.f + (kMaxH - 460.f) * k, std::max(120.f, (float)(panelY - gap - mi.rcWork.top - margin) / scale));
+            const int h = (int)std::lround(panelH * scale);
+            const int y = std::max(static_cast<int>(mi.rcWork.top), panelY - gap - h);
+            SetWindowPos(hwnd, nullptr, panelX, y, panelW, h, SWP_NOZORDER | SWP_NOACTIVATE);
+            BuildRows();
+            Invalidate();
+        }
+
+        // ---- scrolling ------------------------------------------------------------------------------------------------
+        void Kick()
+        {
+            if (hwnd)
+                StartFrames(hwnd, TIMER_SCROLL_ANIM);
+            Invalidate();
+        }
+        void ScrollBy(float d)
+        {
+            sm.target = std::min(MaxScroll(), std::max(0.f, sm.target + d));
+            Kick();
+        }
+        void StepScroll()
+        {
+            const ULONGLONG now = MonoMs();
+            const float dt = lastStep ? std::min(50.f, (float)(now - lastStep)) : fclk::PeriodMs();
+            lastStep = now;
+            sm.target = std::min(MaxScroll(), std::max(0.f, sm.target));
+            const bool any = sm.Step(dt, now - lastTouchpadTick < kTouchpadDirectMs ? 1.f : kGlideMs); // fingers down: 1:1
+            sm.pos = std::min(MaxScroll(), std::max(0.f, sm.pos));
+            if (!any)
+            {
+                lastStep = 0;
+                if (hwnd)
+                    StopFrames(hwnd, TIMER_SCROLL_ANIM);
+            }
+        }
+        void OnWheel(int delta, float, float y, bool horizontal) override
+        {
+            if (horizontal || delta == 0 || y < kHeaderH)
+                return;
+            ScrollBy(-(float)delta * (kWheelPx / (float)WHEEL_DELTA));
+        }
+        void OnTouchpadScroll(float, float dy, float, float y) override
+        {
+            if (y >= kHeaderH)
+                ScrollBy(-dy);
+        }
+        void OnTouchpadScrollEnd(float, float vy, float, float) override
+        {
+            const float fling = std::min(560.f, std::max(-560.f, -vy * 320.f)); // coasts about velocity x 320 ms
+            if (std::fabs(fling) >= 8.f)
+                ScrollBy(fling);
+        }
+        int PointerPanAxisAt(float, float y) const override { return (y >= kHeaderH && MaxScroll() > 0.5f) ? 1 : 0; }
+        void OnPointerPan(float, float dy, float, float) override
+        {
+            const ULONGLONG now = MonoMs();
+            const float dtMs = panLastTick ? std::max(1.f, (float)(now - panLastTick)) : 16.f;
+            panLastTick = now;
+            panVelocity = 0.6f * panVelocity + 0.4f * (dy / dtMs);
+            sm.Jump(std::min(MaxScroll(), std::max(0.f, sm.pos - dy)));
+            Invalidate();
+        }
+        void OnPointerPanEnd() override
+        {
+            const bool fresh = panLastTick && MonoMs() - panLastTick < 90;
+            const float fling = fresh ? -panVelocity * 260.f : 0.f;
+            panLastTick = 0;
+            panVelocity = 0.f;
+            if (std::fabs(fling) >= 8.f)
+                ScrollBy(fling);
+        }
+        float panVelocity = 0.f;
+        ULONGLONG panLastTick = 0;
+
+        // ---- painting -----------------------------------------------------------------------------------------------------
+        // The part of r inside the scrolling viewport (so a card half under the header is not clickable there).
+        bool Visible(D2D1_RECT_F &r) const
+        {
+            r.top = std::max(r.top, kHeaderH + 1.f);
+            r.bottom = std::min(r.bottom, panelH);
+            return r.bottom > r.top;
+        }
+        void DrawIcon(const std::wstring &id, const std::wstring &name, float x, float y, float size)
+        {
+            Icon &ic = IconFor(id);
+            if (ID2D1Bitmap *b = BitmapOf(ic))
+            {
+                const D2D1_RECT_F dst = RF(x, y, size, size);
+                rt->DrawBitmap(b, &dst, Clamp01(drawOpacity) * Clamp01(masterOpacity), D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                return;
+            }
+            Circle(x + size / 2, y + size / 2, size / 2, pal.accent);
+            const std::wstring letter = name.empty() ? std::wstring(L"?") : std::wstring(1, (wchar_t)towupper(name[0]));
+            Text(letter, RF(x, y, size, size), size * 0.55f, 600, pal.onAccent, 1, 1);
+        }
+
+        void Paint() override
+        {
+            StepScroll();
+            // header
+            Text(L"Notifications", RF(16, 0, 180, kHeaderH), 15.5f, 600, pal.text, 0, 1);
+            bool anyVisible = false;
+            for (const Group &g : groups)
+                anyVisible |= !g.idx.empty();
+            // Settings gear on the right margin, "Clear all" beside it; both vertically centred in the header.
+            const float by = (kHeaderH - 32.f) / 2;
+            FlatIcon(RF(kPanelW - 16 - 32, by, 32, 32), ID_NF_SETTINGS, 0, L"\uE713", 15.f);
+            if (anyVisible)
+                Btn(RF(kPanelW - 16 - 32 - 6 - 84, by, 84, 32), ID_NF_CLEARALL, 0, L"Clear all", 2, 12.5f);
+            Line(0, kHeaderH + 0.5f, kPanelW, kHeaderH + 0.5f, pal.border, 1.f);
+
+            if (!loaded)
+                return; // the first read is still running: header only
+            if (!available || groups.empty())
+            {
+                const float cy = kHeaderH + (panelH - kHeaderH) / 2 - 20.f;
+                Text(L"\uEA8F", RF(0, cy - 44, kPanelW, 48), 34.f, 400, pal.sub, 1, 1, true);
+                if (!available)
+                {
+                    Text(L"Can\u2019t read Windows notifications", RF(16, cy + 10, kPanelW - 32, 24), 14.f, 600, pal.text, 1, 1);
+                    Text(L"WinKlok couldn\u2019t open the notification list on this PC.", RF(24, cy + 34, kPanelW - 48, 36), 12.f, 400, pal.sub, 1, 0, false, true);
+                    Btn(RF(kPanelW / 2 - 100, cy + 80, 200, 34), ID_NF_OPENWIN, 0, L"Open Windows notifications", 0, 12.5f);
+                }
+                else
+                    Text(L"No new notifications", RF(16, cy + 10, kPanelW - 32, 24), 14.f, 400, pal.sub, 1, 1);
+                return;
+            }
+
+            rt->PushAxisAlignedClip(RF(0, kHeaderH + 1.f, kPanelW, panelH - kHeaderH - 1.f), D2D1_ANTIALIAS_MODE_ALIASED);
+            const float off = kHeaderH + 1.f - std::round(sm.pos * Scale()) / Scale();
+            for (const Row &r : rows)
+            {
+                const float y = r.y + off;
+                if (y + r.h < kHeaderH || y > panelH)
+                    continue;
+                const Group &g = groups[r.group];
+                if (r.kind == 0)
+                {
+                    DrawIcon(g.aumid, g.name, 20.f, y + 7.f, 20.f);
+                    Text(FitText(g.name, 12.5f, 600, 230.f), RF(48, y, 240, r.h), 12.5f, 600, pal.text, 0, 1);
+                    D2D1_RECT_F b = RF(kPanelW - 16 - 30, y + 2, 30, 30);
+                    const float hov = HoverAmount(ID_NF_GROUP_CLEAR, r.group);
+                    if (hov > 0.001f)
+                        RoundFill(b, 6.f, Fade(pal.cardHover, hov));
+                    Text(L"\uE711", b, 11.f, 400, pal.sub, 1, 1, true);
+                    if (Visible(b))
+                        AddHit(b, ID_NF_GROUP_CLEAR, r.group);
+                }
+                else if (r.kind == 1)
+                {
+                    const wpn::Item &it = items[r.item];
+                    D2D1_RECT_F card = RF(16, y, 340, r.h);
+                    const float hov = HoverAmount(ID_NF_OPEN, r.item);
+                    RoundFill(card, 8.f, Mix(pal.card, pal.cardHover, hov));
+                    RoundStroke(card, 8.f, pal.border, 1.f);
+                    D2D1_RECT_F hit = card;
+                    if (Visible(hit))
+                        AddHit(hit, ID_NF_OPEN, r.item);
+                    Text(FitText(it.title.empty() ? g.name : it.title, 13.5f, 600, 226.f), RF(30, y + 12, 236, 20), 13.5f, 600, pal.text, 0, 1);
+                    Text(RelTime(it.arrival), RF(card.right - 40 - 62, y + 12, 62, 20), 11.f, 400, pal.sub, 2, 1);
+                    if (r.bodyLines)
+                        Text(it.body, RF(30, y + 34, 312, 16.f * (float)r.bodyLines), 12.f, 400, pal.sub, 0, 0, false, true);
+                    D2D1_RECT_F x = RF(card.right - 36, y + 8, 26, 26);
+                    const float xh = HoverAmount(ID_NF_DISMISS, r.item);
+                    if (xh > 0.001f)
+                        RoundFill(x, 6.f, Fade(pal.cardHover, xh));
+                    Text(L"\uE711", x, 10.5f, 400, pal.sub, 1, 1, true);
+                    if (Visible(x))
+                        AddHit(x, ID_NF_DISMISS, r.item);
+                }
+                else
+                {
+                    D2D1_RECT_F b = RF(16, y, 340, r.h);
+                    const float hov = HoverAmount(ID_NF_GROUP_MORE, r.group);
+                    if (hov > 0.001f)
+                        RoundFill(b, 6.f, Fade(pal.cardHover, hov));
+                    const size_t more = g.idx.size() - 3;
+                    Text(g.expanded ? std::wstring(L"Show less") : L"Show " + std::to_wstring(more) + (more == 1 ? L" more notification" : L" more notifications"),
+                         b, 12.f, 600, pal.accent, 1, 1);
+                    if (Visible(b))
+                        AddHit(b, ID_NF_GROUP_MORE, r.group);
+                }
+            }
+            rt->PopAxisAlignedClip();
+            if (MaxScroll() > 0.5f)
+            { // quiet scroll thumb
+                const float trackTop = kHeaderH + 8.f, trackH = panelH - trackTop - 8.f;
+                const float thumbH = std::min(trackH, std::max(24.f, trackH * ViewH() / contentH));
+                RoundFill(RF(kPanelW - 6.f, trackTop + (trackH - thumbH) * (sm.pos / MaxScroll()), 2.f, thumbH), 1.f, Fade(pal.sub, 0.8f));
+            }
+        }
+
+        void OnClick(int id, int param, bool right) override
+        {
+            if (right)
+                return;
+            switch (id)
+            {
+            case ID_NF_CLEARALL:
+            {
+                bool changed = false;
+                for (const wpn::Item &it : items)
+                    changed |= wpn::HideNoSave(it);
+                if (changed)
+                    wpn::SaveHidden(); // one write for all of them
+                break;
+            }
+            case ID_NF_GROUP_CLEAR:
+                if (param >= 0 && param < (int)groups.size())
+                {
+                    bool changed = false;
+                    for (int i : groups[param].idx)
+                        changed |= wpn::HideNoSave(items[i]);
+                    if (changed)
+                        wpn::SaveHidden();
+                }
+                break;
+            case ID_NF_GROUP_MORE:
+                if (param >= 0 && param < (int)groups.size())
+                {
+                    const std::wstring key = groups[param].aumid;
+                    auto it = std::find(expandedIds.begin(), expandedIds.end(), key);
+                    if (it == expandedIds.end())
+                        expandedIds.push_back(key);
+                    else
+                        expandedIds.erase(it);
+                }
+                break;
+            case ID_NF_DISMISS:
+                if (param >= 0 && param < (int)items.size())
+                    wpn::Hide(items[param]);
+                break;
+            case ID_NF_OPEN:
+                if (param >= 0 && param < (int)items.size())
+                {
+                    if (wpn::LaunchApp(items[param].aumid))
+                    {
+                        wpn::Hide(items[param]); // like Windows: opening a notification takes it off the list
+                        BuildRows();
+                        Dismiss();
+                        return;
+                    }
+                    // the app could not be started: the notification stays where it is
+                }
+                break;
+            case ID_NF_SETTINGS:
+                ShellExecuteW(nullptr, L"open", L"ms-settings:notifications", nullptr, nullptr, SW_SHOWNORMAL);
+                Dismiss();
+                return;
+            case ID_NF_OPENWIN:
+                Dismiss();
+                tb::OpenWindowsNotifications();
+                return;
+            default:
+                return;
+            }
+            BuildRows();
+            Invalidate();
+        }
+
+        LRESULT HandleMessage(UINT msg, WPARAM wp, LPARAM lp) override
+        {
+            switch (msg)
+            {
+            case wpn::WM_NOTIF_READ:
+                OnReadDone();
+                return 0;
+            case WM_TIMER:
+                if (wp == TIMER_SCROLL_ANIM)
+                {
+                    if (IsWindowVisible(hwnd))
+                        Invalidate();
+                    else
+                        StopFrames(hwnd, TIMER_SCROLL_ANIM);
+                    return 0;
+                }
+                if (wp == TIMER_NOTIF_REFRESH)
+                {
+                    if (IsWindowVisible(hwnd) && panelAnimation != PanelAnimationState::Closing)
+                    {
+                        Reload(false);
+                        Invalidate(); // relative times
+                    }
+                    return 0;
+                }
+                if (wp == TIMER_DEACTIVATE_CHECK)
+                {
+                    KillTimer(hwnd, TIMER_DEACTIVATE_CHECK);
+                    if (!IsOpen())
+                        return 0;
+                    if (g_clockTogglePendingUntil.load() > MonoMs())
+                    {
+                        SetTimer(hwnd, TIMER_DEACTIVATE_CHECK, 180, nullptr);
+                        return 0;
+                    }
+                    g_clockTogglePendingUntil = 0;
+                    HWND fg = GetForegroundWindow();
+                    if (fg != hwnd && !IsFlyoutHwnd(fg))
+                        Dismiss(); // the stack closes as a whole
+                    return 0;
+                }
+                if (wp == TIMER_PANEL_ANIM)
+                {
+                    AdvancePanelAnimation();
+                    return 0;
+                }
+                break;
+            case WM_ACTIVATE:
+                if (LOWORD(wp) != WA_INACTIVE)
+                {
+                    KillTimer(hwnd, TIMER_DEACTIVATE_CHECK);
+                    if (stacked && IsWindowVisible(g_panelWnd.load())) // activation must not lift the card over the panel
+                        SetWindowPos(hwnd, g_panelWnd.load(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+                else if (IsWindowVisible(hwnd))
+                    SetTimer(hwnd, TIMER_DEACTIVATE_CHECK, 180, nullptr); // deferred, so the bell's toggle message wins
+                return 0;
+            case WM_MOUSEACTIVATE:
+                return MA_ACTIVATE;
+            case WM_COMMAND:
+                if (LOWORD(wp) == IDCANCEL)
+                {
+                    Dismiss();
+                    return 0;
+                }
+                break;
+            case WM_SETTINGCHANGE: // theme, accent colour or the Transparency effects switch changed
+                ApplyComposition();
+                Invalidate();
+                return 0;
+            }
+            return UiWindow::HandleMessage(msg, wp, lp);
+        }
+    };
+
+    static NotifWindow *g_notif = nullptr;
+
+    // Both windows get one common start time and one timer, so they slide in and out as a single unit.
+    static void NotifSyncWithPanel()
+    {
+        if (!g_notif || !g_panel || g_panel->panelAnimation == FlyoutWindow::PanelAnimationState::Idle ||
+            g_notif->panelAnimation == FlyoutWindow::PanelAnimationState::Idle)
+            return;
+        const ULONGLONG now = MonoMs();
+        g_panel->panelAnimationStarted = now;
+        g_notif->panelAnimationStarted = now;
+        g_notif->syncFollower = true;
+        StopFrames(g_notif->hwnd, TIMER_PANEL_ANIM);
+    }
+    // One timer tick. With a stacked card both windows are moved by a single batched call (one compositor frame) and
+    // only then do the heavy end-of-slide steps run, so neither window ever waits for the other's re-render.
+    static void StepStackedFlyouts(FlyoutWindow &panel)
+    {
+        const bool follower = g_notif && g_notif->syncFollower && g_notif->panelAnimation != FlyoutWindow::PanelAnimationState::Idle;
+        if (follower && !panel.slideUseClip)
+            g_moveBatch = BeginDeferWindowPos(2); // NULL on failure: plain moves
+        panel.AdvancePanelAnimation(false, follower);
+        if (follower)
+            g_notif->AdvancePanelAnimation(false, true);
+        if (g_moveBatch)
+        {
+            EndDeferWindowPos(g_moveBatch);
+            g_moveBatch = nullptr;
+        }
+        if (panel.finishPending)
+            panel.FinishAnimation();
+        if (follower && g_notif->finishPending)
+            g_notif->FinishAnimation();
+    }
+    static void NotifOpenStacked(HMONITOR mon, const MONITORINFO &mi, int panelX, int panelY, int panelW, int bandTop, bool noAct)
+    {
+        if (!g_notif)
+            return;
+        g_notif->ShowAbove(mon, mi, panelX, panelY, panelW, bandTop, noAct, true);
+        NotifSyncWithPanel(); // one start time for both ...
+        if (g_panel)
+            g_panel->ReleaseCloak(); // ... and both appear in the same instant, already on their way
+        g_notif->ReleaseCloak();
+    }
+    static void NotifFollowStack(int panelX, int panelY, int panelW)
+    {
+        if (g_notif)
+            g_notif->FollowStack(panelX, panelY, panelW);
+    }
+    static void NotifCloseStacked()
+    {
+        if (g_notif && g_notif->stacked && g_notif->IsOpen())
+        {
+            g_notif->Hide();
+            NotifSyncWithPanel();
+        }
+    }
+    static void NotifCloseStandalone()
+    {
+        if (g_notif && !g_notif->stacked && g_notif->IsOpen())
+            g_notif->Hide();
+    }
+
+    // The taskbar bell. Separate-panel mode: the notification panel replaces the WinKlok panel. Stacked mode: the WinKlok
+    // panel opens (if it is not open yet) with the notification panel above it, as in the native flyout.
+    static void ToggleNotifications()
+    {
+        if (!g_notif || !g_panel)
+            return;
+        if (g_notif->IsOpen())
+        {
+            g_notif->Dismiss();
+            return;
+        }
+        if (td::g_set.notifMode.load() == 0)
+        {
+            if (g_panel->IsOpen())
+                g_panel->HidePanel();
+            g_notif->ShowStandalone();
+            return;
+        }
+        if (!g_panel->IsOpen())
+        {
+            g_panel->ShowPanel(false, true);
+            return;
+        }
+        HMONITOR mon = MonitorFromWindow(g_panel->hwnd, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (mon && GetMonitorInfoW(mon, &mi))
+        { // the panel was opened on its own (before the mode was switched): join it into a stack
+            g_panel->stackMode = true;
+            g_panel->collapsed = false;
+            g_panel->stackK = 0.f;
+            g_panel->InitTabAnim();
+            g_panel->Invalidate();
+            g_notif->ShowAbove(mon, mi, g_panel->panelAnimationX, g_panel->panelAnimationEndY, g_panel->panelAnimationWidth,
+                               g_panel->panelWorkBottom, true);
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -11295,7 +14550,7 @@ namespace ui
             }
             if (msg == WM_TIMER && wp == TIMER_ALERT_ANIM)
             {
-                const float t = Clamp01((float)(GetTickCount64() - appearStarted) / 220.f);
+                const float t = Clamp01((float)(MonoMs() - appearStarted) / 220.f);
                 const float eased = EaseOutCubic(t);
                 const int y = appearStartY + (int)std::lround((appearEndY - appearStartY) * eased);
                 // Over the live acrylic backdrop the popup only slides (no fade), like the panel.
@@ -11305,7 +14560,7 @@ namespace ui
                              SWP_NOACTIVATE | SWP_NOSENDCHANGING);
                 if (t >= 1.f)
                 {
-                    KillTimer(hwnd, TIMER_ALERT_ANIM);
+                    StopFrames(hwnd, TIMER_ALERT_ANIM);
                     if (compMode != 2)
                         SetLayeredWindowAttributes(hwnd, 0, restingAlpha, LWA_ALPHA);
                 }
@@ -11346,11 +14601,42 @@ namespace ui
         }
     }
 
-    static void LayoutAlerts()
+    // True only when a same-monitor taskbar currently sits above this alert in the
+    // desktop z-order. This catches the late-taskbar case even when the alert's
+    // rectangle did not change.
+    static bool TaskbarAboveAlert(HMONITOR mon, HWND alert)
+    {
+        for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT))
+        {
+            if (w == alert)
+                return false;
+            if (tb::IsTaskbarWindow(w) && MonitorFromWindow(w, MONITOR_DEFAULTTONEAREST) == mon)
+                return true;
+        }
+        return false;
+    }
+
+    // moveOnly: the popups are already on screen; only their position is corrected (no animation, no DPI probing). It runs
+    // from the tick while any popup exists: right after sign-in a missed-alarm popup can appear before the taskbar exists
+    // (or before it has its final size), so the first layout may put it where the taskbar later arrives.
+    static void LayoutAlerts(bool moveOnly = false)
     {
         POINT cur;
         GetCursorPos(&cur);
         HMONITOR mon = MonitorFromPoint(cur, MONITOR_DEFAULTTOPRIMARY);
+        if (moveOnly)
+        {
+            HWND first = nullptr;
+            for (AlertWindow *a : g_alerts)
+                if (a->hwnd)
+                {
+                    first = a->hwnd;
+                    break;
+                }
+            if (!first)
+                return;
+            mon = MonitorFromWindow(first, MONITOR_DEFAULTTONEAREST); // stay on the monitor the popups are on
+        }
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         GetMonitorInfoW(mon, &mi);
@@ -11359,13 +14645,18 @@ namespace ui
             AlertWindow *a = g_alerts[i];
             if (!a->hwnd)
                 continue;
-            SetWindowPos(a->hwnd, nullptr, mi.rcWork.left + 20, mi.rcWork.top + 20, 50, 50,
-                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOSENDCHANGING);
-            UINT nd = GetDpiForWindow(a->hwnd);
-            if (nd && nd != a->dpi)
+            if (moveOnly && !IsWindowVisible(a->hwnd))
+                continue; // not shown yet
+            if (!moveOnly)
             {
-                a->dpi = nd;
-                a->ReleaseTarget();
+                SetWindowPos(a->hwnd, nullptr, mi.rcWork.left + 20, mi.rcWork.top + 20, 50, 50,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOSENDCHANGING);
+                UINT nd = GetDpiForWindow(a->hwnd);
+                if (nd && nd != a->dpi)
+                {
+                    a->dpi = nd;
+                    a->ReleaseTarget();
+                }
             }
             const float s = a->Scale();
             const int w = (int)(AlertWindow::W * s), h = (int)(a->height * s), gap = (int)(8 * s), margin = (int)(12 * s);
@@ -11373,13 +14664,32 @@ namespace ui
             int below = 0; // total height of the alerts stacked beneath this one
             for (size_t j = 0; j < i; ++j)
                 below += (int)(g_alerts[j]->height * s) + gap;
-            int y = mi.rcWork.bottom - margin - h - below;
+            int y = TaskbarBandTop(mon, mi, s) - margin - h - below; // above the taskbar, even an auto-hidden one
             if (y < mi.rcWork.top)
                 y = mi.rcWork.top;
+            if (moveOnly)
+            {
+                RECT cr{};
+                const bool haveRect = GetWindowRect(a->hwnd, &cr) != FALSE;
+                const bool geometryChanged = !haveRect || cr.left != x || cr.top != y ||
+                                             cr.right - cr.left != w || cr.bottom - cr.top != h;
+                const bool entering = a->animateOnNextLayout || MonoMs() - a->appearStarted < 400;
+                if (TaskbarAboveAlert(mon, a->hwnd))
+                {
+                    // Raise without disturbing an entrance animation.
+                    SetWindowPos(a->hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                }
+                else if (!entering && geometryChanged)
+                {
+                    SetWindowPos(a->hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                }
+                continue;
+            }
             if (a->animateOnNextLayout)
             {
                 a->animateOnNextLayout = false;
-                a->appearStarted = GetTickCount64();
+                a->appearStarted = MonoMs();
                 a->appearX = x;
                 a->appearEndY = y;
                 a->appearStartY = y + (int)std::lround(10.f * s);
@@ -11388,11 +14698,11 @@ namespace ui
                 if (a->compMode != 2)
                     SetLayeredWindowAttributes(a->hwnd, 0, 0, LWA_ALPHA);
                 a->ShowWithMaterial(x, a->appearStartY, w, h);
-                SetTimer(a->hwnd, TIMER_ALERT_ANIM, 15, nullptr);
+                StartFrames(a->hwnd, TIMER_ALERT_ANIM);
             }
             else
             {
-                KillTimer(a->hwnd, TIMER_ALERT_ANIM);
+                StopFrames(a->hwnd, TIMER_ALERT_ANIM);
                 if (a->compMode != 2)
                     SetLayeredWindowAttributes(a->hwnd, 0, a->restingAlpha, LWA_ALPHA);
                 SetWindowPos(a->hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -11422,6 +14732,11 @@ namespace ui
         PostMessageW(hwnd, WM_UI_CLOSEALERT, 0, 0);
     }
 
+    void PanelWindow::KeepAlertsPlaced()
+    {
+        if (!g_alerts.empty())
+            LayoutAlerts(true);
+    }
     void PanelWindow::AddAlertFor(const td::RingEvent &e)
     {
         if (g_alerts.size() >= 8)
@@ -11492,14 +14807,18 @@ namespace ui
 
     static DWORD WINAPI UiThreadProc(LPVOID evt)
     {
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        bool ok = InitFactories() && RegisterUiClass();
+        const HRESULT coInitResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        const bool comInitialized = SUCCEEDED(coInitResult);
+        wpn::CleanupLeftovers(); // a database copy left by a crashed session is removed before anything is read
+        bool ok = comInitialized && InitFactories() && RegisterUiClass();
         if (ok)
         {
             g_panel = new PanelWindow();
             ok = g_panel->Create();
             if (!ok)
             {
+                if (g_panel->hwnd)
+                    DestroyWindow(g_panel->hwnd); // a half-built panel (an EDIT failed to create) must not stay alive with dangling user data
                 delete g_panel;
                 g_panel = nullptr;
             }
@@ -11508,6 +14827,14 @@ namespace ui
         {
             g_panelWnd = g_panel->hwnd;
             SetTimer(g_panel->hwnd, TIMER_TICK, 100, nullptr);
+            g_notif = new NotifWindow(); // optional: without it the bell simply does nothing
+            if (g_notif->Create())
+                g_notifWnd = g_notif->hwnd;
+            else
+            {
+                delete g_notif;
+                g_notif = nullptr;
+            }
         }
         g_uiOk = ok;
         SetEvent((HANDLE)evt);
@@ -11539,6 +14866,8 @@ namespace ui
         }
         // teardown
         g_panelWnd = nullptr;
+        g_notifWnd = nullptr;
+        wpn::Shutdown(); // the notification reader is cancelled and joined before anything it uses goes away
         if (g_panel && g_panel->hwnd)
             g_panel->FlushNote();
         RemoveWheelHook();
@@ -11550,6 +14879,15 @@ namespace ui
         snd::Stop();
         snd::g_ringing = false;
         snd::g_waves.clear();
+        if (g_notif)
+        {
+            if (g_notif->hwnd)
+                DestroyWindow(g_notif->hwnd);
+            delete g_notif;
+            g_notif = nullptr;
+        }
+        wpn::Release();
+        fclk::Shutdown();
         if (g_panel)
         {
             if (g_panel->hwnd)
@@ -11574,7 +14912,8 @@ namespace ui
             UnregisterClassW(kUiClass, ModInst());
             g_uiClassRegistered = false;
         }
-        CoUninitialize();
+        if (comInitialized)
+            CoUninitialize();
         return 0;
     }
 
@@ -11638,7 +14977,16 @@ namespace ui
         }
     }
 
-    void NotifyTaskbarClockPress() { g_clockTogglePendingUntil = GetTickCount64() + 700; }
+    void NotifyTaskbarClockPress() { g_clockTogglePendingUntil = MonoMs() + 700; }
+
+    void RequestToggleNotifications()
+    {
+        HWND h = g_panelWnd.load();
+        if (h)
+            PostMessageW(h, WM_UI_TOGGLE_NOTIF, 0, 0);
+        else
+            g_clockTogglePendingUntil = 0;
+    }
 
     void RequestTogglePanel(bool noActivate)
     {
@@ -11654,19 +15002,44 @@ namespace ui
 // ============================================================================
 //  WINDHAWK ENTRY POINTS
 // ============================================================================
+static HANDLE g_initThread = nullptr, g_initStop = nullptr;
+
+// Only the explorer.exe that owns the desktop (the one with the taskbar) runs alarms and the panel. The shell window
+// may not exist yet while Explorer starts, so wait for it here instead of in Wh_ModInit.
+static DWORD WINAPI InitThreadProc(LPVOID)
+{
+    HWND shell = nullptr;
+    while (!(shell = GetShellWindow()))
+        if (WaitForSingleObject(g_initStop, 200) == WAIT_OBJECT_0)
+            return 0;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(shell, &pid);
+    if (pid != GetCurrentProcessId() || g_shuttingDown.load())
+        return 0; // another explorer.exe (folder windows, "Show in folder"): stay idle
+    td::g_eng.Load(); // before the UI starts: Load may queue the missed-alarm popup
+    if (!ui::Start())
+        Wh_Log(L"could not start the UI thread");
+    return 0;
+}
+
 BOOL Wh_ModInit()
 {
-    td::g_eng.Load();
-    td::g_set.Load();
-    if (!ui::Start())
-    {
-        Wh_Log(L"could not start the UI thread");
-        return FALSE;
-    }
+    td::g_set.Load(); // read-only, safe in every process
     if (!tb::InstallHooks())
     {
         Wh_Log(L"could not install hooks");
-        ui::Stop();
+        return FALSE;
+    }
+    g_initStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_initThread = g_initStop ? CreateThread(nullptr, 0, InitThreadProc, nullptr, 0, nullptr) : nullptr;
+    if (!g_initThread)
+    {
+        Wh_Log(L"could not start the init thread");
+        if (g_initStop)
+            CloseHandle(g_initStop);
+        g_initStop = nullptr;
+        g_shuttingDown = true;
+        tb::CleanupAll();
         return FALSE;
     }
     Wh_Log(L"Initialised");
@@ -11681,5 +15054,20 @@ void Wh_ModBeforeUninit()
 
 void Wh_ModUninit()
 {
-    ui::Stop();
+    if (g_initStop)
+        SetEvent(g_initStop);
+    if (g_initThread)
+    { // join first: it may still be inside ui::Start
+        WaitForSingleObject(g_initThread, INFINITE);
+        CloseHandle(g_initThread);
+        g_initThread = nullptr;
+    }
+    ui::Stop(); // returns at once when the UI never started
+    if (g_initStop)
+    {
+        CloseHandle(g_initStop);
+        g_initStop = nullptr;
+    }
 }
+
+
