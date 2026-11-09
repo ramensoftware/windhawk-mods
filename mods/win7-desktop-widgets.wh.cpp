@@ -2,6 +2,7 @@
 // @id              win7-desktop-widgets
 // @name            Windows 7 Desktop Widgets
 // @description     Authentic Windows 7 Clock, Calendar & CPU Meter desktop gadgets. Features 8 classic vector clock skins, expandable calendar, real-time dual CPU/RAM meters, and full multi-monitor support.
+// @description:ru  Аутентичные виджеты Часов, Календаря и Индикатора ЦП из Windows 7. 8 векторных скинов часов, раскрывающийся календарь, мониторинг ЦП/памяти и поддержка нескольких мониторов.
 // @version         1.1.0
 // @author          dekvas
 // @github          https://github.com/dekvas
@@ -25,7 +26,7 @@ A faithful, lightweight, and modern recreation of the beloved Windows 7 desktop 
 - 🕒 **Classic Windows 7 Clock**:
   - All **8 original Windows 7 clock skins** (Traditional, Modern, Chronometer, Diner, Daisy, Novelty, Square, System).
   - Authentic options dialog (click the wrench icon on the hover bar or right-click -> **Options...**).
-  - Optional smooth second hand, customizable clock label, and worldwide time zone selection.
+  - Optional second hand, customizable clock label, and worldwide time zone selection.
 
 - 📅 **Classic Windows 7 Calendar**:
   - Iconic spiral-bound desktop notebook.
@@ -52,7 +53,7 @@ A faithful, lightweight, and modern recreation of the beloved Windows 7 desktop 
 
 - 🚀 **Lightweight & High Performance**:
   - Runs in a dedicated, isolated Windhawk tool process — zero bloat and no heavy web frameworks (Electron/Chromium).
-  - Animation timers automatically sleep when usage is steady, consuming negligible CPU and RAM in the background.
+  - Pre-rendered static layers and optimized animation thresholds ensure negligible CPU and RAM footprint in Task Manager.
 
 - 🖱️ **Authentic Windows 7 Hover UI**:
   - Hovering reveals the original Windows 7 side toolbar with Close, Resize/Options, and Drag buttons.
@@ -70,19 +71,27 @@ If you enjoy this mod and want to support its author:
 /*
 - showClock: true
   $name: Show Clock Widget
+  $name:ru: Показывать виджет Часов
   $description: Enable or disable the Windows 7 Clock widget on the desktop.
+  $description:ru: Включить или скрыть виджет часов на рабочем столе.
 
 - showCalendar: true
   $name: Show Calendar Widget
+  $name:ru: Показывать виджет Календаря
   $description: Enable or disable the Windows 7 Calendar widget on the desktop.
+  $description:ru: Включить или скрыть виджет календаря на рабочем столе.
 
 - showCpuMeter: true
   $name: Show CPU Meter Widget
+  $name:ru: Показывать виджет Индикатора ЦП
   $description: Enable or disable the Windows 7 CPU & RAM Meter widget on the desktop.
+  $description:ru: Включить или скрыть виджет индикатора загрузки ЦП и памяти на рабочем столе.
 
 - clockSkin: skin1
   $name: Clock Skin (1 - 8)
+  $name:ru: Скин часов (1 - 8)
   $description: Choose one of the 8 classic Windows 7 clock faces (can also be changed via the wrench button on the clock).
+  $description:ru: Выберите один из 8 классических циферблатов Windows 7 (также меняется через значок гаечного ключа на часах).
   $options:
   - skin1: 1 - Traditional
   - skin2: 2 - Modern
@@ -92,38 +101,65 @@ If you enjoy this mod and want to support its author:
   - skin6: 6 - Novelty
   - skin7: 7 - Square
   - skin8: 8 - System
+  $options:ru:
+  - skin1: 1 - Классический
+  - skin2: 2 - Современный
+  - skin3: 3 - Хронометр
+  - skin4: 4 - Неоновый
+  - skin5: 5 - Ромашка
+  - skin6: 6 - Монстрик
+  - skin7: 7 - Металлический квадрат
+  - skin8: 8 - Системный
 
 - showSeconds: true
   $name: Show Second Hand
+  $name:ru: Показывать секундную стрелку
   $description: Display the red sweeping second hand on the clock.
+  $description:ru: Отображать секундную стрелку на часах.
 
 - clockName: ""
   $name: Clock Name
+  $name:ru: Имя часов
   $description: Optional text displayed on the clock face.
+  $description:ru: Текст, отображаемый прямо на циферблате часов.
 
 - calendarExpanded: false
   $name: Calendar Expanded (Larger Size)
+  $name:ru: Развёрнутый календарь (Крупный размер)
   $description: Show both the top monthly grid sheet and the bottom daily page.
+  $description:ru: Показывать верхний лист с сеткой месяца и нижний лист с текущим числом.
 
 - cpuMeterExpanded: false
   $name: CPU Meter Expanded (Larger Size)
+  $name:ru: Крупный размер Индикатора ЦП
   $description: Show the larger undocked version of the CPU & RAM Meter widget.
+  $description:ru: Показывать увеличенную версию виджета Индикатора ЦП и памяти.
 
 - widgetOpacity: 100
   $name: Widget Opacity (%)
+  $name:ru: Непрозрачность виджетов (%)
   $description: Opacity from 20% to 100%.
+  $description:ru: Прозрачность виджетов от 20% до 100%.
 
 - widgetScale: 100
   $name: Widget Scale (%)
+  $name:ru: Масштаб виджетов (%)
   $description: Size scale in percent (e.g. 100, 125, 150).
+  $description:ru: Масштаб размера в процентах (например 100, 125, 150).
 
 - language: auto
   $name: Language
+  $name:ru: Язык интерфейса
   $description: Widget interface language (Auto matches system language, or force English / Russian).
+  $description:ru: Язык интерфейса виджетов (Авто — по языку системы, либо принудительно Английский / Русский).
   $options:
   - auto: Auto (System Default)
   - en: English
   - ru: Russian
+  $options:ru:
+  - auto: Авто (По умолчанию системы)
+  - en: Английский (English)
+  - ru: Русский
 */
 // ==/WindhawkModSettings==
 
@@ -279,11 +315,42 @@ struct RenderSurface {
 
 RenderSurface g_surfaces[WidgetCount];
 
+struct CpuMeterCache {
+    Bitmap* layerA = nullptr;
+    Bitmap* layerB = nullptr;
+    Bitmap* layerHubCpu = nullptr;
+    int width = 0;
+    int height = 0;
+    float scale = 0.0f;
+    bool expanded = false;
+};
+
+CpuMeterCache g_cpuCache;
+FontFamily* g_segoeFontFamily = nullptr;
+
+void InvalidateCpuMeterCache() {
+    if (g_cpuCache.layerA) { delete g_cpuCache.layerA; g_cpuCache.layerA = nullptr; }
+    if (g_cpuCache.layerB) { delete g_cpuCache.layerB; g_cpuCache.layerB = nullptr; }
+    if (g_cpuCache.layerHubCpu) { delete g_cpuCache.layerHubCpu; g_cpuCache.layerHubCpu = nullptr; }
+    g_cpuCache.width = 0;
+    g_cpuCache.height = 0;
+    g_cpuCache.scale = 0.0f;
+    g_cpuCache.expanded = false;
+}
+
+void CleanupGdiplusCache() {
+    InvalidateCpuMeterCache();
+    if (g_segoeFontFamily) {
+        delete g_segoeFontFamily;
+        g_segoeFontFamily = nullptr;
+    }
+}
+
 // ── Localization ─────────────────────────────────────────────────────────────
 
 void DetectLanguage() {
     auto langSetting = WindhawkUtils::StringSetting::make(L"language");
-    if (langSetting.get()) {
+    if (langSetting.get()[0] != L'\0') {
         if (wcscmp(langSetting.get(), L"ru") == 0) {
             g_isRussian = true;
             return;
@@ -712,12 +779,15 @@ void SampleCpuAndRamUsage(bool snapNeedlesImmediately = false) {
         g_dispCpuPct = g_targetCpuPct;
         g_dispRamPct = g_targetRamPct;
     } else if (HWND cpuHwnd = g_cpuHwnd.load(); cpuHwnd && IsWindow(cpuHwnd) && g_showCpuMeter) {
-        if (std::fabs(g_dispCpuPct - g_targetCpuPct) > 0.15f ||
-            std::fabs(g_dispRamPct - g_targetRamPct) > 0.15f) {
+        if (std::fabs(g_dispCpuPct - g_targetCpuPct) >= 1.0f ||
+            std::fabs(g_dispRamPct - g_targetRamPct) >= 1.0f) {
             if (!g_cpuAnimRunning) {
                 SetTimer(cpuHwnd, kCpuAnimTimer, 33, nullptr);
                 g_cpuAnimRunning = true;
             }
+        } else if (!g_cpuAnimRunning) {
+            g_dispCpuPct = g_targetCpuPct;
+            g_dispRamPct = g_targetRamPct;
         }
     }
 }
@@ -822,7 +892,7 @@ void LoadStateAndSettings(bool fromWindhawkSettingsChange) {
     int cfgSkin = 0;
     {
         auto skinSetting = WindhawkUtils::StringSetting::make(L"clockSkin");
-        if (skinSetting.get()) {
+        if (skinSetting.get()[0] != L'\0') {
             if (wcsncmp(skinSetting.get(), L"skin", 4) == 0 &&
                 skinSetting.get()[4] >= L'1' && skinSetting.get()[4] <= L'8') {
                 cfgSkin = skinSetting.get()[4] - L'1';
@@ -837,9 +907,7 @@ void LoadStateAndSettings(bool fromWindhawkSettingsChange) {
     wchar_t cfgClockName[64] = L"";
     {
         auto nameSetting = WindhawkUtils::StringSetting::make(L"clockName");
-        if (nameSetting.get()) {
-            wcsncpy_s(cfgClockName, nameSetting.get(), _TRUNCATE);
-        }
+        wcsncpy_s(cfgClockName, nameSetting.get(), _TRUNCATE);
     }
 
     // Compare against the last known Windhawk settings so widget-side changes
@@ -2897,10 +2965,10 @@ Color EvalWarningZoneColor(float deg, bool isCpuDial, BYTE* outAlpha) {
     }
 }
 
-void DrawCpuMeterDialInterior(Graphics& g, float cx, float cy, float innerR, float s,
-                              bool isCpuDial, bool expanded,
-                              bool hasStopPin, float stopPinR,
-                              const RectF& lcdRc, float lcdCornerR, float fontPx, int pctValue) {
+void DrawCpuMeterDialStaticInterior(Graphics& g, float cx, float cy, float innerR, float s,
+                                    bool isCpuDial, bool expanded,
+                                    bool hasStopPin, float stopPinR,
+                                    const RectF& lcdRc, float lcdCornerR) {
     GraphicsState st = g.Save();
 
     GraphicsPath dialClip;
@@ -3042,36 +3110,6 @@ void DrawCpuMeterDialInterior(Graphics& g, float cx, float cy, float innerR, flo
 
         Pen lcdBorder(Color(235, 36, 37, 39), 0.85f * s);
         DrawRoundRect(g, lcdRc, lcdCornerR * s, lcdBorder);
-
-        wchar_t pctText[16];
-        int clampedPct = std::max(0, std::min(100, pctValue));
-        swprintf_s(pctText, L"%d%%", clampedPct);
-
-        float effFontPx = fontPx * s;
-        if (clampedPct >= 100 && !expanded) {
-            effFontPx *= 0.88f;
-        }
-        float snappedPx = std::max(6.0f, std::round(effFontPx));
-
-        TextRenderingHint oldHint = g.GetTextRenderingHint();
-        PixelOffsetMode oldOffset = g.GetPixelOffsetMode();
-        g.SetPixelOffsetMode(PixelOffsetModeDefault);
-        g.SetTextRenderingHint(snappedPx >= 8.0f ? TextRenderingHintClearTypeGridFit
-                                                 : TextRenderingHintAntiAliasGridFit);
-
-        FontFamily segoe(L"Segoe UI");
-        Font lcdFont(&segoe, snappedPx, FontStyleRegular, UnitPixel);
-        StringFormat sf(StringFormat::GenericTypographic());
-        sf.SetAlignment(StringAlignmentCenter);
-        sf.SetLineAlignment(StringAlignmentCenter);
-        sf.SetFormatFlags(StringFormatFlagsNoWrap);
-
-        SolidBrush lcdWhite(Color(255, 248, 250, 252));
-        RectF textRc = SnapTextRect(lcdRc.X - 1.0f * s, lcdRc.Y, lcdRc.Width + 2.0f * s, lcdRc.Height + 0.4f * s);
-        g.DrawString(pctText, -1, &lcdFont, textRc, &sf, &lcdWhite);
-
-        g.SetPixelOffsetMode(oldOffset);
-        g.SetTextRenderingHint(oldHint);
     }
 
     g.Restore(st);
@@ -3083,6 +3121,44 @@ void DrawCpuMeterDialInterior(Graphics& g, float cx, float cy, float innerR, flo
     Pen bottomRimLight(Color(145, 244, 246, 248), 0.85f * s);
     g.DrawArc(&bottomRimLight, cx - innerR - 0.8f * s, cy - innerR - 0.8f * s,
               (innerR + 0.8f * s) * 2.0f, (innerR + 0.8f * s) * 2.0f, 20.0f, 140.0f);
+}
+
+void DrawCpuMeterLcdText(Graphics& g, const RectF& lcdRc, float fontPx, float s, bool expanded, int pctValue) {
+    wchar_t pctText[16];
+    int clampedPct = std::max(0, std::min(100, pctValue));
+    swprintf_s(pctText, L"%d%%", clampedPct);
+
+    float effFontPx = fontPx * s;
+    if (clampedPct >= 100 && !expanded) {
+        effFontPx *= 0.88f;
+    }
+    float snappedPx = std::max(6.0f, std::round(effFontPx));
+
+    TextRenderingHint oldHint = g.GetTextRenderingHint();
+    PixelOffsetMode oldOffset = g.GetPixelOffsetMode();
+    g.SetPixelOffsetMode(PixelOffsetModeDefault);
+    g.SetTextRenderingHint(snappedPx >= 8.0f ? TextRenderingHintClearTypeGridFit
+                                             : TextRenderingHintAntiAliasGridFit);
+
+    FontFamily* fam = g_segoeFontFamily;
+    if (!fam || fam->GetLastStatus() != Ok) {
+        delete g_segoeFontFamily;
+        g_segoeFontFamily = new FontFamily(L"Segoe UI");
+        fam = g_segoeFontFamily;
+    }
+    Font lcdFont(fam && fam->GetLastStatus() == Ok ? fam : FontFamily::GenericSansSerif(),
+                 snappedPx, FontStyleRegular, UnitPixel);
+    StringFormat sf(StringFormat::GenericTypographic());
+    sf.SetAlignment(StringAlignmentCenter);
+    sf.SetLineAlignment(StringAlignmentCenter);
+    sf.SetFormatFlags(StringFormatFlagsNoWrap);
+
+    SolidBrush lcdWhite(Color(255, 248, 250, 252));
+    RectF textRc = SnapTextRect(lcdRc.X - 1.0f * s, lcdRc.Y, lcdRc.Width + 2.0f * s, lcdRc.Height + 0.4f * s);
+    g.DrawString(pctText, -1, &lcdFont, textRc, &sf, &lcdWhite);
+
+    g.SetPixelOffsetMode(oldOffset);
+    g.SetTextRenderingHint(oldHint);
 }
 
 void DrawCpuMeterNeedle(Graphics& g, float dialCx, float dialCy, float innerR,
@@ -3101,25 +3177,8 @@ void DrawCpuMeterNeedle(Graphics& g, float dialCx, float dialCy, float innerR,
     float cosA = std::cos(rad);
     float sinA = std::sin(rad);
 
-    // Exact 8-point stepped parallel blade + short chevron tip from dial*.png pixel scans
+    // Exact 10-point stepped parallel blade + short chevron tip from dial*.png pixel scans
     const float tipHalfW = 0.55f * s;
-    PointF localPts[8] = {
-        PointF(-tipHalfW,       tipY * s),
-        PointF( tipHalfW,       tipY * s),
-        PointF( bladeHalfW * s, shoulderY * s),
-        PointF( bladeHalfW * s, stepOutY * s),
-        PointF( baseHalfW * s,  stepInY * s),
-        PointF( baseHalfW * s,  baseY * s),
-        PointF(-baseHalfW * s,  baseY * s),
-        PointF(-baseHalfW * s,  stepInY * s)
-    };
-    // Add symmetric left step-out & left shoulder in 9-point polygon
-    PointF fullLocal[9] = {
-        localPts[0], localPts[1], localPts[2], localPts[3],
-        localPts[4], localPts[5], localPts[6], localPts[7],
-        PointF(-bladeHalfW * s, stepOutY * s)
-    };
-    // Wait: connect (-baseHalfW, stepInY) -> (-bladeHalfW, stepOutY) -> (-bladeHalfW, shoulderY) -> (-tipHalfW, tipY)
     PointF polyLocal[10] = {
         PointF(-tipHalfW,       tipY * s),
         PointF( tipHalfW,       tipY * s),
@@ -3132,7 +3191,6 @@ void DrawCpuMeterNeedle(Graphics& g, float dialCx, float dialCy, float innerR,
         PointF(-bladeHalfW * s, stepOutY * s),
         PointF(-bladeHalfW * s, shoulderY * s)
     };
-    (void)fullLocal;
 
     PointF worldPts[10];
     PointF shPts[10];
@@ -3316,12 +3374,11 @@ void DrawCpuMeterHubCap(Graphics& g, float hubCx, float hubCy, float hubR, float
     g.Restore(st);
 }
 
-void BuildCpuRamBridgePath(GraphicsPath& path, float cpuCx, float cpuCy, float cpuOuterR,
+void BuildCpuRamBridgePath(GraphicsPath& path, float cpuCx, float cpuCy,
                            float ramCx, float ramCy, float ramOuterR) {
     // Authentic tapered sidecar sleeve wrapping around RAM bezel and tucking BEHIND the foreground CPU bezel!
     // Exact upper tangent normal (-122 deg, slope -32 deg) & lower tangent normal (+80 deg, slope -10 deg)
     // measured directly from back.png and back_lrg.png.
-    (void)cpuOuterR;
     const float dx = ramCx - cpuCx;
     const float dy = ramCy - cpuCy;
     const float dist = std::sqrt(dx * dx + dy * dy);
@@ -3357,12 +3414,33 @@ void BuildCpuRamBridgePath(GraphicsPath& path, float cpuCx, float cpuCy, float c
     path.CloseFigure();
 }
 
-void DrawCpuMeterGadget(Graphics& g) {
-    if (!g_showCpuMeter) return;
+void BuildCpuMeterCache(Graphics& targetG, int w, int h, float s, bool expanded) {
+    if (g_cpuCache.layerA && g_cpuCache.layerB && g_cpuCache.layerHubCpu &&
+        g_cpuCache.width == w && g_cpuCache.height == h &&
+        std::fabs(g_cpuCache.scale - s) < 0.001f && g_cpuCache.expanded == expanded) {
+        return;
+    }
 
-    const float s = GetWidgetScale(WidgetCpuMeter);
+    InvalidateCpuMeterCache();
+
+    g_cpuCache.layerA = new Bitmap(w, h, PixelFormat32bppPARGB);
+    g_cpuCache.layerB = new Bitmap(w, h, PixelFormat32bppPARGB);
+    g_cpuCache.layerHubCpu = new Bitmap(w, h, PixelFormat32bppPARGB);
+    g_cpuCache.width = w;
+    g_cpuCache.height = h;
+    g_cpuCache.scale = s;
+    g_cpuCache.expanded = expanded;
+
+    REAL dpiX = targetG.GetDpiX();
+    REAL dpiY = targetG.GetDpiY();
+    if (dpiX > 0.0f && dpiY > 0.0f) {
+        g_cpuCache.layerA->SetResolution(dpiX, dpiY);
+        g_cpuCache.layerB->SetResolution(dpiX, dpiY);
+        g_cpuCache.layerHubCpu->SetResolution(dpiX, dpiY);
+    }
+
     const RectF body = GetWidgetLocalBodyRect(WidgetCpuMeter);
-    const CpuMeterLayout L = GetCpuMeterLayout(g_cpuMeterExpanded);
+    const CpuMeterLayout L = GetCpuMeterLayout(expanded);
 
     const float cpuCx = body.X + L.cpuCx * s;
     const float cpuCy = body.Y + L.cpuCy * s;
@@ -3374,135 +3452,202 @@ void DrawCpuMeterGadget(Graphics& g) {
     const float ramOuterR = L.ramOuterR * s;
     const float ramInnerR = L.ramInnerR * s;
 
-    // 1. Soft multi-layer desktop drop shadow behind both circles & sidecar bridge
-    for (int i = 4; i >= 1; --i) {
-        float ex = i * 1.10f * s;
-        float dy = i * 1.00f * s;
-        SolidBrush shBrush(Color(static_cast<BYTE>(14 * (5 - i)), 0, 0, 0));
-
-        GraphicsPath shPath;
-        BuildCpuRamBridgePath(shPath, cpuCx, cpuCy + dy, cpuOuterR + ex,
-                              ramCx, ramCy + dy, ramOuterR + ex);
-        g.FillPath(&shBrush, &shPath);
-        g.FillEllipse(&shBrush, cpuCx - cpuOuterR - ex, cpuCy - cpuOuterR - ex + dy,
-                      (cpuOuterR + ex) * 2.0f, (cpuOuterR + ex) * 2.0f);
-    }
-
-    // 2. Background Housing: Tapered Silver Sidecar Sleeve + Right RAM Studio-Chrome Bezel
-    GraphicsPath bridgeAndRam;
-    BuildCpuRamBridgePath(bridgeAndRam, cpuCx, cpuCy, cpuOuterR, ramCx, ramCy, ramOuterR);
+    // --- Build Layer A (Drop shadows, RAM sidecar housing, RAM static dial) ---
     {
-        LinearGradientBrush ramChrome(
-            PointF(ramCx, ramCy - ramOuterR), PointF(ramCx, ramCy + ramOuterR * 1.06f),
-            Color(255, 88, 96, 99), Color(255, 95, 102, 105));
-        ramChrome.SetWrapMode(WrapModeTileFlipXY);
-        ApplyWin7StudioChromeStops(ramChrome);
-        g.FillPath(&ramChrome, &bridgeAndRam);
+        Graphics gA(g_cpuCache.layerA);
+        gA.SetSmoothingMode(SmoothingModeAntiAlias);
+        gA.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        gA.Clear(Color(0, 0, 0, 0));
 
-        // Bright diagonal specular highlight on the upper-left sidecar shoulder (matching back_lrg.png)
-        {
-            GraphicsState brSt = g.Save();
-            g.SetClip(&bridgeAndRam);
-            float shCx = cpuCx + (ramCx - cpuCx) * 0.48f;
-            float shCy = ramCy - ramOuterR * 0.36f;
-            GraphicsPath sheenPath;
-            sheenPath.AddEllipse(shCx - ramOuterR * 0.65f, shCy - ramOuterR * 0.45f,
-                                 ramOuterR * 1.30f, ramOuterR * 0.90f);
-            PathGradientBrush sheenPgb(&sheenPath);
-            sheenPgb.SetCenterColor(Color(175, 255, 255, 255));
-            Color surCol[1] = {Color(0, 255, 255, 255)};
-            INT surCnt = 1;
-            sheenPgb.SetSurroundColors(surCol, &surCnt);
-            g.FillPath(&sheenPgb, &sheenPath);
-            g.Restore(brSt);
+        // 1. Soft multi-layer desktop drop shadow behind both circles & sidecar bridge
+        for (int i = 4; i >= 1; --i) {
+            float ex = i * 1.10f * s;
+            float dy = i * 1.00f * s;
+            SolidBrush shBrush(Color(static_cast<BYTE>(14 * (5 - i)), 0, 0, 0));
+
+            GraphicsPath shPath;
+            BuildCpuRamBridgePath(shPath, cpuCx, cpuCy + dy,
+                                  ramCx, ramCy + dy, ramOuterR + ex);
+            gA.FillPath(&shBrush, &shPath);
+            gA.FillEllipse(&shBrush, cpuCx - cpuOuterR - ex, cpuCy - cpuOuterR - ex + dy,
+                           (cpuOuterR + ex) * 2.0f, (cpuOuterR + ex) * 2.0f);
         }
 
-        Pen outerGunmetal(Color(230, 44, 48, 52), 1.0f * s);
-        g.DrawPath(&outerGunmetal, &bridgeAndRam);
+        // 2. Background Housing: Tapered Silver Sidecar Sleeve + Right RAM Studio-Chrome Bezel
+        GraphicsPath bridgeAndRam;
+        BuildCpuRamBridgePath(bridgeAndRam, cpuCx, cpuCy, ramCx, ramCy, ramOuterR);
+        {
+            LinearGradientBrush ramChrome(
+                PointF(ramCx, ramCy - ramOuterR), PointF(ramCx, ramCy + ramOuterR * 1.06f),
+                Color(255, 88, 96, 99), Color(255, 95, 102, 105));
+            ramChrome.SetWrapMode(WrapModeTileFlipXY);
+            ApplyWin7StudioChromeStops(ramChrome);
+            gA.FillPath(&ramChrome, &bridgeAndRam);
 
-        GraphicsPath innerBridge;
-        BuildCpuRamBridgePath(innerBridge, cpuCx, cpuCy, cpuOuterR - 0.95f * s,
-                              ramCx, ramCy, ramOuterR - 0.95f * s);
-        Pen innerSpec(Color(105, 255, 255, 255), 0.80f * s);
-        g.DrawPath(&innerSpec, &innerBridge);
-    }
+            // Bright diagonal specular highlight on the upper-left sidecar shoulder (matching back_lrg.png)
+            {
+                GraphicsState brSt = gA.Save();
+                gA.SetClip(&bridgeAndRam);
+                float shCx = cpuCx + (ramCx - cpuCx) * 0.48f;
+                float shCy = ramCy - ramOuterR * 0.36f;
+                GraphicsPath sheenPath;
+                sheenPath.AddEllipse(shCx - ramOuterR * 0.65f, shCy - ramOuterR * 0.45f,
+                                     ramOuterR * 1.30f, ramOuterR * 0.90f);
+                PathGradientBrush sheenPgb(&sheenPath);
+                sheenPgb.SetCenterColor(Color(175, 255, 255, 255));
+                Color surCol[1] = {Color(0, 255, 255, 255)};
+                INT surCnt = 1;
+                sheenPgb.SetSurroundColors(surCol, &surCnt);
+                gA.FillPath(&sheenPgb, &sheenPath);
+                gA.Restore(brSt);
+            }
 
-    // 3. RAM Dial Interior, Needle, and Center Hub Cap (drawn BEFORE foreground CPU bezel!)
-    {
+            Pen outerGunmetal(Color(230, 44, 48, 52), 1.0f * s);
+            gA.DrawPath(&outerGunmetal, &bridgeAndRam);
+
+            GraphicsPath innerBridge;
+            BuildCpuRamBridgePath(innerBridge, cpuCx, cpuCy,
+                                  ramCx, ramCy, ramOuterR - 0.95f * s);
+            Pen innerSpec(Color(105, 255, 255, 255), 0.80f * s);
+            gA.DrawPath(&innerSpec, &innerBridge);
+        }
+
+        // 3. RAM Dial Static Interior
         RectF ramLcd(body.X + L.ramLcd.X * s, body.Y + L.ramLcd.Y * s,
                      L.ramLcd.Width * s, L.ramLcd.Height * s);
-        int ramPctInt = static_cast<int>(std::round(g_targetRamPct));
-
-        DrawCpuMeterDialInterior(g, ramCx, ramCy, ramInnerR, s,
-                                 false, g_cpuMeterExpanded,
-                                 true, L.ramStopPinR,
-                                 ramLcd, L.ramLcdRadius, L.ramFontPx, ramPctInt);
-
-        DrawCpuMeterNeedle(g, ramCx, ramCy, ramInnerR,
-                           body.X + L.ramNeedlePivotCx * s, body.Y + L.ramNeedlePivotCy * s,
-                           g_dispRamPct, s,
-                           L.ramNeedleTipY, L.ramNeedleShoulderY, L.ramNeedleBladeHalfW,
-                           L.ramNeedleStepOutY, L.ramNeedleStepInY, L.ramNeedleBaseY, L.ramNeedleBaseHalfW);
-
-        DrawCpuMeterHubCap(g, body.X + L.ramHubCx * s, body.Y + L.ramHubCy * s, L.ramHubR * s, s,
-                           false, g_cpuMeterExpanded, L.ramHubClipBottomY, body.Y);
+        DrawCpuMeterDialStaticInterior(gA, ramCx, ramCy, ramInnerR, s,
+                                       false, expanded,
+                                       true, L.ramStopPinR,
+                                       ramLcd, L.ramLcdRadius);
     }
 
-    // 4. 3D Contact Shadow cast by foreground CPU bezel exclusively onto the RAM sidecar housing
+    // --- Build Layer B (RAM hub cap, CPU shadow, CPU bezel, CPU static dial) ---
     {
-        GraphicsState ovSt = g.Save();
-        g.SetClip(&bridgeAndRam);
-        for (int i = 4; i >= 1; --i) {
-            float ex = i * 1.35f * s;
-            SolidBrush overlapSh(Color(static_cast<BYTE>(22 * (5 - i)), 0, 0, 0));
-            g.FillEllipse(&overlapSh,
-                          cpuCx - cpuOuterR - ex * 0.2f + i * 0.95f * s,
-                          cpuCy - cpuOuterR - ex * 0.3f + i * 0.45f * s,
-                          (cpuOuterR + ex * 0.4f) * 2.0f,
-                          (cpuOuterR + ex * 0.4f) * 2.0f);
+        Graphics gB(g_cpuCache.layerB);
+        gB.SetSmoothingMode(SmoothingModeAntiAlias);
+        gB.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        gB.Clear(Color(0, 0, 0, 0));
+
+        // 1. RAM Center Hub Cap (drawn over RAM needle, under CPU bezel)
+        DrawCpuMeterHubCap(gB, body.X + L.ramHubCx * s, body.Y + L.ramHubCy * s, L.ramHubR * s, s,
+                           false, expanded, L.ramHubClipBottomY, body.Y);
+
+        // 2. 3D Contact Shadow cast by foreground CPU bezel exclusively onto the RAM sidecar housing
+        GraphicsPath bridgeAndRam;
+        BuildCpuRamBridgePath(bridgeAndRam, cpuCx, cpuCy, ramCx, ramCy, ramOuterR);
+        {
+            GraphicsState ovSt = gB.Save();
+            gB.SetClip(&bridgeAndRam);
+            for (int i = 4; i >= 1; --i) {
+                float ex = i * 1.35f * s;
+                SolidBrush overlapSh(Color(static_cast<BYTE>(22 * (5 - i)), 0, 0, 0));
+                gB.FillEllipse(&overlapSh,
+                               cpuCx - cpuOuterR - ex * 0.2f + i * 0.95f * s,
+                               cpuCy - cpuOuterR - ex * 0.3f + i * 0.45f * s,
+                               (cpuOuterR + ex * 0.4f) * 2.0f,
+                               (cpuOuterR + ex * 0.4f) * 2.0f);
+            }
+            gB.Restore(ovSt);
         }
-        g.Restore(ovSt);
-    }
 
-    // 5. Foreground Unbroken 360-Degree CPU Studio-Chrome Bezel
-    {
-        LinearGradientBrush cpuChrome(
-            PointF(cpuCx, cpuCy - cpuOuterR), PointF(cpuCx, cpuCy + cpuOuterR),
-            Color(255, 88, 96, 99), Color(255, 95, 102, 105));
-        ApplyWin7StudioChromeStops(cpuChrome);
-        g.FillEllipse(&cpuChrome, cpuCx - cpuOuterR, cpuCy - cpuOuterR,
-                      cpuOuterR * 2.0f, cpuOuterR * 2.0f);
+        // 3. Foreground Unbroken 360-Degree CPU Studio-Chrome Bezel
+        {
+            LinearGradientBrush cpuChrome(
+                PointF(cpuCx, cpuCy - cpuOuterR), PointF(cpuCx, cpuCy + cpuOuterR),
+                Color(255, 88, 96, 99), Color(255, 95, 102, 105));
+            ApplyWin7StudioChromeStops(cpuChrome);
+            gB.FillEllipse(&cpuChrome, cpuCx - cpuOuterR, cpuCy - cpuOuterR,
+                           cpuOuterR * 2.0f, cpuOuterR * 2.0f);
 
-        Pen outerGunmetal(Color(235, 42, 46, 50), 1.05f * s);
-        g.DrawEllipse(&outerGunmetal, cpuCx - cpuOuterR, cpuCy - cpuOuterR,
-                      cpuOuterR * 2.0f, cpuOuterR * 2.0f);
+            Pen outerGunmetal(Color(235, 42, 46, 50), 1.05f * s);
+            gB.DrawEllipse(&outerGunmetal, cpuCx - cpuOuterR, cpuCy - cpuOuterR,
+                           cpuOuterR * 2.0f, cpuOuterR * 2.0f);
 
-        Pen innerSpec(Color(115, 255, 255, 255), 0.85f * s);
-        g.DrawEllipse(&innerSpec, cpuCx - cpuOuterR + 0.95f * s, cpuCy - cpuOuterR + 0.95f * s,
-                      (cpuOuterR - 0.95f * s) * 2.0f, (cpuOuterR - 0.95f * s) * 2.0f);
-    }
+            Pen innerSpec(Color(115, 255, 255, 255), 0.85f * s);
+            gB.DrawEllipse(&innerSpec, cpuCx - cpuOuterR + 0.95f * s, cpuCy - cpuOuterR + 0.95f * s,
+                           (cpuOuterR - 0.95f * s) * 2.0f, (cpuOuterR - 0.95f * s) * 2.0f);
+        }
 
-    // 6. CPU Dial Interior, Needle, and Center Hub Cap
-    {
+        // 4. CPU Dial Static Interior
         RectF cpuLcd(body.X + L.cpuLcd.X * s, body.Y + L.cpuLcd.Y * s,
                      L.cpuLcd.Width * s, L.cpuLcd.Height * s);
-        int cpuPctInt = static_cast<int>(std::round(g_targetCpuPct));
-
-        DrawCpuMeterDialInterior(g, cpuCx, cpuCy, cpuInnerR, s,
-                                 true, g_cpuMeterExpanded,
-                                 L.cpuHasStopPin, L.cpuStopPinR,
-                                 cpuLcd, L.cpuLcdRadius, L.cpuFontPx, cpuPctInt);
-
-        DrawCpuMeterNeedle(g, cpuCx, cpuCy, cpuInnerR,
-                           cpuCx, cpuCy,
-                           g_dispCpuPct, s,
-                           L.cpuNeedleTipY, L.cpuNeedleShoulderY, L.cpuNeedleBladeHalfW,
-                           L.cpuNeedleStepOutY, L.cpuNeedleStepInY, L.cpuNeedleBaseY, L.cpuNeedleBaseHalfW);
-
-        DrawCpuMeterHubCap(g, body.X + L.cpuHubCx * s, body.Y + L.cpuHubCy * s, L.cpuHubR * s, s,
-                           true, g_cpuMeterExpanded, 999.0f, body.Y);
+        DrawCpuMeterDialStaticInterior(gB, cpuCx, cpuCy, cpuInnerR, s,
+                                       true, expanded,
+                                       L.cpuHasStopPin, L.cpuStopPinR,
+                                       cpuLcd, L.cpuLcdRadius);
     }
 
+    // --- Build Layer Hub CPU (PGA chip with gold pins, IHS, and glass dome) ---
+    {
+        Graphics gHub(g_cpuCache.layerHubCpu);
+        gHub.SetSmoothingMode(SmoothingModeAntiAlias);
+        gHub.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        gHub.Clear(Color(0, 0, 0, 0));
+
+        DrawCpuMeterHubCap(gHub, body.X + L.cpuHubCx * s, body.Y + L.cpuHubCy * s, L.cpuHubR * s, s,
+                           true, expanded, 999.0f, body.Y);
+    }
+}
+
+void DrawCpuMeterGadget(Graphics& g) {
+    if (!g_showCpuMeter) return;
+
+    const float s = GetWidgetScale(WidgetCpuMeter);
+    const RectF body = GetWidgetLocalBodyRect(WidgetCpuMeter);
+    const CpuMeterLayout L = GetCpuMeterLayout(g_cpuMeterExpanded);
+    SizeF winSz = GetWidgetWindowSize(WidgetCpuMeter);
+    int w = std::max(1, static_cast<int>(winSz.Width));
+    int h = std::max(1, static_cast<int>(winSz.Height));
+
+    BuildCpuMeterCache(g, w, h, s, g_cpuMeterExpanded);
+
+    RectF dstRc(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h));
+
+    // 1. Blit Layer A (Drop shadows, RAM sidecar housing, RAM static dial face)
+    if (g_cpuCache.layerA) {
+        g.DrawImage(g_cpuCache.layerA, dstRc, 0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), UnitPixel);
+    }
+
+    // 2. Draw RAM Needle (dynamic)
+    const float ramCx = body.X + L.ramCx * s;
+    const float ramCy = body.Y + L.ramCy * s;
+    const float ramInnerR = L.ramInnerR * s;
+    DrawCpuMeterNeedle(g, ramCx, ramCy, ramInnerR,
+                       body.X + L.ramNeedlePivotCx * s, body.Y + L.ramNeedlePivotCy * s,
+                       g_dispRamPct, s,
+                       L.ramNeedleTipY, L.ramNeedleShoulderY, L.ramNeedleBladeHalfW,
+                       L.ramNeedleStepOutY, L.ramNeedleStepInY, L.ramNeedleBaseY, L.ramNeedleBaseHalfW);
+
+    // 3. Blit Layer B (RAM hub cap, CPU shadow, CPU bezel, CPU static dial face)
+    if (g_cpuCache.layerB) {
+        g.DrawImage(g_cpuCache.layerB, dstRc, 0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), UnitPixel);
+    }
+
+    // 4. Draw CPU Needle (dynamic)
+    const float cpuCx = body.X + L.cpuCx * s;
+    const float cpuCy = body.Y + L.cpuCy * s;
+    const float cpuInnerR = L.cpuInnerR * s;
+    DrawCpuMeterNeedle(g, cpuCx, cpuCy, cpuInnerR,
+                       cpuCx, cpuCy,
+                       g_dispCpuPct, s,
+                       L.cpuNeedleTipY, L.cpuNeedleShoulderY, L.cpuNeedleBladeHalfW,
+                       L.cpuNeedleStepOutY, L.cpuNeedleStepInY, L.cpuNeedleBaseY, L.cpuNeedleBaseHalfW);
+
+    // 5. Blit Layer Hub CPU (PGA chip center hub cap)
+    if (g_cpuCache.layerHubCpu) {
+        g.DrawImage(g_cpuCache.layerHubCpu, dstRc, 0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), UnitPixel);
+    }
+
+    // 6. Draw LCD Numbers (dynamic)
+    RectF ramLcd(body.X + L.ramLcd.X * s, body.Y + L.ramLcd.Y * s,
+                 L.ramLcd.Width * s, L.ramLcd.Height * s);
+    DrawCpuMeterLcdText(g, ramLcd, L.ramFontPx, s, g_cpuMeterExpanded, static_cast<int>(std::round(g_dispRamPct)));
+
+    RectF cpuLcd(body.X + L.cpuLcd.X * s, body.Y + L.cpuLcd.Y * s,
+                 L.cpuLcd.Width * s, L.cpuLcd.Height * s);
+    DrawCpuMeterLcdText(g, cpuLcd, L.cpuFontPx, s, g_cpuMeterExpanded, static_cast<int>(std::round(g_dispCpuPct)));
+
+    // 7. Hover toolbar
     DrawWin7HoverToolbar(g, WidgetCpuMeter);
 }
 
@@ -3754,6 +3899,7 @@ void Render() {
 }
 
 void ToggleCpuMeterExpanded() {
+    InvalidateCpuMeterCache();
     g_cpuMeterExpanded = !g_cpuMeterExpanded;
     AdjustCpuPosForSizeToggle(g_cpuMeterExpanded);
     UpdateEffectiveScale();
@@ -3762,7 +3908,7 @@ void ToggleCpuMeterExpanded() {
     RenderWidget(WidgetCpuMeter);
 }
 
-// ── Authentic Windows 7 Clock Options Dialog (matching Screenshot #2) ────────
+// ── Authentic Windows 7 Clock Options Dialog ─────────────────────────────────
 
 struct ClockOptionsState {
     int tempSkin = 0;
@@ -3833,7 +3979,7 @@ void PaintClockOptionsDialog(HWND hwnd, HDC hdc) {
         SolidBrush bgBrush(Color(255, 245, 246, 248));
         g.FillRectangle(&bgBrush, 0, 0, w, h);
 
-        // Top Aero Glass dark-blue header band (matching "Часы" header on Screenshot #2)
+        // Top Aero Glass dark-blue header band
         int headerH = static_cast<int>(std::round(34.0f * ds));
         LinearGradientBrush headerBrush(
             PointF(0.0f, 0.0f), PointF(0.0f, 34.0f * ds),
@@ -4425,14 +4571,14 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 }
                 float dCpu = g_targetCpuPct - g_dispCpuPct;
                 float dRam = g_targetRamPct - g_dispRamPct;
-                if (std::fabs(dCpu) <= 0.12f && std::fabs(dRam) <= 0.12f) {
+                if (std::fabs(dCpu) <= 0.5f && std::fabs(dRam) <= 0.5f) {
                     g_dispCpuPct = g_targetCpuPct;
                     g_dispRamPct = g_targetRamPct;
                     KillTimer(hwnd, kCpuAnimTimer);
                     g_cpuAnimRunning = false;
                 } else {
-                    g_dispCpuPct += dCpu * 0.24f;
-                    g_dispRamPct += dRam * 0.24f;
+                    g_dispCpuPct += dCpu * 0.28f;
+                    g_dispRamPct += dRam * 0.28f;
                 }
                 RenderWidget(WidgetCpuMeter);
                 return 0;
@@ -4442,6 +4588,7 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED: {
+            InvalidateCpuMeterCache();
             UpdateEffectiveScale();
             ClampWidgetToVirtualScreen(WidgetClock);
             ClampWidgetToVirtualScreen(WidgetCalendar);
@@ -4858,6 +5005,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     UnregisterClassW(kCpuMeterClassName, instance);
     UnregisterClassW(kCalendarClassName, instance);
     UnregisterClassW(kClockClassName, instance);
+    CleanupGdiplusCache();
     GdiplusShutdown(g_gdiplusToken);
     return 0;
 }
@@ -5038,10 +5186,9 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
+    STARTUPINFO si = {};
+    si.cb = sizeof(STARTUPINFO);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
