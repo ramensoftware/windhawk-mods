@@ -2,7 +2,7 @@
 // @id win10-taskbar-context-menu-fix-24h2
 // @name Windows 10 Taskbar Context Menu Fix for Win11 24H2+
 // @description Fixes context menu on Windows 10 taskbar running on Windows 11 24H2, 25H2 and later
-// @version 1.2
+// @version 1.3
 // @author Anixx
 // @github          https://github.com/Anixx
 // @architecture    x86-64
@@ -37,6 +37,9 @@ static HMODULE g_explorerframeModule;
 
 using LoadMenuW_t = decltype(&LoadMenuW);
 LoadMenuW_t LoadMenuW_Original;
+
+using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
+TrackPopupMenuEx_t TrackPopupMenuEx_Original;
 
 static wchar_t* LoadStr(HMODULE hMod, UINT id, wchar_t* buf, int size) {
     if (LoadStringW(hMod, id, buf, size) > 0) return buf;
@@ -127,6 +130,17 @@ HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
     return LoadMenuW_Original(hInstance, lpMenuName);
 }
 
+BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
+    BOOL ret = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
+    if (ret >= IDM_TASKMANAGER && (uFlags & TPM_RETURNCMD) &&
+        GetMenuState(hMenu, ret - IDM_TASKMANAGER + IDM_SHOWDESKTOP, MF_BYCOMMAND) != (UINT)-1 &&
+        GetMenuState(hMenu, ret - IDM_TASKMANAGER + IDM_SETTINGS, MF_BYCOMMAND) != (UINT)-1) {
+        ShellExecuteW(nullptr, nullptr, L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
+        return 0;
+    }
+    return ret;
+}
+
 BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
@@ -134,6 +148,7 @@ BOOL Wh_ModInit() {
     g_explorerframeModule = GetModuleHandleW(L"explorerframe.dll");
 
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
+    Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&TrackPopupMenuEx_Original);
 
     return TRUE;
 }
