@@ -6,7 +6,7 @@
 // @author          Zach Vaughn
 // @github          https://github.com/zachvdev
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32 -ldwmapi -lgdiplus -ld2d1
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -49,7 +49,11 @@ Turning the mod off puts the taskbar back to normal.
   also pick a plain one-color edge, or none.
 - **Running dots.** A small dot under each open app, the same size at any
   dock size, as on a Mac. Dots and dividers turn dark on a light dock and
-  light on a dark one.
+  light on a dark one. "Running indicators" has two other styles: Hybrid
+  dots, Windows' own indicators made round, so the active app's dot takes
+  your accent color and an app that needs attention turns orange; or Windows
+  11, Windows' own. Progress bars, like a download's, show under the icon
+  either way.
 
 ## The icons
 
@@ -87,16 +91,22 @@ Both keep Windows' icons and names, unless you give them your own icons
 
 ## Custom icons
 
-Under "Custom icons", paste an image as Base64 text into a field to use it.
-Leave a field blank to keep Windows' icon.
+Give File Explorer and the Recycle Bin your own icons, from image files on
+your PC. Leave a setting blank to keep Windows' icon.
 
-1. **Pick an image.** PNG with transparency works best. Make it 256x256 for
-   File Explorer and 240x256 for the Recycle Bin, with 25 pixels of empty
-   space around the artwork, as macOS's icons have for their shadow.
-2. **Turn it into Base64 text.** You may ask an AI model to resize and encode
-   it for you. A leading "data:image/png;base64," is fine.
-3. **Paste it in.** File Explorer takes one image. The Recycle Bin takes one
-   for empty and, if you like, one for full.
+1. **Pick an image.** PNG with transparency works best: 256x256 for File
+   Explorer and 240x256 for the Recycle Bin, with 25 pixels of empty space
+   around the artwork, as macOS's icons have for their shadow.
+2. **Put it somewhere it'll stay**, like `C:\Icons`. The mod loads it from
+   there.
+3. **Copy its path.** Right-click the file and choose "Copy as path".
+4. **Paste it** under "Custom icons": into "File Explorer icon", or "Recycle
+   Bin icon, empty" (and, if you like, "full").
+
+A path looks like `C:\Icons\finder.png`. Quotes around it are fine, and so
+are variables, like `%USERPROFILE%\Pictures\finder.png`. If there's no image
+there, Windows' icon shows. After editing an image, change any setting to
+reload it.
 
 If your icon looks too big or small, adjust it:
 
@@ -104,18 +114,18 @@ If your icon looks too big or small, adjust it:
   a 256-pixel image. Space past the icon's spot spills out, like a shadow.
 - **Size:** the artwork's size next to other icons, in percent.
 
-An image that can't be read shows Windows' icon instead.
-
 ## Using the dock
 
-- **App names on hover**, in macOS-style labels, instead of window previews.
+- **App names on hover**, in macOS-style labels. Windows' window previews
+  open when you click an app with more than one window. Turn on "Window
+  previews" to also see them on hover, just above the label.
 - **Rearranging.** Drag apps anywhere between File Explorer and the Recycle
   Bin. While you drag, icons stop magnifying, and the one you're moving fades
   slightly.
 - **Right-click menus** (an app's recent files, pinned items and "Close
   window") open right above the icon you right-clicked.
-- **Maximized windows** reach down to the top of the dock, with magnified
-  icons rising over them.
+- **Magnified icons** rise over windows, so the dock never needs extra room
+  above it.
 
 ## Hot corners
 
@@ -139,9 +149,9 @@ background.
 
 Only the dock hides; the hot corners keep working.
 
-- **Hybrid** (the default): the dock hides while a window is maximized. The
-  window gets the whole screen right away, and the dock slides out of sight
-  a moment later.
+- **Hybrid** (the default): the dock slides away while a window is maximized.
+  Windows always have the whole screen, so the dock floats over their bottom
+  edge and nothing moves when it shows or hides.
 - **On:** the dock is always hidden.
 - **Off:** the dock is always shown, and windows stop at its top.
 
@@ -161,8 +171,8 @@ apply right away.
 - **Spacing:** padding around the icons and the gaps between them. These
   scale with the dock's size, so it keeps its shape.
 - **Dock items:** squircle icons and their tile color, keeping File Explorer
-  first, the Recycle Bin, app names, a divider after File Explorer, and high
-  resolution icons.
+  first, the Recycle Bin, app names, running indicators, window previews, a
+  divider after File Explorer, and high resolution icons.
 - **Custom icons:** your own File Explorer and Recycle Bin icons, with their
   margin and size.
 - **Hot corners:** what each bottom corner does.
@@ -180,8 +190,9 @@ If something glitches or looks wrong:
 
 ## Compatibility
 
-- Windows 11 on x64, with the taskbar at the bottom. "Small taskbar buttons"
-  isn't supported.
+- Windows 11 on x64 or ARM64, with the taskbar at the bottom. "Small taskbar
+  buttons" isn't supported. ARM64 support follows m417z's mods and hasn't been
+  tested on an ARM64 PC yet.
 - With several monitors, each taskbar becomes its own dock.
 - Use the dock's own Auto-hide, not Windows' "Automatically hide the
   taskbar". The mod uses Windows' setting behind the scenes and puts it back
@@ -199,9 +210,11 @@ If something glitches or looks wrong:
 
 The taskbar height code is based on m417z's "Taskbar height and icon size".
 Icon dragging and right-click menu placement follow his "Taskbar Multirow",
-keeping the taskbar shown follows his "Taskbar auto-hide when maximized", and
-removing hover previews follows his "Disable Taskbar Thumbnails" (all
-GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
+keeping the taskbar shown follows his "Taskbar auto-hide when maximized",
+turning off hover previews follows his "Disable Taskbar Thumbnails", and
+placing them follows his "Taskbar on top" (all GPL-3.0). Hybrid dots follow
+notdominicc's way of reshaping Windows' own indicators. The squircle corners
+use PaintCode's measurements of Apple's curve.
 */
 // ==/WindhawkModReadme==
 
@@ -239,7 +252,8 @@ GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
     $name: Auto-hide
     $description: >-
       On: hidden until the pointer reaches the bottom of the screen below it.
-      Hybrid: hidden only while a window is maximized. Default is Hybrid.
+      Hybrid: hidden only while a window is maximized, and windows always get
+      the whole screen. Off: windows stop at the dock. Default is Hybrid.
     $options:
     - never: "Off"
     - always: "On"
@@ -300,6 +314,22 @@ GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
   - tooltips: true
     $name: Show tooltips
     $description: App names above icons on hover. Default is on.
+  - indicators: dots
+    $name: Running indicators
+    $description: >-
+      Under each open app. Dots: small round dots, as on a Mac. Hybrid dots:
+      Windows' own indicators made round, still showing the active app and apps
+      that need attention. Windows 11: Windows' own. Progress bars, like a
+      download's, show under the icon either way. Default is Dots.
+    $options:
+    - dots: Dots
+    - hybrid: Hybrid dots
+    - windows: Windows 11
+  - previews: false
+    $name: Window previews
+    $description: >-
+      Windows' previews of an app's windows on hover, just above the app name.
+      Off, previews only open on click. Default is off.
   - appsDivider: false
     $name: Divider after File Explorer
     $description: Default is off.
@@ -308,9 +338,12 @@ GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
     $description: Keeps icons sharp when magnified. Turn off if apps' custom icons don't show up. Default is on.
   $name: Dock items
 - customIcons:
-  - finderImage: ""
-    $name: File Explorer icon (Base64)
-    $description: Your own icon, which also names it Finder. Leave blank for Windows' icon.
+  - finderPath: ""
+    $name: File Explorer icon
+    $description: >-
+      Full path to an image file, like C:\Icons\finder.png. Right-click the file
+      and choose "Copy as path" to get it. Also names it Finder. Leave blank for
+      Windows' icon.
   - finderMargin: 25
     $name: File Explorer icon margin
     $description: >-
@@ -319,12 +352,16 @@ GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
   - finderSize: 100
     $name: File Explorer icon size
     $description: The artwork's size next to other icons, in percent. Default is 100.
-  - trashEmptyImage: ""
-    $name: Recycle Bin icon, empty (Base64)
-    $description: Your own icon, which also names it Trash. Leave blank for Windows' icon.
-  - trashFullImage: ""
-    $name: Recycle Bin icon, full (Base64)
-    $description: Shown while it has something in it. Leave blank to use the empty icon.
+  - trashEmptyPath: ""
+    $name: Recycle Bin icon, empty
+    $description: >-
+      Full path to an image file, like C:\Icons\trash-empty.png. Also names it
+      Trash. Leave blank for Windows' icon.
+  - trashFullPath: ""
+    $name: Recycle Bin icon, full
+    $description: >-
+      Shown while it has something in it, like C:\Icons\trash-full.png. Leave
+      blank to use the empty icon.
   - trashMargin: 25
     $name: Recycle Bin icon margin
     $description: >-
@@ -335,10 +372,10 @@ GPL-3.0). The squircle corners use PaintCode's measurements of Apple's curve.
     $description: The artwork's size next to other icons, in percent. Default is 100.
   $name: Custom icons
   $description: >-
-    Your own icons for File Explorer and the Recycle Bin, pasted as Base64 text.
-    Best as PNGs, 256x256 for File Explorer and 240x256 for the Recycle Bin, with
-    25 pixels of empty space around the artwork. You may ask an AI model to
-    resize and encode an image for you.
+    Your own icons for File Explorer and the Recycle Bin, from image files on
+    your PC. PNGs with transparency work best: 256x256 for File Explorer and
+    240x256 for the Recycle Bin, with 25 pixels of empty space around the
+    artwork. Keep the files where they are; the mod loads them from there.
 - hotCorners:
   - bottomLeft: taskView
     $name: Bottom left
@@ -468,12 +505,13 @@ enum class Show { Hidden, Visible, HotCorner };  // the system tray
 enum class AutoHide { Off, On, Hybrid };
 enum class GlowEdges { TopBottom, Sides, All };
 enum class TileColor { Auto, Light, Dark, Custom };  // behind squircle icons' shapes
+enum class Indicators { Dots, HybridDots, Windows };  // running apps
 
-// The user's own Finder or Trash icon. None while `image` is empty.
+// The user's own Finder or Trash icon. None while `path` is empty.
 struct CustomIcon {
-    std::string image, fullImage;  // Base64; fullImage for a full Recycle Bin
-    float size = 1;                // the artwork, of the icon size
-    float scale = 1;               // the image, of the icon size, margin included
+    std::wstring path, fullPath;  // image files; fullPath for a full Recycle Bin
+    float size = 1;               // the artwork, of the icon size
+    float scale = 1;              // the image, of the icon size, margin included
 };
 
 struct Settings {
@@ -501,6 +539,8 @@ struct Settings {
     bool explorerFirst;
     bool recycleBin;
     bool tooltips;
+    Indicators indicators;
+    bool previews;
     bool appsDivider;
     bool highResIcons;
     LeftCorner leftCorner;
@@ -533,24 +573,33 @@ int ChoiceSetting(PCWSTR name, std::initializer_list<PCWSTR> options, int fallba
     return fallback;
 }
 
-// Base64 text from a string setting, without a data URI's "data:...;base64,".
-std::string Base64Setting(PCWSTR name) {
+// A file's path from a string setting, as typed or copied: surrounding quotes
+// and %VARIABLES% are fine. Empty if there's no file there.
+std::wstring PathSetting(PCWSTR name) {
     auto value = WindhawkUtils::StringSetting::make(name);
     std::wstring_view text = value ? (PCWSTR)value : L"";
-    if (size_t comma = text.rfind(L','); comma != text.npos) text.remove_prefix(comma + 1);
-    std::string base64;
-    for (wchar_t c : text) {
-        if (c < 128 && !iswspace(c)) base64.push_back((char)c);
+    auto trimmed = [](wchar_t c) { return iswspace(c) || c == L'"'; };
+    while (!text.empty() && trimmed(text.front())) text.remove_prefix(1);
+    while (!text.empty() && trimmed(text.back())) text.remove_suffix(1);
+    if (text.empty()) return {};
+    std::wstring raw(text);
+    std::wstring path(ExpandEnvironmentStringsW(raw.c_str(), nullptr, 0), L'\0');
+    DWORD length = ExpandEnvironmentStringsW(raw.c_str(), path.data(), (DWORD)path.size());
+    path = length && length <= path.size() ? path.substr(0, length - 1) : raw;
+    DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        Wh_Log(L"No file at %s", path.c_str());
+        return {};
     }
-    return base64;
+    return path;
 }
 
 // A custom icon, drawn so its artwork is `size` percent of other icons, with
 // `margin` pixels of a 256-pixel image around it.
-CustomIcon CustomIconSetting(PCWSTR image, PCWSTR fullImage, PCWSTR margin, PCWSTR size) {
+CustomIcon CustomIconSetting(PCWSTR path, PCWSTR fullPath, PCWSTR margin, PCWSTR size) {
     CustomIcon icon;
-    icon.image = Base64Setting(image);
-    if (fullImage) icon.fullImage = Base64Setting(fullImage);
+    icon.path = PathSetting(path);
+    if (fullPath) icon.fullPath = PathSetting(fullPath);
     icon.size = std::clamp(Wh_GetIntSetting(size), 10, 200) / 100.0f;
     icon.scale = icon.size * 256 / (256 - 2.0f * std::clamp(Wh_GetIntSetting(margin), 0, 100));
     return icon;
@@ -587,9 +636,9 @@ void LoadSettings() {
     s.range = percent(L"magnification.range");
     s.animationMs = std::clamp(Wh_GetIntSetting(L"magnification.smoothing"), 0, 1000);
 
-    s.customFinder = CustomIconSetting(L"customIcons.finderImage", nullptr,
+    s.customFinder = CustomIconSetting(L"customIcons.finderPath", nullptr,
                                        L"customIcons.finderMargin", L"customIcons.finderSize");
-    s.customTrash = CustomIconSetting(L"customIcons.trashEmptyImage", L"customIcons.trashFullImage",
+    s.customTrash = CustomIconSetting(L"customIcons.trashEmptyPath", L"customIcons.trashFullPath",
                                       L"customIcons.trashMargin", L"customIcons.trashSize");
     s.squircleIcons = Wh_GetIntSetting(L"items.squircleIcons");
     s.tileColor = (TileColor)ChoiceSetting(L"items.squircleColor",
@@ -600,6 +649,9 @@ void LoadSettings() {
     s.explorerFirst = Wh_GetIntSetting(L"items.explorerFirst");
     s.recycleBin = Wh_GetIntSetting(L"items.recycleBin");
     s.tooltips = Wh_GetIntSetting(L"items.tooltips");
+    s.previews = Wh_GetIntSetting(L"items.previews");
+    s.indicators = (Indicators)ChoiceSetting(L"items.indicators",
+                                             {L"dots", L"hybrid", L"windows"}, 0);
     s.appsDivider = Wh_GetIntSetting(L"items.appsDivider");
     s.highResIcons = Wh_GetIntSetting(L"items.highResIcons");
 
@@ -634,6 +686,7 @@ constexpr float kTrashIconScale = 1.15f;        // Windows' bin icon has empty s
 constexpr float kMacIconScale = 1024.0f / 824;  // macOS icons fill 824 of 1024px, for shadows
 constexpr float kTrashShift = 3;                // the Recycle Bin, moved left, at Size 60
 constexpr float kTrashMenuLift = 6;             // its menu's gap above the icon, at Size 60
+constexpr float kBounceRoom = 0.25f;            // above a fully magnified icon, of its size
 constexpr float kDividerWidth = 1;
 constexpr float kDividerGapScale = 1.25f;       // space either side of a divider, in icon gaps
 constexpr float kDividerInsetScale = 0.7f;      // divider ends, as a share of the vertical padding
@@ -649,6 +702,7 @@ struct Sizes {
     float iconLoadSize;       // 0 = Windows' own
     float dividerSpace, dividerLeft;
     float trashSlot, trashSpace;
+    float bounceRoom;         // how much taller the taskbar is for the bounce
 } g_size;
 
 int g_taskbarHeight = 0;      // 0 = the taskbar's normal height (while unloading)
@@ -685,10 +739,13 @@ void ComputeSizes() {
     z.trashSlot = icon + z.gap;
     z.trashSpace = z.dividerSpace + z.trashSlot;
 
-    // Tall enough for the dock and a fully magnified icon, plus 2px.
+    // Tall enough for the dock and a fully magnified icon, plus 2px, with room
+    // above the icon for Windows' launch bounce.
     float dockTop = z.bottomGap + z.dockHeight;
     float iconTop = z.bottomGap + z.padY + s.scale * icon;
-    g_taskbarHeight = std::max((int)std::ceil(std::max(dockTop, iconTop) + 2), kMinTaskbarHeight);
+    int height = std::max((int)std::ceil(std::max(dockTop, iconTop) + 2), kMinTaskbarHeight);
+    g_taskbarHeight = std::max(height, (int)std::ceil(iconTop + s.scale * icon * kBounceRoom));
+    z.bounceRoom = (float)(g_taskbarHeight - height);
 
     Wh_Log(L"Icon %.0f (loaded at %.0f), dock %.0f, taskbar %d, gap %.0f, padding %.0f x %.0f",
            z.icon, z.iconLoadSize, z.dockHeight, g_taskbarHeight, z.gap, z.padX, z.padY);
@@ -865,6 +922,7 @@ constexpr UINT_PTR kPollTimer = 3;
 constexpr UINT_PTR kTrayClipTimer = 4;
 constexpr UINT_PTR kSquircleRetryTimer = 5;
 constexpr UINT_PTR kMaximizedCheckTimer = 6;
+constexpr UINT_PTR kIconsMovingTimer = 7;
 constexpr UINT kSquircleRetryMs = 50;
 
 std::atomic<HWND> g_modWindow = nullptr;
@@ -998,48 +1056,22 @@ wuxm::ImageSource BitmapFromPixels(int width, int height, std::vector<BYTE> cons
     return bitmap;
 }
 
-std::vector<BYTE> DecodeBase64(std::string_view text) {
-    std::vector<BYTE> out;
-    uint32_t bits = 0;
-    int count = 0;
-    for (char c : text) {
-        int v = c >= 'A' && c <= 'Z'   ? c - 'A'
-                : c >= 'a' && c <= 'z' ? c - 'a' + 26
-                : c >= '0' && c <= '9' ? c - '0' + 52
-                : c == '+'             ? 62
-                : c == '/'             ? 63
-                                       : -1;
-        if (v < 0) continue;
-        bits = (bits << 6) | v;
-        count += 6;
-        if (count >= 8) {
-            count -= 8;
-            out.push_back((BYTE)(bits >> count));
-        }
-    }
-    return out;
-}
-
-// A Base64 image (PNG, or any format Windows reads), scaled to `px` on its
+// An image file (PNG, or any format Windows reads), scaled to `px` on its
 // longer side, decoded synchronously (XAML's own decoding is asynchronous).
-wuxm::ImageSource LoadBase64Image(std::string_view base64, int px) {
-    std::vector<BYTE> png = DecodeBase64(base64);
-    if (png.empty() || px <= 0) return nullptr;
+wuxm::ImageSource LoadImageFile(std::wstring const& path, int px) {
+    if (path.empty() || px <= 0) return nullptr;
     wuxm::ImageSource result{nullptr};
     Try([&] {
         using winrt::check_hresult;
         winrt::com_ptr<IWICImagingFactory> factory;
-        winrt::com_ptr<IWICStream> stream;
         winrt::com_ptr<IWICBitmapDecoder> decoder;
         winrt::com_ptr<IWICBitmapFrameDecode> frame;
         winrt::com_ptr<IWICFormatConverter> converter;
         winrt::com_ptr<IWICBitmapScaler> scaler;
         check_hresult(CoCreateInstance(kWICImagingFactoryId, nullptr, CLSCTX_INPROC_SERVER,
                                        kIWICImagingFactoryId, factory.put_void()));
-        check_hresult(factory->CreateStream(stream.put()));
-        check_hresult(stream->InitializeFromMemory(png.data(), (DWORD)png.size()));
-        check_hresult(factory->CreateDecoderFromStream(
-            stream.get(), nullptr, WICDecodeMetadataCacheOnDemand, decoder.put()));
+        check_hresult(factory->CreateDecoderFromFilename(
+            path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, decoder.put()));
         check_hresult(decoder->GetFrame(0, frame.put()));
 
         UINT width = 0, height = 0;
@@ -1080,8 +1112,8 @@ int MagnifiedPixels(wux::UIElement const& el, float scale) {
 // it and their margin (a shadow) spills past. They also take the names Finder
 // and Trash. Without them, Windows' own.
 
-bool HasFinderIcon() { return !g_settings.customFinder.image.empty(); }
-bool HasTrashIcon() { return !g_settings.customTrash.image.empty(); }
+bool HasFinderIcon() { return !g_settings.customFinder.path.empty(); }
+bool HasTrashIcon() { return !g_settings.customTrash.path.empty(); }
 
 float TrashIconScale() {
     return HasTrashIcon() ? g_settings.customTrash.scale : kTrashIconScale;
@@ -1094,11 +1126,11 @@ float TrashArtHeight() {
     return g_size.icon * (1 + kTrashIconScale) / 2;
 }
 
-// None for Windows' own icon. Without a full image, the empty one.
-std::string_view TrashImage(bool full) {
+// Empty for Windows' own icon. Without a full image, the empty one.
+std::wstring TrashPath(bool full) {
     auto& custom = g_settings.customTrash;
     if (!HasTrashIcon()) return {};
-    return full && !custom.fullImage.empty() ? custom.fullImage : custom.image;
+    return full && !custom.fullPath.empty() ? custom.fullPath : custom.path;
 }
 
 // =============================================================================
@@ -1225,6 +1257,38 @@ void TrackIconImage(wux::FrameworkElement const& el) {
     Track(el, wux::FrameworkElement::WidthProperty(), ApplyIconSize);
     Track(el, wux::FrameworkElement::HeightProperty(), ApplyIconSize);
     ApplyIconSize(el);
+}
+
+// ---- Overlay icons ----
+// An app's status badge, like a recording dot. Windows puts it at the top of the
+// button, far above the icon in the taller dock, so magnifying would carry it
+// off the taskbar. It goes on the icon's top-right corner instead, centered in
+// the same cell and pushed out by margins.
+
+void ApplyOverlayPlace(wux::FrameworkElement const& el) {
+    double size = std::isnan(el.Width()) ? el.ActualWidth() : el.Width();
+    double shift = std::max(0.0, (g_size.icon - size) / 2);
+    if (el.HorizontalAlignment() != wux::HorizontalAlignment::Center) {
+        el.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    }
+    if (el.VerticalAlignment() != wux::VerticalAlignment::Center) {
+        el.VerticalAlignment(wux::VerticalAlignment::Center);
+    }
+    wux::Thickness margin{2 * shift, 0, 0, 2 * shift};
+    auto have = el.Margin();
+    if (have.Left != margin.Left || have.Top != margin.Top || have.Right != margin.Right ||
+        have.Bottom != margin.Bottom) {
+        el.Margin(margin);
+    }
+}
+
+void TrackOverlayIcon(wux::FrameworkElement const& el) {
+    for (auto& dp : {wux::FrameworkElement::MarginProperty(),
+                     wux::FrameworkElement::HorizontalAlignmentProperty(),
+                     wux::FrameworkElement::VerticalAlignmentProperty()}) {
+        Track(el, dp, ApplyOverlayPlace);
+    }
+    ApplyOverlayPlace(el);
 }
 
 // ---- Highlights, Start and the background ----
@@ -1596,7 +1660,8 @@ struct Plate {
     float left = -1, width = -1;        // last applied
     float top = 0;
     float offsetY = 0;                  // how far the icons are moved down
-    float originX = 0;                  // the row's left edge in the panel
+    float originX = 0, originY = 0;     // the row's top-left corner in the panel
+    size_t iconCount = 0;               // last measured
     Color dotColor{};
     wux::FrameworkElement::SizeChanged_revoker rowSizeChanged, panelSizeChanged;
     wux::FrameworkElement::ActualThemeChanged_revoker panelThemeChanged;
@@ -1791,12 +1856,13 @@ void PlaceInPanel(wuxc::Panel const& panel, wux::FrameworkElement const& el) {
     }
 }
 
-// Adds `el` right after the icon row, so it's drawn above it.
-bool InsertAfterRow(wuxc::Panel const& panel, wux::UIElement const& row,
-                    wux::UIElement const& el) {
+// Adds `el` right after the icon row, so it's drawn above it, or right before
+// it, so it's drawn beneath it (still above the plate).
+bool InsertBesideRow(wuxc::Panel const& panel, wux::UIElement const& row,
+                     wux::UIElement const& el, bool above = true) {
     uint32_t index = 0;
     if (!panel.Children().IndexOf(row, index)) return false;
-    panel.Children().InsertAt(index + 1, el);
+    panel.Children().InsertAt(above ? index + 1 : index, el);
     return true;
 }
 
@@ -1807,7 +1873,7 @@ wuxc::Border AddDivider(wuxc::Panel const& panel, wux::UIElement const& row) {
     divider.UseLayoutRounding(false);  // allows a fraction of a pixel
     divider.Width(kDividerWidth);
     divider.Height(std::max(1.0f, g_size.dockHeight - 2 * DividerInset()));
-    return InsertAfterRow(panel, row, divider) ? divider : nullptr;
+    return InsertBesideRow(panel, row, divider) ? divider : nullptr;
 }
 
 // =============================================================================
@@ -1854,7 +1920,7 @@ IconSwap* FindSwap(wux::FrameworkElement const& image) {
 wuxm::ImageSource FinderIconSource(wux::UIElement const& el) {
     if (!g_finderIconSource) {
         auto& custom = g_settings.customFinder;
-        g_finderIconSource = LoadBase64Image(custom.image, MagnifiedPixels(el, custom.scale));
+        g_finderIconSource = LoadImageFile(custom.path, MagnifiedPixels(el, custom.scale));
     }
     return *g_finderIconSource;
 }
@@ -1955,13 +2021,17 @@ void UpdateAppIcon(wux::FrameworkElement const& el, wux::FrameworkElement const&
 // ---- Squircle tiles ----
 // The icon's pixels, read straight from its bitmap, or else from the icon as
 // drawn. If it's mostly opaque and square, it's a tile already: cropped to fill
-// the squircle. Otherwise it's a shape, shrunk onto a tile of the Squircle
-// color: for Auto, light, or dark if its outline is light.
+// the squircle, but only if each side is flat between its corners, right up to
+// its edge. Otherwise it's a shape, shrunk onto a tile of the Squircle color:
+// for Auto, light, or dark if its outline is light.
 
 constexpr int kAlphaShown = 64;              // counts as part of the icon
 constexpr int kAlphaSolid = 224;             // counts as solid
 constexpr float kTileMinCoverage = 0.84f;    // solid share of its bounds, to be a tile
 constexpr float kTileMinAspect = 0.9f;
+constexpr float kTileFlatFrom = 0.25f;       // a side's flat middle starts this far along it
+constexpr float kTileFlatShare = 0.9f;       // of that middle, solid
+constexpr float kTileEdgeDepth = 0.03f;      // how far in from its edge, of the icon's size
 constexpr float kTileTrim = 0.015f;          // of a tile's own edge, cut off
 constexpr float kShapeSize = 0.72f;          // a shape on its tile, of the tile's size
 constexpr float kLongShapeSize = 0.8f;       // a long one, by its longer side
@@ -1973,7 +2043,7 @@ constexpr float kTileShadowOpacity = 0.3f;
 constexpr std::array<Color, 2> kLightTile{{{255, 0xFF, 0xFF, 0xFF}, {255, 0xE9, 0xE9, 0xEE}}};
 constexpr std::array<Color, 2> kDarkTile{{{255, 0x4A, 0x4A, 0x4E}, {255, 0x1F, 0x1F, 0x22}}};
 constexpr float kCustomTileShade = 0.08f;    // a custom tile's bottom, darker than its top
-constexpr int kSquircleRetries = 30;         // while the icon isn't drawn yet
+constexpr int kSquircleRetries = 30;         // while the icon isn't laid out or drawn yet
 constexpr size_t kSquircleCacheSize = 64;
 
 ULONG_PTR g_gdiplus = 0;
@@ -2039,12 +2109,17 @@ std::array<Color, 2> TileColors(bool lightOutline) {
 // A `w` x `h` icon as a squircle tile, on a canvas kMacIconScale times bigger.
 IconPixels MakeSquircleIcon(std::vector<BYTE> source, int w, int h) {
     namespace gp = Gdiplus;
-    int x0 = w, y0 = h, x1 = -1, y1 = -1;
+    int x0 = w, y0 = h, x1 = -1, y1 = -1;  // what's shown
+    int sx0 = w, sy0 = h, sx1 = -1, sy1 = -1;  // what's solid
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            if (source[((size_t)y * w + x) * 4 + 3] < kAlphaShown) continue;
+            BYTE alpha = source[((size_t)y * w + x) * 4 + 3];
+            if (alpha < kAlphaShown) continue;
             x0 = std::min(x0, x), x1 = std::max(x1, x);
             y0 = std::min(y0, y), y1 = std::max(y1, y);
+            if (alpha < kAlphaSolid) continue;
+            sx0 = std::min(sx0, x), sx1 = std::max(sx1, x);
+            sy0 = std::min(sy0, y), sy1 = std::max(sy1, y);
         }
     }
     if (x1 < 0 || !EnsureGdiplus()) return {};
@@ -2070,7 +2145,28 @@ IconPixels MakeSquircleIcon(std::vector<BYTE> source, int w, int h) {
         }
     }
     float aspect = (float)std::min(bw, bh) / std::max(bw, bh);
-    bool tile = aspect >= kTileMinAspect && solid >= kTileMinCoverage * bw * bh;
+
+    // A side is flat if the middle of it, past any rounded corners, is solid
+    // within a few pixels of the solid part's edge (soft edges and a baked-in
+    // shadow aside).
+    int depth = std::max(1, (int)std::round(std::max(bw, bh) * kTileEdgeDepth));
+    auto flat = [&](bool vertical, bool end) {
+        int length = vertical ? sy1 - sy0 + 1 : sx1 - sx0 + 1;
+        int from = (int)(length * kTileFlatFrom), to = length - from, found = 0;
+        for (int i = from; i < to; i++) {
+            for (int d = 0; d < depth; d++) {
+                int x = vertical ? (end ? sx1 - d : sx0 + d) : sx0 + i;
+                int y = vertical ? sy0 + i : (end ? sy1 - d : sy0 + d);
+                if (source[((size_t)y * w + x) * 4 + 3] >= kAlphaSolid) {
+                    found++;
+                    break;
+                }
+            }
+        }
+        return found >= kTileFlatShare * (to - from);
+    };
+    bool tile = aspect >= kTileMinAspect && solid >= kTileMinCoverage * bw * bh && sx1 >= 0 &&
+                flat(false, false) && flat(false, true) && flat(true, false) && flat(true, true);
     bool light = lightness / weight >= kDarkTileFrom;
 
     int t = std::max(w, h), size = (int)std::ceil(t * kMacIconScale);
@@ -2252,6 +2348,14 @@ void RetrySquircles() {
     }
 }
 
+// Not laid out or drawn yet, as with a button still sliding in: tried again
+// shortly, a limited number of times.
+void RetrySquircleSoon(IconSwap& s) {
+    if (++s.retries > kSquircleRetries) return;
+    HWND window = EnsureModWindow();
+    if (window && SetTimer(window, kSquircleRetryTimer, kSquircleRetryMs, nullptr)) s.retry = true;
+}
+
 void OnStockPixels(winrt::weak_ref<wuxc::Image> const& weak, wuxm::ImageSource const& stock,
                    std::vector<BYTE> pixels, int w, int h) {
     auto image = weak.get();
@@ -2263,15 +2367,7 @@ void OnStockPixels(winrt::weak_ref<wuxc::Image> const& weak, wuxm::ImageSource c
 
     IconPixels tile;
     if (!pixels.empty() && w > 0 && h > 0) tile = MakeSquircleIcon(std::move(pixels), w, h);
-    if (!tile.size) {
-        // Not drawn yet: tried again shortly.
-        if (++s->retries > kSquircleRetries) return;
-        HWND window = EnsureModWindow();
-        if (window && SetTimer(window, kSquircleRetryTimer, kSquircleRetryMs, nullptr)) {
-            s->retry = true;
-        }
-        return;
-    }
+    if (!tile.size) return RetrySquircleSoon(*s);
     s->shown = BitmapFromPixels(tile.size, tile.size, tile.pixels);
     g_squircleCache.emplace_front(stock, s->shown);
     if (g_squircleCache.size() > kSquircleCacheSize) g_squircleCache.pop_back();
@@ -2289,7 +2385,8 @@ std::vector<BYTE> BufferBytes(wss::IBuffer const& buffer) {
 void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
     if (s.rendering || !s.stock || s.retries > kSquircleRetries) return;
     if (g_iconsSettling) return WaitForIconsToSettle();
-    if (image.Source() != s.stock || image.ActualWidth() <= 0) return;
+    if (image.Source() != s.stock) return;
+    if (image.ActualWidth() <= 0) return RetrySquircleSoon(s);
     auto weak = winrt::make_weak(image);
     auto stock = s.stock;
     if (auto bitmap = stock.try_as<wuxm::Imaging::WriteableBitmap>()) {
@@ -2389,7 +2486,7 @@ wuxm::ImageSource TrashIcon(bool full, wux::UIElement const& el) {
     auto& icon = g_trashIcons[full];
     if (icon) return icon;
     int px = MagnifiedPixels(el, TrashIconScale());
-    icon = LoadBase64Image(TrashImage(full), px);
+    icon = LoadImageFile(TrashPath(full), px);
     if (!icon) icon = LoadStockTrashIcon(full, px);
     return icon;
 }
@@ -2568,7 +2665,7 @@ void AddTrash(Plate& p, wuxc::Panel const& panel, wux::UIElement const& row) {
     anchor.Margin({0, -kTrashMenuLift * g_size.icon / kDefaultIconSize, 0, 0});
     anchor.IsHitTestVisible(false);
     trash.Children().Append(anchor);
-    if (!InsertAfterRow(panel, row, trash)) return;
+    if (!InsertBesideRow(panel, row, trash)) return;
 
     p.trash = trash;
     p.trashImage = image;
@@ -2593,7 +2690,10 @@ void SetTrashScale(Plate& p, float s, float tx, float dividerTx) {
 // RUNNING INDICATORS
 // =============================================================================
 // A round dot in place of Windows' pill. It lives beside the dock, not in the
-// button, so it follows its icon sideways without growing.
+// button, so it follows its icon sideways without growing. With "Running
+// indicators" set to Windows 11, Windows' own pill shows instead, or with
+// Hybrid dots, that pill made round. Its progress bar always shows. Windows'
+// own are moved up under the icon.
 
 struct Indicator {
     winrt::weak_ref<wux::FrameworkElement> button;
@@ -2601,6 +2701,9 @@ struct Indicator {
     winrt::weak_ref<wux::VisualStateGroup> states;
     wux::VisualStateGroup::CurrentStateChanged_revoker stateChanged;
     wux::FrameworkElement::SizeChanged_revoker sizeChanged;
+    winrt::weak_ref<wux::FrameworkElement> progress;  // Windows' progress bar
+    wux::FrameworkElement::SizeChanged_revoker progressSizeChanged;
+    int64_t progressVisibilityToken = 0;
     wuxc::Border dot{nullptr};
     winrt::weak_ref<wuxc::Panel> dotPanel;
     float dotLeft = NAN, dotTop = NAN, dotShift = NAN;  // last applied
@@ -2624,6 +2727,24 @@ Indicator* FindIndicator(wux::FrameworkElement const& button) {
         if (i.button.get() == button) return &i;
     }
     return nullptr;
+}
+
+Indicator& IndicatorFor(wux::FrameworkElement const& button) {
+    if (Indicator* i = FindIndicator(button)) return *i;
+    auto& i = g_indicators->emplace_back();
+    i.button = winrt::make_weak(button);
+    return i;
+}
+
+void RefreshButton(winrt::weak_ref<wux::FrameworkElement> const& weak) {
+    Try([&] {
+        if (auto button = weak.get()) ReapplyButton(button);
+    });
+}
+
+bool ProgressShown(Indicator const& i) {
+    auto el = i.progress.get();
+    return el && el.Visibility() == Visibility::Visible && el.ActualWidth() > 0;
 }
 
 constexpr float kDotSize = 4;     // the same at every Size, as on a Mac
@@ -2678,8 +2799,96 @@ void RemoveDot(Indicator& i) {
     i.dotPanel = nullptr;
 }
 
-// Centered under the icon, in the dock's bottom padding. `tx` is how far
-// magnification moves the icon sideways.
+// Where indicators are centered: under the icon, in the dock's bottom padding.
+float IndicatorCenterY(Plate const& p) {
+    return p.top + g_size.dockHeight - g_size.padY * kDotRise;
+}
+
+// Windows' pill or progress bar, in its button: moved to the dots' spot at its
+// own size, undoing the button's magnification `s` (see SetScale).
+void PlaceStockIndicator(wux::FrameworkElement const& el, wux::FrameworkElement const& button,
+                         float s) {
+    Plate* p = GetRowPlate(wuxm::VisualTreeHelper::GetParent(button));
+    auto visual = wuxh::ElementCompositionPreview::GetElementVisual(el);
+    float width = (float)el.ActualWidth(), height = (float)el.ActualHeight();
+    float centerY = height / 2;  // in the button, as laid out
+    wux::DependencyObject current = el;
+    while (current && current != button) {
+        if (auto ui = current.try_as<wux::UIElement>()) centerY += ui.ActualOffset().y;
+        current = wuxm::VisualTreeHelper::GetParent(current);
+    }
+    if (!p || !current || s <= 0) {
+        visual.Scale({1, 1, 1});
+        return SetTranslation(el, 0, 0);
+    }
+    auto slot = wuxc::Primitives::LayoutInformation::GetLayoutSlot(button);
+    float buttonTop = p->originY + slot.Y + (float)button.Margin().Top;
+    float pivotY = (float)button.ActualHeight() / 2 + g_size.icon / 2;
+    float y = pivotY + (IndicatorCenterY(*p) - p->offsetY - buttonTop - pivotY) / s;
+    visual.CenterPoint({width / 2, height / 2, 0});
+    visual.Scale({1 / s, 1 / s, 1});
+    SetTranslation(el, 0, y - centerY);
+}
+
+// ---- Hybrid dots ----
+// Windows' own pill made round (as in notdominicc's version), so its states
+// still show: the active app in the accent color, an app asking for attention
+// in orange. Those states only set its fill; otherwise it's the dots' color.
+
+void ApplyHybridDotShape(wux::FrameworkElement const& el) {
+    if (el.Width() != kDotSize) el.Width(kDotSize);
+    if (el.Height() != kDotSize) el.Height(kDotSize);
+    if (auto r = el.try_as<wuxs::Rectangle>()) {
+        if (r.RadiusX() != kDotSize / 2) r.RadiusX(kDotSize / 2);
+        if (r.RadiusY() != kDotSize / 2) r.RadiusY(kDotSize / 2);
+    }
+}
+
+void ShapeHybridDot(wux::FrameworkElement const& el) {
+    if (el.try_as<wuxs::Shape>()) Track(el, wuxs::Shape::FillProperty());  // see ColorHybridDot
+    Track(el, wux::FrameworkElement::WidthProperty(), ApplyHybridDotShape);
+    Track(el, wux::FrameworkElement::HeightProperty(), ApplyHybridDotShape);
+    if (el.try_as<wuxs::Rectangle>()) {
+        Track(el, wuxs::Rectangle::RadiusXProperty(), ApplyHybridDotShape);
+        Track(el, wuxs::Rectangle::RadiusYProperty(), ApplyHybridDotShape);
+    }
+    ApplyHybridDotShape(el);
+}
+
+void UnshapeHybridDot(wux::FrameworkElement const& el) {
+    if (!FindOverride(el, wux::FrameworkElement::WidthProperty())) return;
+    for (auto& dp : {wux::FrameworkElement::WidthProperty(),
+                     wux::FrameworkElement::HeightProperty(), wuxs::Rectangle::RadiusXProperty(),
+                     wuxs::Rectangle::RadiusYProperty(), wuxs::Shape::FillProperty()}) {
+        Release(el, dp);
+    }
+}
+
+// Its own fill, under the states' colors. Tracked by ShapeHybridDot.
+void ColorHybridDot(wux::FrameworkElement const& el, wux::FrameworkElement const& button) {
+    auto shape = el.try_as<wuxs::Shape>();
+    Plate* p = GetRowPlate(wuxm::VisualTreeHelper::GetParent(button));
+    if (!shape || !p) return;
+    auto local = el.ReadLocalValue(wuxs::Shape::FillProperty()).try_as<wuxm::SolidColorBrush>();
+    if (!local || local.Color() != p->dotColor) shape.Fill(wuxm::SolidColorBrush(p->dotColor));
+}
+
+void PlaceStockIndicators(wux::FrameworkElement const& button, float s) {
+    Indicator* i = FindIndicator(button);
+    if (!i) return;
+    if (auto progress = i->progress.get()) {
+        Try([&] { PlaceStockIndicator(progress, button, s); });
+    }
+    auto el = i->element.get();
+    if (!el || g_settings.indicators == Indicators::Dots) return;
+    Try([&] {
+        PlaceStockIndicator(el, button, s);
+        if (g_settings.indicators == Indicators::HybridDots) ColorHybridDot(el, button);
+    });
+}
+
+// Centered under the icon. `tx` is how far magnification moves the icon
+// sideways. Not while Windows' own pill or progress bar shows there.
 void PlaceDot(wux::FrameworkElement const& button, float tx) {
     Indicator* i = FindIndicator(button);
     if (!i) return;
@@ -2687,7 +2896,8 @@ void PlaceDot(wux::FrameworkElement const& button, float tx) {
     auto panel = p ? p->panel.get() : nullptr;
     auto row = p ? p->row.get() : nullptr;
     if (!panel || !row || p->baseWidth <= 0 || button.Visibility() != Visibility::Visible ||
-        button.ActualWidth() <= 0 || !IsRunning(*i) || g_dragging) {
+        button.ActualWidth() <= 0 || !IsRunning(*i) || g_dragging ||
+        g_settings.indicators != Indicators::Dots || ProgressShown(*i)) {
         return HideDot(*i);
     }
     auto slot = wuxc::Primitives::LayoutInformation::GetLayoutSlot(button);
@@ -2703,7 +2913,7 @@ void PlaceDot(wux::FrameworkElement const& button, float tx) {
         dot.IsHitTestVisible(false);
         dot.UseLayoutRounding(false);
         dot.Background(wuxm::SolidColorBrush(p->dotColor));
-        if (!InsertAfterRow(panel, row, dot)) return;
+        if (!InsertBesideRow(panel, row, dot, false)) return;  // under icons sliding by
         i->dot = dot;
         i->dotPanel = winrt::make_weak(panel);
         i->dotLeft = i->dotTop = i->dotShift = NAN;
@@ -2716,7 +2926,7 @@ void PlaceDot(wux::FrameworkElement const& button, float tx) {
         i->dot.CornerRadius({size / 2, size / 2, size / 2, size / 2});
     }
     float centerX = p->originX + slot.X + (float)margin.Left + (float)button.ActualWidth() / 2;
-    float centerY = p->top + g_size.dockHeight - g_size.padY * kDotRise;
+    float centerY = IndicatorCenterY(*p);
     float left = std::round(centerX - size / 2);
     float top = std::round(centerY - size / 2);
     if (left != i->dotLeft || top != i->dotTop) {
@@ -2736,6 +2946,11 @@ void ColorDots(Plate& p) {
     if (!panel || !g_indicators) return;
     for (auto& i : *g_indicators) {
         if (i.dot && i.dotPanel.get() == panel) i.dot.Background(wuxm::SolidColorBrush(p.dotColor));
+        auto el = i.element.get();
+        auto button = i.button.get();
+        if (el && button && g_settings.indicators == Indicators::HybridDots) {
+            Try([&] { ColorHybridDot(el, button); });
+        }
     }
 }
 
@@ -2813,34 +3028,53 @@ void HideStrayDots(wuxc::Panel const& panel, std::vector<Icon> const& icons) {
     }
 }
 
-// Hides Windows' indicator and follows its state. The taskbar can replace it.
+// Hides Windows' indicator (unless it's the one shown) and follows its state.
+// The taskbar can replace it.
 void TrackIndicator(wux::FrameworkElement const& el, wux::FrameworkElement const& button) {
-    wuxh::ElementCompositionPreview::GetElementVisual(el).Opacity(0);
-    Indicator* i = FindIndicator(button);
-    if (i && i->element.get() == el) return;
-    if (!i) {
-        i = &g_indicators->emplace_back();
-        i->button = winrt::make_weak(button);
-    }
-    i->element = winrt::make_weak(el);
-    i->stateChanged.revoke();
-    i->states = nullptr;
-    auto refresh = [weakButton = i->button] {
-        Try([&] {
-            if (auto b = weakButton.get()) ReapplyButton(b);
-        });
-    };
+    float opacity = g_settings.indicators == Indicators::Dots ? 0.0f : 1.0f;
+    wuxh::ElementCompositionPreview::GetElementVisual(el).Opacity(opacity);
+    if (g_settings.indicators == Indicators::HybridDots) ShapeHybridDot(el);
+    else UnshapeHybridDot(el);
+    Indicator& i = IndicatorFor(button);
+    if (i.element.get() == el) return;
+    i.element = winrt::make_weak(el);
+    i.stateChanged.revoke();
+    i.states = nullptr;
     if (auto group = FindRunningStates(el, button)) {
-        i->states = winrt::make_weak(group);
-        i->stateChanged = group.CurrentStateChanged(
+        i.states = winrt::make_weak(group);
+        i.stateChanged = group.CurrentStateChanged(
             winrt::auto_revoke,
-            [refresh](wf::IInspectable const&, wux::VisualStateChangedEventArgs const&) {
-                refresh();
+            [weak = i.button](wf::IInspectable const&, wux::VisualStateChangedEventArgs const&) {
+                RefreshButton(weak);
             });
     }
-    i->sizeChanged = el.SizeChanged(
-        winrt::auto_revoke,
-        [refresh](wf::IInspectable const&, wux::SizeChangedEventArgs const&) { refresh(); });
+    i.sizeChanged = el.SizeChanged(
+        winrt::auto_revoke, [weak = i.button](wf::IInspectable const&,
+                                              wux::SizeChangedEventArgs const&) {
+            RefreshButton(weak);
+        });
+    MarkPlatesDirty();
+}
+
+// Followed as it appears, disappears and resizes.
+void TrackProgress(wux::FrameworkElement const& el, wux::FrameworkElement const& button) {
+    Indicator& i = IndicatorFor(button);
+    if (i.progress.get() == el) return;
+    if (auto old = i.progress.get(); old && i.progressVisibilityToken) {
+        old.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(),
+                                              i.progressVisibilityToken);
+    }
+    i.progress = winrt::make_weak(el);
+    i.progressSizeChanged = el.SizeChanged(
+        winrt::auto_revoke, [weak = i.button](wf::IInspectable const&,
+                                              wux::SizeChangedEventArgs const&) {
+            RefreshButton(weak);
+        });
+    i.progressVisibilityToken = el.RegisterPropertyChangedCallback(
+        wux::UIElement::VisibilityProperty(),
+        [weak = i.button](wux::DependencyObject const&, wux::DependencyProperty const&) {
+            RefreshButton(weak);
+        });
     MarkPlatesDirty();
 }
 
@@ -2852,13 +3086,28 @@ void ForgetGoneIndicators() {
     });
 }
 
+void RestoreStockIndicator(wux::FrameworkElement const& el) {
+    Try([&] {
+        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(el);
+        visual.Opacity(1);
+        visual.Scale({1, 1, 1});
+        SetTranslation(el, 0, 0);
+    });
+}
+
 void RestoreIndicators() {
     for (auto& i : *g_indicators) {
         i.stateChanged.revoke();
         i.sizeChanged.revoke();
+        i.progressSizeChanged.revoke();
         RemoveDot(i);
-        if (auto el = i.element.get()) {
-            Try([&] { wuxh::ElementCompositionPreview::GetElementVisual(el).Opacity(1); });
+        if (auto el = i.element.get()) RestoreStockIndicator(el);
+        if (auto el = i.progress.get()) {
+            Try([&] {
+                el.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(),
+                                                     i.progressVisibilityToken);
+            });
+            RestoreStockIndicator(el);
         }
     }
     g_indicators->clear();
@@ -2896,6 +3145,7 @@ void SetScale(wux::FrameworkElement const& el, float s, float tx = 0) {
     visual.Scale({s, s, 1});
     SetTranslation(el, tx, GetRowOffsetY(wuxm::VisualTreeHelper::GetParent(el)));
     PlaceDot(el, tx);
+    PlaceStockIndicators(el, s);
 }
 
 void ReapplyButton(wux::FrameworkElement const& button) {
@@ -3052,6 +3302,8 @@ std::pair<wux::FrameworkElement, wux::FrameworkElement> LayOutButtons(
     return {icons[last].element, beforeAppsDivider};
 }
 
+void NoteIconsMoving();
+
 // Re-measures the plate around the icons, as if nothing were magnified.
 void MeasurePlate(Plate& p) {
     auto row = p.row.get();
@@ -3064,6 +3316,10 @@ void MeasurePlate(Plate& p) {
     }
 
     auto icons = GetIcons(row);
+    if (icons.size() != p.iconCount) {
+        if (p.iconCount) NoteIconsMoving();  // an app opened or closed
+        p.iconCount = icons.size();
+    }
     if (icons.empty()) {
         for (auto& el : PlateParts(p)) {
             if (el) el.Visibility(Visibility::Collapsed);
@@ -3136,6 +3392,7 @@ void MeasurePlate(Plate& p) {
 
     p.offsetY = offsetY;
     p.originX = origin.X;
+    p.originY = origin.Y;
     for (auto& icon : icons) ReapplyButton(icon.element);
     HideStrayDots(panel, icons);
 }
@@ -3202,8 +3459,10 @@ void EnsurePlate(wux::FrameworkElement const& button) {
     ApplyPlateLook(p);
 }
 
-// Clearing the list also revokes the plates' event handlers.
+// Clearing the list also revokes the plates' event handlers. Dots go too, and
+// come back over the new plates when they're measured.
 void RemovePlates() {
+    for (auto& i : *g_indicators) RemoveDot(i);
     for (auto& p : *g_plates) {
         if (p.blurHost) {
             Try([&] { wuxh::ElementCompositionPreview::SetElementChildVisual(p.blurHost, nullptr); });
@@ -3348,15 +3607,15 @@ bool IsWindowMaximized() {
     return search.found;
 }
 
-// The dock gives up its space at once, so the window takes it right away, but
-// stays on show as if hovered, sliding away once the pointer's been gone for
-// half a second.
+// Windows already have the whole screen in Hybrid, so the dock just slides
+// away, unless the pointer's on it, when it waits until it's been gone for half
+// a second.
 void SetWindowMaximized(bool maximized) {
     if (maximized == g_windowMaximized) return;
     g_windowMaximized = maximized;
-    g_dockRevealed = maximized;
+    g_dockRevealed = maximized && g_pointerOver;
     g_dockAwayTicks = 0;
-    ScheduleOverWindows(false);  // app bars and clip
+    ScheduleOverWindows(false);  // the clip
     StartFrames();
 }
 
@@ -3425,8 +3684,8 @@ void UpdateAutoHide(POINT p, RECT const& m, UINT dpi, bool held, bool fullscreen
 // LABELS
 // =============================================================================
 // The name of the app under the pointer, above its icon as on a Mac, in place
-// of Windows' window previews and tooltips. It rises above the taskbar, so it's
-// a click-through window of its own: a solid light pill with a soft glow.
+// of Windows' tooltips. It rises above the taskbar, so it's a click-through
+// window of its own: a solid light pill with a soft glow.
 
 constexpr float kLabelHeight = 30;       // the box, without its arrow
 constexpr float kLabelPadX = 11;
@@ -3625,9 +3884,10 @@ void DrawLabel(std::wstring const& text, POINT tip, float scale) {
     g_label = {g_label.hwnd, text, rect, true};
 }
 
-// With its arrow's tip at (`x`, `tipY`) in the plate's panel. The taskbar's
-// content starts at its window's corner.
-void ShowLabel(Plate& p, std::wstring const& name, float x, float tipY) {
+// A point in the plate's panel, on screen, with the window of the taskbar under
+// the pointer (its content starts at the window's corner). Returns the screen's
+// scale, or 0 when it can't tell.
+float PanelToScreen(Plate& p, wf::Point point, POINT& out, RECT& window) {
     auto panel = p.panel.get();
     auto root = panel ? panel.XamlRoot() : nullptr;
     auto content = root ? root.Content() : nullptr;
@@ -3639,39 +3899,48 @@ void ShowLabel(Plate& p, std::wstring const& name, float x, float tipY) {
             if (!taskbar && MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST) == monitor) taskbar = tb;
         });
     }
-    RECT window;
-    if (name.empty() || !taskbar || !GetWindowRect(taskbar, &window) || !EnsureLabelWindow()) {
-        return HideLabel();
-    }
+    if (!taskbar || !GetWindowRect(taskbar, &window)) return 0;
     float scale = (float)root.RasterizationScale();
-    auto at = panel.TransformToVisual(content).TransformPoint({x, tipY});
-    POINT tip{window.left + std::lround(at.X * scale), window.top + std::lround(at.Y * scale)};
+    auto at = panel.TransformToVisual(content).TransformPoint(point);
+    out = {window.left + std::lround(at.X * scale), window.top + std::lround(at.Y * scale)};
+    return scale;
+}
+
+// With its arrow's tip at (`x`, `tipY`) in the plate's panel.
+void ShowLabel(Plate& p, std::wstring const& name, float x, float tipY) {
+    POINT tip;
+    RECT window;
+    float scale = name.empty() ? 0 : PanelToScreen(p, {x, tipY}, tip, window);
+    if (scale <= 0 || !EnsureLabelWindow()) return HideLabel();
     DrawLabel(name, tip, scale);
 }
 
-// Over the icon under the pointer, as magnified (icons grow from their bottom),
-// and never lower than the dock's top edge.
+// Where the label's arrow tip goes over an icon `height` tall, as magnified
+// (icons grow from their bottom): never lower than the dock's top edge.
+float LabelTipY(Plate const& p, float height) {
+    float bottom = p.top + g_size.padY + g_size.icon;
+    return std::min(bottom - height - kLabelGap, p.top - kLabelDockGap);
+}
+
+// Over the icon under the pointer.
 void UpdateLabel(Plate* p) {
     if (!g_settings.tooltips || !p || !g_pointerOver || g_dragging || g_labelSuppressed ||
         DockHidden()) {
         return HideLabel();
     }
-    float bottom = p->top + g_size.padY + g_size.icon;
-    auto above = [p, bottom](float height) {
-        return std::min(bottom - height - kLabelGap, p->top - kLabelDockGap);
-    };
     for (auto& item : g_row) {
         float x = item.center + item.shift;
         if (std::fabs(g_pointerX - x) > item.width * item.scale / 2) continue;
         if (item.trash) {
             PCWSTR name = HasTrashIcon() ? L"Trash" : L"Recycle Bin";
-            return ShowLabel(*p, name, p->originX + x, above(TrashArtHeight() * item.scale));
+            float tipY = LabelTipY(*p, TrashArtHeight() * item.scale);
+            return ShowLabel(*p, name, p->originX + x, tipY);
         }
         auto el = item.element.get();
         if (!el) break;
         HideStockToolTip(el);
         auto name = HasFinderIcon() && IsFileExplorer(el) ? L"Finder" : AppName(el);
-        return ShowLabel(*p, name, p->originX + x, above(g_size.icon * item.scale));
+        return ShowLabel(*p, name, p->originX + x, LabelTipY(*p, g_size.icon * item.scale));
     }
     HideLabel();
 }
@@ -4158,8 +4427,14 @@ void ProcessButton(wux::FrameworkElement const& button) {
         if (name == L"Icon") {
             TrackIconImage(el);
             UpdateAppIcon(el, button);
+        } else if (name == L"DefaultIcon") {
+            TrackIconImage(el);  // shown in place of Icon for some apps
+        } else if (name == L"OverlayIcon") {
+            TrackOverlayIcon(el);
         } else if (name == L"RunningIndicator") {
             TrackIndicator(el, button);
+        } else if (name == L"ProgressIndicator") {
+            TrackProgress(el, button);
         } else if ((name == L"BackgroundElement" || name == L"MultiWindowElement") &&
                    el.try_as<wuxc::Border>()) {
             HideHighlight(el);
@@ -4576,7 +4851,8 @@ int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
 }
 
 // ---- Jump list placement (as in "Taskbar Multirow") ----
-// Centered on where the button is, not where layout put it (File Explorer).
+// Centered on where the button is, not where layout put it (File Explorer), and
+// as high as without the room left for the icons' bounce.
 
 bool g_placingJumpList = false;
 bool g_hasJumpListButton = false;
@@ -4648,6 +4924,9 @@ RECT WINAPI ToRawPixelsInDesktopCoordinates_Hook(wf::Rect const& rect, UINT dpi,
     wf::Rect moved = rect;
     moved.X = g_jumpListButton.X;
     moved.Width = g_jumpListButton.Width;
+    float room = std::min(g_size.bounceRoom, moved.Height);
+    moved.Y += room;
+    moved.Height -= room;
     return ToRawPixelsInDesktopCoordinates_Original(moved, dpi, hWnd);
 }
 
@@ -4834,6 +5113,26 @@ bool OverrideHeight(int enumTaskbarSize) {
     return g_taskbarHeight > 0 && (enumTaskbarSize == 1 || enumTaskbarSize == 2);
 }
 
+// The offset `regex` captures (in hex) from the first of the `limit`
+// instructions from `code` it matches, or 0. Stops at a ret.
+LONG OffsetFromDisasm(const void* code, int limit, std::regex const& regex) {
+    auto p = (BYTE*)code;
+    for (int i = 0; p && i < limit; i++) {
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result)) break;
+        p += result.length;
+        std::string_view text = result.text;
+        if (text == "ret") break;
+        std::match_results<std::string_view::const_iterator> match;
+        if (std::regex_match(text.begin(), text.end(), match, regex)) {
+            size_t offset = 0;
+            std::from_chars(&*match[1].first, &*match[1].first + match[1].length(), offset, 16);
+            return offset > 0 && offset <= 0xFFFF ? (LONG)offset : 0;
+        }
+    }
+    return 0;
+}
+
 // ---- The taskbar window ----
 
 using TaskbarConfiguration_GetFrameSize_t = double(WINAPI*)(int enumTaskbarSize);
@@ -4843,6 +5142,49 @@ double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int enumTaskbarSize) {
                ? g_taskbarHeight
                : TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
 }
+
+#ifdef _M_ARM64
+// On ARM64, GetFrameSize is inlined into UpdateFrameSize, so the size it
+// stores is replaced just before its change event fires. Its offset is read
+// from str dN, [xN, #offset].
+thread_local double* g_updatingFrameSize = nullptr;
+VoidMethod_t TaskbarConfiguration_UpdateFrameSize_Address;  // hooked by address, below
+VoidMethod_t TaskbarConfiguration_UpdateFrameSize_Original;
+
+LONG FrameSizeOffset() {
+    static LONG offset = [] {
+        LONG found = OffsetFromDisasm((void*)TaskbarConfiguration_UpdateFrameSize_Address, 0x80,
+                                      std::regex(R"(str\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])"));
+        Wh_Log(found ? L"Frame size offset: 0x%X" : L"Frame size offset not found", found);
+        return found;
+    }();
+    return offset;
+}
+
+void WINAPI TaskbarConfiguration_UpdateFrameSize_Hook(void* pThis) {
+    LONG offset = FrameSizeOffset();
+    g_updatingFrameSize = offset ? (double*)((BYTE*)pThis + offset) : nullptr;
+    TaskbarConfiguration_UpdateFrameSize_Original(pThis);
+    g_updatingFrameSize = nullptr;
+}
+
+VoidMethod_t Event_operator_call_Original;
+void WINAPI Event_operator_call_Hook(void* pThis) {
+    if (g_updatingFrameSize && g_taskbarHeight > 0) *g_updatingFrameSize = g_taskbarHeight;
+    Event_operator_call_Original(pThis);
+}
+
+void HookFrameSizeUpdate() {
+    if (!TaskbarConfiguration_UpdateFrameSize_Address ||
+        TaskbarConfiguration_UpdateFrameSize_Original) {
+        return;
+    }
+    FrameSizeOffset();  // found up front
+    WindhawkUtils::SetFunctionHook(TaskbarConfiguration_UpdateFrameSize_Address,
+                                   TaskbarConfiguration_UpdateFrameSize_Hook,
+                                   &TaskbarConfiguration_UpdateFrameSize_Original);
+}
+#endif
 
 // ---- The system tray, on the main taskbar and the others ----
 
@@ -4871,9 +5213,11 @@ void WINAPI SystemTray_UpdateFrameSize_Hook(void* pThis) {
 // The main tray skips resizing when the height is the one it last set, and
 // would keep the dock's when the mod unloads. That's forgotten first, so any new
 // height applies. Found in the function's code (as in "Taskbar height and icon
-// size"): ucomisd xmmN, [reg + offset], then jp, then je or jne.
+// size"): on x64, ucomisd xmmN, [reg + offset], then jp, then je or jne; on
+// ARM64, ldr dN, [xN, #offset], then fcmp, then b.eq.
 LONG TrayLastHeightOffset() {
     static LONG offset = [] {
+#if defined(_M_X64)
         auto start = (BYTE const*)SystemTrayController_UpdateFrameSize_Address;
         for (auto p = start; start && p != start + 0x400; p++) {
             if (p[0] == 0x66 && p[1] == 0x0F && p[2] == 0x2E && (p[3] & 0xC0) == 0x80 &&
@@ -4885,6 +5229,26 @@ LONG TrayLastHeightOffset() {
                 return found > 0 && found <= 0xFFFF ? found : 0L;
             }
         }
+#elif defined(_M_ARM64)
+        std::regex load(R"(ldr\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])");
+        std::regex compare(R"(fcmp\s+d\d+, d\d+)");
+        std::regex branch(R"(b\.eq\s+0x[0-9a-f]+)");
+        auto start = (DWORD const*)SystemTrayController_UpdateFrameSize_Address;
+        for (auto p = start; start && p != start + 0x100; p++) {
+            WH_DISASM_RESULT r[3];
+            if (!Wh_Disasm((void*)p, &r[0]) || !strcmp(r[0].text, "ret")) break;
+            std::cmatch match;
+            if (std::regex_match(r[0].text, match, load) && Wh_Disasm((void*)(p + 1), &r[1]) &&
+                std::regex_match(r[1].text, compare) && Wh_Disasm((void*)(p + 2), &r[2]) &&
+                std::regex_match(r[2].text, branch)) {
+                LONG found = std::stol(match[1], nullptr, 16);
+                Wh_Log(L"Tray height offset: 0x%X", found);
+                return found > 0 && found <= 0xFFFF ? found : 0L;
+            }
+        }
+#else
+#error "Unsupported architecture"
+#endif
         Wh_Log(L"Tray height offset not found");
         return 0L;
     }();
@@ -4927,17 +5291,26 @@ void WINAPI TaskbarFrame_Height_Hook(void* pThis, double value) {
 }
 
 // Windows 11 24H2 and newer. The controller's TaskbarFrame offset is read from
-// the start of OnGroupingModeChanged: sub rsp, 28h / mov rax|r8, [rcx+offset]
+// the start of OnGroupingModeChanged: on x64, sub rsp, 28h / mov rax|r8,
+// [rcx+offset]; on ARM64, the first ldr xN, [xN, #offset].
 void* TaskbarController_OnGroupingModeChanged_Address;
 
 LONG GetTaskbarFrameOffset() {
     static LONG offset = []() -> LONG {
+#if defined(_M_X64)
         const BYTE* p = (const BYTE*)TaskbarController_OnGroupingModeChanged_Address;
         if (p && p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
             (p[4] == 0x48 || p[4] == 0x4C) && p[5] == 0x8B && (p[6] & 0xC0) == 0x80) {
             LONG o = *(LONG*)(p + 7);
             if (o > 0 && o <= 0xFFFF) return o;
         }
+#elif defined(_M_ARM64)
+        LONG o = OffsetFromDisasm(TaskbarController_OnGroupingModeChanged_Address, 10,
+                                  std::regex(R"(ldr\s+x\d+, \[x\d+, #0x([0-9a-f]+)\])"));
+        if (o) return o;
+#else
+#error "Unsupported architecture"
+#endif
         Wh_Log(L"Taskbar frame offset not found");
         return 0;
     }();
@@ -5023,30 +5396,24 @@ void* WINAPI TaskbarFrame_GetMetrics_Hook(void* pThis, void* metrics) {
 
 // ---- App buttons: layout keeps seeing 24px ----
 
-// Read from the IconHeight setter: movsd xmmN, qword ptr [rcx+offset]
+// Read from the IconHeight setter: movsd xmmN, qword ptr [rcx+offset] on x64,
+// ldr dN, [xN, #offset] on ARM64.
 void* TaskListButton_IconHeight_Address;
 
 size_t GetIconHeightOffset() {
     static size_t offset = []() -> size_t {
-        BYTE* p = (BYTE*)TaskListButton_IconHeight_Address;
+#if defined(_M_X64)
         std::regex regex(R"(movsd xmm\d+, qword ptr \[rcx\+0x([0-9a-f]+)\])",
                          std::regex_constants::icase);
-        for (int i = 0; p && i < 30; i++) {
-            WH_DISASM_RESULT result;
-            if (!Wh_Disasm(p, &result)) break;
-            p += result.length;
-            std::string_view text = result.text;
-            if (text == "ret") break;
-            std::match_results<std::string_view::const_iterator> match;
-            if (std::regex_match(text.begin(), text.end(), match, regex)) {
-                size_t o = 0;
-                std::from_chars(&*match[1].first, &*match[1].first + match[1].length(), o, 16);
-                Wh_Log(L"Icon height offset: 0x%zX", o);
-                return o <= 0xFFFF ? o : 0;
-            }
-        }
-        Wh_Log(L"Icon height offset not found; icon resolution unchanged");
-        return 0;
+#elif defined(_M_ARM64)
+        std::regex regex(R"(ldr\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])", std::regex_constants::icase);
+#else
+#error "Unsupported architecture"
+#endif
+        LONG o = OffsetFromDisasm(TaskListButton_IconHeight_Address, 30, regex);
+        if (o) Wh_Log(L"Icon height offset: 0x%X", o);
+        else Wh_Log(L"Icon height offset not found; icon resolution unchanged");
+        return o;
     }();
     return offset;
 }
@@ -5092,6 +5459,9 @@ using TaskListButton_OverlayIcon_t = void(WINAPI*)(void* pThis, void* stream);
 TaskListButton_OverlayIcon_t TaskListButton_OverlayIcon_Original;
 void WINAPI TaskListButton_OverlayIcon_Hook(void* pThis, void* stream) {
     WithStockIconHeight(pThis, [=] { TaskListButton_OverlayIcon_Original(pThis, stream); });
+    if (!g_unloading) Try([&] {
+        if (auto button = ElementFromThis(pThis)) ProcessButton(button);  // places a new badge
+    });
 }
 
 // ---- Start, Task View, widgets and other system buttons ----
@@ -5134,8 +5504,9 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
 // =============================================================================
 // HOOKS: WINDOW PREVIEWS
 // =============================================================================
-// Previews only open on click; hovering shows the dock's labels instead. As in
-// m417z's "Disable Taskbar Thumbnails".
+// With "Window previews" on, hovering opens Windows' preview, just above the
+// dock's label. Off, previews only open on click, as in m417z's "Disable
+// Taskbar Thumbnails".
 
 // ---- Older builds ----
 
@@ -5145,7 +5516,7 @@ CTaskListWnd__DisplayExtendedUI_t CTaskListWnd__DisplayExtendedUI_Original;
 HRESULT WINAPI CTaskListWnd__DisplayExtendedUI_Hook(void* pThis, void* taskBtnGroup, int param2,
                                                     DWORD flags, int param4) {
     bool click = flags & 2;
-    if (!click && !g_unloading) return S_OK;
+    if (!click && !g_unloading && !g_settings.previews) return S_OK;
     return CTaskListWnd__DisplayExtendedUI_Original(pThis, taskBtnGroup, param2, flags, param4);
 }
 
@@ -5156,8 +5527,8 @@ void WINAPI CTaskListWnd__ShowToolTip_Hook(void* pThis, DWORD flags) {
 }
 
 // ---- Newer builds ----
-// A XAML flyout. While it opens on hover its window is kept hidden, and it's
-// shown after all if it then turns into a click (sticky) flyout.
+// A XAML flyout. Without previews, while it opens on hover its window is kept
+// hidden, and it's shown after all if it then turns into a click (sticky) flyout.
 
 struct HoverFlyout {
     HWND hwnd = nullptr;
@@ -5170,7 +5541,8 @@ bool g_inStickyFlyout = false;
 HoverFlyout g_hoverFlyout;
 
 bool InHoverFlyout() {
-    return g_hoverFlyoutThread == GetCurrentThreadId() && !g_inStickyFlyout;
+    return !g_settings.previews && g_hoverFlyoutThread == GetCurrentThreadId() &&
+           !g_inStickyFlyout;
 }
 
 using ShowWindow_t = decltype(&ShowWindow);
@@ -5243,14 +5615,162 @@ void WINAPI HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old_Hook(void* p
     g_hoverFlyoutThread = 0;
 }
 
+// ---- Placement ----
+// Windows puts a preview above its app's button, which reaches well past the
+// icons. It's moved to just above the label at its highest, and sideways onto
+// the magnified icon under the pointer (as "Taskbar on top" moves them).
+
+constexpr float kPreviewGap = 6;        // between it and the label
+constexpr float kFlyoutStockGap = 12;   // under a flyout, above its app's button
+
+// How far to move a preview: a window Windows put at `rect` on screen, or a
+// flyout (null), which it puts kFlyoutStockGap above its app's button. Buttons
+// reach above the taskbar window.
+POINT PreviewOffset(RECT const* rect) {
+    HWND tb = FindTaskbar();  // the dock is only read on its own thread
+    if (!tb || GetWindowThreadProcessId(tb, nullptr) != GetCurrentThreadId()) return {};
+    Plate* p = GetRowPlate(g_rowParent.get());
+    if (!p) return {};
+
+    float iconTop = p->top + g_size.padY + g_size.icon * (1 - g_settings.scale);
+    float top = g_settings.tooltips
+                    ? LabelTipY(*p, g_size.icon * g_settings.scale) - kLabelArrow - kLabelHeight
+                    : std::min(iconTop, p->top);
+    float shift = 0;
+    wux::FrameworkElement button{nullptr};
+    for (auto& item : g_row) {
+        auto el = item.trash ? nullptr : item.element.get();
+        if (!el) continue;
+        if (!button) button = el;
+        float d = std::fabs(g_pointerX - item.center - item.shift);
+        if (g_pointerOver && d <= item.width * item.scale / 2) {
+            shift = item.shift;
+            button = el;
+        }
+    }
+    auto panel = p->panel.get();
+    if (!button || !panel) return {};
+    float buttonTop = button.TransformToVisual(panel).TransformPoint({0, 0}).Y;
+
+    POINT bottom, stock;
+    RECT window;
+    float scale = PanelToScreen(*p, {0, top - kPreviewGap}, bottom, window);
+    if (scale <= 0 || !PanelToScreen(*p, {0, buttonTop - kFlyoutStockGap}, stock, window)) {
+        return {};
+    }
+    LONG stockBottom = rect ? rect->bottom : stock.y;
+    POINT offset{std::lround(shift * scale), bottom.y - stockBottom};
+
+    // A window is kept on the screen.
+    MONITORINFO info{sizeof(info)};
+    if (rect && GetMonitorInfo(MonitorFromRect(&window, MONITOR_DEFAULTTONEAREST), &info)) {
+        offset.x = std::max(info.rcMonitor.left - rect->left,
+                            std::min(offset.x, info.rcMonitor.right - rect->right));
+        offset.y = std::max(offset.y, info.rcMonitor.top - rect->top);
+    }
+    return offset;
+}
+
+// Newer builds: a XAML flyout. FlyoutFrame::UpdateFlyoutPosition maps where
+// it goes to the screen, and every point it maps is moved.
+
+thread_local void* g_placingFlyout = nullptr;
+
+VoidMethod_t FlyoutFrame_UpdateFlyoutPosition_Original;
+void WINAPI FlyoutFrame_UpdateFlyoutPosition_Hook(void* pThis) {
+    void* outer = std::exchange(g_placingFlyout, pThis);
+    FlyoutFrame_UpdateFlyoutPosition_Original(pThis);
+    g_placingFlyout = outer;
+}
+
+// Whether a flyout frame holds a preview, not another flyout.
+bool IsPreview(void* flyoutFrame) {
+    wux::FrameworkElement frame{nullptr};
+    ((::IUnknown*)flyoutFrame)
+        ->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(frame));
+    if (!frame) {  // before build 26120.4733
+        ((::IUnknown**)flyoutFrame)[1]->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
+                                                       winrt::put_abi(frame));
+    }
+    bool found = false;
+    if (frame) {
+        ForEachDescendant(frame, 2, [&found](wux::FrameworkElement const& el) {
+            found = found || el.Name() == L"HoverFlyoutGrid";
+            return !found;
+        });
+    }
+    return found;
+}
+
+using MapWindowPoints_t = decltype(&MapWindowPoints);
+MapWindowPoints_t MapWindowPoints_Original;
+int WINAPI MapWindowPoints_Hook(HWND hWndFrom, HWND hWndTo, LPPOINT lpPoints, UINT cPoints) {
+    int result = MapWindowPoints_Original(hWndFrom, hWndTo, lpPoints, cPoints);
+    if (!g_placingFlyout || !lpPoints || !cPoints || g_unloading) return result;
+    void* flyout = std::exchange(g_placingFlyout, nullptr);  // not again from in here
+    Try([&] {
+        if (!IsPreview(flyout)) return;
+        POINT offset = PreviewOffset(nullptr);
+        for (UINT i = 0; i < cPoints; i++) {
+            lpPoints[i].x += offset.x;
+            lpPoints[i].y += offset.y;
+        }
+    });
+    g_placingFlyout = flyout;
+    return result;
+}
+
+// Older builds: a window, placed while CTaskListThumbnailWnd shows it or lays
+// out its thumbnails.
+
+thread_local bool g_placingThumbnails = false;
+
+using CTaskListThumbnailWnd_DisplayUI_t = int(WINAPI*)(void* pThis, void* taskBtnGroup,
+                                                       void* item1, void* item2, DWORD flags);
+CTaskListThumbnailWnd_DisplayUI_t CTaskListThumbnailWnd_DisplayUI_Original;
+int WINAPI CTaskListThumbnailWnd_DisplayUI_Hook(void* pThis, void* taskBtnGroup, void* item1,
+                                                void* item2, DWORD flags) {
+    bool outer = std::exchange(g_placingThumbnails, true);
+    int result = CTaskListThumbnailWnd_DisplayUI_Original(pThis, taskBtnGroup, item1, item2, flags);
+    g_placingThumbnails = outer;
+    return result;
+}
+
+VoidMethod_t CTaskListThumbnailWnd_LayoutThumbnails_Original;
+void WINAPI CTaskListThumbnailWnd_LayoutThumbnails_Hook(void* pThis) {
+    bool outer = std::exchange(g_placingThumbnails, true);
+    CTaskListThumbnailWnd_LayoutThumbnails_Original(pThis);
+    g_placingThumbnails = outer;
+}
+
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t SetWindowPos_Original;
+BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND after, int X, int Y, int cx, int cy, UINT flags) {
+    WCHAR cls[32];
+    RECT rect;
+    if (g_placingThumbnails && !g_unloading && !(flags & SWP_NOMOVE) &&
+        GetClassName(hWnd, cls, ARRAYSIZE(cls)) && !_wcsicmp(cls, L"TaskListThumbnailWnd") &&
+        GetWindowRect(hWnd, &rect)) {
+        if (!(flags & SWP_NOSIZE)) rect = {X, Y, X + cx, Y + cy};
+        else OffsetRect(&rect, X - rect.left, Y - rect.top);
+        Try([&] {
+            POINT offset = PreviewOffset(&rect);
+            X += offset.x;
+            Y += offset.y;
+        });
+    }
+    return SetWindowPos_Original(hWnd, after, X, Y, cx, cy, flags);
+}
+
 // =============================================================================
 // HOOKS: MAXIMIZED WINDOWS
 // =============================================================================
 // Maximized windows reach down to the dock, and magnified icons rise over them:
 // - Auto-hide is turned on, so Windows keeps no space for the taskbar, which
 //   is kept from hiding (as in "Taskbar auto-hide when maximized").
-// - An app bar keeps the dock's strip free on each screen, unless the dock
-//   hides itself, when windows fill the screen.
+// - With Auto-hide Off, an app bar keeps the dock's strip free on each screen.
+//   Otherwise windows always have the whole screen, so none is moved when the
+//   dock shows or hides.
 // - The taller taskbar window is clipped to that strip while not magnifying,
 //   and to the tray (if shown) while the dock is hidden.
 
@@ -5320,10 +5840,26 @@ int StripHeight(UINT dpi) {
     return MulDiv((int)std::ceil(height), dpi, 96);
 }
 
+// While an app's icon slides in or out of a shown dock, Windows' animation can
+// rise past the strip, so the whole window shows for a moment.
+constexpr UINT kIconsMovingMs = 800;
+ULONGLONG g_iconsMovingUntil = 0;
+
+bool IconsMoving() { return GetTickCount64() < g_iconsMovingUntil && !DockHidden(); }
+
+void NoteIconsMoving() {
+    HWND w = g_modWindow;
+    if (!w || !SetTimer(w, kIconsMovingTimer, kIconsMovingMs, nullptr)) return;
+    g_iconsMovingUntil = GetTickCount64() + kIconsMovingMs;
+    ScheduleOverWindows(false);
+}
+
 // No region (null) shows the whole window.
 HRGN TaskbarRegion(HWND tb) {
     RECT window;
-    if (!KeepTaskbarShown() || g_dockExpanded || !GetWindowRect(tb, &window)) return nullptr;
+    if (!KeepTaskbarShown() || g_dockExpanded || IconsMoving() || !GetWindowRect(tb, &window)) {
+        return nullptr;
+    }
     int width = window.right - window.left, height = window.bottom - window.top;
     UINT dpi = GetDpiForWindow(tb);
     if (!DockFullyHidden()) {
@@ -5384,7 +5920,7 @@ void AddAppBar(RECT const& rect) {
 // included, which would otherwise loop.
 void UpdateAppBars() {
     std::vector<RECT> want;
-    if (KeepTaskbarShown() && !DockHides()) {
+    if (KeepTaskbarShown() && g_settings.autoHide == AutoHide::Off) {
         ForEachTaskbarWindow([&want](HWND tb, bool) {
             HMONITOR monitor = MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST);
             MONITORINFO info{sizeof(info)};
@@ -5464,6 +6000,11 @@ LRESULT CALLBACK ModWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
                 ScheduleOverWindows(false);
                 return 0;
             }
+            if (wParam == kIconsMovingTimer) {
+                KillTimer(hWnd, kIconsMovingTimer);
+                ScheduleOverWindows(false);  // clipped again
+                return 0;
+            }
             if (wParam == kMaximizedCheckTimer) {
                 KillTimer(hWnd, kMaximizedCheckTimer);
                 CheckWindowMaximized();
@@ -5508,11 +6049,15 @@ bool HookTaskbarDllSymbols() {
          &CTaskListWnd_ComputeJumpViewPosition_Original, CTaskListWnd_ComputeJumpViewPosition_Hook, true},
         {{LR"(struct tagRECT __cdecl ToRawPixelsInDesktopCoordinates(struct winrt::Windows::Foundation::Rect const &,unsigned int,struct HWND__ *))"},
          &ToRawPixelsInDesktopCoordinates_Original, ToRawPixelsInDesktopCoordinates_Hook, true},
-        // Window previews (gone in 10.0.26100.8313)
+        // Window previews, older builds (gone in 10.0.26100.8313 and later)
         {{LR"(protected: long __cdecl CTaskListWnd::_DisplayExtendedUI(struct ITaskBtnGroup *,int,unsigned long,int))"},
          &CTaskListWnd__DisplayExtendedUI_Original, CTaskListWnd__DisplayExtendedUI_Hook, true},
         {{LR"(protected: void __cdecl CTaskListWnd::_ShowToolTip(enum ShowToolTipFlags))"},
          &CTaskListWnd__ShowToolTip_Original, CTaskListWnd__ShowToolTip_Hook, true},
+        {{LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup *,struct ITaskItem *,struct ITaskItem *,unsigned long))"},
+         &CTaskListThumbnailWnd_DisplayUI_Original, CTaskListThumbnailWnd_DisplayUI_Hook, true},
+        {{LR"(public: virtual void __cdecl CTaskListThumbnailWnd::LayoutThumbnails(void))"},
+         &CTaskListThumbnailWnd_LayoutThumbnails_Original, CTaskListThumbnailWnd_LayoutThumbnails_Hook, true},
     };
     return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
@@ -5545,6 +6090,12 @@ bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
          &TaskbarConfiguration_GetFrameSize_Original, TaskbarConfiguration_GetFrameSize_Hook, true},
+#ifdef _M_ARM64
+        {{LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::UpdateFrameSize(void))"},
+         &TaskbarConfiguration_UpdateFrameSize_Address, nullptr, true},
+        {{LR"(public: void __cdecl winrt::event<struct winrt::delegate<> >::operator()<>(void))"},
+         &Event_operator_call_Original, Event_operator_call_Hook, true},
+#endif
         {{LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::MaxHeight(double)const )"},
          &TaskbarFrame_MaxHeight_Original, nullptr, true},
         {{LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::Height(double)const )"},
@@ -5565,6 +6116,8 @@ bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
          &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original, HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook, true},
         {{LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
          &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old_Original, HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old_Hook, true},
+        {{LR"(private: void __cdecl winrt::Taskbar::implementation::FlyoutFrame::UpdateFlyoutPosition(void))"},
+         &FlyoutFrame_UpdateFlyoutPosition_Original, FlyoutFrame_UpdateFlyoutPosition_Hook, true},
         // Jump list placement
         {{LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarResources::OnTaskListButtonContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))"},
          &TaskbarResources_OnTaskListButtonContextRequested_Original, TaskbarResources_OnTaskListButtonContextRequested_Hook, true},
@@ -5578,7 +6131,7 @@ bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
         {{LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnDragCompletedGesture(void))"},
          &TaskListButton_OnDragCompletedGesture_Original, TaskListButton_OnDragCompletedGesture_Hook, true},
         {{LR"(public: struct winrt::Taskbar::implementation::DropPlaceholder __cdecl winrt::Taskbar::implementation::TaskListDragOperation::GetDropPlaceholder(class std::vector<struct winrt::Windows::Foundation::Rect,class std::allocator<struct winrt::Windows::Foundation::Rect> > const &,struct std::pair<unsigned int,unsigned int>,struct winrt::Windows::Foundation::Rect,enum winrt::Taskbar::implementation::RearrangeDirection,struct winrt::Taskbar::implementation::GroupBoundsCalculator const *,bool))",
-          // Older builds lack the last parameter; passing it anyway is harmless on x64.
+          // Older builds lack the last parameter; passing it anyway is harmless.
           LR"(public: struct winrt::Taskbar::implementation::DropPlaceholder __cdecl winrt::Taskbar::implementation::TaskListDragOperation::GetDropPlaceholder(class std::vector<struct winrt::Windows::Foundation::Rect,class std::allocator<struct winrt::Windows::Foundation::Rect> > const &,struct std::pair<unsigned int,unsigned int>,struct winrt::Windows::Foundation::Rect,enum winrt::Taskbar::implementation::RearrangeDirection,struct winrt::Taskbar::implementation::GroupBoundsCalculator const *))"},
          &TaskListDragOperation_GetDropPlaceholder_Original, TaskListDragOperation_GetDropPlaceholder_Hook, true},
         // Icon resolution
@@ -5620,6 +6173,9 @@ bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
     if (!WindhawkUtils::HookSymbols(module, allHooks.data(), allHooks.size())) return false;
     if (TaskListButton_IconHeight_Address) GetIconHeightOffset();  // found up front
     if (withTray) HookTrayUpdateFrameSize();
+#ifdef _M_ARM64
+    HookFrameSizeUpdate();
+#endif
     return true;
 }
 
@@ -5694,7 +6250,7 @@ BOOL Wh_ModInit() {
                                            &LoadLibraryExW_Original);
         }
     }
-    // Window previews, on newer builds.
+    // Window previews.
     if (HMODULE win32u = GetModuleHandle(L"win32u.dll")) {
         if (auto p = GetProcAddress(win32u, "NtUserShowWindow")) {
             WindhawkUtils::SetFunctionHook((ShowWindow_t)p, ShowWindow_Hook, &ShowWindow_Original);
@@ -5704,6 +6260,9 @@ BOOL Wh_ModInit() {
                                            &EnableWindow_Original);
         }
     }
+    WindhawkUtils::SetFunctionHook(MapWindowPoints, MapWindowPoints_Hook,
+                                   &MapWindowPoints_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
     g_dockShown = g_settings.autoHide == AutoHide::On ? 0 : 1;  // starts hidden
     return TRUE;
 }
