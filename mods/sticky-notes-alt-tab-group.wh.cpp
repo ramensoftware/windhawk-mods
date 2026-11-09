@@ -4,7 +4,7 @@
 // @name:ko         스티커 메모 Alt+Tab 하나로 묶기
 // @description     Group Microsoft Sticky Notes into one Alt+Tab entry, bring open notes forward together, and use compact previews.
 // @description:ko  스티커 메모를 Alt+Tab 한 항목으로 묶고, 전환하면 열린 메모를 함께 표시하며 미리보기를 작게 만듭니다.
-// @version         1.1.1
+// @version         1.1.2
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
@@ -19,6 +19,8 @@
 Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
 
 - Show one representative Sticky Notes window in Alt+Tab.
+  - Keep notes grouped during delayed refreshes for as long as the switcher is
+    open. If the representative note closes, another open note represents it.
 - Switch to Sticky Notes to bring all its open windows on the current virtual
   desktop forward together.
   - Minimized notes are restored; closed notes are not opened.
@@ -106,6 +108,7 @@ SOFTWARE.
 std::atomic<DWORD> buildThread{0}, lastThread{0};
 std::atomic<ULONGLONG> buildTime{0};
 std::atomic<HWND> representative{nullptr};
+std::atomic<void*> shownHost{nullptr};
 void *win32Vtable, *winrtVtable;
 using NativeWindow = HRESULT(WINAPI*)(void*, HWND*);
 NativeWindow win32Window, winrtWindow;
@@ -113,6 +116,10 @@ using Visible = HRESULT(WINAPI*)(void*, void*, BOOL*);
 Visible originalVisible;
 using Create = HRESULT(WINAPI*)(void*, void*, void*);
 Create originalCreate;
+using Show = HRESULT(WINAPI*)(void*, void*, int, void*);
+Show originalShow;
+using Dismiss = void(WINAPI*)(void*);
+Dismiss originalDismiss;
 HANDLE stopEvent, worker;
 IVirtualDesktopManager* desktops;
 bool wasNotes;
@@ -187,25 +194,47 @@ HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
     HRESULT hr = originalVisible(self, view, visible);
     if (FAILED(hr) || !*visible) return hr;
     DWORD thread = GetCurrentThreadId();
-    if (buildThread != thread && (lastThread != thread || GetTickCount64() - buildTime > 250)) return hr;
+    // The shell can refresh entries long after creation. Scope late filtering
+    // to this host's Show/Dismiss lifetime instead of a fixed time limit.
+    if (buildThread != thread && (lastThread != thread ||
+        (!shownHost && GetTickCount64() - buildTime > 250))) return hr;
     HWND window = nullptr;
     void* table = *reinterpret_cast<void**>(view);
     if (table == win32Vtable) hr = win32Window(view, &window);
     else if (table == winrtVtable) hr = winrtWindow(view, &window);
     else return S_OK;
     if (FAILED(hr) || !Notes(window)) return S_OK;
-    HWND expected = nullptr;
-    representative.compare_exchange_strong(expected, window);
+    HWND expected = representative.load();
+    while (!expected || !IsWindow(expected)) {
+        if (representative.compare_exchange_weak(expected, window)) break;
+    }
     if (representative != window) *visible = FALSE;
     return S_OK;
 }
 HRESULT WINAPI CreateHook(void* a, void* b, void* c) {
     representative = nullptr;
+    shownHost = nullptr;
     buildThread = GetCurrentThreadId(); lastThread = GetCurrentThreadId();
     buildTime = GetTickCount64();
     HRESULT hr = originalCreate(a, b, c);
     buildThread = 0;
     return hr;
+}
+void EndShownHost(void* self) {
+    void* expected = self;
+    // A late dismissal of an older host must not clear a newer session.
+    shownHost.compare_exchange_strong(expected, nullptr);
+}
+HRESULT WINAPI ShowHook(void* self, void* monitor, int flags, void* view) {
+    lastThread = GetCurrentThreadId();
+    shownHost = self;
+    HRESULT hr = originalShow(self, monitor, flags, view);
+    if (FAILED(hr)) EndShownHost(self);
+    return hr;
+}
+void WINAPI DismissHook(void* self) {
+    originalDismiss(self);
+    EndShownHost(self);
 }
 void CALLBACK Foreground(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD, DWORD) {
     if (object != OBJID_WINDOW || !window) return;
@@ -256,6 +285,8 @@ BOOL Wh_ModInit() {
         {{LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"}, &winrtVtable},
         {{LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"}, &winrtWindow},
         {{LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"}, &originalCreate, CreateHook},
+        {{LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"}, &originalShow, ShowHook},
+        {{LR"(protected: virtual void __cdecl XamlAltTabViewHost::v_DismissView(void))"}, &originalDismiss, DismissHook},
     };
     if (!WindhawkUtils::HookSymbols(shell, hooks, ARRAYSIZE(hooks))) return FALSE;
     HMODULE model = LoadLibraryW(L"DesktopSwitcherDataModel.dll");
