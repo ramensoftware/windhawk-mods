@@ -2,7 +2,7 @@
 // @id              arabic-keyboard-layout-fixer
 // @name            Arabic Keyboard Layout Fixer
 // @description     Instantly converts mistyped Arabic/English text with Alt+Z across any application.
-// @version         1.2.0
+// @version         1.3.0
 // @author          Omar
 // @github          https://github.com/uomr
 // @homepage        https://github.com/uomr/keyboard-layout-fixer
@@ -39,6 +39,9 @@ Fixes the common frustration of typing Arabic text while the keyboard is acciden
 - enable_secondary_hotkey: false
   $name: "Enable Secondary Hotkey (Ctrl + Shift + X)"
   $description: "Enable Ctrl + Shift + X as an alternative conversion hotkey."
+- play_sound: true
+  $name: "Play Audio Notification"
+  $description: "Play a subtle beep notification after converting text."
 */
 // ==/WindhawkModSettings==
 
@@ -77,6 +80,7 @@ static HotkeyConfig UnpackHotkey(DWORD packed) {
 
 static std::atomic<DWORD> g_hotkeyPrimaryPacked{ PackHotkey({ false, false, true, 'Z' }) }; // Default: Alt + Z
 static std::atomic<bool> g_enableSecondaryHotkey{ false };
+static std::atomic<bool> g_playSound{ true };
 
 static std::wstring ToLowerStr(const std::wstring& s) {
     std::wstring res = s;
@@ -170,6 +174,7 @@ static void LoadSettings() {
     }
     g_hotkeyPrimaryPacked.store(PackHotkey(cfg));
     g_enableSecondaryHotkey.store(Wh_GetIntSetting(L"enable_secondary_hotkey") != 0);
+    g_playSound.store(Wh_GetIntSetting(L"play_sound") != 0);
 }
 
 // ── Global State ────────────────────────────────────────────────────────────
@@ -241,10 +246,10 @@ static std::wstring ArToEn(const std::wstring& s) {
     out.reserve(s.size());
     for (size_t i = 0; i < s.size(); ++i) {
         wchar_t c = s[i];
-        if (c == 0xFEFB) { out += L'b'; continue; } // Lam-Alef
-        if (c == 0xFEF7) { out += L'T'; continue; } // Lam-Alef with Hamza Above
-        if (c == 0xFEF9) { out += L'G'; continue; } // Lam-Alef with Hamza Below
-        if (c == 0xFEF5) { out += L'B'; continue; } // Lam-Alef with Madda Above
+        if (c == 0xFEFB || c == 0xFEFC) { out += L'b'; continue; } // Lam-Alef (isolated / final)
+        if (c == 0xFEF7 || c == 0xFEF8) { out += L'G'; continue; } // Lam-Alef with Hamza Above (isolated / final -> G)
+        if (c == 0xFEF9 || c == 0xFEFA) { out += L'T'; continue; } // Lam-Alef with Hamza Below (isolated / final -> T)
+        if (c == 0xFEF5 || c == 0xFEF6) { out += L'B'; continue; } // Lam-Alef with Madda Above (isolated / final -> B)
 
         if (c == L'ل' && (i + 1) < s.size()) {
             wchar_t next = s[i + 1];
@@ -293,6 +298,7 @@ static std::wstring ConvertSmart(const std::wstring& s) {
         if (IsArabicChar(c)) arCount++;
         else if ((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z')) enCount++;
     }
+    if (arCount == 0 && enCount == 0) return s; // Keep text with no letters unchanged
     return (arCount >= enCount) ? ArToEn(s) : EnToAr(s);
 }
 
@@ -354,10 +360,14 @@ static ClipboardSnapshot SaveClipboard() {
 }
 
 static void RestoreClipboard(const ClipboardSnapshot& snapshot) {
-    if (snapshot.items.empty()) return;
     if (!OpenClipboardRetrying(nullptr)) return;
 
     EmptyClipboard();
+
+    if (snapshot.items.empty()) {
+        CloseClipboard();
+        return;
+    }
 
     UINT excludeFmt = GetExcludeClipboardFormat();
     if (excludeFmt) {
@@ -365,7 +375,9 @@ static void RestoreClipboard(const ClipboardSnapshot& snapshot) {
         if (hEx) {
             PDWORD p = (PDWORD)GlobalLock(hEx);
             if (p) { *p = 1; GlobalUnlock(hEx); }
-            SetClipboardData(excludeFmt, hEx);
+            if (!SetClipboardData(excludeFmt, hEx)) {
+                GlobalFree(hEx);
+            }
         }
     }
 
@@ -376,7 +388,9 @@ static void RestoreClipboard(const ClipboardSnapshot& snapshot) {
             if (dst) {
                 memcpy(dst, item.data.data(), item.data.size());
                 GlobalUnlock(hMem);
-                SetClipboardData(item.format, hMem);
+                if (!SetClipboardData(item.format, hMem)) {
+                    GlobalFree(hMem);
+                }
             } else {
                 GlobalFree(hMem);
             }
@@ -424,7 +438,9 @@ static void SetClipboardText(const std::wstring& text) {
         if (dst) {
             memcpy(dst, text.c_str(), bytes);
             GlobalUnlock(hMem);
-            SetClipboardData(CF_UNICODETEXT, hMem);
+            if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
+                GlobalFree(hMem);
+            }
         } else {
             GlobalFree(hMem);
         }
@@ -574,7 +590,7 @@ static DWORD WINAPI ExecuteConversionThread(LPVOID) {
     // 6. Allow target application to process paste before restoring original clipboard
     Sleep(250);
     RestoreClipboard(backup);
-    MessageBeep(MB_OK);
+    if (g_playSound.load()) MessageBeep(MB_OK);
 
     return 0;
 }
