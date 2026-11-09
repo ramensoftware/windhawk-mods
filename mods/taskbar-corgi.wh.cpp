@@ -548,68 +548,115 @@ struct Canvas {
     }
 };
 
-// A click-through, always-on-top layered window showing one canvas.
-struct Layer {
+// Everything is drawn into one click-through, always-on-top layered window
+// that covers the strip above the taskbar. The window itself stays put while
+// the corgis move: moving windows makes Windows show a mouse pointer that was
+// hidden while typing, which looks like flickering.
+struct Stage {
     HWND hwnd = nullptr;
     HDC dc = nullptr;
     HBITMAP bitmap = nullptr;
     HGDIOBJ oldBitmap = nullptr;
     uint32_t* bits = nullptr;
-    int bitmapW = 0;
-    int bitmapH = 0;
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
     bool shown = false;
+    uint64_t lastHash = 0;
+};
+
+// One thing to draw: a canvas at a screen position.
+struct Item {
+    Canvas canvas;
+    bool flip = false;
+    int x = 0;
+    int y = 0;
 };
 
 HINSTANCE g_hInstance = nullptr;
+Stage g_stage;
+Item g_items[kMaxCorgis + 2];  // corgis, bowl, ball
+int g_itemCount = 0;
 
-bool CreateLayer(Layer& l) {
-    l.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT |
-                                 WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
-                                 WS_EX_NOACTIVATE,
-                             kClassName, L"Taskbar Corgi", WS_POPUP, 0, 0, 1, 1,
-                             nullptr, nullptr, g_hInstance, nullptr);
-    if (!l.hwnd) {
+bool CreateStage() {
+    g_stage.hwnd = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
+            WS_EX_NOACTIVATE,
+        kClassName, L"Taskbar Corgi", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+        g_hInstance, nullptr);
+    if (!g_stage.hwnd) {
         return false;
     }
-    l.dc = CreateCompatibleDC(nullptr);
+    g_stage.dc = CreateCompatibleDC(nullptr);
     return true;
 }
 
-void DestroyLayer(Layer& l) {
-    if (l.bitmap) {
-        SelectObject(l.dc, l.oldBitmap);
-        DeleteObject(l.bitmap);
+void DestroyStage() {
+    if (g_stage.bitmap) {
+        SelectObject(g_stage.dc, g_stage.oldBitmap);
+        DeleteObject(g_stage.bitmap);
     }
-    if (l.dc) {
-        DeleteDC(l.dc);
+    if (g_stage.dc) {
+        DeleteDC(g_stage.dc);
     }
-    if (l.hwnd) {
-        DestroyWindow(l.hwnd);
+    if (g_stage.hwnd) {
+        DestroyWindow(g_stage.hwnd);
     }
-    l = Layer{};
+    g_stage = Stage{};
 }
 
-void HideLayer(Layer& l) {
-    if (l.shown) {
-        ShowWindow(l.hwnd, SW_HIDE);
-        l.shown = false;
+void HideStage() {
+    if (g_stage.shown) {
+        ShowWindow(g_stage.hwnd, SW_HIDE);
+        g_stage.shown = false;
     }
 }
 
-void PresentLayer(Layer& l, const Canvas& c, bool flip, int scale, int x,
-                  int y) {
-    if (!l.hwnd) {
+Item& AddItem() {
+    Item& item = g_items[g_itemCount++];
+    item.flip = false;
+    return item;
+}
+
+uint64_t Fnv(uint64_t hash, const void* data, size_t size) {
+    const uint8_t* p = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < size; i++) {
+        hash = (hash ^ p[i]) * 1099511628211ull;
+    }
+    return hash;
+}
+
+// Draws the items into the stage window covering (x, y, w, h). Does nothing
+// if the picture hasn't changed since the last frame.
+void PresentStage(int x, int y, int w, int h, int scale) {
+    if (!g_stage.hwnd || w <= 0 || h <= 0) {
         return;
     }
 
-    int w = c.w * scale;
-    int h = c.h * scale;
-    if (!l.bits || l.bitmapW != w || l.bitmapH != h) {
-        if (l.bitmap) {
-            SelectObject(l.dc, l.oldBitmap);
-            DeleteObject(l.bitmap);
-            l.bitmap = nullptr;
-            l.bits = nullptr;
+    uint64_t hash = 1469598103934665603ull;
+    int geometry[] = {x, y, w, h, scale};
+    hash = Fnv(hash, geometry, sizeof(geometry));
+    for (int i = 0; i < g_itemCount; i++) {
+        const Item& item = g_items[i];
+        int header[] = {item.x, item.y, item.flip, item.canvas.w,
+                        item.canvas.h};
+        hash = Fnv(hash, header, sizeof(header));
+        hash = Fnv(hash, item.canvas.px,
+                   sizeof(uint32_t) * item.canvas.w * item.canvas.h);
+    }
+    if (g_stage.shown && hash == g_stage.lastHash) {
+        return;
+    }
+    g_stage.lastHash = hash;
+
+    bool resized = !g_stage.bits || w != g_stage.w || h != g_stage.h;
+    if (resized) {
+        if (g_stage.bitmap) {
+            SelectObject(g_stage.dc, g_stage.oldBitmap);
+            DeleteObject(g_stage.bitmap);
+            g_stage.bitmap = nullptr;
+            g_stage.bits = nullptr;
         }
         BITMAPINFO bi = {};
         bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
@@ -619,38 +666,62 @@ void PresentLayer(Layer& l, const Canvas& c, bool flip, int scale, int x,
         bi.bmiHeader.biBitCount = 32;
         bi.bmiHeader.biCompression = BI_RGB;
         void* bits = nullptr;
-        l.bitmap =
-            CreateDIBSection(l.dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!l.bitmap) {
+        g_stage.bitmap = CreateDIBSection(g_stage.dc, &bi, DIB_RGB_COLORS,
+                                          &bits, nullptr, 0);
+        if (!g_stage.bitmap) {
             return;
         }
-        l.oldBitmap = SelectObject(l.dc, l.bitmap);
-        l.bits = static_cast<uint32_t*>(bits);
-        l.bitmapW = w;
-        l.bitmapH = h;
+        g_stage.oldBitmap = SelectObject(g_stage.dc, g_stage.bitmap);
+        g_stage.bits = static_cast<uint32_t*>(bits);
     }
 
-    for (int cy = 0; cy < c.h; cy++) {
-        for (int cx = 0; cx < c.w; cx++) {
-            uint32_t color = c.px[cy * c.w + (flip ? c.w - 1 - cx : cx)];
-            for (int sy = 0; sy < scale; sy++) {
-                uint32_t* row = l.bits + (size_t)(cy * scale + sy) * w;
-                for (int sx = 0; sx < scale; sx++) {
-                    row[cx * scale + sx] = color;
+    memset(g_stage.bits, 0, (size_t)w * h * sizeof(uint32_t));
+    for (int i = 0; i < g_itemCount; i++) {
+        const Item& item = g_items[i];
+        const Canvas& c = item.canvas;
+        for (int cy = 0; cy < c.h; cy++) {
+            for (int cx = 0; cx < c.w; cx++) {
+                uint32_t color =
+                    c.px[cy * c.w + (item.flip ? c.w - 1 - cx : cx)];
+                if (!color) {
+                    continue;
+                }
+                for (int sy = 0; sy < scale; sy++) {
+                    int py = item.y - y + cy * scale + sy;
+                    if (py < 0 || py >= h) {
+                        continue;
+                    }
+                    uint32_t* row = g_stage.bits + (size_t)py * w;
+                    for (int sx = 0; sx < scale; sx++) {
+                        int px = item.x - x + cx * scale + sx;
+                        if (px >= 0 && px < w) {
+                            row[px] = color;
+                        }
+                    }
                 }
             }
         }
     }
 
+    // Only pass a position when it changes, so the window doesn't move.
+    bool moved = !g_stage.shown || resized || x != g_stage.x || y != g_stage.y;
     POINT dst = {x, y};
     SIZE size = {w, h};
     POINT src = {0, 0};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(l.hwnd, nullptr, &dst, &size, l.dc, &src, 0, &blend,
-                        ULW_ALPHA);
-    if (!l.shown) {
-        ShowWindow(l.hwnd, SW_SHOWNOACTIVATE);
-        l.shown = true;
+    if (!UpdateLayeredWindow(g_stage.hwnd, nullptr, moved ? &dst : nullptr,
+                             &size, g_stage.dc, &src, 0, &blend, ULW_ALPHA)) {
+        Wh_Log(L"UpdateLayeredWindow failed: %u", GetLastError());
+        g_stage.lastHash = 0;
+    }
+    g_stage.x = x;
+    g_stage.y = y;
+    g_stage.w = w;
+    g_stage.h = h;
+
+    if (!g_stage.shown) {
+        ShowWindow(g_stage.hwnd, SW_SHOWNOACTIVATE);
+        g_stage.shown = true;
     }
 }
 
@@ -692,7 +763,6 @@ enum class State {
 };
 
 struct Corgi {
-    Layer layer;
     int coat = kRed;
     bool placed = false;
     State state = State::Sit;
@@ -712,7 +782,6 @@ struct Corgi {
 };
 
 struct Ball {
-    Layer layer;
     bool active = false;
     double x = 0;  // screen x of the ball's left edge
     double vx = 0;
@@ -722,7 +791,6 @@ struct Ball {
 };
 
 struct Bowl {
-    Layer layer;
     bool full = false;
     int mealKey = -1;
     int lastMealKey = -1;
@@ -754,7 +822,6 @@ Bowl g_bowl;
 Env g_env;
 uint32_t g_rng = 1;
 ULONGLONG g_lastTick = 0;
-double g_topmostTimer = 0;
 UINT_PTR g_timer = 0;
 bool g_mealsInitialized = false;
 
@@ -815,51 +882,31 @@ void LoadSettings() {
     g_settings = s;
 }
 
-// Creates or removes windows to match the settings.
+// Adds or removes corgis to match the settings.
 void ApplySettings() {
-    for (int i = 0; i < kMaxCorgis; i++) {
-        Corgi& c = g_corgis[i];
-        if (i < g_settings.corgis) {
-            if (!c.layer.hwnd) {
-                c = Corgi{};
-                CreateLayer(c.layer);
-            }
-            c.coat = (g_settings.coat + i) % kCoatCount;
-            if (c.leader >= g_settings.corgis) {
-                c.state = State::Sit;
-                c.leader = -1;
-            }
-        } else if (c.layer.hwnd) {
-            DestroyLayer(c.layer);
-        }
+    for (int i = g_corgiCount; i < g_settings.corgis; i++) {
+        g_corgis[i] = Corgi{};
     }
     g_corgiCount = g_settings.corgis;
+    for (int i = 0; i < g_corgiCount; i++) {
+        Corgi& c = g_corgis[i];
+        c.coat = (g_settings.coat + i) % kCoatCount;
+        if (c.leader >= g_corgiCount) {
+            c.state = State::Sit;
+            c.leader = -1;
+        }
+    }
 
     if (g_ball.carrier >= g_corgiCount || !g_settings.fetch) {
         g_ball.carrier = -1;
         g_ball.active = false;
     }
-    if (g_settings.fetch && !g_ball.layer.hwnd) {
-        CreateLayer(g_ball.layer);
+    if (g_settings.fetch && g_ball.nextIn <= 0 && !g_ball.active) {
         g_ball.nextIn = 60 + Rand() * 120;
-    } else if (!g_settings.fetch && g_ball.layer.hwnd) {
-        DestroyLayer(g_ball.layer);
     }
-
-    if (g_settings.bowl && !g_bowl.layer.hwnd) {
-        CreateLayer(g_bowl.layer);
-    } else if (!g_settings.bowl && g_bowl.layer.hwnd) {
-        DestroyLayer(g_bowl.layer);
+    if (!g_settings.bowl) {
         g_bowl.full = false;
     }
-}
-
-void HideAll() {
-    for (int i = 0; i < g_corgiCount; i++) {
-        HideLayer(g_corgis[i].layer);
-    }
-    HideLayer(g_ball.layer);
-    HideLayer(g_bowl.layer);
 }
 
 // ---------------------------------------------------------------------------
@@ -1341,9 +1388,10 @@ const Sprite& PickFrame(const Corgi& c, int* lift) {
     return kSit;
 }
 
-void RenderCorgi(Corgi& c) {
+void RenderCorgi(const Corgi& c) {
     const Env& e = g_env;
-    Canvas canvas;
+    Item& item = AddItem();
+    Canvas& canvas = item.canvas;
     canvas.Reset(kCanvasW, kCanvasH);
 
     int lift = 0;
@@ -1378,8 +1426,9 @@ void RenderCorgi(Corgi& c) {
         canvas.Draw(kHeart, kDogX + 9, 1 + (int)(c.heart / 1.6 * 3));
     }
 
-    PresentLayer(c.layer, canvas, c.dir < 0, e.scale, (int)std::lround(c.x),
-                 e.winY);
+    item.flip = c.dir < 0;
+    item.x = (int)std::lround(c.x);
+    item.y = e.winY;
 }
 
 void UpdateBall() {
@@ -1390,7 +1439,6 @@ void UpdateBall() {
     }
 
     if (!g_ball.active) {
-        HideLayer(g_ball.layer);
         g_ball.nextIn -= e.dt;
         if (g_ball.nextIn > 0) {
             return;
@@ -1429,8 +1477,7 @@ void UpdateBall() {
     }
 
     if (g_ball.carrier >= 0) {
-        HideLayer(g_ball.layer);  // drawn in the corgi's mouth
-        return;
+        return;  // drawn in the corgi's mouth
     }
 
     g_ball.x += g_ball.vx * e.dt;
@@ -1461,16 +1508,19 @@ void UpdateBall() {
         if (g_ball.restLeft < 0) {
             g_ball.active = false;
             g_ball.nextIn = 180 + Rand() * 300;
-            HideLayer(g_ball.layer);
-            return;
         }
     }
+}
 
-    Canvas canvas;
-    canvas.Reset(kBall.w, kBall.h);
-    canvas.Draw(kBall, 0, 0);
-    PresentLayer(g_ball.layer, canvas, false, e.scale, (int)std::lround(g_ball.x),
-                 e.ground - kBall.h * e.scale);
+void RenderBall() {
+    if (!g_settings.fetch || !g_ball.active || g_ball.carrier >= 0) {
+        return;
+    }
+    Item& item = AddItem();
+    item.canvas.Reset(kBall.w, kBall.h);
+    item.canvas.Draw(kBall, 0, 0);
+    item.x = (int)std::lround(g_ball.x);
+    item.y = g_env.ground - kBall.h * g_env.scale;
 }
 
 void UpdateBowl(const SYSTEMTIME& now) {
@@ -1498,13 +1548,18 @@ void UpdateBowl(const SYSTEMTIME& now) {
         }
     }
     g_mealsInitialized = true;
+}
 
+void RenderBowl() {
+    if (!g_settings.bowl) {
+        return;
+    }
     const Sprite& sprite = g_bowl.full ? kBowlFull : kBowlEmpty;
-    Canvas canvas;
-    canvas.Reset(sprite.w, sprite.h);
-    canvas.Draw(sprite, 0, 0);
-    PresentLayer(g_bowl.layer, canvas, false, e.scale, (int)std::lround(g_bowl.x),
-                 e.ground - sprite.h * e.scale);
+    Item& item = AddItem();
+    item.canvas.Reset(sprite.w, sprite.h);
+    item.canvas.Draw(sprite, 0, 0);
+    item.x = (int)std::lround(g_bowl.x);
+    item.y = g_env.ground - sprite.h * g_env.scale;
 }
 
 bool IsFullscreenAppActive(const RECT& monitor) {
@@ -1543,13 +1598,13 @@ void Tick() {
     if (!taskbar || !GetWindowRect(taskbar, &e.taskbar) ||
         !GetMonitorInfoW(MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY),
                          &mi)) {
-        HideAll();
+        HideStage();
         return;
     }
     e.monitor = mi.rcMonitor;
 
     if (g_settings.hideInFullscreen && IsFullscreenAppActive(e.monitor)) {
-        HideAll();
+        HideStage();
         return;
     }
 
@@ -1595,27 +1650,16 @@ void Tick() {
         UpdateCorgi(i);
     }
     UpdateBall();
+
+    // The bowl and the ball are drawn in front of the corgis.
+    g_itemCount = 0;
     for (int i = 0; i < g_corgiCount; i++) {
         RenderCorgi(g_corgis[i]);
     }
-
-    // Keep the windows above other always-on-top windows, the bowl and the
-    // ball in front of the corgis.
-    g_topmostTimer -= e.dt;
-    if (g_topmostTimer <= 0) {
-        g_topmostTimer = 2.0;
-        auto raise = [](const Layer& l) {
-            if (l.hwnd) {
-                SetWindowPos(l.hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-        };
-        for (int i = 0; i < g_corgiCount; i++) {
-            raise(g_corgis[i].layer);
-        }
-        raise(g_bowl.layer);
-        raise(g_ball.layer);
-    }
+    RenderBowl();
+    RenderBall();
+    PresentStage(e.monitor.left, e.winY, e.monitor.right - e.monitor.left,
+                 kCanvasH * e.scale, e.scale);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1657,6 +1701,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
     LoadSettings();
     ApplySettings();
+    CreateStage();
     g_timer = SetTimer(nullptr, 0, 33, nullptr);
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -1676,11 +1721,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     KillTimer(nullptr, g_timer);
-    for (Corgi& c : g_corgis) {
-        DestroyLayer(c.layer);
-    }
-    DestroyLayer(g_ball.layer);
-    DestroyLayer(g_bowl.layer);
+    DestroyStage();
     ReleaseMeter();
     UnregisterClassW(kClassName, g_hInstance);
     if (SUCCEEDED(comResult)) {
