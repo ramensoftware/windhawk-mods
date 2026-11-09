@@ -1,3 +1,7 @@
+## 7.7 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b05e867c15812b2e80d29d6daafa19b16f1207c5/mods/desktop-draggable-widgets.wh.cpp))
+
+* The Music widget is now more interactive with buttons where user can play next or previous media file with a single click.
+
 ## 7.3 ([Oct 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2d32e8e405b989702c69f1e918195bba0f051fd0/mods/desktop-draggable-widgets.wh.cpp))
 
 * Mods are now more interactive and have more styles, WiFi, Hotspot, Bluetooth and Mode widgets indicate the functions current status with the toggle button, the default appearance theme is changed, and Winblue appearance theme is removed

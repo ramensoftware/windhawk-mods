@@ -1,3 +1,9 @@
+## 1.2 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/15d44b0108ad149dc9432402390eff99e05a1950/mods/taskbar-system-utilities.wh.cpp))
+
+* Added support for grouping taskbar utilities into a customizable dropdown submenu (`MenuFlyoutSubItem`) to reduce root menu clutter.
+* Added settings to configure submenu visibility, label text, and icon glyph.
+* Added individual `inSubmenu` toggles for each utility in the settings.
+
 ## 1.1 ([Nov 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/86a896f7ddd20f2bf60d0798e487701f009f6595/mods/taskbar-system-utilities.wh.cpp))
 
 - Added **Reduce Memory** tool to trim working sets of non-elevated processes.

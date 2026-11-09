@@ -2,12 +2,232 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-09T19:04:08.000Z</updated>
+    <updated>2026-11-09T23:05:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1/10 UAC Recreation 1.2.0]]></title>
+        <id>https://windhawk.net/mods/win7-uac-recreation#d6dbe47b119ed3d072863bd4ade4ef14b2ce95bd</id>
+        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
+        <updated>2026-11-09T23:05:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved Unicode case-insensitive matching for native Yes and No buttons</li>
+<li>Added a best-effort fallback using localized system button labels when they agree with known translations</li>
+<li>Added optional debug logging for unrecognized button names and automation IDs</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7.7]]></title>
+        <id>https://windhawk.net/mods/desktop-draggable-widgets#b05e867c15812b2e80d29d6daafa19b16f1207c5</id>
+        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
+        <updated>2026-11-09T23:05:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The Music widget is now more interactive with buttons where user can play next or previous media file with a single click.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Jona like it, code it</name>
+            <uri>https://github.com/Stunning-dev</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Utilities 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-utilities#15d44b0108ad149dc9432402390eff99e05a1950</id>
+        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
+        <updated>2026-11-09T23:05:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for grouping taskbar utilities into a customizable dropdown submenu (<code>MenuFlyoutSubItem</code>) to reduce root menu clutter.</li>
+<li>Added settings to configure submenu visibility, label text, and icon glyph.</li>
+<li>Added individual <code>inSubmenu</code> toggles for each utility in the settings.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Marco Petrucci</name>
+            <uri>https://github.com/marco00petrucci</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Adobe Dark Menus 1.0.0]]></title>
+        <id>https://windhawk.net/mods/adobe-dark-menus#b60d87126147f197eca7d8d69e73cec6cc7e5d5c</id>
+        <link href="https://windhawk.net/mods/adobe-dark-menus"/>
+        <updated>2026-11-09T23:05:07.000Z</updated>
+        <content type="html"><![CDATA[<h1>Adobe Dark Menus</h1>
+<p>This Windhawk mod gives Adobe apps on Windows dark menus: real menu bars, top-bar
+dropdowns, context menus and dropdown lists. It also colors their standard title
+bars to match.</p>
+<p>Everything happens inside each app's own process. No system colors are changed
+and no other application is affected.</p>
+<h2>Supported apps</h2>
+<p>Photoshop, Illustrator, InDesign, Dreamweaver, After Effects, Premiere Pro,
+Audition, Media Encoder, Bridge and Acrobat.</p>
+<h2>Screenshots</h2>
+<p><strong>Photoshop:</strong> a dropdown list in the options bar</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/photoshop-dropdown-list.png" alt="Photoshop dropdown list"></p>
+<p><strong>Illustrator:</strong> a context menu</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/illustrator-context-menu.png" alt="Illustrator context menu"></p>
+<p><strong>InDesign:</strong> the Type menu</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/indesign-type-menu.png" alt="InDesign Type menu"></p>
+<p><strong>After Effects:</strong> the Window menu, with the menu bar and title bar</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/after-effects-window-menu.png" alt="After Effects Window menu"></p>
+<p><strong>After Effects:</strong> the blend modes on a timeline layer</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/after-effects-blend-modes.png" alt="After Effects blend modes"></p>
+<p><strong>Premiere Pro:</strong> a context menu on a timeline clip</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/premiere-context-menu.png" alt="Premiere Pro context menu"></p>
+<p><strong>Premiere Pro:</strong> the Sequence menu, with the menu bar and title bar</p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/premiere-sequence-menu.png" alt="Premiere Pro Sequence menu"></p>
+<h2>Related mods</h2>
+<p>These overlap with this mod. Running them together in the same app has not been
+tested, so use one or the other for the apps above.</p>
+<ul>
+<li><strong><a href="https://windhawk.net/mods/photoshop-dark-menus">Photoshop Dark Menus</a></strong> covers
+Photoshop only. This mod does everything it did and reaches the other Adobe apps,
+so disable it if you use this one.</li>
+<li><strong><a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a></strong> darkens the
+menus Windows draws, in every app and in fixed colors. It does not reach menus an
+app draws itself, which is why Photoshop stays light with it, or dropdown lists.
+This mod uses the same technique for the menus Windows draws, so exclude the Adobe
+apps from it in its Advanced tab.</li>
+<li><strong><a href="https://windhawk.net/mods/after-effects-theme">After Effects Theme</a></strong> and
+<strong><a href="https://windhawk.net/mods/premiere-pro-theme">Premiere Pro Theme</a></strong> recolor the
+whole interface of those two apps in palettes of their own, title bar, menu bar
+and menus included. They answer the same menu bar messages as this mod, so if you
+use one of them, exclude that app from this mod in its Advanced tab.</li>
+<li><strong><a href="https://windhawk.net/mods/win11-custom-title-bar-colours">Windows 11 Custom Title Bar Colours</a></strong>
+and <strong><a href="https://windhawk.net/mods/auto-custom-titlebar-colors">Auto Custom Titlebar Colors</a></strong>
+color title bars in every app. If you prefer one of them, turn off <strong>Dark Title Bars</strong> here.</li>
+</ul>
+<h2>Options</h2>
+<ul>
+<li><strong>Menu Background Color</strong>: Background color (Default: <code>#2D2D2D</code>).</li>
+<li><strong>Menu Text Color</strong>: Text color for active items (Default: <code>#DCDCDC</code>).</li>
+<li><strong>Highlight Background Color</strong>: Color when hovering over an item (Default: <code>#505050</code>).</li>
+<li><strong>Highlight Text Color</strong>: Text color when hovering over an item (Default: <code>#FFFFFF</code>).</li>
+<li><strong>Separator Line Color</strong>: Color for separator lines. Set to match the background color to hide them completely (Default: <code>#383838</code>).</li>
+<li><strong>Disabled Text Color</strong>: Text color for disabled menu items (Default: <code>#808080</code>).</li>
+<li><strong>Border Color</strong>: Color of the frame around menus an app draws itself and around dropdown lists. Leave empty to keep the system frame on those menus and to use the background color on lists (Default: <code>#2D2D2D</code>).</li>
+<li><strong>Theme Dropdown Lists</strong>: Darken the dropdown lists an app draws itself, using the colors above (Default: on).</li>
+<li><strong>Darken Menus Windows Draws</strong>: Use Windows' dark menu theme, and paint real menu bars dark (Default: on).</li>
+<li><strong>Dark Title Bars</strong>: Color standard title bars to match the menus (Default: on).</li>
+<li><strong>Title Bar Color</strong>: Leave empty to match Menu Background Color (Default: empty).</li>
+<li><strong>Title Bar Text Color</strong>: Leave empty to let Windows choose, which dims the text on a window that is not active (Default: empty).</li>
+</ul>
+<p>Colors can be given as <code>#RRGGBB</code> or the short <code>#RGB</code> form.</p>
+<p>The colors apply to real menu bars, to menus an app draws itself (Photoshop's) and
+to dropdown lists. Menus Windows draws itself keep Windows' own dark colors.</p>
+<h2>How it works</h2>
+<p>Adobe's apps do not all draw their menus the same way, and sharing a library does
+not settle it: Illustrator and InDesign ship the same <code>AdobeOwl.dll</code> as Photoshop,
+yet Windows draws their menus and Photoshop draws its own. So the mod decides
+menu by menu, by whether the items are owner-drawn (<code>MFT_OWNERDRAW</code>).</p>
+<h3>Menus Windows draws</h3>
+<p>This is most menus in most Adobe apps. Windows paints them through its theme
+engine, and uxtheme has a dark variant of that drawing which is off unless a
+process asks for it. The mod asks for it with <code>SetPreferredAppMode(ForceDark)</code>
+and <code>FlushMenuThemes</code>, and puts the process back when it is disabled. This
+technique comes from
+<a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a> by MGGSK, and
+needs Windows 10 1903 or later.</p>
+<h3>Real menu bars</h3>
+<p>Some apps, After Effects for one, have a real Win32 menu bar. The dark theme does
+not reach it, but Windows offers it to the window first through the undocumented
+<code>WM_UAHDRAWMENU</code> and <code>WM_UAHDRAWMENUITEM</code> messages, so the mod paints it from a
+<code>DefWindowProc</code> hook, in the colors above. Those messages were worked out in
+<a href="https://github.com/adzm/win32-custom-menubar-aero-theme">win32-custom-menubar-aero-theme</a>.</p>
+<h3>Menus an app draws itself</h3>
+<p>Photoshop owner-draws its menu items with plain GDI, so the theme has nothing to
+attach to. Measured in Photoshop, the popups go up via <code>TrackPopupMenuEx</code> and each
+item is painted with:</p>
+<ul>
+<li><code>FillRect(hdc, &amp;rc, (HBRUSH)(COLOR_MENU + 1))</code> for the item background, and
+<code>(HBRUSH)(COLOR_HIGHLIGHT + 1)</code> for the hovered item. These <strong>system color
+pseudo-handles</strong> are resolved inside <code>user32</code> from shared memory, so they
+bypass <code>GetSysColor</code> and <code>GetSysColorBrush</code> hooks entirely.</li>
+<li><code>GetSysColor(COLOR_MENUTEXT / COLOR_GRAYTEXT / COLOR_HIGHLIGHTTEXT)</code> for text.</li>
+<li>Its own 1px <code>FillRect</code> for separator lines.</li>
+</ul>
+<p>So every pixel of a menu item is reachable from inside the process:</p>
+<ul>
+<li><code>FillRect</code> / <code>PatBlt</code> are hooked and, while a menu item is being painted,
+sys-color pseudo-handles are re-resolved through this mod's own color table,
+and 1px fills inside a menu DC are recolored to the separator color.</li>
+<li><code>GetSysColor</code> / <code>GetSysColorBrush</code> are hooked for the menu color indices, but
+<strong>only while a menu item is actually being painted</strong>, that is, inside a
+<code>WM_DRAWITEM</code> of type <code>ODT_MENU</code>, so the app's dialogs and panels keep the
+system colors. &quot;While a menu is open&quot; would be far too broad: a menu runs a
+modal message loop that keeps dispatching to every other window on the thread,
+and an unrelated repaint would pick the menu colors up.</li>
+<li><code>MENUINFO::hbrBack</code> is stamped on each owner-drawn popup at <code>WM_INITMENUPOPUP</code>,
+covering the popup background that the system paints around the items. It is
+never stamped on a menu Windows draws, where it would put a custom background
+behind a theme's gutter, separators and text.</li>
+<li>The popup's non-client frame is drawn kernel-side, where no user-mode hook can
+reach it. So the popup is subclassed at creation and the frame is repainted
+with the border color after it.</li>
+</ul>
+<h3>Dropdown lists</h3>
+<p>The dropdown lists are stock Win32 combo boxes whose list is the system's own
+<code>ComboLBox</code> window. Photoshop owner-draws the rows but takes their colors from the
+system, and not consistently: one list reads <code>COLOR_WINDOWTEXT</code> for its row text
+where another reads <code>COLOR_MENUTEXT</code>, and one fills its rows from a color it asks
+for where another fills them with a <code>(HBRUSH)(COLOR_X + 1)</code> pseudo-handle. Both
+routes are therefore covered, over a table that maps every background index to
+the background color and every text index to the text color. The list window is
+subclassed so that all of it applies only while that list or one of its rows is
+painting, which leaves every other control reading those same colors alone,
+including anything the app repaints in response to a selection.</p>
+<p>A list whose rows Windows draws is left alone, the same rule as for menus. Windows
+fills it from a brush no hook can reach, so recoloring the text alone would leave
+light text on white. So is a list that stays open inside a dialog, such as the ones
+in the font picker, since it is part of the dialog rather than a dropdown.</p>
+<h3>Scroll arrows</h3>
+<p>A menu too tall for the screen gets scroll arrows, which the Windows kernel draws
+directly in light colors, below anything the dark theme or a hook can reach. So the
+mod paints over them straight afterward, turning the light square dark and the dark
+triangle light. A disabled arrow stays dimmer, since this inverts what is there
+rather than drawing a new one. On a menu an app draws itself, Windows draws a bare
+triangle instead of the square, and the mod recolors it to Menu Text Color or
+Disabled Text Color.</p>
+<h3>Title bars</h3>
+<p>Windows 11 lets a process color a standard title bar through
+<code>DwmSetWindowAttribute</code>, so nothing is drawn here: the mod sets
+<code>DWMWA_USE_IMMERSIVE_DARK_MODE</code> and <code>DWMWA_CAPTION_COLOR</code> on each top-level window
+with a caption, and puts them back when it is disabled. On Windows 10 2004 or later
+the dark flag still gives a dark title bar, without the custom color.</p>
+<p>A window that draws its own title bar, such as the main window of Photoshop,
+Illustrator or InDesign, is left alone. This is checked per window, so the dialogs
+in those apps are still colored. The dialog's contents stay whatever color the app
+or Windows paints them.</p>
+<h2>Scope</h2>
+<p>Anything an app paints from its own palette rather than from a system color or
+the theme is out of reach, such as Photoshop's font browser and the Glyphs panel's
+character cells. Recoloring those would mean matching color values rather than
+intercepting a system one, in windows where a light fill can be the content.</p>
+<p>A dropdown list Windows draws itself keeps its normal colors, as described above.</p>
+<p>Long menus scroll rather than splitting into columns, because Windows turns its
+theme off for any menu that has columns, which leaves them light.</p>
+<h2>Source and bug reports</h2>
+<p>The mod is developed at
+<a href="https://github.com/sabergraphics/adobe-dark-menus">github.com/sabergraphics/adobe-dark-menus</a>.</p>
+<p>Report a problem in
+<a href="https://github.com/sabergraphics/adobe-dark-menus/issues">Issues</a>. Menu drawing
+depends on the environment more than most things do, so please say which Adobe
+app and version and which Windows version you are on, what your display scaling
+is, and which menu or dropdown list is wrong. A screenshot usually says more than
+a description does.</p>
+]]></content>
+        <author>
+            <name>Saber Naeemi</name>
+            <uri>https://github.com/sabergraphics</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Share Flyout 1.1.0]]></title>
         <id>https://windhawk.net/mods/quick-share-flyout#4010d194f66fc813c5975ed2f20bfad996ccedf8</id>
@@ -795,102 +1015,6 @@ found by their names in English and Dutch apps.</li>
         <author>
             <name>dion</name>
             <uri>https://github.com/dismedan-dion</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Centralizer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/window-centralizer#7a79ece1171c8f82c517e577bdcd2ac5466e63ed</id>
-        <link href="https://windhawk.net/mods/window-centralizer"/>
-        <updated>2026-11-08T18:00:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New toggle to show windows only after complete UI load, avoiding the native elements flicker of some interfaces.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.1.1]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#6913ece9a195fd9b8c2492b74f6004c2a2e0df5b</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-11-08T18:00:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>
-<p>Periodic (10 s) island health check on the taskbar thread: detached panels are re-attached and committed to again, live ones repaired (position above the background, visibility, opacity, stroke and fill state), each repair logged; the check touches only what the mod itself placed or changed, so Styler themes, Dynamic Taskbar Transparency and the Opacity Tuner are left alone</p>
-</li>
-<li>
-<p>An update that finds its panel detached prunes the island and triggers the discovery retry instead of dropping silently</p>
-</li>
-<li>
-<p>A Peek state that can no longer be alive (cursor away from the taskbar and nothing of Explorer’s showing a thumbnail or switcher for 1 s) is cleared; the Peek hook logs on/off and what kept a Peek alive</p>
-</li>
-<li>
-<p>New setting “Transparent taskbar when nothing is maximized”: the taskbar’s own background and border line are hidden, so the wallpaper shows through whenever no bleed is showing - the taskbar is either bled or transparent, never stock. The mod saves and restores the elements’ own values rather than writing Visible / 1.0, so other mods’ settings survive; taskbars the mod leaves idle (a bottom taskbar without Any taskbar position) keep their background</p>
-</li>
-<li>
-<p>Task View (Win+Tab) and any window opaque over the top 16 px of the title bar (a full-screen app or overlay) hide the panel until they are gone, recovering one frame after</p>
-</li>
-<li>
-<p>The Alt+Tab switcher, taskbar flyouts, light-dismiss overlays, the input-language switcher and other shell chrome never count as covers</p>
-</li>
-<li>
-<p>Screen-recorder frames (region-shaped windows, like ShareX’s) no longer count as covers; a thin border lying on the sampled row moves the sample down past it</p>
-</li>
-<li>
-<p>The sampled row is now the 4th row of the title bar</p>
-</li>
-<li>
-<p>README updated</p>
-</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Background Dimmer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/background-dimmer#2e774e506b47ba68e529a535f0ed50ac9b4d7152</id>
-        <link href="https://windhawk.net/mods/background-dimmer"/>
-        <updated>2026-11-08T18:00:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Taskbar, Start, Alt+Tab and notification center now count as focused: while one of them has focus, every regular window is dimmed. Previously they left the layer where it was, so the last active window stayed lit behind them.</li>
-<li>A dialog now can dim the window that owns it (enabled by default). The new option &quot;Dim a window while one of its dialogs has focus&quot; can be turned off to keep them lit together, as in 1.0.0.</li>
-<li>New option &quot;Dim everything behind an open menu&quot; (off by default). It works with standard Windows menus; apps that draw their own menus aren't detected. Without it, a menu keeps the window that opened it lit.</li>
-<li>&quot;Hide the layer from screenshots and screen sharing&quot; is now on by default. Existing users keep their saved choice.</li>
-<li>Optional tray icon (new &quot;Tray icon&quot; setting, off by default): click to open the configuration window, right-click to toggle dimming on and off.</li>
-<li>Patterns simplified to Solid, Checkerboard, Stripes and Image, with a new Rotation slider for stripes and checkerboard (any angle, antialiased). Saved horizontal, vertical and diagonal stripes are converted to Stripes at 0°, 90° and 45°.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinKlok 1.1.0]]></title>
-        <id>https://windhawk.net/mods/winklok#feee2cb5f06585c57516ef3071b4d4be1ae23968</id>
-        <link href="https://windhawk.net/mods/winklok"/>
-        <updated>2026-11-08T18:00:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a custom notification panel.</li>
-<li>Improved animations for smoother transitions.</li>
-<li>Fixed the taskbar auto-hide bug.</li>
-<li>Added the Tasks tab.</li>
-<li>Updated the About section.</li>
-<li>Added the ability to hide individual tabs.</li>
-<li>Fixed interruptions affecting the notification bell icon.</li>
-<li>Fixed inline math rendering in Notes.</li>
-<li>Added week numbers to the calendar.</li>
-<li>Added support for multiple time zones, following Windows' additional clock settings.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Shifting Whistler</name>
-            <uri>https://github.com/shifting-whistler</uri>
         </author>
     </entry>
 </feed>
