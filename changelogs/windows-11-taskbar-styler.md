@@ -1,3 +1,10 @@
+## 1.11.1 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2cd9c600bfe13afb4fba68ec907a4b8084acc0a3/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Fixed a possible hang or crash in some cases (a v1.11 regression). One example is clicking on the language tray icon.
+* Fixed issues with thumbnail previews (a v1.11 regression). In some cases, new previews didn't appear, or closed previews stayed.
+* Fixed incorrect styling for taskbar items in some cases after the mod is re-enabled or settings are changed.
+* Minor updates to themes.
+
 ## 1.11 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a59167ace74a357b5c27f8755145a407bf5baf9a/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Updated the following themes: Blob, Borderless, Command Center, DockLike, FluentGlass, LiquidGlass, Luminosity, OS26 Liquid Glass, Pills, Surface, TaskbarXII, TintedGlass.

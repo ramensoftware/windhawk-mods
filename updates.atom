@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-09T01:00:02.000Z</updated>
+    <updated>2026-11-09T06:10:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#2cd9c600bfe13afb4fba68ec907a4b8084acc0a3</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-11-09T06:10:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a possible hang or crash in some cases (a v1.11 regression). One example is clicking on the language tray icon.</li>
+<li>Fixed issues with thumbnail previews (a v1.11 regression). In some cases, new previews didn't appear, or closed previews stayed.</li>
+<li>Fixed incorrect styling for taskbar items in some cases after the mod is re-enabled or settings are changed.</li>
+<li>Minor updates to themes.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Tweaks 2.0]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#e6cdfc29ed28f771f7ab0fc11485b963ccfa8c40</id>
@@ -1095,26 +1112,6 @@ closes it, so pick the files first, then open the flyout and drag them in.</p>
         <author>
             <name>IMiloDev</name>
             <uri>https://github.com/IMiloDev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Brave Acrylic 4.0]]></title>
-        <id>https://windhawk.net/mods/brave-acrylic#bb165c126f8428fa76189e2ae85861359379e2cb</id>
-        <link href="https://windhawk.net/mods/brave-acrylic"/>
-        <updated>2026-11-08T01:03:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add independent Toolbar and Address bar settings. The Address bar option is on by default and removes Brave’s hover shadow on supported builds. If you previously disabled Toolbar to keep the address field opaque, turn Address bar off separately.</li>
-<li>Enable Hide duplicate Windows buttons by default on fresh installs so affected users get a single set of controls without another setup step. The option can affect Alt+Space and taskbar menus. Turn it off to restore the original Windows window style.</li>
-<li>Clear the backing around rounded webpage content while preserving its clipping and thin outline.</li>
-<li>Add acrylic to Site information, Recent downloads and Media controls. Clear the download quick-action strip while preserving its controls.</li>
-<li>Add adjustable popup tint opacity and use a short matching fade for supported bubbles and their backdrop.</li>
-<li>Recognize Chromium 157’s virtual popup opacity setter and check for new stable Brave builds every hour.</li>
-<li>Add an opt-in fallback to the official Brave symbol server. Windhawk checks the small cache first and can download the full PDB if needed. The fallback is off by default.</li>
-</ul>
-]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
         </author>
     </entry>
 </feed>
