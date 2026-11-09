@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.800
+// @version         0.1.810
 // @author          Proponent
 // @include         chrome.exe
 // @architecture    x86-64
@@ -11,80 +11,42 @@
 
 // ==WindhawkModReadme==
 /*
-# PWA Center
+## PWA Center
 
-Adds a **Hide to PWA Center** item to the window menu (right click on the title
-bar or Alt+Space) of installed Chrome PWA windows. The item is placed right
-above "Close". The window is hidden, the page keeps running, so music keeps
-playing, and **one** tray icon appears for all hidden PWAs. The icon shows up
-with the first hidden PWA and goes away when the last one is restored.
+Adds a **"Hide to PWA Center"** item to the window menu of installed Chrome PWA windows (right-click title bar).
 
-* **Left click** on the tray icon: opens the PWA Center, a Windows 11 style
-  (Fluent) flyout with rounded corners and a Mica backdrop.
-* **Right click** on the tray icon: a small menu with Show all and Quit all.
+- Hidden windows keep running (music plays, etc.)
+- One tray icon appears for all hidden PWAs (shows with first hidden, disappears when last restored)
 
-## Tabs
+### Tray Icon
+- **Left click** → opens PWA Center (Fluent flyout, rounded corners, Mica backdrop)
+- **Right click** → menu: *Show all* / *Quit all*
 
-The tabs can be reordered: drag a tab to a new place, or right click it and
-choose Move left / Move right. The order and the last opened tab are remembered.
+### Tabs
 
-* **Media**: one card for every media session of Chrome: cover, title, artist,
-  the PWA it comes from, previous / play-pause / next and a draggable progress
-  bar. It uses the Windows media transport controls (the same source as the
-  volume flyout). Empty when nothing is playing. Right click a card for its
-  source PWA, Play / Pause, Previous, Next, Show window, Quit app and the
-  Compact view switch. Compact shows only the covers, three per row, and a hover
-  over a cover shows its play button and progress. Drag a card to change the
-  order, it is remembered.
-* **Apps**: PWAs hidden in the center. Left click shows the window, right click
-  gives Show and Quit. A badge shows the unread counter. Drag a tile to change
-  the order, it is remembered.
-* **Notifications**: PWAs with notifications. Toast notifications that Chrome
-  put into the Windows notification center are listed with title and text. If
-  there are none, the unread counter from the window title is used, such as
-  `(3) Inbox` or `[3] Chat`. Empty when there is nothing. Drag an app to move all its notifications.
-* **Library**: every PWA installed in Chrome. Left click launches it (or shows
-  the window if it is already running). Drag a tile to another place to change
-  the order, it is remembered. Right click gives Open, Quit and the
-  categories. Scroll the chips with the wheel, and drag a chip to change the order of the
-  categories. Use the chips at the top to filter by category: "+" creates a
-  category, right click on a chip renames or deletes it (deleting a category
-  never touches the apps).
-  Under the tiles a search field filters the apps by name.
-* **Settings**: every option of the mod, in groups. Panel: center mode, backdrop and
-  the shortcut that opens the panel. Media: compact view and the Chrome volume. PWAs: app view.
-  Notifications: position and dismiss. Advanced: diagnostics. Switches and
-  dropdowns work right in the panel.
+| Tab | Description |
+|-----|-------------|
+| **Media** | Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Compact view: 3 covers per row. |
+| **Apps** | Hidden PWAs. Left-click to show, right-click for Show/Quit. Badge shows unread counter. |
+| **Notifications** | Toast notifications from Windows notification center. Falls back to unread counter from window title (e.g. `(3) Inbox`). |
+| **Library** | All installed Chrome PWAs. Left-click to launch/show. Drag to reorder. Right-click for Open/Quit/categories. Search field + category chips for filtering. |
+| **Settings** | All mod options (Panel, Media, PWAs, Notifications, Advanced). No Windhawk settings needed. |
 
-Nothing is set in Windhawk any more: the options are in the **Settings** tab.
+> Tabs, cards, and tiles are **drag-to-reorder**; order is remembered.
 
-Only PWA windows are affected. Regular browser windows and other programs are
-not touched. A PWA window is recognized by its AppUserModelID, which Chromium
-builds from the `_crx_<app id>` application name.
+> **Notifications are not verified yet and may not work.**
 
-## Notes
+### Technical Notes
+- Only affects PWA windows (identified by `AppUserModelID` with `_crx_<app id>`)
+- Regular browser windows and other programs are untouched
+- Library reads from Chrome's Web Applications folders (default or `--user-data-dir`)
 
-* The Library reads the installed apps from the `Web Applications` folders of
-  the Chrome profiles (the default user data folder, or the one given with
-  `--user-data-dir`).
-* Disable the older "PWA Hide To Tray" mod, if installed. They do the same job.
-* **Diagnostics** in the Settings tab shows the strip at the bottom of the
-  panel. The log text is switched off for now.
+### Chrome Volume
+Volume bar in Media tab controls Chrome's system-wide volume (same as Windows volume mixer). Dims when no audio session; changes apply when Chrome starts playing. Can be hidden in Settings.
 
-## Chrome volume
-
-The Media tab has one volume bar pinned to its bottom: a mute button and a
-slider. It controls the volume of Chrome as a whole, the same one you see for
-Chrome in the Windows volume mixer (so a change in the mixer shows up here too).
-It dims while Chrome has no audio session yet, and a change made then is applied
-as soon as Chrome starts playing sound. The bar can be hidden in Settings, under
-Media.
-
-## Limits
-
-This does not keep a PWA alive after the browser process really exits. If the
-browser freezes or discards background pages (Memory Saver, Efficiency mode),
-audio can still stop.
+### Limitations
+- Does not keep PWA alive after browser process exits
+- Audio may stop if browser freezes or discards background pages (Memory Saver / Efficiency mode)
 */
 // ==/WindhawkModReadme==
 
@@ -1874,7 +1836,7 @@ constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.800";
+constexpr wchar_t kAppVersion[] = L"v0.1.810";
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
