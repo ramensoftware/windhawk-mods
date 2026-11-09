@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.4.7
+// @version         0.4.8
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -72,8 +72,9 @@ material without it.
 
 **Layout**, **Shape** and **Alignment** are under **Dock layout**. **Unified**, the
 default, is one dock around the buttons and the tray. **Separate** splits it into a
-button bar and a tray bar with a 12-DIP gap between their edges, so the tray content
-sits 28 DIP after the last button. In both layouts the dock reaches its new width as
+button bar and a tray bar **Bar distance** apart (12 DIP by default, 0 to 100),
+measured where the two bars come nearest, so the bars move apart as their facing
+ends curve toward each other. In both layouts the dock reaches its new width as
 a button appears, before Windows slides the other buttons into place, and shrinks
 with that slide when a button closes. **Island**, the default shape,
 floats the dock **Distance from screen edge** away from the screen edge with every
@@ -83,13 +84,18 @@ distance, so the taskbar is that much shorter and the dock keeps its height.
 **Edge arc** is Edge plus a concave arc of the dock corner radius where each
 outer side meets the screen edge, so the dock flares out along it like a tab.
 With Separate, the facing sides of the two bars meet the screen edge straight;
-**Arc the inner edges** curves them out along it too, each arc at most half the
-12-DIP gap.
-**Slanted ends** curves the dock's outer ends out toward the screen edge. Every
-curve rounds at the same radius, the dock's corner radius or less where the
-tightest curve needs it, and keeps clear of the buttons; the tray's end sits as
-far from the last tray icon as the Start end sits from the Start icon. In
-Separate only each bar's outer end curves out.
+**Arc the inner edges** curves them out along it too, with the same arc as the
+outer sides.
+**Slanted ends** curves the dock's ends out toward the screen edge, the facing
+ends of Separate's two bars too. Every curve rounds at the same radius in both
+layouts, the dock's corner radius or less where the tightest curve needs it,
+and keeps 6 DIP clear of the buttons and the tray. Every end sits as far from
+its nearest icon as the Start end sits from the Start icon: the tray's outer
+end from the last tray icon, Separate's facing ends from the last button's icon
+and the first tray icon.
+Where the dock is too wide for its monitor, the tray's outer end first meets
+the screen's side square instead of curving off it, then Separate's bars close
+in down to their facing curves touching, and then the buttons move left.
 **Curve angle** (70 degrees by default, 30 to 85) is how steep the middle of
 each curve is, from the screen edge: higher is steeper and narrower.
 **Smaller tray** lowers the tray's side of the dock by **Tray height reduction**
@@ -106,7 +112,7 @@ monitor, and the tray follows to their right. Every theme, the border line,
 and the Liquid shadow follow the layout and shape. They are saved as `layout`
 (`unified` or `separate`), `shape` (`island`, `edge` or `edgeArc`), `alignment`
 (`group` or `buttons`), `innerArcs`, `slantedEnds` and `smallerTray` (`true` or
-`false`), `trayReduction` and `slantAngle` in `[settings]`.
+`false`), `trayReduction`, `slantAngle` and `barDistance` in `[settings]`.
 
 **Text color** can retain Windows' color, force light or dark text, or
 adapt each text element from its local composed background. Adaptive color uses
@@ -397,7 +403,7 @@ extern "C" HRESULT __stdcall CreateDirect3D11DeviceFromDXGIDevice(
     IDXGIDevice*, IInspectable**);
 
 constexpr double kGap = 12;
-constexpr double kBarGap = 12; // Separate: the visible gap between the button bar and the tray bar.
+constexpr double kBarGap = 12; // Separate's default Bar distance.
 constexpr double kDockPadding = 8;
 constexpr double kDockInnerMargin = 4;
 constexpr float kEditorWindowRadius = 44;
@@ -790,6 +796,7 @@ constexpr SettingField kSettingFields[]{
     {L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 100},
     {L"slantedEnds", L"Slanted ends", SettingKind::Toggle, 0, 0},
     {L"slantAngle", L"Curve angle (°)", SettingKind::Number, 0, 70, 30, 85},
+    {L"barDistance", L"Bar distance (DIP)", SettingKind::Number, 0, 12, 0, 100},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -861,11 +868,13 @@ struct DockStyle {
     DockLayout layout{};
     bool innerArcs{};
     double trayReduction{}; // 0 with Smaller tray off.
-    double slant{}; // Slanted ends: degrees the outer walls lean from upright, 90 less the Curve angle; 0 off.
+    double slant{}; // Slanted ends: degrees the walls lean from upright, 90 less the Curve angle; 0 off.
+    double barGap{kBarGap}; // Separate: how far apart the two bars are where they come nearest.
 };
 DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
     auto const& reduction = SettingDefinition(L"trayReduction");
     auto const& angle = SettingDefinition(L"slantAngle");
+    auto const& distance = SettingDefinition(L"barDistance");
     return {DockShape(LocalChoice(values, L"shape")),
             DockAlignment(LocalChoice(values, L"alignment")),
             DockLayout(LocalChoice(values, L"layout")),
@@ -873,7 +882,8 @@ DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
             LocalBool(values, L"smallerTray") ?
                 std::clamp(LocalInt(values, reduction.key), reduction.minimum, reduction.maximum) : 0.0,
             LocalBool(values, L"slantedEnds") ?
-                90.0 - std::clamp(LocalInt(values, angle.key), angle.minimum, angle.maximum) : 0.0};
+                90.0 - std::clamp(LocalInt(values, angle.key), angle.minimum, angle.maximum) : 0.0,
+            std::clamp<double>(LocalInt(values, distance.key), distance.minimum, distance.maximum)};
 }
 DockStyle g_dockStyle;
 
@@ -1709,6 +1719,7 @@ TaskbarPreviewMetrics g_previewMetrics;
 struct EditorPreview {
     int width = 640, height = 420;
     double margin = 48; // The canvas past each side of the dock band: wider when a slanted outline leans further.
+    double widen = 0; // How much wider the dock band is than with the 28-DIP gap: Separate's facing ends part the bars.
     TaskbarPreviewMetrics metrics;
     Controls::Canvas canvas{nullptr};
     Controls::Image backdrop{nullptr};
@@ -1992,6 +2003,7 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
         bool enabled = true;
         if (i == 6) enabled &= shape == int(DockShape::Island); // Edge and Edge arc sit on the screen edge.
         if (i == 113) enabled &= separate && shape == int(DockShape::EdgeArc); // Only Separate Edge arc has facing flares.
+        if (i == 118) enabled &= separate;
         if (i == 115) enabled &= editor.controls[114].input.as<Controls::ToggleSwitch>().IsOn();
         if (i == 117) enabled &= editor.controls[116].input.as<Controls::ToggleSwitch>().IsOn();
         if (i == 8 || i == 9) enabled &= liquid;
@@ -3311,7 +3323,7 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.refreshTray = find(L"RefreshTray").as<Controls::Button>();
     editor.syncing = true;
     constexpr size_t displayOrder[]{
-        0, 1, 36, 100, 101, 102, 103, 104, 112, 110, 111, 113, 116, 117, 114, 115, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
+        0, 1, 36, 100, 101, 102, 103, 104, 112, 118, 110, 111, 113, 116, 117, 114, 115, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
         9, 20, 21, 10, 22, 23, 24, 11, 25, 12, 26,
         29, 14, 13, 15, 30, 31, 32, 16, 17, 18, 27, 28, 33, 34, 35,
         58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
@@ -3504,13 +3516,14 @@ void CreateEditorContent(SettingsEditor& editor) {
         PCWSTR help = i == 3 || i == 4 ? L"Rounded corners are limited to half the visible shape's width or height." :
             i == 5 ? L"Space above and below each button background. Icons and click targets keep their native size." :
             i == 110 ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab." :
-            i == 113 ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, each arc at most half the gap between the bars." :
+            i == 113 ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, with the same arc as the outer sides." :
+            i == 118 ? L"How far apart Separate's two bars are where they come nearest. Arcs and slanted ends on their facing sides move the bars apart, so the curves never touch. On a monitor too narrow for the dock, the bars close in, down to the curves touching, before the buttons move left." :
             i == 114 ? L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar." :
             i == 115 ? L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP." :
-            i == 116 ? L"Curves the dock's outer ends out toward the screen edge. Every curve rounds at the same radius, the dock's corner radius or less where the tightest curve needs it, and keeps clear of the buttons; the tray's end sits as far from the last tray icon as the Start end sits from the Start icon. In Separate only each bar's outer end curves out. With Smaller tray, the step to the tray becomes an S of the same kind beside the last button." :
+            i == 116 ? L"Curves the dock's ends out toward the screen edge, the facing ends of Separate's two bars too. Every curve rounds at the same radius in both layouts, the dock's corner radius or less where the tightest curve needs it, and keeps clear of the buttons and the tray; every end sits as far from its nearest icon as the Start end sits from the Start icon. With Smaller tray, the step to the tray becomes an S of the same kind beside the last button. Where the dock is too wide for its monitor, the tray's end meets the screen's side square." :
             i == 117 ? L"How steep the middle of the curve is, from the screen edge: higher is steeper and narrower." :
             i == 111 ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
-            i == 112 ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar 12 DIP apart." :
+            i == 112 ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar, Bar distance apart." :
             i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
             i == 21 || i == 42 ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
             i == 22 || i == 43 ? L"Width of the curved edge, independent of the glass base thickness." :
@@ -4396,6 +4409,11 @@ struct DockOutline {
     std::vector<DockPolygon> polygons{}; // Slanted ends: one per bar, with no pieces.
     float radius{};
     bool atTop{}; // The screen edge is the hull's top; only flares read it.
+    // From the last button's edge to the tray content's: Plan puts the tray this far after the buttons. Separate's grows
+    // with whatever its facing ends reach toward each other.
+    double gap{kGap};
+    // How far the outline runs past the hull's right edge on screen: the tray end's curve, which FitDock keeps on it.
+    double reach{};
     bool operator==(DockOutline const&) const = default;
 };
 // Today's dock: the clip keeps the hull geometry and the shader its own distance.
@@ -4464,7 +4482,7 @@ std::vector<DockFillet> Fillets(DockPolygon const& polygon) {
     return fillets;
 }
 
-constexpr double kSlantClearance = 2;
+constexpr double kSlantClearance = 6;
 // A concave fillet's radius over its convex partner's: Edge arc's flare over the far corner, the ramp's foot over its
 // top.
 constexpr double kConcaveRatio = 1.5;
@@ -4472,33 +4490,35 @@ constexpr double kConcaveRatio = 1.5;
 // hull's far side.
 struct IconBox { double inset{}, top{}, bottom{}; };
 // What a slanted end keeps clear of, from the settings: the first button's plate, its corner radius already clamped
-// to half the button's width, and the last tray item's highlight. Given both icons, the right end mirrors the left:
-// its wall keeps the gap from the last visible tray item's icon that the left wall leaves beside the first button's.
+// to half the button's width, and the last tray item's highlight. Given Start's icon, every other end with an icon
+// mirrors the left one: its wall keeps the gap beside that icon that the left wall leaves beside Start's. The right
+// end's is the last visible tray item's, inset from the hull edge; Separate's facing ends' are the last button's and
+// the first tray item's, each inset from its bar's edge, kDockPadding from its content, to its side facing the other
+// bar.
 struct DockContent {
     double buttonPadding{}, buttonRadius{}, trayPadding{}, trayRadius{};
-    std::optional<IconBox> buttonIcon{}, trayIcon{};
+    std::optional<IconBox> buttonIcon{}, trayIcon{}, lastButtonIcon{}, firstTrayIcon{};
 };
 
-// Slanted ends: one rounded polygon per bar. An outer wall leans out by k = tan(slant) per DIP of depth. Every
-// slanted curve rounds at one convex radius, and its concave fillets at kConcaveRatio times that: Edge arc's far
-// corner and flare as an S, an Island's far corner and toe, Edge's far corner, and Smaller tray's step. That radius
-// is the corner radius up to what the tightest curve allows, and a straight run at the slant takes the rest of each.
-// The left wall then moves in as far as it can while it stays kSlantClearance outside the first button's plate, and
-// the right wall until its gap beside the last tray icon is the left wall's beside the first button's icon, or
-// kSlantClearance outside the tray plate without both icons. Separate's facing walls stay upright, and Smaller tray's
-// step becomes an S at the same slant, moved toward the buttons until it is kSlantClearance from the last button's
-// plate.
+// Slanted ends: one rounded polygon per bar. Every wall leans out by k = tan(slant) per DIP of depth, Separate's
+// facing walls toward each other. Every slanted curve rounds at one convex radius, and its concave fillets at
+// kConcaveRatio times that: Edge arc's far corner and flare as an S (a facing wall's flare with Arc the inner edges),
+// an Island's far corner and toe, Edge's far corner, and Smaller tray's step. That radius is the corner radius up to
+// what the tightest curve allows, and a straight run at the slant takes the rest of each. Each wall then moves in: the
+// left one as far as it can while it stays kSlantClearance outside the first button's plate, the right one until its
+// gap beside the last tray icon is the left one's beside the first button's icon (or kSlantClearance outside the tray
+// plate without both icons), and a facing one to kSlantClearance outside the content beside it. Separate's bars stand
+// where their facing ends come barGap apart at their nearest. Smaller tray's step becomes an S at the same slant,
+// moved toward the buttons until it is kSlantClearance from the last button's plate.
 DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop,
-                           DockContent const& content) {
+                           DockContent const& content, double square) {
     double k = std::tan(style.slant * 3.14159265358979323846 / 180), tau = std::sqrt(1 + k * k) - k;
     double r = radius, bleed = DockBleed(style.shape, radius), drop = TrayDrop(style, band);
     bool arc = style.shape == DockShape::EdgeArc;
-    double facing = arc && style.innerArcs ? std::min(r, kBarGap / 2) : 0;
-    auto trayFlare = [&](double flare) { return drop > 0 ? std::min(flare, (band - drop) / 2) : flare; };
     DockOutline outline{.pieces = {}, .radius = static_cast<float>(r), .atTop = atTop};
     // The radius a leaning wall of `run` allows: its far corner and its flare take their radius * tau of its length, an
     // Island's toe its radius / tau, and a dropped wall rounds at most at half its band. Smaller tray's step takes its
-    // two fillets of the ramp.
+    // two fillets of the ramp, and Separate rounds as Unified would, so switching layouts keeps every curve.
     auto fits = [&](double run) {
         double length = run * std::sqrt(1 + k * k);
         double cap = arc ? length / ((1 + kConcaveRatio) * tau)
@@ -4506,8 +4526,7 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
         return std::min(run < band ? run / 2 : INFINITY, cap);
     };
     double rounding = std::min({r, fits(band), fits(band - drop)});
-    if (drop > 0 && style.layout == DockLayout::Unified)
-        rounding = std::min(rounding, drop * std::sqrt(1 + k * k) / ((1 + kConcaveRatio) * tau));
+    if (drop > 0) rounding = std::min(rounding, drop * std::sqrt(1 + k * k) / ((1 + kConcaveRatio) * tau));
     // A content plate, inset from the hull edge it hangs off and unbounded away from it, by depth. An icon's plate counts
     // only the wall beside it: with Smaller tray the far fillet sits just above the last tray icon, and measuring from it
     // would hold the wall far out.
@@ -4522,30 +4541,29 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
     // Unified's last button, seen from the ramp: it ends a gap before the tray content.
     Plate lastButton = plate(kDockPadding + trayWidth + kGap, buttonInsets, content.buttonRadius);
     auto icon = [](IconBox const& box) { return Plate{box.inset, box.top, box.bottom, 0, true}; };
-    struct Wall { HullEdge edge; double x, outward, drop, flare; bool lean; };
+    // What a wall keeps its distance from: Start's end the first button's plate, and it sets the mirror; the tray's end
+    // mirrors it beside the last tray icon; a facing end mirrors it beside its icon, or keeps clear of the content
+    // beside it, its plate, without one. A square end runs past the screen's side where the dock doesn't fit its curve.
+    enum class Role { Start, TrayEnd, Facing, Square };
+    struct Wall { HullEdge edge; double x, outward, drop; bool flared; Role role; Plate plate{}; std::optional<Plate> icon{}; };
     // A wall's corners from its far corner to the screen edge, in the order a right wall is traced.
     auto corners = [&](Wall const& wall) {
         auto at = [&](double x, double depth, double cornerRadius) {
             return DockCorner{{wall.edge, static_cast<float>(x)}, static_cast<float>(depth), static_cast<float>(cornerRadius)};
         };
-        double run = band - wall.drop, wallRadius = wall.drop > 0 ? std::min(r, run / 2) : r;
-        double farRadius = wallRadius, flare = wall.flare, lean = 0;
-        if (wall.lean) {
-            farRadius = rounding;
-            if (arc) flare = kConcaveRatio * rounding;
-            lean = k;
-        }
-        double foot = wall.x + wall.outward * run * lean;
-        DockPolygon list{at(wall.x, wall.drop, farRadius)};
-        if (flare > 0) {
+        double run = band - wall.drop, foot = wall.x + wall.outward * run * k;
+        // Upright and sharp: its corners lie past the screen's side.
+        if (wall.role == Role::Square) return DockPolygon{at(wall.x, wall.drop, 0), at(wall.x, band + bleed, 0)};
+        DockPolygon list{at(wall.x, wall.drop, rounding)};
+        if (wall.flared) {
             // The concave flare turns from the wall onto the screen edge and meets it at the tip.
-            double tip = foot + wall.outward * flare * (wall.lean ? tau : 1);
+            double flare = kConcaveRatio * rounding, tip = foot + wall.outward * flare * tau;
             list.insert(list.end(), {at(foot, band, flare), at(tip, band, 0), at(tip, band + bleed, 0)});
         } else if (style.shape == DockShape::Island) {
-            list.push_back(at(foot, band, wall.lean ? rounding : wallRadius));
+            list.push_back(at(foot, band, rounding));
         } else {
             // Sharp past the screen edge: a leaning wall's rounded corner there would start above it.
-            list.push_back(at(foot + wall.outward * bleed * lean, band + bleed, 0));
+            list.push_back(at(foot + wall.outward * bleed * k, band + bleed, 0));
         }
         return list;
     };
@@ -4610,17 +4628,19 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
         return least;
     };
     double mirror = NAN; // The left wall's gap beside the first button's icon, once it is placed.
-    auto bar = [&](Wall left, Wall right, DockPolygon ramp) {
-        auto build = [&] {
-            auto leftCorners = corners(left), rightCorners = corners(right);
-            DockPolygon polygon{leftCorners.front()};
-            polygon.insert(polygon.end(), ramp.begin(), ramp.end());
-            polygon.insert(polygon.end(), rightCorners.begin(), rightCorners.end());
-            polygon.insert(polygon.end(), leftCorners.rbegin(), leftCorners.rend() - 1);
-            return polygon;
-        };
+    auto build = [&](Wall const& left, Wall const& right, DockPolygon const& ramp) {
+        auto leftCorners = corners(left), rightCorners = corners(right);
+        DockPolygon polygon{leftCorners.front()};
+        polygon.insert(polygon.end(), ramp.begin(), ramp.end());
+        polygon.insert(polygon.end(), rightCorners.begin(), rightCorners.end());
+        polygon.insert(polygon.end(), leftCorners.rbegin(), leftCorners.rend() - 1);
+        return polygon;
+    };
+    // A bar with its walls moved in, and how far each wall's outline reaches out past its far corner on screen.
+    struct Bar { Wall left, right; DockPolygon ramp; double leftReach, rightReach; };
+    auto place = [&](Wall left, Wall right, DockPolygon ramp) {
         // Moving a wall or the ramp moves its corners alike, so the rooms of the polygon built at the start stay right.
-        auto polygon = build();
+        auto polygon = build(left, right, ramp);
         size_t leftCount = corners(left).size(), rightCount = corners(right).size(), leftFirst = polygon.size() + 1 - leftCount;
         if (!ramp.empty()) {
             // From the tray content's edge toward the buttons, at most until the S ends where the last button's plate
@@ -4629,24 +4649,68 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
             double shift = std::min(room(polygon, 1, ramp.size(), 1, lastButton, kSlantClearance), end);
             for (auto& corner : ramp) corner.x.offset -= static_cast<float>(shift);
         }
-        if (left.lean) {
-            left.x -= left.outward * room(polygon, leftFirst, leftCount, left.outward, buttons, kSlantClearance);
-            if (content.buttonIcon && content.trayIcon)
-                mirror = gap(build(), leftFirst, leftCount, left.outward, icon(*content.buttonIcon));
-        }
-        if (right.lean) {
-            double in = std::isfinite(mirror)
-                ? room(polygon, 1 + ramp.size(), rightCount, right.outward, icon(*content.trayIcon), mirror, true) : INFINITY;
-            // Nothing of the wall beside the icon leaves it on the tray plate.
-            if (!std::isfinite(in)) in = room(polygon, 1 + ramp.size(), rightCount, right.outward, tray, kSlantClearance);
-            right.x -= right.outward * in;
-        }
-        outline.polygons.push_back(build());
+        auto moveIn = [&](Wall& wall, size_t first, size_t count) {
+            if (wall.role == Role::Square) return;
+            if (wall.role == Role::Start) {
+                wall.x -= wall.outward * room(polygon, first, count, wall.outward, buttons, kSlantClearance);
+                return;
+            }
+            double in = std::isfinite(mirror) && wall.icon ? room(polygon, first, count, wall.outward, *wall.icon, mirror, true)
+                                                           : INFINITY;
+            // Nothing of the wall beside the icon, or no icon, leaves it on its plate.
+            if (!std::isfinite(in)) in = room(polygon, first, count, wall.outward, wall.plate, kSlantClearance);
+            wall.x -= wall.outward * in;
+        };
+        moveIn(left, leftFirst, leftCount);
+        if (left.role == Role::Start && content.buttonIcon)
+            mirror = gap(build(left, right, ramp), leftFirst, leftCount, left.outward, icon(*content.buttonIcon));
+        moveIn(right, 1 + ramp.size(), rightCount);
+        auto placed = build(left, right, ramp);
+        auto reach = [&](Wall const& wall, size_t first, size_t count) {
+            double most = 0;
+            walk(placed, first, count, [&](double x, double depth) {
+                if (depth <= band) most = std::max(most, wall.outward * (x - wall.x));
+            });
+            return most;
+        };
+        return Bar{left, right, ramp, reach(left, leftFirst, leftCount), reach(right, 1 + ramp.size(), rightCount)};
     };
+    // The tray's outer end: square, `square` past the hull edge and so past the screen's side, where the dock doesn't fit
+    // its curve; else the curve mirroring Start's end beside the last tray icon.
+    Wall trayEnd = std::isfinite(square)
+        ? Wall{HullEdge::Right, square, 1, drop, false, Role::Square}
+        : Wall{HullEdge::Right, 0, 1, drop, arc, Role::TrayEnd, tray,
+               content.trayIcon ? std::optional<Plate>(icon(*content.trayIcon)) : std::nullopt};
     if (style.layout == DockLayout::Separate) {
-        double trayBar = trayWidth + 2 * kDockPadding;
-        bar({HullEdge::Left, 0, -1, 0, 0, true}, {HullEdge::Right, -(trayBar + kBarGap), 1, 0, facing, false}, {});
-        bar({HullEdge::Right, -trayBar, -1, drop, trayFlare(facing), false}, {HullEdge::Right, 0, 1, drop, 0, true}, {});
+        // Each facing end hugs the content beside it, its plate kDockPadding in from the bar's edge where the wall
+        // starts. The button bar's is placed against a provisional tray bar and then moved over: the tray content sits
+        // gap after the last button, where each bar spans from its content's edge to its facing end's nearest point
+        // and barGap parts the two.
+        double trayBar = trayWidth + 2 * kDockPadding, provisional = -(trayBar + style.barGap);
+        bool facingFlared = arc && style.innerArcs;
+        auto trayInsets = GetButtonInsets(TrayInsets({0, 0}, false, drop), band, content.trayPadding);
+        Plate lastButtonPlate = plate(kDockPadding - provisional, buttonInsets, content.buttonRadius),
+              firstTrayPlate = plate(kDockPadding - trayBar, trayInsets, content.trayRadius);
+        // A facing icon's inset counts from its bar's edge, where its wall starts.
+        auto facingIcon = [&](std::optional<IconBox> box, double edge) {
+            std::optional<Plate> result;
+            if (box) box->inset += edge, result = icon(*box);
+            return result;
+        };
+        auto buttonBar = place({HullEdge::Left, 0, -1, 0, arc, Role::Start},
+                               {HullEdge::Right, provisional, 1, 0, facingFlared, Role::Facing, lastButtonPlate,
+                                facingIcon(content.lastButtonIcon, -provisional)}, {});
+        auto trayBarPlaced = place({HullEdge::Right, -trayBar, -1, drop, facingFlared, Role::Facing, firstTrayPlate,
+                                    facingIcon(content.firstTrayIcon, -trayBar)},
+                                   trayEnd, {});
+        double movedIn = provisional - buttonBar.right.x;
+        double buttonSpan = kDockPadding - movedIn + buttonBar.rightReach;
+        double traySpan = kDockPadding - (trayBarPlaced.left.x + trayBar) + trayBarPlaced.leftReach;
+        outline.gap = style.barGap + buttonSpan + traySpan;
+        outline.reach = trayBarPlaced.right.x + trayBarPlaced.rightReach;
+        buttonBar.right.x = -(trayWidth + outline.gap) - movedIn;
+        outline.polygons.push_back(build(buttonBar.left, buttonBar.right, {}));
+        outline.polygons.push_back(build(trayBarPlaced.left, trayBarPlaced.right, {}));
     } else {
         DockPolygon ramp;
         if (drop > 0) {
@@ -4658,28 +4722,34 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
                     {{HullEdge::Right, static_cast<float>(upper + drop * k)}, static_cast<float>(drop),
                      static_cast<float>(kConcaveRatio * rho)}};
         }
-        bar({HullEdge::Left, 0, -1, 0, 0, true}, {HullEdge::Right, 0, 1, drop, 0, true}, ramp);
+        auto dock = place({HullEdge::Left, 0, -1, 0, arc, Role::Start}, trayEnd, ramp);
+        outline.reach = dock.right.x + dock.rightReach;
+        outline.polygons.push_back(build(dock.left, dock.right, dock.ramp));
     }
     return outline;
 }
 
+// `square`, when a distance, runs the tray's outer end square that far past the hull's right edge, past the screen's
+// side: where the dock doesn't fit its curve (FitDock).
 DockOutline MakeOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop,
-                        DockContent const& content) {
-    if (style.slant > 0) return SlantedOutline(style, trayWidth, radius, band, atTop, content);
+                        DockContent const& content, double square = NAN) {
+    if (style.slant > 0) return SlantedOutline(style, trayWidth, radius, band, atTop, content, square);
     auto bleed = static_cast<float>(DockBleed(style.shape, radius));
     auto r = static_cast<float>(radius);
     auto drop = static_cast<float>(TrayDrop(style, band));
     bool arc = style.shape == DockShape::EdgeArc;
-    // Each facing flare gets at most half the bar gap, so the two never overlap.
-    float outer = arc ? r : 0, facing = arc && style.innerArcs ? std::min(r, static_cast<float>(kBarGap / 2)) : 0;
+    // A facing flare is the outer flares' arc.
+    float outer = arc ? r : 0, facing = arc && style.innerArcs ? r : 0;
     // A dropped wall rounds at the shorter band's radius, so its flare may not exceed that either.
     auto trayFlare = [&](float flare) { return drop > 0 ? std::min(flare, static_cast<float>(band - drop) / 2) : flare; };
     DockPiece piece{.top = atTop ? -bleed : 0, .bottom = atTop ? 0 : bleed, .flareLeft = outer, .flareRight = outer};
     DockOutline outline{.pieces = {piece}, .radius = r, .atTop = atTop};
     if (style.layout == DockLayout::Separate) {
-        // The tray bar wraps the tray content in the dock padding; the button bar ends a bar gap before it.
+        // The tray bar wraps the tray content in the dock padding. The button bar ends where its facing flare's tip,
+        // the bars' nearest point, comes barGap short of the tray bar's.
         auto trayBar = static_cast<float>(trayWidth + 2 * kDockPadding);
-        outline.pieces[0].right = {HullEdge::Right, -(trayBar + static_cast<float>(kBarGap))};
+        outline.gap = style.barGap + 2 * kDockPadding + facing + trayFlare(facing);
+        outline.pieces[0].right = {HullEdge::Right, -static_cast<float>(trayWidth + outline.gap)};
         outline.pieces[0].flareRight = facing;
         outline.pieces.push_back(piece);
         auto& tray = outline.pieces[1];
@@ -4693,6 +4763,15 @@ DockOutline MakeOutline(DockStyle const& style, double trayWidth, double radius,
         dock.flareRight = trayFlare(outer);
         dock.dropRight = drop;
         dock.step = {HullEdge::Right, -static_cast<float>(kDockPadding + trayWidth + kGap / 2)};
+    }
+    // The tray's outer end reaches its flare past the hull's right edge, or runs square past the screen's side, its
+    // rounded corners off screen.
+    auto& last = outline.pieces.back();
+    outline.reach = last.flareRight;
+    if (std::isfinite(square)) {
+        last.right = {HullEdge::Right, static_cast<float>(square)};
+        last.flareRight = 0;
+        outline.reach = square;
     }
     return outline;
 }
@@ -5634,23 +5713,38 @@ struct Measurements {
 std::wstring Correction() { return L"Max(0, (geometry.threshold - anchor.Offset.X) / 2)"; }
 std::wstring StripOrigin() { return L"geometry.dockOrigin + geometry.shift + " + Correction(); }
 
-// Last button content to tray content: Separate adds both bars' padding around the bar gap.
-double ButtonTrayGap(DockLayout layout) {
-    return layout == DockLayout::Separate ? kBarGap + 2 * kDockPadding : kGap;
+// Where the button area's centre goes on the host, with `gap` from the last button to the tray content, the outline's.
+double ButtonsCenter(double host, double tray, DockStyle const& style, double gap = kGap) {
+    return style.alignment == DockAlignment::Buttons ? host / 2 : (host - tray - gap) / 2;
 }
 
-// Where the button area's centre goes on the host. The one place alignment is decided.
-double ButtonsCenter(double host, double tray, DockStyle const& style) {
-    return style.alignment == DockAlignment::Buttons ? host / 2
-                                                     : (host - tray - ButtonTrayGap(style.layout)) / 2;
+// How the dock fits its host: the button area's centre, the gap to the tray content and the Bar distance that gives
+// it, and how far past the hull's right edge the tray's outer end runs square (NAN for its curve). Where the dock is
+// too wide, in this order: that end goes square as soon as the hull and its curve would run off the screen, and if the
+// tray content itself would, Separate's gap narrows down to its facing curves touching and then the buttons move
+// left. `normal` and `touching` are the outline at Bar distance and at 0. With the alignment, the one place where the
+// dock goes is decided.
+constexpr double kSquareSlack = 64; // Past the screen's side, so the square end stays off screen while buttons animate.
+struct DockFit { double buttonsCenter{}, gap{kGap}, barGap{kBarGap}, square = NAN; };
+DockFit FitDock(double host, double buttons, double tray, DockStyle const& style, DockOutline const& normal,
+                DockOutline const& touching) {
+    // The tray content's right edge for a gap: Whole group's moves by half the gap, as the group centres.
+    bool group = style.alignment == DockAlignment::Group;
+    auto right = [&](double gap) { return ButtonsCenter(host, tray, style, gap) + buttons / 2 + gap + tray; };
+    DockFit fit{ButtonsCenter(host, tray, style, normal.gap), normal.gap, style.barGap};
+    if (right(fit.gap) + kDockPadding + normal.reach <= host) return fit;
+    double narrow = std::clamp((right(fit.gap) - host) * (group ? 2 : 1), 0.0, normal.gap - touching.gap);
+    fit.gap -= narrow;
+    fit.barGap -= narrow;
+    fit.buttonsCenter = ButtonsCenter(host, tray, style, fit.gap) - std::max(0.0, right(fit.gap) - host);
+    fit.square = host - (fit.buttonsCenter + buttons / 2 + fit.gap + tray + kDockPadding) + kSquareSlack;
+    return fit;
 }
 
 bool Plan(double host, double buttons, double tray, double nativeCenter,
-          double nativeTrayLeft, double nativeStartDelta, Placement& result,
-          DockStyle const& style = {}) {
-    double buttonsCenter = ButtonsCenter(host, tray, style);
-    double gap = ButtonTrayGap(style.layout);
-    // Button area is off-centre, so its extent is checked on each side.
+          double nativeTrayLeft, double nativeStartDelta, Placement& result, DockFit const& fit) {
+    double buttonsCenter = fit.buttonsCenter, gap = fit.gap;
+    // FitDock keeps the tray on the host, moving the buttons left if it must; they may still run off its left.
     if (!std::isfinite(host) || !std::isfinite(buttons) ||
         !std::isfinite(tray) || !std::isfinite(nativeCenter) ||
         !std::isfinite(nativeTrayLeft) || !std::isfinite(nativeStartDelta) ||
@@ -9624,11 +9718,12 @@ void CreateEditorPreview(SettingsEditor& editor) {
 }
 
 // Sizes the canvas to the dock band and a margin of 48 DIP, or the outline's reach past the band, on each side.
-void FitPreviewCanvas(SettingsEditor& editor, double reach) {
+void FitPreviewCanvas(SettingsEditor& editor, double reach, double widen) {
     auto& preview = editor.preview;
     preview.margin = std::max(48.0, std::ceil(reach));
+    preview.widen = widen;
     double step = std::max(44.0, preview.metrics.iconWidth + 16) + 8;
-    int width = static_cast<int>(std::ceil(5 * step + 380 + 2 * (preview.margin - 48)));
+    int width = static_cast<int>(std::ceil(5 * step + 380 + widen + 2 * (preview.margin - 48)));
     int height = static_cast<int>(std::ceil(std::max(editor.compactLayout?140.0:420.0, preview.metrics.dockHeight + 48)));
     if (preview.width != width || preview.height != height) {
         CloseEditorPreview(editor);
@@ -9643,7 +9738,7 @@ void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& me
     auto& preview = editor.preview;
     preview.metrics = metrics;
     // UpdateEditorPreview, below, refits the margin to the outline at the new band.
-    FitPreviewCanvas(editor, preview.margin);
+    FitPreviewCanvas(editor, preview.margin, preview.widen);
     auto number = [](double value) {
         wchar_t text[32]{};
         swprintf(text, ARRAYSIZE(text), std::abs(value - std::round(value)) < 0.05 ? L"%.0f" : L"%.1f", value);
@@ -9767,7 +9862,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double dockHeight = preview.metrics.dockHeight;
         double buttonWidth = std::max(44.0, preview.metrics.iconWidth + 16);
         double step = buttonWidth + 8;
-        double dockWidth = 5 * step + 284;
+        double trayWidth = 240; // The preview's tray content, from its first icon past the clock.
         auto pageValues = EditorPageValues(editor, 0);
         // Alignment places the dock on the host, so only the layout and shape show here. Edge and Edge arc
         // sit on the canvas bottom as a bottom taskbar sits on its screen edge.
@@ -9776,21 +9871,28 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double radius = std::min(number(3), dockHeight / 2);
         double bleed = DockBleed(style.shape, radius);
         double drop = TrayDrop(style, dockHeight);
-        // The tray bar wraps the tray content, 16 DIP, the buttons and 20 DIP into the dock, in the dock padding, like
-        // the live tray. The ends mirror around the Start icon and the clock, the last tray item, as placed below.
-        auto outline = MakeOutline(style, dockWidth - (16 + 5 * step + 20) - kDockPadding, radius, dockHeight, false,
+        // The tray bar wraps the tray content in the dock padding, like the live tray. The ends mirror around the Start
+        // icon and the clock, the last tray item, and Separate's facing ends around the last button's icon and the
+        // first tray glyph, 16 DIP tall at the tray content's edge, as placed below.
+        IconBox buttonIcon{0, (dockHeight - preview.metrics.iconHeight) / 2, (dockHeight + preview.metrics.iconHeight) / 2};
+        double iconInset = (buttonWidth - preview.metrics.iconWidth) / 2;
+        auto outline = MakeOutline(style, trayWidth, radius, dockHeight, false,
                                    {number(5), std::min(number(4), buttonWidth / 2), number(98), number(99),
-                                    IconBox{16 + (buttonWidth - preview.metrics.iconWidth) / 2,
-                                            (dockHeight - preview.metrics.iconHeight) / 2,
-                                            (dockHeight + preview.metrics.iconHeight) / 2},
-                                    IconBox{dockWidth - (16 + 5 * step + 20 + 102 + preview.clock.Width()),
-                                            (dockHeight + drop - 34) / 2, (dockHeight + drop + 34) / 2}});
+                                    IconBox{16 + iconInset, buttonIcon.top, buttonIcon.bottom},
+                                    IconBox{kDockPadding + trayWidth - (102 + preview.clock.Width()),
+                                            (dockHeight + drop - 34) / 2, (dockHeight + drop + 34) / 2},
+                                    IconBox{kDockPadding + iconInset, buttonIcon.top, buttonIcon.bottom},
+                                    IconBox{kDockPadding, (dockHeight + drop - 16) / 2, (dockHeight + drop + 16) / 2}});
+        // The buttons start 16 DIP into the dock, and the tray content sits Separate's gap after the last one, 28 DIP
+        // in Unified.
+        double trayGap = style.layout == DockLayout::Separate ? outline.gap : 28;
+        double dockWidth = 16 + 5 * step - 8 + trayGap + trayWidth + kDockPadding;
         // A traced outline clips the material, which the outer flares or the slanted walls widen past the dock band on
         // both sides.
         bool traced = NeedsPath(outline);
         float flare = static_cast<float>(OutlineReach(outline, dockHeight));
-        FitPreviewCanvas(editor, flare);
-        double left = preview.margin, trayLeft = left + 16 + 5 * step + 20;
+        FitPreviewCanvas(editor, flare, trayGap - 28);
+        double left = preview.margin, trayLeft = left + 16 + 5 * step - 8 + trayGap;
         double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         auto buttonInsets=GetButtonInsets({0,0},dockHeight,number(5));
         double padding=buttonInsets.top;
@@ -10527,20 +10629,27 @@ std::optional<winrt::Windows::Foundation::Rect> ContentBox(FrameworkElement cons
     return result;
 }
 
-// The last visible tray item's content in `root`'s DIP. The items are the icon views named NotifyItemIcon and
-// SystemTrayIcon. Show desktop's, the strip at the tray's end, and any of no width don't count. The last is the one
-// that starts furthest right: an app's icon can be far larger than its slot, so its content may end past the tray.
-std::optional<winrt::Windows::Foundation::Rect> LastTrayItemBox(FrameworkElement const& tray, UIElement const& root) {
-    std::optional<winrt::Windows::Foundation::Rect> last;
+// The last, or the first, visible tray item's content in `root`'s DIP. The items are the icon views named
+// NotifyItemIcon and SystemTrayIcon and the hidden icons' chevron, a SystemTray.ChevronIconView with no name (0.4.8:
+// without it the first tray icon read the item after the chevron, and the facing end cut the chevron). One whose
+// content ContentBox doesn't know counts as its own box rather than not at all. Show desktop's, the strip at the
+// tray's end, and any of no width don't count. Items are told apart by where they start: an app's icon can be far
+// larger than its slot, so its content may end past the tray.
+std::optional<winrt::Windows::Foundation::Rect> TrayItemBox(FrameworkElement const& tray, UIElement const& root, bool last) {
+    std::optional<winrt::Windows::Foundation::Rect> found;
     auto visit = [&](auto&& self, FrameworkElement const& element, unsigned depth) -> void {
         if (!element || !depth || element.Visibility() != Visibility::Visible || element.Opacity() == 0) return;
         auto name = element.Name();
+        auto type = winrt::get_class_name(element);
         // This build names the strip's stack differently; its own type gives it away.
-        if (name == L"ShowDesktopStack" || winrt::get_class_name(element) == L"SystemTray.ShowDesktopButton") return;
-        if (name == L"NotifyItemIcon" || name == L"SystemTrayIcon") {
-            if (element.ActualWidth() > 0)
-                if (auto box = ContentBox(element, root); box && (!last || box->X > last->X))
-                    last = box;
+        if (name == L"ShowDesktopStack" || type == L"SystemTray.ShowDesktopButton") return;
+        if (name == L"NotifyItemIcon" || name == L"SystemTrayIcon" || type == L"SystemTray.ChevronIconView") {
+            if (element.ActualWidth() > 0) {
+                auto box = ContentBox(element, root);
+                if (!box) box = element.TransformToVisual(root).TransformBounds(
+                    {0, 0, static_cast<float>(element.ActualWidth()), static_cast<float>(element.ActualHeight())});
+                if (!found || (last ? box->X > found->X : box->X < found->X)) found = box;
+            }
             return;
         }
         int count = Media::VisualTreeHelper::GetChildrenCount(element);
@@ -10548,7 +10657,7 @@ std::optional<winrt::Windows::Foundation::Rect> LastTrayItemBox(FrameworkElement
             self(self, Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>(), depth - 1);
     };
     visit(visit, tray, 16);
-    return last;
+    return found;
 }
 
 // Versioned WinRT contracts, checked against SystemTray.dll's matching symbols.
@@ -13263,33 +13372,52 @@ IconBox PlaceIcon(Measurements const& m, DockInsets band, double inset, double t
     return m.atTop ? IconBox{inset, farSide - bottom, farSide - top} : IconBox{inset, top - farSide, bottom - farSide};
 }
 
-// Start's icon and the last visible tray item's as insets from the hull edges. Each is read in the element our
-// Translation moves, the repeater or the tray, where that Translation doesn't show: TransformToVisual includes it once
-// it is installed and ActualOffset doesn't. x is taken from Start's and the tray's own edges, which the hull keeps
-// kDockPadding away.
-void MeasureDockIcons(DockContent& content, FrameworkElement const& start, FrameworkElement const& repeater,
-                      FrameworkElement const& tray, FrameworkElement const& background, Measurements const& m) {
+// The icons the slanted ends mirror: Start's and the last visible tray item's as insets from the hull edges, and the
+// last button's and the first tray item's from their bars' edges, for Separate's facing ends. Each is read in the
+// element our Translation moves, the repeater or the tray, where that Translation doesn't show: TransformToVisual
+// includes it once it is installed and ActualOffset doesn't. x is taken from the buttons' and the tray's own edges,
+// which the hull and the bars keep kDockPadding away. Returns them as the log line's text.
+std::wstring MeasureDockIcons(DockContent& content, FrameworkElement const& start, FrameworkElement const& repeater,
+                              FrameworkElement const& tray, FrameworkElement const& background, Measurements const& m) {
     auto laidOut = [&](FrameworkElement const& carrier) {
         auto parent = Media::VisualTreeHelper::GetParent(carrier).as<UIElement>();
         return parent.TransformToVisual(background).TransformPoint({0, 0}).Y + carrier.ActualOffset().y;
     };
-    std::array<double, 3> buttonAt{}, trayAt{};
+    std::array<double, 3> buttonAt{}, trayAt{}, lastButtonAt{}, firstTrayAt{};
     try {
+        // The last button: the eligible task button furthest right, as RealizedButtons counts them, or Start alone.
+        FrameworkElement lastButton = start;
+        double lastSlot = -INFINITY;
+        for (int i = 0, count = Media::VisualTreeHelper::GetChildrenCount(repeater); i < count; ++i) {
+            auto child = Media::VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
+            if (!child || child.Visibility() != Visibility::Visible || winrt::get_class_name(child) != L"Taskbar.TaskListButton")
+                continue;
+            auto slot = Controls::Primitives::LayoutInformation::GetLayoutSlot(child);
+            if (EligibleSlot(slot.X, slot.Width, repeater.ActualWidth()) && slot.X > lastSlot) lastButton = child, lastSlot = slot.X;
+        }
+        auto left = [&](FrameworkElement const& element) { return element.TransformToVisual(repeater).TransformPoint({0, 0}).X; };
         if (auto box = ContentBox(start, repeater)) {
             buttonAt = {laidOut(repeater) + box->Y, box->Height, box->Width};
-            content.buttonIcon = PlaceIcon(m, m.insets, kDockPadding + box->X - start.TransformToVisual(repeater).TransformPoint({0, 0}).X,
-                                           buttonAt[0], buttonAt[1]);
+            content.buttonIcon = PlaceIcon(m, m.insets, kDockPadding + box->X - left(start), buttonAt[0], buttonAt[1]);
         }
-        if (auto box = LastTrayItemBox(tray, tray)) {
+        if (auto box = ContentBox(lastButton, repeater)) {
+            lastButtonAt = {laidOut(repeater) + box->Y, box->Height, box->Width};
+            double right = left(lastButton) + lastButton.ActualWidth();
+            content.lastButtonIcon = PlaceIcon(m, m.insets, kDockPadding + right - box->X - box->Width, lastButtonAt[0],
+                                               lastButtonAt[1]);
+        }
+        if (auto box = TrayItemBox(tray, tray, true)) {
             trayAt = {laidOut(tray) + box->Y, box->Height, box->Width};
             content.trayIcon = PlaceIcon(m, m.trayInsets, kDockPadding + m.trayWidth - box->X - box->Width, trayAt[0], trayAt[1]);
         }
+        if (auto box = TrayItemBox(tray, tray, false)) {
+            firstTrayAt = {laidOut(tray) + box->Y, box->Height, box->Width};
+            content.firstTrayIcon = PlaceIcon(m, m.trayInsets, kDockPadding + box->X, firstTrayAt[0], firstTrayAt[1]);
+        }
     } catch (...) {
-        // A tree in flux leaves both ends on their plates.
-        content.buttonIcon = content.trayIcon = std::nullopt;
+        // A tree in flux leaves every end on its plate.
+        content.buttonIcon = content.trayIcon = content.lastButtonIcon = content.firstTrayIcon = std::nullopt;
     }
-    // One line per change and taskbar, so a live check can tell which icons the mirror read.
-    static std::map<void*, std::wstring> logged;
     auto describe = [](std::optional<IconBox> const& box, std::array<double, 3> at) {
         wchar_t text[128];
         if (!box) return std::wstring(L"none");
@@ -13297,14 +13425,9 @@ void MeasureDockIcons(DockContent& content, FrameworkElement const& start, Frame
                  at[1], at[2], box->top, box->bottom);
         return std::wstring(text);
     };
-    wchar_t frame[96];
-    swprintf(frame, ARRAYSIZE(frame), L"host %.1f, tray %.1f wide, centre %.1f; ", m.host, m.trayWidth, m.center);
-    auto line = frame + (L"start icon " + describe(content.buttonIcon, buttonAt) + L"; last tray icon " +
-                         describe(content.trayIcon, trayAt));
-    if (auto& last = logged[winrt::get_abi(tray)]; last != line) {
-        last = line;
-        Wh_Log(L"[UWSLANT] mirror %ls", line.c_str());
-    }
+    return L"start icon " + describe(content.buttonIcon, buttonAt) + L"; last tray icon " + describe(content.trayIcon, trayAt) +
+           L"; last button icon " + describe(content.lastButtonIcon, lastButtonAt) + L"; first tray icon " +
+           describe(content.firstTrayIcon, firstTrayAt);
 }
 
 // ---- The layout pass ----------------------------------------------------
@@ -13364,12 +13487,35 @@ void Refresh(Root& root) {
     double expectedStart = (repeaterWidth - buttons) / 2;
     double trayLeft = tray.ActualOffset().x;
     Placement target{};
+    DockContent content{g_buttonVerticalPadding, std::min(g_buttonCornerRadius, start.ActualWidth() / 2),
+                        g_trayHighlightPadding, g_trayHighlightRadius};
+    double band = background.ActualHeight() - DockInsetSum(background.ActualHeight());
+    double radius = EffectiveDockRadius(host, band);
+    // The icons the slanted ends mirror, read before the dock is placed once the taskbar is known, as every refresh
+    // after the first: Separate's facing ones set how far the tray sits from the buttons. The first mirrors none, so its
+    // gap and outline agree.
+    std::wstring icons;
+    if (g_dockStyle.slant > 0 && root.taskbar && band > 0) {
+        Measurements early{.host = host, .trayWidth = trayWidth, .dockHeight = background.ActualHeight(),
+                           .insets = GetDockInsets(root.taskbar, background.ActualHeight()), .atTop = TaskbarAtTop(root.taskbar)};
+        early.trayInsets = TrayInsets(early.insets, early.atTop, TrayDrop(g_dockStyle, band));
+        icons = MeasureDockIcons(content, start, repeater, tray, background, early);
+    }
+    // The outline sets the gap from the buttons to the tray and how far its tray end curves out, before it is placed:
+    // it reads only the band. Separate's at Bar distance 0 is how far the gap may narrow.
+    DockFit fit{};
+    if (band > 0) {
+        auto normal = MakeOutline(g_dockStyle, trayWidth, radius, band, false, content);
+        DockStyle touching = g_dockStyle;
+        touching.barGap = 0;
+        fit = FitDock(host, buttons, trayWidth, g_dockStyle, normal,
+                      g_dockStyle.layout == DockLayout::Separate ? MakeOutline(touching, trayWidth, radius, band, false, content) : normal);
+    }
     // Keep the full centered repeater budget. Account for the native strip's
     // layout offset without reading per-button animation transforms.
-    bool supported = !overflowing && background.ActualWidth() > 0 &&
-        background.ActualHeight() > DockInsetSum(background.ActualHeight()) &&
+    bool supported = !overflowing && background.ActualWidth() > 0 && band > 0 &&
         std::abs(frame.ActualWidth() - host) <= 1 &&
-        Plan(host, buttons, trayWidth, nativeCenter, trayLeft, startTarget - expectedStart, target, g_dockStyle);
+        Plan(host, buttons, trayWidth, nativeCenter, trayLeft, startTarget - expectedStart, target, fit);
     if (!supported) {
         if (!root.fallbackReported) Wh_Log(L"[UWPOS] native fallback host=%.3f frame=%.3f buttons=%.3f tray=%.3f center=%.3f start=%.3f overflow=%d root=%p repeaterWidth=%.3f expectedStart=%.3f trayLeft=%.3f",
             host, frame.ActualWidth(), buttons, trayWidth, nativeCenter, startTarget, overflowing,
@@ -13396,7 +13542,7 @@ void Refresh(Root& root) {
         RestoreRoot(root);
         return;
     }
-    double buttonsCenter = ButtonsCenter(host, trayWidth, g_dockStyle);
+    double buttonsCenter = fit.buttonsCenter, gap = fit.gap;
     double backgroundOrigin = background.TransformToVisual(parent).TransformPoint({0, 0}).X;
     Measurements m{
         .host = host,
@@ -13406,18 +13552,34 @@ void Refresh(Root& root) {
         .trayWidth = trayWidth,
         .buttonsWidth = buttons,
         .shift = buttonsCenter - nativeCenter,
-        .center = buttonsCenter + (ButtonTrayGap(g_dockStyle.layout) + trayWidth) / 2 - backgroundOrigin,
+        .center = buttonsCenter + (gap + trayWidth) / 2 - backgroundOrigin,
         .backgroundOrigin = backgroundOrigin,
         .dockHeight = background.ActualHeight(),
         .insets = GetDockInsets(root.taskbar, background.ActualHeight()),
         .atTop = TaskbarAtTop(root.taskbar),
     };
-    double band = m.visibleDockHeight();
     m.trayInsets = TrayInsets(m.insets, m.atTop, TrayDrop(g_dockStyle, band));
-    DockContent content{g_buttonVerticalPadding, std::min(g_buttonCornerRadius, start.ActualWidth() / 2),
-                        g_trayHighlightPadding, g_trayHighlightRadius};
-    if (g_dockStyle.slant > 0) MeasureDockIcons(content, start, repeater, tray, background, m);
-    m.outline = MakeOutline(g_dockStyle, trayWidth, EffectiveDockRadius(host, band), band, m.atTop, content);
+    // One line per taskbar whenever what the mirror reads changes, each icon's inset and depths, so a live check can tell
+    // which icons it read. Widths and the frame ride along but aren't part of the change: the tray's width follows its
+    // items, and a clock that shows seconds is the first tray item on a monitor without hidden icons.
+    static std::map<void*, std::wstring> logged;
+    std::wstring change;
+    for (auto const& box : {content.buttonIcon, content.trayIcon, content.lastButtonIcon, content.firstTrayIcon}) {
+        wchar_t text[48] = L"-;";
+        if (box) swprintf(text, ARRAYSIZE(text), L"%.1f/%.1f/%.1f;", box->inset, box->top, box->bottom);
+        change += text;
+    }
+    if (auto& last = logged[winrt::get_abi(tray)]; !icons.empty() && last != change) {
+        last = change;
+        Wh_Log(L"[UWSLANT] mirror host %.1f, tray %.1f wide, centre %.1f; %ls", m.host, m.trayWidth, m.center, icons.c_str());
+    }
+    // At FitDock's Bar distance, square where it said so or where the mirrored tray end's curve still runs off screen.
+    DockStyle placed = g_dockStyle;
+    placed.barGap = fit.barGap;
+    m.outline = MakeOutline(placed, trayWidth, radius, band, m.atTop, content, fit.square);
+    double hullRight = buttonsCenter + buttons / 2 + gap + trayWidth + kDockPadding;
+    if (!std::isfinite(fit.square) && hullRight + m.outline.reach > host)
+        m.outline = MakeOutline(placed, trayWidth, radius, band, m.atTop, content, host - hullRight + kSquareSlack);
     root.measurements = m;
     root.measurementsReady = true;
     if (!PrepareDock(root.dock, background, m.insets, m.outline)) {
