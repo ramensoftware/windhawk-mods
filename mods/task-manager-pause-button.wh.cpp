@@ -8,7 +8,7 @@
 // @homepage        https://github.com/luizbizzio/task-manager-pause-button
 // @include         Taskmgr.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // @license         Apache-2.0
 // ==/WindhawkMod==
 
