@@ -6,7 +6,7 @@
 // @version             1.7.0
 // @author              Salyts
 // @github              https://github.com/Salyts
-// @homepage            https://github.com/Salyts/Taskbar-Fluent-Media-Player
+// @homepage            https://discord.gg/vdSrFVMY6J
 // @donateUrl           https://buymeacoffee.com/tfmp
 // @license             MIT
 // @include             explorer.exe
@@ -94,7 +94,7 @@ A full media player on your Windows 11 taskbar, styled to fit in with the rest o
 
 ## Good to know
 
-- **Where settings are kept:** in the mod's own storage, which also works with portable Windhawk. Changes saved on Windhawk's Settings tab still come in, including ones made while the mod was off.
+- **Where settings are kept:** in the mod's own storage, which also works with portable Windhawk. Windhawk's Settings tab doesn't show what you save in the settings window, so it can show older values. A setting you change and save on that tab still comes in, even while the mod is off.
 - **If something goes wrong:** use **Reset to Windhawk's settings** on the Other page of the settings window. The storage is in the registry under `HKEY_LOCAL_MACHINE\SOFTWARE\Windhawk\Engine\ModsWritable\taskbar-fluent-media-player\LocalStorage` (portable Windhawk keeps it in its own data folder), and deleting that key also starts over from Windhawk's Settings tab.
 - **Hex colors in Windhawk's code view:** put quotes around them (`'#1ED760'`), since YAML reads a bare `#` as a comment.
 
@@ -117,6 +117,10 @@ Made by [Salyts](https://github.com/Salyts) & [GR0UD](https://github.com/GR0UD).
     "Simple" show the settings here as before; whatever you set here is still
     used either way. Needs Windhawk 2.0 or newer; older versions always show
     every setting.
+
+
+    What you save in the settings window isn't shown on this page, so it can
+    show older values. A setting you change and save here still applies.
   $options:
   - window: Settings window (recommended)
   - full: All settings
@@ -3711,6 +3715,18 @@ static void WaitForDispatcherWork() {
     while (g_dispatcherWorkPending.load() > 0) Sleep(5);
 }
 
+// ShellExecute without any error UI: workers run these, and unload waits for
+// workers, so a "Windows cannot find..." box must not keep one waiting.
+static bool ShellOpenNoUi(const wchar_t* target, HWND owner = nullptr) {
+    SHELLEXECUTEINFOW sei{ sizeof(sei) };
+    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
+    sei.hwnd = owner;
+    sei.lpVerb = L"open";
+    sei.lpFile = target;
+    sei.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&sei) != FALSE;
+}
+
 // Sleeps up to `ms` in short slices so a worker never sleeps through an
 // unload. Returns false if the mod started unloading meanwhile; the worker
 // should then return straight away (WaitForTrackedWorkers is waiting on it).
@@ -3727,12 +3743,11 @@ static bool SleepUnlessUnloading(int ms) {
 // app must not keep a worker (and so the unload) waiting.
 template <typename Async>
 static auto AwaitOrCancel(Async const& op) {
-    while (op.Status() == winrt::Windows::Foundation::AsyncStatus::Started) {
+    while (op.wait_for(std::chrono::milliseconds(50)) == winrt::Windows::Foundation::AsyncStatus::Started) {
         if (g_unloading) {
             try { op.Cancel(); } catch (...) { LOG_IGNORED_EXCEPTION(); }
             throw winrt::hresult_canceled();
         }
-        Sleep(2);
     }
     return op.GetResults();
 }
@@ -6692,7 +6707,11 @@ static HICON CreateSettingsAppIcon(int px, COLORREF fgRgb = RGB(255, 255, 255)) 
 // ===========================================================================
 namespace Audio {
 
+// Called from the taskbar thread and from wheel-step workers. Once set it stays
+// until unload, which runs after every worker has finished.
+static std::mutex g_deviceEnumeratorMtx;
 static void InitAudioDeviceEnumerator() {
+    std::lock_guard<std::mutex> lk(g_deviceEnumeratorMtx);
     if (!g_pDeviceEnumerator) {
         CoCreateInstance(
             XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
@@ -7692,17 +7711,37 @@ static void UpdateVisualizerPeaks() {
 // ===========================================================================
 namespace UI {
 
+// On a worker, not the taskbar's thread. Unload answers it (CloseSuccessNotification).
+static constexpr const wchar_t* SUCCESS_BOX_TITLE = L"Taskbar Fluent Media Player";
+static std::atomic<bool> g_successBoxActive{false};
 static void ShowSuccessNotification() {
     if (!g_settings.showSuccessNotification) {
         return;
     }
-
-    MessageBoxW(
-        nullptr,
-        L"Media player successfully loaded and ready to use",
-        L"Taskbar Fluent Media Player",
-        MB_ICONINFORMATION | MB_OK | MB_TOPMOST | MB_SETFOREGROUND
-    );
+    SpawnTrackedWorker([]() {
+        g_successBoxActive = true;
+        if (!g_unloading)
+            MessageBoxW(nullptr, L"Media player successfully loaded and ready to use", SUCCESS_BOX_TITLE,
+                        MB_ICONINFORMATION | MB_OK | MB_TOPMOST | MB_SETFOREGROUND);
+        g_successBoxActive = false;
+    });
+}
+// Unload, with g_unloading set: closes the box if it's up, until its worker is done.
+static void CloseSuccessNotification() {
+    while (g_successBoxActive) {
+        EnumWindows([](HWND w, LPARAM) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(w, &pid);
+            if (pid != GetCurrentProcessId()) return TRUE;
+            wchar_t cls[16]{}, title[64]{};
+            GetClassNameW(w, cls, ARRAYSIZE(cls));
+            GetWindowTextW(w, title, ARRAYSIZE(title));
+            if (wcscmp(cls, L"#32770") == 0 && wcscmp(title, SUCCESS_BOX_TITLE) == 0)
+                PostMessageW(w, WM_COMMAND, IDOK, 0);
+            return TRUE;
+        }, 0);
+        Sleep(20);
+    }
 }
 
 
@@ -9127,25 +9166,37 @@ static MenuFlyoutItem MakeActionContextMenuItem(const wchar_t* glyph, const wcha
     return item;
 }
 
-// Launches Windhawk from where it's installed. The old fallback ran a bare
-// "windhawk.exe", which resolves through the search path (GitHub #71).
+// windhawk.exe, found from the windhawk.dll loaded in this process
+// (<Windhawk>\Engine\<version>\<arch>\windhawk.dll), so portable installs work
+// too. %ProgramFiles%\Windhawk if that doesn't find it. Never a bare
+// "windhawk.exe" through the search path (GitHub #71).
+static std::wstring FindWindhawkExe() {
+    auto isFile = [](const std::wstring& path) {
+        DWORD attrs = GetFileAttributesW(path.c_str());
+        return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+    };
+    wchar_t path[MAX_PATH]{};
+    HMODULE engine = GetModuleHandleW(L"windhawk.dll");
+    if (engine && GetModuleFileNameW(engine, path, MAX_PATH)) {
+        std::wstring dir = path;
+        for (int up = 0; up < 4; up++) {
+            const size_t slash = dir.find_last_of(L'\\');
+            if (slash == std::wstring::npos) break;
+            dir.resize(slash);
+            if (isFile(dir + L"\\windhawk.exe")) return dir + L"\\windhawk.exe";
+        }
+    }
+    wchar_t fallback[MAX_PATH]{};
+    if (ExpandEnvironmentStringsW(L"%ProgramFiles%\\Windhawk\\windhawk.exe", fallback, MAX_PATH) && isFile(fallback))
+        return fallback;
+    return {};
+}
+
 static void OpenWindhawk() {
     SpawnTrackedWorker([]() {
-        static const wchar_t* const CANDIDATES[] = {
-            L"%ProgramFiles%\\Windhawk\\windhawk.exe",
-            L"%ProgramFiles(x86)%\\Windhawk\\windhawk.exe",
-            L"%LOCALAPPDATA%\\Programs\\Windhawk\\windhawk.exe",
-        };
-        for (const wchar_t* c : CANDIDATES) {
-            wchar_t expanded[MAX_PATH]{};
-            if (!ExpandEnvironmentStringsW(c, expanded, MAX_PATH)) continue;
-            DWORD attrs = GetFileAttributesW(expanded);
-            if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-                ShellExecuteW(nullptr, L"open", expanded, nullptr, nullptr, SW_SHOWNORMAL);
-                return;
-            }
-        }
-        Wh_Log(L"OpenWindhawk: windhawk.exe not found in its usual install folders");
+        const std::wstring exe = FindWindhawkExe();
+        if (exe.empty()) { Wh_Log(L"OpenWindhawk: windhawk.exe not found"); return; }
+        ShellOpenNoUi(exe.c_str());
     });
 }
 
@@ -16882,8 +16933,8 @@ static bool LaunchDefaultMediaAppIfIdle(const std::wstring& action) {
     if (target.size() >= 2 && target.front() == L'"' && target.back() == L'"') target = target.substr(1, target.size() - 2);
     if (target.empty()) return false;
     SpawnTrackedWorker([target]() {
-        HINSTANCE r = ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-        if ((INT_PTR)r <= 32) Wh_Log(L"Default media app: couldn't open \"%s\" (%d)", target.c_str(), (int)(INT_PTR)r);
+        if (!ShellOpenNoUi(target.c_str()))
+            Wh_Log(L"Default media app: couldn't open \"%s\" (%lu)", target.c_str(), GetLastError());
     });
     return true;
 }
@@ -17094,7 +17145,7 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
 
             if (!appAumid.empty()) {
                 std::wstring shellPath = L"shell:AppsFolder\\" + appAumid;
-                ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                ShellOpenNoUi(shellPath.c_str());
             }
 
         });
@@ -17280,13 +17331,13 @@ namespace Runtime {
 static void StartTimerThread() {
     if (g_timerThread) return;
     g_timerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_timerUpdateEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    // Kept across restarts of the thread: workers signal it, and it's only
+    // closed once they've all finished (Wh_ModUninit).
+    if (!g_timerUpdateEvent) g_timerUpdateEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_timerThread    = CreateThread(nullptr, 0, TimerThreadProc, nullptr, 0, nullptr);
     if (!g_timerThread) {
         CloseHandle(g_timerStopEvent);
         g_timerStopEvent = nullptr;
-        CloseHandle(g_timerUpdateEvent);
-        g_timerUpdateEvent = nullptr;
     }
 
     if (g_settings.enableTitleScrolling || g_settings.enableArtistScrolling) {
@@ -17314,7 +17365,6 @@ static void StopTimerThread() {
         g_timerThread = nullptr;
     }
     if (g_timerStopEvent) { CloseHandle(g_timerStopEvent); g_timerStopEvent = nullptr; }
-    if (g_timerUpdateEvent) { CloseHandle(g_timerUpdateEvent); g_timerUpdateEvent = nullptr; }
 }
 
 } // namespace Runtime
@@ -17660,10 +17710,13 @@ static void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
     }
 }
 
-static bool HookTaskbarViewDllSymbols() {
+static HMODULE FindTaskbarViewModule() {
     HMODULE h = GetModuleHandleW(L"Taskbar.View.dll");
     if (!h) h = GetModuleHandleW(L"ExplorerExtensions.dll");
-    if (!h) { Wh_Log(L"HookTaskbarViewDllSymbols: module not found"); return FALSE; }
+    return h;
+}
+
+static bool HookTaskbarViewDllSymbols(HMODULE h) {
 
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
@@ -17685,6 +17738,31 @@ static bool HookTaskbarViewDllSymbols() {
         return FALSE;
     }
     return AugmentedEntryPointButton_UpdateButtonPadding_Original != nullptr;
+}
+
+// Taskbar.View.dll usually isn't loaded yet when the mod starts with Explorer,
+// so LoadLibraryExW is watched and the module is hooked once it loads.
+static std::atomic<bool> g_taskbarViewHooked{false};
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+
+static void HookTaskbarViewNow(HMODULE h, bool afterInit) {
+    if (!h || g_taskbarViewHooked.exchange(true)) return;
+    if (!HookTaskbarViewDllSymbols(h)) {
+        Wh_Log(L"HookTaskbarViewNow: hooking failed (native Widgets hiding unavailable)");
+        return;
+    }
+    if (afterInit) Wh_ApplyHookOperations();
+}
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    HMODULE m = LoadLibraryExW_Original(name, file, flags);
+    if (m && !(reinterpret_cast<ULONG_PTR>(m) & 3) && !g_taskbarViewHooked && !g_unloading &&
+        m == FindTaskbarViewModule()) {
+        Wh_Log(L"LoadLibraryExW: %s loaded, hooking it", name ? name : L"?");
+        HookTaskbarViewNow(m, true);
+    }
+    return m;
 }
 
 // ============================================================================
@@ -21238,7 +21316,7 @@ static void AttachBugReportForm(wuxc::Button const& openBtn) {
         if (text.empty()) { box.Focus(wux::FocusState::Programmatic); return; }
         auto ticked = [](wuxc::CheckBox const& c) { auto v = c.IsChecked(); return v && v.Value(); };
         CopyTextToClipboard(s_hostWnd, BuildBugReportText(text, ticked(withErrors), ticked(withSettings)));
-        ShellExecuteW(s_hostWnd, L"open", BUG_REPORT_URL, nullptr, nullptr, SW_SHOWNORMAL);
+        ShellOpenNoUi(BUG_REPORT_URL, s_hostWnd);
         FlashButtonLabel(sender.as<wuxc::Button>(), L"\u2713  " + Loc(L"Copied"), Loc(L"Copy and open Discord"));
     });
 }
@@ -23875,7 +23953,10 @@ static DWORD WINAPI ThreadProc(void*) {
     if (!s_classBrush) s_classBrush = CreateSolidBrush(RGB(32, 32, 32));
     wc.hbrBackground = s_classBrush;
     wc.lpszClassName = s_windowClass;
-    if (!s_classRegistered && RegisterClassExW(&wc)) s_classRegistered = true;
+    if (!s_classRegistered) {
+        if (RegisterClassExW(&wc)) s_classRegistered = true;
+        else { DeleteObject(s_classBrush); s_classBrush = nullptr; }  // not the class's to free then
+    }
 
     int dpi = GetCurrentDpi();
     float scale = dpi / 96.0f;
@@ -23965,8 +24046,10 @@ static DWORD WINAPI ThreadProc(void*) {
 
 // Runs on the taskbar's thread, so it never waits on the window's thread.
 static void Show() {
-    if (g_unloading) return;
+    // Checked under the lock: unload sets g_unloading before CloseWindow takes
+    // it, so a Show that gets the lock after that can't start a thread.
     std::lock_guard<std::mutex> lk(s_launchMtx);
+    if (g_unloading) return;
     if (s_hostWnd && IsWindow(s_hostWnd)) {
         PostMessageW(s_hostWnd, WM_XS_REFRESH, 0, 0);
         ShowWindow(s_hostWnd, IsIconic(s_hostWnd) ? SW_RESTORE : SW_SHOW);
@@ -24015,8 +24098,12 @@ static void CloseWindow() {
         CloseHandle(thread);
     }
     UnregisterWindowClass();
-    for (HBRUSH* b : { &s_classBrush, &s_eraseLight, &s_eraseDark }) {
-        if (*b && !s_classRegistered) { DeleteObject(*b); *b = nullptr; }
+    // Unregistering the class frees its background brush; the erase brushes are ours.
+    if (!s_classRegistered) {
+        s_classBrush = nullptr;
+        for (HBRUSH* b : { &s_eraseLight, &s_eraseDark }) {
+            if (*b) { DeleteObject(*b); *b = nullptr; }
+        }
     }
 }
 
@@ -24052,9 +24139,15 @@ BOOL Wh_ModInit() {
                    L"Usually Windhawk's symbol download failed: exit Windhawk from the tray, reopen it, and let \"Loading symbols\" finish.");
         return FALSE;
     }
-    Wh_Log(L"Wh_ModInit: Calling HookTaskbarViewDllSymbols");
-    if (!HookTaskbarViewDllSymbols()) {
-        Wh_Log(L"Wh_ModInit: HookTaskbarViewDllSymbols failed (native Widgets hiding unavailable)");
+    if (HMODULE taskbarView = FindTaskbarViewModule()) {
+        HookTaskbarViewNow(taskbarView, false);
+    } else {
+        Wh_Log(L"Wh_ModInit: Taskbar.View.dll isn't loaded yet, hooking it when it loads");
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto loadLibraryExW = kernelBase
+            ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelBase, "LoadLibraryExW")) : nullptr;
+        if (loadLibraryExW)
+            WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
     }
 
     Wh_Log(L"Wh_ModInit: Completed successfully");
@@ -24062,6 +24155,8 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    // Loaded between the check in Wh_ModInit and the LoadLibraryExW hook going live.
+    if (!g_taskbarViewHooked) HookTaskbarViewNow(FindTaskbarViewModule(), true);
 
     Wh_Log(L"Wh_ModAfterInit: Starting initialization");
 
@@ -24161,6 +24256,7 @@ void Wh_ModUninit() {
 
     // First: while open, the window applies settings on the taskbar's thread.
     xs::CloseWindow();
+    CloseSuccessNotification();
 
     // Every thread the mod started, with no timeout: the DLL is freed as soon as
     // this returns. New workers are refused from here on. Workers go before the
@@ -24234,6 +24330,7 @@ void Wh_ModUninit() {
     WaitForDispatcherWork();
     WaitForTrackedWorkers();
     if (g_trackingGroups->empty()) g_trackingGroups.reset();  // nothing XAML left in it
+    if (g_timerUpdateEvent) { CloseHandle(g_timerUpdateEvent); g_timerUpdateEvent = nullptr; }
     ShutdownGdiplusIfStarted();
 }
 
