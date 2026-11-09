@@ -7,7 +7,7 @@
 // @name:fr-FR       Mixeur de volume contextuel Pro
 // @name:es-ES       Mezclador de volumen emergente Pro
 // @name:ru-RU       Всплывающий микшер громкости Pro
-// @description     Per-app volume mixer popup with live VU meters, per-app output device routing, volume locks, focused-app hotkeys, an optional tray icon and a volume OSD.
+// @description     Per-app volume mixer popup with live VU meters, per-app output device routing, volume locks, focused-app hotkeys, Deafen background and a volume OSD.
 // @version         2.6.1
 // @author          neMik
 // @github          https://github.com/mykolazozul
@@ -39,12 +39,10 @@ taking the keyboard focus, so games are never minimized.
 - **Custom volume OSD (BETA)** – 9 styles, can replace the Windows volume flyout for the media keys and the volume
   tooltip of the taskbar, draggable. Like the Windows flyout, it stays while the pointer rests on it, and the mouse
   wheel or a click on its bar changes the volume.
-- **System tray icon (BETA)** – 9 icon styles that follow the volume and the light/dark taskbar, 7 popup styles,
-  mouse wheel over the icon changes the volume, middle click mutes.
 - **17 mixer layouts and 22 color themes.**
 - **Correct scaling** – interface scale 30–300 % multiplied by the Windows display scaling of each monitor;
   the popup shrinks automatically when it would not fit on the screen.
-- **Light on resources** – nothing is polled while the popup is closed: the tray icon and the volume locks react to
+- **Light on resources** – nothing is polled while the popup is closed: the OSD and the volume locks react to
   Windows audio events, and the keyboard and mouse hooks are installed only while a feature needs them.
 
 ## 🎛️ Mixer layouts
@@ -57,12 +55,6 @@ Soft Neumorphic · Vertical Channel Strips.
 Windows 11 Mica · Modern Dark · Light Fluent · AMOLED Black · Frosted Glass · System Accent · Classic Blue ·
 Dracula · Nordic Frost · Cyberpunk Neon · Retro Amber · Tokyo Night · Sunset · Catppuccin Mocha · Forest ·
 Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Green · Midnight Gold.
-
-## 🔔 Tray icon (BETA)
-- Icons: Windows native, Fluent speaker, studio faders, spectrum, headphones, retro knob, status dot, equalizer bars, sonar pulse.
-- Popup on click: Windows 11 quick flyout (default device + expandable app list), full mixer, compact fader,
-  mini island, radial dial, vertical channel strips, Control Center pills.
-- Scroll the mouse wheel over the icon to change the master volume; middle-click to mute.
 
 ## 📺 OSD styles (BETA)
 Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
@@ -115,7 +107,8 @@ German, French, Spanish, Russian). The settings page is translated into the same
 the language of Windhawk itself (**Windhawk → Settings → Language**); other languages show English.
 
 ## ⚠️ Notes
-- Features marked BETA (tray icon, OSD, Deafen background) are off by default.
+- Features marked BETA (OSD, Deafen background) are off by default. The mod adds no tray icon: the mixer opens
+  with its hotkey.
 - "Route audio to" uses the same undocumented Windows API as the "App volume and device preferences"
   page of Windows and EarTrumpet; some apps only switch the device after their audio stream restarts.
 - While a game or app running as administrator is focused, hotkeys work through standard Windows hotkeys:
@@ -667,179 +660,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
   $name:fr-FR: "🎨 Apparence"
   $name:es-ES: "🎨 Apariencia"
   $name:ru-RU: "🎨 Внешний вид"
-- tray:
-  - showTrayIcon: false
-    $name: "Show tray icon [BETA]"
-    $name:uk-UA: "Показувати іконку в треї (БЕТА)"
-    $name:pl-PL: "Pokaż ikonę w zasobniku (BETA)"
-    $name:de-DE: "Tray-Symbol anzeigen (BETA)"
-    $name:fr-FR: "Afficher l'icône dans la zone de notification (BÊTA)"
-    $name:es-ES: "Mostrar icono en la bandeja (BETA)"
-    $name:ru-RU: "Показывать иконку в трее (БЕТА)"
-    $description: "Add a volume icon to the system notification area. (BETA - experimental feature)."
-    $description:uk-UA: "Додати іконку гучності в системний трей. (БЕТА - експериментальна функція)."
-    $description:pl-PL: "Dodaje ikonę w zasobniku. (BETA - funkcja eksperymentalna)."
-    $description:de-DE: "Symbol im Infobereich anzeigen. (BETA - experimentelle Funktion)."
-    $description:fr-FR: "Ajouter l'icône dans la zone de notification. (BÊTA - fonctionnalité expérimentale)."
-    $description:es-ES: "Añadir icono en la bandeja. (BETA - función experimental)."
-    $description:ru-RU: "Добавить иконку в системный трей. (БЕТА - экспериментальная функция)."
-  - trayIconStyle: "system"
-    $name: "Tray icon style [BETA]"
-    $name:uk-UA: "Стиль іконки в треї (БЕТА)"
-    $name:pl-PL: "Styl ikony w zasobniku (BETA)"
-    $name:de-DE: "Symbolstil (BETA)"
-    $name:fr-FR: "Style de l'icône (BÊTA)"
-    $name:es-ES: "Estilo del icono (BETA)"
-    $name:ru-RU: "Стиль иконки в трее (БЕТА)"
-    $options:
-    - system: "Windows native icon"
-    - speaker: "Fluent speaker"
-    - faders: "Studio faders"
-    - wave: "Spectrum"
-    - headphones: "Headphones"
-    - retro_knob: "Retro knob"
-    - minimal_dot: "Status dot"
-    - equalizer_bars: "Equalizer bars"
-    - soundwave_circle: "Sonar pulse"
-    $options:uk-UA:
-    - system: "Системна іконка Windows"
-    - speaker: "Динамік Fluent"
-    - faders: "Студійні фейдери"
-    - wave: "Спектр"
-    - headphones: "Навушники"
-    - retro_knob: "Ретро-ручка"
-    - minimal_dot: "Індикатор-крапка"
-    - equalizer_bars: "Смуги еквалайзера"
-    - soundwave_circle: "Сонар"
-    $options:pl-PL:
-    - system: "Natywna ikona Windows"
-    - speaker: "Głośnik Fluent"
-    - faders: "Suwaki studyjne"
-    - wave: "Widmo"
-    - headphones: "Słuchawki"
-    - retro_knob: "Pokrętło retro"
-    - minimal_dot: "Kropka stanu"
-    - equalizer_bars: "Paski korektora"
-    - soundwave_circle: "Impuls sonaru"
-    $options:de-DE:
-    - system: "Natives Windows-Symbol"
-    - speaker: "Fluent-Lautsprecher"
-    - faders: "Studio-Fader"
-    - wave: "Spektrum"
-    - headphones: "Kopfhörer"
-    - retro_knob: "Retro-Drehknopf"
-    - minimal_dot: "Statuspunkt"
-    - equalizer_bars: "Equalizer-Balken"
-    - soundwave_circle: "Sonar-Impuls"
-    $options:fr-FR:
-    - system: "Icône native de Windows"
-    - speaker: "Haut-parleur Fluent"
-    - faders: "Faders de studio"
-    - wave: "Spectre"
-    - headphones: "Casque"
-    - retro_knob: "Bouton rétro"
-    - minimal_dot: "Point d'état"
-    - equalizer_bars: "Barres d'égaliseur"
-    - soundwave_circle: "Impulsion sonar"
-    $options:es-ES:
-    - system: "Icono nativo de Windows"
-    - speaker: "Altavoz Fluent"
-    - faders: "Faders de estudio"
-    - wave: "Espectro"
-    - headphones: "Auriculares"
-    - retro_knob: "Perilla retro"
-    - minimal_dot: "Punto de estado"
-    - equalizer_bars: "Barras de ecualizador"
-    - soundwave_circle: "Pulso de sonar"
-    $options:ru-RU:
-    - system: "Системная иконка Windows"
-    - speaker: "Динамик Fluent"
-    - faders: "Студийные фейдеры"
-    - wave: "Спектр"
-    - headphones: "Наушники"
-    - retro_knob: "Ретро-ручка"
-    - minimal_dot: "Точка-индикатор"
-    - equalizer_bars: "Полосы эквалайзера"
-    - soundwave_circle: "Сонар"
-  - trayPopupStyle: "system_flyout"
-    $name: "Popup shown on tray click [BETA]"
-    $name:uk-UA: "Вигляд вікна при кліку в треї (БЕТА)"
-    $name:pl-PL: "Okno po kliknięciu ikony (BETA)"
-    $name:de-DE: "Fenster beim Klick auf das Symbol (BETA)"
-    $name:fr-FR: "Fenêtre au clic sur l'icône (BÊTA)"
-    $name:es-ES: "Ventana al hacer clic en el icono (BETA)"
-    $name:ru-RU: "Окно при клике в трее (БЕТА)"
-    $options:
-    - system_flyout: "Windows 11 quick flyout (master + expandable apps)"
-    - full_mixer: "Full mixer (main layout)"
-    - compact_fader: "Compact fader strip"
-    - mini_island: "Mini island"
-    - radial_dial: "Radial dial"
-    - vertical_dock: "Vertical channel strips"
-    - control_center: "Control Center pills"
-    $options:uk-UA:
-    - system_flyout: "Швидка панель Windows 11 (загальна гучність + список програм)"
-    - full_mixer: "Повний мікшер (основний стиль)"
-    - compact_fader: "Компактна смуга фейдерів"
-    - mini_island: "Міні-острівець"
-    - radial_dial: "Радіальна ручка"
-    - vertical_dock: "Вертикальні фейдери"
-    - control_center: "Капсули Control Center"
-    $options:pl-PL:
-    - system_flyout: "Szybki panel Windows 11 (głośność główna + lista aplikacji)"
-    - full_mixer: "Pełny mikser (główny układ)"
-    - compact_fader: "Kompaktowy pasek suwaków"
-    - mini_island: "Mini wyspa"
-    - radial_dial: "Pokrętło radialne"
-    - vertical_dock: "Pionowe suwaki kanałów"
-    - control_center: "Kapsułki Control Center"
-    $options:de-DE:
-    - system_flyout: "Windows 11-Schnellflyout (Gesamtlautstärke + App-Liste)"
-    - full_mixer: "Vollständiger Mixer (Hauptlayout)"
-    - compact_fader: "Kompakte Faderleiste"
-    - mini_island: "Mini-Insel"
-    - radial_dial: "Drehregler"
-    - vertical_dock: "Vertikale Kanalzüge"
-    - control_center: "Control-Center-Pillen"
-    $options:fr-FR:
-    - system_flyout: "Volet rapide Windows 11 (volume principal + liste des applications)"
-    - full_mixer: "Mixeur complet (disposition principale)"
-    - compact_fader: "Bande de faders compacte"
-    - mini_island: "Mini-îlot"
-    - radial_dial: "Cadran radial"
-    - vertical_dock: "Tranches verticales"
-    - control_center: "Pilules Control Center"
-    $options:es-ES:
-    - system_flyout: "Panel rápido de Windows 11 (volumen maestro + lista de apps)"
-    - full_mixer: "Mezclador completo (diseño principal)"
-    - compact_fader: "Tira de faders compacta"
-    - mini_island: "Mini isla"
-    - radial_dial: "Dial radial"
-    - vertical_dock: "Canales verticales"
-    - control_center: "Píldoras de Control Center"
-    $options:ru-RU:
-    - system_flyout: "Быстрая панель Windows 11 (общая громкость + список приложений)"
-    - full_mixer: "Полный микшер (основной стиль)"
-    - compact_fader: "Компактная полоса фейдеров"
-    - mini_island: "Мини-островок"
-    - radial_dial: "Радиальная ручка"
-    - vertical_dock: "Вертикальные фейдеры"
-    - control_center: "Капсулы Control Center"
-  - trayScrollVolume: true
-    $name: "Mouse wheel over the icon changes volume [BETA]"
-    $name:uk-UA: "Коліщатко миші над іконкою змінює гучність (БЕТА)"
-    $name:pl-PL: "Kółko myszy nad ikoną zmienia głośność (BETA)"
-    $name:de-DE: "Mausrad über dem Symbol ändert die Lautstärke (BETA)"
-    $name:fr-FR: "La molette sur l'icône règle le volume (BÊTA)"
-    $name:es-ES: "La rueda sobre el icono cambia el volumen (BETA)"
-    $name:ru-RU: "Колесо мыши над иконкой меняет громкость (БЕТА)"
-  $name: "🔔 Tray icon [BETA]"
-  $name:uk-UA: "🔔 Іконка в треї (БЕТА)"
-  $name:pl-PL: "🔔 Ikona w zasobniku (BETA)"
-  $name:de-DE: "🔔 Tray-Symbol (BETA)"
-  $name:fr-FR: "🔔 Icône de notification (BÊTA)"
-  $name:es-ES: "🔔 Icono de la bandeja (BETA)"
-  $name:ru-RU: "🔔 Иконка в трее (БЕТА)"
 - position:
   - allowDragMove: false
     $name: "Allow moving the mixer with the mouse"
@@ -880,7 +700,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "Top left"
     - top_center: "Top center"
     - center: "Center"
-    - tray: "Above the tray icon"
     $options:uk-UA:
     - bottom_right: "Праворуч унизу"
     - bottom_left: "Ліворуч унизу"
@@ -889,7 +708,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "Ліворуч угорі"
     - top_center: "Угорі по центру"
     - center: "По центру"
-    - tray: "Над іконкою в треї"
     $options:pl-PL:
     - bottom_right: "Prawy dolny róg"
     - bottom_left: "Lewy dolny róg"
@@ -898,7 +716,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "Lewy górny róg"
     - top_center: "Na górze pośrodku"
     - center: "Na środku"
-    - tray: "Nad ikoną w zasobniku"
     $options:de-DE:
     - bottom_right: "Unten rechts"
     - bottom_left: "Unten links"
@@ -907,7 +724,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "Oben links"
     - top_center: "Oben mittig"
     - center: "Mitte"
-    - tray: "Über dem Tray-Symbol"
     $options:fr-FR:
     - bottom_right: "En bas à droite"
     - bottom_left: "En bas à gauche"
@@ -916,7 +732,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "En haut à gauche"
     - top_center: "En haut au centre"
     - center: "Centre"
-    - tray: "Au-dessus de l'icône"
     $options:es-ES:
     - bottom_right: "Abajo a la derecha"
     - bottom_left: "Abajo a la izquierda"
@@ -925,7 +740,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "Arriba a la izquierda"
     - top_center: "Arriba al centro"
     - center: "Centro"
-    - tray: "Sobre el icono de la bandeja"
     $options:ru-RU:
     - bottom_right: "Справа внизу"
     - bottom_left: "Слева внизу"
@@ -934,7 +748,6 @@ Like the Windows volume mixer, the mod changes Windows' own audio preferences, a
     - top_left: "Слева вверху"
     - top_center: "Вверху по центру"
     - center: "По центру"
-    - tray: "Над иконкой в трее"
   - monitor: "cursor"
     $name: "Monitor"
     $name:uk-UA: "Монітор"
@@ -1743,12 +1556,6 @@ struct Config {
     bool osdAllowDrag = false;
     bool osdRememberPos = true;
 
-    // System tray (BETA)
-    bool showTrayIcon = false;
-    std::wstring trayIconStyle = L"system";
-    std::wstring trayPopupStyle = L"system_flyout";
-    bool trayScrollVolume = true;
-
     // Window position & dragging
     bool allowDragMove = false;
     bool rememberCustomPos = true;
@@ -1813,8 +1620,6 @@ enum class StrId {
     SystemDefault,
     MasterVolume,
     Muted,
-    ShowApps,
-    HideApps,
     DeafenOn,
     DeafenOff,
     OsdDragHint,
@@ -1833,8 +1638,6 @@ const WCHAR* L10n(StrId id) {
         {L"Пристрій Windows за замовчуванням", L"Domyślne urządzenie Windows", L"Windows-Standardgerät", L"Périphérique Windows par défaut", L"Dispositivo predeterminado de Windows", L"Устройство Windows по умолчанию", L"Windows default device"},
         {L"Загальна гучність", L"Głośność główna", L"Gesamtlautstärke", L"Volume principal", L"Volumen maestro", L"Общая громкость", L"Master volume"},
         {L"Звук вимкнено", L"Wyciszono", L"Stummgeschaltet", L"Muet", L"Silenciado", L"Звук выключен", L"Muted"},
-        {L"Показати програми", L"Pokaż aplikacje", L"Apps anzeigen", L"Afficher les applications", L"Mostrar aplicaciones", L"Показать приложения", L"Show apps"},
-        {L"Сховати програми", L"Ukryj aplikacje", L"Apps ausblenden", L"Masquer les applications", L"Ocultar aplicaciones", L"Скрыть приложения", L"Hide apps"},
         {L"Глушіння фону УВІМК", L"Wyciszenie tła WŁ.", L"Hintergrund stumm AN", L"Sourdine de fond ACTIVÉE", L"Silencio de fondo ACTIVADO", L"Глушение фона ВКЛ", L"Deafen ON"},
         {L"Глушіння фону ВИМК — звук відновлено", L"Wyciszenie tła WYŁ. — dźwięk przywrócony", L"Hintergrund stumm AUS — wiederhergestellt", L"Sourdine de fond DÉSACTIVÉE — son rétabli", L"Silencio de fondo DESACTIVADO — audio restaurado", L"Глушение фона ВЫКЛ — звук восстановлен", L"Deafen OFF — audio restored"},
         {L"Перетягніть OSD мишкою", L"Przeciągnij OSD myszą", L"OSD mit der Maus ziehen", L"Faites glisser l'OSD", L"Arrastra el OSD con el ratón", L"Перетащите OSD мышью", L"Drag the OSD with the mouse"},
@@ -2222,8 +2025,6 @@ int g_winH = 200;
 POINT g_pos{0, 0};
 float g_scale = 1.0f;  // user scale x monitor DPI (x auto-fit)
 HMONITOR g_popupMonitor = nullptr;
-bool g_openedFromTray = false;
-std::wstring g_activeTrayPopupStyle;  // tray popup style while opened from the tray icon
 std::vector<int> g_colSeparators;
 
 // Custom Dragging and Remembering Window Position
@@ -2233,17 +2034,6 @@ POINT g_dragStartWinPos{0, 0};
 int g_customPosX = 0;
 int g_customPosY = 0;
 bool g_hasCustomPos = false;
-bool g_trayExpanded = false;
-RECT g_trayExpandBtnRc{};
-
-// System Tray Notification Icon
-constexpr UINT WM_APP_TRAY = WM_APP + 10;
-constexpr UINT TRAY_ICON_ID = 2001;
-NOTIFYICONDATAW g_nid{};
-bool g_trayAdded = false;
-HICON g_hTrayIcon = nullptr;
-std::wstring g_traySig;
-DWORD g_lastTrayToggle = 0;
 
 // Routing / lock context menu
 HWND g_hwndMenu = nullptr;
@@ -2341,16 +2131,13 @@ struct HotkeyDef {
 // State shared with the low-level hook thread. The hooks live on their own
 // thread so slow audio calls on the UI thread never stall system-wide input
 // (Windows silently removes low-level hooks that time out).
-SRWLOCK g_hookLock = SRWLOCK_INIT;  // guards g_hookHotkeys, g_hookTrayRect and g_hookOsdRect
+SRWLOCK g_hookLock = SRWLOCK_INIT;  // guards g_hookHotkeys and g_hookOsdRect
 HotkeyDef g_hookHotkeys[HK_COUNT];
-RECT g_hookTrayRect{};
 RECT g_hookOsdRect{};
 std::atomic<bool> g_hookOsdHover{false};  // a visible pointer is over the OSD
 std::atomic<bool> g_hookPopupOpen{false};
 std::atomic<DWORD> g_hookShowTick{0};
-std::atomic<DWORD> g_hookOutsideClickTick{0};
 std::atomic<bool> g_hookReplaceOsd{false};
-std::atomic<bool> g_hookTrayWheel{false};
 std::atomic<bool> g_volumeMsgPending{false};
 // Event context of the mod's own endpoint volume changes: only a change made
 // outside the mod lets it replace a Windows flyout.
@@ -2378,7 +2165,6 @@ constexpr UINT WM_APP_CLOSE_MENU = WM_APP + 4;
 constexpr UINT WM_APP_VOLUME_CHANGED = WM_APP + 5;
 constexpr UINT WM_APP_DEVICES_CHANGED = WM_APP + 6;
 constexpr UINT WM_APP_MEDIA_KEY = WM_APP + 7;
-constexpr UINT WM_APP_TRAY_WHEEL = WM_APP + 8;
 constexpr UINT WM_APP_TASKBAR_WHEEL = WM_APP + 9;  // wheel over the notification area, wParam = delta
 constexpr UINT WM_APP_OSD_WHEEL = WM_APP + 11;     // wheel over the OSD, wParam = delta
 constexpr UINT WM_APP_LOCK_CHECK = WM_APP + 12;
@@ -3112,8 +2898,6 @@ void ShowOsd(const std::wstring& name, float vol, bool mute, Bitmap* icon,
 void Render();
 void HideCustomMenu();
 void SyncPopupHookState();
-bool GetTrayIconRect(RECT* rc);
-void UpdateTrayIcon(bool force = false);
 
 void ReleaseItems(std::vector<Item>& items) {
     for (Item& it : items) {
@@ -3660,7 +3444,6 @@ void AdjustMasterVolume(float delta, bool toggleMute, bool alwaysOsd = false) {
     g_osdMasterMute = m != FALSE;
     ShowOsd(L10n(StrId::MasterVolume), v, m != FALSE, nullptr, alwaysOsd ? OsdKind::Always : OsdKind::Volume, devName);
     if (g_visible && RefreshValues()) Render();
-    UpdateTrayIcon();
 }
 
 // Changes every session of one app; the loudest session is the reference for
@@ -4467,13 +4250,6 @@ const Color kLockColor(240, 245, 158, 11);
 std::wstring g_layoutMode = L"modern_cards";  // effective layout of the open popup
 
 std::wstring EffectiveLayoutMode() {
-    const std::wstring& t = g_activeTrayPopupStyle;
-    if (t == L"system_flyout") return L"fluent_flyout";
-    if (t == L"compact_fader") return L"compact_strip";
-    if (t == L"mini_island") return L"minimal_pill";
-    if (t == L"radial_dial") return L"circular_hud";
-    if (t == L"vertical_dock") return L"vertical_dock";
-    if (t == L"control_center") return L"control_center";
     if (g_cfg.layoutMode.empty()) return L"modern_cards";
     return g_cfg.layoutMode;
 }
@@ -4530,24 +4306,12 @@ LayoutMetrics GetLayoutMetrics(const std::wstring& l) {
 void Layout() {
     g_layoutMode = EffectiveLayoutMode();
     const LayoutMetrics m = GetLayoutMetrics(g_layoutMode);
-    const bool trayFlyout = (g_activeTrayPopupStyle == L"system_flyout");
     const int pad = S(m.pad);
     const int gap = S(m.gap);
     const int btnSz = std::max(10, S(m.btnSz));
     const int iconSz = std::max(10, S(m.iconSz));
 
-    int appCount = 0, deviceCount = 0;
-    bool haveDefault = false;
-    for (const Item& it : g_items) {
-        if (it.kind == 2) appCount++;
-        if (it.kind == 0) deviceCount++;
-        if (it.isDefaultDevice) haveDefault = true;
-    }
-    // The Windows 11 style flyout starts with the default device only.
-    const bool collapsed = trayFlyout && !g_trayExpanded;
-
     g_colSeparators.clear();
-    SetRectEmpty(&g_trayExpandBtnRc);
     for (Item& it : g_items) {
         it.firstDevice = false;
         it.verticalSlider = false;
@@ -4559,11 +4323,7 @@ void Layout() {
         it.rowTop = it.rowBottom = -9999;
         it.trackTop = it.trackBottom = 0;
     }
-    auto isHidden = [&](const Item& it) {
-        if (collapsed && (it.kind == 2 || (haveDefault && !it.isDefaultDevice))) return true;
-        if (it.kind == 0 && (!m.headers || m.columns)) return true;
-        return false;
-    };
+    auto isHidden = [&](const Item& it) { return it.kind == 0 && (!m.headers || m.columns); };
 
     if (m.columns) {
         const int colW = S(m.colW), colH = S(m.colH), top = S(10);
@@ -4668,12 +4428,6 @@ void Layout() {
             it.trackCy = cy;
             it.trackH = ph;
         }
-    }
-
-    if (trayFlyout && (appCount > 0 || deviceCount > 1)) {
-        y += S(8);
-        g_trayExpandBtnRc = {pad, y, W - pad, y + S(30)};
-        y += S(30);
     }
     g_winH = y + S(10);
 }
@@ -5182,30 +4936,6 @@ void DrawContent(Graphics& g) {
             DrawRouteButton(g, it.routeBtnRc, ink);
         }
     }
-
-    // =========================================================================
-    // Tray flyout expand / collapse button
-    // =========================================================================
-    if (!IsRectEmpty(&g_trayExpandBtnRc)) {
-        const float bx = (float)g_trayExpandBtnRc.left;
-        const float by = (float)g_trayExpandBtnRc.top;
-        const float bw = (float)(g_trayExpandBtnRc.right - g_trayExpandBtnRc.left);
-        const float bh = (float)(g_trayExpandBtnRc.bottom - g_trayExpandBtnRc.top);
-        FillRoundRect(g, WithAlpha(ink, 20), bx, by, bw, bh, (float)S(6.0f));
-        StrokeRoundRect(g, WithAlpha(ink, 40), 1.0f, bx, by, bw, bh, (float)S(6.0f));
-
-        const float cs = (float)S(4.0f);
-        const float cx = bx + S(16.0f);
-        const float cy = by + bh / 2.0f;
-        Pen chev(ink, std::max(1.3f, (float)S(1.4f)));
-        chev.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-        const float dir = g_trayExpanded ? -1.0f : 1.0f;
-        g.DrawLine(&chev, cx - cs, cy - dir * cs / 2.0f, cx, cy + dir * cs / 2.0f);
-        g.DrawLine(&chev, cx, cy + dir * cs / 2.0f, cx + cs, cy - dir * cs / 2.0f);
-
-        const WCHAR* label = L10n(g_trayExpanded ? StrId::HideApps : StrId::ShowApps);
-        g.DrawString(label, -1, g_gc.fontRoute, RectF(bx + S(28), by, bw - S(36), bh), &left, &textBrush);
-    }
 }
 
 void Render() {
@@ -5279,13 +5009,9 @@ void ClampToWorkArea(const RECT& wa) {
 }
 
 HMONITOR TargetMonitor() {
-    if (g_cfg.rememberCustomPos && g_hasCustomPos && !g_openedFromTray) {
+    if (g_cfg.rememberCustomPos && g_hasCustomPos) {
         HMONITOR m = MonitorFromPoint(POINT{g_customPosX + 8, g_customPosY + 8}, MONITOR_DEFAULTTONULL);
         if (m) return m;
-    }
-    RECT tray{};
-    if ((g_openedFromTray || g_cfg.anchor == L"tray") && GetTrayIconRect(&tray)) {
-        return MonitorFromRect(&tray, MONITOR_DEFAULTTONEAREST);
     }
     if (g_cfg.monitor == L"primary") return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
     if (g_cfg.monitor == L"active") {
@@ -5318,32 +5044,10 @@ void ComputeScaleAndLayout(HMONITOR mon) {
 void PositionWindow(HMONITOR mon) {
     const RECT wa = MonitorWorkArea(mon);
 
-    if (g_cfg.rememberCustomPos && g_hasCustomPos && !g_openedFromTray &&
+    if (g_cfg.rememberCustomPos && g_hasCustomPos &&
         MonitorFromPoint(POINT{g_customPosX + 8, g_customPosY + 8}, MONITOR_DEFAULTTONULL)) {
         g_pos.x = g_customPosX;
         g_pos.y = g_customPosY;
-        ClampToWorkArea(wa);
-        return;
-    }
-
-    RECT tray{};
-    if ((g_openedFromTray || g_cfg.anchor == L"tray") && GetTrayIconRect(&tray)) {
-        const int gap = S(10);
-        const int cx = (tray.left + tray.right) / 2;
-        const int cy = (tray.top + tray.bottom) / 2;
-        if (tray.left >= wa.right) {          // taskbar on the right
-            g_pos.x = tray.left - g_winW - gap;
-            g_pos.y = cy - g_winH / 2;
-        } else if (tray.right <= wa.left) {   // taskbar on the left
-            g_pos.x = tray.right + gap;
-            g_pos.y = cy - g_winH / 2;
-        } else if (tray.bottom <= wa.top) {   // taskbar on top
-            g_pos.x = cx - g_winW / 2;
-            g_pos.y = tray.bottom + gap;
-        } else {                              // bottom taskbar or overflow flyout
-            g_pos.x = cx - g_winW / 2;
-            g_pos.y = tray.top - g_winH - gap;
-        }
         ClampToWorkArea(wa);
         return;
     }
@@ -5365,14 +5069,14 @@ void PositionWindow(HMONITOR mon) {
         g_pos = {midX, wa.bottom - g_winH - offY};
     } else if (a == L"center") {
         g_pos = {midX, midY};
-    } else {  // bottom_right, or "tray" while the tray icon is hidden
+    } else {  // bottom_right
         g_pos = {wa.right - g_winW - offX, wa.bottom - g_winH - offY};
     }
     ClampToWorkArea(wa);
 }
 
-// Re-layout of the open popup (new apps, expanded flyout). The edge that is
-// closest to the screen edge stays put, so the popup grows away from the tray.
+// Re-layout of the open popup (new apps or devices). The edge that is closest
+// to the screen edge stays put, so the popup grows away from it.
 void ApplyLayoutChange() {
     const int oldW = g_winW, oldH = g_winH;
     if (!g_popupMonitor) g_popupMonitor = TargetMonitor();
@@ -5427,8 +5131,6 @@ void FinishHide() {
     ReleaseItems(g_items);
     g_items.clear();
     g_sig.clear();
-    g_activeTrayPopupStyle.clear();
-    g_openedFromTray = false;
     g_hoverIdx = -1;
     SyncPopupHookState();
 }
@@ -5454,12 +5156,9 @@ void HidePopup() {
 
 // The popup never takes the focus: activating it would minimize exclusive
 // fullscreen games. Clicks outside and key presses are seen by the hooks.
-void ShowPopup(bool fromTray) {
+void ShowPopup() {
     if (g_visible) FinishHide();
 
-    g_openedFromTray = fromTray;
-    g_activeTrayPopupStyle = fromTray ? g_cfg.trayPopupStyle : L"";
-    if (g_activeTrayPopupStyle == L"full_mixer") g_activeTrayPopupStyle.clear();
     g_theme = MakeTheme(g_cfg.theme);
     g_hoverIdx = -1;
 
@@ -5492,14 +5191,10 @@ void ShowPopup(bool fromTray) {
     SyncPopupHookState();
 }
 
-// zone: 0 = row, 1 = icon (mute), 2 = slider, 3 = route button, 4 = expand button
+// zone: 0 = row, 1 = icon (mute), 2 = slider, 3 = route button
 int HitTest(int x, int y, int* zone) {
     *zone = 0;
     POINT pt{x, y};
-    if (!IsRectEmpty(&g_trayExpandBtnRc) && PtInRect(&g_trayExpandBtnRc, pt)) {
-        *zone = 4;
-        return -2;
-    }
     for (int i = 0; i < (int)g_items.size(); i++) {
         const Item& it = g_items[i];
         if (it.rowTop < 0 || y < it.rowTop || y >= it.rowBottom) continue;
@@ -6317,11 +6012,11 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// Audio Notifications, System Tray Icon, and Low-Level Hooks
+// Audio Notifications and Low-Level Hooks
 
 ////////////////////////////////////////////////////////////////////////////////
 // Endpoint notifications: media keys, other apps and Windows itself change the
-// volume or the default device; the tray icon and the open popup follow.
+// volume or the default device; the open popup follows.
 
 class AudioNotifier final : public IAudioEndpointVolumeCallback, public IMMNotificationClient {
 public:
@@ -6436,262 +6131,6 @@ static bool ReadDefaultMaster(float* vol, bool* mute) {
     *mute = m != FALSE;
     ep->Release();
     return true;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// System Tray Icon
-
-// Cached; reset by the "ImmersiveColorSet" WM_SETTINGCHANGE broadcast.
-int g_lightTaskbar = -1;
-
-bool IsLightTaskbar() {
-    if (g_lightTaskbar < 0) {
-        DWORD v = 0;
-        DWORD sz = sizeof(v);
-        g_lightTaskbar = (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                                       L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS && v) ? 1 : 0;
-    }
-    return g_lightTaskbar == 1;
-}
-
-HICON CreateTrayIcon(const std::wstring& style, float vol, bool mute, bool light) {
-    int sz = GetSystemMetrics(SM_CXSMICON);
-    sz = std::clamp(sz <= 0 ? 16 : sz, 16, 64);
-
-    if (style == L"system" && !light) {
-        // SndVolSSO.dll icons: 1 = muted, 2 = no waves, 3/4/5 = one/two/three waves.
-        // They are white, so a light taskbar falls back to the drawn speaker.
-        const int idx = mute ? 1 : vol <= 0.001f ? 2 : vol < 0.34f ? 3 : vol < 0.67f ? 4 : 5;
-        WCHAR sysPath[MAX_PATH] = {0};
-        GetSystemDirectoryW(sysPath, MAX_PATH);
-        const std::wstring dll = FileAccessPath(std::wstring(sysPath) + L"\\SndVolSSO.dll");
-        HICON hIcon = nullptr;
-        if (SUCCEEDED(SHDefExtractIconW(dll.c_str(), idx, 0, &hIcon, nullptr, MAKELONG(sz, sz))) && hIcon) return hIcon;
-        if (ExtractIconExW(dll.c_str(), idx, nullptr, &hIcon, 1) > 0 && hIcon) return hIcon;
-    }
-
-    Bitmap bmp(sz, sz, PixelFormat32bppARGB);
-    Graphics g(&bmp);
-    g.SetSmoothingMode(SmoothingModeAntiAlias);
-    g.Clear(Color(0, 0, 0, 0));
-
-    const Color fg = light ? Color(255, 28, 28, 28) : Color(255, 255, 255, 255);
-    const Color col = mute ? Color(240, 232, 72, 72) : fg;
-    Pen pen(col, sz * 0.07f);
-    pen.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-    SolidBrush brush(col);
-
-    const float fSz = (float)sz;
-
-    if (style == L"faders") {
-        const float x1 = fSz * 0.22f, x2 = fSz * 0.50f, x3 = fSz * 0.78f;
-        const float top = fSz * 0.12f, bot = fSz * 0.88f;
-        Pen trackPen(WithAlpha(fg, 120), fSz * 0.055f);
-        trackPen.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-        g.DrawLine(&trackPen, x1, top, x1, bot);
-        g.DrawLine(&trackPen, x2, top, x2, bot);
-        g.DrawLine(&trackPen, x3, top, x3, bot);
-
-        const float lvl = mute ? 0.0f : std::clamp(vol, 0.0f, 1.0f);
-        const float k1 = top + (bot - top) * 0.65f;
-        const float k2 = bot - (bot - top) * lvl;
-        const float k3 = top + (bot - top) * 0.75f;
-        const float kw = fSz * 0.20f, kh = fSz * 0.13f;
-        FillRoundRect(g, col, x1 - kw / 2, k1 - kh / 2, kw, kh, 1.5f);
-        FillRoundRect(g, col, x2 - kw / 2, k2 - kh / 2, kw, kh, 1.5f);
-        FillRoundRect(g, col, x3 - kw / 2, k3 - kh / 2, kw, kh, 1.5f);
-    } else if (style == L"wave" || style == L"equalizer_bars") {
-        const bool eq = (style == L"equalizer_bars");
-        const float shape[5] = {0.40f, 0.78f, 1.0f, 0.66f, 0.45f};
-        const float level = mute ? 0.25f : 0.35f + 0.65f * std::clamp(vol, 0.0f, 1.0f);
-        const float bw = fSz * (eq ? 0.13f : 0.11f);
-        const float gap = fSz * (eq ? 0.05f : 0.07f);
-        const float startX = (fSz - (5 * bw + 4 * gap)) / 2.0f;
-        for (int i = 0; i < 5; i++) {
-            const float bh = std::max(fSz * 0.15f, fSz * 0.88f * shape[i] * level);
-            const float bx = startX + i * (bw + gap);
-            const float by = eq ? (fSz * 0.94f - bh) : (fSz - bh) / 2.0f;  // equalizer grows from the floor
-            FillRoundRect(g, col, bx, by, bw, bh, eq ? 1.0f : 1.5f);
-        }
-    } else if (style == L"soundwave_circle") {
-        const float cx = fSz * 0.50f, cy = fSz * 0.50f;
-        g.FillEllipse(&brush, cx - fSz * 0.15f, cy - fSz * 0.15f, fSz * 0.30f, fSz * 0.30f);
-        if (!mute && vol > 0.05f) {
-            Pen ring1(WithAlpha(fg, 180), fSz * 0.06f);
-            g.DrawEllipse(&ring1, cx - fSz * 0.28f, cy - fSz * 0.28f, fSz * 0.56f, fSz * 0.56f);
-        }
-        if (!mute && vol > 0.5f) {
-            Pen ring2(WithAlpha(fg, 100), fSz * 0.05f);
-            g.DrawEllipse(&ring2, cx - fSz * 0.42f, cy - fSz * 0.42f, fSz * 0.84f, fSz * 0.84f);
-        }
-    } else if (style == L"headphones") {
-        Pen hpPen(col, fSz * 0.08f);
-        hpPen.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-        g.DrawArc(&hpPen, fSz * 0.18f, fSz * 0.15f, fSz * 0.64f, fSz * 0.60f, 180.0f, 180.0f);
-        FillRoundRect(g, col, fSz * 0.12f, fSz * 0.45f, fSz * 0.16f, fSz * 0.40f, 2.0f);
-        FillRoundRect(g, col, fSz * 0.72f, fSz * 0.45f, fSz * 0.16f, fSz * 0.40f, 2.0f);
-    } else if (style == L"retro_knob") {
-        const float cx = fSz * 0.50f, cy = fSz * 0.50f, r = fSz * 0.36f;
-        Pen rimPen(WithAlpha(fg, 160), fSz * 0.065f);
-        g.DrawEllipse(&rimPen, cx - r, cy - r, r * 2.0f, r * 2.0f);
-        // 0 % points to the lower left (135 deg), 100 % to the lower right (405 deg)
-        const float angle = 135.0f + std::clamp(vol, 0.0f, 1.0f) * 270.0f;
-        const float rads = angle * 3.14159265f / 180.0f;
-        const float nx = cx + (r - fSz * 0.08f) * cosf(rads);
-        const float ny = cy + (r - fSz * 0.08f) * sinf(rads);
-        Pen needlePen(col, fSz * 0.08f);
-        needlePen.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-        g.DrawLine(&needlePen, cx, cy, nx, ny);
-    } else if (style == L"minimal_dot") {
-        const float cx = fSz * 0.50f, cy = fSz * 0.50f;
-        const float dotR = mute ? fSz * 0.14f : fSz * 0.20f;
-        g.FillEllipse(&brush, cx - dotR, cy - dotR, dotR * 2.0f, dotR * 2.0f);
-        if (!mute) {
-            Pen glowPen(WithAlpha(fg, 120), fSz * 0.06f);
-            g.DrawEllipse(&glowPen, cx - fSz * 0.34f, cy - fSz * 0.34f, fSz * 0.68f, fSz * 0.68f);
-        }
-    } else {  // Fluent Vector Speaker (default; also "system" on a light taskbar)
-        const float sx = fSz * 0.12f;
-        const float sy = fSz * 0.50f;
-        PointF pts[6] = {
-            {sx, sy - fSz * 0.14f},
-            {sx + fSz * 0.16f, sy - fSz * 0.14f},
-            {sx + fSz * 0.35f, sy - fSz * 0.28f},
-            {sx + fSz * 0.35f, sy + fSz * 0.28f},
-            {sx + fSz * 0.16f, sy + fSz * 0.14f},
-            {sx, sy + fSz * 0.14f}
-        };
-        SolidBrush spk(fg);
-        g.FillPolygon(&spk, pts, 6);
-
-        if (mute) {
-            Pen xPen(Color(240, 232, 72, 72), fSz * 0.08f);
-            xPen.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-            const float x1 = fSz * 0.58f, x2 = fSz * 0.86f;
-            const float y1 = sy - fSz * 0.14f, y2 = sy + fSz * 0.14f;
-            g.DrawLine(&xPen, x1, y1, x2, y2);
-            g.DrawLine(&xPen, x2, y1, x1, y2);
-        } else {
-            Pen wave(fg, fSz * 0.07f);
-            wave.SetLineCap(LineCapRound, LineCapRound, DashCapFlat);
-            if (vol > 0.01f) g.DrawArc(&wave, fSz * 0.30f, sy - fSz * 0.20f, fSz * 0.40f, fSz * 0.40f, -40.0f, 80.0f);
-            if (vol > 0.34f) g.DrawArc(&wave, fSz * 0.24f, sy - fSz * 0.30f, fSz * 0.60f, fSz * 0.60f, -45.0f, 90.0f);
-            if (vol > 0.67f) g.DrawArc(&wave, fSz * 0.18f, sy - fSz * 0.40f, fSz * 0.80f, fSz * 0.80f, -50.0f, 100.0f);
-        }
-    }
-
-    HICON hIcon = nullptr;
-    bmp.GetHICON(&hIcon);
-    return hIcon;
-}
-
-bool GetTrayIconRect(RECT* rc) {
-    if (!g_trayAdded || !g_hwnd) return false;
-    NOTIFYICONIDENTIFIER id{};
-    id.cbSize = sizeof(id);
-    id.hWnd = g_hwnd;
-    id.uID = TRAY_ICON_ID;
-    return SUCCEEDED(Shell_NotifyIconGetRect(&id, rc)) && !IsRectEmpty(rc);
-}
-
-// The mouse hook only gets a cached rectangle; the UI thread verifies it again.
-void RefreshTrayRect() {
-    RECT rc{};
-    if (!GetTrayIconRect(&rc)) SetRectEmpty(&rc);
-    AcquireSRWLockExclusive(&g_hookLock);
-    g_hookTrayRect = rc;
-    ReleaseSRWLockExclusive(&g_hookLock);
-}
-
-void RemoveTrayIcon() {
-    if (g_trayAdded) Shell_NotifyIconW(NIM_DELETE, &g_nid);
-    g_trayAdded = false;
-    g_traySig.clear();
-    memset(&g_nid, 0, sizeof(g_nid));
-    if (g_hTrayIcon) {
-        DestroyIcon(g_hTrayIcon);
-        g_hTrayIcon = nullptr;
-    }
-    RefreshTrayRect();
-    UpdateHooks();
-}
-
-void UpdateTrayIcon(bool force) {
-    if (!g_cfg.showTrayIcon || !g_hwnd) {
-        if (g_trayAdded || g_hTrayIcon) RemoveTrayIcon();
-        return;
-    }
-
-    float vol = 1.0f;
-    bool mute = false;
-    ReadDefaultMaster(&vol, &mute);
-    const bool light = IsLightTaskbar();
-    const int pct = (int)std::lround(vol * 100);
-
-    // Nothing to do when the icon would look the same (slider drags call this often).
-    WCHAR sig[160];
-    swprintf_s(sig, L"%ls|%d|%d|%d|%d", g_cfg.trayIconStyle.c_str(), pct, mute ? 1 : 0, light ? 1 : 0,
-               (int)GetCurrentLanguage());
-    if (!force && g_trayAdded && g_traySig == sig) return;
-
-    HICON icon = CreateTrayIcon(g_cfg.trayIconStyle, vol, mute, light);
-
-    NOTIFYICONDATAW nid{};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = g_hwnd;
-    nid.uID = TRAY_ICON_ID;
-    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-    nid.uCallbackMessage = WM_APP_TRAY;
-    nid.hIcon = icon;
-    if (mute) swprintf_s(nid.szTip, L"%ls: %ls", L10n(StrId::MasterVolume), L10n(StrId::Muted));
-    else swprintf_s(nid.szTip, L"%ls: %d%%", L10n(StrId::MasterVolume), pct);
-
-    bool ok = g_trayAdded && Shell_NotifyIconW(NIM_MODIFY, &nid);
-    bool added = false;
-    if (!ok) {
-        ok = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
-        added = ok;
-        if (ok) {
-            nid.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIconW(NIM_SETVERSION, &nid);
-        }
-    }
-
-    if (ok) {
-        if (g_hTrayIcon) DestroyIcon(g_hTrayIcon);
-        g_hTrayIcon = icon;
-        g_nid = nid;
-        g_trayAdded = true;
-        g_traySig = sig;
-        if (added) {
-            Wh_Log(L"Tray icon added");
-            RefreshTrayRect();
-            UpdateHooks();
-        }
-    } else {
-        // Usually the taskbar is not up yet; TaskbarCreated will retry.
-        if (icon) DestroyIcon(icon);
-        g_trayAdded = false;
-        g_traySig.clear();
-        Wh_Log(L"Shell_NotifyIconW failed, err=%lu", GetLastError());
-    }
-}
-
-void ShowPopup(bool fromTray);
-void HidePopup();
-
-void TrayToggle() {
-    const DWORD now = GetTickCount();
-    // One click arrives as WM_LBUTTONUP + NIN_SELECT (WM_RBUTTONUP + WM_CONTEXTMENU).
-    if (now - g_lastTrayToggle < 350) return;
-    g_lastTrayToggle = now;
-    if (g_visible && !g_hiding) {
-        HidePopup();
-        return;
-    }
-    // The mouse-down of this very click on the icon has already closed the popup.
-    if (now - g_hookOutsideClickTick.load() < 500) return;
-    ShowPopup(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6819,18 +6258,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     return 1;
                 }
             }
-            bool onTrayIcon = false;
-            if (g_hookTrayWheel) {
-                AcquireSRWLockShared(&g_hookLock);
-                const RECT rc = g_hookTrayRect;
-                ReleaseSRWLockShared(&g_hookLock);
-                if (PtInRect(&rc, ms->pt)) {
-                    onTrayIcon = true;
-                    PostMessageW(g_hwnd, WM_APP_TRAY_WHEEL, delta, MAKELPARAM(ms->pt.x, ms->pt.y));
-                }
-            }
             if (g_hookReplaceOsd && PtInNotifyArea(ms->pt)) {
-                if (!onTrayIcon) PostMessageW(g_hwnd, WM_APP_TASKBAR_WHEEL, delta, 0);
+                PostMessageW(g_hwnd, WM_APP_TASKBAR_WHEEL, delta, 0);
                 return 1;
             }
         } else if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
@@ -6841,7 +6270,6 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 const bool menuOpen = g_hwndMenu && IsWindowVisible(g_hwndMenu);
                 const bool inMenu = menuOpen && GetWindowRect(g_hwndMenu, &mr) && PtInRect(&mr, ms->pt);
                 if (!inMain && !inMenu) {
-                    g_hookOutsideClickTick = GetTickCount();
                     PostMessageW(g_hwnd, WM_APP_CLOSE_MIXER, 0, 0);
                 } else if (menuOpen && !inMenu) {
                     PostMessageW(g_hwnd, WM_APP_CLOSE_MENU, 0, 0);
@@ -6910,12 +6338,9 @@ void StopHookThread() {
 
 // Each hook is installed only while a feature needs it: the keyboard hook for
 // configured hotkeys, the media key replacement and the open popup (any key
-// closes it); the mouse hook for the open popup, the tray wheel, the wheel
-// over a hovered OSD and the replacement of the Windows volume tooltip in the
-// notification area.
+// closes it); the mouse hook for the open popup, the wheel over a hovered OSD and
+// the replacement of the Windows volume tooltip in the notification area.
 void UpdateHooks() {
-    const bool trayWheel = g_cfg.showTrayIcon && g_cfg.trayScrollVolume && g_trayAdded;
-    g_hookTrayWheel = trayWheel;
     bool anyHotkey = false;
     AcquireSRWLockShared(&g_hookLock);
     for (const HotkeyDef& h : g_hookHotkeys) {
@@ -6929,7 +6354,7 @@ void UpdateHooks() {
         PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_KBD, wantKbd ? 1 : 0, 0)) {
         g_kbdHookWanted = wantKbd;
     }
-    const bool wantMouse = g_visible || trayWheel || g_hookReplaceOsd || g_hookOsdHover;
+    const bool wantMouse = g_visible || g_hookReplaceOsd || g_hookOsdHover;
     if (wantMouse != g_mouseHookWanted &&
         PostThreadMessageW(g_hookThreadId, WM_APP_HOOK_MOUSE, wantMouse ? 1 : 0, 0)) {
         g_mouseHookWanted = wantMouse;
@@ -7300,21 +6725,12 @@ void LoadConfig() {
     c.opacity = SettingInt(L"appearance.opacity", 20, 100);
     c.animate = SettingBool(L"appearance.animation");
 
-    // Tray
-    c.showTrayIcon = SettingBool(L"tray.showTrayIcon");
-    c.trayIconStyle = SettingChoice(L"tray.trayIconStyle",
-        {L"system", L"speaker", L"faders", L"wave", L"headphones", L"retro_knob", L"minimal_dot",
-         L"equalizer_bars", L"soundwave_circle"}, L"system");
-    c.trayPopupStyle = SettingChoice(L"tray.trayPopupStyle",
-        {L"system_flyout", L"full_mixer", L"compact_fader", L"mini_island", L"radial_dial", L"vertical_dock",
-         L"control_center"}, L"system_flyout");
-    c.trayScrollVolume = SettingBool(L"tray.trayScrollVolume");
 
     // Position
     c.allowDragMove = SettingBool(L"position.allowDragMove");
     c.rememberCustomPos = SettingBool(L"position.rememberCustomPos");
     c.anchor = SettingChoice(L"position.anchor",
-        {L"bottom_right", L"bottom_left", L"bottom_center", L"top_right", L"top_left", L"top_center", L"center", L"tray"},
+        {L"bottom_right", L"bottom_left", L"bottom_center", L"top_right", L"top_left", L"top_center", L"center"},
         L"bottom_right");
     c.monitor = SettingChoice(L"position.monitor", {L"cursor", L"active", L"primary"}, L"cursor");
     c.offsetX = SettingInt(L"position.offsetX", -2000, 2000);
@@ -7398,10 +6814,7 @@ static void BeginWindowMove() {
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static const UINT s_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     if (s_wmTaskbarCreated && msg == s_wmTaskbarCreated) {
-        Wh_Log(L"TaskbarCreated received, restoring tray icon");
-        g_trayAdded = false;
-        UpdateTrayIcon(true);
-        UpdateFlyoutHook();
+        UpdateFlyoutHook();  // Explorer restarted
         return 0;
     }
 
@@ -7435,8 +6848,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_SETTINGCHANGE:
             if (lParam && wcscmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0) {
-                g_lightTaskbar = -1;
-                UpdateTrayIcon(true);
                 if (g_visible) {
                     g_theme = MakeTheme(g_cfg.theme);
                     Render();
@@ -7465,45 +6876,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_DISPLAYCHANGE:
             if (g_visible) HidePopup();
-            RefreshTrayRect();
             break;
-
-        case WM_APP_TRAY:
-            switch (LOWORD(lParam)) {
-                case WM_LBUTTONUP:
-                case NIN_SELECT:
-                case NIN_KEYSELECT:
-                case WM_RBUTTONUP:
-                case WM_CONTEXTMENU:
-                    TrayToggle();
-                    break;
-                case WM_MBUTTONUP:
-                    AdjustMasterVolume(0.0f, true);
-                    break;
-                case WM_MOUSEMOVE: {
-                    // Keeps the rectangle used by the tray wheel up to date.
-                    static DWORD s_lastRectRefresh = 0;
-                    const DWORD now = GetTickCount();
-                    if (now - s_lastRectRefresh > 1000) {
-                        s_lastRectRefresh = now;
-                        RefreshTrayRect();
-                    }
-                    break;
-                }
-            }
-            return 0;
-
-        case WM_APP_TRAY_WHEEL: {
-            RECT rc{};
-            const POINT pt{(short)LOWORD(lParam), (short)HIWORD(lParam)};
-            if (g_cfg.trayScrollVolume && GetTrayIconRect(&rc) && PtInRect(&rc, pt)) {
-                const int notches = TakeWheelNotches((short)wParam);
-                if (notches) AdjustMasterVolume(notches * g_cfg.wheelStep / 100.0f, false);
-            } else {
-                RefreshTrayRect();
-            }
-            return 0;
-        }
 
         case WM_APP_TASKBAR_WHEEL: {
             const int notches = TakeWheelNotches((short)wParam);
@@ -7520,7 +6893,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             switch ((int)wParam - 1) {
                 case HK_MAIN:
                     if (g_visible && !g_hiding) HidePopup();
-                    else ShowPopup(false);
+                    else ShowPopup();
                     break;
                 case HK_APP_UP: AdjustForegroundAppVolume(step, false); break;
                 case HK_APP_DOWN: AdjustForegroundAppVolume(-step, false); break;
@@ -7530,7 +6903,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case HK_MASTER_MUTE: AdjustMasterVolume(0.0f, true); break;
                 case HK_DEAFEN: ToggleDeafenBackground(); break;
             }
-            UpdateTrayIcon();
             return 0;
         }
 
@@ -7545,7 +6917,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_VOLUME_CHANGED:
             g_volumeMsgPending = false;
             OnMasterVolumeChanged();
-            UpdateTrayIcon();
             if (g_visible && !g_dragging && RefreshValues()) Render();
             return 0;
 
@@ -7553,7 +6924,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_deviceMsgPending = false;
             RebindDefaultEndpoint();
             ResyncMasterLevel();
-            UpdateTrayIcon(true);
             RebuildLockWatch();
             if (g_visible && !g_dragging) RefreshModel(false);
             return 0;
@@ -7575,10 +6945,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_deafenActive && !g_cfg.enableDeafenBackground) RestoreDeafen(false);
             RegisterAllHotkeys();
             ApplyOsdWindowStyle();
-            UpdateTrayIcon(true);
             UpdateHooks();
             g_theme = MakeTheme(g_cfg.theme);
-            if (g_visible) ShowPopup(g_openedFromTray);
+            if (g_visible) ShowPopup();
             if (g_cfg.osdAllowDrag) ShowOsdDragPreview();
             return 0;
         }
@@ -7586,7 +6955,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_QUIT:
             UnregisterAllHotkeys();
             FinishHide();
-            RemoveTrayIcon();
             KillTimer(hwnd, ID_TIMER_REFRESH_ONCE);
             if (g_hwndOsd) {
                 DestroyWindow(g_hwndOsd);
@@ -7637,15 +7005,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int zone = 0;
             const int i = HitTest(x, y, &zone);
 
-            if (zone == 4) {
-                g_trayExpanded = !g_trayExpanded;
-                ApplyLayoutChange();
-                return 0;
-            }
+
             if (i >= 0 && zone == 1) {
                 ToggleMute(g_items[i]);
                 Render();
-                UpdateTrayIcon();
                 return 0;
             }
             if (i >= 0 && zone == 3) {
@@ -7697,7 +7060,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             if (g_dragging) {
                 DragTo(x, y);
-                UpdateTrayIcon();
                 return 0;
             }
             int zone = 0;
@@ -7747,7 +7109,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_dragIdx = -1;
                 ReleaseCapture();
                 if (g_locksDirty) PersistLockedVolumes();
-                UpdateTrayIcon();
             }
             return 0;
 
@@ -7765,7 +7126,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (i >= 0 && g_items[i].kind == 0) {
                 SetDefaultAudioDevice(g_items[i].deviceId);
                 RefreshModel(false);
-                UpdateTrayIcon(true);
                 return 0;
             }
             // A quick second click on a slider or an icon is a normal click.
@@ -7786,7 +7146,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetItemVolume(it, it.vol + (delta > 0 ? step : -step));
                 if (it.mute && it.vol > 0.0f && delta > 0) SetItemMute(it, false);
                 Render();
-                UpdateTrayIcon();
             }
             return 0;
         }
@@ -7874,7 +7233,6 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         StartAudioNotifications();
         StartHookThread();
         RegisterAllHotkeys();
-        UpdateTrayIcon(true);
         UpdateHooks();
         RecoverDeafenState();
         RebuildLockWatch();
@@ -7962,7 +7320,7 @@ void WhTool_ModUninit() {
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP_QUIT, 0, 0);
     if (g_thread) {
         // The process exits right after this returns. The UI thread finishes
-        // its cleanup (Deafen, locks, tray icon, hooks) first; if it hangs, the
+        // its cleanup (Deafen, locks, hooks) first; if it hangs, the
         // process exits anyway, so the mutex can't keep a restarted mod off.
         if (WaitForSingleObject(g_thread, 10000) != WAIT_OBJECT_0) Wh_Log(L"UI thread didn't stop in time");
         CloseHandle(g_thread);
