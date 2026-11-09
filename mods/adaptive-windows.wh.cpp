@@ -59,6 +59,8 @@ are the defaults and can be changed in the settings (text fields such as "Ctrl+A
 "Win+T"; leave empty to turn the hotkey off). Unavailable hotkeys are reported in the Windhawk
 log (error 1409 = already in use).
 
+Win + Ctrl + T is also the default Always On Top shortcut of PowerToys: if you use both, change one of them.
+
 ### Works with other animation mods
 Adaptive Windows works together with these two mods:
 
@@ -144,6 +146,8 @@ ou Alt+Shift) caso outro programa já os use; reinicie o mod depois de mudar. Wi
 os padrões e podem ser trocados nas configurações (campos de texto como "Ctrl+Alt+G" ou "Win+T";
 deixe vazio para desligar o atalho). Atalhos indisponíveis aparecem no log do Windhawk
 (erro 1409 = já em uso).
+
+Win + Ctrl + T também é o atalho padrão do Always On Top do PowerToys: se você usa os dois, troque um deles.
 
 ### Funciona junto com outros mods de animação
 O Adaptive Windows funciona junto com estes dois mods:
@@ -371,7 +375,7 @@ os cantos.
 #include <cwctype>
 #include <string>
 #include <vector>
-#include <mutex>
+#include <atomic>
 #include <cstdint>
 
 #ifndef DWMWA_BORDER_COLOR
@@ -421,8 +425,8 @@ struct Config {
 };
 
 static Config g_cfg;
-static int g_layoutRt = -1;
-static double g_mainFrac = 0;  // fração da janela principal ajustada pelo usuário (0 = padrão)  // layout escolhido pelo atalho (-1 = usar o das configurações)
+static int g_layoutRt = -1;  // layout escolhido pelo atalho (-1 = usar o das configurações)
+static double g_mainFrac = 0;  // fração da janela principal ajustada pelo usuário (0 = padrão)
 
 static std::wstring GetStr(PCWSTR name) {
     std::wstring out;
@@ -431,7 +435,6 @@ static std::wstring GetStr(PCWSTR name) {
     return out;
 }
 
-static std::mutex g_ignMx;
 static std::vector<std::wstring> g_ignore;
 
 static std::wstring Lower(std::wstring v) {
@@ -474,7 +477,6 @@ static void LoadIgnoreList() {
         if (a != std::wstring::npos) out.push_back(t.substr(a, b - a + 1));
         i = j + 1;
     }
-    std::lock_guard<std::mutex> lk(g_ignMx);
     g_ignore = std::move(out);
 }
 
@@ -482,7 +484,6 @@ static bool IsIgnored(HWND h, PCWSTR cls) {
     wchar_t title[256] = L"";
     GetWindowTextW(h, title, 256);
     std::wstring t = Lower(title), c = Lower(cls);
-    std::lock_guard<std::mutex> lk(g_ignMx);
     for (auto& k : g_ignore)
         if (t.find(k) != std::wstring::npos || c.find(k) != std::wstring::npos) return true;
     return false;
@@ -614,7 +615,7 @@ static std::vector<Item> g_items;
 struct Pend { HWND first; ULONGLONG second; int tries = 0; };
 static std::vector<Pend> g_pending;  // janelas novas aguardando "assentar"
 static bool g_monocle = false;
-static HWND g_dragHwnd = nullptr;
+static HWND g_dragHwnd = nullptr;  // janela sendo arrastada pelo usuário
 
 // Relógio de alta precisão (GetTickCount64 tem passo de ~15 ms e causa "degraus" na animação).
 static double NowMs() {
@@ -622,12 +623,12 @@ static double NowMs() {
     LARGE_INTEGER c;
     QueryPerformanceCounter(&c);
     return (double)c.QuadPart * 1000.0 / (double)freq.QuadPart;
-}  // janela sendo arrastada pelo usuário
+}
 static HWND g_borderHwnd = nullptr;
 
 static HANDLE g_thread = nullptr;
 static DWORD g_threadId = 0;
-static volatile bool g_stop = false;
+static std::atomic<bool> g_stop{false};
 
 static const UINT WM_APP_RELOAD = WM_APP + 1;
 static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6;
@@ -2121,7 +2122,7 @@ static void WaitFrame() {
     Sleep((DWORD)wait);
 }
 
-// Estatísticas (só gravadas no log com a opção "Registrar estatísticas" ligada)
+// Estatísticas (só gravadas no log com a opção "Registrar informações detalhadas" ligada)
 static struct {
     int frames = 0;
     double start = 0, last = 0, maxDt = 0, maxCost = 0;
@@ -2222,6 +2223,7 @@ static DWORD WINAPI Worker(LPVOID) {
             if (msg.message == WM_HOTKEY) {
                 OnHotkey((int)msg.wParam);
             } else if (msg.message == WM_APP_RELOAD) {
+                LoadSettings();  // g_cfg and friends are only touched by this thread after startup
                 UpdateInterval();
                 ResetWeights();
                 for (auto& it : g_items) it.to = RECT{0, 0, 0, 0};
@@ -2294,7 +2296,7 @@ static DWORD WINAPI Worker(LPVOID) {
 // ---------------------------------------------------------------------------
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Adaptive Windows 1.0.0 carregado");
+    Wh_Log(L"Adaptive Windows " WH_MOD_VERSION L" carregado");
     LoadSettings();
     g_stop = false;
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, &g_threadId);
@@ -2302,7 +2304,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    LoadSettings();
+    // settings are re-read on the worker thread (WM_APP_RELOAD), so no state is shared between threads
     if (g_thread) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
 }
 
