@@ -1,16 +1,16 @@
 // ==WindhawkMod==
 // @id              auto-pause-on-disconnect
 // @name            Auto-Pause on Disconnect
-// @description     Paste, mute or unmute automatically when an external audio device connects or disconnects (wired headphones, Bluetooth, USB DAC).
-// @version         1.0.0
+// @description     Pause, mute or unmute automatically when an external audio device connects or disconnects (wired headphones, Bluetooth, USB DAC).
+// @version         1.2.0
 // @author          DpakB
 // @homepage        https://dpakb.com
 // @github          https://github.com/DeepakBalaraman
 // @twitter         https://twitter.com/dpakb_
 // @donateUrl       https://buymeacoffee.com/dpakb
 // @license         MIT
-// @include         explorer.exe
-// @compilerOptions -lole32 -luser32
+// @include         windhawk.exe
+// @compilerOptions -lole32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,7 +22,7 @@ pulled out, a Bluetooth headset dropped, a USB DAC unplugged. The action lands
 after Windows has moved the sound back to the built-in speakers, so there is no
 one-second blast through them.
 
-![Auto-Pause in action (sample recording)](https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/master/assets/auto-pause-sample.gif)
+![Auto-Pause in action](https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/main/assets/auto-pause-sample.gif)
 
 It does not have to be a pause. The action is a setting, and so is whether it
 runs on a disconnect, on a connect, or both.
@@ -36,7 +36,10 @@ runs on a disconnect, on a connect, or both.
   moving the stream. Adjustable.
 - Repeats inside one second are folded into a single action. One unplug raises
   several notifications, and play/pause is a toggle.
-- Optional: only act while an app is actually playing.
+- Only acts while an app is actually playing by default, so it never starts
+  playback on its own.
+- Switching the output by hand is left alone; the old device has to be gone for
+  the action to run.
 
 ## Settings
 
@@ -45,22 +48,24 @@ runs on a disconnect, on a connect, or both.
   the default output too.
 - **Audio role to watch** is Multimedia by default, or Console, or Both.
 - **Action** is Toggle play/pause, Mute the default output, or Unmute it.
-- **Delay before acting (ms)** is how long Windows gets before the action runs.
-- **Ignore repeats within (ms)** is the window used to fold the burst.
-- **Act only while audio is playing** turns the toggle into a real pause.
+- **Delay before acting (ms)** is how long Windows gets before the action runs,
+  0 to 3000.
+- **Ignore repeats within (ms)** is the window used to fold the burst, 0 to 5000.
+- **Act only while audio is playing** keeps the toggle from starting playback.
 
 ## Good to know
 
 Play/pause is a toggle, not a pause: if playback was already stopped, it starts
-again. Turn on *Act only while audio is playing* to keep it honest.
+again. Leaving *Act only while audio is playing* on keeps it honest, and the
+Windows disconnect sound is not counted as playback.
 
 The mute action applies to whichever device is the default after the switch,
 which is normally the internal speakers. Pair *When a device connects* with
 unmute if the headset should bring the sound back when it returns.
 
-The mod runs inside Explorer and uses the Windows Core Audio API. The
-notification callback only queues the work; the delay and the media key happen on
-a background thread.
+The mod runs in a small process of its own rather than inside Explorer, and uses
+the Windows Core Audio API. The notification callback only wakes a worker thread;
+the delay, the playback check and the media key all happen there.
 */
 // ==/WindhawkModReadme==
 
@@ -90,13 +95,13 @@ a background thread.
       - unmute: Unmute the default output
   - Delay: 300
     $name: Delay before acting (ms)
-    $description: "How long Windows gets to move the default stream. Raise it if sound still leaks through the speakers for a moment."
+    $description: "How long Windows gets to move the default stream, 0 to 3000. Raise it if sound still leaks through the speakers for a moment."
   - Debounce: 1000
     $name: Ignore repeats within (ms)
-    $description: "One unplug raises several notifications. Play/pause is a toggle, so a second trigger inside this window would undo the first."
+    $description: "One unplug raises several notifications. Play/pause is a toggle, so a second trigger inside this window, 0 to 5000, would undo the first."
   - OnlyWhenPlaying: true
     $name: Act only while audio is playing
-    $description: "Skip the action when no app is playing. Worth enabling with play/pause, so the mod never starts playback on its own."
+    $description: "Skip the action when no app is playing, so the mod never starts playback on its own."
 */
 // ==/WindhawkModSettings==
 
@@ -104,41 +109,34 @@ a background thread.
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <audiopolicy.h>
+#include <shellapi.h>
+
+#include <windhawk_utils.h>
 
 #include <atomic>
+#include <cstdio>
 #include <cwchar>
 #include <new>
 
-// Upper bound for waiting on a pending action when the mod is disabled. The
-// worker itself only sleeps for the configured delay.
-static const DWORD kWorkerShutdownWaitMs = 3000;
-
 // Recently added / removed device ids are remembered for this long, which is
-// what tells a disconnect (Windows falls back to an existing device) apart
-// from a connect (a brand new device becomes the default).
+// what tells a disconnect (Windows falls back to an existing device) apart from
+// a connect (a device that just showed up becomes the default).
 static const DWORD kRecentDeviceWindowMs = 5000;
 static const int kRecentDeviceSlots = 8;
 static const int kMaxDeviceIdChars = 256;
 
-// The GUIDs are spelled out explicitly: the MinGW-w64 SDK headers only declare
-// CLSID_MMDeviceEnumerator / IID_IMMDeviceEnumerator / IID_IMMNotificationClient
-// without defining them, so using the SDK names would need an extra import lib.
-static const CLSID kCLSID_MMDeviceEnumerator = {
-    0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-static const IID kIID_IMMDeviceEnumerator = {
-    0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
-static const IID kIID_IMMNotificationClient = {
-    0x7991EEC9, 0x7E89, 0x4D85, {0x83, 0x90, 0x6C, 0x70, 0x3C, 0xEC, 0x60, 0xC0}};
-static const IID kIID_IUnknown = {
-    0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-static const IID kIID_IAudioEndpointVolume = {
-    0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
-static const IID kIID_IAudioSessionManager2 = {
-    0x77AA99A0, 0x1BD6, 0x484F, {0x8B, 0xC7, 0x2C, 0x65, 0x4C, 0x9A, 0x9B, 0x6F}};
+// The default device is tracked per role, so a Console change is not compared
+// against a Multimedia id.
+static const int kRoleSlotMultimedia = 0;
+static const int kRoleSlotConsole = 1;
+static const int kRoleSlots = 2;
 
 enum TriggerKind {
     kTriggerConnect,
     kTriggerDisconnect,
+    // A change with no fresh device behind it: either a removal Windows has not
+    // reported yet, or the output was switched by hand. Decided after the delay.
+    kTriggerUnknown,
 };
 
 enum RoleFilter {
@@ -157,16 +155,17 @@ enum ActionKind {
 // Settings
 // ---------------------------------------------------------------------------
 
-// Written on the Windhawk settings thread, read from the audio notification
-// and worker threads, hence atomics.
+// Written when the settings change, read from the notification callback and the
+// audio thread, hence atomics. The values are filled in by LoadSettings() before
+// the audio thread is started.
 struct {
-    std::atomic<bool> onDisconnect{true};
-    std::atomic<bool> onConnect{false};
-    std::atomic<int> roleFilter{kRoleMultimedia};
-    std::atomic<int> action{kActionPlayPause};
-    std::atomic<int> delayMs{300};
-    std::atomic<int> debounceMs{1000};
-    std::atomic<bool> onlyWhenPlaying{false};
+    std::atomic<bool> onDisconnect{};
+    std::atomic<bool> onConnect{};
+    std::atomic<int> roleFilter{};
+    std::atomic<int> action{};
+    std::atomic<int> delayMs{};
+    std::atomic<int> debounceMs{};
+    std::atomic<bool> onlyWhenPlaying{};
 } g_settings;
 
 static int ClampInt(int value, int minValue, int maxValue) {
@@ -183,29 +182,34 @@ static void LoadSettings() {
     g_settings.onDisconnect.store(Wh_GetIntSetting(L"Triggers.OnDisconnect") != 0);
     g_settings.onConnect.store(Wh_GetIntSetting(L"Triggers.OnConnect") != 0);
 
-    PCWSTR role = Wh_GetStringSetting(L"Triggers.Role");
-    int roleFilter = kRoleMultimedia;
-    if (role && wcscmp(role, L"console") == 0) {
-        roleFilter = kRoleConsole;
-    } else if (role && wcscmp(role, L"both") == 0) {
-        roleFilter = kRoleBoth;
+    {
+        WindhawkUtils::StringSetting role =
+            WindhawkUtils::StringSetting::make(L"Triggers.Role");
+        int roleFilter = kRoleMultimedia;
+        if (wcscmp(role.get(), L"console") == 0) {
+            roleFilter = kRoleConsole;
+        } else if (wcscmp(role.get(), L"both") == 0) {
+            roleFilter = kRoleBoth;
+        }
+        g_settings.roleFilter.store(roleFilter);
     }
-    Wh_FreeStringSetting(role);
-    g_settings.roleFilter.store(roleFilter);
 
-    PCWSTR action = Wh_GetStringSetting(L"Handling.Action");
-    int actionKind = kActionPlayPause;
-    if (action && wcscmp(action, L"mute") == 0) {
-        actionKind = kActionMute;
-    } else if (action && wcscmp(action, L"unmute") == 0) {
-        actionKind = kActionUnmute;
+    {
+        WindhawkUtils::StringSetting action =
+            WindhawkUtils::StringSetting::make(L"Handling.Action");
+        int actionKind = kActionPlayPause;
+        if (wcscmp(action.get(), L"mute") == 0) {
+            actionKind = kActionMute;
+        } else if (wcscmp(action.get(), L"unmute") == 0) {
+            actionKind = kActionUnmute;
+        }
+        g_settings.action.store(actionKind);
     }
-    Wh_FreeStringSetting(action);
-    g_settings.action.store(actionKind);
 
     g_settings.delayMs.store(ClampInt(Wh_GetIntSetting(L"Handling.Delay"), 0, 3000));
     g_settings.debounceMs.store(ClampInt(Wh_GetIntSetting(L"Handling.Debounce"), 0, 5000));
-    g_settings.onlyWhenPlaying.store(Wh_GetIntSetting(L"Handling.OnlyWhenPlaying") != 0);
+    g_settings.onlyWhenPlaying.store(
+        Wh_GetIntSetting(L"Handling.OnlyWhenPlaying") != 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,33 +218,22 @@ static void LoadSettings() {
 
 class CAudioNotificationClient;
 
-// Set to false first thing in Wh_ModUninit(), so that in-flight notification
-// callbacks stop queueing work before any COM object is torn down.
+// Manual-reset, set by WhTool_ModUninit() to end the audio thread.
+static HANDLE g_hStopEvent = nullptr;
+
+// Auto-reset, set by the notification callback to wake the audio thread.
+static HANDLE g_hTriggerEvent = nullptr;
+
+static HANDLE g_hAudioThread = nullptr;
+
+// Set while the audio thread has the callback registered.
 static std::atomic<bool> g_bActive{false};
 
-// True while an action is pending. Also used to coalesce bursts.
-static std::atomic<bool> g_bWorkerBusy{false};
-
-// Tick of the last queued action, used for the debounce window.
+// Tick of the last queued change, used for the debounce window.
 static std::atomic<ULONGLONG> g_ullLastTriggerTick{0};
 
-// Auto-reset event signalled by the worker when it is finished; lets
-// Wh_ModUninit() wait for a pending action instead of pulling the COM objects
-// out from under it.
-static HANDLE g_hWorkerDone = nullptr;
-
-// Owned COM objects. The client holds one reference for us; the enumerator
-// keeps it alive as well while the callback is registered.
-static IMMDeviceEnumerator* g_pEnumerator = nullptr;
-static CAudioNotificationClient* g_pClient = nullptr;
-
-static bool g_bComInitialized = false;
-
-static void QueueActionOnWorkerThread();
-
 // Device bookkeeping shared between the notification callbacks.
-static CRITICAL_SECTION g_deviceCs;
-static bool g_bDeviceCsInitialized = false;
+static SRWLOCK g_deviceLock = SRWLOCK_INIT;
 
 struct RecentDevice {
     wchar_t id[kMaxDeviceIdChars];
@@ -249,7 +242,19 @@ struct RecentDevice {
 
 static RecentDevice g_recentAdded[kRecentDeviceSlots];
 static RecentDevice g_recentRemoved[kRecentDeviceSlots];
-static wchar_t g_lastDefaultDevice[kMaxDeviceIdChars];
+
+// Last default output per role slot, the baseline a change is compared against.
+static wchar_t g_lastDefault[kRoleSlots][kMaxDeviceIdChars];
+
+// The change the audio thread is about to act on. Only one is kept: a newer
+// change replaces an older one that has not been handled yet.
+struct PendingChange {
+    bool valid;
+    int kind;
+    wchar_t previous[kMaxDeviceIdChars];
+};
+
+static PendingChange g_pending;
 
 static void CopyDeviceId(wchar_t* dst, size_t cchDst, LPCWSTR src) {
     if (!src) {
@@ -265,8 +270,9 @@ static void CopyDeviceId(wchar_t* dst, size_t cchDst, LPCWSTR src) {
     dst[i] = L'\0';
 }
 
-// Callers must hold g_deviceCs.
-static bool ContainsRecentLocked(RecentDevice* slots, LPCWSTR deviceId, ULONGLONG now) {
+// Callers must hold g_deviceLock.
+static bool ContainsRecentLocked(RecentDevice* slots, LPCWSTR deviceId,
+                                 ULONGLONG now) {
     if (!deviceId || !deviceId[0]) {
         return false;
     }
@@ -281,11 +287,11 @@ static bool ContainsRecentLocked(RecentDevice* slots, LPCWSTR deviceId, ULONGLON
 }
 
 static void RememberDevice(RecentDevice* slots, LPCWSTR deviceId) {
-    if (!deviceId || !deviceId[0] || !g_bDeviceCsInitialized) {
+    if (!deviceId || !deviceId[0]) {
         return;
     }
 
-    EnterCriticalSection(&g_deviceCs);
+    AcquireSRWLockExclusive(&g_deviceLock);
     int oldest = 0;
     for (int i = 1; i < kRecentDeviceSlots; i++) {
         if (slots[i].tick < slots[oldest].tick) {
@@ -294,43 +300,70 @@ static void RememberDevice(RecentDevice* slots, LPCWSTR deviceId) {
     }
     CopyDeviceId(slots[oldest].id, ARRAYSIZE(slots[oldest].id), deviceId);
     slots[oldest].tick = GetTickCount64();
-    LeaveCriticalSection(&g_deviceCs);
+    ReleaseSRWLockExclusive(&g_deviceLock);
 }
 
-// Decides whether the new default device means a connect or a disconnect and
-// remembers it. Returns false when the default did not actually change.
-static bool TrackDefaultChange(LPCWSTR newDeviceId, TriggerKind* kind) {
+// Compares the new default with the last one for that role and classifies the
+// change. Returns false when there is nothing to act on, either because the
+// default did not move or because this is the first change (the baseline).
+static bool TrackDefaultChange(int roleSlot, LPCWSTR newDeviceId,
+                               wchar_t* previousOut, size_t cchPrevious,
+                               int* kind) {
     wchar_t previous[kMaxDeviceIdChars];
     wchar_t current[kMaxDeviceIdChars];
+    bool lastDefaultWasRemoved = false;
+    bool newDeviceWasJustAdded = false;
 
-    EnterCriticalSection(&g_deviceCs);
-    CopyDeviceId(previous, ARRAYSIZE(previous), g_lastDefaultDevice);
+    AcquireSRWLockExclusive(&g_deviceLock);
+    CopyDeviceId(previous, ARRAYSIZE(previous), g_lastDefault[roleSlot]);
     CopyDeviceId(current, ARRAYSIZE(current), newDeviceId);
-    CopyDeviceId(g_lastDefaultDevice, ARRAYSIZE(g_lastDefaultDevice), current);
+    CopyDeviceId(g_lastDefault[roleSlot], ARRAYSIZE(g_lastDefault[roleSlot]),
+                 current);
 
     const ULONGLONG now = GetTickCount64();
-    const bool lastDefaultWasRemoved = ContainsRecentLocked(g_recentRemoved, previous, now);
-    const bool newDeviceWasJustAdded = ContainsRecentLocked(g_recentAdded, current, now);
-    LeaveCriticalSection(&g_deviceCs);
+    lastDefaultWasRemoved = ContainsRecentLocked(g_recentRemoved, previous, now);
+    newDeviceWasJustAdded = ContainsRecentLocked(g_recentAdded, current, now);
+    ReleaseSRWLockExclusive(&g_deviceLock);
 
-    if (wcscmp(previous, current) == 0) {
+    if (!previous[0] || wcscmp(previous, current) == 0) {
         return false;
     }
 
-    // The first change only establishes the baseline; there is nothing to
-    // compare it against yet.
-    if (!previous[0]) {
-        return false;
-    }
+    CopyDeviceId(previousOut, cchPrevious, previous);
 
-    // A plugged in device becomes the default right after it appears, while an
+    // A device that just appeared becomes the default right away, while an
     // unplug leaves Windows falling back to a device that was already there.
     if (newDeviceWasJustAdded && !lastDefaultWasRemoved) {
         *kind = kTriggerConnect;
-    } else {
+    } else if (lastDefaultWasRemoved) {
         *kind = kTriggerDisconnect;
+    } else {
+        *kind = kTriggerUnknown;
     }
     return true;
+}
+
+static void StorePendingChange(int kind, LPCWSTR previous) {
+    AcquireSRWLockExclusive(&g_deviceLock);
+    g_pending.valid = true;
+    g_pending.kind = kind;
+    CopyDeviceId(g_pending.previous, ARRAYSIZE(g_pending.previous), previous);
+    ReleaseSRWLockExclusive(&g_deviceLock);
+}
+
+static bool TakePendingChange(int* kind, wchar_t* previous, size_t cchPrevious) {
+    bool valid = false;
+
+    AcquireSRWLockExclusive(&g_deviceLock);
+    if (g_pending.valid) {
+        valid = true;
+        *kind = g_pending.kind;
+        CopyDeviceId(previous, cchPrevious, g_pending.previous);
+        g_pending.valid = false;
+    }
+    ReleaseSRWLockExclusive(&g_deviceLock);
+
+    return valid;
 }
 
 // ---------------------------------------------------------------------------
@@ -343,12 +376,14 @@ public:
 
     // --- IUnknown ---------------------------------------------------------
 
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid,
+                                             void** ppvObject) override {
         if (!ppvObject) {
             return E_POINTER;
         }
 
-        if (IsEqualIID(riid, kIID_IUnknown) || IsEqualIID(riid, kIID_IMMNotificationClient)) {
+        if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+            IsEqualIID(riid, __uuidof(IMMNotificationClient))) {
             *ppvObject = static_cast<IMMNotificationClient*>(this);
             AddRef();
             return S_OK;
@@ -373,8 +408,13 @@ public:
     // --- IMMNotificationClient -------------------------------------------
 
     HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId,
-                                                  DWORD dwNewState) override {
-        if (dwNewState != DEVICE_STATE_ACTIVE) {
+                                                   DWORD dwNewState) override {
+        // A device Windows has already seen comes back as an active endpoint
+        // rather than a new one, which is how headphones in the jack and a
+        // paired Bluetooth headset announce themselves.
+        if (dwNewState == DEVICE_STATE_ACTIVE) {
+            RememberDevice(g_recentAdded, pwstrDeviceId);
+        } else {
             RememberDevice(g_recentRemoved, pwstrDeviceId);
         }
         return S_OK;
@@ -390,8 +430,7 @@ public:
         return S_OK;
     }
 
-    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow,
-                                                     ERole role,
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role,
                                                      LPCWSTR pwstrDefaultDeviceId) override {
         if (!g_bActive.load()) {
             return S_OK;
@@ -399,7 +438,7 @@ public:
 
         // Only render endpoints matter, and this callback fires for every kind
         // of removal: Bluetooth drop, 3.5 mm unplug, USB/DAC detach.
-        if (flow != eRender) {
+        if (flow != eRender || role == eCommunications) {
             return S_OK;
         }
 
@@ -411,16 +450,11 @@ public:
             return S_OK;
         }
 
-        TriggerKind kind = kTriggerDisconnect;
-        if (!TrackDefaultChange(pwstrDefaultDeviceId, &kind)) {
-            return S_OK;
-        }
-
-        const bool wanted = kind == kTriggerConnect ? g_settings.onConnect.load()
-                                                    : g_settings.onDisconnect.load();
-        if (!wanted) {
-            Wh_Log(L"Default device changed (%s), ignored by the trigger settings",
-                   kind == kTriggerConnect ? L"connect" : L"disconnect");
+        wchar_t previous[kMaxDeviceIdChars] = {};
+        int kind = kTriggerDisconnect;
+        const int roleSlot = role == eConsole ? kRoleSlotConsole : kRoleSlotMultimedia;
+        if (!TrackDefaultChange(roleSlot, pwstrDefaultDeviceId, previous,
+                                ARRAYSIZE(previous), &kind)) {
             return S_OK;
         }
 
@@ -433,7 +467,10 @@ public:
         g_ullLastTriggerTick.store(now);
 
         // Never block this callback: it runs on the Core Audio RPC thread pool.
-        QueueActionOnWorkerThread();
+        StorePendingChange(kind, previous);
+        if (g_hTriggerEvent) {
+            SetEvent(g_hTriggerEvent);
+        }
         return S_OK;
     }
 
@@ -455,7 +492,8 @@ static void SendPauseMediaKey() {
 
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = VK_MEDIA_PLAY_PAUSE;
-    inputs[0].ki.wScan = static_cast<WORD>(MapVirtualKeyW(VK_MEDIA_PLAY_PAUSE, MAPVK_VK_TO_VSC));
+    inputs[0].ki.wScan = static_cast<WORD>(
+        MapVirtualKeyW(VK_MEDIA_PLAY_PAUSE, MAPVK_VK_TO_VSC));
     inputs[0].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
 
     inputs[1] = inputs[0];
@@ -474,10 +512,28 @@ static IMMDevice* GetDefaultRenderDevice(IMMDeviceEnumerator* pEnumerator) {
     if (!pEnumerator) {
         return nullptr;
     }
-    if (FAILED(pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice))) {
+    if (FAILED(pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
+                                                    &pDevice))) {
         return nullptr;
     }
     return pDevice;
+}
+
+static bool IsDeviceActive(IMMDeviceEnumerator* pEnumerator, LPCWSTR deviceId) {
+    if (!pEnumerator || !deviceId || !deviceId[0]) {
+        return false;
+    }
+
+    IMMDevice* pDevice = nullptr;
+    if (FAILED(pEnumerator->GetDevice(deviceId, &pDevice)) || !pDevice) {
+        return false;
+    }
+
+    DWORD state = 0;
+    const bool active =
+        SUCCEEDED(pDevice->GetState(&state)) && state == DEVICE_STATE_ACTIVE;
+    pDevice->Release();
+    return active;
 }
 
 static void SetDefaultOutputMuted(IMMDeviceEnumerator* pEnumerator, bool mute) {
@@ -488,7 +544,8 @@ static void SetDefaultOutputMuted(IMMDeviceEnumerator* pEnumerator, bool mute) {
     }
 
     IAudioEndpointVolume* pVolume = nullptr;
-    HRESULT hr = pDevice->Activate(kIID_IAudioEndpointVolume, CLSCTX_ALL, nullptr,
+    HRESULT hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                                   nullptr,
                                    reinterpret_cast<void**>(&pVolume));
     pDevice->Release();
     if (FAILED(hr) || !pVolume) {
@@ -499,10 +556,27 @@ static void SetDefaultOutputMuted(IMMDeviceEnumerator* pEnumerator, bool mute) {
     hr = pVolume->SetMute(mute ? TRUE : FALSE, nullptr);
     pVolume->Release();
     if (FAILED(hr)) {
-        Wh_Log(L"SetMute(%s) failed, error 0x%08X", mute ? L"true" : L"false", hr);
+        Wh_Log(L"SetMute(%s) failed, error 0x%08X", mute ? L"true" : L"false",
+               hr);
     } else {
         Wh_Log(L"Default output %s", mute ? L"muted" : L"unmuted");
     }
+}
+
+static bool IsSystemSoundsSession(IAudioSessionControl* pControl) {
+    IAudioSessionControl2* pControl2 = nullptr;
+    if (FAILED(pControl->QueryInterface(
+            __uuidof(IAudioSessionControl2),
+            reinterpret_cast<void**>(&pControl2))) ||
+        !pControl2) {
+        return false;
+    }
+
+    // S_OK means the session belongs to the system sounds, which play when a
+    // device is removed and are not media playback.
+    const bool isSystem = pControl2->IsSystemSoundsSession() == S_OK;
+    pControl2->Release();
+    return isSystem;
 }
 
 // 1 = a session is playing, 0 = nothing is playing, -1 = could not be checked.
@@ -513,7 +587,8 @@ static int GetPlaybackState(IMMDeviceEnumerator* pEnumerator) {
     }
 
     IAudioSessionManager2* pManager = nullptr;
-    HRESULT hr = pDevice->Activate(kIID_IAudioSessionManager2, CLSCTX_ALL, nullptr,
+    HRESULT hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL,
+                                   nullptr,
                                    reinterpret_cast<void**>(&pManager));
     pDevice->Release();
     if (FAILED(hr) || !pManager) {
@@ -528,14 +603,17 @@ static int GetPlaybackState(IMMDeviceEnumerator* pEnumerator) {
             state = 0;
             for (int i = 0; i < count && state != 1; i++) {
                 IAudioSessionControl* pControl = nullptr;
-                if (SUCCEEDED(pSessions->GetSession(i, &pControl)) && pControl) {
-                    AudioSessionState sessionState = AudioSessionStateInactive;
-                    if (SUCCEEDED(pControl->GetState(&sessionState)) &&
-                        sessionState == AudioSessionStateActive) {
-                        state = 1;
-                    }
-                    pControl->Release();
+                if (FAILED(pSessions->GetSession(i, &pControl)) || !pControl) {
+                    continue;
                 }
+
+                AudioSessionState sessionState = AudioSessionStateInactive;
+                if (SUCCEEDED(pControl->GetState(&sessionState)) &&
+                    sessionState == AudioSessionStateActive &&
+                    !IsSystemSoundsSession(pControl)) {
+                    state = 1;
+                }
+                pControl->Release();
             }
         }
         pSessions->Release();
@@ -559,235 +637,388 @@ static void ApplyAction(int action, IMMDeviceEnumerator* pEnumerator) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Background worker
-// ---------------------------------------------------------------------------
-
-struct ActionRequest {
-    int action;
-    int delayMs;
-    bool onlyWhenPlaying;
-};
-
-static DWORD WINAPI ActionWorkerThread(LPVOID lpParameter) {
-    ActionRequest* pRequest = static_cast<ActionRequest*>(lpParameter);
-
-    // The mute and playback checks talk to Core Audio, so this thread needs its
-    // own COM apartment; the notification callback threads belong to RPC.
-    const HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-
-    // A private enumerator keeps all Core Audio use inside this apartment
-    // instead of sharing the objects registered on the init thread.
-    IMMDeviceEnumerator* pEnumerator = nullptr;
-    if (SUCCEEDED(hr)) {
-        CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
-                         kIID_IMMDeviceEnumerator,
-                         reinterpret_cast<void**>(&pEnumerator));
+static void RunPendingAction(IMMDeviceEnumerator* pEnumerator) {
+    int kind = kTriggerDisconnect;
+    wchar_t previous[kMaxDeviceIdChars] = {};
+    if (!TakePendingChange(&kind, previous, ARRAYSIZE(previous))) {
+        return;
     }
 
-    // Give Windows time to finish moving the default stream, then act.
-    Sleep(pRequest->delayMs);
-
-    if (g_bActive.load()) {
-        // Act when the playback check is unavailable rather than do nothing.
-        const bool bIdle = pRequest->onlyWhenPlaying && GetPlaybackState(pEnumerator) == 0;
-        if (bIdle) {
-            Wh_Log(L"No active audio session, skipping the action");
-        } else {
-            ApplyAction(pRequest->action, pEnumerator);
+    if (kind == kTriggerUnknown) {
+        // The old device is still there, so the output was switched by hand.
+        if (IsDeviceActive(pEnumerator, previous)) {
+            Wh_Log(L"Default device switched by hand -> skip");
+            return;
         }
+        kind = kTriggerDisconnect;
     }
 
+    const bool wanted = kind == kTriggerConnect ? g_settings.onConnect.load()
+                                                : g_settings.onDisconnect.load();
+    if (!wanted) {
+        Wh_Log(L"Device change ignored by the trigger settings");
+        return;
+    }
+
+    const bool idle = g_settings.onlyWhenPlaying.load() &&
+                      pEnumerator && GetPlaybackState(pEnumerator) == 0;
+    if (idle) {
+        Wh_Log(L"No active audio session, skipping the action");
+        return;
+    }
+
+    ApplyAction(g_settings.action.load(), pEnumerator);
+}
+
+// ---------------------------------------------------------------------------
+// Audio thread
+// ---------------------------------------------------------------------------
+
+static void SeedBaseline(IMMDeviceEnumerator* pEnumerator, ERole role,
+                         int roleSlot) {
+    IMMDevice* pDevice = nullptr;
+    if (FAILED(pEnumerator->GetDefaultAudioEndpoint(eRender, role, &pDevice)) ||
+        !pDevice) {
+        return;
+    }
+
+    LPWSTR pDeviceId = nullptr;
+    if (SUCCEEDED(pDevice->GetId(&pDeviceId)) && pDeviceId) {
+        AcquireSRWLockExclusive(&g_deviceLock);
+        CopyDeviceId(g_lastDefault[roleSlot], ARRAYSIZE(g_lastDefault[roleSlot]),
+                     pDeviceId);
+        ReleaseSRWLockExclusive(&g_deviceLock);
+        CoTaskMemFree(pDeviceId);
+    }
+
+    pDevice->Release();
+}
+
+static DWORD WINAPI AudioThread(LPVOID lpParameter) {
+    // This thread owns the COM apartment, the enumerator and the callback, so
+    // everything is created and released on the same thread.
+    const HRESULT hrCom = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    CAudioNotificationClient* pClient = nullptr;
+    bool registered = false;
+
+    if (SUCCEEDED(hrCom)) {
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                      CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                      reinterpret_cast<void**>(&pEnumerator));
+        if (FAILED(hr) || !pEnumerator) {
+            Wh_Log(L"CoCreateInstance(IMMDeviceEnumerator) failed, error 0x%08X",
+                   hr);
+        } else {
+            pClient = new (std::nothrow) CAudioNotificationClient();
+            if (!pClient) {
+                Wh_Log(L"Allocation of the notification client failed");
+            } else {
+                hr = pEnumerator->RegisterEndpointNotificationCallback(pClient);
+                registered = SUCCEEDED(hr);
+                if (!registered) {
+                    Wh_Log(L"RegisterEndpointNotificationCallback failed, error 0x%08X",
+                           hr);
+                }
+            }
+        }
+    } else {
+        Wh_Log(L"CoInitializeEx failed, error 0x%08X", hrCom);
+    }
+
+    if (registered) {
+        // Seed the baseline so that the very first unplug is recognised instead
+        // of being swallowed as the initial state.
+        const int roleFilter = g_settings.roleFilter.load();
+        if (roleFilter != kRoleConsole) {
+            SeedBaseline(pEnumerator, eMultimedia, kRoleSlotMultimedia);
+        }
+        if (roleFilter != kRoleMultimedia) {
+            SeedBaseline(pEnumerator, eConsole, kRoleSlotConsole);
+        }
+
+        g_bActive.store(true);
+
+        HANDLE handles[2] = {g_hStopEvent, g_hTriggerEvent};
+        while (WaitForMultipleObjects(2, handles, FALSE, INFINITE) ==
+               WAIT_OBJECT_0 + 1) {
+            // The delay returns early when the mod is being unloaded.
+            if (WaitForSingleObject(g_hStopEvent,
+                                    static_cast<DWORD>(g_settings.delayMs.load())) ==
+                WAIT_OBJECT_0) {
+                break;
+            }
+
+            // Fold triggers that arrived during the delay into this one.
+            ResetEvent(g_hTriggerEvent);
+            RunPendingAction(pEnumerator);
+        }
+
+        g_bActive.store(false);
+        pEnumerator->UnregisterEndpointNotificationCallback(pClient);
+        Wh_Log(L"Unregistered default render device notification callback");
+    } else {
+        // Stay alive and idle, so the mod can still be disabled and re-enabled
+        // cleanly instead of its process dying on its own.
+        Wh_Log(L"Core Audio is unavailable, the mod will not act on changes");
+        WaitForSingleObject(g_hStopEvent, INFINITE);
+    }
+
+    if (pClient) {
+        pClient->Release();
+    }
     if (pEnumerator) {
         pEnumerator->Release();
     }
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hrCom)) {
         CoUninitialize();
     }
 
-    delete pRequest;
-
-    g_bWorkerBusy.store(false);
-    if (g_hWorkerDone) {
-        SetEvent(g_hWorkerDone);
-    }
-
     return 0;
-}
-
-static void QueueActionOnWorkerThread() {
-    bool bExpected = false;
-    if (!g_bWorkerBusy.compare_exchange_strong(bExpected, true)) {
-        // An action is already pending for this burst.
-        return;
-    }
-
-    ActionRequest* pRequest = new (std::nothrow) ActionRequest();
-    if (!pRequest) {
-        Wh_Log(L"Allocation of the action request failed");
-        g_bWorkerBusy.store(false);
-        return;
-    }
-
-    pRequest->action = g_settings.action.load();
-    pRequest->delayMs = g_settings.delayMs.load();
-    pRequest->onlyWhenPlaying = g_settings.onlyWhenPlaying.load();
-
-    HANDLE hThread = CreateThread(nullptr, 0, ActionWorkerThread, pRequest, 0, nullptr);
-    if (hThread) {
-        // The handle is not needed: completion is tracked through the event.
-        CloseHandle(hThread);
-    } else {
-        Wh_Log(L"CreateThread failed, error %u", GetLastError());
-        delete pRequest;
-        g_bWorkerBusy.store(false);
-    }
 }
 
 // ---------------------------------------------------------------------------
 // Windhawk lifecycle
 // ---------------------------------------------------------------------------
 
-static void ReleaseComObjects() {
-    if (g_pClient) {
-        g_pClient->Release();
-        g_pClient = nullptr;
+BOOL WhTool_ModInit() {
+    LoadSettings();
+
+    g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hTriggerEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_hStopEvent || !g_hTriggerEvent) {
+        Wh_Log(L"CreateEvent failed, error %u", GetLastError());
+        if (g_hTriggerEvent) {
+            CloseHandle(g_hTriggerEvent);
+            g_hTriggerEvent = nullptr;
+        }
+        if (g_hStopEvent) {
+            CloseHandle(g_hStopEvent);
+            g_hStopEvent = nullptr;
+        }
+        return FALSE;
     }
 
-    if (g_pEnumerator) {
-        g_pEnumerator->Release();
-        g_pEnumerator = nullptr;
+    g_hAudioThread = CreateThread(nullptr, 0, AudioThread, nullptr, 0, nullptr);
+    if (!g_hAudioThread) {
+        Wh_Log(L"CreateThread failed, error %u", GetLastError());
+        CloseHandle(g_hTriggerEvent);
+        g_hTriggerEvent = nullptr;
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = nullptr;
+        return FALSE;
     }
+
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    Wh_Log(L"Settings reloaded");
+}
+
+void WhTool_ModUninit() {
+    g_bActive.store(false);
+
+    if (g_hStopEvent) {
+        SetEvent(g_hStopEvent);
+    }
+
+    // Joined without a timeout: the thread only waits on the events above, so
+    // it always returns promptly, and nothing from the mod is left running when
+    // the process unloads it.
+    if (g_hAudioThread) {
+        WaitForSingleObject(g_hAudioThread, INFINITE);
+        CloseHandle(g_hAudioThread);
+        g_hAudioThread = nullptr;
+    }
+
+    if (g_hTriggerEvent) {
+        CloseHandle(g_hTriggerEvent);
+        g_hTriggerEvent = nullptr;
+    }
+    if (g_hStopEvent) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    LoadSettings();
-
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (hr == RPC_E_CHANGED_MODE) {
-        // The thread already lives in an STA; COM is usable regardless and we
-        // must not balance it with CoUninitialize().
-        Wh_Log(L"COM already initialized in STA mode, reusing it");
-    } else if (FAILED(hr)) {
-        Wh_Log(L"CoInitializeEx failed, error 0x%08X", hr);
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
-    } else {
-        g_bComInitialized = true;
     }
 
-    InitializeCriticalSection(&g_deviceCs);
-    g_bDeviceCsInitialized = true;
-
-    g_lastDefaultDevice[0] = L'\0';
-    ZeroMemory(g_recentAdded, sizeof(g_recentAdded));
-    ZeroMemory(g_recentRemoved, sizeof(g_recentRemoved));
-
-    // Declared up front because the failure path is reached through goto.
-    IMMDevice* pDefaultDevice = nullptr;
-    LPWSTR pDefaultId = nullptr;
-
-    g_hWorkerDone = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_hWorkerDone) {
-        Wh_Log(L"CreateEventW failed, error %u", GetLastError());
-        goto fail;
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
 
-    hr = CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
-                          kIID_IMMDeviceEnumerator,
-                          reinterpret_cast<void**>(&g_pEnumerator));
-    if (FAILED(hr) || !g_pEnumerator) {
-        Wh_Log(L"CoCreateInstance(IMMDeviceEnumerator) failed, error 0x%08X", hr);
-        goto fail;
-    }
-
-    g_pClient = new (std::nothrow) CAudioNotificationClient();
-    if (!g_pClient) {
-        Wh_Log(L"Allocation of the notification client failed");
-        goto fail;
-    }
-
-    hr = g_pEnumerator->RegisterEndpointNotificationCallback(g_pClient);
-    if (FAILED(hr)) {
-        Wh_Log(L"RegisterEndpointNotificationCallback failed, error 0x%08X", hr);
-        goto fail;
-    }
-
-    // Seed the baseline so that the very first unplug is recognised instead of
-    // being swallowed as the initial state.
-    if (SUCCEEDED(g_pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDefaultDevice)) &&
-        pDefaultDevice) {
-        if (SUCCEEDED(pDefaultDevice->GetId(&pDefaultId)) && pDefaultId) {
-            CopyDeviceId(g_lastDefaultDevice, ARRAYSIZE(g_lastDefaultDevice), pDefaultId);
-            CoTaskMemFree(pDefaultId);
-        }
-        pDefaultDevice->Release();
-    }
-
-    g_ullLastTriggerTick.store(0);
-    g_bWorkerBusy.store(false);
-    g_bActive.store(true);
-
-    Wh_Log(L"Registered default render device notification callback");
-    return TRUE;
-
-fail:
-    // The callback was never registered, so the client can only be ours.
-    ReleaseComObjects();
-    if (g_hWorkerDone) {
-        CloseHandle(g_hWorkerDone);
-        g_hWorkerDone = nullptr;
-    }
-    if (g_bDeviceCsInitialized) {
-        DeleteCriticalSection(&g_deviceCs);
-        g_bDeviceCsInitialized = false;
-    }
-    if (g_bComInitialized) {
-        CoUninitialize();
-        g_bComInitialized = false;
-    }
-    return FALSE;
-}
-
-void Wh_ModUninit() {
-    // Stop accepting new events before anything is released.
-    g_bActive.store(false);
-
-    if (g_pEnumerator && g_pClient) {
-        g_pEnumerator->UnregisterEndpointNotificationCallback(g_pClient);
-    }
-
-    // Let a pending action finish so it cannot touch the event or the global
-    // state after teardown.
-    for (DWORD waited = 0; g_bWorkerBusy.load() && waited < kWorkerShutdownWaitMs;
-         waited += 100) {
-        if (g_hWorkerDone) {
-            WaitForSingleObject(g_hWorkerDone, 100);
-        } else {
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
 
-    ReleaseComObjects();
-
-    if (g_hWorkerDone) {
-        CloseHandle(g_hWorkerDone);
-        g_hWorkerDone = nullptr;
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
     }
 
-    if (g_bDeviceCsInitialized) {
-        DeleteCriticalSection(&g_deviceCs);
-        g_bDeviceCsInitialized = false;
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
     }
 
-    if (g_bComInitialized) {
-        CoUninitialize();
-        g_bComInitialized = false;
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
     }
 
-    Wh_Log(L"Unregistered default render device notification callback");
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    Wh_Log(L"Settings reloaded");
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
