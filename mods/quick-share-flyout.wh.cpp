@@ -2,7 +2,7 @@
 // @id              quick-share-flyout
 // @name            Quick Share Flyout
 // @description     Open Google Quick Share as a flyout above the system tray
-// @version         1.0.0
+// @version         1.1.0
 // @author          0Allu
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/quick-share-flyout
@@ -17,9 +17,12 @@
 /*
 # Quick Share Flyout
 
-Opens Google's [Quick Share for Windows](https://www.android.com/better-together/quick-share-app/)
-as a flyout above the system tray, like the Windows 11 quick settings, instead
-of a window in the middle of the screen.
+Opens Google's Quick Share app as a flyout above the system tray, like the
+Windows 11 quick settings, instead of a window in the middle of the screen.
+
+**Requires [Quick Share for Windows](https://www.android.com/better-together/quick-share-app/).**
+The mod changes the app's own window, so it does nothing unless the app is
+installed.
 
 ![Quick Share Flyout demo](https://raw.githubusercontent.com/0Allu/quick-share-flyout/main/assets/quick-share-flyout-demo.gif)
 
@@ -28,8 +31,8 @@ the tray overflow menu, the flyout opens beside the menu.
 
 ## Features
 
-* Opens above the tray icon and slides out from the taskbar
-* No title bar, with rounded corners
+* Opens above the tray icon, sliding out from the taskbar and fading in
+* No title bar, with rounded corners, or a title bar with only a close button
 * Stays above other windows, and closes when you click somewhere else
 * Drag files onto it from File Explorer
 * Moves notifications out of the way while it's open
@@ -58,14 +61,21 @@ You can also right-click files and choose **Send with Quick Share**, or use
 - closeWhenFocusIsLost: true
   $name: Close when focus is lost
   $description: Close the flyout when you click somewhere else.
+- closeButton: false
+  $name: Close button
+  $description: Show a title bar with a close button.
 - hideFromTaskbar: true
   $name: Hide from the taskbar and Alt+Tab
 - moveNotifications: true
   $name: Move notifications out of the way
   $description: Applies to notifications that would cover the open flyout.
-- animations: true
-  $name: Enable animations
-  $description: Slide out from the taskbar when opening and closing. Follows the Windows animation setting.
+- animation: slideAndFade
+  $name: Animation
+  $description: Used when opening and closing. Turning off animation effects in Windows turns this off too.
+  $options:
+  - slideAndFade: Slide and fade
+  - slide: Slide
+  - off: "Off"
 */
 // ==/WindhawkModSettings==
 
@@ -86,12 +96,15 @@ struct {
     int width;
     int height;
     bool closeWhenFocusIsLost;
+    bool closeButton;
     bool hideFromTaskbar;
     bool moveNotifications;
-    bool animations;
+    bool slide;
+    bool fade;
 } g_settings;
 
 std::atomic<HWND> g_window;
+SIZE g_appSize;  // Of Quick Share's window before it became a flyout.
 UINT g_applyMessage;
 UINT g_tickMessage;
 UINT g_showRequestMessage;
@@ -105,12 +118,16 @@ std::atomic<bool> g_tickPending;
 // The rest is only used on the window's thread.
 bool g_flyout;
 bool g_addedToolWindow;
+LONG_PTR g_removedBoxes;  // Title bar buttons taken away.
 HWND g_taskbar;           // On the flyout's screen.
 RECT g_restRect;          // Where the open flyout sits.
+RECT g_frameInsets;       // Window edges that aren't seen, see PlaceFlyout.
 POINT g_slideDirection;   // Towards the taskbar.
 int g_travel;             // How far the flyout slides to get behind the taskbar.
 float g_offset;           // How far the flyout is from its resting place.
 float g_motionFrom;
+float g_opacity;
+float g_opacityFrom;
 ULONGLONG g_motionStart;  // 0 while the flyout isn't moving.
 bool g_closing;
 bool g_revealPending;
@@ -190,13 +207,32 @@ float EntranceEase(float progress) {
 }
 
 // The tray overflow menu stays above the flyout until the pointer is well
-// away from it, so a flyout opened from it goes beside it: along the taskbar,
-// to the nearer side that has room.
+// away from it, so a flyout opened from it goes above it. If the screen is
+// too short for that, it goes beside it instead: along the taskbar, to the
+// nearer side that has room.
 void AvoidOverflowMenu(HWND menu, const RECT& work, int gap) {
+    // The menu's window already has a margin around the menu.
     RECT avoid, overlap;
-    if (!GetWindowRect(menu, &avoid)) return;
-    InflateRect(&avoid, gap, gap);
-    if (!IntersectRect(&overlap, &g_restRect, &avoid)) return;
+    if (!GetWindowRect(menu, &avoid) || !IntersectRect(&overlap, &g_restRect, &avoid)) return;
+
+    int lift;
+    if (g_slideDirection.y > 0) {
+        lift = avoid.top - g_restRect.bottom;
+    } else if (g_slideDirection.y < 0) {
+        lift = avoid.bottom - g_restRect.top;
+    } else if (g_slideDirection.x > 0) {
+        lift = avoid.left - g_restRect.right;
+    } else {
+        lift = avoid.right - g_restRect.left;
+    }
+    RECT lifted = g_restRect;
+    OffsetRect(&lifted, g_slideDirection.x ? lift : 0, g_slideDirection.y ? lift : 0);
+    if (lifted.left >= work.left + gap && lifted.top >= work.top + gap &&
+        lifted.right <= work.right - gap && lifted.bottom <= work.bottom - gap) {
+        g_restRect = lifted;
+        return;
+    }
+
     bool horizontal = g_slideDirection.y != 0;
     LONG start = horizontal ? g_restRect.left : g_restRect.top;
     LONG size = horizontal ? g_restRect.right - g_restRect.left : g_restRect.bottom - g_restRect.top;
@@ -209,7 +245,7 @@ void AvoidOverflowMenu(HWND menu, const RECT& work, int gap) {
     OffsetRect(&g_restRect, horizontal ? to - start : 0, horizontal ? 0 : to - start);
 }
 
-void PlaceFlyout() {
+void PlaceFlyout(HWND hWnd) {
     POINT cursor{};
     GetCursorPos(&cursor);
     HWND pointed = WindowFromPoint(cursor);
@@ -268,11 +304,26 @@ void PlaceFlyout() {
     } else {
         g_travel = g_restRect.right - work.left;
     }
+
+    // A title bar comes with an invisible resizing border on the other sides,
+    // so the window is that much larger than what's seen.
+    g_frameInsets = {};
+    if (g_settings.closeButton) {
+        RECT frame{};
+        AdjustWindowRectExForDpi(&frame, GetWindowLongPtrW(hWnd, GWL_STYLE), FALSE,
+                                 GetWindowLongPtrW(hWnd, GWL_EXSTYLE), dpiX);
+        UINT border = 1;
+        DwmGetWindowAttribute(hWnd, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS, &border, sizeof(border));
+        int side = std::max<int>(0, frame.right - border);
+        g_frameInsets = {side, 0, side, std::max<int>(0, frame.bottom - border)};
+    }
 }
 
+// Of the window, which may be larger than the flyout, see PlaceFlyout.
 POINT FlyoutPosition() {
     int shift = static_cast<int>(std::lround(g_offset));
-    return {g_restRect.left + g_slideDirection.x * shift, g_restRect.top + g_slideDirection.y * shift};
+    return {g_restRect.left - g_frameInsets.left + g_slideDirection.x * shift,
+            g_restRect.top - g_frameInsets.top + g_slideDirection.y * shift};
 }
 
 void MoveFlyout(HWND hWnd) {
@@ -297,7 +348,7 @@ DWORD WINAPI FrameThread(LPVOID) {
 bool MotionEnabled() {
     BOOL enabled = TRUE;
     SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0);
-    if (!g_settings.animations || !enabled) return false;
+    if (!g_settings.slide || !enabled) return false;
     // Started on first use. Starting it as the mod loads made a second Quick
     // Share instance crash, so it couldn't hand off to the first one.
     if (!g_frameThread) g_frameThread = CreateThread(nullptr, 0, FrameThread, nullptr, 0, nullptr);
@@ -306,6 +357,7 @@ bool MotionEnabled() {
 
 void StartMotion() {
     g_motionFrom = g_offset;
+    g_opacityFrom = g_opacity;
     g_motionStart = AnimationClock();
     SetEvent(g_frameEvent);
 }
@@ -320,6 +372,19 @@ void Cloak(HWND hWnd, bool cloak) {
     DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &value, sizeof(value));
 }
 
+// Layered only while fading, as Windows can let clicks through layered windows.
+void SetOpacity(HWND hWnd, float opacity) {
+    g_opacity = opacity;
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    bool layered = opacity < 1.0f;
+    if (layered != ((exStyle & WS_EX_LAYERED) != 0)) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle ^ WS_EX_LAYERED);
+    }
+    if (layered) {
+        SetLayeredWindowAttributes(hWnd, 0, static_cast<BYTE>(std::lround(opacity * 255.0f)), LWA_ALPHA);
+    }
+}
+
 // Ends opening or closing where it would end.
 void SettleFlyout(HWND hWnd) {
     bool closing = g_closing;
@@ -329,6 +394,7 @@ void SettleFlyout(HWND hWnd) {
     g_closing = false;
     g_offset = 0.0f;
     if (closing) ShowWindow(hWnd, SW_HIDE);
+    SetOpacity(hWnd, 1.0f);
     Cloak(hWnd, false);
 }
 
@@ -338,11 +404,16 @@ void AdvanceMotion(HWND hWnd) {
         SettleFlyout(hWnd);
         return;
     }
+    float elapsed = static_cast<float>(AnimationClock() - g_motionStart);
     float duration = g_closing ? 167000.0f : 250000.0f;
-    float progress = std::min(1.0f, static_cast<float>(AnimationClock() - g_motionStart) / duration);
+    float progress = std::min(1.0f, elapsed / duration);
     float target = g_closing ? static_cast<float>(g_travel) : 0.0f;
     float eased = g_closing ? 1.0f - EntranceEase(1.0f - progress) : EntranceEase(progress);
     g_offset = g_motionFrom + (target - g_motionFrom) * eased;
+    // Fades in before the slide, which crawls at the end, has stopped.
+    float faded = g_closing ? progress : std::min(1.0f, elapsed / 150000.0f);
+    float opacity = g_closing && g_settings.fade ? 0.0f : 1.0f;
+    SetOpacity(hWnd, g_opacityFrom + (opacity - g_opacityFrom) * faded);
     MoveFlyout(hWnd);
     if (progress < 1.0f) return;
     if (g_closing) {
@@ -499,11 +570,12 @@ void ReturnNotifications() {
 // the screen when Quick Share draws stay empty, so it stays hidden where the
 // whole of it is on the screen until Quick Share has drawn it.
 void OpenFlyout(HWND hWnd) {
-    PlaceFlyout();
+    PlaceFlyout(hWnd);
     KeepNotificationsAway(hWnd);
     StopMotion();
     g_closing = false;
     g_offset = 0.0f;
+    SetOpacity(hWnd, 1.0f);
     g_openTime = GetTickCount();
     Cloak(hWnd, true);
     g_revealPending = SetTimer(hWnd, kRevealTimer, kRevealDelay, nullptr) != 0;
@@ -515,6 +587,7 @@ void RevealFlyout(HWND hWnd) {
     g_revealPending = false;
     if (IsWindowVisible(hWnd) && MotionEnabled()) {
         g_offset = static_cast<float>(g_travel);
+        if (g_settings.fade) SetOpacity(hWnd, 0.0f);
         MoveFlyout(hWnd);
         StartMotion();
     }
@@ -635,6 +708,17 @@ void ApplyFlyout(HWND hWnd, bool enable) {
         g_addedToolWindow = false;
     }
 
+    // Leaves only the close button on the title bar.
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    constexpr LONG_PTR boxes = WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    if (enable && g_settings.closeButton) {
+        g_removedBoxes |= style & boxes;
+        SetWindowLongPtrW(hWnd, GWL_STYLE, style & ~boxes);
+    } else if (g_removedBoxes) {
+        SetWindowLongPtrW(hWnd, GWL_STYLE, style | g_removedBoxes);
+        g_removedBoxes = 0;
+    }
+
     // The flyout slides in by itself.
     BOOL noTransitions = enable;
     DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions, sizeof(noTransitions));
@@ -642,13 +726,28 @@ void ApplyFlyout(HWND hWnd, bool enable) {
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 
     if (enable && IsWindowVisible(hWnd)) {
-        PlaceFlyout();
+        PlaceFlyout(hWnd);
         KeepNotificationsAway(hWnd);
     }
     if (!enable || !g_settings.moveNotifications) ReturnNotifications();
-    // Moves an open flyout into place too, see WM_WINDOWPOSCHANGING.
-    SetWindowPos(hWnd, enable ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
-                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    if (enable) {
+        // Moves an open flyout into place too, see WM_WINDOWPOSCHANGING.
+        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+        return;
+    }
+
+    // The closed flyout is left behind the taskbar, so Quick Share's window
+    // goes back to its own size in the middle of the screen.
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &info);
+    const RECT& work = info.rcWork;
+    int width = std::min<int>(g_appSize.cx, work.right - work.left);
+    int height = std::min<int>(g_appSize.cy, work.bottom - work.top);
+    SetWindowPos(hWnd, HWND_NOTOPMOST, work.left + (work.right - work.left - width) / 2,
+                 work.top + (work.bottom - work.top - height) / 2, width, height,
+                 SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
 }
 
 LRESULT CALLBACK FlyoutSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
@@ -682,8 +781,14 @@ LRESULT CALLBACK FlyoutSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_NCCALCSIZE:
             // The client area covers the whole window, which hides the title
             // bar. Windows still rounds the corners and draws the shadow.
-            if (wParam) return 0;
+            if (wParam && !g_settings.closeButton) return 0;
             break;
+
+        case WM_NCHITTEST: {
+            // The flyout can't be resized.
+            LRESULT hit = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            return hit >= HTLEFT && hit <= HTBOTTOMRIGHT ? HTBORDER : hit;
+        }
 
         case WM_GETMINMAXINFO: {
             // Quick Share's own minimum size is larger than a flyout.
@@ -713,8 +818,8 @@ LRESULT CALLBACK FlyoutSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             POINT topLeft = FlyoutPosition();
             position->x = topLeft.x;
             position->y = topLeft.y;
-            position->cx = g_restRect.right - g_restRect.left;
-            position->cy = g_restRect.bottom - g_restRect.top;
+            position->cx = g_restRect.right - g_restRect.left + g_frameInsets.left + g_frameInsets.right;
+            position->cy = g_restRect.bottom - g_restRect.top + g_frameInsets.top + g_frameInsets.bottom;
             position->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
             break;
         }
@@ -725,10 +830,13 @@ LRESULT CALLBACK FlyoutSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
         case WM_SYSCOMMAND:
             switch (wParam & 0xFFF0) {
+                case SC_CLOSE:
                 case SC_MINIMIZE:
                     CloseFlyout(hWnd);
                     return 0;
                 case SC_MAXIMIZE:
+                case SC_MOVE:
+                case SC_SIZE:
                     return 0;
             }
             break;
@@ -744,6 +852,9 @@ void Attach(HWND hWnd) {
         g_window = nullptr;
         return;
     }
+    RECT rect;
+    GetWindowRect(hWnd, &rect);
+    g_appSize = {rect.right - rect.left, rect.bottom - rect.top};
     SendMessageW(hWnd, g_applyMessage, TRUE, 0);
 }
 
@@ -786,9 +897,12 @@ void LoadSettings() {
     g_settings.width = std::max(Wh_GetIntSetting(L"width"), 200);
     g_settings.height = std::max(Wh_GetIntSetting(L"height"), 200);
     g_settings.closeWhenFocusIsLost = Wh_GetIntSetting(L"closeWhenFocusIsLost");
+    g_settings.closeButton = Wh_GetIntSetting(L"closeButton");
     g_settings.hideFromTaskbar = Wh_GetIntSetting(L"hideFromTaskbar");
     g_settings.moveNotifications = Wh_GetIntSetting(L"moveNotifications");
-    g_settings.animations = Wh_GetIntSetting(L"animations");
+    WindhawkUtils::StringSetting animation = WindhawkUtils::StringSetting::make(L"animation");
+    g_settings.slide = wcscmp(animation.get(), L"off") != 0;
+    g_settings.fade = g_settings.slide && wcscmp(animation.get(), L"slide") != 0;
 }
 
 BOOL Wh_ModInit() {
