@@ -9314,6 +9314,9 @@ static void ComputeLayout(HMONITOR hMon) {
     if (n == 0) { g_winW = 0; g_winH = 0; return; }
 
     if (DockLayoutActive()) {
+        // Shrink-to-fit does not apply to Dock; clear any scale left by a
+        // previous Default/Badge layout so Dock title and icon sizes stay normal.
+        g_autoFitScalePct = 100;
         ComputeDockLayout(hMon, mi, dpiX, dpiY);
         return;
     }
@@ -19961,7 +19964,7 @@ static void LoadSettings() {
     if (g_settings.rowWidth < 0) g_settings.rowWidth = 0;
     g_settings.stretchThumbnailsToTaskWidth = Wh_GetIntSetting(L"Dimensions.stretchThumbnailsToTaskWidth");
     g_settings.autoFitTasks = Wh_GetIntSetting(L"Dimensions.autoFitTasks");
-    g_settings.defaultSwitcherPadding = LoadIntSetting(L"Dimensions.defaultSwitcherPadding", LoadIntSetting(L"Dimensions.switcherPadding", 20));
+    g_settings.defaultSwitcherPadding = LoadIntSetting(L"Dimensions.switcherPadding", 20);
     if (g_settings.defaultSwitcherPadding < 0) g_settings.defaultSwitcherPadding = 20;
     g_settings.switcherPadding = g_settings.defaultSwitcherPadding;
     g_settings.entryPadding = LoadIntSetting(L"Dimensions.entryPadding", 16);
@@ -20301,7 +20304,10 @@ static void LoadSettings() {
         size_t b = s.find_last_not_of(L" \t\r\n");
         return s.substr(a, b - a + 1);
     };
-    for (int i = 0; ; i++) {
+    // A blank rule row in the middle of the list must not hide the rules after
+    // it, so stop only after a run of consecutive blank rows.
+    int blankRun = 0;
+    for (int i = 0; i < 512; i++) {
         PCWSTR proc = Wh_GetStringSetting(L"customHeader[%d].process", i);
         PCWSTR icon = Wh_GetStringSetting(L"customHeader[%d].iconPath", i);
         PCWSTR name = Wh_GetStringSetting(L"customHeader[%d].appName", i);
@@ -20315,11 +20321,11 @@ static void LoadSettings() {
             if (!p.empty() && (!ip.empty() || !an.empty()))
                 g_customHeaderRules.push_back({p, ip, an});
         }
-        bool endOfArray = !hasProc && !hasIcon && !hasName;
+        blankRun = (!hasProc && !hasIcon && !hasName) ? blankRun + 1 : 0;
         if (proc) Wh_FreeStringSetting(proc);
         if (icon) Wh_FreeStringSetting(icon);
         if (name) Wh_FreeStringSetting(name);
-        if (endOfArray) break;
+        if (blankRun >= 8) break;
     }
     UpdateCachedSettings();
     g_settings.switcherPadding = GetActiveSwitcherPadding();
