@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.890
+// @version         0.1.900
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -1885,7 +1885,7 @@ constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.890";
+constexpr wchar_t kAppVersion[] = L"v0.1.900";
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
@@ -8234,6 +8234,11 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 RECT wr = {};
                 if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, pt)) {
                     CancelHotkeyCapture(*g_panel);
+                } else {
+                    // Inside the panel: the click goes on, and the note says what is needed.
+                    PushNote(*g_panel, NotifSeverity::Warning, L"Add Ctrl, Alt or Win",
+                             L"Mouse buttons need a modifier key.");
+                    StartAnim(*g_panel);
                 }
             }
             return 0;
