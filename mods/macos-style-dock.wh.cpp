@@ -3698,7 +3698,7 @@ void KeepTitleBarAboveDock(HWND w) {
     LONG lowest = mi.rcMonitor.bottom - StripHeight(dpiY) - titleBar;
     if (r.top <= lowest) return;
     SetWindowPos(w, nullptr, window.left, window.top - (r.top - lowest), 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
 }
 
 void CALLBACK OnWindowDropped(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD,
