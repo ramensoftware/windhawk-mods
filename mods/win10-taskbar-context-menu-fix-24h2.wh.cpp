@@ -130,13 +130,26 @@ HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
     return LoadMenuW_Original(hInstance, lpMenuName);
 }
 
+static bool IsTaskbarWindow(HWND hWnd) {
+    WCHAR className[32];
+    HWND root = GetAncestor(hWnd, GA_ROOT);
+    return root && GetClassNameW(root, className, ARRAYSIZE(className)) &&
+           (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+            _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0);
+}
+
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
     BOOL ret = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
-    if (ret >= IDM_TASKMANAGER && (uFlags & TPM_RETURNCMD) &&
+    if (ret >= IDM_TASKMANAGER && (uFlags & TPM_RETURNCMD) && IsTaskbarWindow(hWnd) &&
         GetMenuState(hMenu, ret - IDM_TASKMANAGER + IDM_SHOWDESKTOP, MF_BYCOMMAND) != (UINT)-1 &&
         GetMenuState(hMenu, ret - IDM_TASKMANAGER + IDM_SETTINGS, MF_BYCOMMAND) != (UINT)-1) {
-        ShellExecuteW(nullptr, nullptr, L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
-        return 0;
+        wchar_t itemText[256], tmText[256];
+        wchar_t* expected = LoadStr(g_shell32Module, IDS_TASKMANAGER, tmText, 256);
+        if (GetMenuStringW(hMenu, ret, itemText, 256, MF_BYCOMMAND) > 0 &&
+            wcscmp(itemText, expected ? expected : L"Task Manager") == 0) {
+            ShellExecuteW(nullptr, nullptr, L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            return 0;
+        }
     }
     return ret;
 }
@@ -144,7 +157,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
-    g_bthpropsModule = LoadLibraryW(L"bthprops.cpl");
+    g_bthpropsModule = LoadLibraryExW(L"bthprops.cpl", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     g_explorerframeModule = GetModuleHandleW(L"explorerframe.dll");
 
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
