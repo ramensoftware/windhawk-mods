@@ -91,13 +91,9 @@ a background thread.
   - Delay: 300
     $name: Delay before acting (ms)
     $description: "How long Windows gets to move the default stream. Raise it if sound still leaks through the speakers for a moment."
-#! $min: 0
-#! $max: 3000
   - Debounce: 1000
     $name: Ignore repeats within (ms)
     $description: "One unplug raises several notifications. Play/pause is a toggle, so a second trigger inside this window would undo the first."
-#! $min: 0
-#! $max: 5000
   - OnlyWhenPlaying: true
     $name: Act only while audio is playing
     $description: "Skip the action when no app is playing. Worth enabling with play/pause, so the mod never starts playback on its own."
