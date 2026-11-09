@@ -44,8 +44,6 @@ whiten out the window content on restore after the minimized state if the option
 For custom dark themes, fixes white header and sidebar in Control Panel. This is compatible with dark-toned Classic Theme.
 Can be disabled in the mod settings.
 
-Compatible with ExplorerFrame Legacy Redirector.
-
 */
 // ==/WindhawkModReadme==
 
