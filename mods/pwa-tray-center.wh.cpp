@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.820
+// @version         0.1.850
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -16,10 +16,17 @@
 
 Adds a **"Hide to PWA Center"** item to the window menu of installed Chrome PWA windows (right-click title bar).
 
+![Hide to PWA Center in the window menu](https://i.ibb.co.com/4ZdGLx7Z/RMB-Place.jpg)
+
 - Hidden windows keep running (music plays, etc.)
 - One tray icon appears for all hidden PWAs (shows with first hidden, disappears when last restored)
 
+![PWA Center flyout](https://i.ibb.co.com/v4pc5n82/Main-app.jpg)
+
 ### Tray Icon
+
+![PWA Center tray icon](https://i.ibb.co.com/DDZP4mjz/Tray-place.jpg)
+
 - **Left click** → opens PWA Center (Fluent flyout, rounded corners, Mica backdrop)
 - **Right click** → menu: *Show all* / *Quit all*
 
@@ -43,7 +50,7 @@ Adds a **"Hide to PWA Center"** item to the window menu of installed Chrome PWA 
 - Library reads from Chrome's Web Applications folders (default or `--user-data-dir`)
 
 ### Chrome Volume
-Volume bar in Media tab controls Chrome's system-wide volume (same as Windows volume mixer). Dims when no audio session; changes apply when Chrome starts playing. Can be hidden in Settings.
+Volume bar in Media tab controls Chrome's system-wide volume (same as Windows volume mixer). Dims when no audio session; changes apply when Chrome starts playing. It can be turned on or off in Settings. The level stays as set after the mod is disabled.
 
 ### Limitations
 - Does not keep PWA alive after browser process exits
@@ -344,7 +351,11 @@ std::wstring SanitizeCategoryName(std::wstring s) {
 
 std::vector<Category> ParseCategories(const std::wstring& text) {
     std::vector<Category> out;
-    for (const auto& line : Split(text, L'\n')) {
+    // Categories are separated by \x1e (names never contain control characters).
+    // Older saves used line breaks, they are read the same way.
+    std::wstring norm = text;
+    std::replace(norm.begin(), norm.end(), L'\n', L'\x1e');
+    for (const auto& line : Split(norm, L'\x1e')) {
         if (line.empty()) {
             continue;
         }
@@ -376,7 +387,7 @@ std::wstring SerializeCategories(const std::vector<Category>& cats) {
         for (size_t i = 0; i < c.ids.size(); ++i) {
             s += (i ? L"," : L"") + c.ids[i];
         }
-        s += L"\n";
+        s += L"\x1e";
     }
     return s;
 }
@@ -1837,7 +1848,7 @@ constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.820";
+constexpr wchar_t kAppVersion[] = L"v0.1.850";
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
@@ -5296,6 +5307,52 @@ void DrawSearchField(Panel& p) {
     }
 }
 
+// Text of the Diagnostics strip and of "Copy all logs". Built from the current
+// state, and rebuilt about once a second while the strip is shown.
+void BuildDiagReport(Panel& p) {
+    std::wstring s;
+    auto line = [&s](const std::wstring& t) {
+        s += t;
+        s += L"\n";
+    };
+    line(std::wstring(L"PWA Center ") + kAppVersion);
+    line(L"Windows build " + std::to_wstring(GetWindowsBuild()));
+    line(std::wstring(L"Center: ") + kOptPanelMode[g_panelMode.load()] + L", backdrop " +
+         kOptBackdrop[g_backdrop.load()]);
+    line(L"Shortcut: " + HotkeyText(g_hotkey.load()));
+    line(L"Library: " + std::to_wstring(g_library.size()) + L" apps, " +
+         std::to_wstring(g_categories.size()) + L" categories");
+    line(L"PWA windows: " + std::to_wstring(p.all.size()) + L" (" +
+         std::to_wstring(p.hiddenIdx.size()) + L" hidden)");
+    for (const AppInfo& a : p.all) {
+        std::wstring row = std::wstring(L"  ") + (a.hidden ? L"hidden " : L"shown  ") +
+                           a.name + L" [" + a.crxId;
+        if (!a.profile.empty()) {
+            row += L", " + a.profile;
+        }
+        row += L"]";
+        if (a.unread > 0) {
+            row += L" unread " + std::to_wstring(a.unread);
+        }
+        line(row);
+    }
+    line(L"Media sessions: " + std::to_wstring(p.media.size()));
+    for (const MediaInfo& m : p.media) {
+        line(std::wstring(L"  ") + (m.playing ? L"playing " : L"paused  ") +
+             MediaSourceName(p, m) + L": " + m.title);
+    }
+    line(L"Notifications: " + std::to_wstring(p.toasts.size()) + L" toasts, " +
+         std::to_wstring(p.rows.size()) + L" rows");
+    line(std::wstring(L"Chrome volume: ") +
+         (p.volKnown ? std::to_wstring((int)std::lround(p.volFrac * 100.0)) + L"%" +
+                           (p.volMute ? L", muted" : L"")
+                     : std::wstring(L"no audio session yet")));
+    line(std::wstring(L"Volume bar: ") + (g_showVolume ? L"on" : L"off"));
+
+    p.diagReport = s;
+    p.diagTick = GetTickCount64();
+}
+
 void DrawPanel(Panel& p) {
     ID2D1DCRenderTarget* rt = p.rt.p;
     RECT rc = {0, 0, p.pxW, p.pxH};
@@ -5400,6 +5457,9 @@ void DrawPanel(Panel& p) {
 
     // Diagnostics: the report, scrolled with the wheel, copied from the menu.
     if (g_showDiag) {
+        if (GetTickCount64() - p.diagTick >= 1000) {
+            BuildDiagReport(p);
+        }
         const D2D1_RECT_F box = Rc(kPad, kPanelH + 4, kPanelW - 2 * kPad, kDiagH - 8);
         DrawLine(p, kPad, kPanelH, kPanelW - kPad, kPanelH, t.divider);
         AddHit(p, MakeId(kHitDiag, 0), box);
@@ -6094,6 +6154,7 @@ void ExecMenuCmd(Panel& p, const MenuItem& it, const MenuCtx& ctx) {
             Activate(p, MakeId(kHitMediaNext, it.arg));
             break;
         case kCmdCopyLogs:
+            BuildDiagReport(p);
             SetClipboardText(p.hwnd, p.diagReport);
             PushNote(p, NotifSeverity::Success, L"Logs copied",
                      L"The diagnostics report is on the clipboard.");
@@ -8025,8 +8086,7 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_panel && g_panel->hotkeyListening) {
                 const UINT vk = (UINT)wParam;
                 const UINT mods = (UINT)lParam;
-                if ((vk == VK_LBUTTON || vk == VK_RBUTTON) &&
-                    !(mods & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
+                if (!(mods & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
                     PushNote(*g_panel, NotifSeverity::Warning, L"Add Ctrl, Alt or Win",
                              L"A shortcut needs a modifier key.");
                     StartAnim(*g_panel);
