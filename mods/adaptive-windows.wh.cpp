@@ -44,6 +44,20 @@ and works together with minimize / restore / open animation mods: a window is an
   imposes: the minimum size is decided by the app (and grows with the monitor's scale), so an app
   whose minimum is wider than the monitor will overflow its right / bottom edge.
 
+### Free resizing: when it works
+Dragging a window border adapts the grid only when all of these are true:
+- The window is in the grid: not taken out with the float hotkey, not maximized and not minimized.
+- There are at least two windows in the grid on the same monitor.
+- You drag an edge that faces another window. An edge against the screen border has no neighbor to
+  take space from, so dragging it does nothing and the window goes back to its slot.
+- You hold the window by its border (within about 12 px of the left, right or bottom edge, or the
+  top 5 px) and change its size by more than 6 px. Holding it by the middle or the title bar moves
+  the window instead (drop it over another window to swap, anywhere else to send it back).
+
+In the "main left" / "main top" layouts, dragging the divider of the main window changes how much of
+the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
+is opened, closed or minimized, when the layout changes (Win + Ctrl + G) and with Win + Alt + ↓.
+
 ### Hotkeys
 | Hotkey | Action |
 |--------|--------|
@@ -133,6 +147,21 @@ e funciona junto com os mods de animação de minimizar, restaurar e abrir janel
   impostos por cada janela ou app: o tamanho mínimo é decidido pelo app (e cresce com a escala do
   monitor), então um app cujo mínimo é maior que a largura do monitor vai passar da borda direita
   / de baixo.
+
+### Redimensionamento livre: quando funciona
+Arrastar a borda de uma janela adapta a grade apenas quando todas estas condições são verdadeiras:
+- A janela está na grade: não foi tirada com o atalho de soltar, nem está maximizada ou minimizada.
+- Há pelo menos duas janelas na grade no mesmo monitor.
+- Você arrasta uma borda que encosta em outra janela. Uma borda junto da borda da tela não tem
+  vizinha para ceder espaço, então arrastá-la não faz nada e a janela volta ao seu espaço.
+- Você segura a janela pela borda (a cerca de 12 px da lateral esquerda, direita ou de baixo, ou
+  nos 5 px de cima) e muda o tamanho em mais de 6 px. Segurar pelo meio ou pela barra de título
+  move a janela (solte sobre outra para trocar, ou em qualquer outro ponto para devolvê-la).
+
+Nos layouts "principal à esquerda" / "principal em cima", arrastar a divisória da janela principal
+muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
+escolhidos são descartados quando uma janela é aberta, fechada ou minimizada, quando o layout muda
+(Win + Ctrl + G) e com Win + Alt + ↓.
 
 ### Atalhos
 | Atalho | Ação |
@@ -1727,7 +1756,15 @@ static bool ApplyResize(size_t i, const RECT& now) {
         bb.left = std::min(bb.left, g_items[j].to.left); bb.top = std::min(bb.top, g_items[j].to.top);
         bb.right = std::max(bb.right, g_items[j].to.right); bb.bottom = std::max(bb.bottom, g_items[j].to.bottom);
     }
-    const RECT t = me.to;
+    // as janelas têm bordas invisíveis (a área de destino 'to' as inclui); vizinhança e alinhamento
+    // precisam ser medidos na área visível, onde o espaço entre janelas é exatamente o 'gap'
+    auto vis = [&](size_t j) {
+        RECT r = g_items[j].to;
+        const RECT& in = g_items[j].lastInset;
+        r.left += in.left; r.top += in.top; r.right -= in.right; r.bottom -= in.bottom;
+        return r;
+    };
+    const RECT t = vis(i);
     auto closeTo = [](LONG a, LONG b, LONG tol) { return std::abs(a - b) <= tol; };
     auto overlapV = [](const RECT& a, const RECT& b) { return std::min(a.bottom, b.bottom) - std::max(a.top, b.top) > 0; };
     auto overlapH = [](const RECT& a, const RECT& b) { return std::min(a.right, b.right) - std::max(a.left, b.left) > 0; };
@@ -1750,15 +1787,15 @@ static bool ApplyResize(size_t i, const RECT& now) {
         }
         for (size_t j : idx) {
             if (j == i) continue;
-            const RECT& r = g_items[j].to;
+            const RECT r = vis(j);
             bool adj = rightEdge ? closeTo(r.left, t.right + gap, 8) : closeTo(r.right + gap, t.left, 8);
             if (!adj || !overlapV(r, t)) continue;
             if (master && layout == 4 && (j == mainIdx || i == mainIdx)) continue;
             double d = (double)delta * (rightEdge ? 1 : -1);
             // a largura é da coluna inteira: todas as janelas empilhadas nela mudam juntas
             for (size_t q : idx) {
-                if (closeTo(g_items[q].to.left, t.left, 4)) g_items[q].wx = std::max(kMin, g_items[q].wx + d);
-                else if (closeTo(g_items[q].to.left, r.left, 4)) g_items[q].wx = std::max(kMin, g_items[q].wx - d);
+                if (closeTo(vis(q).left, t.left, 4)) g_items[q].wx = std::max(kMin, g_items[q].wx + d);
+                else if (closeTo(vis(q).left, r.left, 4)) g_items[q].wx = std::max(kMin, g_items[q].wx - d);
             }
         }
     };
@@ -1778,7 +1815,7 @@ static bool ApplyResize(size_t i, const RECT& now) {
         size_t nb = (size_t)-1;
         for (size_t j : idx) {
             if (j == i) continue;
-            const RECT& r = g_items[j].to;
+            const RECT r = vis(j);
             if (!overlapH(r, t)) continue;
             if (bottomEdge ? closeTo(r.top, t.bottom + gap, 8) : closeTo(r.bottom + gap, t.top, 8)) { nb = j; break; }
         }
@@ -1786,7 +1823,7 @@ static bool ApplyResize(size_t i, const RECT& now) {
             // layout de linhas (itens lado a lado): cai no comportamento por linha
             std::vector<size_t> mine, other;
             for (size_t j : idx) {
-                const RECT& r = g_items[j].to;
+                const RECT r = vis(j);
                 if (closeTo(r.top, t.top, 4)) mine.push_back(j);
                 else if (bottomEdge && closeTo(r.top, t.bottom + gap, 8)) other.push_back(j);
                 else if (!bottomEdge && closeTo(r.bottom + gap, t.top, 8)) other.push_back(j);
