@@ -5155,7 +5155,8 @@ LONG FrameSizeOffset() {
     static LONG offset = [] {
         LONG found = OffsetFromDisasm((void*)TaskbarConfiguration_UpdateFrameSize_Address, 0x80,
                                       std::regex(R"(str\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])"));
-        Wh_Log(found ? L"Frame size offset: 0x%X" : L"Frame size offset not found", found);
+        if (found) Wh_Log(L"Frame size offset: 0x%X", found);
+        else Wh_Log(L"Frame size offset not found");
         return found;
     }();
     return offset;
