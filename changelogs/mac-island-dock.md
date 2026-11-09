@@ -1,3 +1,87 @@
+## 3.1.0 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ad5c9dd895db50eb11675af7a29aa988981b2e2d/mods/mac-island-dock.wh.cpp))
+
+**Arranging the pill**
+* "Change the order with Ctrl + drag on the island" (Style tab, on by default): hold Ctrl and drag an item on the island (Island, Fixed or Bar) to another place, or into another notch (the notches start again when the bell's notch changes, as from the settings); with the app in front having its own order, that one changes. While Ctrl is held with the mouse on the pill, its items jiggle; the item held is dimmed, its icon follows the mouse and a line shows where it goes. An idea of Thiago Silva's.
+* The settings' preview shows that its icons are dragged: for 10 seconds when the settings open, and when the mouse comes onto it, the icons jiggle, a hand carries one past the next one and back, and the line under it says so (Ctrl + drag on the island too). Pressing an icon stops it; with animations off, only the line.
+
+**Panels and your commands**
+* "Open panels with the mouse" (Look tab, off by default, #6654): a panel opens when the mouse rests on its item for a moment, without taking the focus from the app in front, and closes a moment after the mouse leaves the pill and the panel. Only items whose click just opens a panel do it; the media buttons, a timer's start, a pinned command, the microphone, the quick actions and a power button that runs its only action still need a click. A click on the item, or inside the panel, keeps it open like a clicked one; moving to another such item switches to its panel.
+* Files, folders, shortcuts or a web link (http or https) dropped on the commands' icon or a command's button become your commands, each a button on the pill, named after what it opens (anywhere on the pill when the shelf is off or doesn't take them; only with the commands on the pill). Only the path or link is kept; one already there is just put on the pill (#6654).
+
+**Look**
+* "Island font" and "Clock font" (Look tab): a font from your PC for the pill's and the panels' texts, and one of its own for the clock on the pill and in the calendar; Windows' font dialog, per profile (#6648, #6609).
+* "Items in the bar" (Look tab): Automatic (as before), at its left end, in the middle or at its right end (#6922).
+* "Bar: items keep their side of the clock" (Look tab): with the clock in the middle, the items keep their side of the clock, at the screen's corners, as items come and go (#6639).
+* The calendar's clock and date are centered, and "Events in the calendar" (on by default) can leave only the clock and the month (#6609).
+* The visualizer can come only for the apps you choose ("Apps that bring the visualizer", from what played and what was heard), also players without Windows' media controls, its bars following that app's sound; sliders "Bars' height", "Bars' width" and "Room between the bars" (#6204, #6924). The bars are now seven, the middle one the tallest: the sound reaches it first and goes out to the ones at its sides a moment later, like a wave, with the beat (a beat kicks the middle up) or smooth.
+* The panels' scroll bars (the apps launcher, notes, tasks, notifications and the other long lists) can be dragged by their thumb, and a click above or below it moves a page; they get wider under the mouse, like Windows 11's.
+* With "Light and shadow like macOS 27": the control center's sliders are thin lines with icons that grow with the level (the sun turns) and bounce as it changes, the mouse following the same line; buttons and tiles that are on show a white circle with the icon in the accent color. Over the Liquid Glass, a long pill's ends fade into the glass's tint, inside its round shape, instead of a dark block. By Thiago Silva.
+* "Hide a notch with nothing in it" (Style tab, #6651): a notch with no items disappears, the one with the bell too; it comes back when an item or a notification comes to it, and while items are dragged between the notches in the settings. The strip kept on the screen stays the same.
+* "Ring with the battery's charge" (Animations tab, #6071): a ring along the edge shows the charge, on the battery's notch or the pill, or on every notch; green above 40%, yellow down to 20%, red below; not as the line, nor on the Bar style.
+
+**On the pill**
+* "Lyrics as an icon" (What's playing tab, #6684): a single icon while the song has lyrics; a click opens them.
+* "Always on the pill, even with nothing playing" (#6905): the note stays on the pill with nothing playing.
+* "Only play and pause" for the pill's media buttons (#6907).
+* Touch keyboard (#6160), Windows Settings and Win+X (#6922) buttons, in the control center and on the pill, off until you choose them.
+* A click on the network's speed opens a Network tab in the usage panel: the last minute's download and upload graphs, their peaks and a Task Manager button (#6932).
+* "See-through only on the desktop" (Look tab, #7005): the see-through bar goes back to its usual look while a window is maximized on its monitor.
+* "Clock against the screen's edge" (Hiding tab, #6997): the small pill with the time touches the edge, straight on that side and as thin as its text.
+* "Long notification texts scroll under the mouse" (Banners tab, #6200): a notification's text stays on one line and scrolls to its end and back, instead of opening on up to three lines.
+* Hibernate in the power button's menu, only when Windows allows hibernation (#6886); each power action can be turned off, with only one on the button runs it, and asking before restarting, shutting down or signing out is an option (System tab, #6609).
+
+**Hiding**
+* "The minimize arrow keeps the island open" (Hiding tab, #6725): with the line on, the minimize arrow can keep that monitor's island open until it's clicked again; Win+J still minimizes it.
+* "The edge zone as wide as the pill" (Hiding tab, #6525): the edge zone that brings the pill back follows the pill's width, also with the line invisible.
+* "Shortcut: let clicks through the pill" (Hiding tab, #6718): a recorded shortcut lets clicks pass through the pill to what's under it while it stays shown; a bubble says when it's on.
+* "Stay over borderless full-screen apps" (Hiding tab, #6740, off by default): the island stays over borderless full-screen apps; games in exclusive full screen still draw over it (README note on performance and anti-cheat).
+
+**Launcher, media and more**
+* "Apps (launcher)" (Apps and tools tab, off by default, #7058): a pill item whose panel lists the shell's Apps folder (what Start lists: shortcuts and the Store's apps, each once), read on a thread when it opens (again after a minute), with a search box (case and accents ignored; Enter opens the first one, Esc clears), the favorites first (a star on each row, kept per account) and all apps in Start's order; icons load for the rows in view only; a shortcut's row has a button that shows its program in Explorer; apps start as the user and unelevated when Windhawk runs as administrator.
+* "Media panel style" (What's playing tab, #7042): the usual look (default), Pixel (as Android 13-15 draws it: the cover filling the card under its shade, a smooth wavy progress line moving while playing and flat when paused, the play button turning from a circle into a rounded square), One UI (a card in the cover's color, plain buttons), Windows 11 (the Quick Settings card, the cover on the right), or only the cover with the buttons over it; long titles and artists scroll in the panel in every look; "Only the cover on the pill" (#7038); "Media buttons size" for the pill's previous / play / next and "Media panel size" up to 200% (#7041), kept within the pill's height and the screen.
+* "What's playing on the minimized line" (Hiding tab, off by default, #7045): while something plays, the minimized line becomes a thin pill with the song's cover and the visualizer's bars (the bars run only while it shows); the mouse on it opens the island.
+* One switch for each status notice: the charger, the low battery, Bluetooth audio, "Do not disturb" (on by default, as before) and the desktop switched to, with its number and name (off by default, #7091, #7014).
+* "The bell opens Windows' notification center" and "World clocks inside the clock" (a list under the mouse on the clock), both off by default (#7089).
+* Virtual desktops renamed with a pencil in their list (Windows 11 24H2 and later, through the shell's own desktop service, on a thread; the pencil stays away where the service isn't there).
+* Separator lines on the pill: a "+ Line" chip in the settings' preview strip (with a hint, a glow when a What's new link or the settings search for "separator"/"line" leads to it) adds one, glowing on the pill for a moment, dragged between two groups (Island, Fixed and Bar, upright too), a click takes it away; "dock.separator" (off by default): a thin line in the dock between the pinned apps and the others, drawn only, the taskbar's buttons untouched.
+* A hex box (#RRGGBB) under the buttons of the color dialog every color of the island's settings opens.
+* "Weather icons" (Tools tab): emoji (default, as before), the chosen icon pack's pictures, Meteocons (MIT, in color) or Weather Icons (SIL OFL 1.1), downloaded once when chosen like the icon packs; emoji for a sky a set has no picture for.
+* A keyboard shortcut for each of your commands (recorded in the command's editor, up to 16, clashes with the island's shortcuts and other commands refused; the keyboard hook stays off with none) (#6165).
+* "Show VLC 3 from its window's title" (What's playing tab, off by default, #6164): VLC 3 publishes nothing to Windows' media controls, so while it makes sound its window's title shows as what's playing, with play/pause, previous and next pressed as the buttons of its taskbar thumbnail (a posted WM_APPCOMMAND crashes VLC 3.0's Qt filter); VLC has its own chip among the media apps (chosen, it shows with another app playing; another app chosen keeps its place), its program icon stands in for the cover on the pill and in the panel, and with another player paused too the one that played last shows; no cover or time (VLC 3 tells neither).
+* The Fixed style and the Bar have their own list of icons per app (items, clock and order while that app is in front; the place and size stay the Island style's only) (#6162).
+
+**Fixes**
+* The Bar no longer flickers at the screen's corners with apps that round them (Roundly, Monitor Rounded Edges): windows that let clicks through no longer count as covering the island (#6954).
+* Song lyrics: a song not found by its exact title and artist is looked for again with the bare title and the first artist; "Artist - Topic" and "Artist • Album" are read as the artist (SimpMusic and YouTube Music, #6612).
+* Brightness of external monitors (DDC/CI): the calls go one at a time, and if Windows stops in the middle of one (a blue screen some monitors, docks or hubs cause), the island turns this brightness off at the next start and says so in a notice; it stays off, whatever a profile or a backup put back holds, until it's turned on again in the settings (#6966).
+* On Insider builds with Windows' newer taskbar, which has none of the parts the dock styles, the taskbar is left as Windows draws it instead of cut at the bottom and restyled over and over (#6888).
+* Calendars from .ics files: an event in a time zone of its own (TZID) shows at your local time, whichever way the file names the zone: Windows' name (Outlook), an IANA one (Apple and most others) or a zone the file itself describes. A zone nothing knows is read as local, with a line in the log (#7020).
+* Apple Music shows once in the mixer and its slider changes what you hear: the programs of one Store app (Apple Music plays through a helper, AMPLibraryAgent.exe) are one entry, with the app's name and icon. The same in the control panel's mixer (#7043).
+* Panels too tall for a short screen or a large scale now stop at the screen's edge and scroll, instead of being cut. The calendar keeps its month whole, its rows shorter and its big clock gone if needed, and scrolls its events; the lyrics and the shelf shorten their own lists (#7046).
+* Recycle Bin: when Windows isn't ready to count or watch it (right after the PC starts, for example), the island tries again ten seconds later instead of keeping an old count, and it counts the bin again each time its panel opens; "Empty the bin" also works while the count is unknown (#7048).
+* Battery charging between 85% and 94%: the charging battery shows, instead of the font's energy saver battery, the glyph right after the charging ones (#6922).
+* Wi-Fi: the network's name and signal are read when it connects (and every five minutes), the signal's changes coming from Windows' own notices, instead of reading the network on each change: on newer Windows 11 builds each read counts as using the location, which kept Windows' location icon on.
+* Dock with the "Disable grouping on the taskbar" mod: the app ID's suffix that mod adds for each extra window is left out, so those windows get the app's sharp, large icons (#7029).
+* Dock: a taskbar button reused for an app opened right after another one closed kept the closed app's sharp icon when none was found for the new one (the Riot Client showed FileZilla's, reported on Discord). That picture is no longer left on it (also when the taskbar changes the button's picture a moment before its app ID), and an app the shell has no icon for gets its program's or its window's icon, its window found also when the app sets its ID on its process (like TeamViewer).
+* The "Taskbar" setting says the dock is for Windows 11 only: on Windows 10 the taskbar stays as it is and only the island works (#7059).
+* Media panel: two sources of the same app (two Chrome tabs, for example) show each one's title on its chip instead of the app's name twice.
+* Drawing: a frame lost because the graphics driver couldn't make pictures smaller the smooth way is drawn again at once the plain way, the panels in their own window too.
+* Weather: when the weather service doesn't answer, the log says why (WinHTTP's error), for blocked connections.
+* "Do not disturb" notice: it comes when you turn it on or off, not each time Windows turns it on by itself for an app in full screen or a game (its automatic rules); the notice follows the profile you chose, Windows' state only when that can't be read (#7091).
+* Tray icons answer clicks again with UAC off or on the Administrator account: 3.0 refused clicks from an elevated island to elevated apps, and with UAC off every process is elevated, explorer too; the refusal now applies only when explorer isn't elevated (a real UAC line), and the log says when it refuses (#7092).
+* Calendar reminders: one that came due with the notifications list open, a notification arriving or a panel opening over it waits and shows; one the PC slept through shows once as missed (up to 12 hours, an all-day event's until its day ends); the reminder's sound follows the island's "Do not disturb" that silences reminders (#6156).
+* Taskbar progress filling the pill: the log names the programs it comes from as a fill starts.
+* Dock: the bubble drawn for an app's count (sharp when magnified) takes the color of the app's own badge, the average of its solid pixels without the number's white (Telegram's gray for archived chats, for example), instead of always red (#7095).
+* Tray: an app asking where its icon is right after adding it (Electron's tray.getBounds() after new Tray(), as Medal does) got 0x0 with the taskbar's tray hidden, since the island places an icon a frame later; Medal then removed the icon and quit when its window closed. When neither the island's places nor the taskbar answer, a known icon now gets the island's middle until its real place comes (#7106, from the reporter's patch).
+* Lyrics: the lyrics item steps aside when the pill's title already shows the line sung now (the swap, or a player that writes the line in its own title), compared without case or surrounding spaces (#7105).
+* Dock: the room above the icons is 12 instead of 8 at 46 px (in proportion to the icon size), so the icons sit closer to the middle with the dots' room below (#7103).
+* Switching a monitor's profile starts and stops what that island shows (net speed, weather, AI usage, updates; at start too, the watches only another monitor's profile wants); what's playing stops being watched once media, its buttons, lyrics and the visualizer are all off; a paused download no longer redraws its fill on every frame; a shutdown in the middle of a call to a monitor no longer turns external monitors' brightness (DDC/CI) off with a false crash notice at the next start; an icon folder or a notification's picture on another PC's share no longer stalls the island; clipboard text without its end is read only up to its block.
+
+**Other**
+* The Vietnamese texts were reviewed to sound more natural, by caotu2k5.
+* The file's header has the GPL-3.0 notice (the mod was already under GPL-3.0), with caliberda's copyright and m417z's for the taskbar XAML part, and the README a License section.
+* The README has a "Not planned, and why" section, with how to try one of the island's yourself.
+
 ## 3.0.0 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11347634795228e9aff5efcb89f39c9f758113bc/mods/mac-island-dock.wh.cpp))
 
 **Icons**

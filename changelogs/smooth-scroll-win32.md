@@ -1,3 +1,13 @@
+## 1.0.4 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/32cc0039878a297b8bdf1c41be8dc3b12337d7d9/mods/smooth-scroll-win32.wh.cpp))
+
+- Scroll File Explorer's folder view by pixels through Explorer's own pan path instead of UI Automation, with the native distance per notch (at most a third of the view). It works in grouped views and no longer brings background windows to the front.
+- Scroll Task Manager and Control Panel DirectUI pages smoothly by pixels; Control Panel pages no longer ignore the wheel from time to time.
+- Draw tree views, list boxes, multi-line text boxes and Details-view lists at pixel offsets, so they glide instead of jumping a line at a time. RichEdit boxes and icon views scroll by pixels directly.
+- Stop the legacy list box animation from playing underneath the mod's.
+- Pace frames with the compositor clock at the monitor's full refresh rate.
+- Ease Smooth Only mode like WinUI and finish every scroll at an even pace.
+- Remove the Scroll Multiplier and Smooth Speed settings; the distance follows the Windows "lines per notch" setting, which halves it for anyone who used the previous default multiplier (2x).
+
 ## 1.0.3 ([May 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a4b44b30b8e194e4e7d7e4651ef8a21fecc57db/mods/smooth-scroll-win32.wh.cpp))
 
 - **Consistent scroll speed across folder sizes** — the UIA percent-per-line

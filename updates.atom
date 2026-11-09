@@ -2,12 +2,172 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-09T06:10:46.000Z</updated>
+    <updated>2026-11-09T17:01:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.5.1]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#e935dd1c5404ed3916207e33b4a4b4fcbafe45c7</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-09T17:01:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><code>Ctrl+Insert</code>, <code>Shift+Insert</code> and <code>Shift+Delete</code> now raise the copy, paste and cut tips, not just <code>Ctrl+C</code> / <code>Ctrl+V</code> / <code>Ctrl+X</code>, since terminal windows still lean on the legacy set. <code>Ctrl+Shift+Delete</code> stays silent because browsers and editors use it for something else.</li>
+<li>Fixed a card-shaped ghost of the previous tip bleeding into the new card's blurred backdrop when two tips appear in quick succession; the old card is now flushed out of the composed frame before the screen is captured.</li>
+<li>Readme and settings text reworked, including a note that the card also works on Windows 10 and both shortcut sets in the copy / paste / cut descriptions.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.4]]></title>
+        <id>https://windhawk.net/mods/smooth-scroll-win32#32cc0039878a297b8bdf1c41be8dc3b12337d7d9</id>
+        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
+        <updated>2026-11-09T17:01:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Scroll File Explorer's folder view by pixels through Explorer's own pan path instead of UI Automation, with the native distance per notch (at most a third of the view). It works in grouped views and no longer brings background windows to the front.</li>
+<li>Scroll Task Manager and Control Panel DirectUI pages smoothly by pixels; Control Panel pages no longer ignore the wheel from time to time.</li>
+<li>Draw tree views, list boxes, multi-line text boxes and Details-view lists at pixel offsets, so they glide instead of jumping a line at a time. RichEdit boxes and icon views scroll by pixels directly.</li>
+<li>Stop the legacy list box animation from playing underneath the mod's.</li>
+<li>Pace frames with the compositor clock at the monitor's full refresh rate.</li>
+<li>Ease Smooth Only mode like WinUI and finish every scroll at an even pace.</li>
+<li>Remove the Scroll Multiplier and Smooth Speed settings; the distance follows the Windows &quot;lines per notch&quot; setting, which halves it for anyone who used the previous default multiplier (2x).</li>
+</ul>
+]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mac Island & Dock 3.1.0]]></title>
+        <id>https://windhawk.net/mods/mac-island-dock#ad5c9dd895db50eb11675af7a29aa988981b2e2d</id>
+        <link href="https://windhawk.net/mods/mac-island-dock"/>
+        <updated>2026-11-09T17:01:19.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Arranging the pill</strong></p>
+<ul>
+<li>&quot;Change the order with Ctrl + drag on the island&quot; (Style tab, on by default): hold Ctrl and drag an item on the island (Island, Fixed or Bar) to another place, or into another notch (the notches start again when the bell's notch changes, as from the settings); with the app in front having its own order, that one changes. While Ctrl is held with the mouse on the pill, its items jiggle; the item held is dimmed, its icon follows the mouse and a line shows where it goes. An idea of Thiago Silva's.</li>
+<li>The settings' preview shows that its icons are dragged: for 10 seconds when the settings open, and when the mouse comes onto it, the icons jiggle, a hand carries one past the next one and back, and the line under it says so (Ctrl + drag on the island too). Pressing an icon stops it; with animations off, only the line.</li>
+</ul>
+<p><strong>Panels and your commands</strong></p>
+<ul>
+<li>&quot;Open panels with the mouse&quot; (Look tab, off by default, #6654): a panel opens when the mouse rests on its item for a moment, without taking the focus from the app in front, and closes a moment after the mouse leaves the pill and the panel. Only items whose click just opens a panel do it; the media buttons, a timer's start, a pinned command, the microphone, the quick actions and a power button that runs its only action still need a click. A click on the item, or inside the panel, keeps it open like a clicked one; moving to another such item switches to its panel.</li>
+<li>Files, folders, shortcuts or a web link (http or https) dropped on the commands' icon or a command's button become your commands, each a button on the pill, named after what it opens (anywhere on the pill when the shelf is off or doesn't take them; only with the commands on the pill). Only the path or link is kept; one already there is just put on the pill (#6654).</li>
+</ul>
+<p><strong>Look</strong></p>
+<ul>
+<li>&quot;Island font&quot; and &quot;Clock font&quot; (Look tab): a font from your PC for the pill's and the panels' texts, and one of its own for the clock on the pill and in the calendar; Windows' font dialog, per profile (#6648, #6609).</li>
+<li>&quot;Items in the bar&quot; (Look tab): Automatic (as before), at its left end, in the middle or at its right end (#6922).</li>
+<li>&quot;Bar: items keep their side of the clock&quot; (Look tab): with the clock in the middle, the items keep their side of the clock, at the screen's corners, as items come and go (#6639).</li>
+<li>The calendar's clock and date are centered, and &quot;Events in the calendar&quot; (on by default) can leave only the clock and the month (#6609).</li>
+<li>The visualizer can come only for the apps you choose (&quot;Apps that bring the visualizer&quot;, from what played and what was heard), also players without Windows' media controls, its bars following that app's sound; sliders &quot;Bars' height&quot;, &quot;Bars' width&quot; and &quot;Room between the bars&quot; (#6204, #6924). The bars are now seven, the middle one the tallest: the sound reaches it first and goes out to the ones at its sides a moment later, like a wave, with the beat (a beat kicks the middle up) or smooth.</li>
+<li>The panels' scroll bars (the apps launcher, notes, tasks, notifications and the other long lists) can be dragged by their thumb, and a click above or below it moves a page; they get wider under the mouse, like Windows 11's.</li>
+<li>With &quot;Light and shadow like macOS 27&quot;: the control center's sliders are thin lines with icons that grow with the level (the sun turns) and bounce as it changes, the mouse following the same line; buttons and tiles that are on show a white circle with the icon in the accent color. Over the Liquid Glass, a long pill's ends fade into the glass's tint, inside its round shape, instead of a dark block. By Thiago Silva.</li>
+<li>&quot;Hide a notch with nothing in it&quot; (Style tab, #6651): a notch with no items disappears, the one with the bell too; it comes back when an item or a notification comes to it, and while items are dragged between the notches in the settings. The strip kept on the screen stays the same.</li>
+<li>&quot;Ring with the battery's charge&quot; (Animations tab, #6071): a ring along the edge shows the charge, on the battery's notch or the pill, or on every notch; green above 40%, yellow down to 20%, red below; not as the line, nor on the Bar style.</li>
+</ul>
+<p><strong>On the pill</strong></p>
+<ul>
+<li>&quot;Lyrics as an icon&quot; (What's playing tab, #6684): a single icon while the song has lyrics; a click opens them.</li>
+<li>&quot;Always on the pill, even with nothing playing&quot; (#6905): the note stays on the pill with nothing playing.</li>
+<li>&quot;Only play and pause&quot; for the pill's media buttons (#6907).</li>
+<li>Touch keyboard (#6160), Windows Settings and Win+X (#6922) buttons, in the control center and on the pill, off until you choose them.</li>
+<li>A click on the network's speed opens a Network tab in the usage panel: the last minute's download and upload graphs, their peaks and a Task Manager button (#6932).</li>
+<li>&quot;See-through only on the desktop&quot; (Look tab, #7005): the see-through bar goes back to its usual look while a window is maximized on its monitor.</li>
+<li>&quot;Clock against the screen's edge&quot; (Hiding tab, #6997): the small pill with the time touches the edge, straight on that side and as thin as its text.</li>
+<li>&quot;Long notification texts scroll under the mouse&quot; (Banners tab, #6200): a notification's text stays on one line and scrolls to its end and back, instead of opening on up to three lines.</li>
+<li>Hibernate in the power button's menu, only when Windows allows hibernation (#6886); each power action can be turned off, with only one on the button runs it, and asking before restarting, shutting down or signing out is an option (System tab, #6609).</li>
+</ul>
+<p><strong>Hiding</strong></p>
+<ul>
+<li>&quot;The minimize arrow keeps the island open&quot; (Hiding tab, #6725): with the line on, the minimize arrow can keep that monitor's island open until it's clicked again; Win+J still minimizes it.</li>
+<li>&quot;The edge zone as wide as the pill&quot; (Hiding tab, #6525): the edge zone that brings the pill back follows the pill's width, also with the line invisible.</li>
+<li>&quot;Shortcut: let clicks through the pill&quot; (Hiding tab, #6718): a recorded shortcut lets clicks pass through the pill to what's under it while it stays shown; a bubble says when it's on.</li>
+<li>&quot;Stay over borderless full-screen apps&quot; (Hiding tab, #6740, off by default): the island stays over borderless full-screen apps; games in exclusive full screen still draw over it (README note on performance and anti-cheat).</li>
+</ul>
+<p><strong>Launcher, media and more</strong></p>
+<ul>
+<li>&quot;Apps (launcher)&quot; (Apps and tools tab, off by default, #7058): a pill item whose panel lists the shell's Apps folder (what Start lists: shortcuts and the Store's apps, each once), read on a thread when it opens (again after a minute), with a search box (case and accents ignored; Enter opens the first one, Esc clears), the favorites first (a star on each row, kept per account) and all apps in Start's order; icons load for the rows in view only; a shortcut's row has a button that shows its program in Explorer; apps start as the user and unelevated when Windhawk runs as administrator.</li>
+<li>&quot;Media panel style&quot; (What's playing tab, #7042): the usual look (default), Pixel (as Android 13-15 draws it: the cover filling the card under its shade, a smooth wavy progress line moving while playing and flat when paused, the play button turning from a circle into a rounded square), One UI (a card in the cover's color, plain buttons), Windows 11 (the Quick Settings card, the cover on the right), or only the cover with the buttons over it; long titles and artists scroll in the panel in every look; &quot;Only the cover on the pill&quot; (#7038); &quot;Media buttons size&quot; for the pill's previous / play / next and &quot;Media panel size&quot; up to 200% (#7041), kept within the pill's height and the screen.</li>
+<li>&quot;What's playing on the minimized line&quot; (Hiding tab, off by default, #7045): while something plays, the minimized line becomes a thin pill with the song's cover and the visualizer's bars (the bars run only while it shows); the mouse on it opens the island.</li>
+<li>One switch for each status notice: the charger, the low battery, Bluetooth audio, &quot;Do not disturb&quot; (on by default, as before) and the desktop switched to, with its number and name (off by default, #7091, #7014).</li>
+<li>&quot;The bell opens Windows' notification center&quot; and &quot;World clocks inside the clock&quot; (a list under the mouse on the clock), both off by default (#7089).</li>
+<li>Virtual desktops renamed with a pencil in their list (Windows 11 24H2 and later, through the shell's own desktop service, on a thread; the pencil stays away where the service isn't there).</li>
+<li>Separator lines on the pill: a &quot;+ Line&quot; chip in the settings' preview strip (with a hint, a glow when a What's new link or the settings search for &quot;separator&quot;/&quot;line&quot; leads to it) adds one, glowing on the pill for a moment, dragged between two groups (Island, Fixed and Bar, upright too), a click takes it away; &quot;dock.separator&quot; (off by default): a thin line in the dock between the pinned apps and the others, drawn only, the taskbar's buttons untouched.</li>
+<li>A hex box (#RRGGBB) under the buttons of the color dialog every color of the island's settings opens.</li>
+<li>&quot;Weather icons&quot; (Tools tab): emoji (default, as before), the chosen icon pack's pictures, Meteocons (MIT, in color) or Weather Icons (SIL OFL 1.1), downloaded once when chosen like the icon packs; emoji for a sky a set has no picture for.</li>
+<li>A keyboard shortcut for each of your commands (recorded in the command's editor, up to 16, clashes with the island's shortcuts and other commands refused; the keyboard hook stays off with none) (#6165).</li>
+<li>&quot;Show VLC 3 from its window's title&quot; (What's playing tab, off by default, #6164): VLC 3 publishes nothing to Windows' media controls, so while it makes sound its window's title shows as what's playing, with play/pause, previous and next pressed as the buttons of its taskbar thumbnail (a posted WM_APPCOMMAND crashes VLC 3.0's Qt filter); VLC has its own chip among the media apps (chosen, it shows with another app playing; another app chosen keeps its place), its program icon stands in for the cover on the pill and in the panel, and with another player paused too the one that played last shows; no cover or time (VLC 3 tells neither).</li>
+<li>The Fixed style and the Bar have their own list of icons per app (items, clock and order while that app is in front; the place and size stay the Island style's only) (#6162).</li>
+</ul>
+<p><strong>Fixes</strong></p>
+<ul>
+<li>The Bar no longer flickers at the screen's corners with apps that round them (Roundly, Monitor Rounded Edges): windows that let clicks through no longer count as covering the island (#6954).</li>
+<li>Song lyrics: a song not found by its exact title and artist is looked for again with the bare title and the first artist; &quot;Artist - Topic&quot; and &quot;Artist • Album&quot; are read as the artist (SimpMusic and YouTube Music, #6612).</li>
+<li>Brightness of external monitors (DDC/CI): the calls go one at a time, and if Windows stops in the middle of one (a blue screen some monitors, docks or hubs cause), the island turns this brightness off at the next start and says so in a notice; it stays off, whatever a profile or a backup put back holds, until it's turned on again in the settings (#6966).</li>
+<li>On Insider builds with Windows' newer taskbar, which has none of the parts the dock styles, the taskbar is left as Windows draws it instead of cut at the bottom and restyled over and over (#6888).</li>
+<li>Calendars from .ics files: an event in a time zone of its own (TZID) shows at your local time, whichever way the file names the zone: Windows' name (Outlook), an IANA one (Apple and most others) or a zone the file itself describes. A zone nothing knows is read as local, with a line in the log (#7020).</li>
+<li>Apple Music shows once in the mixer and its slider changes what you hear: the programs of one Store app (Apple Music plays through a helper, AMPLibraryAgent.exe) are one entry, with the app's name and icon. The same in the control panel's mixer (#7043).</li>
+<li>Panels too tall for a short screen or a large scale now stop at the screen's edge and scroll, instead of being cut. The calendar keeps its month whole, its rows shorter and its big clock gone if needed, and scrolls its events; the lyrics and the shelf shorten their own lists (#7046).</li>
+<li>Recycle Bin: when Windows isn't ready to count or watch it (right after the PC starts, for example), the island tries again ten seconds later instead of keeping an old count, and it counts the bin again each time its panel opens; &quot;Empty the bin&quot; also works while the count is unknown (#7048).</li>
+<li>Battery charging between 85% and 94%: the charging battery shows, instead of the font's energy saver battery, the glyph right after the charging ones (#6922).</li>
+<li>Wi-Fi: the network's name and signal are read when it connects (and every five minutes), the signal's changes coming from Windows' own notices, instead of reading the network on each change: on newer Windows 11 builds each read counts as using the location, which kept Windows' location icon on.</li>
+<li>Dock with the &quot;Disable grouping on the taskbar&quot; mod: the app ID's suffix that mod adds for each extra window is left out, so those windows get the app's sharp, large icons (#7029).</li>
+<li>Dock: a taskbar button reused for an app opened right after another one closed kept the closed app's sharp icon when none was found for the new one (the Riot Client showed FileZilla's, reported on Discord). That picture is no longer left on it (also when the taskbar changes the button's picture a moment before its app ID), and an app the shell has no icon for gets its program's or its window's icon, its window found also when the app sets its ID on its process (like TeamViewer).</li>
+<li>The &quot;Taskbar&quot; setting says the dock is for Windows 11 only: on Windows 10 the taskbar stays as it is and only the island works (#7059).</li>
+<li>Media panel: two sources of the same app (two Chrome tabs, for example) show each one's title on its chip instead of the app's name twice.</li>
+<li>Drawing: a frame lost because the graphics driver couldn't make pictures smaller the smooth way is drawn again at once the plain way, the panels in their own window too.</li>
+<li>Weather: when the weather service doesn't answer, the log says why (WinHTTP's error), for blocked connections.</li>
+<li>&quot;Do not disturb&quot; notice: it comes when you turn it on or off, not each time Windows turns it on by itself for an app in full screen or a game (its automatic rules); the notice follows the profile you chose, Windows' state only when that can't be read (#7091).</li>
+<li>Tray icons answer clicks again with UAC off or on the Administrator account: 3.0 refused clicks from an elevated island to elevated apps, and with UAC off every process is elevated, explorer too; the refusal now applies only when explorer isn't elevated (a real UAC line), and the log says when it refuses (#7092).</li>
+<li>Calendar reminders: one that came due with the notifications list open, a notification arriving or a panel opening over it waits and shows; one the PC slept through shows once as missed (up to 12 hours, an all-day event's until its day ends); the reminder's sound follows the island's &quot;Do not disturb&quot; that silences reminders (#6156).</li>
+<li>Taskbar progress filling the pill: the log names the programs it comes from as a fill starts.</li>
+<li>Dock: the bubble drawn for an app's count (sharp when magnified) takes the color of the app's own badge, the average of its solid pixels without the number's white (Telegram's gray for archived chats, for example), instead of always red (#7095).</li>
+<li>Tray: an app asking where its icon is right after adding it (Electron's tray.getBounds() after new Tray(), as Medal does) got 0x0 with the taskbar's tray hidden, since the island places an icon a frame later; Medal then removed the icon and quit when its window closed. When neither the island's places nor the taskbar answer, a known icon now gets the island's middle until its real place comes (#7106, from the reporter's patch).</li>
+<li>Lyrics: the lyrics item steps aside when the pill's title already shows the line sung now (the swap, or a player that writes the line in its own title), compared without case or surrounding spaces (#7105).</li>
+<li>Dock: the room above the icons is 12 instead of 8 at 46 px (in proportion to the icon size), so the icons sit closer to the middle with the dots' room below (#7103).</li>
+<li>Switching a monitor's profile starts and stops what that island shows (net speed, weather, AI usage, updates; at start too, the watches only another monitor's profile wants); what's playing stops being watched once media, its buttons, lyrics and the visualizer are all off; a paused download no longer redraws its fill on every frame; a shutdown in the middle of a call to a monitor no longer turns external monitors' brightness (DDC/CI) off with a false crash notice at the next start; an icon folder or a notification's picture on another PC's share no longer stalls the island; clipboard text without its end is read only up to its block.</li>
+</ul>
+<p><strong>Other</strong></p>
+<ul>
+<li>The Vietnamese texts were reviewed to sound more natural, by caotu2k5.</li>
+<li>The file's header has the GPL-3.0 notice (the mod was already under GPL-3.0), with caliberda's copyright and m417z's for the taskbar XAML part, and the README a License section.</li>
+<li>The README has a &quot;Not planned, and why&quot; section, with how to try one of the island's yourself.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Font Fallback Override 2.0]]></title>
+        <id>https://windhawk.net/mods/dwrite-font-fallback-override#07ddbcff6810b5b69ed7fda33e3dff7151668060</id>
+        <link href="https://windhawk.net/mods/dwrite-font-fallback-override"/>
+        <updated>2026-11-09T17:01:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for classic GDI APIs:
+<ul>
+<li><code>DrawTextExW</code></li>
+<li><code>DrawThemeText</code></li>
+<li><code>DrawThemeTextEx</code></li>
+<li><code>DrawShadowText</code></li>
+<li><code>TextOutW</code></li>
+<li><code>ExtTextOutW</code></li>
+</ul>
+</li>
+</ul>
+]]></content>
+        <author>
+            <name>Muhammad Ragib Hasin</name>
+            <uri>https://github.com/RagibHasin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11.1]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#2cd9c600bfe13afb4fba68ec907a4b8084acc0a3</id>
@@ -705,413 +865,6 @@ found by their names in English and Dutch apps.</li>
         <author>
             <name>Lemon</name>
             <uri>https://github.com/lemon-web-stack</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota 2.18.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#ad20837f5bc018842c571112b1e60019e831e4a4</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-11-08T17:04:04.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Taskbar</strong></p>
-<ul>
-<li>Add eight tile styles: usage graph, segmented ring, concentric rings, gauge, clock pies, rounded square, headline % and quota matrix.</li>
-<li>Add provider logos as account identity, with number badges for accounts that share a provider.</li>
-<li>Add a Position setting for where the bars sit on the taskbar, and support for left and right taskbars.</li>
-<li>Add warning marks on accounts while their provider's status page reports a problem.</li>
-<li>Improve clicks: click a column to refresh it, and right-click it to hide the account or open its history.</li>
-</ul>
-<p><strong>Details flyout</strong></p>
-<ul>
-<li>Add a details flyout on hover, replacing the tooltip, with usage charts, reset times, pace and when each limit is projected to run out.</li>
-<li>Add model and extra limits, the Claude plan, free resets and Antigravity's other quotas.</li>
-</ul>
-<p><strong>Usage history</strong></p>
-<ul>
-<li>Add usage history, recorded on this PC and on by default.</li>
-<li>Add a history window that charts accounts together, overlays the previous week and exports CSV.</li>
-</ul>
-<p><strong>Providers</strong></p>
-<ul>
-<li>Add GitHub Copilot support for its monthly AI credits.</li>
-<li>Add OpenCode Go support with its 5-hour, weekly and monthly limits.</li>
-<li>Add Antigravity's Gemini Argon weekly quota.</li>
-</ul>
-<p><strong>Sign-in</strong></p>
-<ul>
-<li>Improve sign-in with a window to open or copy the link, Anthropic sign-in without pasting a code, and one-button Copilot sign-in.</li>
-<li>Improve sign-in security by never following HTTP redirects.</li>
-<li>Fix a new sign-in being overwritten by a token refresh that was already running.</li>
-</ul>
-<p><strong>Settings and notifications</strong></p>
-<ul>
-<li>Improve settings with a redesigned window and a live taskbar preview.</li>
-<li>Add a custom usage color palette and a choice of window material.</li>
-<li>Add notification levels; notifications now show under the mod's name, include the projected limit time and open the provider's dashboard.</li>
-</ul>
-<p><strong>Languages</strong></p>
-<ul>
-<li>Add German, Spanish, French, Japanese, Portuguese (Brazil), Russian and Chinese translations.</li>
-<li>Improve numbers to follow your Windows regional format.</li>
-</ul>
-<p><strong>Fixes</strong></p>
-<ul>
-<li>Fix duplicate polls, duplicate notifications and lost sign-ins when Explorer runs extra processes.</li>
-<li>Fix a possible Explorer crash when the mod is disabled while a link opens.</li>
-</ul>
-<p>Note: settings and sign-ins carry over, and the mod is renamed Taskbar AI Quota. Usage history recording is on by default; samples stay on this PC, and Settings &gt; History turns it off.</p>
-]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-live-wallpaper#deb9248a6196aefbbdbd52149d5fba59a6ae0dd8</id>
-        <link href="https://windhawk.net/mods/lock-screen-live-wallpaper"/>
-        <updated>2026-11-08T05:01:41.000Z</updated>
-        <content type="html"><![CDATA[<h1>Lock Screen Live Wallpaper</h1>
-<p>Plays a video as the background of the Windows 11 <strong>lock screen</strong> and the <strong>password / sign-in screen</strong>.</p>
-<p><img src="https://i.imgur.com/cCjmOzL.gif" alt="preview"></p>
-<p><em>Preview video: &quot;Stelle Cosmic Cheerleader&quot; by u/iTaiizor, <a href="https://www.reddit.com/r/iSucrose/comments/1xirh99/stelle_cosmic_cheerleader/">source</a>. Character © HoYoverse. The video is not included in this mod.</em></p>
-<p>The mod runs inside <code>LogonUI.exe</code>, decodes your video with Media Foundation, and feeds the frames into the XAML image elements that Windows normally uses for the lock screen wallpaper. If something looks wrong, a built-in fail-safe restores the original wallpaper.</p>
-<h2>⚠️ Before you start ⚠️</h2>
-<p><code>LogonUI.exe</code> is a protected system process, so Windhawk does not inject into it by default. For this mod to work you must add it to Windhawk's process inclusion list:</p>
-<ol>
-<li>Open Windhawk and go to <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
-<li>Add <code>LogonUI.exe</code> to the <strong>Process inclusion list</strong> and save.</li>
-</ol>
-<p><img src="https://i.imgur.com/9Biip4G.png" alt="Windhawk advanced settings: process inclusion list"></p>
-<h2>📋 Requirements</h2>
-<ul>
-<li>Windows 11</li>
-<li><code>LogonUI.exe</code> added to Windhawk's process inclusion list (see above)</li>
-<li>A video file that the <strong>SYSTEM</strong> account can read. <code>LogonUI.exe</code> runs as SYSTEM, so network locations, encrypted folders, and cloud-only (not downloaded) files may not work.</li>
-</ul>
-<h2>⚙️ Features</h2>
-<table>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Details</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Video source</td>
-<td>One video file, or a folder (a random video is picked on every lock)</td>
-</tr>
-<tr>
-<td>Formats</td>
-<td><code>mp4</code>, <code>m4v</code>, <code>mov</code>, <code>wmv</code>, <code>avi</code>, <code>mkv</code> (anything Media Foundation can decode on your system; H.264 MP4 is recommended)</td>
-</tr>
-<tr>
-<td>Fit modes</td>
-<td>Cover, fill, fit (letterbox), center</td>
-</tr>
-<tr>
-<td>Playback speed</td>
-<td>25% to 400%</td>
-</tr>
-<tr>
-<td>Hardware decoding</td>
-<td>Decodes on the GPU (D3D11/DXVA) when possible, with automatic fallback to software decoding</td>
-</tr>
-<tr>
-<td>Color adjustments</td>
-<td>Hue, saturation, brightness, contrast, gamma</td>
-</tr>
-<tr>
-<td>Audio</td>
-<td>Plays the video's audio track when the volume is above 0</td>
-</tr>
-<tr>
-<td>Power saving</td>
-<td>Still-frame mode, pause when idle, and optional pause on the password screen</td>
-</tr>
-<tr>
-<td>Boot behavior</td>
-<td>Optionally show the last frame right after boot instead of decoding</td>
-</tr>
-<tr>
-<td>Shutdown screen</td>
-<td>Optionally show the video on the &quot;Shutting down&quot; / &quot;Restarting&quot; screen (off by default, so Windows' own black screen is shown)</td>
-</tr>
-<tr>
-<td>Fail-safe</td>
-<td>Restores the original wallpaper if the lock screen UI changes or the mod misbehaves</td>
-</tr>
-<tr>
-<td>Debug log</td>
-<td>Optional CPU and decode statistics and a UI tree dump</td>
-</tr>
-</tbody>
-</table>
-<h2>📝 Notes on some settings</h2>
-<ul>
-<li><strong>Render width</strong>: internal canvas width (320 to 1920). The height follows your screen's aspect ratio. This is the biggest CPU lever.</li>
-<li><strong>Hardware video decoding</strong>: on (default) decodes with the GPU when possible, which greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. If the GPU path cannot produce a frame, the mod falls back to software decoding by itself. Changing this setting also re-enables playback if the crash guard turned it off.</li>
-<li><strong>Behavior right after boot</strong>: with <strong>Show last frame</strong>, the first 3 minutes after boot show the last saved frame without decoding. Needs at least one earlier session where the video was playing.</li>
-<li><strong>Audio volume</strong>: 0 means muted. Above 0, audio only plays at 100% speed while the video is playing (not paused, idle-paused, or showing the boot still frame).</li>
-<li><strong>Pause when idle</strong>: freezes the video and mutes the audio after the chosen time without input, and resumes on the next input.</li>
-<li><strong>Play video on the password screen</strong>: on (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen.</li>
-<li><strong>Debug log</strong>: also writes <code>debug.log</code> in the mod's storage folder, with CPU and decode statistics every 5 seconds and one UI tree dump. Basic events always go to Windhawk's log (enable logging for the mod in Windhawk to see them).</li>
-<li><strong>Long playback</strong>: the video loops without any time limit. By default it freezes after 5 minutes without input (see <strong>Pause when idle</strong>); set that to 0 if you want it to keep playing while nobody is at the PC.</li>
-</ul>
-<h2>📈 Performance tips</h2>
-<ul>
-<li>Lower <strong>Render width</strong> (the default is 1920; for example try 1280 or 960).</li>
-<li>Videos at 4K or 60 fps are decoded on the GPU when <strong>Hardware video decoding</strong> is on (the default). With it off they are decoded on the CPU and can use several cores; prefer 1080p at 30 fps then.</li>
-<li>Use <strong>Pause</strong> if you only want a still image.</li>
-<li>Keep <strong>Pause when idle</strong> enabled so nothing is decoded while nobody is at the PC.</li>
-<li>If the video stutters while you type your password, turn off <strong>Play video on the password screen</strong>.</li>
-<li>The password screen blurs the wallpaper behind it. A constantly changing background makes Windows redo that blur every frame, which costs some GPU time.</li>
-</ul>
-<h2>🔧 Troubleshooting</h2>
-<ul>
-<li><strong>Normal wallpaper is shown</strong>: make sure <code>LogonUI.exe</code> is in the process inclusion list and the video path is correct, then turn on <strong>Debug log</strong> and read <code>debug.log</code> in the mod's storage folder (see &quot;Files written by the mod&quot;). Look for <code>Failed to open video</code>, <code>Unsupported video format</code>, or <code>FAIL-SAFE TRIPPED</code>. Enable <strong>Debug log</strong> for more detail.</li>
-<li><strong>Video will not open</strong>: try an H.264 MP4 stored somewhere the SYSTEM account can read.</li>
-<li><strong>No sound</strong>: set <strong>Audio volume</strong> above 0 and see the notes above.</li>
-<li><strong>Stuttering</strong>: lower the render width and enable <strong>Debug log</strong>, then check the <code>CPU</code> and <code>UI stalls</code> lines in the log.</li>
-</ul>
-<h2>🤔 How it works</h2>
-<ol>
-<li>A worker thread finds the <code>LogonUI Logon Window</code> and installs a <code>WH_GETMESSAGE</code> hook on its UI thread.</li>
-<li>A decoder thread reads the video as RGB32 through Media Foundation, scales each frame according to the fit mode, applies the color settings, and publishes it to a shared buffer.</li>
-<li>On the UI thread, the newest frame is copied into a <code>WriteableBitmap</code>, which is set as the source of the <code>LockLogonImage</code> and <code>SwapLockLogonImage</code> elements.</li>
-<li>When the mod is unloaded, the original image sources are restored.</li>
-</ol>
-<h2>🛡️ Fail-safe</h2>
-<p>The mod stops itself and restores the original wallpaper for the rest of that <code>LogonUI.exe</code> process when:</p>
-<ul>
-<li>the video decoder fails before producing any frame,</li>
-<li>no video frame is produced within 30 seconds,</li>
-<li>the lock screen elements (<code>LockLogonImage</code> / <code>SwapLockLogonImage</code>) are never found, which usually means a Windows update changed the UI, or</li>
-<li>the UI throws repeated errors (3 within 30 seconds).</li>
-</ul>
-<p>Separately, a crash guard protects the sign-in screen. If two <code>LogonUI.exe</code> sessions in a row end before the decoder shows its first frame (for example because a codec crashes on your video), the mod turns playback off and the normal wallpaper is shown. To turn it back on, change <strong>Video file or folder</strong>, <strong>Render width</strong>, <strong>Fit mode</strong> or <strong>Hardware video decoding</strong> to a different value and keep it. Very short sessions (for example two Ctrl+Alt+Del screens in a row) can also trip it; the same fix applies.</p>
-<h2>📁 Files written by the mod</h2>
-<p>Everything is stored in the mod's own storage folder inside Windhawk's data folder (the path below is for a regular install; a portable Windhawk keeps it elsewhere):</p>
-<p><code>C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper</code></p>
-<p><code>ProgramData</code> is a hidden folder, so paste the path above into the File Explorer address bar to open it. The files are:</p>
-<ul>
-<li><code>debug.log</code>: log file, trimmed automatically after 2 MB</li>
-<li><code>frame_*.bgra</code>: cached first frame, so the lock screen can show something immediately</li>
-<li><code>last.bgra</code>: last shown frame, used by the <strong>Show last frame</strong> boot mode</li>
-</ul>
-<p>You can delete these files at any time; the mod recreates what it needs. The folder is removed automatically when the mod is uninstalled.</p>
-<h2>☕ Support</h2>
-<p>If you enjoy this mod, you can support its development:</p>
-<ul>
-<li><a href="https://ko-fi.com/grn15rens">Ko-fi</a></li>
-<li><a href="https://saweria.co/grn15RenS">Saweria</a> (for Indonesia)</li>
-</ul>
-<h2>ℹ️ Disclaimer</h2>
-<p>Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI process (<code>LogonUI.exe</code>), so it includes a fail-safe that restores the original wallpaper if anything goes wrong. As a precaution, keep another way to sign in available while trying it out.</p>
-<hr>
-<h1>Bahasa Indonesia</h1>
-<p>Memutar video sebagai latar belakang <strong>lock screen</strong> dan <strong>layar password / sign-in</strong> Windows 11.</p>
-<p><img src="https://i.imgur.com/cCjmOzL.gif" alt="preview"></p>
-<p><em>Pratinjau video: &quot;Stelle Cosmic Cheerleader&quot; oleh u/iTaiizor, <a href="https://www.reddit.com/r/iSucrose/comments/1xirh99/stelle_cosmic_cheerleader/">sumber</a>. Karakter © HoYoverse. Videonya tidak disertakan dalam mod ini.</em></p>
-<p>Mod ini berjalan di dalam <code>LogonUI.exe</code>, men-decode videomu dengan Media Foundation, lalu memasukkan frame-nya ke elemen gambar XAML yang biasanya dipakai Windows untuk wallpaper lock screen. Jika ada yang tidak beres, fail-safe bawaan akan mengembalikan wallpaper asli.</p>
-<h2>⚠️ Sebelum mulai ⚠️</h2>
-<p><code>LogonUI.exe</code> adalah proses sistem yang dilindungi, jadi Windhawk tidak meng-inject ke dalamnya secara default. Agar mod ini berfungsi, kamu harus menambahkannya ke daftar inklusi proses Windhawk:</p>
-<ol>
-<li>Buka Windhawk lalu pergi ke <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
-<li>Tambahkan <code>LogonUI.exe</code> ke <strong>Process inclusion list</strong> lalu simpan.</li>
-</ol>
-<p><img src="https://i.imgur.com/9Biip4G.png" alt="pengaturan lanjutan"></p>
-<h2>📋 Persyaratan</h2>
-<ul>
-<li>Windows 11</li>
-<li><code>LogonUI.exe</code> sudah ditambahkan ke daftar inklusi proses Windhawk (lihat di atas)</li>
-<li>File video yang bisa dibaca akun <strong>SYSTEM</strong>. <code>LogonUI.exe</code> berjalan sebagai SYSTEM, sehingga lokasi jaringan, folder terenkripsi, dan file cloud-only (belum diunduh) mungkin tidak berfungsi.</li>
-</ul>
-<h2>⚙️ Fitur</h2>
-<table>
-<thead>
-<tr>
-<th>Fitur</th>
-<th>Keterangan</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Sumber video</td>
-<td>Satu file video, atau satu folder (video dipilih acak setiap kali dikunci)</td>
-</tr>
-<tr>
-<td>Format</td>
-<td><code>mp4</code>, <code>m4v</code>, <code>mov</code>, <code>wmv</code>, <code>avi</code>, <code>mkv</code> (apa pun yang bisa di-decode Media Foundation di sistemmu; MP4 H.264 disarankan)</td>
-</tr>
-<tr>
-<td>Mode fit</td>
-<td>Cover, fill, fit (letterbox), center</td>
-</tr>
-<tr>
-<td>Kecepatan putar</td>
-<td>25% sampai 400%</td>
-</tr>
-<tr>
-<td>Decoding hardware</td>
-<td>Men-decode di GPU (D3D11/DXVA) jika memungkinkan, dengan fallback otomatis ke decoding software</td>
-</tr>
-<tr>
-<td>Penyesuaian warna</td>
-<td>Hue, saturasi, kecerahan, kontras, gamma</td>
-</tr>
-<tr>
-<td>Audio</td>
-<td>Memutar audio video jika volume di atas 0</td>
-</tr>
-<tr>
-<td>Hemat daya</td>
-<td>Mode gambar diam, jeda saat idle, dan opsi jeda di layar password</td>
-</tr>
-<tr>
-<td>Perilaku saat boot</td>
-<td>Opsional menampilkan frame terakhir tepat setelah boot tanpa decoding</td>
-</tr>
-<tr>
-<td>Layar shutdown</td>
-<td>Opsional menampilkan video di layar &quot;Shutting down&quot; / &quot;Restarting&quot; (mati secara default, sehingga layar hitam bawaan Windows yang tampil)</td>
-</tr>
-<tr>
-<td>Fail-safe</td>
-<td>Mengembalikan wallpaper asli jika UI lock screen berubah atau mod bermasalah</td>
-</tr>
-<tr>
-<td>Debug log</td>
-<td>Opsional: statistik CPU dan decode serta dump UI tree</td>
-</tr>
-</tbody>
-</table>
-<h2>📝 Catatan beberapa pengaturan</h2>
-<ul>
-<li><strong>Render width</strong>: lebar kanvas internal (320 sampai 1920). Tinggi mengikuti rasio aspek layarmu. Ini pengaturan yang paling berpengaruh pada CPU.</li>
-<li><strong>Hardware video decoding</strong>: aktif (default) berarti video di-decode oleh GPU jika memungkinkan, sehingga pemakaian CPU turun jauh untuk video 4K atau 60 fps. Matikan jika pemutaran bermasalah atau layar sign-in bermasalah. Jika jalur GPU gagal menghasilkan frame, mod otomatis beralih ke decoding software. Mengubah setting ini juga menyalakan kembali pemutaran jika crash guard sempat mematikannya.</li>
-<li><strong>Behavior right after boot</strong>: dengan <strong>Show last frame</strong>, 3 menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Butuh minimal satu sesi sebelumnya di mana video sempat diputar.</li>
-<li><strong>Audio volume</strong>: 0 berarti senyap. Di atas 0, audio hanya diputar pada kecepatan 100% dan hanya saat video benar-benar berjalan (bukan saat dijeda, dijeda karena idle, atau menampilkan frame diam setelah boot).</li>
-<li><strong>Pause when idle</strong>: membekukan video dan membisukan audio setelah waktu tertentu tanpa input, lalu lanjut saat ada input berikutnya.</li>
-<li><strong>Play video on the password screen</strong>: aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen.</li>
-<li><strong>Debug log</strong>: juga menulis <code>debug.log</code> di folder penyimpanan mod, berisi statistik CPU dan decode setiap 5 detik dan satu kali dump UI tree. Peristiwa dasar selalu masuk ke log Windhawk (aktifkan logging untuk mod ini di Windhawk untuk melihatnya).</li>
-<li><strong>Pemutaran lama</strong>: video diulang tanpa batas waktu. Secara default video dibekukan setelah 5 menit tanpa input (lihat <strong>Pause when idle</strong>); setel ke 0 kalau kamu ingin video terus berjalan saat tidak ada orang di depan PC.</li>
-</ul>
-<h2>📈 Tips performa</h2>
-<ul>
-<li>Turunkan <strong>Render width</strong> (defaultnya 1920; misalnya coba 1280 atau 960).</li>
-<li>Video 4K atau 60 fps di-decode oleh GPU saat <strong>Hardware video decoding</strong> aktif (default). Jika dimatikan, video di-decode oleh CPU dan bisa memakai beberapa core; pilih 1080p dengan 30 fps.</li>
-<li>Gunakan <strong>Pause</strong> jika kamu hanya ingin gambar diam.</li>
-<li>Biarkan <strong>Pause when idle</strong> aktif agar tidak ada decoding saat tidak ada orang di depan PC.</li>
-<li>Jika video patah-patah saat mengetik password, matikan <strong>Play video on the password screen</strong>.</li>
-<li>Layar password mem-blur wallpaper di belakangnya. Latar yang terus berubah membuat Windows mengulang blur itu di setiap frame, yang memakan sebagian GPU.</li>
-</ul>
-<h2>🔧 Pemecahan masalah</h2>
-<ul>
-<li><strong>Wallpaper normal yang tampil</strong>: pastikan <code>LogonUI.exe</code> ada di daftar inklusi proses dan path video benar, lalu aktifkan <strong>Debug log</strong> dan baca <code>debug.log</code> di folder penyimpanan mod (lihat &quot;File yang ditulis oleh mod&quot;). Cari <code>Failed to open video</code>, <code>Unsupported video format</code>, atau <code>FAIL-SAFE TRIPPED</code>. Aktifkan <strong>Debug log</strong> untuk detail lebih banyak.</li>
-<li><strong>Video tidak mau terbuka</strong>: coba MP4 H.264 yang disimpan di tempat yang bisa dibaca akun SYSTEM.</li>
-<li><strong>Tidak ada suara</strong>: setel <strong>Audio volume</strong> di atas 0 dan baca catatan di atas.</li>
-<li><strong>Patah-patah</strong>: turunkan render width dan aktifkan <strong>Debug log</strong>, lalu cek baris <code>CPU</code> dan <code>UI stalls</code> di log.</li>
-</ul>
-<h2>🤔 Cara kerja</h2>
-<ol>
-<li>Worker thread mencari <code>LogonUI Logon Window</code> dan memasang hook <code>WH_GETMESSAGE</code> pada UI thread-nya.</li>
-<li>Decoder thread membaca video sebagai RGB32 lewat Media Foundation, mengubah ukuran tiap frame sesuai mode fit, menerapkan pengaturan warna, lalu menaruhnya di buffer bersama.</li>
-<li>Di UI thread, frame terbaru disalin ke <code>WriteableBitmap</code>, yang dipasang sebagai source elemen <code>LockLogonImage</code> dan <code>SwapLockLogonImage</code>.</li>
-<li>Saat mod di-unload, source gambar asli dikembalikan.</li>
-</ol>
-<h2>🛡️ Fail-safe</h2>
-<p>Mod berhenti sendiri dan mengembalikan wallpaper asli sampai proses <code>LogonUI.exe</code> itu berakhir, jika:</p>
-<ul>
-<li>decoder video gagal sebelum menghasilkan frame apa pun,</li>
-<li>tidak ada frame video yang dihasilkan dalam 30 detik,</li>
-<li>elemen lock screen (<code>LockLogonImage</code> / <code>SwapLockLogonImage</code>) tidak pernah ditemukan, yang biasanya berarti update Windows mengubah UI, atau</li>
-<li>UI melempar error berulang (3 kali dalam 30 detik).</li>
-</ul>
-<p>Selain itu, ada pelindung crash untuk layar sign-in. Jika dua sesi <code>LogonUI.exe</code> berturut-turut berakhir sebelum decoder menampilkan frame pertama (misalnya karena codec crash pada videomu), mod mematikan pemutaran dan wallpaper normal yang tampil. Untuk menyalakannya lagi, ubah <strong>Video file or folder</strong>, <strong>Render width</strong>, <strong>Fit mode</strong> atau <strong>Hardware video decoding</strong> ke nilai yang berbeda dan biarkan begitu. Sesi yang sangat singkat (misalnya dua kali layar Ctrl+Alt+Del berturut-turut) juga bisa memicunya; solusinya sama.</p>
-<h2>📁 File yang ditulis oleh mod</h2>
-<p>Semuanya disimpan di folder penyimpanan milik mod sendiri, di dalam folder data Windhawk (path di bawah untuk instalasi biasa; Windhawk portabel menyimpannya di tempat lain):</p>
-<p><code>C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper</code></p>
-<p><code>ProgramData</code> adalah folder tersembunyi, jadi tempel path di atas ke address bar File Explorer untuk membukanya. Isinya:</p>
-<ul>
-<li><code>debug.log</code>: file log, dipangkas otomatis setelah 2 MB</li>
-<li><code>frame_*.bgra</code>: cache frame pertama, agar lock screen bisa langsung menampilkan sesuatu</li>
-<li><code>last.bgra</code>: frame terakhir yang ditampilkan, dipakai oleh mode boot <strong>Show last frame</strong></li>
-</ul>
-<p>Kamu boleh menghapus file-file ini kapan saja; mod akan membuat ulang yang dibutuhkan. Folder ini dihapus otomatis saat mod di-uninstall.</p>
-<h2>☕ Dukungan</h2>
-<p>Kalau kamu suka mod ini, kamu bisa mendukung pengembangannya lewat:</p>
-<ul>
-<li><a href="https://saweria.co/grn15RenS">Saweria</a> (untuk Indonesia)</li>
-<li><a href="https://ko-fi.com/grn15rens">Ko-fi</a> (internasional)</li>
-</ul>
-<h2>ℹ️ Peringatan</h2>
-<p>Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sistem (<code>LogonUI.exe</code>), jadi sudah dilengkapi fail-safe yang mengembalikan wallpaper asli jika ada yang tidak beres. Sebagai langkah berjaga-jaga, siapkan cara lain untuk masuk ke Windows saat mencobanya.</p>
-]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Share Flyout 1.0.0]]></title>
-        <id>https://windhawk.net/mods/quick-share-flyout#3cef2b9dd0957a2340d46f0aa5f7d14206680a7d</id>
-        <link href="https://windhawk.net/mods/quick-share-flyout"/>
-        <updated>2026-11-08T04:00:25.000Z</updated>
-        <content type="html"><![CDATA[<h1>Quick Share Flyout</h1>
-<p>Opens Google's <a href="https://www.android.com/better-together/quick-share-app/">Quick Share for Windows</a>
-as a flyout above the system tray, like the Windows 11 quick settings, instead
-of a window in the middle of the screen.</p>
-<p><img src="https://raw.githubusercontent.com/0Allu/quick-share-flyout/main/assets/quick-share-flyout-demo.gif" alt="Quick Share Flyout demo"></p>
-<p>Click the Quick Share tray icon to open or close the flyout. If the icon is in
-the tray overflow menu, the flyout opens beside the menu.</p>
-<h2>Features</h2>
-<ul>
-<li>Opens above the tray icon and slides out from the taskbar</li>
-<li>No title bar, with rounded corners</li>
-<li>Stays above other windows, and closes when you click somewhere else</li>
-<li>Drag files onto it from File Explorer</li>
-<li>Moves notifications out of the way while it's open</li>
-<li>Hidden from the taskbar and Alt+Tab</li>
-<li>Adjustable size</li>
-</ul>
-<h2>Sending files</h2>
-<p>Drag files from File Explorer onto the flyout. It stays open while you drag
-and after you drop, until you click somewhere else. Clicking another window
-closes it, so pick the files first, then open the flyout and drag them in.</p>
-<p>You can also right-click files and choose <strong>Send with Quick Share</strong>, or use
-<strong>Select</strong> in the flyout.</p>
-]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.3.1]]></title>
-        <id>https://windhawk.net/mods/overhaulded-alt-tab#5b1d0cdb276170cb6da30d20e314813571cd9b5a</id>
-        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
-        <updated>2026-11-08T01:03:57.000Z</updated>
-        <content type="html"><![CDATA[<h3>Added</h3>
-<ul>
-<li>Added configurable card motion speed (100% by default).</li>
-<li>Added independent animation controls for navigation and selector transitions.</li>
-<li>Added a toggle for the background mouse spotlight.</li>
-<li>Added Dots and Squares shapes to Pattern Waves.</li>
-<li>Added Fullscreen background</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-<li>Refined carousel motion styles: Smooth, Linear, and Bouncy.</li>
-<li>Improved card transitions, animation timing, and synchronization with background effects.</li>
-<li>Adjusted Pattern Waves animation speed and reorganized animation settings.</li>
-<li>Made card visibility fully automatic, replacing the Visible Cards and Single Window Card settings.</li>
-<li>Optimized card layouts based on window count, displaying up to five cards in the carousel.</li>
-</ul>
-]]></content>
-        <author>
-            <name>IMiloDev</name>
-            <uri>https://github.com/IMiloDev</uri>
         </author>
     </entry>
 </feed>

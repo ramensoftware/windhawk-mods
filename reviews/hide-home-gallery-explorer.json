@@ -1,0 +1,14 @@
+{
+  "modId": "hide-home-gallery-explorer",
+  "reviews": [
+    {
+      "authorName": "Callum",
+      "content": "Heads up: with this mod enabled, opening a specific folder path from an external application or command line causes File Explorer to briefly display the target folder for a split second before immediately snapping back to Desktop. Disabling the mod resolves the issue straight away. Seems to have broken with a recent W11 update.",
+      "id": 115,
+      "modVersion": "0.3",
+      "parentId": null,
+      "timestamp": 1794241069,
+      "votes": 0
+    }
+  ]
+}

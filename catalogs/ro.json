@@ -5529,20 +5529,20 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1774718714000,
+        "updated": 1794243673000,
         "users": 94
       },
       "metadata": {
         "author": "Muhammad Ragib Hasin",
-        "compilerOptions": "-ldwrite -lole32 -lwindowsapp",
-        "description": "Intercepts DirectWrite font fallback to replace fonts for specific characters",
+        "compilerOptions": "-luser32 -lgdi32 -ldwrite -lole32 -lwindowsapp",
+        "description": "Intercepts DirectWrite font fallback and GDI text draw routines to replace fonts for specific characters",
         "github": "https://github.com/RagibHasin",
         "include": [
           "*"
         ],
         "license": "MIT",
-        "name": "DirectWrite Font Fallback Override",
-        "version": "1.0"
+        "name": "Font Fallback Override",
+        "version": "2.0"
       }
     },
     "dxgi-flip-model-upgrade": {
@@ -8808,7 +8808,7 @@
         "rating": 7,
         "ratingBreakdown": [24, 4, 9, 9, 52],
         "ratingUsers": 98,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.9965897164826948,
         "updated": 1762850623000,
         "users": 3065
@@ -10281,7 +10281,7 @@
         "ratingUsers": 712,
         "reviews": 6,
         "trendingSorting": 30.187765067904067,
-        "updated": 1793847800000,
+        "updated": 1794243679000,
         "users": 18895
       },
       "metadata": {
@@ -10297,7 +10297,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Mac Island & Dock",
-        "version": "3.0.0"
+        "version": "3.1.0"
       }
     },
     "mac-magnifying-cursor": {
@@ -15115,12 +15115,12 @@
         "ratingUsers": 87,
         "reviews": 0,
         "trendingSorting": 0.6000896909137541,
-        "updated": 1779783329000,
+        "updated": 1794243686000,
         "users": 4367
       },
       "metadata": {
         "author": "crazyboyybs",
-        "compilerOptions": "-luser32 -lcomctl32 -lole32 -loleaut32",
+        "compilerOptions": "-luser32 -lgdi32 -lcomctl32 -lole32",
         "description": "Adds smooth scrolling with spring physics to legacy Win32 apps",
         "github": "https://github.com/crazyboyybs",
         "include": [
@@ -15132,7 +15132,7 @@
           "taskmgr.exe"
         ],
         "name": "Smooth Scroll for Win32",
-        "version": "1.0.3"
+        "version": "1.0.4"
       }
     },
     "smooth-virtual-desktop-switching": {
@@ -22981,7 +22981,7 @@
         "ratingUsers": 28,
         "reviews": 0,
         "trendingSorting": 38.7,
-        "updated": 1794067237000,
+        "updated": 1794243691000,
         "users": 387
       },
       "metadata": {
@@ -22995,7 +22995,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinTips OSD",
-        "version": "1.5.0"
+        "version": "1.5.1"
       }
     },
     "winui-context-menu-animation": {

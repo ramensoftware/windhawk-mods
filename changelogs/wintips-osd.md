@@ -1,3 +1,9 @@
+## 1.5.1 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e935dd1c5404ed3916207e33b4a4b4fcbafe45c7/mods/wintips-osd.wh.cpp))
+
+* `Ctrl+Insert`, `Shift+Insert` and `Shift+Delete` now raise the copy, paste and cut tips, not just `Ctrl+C` / `Ctrl+V` / `Ctrl+X`, since terminal windows still lean on the legacy set. `Ctrl+Shift+Delete` stays silent because browsers and editors use it for something else.
+* Fixed a card-shaped ghost of the previous tip bleeding into the new card's blurred backdrop when two tips appear in quick succession; the old card is now flushed out of the composed frame before the screen is captured.
+* Readme and settings text reworked, including a note that the card also works on Windows 10 and both shortcut sets in the copy / paste / cut descriptions.
+
 ## 1.5.0 ([Nov 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1492292686dabfa975d4165614a4eb3707ce300d/mods/wintips-osd.wh.cpp))
 
 * Eight card languages: Simplified and Traditional Chinese, English, German, Japanese, Russian, Spanish, Portuguese, plus automatic detection from the Windows display language.
