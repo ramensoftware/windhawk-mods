@@ -81,18 +81,18 @@ A lightweight, media-focused fork of **Dynamic Island for Windows** (originally 
   - HideInFullscreen: true
     $name: Hide in browser/video fullscreen
     $description: Automatically hide the island when a video or browser is playing in full screen, without hiding it in games.
-  - IdleTimeout: 0
+  - IdleTimeout: '0'
     $name: Hide when paused/idle
     $description: Hide the island after inactivity.
     $options:
-      - 0: Never
-      - 30: After 30 seconds
-      - 60: After 1 minute
-      - 300: After 5 minutes
-      - 900: After 15 minutes
-      - 1800: After 30 minutes
-      - 3600: After 1 hour
-      - 7200: After 2 hours
+      - '0': Never
+      - '30': After 30 seconds
+      - '60': After 1 minute
+      - '300': After 5 minutes
+      - '900': After 15 minutes
+      - '1800': After 30 minutes
+      - '3600': After 1 hour
+      - '7200': After 2 hours
   $name: Behavior
 - Animations:
   - TargetFPS: auto
