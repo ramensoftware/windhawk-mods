@@ -61,6 +61,22 @@ holds its settings and app order) and the group's icon. If you uninstall the
 mod, your groups stay as normal folders with your shortcuts in them, so
 nothing is lost.
 
+## Uninstalling
+
+Groups are normal folders, so they stay on your desktop with your shortcuts
+in them. Each one keeps what Windows needs to show its custom icon: its last
+group icon, the hidden `desktop.ini` and `group-icon-....ico` files inside
+it, and the folder's read-only flag (which, for folders, only tells Windows
+to look for a `desktop.ini`; it doesn't make anything read-only).
+
+To turn a group back into a plain folder, either move the shortcuts out and
+delete the folder, or:
+
+1. Right-click the group, then Properties, then Customize, then Change Icon,
+   and click Restore Defaults.
+2. In File Explorer, turn on View, then Show, then Hidden items, open the
+   folder, and delete `desktop.ini` and the `group-icon-....ico` file.
+
 ## Tips
 
 - Ctrl+click a group to select it without opening it. Right-click it for
@@ -154,12 +170,33 @@ Made for Windows 11.
 #include <climits>
 #include <cmath>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
+
+// ---- Staying safe while unloading -------------------------------------------
+//
+// Windhawk can unload the mod at any time (when you disable or update it).
+// Some of the mod's code can be in the middle of running then: a right-click
+// menu, the colour picker, a drag, or a "Do you want to allow this?" prompt
+// all wait for you inside the mod's code. If the mod's code were removed from
+// Explorer while that's happening, Explorer would crash when it returned.
+//
+// So every entry point that Windows calls into (window message handlers, and
+// the DoDragDrop hook) counts itself in and out with a BusyScope, and
+// Wh_ModUninit waits until the count is back to zero before letting the mod
+// be unloaded.
+
+std::atomic<int> g_busyCount{0};
+
+struct BusyScope {
+    BusyScope() { g_busyCount++; }
+    ~BusyScope() { g_busyCount--; }  // Runs when the function returns, however it returns.
+};
 
 // ---- 1. Settings ------------------------------------------------------------
 
@@ -490,8 +527,8 @@ bool CanBeGrouped(const DesktopItem& item) {
 // are only safe in our own windows; the desktop window is Explorer's, and
 // Explorer may already use them.)
 
-UINT g_msgGetItemPosition = 0;  // wParam: const std::wstring* path, lParam: POINT*
-UINT g_msgPlaceItem = 0;        // wParam: const std::wstring* path, lParam: const POINT*
+UINT g_msgGetItemPosition = 0;  // lParam: std::shared_ptr<PositionRequest>*
+UINT g_msgPlaceItem = 0;        // lParam: Placement*
 UINT g_msgStopPlacing = 0;      // Clears the to-do list (when the mod stops).
 constexpr UINT_PTR kPlacementTimer = 0x5DA6;  // An unusual number, to avoid
                                               // clashing with DefView's timers.
@@ -575,23 +612,55 @@ void ProcessPlacements(HWND desktopWindow) {
 }
 
 // For other threads (the group watcher): the same, by asking the desktop's
-// thread with a message. SendMessageTimeoutW waits for the answer, but gives
-// up after 2 seconds rather than freeze if the desktop is busy.
+// thread with a message.
+//
+// Careful: a message must never point at data the sender might throw away
+// before the message is handled. SendMessageTimeoutW gives up waiting after
+// 2 seconds if the desktop is busy, but the message stays queued, and the
+// desktop's thread handles it later. So each request lives on the heap
+// (created with "new"), and the desktop's thread frees it when it's done.
+
+// The request and its answer. Both threads keep a reference to it (a
+// shared_ptr, which counts its users), and it's freed when the last one lets
+// go. So if the asker gives up, the desktop's thread can still answer safely.
+struct PositionRequest {
+    std::wstring path;
+    POINT position = {};
+    bool found = false;
+};
+
 bool AskDesktopForPosition(const std::wstring& path, POINT* position) {
     HWND desktopWindow = g_desktopDefView;
-    DWORD_PTR found = 0;
-    return desktopWindow &&
-           SendMessageTimeoutW(desktopWindow, g_msgGetItemPosition, (WPARAM)&path,
-                               (LPARAM)position, SMTO_ABORTIFHUNG, 2000, &found) &&
-           found;
+    if (!desktopWindow) {
+        return false;
+    }
+    auto request = std::make_shared<PositionRequest>();
+    request->path = path;
+    // The desktop's thread's own reference, which it deletes once it answers.
+    auto* message = new std::shared_ptr<PositionRequest>(request);
+
+    DWORD_PTR ignored = 0;
+    if (!SendMessageTimeoutW(desktopWindow, g_msgGetItemPosition, 0, (LPARAM)message,
+                             SMTO_ABORTIFHUNG, 2000, &ignored)) {
+        // Gave up waiting. If the message is handled later, the desktop's
+        // thread frees it then. (If it never is, a few bytes are lost, which
+        // is harmless.)
+        return false;
+    }
+    *position = request->position;
+    return request->found;
 }
 
+// No answer is needed here, so the message is posted (queued without
+// waiting) instead of sent.
 void AskDesktopToPlace(const std::wstring& path, POINT position) {
     HWND desktopWindow = g_desktopDefView;
-    DWORD_PTR ignored = 0;
-    if (desktopWindow) {
-        SendMessageTimeoutW(desktopWindow, g_msgPlaceItem, (WPARAM)&path, (LPARAM)&position,
-                            SMTO_ABORTIFHUNG, 2000, &ignored);
+    if (!desktopWindow) {
+        return;
+    }
+    auto* request = new Placement{path, position, 0};
+    if (!PostMessageW(desktopWindow, g_msgPlaceItem, 0, (LPARAM)request)) {
+        delete request;  // Not queued, so nobody else will free it.
     }
 }
 
@@ -1534,6 +1603,13 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
         return false;
     }
     SetFileAttributesW(groupPath.c_str(), FILE_ATTRIBUTE_HIDDEN);
+
+    // Note the folder in the mod's storage until it's finished. If Explorer
+    // stops before then (say it crashes while Windows is asking for
+    // permission), the folder would be left hidden with some shortcuts
+    // already in it. At the next start, RecoverUnfinishedGroup finds this note
+    // and puts things right.
+    Wh_SetStringValue(L"UnfinishedGroup", groupPath.c_str());
     Wh_Log(L"Created \"%s\"", groupPath.c_str());
 
     // 2. Draw the icon from the apps where they are now, in the same order
@@ -1559,6 +1635,7 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
                                            IID_PPV_ARGS(&destination)))) {
         Wh_Log(L"Couldn't start the file move");
         CleanUpFailedGroup(groupPath);
+        Wh_DeleteValue(L"UnfinishedGroup");
         return false;
     }
 
@@ -1579,6 +1656,7 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
     if (FAILED(result) || aborted) {
         Wh_Log(L"The move didn't finish (error 0x%08X)", (unsigned)result);
         CleanUpFailedGroup(groupPath);
+        Wh_DeleteValue(L"UnfinishedGroup");
         return false;
     }
 
@@ -1588,6 +1666,7 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
     MarkAsGroup(groupPath);
     RemoveAttributes(groupPath, FILE_ATTRIBUTE_HIDDEN);
     *groupPathOut = groupPath;
+    Wh_DeleteValue(L"UnfinishedGroup");  // Finished.
     SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW | SHCNF_FLUSHNOWAIT, groupPath.c_str(),
                    nullptr);
     return true;
@@ -2114,6 +2193,7 @@ bool g_draggingFromPopup = false;
 
 HRESULT WINAPI DoDragDrop_Hook(IDataObject* dataObject, IDropSource* dropSource,
                                DWORD allowedEffects, DWORD* effect) {
+    BusyScope busy;  // See "Staying safe while unloading" near the top.
     // Only interested in drags that start on the desktop. The desktop's list
     // runs on its own thread, so if we're on that thread, it's a desktop drag.
     HWND list = g_desktopList;
@@ -2191,7 +2271,10 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* dataObject, IDropSource* dropSource,
 //   - Press on an app and move the mouse to drag it out of the group, onto
 //     the desktop or anywhere else you can drop files.
 
-const WCHAR kPopupClassName[] = L"DesktopAppGroups_Popup";
+// The popup's window class name. It's made unique each time the mod loads
+// (see RegisterWindowClasses in section 12).
+std::wstring g_popupClassName;
+bool g_windowClassesRegistered = false;
 HMODULE g_module = nullptr;  // This mod's DLL, needed to register the class.
 std::atomic<HWND> g_popupWindow{nullptr};
 
@@ -2905,6 +2988,7 @@ void RenameGroup(const std::wstring& typedName) {
 // messages.
 LRESULT CALLBACK RenameBoxProc(HWND box, UINT message, WPARAM wParam, LPARAM lParam,
                                UINT_PTR id, DWORD_PTR) {
+    BusyScope busy;
     switch (message) {
         case WM_KEYDOWN:
             if (wParam == VK_RETURN || wParam == VK_ESCAPE) {
@@ -3385,8 +3469,32 @@ void ClosePopupAnimated(HWND window) {
 
 // --- The popup's message handler ---------------------------------------------
 
+// Cancels any dialog box on this thread that belongs to the popup (directly,
+// or through the settings panel), as if you'd clicked Cancel.
+void CloseDialogsOwnedBy(HWND popup) {
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND window, LPARAM popupParam) -> BOOL {
+            WCHAR className[16] = L"";
+            GetClassNameW(window, className, ARRAYSIZE(className));
+            if (wcscmp(className, L"#32770") != 0) {  // The class of dialog boxes.
+                return TRUE;
+            }
+            for (HWND owner = GetWindow(window, GW_OWNER); owner;
+                 owner = GetWindow(owner, GW_OWNER)) {
+                if (owner == (HWND)popupParam) {
+                    SendMessageW(window, WM_COMMAND, IDCANCEL, 0);
+                    break;
+                }
+            }
+            return TRUE;
+        },
+        (LPARAM)popup);
+}
+
 LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
+    BusyScope busy;  // Covers right-click menus, renaming and dragging out.
     // While a right-click menu is open, pass the messages it needs for its
     // submenus and icons to the menu object.
     if ((g_popup.contextMenu2 || g_popup.contextMenu3) &&
@@ -3599,6 +3707,12 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             return 0;
 
         case kMsgCloseNow:
+            // Sent when the mod is unloading. A right-click menu or a window
+            // Windows opened for us (the colour picker, a delete
+            // confirmation) would keep the mod's code waiting underneath it,
+            // so close those first; then the popup itself.
+            EndMenu();
+            CloseDialogsOwnedBy(window);
             DestroyWindow(window);
             return 0;
 
@@ -3680,9 +3794,8 @@ bool RegisterPopupClass() {
     windowClass.lpfnWndProc = PopupWindowProc;
     windowClass.hInstance = g_module;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    windowClass.lpszClassName = kPopupClassName;
-    return RegisterClassExW(&windowClass) ||
-           GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    windowClass.lpszClassName = g_popupClassName.c_str();
+    return RegisterClassExW(&windowClass) != 0;
 }
 
 // --- The blurred background --------------------------------------------------
@@ -3873,7 +3986,7 @@ void ApplyPopupSettings(HWND window) {
 // piece with its position. The same list is used for drawing and for
 // working out what the mouse is over, so the two always agree.
 
-const WCHAR kPanelClassName[] = L"DesktopAppGroups_Settings";
+std::wstring g_panelClassName;  // Unique per load, like g_popupClassName.
 constexpr UINT_PTR kPanelTimer = 3;
 constexpr int kPanelOpenMilliseconds = 150;
 
@@ -4443,6 +4556,7 @@ void StepPanelAnimation(HWND window) {
 }
 
 LRESULT CALLBACK PanelWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    BusyScope busy;  // Covers the colour picker.
     switch (message) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;  // Clicking doesn't take the focus.
@@ -4534,12 +4648,12 @@ bool RegisterPanelClass() {
     windowClass.lpfnWndProc = PanelWindowProc;
     windowClass.hInstance = g_module;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    windowClass.lpszClassName = kPanelClassName;
-    return RegisterClassExW(&windowClass) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    windowClass.lpszClassName = g_panelClassName.c_str();
+    return RegisterClassExW(&windowClass) != 0;
 }
 
 void OpenSettingsPanel(HWND popup) {
-    if (g_panel.window || !RegisterPanelClass()) {
+    if (g_panel.window || !g_windowClassesRegistered) {
         return;
     }
     g_panel.allGroups = false;
@@ -4551,7 +4665,7 @@ void OpenSettingsPanel(HWND popup) {
     RECT start = g_panel.finalRect;
 
     // The popup is the "owner" (the parent argument, for a WS_POPUP window).
-    HWND panel = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kPanelClassName,
+    HWND panel = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, g_panelClassName.c_str(),
                                  L"Group settings", WS_POPUP, start.left, start.top,
                                  layout.size.cx, layout.size.cy, popup, nullptr, g_module,
                                  nullptr);
@@ -4602,8 +4716,7 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
     if (HWND existing = g_popupWindow) {
         DestroyWindow(existing);
     }
-    if (!RegisterPopupClass()) {
-        Wh_Log(L"Couldn't register the popup window class");
+    if (!g_windowClassesRegistered) {
         return;
     }
 
@@ -4658,7 +4771,7 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
 
     // WS_POPUP: no title bar or border. WS_EX_TOOLWINDOW: no taskbar button.
     HWND window = CreateWindowExW(
-        WS_EX_TOOLWINDOW, kPopupClassName, title.c_str(), WS_POPUP, start.left, start.top,
+        WS_EX_TOOLWINDOW, g_popupClassName.c_str(), title.c_str(), WS_POPUP, start.left, start.top,
         std::max(1L, start.right - start.left), std::max(1L, start.bottom - start.top),
         nullptr, nullptr, g_module, nullptr);
     if (!window) {
@@ -4762,15 +4875,21 @@ bool TryOpenGroup(HWND list, int index, bool isClick) {
 
 LRESULT CALLBACK DefViewSubclassProc(HWND window, UINT message, WPARAM wParam,
                                      LPARAM lParam, DWORD_PTR) {
+    BusyScope busy;
     // Placing icons (section 4): requests from other threads, and the timer.
     // Registered message numbers aren't fixed, so they can't go in a
     // "switch"; plain "if"s instead.
     if (message == g_msgGetItemPosition && message) {
-        return GetViewItemPosition(*(const std::wstring*)wParam, (POINT*)lParam);
+        auto* request = (std::shared_ptr<PositionRequest>*)lParam;
+        (*request)->found = GetViewItemPosition((*request)->path, &(*request)->position);
+        delete request;  // Our reference; see AskDesktopForPosition.
+        return 0;
     }
     if (message == g_msgPlaceItem && message) {
-        QueuePlacement(window, *(const std::wstring*)wParam, *(const POINT*)lParam);
-        return TRUE;
+        auto* request = (Placement*)lParam;
+        QueuePlacement(window, request->path, request->position);
+        delete request;  // See AskDesktopToPlace.
+        return 0;
     }
     if (message == g_msgStopPlacing && message) {
         g_placements.clear();
@@ -4808,6 +4927,32 @@ LRESULT CALLBACK DefViewSubclassProc(HWND window, UINT message, WPARAM wParam,
 }
 
 // ---- 11. Worker thread ------------------------------------------------------
+
+// If Explorer stopped while a group was being created, CreateGroup's note of
+// the folder is still in the mod's storage. If that folder was finished (it's
+// marked as a group), it only needs unhiding. Otherwise it's tidied up like a
+// failed group: removed if it's empty, or unhidden if shortcuts were already
+// moved into it, so they're never left out of sight.
+void RecoverUnfinishedGroup() {
+    WCHAR path[MAX_PATH * 2] = L"";
+    if (Wh_GetStringValue(L"UnfinishedGroup", path, ARRAYSIZE(path)) == 0 || !path[0]) {
+        return;
+    }
+    Wh_DeleteValue(L"UnfinishedGroup");
+
+    DWORD attributes = GetFileAttributesW(path);
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        return;
+    }
+    if (IsGroupFolder(path)) {
+        RemoveAttributes(path, FILE_ATTRIBUTE_HIDDEN);
+    } else {
+        CleanUpFailedGroup(path);
+    }
+    SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW | SHCNF_FLUSHNOWAIT, path, nullptr);
+    Wh_Log(L"Recovered \"%s\", left unfinished when Explorer stopped", path);
+}
+
 //
 // When Windows starts, Windhawk loads the mod before the desktop exists, so we
 // keep checking every half second for up to a minute.
@@ -4824,6 +4969,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
         HWND list = nullptr;
         switch (FindDesktopListView(&list, lastAttempt)) {
             case SearchResult::Found: {
+                // Only the explorer.exe that owns the desktop gets here, so
+                // only one copy of the mod does this.
+                RecoverUnfinishedGroup();
                 g_desktopList = list;
                 LogDesktopIcons(list);
 
@@ -4877,6 +5025,21 @@ void StopWorker() {
 // ---- 12. Windhawk callbacks -------------------------------------------------
 
 // Called first. Returning FALSE tells Windhawk to unload the mod.
+// Registers the popup's and settings panel's window classes, once per load.
+// The names get a number that's different every time the mod loads, so a
+// class left behind by an earlier load (whose message handler no longer
+// exists) can never be picked up by mistake.
+void RegisterWindowClasses() {
+    std::wstring suffix = std::to_wstring(GetTickCount64());
+    g_popupClassName = L"DesktopAppGroups_Popup_" + suffix;
+    g_panelClassName = L"DesktopAppGroups_Settings_" + suffix;
+    g_windowClassesRegistered = RegisterPopupClass() && RegisterPanelClass();
+    if (!g_windowClassesRegistered) {
+        Wh_Log(L"Couldn't register the popup's window classes (error %u)",
+               (unsigned)GetLastError());
+    }
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Desktop App Groups: starting in explorer.exe process %u",
            (unsigned)GetCurrentProcessId());
@@ -4888,6 +5051,7 @@ BOOL Wh_ModInit() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&Wh_ModInit, &g_module);
+    RegisterWindowClasses();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
@@ -4938,12 +5102,24 @@ void Wh_ModUninit() {
     }
 
     // Close the popup if it's open. SendMessage runs this on the popup's own
-    // thread, which is required for destroying a window.
+    // thread, which is required for destroying a window. Closing it also ends
+    // its right-click menu or colour picker, if one is open.
     if (HWND popup = g_popupWindow) {
         SendMessageW(popup, kMsgCloseNow, 0, 0);
     }
-    UnregisterClassW(kPopupClassName, g_module);
-    UnregisterClassW(kPanelClassName, g_module);  // (Closed along with the popup.)
+
+    // Wait for any of the mod's code that's still running to finish (see
+    // "Staying safe while unloading" near the top). Usually there's none; if
+    // you're mid-drag or answering a prompt, this waits until you're done.
+    while (g_busyCount > 0) {
+        Sleep(100);
+    }
+
+    if (g_windowClassesRegistered) {
+        UnregisterClassW(g_popupClassName.c_str(), g_module);
+        UnregisterClassW(g_panelClassName.c_str(), g_module);
+        g_windowClassesRegistered = false;
+    }
 
     // Stop the watcher last, since the popup can send it requests.
     StopGroupWatcher();
