@@ -4,7 +4,7 @@
 // @name:ko         스티커 메모 Alt+Tab 하나로 묶기
 // @description     Group Microsoft Sticky Notes into one Alt+Tab entry, bring open notes forward together, and use compact previews.
 // @description:ko  스티커 메모를 Alt+Tab 한 항목으로 묶고, 전환하면 열린 메모를 함께 표시하며 미리보기를 작게 만듭니다.
-// @version         1.1.3
+// @version         1.1.4
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
@@ -20,8 +20,8 @@ Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
 
 - Show one representative Sticky Notes window in Alt+Tab.
   - Keep notes grouped during delayed refreshes for as long as the switcher is
-    open, including refreshes after Show desktop (Win+D). If the representative
-    note closes or is hidden, another open note represents it.
+    open, including refreshes after Show desktop (Win+D). Native window hiding
+    does not change the representative; a destroyed window can be replaced.
 - Switch to Sticky Notes to bring all its open windows on the current virtual
   desktop forward together.
   - Minimized notes are restored; closed notes are not opened.
@@ -219,7 +219,10 @@ HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
         TrackDataView(evaluatingDataView);
     }
     HWND expected = representative.load();
-    while (!expected || !IsWindow(expected) || !IsWindowVisible(expected)) {
+    // WS_VISIBLE is not Alt+Tab eligibility. Show desktop/UWP transitions may
+    // hide every native window; re-electing on each hidden candidate lets all
+    // notes through. Keep the live representative stable until it is destroyed.
+    while (!expected || !IsWindow(expected)) {
         if (representative.compare_exchange_weak(expected, window)) break;
     }
     if (representative != window) *visible = FALSE;
