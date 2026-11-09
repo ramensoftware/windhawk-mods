@@ -5186,9 +5186,10 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si = {};
-    si.cb = sizeof(STARTUPINFO);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
