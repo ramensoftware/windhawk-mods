@@ -97,12 +97,12 @@ Behavior**, which defaults to closing its most recent window.
 
 Enable **Touchpad → Enable Three-Finger Gestures** for swipe and tap controls on
 a supported precision touchpad. **Sticky Switcher from Upward Swipe** controls
-the upward launcher independently.
+the upward launcher independently and is off by default.
 
 | Gesture | Action |
 | --- | --- |
 | Three-finger horizontal swipe while closed | Select the adjacent MRU entry. With Rapid Switching enabled, release before the show deadline activates that entry without revealing the UI; hold to reveal, then drag to navigate. Initial selection wraps within the first row. |
-| Three-finger upward swipe while closed | Open sticky mode when the upward launcher is enabled. |
+| Three-finger upward swipe while closed | Open sticky mode when the upward launcher is enabled (off by default). |
 | Three-finger drag while open | Navigate entries and rows without wrapping past the spatial edges. In sticky mode, lifting after a drag leaves the switcher open. |
 | Fresh stationary three-finger tap in sticky mode | Activate the selection after lifting from the previous swipe. |
 | Fresh upward swipe in sticky mode | Expand the selected application group, when grouping is enabled and it has multiple windows. |
@@ -158,6 +158,10 @@ navigation can change the selection while the UI remains hidden.
     restored only when the switcher is inactive.
 - Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
   Acrylic on Windows 10; backdrop blur is a separate, optional setting.
+- With [Windows Animations](https://windhawk.net/mods/windows-animations) 1.3.7 or
+  newer, confirmed keyboard and touchpad selections also play its window-switch
+  animation, and minimized windows are restored through its restore animation.
+  Cancelling the switcher plays no animation.
 
 ## Configuration
 
@@ -874,7 +878,7 @@ nothing failed.
     - enabled: true
       $name: Enable Three-Finger Gestures
       $description: Open and navigate the switcher with three-finger swipes on a precision touchpad. Drag to move, lift to select. Windows' own three-finger gestures are blocked while it is open.
-    - stickyLaunch: true
+    - stickyLaunch: false
       $name: Sticky Switcher from Upward Swipe
       $description: Open the switcher in sticky mode with an upward three-finger swipe. When off, Windows keeps its upward swipe. Horizontal swipes always open the normal switcher.
   $name: Touchpad
@@ -6208,7 +6212,7 @@ static bool ResolveAPIs() {
 
 // Explorer restart prompt
 
-constexpr WCHAR kRestartTitle[] = L"Simple Window Switcher - Windhawk";
+constexpr WCHAR kRestartTitle[] = L"WindowSwitcher++ - Windhawk";
 constexpr WCHAR kRestartText[] = L"Explorer needs to be restarted for changes to take effect. Restart now?";
 
 static HRESULT CALLBACK RestartPromptDialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM, LONG_PTR) {
@@ -20284,7 +20288,7 @@ static void LoadSettings() {
 
     g_settings.excludeXboxMode = LoadBoolSetting(L"ExcludedWindows.excludeXboxMode", false);
     g_settings.handleTouchpadGestures = LoadBoolSetting(L"Touchpad.enabled", true);
-    g_settings.stickyTouchpadMode = LoadBoolSetting(L"Touchpad.stickyLaunch", true);
+    g_settings.stickyTouchpadMode = LoadBoolSetting(L"Touchpad.stickyLaunch", false);
     g_touchpadGesturesEnabled.store(g_settings.handleTouchpadGestures);
     g_touchpadStickyLaunchEnabled.store(g_settings.stickyTouchpadMode);
     PublishNativeSwipePolicy();
@@ -22318,7 +22322,7 @@ BOOL WhTool_ModInit() {
     bool touchpadEnabled = TouchpadRawInputRequested();
     g_touchpadGesturesEnabled.store(touchpadEnabled);
     g_touchpadStickyLaunchEnabled.store(
-        LoadBoolSetting(L"Touchpad.stickyLaunch", true));
+        LoadBoolSetting(L"Touchpad.stickyLaunch", false));
     PublishNativeSwipePolicy();
     // Seed the cross-thread touchpad snapshot before the switcher thread can
     // load its full UI settings. Starting the thread first allowed its initial
@@ -22366,7 +22370,7 @@ void WhTool_ModSettingsChanged() {
     // WM_SWS_SETTINGS_CHANGED on the switcher thread.
     g_touchpadGesturesEnabled.store(touchpadEnabled);
     g_touchpadStickyLaunchEnabled.store(
-        LoadBoolSetting(L"Touchpad.stickyLaunch", true));
+        LoadBoolSetting(L"Touchpad.stickyLaunch", false));
     PublishNativeSwipePolicy();
     if (touchpadEnabled) {
         StartTouchpadReader();
