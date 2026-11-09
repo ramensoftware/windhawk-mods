@@ -12,7 +12,7 @@
 // ==WindhawkModReadme==
 /*
 The taskbar context menu (when clicking on the taskbar empty area) does not appear when
-running the Windows 10 taskbar ob Windows 11 24H2 or Windows 11 25H2.
+running the Windows 10 taskbar on Windows 11 24H2 or later.
 This mod restores the menu.
 */
 // ==/WindhawkModReadme==
