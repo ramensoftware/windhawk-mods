@@ -22,7 +22,7 @@ pulled out, a Bluetooth headset dropped, a USB DAC unplugged. The action lands
 after Windows has moved the sound back to the built-in speakers, so there is no
 one-second blast through them.
 
-![Auto-Pause in action](https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/main/assets/auto-pause-sample.gif)
+![Auto-Pause in action](https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/master/assets/auto-pause-sample.gif)
 
 It does not have to be a pause. The action is a setting, and so is whether it
 runs on a disconnect, on a connect, or both.
