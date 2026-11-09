@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-![Screenshot](https://i.ibb.co.com/Y7GmJqwc/windhawk-XU7-EJ31-Wg4.png) 
+![Screenshot](https://raw.githubusercontent.com/dekvas/images/main/windhawk_XU7EJ31Wg4.png) 
 
 # Windows 7 Desktop Widgets
 
