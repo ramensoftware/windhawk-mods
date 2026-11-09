@@ -28,17 +28,20 @@ survives Explorer restarts.
 ### Features
 - **Real-time monitoring:** CPU load, RAM usage and active network speed (Mbps/Kbps).
 - **Windows 10 & 11 look:** blends with the taskbar, configurable corner style, custom/auto background color and per-pixel background alpha.
-- **Zero-delay Auto-hide:** instantly and smoothly tracks taskbar animations with 0 latency.
-- **Auto-hide support:** hides cleanly when the taskbar or desktop is idle/translucent/hidden.
-- **Fullscreen detection:** hides itself when a fullscreen game or application is active.
-- **Ping (opt-in, off by default):** measures ICMP latency to the local router (default gateway) roughly every 1.6 seconds.
+- **Auto-hide support:** smoothly follows taskbar auto-hide animations and hides when the taskbar is retracted.
+- **Instant Fullscreen detection:** hides instantly without delay when any app goes fullscreen (e.g. F11 in browsers, video players, or games).
+- **Ping (opt-in, off by default):** measures ICMP latency to the local router (default gateway) roughly every 1.6 seconds. Nothing is sent while it is disabled.
 - **Mini History Graph:** press **Ctrl + Right Click** to open a real-time CPU & RAM history graph.
-- **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click**.
+- **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click**. Trimmed pages move to the standby list and programs page the data back in when they need it, so this does not free memory in a lasting way and may cause a short slowdown.
 
 ### Controls
 - **Ctrl + Left Click:** trim memory (only if enabled in settings).
 - **Ctrl + Right Click:** toggle real-time CPU & RAM mini-graph popup.
 - **Alt + Left Click and drag:** adjust the horizontal position on the taskbar.
+
+### Known limitations
+- Only the primary taskbar is supported (no secondary monitors).
+- Network speed is the sum of all active hardware adapters.
 */
 // ==/WindhawkModReadme==
 
@@ -245,6 +248,10 @@ HANDLE g_hStopEvent = NULL;
 HANDLE g_hPingWake = NULL;
 ULONG_PTR g_gdiplusToken = 0;
 
+HWND g_hookedTray = NULL;
+HWINEVENTHOOK g_hHookLoc = NULL;
+HWINEVENTHOOK g_hHookVis = NULL;
+
 std::atomic<bool> g_bRunning(false);
 std::atomic<bool> g_bCleaningRam(false);
 
@@ -254,6 +261,7 @@ std::atomic<int> g_pingMs(PING_PENDING);
 std::atomic<DWORD> g_netDownKbps(0);
 std::atomic<DWORD> g_netUpKbps(0);
 
+// History buffer for mini-graph
 std::mutex g_historyMutex;
 static const size_t MAX_GRAPH_POINTS = 50;
 std::deque<int> g_cpuHistory;
@@ -309,6 +317,7 @@ void UpdateCachedFonts(UINT dpi) {
     Gdiplus::REAL fontHeight = (Gdiplus::REAL)ScaleDpi(12, dpi);
     Gdiplus::REAL smallFontHeight = (Gdiplus::REAL)ScaleDpi(10, dpi);
 
+    // Support Windows 11 (Segoe UI Variable) and Windows 10 (Segoe UI fallback)
     Gdiplus::FontFamily familyVar(L"Segoe UI Variable Text");
     Gdiplus::FontFamily familySegoe(L"Segoe UI");
 
@@ -458,7 +467,7 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
         if (row.Type == NET_TYPE_LOOPBACK) continue;
         if (!row.InterfaceAndOperStatusFlags.HardwareInterface) continue;
         if (row.InterfaceAndOperStatusFlags.FilterInterface) continue;
-        if (row.OperStatus != 1) continue;
+        if (row.OperStatus != 1) continue; // IfOperStatusUp == 1
 
         IfCounter c = { (DWORD)row.InterfaceIndex, row.InOctets, row.OutOctets };
         cur.push_back(c);
@@ -658,11 +667,10 @@ void FormatStrings(wchar_t* cpuVal, wchar_t* ramVal, wchar_t* pingVal, wchar_t* 
     }
 }
 
-// Determines if the taskbar is retracted by auto-hide or hidden by third-party mods
+// Determines if the taskbar is retracted by auto-hide or hidden by styling mods
 bool IsTaskbarHiddenOrRetracted(HWND hTray) {
     if (!hTray || !IsWindowVisible(hTray)) return true;
 
-    // Check if another mod made the taskbar fully transparent
     if (GetWindowLongPtrW(hTray, GWL_EXSTYLE) & WS_EX_LAYERED) {
         COLORREF crKey = 0;
         BYTE bAlpha = 255;
@@ -679,55 +687,51 @@ bool IsTaskbarHiddenOrRetracted(HWND hTray) {
     RECT rcTray = {};
     if (!GetWindowRect(hTray, &rcTray)) return true;
 
-    // Geometry check: Windows leaves a 2-4px edge when retracted via auto-hide
-    const int THRESHOLD = 6;
-    if (rcTray.top >= mi.rcMonitor.bottom - THRESHOLD) return true;
-    if (rcTray.bottom <= mi.rcMonitor.top + THRESHOLD) return true;
-    if (rcTray.left >= mi.rcMonitor.right - THRESHOLD) return true;
-    if (rcTray.right <= mi.rcMonitor.left + THRESHOLD) return true;
+    int trayHeight = rcTray.bottom - rcTray.top;
 
-    // TrayNotifyWnd check: many mods hide/collapse the system tray when inactive
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    if (hNotify) {
-        if (!IsWindowVisible(hNotify)) return true;
-        RECT rcNotify = {};
-        if (GetWindowRect(hNotify, &rcNotify)) {
-            if (rcNotify.right <= rcNotify.left || rcNotify.bottom <= rcNotify.top) return true;
-            if (rcNotify.top >= mi.rcMonitor.bottom - THRESHOLD) return true;
-            if (rcNotify.bottom <= mi.rcMonitor.top + THRESHOLD) return true;
-            if (rcNotify.left >= mi.rcMonitor.right - THRESHOLD) return true;
-            if (rcNotify.right <= mi.rcMonitor.left + THRESHOLD) return true;
-        }
-    }
+    // Detect if the taskbar is sliding down or retracted
+    if (rcTray.top > mi.rcMonitor.bottom - (trayHeight > 30 ? (trayHeight - 8) : 15)) return true;
+    if (rcTray.bottom < mi.rcMonitor.top + (trayHeight > 30 ? (trayHeight - 8) : 15)) return true;
+    if (rcTray.left > mi.rcMonitor.right - 15) return true;
+    if (rcTray.right < mi.rcMonitor.left + 15) return true;
 
     return false;
 }
 
+// Instantly detects if any window is running fullscreen (e.g. F11 in browsers, games, media players)
 bool IsFullscreenAppActive(HWND hTaskbar) {
-    QUERY_USER_NOTIFICATION_STATE quns;
-    if (SUCCEEDED(SHQueryUserNotificationState(&quns))) {
-        if (quns == QUNS_BUSY || quns == QUNS_RUNNING_D3D_FULL_SCREEN || quns == QUNS_PRESENTATION_MODE) {
-            HWND hHud = g_hHudWnd;
-            HWND hFg = GetForegroundWindow();
-            if (hFg && hFg != hTaskbar && hFg != hHud) {
-                HMONITOR hMonTray = MonitorFromWindow(hTaskbar ? hTaskbar : hHud, MONITOR_DEFAULTTOPRIMARY);
-                HMONITOR hMonFg = MonitorFromWindow(hFg, MONITOR_DEFAULTTONEAREST);
-                if (hMonTray == hMonFg) {
-                    RECT rcFg;
-                    MONITORINFO mi = { sizeof(mi) };
-                    if (GetWindowRect(hFg, &rcFg) && GetMonitorInfoW(hMonTray, &mi)) {
-                        if (rcFg.left <= mi.rcMonitor.left && rcFg.top <= mi.rcMonitor.top &&
-                            rcFg.right >= mi.rcMonitor.right && rcFg.bottom >= mi.rcMonitor.bottom) {
-                            return true;
-                        }
-                    }
-                }
-            }
+    HWND hFg = GetForegroundWindow();
+    if (!hFg) return false;
+
+    HWND hHud = g_hHudWnd.load();
+    if (hFg == hTaskbar || hFg == hHud) return false;
+
+    // Do not hide when the desktop itself is focused
+    WCHAR className[32] = {};
+    if (GetClassNameW(hFg, className, 32)) {
+        if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
+            return false;
         }
     }
+
+    HMONITOR hMonTray = MonitorFromWindow(hTaskbar ? hTaskbar : hHud, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR hMonFg = MonitorFromWindow(hFg, MONITOR_DEFAULTTONEAREST);
+    if (hMonTray != hMonFg) return false;
+
+    RECT rcFg;
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetWindowRect(hFg, &rcFg) && GetMonitorInfoW(hMonTray, &mi)) {
+        // Fast direct geometry check: window covers or exceeds full monitor bounds (F11)
+        if (rcFg.left <= mi.rcMonitor.left && rcFg.top <= mi.rcMonitor.top &&
+            rcFg.right >= mi.rcMonitor.right && rcFg.bottom >= mi.rcMonitor.bottom) {
+            return true;
+        }
+    }
+
     return false;
 }
 
+// Renders the mini-graph popup on Ctrl + Right Click
 void RenderGraphPopup(HWND hWnd) {
     RECT rc;
     GetClientRect(hWnd, &rc);
@@ -791,6 +795,7 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::Pen borderPen(borderColor, 1.0f);
         g.DrawPath(&borderPen, &bgPath);
 
+        // Header with dynamically calculated duration
         wchar_t titleBuf[48];
         int totalSec = (int)((MAX_GRAPH_POINTS * interval) / 1000);
         wsprintfW(titleBuf, L"Activity (Last %ds)", totalSec);
@@ -917,7 +922,37 @@ void ToggleGraphWindow() {
     RenderGraphPopup(hGraph);
 }
 
-// Ultra-fast hardware window reposition without GDI+ CPU re-rendering (zero-lag tracking)
+bool CalculateHudPosition(HWND hTray, int exactWidth, int height, int& posX, int& posY) {
+    if (!hTray) return false;
+    RECT rcTray = {};
+    if (!GetWindowRect(hTray, &rcTray)) return false;
+
+    UINT dpi = SafeGetWindowDpi(hTray);
+    int trayH = rcTray.bottom - rcTray.top;
+
+    int offsetX;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        offsetX = settings.offsetX;
+    }
+
+    posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
+    posY = rcTray.top + (trayH - height) / 2;
+
+    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
+    if (hNotify && IsWindowVisible(hNotify)) {
+        RECT rcNotify;
+        if (GetWindowRect(hNotify, &rcNotify) && rcNotify.right > rcNotify.left) {
+            posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
+            int notifyH = rcNotify.bottom - rcNotify.top;
+            if (notifyH > 0) {
+                posY = rcNotify.top + (notifyH - height) / 2;
+            }
+        }
+    }
+    return true;
+}
+
 void FastRepositionOnly() {
     HWND hWnd = g_hHudWnd.load();
     if (!hWnd) return;
@@ -936,41 +971,22 @@ void FastRepositionOnly() {
     int height = rcHud.bottom - rcHud.top;
     if (exactWidth <= 0 || height <= 0) return;
 
-    UINT dpi = SafeGetWindowDpi(hTray);
-    int offsetX;
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        offsetX = settings.offsetX;
+    int posX = 0, posY = 0;
+    if (!CalculateHudPosition(hTray, exactWidth, height, posX, posY)) return;
+
+    // Early return: if already at the target position, avoid unnecessary SetWindowPos
+    if (IsWindowVisible(hWnd) && rcHud.left == posX && rcHud.top == posY) {
+        return;
     }
 
-    RECT rcTray = {};
-    GetWindowRect(hTray, &rcTray);
-    int trayH = rcTray.bottom - rcTray.top;
-
-    int posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
-    int posY = rcTray.top + (trayH - height) / 2;
-
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    if (hNotify) {
-        RECT rcNotify;
-        if (GetWindowRect(hNotify, &rcNotify)) {
-            posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
-            int notifyH = rcNotify.bottom - rcNotify.top;
-            if (notifyH > 0) {
-                posY = rcNotify.top + (notifyH - height) / 2;
-            }
-        }
-    }
-
-    // Move window position instantly via DWM compositor
-    SetWindowPos(hWnd, HWND_TOPMOST, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(hWnd, NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     if (!IsWindowVisible(hWnd)) {
         ShowWindow(hWnd, SW_SHOWNA);
     }
 }
 
-// Full sync: measures text, redraws layered GDI+ surface when sensor values change
+// GUI thread only: computes dimensions and paints with per-pixel alpha via UpdateLayeredWindow
 void SyncWindowGeometry() {
     HWND hWnd = g_hHudWnd;
     if (!hWnd) return;
@@ -989,7 +1005,7 @@ void SyncWindowGeometry() {
     }
 
     bool showCpu, showRam, showPing, showNet, showBars, customBg;
-    int offsetX, bgAlpha, cornerPref;
+    int bgAlpha, cornerPref;
     BYTE cr, cg, cb;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -998,7 +1014,6 @@ void SyncWindowGeometry() {
         showPing = settings.showPing;
         showNet = settings.showNetSpeed;
         showBars = settings.showMiniBars;
-        offsetX = settings.offsetX;
         bgAlpha = settings.bgAlpha;
         cornerPref = settings.cornerPref;
         customBg = settings.customBgEnabled;
@@ -1058,20 +1073,8 @@ void SyncWindowGeometry() {
         height = trayH - ScaleDpi(10, dpi);
     }
 
-    int posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
-    int posY = rcTray.top + (trayH - height) / 2;
-
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    if (hNotify) {
-        RECT rcNotify;
-        if (GetWindowRect(hNotify, &rcNotify)) {
-            posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
-            int notifyH = rcNotify.bottom - rcNotify.top;
-            if (notifyH > 0) {
-                posY = rcNotify.top + (notifyH - height) / 2;
-            }
-        }
-    }
+    int posX = 0, posY = 0;
+    CalculateHudPosition(hTray, exactWidth, height, posX, posY);
 
     HDC memDC = CreateCompatibleDC(screenDC);
     BITMAPINFO bi = {};
@@ -1201,6 +1204,7 @@ void SyncWindowGeometry() {
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
     UpdateLayeredWindow(hWnd, screenDC, &ptDst, &szDst, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
+    // Keep widget above the taskbar in the topmost band
     SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (!IsWindowVisible(hWnd)) {
@@ -1213,14 +1217,32 @@ void SyncWindowGeometry() {
     ReleaseDC(NULL, screenDC);
 }
 
-// WinEvent hook executes directly on the GUI thread to eliminate lag during taskbar sliding/animations
+// WinEvent hook to follow taskbar slide smoothly
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG, DWORD, DWORD) {
     if (idObject != OBJID_WINDOW || !hwnd) return;
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    HWND hTray = g_hookedTray;
     if (!hTray) return;
 
     if (hwnd == hTray || GetAncestor(hwnd, GA_ROOT) == hTray) {
         FastRepositionOnly();
+    }
+}
+
+// GUI thread only. Hooks Explorer's process so animations from any Explorer thread/mod are caught
+void UpdateTaskbarHooks() {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTray == g_hookedTray) return;
+    if (g_hHookLoc) { UnhookWinEvent(g_hHookLoc); g_hHookLoc = NULL; }
+    if (g_hHookVis) { UnhookWinEvent(g_hHookVis); g_hHookVis = NULL; }
+    g_hookedTray = hTray;
+    if (!hTray) return;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hTray, &pid);
+    if (pid != 0) {
+        g_hHookLoc = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
+                                     NULL, WinEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
+        g_hHookVis = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE,
+                                     NULL, WinEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
     }
 }
 
@@ -1335,6 +1357,8 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_TIMER: {
             if (wParam == TIMER_FAST_CHECK) {
+                UpdateTaskbarHooks();
+
                 if (g_statusMessageTime && (GetTickCount64() - g_statusMessageTime >= g_statusDuration)) {
                     g_statusMessageTime = 0;
                     SyncWindowGeometry();
@@ -1487,19 +1511,8 @@ DWORD WINAPI GuiWorkerThread(LPVOID) {
     if (hGraph) ApplyWindowStyle(hGraph);
 
     SyncWindowGeometry();
-    SetTimer(hWnd, TIMER_FAST_CHECK, 80, NULL);
-
-    // Install real-time hooks for 0ms latency tracking of taskbar animations
-    HWINEVENTHOOK hHookLoc = SetWinEventHook(
-        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-        NULL, WinEventProc, 0, 0,
-        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
-    );
-    HWINEVENTHOOK hHookVis = SetWinEventHook(
-        EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE,
-        NULL, WinEventProc, 0, 0,
-        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
-    );
+    UpdateTaskbarHooks();
+    SetTimer(hWnd, TIMER_FAST_CHECK, 100, NULL);
 
     for (;;) {
         DWORD r = MsgWaitForMultipleObjects(1, &g_hStopEvent, FALSE, INFINITE, QS_ALLINPUT);
@@ -1517,8 +1530,9 @@ DWORD WINAPI GuiWorkerThread(LPVOID) {
     }
 end_loop:
 
-    if (hHookLoc) UnhookWinEvent(hHookLoc);
-    if (hHookVis) UnhookWinEvent(hHookVis);
+    if (g_hHookLoc) { UnhookWinEvent(g_hHookLoc); g_hHookLoc = NULL; }
+    if (g_hHookVis) { UnhookWinEvent(g_hHookVis); g_hHookVis = NULL; }
+    g_hookedTray = NULL;
 
     KillTimer(hWnd, TIMER_FAST_CHECK);
     g_hHudWnd = NULL;
@@ -1570,6 +1584,7 @@ void WhTool_ModUninit() {
         SetEvent(g_hStopEvent);
     }
 
+    // Join GUI thread first so no UI actions can spawn new clean threads
     for (HANDLE* h : { &g_hGuiThread, &g_hPingThread, &g_hStatsThread, &g_hCleanThread }) {
         if (*h) {
             WaitForSingleObject(*h, INFINITE);
@@ -1598,7 +1613,19 @@ void WhTool_ModSettingsChanged() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other processes
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -1609,7 +1636,8 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
@@ -1649,7 +1677,8 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -1664,8 +1693,10 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
@@ -1688,15 +1719,19 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -1716,7 +1751,8 @@ void Wh_ModAfterInit() {
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
@@ -1742,6 +1778,7 @@ void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -1749,6 +1786,7 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
