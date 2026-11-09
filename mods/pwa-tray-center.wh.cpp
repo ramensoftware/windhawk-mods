@@ -2,8 +2,9 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.810
+// @version         0.1.820
 // @author          Proponent
+// @github          https://github.com/JJProponent
 // @include         chrome.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject
@@ -1836,7 +1837,7 @@ constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.810";
+constexpr wchar_t kAppVersion[] = L"v0.1.820";
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
