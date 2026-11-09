@@ -18,8 +18,10 @@ on the desktop and in open/save file dialogs. Version 2.0 adds features by user 
 
 ## Features
 - Paste text as a file (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
-- Optionally detect the text type (e.g. JSON, HTML, Python, SQL, Markdown, YAML)
+- Optionally detect the text type (e.g. JSON, HTML, C/C++, SQL, Markdown, YAML)
   and use it as the file extension instead of .txt
+- Executable script types (.bat, .ps1, .js, .py, .sh, ...) are NOT detected
+  by default, see "Security" below
 - Paste images as .png
 - After pasting, the new file is selected and put into rename mode,
   like New → Text Document
@@ -30,6 +32,20 @@ on the desktop and in open/save file dialogs. Version 2.0 adds features by user 
 - Ctrl+V, context menu Paste and menubar Paste all work
 - Shows system error dialog when pasting into a folder without write access
 
+## Security
+Pasted text is saved as a file, and a double-click or Enter on a script file
+**runs it** with your user's permissions. Text from websites, chats or emails
+can contain destructive commands, for example a one-line .bat that deletes
+all your files.
+
+Because of this the extension detection is split in two:
+- **Safe types** (.json, .html, .css, .c, .cpp, .cs, .java, .go, .rs, .sql,
+  .md, .yaml, .toml, .ini, .csv, .log, ...): detected by default.
+- **Executable script types** (.bat, .ps1, .js, .py, .sh, .pl, .rb, .php, .lua):
+  detected only if you explicitly enable "Also detect executable script types".
+  It is **off** by default. Without it such text is saved as plain .txt.
+
+Always review pasted text before running anything created by this mod.
 */
 // ==/WindhawkModReadme==
 
@@ -50,14 +66,28 @@ on the desktop and in open/save file dialogs. Version 2.0 adds features by user 
   $description: Allow pasting images from clipboard
 - detectTextType: true
   $name: Detect text type and set file extension
-  $description: Guesses the format or programming language of pasted text (e.g. .json, .py, .html, .sql) and uses it as the file extension. File types that would break with the selected encoding (for example scripts with a BOM, or non-ASCII .bat/.ps1 without a BOM) are saved as .txt instead.
+  $description: >-
+    Guesses the format or programming language of pasted text (e.g. .json,
+    .html, .c, .cpp, .sql, .md, .yaml) and uses it as the file extension.
+    Only non-executable types are used. Text that looks like a script is saved
+    as .txt unless the option below is enabled. File types that would break with
+    the selected encoding are also saved as .txt.
+- allowScriptTypes: false
+  $name: Also detect executable script types (UNSAFE)
+  $description: >-
+    WARNING! If enabled, text that looks like a script is saved with an
+    executable extension (.bat, .ps1, .js, .py, .sh, .pl, .rb, .php, .lua).
+    Double-clicking or pressing Enter on such a file RUNS it with your user
+    permissions. Text copied from websites, chats or emails may contain
+    destructive commands (for example deleting all your files), and pasted
+    code is never checked. Keep this disabled unless you always review what
+    you paste. Works only when "Detect text type" is enabled.
 - renameAfterPaste: true
   $name: Select and rename the new file after pasting
   $description: Selects the newly created file and enters rename mode, like New → Text Document does.
 */
 // ==/WindhawkModSettings==
 
-#include <mutex>
 #include <windows.h>
 #include <windowsx.h>
 #include <shlobj.h>
@@ -89,6 +119,7 @@ struct {
     std::atomic<bool> enableTextPaste{true};
     std::atomic<bool> enableImagePaste{true};
     std::atomic<bool> detectTextType{true};
+    std::atomic<bool> allowScriptTypes{false};   // UNSAFE, off by default
     std::atomic<bool> renameAfterPaste{true};
 } g_settings;
 
@@ -107,6 +138,7 @@ void LoadSettings()
     g_settings.enableTextPaste  = Wh_GetIntSetting(L"enableTextPaste")  != 0;
     g_settings.enableImagePaste = Wh_GetIntSetting(L"enableImagePaste") != 0;
     g_settings.detectTextType   = Wh_GetIntSetting(L"detectTextType")   != 0;
+    g_settings.allowScriptTypes = Wh_GetIntSetting(L"allowScriptTypes") != 0;
     g_settings.renameAfterPaste = Wh_GetIntSetting(L"renameAfterPaste") != 0;
 }
 
@@ -1319,7 +1351,7 @@ static const WCHAR* DetectDataFormat(const std::wstring& s)
         if (tabOk && tabRef >= 1) return L".tsv";
         if (commaOk && ((commaRef >= 2 && n >= 3) || (commaRef >= 1 && n >= 6)))
             return L".csv";
-        }
+    }
 
     if (n < 2) return nullptr;
 
@@ -1478,6 +1510,31 @@ static bool ExtIn(const WCHAR* ext, std::initializer_list<const WCHAR*> list)
     return false;
 }
 
+// ============================================================
+//  Security: executable extension policy
+// ============================================================
+// Extensions that Windows (or a commonly installed interpreter) will EXECUTE
+// on double-click / Enter / "Run with ...".
+static bool IsExecutableScriptExt(const WCHAR* ext)
+{
+    return ExtIn(ext, { L".bat", L".cmd", L".ps1", L".js", L".vbs",
+                        L".py", L".sh", L".pl", L".rb", L".php", L".lua" });
+}
+
+// Executable types are used only if the user explicitly allowed them.
+// Otherwise the file is saved as plain .txt.
+// Detection runs first on purpose: a Python script must not be mislabeled
+// as another language just because scripts were excluded from scoring.
+static const WCHAR* ApplyExtensionPolicy(const WCHAR* ext)
+{
+    if (!g_settings.allowScriptTypes && IsExecutableScriptExt(ext))
+    {
+        Wh_Log(L"Extension '%s' is executable and not allowed, using .txt", ext);
+        return L".txt";
+    }
+    return ext;
+}
+
 static bool IsAsciiOnly(const std::wstring& t)
 {
     for (WCHAR c : t) if (c > 0x7F) return false;
@@ -1537,8 +1594,10 @@ static bool PerformPaste(HWND sourceWindow)
             int enc = g_settings.textEncoding;
             const WCHAR* ext = L".txt";
             if (g_settings.detectTextType)
-                ext = ApplyEncodingRules(DetectTextExtension(text.c_str(), text.size()),
-                                         enc, text);
+                ext = ApplyEncodingRules(
+                          ApplyExtensionPolicy(
+                              DetectTextExtension(text.c_str(), text.size())),
+                          enc, text);
             Wh_Log(L"PerformPaste: text extension '%s'", ext);
             filePath = GetUniquePath(targetPath, baseName, ext);
             errCode  = SaveTextToFile(filePath, text, enc);
