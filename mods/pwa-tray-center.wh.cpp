@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.880
+// @version         0.1.890
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -111,6 +111,7 @@ constexpr UINT kMenuIdHideToCenter = 0x0B80;
 constexpr UINT kMsgListChanged = WM_APP + 1;
 constexpr UINT kMsgMouseHotkey = WM_APP + 4;  // mouse button pressed while the shortcut is chosen (wParam vk, lParam mods)
 constexpr UINT kMsgHookSync = WM_APP + 5;     // hook thread: make the hooks match the settings
+constexpr UINT kMsgPlainClick = WM_APP + 7;   // plain press while a shortcut is chosen (point in wParam/lParam)
 constexpr UINT kMsgOutsidePress = WM_APP + 6; // a mouse press seen by a hook (Hermes closes on an outside press)
 
 constexpr UINT_PTR kHostTimer = 1;
@@ -1246,17 +1247,17 @@ std::atomic<ULONGLONG> g_pollUntil{0};
 
 template <typename Op>
 bool WaitFor(Op const& op, int ms = 3000) {
-    // Waits in short steps, so a stop request (unload) ends the wait at once.
+    // wait_for sets the Completed handler, which an operation takes only once,
+    // so the status is polled instead. A stop request (unload) ends the wait.
     const ULONGLONG until = GetTickCount64() + ms;
-    while (true) {
-        if (op.wait_for(std::chrono::milliseconds(100)) == AsyncStatus::Completed) {
-            return true;
-        }
+    while (op.Status() == AsyncStatus::Started) {
         if (g_workStop || GetTickCount64() >= until) {
             op.Cancel();
             return false;
         }
+        Sleep(20);
     }
+    return op.Status() == AsyncStatus::Completed;
 }
 
 std::wstring ToWide(winrt::hstring const& h) {
@@ -1753,6 +1754,8 @@ void RequestMediaPoll(unsigned ms, bool wake = true) {
     while (cur < until && !g_pollUntil.compare_exchange_weak(cur, until)) {
     }
     EnsureWorkThread();
+    // StopWorkThread closes the event under this mutex, so it cannot be closed meanwhile.
+    std::lock_guard<std::mutex> lock(g_workThreadMutex);
     if (wake && g_workWake) {
         SetEvent(g_workWake);
     }
@@ -1882,7 +1885,7 @@ constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.880";
+constexpr wchar_t kAppVersion[] = L"v0.1.890";
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
@@ -3001,6 +3004,10 @@ void StopFrameThread() {
         WaitForSingleObject(g_frameThread, INFINITE);
         CloseHandle(g_frameThread);
         g_frameThread = nullptr;
+    }
+    if (g_frameWake) {
+        CloseHandle(g_frameWake);
+        g_frameWake = nullptr;
     }
 }
 
@@ -6173,10 +6180,12 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // creates the message queue
     g_hookThreadId = GetCurrentThreadId();
-    SyncHooks();
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == kMsgHookSync) {
-            SyncHooks();
+    if (!g_stopping) {
+        SyncHooks();
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            if (msg.message == kMsgHookSync) {
+                SyncHooks();
+            }
         }
     }
     // WM_QUIT: the hooks go with this thread.
@@ -6662,11 +6671,14 @@ LRESULT CALLBACK HotkeyMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     // A plain press goes through to the app; the panel decides what it means.
     if (g_hookListening.load()) {
         const UINT mods = CurrentMods();
-        PostMessageW(host, kMsgMouseHotkey, (WPARAM)vk, (LPARAM)mods);
         if (mods & (MOD_CONTROL | MOD_ALT | MOD_WIN)) {
+            PostMessageW(host, kMsgMouseHotkey, (WPARAM)vk, (LPARAM)mods);
             g_swallowUp = vk;
             return 1;
         }
+        // A plain press goes through; the panel checks whether it was outside.
+        PostMessageW(host, kMsgPlainClick, (WPARAM)(uint32_t)ms->pt.x,
+                     (LPARAM)(uint32_t)ms->pt.y);
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
     // Otherwise, the shortcut that opens the panel.
@@ -7136,7 +7148,9 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
                               wParam == WM_MBUTTONDOWN)) {
         if (HWND host = g_hostHwnd.load()) {
-            PostMessageW(host, kMsgOutsidePress, 0, 0);
+            const MSLLHOOKSTRUCT* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+            PostMessageW(host, kMsgOutsidePress, (WPARAM)(uint32_t)ms->pt.x,
+                         (LPARAM)(uint32_t)ms->pt.y);
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -8206,11 +8220,20 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case kMsgOutsidePress:
             if (g_panel && g_panel->hwnd && IsHermes() && !g_panel->nativeMenuActive) {
-                POINT pt = {};
+                POINT pt = {(LONG)(int32_t)(uint32_t)wParam, (LONG)(int32_t)(uint32_t)lParam};
                 RECT wr = {};
-                GetCursorPos(&pt);
                 if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, pt)) {
                     PostMessageW(g_panel->hwnd, WM_CLOSE, 0, 0);
+                }
+            }
+            return 0;
+
+        case kMsgPlainClick:
+            if (g_panel && g_panel->hotkeyListening) {
+                POINT pt = {(LONG)(int32_t)(uint32_t)wParam, (LONG)(int32_t)(uint32_t)lParam};
+                RECT wr = {};
+                if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, pt)) {
+                    CancelHotkeyCapture(*g_panel);
                 }
             }
             return 0;
@@ -8393,9 +8416,14 @@ bool HideToCenter(HWND hWnd) {
 
 // From the window menu: if the panel could not start, say so and keep the window visible.
 void HideFromMenu(HWND hWnd) {
+    // Runs inside the browser's window procedure: no modal dialog here, it would
+    // keep the browser's thread busy while the mod unloads.
+    if (g_stopping) {
+        return;
+    }
     if (!HideToCenter(hWnd)) {
-        MessageBoxW(hWnd, L"PWA Center could not start, so the window stays visible.",
-                    L"PWA Center", MB_OK | MB_ICONWARNING);
+        MessageBeep(MB_ICONWARNING);
+        Wh_Log(L"PWA Center could not start, so the window stays visible.");
     }
 }
 
