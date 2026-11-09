@@ -28,15 +28,32 @@ The provider is detected from the **default output device**.
 While Discord is running, the mod:
 
 1. Mutes Discord on the provider's target device and on every device outside
-   the provider (speakers, headphones).
+   the provider (speakers, headphones). Only the mute changes, never the
+   volume.
 2. Leaves the provider's other virtual devices alone.
 3. When the mod is disabled, or the default device switches to another
-   provider, unmutes only the sessions it muted and gives them back their
-   previous volume.
+   provider, unmutes Discord on the devices the rule no longer covers.
+
+With FxSound, `FxSound Speakers` is usually the only FxSound device, so every
+other output device is outside the provider and Discord is muted on all of
+them, voice chat included.
 
 It reacts to Windows audio notifications right away (default device changed,
 device added or removed, new audio session such as a screen share, a muted
 session was unmuted) and also checks every 30 seconds.
+
+## Windows remembers the mute
+
+The mute is Discord's per-app setting in the Volume Mixer, and Windows saves it
+for each output device, so it outlives the mod. The mod records each device it
+muted Discord on and unmutes Discord there once the rule no longer covers it,
+including after a crash. Windows only lets the mod do that while Discord is
+running. If Discord is closed when you disable the mod, Discord stays muted on
+those devices: open the Volume Mixer and unmute Discord, or enable the mod
+again while Discord is running and switch the default device away from the
+provider.
+
+## Mutelith app
 
 This is the same rule as the [Mutelith app](https://github.com/Faelayis/Mutelith).
 **Use one or the other:** while `Mutelith.exe` is running, the mod does nothing.
@@ -56,6 +73,8 @@ Designed and tested for one virtual audio provider at a time.
 #include <atomic>
 #include <cwctype>
 #include <map>
+#include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,26 +82,6 @@ Designed and tested for one virtual audio provider at a time.
 using Microsoft::WRL::ComPtr;
 
 namespace {
-
-// GUIDs and property keys are spelled out so the mod links without -luuid.
-constexpr GUID kClsidMMDeviceEnumerator = {
-    0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}};
-constexpr GUID kIidUnknown = {
-    0x00000000, 0x0000, 0x0000, {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-constexpr GUID kIidMMDeviceEnumerator = {
-    0xa95664d2, 0x9614, 0x4f35, {0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6}};
-constexpr GUID kIidAudioSessionManager2 = {
-    0x77aa99a0, 0x1bd6, 0x484f, {0x8b, 0xc7, 0x2c, 0x65, 0x4c, 0x9a, 0x9b, 0x6f}};
-constexpr GUID kIidAudioSessionControl2 = {
-    0xbfb7ff88, 0x7239, 0x4fc9, {0x8f, 0xa2, 0x07, 0xc9, 0x50, 0xbe, 0x9c, 0x6d}};
-constexpr GUID kIidSimpleAudioVolume = {
-    0x87ce5498, 0x68d6, 0x44e5, {0x92, 0x15, 0x6d, 0xa4, 0x7e, 0xf8, 0x83, 0xd8}};
-constexpr GUID kIidMMNotificationClient = {
-    0x7991eec9, 0x7e89, 0x4d85, {0x83, 0x90, 0x6c, 0x70, 0x3c, 0xec, 0x60, 0xc0}};
-constexpr GUID kIidAudioSessionNotification = {
-    0x641dd20b, 0x4d41, 0x49cc, {0xab, 0xa3, 0x17, 0x4b, 0x94, 0x77, 0xbb, 0x08}};
-constexpr GUID kIidAudioSessionEvents = {
-    0x24918acc, 0x64b3, 0x37c1, {0x8c, 0xa9, 0x74, 0xa6, 0x6e, 0x99, 0x57, 0xa8}};
 
 // "Speakers (Realtek(R) Audio)".
 constexpr PROPERTYKEY kPkeyDeviceFriendlyName = {
@@ -99,20 +98,20 @@ constexpr DWORD kPollMs = 2 * 1000;
 constexpr DWORD kResumeSettleMs = 3 * 1000;
 
 constexpr const wchar_t* kDiscordExes[] = {L"Discord.exe", L"DiscordPTB.exe",
+                                          L"DiscordCanary.exe",
                                           L"DiscordDevelopment.exe"};
 constexpr const wchar_t* kAppExe = L"Mutelith.exe";
 
+
 struct Provider {
+    // Provider name, also the name prefix shared by all devices it creates.
     const wchar_t* name;
-    // Name prefix shared by all devices this provider creates.
-    const wchar_t* prefix;
     // The provider device where Discord is muted too.
     const wchar_t* target;
 };
 
-constexpr Provider kSonar{L"SteelSeries Sonar", L"SteelSeries Sonar",
-                          L"SteelSeries Sonar - Microphone"};
-constexpr Provider kFxSound{L"FxSound", L"FxSound", L"FxSound Speakers"};
+constexpr Provider kSonar{L"SteelSeries Sonar", L"SteelSeries Sonar - Microphone"};
+constexpr Provider kFxSound{L"FxSound", L"FxSound Speakers"};
 
 std::wstring Lower(std::wstring text) {
     for (auto& c : text) {
@@ -133,7 +132,7 @@ const Provider* DetectProvider(const std::wstring& name,
     if (either(L"SteelSeries Sonar Virtual Audio Device")) {
         return &kSonar;
     }
-    if (either(L"FxSound Audio Enhancer") || either(L"FxSound")) {
+    if (either(L"FxSound")) {
         return &kFxSound;
     }
     return nullptr;
@@ -165,8 +164,44 @@ std::wstring DeviceId(IMMDevice* device) {
     return text;
 }
 
+std::wstring SessionInstanceId(IAudioSessionControl2* control) {
+    LPWSTR id = nullptr;
+    if (FAILED(control->GetSessionInstanceIdentifier(&id)) || !id) {
+        return {};
+    }
+    std::wstring text = id;
+    CoTaskMemFree(id);
+    return text;
+}
+
+// Windows saves Discord's per-app mute for each output device, so the mod
+// records where it muted each Discord build and can undo leftovers after an
+// unclean exit. One storage value per build and endpoint.
+std::wstring MutedValueName(const wchar_t* exe, const std::wstring& endpointId) {
+    return std::wstring(L"muted-") + exe + L"-" + endpointId;
+}
+
+bool IsRecorded(const wchar_t* exe, const std::wstring& endpointId) {
+    return Wh_GetIntValue(MutedValueName(exe, endpointId).c_str(), 0) != 0;
+}
+
+void Record(const wchar_t* exe, const std::wstring& endpointId) {
+    if (!IsRecorded(exe, endpointId) &&
+        !Wh_SetIntValue(MutedValueName(exe, endpointId).c_str(), 1)) {
+        Wh_Log(L"Failed to record muted device %s for %s", endpointId.c_str(),
+               exe);
+    }
+}
+
+void Forget(const wchar_t* exe, const std::wstring& endpointId) {
+    Wh_DeleteValue(MutedValueName(exe, endpointId).c_str());
+}
+
+using DiscordMap = std::map<DWORD, const wchar_t*>;
+
 struct Processes {
-    std::map<DWORD, std::wstring> discord;
+    // Discord PIDs and their entry in kDiscordExes.
+    DiscordMap discord;
     bool appRunning = false;
 };
 
@@ -185,7 +220,7 @@ Processes ScanProcesses() {
         }
         for (auto exe : kDiscordExes) {
             if (_wcsicmp(entry.szExeFile, exe) == 0) {
-                result.discord[entry.th32ProcessID] = entry.szExeFile;
+                result.discord[entry.th32ProcessID] = exe;
             }
         }
     }
@@ -205,12 +240,12 @@ class Waker final : public IMMNotificationClient,
         if (!object) {
             return E_POINTER;
         }
-        if (IsEqualIID(riid, kIidUnknown) ||
-            IsEqualIID(riid, kIidMMNotificationClient)) {
+        if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+            IsEqualIID(riid, __uuidof(IMMNotificationClient))) {
             *object = static_cast<IMMNotificationClient*>(this);
-        } else if (IsEqualIID(riid, kIidAudioSessionNotification)) {
+        } else if (IsEqualIID(riid, __uuidof(IAudioSessionNotification))) {
             *object = static_cast<IAudioSessionNotification*>(this);
-        } else if (IsEqualIID(riid, kIidAudioSessionEvents)) {
+        } else if (IsEqualIID(riid, __uuidof(IAudioSessionEvents))) {
             *object = static_cast<IAudioSessionEvents*>(this);
         } else {
             *object = nullptr;
@@ -282,8 +317,10 @@ class Monitor {
    public:
     Monitor(HANDLE wakeEvent) : m_waker(new Waker(wakeEvent)) {}
 
+    // Leaves Discord muted, so restarting after resume has no unmuted gap.
+    // Call Restore() first to unmute.
     ~Monitor() {
-        Restore();
+        ClearMuted();
         UnwatchSessionManagers();
         if (m_enumerator && m_notificationsRegistered) {
             m_enumerator->UnregisterEndpointNotificationCallback(m_waker);
@@ -292,9 +329,8 @@ class Monitor {
     }
 
     bool Init() {
-        if (FAILED(CoCreateInstance(kClsidMMDeviceEnumerator, nullptr, CLSCTX_ALL,
-                                    kIidMMDeviceEnumerator,
-                                    (void**)m_enumerator.GetAddressOf()))) {
+        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                    CLSCTX_ALL, IID_PPV_ARGS(&m_enumerator)))) {
             Wh_Log(L"Failed to create the device enumerator");
             return false;
         }
@@ -317,9 +353,11 @@ class Monitor {
         if (processes.appRunning) {
             if (!m_appRunning) {
                 Wh_Log(L"Mutelith.exe is running, the mod stays idle");
+                m_appRunning = true;
+                // Once, so the mod never fights the app's own mutes.
+                Release(devices, {}, processes.discord);
+                ClearMuted();
             }
-            m_appRunning = true;
-            Restore();
             return PollMs();
         }
         if (m_appRunning) {
@@ -327,57 +365,60 @@ class Monitor {
             m_appRunning = false;
         }
 
+        ForgetExited(processes.discord);
+
         const Provider* detected = DefaultProvider();
         if (detected != m_provider) {
             Wh_Log(L"Default device provider changed from %s to %s",
                    m_provider ? m_provider->name : L"none",
                    detected ? detected->name : L"none");
-            // Undo mutes that the new provider's rule does not cover.
-            Restore();
+            // Nothing is unmuted here: Release() below unmutes Discord on the
+            // devices the new rule does not cover, without a gap on the others.
+            ClearMuted();
             m_provider = detected;
         }
 
-        if (m_provider && !processes.discord.empty()) {
-            Apply(devices, processes.discord);
+        if (!m_provider) {
+            Release(devices, {}, processes.discord);
+            return PollMs();
         }
+
+        std::optional<std::vector<const Device*>> targets = Targets(devices);
+        if (!targets) {
+            if (m_lastCount != -2) {
+                Wh_Log(L"%s not found", m_provider->target);
+                m_lastCount = -2;
+            }
+            return PollMs();
+        }
+
+        if (!processes.discord.empty()) {
+            Apply(*targets, processes.discord);
+        }
+        std::set<std::wstring> keep;
+        for (const Device* device : *targets) {
+            keep.insert(device->id);
+        }
+        Release(devices, keep, processes.discord);
         return PollMs();
     }
 
-    // Unmute every session this mod muted and give it back its volume.
+    // Unmute Discord on every device where the mod muted it.
     void Restore() {
-        if (m_muted.empty() || !m_provider) {
-            ClearMuted();
-            return;
-        }
-        int count = 0;
-        Processes processes = ScanProcesses();
-        for (auto& device : ActiveDevices()) {
-            if (!(ContainsCi(device.name, m_provider->target) ||
-                  !ContainsCi(device.name, m_provider->prefix))) {
-                continue;
-            }
-            ForEachSession(device, [&](IAudioSessionControl* control, DWORD pid) {
-                auto muted = m_muted.find({device.name, pid});
-                if (muted == m_muted.end() || !processes.discord.contains(pid)) {
-                    return;
-                }
-                ComPtr<ISimpleAudioVolume> volume;
-                if (SUCCEEDED(control->QueryInterface(
-                        kIidSimpleAudioVolume, (void**)volume.GetAddressOf())) &&
-                    SUCCEEDED(volume->SetMute(FALSE, nullptr)) &&
-                    SUCCEEDED(volume->SetMasterVolume(muted->second, nullptr))) {
-                    count++;
-                    Wh_Log(L"Discord (PID %u) unmuted in %s", pid,
-                           device.name.c_str());
-                }
-            });
-        }
+        int count = Release(ActiveDevices(), {}, ScanProcesses().discord);
         Wh_Log(L"Unmuted %d Discord session(s)", count);
         ClearMuted();
     }
 
    private:
-    using SessionKey = std::pair<std::wstring, DWORD>;
+    // Endpoint ID and session instance ID.
+    using SessionKey = std::pair<std::wstring, std::wstring>;
+
+    struct Muted {
+        DWORD pid;
+        // Registered for volume events; unregistered and released on erase.
+        IAudioSessionControl* watched;
+    };
 
     DWORD PollMs() const {
         return m_notificationsRegistered ? kFallbackPollMs : kPollMs;
@@ -416,13 +457,14 @@ class Monitor {
             ReadString(device.Get(), kPkeyDeviceInterfaceFriendlyName));
     }
 
+    // Calls visit(control, control2, pid) for each session with an owner.
     template <typename F>
     void ForEachSession(const Device& device, F&& visit) {
         ComPtr<IAudioSessionManager2> manager;
         ComPtr<IAudioSessionEnumerator> sessions;
         int count = 0;
-        if (FAILED(device.device->Activate(kIidAudioSessionManager2, CLSCTX_ALL,
-                                           nullptr,
+        if (FAILED(device.device->Activate(__uuidof(IAudioSessionManager2),
+                                           CLSCTX_ALL, nullptr,
                                            (void**)manager.GetAddressOf())) ||
             FAILED(manager->GetSessionEnumerator(&sessions)) ||
             FAILED(sessions->GetCount(&count))) {
@@ -433,49 +475,50 @@ class Monitor {
             ComPtr<IAudioSessionControl2> control2;
             DWORD pid = 0;
             if (SUCCEEDED(sessions->GetSession(i, &control)) &&
-                SUCCEEDED(control->QueryInterface(
-                    kIidAudioSessionControl2, (void**)control2.GetAddressOf())) &&
+                SUCCEEDED(control.As(&control2)) &&
                 SUCCEEDED(control2->GetProcessId(&pid)) && pid != 0) {
-                visit(control.Get(), pid);
+                visit(control.Get(), control2.Get(), pid);
             }
         }
     }
 
-    void Apply(const std::vector<Device>& devices,
-               const std::map<DWORD, std::wstring>& discord) {
-        const Provider& provider = *m_provider;
+    // The first target device, then every device outside the provider.
+    // Empty optional when the target device is missing.
+    std::optional<std::vector<const Device*>> Targets(
+        const std::vector<Device>& devices) {
         bool targetFound = false;
         std::vector<const Device*> targets;
         for (auto& device : devices) {
-            if (!targetFound && ContainsCi(device.name, provider.target)) {
+            if (!targetFound && ContainsCi(device.name, m_provider->target)) {
                 targetFound = true;
                 targets.push_back(&device);
-            } else if (!ContainsCi(device.name, provider.prefix)) {
+            } else if (!ContainsCi(device.name, m_provider->name)) {
                 targets.push_back(&device);
             }
         }
         if (!targetFound) {
-            if (m_lastCount != -2) {
-                Wh_Log(L"%s not found", provider.target);
-                m_lastCount = -2;
-            }
-            return;
+            return std::nullopt;
         }
+        return targets;
+    }
 
+    void Apply(const std::vector<const Device*>& targets,
+               const DiscordMap& discord) {
         int count = 0;
         for (const Device* device : targets) {
-            ForEachSession(*device, [&](IAudioSessionControl* control, DWORD pid) {
+            ForEachSession(*device, [&](IAudioSessionControl* control,
+                                        IAudioSessionControl2* control2,
+                                        DWORD pid) {
                 auto process = discord.find(pid);
                 if (process == discord.end()) {
                     return;
                 }
                 ComPtr<ISimpleAudioVolume> volume;
-                if (FAILED(control->QueryInterface(
-                        kIidSimpleAudioVolume, (void**)volume.GetAddressOf()))) {
+                if (FAILED(control->QueryInterface(IID_PPV_ARGS(&volume)))) {
                     return;
                 }
 
-                SessionKey key{device->name, pid};
+                SessionKey key{device->id, SessionInstanceId(control2)};
                 bool known = m_muted.contains(key);
                 BOOL muted = FALSE;
                 if (known && SUCCEEDED(volume->GetMute(&muted)) && muted) {
@@ -483,14 +526,10 @@ class Monitor {
                     return;
                 }
 
-                // Read before muting; a session muted again keeps its first
-                // saved volume.
-                float level = 1.0f;
-                if (FAILED(volume->GetMasterVolume(&level))) {
-                    level = 1.0f;
-                }
-                if (FAILED(volume->SetMasterVolume(0.0f, nullptr)) ||
-                    FAILED(volume->SetMute(TRUE, nullptr))) {
+                // Recorded first, so a crash right after muting still leaves
+                // a record.
+                Record(process->second, device->id);
+                if (FAILED(volume->SetMute(TRUE, nullptr))) {
                     return;
                 }
                 count++;
@@ -498,15 +537,16 @@ class Monitor {
                     return;
                 }
 
-                m_muted[key] = level;
-                Wh_Log(L"%s (PID %u) muted in %s", process->second.c_str(), pid,
+                Wh_Log(L"%s (PID %u) muted in %s", process->second, pid,
                        device->name.c_str());
+                IAudioSessionControl* watched = nullptr;
                 if (m_notificationsRegistered &&
                     SUCCEEDED(control->RegisterAudioSessionNotification(
                         static_cast<IAudioSessionEvents*>(m_waker)))) {
                     control->AddRef();
-                    m_watched.push_back(control);
+                    watched = control;
                 }
+                m_muted[key] = {pid, watched};
             });
         }
 
@@ -520,14 +560,85 @@ class Monitor {
         }
     }
 
-    void ClearMuted() {
-        for (IAudioSessionControl* control : m_watched) {
+    // Unmute Discord on recorded devices that are not in keep, and forget each
+    // record once that Discord build is unmuted there. Returns the number of
+    // unmuted sessions.
+    int Release(const std::vector<Device>& devices,
+                const std::set<std::wstring>& keep,
+                const DiscordMap& discord) {
+        // Discord's saved mute can only be reached through a running Discord.
+        if (discord.empty()) {
+            return 0;
+        }
+        int count = 0;
+        for (auto& device : devices) {
+            if (device.id.empty() || keep.contains(device.id)) {
+                continue;
+            }
+            for (const wchar_t* exe : kDiscordExes) {
+                if (!IsRecorded(exe, device.id)) {
+                    continue;
+                }
+                bool found = false;
+                bool failed = false;
+                ForEachSession(device, [&](IAudioSessionControl* control,
+                                           IAudioSessionControl2*, DWORD pid) {
+                    auto process = discord.find(pid);
+                    if (process == discord.end() || process->second != exe) {
+                        return;
+                    }
+                    found = true;
+                    ComPtr<ISimpleAudioVolume> volume;
+                    BOOL muted = FALSE;
+                    if (FAILED(control->QueryInterface(IID_PPV_ARGS(&volume))) ||
+                        FAILED(volume->GetMute(&muted))) {
+                        failed = true;
+                        return;
+                    }
+                    if (!muted) {
+                        return;
+                    }
+                    if (FAILED(volume->SetMute(FALSE, nullptr))) {
+                        failed = true;
+                        return;
+                    }
+                    count++;
+                    Wh_Log(L"%s (PID %u) unmuted in %s", exe, pid,
+                           device.name.c_str());
+                });
+                // Kept until a session of that Discord build shows up there,
+                // so its saved mute is undone.
+                if (found && !failed) {
+                    Forget(exe, device.id);
+                }
+            }
+        }
+        return count;
+    }
+
+    void Erase(std::map<SessionKey, Muted>::iterator entry) {
+        if (IAudioSessionControl* control = entry->second.watched) {
             control->UnregisterAudioSessionNotification(
                 static_cast<IAudioSessionEvents*>(m_waker));
             control->Release();
         }
-        m_watched.clear();
-        m_muted.clear();
+        m_muted.erase(entry);
+    }
+
+    void ForgetExited(const DiscordMap& discord) {
+        for (auto entry = m_muted.begin(); entry != m_muted.end();) {
+            auto next = std::next(entry);
+            if (!discord.contains(entry->second.pid)) {
+                Erase(entry);
+            }
+            entry = next;
+        }
+    }
+
+    void ClearMuted() {
+        while (!m_muted.empty()) {
+            Erase(m_muted.begin());
+        }
         m_lastCount = -1;
     }
 
@@ -548,7 +659,7 @@ class Monitor {
             // Windows discards new-session notifications until the existing
             // sessions have been counted once.
             if (SUCCEEDED(device.device->Activate(
-                    kIidAudioSessionManager2, CLSCTX_ALL, nullptr,
+                    __uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr,
                     (void**)manager.GetAddressOf())) &&
                 SUCCEEDED(manager->RegisterSessionNotification(
                     static_cast<IAudioSessionNotification*>(m_waker)))) {
@@ -577,11 +688,8 @@ class Monitor {
     bool m_notificationsRegistered = false;
     bool m_appRunning = false;
     const Provider* m_provider = nullptr;
-    // Muted sessions and the volume each had before the mod muted it.
-    // shortcut: one volume per process and device, so several sessions of one
-    // process on one device all get the first one's volume back.
-    std::map<SessionKey, float> m_muted;
-    std::vector<IAudioSessionControl*> m_watched;
+    // Sessions the mod muted, by endpoint and session instance.
+    std::map<SessionKey, Muted> m_muted;
     std::map<std::wstring, ComPtr<IAudioSessionManager2>> m_managers;
     // -1: nothing logged yet, -2: target device missing.
     int m_lastCount = -1;
@@ -631,8 +739,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 break;
             }
             if (g_resumed.exchange(false)) {
-                // Like the app: wait for audio devices to settle, then unmute
-                // (the destructor) and start over with fresh notifications.
+                // Like the app: wait for audio devices to settle, then start
+                // over with fresh notifications. Discord stays muted meanwhile.
                 Wh_Log(L"System resumed, restarting in 3 seconds");
                 stop = WaitForSingleObject(g_stopEvent, kResumeSettleMs) ==
                        WAIT_OBJECT_0;
@@ -640,7 +748,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
             }
             wait = monitor.Tick();
         }
-        // The destructor restores Discord and unregisters every notification.
+        if (stop) {
+            monitor.Restore();
+        }
+        // The destructor unregisters every notification.
     }
     CoUninitialize();
     Wh_Log(L"Stopped monitoring");
