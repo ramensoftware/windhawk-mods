@@ -2,7 +2,7 @@
 // @id              window-center-resize
 // @name            Window Center & Resize
 // @description     Center and resize the foreground window using global hotkeys. Cycle hotkey steps through custom sizes in order. Combine with center hotkey to resize+center in one press. Optionally auto-restores maximized windows before resizing.
-// @version         1.0
+// @version         1.1
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         windhawk.exe
@@ -206,9 +206,18 @@ static bool GetWindowGeometry(HWND w, WindowGeometry& g)
     return true;
 }
 
+static bool IsTaskbarWindow(HWND w)
+{
+    wchar_t cls[64];
+    if (!GetClassNameW(w, cls, ARRAYSIZE(cls)))
+        return false;
+    return wcscmp(cls, L"Shell_TrayWnd")            == 0 ||
+           wcscmp(cls, L"Shell_SecondaryTrayWnd")   == 0;
+}
+
 static void DoCenterWindow(HWND w)
 {
-    if (!w || !IsWindow(w) || IsIconic(w) || IsZoomed(w)) return;
+    if (!w || !IsWindow(w) || IsIconic(w) || IsZoomed(w) || IsTaskbarWindow(w)) return;
 
     WindowGeometry g;
     if (!GetWindowGeometry(w, g)) return;
@@ -228,7 +237,7 @@ static int Clamp(int v, int lo, int hi)
 
 static void DoResizeCenter(HWND w, int pctW, int pctH, bool doCenter)
 {
-    if (!w || !IsWindow(w) || IsIconic(w)) return;
+    if (!w || !IsWindow(w) || IsIconic(w) || IsTaskbarWindow(w)) return;
 
     if (IsZoomed(w)) {
         if (!g_cfg.restoreMaximized) {
