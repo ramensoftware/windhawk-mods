@@ -1,34 +1,54 @@
 // ==WindhawkMod==
 // @id              dynamic-island-media-player
 // @name            Dynamic Island Media Player
-// @description     A media-only Dynamic Island overlay for Windows with per-app positioning, multilingual support (UA/RU/EN), color morphing, button styles, and system clock.
+// @description     A dedicated, standalone Dynamic Island media player for Windows featuring per-app positioning, custom color morphing, multilingual UI (UA/RU/EN), cubic buttons, and optimized rendering.
 // @version         1.6.0
 // @author          BOG090909
 // @github          https://github.com/BOG090909
 // @homepage        https://github.com/BOG090909/dynamic-island-media-player
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -ld2d1 -ldwrite -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinmm -lcomdlg32
+// @compilerOptions -lole32 -loleaut32 -ld2d1 -ldwrite -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinmm -lcomdlg32 -ldwmapi -lshcore
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Dynamic Island Media Player
+# Dynamic Island Media Player for Windows
 
-A lightweight, media-focused fork of **Dynamic Island for Windows** (originally created by Himanshu / devcode90).
+![Dynamic Island Preview](https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png)
 
-### Key Features
-- **Media Session Tracking:** Displays track details, album art, and app badge for current playback.
-- **Multilingual UI:** Full support for Ukrainian, Russian, and English with automatic system language detection and manual switching.
-- **Per-App Custom Positions:** Drag the island to set distinct screen locations for individual applications or games.
-- **Color Customization & Morphing:** System color picker (`ChooseColorW`) support and smooth RGB morphing during playback.
-- **Button Styles:** Switch between Default (Apple Pill) and Cubic control button styles.
-- **System Clock:** Integrated clock display in both expanded and collapsed views.
-- **Double-Click Confirmation:** Prevents accidental track skips with optional double-press activation.
-- **Performance Optimized:** No global audio hooking; low background CPU usage.
+A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 10/11.
 
----
-*Based on [Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows) by Himanshu (devcode90), licensed under the MIT License.*
+While inspired by the original *Dynamic Island for Windows* by Himanshu (`devcode90`), this project is a complete architectural overhaul transformed into an isolated media tool.
+
+## Why a Standalone Mod Instead of an Upstream PR?
+
+1. **Dedicated Media Pipeline vs. Multi-Module Tool:**
+   The original upstream mod is designed as an all-in-one widget suite (Clock, Notifications, Volume, Weather, Medi, 
+etc.). This mod completely strips out unrelated background modules to deliver a zero-latency, highly optimized media experience without unnecessary background thread overhead.
+
+2. **Per-App Dynamic Screen Positioning:**
+   Supports saving unique screen positions on a per-application basis (e.g., placing the island in different screen locations when switching between Spotify, YouTube in Chrome, or desktop games).
+
+3. **Advanced Visual Styling & Color Morphing:**
+   - Native Windows System Color Picker (`ChooseColorW`) support for custom background/accent/text themes.
+   - Smooth real-time RGB color morphing palettes during playback.
+   - Dual control button aesthetics (Apple Pill vs. Windows 11 Cubic styles).
+
+4. **Trilingual Localized UI (UA / RU / EN):**
+   Full native support for Ukrainian, Russian, and English with automatic system detection and manual runtime switching.
+
+5. **Safe Hotkeys (Disabled by Default):**
+   Global hotkeys are strictly disabled by default to prevent hijacking system shortcuts like `Ctrl+N` or `Ctrl+B` in IDEs, browsers, or office tools. Users can explicitly opt-in and customize keybindings via the context menu.
+
+## Key Features
+- **Smart Media Tracking:** Real-time track metadata, album art, app badges, and progress scrubbing via Windows System Media Transport.
+- **Resource Efficient:** Event-driven render sleeping and direct DWM/DPI API calls to guarantee ultra-low CPU/GPU consumption.
+- **System Clock:** Integrated digital clock in both expanded and collapsed states.
+- **Accidental Track Skip Protection:** Optional double-click confirmation for previous/next actions.
+
+## License
+MIT License — Copyright (c) 2026 BOG090909. Based on original work by Himanshu (devcode90).
 */
 // ==/WindhawkModReadme==
 
@@ -154,29 +174,6 @@ A lightweight, media-focused fork of **Dynamic Island for Windows** (originally 
 */
 // ==/WindhawkModSettings==
 
-/*
-  Dynamic Island Media Player v1.6.0
-  Copyright (c) 2026 BOG090909
-  Based on Dynamic Island for Windows: Copyright (c) 2023 Himanshu (devcode90)
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO QUALITY, FITNESS FOR A PARTICULAR PURPOSE
-  AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #ifndef UNICODE
@@ -196,10 +193,11 @@ A lightweight, media-focused fork of **Dynamic Island for Windows** (originally 
 #include <mmsystem.h>
 #include <objbase.h>
 #include <commdlg.h>
+#include <dwmapi.h>
+#include <shellscalingapi.h>
 #include <wrl/client.h>
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -443,7 +441,7 @@ std::mutex g_stateMutex;
 SharedState g_state;
 std::atomic<uint64_t> g_artGenerationCounter{0};
 
-HWND g_hwnd = nullptr;
+std::atomic<HWND> g_hwnd{nullptr};
 HANDLE g_stopEvent = nullptr;
 HANDLE g_renderThread = nullptr;
 HANDLE g_mediaThread = nullptr;
@@ -475,7 +473,6 @@ std::atomic<int> g_customTop{0};
 
 std::unordered_map<std::wstring, AppPosition> g_appPositions;
 std::mutex g_appPosMutex;
-std::wstring g_activeAppExe;
 std::wstring g_lastTargetAppExe;
 
 std::atomic<bool> g_confirmTrackChange{false};
@@ -496,7 +493,8 @@ std::atomic<bool> g_hidden{false};
 std::atomic<bool> g_disableAnimations{false};
 std::atomic<bool> g_disableShadow{false};
 
-std::atomic<bool> g_hotkeyEnabled{true};
+// Hotkeys are DISABLED by default for safety
+std::atomic<bool> g_hotkeyEnabled{false};
 std::atomic<unsigned> g_hotkeyMods{MOD_CONTROL};
 std::atomic<unsigned> g_hotkeyVk{'H'};
 std::atomic<unsigned> g_hkNextMods{MOD_CONTROL};
@@ -553,18 +551,19 @@ std::wstring BaseNameFromPath(std::wstring path) {
 }
 
 std::wstring GetForegroundExeName() {
+    HWND hSelf = g_hwnd.load();
     HWND fg = GetForegroundWindow();
     
-    if (!fg || fg == g_hwnd) {
+    if (!fg || fg == hSelf) {
         POINT pt;
         GetCursorPos(&pt);
         HWND hwndUnder = WindowFromPoint(pt);
-        if (hwndUnder && hwndUnder != g_hwnd) {
+        if (hwndUnder && hwndUnder != hSelf) {
             fg = GetAncestor(hwndUnder, GA_ROOT);
         }
     }
 
-    if (!fg || fg == g_hwnd) return g_lastTargetAppExe;
+    if (!fg || fg == hSelf) return g_lastTargetAppExe;
 
     wchar_t className[256] = {};
     GetClassNameW(fg, className, 256);
@@ -825,13 +824,7 @@ float GetPrimaryMonitorDpiScale() {
     POINT pt = {0, 0};
     HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
     UINT dpiX = 96, dpiY = 96;
-    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-    HMODULE shcore = LoadLibraryW(L"shcore.dll");
-    if (shcore) {
-        auto fn = reinterpret_cast<GetDpiForMonitor_t>(GetProcAddress(shcore, "GetDpiForMonitor"));
-        if (fn) fn(monitor, 0, &dpiX, &dpiY);
-        FreeLibrary(shcore);
-    }
+    GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
     return static_cast<float>(dpiX) / 96.0f;
 }
 
@@ -854,16 +847,10 @@ int GetMonitorRefreshRate(HWND hwnd) {
 D2D1_COLOR_F GetSystemAccentColor() {
     DWORD color = 0;
     BOOL opaque = FALSE;
-    using Fn = HRESULT(WINAPI*)(DWORD*, BOOL*);
-    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
     D2D1_COLOR_F result = D2D1::ColorF(0x4cc9f0);
-    if (dwm) {
-        auto fn = reinterpret_cast<Fn>(GetProcAddress(dwm, "DwmGetColorizationColor"));
-        if (fn && SUCCEEDED(fn(&color, &opaque))) {
-            result = D2D1::ColorF(((color >> 16) & 0xff) / 255.0f, ((color >> 8) & 0xff) / 255.0f,
-                                  (color & 0xff) / 255.0f, 1.0f);
-        }
-        FreeLibrary(dwm);
+    if (SUCCEEDED(DwmGetColorizationColor(&color, &opaque))) {
+        result = D2D1::ColorF(((color >> 16) & 0xff) / 255.0f, ((color >> 8) & 0xff) / 255.0f,
+                              (color & 0xff) / 255.0f, 1.0f);
     }
     return result;
 }
@@ -974,14 +961,25 @@ void LoadSettings() {
     if (savedIdleSec != -1) {
         g_idleTimeoutSec = savedIdleSec;
     } else {
-        g_idleTimeoutSec = Wh_GetIntSetting(L"Behavior.IdleTimeout");
+        const std::wstring idleStr = GetStringSettingCopy(L"Behavior.IdleTimeout");
+        g_idleTimeoutSec = idleStr.empty() ? 0 : _wtoi(idleStr.c_str());
     }
     next.idleTimeoutSec = g_idleTimeoutSec.load();
 
     g_clickThrough = Wh_GetIntValue(L"ClickThrough", 0) != 0;
     g_disableAnimations = Wh_GetIntValue(L"DisableAnimations", 0) != 0;
     g_disableShadow = Wh_GetIntValue(L"DisableShadow", 0) != 0;
-    g_hotkeyEnabled = Wh_GetIntValue(L"HotkeyEnabled", 1) != 0;
+
+    // Hotkeys persistence: Off by default unless turned on by user
+    g_hotkeyEnabled = Wh_GetIntValue(L"HotkeyEnabled", 0) != 0;
+    g_hotkeyMods = static_cast<unsigned>(Wh_GetIntValue(L"HotkeyMods", MOD_CONTROL));
+    g_hotkeyVk = static_cast<unsigned>(Wh_GetIntValue(L"HotkeyVk", 'H'));
+    g_hkNextMods = static_cast<unsigned>(Wh_GetIntValue(L"HkNextMods", MOD_CONTROL));
+    g_hkNextVk = static_cast<unsigned>(Wh_GetIntValue(L"HkNextVk", 'N'));
+    g_hkPrevMods = static_cast<unsigned>(Wh_GetIntValue(L"HkPrevMods", MOD_CONTROL));
+    g_hkPrevVk = static_cast<unsigned>(Wh_GetIntValue(L"HkPrevVk", 'B'));
+    g_hkPlayPauseMods = static_cast<unsigned>(Wh_GetIntValue(L"HkPlayPauseMods", MOD_CONTROL));
+    g_hkPlayPauseVk = static_cast<unsigned>(Wh_GetIntValue(L"HkPlayPauseVk", 'M'));
 
     if (Wh_GetIntValue(L"CustomPosSet", 0) != 0) {
         g_customCenterX = Wh_GetIntValue(L"CustomPosX", 0);
@@ -998,9 +996,10 @@ void LoadSettings() {
         g_settings = std::move(next);
     }
     g_layoutDirty = true;
-    if (g_hwnd) {
-        PostMessageW(g_hwnd, WM_APP_APPLY_HOTKEY, 0, 0);
-        PostMessageW(g_hwnd, WM_APP_WAKE, 0, 0);
+    HWND hSelf = g_hwnd.load();
+    if (hSelf) {
+        PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
+        PostMessageW(hSelf, WM_APP_WAKE, 0, 0);
     }
 }
 
@@ -1321,7 +1320,7 @@ std::wstring MediaSourceBadge(std::wstring_view sourceName) {
 
 BOOL CALLBACK FindMediaSourceWindowProc(HWND hwnd, LPARAM lParam) {
     auto* data = reinterpret_cast<std::pair<const std::wstring*, HWND*>*>(lParam);
-    if (!IsWindowVisible(hwnd) || hwnd == g_hwnd) return TRUE;
+    if (!IsWindowVisible(hwnd) || hwnd == g_hwnd.load()) return TRUE;
 
     std::wstring image;
     if (!ProcessImageNameForWindow(hwnd, &image)) return TRUE;
@@ -1502,7 +1501,9 @@ DWORD WINAPI MediaThreadProc(void*) {
                 }
                 if (!next.art && prev.art && !metadataChanged) next.art = prev.art;
             }
-        } catch (...) {}
+        } catch (...) {
+            manager = nullptr; // Reset manager on WinRT exception
+        }
 
         bool trackChanged = false;
         bool anyChange = false;
@@ -1517,7 +1518,7 @@ DWORD WINAPI MediaThreadProc(void*) {
             g_state.media = std::move(next);
         }
 
-        if (HWND h = g_hwnd) {
+        if (HWND h = g_hwnd.load()) {
             if (trackChanged && g_autoExpand.load()) {
                 const double t = NowSeconds();
                 if (t - g_lastNudgeTime.load() > 0.45) {
@@ -1532,6 +1533,7 @@ DWORD WINAPI MediaThreadProc(void*) {
         WaitForSingleObject(g_stopEvent, 100);
     }
 
+    manager = nullptr;
     winrt::uninit_apartment();
     return 0;
 }
@@ -1590,7 +1592,7 @@ void SendMediaTransportCommand(int cmd) {
         }
     }
     
-    if (HWND h = g_hwnd) {
+    if (HWND h = g_hwnd.load()) {
         PostMessageW(h, WM_APP_WAKE, 0, 0);
     }
 
@@ -2798,9 +2800,9 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     else if (target == 4) { g_hkPlayPauseMods = mods; g_hkPlayPauseVk = vk; }
                     
                     g_hotkeyEnabled = true;
-                    PersistHotkeys();
                     g_captureHotkey = false;
-                    if (HWND h = g_hwnd) PostMessageW(h, WM_APP_APPLY_HOTKEY, 0, 0);
+                    HWND hSelf = g_hwnd.load();
+                    if (hSelf) PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
                 }
             }
         }
@@ -2856,6 +2858,7 @@ enum MenuId : UINT {
     ID_CLICKTHROUGH,
     ID_DISABLE_ANIMATIONS,
     ID_DISABLE_SHADOW,
+    ID_HOTKEY_ENABLE_TOGGLE,
     ID_HOTKEY_HIDESHOW_SET,
     ID_HOTKEY_NEXT_SET,
     ID_HOTKEY_PREV_SET,
@@ -2955,7 +2958,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowEnabled.load() ? MF_CHECKED : 0), ID_TOGGLE_RAINBOW, Tr(L"Увімкнути переливання", L"Включить переливание", L"Enable morphing"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(rainbowMenu, MF_STRING, ID_ADD_RAINBOW_COLOR, Tr(L"+ Додати колір у палітру...", L"+ Добавить цвет в палитру...", L"+ Add color to palette..."));
-    AppendMenuW(rainbowMenu, MF_STRING, ID_RESET_RAINBOW_COLORS, Tr(L"Скинути палітру переливання", L"Сбросить палитру перелива", L"Reset morphing palette"));
+    AppendMenuW(rainbowMenu, MF_STRING, ID_RESET_RAINBOW_COLORS, Tr(L"Скинути палітуру переливання", L"Сбросить палитру перелива", L"Reset morphing palette"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowSpeed.load() == 0.5f ? MF_CHECKED : 0), ID_RAINBOW_SPEED_SLOW, Tr(L"Повільно", L"Медленно", L"Slow"));
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowSpeed.load() == 1.0f ? MF_CHECKED : 0), ID_RAINBOW_SPEED_NORMAL, Tr(L"Звичайна", L"Обычная", L"Normal"));
@@ -2990,17 +2993,23 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
                 Tr(L"Прозорий для натискань (Ctrl — взаємодія)", L"Прозрачный для нажатий (Ctrl — управлять)", L"Click-through (hold Ctrl to interact)"));
 
     HMENU hotkeyMenu = CreatePopupMenu();
+    const bool hkOn = g_hotkeyEnabled.load();
+    AppendMenuW(hotkeyMenu, MF_STRING | (hkOn ? MF_CHECKED : 0), ID_HOTKEY_ENABLE_TOGGLE, 
+                Tr(L"Увімкнути гарячі клавіші", L"Включить горячие клавиши", L"Enable hotkeys"));
+    AppendMenuW(hotkeyMenu, MF_SEPARATOR, 0, nullptr);
+
+    UINT hkFlags = hkOn ? MF_STRING : (MF_STRING | MF_GRAYED);
     std::wstring hsLabel = std::wstring(Tr(L"Сховати / показати: ", L"Скрыть / показать: ", L"Hide / show: ")) + FormatHotkey(g_hotkeyMods.load(), g_hotkeyVk.load());
-    AppendMenuW(hotkeyMenu, MF_STRING, ID_HOTKEY_HIDESHOW_SET, hsLabel.c_str());
+    AppendMenuW(hotkeyMenu, hkFlags, ID_HOTKEY_HIDESHOW_SET, hsLabel.c_str());
 
     std::wstring nextLabel = std::wstring(Tr(L"Наступний трек: ", L"Следующий трек: ", L"Next track: ")) + FormatHotkey(g_hkNextMods.load(), g_hkNextVk.load());
-    AppendMenuW(hotkeyMenu, MF_STRING, ID_HOTKEY_NEXT_SET, nextLabel.c_str());
+    AppendMenuW(hotkeyMenu, hkFlags, ID_HOTKEY_NEXT_SET, nextLabel.c_str());
 
     std::wstring prevLabel = std::wstring(Tr(L"Попередній трек: ", L"Предыдущий трек: ", L"Previous track: ")) + FormatHotkey(g_hkPrevMods.load(), g_hkPrevVk.load());
-    AppendMenuW(hotkeyMenu, MF_STRING, ID_HOTKEY_PREV_SET, prevLabel.c_str());
+    AppendMenuW(hotkeyMenu, hkFlags, ID_HOTKEY_PREV_SET, prevLabel.c_str());
 
     std::wstring ppLabel = std::wstring(Tr(L"Пауза / Відтворення: ", L"Пауза / Воспроизведение: ", L"Play / Pause: ")) + FormatHotkey(g_hkPlayPauseMods.load(), g_hkPlayPauseVk.load());
-    AppendMenuW(hotkeyMenu, MF_STRING, ID_HOTKEY_PLAYPAUSE_SET, ppLabel.c_str());
+    AppendMenuW(hotkeyMenu, hkFlags, ID_HOTKEY_PLAYPAUSE_SET, ppLabel.c_str());
 
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(hotkeyMenu), Tr(L"Гарячі клавіші", L"Бинды", L"Hotkeys"));
 
@@ -3225,21 +3234,22 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
             g_clickThrough = !g_clickThrough.load();
             Wh_SetIntValue(L"ClickThrough", g_clickThrough.load() ? 1 : 0);
             break;
+        case ID_HOTKEY_ENABLE_TOGGLE:
+            g_hotkeyEnabled = !g_hotkeyEnabled.load();
+            PersistHotkeys();
+            ApplyHideShowHotkey(hwnd);
+            break;
         case ID_HOTKEY_HIDESHOW_SET:
-            g_moveMode = false;
-            StartHotkeyCapture(1);
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(1); }
             break;
         case ID_HOTKEY_NEXT_SET:
-            g_moveMode = false;
-            StartHotkeyCapture(2);
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(2); }
             break;
         case ID_HOTKEY_PREV_SET:
-            g_moveMode = false;
-            StartHotkeyCapture(3);
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(3); }
             break;
         case ID_HOTKEY_PLAYPAUSE_SET:
-            g_moveMode = false;
-            StartHotkeyCapture(4);
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(4); }
             break;
         default:
             return;
@@ -3557,14 +3567,14 @@ DWORD WINAPI RenderThreadProc(void*) {
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 0;
     }
-    g_hwnd = hwnd;
+    g_hwnd.store(hwnd);
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     ApplyHideShowHotkey(hwnd);
 
     Renderer renderer;
     if (!renderer.Initialize(hwnd)) {
         DestroyWindow(hwnd);
-        g_hwnd = nullptr;
+        g_hwnd.store(nullptr);
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 0;
     }
@@ -3697,8 +3707,8 @@ DWORD WINAPI RenderThreadProc(void*) {
 
         bool needsRender = false;
 
-        if (wantVisible && mediaPresent && snapshot.media.playing) {
-            needsRender = true;
+        if (wantVisible && mediaPresent && !parked) {
+    needsRender = true;
         }
 
         if (!hover && g_clickExpanded.load()) {
@@ -3801,7 +3811,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         double targetFrameMs = 1000.0 / targetFps;
 
         if (!needsRender) {
-            WaitForSingleObject(g_stopEvent, 16);
+            MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 16, QS_ALLINPUT);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
             nextFrameTarget += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -3809,7 +3819,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             const auto nowTime = std::chrono::steady_clock::now();
             if (nowTime < nextFrameTarget) {
                 const double remainingMs = std::chrono::duration<double, std::milli>(nextFrameTarget - nowTime).count();
-                if (remainingMs >= 1.5) WaitForSingleObject(g_stopEvent, static_cast<DWORD>(remainingMs - 0.5));
+                if (remainingMs >= 1.5) MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, static_cast<DWORD>(remainingMs - 0.5), QS_ALLINPUT);
                 while (std::chrono::steady_clock::now() < nextFrameTarget &&
                        WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
                     std::this_thread::yield();
@@ -3834,7 +3844,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     }
     renderer.Shutdown();
     DestroyWindow(hwnd);
-    g_hwnd = nullptr;
+    g_hwnd.store(nullptr);
     UnregisterClassW(kWindowClass, wc.hInstance);
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
@@ -3886,7 +3896,6 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    if (g_hwnd) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
     StopThreads();
     Wh_Log(L"Dynamic Island Media Player unloaded.");
 }
