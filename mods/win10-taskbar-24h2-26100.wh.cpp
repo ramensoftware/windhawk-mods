@@ -26,7 +26,6 @@ While similar to [Win10 taskbar on Win11 24H2 or later](https://windhawk.net/mod
 * UWP apps display normally on the taskbar alongside Win32 applications.
 * The system tray is completely custom-built, meaning other mods targeting the notification area **will not work**.
 * The language indicator is currently unavailable, but will be added in a future update.
-* The Notification Center is not implemented.
 
 To restore the network icon, you can install the [Restore legacy network tray](https://windhawk.net/mods/restore-legacy-network-tray) mod, or use any other network indicator of your choice.
 
@@ -41,18 +40,16 @@ To restore the network icon, you can install the [Restore legacy network tray](h
 /*
 - trayEnabled: true
   $name: Enable Custom Win32 System Tray & Clock
+- showActionCenterIcon: true
+  $name: Show Action Center icon in System Tray
 - showSeconds: false
   $name: Show Seconds in Tray Clock
 - hoverEffect: false
   $name: Highlight icons/clock under the mouse
 - recolorIcons: true
   $name: Recolor white monochrome icons on light background
-- legacyVolumeFlyout: true
-  $name: Legacy (Win32) volume flyout (SndVol.exe) for the volume icon
 - legacyPowerFlyout: true
   $name: Legacy (Win32) power/battery flyout
-- legacyClockFlyout: true
-  $name: Legacy (Win32) clock and calendar flyout (when off, ms-actioncenter is used and Windows may still fall back to the Win32 flyout)
 - quickSettingsFallback: true
   $name: Open Quick Settings for the power/battery icon (only when the legacy power flyout is off)
 - showDesktopButton: false
@@ -75,7 +72,9 @@ To restore the network icon, you can install the [Restore legacy network tray](h
 #include <algorithm>
 #include <stdlib.h>
 #include <wchar.h>
+#include <wctype.h>
 #include <unknwn.h>
+#include <objbase.h>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -87,9 +86,9 @@ enum class ProcessType { Explorer, SndVol, Userinit };
 static ProcessType g_processType = ProcessType::Explorer;
 
 struct ModSettings {
-    bool trayEnabled = true, showSeconds = false, hoverEffect = false, recolorIcons = true;
-    bool quickSettingsFallback = true, legacyVolumeFlyout = true, legacyPowerFlyout = true;
-    bool legacyClockFlyout = true, showDesktopButton = false;
+    bool trayEnabled = true, showActionCenterIcon = true, showSeconds = false;
+    bool hoverEffect = false, recolorIcons = true, legacyPowerFlyout = true;
+    bool quickSettingsFallback = true, showDesktopButton = false;
     int iconSizePx = 16, iconPaddingPx = 2;
 } g_settings;
 
@@ -103,8 +102,9 @@ static bool IsZeroGuid(const GUID& g) {
 }
 static bool IsSameGuid(const GUID& a, const GUID& b) { return memcmp(&a, &b, sizeof(GUID)) == 0; }
 
-static constexpr GUID kGuidVolume = {0x7820ae73, 0x23e3, 0x4229, {0x82, 0xc1, 0xe4, 0x1c, 0xb6, 0x7d, 0x5b, 0x9c}};
-static constexpr GUID kGuidPower  = {0x7820ae75, 0x23e3, 0x4229, {0x82, 0xc1, 0xe4, 0x1c, 0xb6, 0x7d, 0x5b, 0x9c}};
+static constexpr GUID kGuidVolume       = {0x7820ae73, 0x23e3, 0x4229, {0x82, 0xc1, 0xe4, 0x1c, 0xb6, 0x7d, 0x5b, 0x9c}};
+static constexpr GUID kGuidPower        = {0x7820ae75, 0x23e3, 0x4229, {0x82, 0xc1, 0xe4, 0x1c, 0xb6, 0x7d, 0x5b, 0x9c}};
+static constexpr GUID kGuidActionCenter = {0x7820ae81, 0x23e3, 0x4229, {0x82, 0xc1, 0xe4, 0x1c, 0xb6, 0x7d, 0x5b, 0x9c}};
 
 // ============================================================================
 // Part 0: userinit.exe (Download & Verify) & Fake Explorer Path
@@ -432,7 +432,7 @@ static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 }
 
 // ============================================================================
-// Part 2: Shell_NotifyIcon protocol & Helpers
+// Part 2: Shell_NotifyIcon protocol, Icon Persistence & Helpers
 // ============================================================================
 #pragma pack(push, 1)
 struct NOTIFYICONDATA32W {
@@ -465,6 +465,7 @@ struct TrayIconEntry {
     UINT uID = 0, uCallbackMessage = 0, uVersion = 0;
     GUID guidItem = {};
     bool hasGuid = false;
+    std::wstring persistKey;
     HICON hIcon = nullptr, hTinted = nullptr;
     COLORREF tintFor = 0;
     int monoKind = -1;
@@ -475,6 +476,7 @@ struct TrayIconEntry {
 
 static std::mutex g_trayMutex;
 static std::vector<TrayIconEntry> g_trayIcons;
+static std::vector<std::wstring> g_savedOrder;
 
 static HWND g_hTrayWnd = nullptr, g_hNotifyWnd = nullptr, g_hReBarWnd = nullptr, g_hTooltipWnd = nullptr;
 static bool g_traySubclassed = false, g_notifySubclassed = false, g_rebarSubclassed = false;
@@ -545,6 +547,170 @@ static void InitTopDownBI(BITMAPINFO& bi, int w, int h) {
     bi.bmiHeader.biCompression = BI_RGB;
 }
 
+static HICON CreateActionCenterIcon() {
+    const int sz = 32;
+    BITMAPINFO bi;
+    InitTopDownBI(bi, sz, sz);
+    DWORD* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP hBmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, (void**)&bits, nullptr, 0);
+    if (!hBmp || !bits) {
+        if (hBmp) DeleteObject(hBmp);
+        DeleteDC(dc);
+        return nullptr;
+    }
+    HGDIOBJ oldBmp = SelectObject(dc, hBmp);
+    RECT rc = {0, 0, sz, sz};
+    FillRectColor(dc, rc, RGB(0, 0, 0));
+
+    HFONT hFont = CreateFontW(-24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe MDL2 Assets");
+    HGDIOBJ oldFont = hFont ? SelectObject(dc, hFont) : nullptr;
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    WCHAR glyph[2] = {0xE91C, 0};
+    DrawTextW(dc, glyph, 1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    if (oldFont) SelectObject(dc, oldFont);
+    if (hFont) DeleteObject(hFont);
+    GdiFlush();
+
+    bool anyPixel = false;
+    for (int i = 0; i < sz * sz; ++i) {
+        DWORD a = (bits[i] >> 16) & 0xFF;
+        if (a) anyPixel = true;
+        bits[i] = (a << 24) | 0x00FFFFFF;
+    }
+    if (!anyPixel) {
+        for (int y = 5; y <= 22; ++y)
+            for (int x = 4; x <= 27; ++x)
+                if (y == 5 || y == 22 || x == 4 || x == 27 ||
+                    ((y == 10 || y == 14 || y == 18) && x >= 8 && x <= 23))
+                    bits[y * sz + x] = 0xFFFFFFFF;
+        for (int i = 0; i < 5; ++i) {
+            bits[(22 + i) * sz + 8] = 0xFFFFFFFF;
+            bits[(26 - i) * sz + (8 + i)] = 0xFFFFFFFF;
+        }
+    }
+
+    SelectObject(dc, oldBmp);
+    DeleteDC(dc);
+
+    HBITMAP hMask = CreateBitmap(sz, sz, 1, 1, nullptr);
+    ICONINFO ii = {TRUE, 0, 0, hMask, hBmp};
+    HICON hIcon = CreateIconIndirect(&ii);
+    DeleteObject(hMask);
+    DeleteObject(hBmp);
+    return hIcon;
+}
+
+static std::wstring GetIconPersistKey(const TrayIconEntry& e) {
+    WCHAR buf[128] = {};
+    if (e.hasGuid && !IsZeroGuid(e.guidItem)) {
+        StringFromGUID2(e.guidItem, buf, ARRAYSIZE(buf));
+        return std::wstring(L"G:") + buf;
+    }
+    std::wstring exe = L"unknown";
+    if (e.hWnd) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(e.hWnd, &pid);
+        if (pid) {
+            if (HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+                WCHAR path[MAX_PATH];
+                DWORD sz = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, path, &sz)) {
+                    const WCHAR* name = wcsrchr(path, L'\\');
+                    exe = name ? (name + 1) : path;
+                    for (auto& ch : exe) ch = towlower(ch);
+                }
+                CloseHandle(hProc);
+            }
+        }
+    }
+    wsprintfW(buf, L":%u", e.uID);
+    return L"P:" + exe + buf;
+}
+
+static void LoadSavedIconOrder() {
+    std::lock_guard<std::mutex> lock(g_trayMutex);
+    g_savedOrder.clear();
+    WCHAR buf[8192] = {};
+    if (Wh_GetStringValue(L"IconOrder", buf, ARRAYSIZE(buf)) > 0) {
+        WCHAR* ctx = nullptr;
+        for (WCHAR* tok = wcstok_s(buf, L";", &ctx); tok; tok = wcstok_s(nullptr, L";", &ctx))
+            if (*tok) g_savedOrder.push_back(tok);
+    }
+}
+
+static void SaveIconOrderLocked() {
+    std::wstring s;
+    for (const auto& k : g_savedOrder) {
+        if (!k.empty()) {
+            if (!s.empty()) s += L';';
+            s += k;
+        }
+    }
+    Wh_SetStringValue(L"IconOrder", s.c_str());
+}
+
+static int EnsureKeyInOrderLocked(const TrayIconEntry& e) {
+    for (size_t i = 0; i < g_savedOrder.size(); ++i)
+        if (g_savedOrder[i] == e.persistKey) return (int)i;
+
+    // By default, keep Action Center at the far right when new icons are discovered
+    if (!(e.hasGuid && IsSameGuid(e.guidItem, kGuidActionCenter)) && !g_savedOrder.empty()) {
+        WCHAR acBuf[64] = {};
+        StringFromGUID2(kGuidActionCenter, acBuf, ARRAYSIZE(acBuf));
+        std::wstring acKey = std::wstring(L"G:") + acBuf;
+        if (g_savedOrder.back() == acKey) {
+            int pos = (int)g_savedOrder.size() - 1;
+            g_savedOrder.insert(g_savedOrder.end() - 1, e.persistKey);
+            SaveIconOrderLocked();
+            return pos;
+        }
+    }
+    g_savedOrder.push_back(e.persistKey);
+    SaveIconOrderLocked();
+    return (int)g_savedOrder.size() - 1;
+}
+
+static void InsertIconSortedLocked(const TrayIconEntry& e) {
+    int rank = EnsureKeyInOrderLocked(e);
+    auto it = g_trayIcons.begin();
+    for (; it != g_trayIcons.end(); ++it)
+        if (EnsureKeyInOrderLocked(*it) > rank) break;
+    g_trayIcons.insert(it, e);
+}
+
+static int FindIconLocked(HWND hWnd, UINT uID, const GUID* guid) {
+    if (guid && !IsZeroGuid(*guid)) {
+        for (size_t i = 0; i < g_trayIcons.size(); ++i)
+            if (g_trayIcons[i].hasGuid && IsSameGuid(g_trayIcons[i].guidItem, *guid)) return (int)i;
+    }
+    for (size_t i = 0; i < g_trayIcons.size(); ++i)
+        if (g_trayIcons[i].hWnd == hWnd && g_trayIcons[i].uID == uID) return (int)i;
+    return -1;
+}
+
+static void SyncActionCenterIconLocked() {
+    int idx = FindIconLocked(nullptr, 0, &kGuidActionCenter);
+    if (g_settings.showActionCenterIcon) {
+        if (idx < 0) {
+            TrayIconEntry e = {};
+            e.guidItem = kGuidActionCenter;
+            e.hasGuid = true;
+            e.persistKey = GetIconPersistKey(e);
+            e.hIcon = CreateActionCenterIcon();
+            wcscpy_s(e.szTip, L"Action Center");
+            InsertIconSortedLocked(e);
+        } else {
+            g_trayIcons[idx].dwState &= ~NIS_HIDDEN;
+        }
+    } else if (idx >= 0) {
+        g_trayIcons[idx].dwState |= NIS_HIDDEN;
+    }
+}
+
 static bool ReadIconColorBits(const ICONINFO& ii, std::vector<DWORD>& px, int* pw, int* ph) {
     BITMAP bm = {};
     if (!ii.hbmColor || !GetObjectW(ii.hbmColor, sizeof(bm), &bm)) return false;
@@ -613,16 +779,6 @@ static HICON MakeTintedIcon(HICON hIcon, COLORREF fg) {
     if (ii.hbmColor) DeleteObject(ii.hbmColor);
     if (ii.hbmMask) DeleteObject(ii.hbmMask);
     return result;
-}
-
-static int FindIconLocked(HWND hWnd, UINT uID, const GUID* guid) {
-    if (guid && !IsZeroGuid(*guid)) {
-        for (size_t i = 0; i < g_trayIcons.size(); ++i)
-            if (g_trayIcons[i].hasGuid && IsSameGuid(g_trayIcons[i].guidItem, *guid)) return (int)i;
-    }
-    for (size_t i = 0; i < g_trayIcons.size(); ++i)
-        if (g_trayIcons[i].hWnd == hWnd && g_trayIcons[i].uID == uID) return (int)i;
-    return -1;
 }
 
 static int CountVisibleIcons() {
@@ -806,6 +962,8 @@ static void ApplyNotifyIconDataLocked(TrayIconEntry& e, const NOTIFYICONDATA32W&
         e.guidItem = nid.guidItem;
         e.hasGuid = true;
     }
+    if (e.persistKey.empty() || ((nid.uFlags & NIF_GUID) && e.hasGuid))
+        e.persistKey = GetIconPersistKey(e);
     if (nid.uFlags & NIF_MESSAGE) e.uCallbackMessage = nid.uCallbackMessage;
     if (nid.uFlags & NIF_ICON) {
         if (HICON src = (HICON)LongToHandle((LONG)nid.dwIcon)) {
@@ -837,7 +995,7 @@ static BOOL HandleTrayCopyData(PCOPYDATASTRUCT pcds) {
                 else {
                     TrayIconEntry e = {};
                     ApplyNotifyIconDataLocked(e, nid);
-                    g_trayIcons.push_back(e);
+                    InsertIconSortedLocked(e);
                 }
                 handled = TRUE;
                 break;
@@ -939,16 +1097,14 @@ struct IWin32Clock : public IUnknown {
 };
 
 static void HandleClockClick(HWND hWnd) {
-    if (g_settings.legacyClockFlyout) {
-        if (FindWindowW(L"ClockFlyoutWindow", nullptr)) return;
-        RECT rc = g_rcClock;
-        MapWindowPoints(hWnd, nullptr, (POINT*)&rc, 2);
-        IWin32Clock* p = nullptr;
-        if (SUCCEEDED(CoCreateInstance(kClsidWin32Clock, nullptr, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, kIidWin32Clock, (void**)&p)) && p) {
-            p->ShowWin32Clock(hWnd, &rc);
-            p->Release();
-            return;
-        }
+    if (FindWindowW(L"ClockFlyoutWindow", nullptr)) return;
+    RECT rc = g_rcClock;
+    MapWindowPoints(hWnd, nullptr, (POINT*)&rc, 2);
+    IWin32Clock* p = nullptr;
+    if (SUCCEEDED(CoCreateInstance(kClsidWin32Clock, nullptr, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, kIidWin32Clock, (void**)&p)) && p) {
+        p->ShowWin32Clock(hWnd, &rc);
+        p->Release();
+        return;
     }
     OpenFlyoutUri(L"ms-actioncenter:");
 }
@@ -975,14 +1131,19 @@ static void PostToIcon(int iconIdx, UINT mouseMsg, POINT ptScreen, bool withSele
         guid = it.guidItem;
         slot = it.rcSlot;
     }
+
+    if (IsSameGuid(guid, kGuidActionCenter)) {
+        if (mouseMsg == WM_LBUTTONUP) OpenFlyoutUri(L"ms-actioncenter:");
+        return;
+    }
+
     if (!hTarget || !IsWindow(hTarget)) return;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hTarget, &pid);
     bool inExplorer = (pid == GetCurrentProcessId());
 
-    if ((mouseMsg == WM_LBUTTONDOWN || mouseMsg == WM_LBUTTONUP) && g_settings.legacyVolumeFlyout &&
-        inExplorer && IsSameGuid(guid, kGuidVolume)) {
+    if ((mouseMsg == WM_LBUTTONDOWN || mouseMsg == WM_LBUTTONUP) && inExplorer && IsSameGuid(guid, kGuidVolume)) {
         if (mouseMsg == WM_LBUTTONUP) {
             POINT anchor = ptScreen;
             RECT sr = {};
@@ -1337,9 +1498,23 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                     if (to >= 0 && to != from) {
                         std::lock_guard<std::mutex> lock(g_trayMutex);
                         if (from < (int)g_trayIcons.size() && to < (int)g_trayIcons.size()) {
+                            std::wstring keyFrom = g_trayIcons[from].persistKey;
+                            std::wstring keyTo = g_trayIcons[to].persistKey;
                             TrayIconEntry e = g_trayIcons[from];
                             g_trayIcons.erase(g_trayIcons.begin() + from);
                             g_trayIcons.insert(g_trayIcons.begin() + to, e);
+
+                            if (!keyFrom.empty() && !keyTo.empty() && keyFrom != keyTo) {
+                                g_savedOrder.erase(std::remove(g_savedOrder.begin(), g_savedOrder.end(), keyFrom), g_savedOrder.end());
+                                auto itTo = std::find(g_savedOrder.begin(), g_savedOrder.end(), keyTo);
+                                if (itTo != g_savedOrder.end()) {
+                                    if (from < to) ++itTo;
+                                    g_savedOrder.insert(itTo, keyFrom);
+                                } else {
+                                    g_savedOrder.push_back(keyFrom);
+                                }
+                                SaveIconOrderLocked();
+                            }
                         }
                     }
                 } else {
@@ -1598,13 +1773,12 @@ static DWORD WINAPI TrayInitThread(LPVOID) {
 
 static void LoadSettings() {
     g_settings.trayEnabled = Wh_GetIntSetting(L"trayEnabled") != 0;
+    g_settings.showActionCenterIcon = Wh_GetIntSetting(L"showActionCenterIcon") != 0;
     g_settings.showSeconds = Wh_GetIntSetting(L"showSeconds") != 0;
     g_settings.hoverEffect = Wh_GetIntSetting(L"hoverEffect") != 0;
     g_settings.recolorIcons = Wh_GetIntSetting(L"recolorIcons") != 0;
-    g_settings.quickSettingsFallback = Wh_GetIntSetting(L"quickSettingsFallback") != 0;
-    g_settings.legacyVolumeFlyout = Wh_GetIntSetting(L"legacyVolumeFlyout") != 0;
     g_settings.legacyPowerFlyout = Wh_GetIntSetting(L"legacyPowerFlyout") != 0;
-    g_settings.legacyClockFlyout = Wh_GetIntSetting(L"legacyClockFlyout") != 0;
+    g_settings.quickSettingsFallback = Wh_GetIntSetting(L"quickSettingsFallback") != 0;
     g_settings.showDesktopButton = Wh_GetIntSetting(L"showDesktopButton") != 0;
     g_settings.iconSizePx = std::max(12, Wh_GetIntSetting(L"iconSizePx"));
     g_settings.iconPaddingPx = std::max(0, Wh_GetIntSetting(L"iconPaddingPx"));
@@ -1637,6 +1811,12 @@ BOOL Wh_ModInit() {
 
     g_processType = ProcessType::Explorer;
     LoadSettings();
+    LoadSavedIconOrder();
+    {
+        std::lock_guard<std::mutex> lock(g_trayMutex);
+        SyncActionCenterIconLocked();
+    }
+
     g_hExplorer = GetModuleHandleW(nullptr);
     g_hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!g_hShell32) g_hShell32 = LoadLibraryW(L"shell32.dll");
@@ -1686,6 +1866,7 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     {
         std::lock_guard<std::mutex> lock(g_trayMutex);
+        SyncActionCenterIconLocked();
         for (auto& it : g_trayIcons) it.monoKind = -1;
     }
     if (g_hNotifyWnd && IsWindow(g_hNotifyWnd)) PostMessageW(g_hNotifyWnd, WM_MOD_RELAYOUT, 0, 0);
