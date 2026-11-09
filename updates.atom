@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-09T17:01:31.000Z</updated>
+    <updated>2026-11-09T19:04:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Share Flyout 1.1.0]]></title>
+        <id>https://windhawk.net/mods/quick-share-flyout#4010d194f66fc813c5975ed2f20bfad996ccedf8</id>
+        <link href="https://windhawk.net/mods/quick-share-flyout"/>
+        <updated>2026-11-09T19:04:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to show a title bar with a close button</li>
+<li>Added more animation options</li>
+<li>Adjusted flyout position when opened from the tray overflow menu</li>
+<li>Fixed the Quick Share window being off screen after disabling the mod</li>
+</ul>
+]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Unlock "Folder In Use" 1.0.0]]></title>
+        <id>https://windhawk.net/mods/unlock-folder-in-use#df82b32c5f560e924ca1c70e63088a5ae635bee8</id>
+        <link href="https://windhawk.net/mods/unlock-folder-in-use"/>
+        <updated>2026-11-09T19:04:02.000Z</updated>
+        <content type="html"><![CDATA[<h1>Unlock &quot;Folder In Use&quot;</h1>
+<p>When Explorer refuses to delete, move or rename something because it is in use (&quot;Folder In Use&quot; / &quot;File In Use&quot;), this mod finds out which processes are blocking it and lets you decide what to do.</p>
+<p><img src="https://i.imgur.com/goeqtLD.png" alt="Screenshot"></p>
+<p>When the warning appears, a small dialog lists the blocking processes and offers:</p>
+<ul>
+<li><strong>End processes and continue</strong> - terminates the processes and presses <em>Try Again</em> for you, so Explorer completes the original operation.</li>
+<li><strong>Only end processes</strong> - terminates the processes and leaves Explorer's warning open so you can retry yourself.</li>
+<li><strong>Cancel</strong> - does nothing.</li>
+</ul>
+<p>If Explorer windows are open inside the item being processed, they are moved up one level.</p>
+<h2>How it works</h2>
+<ul>
+<li>The mod runs as a tool in its own dedicated process, not inside Explorer, so a problem in it can't affect the taskbar or the desktop.</li>
+<li>The warning is detected through its internal UI Automation identifiers instead of its text, so it works with any display language.</li>
+<li>The blocked item is identified from the name shown in the warning. Only the text elements of the interrupt panel itself are read (starting from the <em>Try Again</em> button), never the rest of the progress window, and names are compared in full. Only the selected items (or entries inside selected folders) whose name matches exactly are scanned.</li>
+<li>The matched paths are listed in the details of the prompt, so you can see what was scanned before ending anything.</li>
+<li>Blockers are found with the Restart Manager, the current directory of each process, and the system handle table. Every Explorer process is excluded.</li>
+<li>Processes are opened while scanning and terminated through those same handles, so a process that exits and whose PID is reused is never terminated by mistake.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Ending a process terminates it immediately. Unsaved work in that process is lost.</li>
+<li>Elevated or protected processes can't be ended from this mod.</li>
+<li>If the item named in the warning can't be matched with the selection, the mod says so and does nothing.</li>
+<li>The mod relies on internal details of Explorer's operation dialog, which may change in future Windows versions.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Modern dialogs</strong> - use task-dialog style windows instead of classic message boxes.</li>
+<li><strong>Show message when nothing is found</strong> - show a dialog when the blocked item or its blocking process could not be identified (enabled by default).</li>
+</ul>
+]]></content>
+        <author>
+            <name>LyricsPortal</name>
+            <uri>https://github.com/LyricsPortal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinTips OSD 1.5.1]]></title>
         <id>https://windhawk.net/mods/wintips-osd#e935dd1c5404ed3916207e33b4a4b4fcbafe45c7</id>
@@ -832,39 +891,6 @@ found by their names in English and Dutch apps.</li>
         <author>
             <name>Shifting Whistler</name>
             <uri>https://github.com/shifting-whistler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 2.0]]></title>
-        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#dd9dab4ae94f445b9b3b07600b3a31f959640e8d</id>
-        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
-        <updated>2026-11-08T17:04:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Better support for themes</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Live HUD 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-live-hud-radar#df8b56732c81d756c4f32247780be4448a6f11c1</id>
-        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
-        <updated>2026-11-08T17:04:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added real-time CPU &amp; RAM history mini-graph (Ctrl + Right Click).</li>
-<li>Added default gateway (local router) ping option with zero internet traffic.</li>
-<li>Switched network speed units to Mbps / Kbps.</li>
-<li>Added custom background color setting (HEX).</li>
-<li>Improved background transparency via per-pixel alpha (text and bars remain crisp).</li>
-<li>Added font fallback for Windows 10 support.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lemon</name>
-            <uri>https://github.com/lemon-web-stack</uri>
         </author>
     </entry>
 </feed>

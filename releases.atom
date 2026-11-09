@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-08T22:01:31.000Z</updated>
+    <updated>2026-11-09T19:04:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Unlock "Folder In Use" 1.0.0]]></title>
+        <id>https://windhawk.net/mods/unlock-folder-in-use#df82b32c5f560e924ca1c70e63088a5ae635bee8</id>
+        <link href="https://windhawk.net/mods/unlock-folder-in-use"/>
+        <updated>2026-11-09T19:04:02.000Z</updated>
+        <content type="html"><![CDATA[<h1>Unlock &quot;Folder In Use&quot;</h1>
+<p>When Explorer refuses to delete, move or rename something because it is in use (&quot;Folder In Use&quot; / &quot;File In Use&quot;), this mod finds out which processes are blocking it and lets you decide what to do.</p>
+<p><img src="https://i.imgur.com/goeqtLD.png" alt="Screenshot"></p>
+<p>When the warning appears, a small dialog lists the blocking processes and offers:</p>
+<ul>
+<li><strong>End processes and continue</strong> - terminates the processes and presses <em>Try Again</em> for you, so Explorer completes the original operation.</li>
+<li><strong>Only end processes</strong> - terminates the processes and leaves Explorer's warning open so you can retry yourself.</li>
+<li><strong>Cancel</strong> - does nothing.</li>
+</ul>
+<p>If Explorer windows are open inside the item being processed, they are moved up one level.</p>
+<h2>How it works</h2>
+<ul>
+<li>The mod runs as a tool in its own dedicated process, not inside Explorer, so a problem in it can't affect the taskbar or the desktop.</li>
+<li>The warning is detected through its internal UI Automation identifiers instead of its text, so it works with any display language.</li>
+<li>The blocked item is identified from the name shown in the warning. Only the text elements of the interrupt panel itself are read (starting from the <em>Try Again</em> button), never the rest of the progress window, and names are compared in full. Only the selected items (or entries inside selected folders) whose name matches exactly are scanned.</li>
+<li>The matched paths are listed in the details of the prompt, so you can see what was scanned before ending anything.</li>
+<li>Blockers are found with the Restart Manager, the current directory of each process, and the system handle table. Every Explorer process is excluded.</li>
+<li>Processes are opened while scanning and terminated through those same handles, so a process that exits and whose PID is reused is never terminated by mistake.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Ending a process terminates it immediately. Unsaved work in that process is lost.</li>
+<li>Elevated or protected processes can't be ended from this mod.</li>
+<li>If the item named in the warning can't be matched with the selection, the mod says so and does nothing.</li>
+<li>The mod relies on internal details of Explorer's operation dialog, which may change in future Windows versions.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Modern dialogs</strong> - use task-dialog style windows instead of classic message boxes.</li>
+<li><strong>Show message when nothing is found</strong> - show a dialog when the blocked item or its blocking process could not be identified (enabled by default).</li>
+</ul>
+]]></content>
+        <author>
+            <name>LyricsPortal</name>
+            <uri>https://github.com/LyricsPortal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Musician's Toolkit 1.0.0]]></title>
         <id>https://windhawk.net/mods/musicians-toolkit#20099316d68c751106c23fccedb148c6f3543bbf</id>
@@ -1968,41 +2010,6 @@ keys or selecting text works, but isn't shown on the card.</li>
         <author>
             <name>Wheatlay</name>
             <uri>https://github.com/Wheatlay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Utilities 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-utilities#48e23bd6b1d7ceb1fb47f261ffdd36ec211a7dd3</id>
-        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
-        <updated>2026-11-05T06:03:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar System Utilities</h1>
-<p>System utilities integrated into the Windows 11 Taskbar XAML context menu with
-<strong>native XAML flyout cards</strong>, <strong>synchronous UI thread safety</strong>, and <strong>zero UAC
-prompts</strong>.</p>
-<p><img src="https://i.imgur.com/RquNZCE.gif" alt="Taskbar System Utilities Screenshot"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Restart Explorer</strong>: Instantly restarts the <code>explorer.exe</code> shell process from the
-taskbar context menu.</li>
-<li><strong>Clean Temp</strong>: Comprehensive temporary file cleaner for <code>%TEMP%</code> and
-accessible files in <code>%WINDIR%\Temp</code>. Deletes all unlocked temporary files
-regardless of age (relying on Windows file sharing locks to protect actively
-opened files) and displays a XAML summary card.</li>
-<li><strong>Clean DNS Cache</strong>: Flushes the Windows DNS resolver cache via
-<code>dnsapi.dll!DnsFlushResolverCache</code>.</li>
-<li><strong>Restart Graphics Driver</strong>: Triggers the <code>Win + Ctrl + Shift + B</code> display
-driver reset shortcut.</li>
-<li><strong>Get Local IP</strong>: Lists active local IPv4 and IPv6 addresses across network
-adapters using <code>GetAdaptersAddresses</code> (<code>iphlpapi.dll</code>) with optional clipboard
-copy.</li>
-</ul>
-<h2>Credits &amp; Licensing</h2>
-<p>Taskbar context menu injection hooks adapted from <code>taskbar-restart-explorer</code> by
-<strong>Mgrmjp</strong>. This project is distributed under the MIT license.</p>
-]]></content>
-        <author>
-            <name>Marco Petrucci</name>
-            <uri>https://github.com/marco00petrucci</uri>
         </author>
     </entry>
 </feed>

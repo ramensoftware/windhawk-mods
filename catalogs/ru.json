@@ -13498,7 +13498,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794110425000,
+        "updated": 1794251048000,
         "users": 40
       },
       "metadata": {
@@ -13516,7 +13516,7 @@
         ],
         "license": "MIT",
         "name": "Quick Share Flyout",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "quick-translator-layout-switcher": {
@@ -19833,6 +19833,31 @@
       },
       "metadataEnglish": {
         "description": "This mod adds customizable system tray icons in Windows with configurable actions and context menus, support for image files and application icons, and automatic adaptation to the system theme."
+      }
+    },
+    "unlock-folder-in-use": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794251042000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794251042000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "LyricsPortal",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -lrstrtmgr -luser32 -lshlwapi -luuid",
+        "description": "When Explorer says \"Folder/File In Use\", shows what is blocking it and lets you choose: end the processes and continue, or only end them",
+        "github": "https://github.com/LyricsPortal",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Unlock \"Folder In Use\"",
+        "version": "1.0.0"
       }
     },
     "unlock-office-file-upload": {
