@@ -41,6 +41,8 @@ Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
   - Other Windows builds and the newer OneNote-based Sticky Notes experience
     have not been tested.
 - Uses private shell symbols, which may change after Windows updates.
+  - If optional refresh symbols are unavailable, initial grouping, collective
+    activation, and compact previews retain the previous behavior.
 - Tested alongside Alt+Tab per monitor 1.2 with its cursor-monitor filter.
   - That mod's monitor filtering still applies. Notes restored after selection
     can be on any monitor on the current virtual desktop.
@@ -108,7 +110,9 @@ SOFTWARE.
 std::atomic<DWORD> buildThread{0}, lastThread{0};
 std::atomic<ULONGLONG> buildTime{0};
 std::atomic<HWND> representative{nullptr};
-std::atomic<void*> shownHost{nullptr};
+thread_local unsigned refreshDepth = 0;
+SRWLOCK collectionLock = SRWLOCK_INIT;
+std::vector<void*> altTabCollections;
 void *win32Vtable, *winrtVtable;
 using NativeWindow = HRESULT(WINAPI*)(void*, HWND*);
 NativeWindow win32Window, winrtWindow;
@@ -116,10 +120,12 @@ using Visible = HRESULT(WINAPI*)(void*, void*, BOOL*);
 Visible originalVisible;
 using Create = HRESULT(WINAPI*)(void*, void*, void*);
 Create originalCreate;
-using Show = HRESULT(WINAPI*)(void*, void*, int, void*);
-Show originalShow;
-using Dismiss = void(WINAPI*)(void*);
-Dismiss originalDismiss;
+using CollectionViews = HRESULT(WINAPI*)(void*, void*);
+CollectionViews originalAddViews, originalAddViewItem;
+using UpdateShow = HRESULT(WINAPI*)(void*, void*, bool);
+UpdateShow originalUpdateShow;
+using DestroyCollection = void(WINAPI*)(void*);
+DestroyCollection originalDestroyCollection;
 HANDLE stopEvent, worker;
 IVirtualDesktopManager* desktops;
 bool wasNotes;
@@ -194,10 +200,10 @@ HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
     HRESULT hr = originalVisible(self, view, visible);
     if (FAILED(hr) || !*visible) return hr;
     DWORD thread = GetCurrentThreadId();
-    // The shell can refresh entries long after creation. Scope late filtering
-    // to this host's Show/Dismiss lifetime instead of a fixed time limit.
-    if (buildThread != thread && (lastThread != thread ||
-        (!shownHost && GetTickCount64() - buildTime > 250))) return hr;
+    // Late queries are filtered only inside a refresh of an Alt+Tab collection.
+    // Other callers on the same shell thread keep their normal visibility.
+    if (!refreshDepth && buildThread != thread &&
+        (lastThread != thread || GetTickCount64() - buildTime > 250)) return hr;
     HWND window = nullptr;
     void* table = *reinterpret_cast<void**>(view);
     if (table == win32Vtable) hr = win32Window(view, &window);
@@ -213,28 +219,56 @@ HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
 }
 HRESULT WINAPI CreateHook(void* a, void* b, void* c) {
     representative = nullptr;
-    shownHost = nullptr;
     buildThread = GetCurrentThreadId(); lastThread = GetCurrentThreadId();
     buildTime = GetTickCount64();
     HRESULT hr = originalCreate(a, b, c);
     buildThread = 0;
     return hr;
 }
-void EndShownHost(void* self) {
-    void* expected = self;
-    // A late dismissal of an older host must not clear a newer session.
-    shownHost.compare_exchange_strong(expected, nullptr);
+bool RefreshHooksAvailable() {
+    return originalAddViews && originalAddViewItem && originalUpdateShow &&
+           originalDestroyCollection;
 }
-HRESULT WINAPI ShowHook(void* self, void* monitor, int flags, void* view) {
-    lastThread = GetCurrentThreadId();
-    shownHost = self;
-    HRESULT hr = originalShow(self, monitor, flags, view);
-    if (FAILED(hr)) EndShownHost(self);
-    return hr;
+bool AltTabCollection(void* self) {
+    if (!RefreshHooksAvailable()) return false;
+    AcquireSRWLockExclusive(&collectionLock);
+    bool found = false;
+    for (void* collection : altTabCollections) {
+        if (collection == self) { found = true; break; }
+    }
+    // Capture the collection only when Alt+Tab is building it. Collections
+    // created for Task View or taskbar callers are not enrolled.
+    if (!found && buildThread == GetCurrentThreadId()) {
+        altTabCollections.push_back(self);
+        found = true;
+    }
+    ReleaseSRWLockExclusive(&collectionLock);
+    return found;
 }
-void WINAPI DismissHook(void* self) {
-    originalDismiss(self);
-    EndShownHost(self);
+struct RefreshScope {
+    unsigned previous = refreshDepth;
+    explicit RefreshScope(bool enabled) { if (enabled) ++refreshDepth; }
+    ~RefreshScope() { refreshDepth = previous; }
+};
+HRESULT WINAPI AddViewsHook(void* self, void* views) {
+    RefreshScope scope(AltTabCollection(self));
+    return originalAddViews(self, views);
+}
+HRESULT WINAPI AddViewItemHook(void* self, void* view) {
+    RefreshScope scope(AltTabCollection(self));
+    return originalAddViewItem(self, view);
+}
+HRESULT WINAPI UpdateShowHook(void* self, void* view, bool show) {
+    RefreshScope scope(AltTabCollection(self));
+    return originalUpdateShow(self, view, show);
+}
+void WINAPI DestroyCollectionHook(void* self) {
+    AcquireSRWLockExclusive(&collectionLock);
+    for (auto it = altTabCollections.begin(); it != altTabCollections.end(); ++it) {
+        if (*it == self) { altTabCollections.erase(it); break; }
+    }
+    ReleaseSRWLockExclusive(&collectionLock);
+    originalDestroyCollection(self);
 }
 void CALLBACK Foreground(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD, DWORD) {
     if (object != OBJID_WINDOW || !window) return;
@@ -285,10 +319,15 @@ BOOL Wh_ModInit() {
         {{LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"}, &winrtVtable},
         {{LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"}, &winrtWindow},
         {{LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"}, &originalCreate, CreateHook},
-        {{LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"}, &originalShow, ShowHook},
-        {{LR"(protected: virtual void __cdecl XamlAltTabViewHost::v_DismissView(void))"}, &originalDismiss, DismissHook},
+        {{LR"(private: long __cdecl SwitchItemCollection::_AddViews(struct IObjectArray *))"}, &originalAddViews, AddViewsHook, true},
+        {{LR"(private: long __cdecl SwitchItemCollection::_AddViewItem(struct IApplicationView *))"}, &originalAddViewItem, AddViewItemHook, true},
+        {{LR"(private: long __cdecl SwitchItemCollection::_UpdateShowInSwitchers(struct IApplicationView *,bool))"}, &originalUpdateShow, UpdateShowHook, true},
+        {{LR"(public: virtual void __cdecl SwitchItemCollection::Destroy(void))"}, &originalDestroyCollection, DestroyCollectionHook, true},
     };
     if (!WindhawkUtils::HookSymbols(shell, hooks, ARRAYSIZE(hooks))) return FALSE;
+    if (!RefreshHooksAvailable()) {
+        Wh_Log(L"Refresh symbols unavailable; retaining creation-time grouping");
+    }
     HMODULE model = LoadLibraryW(L"DesktopSwitcherDataModel.dll");
     // DesktopSwitcherDataModel.dll
     WindhawkUtils::SYMBOL_HOOK previewHooks[] = {
