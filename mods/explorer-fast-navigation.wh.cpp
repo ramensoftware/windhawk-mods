@@ -51,8 +51,8 @@ If you find this mod useful, you can support its development and maintenance:
 
 ## Credits
 
-- **Vivy** ([@VivyVCCS](https://x.com/VivyVCCS) / [enginelesscc](https://github.com/enginelesscc)) for the original idea
-  and concept.
+- Based on the original implementation by **Vivy** ([@VivyVCCS](https://x.com/VivyVCCS) / [enginelesscc](https://github.com/enginelesscc)).
+- Modernized, refactored, and maintained by **gilnett**.
 */
 // ==/WindhawkModReadme==
 
