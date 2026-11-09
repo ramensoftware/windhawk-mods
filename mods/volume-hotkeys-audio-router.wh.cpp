@@ -1,13 +1,13 @@
 // ==WindhawkMod==
-// @id              volume-mixer-popup
-// @name            Volume Mixer Popup Pro
-// @name:uk-UA       Спливаючий мікшер гучності Pro
-// @name:pl-PL       Wyskakujący mikser głośności Pro
-// @name:de-DE       Lautstärkemixer-Popup Pro
-// @name:fr-FR       Mixeur de volume contextuel Pro
-// @name:es-ES       Mezclador de volumen emergente Pro
-// @name:ru-RU       Всплывающий микшер громкости Pro
-// @description     Per-app volume mixer popup with live VU meters, per-app output device routing, volume locks, focused-app hotkeys, Deafen background and a volume OSD.
+// @id              volume-hotkeys-audio-router
+// @name            Volume Hotkeys & Audio Router
+// @name:uk-UA       Гарячі клавіші гучності та маршрутизатор звуку
+// @name:pl-PL       Skróty głośności i router dźwięku
+// @name:de-DE       Lautstärke-Hotkeys & Audio-Router
+// @name:fr-FR       Raccourcis de volume et routeur audio
+// @name:es-ES       Atajos de volumen y enrutador de audio
+// @name:ru-RU       Горячие клавиши громкости и маршрутизатор звука
+// @description     Volume hotkeys for the focused game or app, per-app output device routing, volume locks, Deafen background, a replacement volume OSD and a mixer popup with live VU meters.
 // @version         2.6.1
 // @author          neMik
 // @github          https://github.com/mykolazozul
@@ -17,29 +17,30 @@
 
 // ==WindhawkModReadme==
 /*
-# 🔊 Volume Mixer Popup Pro
+# 🔊 Volume Hotkeys & Audio Router
 
-A fast, lightweight per-app volume mixer for Windows 11 and 10. It runs in its own small Windhawk
-process, not inside Explorer, and opens on top of any window — including borderless and fullscreen games — without
-taking the keyboard focus, so games are never minimized.
+Volume control for games and setups with several output devices, on Windows 11 and 10: hotkeys for the focused
+game or app, per-app audio routing, volume locks, Deafen and a replacement volume OSD. Its mixer popup opens on a
+hotkey on top of any window — including borderless and fullscreen games — without taking the keyboard focus, so
+games are never minimized. It runs in its own small Windhawk process, not inside Explorer.
 
 ![Mixer popup (Fluent Flyout layout)](https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/mixer.png)
 
 ![Volume OSD (Windows 11 capsule style)](https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/osd.png)
 
 ## ✨ Highlights
-- **Per-app volume and mute** for every output device, with live VU meters (up to 60 FPS while open).
+- **Game hotkeys** – change or mute the focused game/app on every device it plays to, without opening anything.
+  UWP apps and protected/elevated games are recognized too.
 - **Per-app audio routing** – send any app to another output device with the ⇄ button or a right-click.
 - **Volume lock** – pin the volume of an app or device; a watchdog restores it when a game or Windows changes it.
   Locks are kept across restarts and marked with a padlock.
-- **Game hotkeys** – change or mute the focused game/app on every device it plays to, without opening anything.
-  UWP apps and protected/elevated games are recognized too.
 - **Deafen background (BETA)** – one hotkey mutes or ducks everything except the focused app and your whitelist;
   pressing it again restores every app individually.
 - **Custom volume OSD (BETA)** – 9 styles, can replace the Windows volume flyout for the media keys and the volume
   tooltip of the taskbar, draggable. Like the Windows flyout, it stays while the pointer rests on it, and the mouse
   wheel or a click on its bar changes the volume.
-- **17 mixer layouts and 22 color themes.**
+- **Mixer popup** – volume and mute of every app on every output device at once, with live VU meters (up to
+  60 FPS while open); 17 layouts and 22 color themes.
 - **Correct scaling** – interface scale 30–300 % multiplied by the Windows display scaling of each monitor;
   the popup shrinks automatically when it would not fit on the screen.
 - **Light on resources** – nothing is polled while the popup is closed: the OSD and the volume locks react to
