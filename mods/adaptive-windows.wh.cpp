@@ -66,6 +66,7 @@ is opened, closed or minimized, when the layout changes (Win + Ctrl + G) and wit
 | Win + Alt + F | Focus mode: every window on the monitor fills the screen |
 | Win + Alt + ← / → | Swap the focused window with the previous / next one |
 | Win + Alt + ↓ | Re-arrange everything and put all windows back in the grid |
+| Win + Alt + ↑ | Reserved, does nothing: it only stops Windows from snapping the window to the top half of the screen |
 
 The Win + Alt hotkeys can use another modifier in the settings (Ctrl+Alt, Ctrl+Alt+Shift or
 Alt+Shift) if another program already uses them; restart the mod after changing. Win+Ctrl+G and Win+Ctrl+T
@@ -78,15 +79,8 @@ Win + Ctrl + T is also the default Always On Top shortcut of PowerToys: if you u
 ### Works with other animation mods
 Adaptive Windows works together with these two mods:
 
-- **Windows Animations**.
-  
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
-
-
 - **MacOS Minimize Animation** (genie effect for minimize, restore and open).
-
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
-
+- **Windows Animations**.
 
 Those mods hide the window and play their own animation. With the *sync with open/close
 animations* option on, Adaptive Windows notices this, puts the window in its final slot while it
@@ -178,6 +172,7 @@ escolhidos são descartados quando uma janela é aberta, fechada ou minimizada, 
 | Win + Alt + F | Modo foco: todas as janelas do monitor ocupam a tela toda |
 | Win + Alt + ← / → | Troca a janela em foco com a anterior / a próxima |
 | Win + Alt + ↓ | Reorganiza tudo e devolve todas as janelas à grade |
+| Win + Alt + ↑ | Reservado, não faz nada: apenas impede o Windows de encaixar a janela na metade de cima da tela |
 
 Os atalhos com Win + Alt podem trocar de modificador nas configurações (Ctrl+Alt, Ctrl+Alt+Shift
 ou Alt+Shift) caso outro programa já os use; reinicie o mod depois de mudar. Win+Ctrl+G e Win+Ctrl+T são
@@ -190,15 +185,8 @@ Win + Ctrl + T também é o atalho padrão do Always On Top do PowerToys: se voc
 ### Funciona junto com outros mods de animação
 O Adaptive Windows funciona junto com estes dois mods:
 
+- **MacOS Minimize Animation** (genie de minimizar, restaurar e abrir).
 - **Windows Animations**.
-  
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
-
-
-- **MacOS Minimize Animation** (genie effect for minimize, restore and open).
-
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
-
 
 Esses mods escondem a janela e tocam a animação sozinhos. Com *Sincronizar com animações de
 abrir/fechar* ligado, o Adaptive Windows percebe isso, posiciona a janela no espaço final enquanto
@@ -663,7 +651,7 @@ static DWORD g_threadId = 0;
 static std::atomic<bool> g_stop{false};
 
 static const UINT WM_APP_RELOAD = WM_APP + 1;
-static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6;
+static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_BLOCK = 7;
 
 static int FindItem(HWND h) {
     for (size_t i = 0; i < g_items.size(); i++)
@@ -2046,6 +2034,7 @@ static void OnHotkey(int id) {
             Retile();
             break;
         }
+        case HK_BLOCK: break;  // só impede o Windows de tratar a combinação (encaixe na metade de cima)
         case HK_LEFT: SwapFocused(-1); break;
         case HK_RIGHT: SwapFocused(+1); break;
         case HK_RETILE:
@@ -2241,7 +2230,8 @@ static DWORD WINAPI Worker(LPVOID) {
     else if (hk == L"altshift") mods = MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
     else if (hk == L"ctrlaltshift") mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
     struct HK { int id; UINT mods, vk; };
-    std::vector<HK> keys = {{HK_MONOCLE, mods, 'F'}, {HK_LEFT, mods, VK_LEFT}, {HK_RIGHT, mods, VK_RIGHT}, {HK_RETILE, mods, VK_DOWN}};
+    std::vector<HK> keys = {{HK_MONOCLE, mods, 'F'}, {HK_LEFT, mods, VK_LEFT}, {HK_RIGHT, mods, VK_RIGHT}, {HK_RETILE, mods, VK_DOWN},
+                           {HK_BLOCK, mods, VK_UP}};  // reservada sem ação: com Win+Alt o Windows encaixaria a janela na metade de cima
     {
         UINT m2, k2;
         if (ParseHotkey(GetStr(L"layoutHotkey"), &m2, &k2)) keys.push_back({HK_LAYOUT, m2, k2});
