@@ -7,7 +7,7 @@
 // @github          https://github.com/Faelayis
 // @homepage        https://github.com/Faelayis/Mutelith
 // @include         windhawk.exe
-// @compilerOptions -lole32 -lshell32 -lpowrprof
+// @compilerOptions -lole32 -lshell32 -lpowrprof -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,10 +48,11 @@ The mute is Discord's per-app setting in the Volume Mixer, and Windows saves it
 for each output device, so it outlives the mod. The mod records each device it
 muted Discord on and unmutes Discord there once the rule no longer covers it,
 including after a crash. Windows only lets the mod do that while Discord is
-running. If Discord is closed when you disable the mod, Discord stays muted on
-those devices: open the Volume Mixer and unmute Discord, or enable the mod
-again while Discord is running and switch the default device away from the
-provider.
+running and to have an audio session on that device. If Discord isn't listed
+for a device in the Volume Mixer when you disable the mod, Discord stays muted
+there: open the Volume Mixer and unmute Discord, or enable the mod again while
+Discord is playing audio on that device and switch the default device away from
+the provider. A mute you set yourself in the Volume Mixer is left alone.
 
 ## Mutelith app
 
@@ -67,6 +68,7 @@ Designed and tested for one virtual audio provider at a time.
 #include <audiopolicy.h>
 #include <mmdeviceapi.h>
 #include <powrprof.h>
+#include <sddl.h>
 #include <tlhelp32.h>
 #include <wrl/client.h>
 
@@ -176,9 +178,29 @@ std::wstring SessionInstanceId(IAudioSessionControl2* control) {
 
 // Windows saves Discord's per-app mute for each output device, so the mod
 // records where it muted each Discord build and can undo leftovers after an
-// unclean exit. One storage value per build and endpoint.
+// unclean exit. One storage value per user, build and endpoint: storage is
+// machine-wide but the mute is per user.
+std::wstring CurrentUserSid() {
+    std::wstring result;
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return result;
+    }
+    alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    DWORD size;
+    LPWSTR sid;
+    if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+        ConvertSidToStringSidW(((TOKEN_USER*)buffer)->User.Sid, &sid)) {
+        result = sid;
+        LocalFree(sid);
+    }
+    CloseHandle(token);
+    return result;
+}
+
 std::wstring MutedValueName(const wchar_t* exe, const std::wstring& endpointId) {
-    return std::wstring(L"muted-") + exe + L"-" + endpointId;
+    static const std::wstring userSid = CurrentUserSid();
+    return L"muted-" + userSid + L"-" + exe + L"-" + endpointId;
 }
 
 bool IsRecorded(const wchar_t* exe, const std::wstring& endpointId) {
@@ -521,9 +543,22 @@ class Monitor {
                 SessionKey key{device->id, SessionInstanceId(control2)};
                 bool known = m_muted.contains(key);
                 BOOL muted = FALSE;
-                if (known && SUCCEEDED(volume->GetMute(&muted)) && muted) {
+                bool readable = SUCCEEDED(volume->GetMute(&muted));
+                if (known && readable && muted) {
                     count++;
                     return;
+                }
+                if (!known && readable) {
+                    // A mute the user set stays theirs, unless the device has
+                    // a record: then it is the mod's own leftover.
+                    if (!muted) {
+                        m_userMuted.erase(key);
+                    } else if (m_userMuted.contains(key)) {
+                        return;
+                    } else if (!IsRecorded(process->second, device->id)) {
+                        m_userMuted.insert(key);
+                        return;
+                    }
                 }
 
                 // Recorded first, so a crash right after muting still leaves
@@ -639,6 +674,7 @@ class Monitor {
         while (!m_muted.empty()) {
             Erase(m_muted.begin());
         }
+        m_userMuted.clear();
         m_lastCount = -1;
     }
 
@@ -690,6 +726,8 @@ class Monitor {
     const Provider* m_provider = nullptr;
     // Sessions the mod muted, by endpoint and session instance.
     std::map<SessionKey, Muted> m_muted;
+    // Sessions already muted by the user; left alone.
+    std::set<SessionKey> m_userMuted;
     std::map<std::wstring, ComPtr<IAudioSessionManager2>> m_managers;
     // -1: nothing logged yet, -2: target device missing.
     int m_lastCount = -1;
