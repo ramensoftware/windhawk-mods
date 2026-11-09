@@ -147,7 +147,10 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
         wchar_t* expected = LoadStr(g_shell32Module, IDS_TASKMANAGER, tmText, 256);
         if (GetMenuStringW(hMenu, ret, itemText, 256, MF_BYCOMMAND) > 0 &&
             wcscmp(itemText, expected ? expected : L"Task Manager") == 0) {
-            ShellExecuteW(nullptr, nullptr, L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            WCHAR path[MAX_PATH];
+            GetSystemDirectoryW(path, ARRAYSIZE(path));
+            wcscat_s(path, L"\\Taskmgr.exe");
+            ShellExecuteW(nullptr, nullptr, path, nullptr, nullptr, SW_SHOWNORMAL);
             return 0;
         }
     }
@@ -157,7 +160,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
-    g_bthpropsModule = LoadLibraryExW(L"bthprops.cpl", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    g_bthpropsModule = LoadLibraryW(L"bthprops.cpl");
     g_explorerframeModule = GetModuleHandleW(L"explorerframe.dll");
 
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
