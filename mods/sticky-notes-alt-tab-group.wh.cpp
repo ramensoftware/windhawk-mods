@@ -4,7 +4,7 @@
 // @name:ko         스티커 메모 Alt+Tab 하나로 묶기
 // @description     Group Microsoft Sticky Notes into one Alt+Tab entry, bring open notes forward together, and use compact previews.
 // @description:ko  스티커 메모를 Alt+Tab 한 항목으로 묶고, 전환하면 열린 메모를 함께 표시하며 미리보기를 작게 만듭니다.
-// @version         1.1.2
+// @version         1.1.3
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
@@ -20,7 +20,8 @@ Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
 
 - Show one representative Sticky Notes window in Alt+Tab.
   - Keep notes grouped during delayed refreshes for as long as the switcher is
-    open. If the representative note closes, another open note represents it.
+    open, including refreshes after Show desktop (Win+D). If the representative
+    note closes or is hidden, another open note represents it.
 - Switch to Sticky Notes to bring all its open windows on the current virtual
   desktop forward together.
   - Minimized notes are restored; closed notes are not opened.
@@ -111,8 +112,9 @@ std::atomic<DWORD> buildThread{0}, lastThread{0};
 std::atomic<ULONGLONG> buildTime{0};
 std::atomic<HWND> representative{nullptr};
 thread_local unsigned refreshDepth = 0;
-SRWLOCK collectionLock = SRWLOCK_INIT;
-std::vector<void*> altTabCollections;
+thread_local void* evaluatingDataView = nullptr;
+SRWLOCK dataViewLock = SRWLOCK_INIT;
+std::vector<void*> altTabDataViews;
 void *win32Vtable, *winrtVtable;
 using NativeWindow = HRESULT(WINAPI*)(void*, HWND*);
 NativeWindow win32Window, winrtWindow;
@@ -120,12 +122,10 @@ using Visible = HRESULT(WINAPI*)(void*, void*, BOOL*);
 Visible originalVisible;
 using Create = HRESULT(WINAPI*)(void*, void*, void*);
 Create originalCreate;
-using CollectionViews = HRESULT(WINAPI*)(void*, void*);
-CollectionViews originalAddViews, originalAddViewItem;
-using UpdateShow = HRESULT(WINAPI*)(void*, void*, bool);
-UpdateShow originalUpdateShow;
-using DestroyCollection = void(WINAPI*)(void*);
-DestroyCollection originalDestroyCollection;
+using EvaluateItem = int(WINAPI*)(void*, void*);
+EvaluateItem originalEvaluateItem;
+using DestroyDataView = void(WINAPI*)(void*);
+DestroyDataView originalDestroyDataView;
 HANDLE stopEvent, worker;
 IVirtualDesktopManager* desktops;
 bool wasNotes;
@@ -137,6 +137,8 @@ SourceSize originalSourceSize;
 SourceBounds sourceBounds;
 
 HRESULT WINAPI SourceSizeHook(void* self, PreviewSize* size);
+bool RefreshHooksAvailable();
+void TrackDataView(void* self);
 
 bool NotesProcess(HWND window) {
     DWORD pid = 0;
@@ -200,25 +202,34 @@ HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
     HRESULT hr = originalVisible(self, view, visible);
     if (FAILED(hr) || !*visible) return hr;
     DWORD thread = GetCurrentThreadId();
-    // Late queries are filtered only inside a refresh of an Alt+Tab collection.
+    // Late queries are filtered only inside an Alt+Tab data view's evaluation.
     // Other callers on the same shell thread keep their normal visibility.
     if (!refreshDepth && buildThread != thread &&
         (lastThread != thread || GetTickCount64() - buildTime > 250)) return hr;
     HWND window = nullptr;
     void* table = *reinterpret_cast<void**>(view);
-    if (table == win32Vtable) hr = win32Window(view, &window);
-    else if (table == winrtVtable) hr = winrtWindow(view, &window);
-    else return S_OK;
-    if (FAILED(hr) || !Notes(window)) return S_OK;
+    HRESULT windowResult;
+    if (table == win32Vtable) windowResult = win32Window(view, &window);
+    else if (table == winrtVtable) windowResult = winrtWindow(view, &window);
+    else return hr;
+    if (FAILED(windowResult) || !Notes(window)) return hr;
+    // Capture the innermost data view that actually asks about a note during
+    // Alt+Tab creation, not every surrounding/chained view or collection.
+    if (buildThread == thread && evaluatingDataView && RefreshHooksAvailable()) {
+        TrackDataView(evaluatingDataView);
+    }
     HWND expected = representative.load();
-    while (!expected || !IsWindow(expected)) {
+    while (!expected || !IsWindow(expected) || !IsWindowVisible(expected)) {
         if (representative.compare_exchange_weak(expected, window)) break;
     }
     if (representative != window) *visible = FALSE;
-    return S_OK;
+    return hr;
 }
 HRESULT WINAPI CreateHook(void* a, void* b, void* c) {
     representative = nullptr;
+    AcquireSRWLockExclusive(&dataViewLock);
+    altTabDataViews.clear();
+    ReleaseSRWLockExclusive(&dataViewLock);
     buildThread = GetCurrentThreadId(); lastThread = GetCurrentThreadId();
     buildTime = GetTickCount64();
     HRESULT hr = originalCreate(a, b, c);
@@ -226,49 +237,56 @@ HRESULT WINAPI CreateHook(void* a, void* b, void* c) {
     return hr;
 }
 bool RefreshHooksAvailable() {
-    return originalAddViews && originalAddViewItem && originalUpdateShow &&
-           originalDestroyCollection;
+    return originalEvaluateItem && originalDestroyDataView;
 }
-bool AltTabCollection(void* self) {
-    if (!RefreshHooksAvailable()) return false;
-    AcquireSRWLockExclusive(&collectionLock);
+bool IsAltTabDataView(void* self) {
+    AcquireSRWLockShared(&dataViewLock);
     bool found = false;
-    for (void* collection : altTabCollections) {
-        if (collection == self) { found = true; break; }
+    for (void* dataView : altTabDataViews) {
+        if (dataView == self) { found = true; break; }
     }
-    // Capture the collection only when Alt+Tab is building it. Collections
-    // created for Task View or taskbar callers are not enrolled.
-    if (!found && buildThread == GetCurrentThreadId()) {
-        altTabCollections.push_back(self);
-        found = true;
-    }
-    ReleaseSRWLockExclusive(&collectionLock);
+    ReleaseSRWLockShared(&dataViewLock);
     return found;
 }
-struct RefreshScope {
-    unsigned previous = refreshDepth;
-    explicit RefreshScope(bool enabled) { if (enabled) ++refreshDepth; }
-    ~RefreshScope() { refreshDepth = previous; }
-};
-HRESULT WINAPI AddViewsHook(void* self, void* views) {
-    RefreshScope scope(AltTabCollection(self));
-    return originalAddViews(self, views);
-}
-HRESULT WINAPI AddViewItemHook(void* self, void* view) {
-    RefreshScope scope(AltTabCollection(self));
-    return originalAddViewItem(self, view);
-}
-HRESULT WINAPI UpdateShowHook(void* self, void* view, bool show) {
-    RefreshScope scope(AltTabCollection(self));
-    return originalUpdateShow(self, view, show);
-}
-void WINAPI DestroyCollectionHook(void* self) {
-    AcquireSRWLockExclusive(&collectionLock);
-    for (auto it = altTabCollections.begin(); it != altTabCollections.end(); ++it) {
-        if (*it == self) { altTabCollections.erase(it); break; }
+void TrackDataView(void* self) {
+    AcquireSRWLockExclusive(&dataViewLock);
+    bool found = false;
+    for (void* dataView : altTabDataViews) {
+        if (dataView == self) { found = true; break; }
     }
-    ReleaseSRWLockExclusive(&collectionLock);
-    originalDestroyCollection(self);
+    if (!found) {
+        altTabDataViews.push_back(self);
+        Wh_Log(L"Enrolled Alt+Tab data view %p, %zu tracked", self, altTabDataViews.size());
+    }
+    ReleaseSRWLockExclusive(&dataViewLock);
+}
+struct EvaluationScope {
+    void* previousView = evaluatingDataView;
+    unsigned previousDepth = refreshDepth;
+    explicit EvaluationScope(void* self) {
+        evaluatingDataView = self;
+        if (RefreshHooksAvailable() && IsAltTabDataView(self)) ++refreshDepth;
+    }
+    ~EvaluationScope() {
+        evaluatingDataView = previousView;
+        refreshDepth = previousDepth;
+    }
+};
+int WINAPI EvaluateItemHook(void* self, void* item) {
+    EvaluationScope scope(self);
+    return originalEvaluateItem(self, item);
+}
+void WINAPI DestroyDataViewHook(void* self) {
+    AcquireSRWLockExclusive(&dataViewLock);
+    for (auto it = altTabDataViews.begin(); it != altTabDataViews.end(); ++it) {
+        if (*it == self) {
+            altTabDataViews.erase(it);
+            Wh_Log(L"Destroyed Alt+Tab data view %p", self);
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&dataViewLock);
+    originalDestroyDataView(self);
 }
 void CALLBACK Foreground(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD, DWORD) {
     if (object != OBJID_WINDOW || !window) return;
@@ -319,12 +337,17 @@ BOOL Wh_ModInit() {
         {{LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"}, &winrtVtable},
         {{LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"}, &winrtWindow},
         {{LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"}, &originalCreate, CreateHook},
-        {{LR"(private: long __cdecl SwitchItemCollection::_AddViews(struct IObjectArray *))"}, &originalAddViews, AddViewsHook, true},
-        {{LR"(private: long __cdecl SwitchItemCollection::_AddViewItem(struct IApplicationView *))"}, &originalAddViewItem, AddViewItemHook, true},
-        {{LR"(private: long __cdecl SwitchItemCollection::_UpdateShowInSwitchers(struct IApplicationView *,bool))"}, &originalUpdateShow, UpdateShowHook, true},
-        {{LR"(public: virtual void __cdecl SwitchItemCollection::Destroy(void))"}, &originalDestroyCollection, DestroyCollectionHook, true},
     };
     if (!WindhawkUtils::HookSymbols(shell, hooks, ARRAYSIZE(hooks))) return FALSE;
+    HMODULE switcherModel = LoadLibraryExW(L"SwitcherDataModel.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // SwitcherDataModel.dll
+    WindhawkUtils::SYMBOL_HOOK refreshHooks[] = {
+        {{LR"(private: enum Windows::Internal::ComposableShell::Multitasking::SwitchItemInclusion __cdecl SwitchItemDataViewImpl::InternalEvaluateItem(struct Windows::Internal::ComposableShell::Multitasking::ISwitchItem *))"}, &originalEvaluateItem, EvaluateItemHook, true},
+        {{LR"(private: virtual __cdecl SwitchItemDataViewImpl::~SwitchItemDataViewImpl(void))"}, &originalDestroyDataView, DestroyDataViewHook, true},
+    };
+    if (switcherModel) {
+        WindhawkUtils::HookSymbols(switcherModel, refreshHooks, ARRAYSIZE(refreshHooks));
+    }
     if (!RefreshHooksAvailable()) {
         Wh_Log(L"Refresh symbols unavailable; retaining creation-time grouping");
     }
