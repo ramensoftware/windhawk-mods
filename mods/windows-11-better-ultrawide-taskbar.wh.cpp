@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.4.6
+// @version         0.4.7
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -85,20 +85,28 @@ outer side meets the screen edge, so the dock flares out along it like a tab.
 With Separate, the facing sides of the two bars meet the screen edge straight;
 **Arc the inner edges** curves them out along it too, each arc at most half the
 12-DIP gap.
+**Slanted ends** curves the dock's outer ends out toward the screen edge. Every
+curve rounds at the same radius, the dock's corner radius or less where the
+tightest curve needs it, and keeps clear of the buttons; the tray's end sits as
+far from the last tray icon as the Start end sits from the Start icon. In
+Separate only each bar's outer end curves out.
+**Curve angle** (70 degrees by default, 30 to 85) is how steep the middle of
+each curve is, from the screen edge: higher is steeper and narrower.
 **Smaller tray** lowers the tray's side of the dock by **Tray height reduction**
 (8 DIP by default) on the side away from the screen edge. The limit is the
 dock's height less 24 DIP, so the tray band stays at least 24 DIP tall: 16 DIP
 on a standard 48-DIP taskbar, more on a taller one. A shorter taskbar applies
 as much of a saved reduction as it can. In Unified one long S curve joins the two
-heights in the gap before the tray; in Separate the tray bar is simply shorter.
-The tray icons and their highlights center in the shorter band.
+heights in the gap before the tray, an S at the Curve angle with Slanted ends;
+in Separate the tray bar is simply shorter. The tray icons and their highlights
+center in the shorter band.
 **Whole group**, the default, centers the buttons, the gap, and the tray
 together. **Button area** centers Start through the last app button on the
 monitor, and the tray follows to their right. Every theme, the border line,
 and the Liquid shadow follow the layout and shape. They are saved as `layout`
 (`unified` or `separate`), `shape` (`island`, `edge` or `edgeArc`), `alignment`
-(`group` or `buttons`), `innerArcs` and `smallerTray` (`true` or `false`) and
-`trayReduction` in `[settings]`.
+(`group` or `buttons`), `innerArcs`, `slantedEnds` and `smallerTray` (`true` or
+`false`), `trayReduction` and `slantAngle` in `[settings]`.
 
 **Text color** can retain Windows' color, force light or dark text, or
 adapt each text element from its local composed background. Adaptive color uses
@@ -423,6 +431,9 @@ constexpr unsigned kRefreshRetryLimit = 10;
 constexpr size_t kMaxButtonLenses = UW_BUTTON_LENS_CAP;
 #define UW_DOCK_PIECE_CAP 4
 constexpr size_t kMaxDockPieces = UW_DOCK_PIECE_CAP;
+// A slanted outline's corners over all its polygons: Separate Edge arc with inner arcs needs eight per bar.
+#define UW_DOCK_CORNER_CAP 16
+constexpr size_t kMaxDockCorners = UW_DOCK_CORNER_CAP;
 constexpr wchar_t kWindowClass[] = L"Windhawk.BetterUltrawideTaskbar.2";
 std::atomic<bool> g_stopping{};
 std::atomic<unsigned> g_active{};
@@ -777,6 +788,8 @@ constexpr SettingField kSettingFields[]{
     {L"innerArcs", L"Arc the inner edges", SettingKind::Toggle, 0, 0},
     {L"smallerTray", L"Smaller tray", SettingKind::Toggle, 0, 0},
     {L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 100},
+    {L"slantedEnds", L"Slanted ends", SettingKind::Toggle, 0, 0},
+    {L"slantAngle", L"Curve angle (°)", SettingKind::Number, 0, 70, 30, 85},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -848,15 +861,19 @@ struct DockStyle {
     DockLayout layout{};
     bool innerArcs{};
     double trayReduction{}; // 0 with Smaller tray off.
+    double slant{}; // Slanted ends: degrees the outer walls lean from upright, 90 less the Curve angle; 0 off.
 };
 DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
     auto const& reduction = SettingDefinition(L"trayReduction");
+    auto const& angle = SettingDefinition(L"slantAngle");
     return {DockShape(LocalChoice(values, L"shape")),
             DockAlignment(LocalChoice(values, L"alignment")),
             DockLayout(LocalChoice(values, L"layout")),
             LocalBool(values, L"innerArcs"),
             LocalBool(values, L"smallerTray") ?
-                std::clamp(LocalInt(values, reduction.key), reduction.minimum, reduction.maximum) : 0.0};
+                std::clamp(LocalInt(values, reduction.key), reduction.minimum, reduction.maximum) : 0.0,
+            LocalBool(values, L"slantedEnds") ?
+                90.0 - std::clamp(LocalInt(values, angle.key), angle.minimum, angle.maximum) : 0.0};
 }
 DockStyle g_dockStyle;
 
@@ -1691,6 +1708,7 @@ std::mutex g_previewMetricsMutex;
 TaskbarPreviewMetrics g_previewMetrics;
 struct EditorPreview {
     int width = 640, height = 420;
+    double margin = 48; // The canvas past each side of the dock band: wider when a slanted outline leans further.
     TaskbarPreviewMetrics metrics;
     Controls::Canvas canvas{nullptr};
     Controls::Image backdrop{nullptr};
@@ -1975,6 +1993,7 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
         if (i == 6) enabled &= shape == int(DockShape::Island); // Edge and Edge arc sit on the screen edge.
         if (i == 113) enabled &= separate && shape == int(DockShape::EdgeArc); // Only Separate Edge arc has facing flares.
         if (i == 115) enabled &= editor.controls[114].input.as<Controls::ToggleSwitch>().IsOn();
+        if (i == 117) enabled &= editor.controls[116].input.as<Controls::ToggleSwitch>().IsOn();
         if (i == 8 || i == 9) enabled &= liquid;
         if (kSettingFields[i].page == 1 && i != 9) enabled &= liquid && custom;
         if (i == 2) enabled &= editor.trayEnabled.IsOn();
@@ -3292,7 +3311,7 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.refreshTray = find(L"RefreshTray").as<Controls::Button>();
     editor.syncing = true;
     constexpr size_t displayOrder[]{
-        0, 1, 36, 100, 101, 102, 103, 104, 112, 110, 111, 113, 114, 115, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
+        0, 1, 36, 100, 101, 102, 103, 104, 112, 110, 111, 113, 116, 117, 114, 115, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
         9, 20, 21, 10, 22, 23, 24, 11, 25, 12, 26,
         29, 14, 13, 15, 30, 31, 32, 16, 17, 18, 27, 28, 33, 34, 35,
         58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
@@ -3488,6 +3507,8 @@ void CreateEditorContent(SettingsEditor& editor) {
             i == 113 ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, each arc at most half the gap between the bars." :
             i == 114 ? L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar." :
             i == 115 ? L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP." :
+            i == 116 ? L"Curves the dock's outer ends out toward the screen edge. Every curve rounds at the same radius, the dock's corner radius or less where the tightest curve needs it, and keeps clear of the buttons; the tray's end sits as far from the last tray icon as the Start end sits from the Start icon. In Separate only each bar's outer end curves out. With Smaller tray, the step to the tray becomes an S of the same kind beside the last button." :
+            i == 117 ? L"How steep the middle of the curve is, from the screen edge: higher is steeper and narrower." :
             i == 111 ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
             i == 112 ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar 12 DIP apart." :
             i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
@@ -4362,8 +4383,17 @@ struct DockPiece {
     Anchor step{}; // With dropRight > dropLeft: the centre of the S between the two heights.
     bool operator==(DockPiece const&) const = default;
 };
+// A slanted outline's corner: x hangs off a hull edge, depth is DIP in from the hull's far side (the band height
+// is the screen edge, deeper is past it), and radius is its fillet's, 0 for a sharp corner.
+struct DockCorner {
+    Anchor x;
+    float depth{}, radius{};
+    bool operator==(DockCorner const&) const = default;
+};
+using DockPolygon = std::vector<DockCorner>; // Closed, clockwise for a bottom taskbar.
 struct DockOutline {
     std::vector<DockPiece> pieces{DockPiece{}}; // The hull itself by default.
+    std::vector<DockPolygon> polygons{}; // Slanted ends: one per bar, with no pieces.
     float radius{};
     bool atTop{}; // The screen edge is the hull's top; only flares read it.
     bool operator==(DockOutline const&) const = default;
@@ -4384,7 +4414,23 @@ bool Dropped(DockOutline const& outline) {
 }
 // A rounded rect can't draw two bars, a flare or a drop, so those outlines are a traced path.
 bool NeedsPath(DockOutline const& outline) {
-    return outline.pieces.size() > 1 || Flared(outline) || Dropped(outline);
+    return !outline.polygons.empty() || outline.pieces.size() > 1 || Flared(outline) || Dropped(outline);
+}
+// How far the outline reaches past the hull's sides on the band: an outer flare, or a slanted wall's lean.
+double OutlineReach(DockOutline const& outline, double band) {
+    if (outline.polygons.empty()) return outline.pieces.front().flareLeft;
+    double reach = 0;
+    auto outward = [](DockCorner const& corner, double x) { return corner.x.edge == HullEdge::Left ? -x : x; };
+    for (auto const& polygon : outline.polygons)
+        for (size_t i = 0, n = polygon.size(); i < n; ++i) {
+            auto const& a = polygon[i];
+            auto const& b = polygon[(i + 1) % n];
+            if (a.depth <= band) reach = std::max(reach, outward(a, a.x.offset));
+            // A wall running past the screen edge reaches as far as it crosses it.
+            if (a.x.edge == b.x.edge && (a.depth - band) * (b.depth - band) < 0)
+                reach = std::max(reach, outward(a, a.x.offset + (b.x.offset - a.x.offset) * (band - a.depth) / (b.depth - a.depth)));
+        }
+    return reach;
 }
 
 constexpr double kMinTrayBand = 24;
@@ -4393,7 +4439,233 @@ double TrayDrop(DockStyle const& style, double band) {
     return std::clamp(style.trayReduction, 0.0, std::max(0.0, band - kMinTrayBand));
 }
 
-DockOutline MakeOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop) {
+// A polygon corner's fillet as offsets from the corner, along the hull and in depth: where it leaves the run into
+// the corner, where it joins the run out, its centre, and its signed turn (positive convex). Zero for a sharp corner.
+struct DockFillet { double inX{}, inDepth{}, outX{}, outDepth{}, centreX{}, centreDepth{}, sweep{}; };
+// From the polygon alone, never from a traced hull: the morph's second keyframe hull is inverted, which would turn
+// every run between the two hull edges around.
+std::vector<DockFillet> Fillets(DockPolygon const& polygon) {
+    auto direction = [](DockCorner const& from, DockCorner const& to) -> std::array<double, 2> {
+        // Corners on opposite hull edges are a hull's width apart, so the run between them is along the hull.
+        if (from.x.edge != to.x.edge) return {to.x.edge == HullEdge::Right ? 1.0 : -1.0, 0.0};
+        double dx = to.x.offset - from.x.offset, dy = to.depth - from.depth, length = std::hypot(dx, dy);
+        return {dx / length, dy / length};
+    };
+    std::vector<DockFillet> fillets;
+    for (size_t i = 0, n = polygon.size(); i < n; ++i) {
+        auto const& corner = polygon[i];
+        auto in = direction(polygon[(i + n - 1) % n], corner), out = direction(corner, polygon[(i + 1) % n]);
+        double turn = std::atan2(in[0] * out[1] - in[1] * out[0], in[0] * out[0] + in[1] * out[1]);
+        double rho = corner.radius, t = rho * std::tan(std::abs(turn) / 2), side = turn > 0 ? rho : -rho;
+        if (rho <= 0) fillets.push_back({});
+        else fillets.push_back({-in[0] * t, -in[1] * t, out[0] * t, out[1] * t,
+                                -in[0] * t - side * in[1], -in[1] * t + side * in[0], turn});
+    }
+    return fillets;
+}
+
+constexpr double kSlantClearance = 2;
+// A concave fillet's radius over its convex partner's: Edge arc's flare over the far corner, the ramp's foot over its
+// top.
+constexpr double kConcaveRatio = 1.5;
+// An icon beside a slanted end: inset from the end's hull edge to the icon's outer side, and its depth span from the
+// hull's far side.
+struct IconBox { double inset{}, top{}, bottom{}; };
+// What a slanted end keeps clear of, from the settings: the first button's plate, its corner radius already clamped
+// to half the button's width, and the last tray item's highlight. Given both icons, the right end mirrors the left:
+// its wall keeps the gap from the last visible tray item's icon that the left wall leaves beside the first button's.
+struct DockContent {
+    double buttonPadding{}, buttonRadius{}, trayPadding{}, trayRadius{};
+    std::optional<IconBox> buttonIcon{}, trayIcon{};
+};
+
+// Slanted ends: one rounded polygon per bar. An outer wall leans out by k = tan(slant) per DIP of depth. Every
+// slanted curve rounds at one convex radius, and its concave fillets at kConcaveRatio times that: Edge arc's far
+// corner and flare as an S, an Island's far corner and toe, Edge's far corner, and Smaller tray's step. That radius
+// is the corner radius up to what the tightest curve allows, and a straight run at the slant takes the rest of each.
+// The left wall then moves in as far as it can while it stays kSlantClearance outside the first button's plate, and
+// the right wall until its gap beside the last tray icon is the left wall's beside the first button's icon, or
+// kSlantClearance outside the tray plate without both icons. Separate's facing walls stay upright, and Smaller tray's
+// step becomes an S at the same slant, moved toward the buttons until it is kSlantClearance from the last button's
+// plate.
+DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop,
+                           DockContent const& content) {
+    double k = std::tan(style.slant * 3.14159265358979323846 / 180), tau = std::sqrt(1 + k * k) - k;
+    double r = radius, bleed = DockBleed(style.shape, radius), drop = TrayDrop(style, band);
+    bool arc = style.shape == DockShape::EdgeArc;
+    double facing = arc && style.innerArcs ? std::min(r, kBarGap / 2) : 0;
+    auto trayFlare = [&](double flare) { return drop > 0 ? std::min(flare, (band - drop) / 2) : flare; };
+    DockOutline outline{.pieces = {}, .radius = static_cast<float>(r), .atTop = atTop};
+    // The radius a leaning wall of `run` allows: its far corner and its flare take their radius * tau of its length, an
+    // Island's toe its radius / tau, and a dropped wall rounds at most at half its band. Smaller tray's step takes its
+    // two fillets of the ramp.
+    auto fits = [&](double run) {
+        double length = run * std::sqrt(1 + k * k);
+        double cap = arc ? length / ((1 + kConcaveRatio) * tau)
+                         : style.shape == DockShape::Island ? length / (tau + 1 / tau) : length / tau;
+        return std::min(run < band ? run / 2 : INFINITY, cap);
+    };
+    double rounding = std::min({r, fits(band), fits(band - drop)});
+    if (drop > 0 && style.layout == DockLayout::Unified)
+        rounding = std::min(rounding, drop * std::sqrt(1 + k * k) / ((1 + kConcaveRatio) * tau));
+    // A content plate, inset from the hull edge it hangs off and unbounded away from it, by depth. An icon's plate counts
+    // only the wall beside it: with Smaller tray the far fillet sits just above the last tray icon, and measuring from it
+    // would hold the wall far out.
+    struct Plate { double inset, top, bottom, radius; bool beside{}; };
+    auto plate = [&](double inset, DockInsets insets, double corner) {
+        double bottom = band - insets.bottom;
+        return Plate{inset, insets.top, bottom, std::min(corner, (bottom - insets.top) / 2)};
+    };
+    auto buttonInsets = GetButtonInsets({0, 0}, band, content.buttonPadding);
+    Plate buttons = plate(kDockPadding, buttonInsets, content.buttonRadius);
+    Plate tray = plate(kDockPadding, GetButtonInsets(TrayInsets({0, 0}, false, drop), band, content.trayPadding), content.trayRadius);
+    // Unified's last button, seen from the ramp: it ends a gap before the tray content.
+    Plate lastButton = plate(kDockPadding + trayWidth + kGap, buttonInsets, content.buttonRadius);
+    auto icon = [](IconBox const& box) { return Plate{box.inset, box.top, box.bottom, 0, true}; };
+    struct Wall { HullEdge edge; double x, outward, drop, flare; bool lean; };
+    // A wall's corners from its far corner to the screen edge, in the order a right wall is traced.
+    auto corners = [&](Wall const& wall) {
+        auto at = [&](double x, double depth, double cornerRadius) {
+            return DockCorner{{wall.edge, static_cast<float>(x)}, static_cast<float>(depth), static_cast<float>(cornerRadius)};
+        };
+        double run = band - wall.drop, wallRadius = wall.drop > 0 ? std::min(r, run / 2) : r;
+        double farRadius = wallRadius, flare = wall.flare, lean = 0;
+        if (wall.lean) {
+            farRadius = rounding;
+            if (arc) flare = kConcaveRatio * rounding;
+            lean = k;
+        }
+        double foot = wall.x + wall.outward * run * lean;
+        DockPolygon list{at(wall.x, wall.drop, farRadius)};
+        if (flare > 0) {
+            // The concave flare turns from the wall onto the screen edge and meets it at the tip.
+            double tip = foot + wall.outward * flare * (wall.lean ? tau : 1);
+            list.insert(list.end(), {at(foot, band, flare), at(tip, band, 0), at(tip, band + bleed, 0)});
+        } else if (style.shape == DockShape::Island) {
+            list.push_back(at(foot, band, wall.lean ? rounding : wallRadius));
+        } else {
+            // Sharp past the screen edge: a leaning wall's rounded corner there would start above it.
+            list.push_back(at(foot + wall.outward * bleed * lean, band + bleed, 0));
+        }
+        return list;
+    };
+    // The points of the polygon's corners [first, first + count) in tracing order: their fillets and the runs between
+    // them, 0.1 DIP apart at most. The least room and gap below sit where the points pass nearest the plate, so they
+    // read within a few thousandths of a DIP.
+    auto walk = [&](DockPolygon const& polygon, size_t first, size_t count, auto const& visit) {
+        auto fillets = Fillets(polygon);
+        auto steps = [](double length) { return std::max(1, static_cast<int>(std::ceil(length / 0.1))); };
+        for (size_t j = 0; j < count; ++j) {
+            size_t i = (first + j) % polygon.size();
+            auto const& corner = polygon[i];
+            auto const& fillet = fillets[i];
+            double x = corner.x.offset, depth = corner.depth, rho = corner.radius;
+            double a = std::atan2(fillet.inDepth - fillet.centreDepth, fillet.inX - fillet.centreX);
+            for (int s = 0, n = steps(rho * std::abs(fillet.sweep)); s <= n; ++s)
+                visit(x + fillet.centreX + rho * std::cos(a + fillet.sweep * s / n),
+                      depth + fillet.centreDepth + rho * std::sin(a + fillet.sweep * s / n));
+            if (j + 1 == count) break;
+            size_t next = (i + 1) % polygon.size();
+            double x0 = x + fillet.outX, d0 = depth + fillet.outDepth;
+            double x1 = polygon[next].x.offset + fillets[next].inX, d1 = polygon[next].depth + fillets[next].inDepth;
+            for (int s = 0, n = steps(std::hypot(x1 - x0, d1 - d0)); s <= n; ++s)
+                visit(x0 + (x1 - x0) * s / n, d0 + (d1 - d0) * s / n);
+        }
+    };
+    auto over = [](Plate const& plate, double depth) {
+        return std::max({0.0, plate.top + plate.radius - depth, depth - (plate.bottom - plate.radius)});
+    };
+    // The points beside an icon's plate, and where the walk crosses its top and bottom rows: a leaning wall's gap beside
+    // the icon is least on its top row, or on its bottom row where an Island's toe turns back in.
+    auto beside = [&](DockPolygon const& polygon, size_t first, size_t count, Plate const& plate, auto const& visit) {
+        double previousX = NAN, previousDepth = NAN;
+        walk(polygon, first, count, [&](double x, double depth) {
+            for (double row : {plate.top, plate.bottom})
+                if ((previousDepth - row) * (depth - row) < 0)
+                    visit(previousX + (x - previousX) * (row - previousDepth) / (depth - previousDepth), row);
+            if (depth >= plate.top && depth <= plate.bottom) visit(x, depth);
+            previousX = x, previousDepth = depth;
+        });
+    };
+    // How far those corners, on the plate's outward side, can move toward it. Moved by u, a point meets the plate grown
+    // by the clearance once u reaches the point's room on its depth row, so they stop at their points' least room. A
+    // wall's far side and edge side run along the hull, so moving doesn't bring them closer.
+    // A plate stops the wall at its edge. The mirror may also move a wall out, when its icon sits nearer the end than
+    // the first button's does.
+    auto room = [&](DockPolygon const& polygon, size_t first, size_t count, double outward, Plate const& plate, double clearance,
+                    bool outwardToo = false) {
+        double grown = plate.radius + clearance, least = INFINITY;
+        auto visit = [&](double x, double depth) {
+            if (double o = over(plate, depth); o <= grown)
+                least = std::min(least, outward * x + plate.inset + plate.radius - std::sqrt(grown * grown - o * o));
+        };
+        if (plate.beside) beside(polygon, first, count, plate, visit);
+        else walk(polygon, first, count, visit);
+        return outwardToo ? least : std::max(0.0, least);
+    };
+    // The least gap those corners leave beside an icon.
+    auto gap = [&](DockPolygon const& polygon, size_t first, size_t count, double outward, Plate const& plate) {
+        double least = INFINITY;
+        beside(polygon, first, count, plate, [&](double x, double) { least = std::min(least, outward * x + plate.inset); });
+        return least;
+    };
+    double mirror = NAN; // The left wall's gap beside the first button's icon, once it is placed.
+    auto bar = [&](Wall left, Wall right, DockPolygon ramp) {
+        auto build = [&] {
+            auto leftCorners = corners(left), rightCorners = corners(right);
+            DockPolygon polygon{leftCorners.front()};
+            polygon.insert(polygon.end(), ramp.begin(), ramp.end());
+            polygon.insert(polygon.end(), rightCorners.begin(), rightCorners.end());
+            polygon.insert(polygon.end(), leftCorners.rbegin(), leftCorners.rend() - 1);
+            return polygon;
+        };
+        // Moving a wall or the ramp moves its corners alike, so the rooms of the polygon built at the start stay right.
+        auto polygon = build();
+        size_t leftCount = corners(left).size(), rightCount = corners(right).size(), leftFirst = polygon.size() + 1 - leftCount;
+        if (!ramp.empty()) {
+            // From the tray content's edge toward the buttons, at most until the S ends where the last button's plate
+            // does: a drop shallower than the button padding never meets it.
+            double end = ramp.back().x.offset + Fillets(polygon)[ramp.size()].outX + lastButton.inset;
+            double shift = std::min(room(polygon, 1, ramp.size(), 1, lastButton, kSlantClearance), end);
+            for (auto& corner : ramp) corner.x.offset -= static_cast<float>(shift);
+        }
+        if (left.lean) {
+            left.x -= left.outward * room(polygon, leftFirst, leftCount, left.outward, buttons, kSlantClearance);
+            if (content.buttonIcon && content.trayIcon)
+                mirror = gap(build(), leftFirst, leftCount, left.outward, icon(*content.buttonIcon));
+        }
+        if (right.lean) {
+            double in = std::isfinite(mirror)
+                ? room(polygon, 1 + ramp.size(), rightCount, right.outward, icon(*content.trayIcon), mirror, true) : INFINITY;
+            // Nothing of the wall beside the icon leaves it on the tray plate.
+            if (!std::isfinite(in)) in = room(polygon, 1 + ramp.size(), rightCount, right.outward, tray, kSlantClearance);
+            right.x -= right.outward * in;
+        }
+        outline.polygons.push_back(build());
+    };
+    if (style.layout == DockLayout::Separate) {
+        double trayBar = trayWidth + 2 * kDockPadding;
+        bar({HullEdge::Left, 0, -1, 0, 0, true}, {HullEdge::Right, -(trayBar + kBarGap), 1, 0, facing, false}, {});
+        bar({HullEdge::Right, -trayBar, -1, drop, trayFlare(facing), false}, {HullEdge::Right, 0, 1, drop, 0, true}, {});
+    } else {
+        DockPolygon ramp;
+        if (drop > 0) {
+            // Two fillets of rho * tau and kConcaveRatio times that. The S starts at the tray content's edge, and bar
+            // moves it toward the buttons.
+            double rho = rounding;
+            double upper = -(kDockPadding + trayWidth) + rho * tau;
+            ramp = {{{HullEdge::Right, static_cast<float>(upper)}, 0, static_cast<float>(rho)},
+                    {{HullEdge::Right, static_cast<float>(upper + drop * k)}, static_cast<float>(drop),
+                     static_cast<float>(kConcaveRatio * rho)}};
+        }
+        bar({HullEdge::Left, 0, -1, 0, 0, true}, {HullEdge::Right, 0, 1, drop, 0, true}, ramp);
+    }
+    return outline;
+}
+
+DockOutline MakeOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop,
+                        DockContent const& content) {
+    if (style.slant > 0) return SlantedOutline(style, trayWidth, radius, band, atTop, content);
     auto bleed = static_cast<float>(DockBleed(style.shape, radius));
     auto r = static_cast<float>(radius);
     auto drop = static_cast<float>(TrayDrop(style, band));
@@ -4434,6 +4706,35 @@ struct DockHull { float left{}, top{}, right{}, bottom{}; };
 // structure depends on the outline alone, never on the hull, so a linear morph between two traces is
 // exact for every hull left edge between them.
 void TraceOutline(ID2D1GeometrySink* sink, DockOutline const& outline, DockHull const& hull) {
+    // A slanted outline's polygons: per corner a line to its fillet's start, then the fillet in cubics of at most a
+    // quarter turn each. Every point is a fixed offset from its corner, so the structure is the polygon's alone.
+    if (!outline.polygons.empty()) {
+        double farSide = outline.atTop ? hull.bottom : hull.top, inward = outline.atTop ? -1 : 1;
+        for (auto const& polygon : outline.polygons) {
+            auto fillets = Fillets(polygon);
+            for (size_t i = 0; i < polygon.size(); ++i) {
+                auto const& corner = polygon[i];
+                auto const& fillet = fillets[i];
+                double x = (corner.x.edge == HullEdge::Left ? hull.left : hull.right) + corner.x.offset;
+                auto at = [&](double dx, double depth) {
+                    return D2D1_POINT_2F{float(x + dx), float(farSide + inward * (corner.depth + depth))};
+                };
+                if (i) sink->AddLine(at(fillet.inX, fillet.inDepth));
+                else sink->BeginFigure(at(fillet.inX, fillet.inDepth), D2D1_FIGURE_BEGIN_FILLED);
+                // A quarter turn is one cubic: the guard keeps rounding from splitting it.
+                int arcs = static_cast<int>(std::ceil(std::abs(fillet.sweep) / (3.14159265358979323846 / 2) - 1e-9));
+                double rho = corner.radius, step = arcs ? fillet.sweep / arcs : 0, k = 4.0 / 3 * std::tan(step / 4) * rho;
+                double a = std::atan2(fillet.inDepth - fillet.centreDepth, fillet.inX - fillet.centreX);
+                auto on = [&](double angle, double along) {
+                    return at(fillet.centreX + rho * std::cos(angle) - along * std::sin(angle),
+                              fillet.centreDepth + rho * std::sin(angle) + along * std::cos(angle));
+                };
+                for (int j = 0; j < arcs; ++j, a += step) sink->AddBezier({on(a, k), on(a + step, -k), on(a + step, 0)});
+            }
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        }
+        return;
+    }
     constexpr float kappa = 0.5522847f, pi = 3.14159265f;
     float edge = outline.atTop ? hull.top : hull.bottom, inward = outline.atTop ? 1.f : -1.f;
     for (auto const& piece : outline.pieces) {
@@ -5720,8 +6021,9 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float border[4]{}; // r, g, b, a in 0..1.
         float borderWidth[4]{}; // x: width in pixels, 0 = none; the rest keeps cbuffer alignment.
         float outputOffset[4]{}; // x, y: output pixel to backdrop pixel; z: 1 draws the lenses alone, clear elsewhere.
-        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the pieces; y: the piece count;
-        // z, with flares or drops: +1 when the screen edge is the hull's bottom, -1 at its top.
+        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the pieces, 2 the union of the
+        // polygons; y: the piece or polygon count; z, with flares, drops or polygons: +1 when the screen edge is
+        // the hull's bottom, -1 at its top.
         float dockShape[4]{};
         // Each piece is a box of the dock radius; its left, top, right and bottom sit these pixels from the hull's.
         float dockPieceRect[kMaxDockPieces][4]{};
@@ -5731,13 +6033,19 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         // x and y: how far inside the hull's far side the piece's far side sits at its left and right wall, in
         // pixels; z: the step's centre in pixels from the hull edge w names, 0 its left and 1 its right.
         float dockPieceFar[kMaxDockPieces][4]{};
+        // With dockShape.x 2, a slanted outline: each polygon's corner count, then their corners in order. A corner
+        // is x: its offset in pixels from the hull edge z names (0 its left, 1 its right), y: its depth in pixels in
+        // from the hull's far side, w: its fillet's radius; its fillet's start (xy) and end (zw) are offsets from it.
+        float dockPolygons[4]{};
+        float dockCorners[kMaxDockCorners][4]{};
+        float dockFillets[kMaxDockCorners][4]{};
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
     // Pins the cbuffer arithmetic the HLSL side relies on: a 224-byte header,
     // six float4 arrays, eight trailing 16-byte registers, then the dock outline.
     // Adding a member without accounting for it here would silently shift every lens the shader reads.
     static_assert(sizeof(LensConstants) ==
-                   224 + 6 * 16 * kMaxButtonLenses + 128 + 16 + 3 * 16 * kMaxDockPieces);
+                   224 + 6 * 16 * kMaxButtonLenses + 128 + 16 + 3 * 16 * kMaxDockPieces + 16 + 2 * 16 * kMaxDockCorners);
 
     struct CopyConstants {
         float offset[2]{};
@@ -5842,6 +6150,9 @@ cbuffer Lens : register(b0) {
     float4 dockPieceRect[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
     float4 dockPieceSide[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
     float4 dockPieceFar[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
+    float4 dockPolygons;
+    float4 dockCorners[)" UW_STRINGIZE(UW_DOCK_CORNER_CAP) R"(];
+    float4 dockFillets[)" UW_STRINGIZE(UW_DOCK_CORNER_CAP) R"(];
 };
 cbuffer Copy : register(b1) {
     float2 copyOffset;
@@ -5987,10 +6298,52 @@ float dockPiecesDistance(float2 pixel, bool optical) {
     }
     return distance;
 }
+float cross2(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
+// The slanted outline's rounded polygons in output pixels, along the hull and in depth from its far side. The
+// exact signed distance: the nearest straight run or fillet arc, inside by the sharp polygon's crossing number,
+// which is wrong only between a fillet and its corner: inside the triangle of its ends and corner, off its disc.
+float dockPolygonsDistance(float2 pixel) {
+    float2 hullX = float2(center.x - halfSize.x, center.x + halfSize.x);
+    float2 q = float2(pixel.x, dockShape.z * (pixel.y - center.y) + halfSize.y);
+    float distance = 1e10;
+    uint first = 0;
+    for (uint polygon = 0; polygon < uint(dockShape.y); ++polygon) {
+        uint end = first + uint(dockPolygons[polygon]);
+        float4 last = dockCorners[end - 1];
+        float2 previous = float2(lerp(hullX.x, hullX.y, last.z) + last.x, last.y), runStart = previous + dockFillets[end - 1].zw;
+        float nearest = 1e10;
+        bool inside = false;
+        for (uint i = first; i < end; ++i) {
+            float4 corner = dockCorners[i], fillet = dockFillets[i];
+            float2 v = float2(lerp(hullX.x, hullX.y, corner.z) + corner.x, corner.y), a = v + fillet.xy, b = v + fillet.zw;
+            float2 run = a - runStart, w = q - runStart;
+            nearest = min(nearest, length(w - run * saturate(dot(w, run) / max(dot(run, run), 1e-12))));
+            if ((previous.y > q.y) != (v.y > q.y) &&
+                q.x < previous.x + (q.y - previous.y) * (v.x - previous.x) / (v.y - previous.y)) inside = !inside;
+            float r = corner.w;
+            if (r > 0) {
+                // The centre is on the corner's bisector, through the midpoint of the fillet's ends.
+                float2 c = v + (fillet.xy + fillet.zw) / 2 * (1 + r * r / dot(fillet.xy, fillet.xy));
+                nearest = min(nearest, arcDistance(q - c, r, (a - c) / r, (b - c) / r));
+                float s1 = cross2(v - a, q - a), s2 = cross2(b - v, q - v), s3 = cross2(a - b, q - b);
+                if (((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) && length(q - c) > r)
+                    inside = !inside;
+            }
+            previous = v;
+            runStart = b;
+        }
+        distance = min(distance, inside ? -nearest : nearest);
+        first = end;
+    }
+    return distance;
+}
+float dockOutlineDistance(float2 pixel, bool optical) {
+    return dockShape.x == 2 ? dockPolygonsDistance(pixel) : dockPiecesDistance(pixel, optical);
+}
 // Only the taskbar dock and its preview have pieces; the editor window keeps its own outline.
 float dockDistance(float2 pixel) {
     if (bodyMode != 0 || dockShape.x == 0) return roundedDistance(pixel - center);
-    return dockPiecesDistance(pixel, false);
+    return dockOutlineDistance(pixel, false);
 }
 float cornerValue(float2 p, float4 values) {
     return p.x < 0
@@ -6119,7 +6472,7 @@ void glassRefraction(inout Glass g, float2 gradient, float height, float bevel,
 // The dock surface's field. With pieces, only the field changes: depth, radial terms and the
 // lighting's top bias keep the hull's visible band.
 float glassField(float2 p, float2 halfExtent, float4 radii, bool optical) {
-    if (bodyMode == 0 && dockShape.x != 0) return dockPiecesDistance(p + center, optical);
+    if (bodyMode == 0 && dockShape.x != 0) return dockOutlineDistance(p + center, optical);
     return optical ? opticalDistanceForCorners(p, halfExtent, radii) :
                      roundedDistanceForCorners(p, halfExtent, radii);
 }
@@ -8372,9 +8725,32 @@ void ApplyBorder(LiquidRenderer::LensConstants& lens, DockBorder border, float s
     lens.borderWidth[0] = border.width * scale;
 }
 
-// Packs the outline's pieces in pixels. The hull itself packs nothing, which keeps today's shader path.
+// Packs the outline's pieces, or a slanted outline's polygons, in pixels. The hull itself packs nothing, which keeps
+// today's shader path.
 void ApplyDockShape(LiquidRenderer::LensConstants& lens, DockOutline const& outline, float scale) {
     if (HullOnly(outline)) return;
+    if (!outline.polygons.empty()) {
+        lens.dockShape[0] = 2;
+        lens.dockShape[1] = static_cast<float>(outline.polygons.size());
+        lens.dockShape[2] = outline.atTop ? -1 : 1;
+        size_t first = 0;
+        for (size_t p = 0; p < outline.polygons.size() && p < std::size(lens.dockPolygons); ++p) {
+            auto const& polygon = outline.polygons[p];
+            auto fillets = Fillets(polygon);
+            lens.dockPolygons[p] = static_cast<float>(polygon.size());
+            for (size_t i = 0; i < polygon.size() && first < kMaxDockCorners; ++i, ++first) {
+                auto const& corner = polygon[i];
+                auto const& fillet = fillets[i];
+                float packed[]{corner.x.offset * scale, corner.depth * scale, float(corner.x.edge == HullEdge::Right),
+                               corner.radius * scale};
+                float ends[]{float(fillet.inX * scale), float(fillet.inDepth * scale), float(fillet.outX * scale),
+                             float(fillet.outDepth * scale)};
+                std::copy_n(packed, 4, lens.dockCorners[first]);
+                std::copy_n(ends, 4, lens.dockFillets[first]);
+            }
+        }
+        return;
+    }
     lens.dockShape[0] = 1;
     lens.dockShape[1] = static_cast<float>(outline.pieces.size());
     if (Flared(outline) || Dropped(outline)) lens.dockShape[2] = outline.atTop ? -1 : 1;
@@ -9247,12 +9623,13 @@ void CreateEditorPreview(SettingsEditor& editor) {
     preview.canvas.Children().Append(preview.clock);
 }
 
-void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& metrics) {
+// Sizes the canvas to the dock band and a margin of 48 DIP, or the outline's reach past the band, on each side.
+void FitPreviewCanvas(SettingsEditor& editor, double reach) {
     auto& preview = editor.preview;
-    preview.metrics = metrics;
-    double step = std::max(44.0, metrics.iconWidth + 16) + 8;
-    int width = static_cast<int>(std::ceil(5 * step + 380));
-    int height = static_cast<int>(std::ceil(std::max(editor.compactLayout?140.0:420.0, metrics.dockHeight + 48)));
+    preview.margin = std::max(48.0, std::ceil(reach));
+    double step = std::max(44.0, preview.metrics.iconWidth + 16) + 8;
+    int width = static_cast<int>(std::ceil(5 * step + 380 + 2 * (preview.margin - 48)));
+    int height = static_cast<int>(std::ceil(std::max(editor.compactLayout?140.0:420.0, preview.metrics.dockHeight + 48)));
     if (preview.width != width || preview.height != height) {
         CloseEditorPreview(editor);
         preview.width = width;
@@ -9260,6 +9637,13 @@ void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& me
         preview.unavailable = false;
         BuildPreviewBackdrop(preview);
     }
+}
+
+void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& metrics) {
+    auto& preview = editor.preview;
+    preview.metrics = metrics;
+    // UpdateEditorPreview, below, refits the margin to the outline at the new band.
+    FitPreviewCanvas(editor, preview.margin);
     auto number = [](double value) {
         wchar_t text[32]{};
         swprintf(text, ARRAYSIZE(text), std::abs(value - std::round(value)) < 0.05 ? L"%.0f" : L"%.1f", value);
@@ -9384,26 +9768,35 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double buttonWidth = std::max(44.0, preview.metrics.iconWidth + 16);
         double step = buttonWidth + 8;
         double dockWidth = 5 * step + 284;
-        double trayLeft = 64 + 5 * step + 20;
         auto pageValues = EditorPageValues(editor, 0);
         // Alignment places the dock on the host, so only the layout and shape show here. Edge and Edge arc
         // sit on the canvas bottom as a bottom taskbar sits on its screen edge.
         auto style = ReadDockStyle(pageValues);
         bool edge = style.shape != DockShape::Island;
-        double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         double radius = std::min(number(3), dockHeight / 2);
         double bleed = DockBleed(style.shape, radius);
-        // The tray bar wraps the tray content in the dock padding, like the live tray.
-        auto outline = MakeOutline(style, 48 + dockWidth - trayLeft - kDockPadding, radius, dockHeight, false);
         double drop = TrayDrop(style, dockHeight);
-        // A traced outline clips the material, which the outer flares widen past the dock band on both sides.
+        // The tray bar wraps the tray content, 16 DIP, the buttons and 20 DIP into the dock, in the dock padding, like
+        // the live tray. The ends mirror around the Start icon and the clock, the last tray item, as placed below.
+        auto outline = MakeOutline(style, dockWidth - (16 + 5 * step + 20) - kDockPadding, radius, dockHeight, false,
+                                   {number(5), std::min(number(4), buttonWidth / 2), number(98), number(99),
+                                    IconBox{16 + (buttonWidth - preview.metrics.iconWidth) / 2,
+                                            (dockHeight - preview.metrics.iconHeight) / 2,
+                                            (dockHeight + preview.metrics.iconHeight) / 2},
+                                    IconBox{dockWidth - (16 + 5 * step + 20 + 102 + preview.clock.Width()),
+                                            (dockHeight + drop - 34) / 2, (dockHeight + drop + 34) / 2}});
+        // A traced outline clips the material, which the outer flares or the slanted walls widen past the dock band on
+        // both sides.
         bool traced = NeedsPath(outline);
-        float flare = outline.pieces.front().flareLeft;
+        float flare = static_cast<float>(OutlineReach(outline, dockHeight));
+        FitPreviewCanvas(editor, flare);
+        double left = preview.margin, trayLeft = left + 16 + 5 * step + 20;
+        double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         auto buttonInsets=GetButtonInsets({0,0},dockHeight,number(5));
         double padding=buttonInsets.top;
         double buttonHeight=float(dockHeight-buttonInsets.top-buttonInsets.bottom);
         double buttonRadius=ButtonClipRadius(buttonWidth,buttonHeight,number(4));
-        Controls::Canvas::SetLeft(preview.material, 48 - flare);
+        Controls::Canvas::SetLeft(preview.material, left - flare);
         Controls::Canvas::SetTop(preview.material, y);
         preview.material.Height(dockHeight);
         preview.material.Width(dockWidth + 2 * flare);
@@ -9411,7 +9804,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         for (size_t i = 0; i < preview.buttons.size(); ++i) {
             auto button = preview.buttons[i];
             button.Width(buttonWidth);
-            Controls::Canvas::SetLeft(button, 64 + i * step);
+            Controls::Canvas::SetLeft(button, left + 16 + i * step);
             button.Height(buttonHeight);
             button.CornerRadius({number(4),number(4),number(4),number(4)});
             Controls::Canvas::SetTop(button, y + padding);
@@ -9420,7 +9813,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             auto image = preview.appIcons[i];
             image.Width(preview.metrics.iconWidth);
             image.Height(preview.metrics.iconHeight);
-            Controls::Canvas::SetLeft(image, 64 + (i + 1) * step + (buttonWidth - preview.metrics.iconWidth) / 2);
+            Controls::Canvas::SetLeft(image, left + 16 + (i + 1) * step + (buttonWidth - preview.metrics.iconWidth) / 2);
             Controls::Canvas::SetTop(image, y + (dockHeight - preview.metrics.iconHeight) / 2);
         }
         constexpr double trayOffsets[]{0, 38, 66};
@@ -9439,7 +9832,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         }
         preview.startIcon.Width(preview.metrics.iconWidth);
         preview.startIcon.Height(preview.metrics.iconHeight);
-        Controls::Canvas::SetLeft(preview.startIcon, 64 + (buttonWidth - preview.metrics.iconWidth) / 2);
+        Controls::Canvas::SetLeft(preview.startIcon, left + 16 + (buttonWidth - preview.metrics.iconWidth) / 2);
         Controls::Canvas::SetTop(preview.startIcon, y + (dockHeight - preview.metrics.iconHeight) / 2);
         Controls::Canvas::SetLeft(preview.clock, trayLeft + 102);
         Controls::Canvas::SetTop(preview.clock, y + (dockHeight + drop - 34) / 2);
@@ -9459,7 +9852,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                 preview.glassPointer = std::make_unique<GlassPointerBinding>(preview.canvas, preview.canvas, preview.renderer);
             }
             LiquidRenderer::LensConstants lens{};
-            lens.center[0] = static_cast<float>(48 + dockWidth / 2);
+            lens.center[0] = static_cast<float>(left + dockWidth / 2);
             lens.center[1] = static_cast<float>(y + dockHeight / 2);
             lens.halfSize[0] = static_cast<float>(dockWidth / 2);
             lens.halfSize[1] = static_cast<float>(dockHeight / 2);
@@ -9482,7 +9875,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                         preview.canvas, preview.material, preview.shadowGeometry);
                 }
                 if (auto path = preview.shadowGeometry.try_as<CompositionPathGeometry>()) {
-                    path.Path(OutlinePath(outline, {float(48), float(y), float(48 + dockWidth), float(y + dockHeight)}));
+                    path.Path(OutlinePath(outline, {float(left), float(y), float(left + dockWidth), float(y + dockHeight)}));
                 } else {
                     auto rect = preview.shadowGeometry.as<CompositionRoundedRectangleGeometry>();
                     rect.Offset({lens.center[0] - lens.halfSize[0], lens.center[1] - lens.halfSize[1]});
@@ -9500,7 +9893,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                 for(size_t i=1;i<preview.buttons.size();++i) {
                     bool attention=i==3;
                     if(!ButtonGlassEnabled(theme,toggle(8))) continue;
-                    float x = static_cast<float>(64 + i * step + buttonWidth / 2);
+                    float x = static_cast<float>(left + 16 + i * step + buttonWidth / 2);
                     float centerY = static_cast<float>(y + dockHeight / 2);
                     float4 rect{x,centerY,float(buttonWidth/2),float(buttonHeight/2)};
                     float nativeRadius=float(number(4)),clipRadius=float(buttonRadius);
@@ -9756,6 +10149,7 @@ void EndLiquidMotionBatch(CompositionScopedBatch const& batch) noexcept {
 #undef UW_STRINGIZE_IMPL
 #undef UW_BUTTON_LENS_CAP
 #undef UW_DOCK_PIECE_CAP
+#undef UW_DOCK_CORNER_CAP
 
 winrt::weak_ref<FrameworkElement> MotionEvent(
     void* abi, Root::Source::Life life, bool cancelled = false,
@@ -10100,6 +10494,61 @@ void CollectTrayIconImages(
         }
         CollectTrayIconImages(child, result, depth - 1);
     }
+}
+
+// The union of an item's visible content in `root`'s DIP: images with a source, text, and whatever is named Icon,
+// which for Start is an AnimatedVisualPlayer. None while nothing shows.
+std::optional<winrt::Windows::Foundation::Rect> ContentBox(FrameworkElement const& item, UIElement const& root) {
+    std::optional<winrt::Windows::Foundation::Rect> result;
+    unsigned remaining = 256;
+    auto visit = [&](auto&& self, FrameworkElement const& element, unsigned depth) -> void {
+        if (!element || !depth || !remaining) return;
+        --remaining;
+        if (element.Visibility() != Visibility::Visible || element.Opacity() == 0) return;
+        auto image = element.try_as<Controls::Image>();
+        auto text = element.try_as<Controls::TextBlock>();
+        if (element.Name() == L"Icon" || (image && image.Source()) || (text && !text.Text().empty())) {
+            if (element.ActualWidth() <= 0 || element.ActualHeight() <= 0) return;
+            auto box = element.TransformToVisual(root).TransformBounds(
+                {0, 0, static_cast<float>(element.ActualWidth()), static_cast<float>(element.ActualHeight())});
+            if (result) {
+                float left = std::min(result->X, box.X), top = std::min(result->Y, box.Y);
+                box = {left, top, std::max(result->X + result->Width, box.X + box.Width) - left,
+                       std::max(result->Y + result->Height, box.Y + box.Height) - top};
+            }
+            result = box;
+            return;
+        }
+        int count = Media::VisualTreeHelper::GetChildrenCount(element);
+        for (int i = 0; i < count && remaining; ++i)
+            self(self, Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>(), depth - 1);
+    };
+    visit(visit, item, 16);
+    return result;
+}
+
+// The last visible tray item's content in `root`'s DIP. The items are the icon views named NotifyItemIcon and
+// SystemTrayIcon. Show desktop's, the strip at the tray's end, and any of no width don't count. The last is the one
+// that starts furthest right: an app's icon can be far larger than its slot, so its content may end past the tray.
+std::optional<winrt::Windows::Foundation::Rect> LastTrayItemBox(FrameworkElement const& tray, UIElement const& root) {
+    std::optional<winrt::Windows::Foundation::Rect> last;
+    auto visit = [&](auto&& self, FrameworkElement const& element, unsigned depth) -> void {
+        if (!element || !depth || element.Visibility() != Visibility::Visible || element.Opacity() == 0) return;
+        auto name = element.Name();
+        // This build names the strip's stack differently; its own type gives it away.
+        if (name == L"ShowDesktopStack" || winrt::get_class_name(element) == L"SystemTray.ShowDesktopButton") return;
+        if (name == L"NotifyItemIcon" || name == L"SystemTrayIcon") {
+            if (element.ActualWidth() > 0)
+                if (auto box = ContentBox(element, root); box && (!last || box->X > last->X))
+                    last = box;
+            return;
+        }
+        int count = Media::VisualTreeHelper::GetChildrenCount(element);
+        for (int i = 0; i < count; ++i)
+            self(self, Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>(), depth - 1);
+    };
+    visit(visit, tray, 16);
+    return last;
 }
 
 // Versioned WinRT contracts, checked against SystemTray.dll's matching symbols.
@@ -12805,6 +13254,59 @@ void ReapRetiredRoots() {
     std::erase_if(g_roots, [](Root const& root) { return root.retired; });
 }
 
+// An icon `inset` in from its hull edge, `top` down the background where layout put it and `height` tall, once the
+// Translation that centres `band` moves it by (top - bottom) / 2.
+IconBox PlaceIcon(Measurements const& m, DockInsets band, double inset, double top, double height) {
+    double farSide = m.atTop ? m.dockHeight - m.insets.bottom : m.insets.top;
+    top += (band.top - band.bottom) / 2;
+    double bottom = top + height;
+    return m.atTop ? IconBox{inset, farSide - bottom, farSide - top} : IconBox{inset, top - farSide, bottom - farSide};
+}
+
+// Start's icon and the last visible tray item's as insets from the hull edges. Each is read in the element our
+// Translation moves, the repeater or the tray, where that Translation doesn't show: TransformToVisual includes it once
+// it is installed and ActualOffset doesn't. x is taken from Start's and the tray's own edges, which the hull keeps
+// kDockPadding away.
+void MeasureDockIcons(DockContent& content, FrameworkElement const& start, FrameworkElement const& repeater,
+                      FrameworkElement const& tray, FrameworkElement const& background, Measurements const& m) {
+    auto laidOut = [&](FrameworkElement const& carrier) {
+        auto parent = Media::VisualTreeHelper::GetParent(carrier).as<UIElement>();
+        return parent.TransformToVisual(background).TransformPoint({0, 0}).Y + carrier.ActualOffset().y;
+    };
+    std::array<double, 3> buttonAt{}, trayAt{};
+    try {
+        if (auto box = ContentBox(start, repeater)) {
+            buttonAt = {laidOut(repeater) + box->Y, box->Height, box->Width};
+            content.buttonIcon = PlaceIcon(m, m.insets, kDockPadding + box->X - start.TransformToVisual(repeater).TransformPoint({0, 0}).X,
+                                           buttonAt[0], buttonAt[1]);
+        }
+        if (auto box = LastTrayItemBox(tray, tray)) {
+            trayAt = {laidOut(tray) + box->Y, box->Height, box->Width};
+            content.trayIcon = PlaceIcon(m, m.trayInsets, kDockPadding + m.trayWidth - box->X - box->Width, trayAt[0], trayAt[1]);
+        }
+    } catch (...) {
+        // A tree in flux leaves both ends on their plates.
+        content.buttonIcon = content.trayIcon = std::nullopt;
+    }
+    // One line per change and taskbar, so a live check can tell which icons the mirror read.
+    static std::map<void*, std::wstring> logged;
+    auto describe = [](std::optional<IconBox> const& box, std::array<double, 3> at) {
+        wchar_t text[128];
+        if (!box) return std::wstring(L"none");
+        swprintf(text, ARRAYSIZE(text), L"%.1f in, laid out at %.1f+%.1f, %.1f wide, depth %.1f..%.1f", box->inset, at[0],
+                 at[1], at[2], box->top, box->bottom);
+        return std::wstring(text);
+    };
+    wchar_t frame[96];
+    swprintf(frame, ARRAYSIZE(frame), L"host %.1f, tray %.1f wide, centre %.1f; ", m.host, m.trayWidth, m.center);
+    auto line = frame + (L"start icon " + describe(content.buttonIcon, buttonAt) + L"; last tray icon " +
+                         describe(content.trayIcon, trayAt));
+    if (auto& last = logged[winrt::get_abi(tray)]; last != line) {
+        last = line;
+        Wh_Log(L"[UWSLANT] mirror %ls", line.c_str());
+    }
+}
+
 // ---- The layout pass ----------------------------------------------------
 void Refresh(Root& root) {
     if (root.retired) return;
@@ -12911,8 +13413,11 @@ void Refresh(Root& root) {
         .atTop = TaskbarAtTop(root.taskbar),
     };
     double band = m.visibleDockHeight();
-    m.outline = MakeOutline(g_dockStyle, trayWidth, EffectiveDockRadius(host, band), band, m.atTop);
     m.trayInsets = TrayInsets(m.insets, m.atTop, TrayDrop(g_dockStyle, band));
+    DockContent content{g_buttonVerticalPadding, std::min(g_buttonCornerRadius, start.ActualWidth() / 2),
+                        g_trayHighlightPadding, g_trayHighlightRadius};
+    if (g_dockStyle.slant > 0) MeasureDockIcons(content, start, repeater, tray, background, m);
+    m.outline = MakeOutline(g_dockStyle, trayWidth, EffectiveDockRadius(host, band), band, m.atTop, content);
     root.measurements = m;
     root.measurementsReady = true;
     if (!PrepareDock(root.dock, background, m.insets, m.outline)) {
