@@ -330,8 +330,12 @@ static UINT QL_WM_TOGGLE = 0;
 static UINT QL_WM_SETTINGS = 0;
 static UINT QL_WM_CLEANUP = 0;
 
-// Wh_ModUninit asks every Explorer window to clean up and waits here until the
-// last one is done, so nothing can call into this module after it returns.
+// Wh_ModUninit sends a cleanup request to every Explorer window and waits for
+// the windows that answer. Only a window that handles the request in
+// TopSubclassProc adds itself to the set, so a window that never got the
+// subclass (opened during the unload, or a failed install) is never waited for.
+// The event is auto-reset because the set can empty and fill again while the
+// requests are still being sent.
 static HANDLE g_cleanupEvent = nullptr;
 static std::mutex g_cleanupMutex;
 static std::set<HWND> g_cleanupPending;
@@ -10028,7 +10032,19 @@ static LRESULT CALLBACK TopSubclassProc(HWND hwnd, UINT message,
     // to wait on).
     if (message == QL_WM_CLEANUP) {
         if (wParam == 0) {
-            PostMessageW(hwnd, QL_WM_CLEANUP, 1, 0);
+            // Register before the sent message returns: Wh_ModUninit starts
+            // waiting as soon as its SendMessage comes back, so every window
+            // that will post must already be in the set.
+            {
+                std::lock_guard<std::mutex> lock(g_cleanupMutex);
+                g_cleanupPending.insert(hwnd);
+            }
+            if (!PostMessageW(hwnd, QL_WM_CLEANUP, 1, 0)) {
+                // The queue is full: clean up right here instead of waiting
+                // for a message that will never arrive.
+                CleanupTopWindow(hwnd);
+                FinishWindowCleanup(hwnd);
+            }
         } else {
             CleanupTopWindow(hwnd);
             FinishWindowCleanup(hwnd);
@@ -10384,7 +10400,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    g_cleanupEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_cleanupEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     return TRUE;
 }
 
@@ -10432,17 +10448,6 @@ void Wh_ModUninit() {
     //    thread. Waiting for a busy window is better than leaving a subclass
     //    behind that would crash Explorer on its next message.
     std::vector<HWND> windows = GetExplorerWindows();
-    {
-        std::lock_guard<std::mutex> lock(g_cleanupMutex);
-        g_cleanupPending.clear();
-        for (HWND window : windows) {
-            g_cleanupPending.insert(window);
-        }
-        if (g_cleanupEvent) {
-            ResetEvent(g_cleanupEvent);
-        }
-    }
-
     if (!g_cleanupEvent) {
         // No event to wait on: clean inline. Still correct; only the release of
         // an open preview handler can fail inside a sent call.
@@ -10450,24 +10455,17 @@ void Wh_ModUninit() {
             SendMessageW(window, QL_WM_CLEANUP, 1, 0);
         }
     } else {
+        // Each window registers itself while it handles the request, so the set
+        // only ever contains windows that can answer. Sending first and then
+        // waiting means a window opened in the meantime (without the subclass)
+        // can never stall the unload.
         for (HWND window : windows) {
-            if (GetWindowThreadProcessId(window, nullptr) ==
-                GetCurrentThreadId()) {
-                // Uninit is running on this window's own thread: waiting would
-                // block the queue that runs the posted cleanup, so do it here.
-                CleanupTopWindow(window);
-                FinishWindowCleanup(window);
-            } else {
-                SendMessageW(window, QL_WM_CLEANUP, 0, 0);
-            }
+            SendMessageW(window, QL_WM_CLEANUP, 0, 0);
         }
 
         for (;;) {
             {
                 std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                if (g_cleanupPending.empty()) {
-                    break;
-                }
                 // A window destroyed before its posted cleanup ran dropped
                 // that message; its WM_DESTROY already destroyed the state.
                 for (auto it = g_cleanupPending.begin();
