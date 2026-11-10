@@ -1254,6 +1254,9 @@ struct WindowIconCell {
     ULONGLONG retryAfter = 0;
     bool pending = false;
     bool lastFailed = false;
+    // Which Custom Header title patterns matched when the icon was last
+    // requested (switcher thread only; see CustomHeaderTitleMatchKey).
+    ULONGLONG titleRuleMatch = 0;
     std::atomic<ULONGLONG> discardedGeneration{0};
     std::atomic<bool> retired{false};
     std::shared_ptr<OwnedWindowIcon> icon;
@@ -6914,6 +6917,8 @@ struct CustomHeaderRule {
 static std::vector<CustomHeaderRule> g_customHeaderRules;
 // Some rule names different icons for the light and dark theme.
 static bool s_iconRulesThemed = false;
+// Some rule matches by window title.
+static bool s_iconRulesHaveTitle = false;
 
 // "Light | Dark" picks a side by theme; an empty side uses the other one, and a
 // single path is used in both themes. Surrounding spaces and quotes are ignored.
@@ -7070,6 +7075,27 @@ static void ResetWindowIconSettings() {
             return ResolveThemedIconPath(rule.iconPath, false) !=
                    ResolveThemedIconPath(rule.iconPath, true);
         });
+    s_iconRulesHaveTitle = std::any_of(
+        g_customHeaderRules.begin(), g_customHeaderRules.end(),
+        [](const CustomHeaderRule& rule) { return !rule.titlePattern.empty(); });
+}
+
+// Which title patterns match the window's current title, as a hash (0 when no
+// rule matches by title). The matching rule can only change when this does:
+// the executable of a window doesn't change. Reads the title without sending
+// a message, and needs no process query.
+static ULONGLONG CustomHeaderTitleMatchKey(HWND hWnd) {
+    if (!s_iconRulesHaveTitle || !s_iconRules) return 0;
+    WCHAR title[1024] = {};
+    InternalGetWindowText(hWnd, title, ARRAYSIZE(title));
+    ULONGLONG key = 14695981039346656037ULL;  // FNV-1a over (index, matched)
+    for (size_t i = 0; i < s_iconRules->size(); i++) {
+        const auto& pattern = (*s_iconRules)[i].titlePattern;
+        if (pattern.empty()) continue;
+        const ULONGLONG bit = PathMatchSpecW(title, pattern.c_str()) ? 1 : 0;
+        key = (key ^ ((ULONGLONG)i << 1 | bit)) * 1099511628211ULL;
+    }
+    return key | 1;
 }
 
 static void InvalidateWindowIcon(HWND window) {
@@ -7354,6 +7380,10 @@ static HICON LoadWindowIcon(HWND hWnd, std::shared_ptr<WindowIconCell>* outCell,
     if (cell->pending && cell->discardedGeneration.load() == cell->requestGeneration)
         cell->pending = false;
     ULONGLONG now = GetTickCount64();
+    // A title change that can change the matching Custom Header rule refreshes
+    // the icon like a live redraw does; the current icon stays until then.
+    const ULONGLONG titleKey = CustomHeaderTitleMatchKey(hWnd);
+    if (titleKey != cell->titleRuleMatch) refresh = true;
     // Live redraws can refresh successful icons, but never bypass failure TTLs
     // or repeatedly queue the same request while it is active/awaiting commit.
     bool due = now >= cell->retryAfter || (refresh && cell->icon && !cell->lastFailed);
@@ -7365,6 +7395,7 @@ static HICON LoadWindowIcon(HWND hWnd, std::shared_ptr<WindowIconCell>* outCell,
             cell->pending = true;
             ++state->pending;
             state->queue.push_back({cell, cell->requestGeneration, s_iconRules, g_isDarkMode});
+            cell->titleRuleMatch = titleKey;
             SetEvent(state->wake);
         }
         ReleaseSRWLockExclusive(&state->lock);
