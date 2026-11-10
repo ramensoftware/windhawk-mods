@@ -42,16 +42,26 @@ SOFTWARE.
 
 ![Dynamic Island Preview](https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png)
 
-A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 10/11. 
-
+A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 11. 
 This mod is a specialized, lightweight adaptation of the incredible **[Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows)**. It strips away the extra dashboard modules (weather, hardware monitor, etc.) to focus purely on delivering the ultimate media player experience with zero bloat.
 
+# Why a separate mod?
+
+Although the original Dynamic Island for Windows includes media playback functionality, disabling its other modules does not result in a dedicated media-player-only experience. Several unrelated interface elements remain, such as the microphone usage indicator, calendar, and media visualization.
+Dynamic Island Media Player was created to provide a complete, standalone media-focused experience without these unrelated elements.
+In addition to focusing exclusively on media playback, this mod introduces its own interface, customization options, playback controls, and additional functionality, along with various performance optimizations and improvements.
+The goal is to provide a more focused and customizable Dynamic Island experience for users who primarily want media playback integration, rather than a multi-module desktop overlay.
+
 ## Key Features
-- **Context Menu Priority:** The right-click context menu acts as the primary configuration source. Settings changed here persistently override default Windhawk configurations.
-- **Smart Media Tracking:** Real-time track metadata, album art, app badges, and progress scrubbing via Windows System Media Transport.
-- **Optimized Rendering:** Hybrid event-driven architecture with intelligent sleep throttling guarantees ultra-low CPU/GPU consumption.
-- **Per-App Dynamic Screen Positioning:** Supports saving unique screen positions on a per-application basis.
-- **Trilingual Localized UI (UA / RU / EN):** Full native support for Ukrainian, Russian, and English.
+-Context Menu Priority: The right-click context menu acts as the primary configuration source. Settings changed here persistently override default Windhawk configurations.
+
+-Smart Media Tracking: Real-time track metadata, album art, app badges, and progress scrubbing via Windows System Media Transport.
+
+-Optimized Rendering: Hybrid event-driven architecture with intelligent sleep throttling designed to minimize CPU/GPU consumption.
+
+-Per-App Dynamic Screen Positioning: Supports saving unique screen positions on a per-application basis.
+
+-Trilingual Localized UI (UA / RU / EN): Full native support for Ukrainian, Russian, and English.
 
 ## Credits & Acknowledgements
 - **Himanshu (devcode90)** - For the original Dynamic Island for Windows framework, rendering physics, and core UI design.
