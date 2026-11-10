@@ -6,6 +6,7 @@
 // @author          Luiz Bizzio
 // @github          https://github.com/luizbizzio
 // @homepage        https://github.com/luizbizzio/recycle-bin-file-preview
+// @donateUrl       https://github.com/sponsors/luizbizzio
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshell32 -lshlwapi -luuid
