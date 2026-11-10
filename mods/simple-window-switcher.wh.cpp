@@ -13034,6 +13034,10 @@ static bool s_twoFingerTapRestoreOwned = false;
 // Also read by the mouse hook thread: while it is set, Windows produces no
 // promoted right-click, so the hook has nothing to wait for or consume.
 static std::atomic<bool> s_twoFingerTapOverrideActive{false};
+// Hidden-state retries of a restore that failed when the switcher hid. The
+// recovery record still repairs the setting at the next start.
+static int s_twoFingerTapHiddenRestoreAttempts = 0;
+#define SWS_TWO_FINGER_TAP_HIDDEN_RESTORE_ATTEMPTS 50
 static bool s_twoFingerTapParametersUnavailable = false;
 static DWORD s_twoFingerTapParameterError = ERROR_SUCCESS;
 
@@ -13159,6 +13163,8 @@ static void LogTwoFingerTapParameterError(BOOL want, DWORD error) {
 
 static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
     if (want) {
+        // A new session gets a fresh hidden-restore budget for its own hide.
+        s_twoFingerTapHiddenRestoreAttempts = 0;
         if (s_twoFingerTapOverrideActive || s_twoFingerTapParametersUnavailable) return;
 
         SwsTouchpadParametersV1 parameters{};
@@ -13193,10 +13199,15 @@ static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
             if (set) {
                 s_twoFingerTapRestoreOwned = true;
                 s_twoFingerTapOverrideActive = true;
+                s_twoFingerTapHiddenRestoreAttempts = 0;
                 s_twoFingerTapParameterError = ERROR_SUCCESS;
                 ClearRawTwoFingerTapOutcome();
                 return;
             }
+            // The live setting was not changed, so nothing is owed. Without
+            // this, the next start in this logon would turn two-finger tap
+            // back on even if the user had turned it off since.
+            ClearTwoFingerTapRecovery();
         }
         if (error == ERROR_INVALID_PARAMETER) {
             s_twoFingerTapParametersUnavailable = true;
@@ -13234,6 +13245,7 @@ static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
     if (read && ClearTwoFingerTapRecovery()) {
         s_twoFingerTapRestoreOwned = false;
         s_twoFingerTapOverrideActive = false;
+        s_twoFingerTapHiddenRestoreAttempts = 0;
         s_twoFingerTapRecoverySession.restoreOwed = 0;
         s_twoFingerTapRecoveryPending = false;
         s_twoFingerTapParameterError = ERROR_SUCCESS;
@@ -13302,8 +13314,10 @@ static void RecoverLegacyTwoFingerTapOverride(bool allowRetryTimer = true) {
 static void RestoreTwoFingerTapOverrideBeforeExit() {
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
     for (int attempt = 0; attempt < 5; ++attempt) {
+        if (s_twoFingerTapRestoreOwned) UpdateTwoFingerTapOverride(false, false);
         RecoverLegacyTwoFingerTapOverride(false);
-        if (!s_twoFingerTapRecoverySession.restoreOwed &&
+        if (!s_twoFingerTapRestoreOwned &&
+            !s_twoFingerTapRecoverySession.restoreOwed &&
             !s_twoFingerTapRecoveryPending) {
             return;
         }
@@ -18816,6 +18830,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_isVisible || g_animExitActive) {
                 UpdateTwoFingerTapOverride(
                     g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire));
+            } else if (s_twoFingerTapRestoreOwned) {
+                // The restore on hide failed. The legacy recovery below only
+                // handles records from an earlier run, so retry this one here.
+                if (++s_twoFingerTapHiddenRestoreAttempts <=
+                    SWS_TWO_FINGER_TAP_HIDDEN_RESTORE_ATTEMPTS) {
+                    UpdateTwoFingerTapOverride(false);
+                } else {
+                    KillTimer(hWnd, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+                }
             } else {
                 RecoverLegacyTwoFingerTapOverride();
             }
