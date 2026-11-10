@@ -1073,11 +1073,10 @@ bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
 // rows (a maximized window's 1px DWM border sits in the off-screen frame
 // zone, so the first visible row is already title bar). Four rows, not one:
 // the dominant color is then the title bar's even when one row is something
-// else - a hairline an app paints along its top, the 1-3px border a screen
-// recorder draws right below a recorded taskbar, a row of a gradient - while
+// else - a hairline an app paints along its top, a row of a gradient - while
 // staying above the toolbar icons and caption buttons some apps place near
-// the top of the title bar.
-constexpr LONG kSampleRowOffset = 0;
+// the top of the title bar. (Anything lying on the strip's top row moves the
+// strip down past it first; see OpaqueOver.)
 constexpr LONG kSampleRows = 4;
 
 // The frame is clipped to the work area first (some hosts report a maximized
@@ -1096,7 +1095,6 @@ RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar) {
         wr.left < tb.right && wr.right > tb.left) {
         top = tb.bottom;
     }
-    top += kSampleRowOffset;
     RECT r{wr.left, top, wr.right, top + kSampleRows};
     RECT clipped;
     if (!IntersectRect(&clipped, &r, &work)) return RECT{0, 0, 0, 0};
@@ -1291,11 +1289,11 @@ bool RegionCovers(HWND hwnd, const RECT& wndRect, const RECT& rect) {
 // where it counts, and window regions, which say where a window really is.
 // Used twice: with a rect reaching kCoverDepth into the window to find a
 // cover (a full-screen app or overlay: the title bar isn't on screen, so
-// there is nothing to bleed and the panel hides), and with the one-row strip
-// to find something lying over the whole sampled strip (a thick border
-// of a screen recorder's frame when the taskbar alone is recorded), which
-// just moves the strip down past it, up to kMaxStripShift rows. (A thinner
-// one is simply outvoted in the dominant-color histogram.)
+// there is nothing to bleed and the panel hides), and with the strip's top
+// row to find something lying on it (the 1-3px border a screen recorder draws
+// right below a recorded taskbar, which a 2-3px border would otherwise win
+// the histogram with), which just moves the strip down a row at a time until
+// its top row is clear, up to kMaxStripShift rows.
 constexpr int kCoverDepth = 16;
 constexpr int kMaxStripShift = 8;
 HWND OpaqueOver(const std::vector<ZWindow>& zorder, HWND target, const RECT& rect) {
@@ -1579,12 +1577,13 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
             st.coveredBy = cover;
             return;
         }
-        // Something over the whole strip but not deeper (a thick recorder border):
-        // sample the row below it.
+        // Something lying on the strip's top row (a recorder's frame border):
+        // start the strip below it.
         int shift = 0;
         HWND thin = nullptr;
         while (shift < kMaxStripShift && strip.bottom < wr.bottom) {
-            HWND over = OpaqueOver(ctx.zorder, target, strip);
+            RECT topRow{strip.left, strip.top, strip.right, strip.top + 1};
+            HWND over = OpaqueOver(ctx.zorder, target, topRow);
             if (!over) break;
             thin = over;
             OffsetRect(&strip, 0, 1);
@@ -1618,8 +1617,10 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         st.customColorKnown = false;
     }
 
-    // A program with a custom color: nothing to sample, the color is applied
-    // as is, right away (no landing hold: there is no wrong color to flash).
+    // A program with a custom color: the color is applied as is, with the same
+    // landing hold as a sampled one (the strip is still captured while the
+    // hold runs, only to tell when the window has arrived), so its bleed
+    // appears when every other app's does.
     if (!st.customColorKnown) {
         st.customColorKnown = true;
         st.hasCustomColor = false;
@@ -1636,12 +1637,10 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
             }
         }
     }
-    if (st.hasCustomColor) {
+    if (st.hasCustomColor && !st.holdSince) {
         Gradient g;
         g.fill(st.customColor);
         st.changedThisTick = false;
-        st.holdSince = 0;
-        st.holdStartPx.clear();
         st.haveLastSample = false;
         st.lastGradient = g;
         if (!st.active || targetChanged || g != st.committedGradient) Commit(st, taskbar, st.customColor, g);
@@ -1650,6 +1649,8 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
 
     std::vector<uint32_t> px;
     if (!CaptureStrip(strip, g_captures[taskbar], px) || px.empty()) {
+        st.holdSince = 0;  // a custom color can't wait for a landing it will never see; the next tick commits it
+        st.holdStartPx.clear();
         HandleBlocked(st, taskbar, target);
         return;
     }
@@ -1692,7 +1693,13 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         Wh_Log(L"taskbar %p: target %s after %llu ms", taskbar, landed ? L"landed" : L"hold expired", held);
         st.holdSince = 0;
         st.holdStartPx.clear();
-        Commit(st, taskbar, sampled, st.lastGradient);
+        if (st.hasCustomColor) {
+            st.lastGradient.fill(st.customColor);
+            st.haveLastSample = false;
+            Commit(st, taskbar, st.customColor, st.lastGradient);
+        } else {
+            Commit(st, taskbar, sampled, st.lastGradient);
+        }
         return;
     }
 
