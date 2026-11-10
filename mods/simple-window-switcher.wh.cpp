@@ -94,8 +94,9 @@ entry or close button cancels the click.
 Close commands request a normal application close; applications can still ask to
 save changes. Closing a grouped entry follows **Grouping → Group Close Button
 Behavior**, which defaults to closing its most recent window. In sticky mode, a
-window that answers the close with a prompt is brought forward so the prompt can
-be answered; once you have reached it, the close is not repeated.
+window that answers the close with a separate prompt dialog (such as a save
+dialog) is brought forward so the prompt can be answered; once you have reached
+the window, the close is not repeated.
 
 ### Touchpad
 
@@ -1066,10 +1067,6 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 #define SWS_RAW_TWO_TAP_MOUSE_PAIR_MS 500u
 #define SWS_CLOSE_PRIMARY_TIMEOUT_MS 3000u
 #define SWS_CLOSE_FALLBACK_TIMEOUT_MS 1000u
-// A window that is still open, responsive and without a prompt window this long
-// after a close request from a sticky session is waiting on a prompt drawn
-// inside it (or is slow to close); the session then commits to it.
-#define SWS_CLOSE_PROMPT_GRACE_MS 1000u
 #define SWS_STICKY_TWO_FINGER_CLOSE_TIMEOUT_MS \
     (SWS_CLOSE_PRIMARY_TIMEOUT_MS + SWS_CLOSE_FALLBACK_TIMEOUT_MS)
 #define SWS_RAW_TWO_TAP_MOUSE_TIMER_ID 115
@@ -6772,10 +6769,6 @@ struct PendingCloseRequest {
     UINT fallbackMessage = WM_CLOSE;
     WPARAM fallbackWParam = 0;
     ULONGLONG deadline = 0;
-    ULONGLONG requestTick = 0;
-    // A sticky session has already decided whether to bring this window's
-    // close prompt forward.
-    bool promptChecked = false;
     // The user reached the window (or its prompt) after the close request. An
     // app that answered the close with a prompt drawn inside its own window
     // can't be told apart from one that ignored it, so the fallback must not
@@ -15448,9 +15441,11 @@ static void SwitchToSelected() {
     StartExitAnimation(true);
 }
 
-// A window that answers a close request from a sticky session with a prompt
-// (an owned dialog, or one drawn inside the window like Notepad's) would stay
-// behind the switcher. Commit to it, so the prompt can be answered right away.
+// A window that answers a close request from a sticky session with an owned
+// prompt (a save dialog or message box) would stay behind the switcher, since
+// the switcher holds the foreground. Commit to it, so the prompt can be
+// answered right away. A prompt drawn inside the window itself can't be told
+// apart from a window that is just slow to close, so it isn't handled.
 // Only while the session is idle and the closed entry is still selected: the
 // user hasn't moved on to something else.
 static bool StickySessionIdleForClosePrompt() {
@@ -17781,8 +17776,7 @@ static bool QueueCloseWindow(HWND hw) {
     request.primaryWParam = applicationFrame ? 0 : SC_CLOSE;
     request.fallbackMessage = applicationFrame ? WM_SYSCOMMAND : WM_CLOSE;
     request.fallbackWParam = applicationFrame ? SC_CLOSE : 0;
-    request.requestTick = GetTickCount64();
-    request.deadline = request.requestTick + SWS_CLOSE_PRIMARY_TIMEOUT_MS;
+    request.deadline = GetTickCount64() + SWS_CLOSE_PRIMARY_TIMEOUT_MS;
 
     WCHAR className[64] = {};
     GetClassNameW(hw, className, ARRAYSIZE(className));
@@ -19505,8 +19499,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     // An owned prompt (save dialog, message box) that didn't
                     // get the foreground is brought forward with its window.
                     HWND popup = GetLastActivePopup(h);
-                    if (!promptTarget && !request->second.promptChecked && popup &&
-                        popup != h && IsWindowVisible(popup) &&
+                    if (!promptTarget && popup && popup != h && IsWindowVisible(popup) &&
                         GetForegroundWindow() != popup &&
                         StickySessionIdleForClosePrompt()) {
                         promptTarget = h;
@@ -19520,25 +19513,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     s_pendingCloseRequests.erase(request);
                     it = s_pendingCloseWindows.erase(it);
                 } else if (now < request->second.deadline) {
-                    PendingCloseRequest& pending = request->second;
-                    if (!pending.promptChecked &&
-                        pending.state == CloseRequestState::PrimaryQueued &&
-                        now - pending.requestTick >= SWS_CLOSE_PROMPT_GRACE_MS) {
-                        pending.promptChecked = true;
-                        // Not across virtual desktops: an app that is only slow
-                        // to close must not switch the desktop.
-                        if (!promptTarget && IsWindowVisible(h) && !IsIconic(h) &&
-                            !IsHungAppWindow(h) && StickySessionIdleForClosePrompt() &&
-                            !WindowOnOtherVirtualDesktop(h)) {
-                            promptTarget = h;
-                        }
-                    }
                     ++it;
                 } else if (request->second.state == CloseRequestState::PrimaryQueued &&
                            request->second.fallbackSuppressed) {
                     // The user is handling the window's own prompt. Leave the
                     // outcome to them; destruction is still tracked by the
-                    // shell hook and WinEvent paths.
+                    // shell hook.
                     if (s_stickyTwoFingerTapCloseTarget == h) {
                         ClearStickyTwoFingerTapOwnership();
                     }
@@ -19579,13 +19559,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             } else {
                 s_pendingCloseRequests.clear();
             }
-            if (promptTarget && CommitToClosePrompt(promptTarget)) {
-                // The prompt is the user's now; don't repeat the close.
-                auto request = s_pendingCloseRequests.find(promptTarget);
-                if (request != s_pendingCloseRequests.end()) {
-                    request->second.fallbackSuppressed = true;
-                }
-            }
+            if (promptTarget) CommitToClosePrompt(promptTarget);
             return 0;
         }
 
