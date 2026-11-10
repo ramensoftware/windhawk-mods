@@ -38,7 +38,7 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 - Static taskbar textures and system colors; the textures do not blur live windows behind the bar. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
 - Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.
 - An advanced battery flyout option; compatibility may vary between Windows builds.
-- Experimental secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
+- Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
 - Experimental shell minimize-rectangle support supplies reconstructed button coordinates to Windows, without changing Windows 7 Window Animations Restorer. Availability depends on Windows shell-hook delivery and ordering.
 - Optional icon-only horizontal button width: native default, manual logical width, or read-only following of Taskbar height and icon size for standard registry-based Windhawk installations. This does not change icon size or taskbar height and does not hook or modify the other mod. Unsupported installation layouts use the original width.
 
@@ -157,31 +157,26 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Anchura de los botones de aplicaciones"
   $name:fr: "Largeur des boutons des applications"
   $name:pt: "Largura dos botões dos aplicativos"
-  $description: "This setting selects the original width, the custom width below, or the button width read from the enabled Taskbar height and icon size mod on standard registry-based installations. If unavailable, the original layout is kept. Applies to horizontal icon-only buttons."
-  $description:it: "Questa impostazione seleziona la larghezza originale, quella personalizzata indicata sotto o quella letta dalla mod Taskbar height and icon size attiva nelle installazioni standard su registro. Se il valore non è disponibile, mantiene il layout originale. Vale per i pulsanti orizzontali senza etichette."
-  $description:es: "Esta configuración selecciona la anchura original, la personalizada indicada abajo o la leída del mod Taskbar height and icon size activado en instalaciones estándar con registro. Si no está disponible, conserva el diseño original. Se aplica a botones horizontales sin etiquetas."
-  $description:fr: "Ce paramètre sélectionne la largeur d’origine, la largeur personnalisée ci-dessous ou celle lue dans le mod Taskbar height and icon size activé sur les installations standard utilisant le registre. Si elle est indisponible, la disposition d’origine est conservée. Concerne les boutons horizontaux sans étiquette."
-  $description:pt: "Esta configuração seleciona a largura original, a personalizada abaixo ou a lida do mod Taskbar height and icon size ativo em instalações padrão com registro. Se indisponível, mantém o layout original. Aplica-se aos botões horizontais sem rótulos."
+  $description: "This setting selects the original width or the custom width below. Applies to horizontal icon-only buttons."
+  $description:it: "Questa impostazione seleziona la larghezza originale o quella personalizzata indicata sotto. Vale per i pulsanti orizzontali senza etichette."
+  $description:es: "Esta configuración selecciona la anchura original o la personalizada indicada abajo. Se aplica a botones horizontales sin etiquetas."
+  $description:fr: "Ce paramètre sélectionne la largeur d’origine ou la largeur personnalisée ci-dessous. Concerne les boutons horizontaux sans étiquette."
+  $description:pt: "Esta configuração seleciona a largura original ou a personalizada abaixo. Aplica-se aos botões horizontais sem rótulos."
   $options:
     - native: "Original"
     - custom: "Custom"
-    - iconSizeMod: "Follow Taskbar height and icon size"
   $options:it:
     - native: "Originale"
     - custom: "Personalizzata"
-    - iconSizeMod: "Segui Taskbar height and icon size"
   $options:es:
     - native: "Original"
     - custom: "Personalizada"
-    - iconSizeMod: "Seguir Taskbar height and icon size"
   $options:fr:
     - native: "D’origine"
     - custom: "Personnalisée"
-    - iconSizeMod: "Suivre Taskbar height and icon size"
   $options:pt:
     - native: "Original"
     - custom: "Personalizada"
-    - iconSizeMod: "Seguir Taskbar height and icon size"
 - customTaskButtonWidth: 72
   $name: "Custom task button width (96 DPI)"
   $name:it: "Larghezza personalizzata pulsanti (96 DPI)"
@@ -199,11 +194,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Barras secundarias en otros monitores"
   $name:fr: "Barres secondaires sur les autres écrans"
   $name:pt: "Barras secundárias nos outros monitores"
-  $description: "This setting enables experimental secondary bars with app buttons and a shared notification area. Some flyouts may open on the primary monitor; secondary work-area reservation is requested when needed."
-  $description:it: "Questa impostazione attiva barre secondarie sperimentali con pulsanti delle app e area di notifica condivisa. Alcuni riquadri possono aprirsi sul monitor principale; viene richiesta la riserva dell’area di lavoro secondaria quando necessaria."
-  $description:es: "Esta configuración activa barras secundarias experimentales con botones de aplicaciones y área de notificación compartida. Algunos paneles pueden abrirse en el monitor principal; se solicita reservar el área de trabajo secundaria cuando sea necesario."
-  $description:fr: "Ce paramètre active des barres secondaires expérimentales avec boutons d’applications et zone de notification partagée. Certains volets peuvent s’ouvrir sur l’écran principal ; la réservation de la zone de travail secondaire est demandée si nécessaire."
-  $description:pt: "Esta configuração ativa barras secundárias experimentais com botões de aplicativos e área de notificação compartilhada. Alguns painéis podem abrir no monitor principal; a reserva da área de trabalho secundária é solicitada quando necessário."
+  $description: "This setting enables additional secondary bars with app buttons and a shared notification area. Some flyouts may open on the primary monitor; secondary work-area reservation is requested when needed."
+  $description:it: "Questa impostazione attiva barre secondarie aggiuntive con pulsanti delle app e area di notifica condivisa. Alcuni riquadri possono aprirsi sul monitor principale; viene richiesta la riserva dell’area di lavoro secondaria quando necessaria."
+  $description:es: "Esta configuración activa barras secundarias adicionales con botones de aplicaciones y área de notificación compartida. Algunos paneles pueden abrirse en el monitor principal; se solicita reservar el área de trabajo secundaria cuando sea necesario."
+  $description:fr: "Ce paramètre active des barres secondaires supplémentaires avec boutons d’applications et zone de notification partagée. Certains volets peuvent s’ouvrir sur l’écran principal ; la réservation de la zone de travail secondaire est demandée si nécessaire."
+  $description:pt: "Esta configuração ativa barras secundárias adicionais com botões de aplicativos e área de notificação compartilhada. Alguns painéis podem abrir no monitor principal; a reserva da área de trabalho secundária é solicitada quando necessário."
 - showJumpShowWindow: true
   $name: "Show the Show window action in Jump Lists"
   $name:it: "Mostra l’azione Mostra finestra nelle Jump List"
@@ -2583,9 +2578,8 @@ std::atomic<HWND> nativeWindow{nullptr};
 std::atomic<bool> quitting{false};
 std::atomic<bool> enablePrivateTray{true}, reserveWorkArea{true};
 std::atomic<bool> secondaryVisualMirror{true};
-// 0 native, 1 manual, 2 read-only compatibility with taskbar-icon-size.
+// 0 original width, 1 custom width.
 std::atomic<int> buttonWidthMode{0}, customTaskButtonWidth{72};
-static int externalButtonWidth = 0;
 std::atomic<int> taskbarPlacementMode{3};
 std::atomic<bool> reserveVerticalWorkArea{true};
 std::atomic<int> taskbarOpacity{220}, taskbarBackgroundOpacity{155};
@@ -2664,9 +2658,7 @@ void LoadSettings() {
     secondaryVisualMirror.store(Wh_GetIntSetting(L"secondaryVisualMirror") != 0);
     {
         PCWSTR value = Wh_GetStringSetting(L"buttonWidthMode");
-        int mode = value && !_wcsicmp(value, L"custom")        ? 1
-                   : value && !_wcsicmp(value, L"iconSizeMod") ? 2
-                                                               : 0;
+        int mode = value && !_wcsicmp(value, L"custom") ? 1 : 0;
         Wh_FreeStringSetting(value);
         buttonWidthMode.store(mode);
         int width = Wh_GetIntSetting(L"customTaskButtonWidth");
@@ -7424,71 +7416,12 @@ void RefreshBattery() {
 // and the notification clock is approximately 80 px wide. Other themes,
 // locales and taskbar sizes can differ. Keep these logical, not physical px.
 static constexpr int kStartLogical = 54, kTaskButtonLogical = 61, kClockLogical = 80;
-// Cross-mod storage is not a public Windhawk settings API. Read-only, opt-in,
-// standard installation only; portable/custom paths and user scopes fail closed.
-static int T81ReadExternalButtonWidth(bool small) {
-    constexpr wchar_t keyPath[] = L"SOFTWARE\\Windhawk\\Engine\\Mods\\taskbar-icon-size";
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, keyPath, 0, KEY_READ | KEY_WOW64_64KEY, &key) !=
-        ERROR_SUCCESS)
-        return 0;
-    // Scoped user settings can override both enabled state and values. Do not
-    // infer them from the global key; keep the original width instead.
-    HKEY users = nullptr;
-    LSTATUS usersStatus = RegOpenKeyExW(key, L"Users", 0, KEY_READ | KEY_WOW64_64KEY, &users);
-    if (usersStatus == ERROR_SUCCESS) {
-        RegCloseKey(users);
-        RegCloseKey(key);
-        return 0;
-    }
-    if (usersStatus != ERROR_FILE_NOT_FOUND) {
-        RegCloseKey(key);
-        return 0;
-    }
-    DWORD disabled = 0, bytes = sizeof(disabled);
-    LSTATUS status =
-        RegGetValueW(key, nullptr, L"Disabled", RRF_RT_REG_DWORD, nullptr, &disabled, &bytes);
-    if ((status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) || disabled) {
-        RegCloseKey(key);
-        return 0;
-    }
-    wchar_t nuked[256]{};
-    bytes = sizeof(nuked);
-    status = RegGetValueW(key, nullptr, L"Nuked", RRF_RT_REG_SZ, nullptr, nuked, &bytes);
-    if ((status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) ||
-        (status == ERROR_SUCCESS && nuked[0])) {
-        RegCloseKey(key);
-        return 0;
-    }
-    DWORD width = 0;
-    bytes = sizeof(width);
-    status =
-        RegGetValueW(key, L"Settings", small ? L"TaskbarButtonWidthSmall" : L"TaskbarButtonWidth",
-                     RRF_RT_REG_DWORD, nullptr, &width, &bytes);
-    RegCloseKey(key);
-    if (status != ERROR_SUCCESS || width < 24 || width > 200)
-        return 0;
-    return (int)width;
-}
-static bool T81UpdateWidthCompat() {
-    int value =
-        buttonWidthMode.load() == 2 && s ? T81ReadExternalButtonWidth(s->nativeSmallIcons) : 0;
-    if (value == externalButtonWidth)
-        return false;
-    externalButtonWidth = value;
-    Wh_Log(L"[T81-WIDTH] external value=%d (0 uses original)", value);
-    return true;
-}
 static bool T81WidthOverridden() {
-    int mode = buttonWidthMode.load();
-    return mode == 1 || (mode == 2 && externalButtonWidth != 0);
+    return buttonWidthMode.load() == 1;
 }
 static int T81ButtonLogicalWidth() {
-    int mode = buttonWidthMode.load();
-    if (mode == 1)
+    if (buttonWidthMode.load() == 1)
         return customTaskButtonWidth.load();
-    if (mode == 2 && externalButtonWidth)
-        return externalButtonWidth;
     return s && s->nativeSmallIcons ? 40 : kTaskButtonLogical;
 }
 
@@ -25688,12 +25621,6 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (wp == TIMER_ANIMATION || wp == TIMER_FADE)
             InvalidateRect(h, nullptr, FALSE);
         if (wp == TIMER_REFRESH) {
-            if (T81UpdateWidthCompat()) {
-                HidePreview();
-                CloseJumpPopup(false);
-                s->buttonTransitions.clear();
-                s->visualPositions.clear();
-            }
             // Covers Start opened externally, including in another Explorer process.
             if (s->peekOn && CompanionStartScreenVisible())
                 PeekOff(false);
@@ -25862,7 +25789,6 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             InvalidateRect(s->overflowPanel, nullptr, FALSE);
         return 0;
     case WM_UPDATE_SETTINGS:
-        T81UpdateWidthCompat();
         s->buttonTransitions.clear();
         s->visualPositions.clear();
         CloseJumpPopup();
