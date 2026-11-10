@@ -1879,8 +1879,11 @@ SPACED_OPERATOR_RE = re.compile(
 
 # Formatted code has almost no operators without spaces around them and few
 # lines with several statements. Compacted code has them throughout the file.
+# Operators without spaces alone are a coding style, which is readable as long
+# as statements are on separate lines.
 COMPACT_CODE_MIN_LINES = 200
 COMPACT_CODE_MAX_UNSPACED_OPERATORS = 0.4
+COMPACT_CODE_MIN_UNSPACED_PACKED_LINES = 50
 COMPACT_CODE_MAX_PACKED_LINES = 0.1
 
 
@@ -1923,9 +1926,12 @@ def validate_code_compactness(path: Path, mod_source: str) -> int:
 
     unspaced_ratio = unspaced_operators / operators if operators else 0
     packed_ratio = packed_lines / lines
-    if (
-        unspaced_ratio <= COMPACT_CODE_MAX_UNSPACED_OPERATORS
-        and packed_ratio <= COMPACT_CODE_MAX_PACKED_LINES
+    if not (
+        (
+            unspaced_ratio > COMPACT_CODE_MAX_UNSPACED_OPERATORS
+            and packed_lines >= COMPACT_CODE_MIN_UNSPACED_PACKED_LINES
+        )
+        or packed_ratio > COMPACT_CODE_MAX_PACKED_LINES
     ):
         return 0
 
