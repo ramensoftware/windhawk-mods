@@ -6,6 +6,7 @@
 // @author          Luiz Bizzio
 // @github          https://github.com/luizbizzio
 // @homepage        https://github.com/luizbizzio/task-manager-pause-button
+// @donateUrl       https://github.com/sponsors/luizbizzio
 // @include         Taskmgr.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
