@@ -792,7 +792,7 @@ struct TrackState {
     bool active = false;        // panel currently showing
     bool notTopLogged = false;
     HWND coveredBy = nullptr;   // window hiding the whole title bar (Task View); kept across Deactivate
-    int stripShift = 0;         // rows the strip was moved down past something lying over all of it
+    int stripShift = 0;         // rows the strip was moved down past something lying on its top row
     bool customColorKnown = false;  // customColor looked up for the current target (and settings)
     bool hasCustomColor = false;
     Rgb customColor{};
@@ -1649,9 +1649,11 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
 
     std::vector<uint32_t> px;
     if (!CaptureStrip(strip, g_captures[taskbar], px) || px.empty()) {
-        st.holdSince = 0;  // a custom color can't wait for a landing it will never see; the next tick commits it
-        st.holdStartPx.clear();
-        HandleBlocked(st, taskbar, target);
+        if (st.hasCustomColor) {
+            st.holdSince = 0;  // can't see the landing; the next tick commits the fixed color
+            st.holdStartPx.clear();
+        }
+        HandleBlocked(st, taskbar, target);  // a sampled target stays held: the next capture judges the landing
         return;
     }
 
