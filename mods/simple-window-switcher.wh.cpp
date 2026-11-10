@@ -19482,8 +19482,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                         pending.state == CloseRequestState::PrimaryQueued &&
                         now - pending.requestTick >= SWS_CLOSE_PROMPT_GRACE_MS) {
                         pending.promptChecked = true;
+                        // Not across virtual desktops: an app that is only slow
+                        // to close must not switch the desktop.
                         if (!promptTarget && IsWindowVisible(h) && !IsIconic(h) &&
-                            !IsHungAppWindow(h) && StickySessionIdleForClosePrompt()) {
+                            !IsHungAppWindow(h) && StickySessionIdleForClosePrompt() &&
+                            !WindowOnOtherVirtualDesktop(h)) {
                             promptTarget = h;
                         }
                     }
