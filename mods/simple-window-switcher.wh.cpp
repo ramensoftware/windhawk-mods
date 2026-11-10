@@ -1076,6 +1076,8 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 #define WM_SWS_NATIVE_TOUCHPAD (WM_APP + 8)
 #define WM_SWS_BACKDROP_READY (WM_APP + 11)
 #define WM_SWS_RAPID_TIMEOUT (WM_APP + 12)
+// wParam: backdrop build generation whose screen read has finished. No lParam.
+#define WM_SWS_BACKDROP_CAPTURED (WM_APP + 13)
 #define SWS_RAW_FRAME_QUEUE_FLAG 0x80000000u
 #define SWS_RAW_FRAME_QUEUE_INDEX_MASK 0xFFu
 #define SWS_RAW_FRAME_QUEUE_EPOCH_SHIFT 8u
@@ -2163,12 +2165,27 @@ static Gdiplus::Bitmap* BuildBackdropWallpaper(const BackdropWallpaperInfo& info
 // while the switcher's own windows are still hidden, so the switcher never ends up
 // in its own backdrop.
 static Gdiplus::Bitmap* BuildBackdropSnapshot(int w, int h, int opacity,
-                                               HANDLE cancel = nullptr) {
+                                               HANDLE cancel = nullptr,
+                                               HWND notifyWindow = nullptr,
+                                               DWORD notifyGeneration = 0) {
+    // Runs on the backdrop worker. The build is started while the switcher is
+    // hidden, but the reveal doesn't wait for it, so the switcher windows stay
+    // excluded from capture until this read reports that it has finished
+    // (BeginBackdropCaptureExclusion). No DwmFlush here on purpose: it can block
+    // indefinitely, and nothing here may stall the switcher's presentation.
+    struct CaptureNotice {
+        HWND window;
+        DWORD generation;
+        bool sent = false;
+        void Send() {
+            if (!sent && window) {
+                PostMessageW(window, WM_SWS_BACKDROP_CAPTURED, generation, 0);
+            }
+            sent = true;
+        }
+        ~CaptureNotice() { Send(); }
+    } captureNotice{notifyWindow, notifyGeneration};
     if (w <= 0 || h <= 0) return nullptr;
-    // Runs before any SWS window is shown (see PrepareBackdropBlur), so the capture is
-    // the clean desktop. No DwmFlush here on purpose: it can block the switcher thread
-    // indefinitely, and that thread owns the Alt+Tab hotkeys and the low-level mouse
-    // hook, so a blocked thread freezes input system-wide.
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     HDC hScreen = GetDC(NULL);
@@ -2186,6 +2203,8 @@ static Gdiplus::Bitmap* BuildBackdropSnapshot(int w, int h, int opacity,
                               SRCCOPY);
         SelectObject(hMem, hOld); // deselect before handing it to GDI+
     }
+    // The screen has been read; the rest works on the private copy.
+    captureNotice.Send();
     if (captured && small) {
         Gdiplus::Bitmap shot(hBmp, NULL); // borrowed handle, hBmp stays alive below
         Gdiplus::Graphics g(small);
@@ -2211,6 +2230,62 @@ static void HideBackdropBlur();
 static void RequestBackdropBlurBuild();
 static bool BackdropWaitForReadyUntil(ULONGLONG deadline);
 
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
+// A desktop snapshot is read on the worker while the reveal goes ahead, so a
+// busy system can capture the switcher itself into its own blur. While that
+// read runs, the switcher windows are excluded from capture (a few frames of
+// the entrance fade). Windows 10 2004+ only: older builds treat the value as
+// WDA_MONITOR and would put a black box into the blur instead.
+static DWORD s_backdropCaptureExclusionGeneration = 0;
+
+static bool BackdropCaptureExclusionSupported() {
+    static int s_supported = -1;
+    if (s_supported < 0) {
+        WCHAR build[16] = {};
+        DWORD size = sizeof(build);
+        s_supported =
+            RegGetValueW(HKEY_LOCAL_MACHINE,
+                         L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                         L"CurrentBuildNumber", RRF_RT_REG_SZ, nullptr, build,
+                         &size) == ERROR_SUCCESS &&
+            _wtoi(build) >= 19041;
+    }
+    return s_supported == 1;
+}
+
+static void SetPresentationCaptureExclusion(bool exclude) {
+    const DWORD affinity = exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
+    auto apply = [affinity](HWND hWnd) {
+        if (!hWnd || !IsWindow(hWnd) || SetWindowDisplayAffinity(hWnd, affinity)) return;
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            Wh_Log(L"SWS: capture exclusion unavailable hwnd=%p error=%u", hWnd,
+                   GetLastError());
+        }
+    };
+    apply(g_hSwitcher);
+    apply(g_hCloseBtnWnd);
+    for (HWND hMirror : g_hMirrorSwitchers) apply(hMirror);
+}
+
+static void BeginBackdropCaptureExclusion(DWORD generation) {
+    if (!generation || !BackdropCaptureExclusionSupported()) return;
+    s_backdropCaptureExclusionGeneration = generation;
+    SetPresentationCaptureExclusion(true);
+}
+
+// generation 0 ends any exclusion (teardown).
+static void EndBackdropCaptureExclusion(DWORD generation) {
+    if (!s_backdropCaptureExclusionGeneration) return;
+    if (generation && generation != s_backdropCaptureExclusionGeneration) return;
+    s_backdropCaptureExclusionGeneration = 0;
+    SetPresentationCaptureExclusion(false);
+}
+
 static void BackdropReapWorker() {
     if (!g_hBackdropWorker ||
         WaitForSingleObject(g_hBackdropWorker, 0) != WAIT_OBJECT_0) {
@@ -2231,6 +2306,7 @@ static void BackdropCancelWorker() {
 }
 
 static void BackdropStopWorker() {
+    EndBackdropCaptureExclusion(0);
     g_backdropWorkerShutdown.store(true, std::memory_order_release);
     g_backdropBuildRetryPending = false;
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID);
@@ -2263,7 +2339,8 @@ static DWORD WINAPI BackdropWorkerProc(LPVOID parameter) {
     if (!cancelled) {
         Gdiplus::Bitmap* bitmap = job->wallpaper
             ? BuildBackdropWallpaper(job->wallpaperInfo, job->cancel)
-            : BuildBackdropSnapshot(job->width, job->height, job->opacity, job->cancel);
+            : BuildBackdropSnapshot(job->width, job->height, job->opacity, job->cancel,
+                                    job->target, job->generation);
         cancelled = WaitForSingleObject(job->cancel, 0) == WAIT_OBJECT_0;
         if (bitmap && !cancelled &&
             PrepareBackdropSurfaceForBitmap(bitmap, job->width, job->height,
@@ -2274,6 +2351,10 @@ static DWORD WINAPI BackdropWorkerProc(LPVOID parameter) {
         }
     }
 
+    if (!job->wallpaper && cancelled) {
+        // Cancelled before the screen read: end the capture exclusion anyway.
+        PostMessageW(job->target, WM_SWS_BACKDROP_CAPTURED, job->generation, 0);
+    }
     result->elapsedMs = GetTickCount64() - startTick;
     if (!g_backdropWorkerShutdown.load(std::memory_order_acquire)) {
         BackdropBuildResult* postedResult = result.release();
@@ -2429,8 +2510,11 @@ static void RequestBackdropBlurBuild() {
     g_backdropWorkerWallpaperInfo = wallpaperInfo;
     g_hBackdropWorkerCancel = cancel;
     g_backdropWorkerRunning.store(true, std::memory_order_release);
+    const DWORD jobGeneration = job->generation;
+    if (!wallpaper) BeginBackdropCaptureExclusion(jobGeneration);
     g_hBackdropWorker = CreateThread(nullptr, 0, BackdropWorkerProc, job, 0, nullptr);
     if (!g_hBackdropWorker) {
+        EndBackdropCaptureExclusion(jobGeneration);
         g_backdropWorkerRunning.store(false, std::memory_order_release);
         g_hBackdropWorkerCancel = nullptr;
         g_backdropWorkerIsWallpaper = false;
@@ -2562,12 +2646,12 @@ static void HideBackdropBlur() {
     }
 }
 
-// Build or reuse the blurred backdrop before presentation. Runs while SWS is hidden, so
-// capture is clean and nothing of ours can end up inside its own backdrop. Doing it here
-// also keeps capture/blur off the reveal path, which runs while the switcher thread owns
-// the low-level mouse hook. A late result can attach to the current visible session; if
-// show is canceled, wallpaper output remains cached for the next show and snapshot output
-// is released.
+// Build or reuse the blurred backdrop before presentation. The build starts while SWS is
+// hidden and runs on the worker, so capture and blur stay off the reveal path. A snapshot
+// that is still reading the screen when the switcher appears can't contain it (see
+// BeginBackdropCaptureExclusion). A late result can attach to the current visible session;
+// if show is canceled, wallpaper output remains cached for the next show and snapshot
+// output is released.
 static void PrepareBackdropBlur() {
     g_backdropSwitcherPresented = false;
     g_backdropFailedBuildRetries = 0;
@@ -14298,6 +14382,9 @@ static void CreateMirrorSwitchers() {
 static void ShowMirrorSwitchers() {
     for (HWND hMirror : g_hMirrorSwitchers) {
         if (IsWindow(hMirror) && !IsWindowVisible(hMirror)) {
+            if (s_backdropCaptureExclusionGeneration) {
+                SetWindowDisplayAffinity(hMirror, WDA_EXCLUDEFROMCAPTURE);
+            }
             ShowWindow(hMirror, SW_SHOWNA);
         }
     }
@@ -18735,6 +18822,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     if (uMsg == WM_SWS_NATIVE_TOUCHPAD) {
         if (hWnd == g_hSwitcher) HandleNativeTouchpadBoundary((DWORD)wParam, (DWORD)lParam);
+        return 0;
+    }
+    if (uMsg == WM_SWS_BACKDROP_CAPTURED) {
+        if (hWnd == g_hSwitcher && wParam) {
+            EndBackdropCaptureExclusion((DWORD)wParam);
+        }
         return 0;
     }
     if (uMsg == WM_SWS_BACKDROP_READY) {
