@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar in Remote Desktop Connection
-// @version         1.0.1
+// @version         1.0.3
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -14,11 +14,6 @@
 # Compact RDP connection bar
 
 Shrinks the top connection bar in Remote Desktop Connection (mstsc.exe) to save screen space when running multiple RDP sessions.
-
-## Screenshots
-
-*Before:* [Original wide connection bar]
-*After:* [Compact connection bar with centered hostname]
 
 ## Settings
 
@@ -68,6 +63,10 @@ DrawTextW_t DrawTextW_Original;
 DrawTextExW_t DrawTextExW_Original;
 CreateWindowExW_t CreateWindowExW_Original;
 
+// Forward declaration
+static LRESULT CALLBACK BBar_SubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
+                                          DWORD_PTR dwRefData);
+
 // Find toolbars in BBar (reviewer fix #3 - use locals, only commit when both found)
 static bool FindToolbars(HWND bbar, HWND* leftOut, HWND* rightOut) {
     HWND child = NULL;
@@ -100,10 +99,10 @@ static bool ApplyLayout(HWND hwnd) {
         return false;
     }
     
-    // Commit globals only when both toolbars found (reviewer fix #3)
+    // Commit toolbar globals only when both found (reviewer fix #3)
+    // g_bbar is NOT set here anymore - it's set in SubclassBBar
     g_leftToolbar = left;
     g_rightToolbar = right;
-    g_bbar = hwnd;
     
     // Save original layout on first time (reviewer fix #4)
     if (!g_haveOriginalLayout) {
@@ -148,6 +147,14 @@ static bool ApplyLayout(HWND hwnd) {
     
     Wh_Log(L"Layout applied: %dx%d, text zone: %d-%d", compactWidth, bbarHeight, g_textRect.left, g_textRect.right);
     return true;
+}
+
+// Reviewer fix: Track subclassed window separately from layout state
+static void SubclassBBar(HWND hwnd) {
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0)) {
+        g_bbar = hwnd;
+        Wh_Log(L"Subclassed BBar: %p", hwnd);
+    }
 }
 
 // Subclass proc - 5th param is dwRefData, not subclass ID (reviewer fix)
@@ -210,8 +217,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         wchar_t className[64] = {0};
         if (GetClassNameW(hwnd, className, 64) && wcscmp(className, L"BBarWindowClass") == 0) {
             Wh_Log(L"BBar created: %p", hwnd);
-            // Subclass immediately - layout will be applied on first paint
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0);
+            // Reviewer fix: use SubclassBBar to track window immediately
+            SubclassBBar(hwnd);
         }
     }
     
@@ -230,7 +237,8 @@ static void FindExistingBBar() {
         if (pid != myPid) continue;
         
         Wh_Log(L"Found existing BBar: %p", hwnd);
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0);
+        // Reviewer fix: use SubclassBBar to track window immediately
+        SubclassBBar(hwnd);
         break;
     }
 }
@@ -275,36 +283,47 @@ void Wh_ModAfterInit() {
 
 // Reviewer fix #2 & #4: proper subclass removal + layout restore
 void Wh_ModUninit() {
-    if (g_bbar && IsWindow(g_bbar)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_bbar, BBar_SubclassProc);
+    // Reviewer fix: remove subclass from ALL BBar windows, even if layout wasn't applied
+    // This handles the case where bar was subclassed but never painted
+    HWND desktop = GetDesktopWindow();
+    HWND hwnd = NULL;
+    DWORD myPid = GetCurrentProcessId();
+    
+    while ((hwnd = FindWindowExW(desktop, hwnd, L"BBarWindowClass", NULL)) != NULL) {
+        DWORD pid;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != myPid) continue;
         
-        // Restore original layout
-        if (g_haveOriginalLayout) {
-            int width = g_originalBBarRect.right - g_originalBBarRect.left;
-            int height = g_originalBBarRect.bottom - g_originalBBarRect.top;
-            SetWindowPos(g_bbar, NULL, g_originalBBarRect.left, g_originalBBarRect.top,
-                         width, height, SWP_NOZORDER | SWP_NOACTIVATE);
-            
-            if (g_leftToolbar && IsWindow(g_leftToolbar)) {
-                int lw = g_originalLeftRect.right - g_originalLeftRect.left;
-                int lh = g_originalLeftRect.bottom - g_originalLeftRect.top;
-                POINT pt = {g_originalLeftRect.left, g_originalLeftRect.top};
-                ScreenToClient(g_bbar, &pt);
-                SetWindowPos(g_leftToolbar, NULL, pt.x, pt.y, lw, lh,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-            
-            if (g_rightToolbar && IsWindow(g_rightToolbar)) {
-                int rw = g_originalRightRect.right - g_originalRightRect.left;
-                int rh = g_originalRightRect.bottom - g_originalRightRect.top;
-                POINT pt = {g_originalRightRect.left, g_originalRightRect.top};
-                ScreenToClient(g_bbar, &pt);
-                SetWindowPos(g_rightToolbar, NULL, pt.x, pt.y, rw, rh,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-            
-            InvalidateRect(g_bbar, NULL, TRUE);
+        // Remove subclass from any BBar window (safe even if not subclassed)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc);
+    }
+    
+    // Restore layout on the tracked window if we have one
+    if (g_bbar && IsWindow(g_bbar) && g_haveOriginalLayout) {
+        int width = g_originalBBarRect.right - g_originalBBarRect.left;
+        int height = g_originalBBarRect.bottom - g_originalBBarRect.top;
+        SetWindowPos(g_bbar, NULL, g_originalBBarRect.left, g_originalBBarRect.top,
+                     width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+        
+        if (g_leftToolbar && IsWindow(g_leftToolbar)) {
+            int lw = g_originalLeftRect.right - g_originalLeftRect.left;
+            int lh = g_originalLeftRect.bottom - g_originalLeftRect.top;
+            POINT pt = {g_originalLeftRect.left, g_originalLeftRect.top};
+            ScreenToClient(g_bbar, &pt);
+            SetWindowPos(g_leftToolbar, NULL, pt.x, pt.y, lw, lh,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
         }
+        
+        if (g_rightToolbar && IsWindow(g_rightToolbar)) {
+            int rw = g_originalRightRect.right - g_originalRightRect.left;
+            int rh = g_originalRightRect.bottom - g_originalRightRect.top;
+            POINT pt = {g_originalRightRect.left, g_originalRightRect.top};
+            ScreenToClient(g_bbar, &pt);
+            SetWindowPos(g_rightToolbar, NULL, pt.x, pt.y, rw, rh,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        
+        InvalidateRect(g_bbar, NULL, TRUE);
     }
     
     g_bbar = nullptr;
