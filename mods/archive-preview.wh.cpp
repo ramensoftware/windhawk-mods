@@ -75,7 +75,7 @@ Archive Preview enables four formats by default:
 
 To try an experimental format, add its extension under **Windhawk Settings > Files / Archive extensions**. These formats are not enabled by default and may not work on every Windows build. Some compound extensions need an available Windows preview association. Adding an extension does not add a missing archive provider.
 
-Archive Preview uses the archive support provided by **Windows Shell**. Results can vary with the Windows version, archive format, and compression method.
+Archive Preview uses the archive support provided by **Windows Shell**. Built-in File Explorer support for RAR, 7z, and TAR was introduced with Windows 11 23H2. For reliable native archive handling, use Windows 11 23H2 or newer; individual providers and compression methods can still vary.
 
 ## Native Windows integration
 
@@ -99,19 +99,23 @@ You can change these options in Windhawk:
 ## Important limitations
 
 - **Windows preview compatibility:** The runtime bridge requires the built-in Windows text Preview Handler and compatible File Explorer association behavior. It may not work on every Windows version or with every custom file association. It does not add a missing Windows archive provider.
-- **Preview Host and unload:** Disabling the mod waits for active workers and COM preview objects to finish before the DLL can unload. If `prevhost.exe` still holds a preview object, Windhawk may remain blocked until that preview is closed. A stalled Shell provider can prevent shutdown indefinitely. The mod never forces a process restart.
+- **Preview Host and unload:** Disabling the mod waits for active workers and COM preview objects to finish before the DLL can unload. If `prevhost.exe` still holds a preview object or class factory (including for normal `.txt` previews), Windhawk may remain blocked until the hosting Explorer window is closed, a different file is selected, or `prevhost.exe` exits. A stalled Shell provider can prevent shutdown indefinitely. The mod never forces a process restart.
 - **Broker security:** Requests are restricted to the current user's Preview Host session, validated local archive paths and live Preview windows, but other code executing inside the same Preview Host remains in the same trust boundary. This architecture is not equivalent to fully isolating every preview provider.
+- **Cross-process controls:** The interactive native list is owned by Explorer and parented into `prevhost.exe`. Windows can connect their input queues, so a stalled Shell drag or other synchronous provider operation may temporarily delay input in Explorer.
 - **Trusted archives only for extraction:** The native Shell backend does not enforce its own limit on the amount of data after decompression. A small archive can contain a very large amount of data. Avoid extracting files from unknown sources.
 - **Windows provider support:** Some archives, compression methods, or password-protected files may not work. Archive Preview does not provide a password entry window.
 - **Transfers:** Copy, paste, drag and drop, and opening files depend on what the Windows archive provider and destination app support. Some apps need physical files and may not accept virtual files.
 - **Opening active content:** Direct opening of executable files, scripts, and other risky file types is blocked. Extracting them is a separate action and should only be done with trusted files.
 - **Large archives:** Loading a large archive may take time. A Windows Shell provider can block inside a system call, so progress and cancellation may not respond immediately.
+- **Unavailable formats:** If both the native browser and recovery list cannot read a selected archive, the mod stops retrying it until the selection changes.
 - **Dates in ZIP folders:** When a folder has no stored date, Archive Preview may show a date derived from items inside it. This is not always the folder's original date.
 - **Selection limit:** Native transfer requests support up to **4,096 selected items** at a time.
 
 ## Troubleshooting
 
 **The preview is not showing**
+
+If Windows cannot read an archive, Archive Preview displays the error and stops retrying that selection. Select another file and then select the archive again to retry.
 
 Make sure the Preview Pane is enabled with **Alt + P** and that the archive extension is listed in Windhawk settings. The runtime bridge also needs the built-in Windows text Preview Handler to be available. If you have just updated the mod, close and reopen the File Explorer window. Archive Preview does not restart Explorer automatically.
 
@@ -152,10 +156,9 @@ Try the same archive in File Explorer itself. If Windows cannot use the archive 
   $name: Appearance / Hide Type
 - HideSize: false
   $name: Appearance / Hide Size
-- ExtractSelectedShortcut: "ctrl+shift+69"
+- ExtractSelectedShortcut: "ctrl+shift+e"
   $name: Actions / Extract selected shortcut
   $description: Default Ctrl+Shift+E. Active only when the archive list is focused.
-  #! $format: hotkey
 */
 // ==/WindhawkModSettings==
 
@@ -676,26 +679,6 @@ namespace ArchivePreviewPathSafety {
         }
         return true;
     }
-    struct FolderAnchor {
-        std::vector < HANDLE > handles;
-        FolderAnchor() = default;
-        FolderAnchor(const FolderAnchor & ) = delete;
-        FolderAnchor & operator = (const FolderAnchor & ) = delete;
-        ~FolderAnchor() {Reset();}
-        void Reset() {
-            for (HANDLE h:handles) CloseHandle(h);
-            handles.clear();
-        }
-        bool Hold(const std::filesystem::path & folder) {
-            const size_t before = handles.size();
-            if (ValidPathComponents(folder,true,true, & handles)) return true;
-            // A late invalid component must not leave earlier ancestor handles
-            // pinned. Preserve handles acquired by previous successful Hold().
-            for (size_t i = before;i < handles.size();++i) CloseHandle(handles[i]);
-            handles.resize(before);
-            return false;
-        }
-    };
 }
 
 // Optional, per-process exception to URLACTION_SHELL_PREVIEW for this mod's
@@ -713,12 +696,16 @@ namespace ArchivePreviewSecurityPolicy {
         if (!url) return false;
         // Accept only local file URLs or an absolute drive path. Reject network
         // shares, web URLs, relative paths and any unsupported extension.
-        WCHAR decoded[32768]{};
+        std::unique_ptr<WCHAR[]> decoded;
         const wchar_t * path = url;
         if (_wcsnicmp(url,L"file:",5) == 0) {
-            DWORD chars = static_cast < DWORD > (std::size(decoded));
-            if (FAILED(PathCreateFromUrlW(url,decoded, & chars,0))) return false;
-            path = decoded;
+            // Allocate without throwing across the Explorer hook boundary.
+            // URLMon may return long paths, so don't reserve 64 KB on the stack.
+            decoded.reset(new(std::nothrow) WCHAR[32768]{});
+            if (!decoded) return false;
+            DWORD chars = 32768;
+            if (FAILED(PathCreateFromUrlW(url,decoded.get(),&chars,0))) return false;
+            path = decoded.get();
         }
         if (wcslen(path) < 4) return false;
         if (!((path[0] >= L'A' && path[0] <= L'Z') ||
@@ -793,12 +780,6 @@ namespace ArchivePreviewSecurityPolicy {
         return installed;
     }
 } // namespace ArchivePreviewSecurityPolicy
-
-#if defined(__MINGW32__) && (defined(__clang__) || defined(__GNUC__))
-__asm__(".section .drectve\n" ".ascii \" -export:DllGetClassObject -export:DllCanUnloadNow\"\n" ".text\n");
-#else
-#error Requires Windhawk Clang/MinGW
-#endif
 
 // Wire protocol for the per-user transfer broker. No arbitrary executables/commands.
 static constexpr DWORD ARCHIVE_BROKER_MAGIC = 0x42505041; // APPB
@@ -1194,7 +1175,6 @@ namespace ArchivePreviewHost {
 // OWNER DRAWN; archive contents still come from Windows' native Shell namespace.
 
 
-static const CLSID CLSID_ArchivePreview = {0x2b65308a,0x3f66,0x4f93,{0xa2,0x2e,0x4d,0x80,0x90,0xe0,0x2d,0x8b}};
 static constexpr wchar_t kWindowClass[] = L"ArchivePreview.RealHost.0607";
 static constexpr wchar_t kToolbarClass[] = L"ArchivePreview.Toolbar.0607";
 static constexpr wchar_t kListClass[] = WC_LISTVIEWW;
@@ -1223,8 +1203,11 @@ static constexpr int kMaxItems = 5000; // fallback page size, not a total archiv
 static constexpr size_t kMaxFallbackPages = 40; // 200k entries, bounded recovery mode
 
 static HINSTANCE g_module = nullptr;
-static std::atomic < long > g_objects{0}, g_locks{0};
+static std::atomic < long > g_objects{0};
 static std::atomic < ULONGLONG > g_nextPollSerial{1};
+// Wh_ModBeforeUninit must also stop an active fallback enumerator. Preview
+// hosts can retain COM adapters while Windhawk waits for a safe unload.
+static std::atomic<bool> g_hostShutdown{false};
 static INIT_ONCE g_classInit = INIT_ONCE_STATIC_INIT;
 
 static COLORREF Mix(COLORREF front, COLORREF back, int opacity) {
@@ -1386,6 +1369,11 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
     HWND parent_{}, window_{}, toolbar_{}, backButton_{}, extractButton_{}, extractToButton_{}, extractSelectedButton_{}, cancelButton_{};
     HWND brokerBoundList_{};
     bool brokerBrowserReady_{};
+    // A corrupt/unsupported archive must not start a new model + fallback
+    // enumeration on every theme timer tick. These flags are per selection.
+    bool brokerLoadFailed_{};
+    bool fallbackLoadFailed_{};
+    bool terminalLoadFailure_{};
     bool brokerThemeKnown_{};
     bool brokerThemeDark_{};
     bool brokerCanGoBack_{};
@@ -1693,6 +1681,17 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         }
     };
     std::shared_ptr<FallbackJob> fallbackJob_;
+    void StopRetryingFailedArchive() {
+        if (terminalLoadFailure_ || !brokerLoadFailed_ ||
+            !fallbackLoadFailed_) return;
+        terminalLoadFailure_ = true;
+        // Stop attaching the broker for this selection. A fresh Initialize()
+        // or Unload()/Stop() resets the state for the next file.
+        SyncGrip(true);
+        error_ = L"Windows cannot read this archive. Select another file to try again.";
+        SetStatus(error_);
+        Layout();
+    }
     static DWORD WINAPI FallbackWorker(LPVOID raw) {
         std::unique_ptr<std::shared_ptr<FallbackJob>> holder(
             static_cast<std::shared_ptr<FallbackJob>*>(raw));
@@ -1710,7 +1709,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         return 0;
     }
     void QueueFallback(Column& col, size_t previousPage = SIZE_MAX) {
-        if (col.populated || !window_ || !archiveId_ || !col.folderId) return;
+        if (terminalLoadFailure_ || g_hostShutdown.load(std::memory_order_acquire) ||
+            col.populated || !window_ || !archiveId_ || !col.folderId) return;
         if (fallbackJob_ && fallbackJob_->list == col.list &&
             fallbackJob_->page == col.page) return;
         if (fallbackJob_) fallbackJob_->cancelled.store(true, std::memory_order_release);
@@ -1724,16 +1724,28 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         job->page = col.page;
         job->previousPage = previousPage;
         if (!job->archiveId || !job->folderId) {
+            fallbackLoadFailed_ = true;
             error_ = L"Not enough memory for recovery enumeration.";
+            SetStatus(error_);
+            StopRetryingFailedArchive();
             return;
         }
         auto* holder = new(std::nothrow) std::shared_ptr<FallbackJob>(job);
-        if (!holder) return;
+        if (!holder) {
+            fallbackLoadFailed_ = true;
+            error_ = L"Could not allocate recovery worker state.";
+            SetStatus(error_);
+            StopRetryingFailedArchive();
+            return;
+        }
         fallbackJob_ = job;
         if (!ArchivePreviewWorkerLifetime::Start(FallbackWorker, holder)) {
             fallbackJob_.reset();
             delete holder;
-            SetStatus(L"Could not start recovery enumeration.");
+            fallbackLoadFailed_ = true;
+            error_ = L"Could not start recovery enumeration.";
+            SetStatus(error_);
+            StopRetryingFailedArchive();
             return;
         }
         SetStatus(L"Loading archive items...");
@@ -1743,7 +1755,9 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         if (!job || job->serial != serial ||
             !job->done.load(std::memory_order_acquire)) return;
         fallbackJob_.reset();
-        if (brokerBrowserReady_ || selectionRetired_) return;
+        if (job->cancelled.load(std::memory_order_acquire) ||
+            g_hostShutdown.load(std::memory_order_acquire) ||
+            brokerBrowserReady_ || selectionRetired_) return;
         Column* col = nullptr;
         for (auto& c : cols_) {
             if (c && c->list == job->list && c->page == job->page) {
@@ -1753,18 +1767,23 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         }
         if (!col || cols_.empty() || cols_.back().get() != col) return;
         if (FAILED(job->result)) {
+            // Cancellation is not an archive-format failure.
+            if (job->result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) return;
             if (job->previousPage != SIZE_MAX) {
                 col->page = job->previousPage;
                 col->populated = true;
                 SetStatus(L"Could not load this recovery page.");
                 if (col->list) ShowWindow(col->list, SW_SHOWNOACTIVATE);
             } else {
+                fallbackLoadFailed_ = true;
                 error_ = L"The Shell cannot enumerate this archive format.";
                 SetStatus(error_);
+                StopRetryingFailedArchive();
             }
             Layout();
             return;
         }
+        fallbackLoadFailed_ = false;
         col->entries = std::move(job->entries);
         col->hasNextPage = job->hasNextPage;
         col->populated = true;
@@ -1988,6 +2007,16 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                     !self->window_ || !self->brokerBoundList_) return 0;
                 if (!self->cols_.empty() && self->cols_.back()->list) {
                     self->brokerBrowserReady_ = true;
+                    self->brokerLoadFailed_ = false;
+                    self->fallbackLoadFailed_ = false;
+                    self->terminalLoadFailure_ = false;
+                    // A slow first attach can start a fallback enumeration.
+                    // It is no longer needed after the broker is ready.
+                    if (self->fallbackJob_)
+                        self->fallbackJob_->cancelled.store(true, std::memory_order_release);
+                    self->fallbackJob_.reset();
+                    self->error_.clear();
+                    if (!self->extractionPending_) self->SetStatus(L"");
                     self->brokerThemeKnown_ = true;
                     self->brokerThemeDark_ = wp != 0;
                     self->Theme();
@@ -2003,10 +2032,14 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                 }
                 return 0;
             case ARCHIVE_BROWSER_FAILED:
-                if (self->selectionRetired_ || !self->uiReady_) return 0;
+                if (self->selectionRetired_ || !self->uiReady_ ||
+                    self->terminalLoadFailure_) return 0;
                 self->brokerBrowserReady_ = false;
                 self->brokerCanGoBack_ = false;
-                self->EnsureFallbackContent();
+                self->brokerLoadFailed_ = true;
+                self->StopRetryingFailedArchive();
+                if (!self->terminalLoadFailure_)
+                    self->EnsureFallbackContent();
                 return 0;
             case ARCHIVE_PROXY_CLICK:
             case ARCHIVE_PROXY_DOUBLECLICK:
@@ -2060,7 +2093,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             case WM_TIMER:
                 if (wp == kChromeRepairTimer) {
                     KillTimer(hwnd, kChromeRepairTimer);
-                    if (!self->selectionRetired_ && !self->brokerBrowserReady_)
+                    if (!self->selectionRetired_ && !self->brokerBrowserReady_ &&
+                        !self->terminalLoadFailure_)
                         self->SyncGrip();
                     self->RefreshChrome();
                     return 0;
@@ -2095,6 +2129,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                         self->EnsureFallbackContent();
                     }
                     if (!self->selectionRetired_ && !self->brokerBrowserReady_ &&
+                        !self->terminalLoadFailure_ &&
                         !self->cols_.empty() && !self->cols_.back()->populated &&
                         self->previewStartedAt_ && GetTickCount64() - self->previewStartedAt_ > 6500)
                         self->EnsureFallbackContent();
@@ -2105,7 +2140,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                     if (now.bg != self->palette_.bg || now.fg != self->palette_.fg ||
                         now.dark != self->palette_.dark || now.selected != self->palette_.selected)
                         self->Theme();
-                    if (!self->selectionRetired_ && !self->brokerBrowserReady_)
+                    if (!self->selectionRetired_ && !self->brokerBrowserReady_ &&
+                        !self->terminalLoadFailure_)
                         self->SyncGrip();
                     // Small independent child surface (~38 logical px high).
                     // Recover from host/Explorer invalidations without
@@ -2955,9 +2991,10 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         }
         return result;
     }
-    // Version A: attach/detach runs on a tracked IPC worker. The broker still
-    // owns its native ListView; version B must replace that without losing DnD.
+    // Attach/detach runs on a tracked IPC worker so the preview UI does not
+    // block on the broker. The broker still owns the native transfer ListView.
     void SyncGrip(bool clear = false) {
+        if (terminalLoadFailure_ && !clear) return;
         HWND current = (!clear && !cols_.empty()) ? cols_.back()->list : nullptr;
         if (!window_ || archive_.empty() ||
             (archive_.find_first_of(L"\\/:") == std::wstring::npos)) current = nullptr;
@@ -3024,6 +3061,9 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             SetStatus(L"Could not queue extraction.");
     }
     static HRESULT CollectFallback(FallbackJob& job) {
+        if (job.cancelled.load(std::memory_order_acquire) ||
+            g_hostShutdown.load(std::memory_order_acquire))
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
         IShellItem * folder = nullptr;
         HRESULT hr = SHCreateItemFromIDList(job.folderId, IID_PPV_ARGS( & folder));
         if (FAILED(hr)) return hr;
@@ -3051,7 +3091,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                         IID_PPV_ARGS( & enumerator));
                 if (freshFolder) freshFolder->Release();
                 if (SUCCEEDED(enumerateResult)) for (ULONG i = 0;i < offset;++i) {
-                    if (job.cancelled.load(std::memory_order_acquire)) {
+                    if (job.cancelled.load(std::memory_order_acquire) ||
+                        g_hostShutdown.load(std::memory_order_acquire)) {
                         enumerateResult = HRESULT_FROM_WIN32(ERROR_CANCELLED);
                         break;
                     }
@@ -3069,7 +3110,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             if (enumerator) enumerator->Release();return enumerateResult;
         }
         for (int i = 0; i < kMaxItems; ++i) {
-            if (job.cancelled.load(std::memory_order_acquire)) {
+            if (job.cancelled.load(std::memory_order_acquire) ||
+                g_hostShutdown.load(std::memory_order_acquire)) {
                 enumerateResult = HRESULT_FROM_WIN32(ERROR_CANCELLED);
                 break;
             }
@@ -3137,7 +3179,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         QueueFallback(col, previousPage);
     }
     void EnsureFallbackContent() {
-        if (cols_.empty() || brokerBrowserReady_ || selectionRetired_) return;
+        if (cols_.empty() || brokerBrowserReady_ || selectionRetired_ ||
+            terminalLoadFailure_ || g_hostShutdown.load(std::memory_order_acquire)) return;
         Column& col = *cols_.back();
         if (!col.populated) QueueFallback(col);
         else if (col.list && IsWindow(col.list))
@@ -3248,6 +3291,9 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         cancelRequested_ = false;
         mouseDownSelection_.clear();
         brokerBrowserReady_ = false;
+        brokerLoadFailed_ = false;
+        fallbackLoadFailed_ = false;
+        terminalLoadFailure_ = false;
         brokerThemeKnown_ = false;
         brokerCanGoBack_ = false;
         brokerSelectionCount_ = 0;
@@ -3305,7 +3351,7 @@ public:
     }
     HRESULT STDMETHODCALLTYPE Initialize(LPCWSTR file, DWORD) override {
         if (!file || !file[0]) return E_INVALIDARG;
-        // Registry aliases let Explorer dispatch compound .tar.* files by their
+        // Existing Windows Shell associations can dispatch compound .tar.* files through their
         // final suffix; this full-name check rejects unenabled standalone streams.
         if (!ArchivePreviewOptions::MatchArchive(file)) return E_NOTIMPL;
         Stop(); archive_ = file;
@@ -3356,6 +3402,13 @@ public:
             // An implicit ancestor visibility change cannot.
             if (selectionRetired_) {
                 selectionRetired_ = false;
+                // A real new preview gesture, unlike a visibility timer,
+                // allows retrying a previously failed archive.
+                brokerLoadFailed_ = false;
+                fallbackLoadFailed_ = false;
+                terminalLoadFailure_ = false;
+                brokerAttachAttempt_ = 0;
+                error_.clear();
                 if (toolbar_) ShowWindow(toolbar_, SW_SHOWNOACTIVATE);
                 if (!cols_.empty() && cols_.back()->list)
                     ShowWindow(cols_.back()->list, SW_SHOWNOACTIVATE);
@@ -3483,43 +3536,6 @@ public:
         dpi_ = 0; UpdateFont(); Layout(); return S_OK;
     }
 };
-
-class PreviewFactory final:public IClassFactory{
-    std::atomic < ULONG > refs_{1};
-public:
-    PreviewFactory() { ++g_objects; }
-    ~PreviewFactory() { --g_objects; }
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void *  * out)override{
-        if(!out)return E_POINTER; * out = nullptr;
-        if(IsEqualIID(iid,IID_IUnknown) || IsEqualIID(iid,IID_IClassFactory))
-            * out = static_cast < IClassFactory *  > (this);
-        if(! * out)return E_NOINTERFACE;AddRef();return S_OK;
-    }
-    ULONG STDMETHODCALLTYPE AddRef()override{return refs_.fetch_add(1) + 1;}
-    ULONG STDMETHODCALLTYPE Release()override{ULONG n = refs_.fetch_sub(1) - 1;if(!n)delete this;return n;}
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown * outer,REFIID iid,void *  * out)override{
-        if(!out)return E_POINTER; * out = nullptr;if(outer)return CLASS_E_NOAGGREGATION;
-        auto * obj = new(std::nothrow) ArchiveHandler();if(!obj)return E_OUTOFMEMORY;
-        HRESULT hr = obj->QueryInterface(iid,out);obj->Release();return hr;
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL lock)override{
-        if(lock) ++g_locks; else { long expected = g_locks.load();
-            while(expected > 0 && !g_locks.compare_exchange_weak(expected,expected - 1)) {}
-            if(expected <= 0) return E_UNEXPECTED;
-        } return S_OK;
-    }
-};
-
-HRESULT STDAPICALLTYPE GetPreviewClassObject(REFCLSID clsid,REFIID iid,LPVOID * out){
-    if(!out)return E_POINTER; * out = nullptr;
-    if(!IsEqualCLSID(clsid,CLSID_ArchivePreview))return CLASS_E_CLASSNOTAVAILABLE;
-    auto * factory = new(std::nothrow) PreviewFactory();if(!factory)return E_OUTOFMEMORY;
-    HRESULT hr = factory->QueryInterface(iid,out);factory->Release();return hr;
-}
-HRESULT STDAPICALLTYPE CanPreviewUnloadNow(){
-    return !g_objects.load() && !g_locks.load()?S_OK:S_FALSE;
-}
-
 
 } // namespace ArchivePreviewHost
 
@@ -3785,8 +3801,7 @@ static HRESULT OpenArchive(const std::wstring & path, IShellItem *  * out) {
     * out = nullptr;
     if (!SafeArchivePath(path,true)) return E_INVALIDARG;
     // Do not manufacture .tbz filename aliases or temporary archives.
-    // The reversible per-user Shell namespace association uses the installed
-    // Windows .tbz2 provider if available.
+    // Use the native Windows Shell provider, if available.
     return SHCreateItemFromParsingName(path.c_str(),nullptr,IID_PPV_ARGS(out));
 }
 // Resolve a complete selection with ONE Shell enumeration per parent directory.
@@ -3902,10 +3917,17 @@ static bool IsDangerousOpenExtension(const std::wstring & ext);
 static std::wstring NativeShellChildName(IShellFolder * folder, PCUITEMID_CHILD child) {
     if (!folder || !child) return {};
     STRRET str{};
-    wchar_t name[32768]{};
-    if (FAILED(folder->GetDisplayNameOf(child,SHGDN_INFOLDER, & str)) ||
-        FAILED(StrRetToBufW( & str,child,name,_countof(name)))) return {};
-    return name;
+    if (FAILED(folder->GetDisplayNameOf(child,SHGDN_INFOLDER,&str))) return {};
+    // Allocate the name through Shell, rather than reserving 64 KB on
+    // a potentially reentrant broker STA stack frame.
+    PWSTR name = nullptr;
+    if (FAILED(StrRetToStrW(&str,child,&name)) || !name) {
+        CoTaskMemFree(name);
+        return {};
+    }
+    std::wstring result(name);
+    CoTaskMemFree(name);
+    return result;
 }
 static HRESULT NativeShellBindFolder(const std::wstring & archive,
                                      const std::wstring & relative,IShellFolder *  * out) {
@@ -4092,12 +4114,22 @@ static void NativeShellMarkClipboardCopy(IDataObject * data) {
     if (FAILED(data->SetData( & kind, & medium,TRUE))) GlobalFree(memory);
 }
 static HRESULT NativeShellClipboard(const Request & req,HWND owner) {
+    if (CancelledForCurrentOperation())
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
     HRESULT hr = NativeShellContextCopy(req,owner);
     if (SUCCEEDED(hr)) return hr;
     IDataObject * data = nullptr;
     hr = NativeShellSelection(req,owner, & data);
     if (FAILED(hr) || !data) return FAILED(hr)?hr:E_FAIL;
+    if (CancelledForCurrentOperation()) {
+        data->Release();
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+    }
     NativeShellMarkClipboardCopy(data);
+    if (CancelledForCurrentOperation()) {
+        data->Release();
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+    }
     hr = OleSetClipboard(data);
     // The broker has persistent STA workers: do NOT call OleFlushClipboard.
     // Flushing a large virtual archive selection can force complete and
@@ -5558,9 +5590,6 @@ static std::wstring BrowserItemSize(IShellItem * item, ULONGLONG & bytes, bool &
     info->Release();
     return hasSize ? BrowserFormatSize(bytes) : L"";
 }
-// Read-only benchmark for Shell enumeration AND request-local selected-item
-// resolution. Use 25 runs, report quantiles rather than calling max-of-5 p95.
-
 
 // Native marquee is preserved on genuinely blank space. Row-width hit tests
 // and a targeted fallback drag gesture prevent false marquee starts.
@@ -5805,7 +5834,7 @@ static void BrowserChromeAudit(BrowserState * s, const wchar_t * reason,
         static_cast < unsigned long > (header),static_cast < unsigned long > (footer),
         s->headerPaints,s->footerPaints,s->headerErases,s->footerErases,
         s->hostPaints,s->hostErases,s->repairs,badHeader?1:0,badFooter?1:0);
-    Wh_Log(L"%s", std::wstring(line).c_str());
+    Wh_Log(L"%s", line);
     if (!repairIfWhite || (!badHeader && !badFooter)) return;
     // No parent/whole-list erase. Repaint only the offending child; never
     // move/recreate the ListView or footer controls.
@@ -5869,7 +5898,7 @@ static void BrowserWarnSelectionLimit(BrowserState * s) {
         L"Too many items selected. The limit is %lu items per transfer.\n"
         L"Nothing was copied or extracted. Please select fewer items.",
         static_cast < unsigned long > (ARCHIVE_BROKER_MAX_PATHS));
-    Wh_Log(L"%s", std::wstring(warning).c_str());
+    Wh_Log(L"%s", warning);
     if (s->host && IsWindow(s->host))
         MessageBoxW(s->host,warning,L"Archive Preview",MB_OK | MB_ICONWARNING);
 }
@@ -6066,7 +6095,7 @@ static HRESULT BrowserBuildModel(BrowserModelJob & job) {
                 job.archiveBytes / (1024ULL * 1024),
                 g_activeModelWorkers.load(std::memory_order_relaxed),
                 g_activeHeavyModelWorkers.load(std::memory_order_relaxed));
-            Wh_Log(L"%s", std::wstring(startedLine).c_str());
+            Wh_Log(L"%s", startedLine);
         }
         IShellItem * root = nullptr;
         HRESULT hr = OpenArchive(archive, & root);
@@ -6074,7 +6103,7 @@ static HRESULT BrowserBuildModel(BrowserModelJob & job) {
             wchar_t openLine[140]{};
             swprintf_s(openLine,L"ArchivePreview model OpenArchive: hr=0x%08lX ms=%llu",
                 static_cast < unsigned long > (hr),GetTickCount64() - started);
-            Wh_Log(L"%s", std::wstring(openLine).c_str());
+            Wh_Log(L"%s", openLine);
         }
         IShellItem * current = nullptr;
         if (SUCCEEDED(hr)) {
@@ -6089,7 +6118,7 @@ static HRESULT BrowserBuildModel(BrowserModelJob & job) {
             wchar_t bindLine[160]{};
             swprintf_s(bindLine,L"ArchivePreview model BindToHandler: hr=0x%08lX ms=%llu",
                 static_cast < unsigned long > (hr),shellReadyMs);
-            Wh_Log(L"%s", std::wstring(bindLine).c_str());
+            Wh_Log(L"%s", bindLine);
         }
         // The Shell icon index is shared by ordinary files with the same
         // extension. Avoid repeating expensive PIDL/icon lookups for each row.
@@ -6205,7 +6234,7 @@ static HRESULT BrowserBuildModel(BrowserModelJob & job) {
         fastLargeBrowse?1u:0u,job.archiveBytes / (1024ULL * 1024),
         shellReadyMs,firstNameMs,GetTickCount64() - started,
         nextMs,namesMs,attrsMs,propertiesMs,metadataMs,fresh.size());
-    Wh_Log(L"%s", std::wstring(modelTiming).c_str());
+    Wh_Log(L"%s", modelTiming);
     return S_OK;
 }
 // A single expensive archive/folder/signature may be requested by many
@@ -6327,7 +6356,7 @@ static HRESULT BrowserScheduleModel(BrowserState * s,bool bypassDebounce = false
                 g_activeHeavyModelWorkers.load(std::memory_order_relaxed),
                 g_activeModelWorkers.load(std::memory_order_relaxed),
                 heavy?1u:0u);
-            Wh_Log(L"%s", std::wstring(line).c_str());
+            Wh_Log(L"%s", line);
         }
         if (!s->hasRenderedFolder && s->extractStatus.empty()) {
             s->extractStatus = L"Archive provider busy. Waiting for a free worker...";
@@ -6484,12 +6513,12 @@ static HRESULT BrowserRefresh(BrowserState * s, bool forceRebuild = false) {
     wchar_t line[180]{};
     swprintf_s(line,L"Broker ListView: folderDepth=%u entries=%zu cache=%u selected=%zu",
         s->folder.empty()?0u:1u,s->entries.size(),fromCache?1u:0u,view.selectedPaths.size());
-    Wh_Log(L"%s", std::wstring(line).c_str());
+    Wh_Log(L"%s", line);
     wchar_t timing[160]{};
     swprintf_s(timing,L"Broker timings: model=%llu ms UI=%llu ms total=%llu ms rows=%zu",
         modelReady - refreshStarted,GetTickCount64() - modelReady,
         GetTickCount64() - refreshStarted,s->entries.size());
-    Wh_Log(L"%s", std::wstring(timing).c_str());
+    Wh_Log(L"%s", timing);
     return S_OK;
 }
 static void BrowserBack(BrowserState * s) {
@@ -7073,7 +7102,7 @@ static bool CreateBrowser(BrowserState * s) {
     if ((!oldParent && GetLastError() != 0) || GetParent(host) != s->parent) {
         DWORD e = GetLastError();
         wchar_t line[120]{};
-        swprintf_s(line,L"SetParent cross-process failed: Win32=%lu",e);Wh_Log(L"%s", std::wstring(line).c_str());
+        swprintf_s(line,L"SetParent cross-process failed: Win32=%lu",e);Wh_Log(L"%s", line);
         DestroyWindow(host);return false;
     }
     s->host = host;
@@ -7133,10 +7162,10 @@ static bool CreateBrowser(BrowserState * s) {
     wchar_t line[190]{};
     swprintf_s(line,L"Broker-owned ListView attached: pid=%lu list=%p rows=%zu",
         pid,s->list,s->entries.size());
-    Wh_Log(L"%s", std::wstring(line).c_str());
+    Wh_Log(L"%s", line);
     wchar_t duration[120]{};
     swprintf_s(duration,L"Broker first list ready in %llu ms",GetTickCount64() - createdAt);
-    Wh_Log(L"%s", std::wstring(duration).c_str());
+    Wh_Log(L"%s", duration);
     return true;
 }
 static void BrowserAdjustProgressPoll(BrowserState * s,bool active) {
@@ -7744,7 +7773,7 @@ static LRESULT CALLBACK BrowserManagerProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM l
             wchar_t code[120]{};
             swprintf_s(code,L"Background archive enumeration failed: 0x%08lX",
                        static_cast < unsigned long > (job->result));
-            Wh_Log(L"%s", std::wstring(code).c_str());
+            Wh_Log(L"%s", code);
             if (s->manualRefreshPending && s->manualRefreshFolder == s->folder) {
                 s->manualRefreshPending = false;
                 s->manualRefreshFolder.clear();
@@ -7899,7 +7928,7 @@ static LRESULT CALLBACK BrowserManagerProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM l
                     browser->dark?1:0,browser->highContrast?1:0,
                     browser->header && IsWindowVisible(browser->header)?1:0,
                     browser->footer && IsWindowVisible(browser->footer)?1:0);
-                Wh_Log(L"%s", std::wstring(themeLine).c_str());
+                Wh_Log(L"%s", themeLine);
                 if (browser->host && IsWindow(browser->host)) {
                     // Explorer can erase this cross-process chrome after
                     // our immediate paint; issue a coalesced delayed repair.
@@ -8233,6 +8262,14 @@ static std::mutex g_workMutex;
 // Manual-reset work signal also lets OLE STAs dispatch clipboard COM calls.
 static HANDLE g_workEvent = nullptr;
 static std::deque < Request > g_workQueue;
+// The OLE clipboard provider needs its own apartment. The two extraction
+// workers may be inside long Shell calls and cannot pump clipboard messages.
+// Both event handles are published, signalled and closed under g_workMutex.
+static HANDLE g_clipboardEvent = nullptr;
+static HANDLE g_clipboardThread = nullptr;
+static std::atomic<bool> g_clipboardReady{false};
+static std::deque<Request> g_clipboardQueue;
+static bool g_clipboardBusy = false; // guarded by g_workMutex
 static std::atomic < bool > g_stopWorkers{false};
 // A completed operation can contain thousands of archive paths. A stable
 // SHA-256 fingerprint bounds retry records without retaining those arrays.
@@ -8521,16 +8558,97 @@ static DWORD WINAPI WorkQueueThread(LPVOID raw) {
     OleUninitialize();
     return 0;
 }
+// Dedicated OLE clipboard STA: never run extractions on this apartment.
+static DWORD WINAPI ClipboardQueueThread(LPVOID) {
+    const HRESULT initialized = OleInitialize(nullptr);
+    if (FAILED(initialized)) {
+        Wh_Log(L"ArchivePreview: clipboard STA initialization failed");
+        return 1;
+    }
+    g_clipboardReady.store(true, std::memory_order_release);
+    for (;;) {
+        Request req;
+        std::shared_ptr<std::atomic<bool>> cancellation;
+        {
+            std::unique_lock<std::mutex> lock(g_workMutex);
+            while (!g_stopWorkers.load(std::memory_order_acquire) &&
+                   g_clipboardQueue.empty()) {
+                ResetEvent(g_clipboardEvent);
+                lock.unlock();
+                const DWORD wake = MsgWaitForMultipleObjects(
+                    1, &g_clipboardEvent, FALSE, INFINITE, QS_ALLINPUT);
+                if (wake == WAIT_OBJECT_0 + 1) {
+                    MSG msg{};
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                } else if (wake == WAIT_FAILED) {
+                    Sleep(50);
+                }
+                lock.lock();
+            }
+            if (g_stopWorkers.load(std::memory_order_acquire) &&
+                g_clipboardQueue.empty()) break;
+            req = std::move(g_clipboardQueue.front());
+            g_clipboardQueue.pop_front();
+            g_clipboardBusy = true;
+            g_activeQueueOperations.fetch_add(1, std::memory_order_release);
+            const auto key = BrokerRequestKey(req.requestId);
+            const auto it = g_operationRecords.find(key);
+            if (!key.empty() && it != g_operationRecords.end()) {
+                it->second.phase = ARCHIVE_OPERATION_RUNNING;
+                it->second.updated = GetTickCount64();
+                cancellation = it->second.cancelled;
+            }
+        }
+        t_operationCancelFlag = cancellation.get();
+        const HRESULT completed = CancelledForCurrentOperation() ?
+            HRESULT_FROM_WIN32(ERROR_CANCELLED) : Process(req);
+        t_operationCancelFlag = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_workMutex);
+            const auto key = BrokerRequestKey(req.requestId);
+            const auto it = g_operationRecords.find(key);
+            if (!key.empty() && it != g_operationRecords.end()) {
+                it->second.phase = ARCHIVE_OPERATION_DONE;
+                it->second.result = completed;
+                it->second.updated = GetTickCount64();
+            }
+            g_clipboardBusy = false;
+        }
+        g_activeQueueOperations.fetch_sub(1, std::memory_order_release);
+    }
+    g_clipboardReady.store(false, std::memory_order_release);
+    OleUninitialize();
+    return 0;
+}
 static bool StartWorkQueue() {
-    g_workEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_workEvent) return false;
+    // StopService may run concurrently with broker startup. Publish both
+    // handles under the same mutex that guards every SetEvent and CloseHandle.
+    {
+        std::lock_guard<std::mutex> lock(g_workMutex);
+        g_workEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_workEvent) return false;
+        g_clipboardEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_clipboardEvent) {
+            CloseHandle(g_workEvent);
+            g_workEvent = nullptr;
+            return false;
+        }
+    }
+    g_clipboardReady.store(false, std::memory_order_release);
     for (int i = 0;i < kWorkerCount;++i) {
         g_workerThreads[i] = CreateThread(nullptr,0,WorkQueueThread,
             reinterpret_cast < LPVOID > (static_cast < uintptr_t > (i)),0,nullptr);
         if (!g_workerThreads[i]) {
             g_stopWorkers.store(true);
-            SetEvent(g_workEvent);
-                    for (int j = 0;j < i;++j) {
+            {
+                std::lock_guard<std::mutex> lock(g_workMutex);
+                SetEvent(g_workEvent);
+                SetEvent(g_clipboardEvent);
+            }
+            for (int j = 0;j < i;++j) {
                 // Keep each STA handle until it has joined. Closing a live
                 // handle loses the reliable join point during DLL unload.
                 while (WaitForSingleObject(g_workerThreads[j],30000) == WAIT_TIMEOUT)
@@ -8538,10 +8656,57 @@ static bool StartWorkQueue() {
                 CloseHandle(g_workerThreads[j]);
                 g_workerThreads[j] = nullptr;
             }
-            CloseHandle(g_workEvent);
-            g_workEvent = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(g_workMutex);
+                CloseHandle(g_clipboardEvent);
+                g_clipboardEvent = nullptr;
+                CloseHandle(g_workEvent);
+                g_workEvent = nullptr;
+            }
             return false;
         }
+    }
+    g_clipboardThread = CreateThread(nullptr, 0, ClipboardQueueThread,
+                                     nullptr, 0, nullptr);
+    if (g_clipboardThread) {
+        // Wait on the broker service thread, never an Explorer UI thread.
+        // A created Win32 thread is not proof its OLE apartment started.
+        for (int attempt = 0; attempt < 200 &&
+             !g_clipboardReady.load(std::memory_order_acquire); ++attempt) {
+            if (WaitForSingleObject(g_clipboardThread, 0) == WAIT_OBJECT_0) break;
+            Sleep(5);
+        }
+    }
+    if (!g_clipboardThread ||
+        !g_clipboardReady.load(std::memory_order_acquire)) {
+        Wh_Log(L"ArchivePreview: clipboard worker unavailable");
+        g_stopWorkers.store(true, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> lock(g_workMutex);
+            SetEvent(g_workEvent);
+            SetEvent(g_clipboardEvent);
+        }
+        for (HANDLE& worker : g_workerThreads) {
+            if (!worker) continue;
+            while (WaitForSingleObject(worker, 30000) == WAIT_TIMEOUT)
+                Wh_Log(L"ArchivePreview: waiting for STA worker after clipboard startup failure");
+            CloseHandle(worker);
+            worker = nullptr;
+        }
+        if (g_clipboardThread) {
+            while (WaitForSingleObject(g_clipboardThread, 30000) == WAIT_TIMEOUT)
+                Wh_Log(L"ArchivePreview: waiting for failed clipboard worker");
+            CloseHandle(g_clipboardThread);
+            g_clipboardThread = nullptr;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_workMutex);
+            CloseHandle(g_clipboardEvent);
+            g_clipboardEvent = nullptr;
+            CloseHandle(g_workEvent);
+            g_workEvent = nullptr;
+        }
+        return false;
     }
     return true;
 }
@@ -8568,10 +8733,15 @@ static HRESULT DispatchAsync(const Request & req,DWORD ownerPid) {
                 return S_OK; // lost reply to this client's same operation
             }
         }
-        // All accepted requests are explicit user actions; FIFO preserves order.
-        if (!HasWorkQueueSpace(req))
+        // Clipboard work must never wait behind large extractions. Its own
+        // STA must remain free to serve deferred IDataObject COM requests.
+        const bool clipboard = req.command == ARCHIVE_BROKER_COPY_SELECTION;
+        if (clipboard ? (g_clipboardBusy || !g_clipboardQueue.empty() ||
+                         !g_clipboardEvent ||
+                         !g_clipboardReady.load(std::memory_order_acquire))
+                      : !HasWorkQueueSpace(req))
             return HRESULT_FROM_WIN32(ERROR_BUSY);
-        g_workQueue.push_back(req);
+        (clipboard ? g_clipboardQueue : g_workQueue).push_back(req);
         if (!id.empty()) {
             // Only finished records may be aged out; pending and running
             // records must remain deduplicated for their entire lifetime.
@@ -8584,9 +8754,11 @@ static HRESULT DispatchAsync(const Request & req,DWORD ownerPid) {
                 if (oldest != g_operationRecords.end()) g_operationRecords.erase(oldest);
                 else {
                     // Cannot evict an in-flight id. Remove only our newly queued task.
-                    for (auto it = g_workQueue.begin();it != g_workQueue.end();++it)
-                        if (InlineIsEqualGUID(it->requestId,req.requestId)) {
-                            g_workQueue.erase(it);break;
+                    auto& queue = clipboard ? g_clipboardQueue : g_workQueue;
+                    for (auto it = queue.begin(); it != queue.end(); ++it)
+                        if (InlineIsEqualGUID(it->requestId, req.requestId)) {
+                            queue.erase(it);
+                            break;
                         }
                     return HRESULT_FROM_WIN32(ERROR_BUSY);
                 }
@@ -8605,9 +8777,34 @@ static HRESULT DispatchAsync(const Request & req,DWORD ownerPid) {
             record.cancelled = std::make_shared < std::atomic < bool >> (false);
             g_operationRecords.emplace(id,std::move(record));
         }
+        // Signal while holding the same mutex used to close both handles.
+        HANDLE signal = clipboard ? g_clipboardEvent : g_workEvent;
+        if (signal) SetEvent(signal);
     }
-    if (g_workEvent) SetEvent(g_workEvent);
     return S_OK;
+}
+
+static void CancelTimedOutClipboard(const GUID& id, DWORD ownerPid) {
+    const std::wstring key = BrokerRequestKey(id);
+    if (key.empty() || !ownerPid) return;
+    std::lock_guard<std::mutex> lock(g_workMutex);
+    auto it = g_operationRecords.find(key);
+    if (it == g_operationRecords.end() ||
+        it->second.ownerPid != ownerPid ||
+        it->second.phase == ARCHIVE_OPERATION_DONE) return;
+    if (it->second.cancelled)
+        it->second.cancelled->store(true, std::memory_order_release);
+    if (it->second.phase != ARCHIVE_OPERATION_QUEUED) return;
+    for (auto pending = g_clipboardQueue.begin();
+         pending != g_clipboardQueue.end(); ++pending) {
+        if (InlineIsEqualGUID(pending->requestId, id)) {
+            g_clipboardQueue.erase(pending);
+            it->second.result = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+            it->second.phase = ARCHIVE_OPERATION_DONE;
+            it->second.updated = GetTickCount64();
+            return;
+        }
+    }
 }
 
 // A per-user named-pipe ACL alone does not identify the Preview Handler: any
@@ -8641,24 +8838,34 @@ static bool VerifyBrokerClient(HANDLE pipe) {
     if (!GetNamedPipeClientProcessId(pipe, & pid) || !pid) return false;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
     if (!process) return false;
-    wchar_t path[32768]{};DWORD chars = _countof(path);
     bool permitted = false;
-    if (IsSameSessionUser(process) && QueryFullProcessImageNameW(process,0,path, & chars)) {
-        wchar_t winDir[MAX_PATH]{};
-        const UINT winCount = GetWindowsDirectoryW(winDir,_countof(winDir));
-        const std::wstring prefix = winCount > 0 && winCount < _countof(winDir)
-            ? std::wstring(winDir) + L"\\" : std::wstring();
-        // Only Windows' Preview Host is an external IPC client. Another
-        // explorer.exe process under the same user is not automatically trusted.
-        const bool windowsProcess = !prefix.empty() &&
-            !_wcsicmp(path,(prefix + L"System32\\prevhost.exe").c_str());
-        // The broker itself can send internal diagnostics, but other copies
-        // of explorer.exe cannot impersonate it using their executable path.
-        wchar_t selfPath[32768]{};
-        const DWORD selfLength = GetModuleFileNameW(nullptr,selfPath,_countof(selfPath));
-        const bool ownBroker = selfLength && selfLength < _countof(selfPath) &&
-            _wcsicmp(path,selfPath) == 0;
-        permitted = windowsProcess || (pid == GetCurrentProcessId() && ownBroker);
+    if (IsSameSessionUser(process)) {
+        // Size the path buffer dynamically. QueryFullProcessImageNameW uses
+        // the supplied character count and reports insufficient capacity.
+        std::vector<wchar_t> path(1024);
+        DWORD chars = 0;
+        for (;;) {
+            chars = static_cast<DWORD>(path.size());
+            if (QueryFullProcessImageNameW(process,0,path.data(),&chars)) break;
+            if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || path.size() >= 32768) {
+                chars = 0;
+                break;
+            }
+            path.resize(std::min<size_t>(32768,path.size()*2));
+        }
+        if (chars != 0) {
+            const std::wstring imagePath(path.data(),chars);
+            wchar_t winDir[MAX_PATH]{};
+            const UINT winCount = GetWindowsDirectoryW(winDir,_countof(winDir));
+            const std::wstring prefix = winCount > 0 && winCount < _countof(winDir)
+                ? std::wstring(winDir) + L"\\" : std::wstring();
+            // A same-user process is not sufficient: require the actual
+            // Windows Preview Host path, or this broker's own process ID.
+            const bool windowsProcess = !prefix.empty() &&
+                _wcsicmp(imagePath.c_str(),
+                         (prefix + L"System32\\prevhost.exe").c_str()) == 0;
+            permitted = windowsProcess || pid == GetCurrentProcessId();
+        }
     }
     CloseHandle(process);
     return permitted;
@@ -8826,26 +9033,9 @@ static std::atomic < unsigned > g_activePipeReaders{0};
 static std::mutex g_readerHandlesMutex;
 static std::vector < HANDLE > g_readerHandles;
 static constexpr unsigned kMaxPipeReaders = 6;
-static constexpr unsigned kMaxHeavyPipeReaders = 2;
-static std::atomic < unsigned > g_activeHeavyPipeReaders{0};
-struct ScopedHeavyPipeReader {
-    bool accepted = false;
-    ScopedHeavyPipeReader() {
-        unsigned current = g_activeHeavyPipeReaders.load(std::memory_order_acquire);
-        while(current < kMaxHeavyPipeReaders) {
-            if(g_activeHeavyPipeReaders.compare_exchange_weak(current,current + 1,
-                    std::memory_order_acq_rel,std::memory_order_acquire)) {
-                accepted = true;break;
-            }
-        }
-    }
-    ~ScopedHeavyPipeReader() {
-        if(accepted) g_activeHeavyPipeReaders.fetch_sub(1,std::memory_order_acq_rel);
-    }
-};
 static void ReapFinishedPipeReaders() {
-    // Serve() is the sole owner and caller. Do not detach live reader threads:
-    // the service pin must protect their DLL code until the thread exits.
+    // Serve() is the sole owner and caller. Join every live reader before
+    // returning from the broker service so the DLL can be safely unloaded.
     std::lock_guard < std::mutex > guard(g_readerHandlesMutex);
     for(auto it = g_readerHandles.begin();it != g_readerHandles.end();) {
         const DWORD status = WaitForSingleObject( * it,0);
@@ -8868,7 +9058,7 @@ static DWORD WINAPI ServeOnePipeClient(LPVOID state) {
                 GetNamedPipeClientProcessId(pipe, & peer);
                 wchar_t detail[160]{};
                 swprintf_s(detail,L"Rejected broker IPC client PID %lu: executable, token or session mismatch",peer);
-                Wh_Log(L"%s", std::wstring(detail).c_str());
+                Wh_Log(L"%s", detail);
                 // Do not interpret any frames from an unauthorized client.
                 DisconnectNamedPipe(pipe);
                 CloseHandle(pipe);
@@ -8923,7 +9113,7 @@ static DWORD WINAPI ServeOnePipeClient(LPVOID state) {
                 replyWritten = SUCCEEDED(ArchiveWriteAll(pipe, & hr,sizeof(hr)));
             }
             if (requestValid && request.command == ARCHIVE_BROKER_COPY_SELECTION &&
-                !g_cancelForShutdown.load(std::memory_order_acquire) && !ProviderStalled()) {
+                !g_cancelForShutdown.load(std::memory_order_acquire)) {
                 // The clipboard IDataObject must belong to a persistent STA.
                 // The IPC reader's OLE apartment is temporary, so running the
                 // provider copy verb here can drop virtual files immediately.
@@ -8946,6 +9136,7 @@ static DWORD WINAPI ServeOnePipeClient(LPVOID state) {
                             break;
                         }
                         if (GetTickCount64() >= deadline) {
+                            CancelTimedOutClipboard(request.requestId, clientPid);
                             hr = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
                             break;
                         }
@@ -8974,12 +9165,11 @@ static DWORD WINAPI ServeOnePipeClient(LPVOID state) {
                     wchar_t status[110]{};
                     swprintf_s(status, L"Could not queue broker command %lu: 0x%08lX",
                         request.command, static_cast < unsigned long > (hr));
-                    Wh_Log(L"%s", std::wstring(status).c_str());
+                    Wh_Log(L"%s", status);
                 }
             }
             if (requestValid && request.command == ARCHIVE_BROKER_COPY_SELECTION &&
-                !replyWritten &&
-                (g_cancelForShutdown.load(std::memory_order_acquire) || ProviderStalled())) {
+                !replyWritten && g_cancelForShutdown.load(std::memory_order_acquire)) {
                 const HRESULT unavailable = HRESULT_FROM_WIN32(ERROR_BUSY);
                 replyWritten = SUCCEEDED(ArchiveWriteAll(pipe, & unavailable,sizeof(unavailable)));
             }
@@ -9070,8 +9260,8 @@ static int Serve() {
                 delete readerPipe;
                 DisconnectNamedPipe(pipe);CloseHandle(pipe);
             } else {
-                // Retain the handle. The service cannot release its DLL pin
-                // until *every* IPC reader has returned.
+                // Retain the handle; shutdown must join every IPC reader
+                // before Windhawk unloads the DLL.
                 std::lock_guard < std::mutex > lock(g_readerHandlesMutex);
                 g_readerHandles.push_back(thread);
             }
@@ -9096,8 +9286,13 @@ static int Serve() {
     }
     g_stopWorkers.store(true);
     { std::lock_guard < std::mutex > lock(g_authorizedMutex);g_authorizedPreviews.clear(); }
-    { std::lock_guard < std::mutex > lock(g_workMutex); g_workQueue.clear(); }
-    if (g_workEvent) SetEvent(g_workEvent);
+    {
+        std::lock_guard<std::mutex> lock(g_workMutex);
+        g_workQueue.clear();
+        g_clipboardQueue.clear();
+        if (g_workEvent) SetEvent(g_workEvent);
+        if (g_clipboardEvent) SetEvent(g_clipboardEvent);
+    }
     if (HWND manager = g_gripManager.load()) {
         PostMessageW(manager, WM_CLOSE, 0, 0);
         if (g_gripWorkerThread) PostThreadMessageW(GetThreadId(g_gripWorkerThread), WM_QUIT, 0, 0);
@@ -9114,7 +9309,23 @@ static int Serve() {
             Wh_Log(L"Shutdown waiting for Broker UI thread");
         CloseHandle(g_gripWorkerThread);g_gripWorkerThread = nullptr;
     }
-    if (g_workEvent) { CloseHandle(g_workEvent); g_workEvent = nullptr; }
+    if (g_clipboardThread) {
+        while (WaitForSingleObject(g_clipboardThread, 30000) == WAIT_TIMEOUT)
+            Wh_Log(L"Shutdown waiting for clipboard STA");
+        CloseHandle(g_clipboardThread);
+        g_clipboardThread = nullptr;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_workMutex);
+        if (g_clipboardEvent) {
+            CloseHandle(g_clipboardEvent);
+            g_clipboardEvent = nullptr;
+        }
+        if (g_workEvent) {
+            CloseHandle(g_workEvent);
+            g_workEvent = nullptr;
+        }
+    }
     g_serviceReady.store(false,std::memory_order_release);
     LocalFree(descriptor);
     return 4;
@@ -9124,8 +9335,13 @@ static void StopService() {
     g_cancelForShutdown.store(true,std::memory_order_release);
     g_stopBroker.store(true, std::memory_order_release);
     g_stopWorkers.store(true, std::memory_order_release);
-    { std::lock_guard < std::mutex > lock(g_workMutex); g_workQueue.clear(); }
-    if (g_workEvent) SetEvent(g_workEvent);
+    {
+        std::lock_guard<std::mutex> lock(g_workMutex);
+        g_workQueue.clear();
+        g_clipboardQueue.clear();
+        if (g_workEvent) SetEvent(g_workEvent);
+        if (g_clipboardEvent) SetEvent(g_clipboardEvent);
+    }
     if (HWND manager = g_gripManager.load()) {
         PostMessageW(manager,WM_CLOSE,0,0);
         if (g_gripWorkerThread) PostThreadMessageW(GetThreadId(g_gripWorkerThread),WM_QUIT,0,0);
@@ -9237,13 +9453,8 @@ static constexpr wchar_t kVirtualClsidText[] =
 static constexpr wchar_t kPreviewAssociation[] =
     L"{8895B1C6-B41F-4C1C-A562-0D564250836F}";
 static std::atomic < unsigned > g_associationHits{0};
-static std::atomic < unsigned > g_associationAllCalls{0};
 static std::atomic < unsigned > g_registryHits{0};
-static std::atomic < unsigned > g_registryAllCalls{0};
 static std::atomic < unsigned > g_regOpenHits{0};
-static std::atomic < unsigned > g_regOpenAllCalls{0};
-static std::atomic < unsigned > g_queryInitCalls{0};
-static std::atomic < unsigned > g_queryStringCalls{0};
 static std::atomic < unsigned > g_queryPreviewCalls{0};
 static std::atomic < unsigned > g_queryVirtualHits{0};
 static std::atomic < bool > g_stopping{false};
@@ -9251,13 +9462,8 @@ static std::atomic < bool > g_stopping{false};
 using AssocQueryStringWFn = decltype( & AssocQueryStringW);
 using RegGetValueWFn = decltype( & RegGetValueW);
 using RegOpenKeyExWFn = decltype( & RegOpenKeyExW);
-using QueryAssocInitFn = HRESULT (STDMETHODCALLTYPE * )(IQueryAssociations * ,ASSOCF,LPCWSTR,HKEY,HWND);
 using QueryAssocGetStringFn = HRESULT (STDMETHODCALLTYPE * )(IQueryAssociations * ,ASSOCF,ASSOCSTR,LPCWSTR,LPWSTR,DWORD * );
-static QueryAssocInitFn g_queryInitOriginal = nullptr;
 static QueryAssocGetStringFn g_queryStringOriginal = nullptr;
-static std::mutex g_queryMutex;
-static std::unordered_set < IQueryAssociations *  > g_queryForArchive;
-static std::unordered_map < IQueryAssociations * ,std::wstring > g_queryDebugContext;
 // Archive associations can arrive as configured extensions, ProgIDs or HKEYs.
 // Build these aliases read-only from the current user's associations.
 static std::mutex g_aliasMutex;
@@ -9526,19 +9732,24 @@ static bool PreviewAssociation(LPCWSTR extra) {
     return extra && _wcsicmp(extra,kPreviewAssociation) == 0;
 }
 static bool VirtualRegistryPath(HKEY root,LPCWSTR subkey,LPCWSTR value) {
-    if (!subkey || (value && * value) ||
+    if (!subkey || (value && *value) ||
         (root != HKEY_CLASSES_ROOT && root != HKEY_CURRENT_USER)) return false;
-    std::wstring path = Lower(subkey);
+    constexpr wchar_t suffix[] =
+        L"\\shellex\\{8895B1C6-B41F-4C1C-A562-0D564250836F}";
+    constexpr wchar_t userPrefix[] = L"software\\classes\\";
+    const wchar_t *association = subkey;
     if (root == HKEY_CURRENT_USER) {
-        static const std::wstring prefix = L"software\\classes\\";
-        if (path.rfind(prefix,0) != 0) return false;
-        path.erase(0,prefix.size());
+        if (_wcsnicmp(association,userPrefix,_countof(userPrefix)-1) != 0)
+            return false;
+        association += _countof(userPrefix)-1;
     }
-    const std::wstring suffix = std::wstring(L"\\shellex\\") +
-                              Lower(kPreviewAssociation);
-    if (!EndsWith(path,suffix)) return false;
-    const std::wstring association = path.substr(0,path.size() - suffix.size());
-    return SupportedAssoc(association);
+    const size_t length = wcslen(association);
+    constexpr size_t suffixLength = _countof(suffix)-1;
+    if (length <= suffixLength ||
+        _wcsicmp(association + length - suffixLength,suffix) != 0)
+        return false;
+    // Only a preview-association lookup reaches these allocations.
+    return SupportedAssoc(Lower(std::wstring(association,length-suffixLength)));
 }
 static void LogHit(const wchar_t * label,unsigned count) {
     if (count == 1 || count == 5 || count == 20)
@@ -9553,74 +9764,13 @@ static HRESULT WriteClsid(WCHAR * output,DWORD * chars) {
     * chars = needed;
     return S_OK;
 }
-// IQueryAssociations is the Shell's underlying API; AssocQueryStringW is only
-// a convenience wrapper. New Explorer builds can bypass that wrapper. We hook
-// the implementation obtained from CLSID_QueryAssociations as an experiment.
-// The archive association table stores only pointers initialized for enabled
-// extensions; every Init evicts any previous entry for the same COM pointer.
-static HRESULT STDMETHODCALLTYPE QueryInitHook(IQueryAssociations * self,ASSOCF flags,
-                                               LPCWSTR association,HKEY key,HWND window) {
-    const unsigned calls = ++g_queryInitCalls;
-    // A ProgID alone is not sufficient evidence: check the current selected
-    // file at GetString time instead of caching a shared class as an archive.
-    const bool wanted = association && SupportedAssoc(association);
-    const HRESULT result = g_queryInitOriginal(self,flags,association,key,window);
-    bool identified = wanted;
-    std::wstring keyName;
-    if (!identified && key && SUCCEEDED(result)) {
-        keyName = RegistryClassKeyName(key);
-        identified = SupportedAssoc(keyName);
-    }
-    {
-        std::lock_guard < std::mutex > lock(g_queryMutex);
-        g_queryForArchive.erase(self);
-        if (g_queryDebugContext.size() >= 256) g_queryDebugContext.clear();
-        std::wstring label = association ? std::wstring(association) : L"<HKEY-only>";
-        if (label.find(L'\\') != std::wstring::npos ||
-            label.find(L'/') != std::wstring::npos) {
-            const size_t sep = label.find_last_of(L"\\/");
-            if (sep != std::wstring::npos) label = L"<path>/" + label.substr(sep + 1);
-        }
-        if (label.size() > 64) label.resize(64);
-        g_queryDebugContext[self] = std::move(label);
-        if (SUCCEEDED(result) && identified) {
-            // Bound the tracking table; stale entries are never trusted across
-            // an Init call and cannot be dereferenced.
-            if (g_queryForArchive.size() >= 256) g_queryForArchive.clear();
-            g_queryForArchive.insert(self);
-        }
-    }
-    // Log a small bounded sample of real Init inputs to distinguish a missing
-    // ProgID from a key-based Init. Do not print full user file paths.
-    if ((identified && calls <= 200) || calls <= 24 || calls == 100 || calls == 300) {
-        std::wstring label = association ? std::wstring(association) : L"<null>";
-        if (label.find(L'\\') != std::wstring::npos ||
-            label.find(L'/') != std::wstring::npos) {
-            const size_t sep = label.find_last_of(L"\\/");
-            if (sep != std::wstring::npos) label = L"<path>/" + label.substr(sep + 1);
-        }
-        if (label.size() > 64) label.resize(64);
-        if (!keyName.empty()) label = L"HKEY:" + keyName;
-        Wh_Log(L"[AP bridge/explorer] R4 Init #%u assoc=%s flags=0x%X archive=%u hr=0x%08lX",
-            calls,label.c_str(),static_cast < unsigned > (flags),identified?1U:0U,
-            static_cast < unsigned long > (result));
-    }
-    return result;
-}
 static HRESULT STDMETHODCALLTYPE QueryGetStringHook(IQueryAssociations * self,
     ASSOCF flags,ASSOCSTR kind,LPCWSTR extra,LPWSTR output,DWORD * chars) {
-    const unsigned calls = ++g_queryStringCalls;
     if (kind == ASSOCSTR_SHELLEXTENSION && PreviewAssociation(extra)) {
         const unsigned previews = ++g_queryPreviewCalls;
         bool archive = false;
-        std::wstring initContext = L"<unknown>";
-        {
-            std::lock_guard < std::mutex > lock(g_queryMutex);
-            const auto it = g_queryDebugContext.find(self);
-            if (it != g_queryDebugContext.end()) initContext = it->second;
-        }
-        // A COM pointer can be recycled. Always validate this *live* object's
-        // association; the old g_queryForArchive cache was unsafe here.
+        // Validate the live association rather than trusting stale COM
+        // pointer identity from an unrelated Init call.
         std::wstring detected = L"unresolved";
         static thread_local bool probing = false;
         if (!probing && !g_stopping.load(std::memory_order_relaxed)) {
@@ -9628,11 +9778,9 @@ static HRESULT STDMETHODCALLTYPE QueryGetStringHook(IQueryAssociations * self,
             archive = QueryObjectArchive(self, & detected);
             probing = false;
         }
-        if (detected.size() > 80) detected.resize(80);
-        if (previews <= 20 || previews == 100 || archive)
-            Wh_Log(L"[AP bridge/explorer] R4 preview #%u known=%u init=%s source=%s flags=0x%X",
-                previews,archive?1U:0U,initContext.c_str(),detected.c_str(),
-                static_cast < unsigned > (flags));
+        if (previews == 1 || previews == 20)
+            Wh_Log(L"[AP bridge/explorer] preview lookups=%u archive=%u",
+                   previews,archive ? 1U : 0U);
         if (archive && !g_stopping.load(std::memory_order_relaxed)) {
             // Preserve an existing third-party handler for ambiguous ProgIDs.
             // The enabled extension is not known from this COM object alone.
@@ -9648,9 +9796,6 @@ static HRESULT STDMETHODCALLTYPE QueryGetStringHook(IQueryAssociations * self,
             return WriteClsid(output,chars);
         }
     }
-    if (calls == 1 || calls == 100)
-        Wh_Log(L"[AP bridge/explorer] IQueryAssociations::GetString total=%u kind=%u",
-            calls,static_cast < unsigned > (kind));
     return g_queryStringOriginal(self,flags,kind,extra,output,chars);
 }
 static bool InstallQueryAssociationHooks() {
@@ -9672,25 +9817,19 @@ static bool InstallQueryAssociationHooks() {
         return false;
     }
     void *  * table =  * reinterpret_cast < void *  *  *  > (query);
-    const bool initHook = Wh_SetFunctionHook(table[3],
-        reinterpret_cast < void *  > ( & QueryInitHook),
-        reinterpret_cast < void *  *  > ( & g_queryInitOriginal));
+    // The Init callback is untouched. We only need to intercept live
+    // preview-handler queries in GetString (vtable index 4).
     const bool getStringHook = Wh_SetFunctionHook(table[4],
         reinterpret_cast < void *  > ( & QueryGetStringHook),
         reinterpret_cast < void *  *  > ( & g_queryStringOriginal));
     query->Release();
     if (SUCCEEDED(coInit)) CoUninitialize();
-    Wh_Log(L"[AP bridge/explorer] IQueryAssociations hooks: Init=%u GetString=%u",
-        initHook?1U:0U,getStringHook?1U:0U);
-    return initHook && getStringHook;
+    Wh_Log(L"[AP bridge/explorer] IQueryAssociations GetString hook=%u",
+           getStringHook ? 1U : 0U);
+    return getStringHook;
 }
 static HRESULT WINAPI AssocHook(ASSOCF flags,ASSOCSTR kind,LPCWSTR association,
                                 LPCWSTR extra,LPWSTR output,DWORD * chars) {
-    const unsigned all = ++g_associationAllCalls;
-    if (all <= 16 || all == 100)
-        Wh_Log(L"[AP bridge/explorer] AssocQueryStringW #%u kind=%u assoc=%.100s extra=%.80s",
-            all,static_cast < unsigned > (kind),association?association:L"(null)",
-            extra?extra:L"(null)");
     if (!g_stopping.load(std::memory_order_relaxed) &&
         kind == ASSOCSTR_SHELLEXTENSION && association &&
         PreviewAssociation(extra) && SupportedAssoc(association)) {
@@ -9702,10 +9841,6 @@ static HRESULT WINAPI AssocHook(ASSOCF flags,ASSOCSTR kind,LPCWSTR association,
 }
 static LSTATUS WINAPI RegistryHook(HKEY root,LPCWSTR subkey,LPCWSTR value,
                                    DWORD flags,LPDWORD type,PVOID output,LPDWORD size) {
-    const unsigned all = ++g_registryAllCalls;
-    if (all <= 5 || all == 100)
-        Wh_Log(L"[AP bridge/explorer] RegGetValueW #%u key=%.115s value=%.65s",
-            all,subkey?subkey:L"(null)",value?value:L"(default)");
     if (!g_stopping.load(std::memory_order_relaxed) &&
         VirtualRegistryPath(root,subkey,value) &&
         (!(flags & RRF_RT_ANY) || (flags & RRF_RT_REG_SZ))) {
@@ -9728,10 +9863,6 @@ static LSTATUS WINAPI RegistryHook(HKEY root,LPCWSTR subkey,LPCWSTR value,
 }
 static LSTATUS WINAPI RegistryOpenProbe(HKEY root,LPCWSTR subkey,DWORD options,
                                          REGSAM access,PHKEY result) {
-    const unsigned all = ++g_regOpenAllCalls;
-    if (all <= 5 || all == 100)
-        Wh_Log(L"[AP bridge/explorer] RegOpenKeyExW #%u key=%.115s",
-            all,subkey?subkey:L"(null)");
     if (!g_stopping.load(std::memory_order_relaxed) &&
         VirtualRegistryPath(root,subkey,nullptr)) {
         ArchivePreviewRuntime::MaybeStartService();
@@ -9786,7 +9917,7 @@ static bool Install() {
     }
     if(g_existingTextPreviewKey.empty())
         Wh_Log(L"[AP bridge/explorer] no TXT preview HKEY found; only direct association queries are virtualized");
-    // Populate aliases before hooking Init/GetString. WinRAR.ZIP, WinRAR and
+    // Populate aliases before hooking GetString. WinRAR.ZIP, WinRAR and
     // CompressedFolder are often what the Shell uses instead of .zip/.rar.
     RefreshArchiveProgIds();
     const bool queryAssoc = InstallQueryAssociationHooks();
@@ -9795,10 +9926,10 @@ static bool Install() {
     return assoc && reg;
 }
 } // namespace ArchivePreviewVirtual
-// EXPERIMENTAL: Registry-free reuse of the existing Windows TXT preview COM
+// Registry-free reuse of the existing Windows TXT preview COM
 // surrogate. This does not modify HKCU/HKLM. The original TXT handler is
-// retained for ordinary text previews. This bridge must be validated on the
-// target Windows build: COM may bypass shell32!DllGetClassObject entirely.
+// retained for ordinary text previews. Some Windows builds may bypass
+// shell32!DllGetClassObject; the bridge must fail closed in that case.
 namespace ArchivePreviewBridge {
 static const CLSID kTextHandler = {0x1531d583,0x8375,0x4d3f,{0xb5,0xfb,0xd2,0x3b,0xbd,0x16,0x9f,0x22}};
 using DllGetClassObjectFn = HRESULT (STDAPICALLTYPE * )(REFCLSID,REFIID,LPVOID * );
@@ -10199,13 +10330,6 @@ static bool Install(){
 } // namespace ArchivePreviewBridge
 
 
-extern "C" HRESULT STDAPICALLTYPE DllGetClassObject(REFCLSID clsid,REFIID iid,LPVOID * out){
-    if(ArchivePreviewRuntime::g_stopping.load())return CO_E_SERVER_STOPPING;
-    return ArchivePreviewHost::GetPreviewClassObject(clsid,iid,out);
-}
-extern "C" HRESULT STDAPICALLTYPE DllCanUnloadNow(){
-    return ArchivePreviewHost::CanPreviewUnloadNow();
-}
 static bool IsExplorer(){
     wchar_t path[MAX_PATH]{};
     if(!GetModuleFileNameW(nullptr,path,MAX_PATH))return false;
@@ -10260,15 +10384,15 @@ void Wh_ModSettingsChanged(){
 // COM wrappers before the engine detaches the hooks, instead of only stopping
 // after that point in Wh_ModUninit. Existing host references remain valid.
 void Wh_ModBeforeUninit(){
+    ArchivePreviewHost::g_hostShutdown.store(true,std::memory_order_release);
     ArchivePreviewRuntime::g_stopping.store(true,std::memory_order_release);
     ArchivePreviewVirtual::g_stopping.store(true,std::memory_order_release);
     ArchivePreviewBridge::stopping.store(true,std::memory_order_release);
     if(IsPrevhost()){
-        Wh_Log(L"[AP bridge/prevhost] before unload: live COM adapters=%ld factories=%ld totalObjects=%ld locks=%ld",
+        Wh_Log(L"[AP bridge/prevhost] before unload: live COM adapters=%ld factories=%ld totalObjects=%ld",
             ArchivePreviewBridge::liveAdapters.load(),
             ArchivePreviewBridge::liveFactories.load(),
-            ArchivePreviewHost::g_objects.load(),
-            ArchivePreviewHost::g_locks.load());
+            ArchivePreviewHost::g_objects.load());
     }
 }
 // Windhawk performs FreeLibrary after this callback returns. Never pin the
@@ -10280,17 +10404,16 @@ static void WaitForPreviewComRelease(){
     ULONGLONG lastLog = started;
     for(;;){
         const long objects = ArchivePreviewHost::g_objects.load(std::memory_order_acquire);
-        const long locks = ArchivePreviewHost::g_locks.load(std::memory_order_acquire);
-        if(objects == 0 && locks == 0)break;
+        if(objects == 0)break;
         const ULONGLONG now = GetTickCount64();
         if(now - lastLog >= 5000){
             Wh_Log(L"ArchivePreview unload: waiting for Preview Host COM references "
-                   L"(objects=%ld adapters=%ld factories=%ld locks=%ld; elapsed=%llu ms). "
-                   L"Close the active preview to allow shutdown.",
+                   L"(objects=%ld adapters=%ld factories=%ld; elapsed=%llu ms). "
+                   L"Close the Explorer preview window to allow shutdown.",
                 objects,
                 ArchivePreviewBridge::liveAdapters.load(std::memory_order_acquire),
                 ArchivePreviewBridge::liveFactories.load(std::memory_order_acquire),
-                locks,now - started);
+                now - started);
             lastLog = now;
         }
         // Do not force Release() of a COM reference owned by the host.
@@ -10323,18 +10446,15 @@ static void UnregisterPreviewClassesSafely(){
     }
 }
 void Wh_ModUninit(){
+    ArchivePreviewHost::g_hostShutdown.store(true,std::memory_order_release);
     ArchivePreviewRuntime::g_stopping.store(true,std::memory_order_release);
     ArchivePreviewVirtual::g_stopping.store(true,std::memory_order_release);
     ArchivePreviewBridge::stopping.store(true,std::memory_order_release);
     if(IsExplorer()){
-        Wh_Log(L"[AP bridge/explorer] shutdown virtualQueries=%u queryInit=%u regQueries=%u",
+        Wh_Log(L"[AP bridge/explorer] shutdown virtualQueries=%u regQueries=%u",
             ArchivePreviewVirtual::g_queryVirtualHits.load(),
-            ArchivePreviewVirtual::g_queryInitCalls.load(),
             ArchivePreviewVirtual::g_registryHits.load());
         ArchivePreviewRuntime::StopService();
-        std::lock_guard < std::mutex > lock(ArchivePreviewVirtual::g_queryMutex);
-        ArchivePreviewVirtual::g_queryForArchive.clear();
-        ArchivePreviewVirtual::g_queryDebugContext.clear();
     }
     if(IsPrevhost()){
         Wh_Log(L"[AP bridge/prevhost] shutdown factories=%u objects=%u archives=%u",
@@ -10347,11 +10467,10 @@ void Wh_ModUninit(){
     // those references and the DLL cannot release them unilaterally.
     ArchivePreviewWorkerLifetime::JoinAll();
     if(IsPrevhost()){
-        Wh_Log(L"[AP bridge/prevhost] after worker join: live COM adapters=%ld factories=%ld totalObjects=%ld locks=%ld",
+        Wh_Log(L"[AP bridge/prevhost] after worker join: live COM adapters=%ld factories=%ld totalObjects=%ld",
             ArchivePreviewBridge::liveAdapters.load(),
             ArchivePreviewBridge::liveFactories.load(),
-            ArchivePreviewHost::g_objects.load(),
-            ArchivePreviewHost::g_locks.load());
+            ArchivePreviewHost::g_objects.load());
     }
     // Once the last host object and factory have been released, no preview
     // callback can safely start; our COM creation paths were stopped in
