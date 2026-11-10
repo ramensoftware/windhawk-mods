@@ -2,7 +2,7 @@
 // @id              octagonal-windows
 // @name            Octagonal Windows
 // @description     Makes Windows 11 window borders octagonal.
-// @version         1.0
+// @version         1.0.1
 // @author          JER-10000
 // @github          https://github.com/JER-10000
 // @include         dwm.exe
@@ -67,6 +67,7 @@ and make sure that `dwm.exe` is in the list.
 
 - When using this mod alongside Translucent Flyouts, set its `CornerType` option
   to `0` ("Don't Change") to prevent conflicts between the two.
+- This mod is not compatible with [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius). Don't use together.
 
 ## Recommended companion mods
 
@@ -518,7 +519,11 @@ float RadiusForOriginal(float orig, bool isTooltip) {
 // Whether `radius`, as returned by RadiusForOriginal, is the window radius,
 // the one per-corner radii apply to.
 bool IsPerCornerRadius(float radius) {
-    return radius > 0;
+    return radius > 0 &&
+           (radius == g_settings.radius ||
+            radius == g_settings.smallRadius ||
+            radius == g_settings.tooltipRadius);
+    // return radius > 0;
     // return g_settings.perCornerRadius && radius == g_settings.radius;
 }
 
@@ -626,9 +631,6 @@ long WINAPI SetRectangle_Hook(void* pThis,
                               bool flag) {
 
     
-    float radiusMultiplier = 1.6;
-    int borderThickness = 0;
-
     if (g_cornerRadiusDeltas) {
         Wh_Log(L"> %f", topLeftX);
         topLeftX = topLeftY = AdjustedCornerRadius(topLeftX, 0);
@@ -636,13 +638,17 @@ long WINAPI SetRectangle_Hook(void* pThis,
         bottomLeftX = bottomLeftY = AdjustedCornerRadius(bottomLeftX, 2);
         bottomRightX = bottomRightY = AdjustedCornerRadius(bottomRightX, 3);
         
-        borderThickness = 1;
-    }
+        int borderThickness = 1;
+        float radiusMultiplier = 1.6;
 
-
-    return SetRectangle_Original(pThis, left + borderThickness, top + borderThickness, right - borderThickness, bottom - borderThickness, topLeftX*radiusMultiplier,
+        return SetRectangle_Original(pThis, left + borderThickness, top + borderThickness, right - borderThickness, bottom - borderThickness, topLeftX*radiusMultiplier,
                                  topLeftY*radiusMultiplier, topRightX*radiusMultiplier, topRightY*radiusMultiplier, bottomLeftX*radiusMultiplier,
                                  bottomLeftY*radiusMultiplier, bottomRightX*radiusMultiplier, bottomRightY*radiusMultiplier, flag);
+    }else{
+        return SetRectangle_Original(pThis, left, top, right, bottom, 
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                flag);
+    }
 }
 
 // Sets the content clip from the border rect, the stored radius and DPI, and
