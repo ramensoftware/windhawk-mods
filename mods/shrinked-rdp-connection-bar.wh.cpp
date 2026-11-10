@@ -2,11 +2,11 @@
 // @id              shrinked-rdp-connection-bar
 // @name            Shrinked RDP connection bar
 // @description     Compact RDP bar with native text rendering centered
-// @version         2.2.3
+// @version         2.2.5
 // @author          Kimi 2.8 and hsb5
 // @github          https://github.com/hsb5/
 // @include         mstsc.exe
-// @compilerOptions -luser32 -lgdi32
+// @compilerOptions -luser32 -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,9 +59,9 @@ int WINAPI DrawTextExW_Hook(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc,
     return DrawTextExW_Original(hdc, lpchText, cchText, lprc, format, lpdtp);
 }
 
-// Windhawk subclass proc - 5 parameters
+// Windhawk subclass proc - 5th parameter must be DWORD_PTR
 static LRESULT CALLBACK BBar_WHSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
-                                            UINT_PTR subclassId) {
+                                            DWORD_PTR subclassId) {
     if (msg == WM_PAINT) {
         RECT leftRect, rightRect;
         GetWindowRect(g_leftToolbar, &leftRect);
@@ -127,7 +127,7 @@ static void CALLBACK ScanTimer(HWND, UINT, UINT_PTR, DWORD) {
             break;
         }
         
-        // Subclass BBar using Windhawk safe method (5-param proc)
+        // Subclass BBar using Windhawk safe method
         WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_WHSubclassProc, 0);
         
         // Get sizes
@@ -190,7 +190,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     if (g_bbar && IsWindow(g_bbar)) {
-        // Use standard RemoveWindowSubclass with 6-param proc
         RemoveWindowSubclass(g_bbar, BBar_SubclassProc, 0);
     }
     g_bbar = nullptr;
