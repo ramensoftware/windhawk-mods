@@ -201,7 +201,6 @@ Try the same archive in File Explorer itself. If Windows cannot use the archive 
 #include <unordered_map>
 #include <unordered_set>
 #include <deque>
-#include <condition_variable>
 #include <limits>
 #include <cstdio>
 
@@ -1205,6 +1204,11 @@ static constexpr UINT_PTR kChromeRepairTimer = 180;
 static constexpr UINT kOperationPollResultMessage = WM_APP + 201;
 static constexpr UINT kOperationPollProgressMessage = WM_APP + 202;
 static constexpr UINT kOperationCancelResultMessage = WM_APP + 203;
+// Async broker commands and path resolution never wait on the preview UI STA.
+static constexpr UINT kAsyncCommandResultMessage = WM_APP + 205;
+static constexpr UINT kAsyncGripResultMessage = WM_APP + 206;
+static constexpr UINT kAsyncPathResultMessage = WM_APP + 207;
+static constexpr UINT kAsyncFallbackResultMessage = WM_APP + 208;
 // Compile-time regression: duplicate WM_TIMER IDs disable one handler branch.
 static_assert(kThemePollTimer != kOperationStatusTimer &&
     kThemePollTimer != kChromeRepairTimer &&
@@ -1463,6 +1467,337 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
     // Preview handler lifecycle: OLE must be paired with OleUninitialize,
     // and DoPreview must not create a second child window on repeat calls.
     bool oleInitialized_{};
+    // Each request owns its inputs and result independently of ArchiveHandler.
+    // The UI compares the globally unique serial before reading any completion.
+    struct CommandJob {
+        HWND hwnd{};
+        ULONGLONG serial{};
+        DWORD command{};
+        std::wstring archive;
+        std::vector<std::wstring> paths;
+        GUID requestId{};
+        HRESULT result{E_PENDING};
+        std::atomic<bool> done{false};
+    };
+    std::shared_ptr<CommandJob> commandJob_;
+    static DWORD WINAPI CommandWorker(LPVOID raw) {
+        std::unique_ptr<std::shared_ptr<CommandJob>> holder(
+            static_cast<std::shared_ptr<CommandJob>*>(raw));
+        const auto job = *holder;
+        GUID requestId{};
+        job->result = ArchiveSendBrokerCommand(job->command, job->archive,
+                                                job->paths, &requestId);
+        job->requestId = requestId;
+        job->done.store(true, std::memory_order_release);
+        PostMessageW(job->hwnd, kAsyncCommandResultMessage,
+                     static_cast<WPARAM>(job->serial), 0);
+        return 0;
+    }
+    bool QueueCommand(DWORD command, std::vector<std::wstring> paths,
+                      const wchar_t* status) {
+        if (!window_ || commandJob_ || archive_.empty() || resolveJob_ ||
+            archive_.find_first_of(L"\\/:") == std::wstring::npos) return false;
+        auto job = std::make_shared<CommandJob>();
+        job->hwnd = window_;
+        job->serial = g_nextPollSerial.fetch_add(1);
+        job->command = command;
+        job->archive = archive_;
+        job->paths = std::move(paths);
+        auto* holder = new(std::nothrow) std::shared_ptr<CommandJob>(job);
+        if (!holder) return false;
+        commandJob_ = job;
+        if (!ArchivePreviewWorkerLifetime::Start(CommandWorker, holder)) {
+            commandJob_.reset();
+            delete holder;
+            return false;
+        }
+        if (status) SetStatus(status);
+        Layout();
+        return true;
+    }
+    void CompleteCommand(ULONGLONG serial) {
+        auto job = commandJob_;
+        if (!job || job->serial != serial ||
+            !job->done.load(std::memory_order_acquire)) return;
+        commandJob_.reset();
+        const HRESULT hr = job->result;
+        if (SUCCEEDED(hr)) {
+            switch (job->command) {
+                case ARCHIVE_BROKER_EXTRACT_HERE:
+                    TrackExtraction(job->requestId, L"Extracting archive...");
+                    break;
+                case ARCHIVE_BROKER_EXTRACT_TO:
+                    TrackExtraction(job->requestId, L"Choose an extraction folder...");
+                    break;
+                case ARCHIVE_BROKER_EXTRACT_SELECTED_HERE:
+                    TrackExtraction(job->requestId, L"Extracting selected items here...");
+                    break;
+                case ARCHIVE_BROKER_EXTRACT_SELECTED_TO:
+                    TrackExtraction(job->requestId, L"Choose a folder to extract selected items.");
+                    break;
+                case ARCHIVE_BROKER_COPY_SELECTION:
+                    SetStatus(L"Files copied. Paste in Explorer with Ctrl+V.");
+                    break;
+                default:
+                    SetStatus(L"");
+                    break;
+            }
+        } else {
+            wchar_t message[160]{};
+            swprintf_s(message, L"Broker command failed (0x%08lX).",
+                       static_cast<unsigned long>(hr));
+            SetStatus(message);
+            if (job->command == ARCHIVE_BROKER_BROWSER_BACK) {
+                brokerBrowserReady_ = false;
+                brokerCanGoBack_ = false;
+                EnsureFallbackContent();
+            }
+        }
+        Layout();
+    }
+    // Only one grip worker per preview session; it serializes clear/update.
+    // A late attach never wins over a newer detach/selection.
+    struct GripState {
+        std::mutex mutex;
+        HWND hwnd{};
+        HWND desired{};
+        HWND applied{};
+        std::wstring desiredArchive;
+        std::wstring appliedArchive;
+        bool running{};
+        ULONGLONG serial{};
+    };
+    std::shared_ptr<GripState> gripState_;
+    static DWORD WINAPI GripWorker(LPVOID raw) {
+        std::unique_ptr<std::shared_ptr<GripState>> holder(
+            static_cast<std::shared_ptr<GripState>*>(raw));
+        auto state = *holder;
+        for (;;) {
+            HWND desired{}, applied{}, callback{};
+            std::wstring desiredArchive, appliedArchive;
+            ULONGLONG serial{};
+            {
+                std::lock_guard<std::mutex> lock(state->mutex);
+                desired = state->desired;
+                applied = state->applied;
+                desiredArchive = state->desiredArchive;
+                appliedArchive = state->appliedArchive;
+                callback = state->hwnd;
+                serial = state->serial;
+                if (applied == desired &&
+                    (!desired || appliedArchive == desiredArchive)) {
+                    state->running = false;
+                    return 0;
+                }
+            }
+            HRESULT hr = S_OK;
+            if (applied) {
+                hr = ArchiveSendBrokerCommand(ARCHIVE_BROKER_GRIP_CLEAR,
+                    appliedArchive, {std::to_wstring(static_cast<unsigned long long>(
+                        reinterpret_cast<uintptr_t>(applied)))});
+            } else if (desired) {
+                hr = ArchiveSendBrokerCommand(ARCHIVE_BROKER_GRIP_UPDATE,
+                    desiredArchive, {std::to_wstring(static_cast<unsigned long long>(
+                        reinterpret_cast<uintptr_t>(desired)))});
+            }
+            {
+                std::lock_guard<std::mutex> lock(state->mutex);
+                if (SUCCEEDED(hr)) {
+                    state->applied = applied ? nullptr : desired;
+                    state->appliedArchive = applied ? L"" : desiredArchive;
+                } else if (applied) {
+                    // A missing old broker no longer owns the previous HWND.
+                    // Forget a failed clear, then try attaching the new view.
+                    state->applied = nullptr;
+                    state->appliedArchive.clear();
+                    continue;
+                } else {
+                    state->running = false;
+                }
+            }
+            if (FAILED(hr)) {
+                PostMessageW(callback, kAsyncGripResultMessage,
+                    static_cast<WPARAM>(serial), static_cast<LPARAM>(hr));
+                return 0;
+            }
+        }
+    }
+    struct ResolveJob {
+        HWND hwnd{};
+        ULONGLONG serial{};
+        std::wstring leaf;
+        std::wstring resultPath;
+        HRESULT result{E_PENDING};
+        std::atomic<bool> cancelled{false};
+        std::atomic<bool> done{false};
+    };
+    std::shared_ptr<ResolveJob> resolveJob_;
+    static DWORD WINAPI ResolveWorker(LPVOID raw) {
+        std::unique_ptr<std::shared_ptr<ResolveJob>> holder(
+            static_cast<std::shared_ptr<ResolveJob>*>(raw));
+        auto job = *holder;
+        // The Explorer broker can be starting on demand. Retry only startup
+        // connection failures, off the UI thread, while the HWND still exists.
+        for (unsigned attempt = 0; attempt < 18; ++attempt) {
+            if (job->cancelled.load(std::memory_order_acquire)) break;
+            job->result = ArchiveResolveSelectedPath(job->leaf, job->hwnd,
+                                                     job->resultPath);
+            if (job->result != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) &&
+                job->result != HRESULT_FROM_WIN32(ERROR_PIPE_BUSY)) break;
+            if (!IsWindow(job->hwnd)) break;
+            Sleep(150);
+        }
+        job->done.store(true, std::memory_order_release);
+        PostMessageW(job->hwnd, kAsyncPathResultMessage,
+                     static_cast<WPARAM>(job->serial), 0);
+        return 0;
+    }
+    bool StartPathResolution() {
+        if (!window_ || resolveJob_) return false;
+        auto job = std::make_shared<ResolveJob>();
+        job->hwnd = window_;
+        job->serial = g_nextPollSerial.fetch_add(1);
+        job->leaf = archive_;
+        auto* holder = new(std::nothrow) std::shared_ptr<ResolveJob>(job);
+        if (!holder) return false;
+        resolveJob_ = job;
+        if (!ArchivePreviewWorkerLifetime::Start(ResolveWorker, holder)) {
+            resolveJob_.reset();
+            delete holder;
+            return false;
+        }
+        SetStatus(L"Locating selected archive...");
+        return true;
+    }
+    // The non-IPC Shell initialization stays on the host STA. No pipe wait.
+    // Data-only recovery enumeration. Shell COM objects belong to a worker STA;
+    // only cloned PIDLs, strings and numeric metadata cross back to the UI STA.
+    struct FallbackJob {
+        HWND hwnd{};
+        HWND list{};
+        ULONGLONG serial{};
+        std::wstring archive;
+        PIDLIST_ABSOLUTE archiveId{};
+        PIDLIST_ABSOLUTE folderId{};
+        size_t page{};
+        size_t previousPage{SIZE_MAX};
+        std::vector<Entry> entries;
+        HIMAGELIST icons{}; // system-owned image list, never destroy
+        bool hasNextPage{};
+        HRESULT result{E_PENDING};
+        std::atomic<bool> cancelled{false};
+        std::atomic<bool> done{false};
+        ~FallbackJob() {
+            CoTaskMemFree(archiveId);
+            CoTaskMemFree(folderId);
+        }
+    };
+    std::shared_ptr<FallbackJob> fallbackJob_;
+    static DWORD WINAPI FallbackWorker(LPVOID raw) {
+        std::unique_ptr<std::shared_ptr<FallbackJob>> holder(
+            static_cast<std::shared_ptr<FallbackJob>*>(raw));
+        auto job = *holder;
+        const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (SUCCEEDED(com)) {
+            job->result = CollectFallback(*job);
+            CoUninitialize();
+        } else {
+            job->result = com;
+        }
+        job->done.store(true, std::memory_order_release);
+        PostMessageW(job->hwnd, kAsyncFallbackResultMessage,
+                     static_cast<WPARAM>(job->serial), 0);
+        return 0;
+    }
+    void QueueFallback(Column& col, size_t previousPage = SIZE_MAX) {
+        if (col.populated || !window_ || !archiveId_ || !col.folderId) return;
+        if (fallbackJob_ && fallbackJob_->list == col.list &&
+            fallbackJob_->page == col.page) return;
+        if (fallbackJob_) fallbackJob_->cancelled.store(true, std::memory_order_release);
+        auto job = std::make_shared<FallbackJob>();
+        job->hwnd = window_;
+        job->list = col.list;
+        job->serial = g_nextPollSerial.fetch_add(1);
+        job->archive = archive_;
+        job->archiveId = ILCloneFull(archiveId_);
+        job->folderId = ILCloneFull(col.folderId);
+        job->page = col.page;
+        job->previousPage = previousPage;
+        if (!job->archiveId || !job->folderId) {
+            error_ = L"Not enough memory for recovery enumeration.";
+            return;
+        }
+        auto* holder = new(std::nothrow) std::shared_ptr<FallbackJob>(job);
+        if (!holder) return;
+        fallbackJob_ = job;
+        if (!ArchivePreviewWorkerLifetime::Start(FallbackWorker, holder)) {
+            fallbackJob_.reset();
+            delete holder;
+            SetStatus(L"Could not start recovery enumeration.");
+            return;
+        }
+        SetStatus(L"Loading archive items...");
+    }
+    void CompleteFallback(ULONGLONG serial) {
+        auto job = fallbackJob_;
+        if (!job || job->serial != serial ||
+            !job->done.load(std::memory_order_acquire)) return;
+        fallbackJob_.reset();
+        if (brokerBrowserReady_ || selectionRetired_) return;
+        Column* col = nullptr;
+        for (auto& c : cols_) {
+            if (c && c->list == job->list && c->page == job->page) {
+                col = c.get();
+                break;
+            }
+        }
+        if (!col || cols_.empty() || cols_.back().get() != col) return;
+        if (FAILED(job->result)) {
+            if (job->previousPage != SIZE_MAX) {
+                col->page = job->previousPage;
+                col->populated = true;
+                SetStatus(L"Could not load this recovery page.");
+                if (col->list) ShowWindow(col->list, SW_SHOWNOACTIVATE);
+            } else {
+                error_ = L"The Shell cannot enumerate this archive format.";
+                SetStatus(error_);
+            }
+            Layout();
+            return;
+        }
+        col->entries = std::move(job->entries);
+        col->hasNextPage = job->hasNextPage;
+        col->populated = true;
+        if (job->icons) icons_ = job->icons;
+        if (col->list && IsWindow(col->list)) {
+            SendMessageW(col->list, WM_SETREDRAW, FALSE, 0);
+            ListView_DeleteAllItems(col->list);
+            for (int i = 0; i < static_cast<int>(col->entries.size()); ++i) {
+                LVITEMW row{};
+                row.mask = LVIF_TEXT | LVIF_PARAM;
+                row.iItem = i;
+                row.pszText = const_cast<LPWSTR>(col->entries[i].name.c_str());
+                row.lParam = i;
+                ListView_InsertItem(col->list, &row);
+            }
+            SendMessageW(col->list, WM_SETREDRAW, TRUE, 0);
+            ShowWindow(col->list, SW_SHOWNOACTIVATE);
+            InvalidateRect(col->list, nullptr, FALSE);
+        }
+        if (col->page || col->hasNextPage) {
+            std::wstring info = L"Recovery page " + std::to_wstring(col->page + 1) +
+                L". Ctrl+PgDown: next, Ctrl+PgUp: previous.";
+            if (col->page + 1 == kMaxFallbackPages &&
+                col->entries.size() == kMaxItems)
+                info = L"Recovery reached its 200,000-entry safety limit.";
+            SetStatus(info);
+        } else SetStatus(L"");
+        if (job->previousPage != SIZE_MAX && col->list && !col->entries.empty()) {
+            ListView_EnsureVisible(col->list, 0, FALSE);
+            ListView_SetItemState(col->list, 0, LVIS_FOCUSED, LVIS_FOCUSED);
+        }
+        Layout();
+    }
     bool uiReady_{};
     bool themeApplied_{};
     HFONT font_{};
@@ -1499,6 +1834,43 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         auto * self = reinterpret_cast < ArchiveHandler *  > (GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (!self) return DefWindowProcW(hwnd, msg, wp, lp);
         switch (msg) {
+            case kAsyncCommandResultMessage:
+                self->CompleteCommand(static_cast<ULONGLONG>(wp));
+                return 0;
+            case kAsyncGripResultMessage: {
+                bool currentFailure = false;
+                if (self->gripState_) {
+                    std::lock_guard<std::mutex> lock(self->gripState_->mutex);
+                    currentFailure = self->gripState_->serial ==
+                        static_cast<ULONGLONG>(wp);
+                }
+                if (currentFailure && !self->selectionRetired_ && self->uiReady_) {
+                    self->brokerBrowserReady_ = false;
+                    self->brokerCanGoBack_ = false;
+                    self->EnsureFallbackContent();
+                }
+                return 0;
+            }
+            case kAsyncFallbackResultMessage:
+                self->CompleteFallback(static_cast<ULONGLONG>(wp));
+                return 0;
+            case kAsyncPathResultMessage: {
+                auto job = self->resolveJob_;
+                if (!job || job->serial != static_cast<ULONGLONG>(wp) ||
+                    !job->done.load(std::memory_order_acquire)) return 0;
+                self->resolveJob_.reset();
+                if (FAILED(job->result)) {
+                    self->error_ = L"Cannot identify the selected archive path.";
+                    self->SetStatus(self->error_);
+                } else {
+                    self->archive_ = std::move(job->resultPath);
+                    self->SetStatus(L"");
+                    self->FinishStart();
+                    if (self->archiveId_) self->SyncGrip();
+                }
+                self->Layout();
+                return 0;
+            }
             case ARCHIVE_BROWSER_CANCEL_FROM_FOOTER:
                 // A broker HWND may be shared by multiple Explorer previews.
                 // Only the Preview Handler owning this exact operation accepts it.
@@ -2175,7 +2547,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         // Navigation and extraction actions live in the separate Preview Host toolbar.
         if (backButton_) {
             placeChild(backButton_,pad,y,backWidth,buttonHeight);
-            EnableWindow(backButton_, brokerBrowserReady_ ? brokerCanGoBack_ : cols_.size() > 1);
+            EnableWindow(backButton_, !commandJob_ && (brokerBrowserReady_ ? brokerCanGoBack_ : cols_.size() > 1));
         }
         const int selectedX = width - pad - selectedWidth;
         if (extractSelectedButton_) {
@@ -2185,13 +2557,15 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                 const bool hasSelection = brokerBrowserReady_ ? brokerSelectionCount_ > 0 :
                     (!cols_.empty() && cols_.back()->list &&
                      ListView_GetSelectedCount(cols_.back()->list) > 0);
-                EnableWindow(extractSelectedButton_,hasSelection && !extractionPending_);
+                EnableWindow(extractSelectedButton_,hasSelection && !extractionPending_ && !commandJob_);
             } else if (GetWindowLongPtrW(extractSelectedButton_,GWL_STYLE) & WS_VISIBLE)
                 ShowWindow(extractSelectedButton_,SW_HIDE);
         }
         const int toX = selectedFits?selectedX - gap - toWidth:width - pad - toWidth;
         placeChild(extractToButton_,toX,y,toWidth,buttonHeight);
         placeChild(extractButton_,toX - gap - hereWidth,y,hereWidth,buttonHeight);
+        if (extractButton_) EnableWindow(extractButton_, !extractionPending_ && !commandJob_);
+        if (extractToButton_) EnableWindow(extractToButton_, !extractionPending_ && !commandJob_);
         if (cancelButton_) {
             const int cancelWidth = Scale(window_,67);
             const int cancelHeight = Scale(window_,19);
@@ -2361,7 +2735,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                 {
                     if (extractSelectedButton_ && !brokerBrowserReady_)
                         EnableWindow(extractSelectedButton_,
-                            ListView_GetSelectedCount(cols_.back()->list) > 0 && !extractionPending_);
+                            ListView_GetSelectedCount(cols_.back()->list) > 0 && !extractionPending_ && !commandJob_);
                 }
         }
         else if (n->code == LVN_BEGINDRAG && !dragStarted_ && !dragInProgress_) {
@@ -2394,14 +2768,13 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         }
     }
     void GoBack() {
+        if (commandJob_) return;
         if (brokerBrowserReady_ && brokerBoundList_) {
-            HRESULT hr = ArchiveSendBrokerCommand(ARCHIVE_BROKER_BROWSER_BACK, archive_,
-                {std::to_wstring(static_cast < unsigned long long > (
-                    reinterpret_cast < uintptr_t > (brokerBoundList_)))});
-            if (SUCCEEDED(hr)) return;
-            brokerBrowserReady_ = false;
-            brokerCanGoBack_ = false;
-            EnsureFallbackContent();
+            if (!QueueCommand(ARCHIVE_BROKER_BROWSER_BACK,
+                {std::to_wstring(static_cast<unsigned long long>(
+                    reinterpret_cast<uintptr_t>(brokerBoundList_)))},
+                L"Going back...")) SetStatus(L"Cannot queue navigation.");
+            return;
         }
         if (cols_.size() <= 1) return;
         auto & child = cols_.back();
@@ -2435,7 +2808,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             SetStatus(L"Extraction incomplete. Some files remain in the destination.");
         else {
             wchar_t status[160]{};
-            swprintf_s(status,L"Extraction failed (0x%08lX). See broker log.",
+            swprintf_s(status,L"Extraction failed (0x%08lX). Check Windhawk logs.",
                 static_cast < unsigned long > (outcome));
             SetStatus(status);
         }
@@ -2499,40 +2872,27 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
     void ExtractSelectedTo() { ExtractSelected(false); }
     void ExtractSelectedHere() { ExtractSelected(true); }
     void ExtractSelected(bool here) {
-        if (extractionPending_) return; // Preserve original status request ID.
-        // The visible owner-data ListView lives in medium-integrity Explorer,
-        // not in prevhost.exe. Ask its authenticated Broker to read the real
-        // selection instead of accidentally using hidden fallback indices.
+        if (extractionPending_ || commandJob_) return;
         if (brokerBrowserReady_ && brokerBoundList_) {
             const DWORD cmd = here ? ARCHIVE_BROKER_BROWSER_EXTRACT_SELECTED_HERE :
                 ARCHIVE_BROKER_BROWSER_EXTRACT_SELECTED_TO;
-            const HRESULT broker = ArchiveSendBrokerCommand(cmd,archive_,
-                {std::to_wstring(static_cast < unsigned long long > (
-                    reinterpret_cast < uintptr_t > (brokerBoundList_)))});
-            if (FAILED(broker)) SetStatus(L"Could not send selected extraction to Broker.");
+            if (!QueueCommand(cmd, {std::to_wstring(static_cast<unsigned long long>(
+                    reinterpret_cast<uintptr_t>(brokerBoundList_)))},
+                    L"Sending selected extraction..."))
+                SetStatus(L"Could not queue selected extraction.");
             return;
         }
         const auto selected = SelectedIndices();
         if (selected.empty()) { SetStatus(L"Select one or more files first."); return; }
         if (selected.size() > ARCHIVE_BROKER_MAX_PATHS) {
-            wchar_t message[150]{};
-            swprintf_s(message,L"Too many items (%zu). Select at most %lu; nothing was extracted.",
-                selected.size(),static_cast < unsigned long > (ARCHIVE_BROKER_MAX_PATHS));
-            SetStatus(message);return;
+            SetStatus(L"Too many selected items; limit is 4,096.");
+            return;
         }
-        const auto paths = SelectedArchivePaths(selected);
-        GUID id{};
-        HRESULT hr = ArchiveSendBrokerCommand(here ? ARCHIVE_BROKER_EXTRACT_SELECTED_HERE :
-                                               ARCHIVE_BROKER_EXTRACT_SELECTED_TO,
-                                               archive_,paths, & id);
-        if (SUCCEEDED(hr)) TrackExtraction(id,here ? L"Extracting selected items here..." :
-            L"Choose a folder to extract selected items.");
-        else {
-            wchar_t msg[150]{};
-            swprintf_s(msg, L"Extract selected failed to start (0x%08lX).",
-                       static_cast < unsigned long > (hr));
-            SetStatus(msg);
-        }
+        const DWORD cmd = here ? ARCHIVE_BROKER_EXTRACT_SELECTED_HERE :
+            ARCHIVE_BROKER_EXTRACT_SELECTED_TO;
+        if (!QueueCommand(cmd, SelectedArchivePaths(selected),
+                          L"Starting selected extraction..."))
+            SetStatus(L"Could not queue selected extraction.");
     }
     void SelectedContextMenu(HWND list, POINT screenPoint) {
         if (!list || cols_.empty() || !window_) return;
@@ -2567,25 +2927,16 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         else if (choice == kSelectedMenuTo) ExtractSelectedTo();
     }
     void CopyItem() {
+        if (commandJob_) return;
         const auto indices = SelectedIndices();
         if (indices.empty()) { SetStatus(L"Select one or more files first."); return; }
         if (indices.size() > ARCHIVE_BROKER_MAX_PATHS) {
-            wchar_t message[150]{};
-            swprintf_s(message,L"Too many items (%zu). Select at most %lu; nothing was copied.",
-                indices.size(),static_cast < unsigned long > (ARCHIVE_BROKER_MAX_PATHS));
-            SetStatus(message);return;
+            SetStatus(L"Too many selected items; limit is 4,096.");
+            return;
         }
-        // Low-integrity OleSetClipboard cannot reliably supply CF_HDROP to
-        // medium-integrity Explorer. Broker sets and flushes the REAL clipboard.
-        const HRESULT hr = ArchiveSendBrokerCommand(ARCHIVE_BROKER_COPY_SELECTION,
-                                                     archive_, SelectedArchivePaths(indices));
-        if (SUCCEEDED(hr)) SetStatus(L"Files copied. Paste in Explorer with Ctrl+V.");
-        else {
-            wchar_t error[128]{};
-            swprintf_s(error, L"Transfer broker unavailable (0x%08lX).",
-                       static_cast < unsigned long > (hr));
-            SetStatus(error);
-        }
+        if (!QueueCommand(ARCHIVE_BROKER_COPY_SELECTION,
+                          SelectedArchivePaths(indices), L"Copying selection..."))
+            SetStatus(L"Could not queue copy operation.");
     }
     std::vector < std::wstring > SelectedArchivePaths(const std::vector < int >  & indices) {
         std::vector < std::wstring > result;
@@ -2604,32 +2955,53 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         }
         return result;
     }
-    // A *real* medium-integrity ListView is parented into the preview host.
-    // Keep the low-IL ListView as a functional fallback if attaching fails.
+    // Version A: attach/detach runs on a tracked IPC worker. The broker still
+    // owns its native ListView; version B must replace that without losing DnD.
     void SyncGrip(bool clear = false) {
         HWND current = (!clear && !cols_.empty()) ? cols_.back()->list : nullptr;
-        if (brokerBoundList_ && (clear || current != brokerBoundList_)) {
-            ArchiveSendBrokerCommand(ARCHIVE_BROKER_GRIP_CLEAR, archive_,
-                {std::to_wstring(static_cast < unsigned long long > (
-                    reinterpret_cast < uintptr_t > (brokerBoundList_)))});
-            brokerBoundList_ = nullptr;
+        if (!window_ || archive_.empty() ||
+            (archive_.find_first_of(L"\\/:") == std::wstring::npos)) current = nullptr;
+        if (selectionRetired_) current = nullptr;
+        if (clear || current != brokerBoundList_) {
             brokerBrowserReady_ = false;
             brokerCanGoBack_ = false;
-        }
-        if (clear || !current || archive_.empty() || selectionRetired_) return;
-        // The child HWND is created before the Explorer preview ancestor is
-        // guaranteed visible. Send the attach now; PositionBrowser on the
-        // broker side independently hides/shows its HWND with its parent.
-        if (!window_ || !IsWindow(window_) || !parent_ || !IsWindow(parent_)) return;
-        const ULONGLONG now = GetTickCount64();
-        if (brokerBoundList_ == current &&
-            (brokerBrowserReady_ || now - brokerAttachAttempt_ < 2000)) return;
-        brokerAttachAttempt_ = now;
-        const std::vector < std::wstring > items{
-            std::to_wstring(static_cast < unsigned long long > (
-                reinterpret_cast < uintptr_t > (current)))};
-        if (SUCCEEDED(ArchiveSendBrokerCommand(ARCHIVE_BROKER_GRIP_UPDATE,archive_,items)))
             brokerBoundList_ = current;
+        }
+        if (current && (!parent_ || !IsWindow(parent_))) return;
+        if (!current && !gripState_) return;
+        if (current && brokerBrowserReady_) return;
+        const ULONGLONG now = GetTickCount64();
+        if (current && now - brokerAttachAttempt_ < 2000) return;
+        if (current) brokerAttachAttempt_ = now;
+        if (!gripState_) gripState_ = std::make_shared<GripState>();
+        auto state = gripState_;
+        bool start = false;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            state->desired = current;
+            state->desiredArchive = archive_;
+            state->hwnd = window_;
+            state->serial = g_nextPollSerial.fetch_add(1);
+            // A pipe acknowledgement is not proof that the broker created its
+            // cross-process HWND. Resend after the 2s retry interval until the
+            // UI receives ARCHIVE_BROWSER_READY.
+            if (current && !brokerBrowserReady_ && !state->running &&
+                state->applied == current && state->appliedArchive == archive_) {
+                state->applied = nullptr;
+                state->appliedArchive.clear();
+            }
+            if (!state->running) {
+                state->running = true;
+                start = true;
+            }
+        }
+        if (!start) return;
+        auto* holder = new(std::nothrow) std::shared_ptr<GripState>(state);
+        if (!holder || !ArchivePreviewWorkerLifetime::Start(GripWorker, holder)) {
+            delete holder;
+            std::lock_guard<std::mutex> lock(state->mutex);
+            state->running = false;
+        }
     }
     void DragItem(int idx, const std::vector < int >  & pressedSelection) {
         // When the transparent overlay is active, its medium-integrity HWND
@@ -2638,51 +3010,32 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         (void)idx; (void)pressedSelection;
         SyncGrip();
     }
-    // Ask the medium-integrity broker to copy the archive's root items using
-    // the Windows Shell; the low-integrity Preview Host never extracts files.
+    // The Broker performs native extraction; the UI only queues the command.
     void ExtractHere() {
-        if (extractionPending_) return;
-        GUID id{};
-        HRESULT hr = ArchiveSendBrokerCommand(ARCHIVE_BROKER_EXTRACT_HERE, archive_, {}, & id);
-        if (SUCCEEDED(hr)) TrackExtraction(id,L"Extracting archive...");
-        else {
-            wchar_t message[220]{};
-            swprintf_s(message, L"Transfer broker unavailable (0x%08lX).\n"
-                L"Close and reopen this File Explorer window, then try again.\n"
-                L"If it still fails, disable and re-enable Archive Preview in Windhawk.",
-                       static_cast < unsigned long > (hr));
-            MessageBoxW(window_, message, L"Extract here", MB_OK | MB_ICONWARNING);
-        }
+        if (extractionPending_ || commandJob_) return;
+        if (!QueueCommand(ARCHIVE_BROKER_EXTRACT_HERE, {},
+                          L"Starting extraction..."))
+            SetStatus(L"Could not queue extraction.");
     }
     void ExtractTo() {
-        if (extractionPending_) return;
-        GUID id{};
-        HRESULT hr = ArchiveSendBrokerCommand(ARCHIVE_BROKER_EXTRACT_TO, archive_, {}, & id);
-        if (SUCCEEDED(hr)) TrackExtraction(id,L"Choose an extraction folder...");
-        else {
-            wchar_t message[220]{};
-            swprintf_s(message, L"Transfer broker unavailable (0x%08lX).\n"
-                L"Close and reopen this File Explorer window, then try again.\n"
-                L"If it still fails, disable and re-enable Archive Preview in Windhawk.",
-                       static_cast < unsigned long > (hr));
-            MessageBoxW(window_, message, L"Extract to", MB_OK | MB_ICONWARNING);
-        }
+        if (extractionPending_ || commandJob_) return;
+        if (!QueueCommand(ARCHIVE_BROKER_EXTRACT_TO, {},
+                          L"Opening extraction destination..."))
+            SetStatus(L"Could not queue extraction.");
     }
-    HRESULT PopulateFallbackColumn(Column & col) {
-        if (col.populated) return S_OK;
-        col.entries.clear();
+    static HRESULT CollectFallback(FallbackJob& job) {
         IShellItem * folder = nullptr;
-        HRESULT hr = SHCreateItemFromIDList(col.folderId, IID_PPV_ARGS( & folder));
+        HRESULT hr = SHCreateItemFromIDList(job.folderId, IID_PPV_ARGS( & folder));
         if (FAILED(hr)) return hr;
         IEnumShellItems * enumerator = nullptr;
         hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS( & enumerator));
         folder->Release();
         if (FAILED(hr)) return hr;
         HRESULT enumerateResult = S_OK;
-        col.hasNextPage = false;
+        job.hasNextPage = false;
         // IEnumShellItems::Skip may be unsupported by third-party providers.
         // Fall back to Next() but never scan beyond the recovery-mode limit.
-        const ULONG offset = static_cast < ULONG > (col.page * kMaxItems);
+        const ULONG offset = static_cast < ULONG > (job.page * kMaxItems);
         if (offset) {
             HRESULT skipped = enumerator->Skip(offset);
             if (skipped == S_FALSE) enumerateResult = HRESULT_FROM_WIN32(ERROR_NO_MORE_FILES);
@@ -2691,13 +3044,17 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                 // returning E_NOTIMPL, so continuing the same enumerator is unsafe.
                 enumerator->Release();enumerator = nullptr;
                 IShellItem * freshFolder = nullptr;
-                enumerateResult = SHCreateItemFromIDList(col.folderId,
+                enumerateResult = SHCreateItemFromIDList(job.folderId,
                     IID_PPV_ARGS( & freshFolder));
                 if (SUCCEEDED(enumerateResult))
                     enumerateResult = freshFolder->BindToHandler(nullptr,BHID_EnumItems,
                         IID_PPV_ARGS( & enumerator));
                 if (freshFolder) freshFolder->Release();
                 if (SUCCEEDED(enumerateResult)) for (ULONG i = 0;i < offset;++i) {
+                    if (job.cancelled.load(std::memory_order_acquire)) {
+                        enumerateResult = HRESULT_FROM_WIN32(ERROR_CANCELLED);
+                        break;
+                    }
                     IShellItem * discard = nullptr;ULONG got = 0;
                     const HRESULT next = enumerator->Next(1, & discard, & got);
                     if (discard) discard->Release();
@@ -2712,6 +3069,10 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             if (enumerator) enumerator->Release();return enumerateResult;
         }
         for (int i = 0; i < kMaxItems; ++i) {
+            if (job.cancelled.load(std::memory_order_acquire)) {
+                enumerateResult = HRESULT_FROM_WIN32(ERROR_CANCELLED);
+                break;
+            }
             IShellItem * item = nullptr;
             ULONG fetched = 0;
             hr = enumerator->Next(1, & item, & fetched);
@@ -2724,14 +3085,14 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             e.name = DisplayName(item);
             if (e.name.empty()) { item->Release(); continue; }
             hr = SHGetIDListFromObject(item, & e.id);
-            if (FAILED(hr) || !Within(archiveId_, e.id)) { item->Release(); continue; }
+            if (FAILED(hr) || !Within(job.archiveId, e.id)) { item->Release(); continue; }
             SFGAOF attrs = SFGAO_FOLDER;
             e.folder = SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, & attrs)) &&
                        ((attrs & SFGAO_FOLDER) != 0);
             IShellItem2 * props = nullptr;
             if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS( & props)))) {
                 e.hasSize = !e.folder && SUCCEEDED(props->GetUInt64(PKEY_Size, & e.bytes));
-                if (e.hasSize && !e.bytes && ArchivePreviewIsSingleStreamArchive(archive_))
+                if (e.hasSize && !e.bytes && ArchivePreviewIsSingleStreamArchive(job.archive))
                     e.hasSize = false; // Shell's zero may be an unknown size.
                 props->Release();
             }
@@ -2739,83 +3100,48 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             UINT flags = SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON | SHGFI_TYPENAME;
             HIMAGELIST imageList = reinterpret_cast < HIMAGELIST > (SHGetFileInfoW(
                 reinterpret_cast < LPCWSTR > (e.id), 0, & fi, sizeof(fi), flags));
-            if (imageList && !icons_) icons_ = imageList;
+            if (imageList && !job.icons) job.icons = imageList;
             e.iconIndex = imageList ? fi.iIcon : - 1;
             e.kind = fi.szTypeName[0] ? fi.szTypeName : (e.folder ? L"Folder" : L"File");
-            col.entries.emplace_back(std::move(e));
+            job.entries.emplace_back(std::move(e));
             item->Release();
         }
         // Only count NEXT as available when a real item exists beyond this
         // page. Paging uses Ctrl+PageDown / Ctrl+PageUp in recovery mode.
-        if (col.entries.size() >= static_cast < size_t > (kMaxItems) &&
-            col.page + 1 < kMaxFallbackPages) {
+        if (job.entries.size() >= static_cast < size_t > (kMaxItems) &&
+            job.page + 1 < kMaxFallbackPages) {
             IShellItem * extra = nullptr;ULONG got = 0;
             const HRESULT more = enumerator->Next(1, & extra, & got);
             if (extra) extra->Release();
-            col.hasNextPage = (more == S_OK && got > 0);
+            job.hasNextPage = (more == S_OK && got > 0);
             if (FAILED(more)) enumerateResult = more;
         }
         enumerator->Release();
-        if (FAILED(enumerateResult)) {col.entries.clear();return enumerateResult;}
-        std::stable_sort(col.entries.begin(), col.entries.end(), [](const Entry & a, const Entry & b) {
+        if (FAILED(enumerateResult)) {job.entries.clear();return enumerateResult;}
+        std::stable_sort(job.entries.begin(), job.entries.end(), [](const Entry & a, const Entry & b) {
             if (a.folder != b.folder) return a.folder > b.folder;
             return CompareStringOrdinal(a.name.c_str(), - 1, b.name.c_str(), - 1, TRUE) == CSTR_LESS_THAN;
         });
-        col.populated = true;
-        if (col.list) {
-            SendMessageW(col.list, WM_SETREDRAW, FALSE, 0);
-            ListView_DeleteAllItems(col.list);
-            for (int i = 0;i < static_cast < int > (col.entries.size());++i) {
-                LVITEMW row{};
-                row.mask = LVIF_TEXT | LVIF_PARAM;
-                row.iItem = i;
-                row.pszText = const_cast < LPWSTR > (col.entries[i].name.c_str());
-                row.lParam = i;
-                ListView_InsertItem(col.list, & row);
-            }
-            SendMessageW(col.list, WM_SETREDRAW, TRUE, 0);
-            InvalidateRect(col.list, nullptr, FALSE);
-        }
-        if (col.page || col.hasNextPage) {
-            std::wstring info = L"Recovery page " + std::to_wstring(col.page + 1) +
-                L". Ctrl+PgDown: next, Ctrl+PgUp: previous.";
-            if (col.page + 1 == kMaxFallbackPages && col.entries.size() == kMaxItems)
-                info = L"Recovery reached its 200,000-entry safety limit.";
-            SetStatus(info);
-        }
         return S_OK;
     }
     void ChangeFallbackPage(int direction) {
         if (brokerBrowserReady_ || cols_.empty()) return;
-        Column & col =  * cols_.back();
+        Column& col = *cols_.back();
         if (!col.populated || (direction > 0 && !col.hasNextPage) ||
             (direction < 0 && col.page == 0) ||
             (direction > 0 && col.page + 1 >= kMaxFallbackPages)) return;
-        const size_t original = col.page;
-        col.page = direction > 0?col.page + 1:col.page - 1;
+        const size_t previousPage = col.page;
+        col.page = direction > 0 ? col.page + 1 : col.page - 1;
         col.populated = false;
-        const HRESULT loaded = PopulateFallbackColumn(col);
-        if (FAILED(loaded)) {
-            col.page = original;
-            col.populated = false;
-            (void)PopulateFallbackColumn(col);
-            SetStatus(L"Could not load this recovery page.");
-            return;
-        }
-        if (col.list && !col.entries.empty()) {
-            ListView_EnsureVisible(col.list,0,FALSE);
-            ListView_SetItemState(col.list,0,LVIS_FOCUSED,LVIS_FOCUSED);
-        }
+        if (col.list) ShowWindow(col.list, SW_HIDE);
+        QueueFallback(col, previousPage);
     }
     void EnsureFallbackContent() {
         if (cols_.empty() || brokerBrowserReady_ || selectionRetired_) return;
-        Column & col =  * cols_.back();
-        if (FAILED(PopulateFallbackColumn(col))) {
-            error_ = L"The Shell cannot enumerate this archive format.";
-            if (window_) InvalidateRect(window_,nullptr,FALSE);
-            return;
-        }
-        if (col.list && IsWindow(col.list)) ShowWindow(col.list,SW_SHOWNOACTIVATE);
+        Column& col = *cols_.back();
+        if (!col.populated) QueueFallback(col);
+        else if (col.list && IsWindow(col.list))
+            ShowWindow(col.list, SW_SHOWNOACTIVATE);
         Layout();
     }
     HRESULT AddColumn(PIDLIST_ABSOLUTE folderId, std::wstring heading, bool deferEntries = false) {
@@ -2842,15 +3168,11 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         lvc.pszText = const_cast < LPWSTR > (L"Name");
         ListView_InsertColumn(list, 0, & lvc);
         SetWindowSubclass(list, ListProc, 1, reinterpret_cast < DWORD_PTR > (this));
-        if (!deferEntries) {
-            const HRESULT loaded = PopulateFallbackColumn( * col);
-            if (FAILED(loaded)) { DestroyWindow(list);return loaded; }
-        }
         if (!cols_.empty() && cols_.back()->list) ShowWindow(cols_.back()->list, SW_HIDE);
         cols_.emplace_back(std::move(col));
         Theme(); Layout();
         if (!deferEntries && !brokerBrowserReady_)
-            ShowWindow(list,SW_SHOWNOACTIVATE);
+            QueueFallback(*cols_.back());
         return S_OK;
     }
     HRESULT Start() {
@@ -2858,20 +3180,14 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
             error_ = L"This extension is not enabled in the mod settings.";
             return S_OK;
         }
-        // The TXT preview bridge can initialize this handler from a named
-        // stream whose STATSTG name is only a basename. Never assume the
-        // current directory of prevhost.exe is the Explorer folder.
         if (archive_.find_first_of(L"\\/:") == std::wstring::npos) {
-            std::wstring absolute;
-            const HRESULT resolution = ArchiveResolveSelectedPath(archive_,window_,absolute);
-            Wh_Log(L"[AP bridge/prevhost] R5 absolute-path lookup for %s hr=0x%08lX",
-                archive_.c_str(),static_cast < unsigned long > (resolution));
-            if (FAILED(resolution)) {
-                error_ = L"Cannot identify the selected archive path.";
-                return S_OK;
-            }
-            archive_ = std::move(absolute);
+            if (!StartPathResolution())
+                error_ = L"Could not start selected path resolution.";
+            return S_OK;
         }
+        return FinishStart();
+    }
+    HRESULT FinishStart() {
         DWORD attr = GetFileAttributesW(archive_.c_str());
         if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
             Wh_Log(L"[AP bridge/prevhost] R5 GetFileAttributesW failed: error=%lu",GetLastError());
@@ -2911,6 +3227,12 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         // preview because Explorer changed the selection after an extraction.
         if (window_) ShowWindow(window_,SW_HIDE);
         SyncGrip(true);
+        commandJob_.reset();
+        if (resolveJob_) resolveJob_->cancelled.store(true, std::memory_order_release);
+        resolveJob_.reset();
+        if (fallbackJob_) fallbackJob_->cancelled.store(true, std::memory_order_release);
+        fallbackJob_.reset();
+        gripState_.reset();
         while (!cols_.empty()) {
             if (cols_.back()->list) DestroyWindow(cols_.back()->list);
             cols_.pop_back();
@@ -3211,7 +3533,7 @@ static HINSTANCE g_module = nullptr; // The Windhawk DLL, never explorer.exe.
 // ComCtl32 v6 enables Windows-native alpha-blended ListView marquee with LVS_EX_DOUBLEBUFFER.
 namespace fs = std::filesystem;
 // Shutdown is cooperative. Never terminate a thread while it can be inside
-// a Windows Shell/COM provider; the service pin remains live until it returns.
+// a Windows Shell/COM provider; join worker handles before DLL unload.
 static std::atomic < bool > g_cancelForShutdown{false};
 static thread_local const std::atomic < bool >  * t_operationCancelFlag = nullptr;
 static bool CancelledForCurrentOperation(const std::atomic < bool >  * overrideFlag = nullptr) {
@@ -7908,7 +8230,8 @@ static HRESULT Process(const Request & req) {
 // Two persistent STA workers process file operations without creating a thread
 // for each click. Only explicit, on-demand operations enter the bounded FIFO.
 static std::mutex g_workMutex;
-static std::condition_variable g_workReady;
+// Manual-reset work signal also lets OLE STAs dispatch clipboard COM calls.
+static HANDLE g_workEvent = nullptr;
 static std::deque < Request > g_workQueue;
 static std::atomic < bool > g_stopWorkers{false};
 // A completed operation can contain thousands of archive paths. A stable
@@ -8131,7 +8454,25 @@ static DWORD WINAPI WorkQueueThread(LPVOID raw) {
         std::shared_ptr < std::atomic < bool >> operationCancel;
         {
             std::unique_lock < std::mutex > lock(g_workMutex);
-            g_workReady.wait(lock, [] { return g_stopWorkers.load() || !g_workQueue.empty(); });
+            // An STA that owns a virtual-file OLE clipboard object must pump
+            // COM window messages even while no broker operation is queued.
+            // The manual-reset event avoids periodic wakeups while idle.
+            while (!g_stopWorkers.load() && g_workQueue.empty()) {
+                ResetEvent(g_workEvent); // Protected by g_workMutex: no lost wake.
+                lock.unlock();
+                const DWORD wake = MsgWaitForMultipleObjects(
+                    1, &g_workEvent, FALSE, INFINITE, QS_ALLINPUT);
+                if (wake == WAIT_OBJECT_0 + 1) {
+                    MSG message{};
+                    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&message);
+                        DispatchMessageW(&message);
+                    }
+                } else if (wake == WAIT_FAILED) {
+                    Sleep(50);
+                }
+                lock.lock();
+            }
             if (g_stopWorkers.load() && g_workQueue.empty()) break;
             req = std::move(g_workQueue.front());
             g_workQueue.pop_front();
@@ -8181,21 +8522,24 @@ static DWORD WINAPI WorkQueueThread(LPVOID raw) {
     return 0;
 }
 static bool StartWorkQueue() {
+    g_workEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_workEvent) return false;
     for (int i = 0;i < kWorkerCount;++i) {
         g_workerThreads[i] = CreateThread(nullptr,0,WorkQueueThread,
             reinterpret_cast < LPVOID > (static_cast < uintptr_t > (i)),0,nullptr);
         if (!g_workerThreads[i]) {
             g_stopWorkers.store(true);
-            g_workReady.notify_all();
-            for (int j = 0;j < i;++j) {
-                // The service's DLL pin remains live until each started STA
-                // worker returns. Closing a still-running handle loses the
-                // only reliable join point, which is unsafe during unload.
+            SetEvent(g_workEvent);
+                    for (int j = 0;j < i;++j) {
+                // Keep each STA handle until it has joined. Closing a live
+                // handle loses the reliable join point during DLL unload.
                 while (WaitForSingleObject(g_workerThreads[j],30000) == WAIT_TIMEOUT)
                     Wh_Log(L"ArchivePreview: waiting for STA worker after partial startup failure");
                 CloseHandle(g_workerThreads[j]);
                 g_workerThreads[j] = nullptr;
             }
+            CloseHandle(g_workEvent);
+            g_workEvent = nullptr;
             return false;
         }
     }
@@ -8262,7 +8606,7 @@ static HRESULT DispatchAsync(const Request & req,DWORD ownerPid) {
             g_operationRecords.emplace(id,std::move(record));
         }
     }
-    g_workReady.notify_one();
+    if (g_workEvent) SetEvent(g_workEvent);
     return S_OK;
 }
 
@@ -8580,11 +8924,35 @@ static DWORD WINAPI ServeOnePipeClient(LPVOID state) {
             }
             if (requestValid && request.command == ARCHIVE_BROKER_COPY_SELECTION &&
                 !g_cancelForShutdown.load(std::memory_order_acquire) && !ProviderStalled()) {
-                ScopedHeavyPipeReader slot;
-                hr = slot.accepted ? NativeShellClipboard(request,nullptr) :
-                    HRESULT_FROM_WIN32(ERROR_BUSY);
-                Report(request,hr);
-                replyWritten = SUCCEEDED(ArchiveWriteAll(pipe, & hr,sizeof(hr)));
+                // The clipboard IDataObject must belong to a persistent STA.
+                // The IPC reader's OLE apartment is temporary, so running the
+                // provider copy verb here can drop virtual files immediately.
+                // Wait only on this broker reader thread, never in prevhost UI.
+                ULONG clientPid = 0;
+                GetNamedPipeClientProcessId(pipe, &clientPid);
+                hr = DispatchAsync(request, clientPid);
+                if (SUCCEEDED(hr)) {
+                    const ULONGLONG timeout = request.items.size() > 1024 ? 53000 : 27000;
+                    const ULONGLONG deadline = GetTickCount64() + timeout;
+                    for (;;) {
+                        const auto result = QueryOperationStatus(request.requestId, clientPid);
+                        if (SUCCEEDED(result.lookup) &&
+                            result.phase == ARCHIVE_OPERATION_DONE) {
+                            hr = result.result;
+                            break;
+                        }
+                        if (g_cancelForShutdown.load(std::memory_order_acquire)) {
+                            hr = HRESULT_FROM_WIN32(ERROR_CANCELLED);
+                            break;
+                        }
+                        if (GetTickCount64() >= deadline) {
+                            hr = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+                            break;
+                        }
+                        Sleep(30);
+                    }
+                }
+                replyWritten = SUCCEEDED(ArchiveWriteAll(pipe, &hr, sizeof(hr)));
             }
             else if (requestValid && request.command != ARCHIVE_BROKER_COPY_SELECTION &&
                        request.command != ARCHIVE_BROKER_GRIP_UPDATE &&
@@ -8712,8 +9080,7 @@ static int Serve() {
     }
     g_cancelForShutdown.store(true,std::memory_order_release);
     // Draining is deliberate: outstanding Shell operations may need time.
-    // If they hang, the service thread keeps its module pin and the broker
-    // ownership marker instead of unloading executable code under a worker.
+    // If they hang, unload stays blocked until the live workers can exit.
     std::vector < HANDLE > readers;
     {
         std::lock_guard < std::mutex > lock(g_readerHandlesMutex);
@@ -8724,13 +9091,13 @@ static int Serve() {
         // shutdown. This does NOT terminate the thread or bypass COM release.
         CancelSynchronousIo(reader);
         while(WaitForSingleObject(reader,30000) == WAIT_TIMEOUT)
-            Wh_Log(L"Shutdown waiting for a stalled IPC/COM reader; DLL remains pinned");
+            Wh_Log(L"Shutdown waiting for a stalled IPC/COM reader");
         CloseHandle(reader);
     }
     g_stopWorkers.store(true);
     { std::lock_guard < std::mutex > lock(g_authorizedMutex);g_authorizedPreviews.clear(); }
     { std::lock_guard < std::mutex > lock(g_workMutex); g_workQueue.clear(); }
-    g_workReady.notify_all();
+    if (g_workEvent) SetEvent(g_workEvent);
     if (HWND manager = g_gripManager.load()) {
         PostMessageW(manager, WM_CLOSE, 0, 0);
         if (g_gripWorkerThread) PostThreadMessageW(GetThreadId(g_gripWorkerThread), WM_QUIT, 0, 0);
@@ -8744,9 +9111,10 @@ static int Serve() {
     }
     if (g_gripWorkerThread) {
         while(WaitForSingleObject(g_gripWorkerThread,30000) == WAIT_TIMEOUT)
-            Wh_Log(L"Shutdown waiting for Broker UI thread; DLL remains pinned");
+            Wh_Log(L"Shutdown waiting for Broker UI thread");
         CloseHandle(g_gripWorkerThread);g_gripWorkerThread = nullptr;
     }
+    if (g_workEvent) { CloseHandle(g_workEvent); g_workEvent = nullptr; }
     g_serviceReady.store(false,std::memory_order_release);
     LocalFree(descriptor);
     return 4;
@@ -8757,7 +9125,7 @@ static void StopService() {
     g_stopBroker.store(true, std::memory_order_release);
     g_stopWorkers.store(true, std::memory_order_release);
     { std::lock_guard < std::mutex > lock(g_workMutex); g_workQueue.clear(); }
-    g_workReady.notify_all();
+    if (g_workEvent) SetEvent(g_workEvent);
     if (HWND manager = g_gripManager.load()) {
         PostMessageW(manager,WM_CLOSE,0,0);
         if (g_gripWorkerThread) PostThreadMessageW(GetThreadId(g_gripWorkerThread),WM_QUIT,0,0);
