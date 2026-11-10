@@ -12,7 +12,7 @@
 // @include         LogonUI.exe
 // @include         LockApp.exe
 // @include         *
-// @compilerOptions -lgdi32 -lntdll
+// @compilerOptions -lgdi32 -lntdll -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -488,12 +488,11 @@ bool TurnOffMonitor(HWND hWnd, BOOL useWm = TRUE) {
     return true;
 }
 
-// Restore the pre-fade gamma ramps and turn off the monitor, and also clean up the monitor info data.
-void RestoreGammaAndMonitorOff(HWND hWnd, BOOL useWm = TRUE) {
+// Clean up the monitor info data
+void FreeMonitorsInfo() {
     if (g_monitorOffFadeData.monitors) {
         for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
             if (g_monitorOffFadeData.monitors[i].hDC) {
-                SetDeviceGammaRamp(g_monitorOffFadeData.monitors[i].hDC, g_monitorOffFadeData.monitors[i].origGamma);
                 DeleteDC(g_monitorOffFadeData.monitors[i].hDC);
             }
         }
@@ -501,6 +500,23 @@ void RestoreGammaAndMonitorOff(HWND hWnd, BOOL useWm = TRUE) {
         g_monitorOffFadeData.monitors = NULL;
         g_monitorOffFadeData.monitorCount = 0;
     }
+}
+
+// Restore the pre-fade gamma ramps and turn off the monitor
+void RestoreGammaAndMonitorOff(HWND hWnd, BOOL useWm = TRUE) {
+    if (g_monitorOffFadeData.monitors) {
+        for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
+            if (g_monitorOffFadeData.monitors[i].hDC) {
+                SetDeviceGammaRamp(g_monitorOffFadeData.monitors[i].hDC, g_monitorOffFadeData.monitors[i].origGamma);
+            }
+        }
+    }
+    if (!g_isWinlogon) {
+        // Keep the data for the failsafe restore below
+        FreeMonitorsInfo();
+    }
+    Wh_Log(L"Restored gamma");
+    Sleep(300); // Make sure the gamma is restored before monitor really gets turned off
     TurnOffMonitor(hWnd, useWm);
 }
 
@@ -514,6 +530,9 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
         MSG m;
         int refreshRate = GetDeviceRefreshRate();
+        if (g_isWinlogon) {
+            FreeMonitorsInfo();
+        }
         if (!GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
             while (PeekMessageW(&m, hWnd, g_monitorOffTaskMsg, g_monitorOffTaskMsg, PM_REMOVE)) {} 
             EndFade();
@@ -556,7 +575,24 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             if (!ChangeWindowMessageFilterEx(hWnd, g_monitorOffTaskMsg, MSGFLT_ALLOW, NULL)) {
                 Wh_Log(L"ChangeWindowMessageFilterEx failed, GLE=%d", GetLastError());
             }
+            if (g_isWinlogon) {
+                if (!RegisterPowerSettingNotification(hWnd, &GUID_SESSION_DISPLAY_STATUS, NULL)) {
+                    Wh_Log(L"RegisterPowerSettingNotification failed, GLE=%d", GetLastError());
+                }
+            }
             return 0;
+        case WM_POWERBROADCAST: {
+            POWERBROADCAST_SETTING* setting = (POWERBROADCAST_SETTING*)lParam;
+            if (setting->PowerSetting == GUID_SESSION_DISPLAY_STATUS && setting->DataLength == sizeof(DWORD)) {
+                DWORD data = *(DWORD*)setting->Data;
+                Wh_Log(L"OverlayWndProc WM_POWERBROADCAST GUID_SESSION_DISPLAY_STATUS %d", data);
+                if (data == 1 && g_monitorOffFadeData.monitors) {
+                    // Failsafe gamma restore after monitor on message
+                    SetTimer(hWnd, 2, 3000, NULL);
+                }
+            }
+            return 0;
+        }
         case WM_LBUTTONDOWN:
             Wh_Log(L"OverlayWndProc WM_LBUTTONDOWN");
             ShowWindow(hWnd, SW_HIDE);
@@ -565,8 +601,23 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             SetCursor(NULL);
             return 1;
         case WM_TIMER:
-            KillTimer(hWnd, 1);
-            g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
+            KillTimer(hWnd, wParam);
+            if (wParam == 2) {
+                if (g_monitorOffFadeData.monitors) {
+                    Wh_Log(L"Restoring gamma after monitor on event...");
+                    for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
+                        if (g_monitorOffFadeData.monitors[i].hDC) {
+                            SetDeviceGammaRamp(g_monitorOffFadeData.monitors[i].hDC, g_monitorOffFadeData.monitors[i].origGamma);
+                            DeleteDC(g_monitorOffFadeData.monitors[i].hDC);
+                        }
+                    }
+                    free(g_monitorOffFadeData.monitors);
+                    g_monitorOffFadeData.monitors = NULL;
+                    g_monitorOffFadeData.monitorCount = 0;
+                }
+            } else {
+                g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
+            }
             return 0;
         case WM_DESTROY:
             Wh_Log(L"OverlayWndProc WM_DESTROY");
@@ -1398,6 +1449,9 @@ void Wh_ModUninit() {
         if (UnregisterClassW(OVERLAY_WIN_CLASS, HINST_THISCOMPONENT) == 0) {
             Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
         }
+    }
+    if (g_isWinlogon) {
+        FreeMonitorsInfo();
     }
 
     if (g_fadeMutex) {
