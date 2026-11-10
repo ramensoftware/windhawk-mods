@@ -252,9 +252,8 @@ bool InspectBar(muxc::CommandBar const& bar, BarCandidate& candidate) {
     return true;
 }
 
-// The R5 Japanese-label probe established this command-bar layout on the
-// tested Windows build: a single CommandBar in the navigation tree, four
-// native AppBarButtons, and Run new task as the FIRST native button.
+// On the tested Task Manager layout, page navigation exposes one CommandBar
+// with four native AppBarButtons and Run new task as its first native command.
 //
 // This is a conservative, language-independent fallback for that layout,
 // not a universal identification of the semantic role of each button.
@@ -443,8 +442,8 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
 }
 
 // Synchronous UI dispatch, following Windhawk's RunFromWindowThread pattern.
-// SendMessageW returns only after the XAML-thread hook and its callback finish.
-// A single active request is protected against unrelated window messages.
+// Keep a short-lived request registry to reject unrelated registered messages.
+// Never hold the registry mutex while sending a message or invoking a callback.
 UINT g_dispatchMsg{};
 
 struct UiRequest {
@@ -453,10 +452,11 @@ struct UiRequest {
     bool (*callback)(DWORD){};
     std::atomic<bool> invoked{false};
     std::atomic<bool> succeeded{false};
+    UiRequest* next{};
 };
 
 std::mutex g_dispatchMutex;
-std::atomic<UiRequest*> g_activeRequest{nullptr};
+UiRequest* g_activeRequests{}; // Protected by g_dispatchMutex.
 
 bool UiThreadTerminated(DWORD threadId) {
     HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
@@ -487,14 +487,25 @@ LRESULT CALLBACK DispatchHook(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION && g_dispatchMsg) {
         auto* msg = reinterpret_cast<const CWPSTRUCT*>(lp);
         if (msg && msg->message == g_dispatchMsg) {
-            auto* request = reinterpret_cast<UiRequest*>(msg->lParam);
-            if (request && request == g_activeRequest.load(std::memory_order_acquire) &&
-                msg->hwnd == request->hwnd &&
-                GetCurrentThreadId() == request->threadId &&
-                !request->invoked.exchange(true, std::memory_order_acq_rel)) {
+            // Do not dereference an arbitrary lParam before verifying it is
+            // one of our live requests. Multiple UI threads may dispatch at once.
+            auto* candidate = reinterpret_cast<UiRequest*>(msg->lParam);
+            bool run = false;
+            {
+                std::lock_guard<std::mutex> lock(g_dispatchMutex);
+                for (auto* request = g_activeRequests; request; request = request->next) {
+                    if (request == candidate && request->hwnd == msg->hwnd &&
+                        request->threadId == GetCurrentThreadId() &&
+                        !request->invoked.exchange(true, std::memory_order_acq_rel)) {
+                        run = true;
+                        break;
+                    }
+                }
+            }
+            if (run) {
                 try {
-                    request->succeeded.store(request->callback(request->threadId),
-                                             std::memory_order_release);
+                    candidate->succeeded.store(candidate->callback(candidate->threadId),
+                                               std::memory_order_release);
                 } catch (...) {
                     Wh_Log(L"UI dispatch callback exception");
                 }
@@ -574,14 +585,27 @@ bool RunOnUiThread(DWORD threadId, bool (*callback)(DWORD)) {
     HWND hwnd = FindUiWindowForThread(threadId);
     if (!hwnd) return false;
 
-    std::lock_guard<std::mutex> guard(g_dispatchMutex);
     HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, DispatchHook, nullptr, threadId);
     if (!hook) return false;
 
-    UiRequest request{hwnd, threadId, callback};
-    g_activeRequest.store(&request, std::memory_order_release);
+    UiRequest request;
+    request.hwnd = hwnd;
+    request.threadId = threadId;
+    request.callback = callback;
+    {
+        std::lock_guard<std::mutex> lock(g_dispatchMutex);
+        request.next = g_activeRequests;
+        g_activeRequests = &request;
+    }
+    // SendMessageW waits for the target UI callback and the hook chain.
+    // Other dispatches can proceed while we are blocked here.
     SendMessageW(hwnd, g_dispatchMsg, 0, reinterpret_cast<LPARAM>(&request));
-    g_activeRequest.store(nullptr, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lock(g_dispatchMutex);
+        auto** link = &g_activeRequests;
+        while (*link && *link != &request) link = &(*link)->next;
+        if (*link) *link = request.next;
+    }
     UnhookDispatchSafely(hook, threadId);
     return request.invoked.load(std::memory_order_acquire) &&
            request.succeeded.load(std::memory_order_acquire);
@@ -897,53 +921,50 @@ BOOL Wh_ModInit() {
     if (!g_dispatchMsg || !FindTaskManagerRange()) return FALSE;
 
     HMODULE host = GetModuleHandleW(nullptr);
-    // Resolve the known working entry point independently. Optional page
-    // hooks must never prevent the Processes button from working.
-    // Taskmgr.exe
-    WindhawkUtils::SYMBOL_HOOK processesHook[] = {
+    // Resolve the Taskmgr.exe symbols together so Windhawk can cache one
+    // complete symbol set per build. The extra navigation hooks are optional.
+    // Resolve optional targets without hooking them here: if an optional hook
+    // can't be installed, it must not disable the required Processes hook.
+    WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
          &g_processesToOriginal, ProcessesNavigatedTo_Hook},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
+         &g_detailsToOriginal, nullptr, true},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
+         &g_processesFromOriginal, nullptr, true},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
+         &g_detailsFromOriginal, nullptr, true},
     };
-    if (!WindhawkUtils::HookSymbols(host, processesHook, ARRAYSIZE(processesHook))) {
-        Wh_Log(L"Required ProcessesPage::OnNavigatedTo hook failed. "
-               L"The button cannot be installed. Check Windhawk debug logging "
-               L"and symbol availability for this Taskmgr.exe build.");
+    if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks, ARRAYSIZE(taskmgrExeHooks))) {
+        Wh_Log(L"Required ProcessesPage::OnNavigatedTo hook failed. No UI was changed.");
         return FALSE;
     }
     Wh_Log(L"Required ProcessesPage::OnNavigatedTo hook installed");
 
-    // Each optional hook has its own symbol resolution and failure handling.
-    // A missing or unhookable optional symbol is not a fatal error.
-    // Taskmgr.exe
-    WindhawkUtils::SYMBOL_HOOK detailsHook[] = {
-        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
-         &g_detailsToOriginal, DetailsNavigatedTo_Hook, true},
-    };
-    const bool detailsOk = WindhawkUtils::HookSymbols(host, detailsHook, ARRAYSIZE(detailsHook));
-    Wh_Log(L"Optional DetailsPage::OnNavigatedTo: call=%s symbol=%s",
-           detailsOk ? L"ok" : L"failed", g_detailsToOriginal ? L"found" : L"missing");
+    // Install each resolved optional target independently. This preserves the
+    // working Processes button even if a particular build rejects one target.
+    const bool detailsFound = g_detailsToOriginal != nullptr;
+    const bool detailsHooked = detailsFound && WindhawkUtils::SetFunctionHook(
+        g_detailsToOriginal, DetailsNavigatedTo_Hook, &g_detailsToOriginal);
+    if (!detailsHooked) g_detailsToOriginal = nullptr;
+    Wh_Log(L"Optional DetailsPage::OnNavigatedTo: symbol=%s hook=%s",
+           detailsFound ? L"found" : L"missing", detailsHooked ? L"ok" : L"unavailable");
 
-    // Taskmgr.exe
-    WindhawkUtils::SYMBOL_HOOK processesExitHook[] = {
-        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
-         &g_processesFromOriginal, ProcessesNavigatedFrom_Hook, true},
-    };
-    const bool processesExitOk = WindhawkUtils::HookSymbols(
-        host, processesExitHook, ARRAYSIZE(processesExitHook));
-    Wh_Log(L"Optional ProcessesPage::OnNavigatedFrom: call=%s symbol=%s",
-           processesExitOk ? L"ok" : L"failed",
-           g_processesFromOriginal ? L"found" : L"missing");
+    const bool processesExitFound = g_processesFromOriginal != nullptr;
+    const bool processesExitHooked = processesExitFound && WindhawkUtils::SetFunctionHook(
+        g_processesFromOriginal, ProcessesNavigatedFrom_Hook, &g_processesFromOriginal);
+    if (!processesExitHooked) g_processesFromOriginal = nullptr;
+    Wh_Log(L"Optional ProcessesPage::OnNavigatedFrom: symbol=%s hook=%s",
+           processesExitFound ? L"found" : L"missing",
+           processesExitHooked ? L"ok" : L"unavailable");
 
-    // Taskmgr.exe
-    WindhawkUtils::SYMBOL_HOOK detailsExitHook[] = {
-        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
-         &g_detailsFromOriginal, DetailsNavigatedFrom_Hook, true},
-    };
-    const bool detailsExitOk = WindhawkUtils::HookSymbols(
-        host, detailsExitHook, ARRAYSIZE(detailsExitHook));
-    Wh_Log(L"Optional DetailsPage::OnNavigatedFrom: call=%s symbol=%s",
-           detailsExitOk ? L"ok" : L"failed",
-           g_detailsFromOriginal ? L"found" : L"missing");
+    const bool detailsExitFound = g_detailsFromOriginal != nullptr;
+    const bool detailsExitHooked = detailsExitFound && WindhawkUtils::SetFunctionHook(
+        g_detailsFromOriginal, DetailsNavigatedFrom_Hook, &g_detailsFromOriginal);
+    if (!detailsExitHooked) g_detailsFromOriginal = nullptr;
+    Wh_Log(L"Optional DetailsPage::OnNavigatedFrom: symbol=%s hook=%s",
+           detailsExitFound ? L"found" : L"missing",
+           detailsExitHooked ? L"ok" : L"unavailable");
 
     // Intentionally unchanged: preserve the tested GetKeyState-based refresh
     // hold, including its Taskmgr.exe return-address restriction.
