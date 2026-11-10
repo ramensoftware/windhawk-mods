@@ -4748,7 +4748,8 @@ BOOL Wh_ModInit() {
     }
 
     if (ourTool) {
-        return WhTool_ModInit();
+        BOOL ok = WhTool_ModInit();
+        return ok;
     }
 
     if (PackIsWindhawkProcess()) {
