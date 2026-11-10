@@ -6,7 +6,6 @@
 // @author          RandomGuy5747
 // @github          https://github.com/RandomGuy5747
 // @include         cmd.exe
-// @compilerOptions -std=c++17
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,7 +17,7 @@ You can customize it in the settings tab. This mod specifically targets the `ver
 
 Preview:
 
-![preview1](https://githubusercontent.com)
+![preview1](https://raw.githubusercontent.com/RandomGuy5747/windhawk-preview/refs/heads/main/preview.png)
 */
 // ==/WindhawkModReadme==
 
@@ -48,7 +47,6 @@ using ReadConsoleW_t = BOOL (WINAPI*)(
 static ReadConsoleW_t ReadConsoleW_Original = nullptr;
 static bool g_promptPrinted = false;
 
-// Hook für die interne PrintPrompt-Funktion von cmd.exe
 void (*PrintPrompt_orig)();
 void PrintPrompt_hook() {
     PrintPrompt_orig();
@@ -82,12 +80,10 @@ static BOOL WINAPI ReadConsoleW_Hook(
     WCHAR* input = static_cast<WCHAR*>(lpBuffer);
     DWORD count = *lpNumberOfCharsRead;
 
-    // 1. Nur agieren, wenn die Eingabe tatsächlich mit Enter (CRLF) abgeschlossen wurde
     if (count < 2 || input[count - 2] != L'\r' || input[count - 1] != L'\n') {
         return result;
     }
 
-    // 2. Sicherstellen, dass die Eingabe direkt nach dem Prompt geschah (verhindert set /p und More?)
     if (!std::exchange(g_promptPrinted, false)) {
         return result;
     }
@@ -103,7 +99,6 @@ static BOOL WINAPI ReadConsoleW_Hook(
         --end;
     }
 
-    // Prüfen auf den Befehl "ver"
     if (end - start != 3 || _wcsnicmp(input + start, L"ver", 3) != 0) {
         return result;
     }
@@ -115,13 +110,11 @@ static BOOL WINAPI ReadConsoleW_Hook(
         Wh_FreeStringSetting(setting);
     }
 
-    // Text sicher ausgeben
     std::wstring output = L"\r\n" + customText + L"\r\n";
     DWORD written;
     WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), output.c_str(),
                   static_cast<DWORD>(output.size()), &written, nullptr);
 
-    // No-Op rem Befehl unterschieben
     constexpr WCHAR kNoop[] = L"rem\r\n";
     if (nNumberOfCharsToRead >= (sizeof(kNoop) / sizeof(WCHAR)) - 1) {
         memcpy(lpBuffer, kNoop, sizeof(kNoop) - sizeof(WCHAR));
@@ -136,7 +129,6 @@ static BOOL WINAPI ReadConsoleW_Hook(
 BOOL Wh_ModInit() {
     HMODULE hCmd = GetModuleHandleW(nullptr);
 
-    // Symbole von cmd.exe für PrintPrompt hooken
     const WindhawkUtils::SYMBOL_HOOK cmdExeHooks[] = {
         {
             {
@@ -156,7 +148,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Standard ReadConsoleW Hook einrichten
     HMODULE kernelBase = GetModuleHandleW(L"KernelBase.dll");
     if (!kernelBase) {
         Wh_Log(L"KernelBase.dll not found.");
