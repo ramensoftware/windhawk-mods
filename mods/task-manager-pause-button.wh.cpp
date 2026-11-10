@@ -628,10 +628,10 @@ BOOL Wh_ModInit() {
     if (!g_dispatchMsg || !FindTaskManagerRange()) return FALSE;
 
     HMODULE host = GetModuleHandleW(nullptr);
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
         {{kOnNavigatedToSymbol}, &g_onNavigatedToOriginal, OnNavigatedTo_Hook},
     };
-    if (!WindhawkUtils::HookSymbols(host, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks, ARRAYSIZE(taskmgrExeHooks))) {
         Wh_Log(L"[TMPB] Page navigation symbol unavailable. No UI was changed.");
         return FALSE;
     }
