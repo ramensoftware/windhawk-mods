@@ -2,10 +2,11 @@
 // @id              custom-cmd-ver-command-text
 // @name            Custom CMD "ver" Command Text
 // @description     A simple mod that lets you customize the command prompt "ver" command text
-// @version         1.0.0
+// @version         1.0
 // @author          RandomGuy5747
 // @github          https://github.com/RandomGuy5747
 // @include         cmd.exe
+// @compilerOptions -std=c++17
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
