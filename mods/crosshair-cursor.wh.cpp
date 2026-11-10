@@ -2,7 +2,7 @@
 // @id              crosshair-cursor
 // @name            Crosshair Cursor
 // @description     Replace the arrow pointer with a customizable crosshair, an optional AutoCAD-style reticle, and a toggle hotkey
-// @version         0.8
+// @version         0.9
 // @author          Jay Simons
 // @github          https://github.com/designly1
 // @homepage        https://yaa.bz
@@ -11,7 +11,7 @@
 // @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
 // @include         *
-// @compilerOptions -lshell32 -lgdi32 -luser32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -43,7 +43,9 @@ still hides while an app hides the pointer.
 **Toggle hotkey** shows or hides the crosshair without disabling the mod. In
 Windhawk 2.0, click the shortcut badge and press the keys you want. In
 Windhawk 1.7.3, type a shortcut such as `Ctrl+Alt+C`. Leave it empty for no
-shortcut. Press the same shortcut again to bring the crosshair back.
+shortcut. Press the same shortcut again to bring the crosshair back. With a
+shortcut set, that on/off choice is kept the next time the mod starts. Hiding
+the crosshair puts the pointer scheme from Mouse settings back.
 
 The mod runs in its own process instead of inside Explorer. Disabling or
 removing it restores the pointer scheme from Mouse settings. If a crash leaves
@@ -105,6 +107,7 @@ enable this mod again and then disable it.
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
+#include <sddl.h>
 
 #ifndef IDC_PIN
 #define IDC_PIN MAKEINTRESOURCE(32671)
@@ -139,6 +142,9 @@ constexpr int kToggleHotkeyId = 1;
 constexpr LONG kToggleOn = 1;
 constexpr LONG kToggleOff = 2;
 constexpr WCHAR kToggleStateName[] = L"Local\\WindhawkCustomCursorToggle";
+constexpr WCHAR kToggleLockName[] = L"Local\\WindhawkCustomCursorToggleLock";
+constexpr WCHAR kToggleMessageName[] = L"WindhawkCrosshairCursorToggle";
+constexpr WCHAR kToggleStorageName[] = L"crosshairHidden";
 
 #ifndef MOD_NOREPEAT
 #define MOD_NOREPEAT 0x4000
@@ -201,9 +207,28 @@ struct App {
     UINT registeredVk;
 };
 
+struct SchemeCursor {
+    DWORD id;
+    const wchar_t* regName;
+    HCURSOR saved;
+};
+
 App g_app;
 LONG* g_toggleState;
 HANDLE g_toggleMapping;
+bool g_toggleReadOnly;
+
+SchemeCursor g_schemeCursors[] = {
+    {32512, L"Arrow", nullptr},      {32513, L"IBeam", nullptr},
+    {32514, L"Wait", nullptr},       {32515, L"Crosshair", nullptr},
+    {32516, L"UpArrow", nullptr},    {32640, L"NWPen", nullptr},
+    {32641, nullptr, nullptr},       {32642, L"SizeNWSE", nullptr},
+    {32643, L"SizeNESW", nullptr},   {32644, L"SizeWE", nullptr},
+    {32645, L"SizeNS", nullptr},     {32646, L"SizeAll", nullptr},
+    {32648, L"No", nullptr},         {32649, L"Hand", nullptr},
+    {32650, L"AppStarting", nullptr},{32651, L"Help", nullptr},
+    {32671, L"Pin", nullptr},        {32672, L"Person", nullptr},
+};
 
 int ClampInt(int value, int minValue, int maxValue) {
     if (value < minValue) {
@@ -258,48 +283,114 @@ COLORREF ParseColor(PCWSTR text) {
 void RestoreSystemCursor();
 bool ApplySystemCursors();
 void SetSuspended(bool suspended);
+void NotifyCursorToggle();
+
+bool CreateSharedSecurity(SECURITY_ATTRIBUTES* attributes,
+                          PSECURITY_DESCRIPTOR* descriptor) {
+    *descriptor = nullptr;
+    attributes->nLength = sizeof(*attributes);
+    attributes->lpSecurityDescriptor = nullptr;
+    attributes->bInheritHandle = FALSE;
+    // Everyone, SYSTEM, and packaged apps can read and write. The low
+    // integrity label lets a medium-integrity process share this with
+    // sandboxed and elevated processes in the same session.
+    const wchar_t* descriptors[] = {
+        L"D:P(A;;GA;;;WD)(A;;GA;;;SY)(A;;GA;;;AC)(A;;GA;;;RC)S:(ML;;NW;;;LW)",
+        L"D:P(A;;GA;;;WD)(A;;GA;;;SY)S:(ML;;NW;;;LW)",
+        L"D:P(A;;GA;;;WD)(A;;GA;;;SY)",
+    };
+    for (const wchar_t* text : descriptors) {
+        if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                text, SDDL_REVISION_1, descriptor, nullptr)) {
+            attributes->lpSecurityDescriptor = *descriptor;
+            return true;
+        }
+    }
+    return false;
+}
 
 void EnsureToggleState() {
     if (g_toggleState) {
         return;
     }
 
-    // A new mapping is zero-filled. 0 and kToggleOn both mean visible.
-    // kToggleOff means the hotkey hid the crosshair. Compare-exchange turns
-    // the initial 0 into kToggleOn without clobbering a later kToggleOff.
-    HANDLE mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr,
-                                        PAGE_READWRITE, 0, sizeof(LONG),
-                                        kToggleStateName);
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    SECURITY_ATTRIBUTES attributes = {};
+    bool haveSecurity = CreateSharedSecurity(&attributes, &descriptor);
+    HANDLE lock = CreateMutexW(haveSecurity ? &attributes : nullptr, FALSE,
+                               kToggleLockName);
+    if (lock) {
+        WaitForSingleObject(lock, 5000);
+    }
+    if (g_toggleState) {
+        if (descriptor) {
+            LocalFree(descriptor);
+        }
+        if (lock) {
+            ReleaseMutex(lock);
+            CloseHandle(lock);
+        }
+        return;
+    }
+
+    // Leave a new mapping at 0. Only the tool process publishes kToggleOn or
+    // kToggleOff, using the value stored across restarts. 0 means "not on",
+    // so another process cannot force the crosshair visible first.
+    HANDLE mapping = CreateFileMappingW(
+        INVALID_HANDLE_VALUE, haveSecurity ? &attributes : nullptr,
+        PAGE_READWRITE, 0, sizeof(LONG), kToggleStateName);
+    if (descriptor) {
+        LocalFree(descriptor);
+    }
     if (!mapping) {
         Wh_Log(L"Toggle state mapping failed: %u", GetLastError());
+        if (lock) {
+            ReleaseMutex(lock);
+            CloseHandle(lock);
+        }
         return;
     }
 
     LONG* state = static_cast<LONG*>(
         MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(LONG)));
     if (!state) {
+        state = static_cast<LONG*>(
+            MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, sizeof(LONG)));
+        g_toggleReadOnly = state != nullptr;
+    }
+    if (!state) {
         Wh_Log(L"Toggle state view failed: %u", GetLastError());
         CloseHandle(mapping);
+        if (lock) {
+            ReleaseMutex(lock);
+            CloseHandle(lock);
+        }
         return;
     }
 
-    InterlockedCompareExchange(state, kToggleOn, 0);
     g_toggleMapping = mapping;
     g_toggleState = state;
+    if (lock) {
+        ReleaseMutex(lock);
+        CloseHandle(lock);
+    }
 }
 
 bool IsCrosshairSuspended() {
     EnsureToggleState();
     if (!g_toggleState) {
-        return false;
+        return true;
     }
-    return InterlockedCompareExchange(g_toggleState, 0, 0) == kToggleOff;
+    return InterlockedCompareExchange(g_toggleState, 0, 0) != kToggleOn;
 }
 
 void PublishToggleState(bool suspended) {
     EnsureToggleState();
-    if (g_toggleState) {
+    if (g_toggleState && !g_toggleReadOnly) {
         InterlockedExchange(g_toggleState, suspended ? kToggleOff : kToggleOn);
+    }
+    if (!Wh_SetIntValue(kToggleStorageName, suspended ? 1 : 0)) {
+        Wh_Log(L"Could not store crosshair toggle");
     }
 }
 
@@ -713,11 +804,111 @@ HCURSOR CreateBlankCursor() {
                         xorMask);
 }
 
-void RestoreSystemCursor() {
-    if (!g_app.cursorReplaced) {
+HCURSOR LoadRegistryCursor(const wchar_t* valueName) {
+    if (!valueName || valueName[0] == L'\0') {
+        return nullptr;
+    }
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", 0,
+                      KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+        return nullptr;
+    }
+    WCHAR path[MAX_PATH] = {};
+    DWORD bytes = sizeof(path);
+    DWORD type = 0;
+    LSTATUS status =
+        RegQueryValueExW(key, valueName, nullptr, &type,
+                         reinterpret_cast<BYTE*>(path), &bytes);
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ) || path[0] == L'\0') {
+        return nullptr;
+    }
+    WCHAR expanded[MAX_PATH] = {};
+    ExpandEnvironmentStringsW(path, expanded, ARRAYSIZE(expanded));
+    return LoadCursorFromFileW(expanded);
+}
+
+HCURSOR LoadResourceCursor(DWORD id) {
+    // Omit LR_SHARED. SetSystemCursor replaces the shared system cursor, and
+    // a private load still comes from user32's original resource.
+    return static_cast<HCURSOR>(
+        LoadImageW(GetModuleHandleW(L"user32.dll"), MAKEINTRESOURCEW(id),
+                   IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE));
+}
+
+void SnapshotSchemeCursor(SchemeCursor* entry) {
+    if (entry->saved) {
         return;
     }
-    SystemParametersInfo(SPI_SETCURSORS, 0, nullptr, 0);
+    HCURSOR live = LoadCursorW(nullptr, MAKEINTRESOURCEW(entry->id));
+    if (live && !CursorIsBlank(live)) {
+        entry->saved = CopyCursor(live);
+        if (entry->saved) {
+            return;
+        }
+    }
+    HCURSOR fromFile = LoadRegistryCursor(entry->regName);
+    if (fromFile && !CursorIsBlank(fromFile)) {
+        entry->saved = fromFile;
+        return;
+    }
+    if (fromFile) {
+        DestroyCursor(fromFile);
+    }
+    HCURSOR fromResource = LoadResourceCursor(entry->id);
+    if (fromResource && !CursorIsBlank(fromResource)) {
+        entry->saved = fromResource;
+        return;
+    }
+    if (fromResource) {
+        DestroyCursor(fromResource);
+    }
+}
+
+void FreeSavedCursors() {
+    for (SchemeCursor& entry : g_schemeCursors) {
+        if (entry.saved) {
+            DestroyCursor(entry.saved);
+            entry.saved = nullptr;
+        }
+    }
+}
+
+bool ArrowIsBlank() {
+    HCURSOR arrow = LoadCursorW(nullptr, IDC_ARROW);
+    return !arrow || CursorIsBlank(arrow);
+}
+
+void RestoreSavedSystemCursors() {
+    for (SchemeCursor& entry : g_schemeCursors) {
+        HCURSOR live = LoadCursorW(nullptr, MAKEINTRESOURCEW(entry.id));
+        if (live && !CursorIsBlank(live)) {
+            continue;
+        }
+        SnapshotSchemeCursor(&entry);
+        if (!entry.saved) {
+            continue;
+        }
+        HCURSOR copy = CopyCursor(entry.saved);
+        if (!copy) {
+            continue;
+        }
+        if (!SetSystemCursor(copy, entry.id)) {
+            DestroyCursor(copy);
+        }
+    }
+}
+
+void RestoreSystemCursor() {
+    if (!g_app.cursorReplaced && !ArrowIsBlank()) {
+        return;
+    }
+    SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
+    if (ArrowIsBlank()) {
+        Wh_Log(L"Cursor scheme reload left the arrow blank; restoring copies");
+        RestoreSavedSystemCursors();
+    }
     g_app.cursorReplaced = false;
     g_app.haveCursorSample = false;
     Wh_Log(L"Restored system cursors");
@@ -725,27 +916,18 @@ void RestoreSystemCursor() {
 
 bool ApplySystemCursors() {
     // With override off, only the arrow is replaced. With it on, the standard
-    // link, text, wait, and resize cursors are replaced too.
-    const DWORD arrowOnly[] = {OCR_NORMAL};
-    const DWORD allCursors[] = {
-        32512, 32513, 32514, 32515, 32516, 32640, 32641, 32642, 32643,
-        32644, 32645, 32646, 32648, 32649, 32650, 32651, 32671, 32672,
-    };
-    const DWORD* ids = arrowOnly;
-    int count = ARRAYSIZE(arrowOnly);
-    if (g_app.settings.forceOverride) {
-        ids = allCursors;
-        count = ARRAYSIZE(allCursors);
-    }
-
+    // link, text, wait, and resize cursors are replaced too. Copies are taken
+    // first so toggle-off can put those pointers back.
+    int count = g_app.settings.forceOverride ? ARRAYSIZE(g_schemeCursors) : 1;
     bool any = false;
     for (int i = 0; i < count; i++) {
+        SnapshotSchemeCursor(&g_schemeCursors[i]);
         HCURSOR cursor = CreateBlankCursor();
         if (!cursor) {
             Wh_Log(L"CreateBlankCursor failed");
             continue;
         }
-        if (!SetSystemCursor(cursor, ids[i])) {
+        if (!SetSystemCursor(cursor, g_schemeCursors[i].id)) {
             DestroyCursor(cursor);
             continue;
         }
@@ -1050,6 +1232,14 @@ void UpdateCrosshair() {
     }
 }
 
+void NotifyCursorToggle() {
+    UINT message = RegisterWindowMessageW(kToggleMessageName);
+    if (!message) {
+        return;
+    }
+    SendNotifyMessageW(HWND_BROADCAST, message, 0, 0);
+}
+
 void SetSuspended(bool suspended) {
     if (g_app.suspended == suspended) {
         return;
@@ -1064,6 +1254,10 @@ void SetSuspended(bool suspended) {
         ApplySystemCursors();
         UpdateCrosshair();
     }
+    // Tell every process that already swapped in a blank cursor. The system
+    // pointer image can be restored from here; each app thread has to select
+    // a real cursor itself.
+    NotifyCursorToggle();
     NudgeCursor();
 }
 
@@ -1150,12 +1344,22 @@ DWORD WINAPI CrosshairThread(void*) {
     EnsureToggleState();
     LoadSettings();
     if (g_app.settings.hotkeyVk) {
-        SetSuspended(IsCrosshairSuspended());
-    } else {
-        PublishToggleState(false);
+        // Shared memory does not survive a restart. The stored value does.
+        bool hidden = Wh_GetIntValue(kToggleStorageName, 0) != 0;
+        Wh_Log(L"Stored crosshair hidden=%d", hidden ? 1 : 0);
+        if (g_app.suspended != hidden) {
+            SetSuspended(hidden);
+        } else if (hidden) {
+            PublishToggleState(true);
+            RestoreSystemCursor();
+            NotifyCursorToggle();
+        } else {
+            PublishToggleState(false);
+        }
     }
-    if (!g_app.suspended) {
+    if (!g_app.suspended && !g_app.cursorReplaced) {
         ApplySystemCursors();
+        NotifyCursorToggle();
     }
     UpdateCrosshair();
     SetTimer(g_app.horizontal.hwnd, kTimerId, kTimerIntervalMs, nullptr);
@@ -1174,6 +1378,7 @@ DWORD WINAPI CrosshairThread(void*) {
     }
     HideCrosshair();
     RestoreSystemCursor();
+    FreeSavedCursors();
     DestroyWindow(g_app.horizontal.hwnd);
     DestroyWindow(g_app.vertical.hwnd);
     DestroyWindow(g_app.reticle.hwnd);
@@ -1242,6 +1447,94 @@ HCURSOR g_lastAppCursor;
 volatile LONG g_forceOverride;
 bool g_isInjectedHelper;
 
+constexpr int kMaxThreadHooks = 128;
+CRITICAL_SECTION g_hookLock;
+bool g_hookLockReady;
+HHOOK g_threadHooks[kMaxThreadHooks];
+DWORD g_hookedThreads[kMaxThreadHooks];
+int g_threadHookCount;
+thread_local bool g_inToggleNotify;
+
+HCURSOR RealCursorForThread() {
+    if (g_lastAppCursor && g_lastAppCursor != g_injectedBlank &&
+        !CursorIsBlank(g_lastAppCursor)) {
+        return g_lastAppCursor;
+    }
+    return LoadCursorW(nullptr, IDC_ARROW);
+}
+
+void ApplyToggleOnThisThread() {
+    if (!SetCursor_Original || g_inToggleNotify) {
+        return;
+    }
+    g_inToggleNotify = true;
+    if (IsCrosshairSuspended()) {
+        HCURSOR restore = RealCursorForThread();
+        if (restore) {
+            SetCursor_Original(restore);
+        }
+    } else if (InterlockedCompareExchange(&g_forceOverride, 0, 0)) {
+        HCURSOR current = GetCursor();
+        if (current && g_injectedBlank && current != g_injectedBlank) {
+            g_lastAppCursor = current;
+            SetCursor_Original(g_injectedBlank);
+        }
+    }
+    g_inToggleNotify = false;
+}
+
+LRESULT CALLBACK ToggleCallWndProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code >= 0) {
+        const CWPSTRUCT* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        UINT toggleMessage = RegisterWindowMessageW(kToggleMessageName);
+        if (toggleMessage && message->message == toggleMessage) {
+            ApplyToggleOnThisThread();
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+void EnsureThreadHook() {
+    if (!g_hookLockReady) {
+        return;
+    }
+    DWORD threadId = GetCurrentThreadId();
+    EnterCriticalSection(&g_hookLock);
+    for (int i = 0; i < g_threadHookCount; i++) {
+        if (g_hookedThreads[i] == threadId) {
+            LeaveCriticalSection(&g_hookLock);
+            return;
+        }
+    }
+    if (g_threadHookCount < kMaxThreadHooks) {
+        HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, ToggleCallWndProc,
+                                       nullptr, threadId);
+        if (hook) {
+            g_threadHooks[g_threadHookCount] = hook;
+            g_hookedThreads[g_threadHookCount] = threadId;
+            g_threadHookCount++;
+        }
+    }
+    LeaveCriticalSection(&g_hookLock);
+}
+
+void UninstallThreadHooks() {
+    if (!g_hookLockReady) {
+        return;
+    }
+    EnterCriticalSection(&g_hookLock);
+    for (int i = 0; i < g_threadHookCount; i++) {
+        if (g_threadHooks[i]) {
+            UnhookWindowsHookEx(g_threadHooks[i]);
+            g_threadHooks[i] = nullptr;
+        }
+    }
+    g_threadHookCount = 0;
+    LeaveCriticalSection(&g_hookLock);
+    DeleteCriticalSection(&g_hookLock);
+    g_hookLockReady = false;
+}
+
 bool ExeNameIs(const wchar_t* exeName) {
     WCHAR path[MAX_PATH];
     DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
@@ -1258,11 +1551,21 @@ bool ExeNameIs(const wchar_t* exeName) {
 }
 
 HCURSOR WINAPI SetCursor_Hook(HCURSOR cursor) {
-    if (!IsCrosshairSuspended() &&
-        InterlockedCompareExchange(&g_forceOverride, 0, 0) && cursor &&
-        g_injectedBlank && cursor != g_injectedBlank) {
+    EnsureThreadHook();
+    bool suspended = IsCrosshairSuspended();
+    bool overrideOn =
+        InterlockedCompareExchange(&g_forceOverride, 0, 0) != 0;
+    if (!suspended && overrideOn && cursor && g_injectedBlank &&
+        cursor != g_injectedBlank) {
         g_lastAppCursor = cursor;
         cursor = g_injectedBlank;
+    } else if (suspended && cursor == g_injectedBlank) {
+        HCURSOR restore = RealCursorForThread();
+        if (restore) {
+            cursor = restore;
+        }
+    } else if (suspended && cursor && cursor != g_injectedBlank) {
+        g_lastAppCursor = cursor;
     }
     return SetCursor_Original(cursor);
 }
@@ -1283,6 +1586,8 @@ void ApplyInjectedOverride() {
 
 BOOL WhInjected_ModInit() {
     g_isInjectedHelper = true;
+    InitializeCriticalSection(&g_hookLock);
+    g_hookLockReady = true;
     EnsureToggleState();
     InterlockedExchange(&g_forceOverride,
                         Wh_GetIntSetting(L"overrideAppCursors") != 0 ? 1 : 0);
@@ -1295,6 +1600,7 @@ BOOL WhInjected_ModInit() {
 }
 
 void WhInjected_ModAfterInit() {
+    EnsureThreadHook();
     ApplyInjectedOverride();
 }
 
@@ -1314,10 +1620,11 @@ void WhInjected_ModSettingsChanged() {
 }
 
 void WhInjected_ModUninit() {
-    if (g_lastAppCursor && GetCursor() == g_injectedBlank) {
-        InterlockedExchange(&g_forceOverride, 0);
-        SetCursor(g_lastAppCursor);
+    InterlockedExchange(&g_forceOverride, 0);
+    if (g_lastAppCursor && GetCursor() == g_injectedBlank && SetCursor_Original) {
+        SetCursor_Original(g_lastAppCursor);
     }
+    UninstallThreadHooks();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
