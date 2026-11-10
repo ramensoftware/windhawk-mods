@@ -8983,13 +8983,14 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
     }
     if (!haveSrc) {
         if (hT && w.sourceSize.cx > 0 && w.sourceSize.cy > 0) {
-            bool readyChanged = w.thumbnailSourceReady;
+            const bool wasReady = w.thumbnailSourceReady;
             // Keep the last valid UWP surface visible while DWM briefly loses
             // its source. A visible frame can recover without a new HWND.
             if (!IsApplicationFrameWindowClass(w.hWnd) ||
                 IsUwpFrameDefinitelyStale(w.hWnd)) {
                 w.thumbnailSourceReady = false;
             }
+            bool readyChanged = wasReady != w.thumbnailSourceReady;
             bool stale = UpdateUwpFrameValidation(
                 w, dwmSourceReady);
             return readyChanged || stale;
@@ -14098,6 +14099,9 @@ static void ApplyThemeToWindow(HWND hWnd) {
                 wcsncpy_s(g_settings.theme, L"backdrop", _TRUNCATE);
                 UpdateCachedSettings();
                 InvalidateStaticCache();
+                // Deliberate re-entry with the new theme: release the guard
+                // first, or the call below returns immediately.
+                s_applyingThemeToWindow = false;
                 ApplyThemeToWindow(hWnd);
                 return;
             }
