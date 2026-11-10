@@ -1655,6 +1655,10 @@ struct BackdropBuildOutput {
 
 struct BackdropWallpaperInfo {
     WCHAR path[MAX_PATH] = {};
+    // Slideshow and Spotlight keep one path (TranscodedWallpaper) and replace
+    // the file, so the file's size and write time identify the image too.
+    ULONGLONG fileSize = 0;
+    ULONGLONG writeTime = 0;
     DWORD style = 10;
     DWORD tile = 0;
     int originX = 0;
@@ -1693,6 +1697,10 @@ static std::atomic<bool> g_backdropWorkerShutdown{false};
 static std::atomic<DWORD> g_backdropGeneration{1};
 static bool g_backdropBuildRequested = false;
 static bool g_backdropBuildRetryPending = false;
+// Failed builds retried in this session; an undecodable wallpaper would
+// otherwise rebuild back to back for as long as the switcher is open.
+static int g_backdropFailedBuildRetries = 0;
+#define SWS_BACKDROP_FAILED_BUILD_RETRIES 2
 static bool g_isPendingShow = false;
 static bool g_backdropBitmapIsWallpaper = false;
 static BackdropWallpaperInfo g_backdropBitmapWallpaperInfo;
@@ -1709,6 +1717,7 @@ static bool BackdropBlurUsesWallpaper() { return wcscmp(g_settings.backdropBlurE
 static bool BackdropWallpaperInfoEqual(const BackdropWallpaperInfo& a,
                                        const BackdropWallpaperInfo& b) {
     return a.valid && b.valid && wcscmp(a.path, b.path) == 0 &&
+           a.fileSize == b.fileSize && a.writeTime == b.writeTime &&
            a.style == b.style && a.tile == b.tile && a.originX == b.originX &&
            a.originY == b.originY && a.width == b.width && a.height == b.height &&
            a.monitorCount == b.monitorCount && a.opacity == b.opacity;
@@ -1727,6 +1736,13 @@ static bool ReadBackdropWallpaperInfo(int width, int height, int opacity,
     if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, info->path, 0) ||
         !info->path[0]) {
         return false;
+    }
+    WIN32_FILE_ATTRIBUTE_DATA attributes = {};
+    if (GetFileAttributesExW(info->path, GetFileExInfoStandard, &attributes)) {
+        info->fileSize = ((ULONGLONG)attributes.nFileSizeHigh << 32) |
+                         attributes.nFileSizeLow;
+        info->writeTime = ((ULONGLONG)attributes.ftLastWriteTime.dwHighDateTime << 32) |
+                          attributes.ftLastWriteTime.dwLowDateTime;
     }
 
     auto readWallpaperNumber = [](PCWSTR name, DWORD fallback) {
@@ -2302,10 +2318,13 @@ static void HandleBackdropBuildResult(BackdropBuildResult* result) {
         if (sameGeneration) g_backdropBuildRequested = false;
         BackdropFreeOutput(&result->output);
         delete result;
-        if (retryAllowed &&
+        const bool failedRetryAllowed =
+            !failed || g_backdropFailedBuildRetries < SWS_BACKDROP_FAILED_BUILD_RETRIES;
+        if (retryAllowed && failedRetryAllowed &&
             (retry || failed || (!current && (g_isVisible || g_isPendingShow))) &&
             g_hSwitcher && BackdropBlurEnabled() &&
             !g_backdropWorkerShutdown.load(std::memory_order_acquire)) {
+            if (failed) ++g_backdropFailedBuildRetries;
             SetTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID, 1, NULL);
         }
         return;
@@ -2551,6 +2570,7 @@ static void HideBackdropBlur() {
 // is released.
 static void PrepareBackdropBlur() {
     g_backdropSwitcherPresented = false;
+    g_backdropFailedBuildRetries = 0;
     if (g_hBackdropWnd && IsWindowVisible(g_hBackdropWnd)) {
         // A prior interrupted session must never contaminate a new snapshot.
         HideBackdropBlur();
