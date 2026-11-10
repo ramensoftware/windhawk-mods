@@ -1,18 +1,18 @@
 // ==WindhawkMod==
-// @id              classic-taskbar-buttons-lite
-// @name            Classic Taskbar 3D buttons Lite
-// @description     Lightweight mod, restoring the 3D buttons in classic theme
-// @version         1.3.1
-// @author          Anixx
-// @github          https://github.com/Anixx
-// @include         explorer.exe
-// @compilerOptions -lgdi32
+// @id classic-taskbar-buttons-lite
+// @name Classic Taskbar 3D buttons Lite
+// @description Lightweight mod restoring the 3D buttons in classic theme
+// @version 1.4
+// @author Anixx
+// @github https://github.com/Anixx
+// @include explorer.exe
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Classic Taskbar 3D buttons
-Lightweight mod which restores 3D buttons on taskbar when using Windows Classic theme. 
+Lightweight mod which restores 3D buttons on taskbar when using Windows Classic theme.
 The idea is based on the mod by Aubymori (https://github.com/aubymori).
 
 Before:
@@ -23,12 +23,16 @@ After:
 
 ![After](https://i.imgur.com/Jz4EkRQ.png)
 
-Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't apply this mod. 
+Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't apply this mod.
 
 */
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #ifdef _WIN64
 #define CALCON __cdecl
@@ -38,75 +42,243 @@ Be warned that the progress indicator will not be displayed on the task buttons 
 #define SCALCON L"__thiscall"
 #endif
 
-typedef struct tagBUTTONRENDERINFOSTATES {
+typedef struct tagBUTTONRENDERINFOSTATES
+{
     char data[12];
 } BUTTONRENDERINFOSTATES, *PBUTTONRENDERINFOSTATES;
 
-/* Draw taskbar item */
-typedef void (* CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
+typedef void (*CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
 CTaskBtnGroup__DrawBar_t CTaskBtnGroup__DrawBar_orig;
-void CALCON CTaskBtnGroup__DrawBar_hook(
-    void *pThis,
-    HDC   hDC,
-    void *pRenderInfo,
-    PBUTTONRENDERINFOSTATES pRenderStates
-)
+
+using CreateWindowExW_t = HWND(WINAPI *)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+CreateWindowExW_t CreateWindowExW_orig = nullptr;
+
+static HWND FindTaskListForTray(HWND hTray)
+{
+    wchar_t szClass[32]{};
+    if (!GetClassNameW(hTray, szClass, ARRAYSIZE(szClass)))
+        return NULL;
+
+    HWND hParent = NULL;
+    if (_wcsicmp(szClass, L"Shell_SecondaryTrayWnd") == 0)
+    {
+        hParent = FindWindowExW(hTray, NULL, L"WorkerW", NULL);
+    }
+    else
+    {
+        HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
+        hParent = hReBar? FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL) : NULL;
+    }
+
+    return hParent? FindWindowExW(hParent, NULL, L"MSTaskListWClass", NULL) : NULL;
+}
+
+static bool IsWindowOfCurrentProcess(HWND hWnd)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    return pid == GetCurrentProcessId();
+}
+
+static HWND GetTrayForTaskList(HWND hList)
+{
+    HWND cur = hList;
+    for (int i = 0; i < 10 && cur; i++)
+    {
+        HWND parent = GetParent(cur);
+        if (!parent)
+            break;
+        wchar_t cls[64]{};
+        GetClassNameW(parent, cls, 64);
+        if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+            wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0)
+            return parent;
+        cur = parent;
+    }
+    return NULL;
+}
+
+static bool IsTrayHorizontal(HWND hTray)
+{
+    if (!hTray ||!IsWindow(hTray))
+        return true;
+    RECT rc{};
+    if (!GetWindowRect(hTray, &rc))
+        return true;
+    return (rc.right - rc.left) > (rc.bottom - rc.top);
+}
+
+static std::vector<HWND> EnumCurrentProcessTrayTaskLists()
+{
+    std::vector<HWND> out;
+    DWORD curPid = GetCurrentProcessId();
+
+    HWND hMain = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hMain)
+    {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hMain, &pid);
+        if (pid == curPid)
+        {
+            HWND hList = FindTaskListForTray(hMain);
+            if (hList)
+                out.push_back(hList);
+        }
+    }
+
+    HWND hSec = NULL;
+    while ((hSec = FindWindowExW(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)))
+    {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hSec, &pid);
+        if (pid!= curPid)
+            continue;
+        HWND hList = FindTaskListForTray(hSec);
+        if (hList)
+            out.push_back(hList);
+    }
+    return out;
+}
+
+// --- painting tracker: tray HWND cached, only GetWindowRect per paint ---
+
+static thread_local HWND tl_currentTaskList = NULL;
+static thread_local bool tl_isHorizontal = true;
+static thread_local HWND tl_stackList[8]{};
+static thread_local bool tl_stackHoriz[8]{};
+static thread_local int tl_depth = 0;
+
+static std::mutex g_mapMutex;
+static std::unordered_set<HWND> g_subclassedTaskLists;
+static std::unordered_map<HWND, HWND> g_taskListToTray;
+
+static void PushTaskList(HWND hList)
+{
+    if (tl_depth < 8)
+    {
+        tl_stackList[tl_depth] = tl_currentTaskList;
+        tl_stackHoriz[tl_depth] = tl_isHorizontal;
+        tl_depth++;
+    }
+    tl_currentTaskList = hList;
+
+    HWND hTray = NULL;
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        auto it = g_taskListToTray.find(hList);
+        if (it!= g_taskListToTray.end())
+            hTray = it->second;
+    }
+    if (!hTray)
+    {
+        hTray = GetTrayForTaskList(hList);
+        if (hTray)
+        {
+            std::lock_guard<std::mutex> lock(g_mapMutex);
+            g_taskListToTray[hList] = hTray;
+        }
+    }
+    tl_isHorizontal = hTray? IsTrayHorizontal(hTray) : true;
+}
+
+static void PopTaskList()
+{
+    if (tl_depth > 0)
+    {
+        tl_depth--;
+        tl_currentTaskList = tl_stackList[tl_depth];
+        tl_isHorizontal = tl_stackHoriz[tl_depth];
+    }
+    else
+    {
+        tl_currentTaskList = NULL;
+        tl_isHorizontal = true;
+    }
+}
+
+LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_PAINT || uMsg == WM_PRINTCLIENT)
+    {
+        PushTaskList(hWnd);
+        LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        PopTaskList();
+        return ret;
+    }
+    else if (uMsg == WM_NCDESTROY)
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        g_subclassedTaskLists.erase(hWnd);
+        g_taskListToTray.erase(hWnd);
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+static void SubclassTaskListIfNew(HWND hList)
+{
+    if (!hList ||!IsWindow(hList) ||!IsWindowOfCurrentProcess(hList))
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        if (g_subclassedTaskLists.find(hList)!= g_subclassedTaskLists.end())
+            return;
+    }
+
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hList, TaskListSubclassProc, 0))
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        g_subclassedTaskLists.insert(hList);
+        HWND hTray = GetTrayForTaskList(hList);
+        if (hTray)
+            g_taskListToTray[hList] = hTray;
+    }
+}
+
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+{
+    HWND hWnd = CreateWindowExW_orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    DWORD lastErr = GetLastError();
+
+    if (hWnd && lpClassName && ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xFFFF))
+    {
+        if (_wcsicmp(lpClassName, L"MSTaskListWClass") == 0)
+        {
+            SubclassTaskListIfNew(hWnd);
+        }
+    }
+
+    SetLastError(lastErr);
+    return hWnd;
+}
+
+void CALCON CTaskBtnGroup__DrawBar_hook(void *pThis, HDC hDC, void *pRenderInfo, PBUTTONRENDERINFOSTATES pRenderStates)
 {
     LPRECT lprcDest = (LPRECT)((char *)pRenderInfo + 4);
 
+    bool isHorizontal = tl_currentTaskList? tl_isHorizontal : true;
+
+    if (isHorizontal)
+    {
+        if ((lprcDest->right - lprcDest->left) > 2)
+            lprcDest->right -= 2;
+    }
+
     UINT uState = DFCS_BUTTONPUSH;
     if (pRenderStates->data[2])
-    {
         uState |= DFCS_CHECKED;
-    }
     else if (pRenderStates->data[4])
-    {
         uState |= DFCS_PUSHED;
-    }
 
-    DrawFrameControl(
-        hDC,
-        lprcDest,
-        DFC_BUTTON,
-        uState
-    ); 
-   
+    DrawFrameControl(hDC, lprcDest, DFC_BUTTON, uState);
 
-    /* If button is pushed in, offset the rect for the icon and text draw */
-    if (pRenderStates->data[2]
-    ||  pRenderStates->data[4])
+    if (pRenderStates->data[2] || pRenderStates->data[4])
     {
         lprcDest->top++;
         lprcDest->bottom++;
         lprcDest->left++;
         lprcDest->right++;
     }
-
-    return;
-}
-
-
-/* Add spacing between taskbar items */
-typedef long (* CTaskBtnGroup_SetLocation_t)(void *, int, int, LPRECT);
-CTaskBtnGroup_SetLocation_t CTaskBtnGroup_SetLocation_orig;
-long __cdecl CTaskBtnGroup_SetLocation_hook(
-    void  *pThis,
-    int    i1,
-    int    i2,
-    LPRECT lprc
-)
-{
-    APPBARDATA abd;
-    abd.cbSize = sizeof(APPBARDATA);
-    if (SHAppBarMessage(ABM_GETTASKBARPOS, &abd))
-    {
-        if (abd.uEdge == ABE_BOTTOM || abd.uEdge == ABE_TOP)
-        {
-            lprc->right -= 2;
-        }
-    }
-
-    return CTaskBtnGroup_SetLocation_orig(pThis, i1, i2, lprc);
 }
 
 BOOL Wh_ModInit(void)
@@ -115,31 +287,36 @@ BOOL Wh_ModInit(void)
 
     WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
-            {
-                L"private: void " 
-                SCALCON 
-                L" CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
-            },
+            {L"private: void " SCALCON L" CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"},
             (void **)&CTaskBtnGroup__DrawBar_orig,
             (void *)CTaskBtnGroup__DrawBar_hook,
-            FALSE
+            FALSE,
         },
-                {
-            {
-                L"public: virtual long __cdecl CTaskBtnGroup::SetLocation(int,int,struct tagRECT const *)"
-            },
-            (void **)&CTaskBtnGroup_SetLocation_orig,
-            (void*)CTaskBtnGroup_SetLocation_hook,
-            FALSE
-        }
-
     };
 
     if (!WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks)))
+        return FALSE;
+
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_orig))
     {
-        Wh_Log(L"Failed to hook one or more functions");
+        Wh_Log(L"Failed to hook CreateWindowExW");
         return FALSE;
     }
 
+    for (HWND hList : EnumCurrentProcessTrayTaskLists())
+        SubclassTaskListIfNew(hList);
+
     return TRUE;
+}
+
+void Wh_ModUninit(void)
+{
+    std::unordered_set<HWND> taskLists;
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        taskLists.swap(g_subclassedTaskLists);
+        g_taskListToTray.clear();
+    }
+    for (HWND hList : taskLists)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hList, TaskListSubclassProc);
 }

@@ -1,166 +1,172 @@
 // ==WindhawkMod==
 // @id              replace-winver-with-exe
-// @name            Replace Winver With EXE
-// @description     Replaces the Winver dialog with a custom executable
-// @version         1.0
+// @name            Winver Redirector
+// @description     Replaces Winver with an executable, command, or Shell app
+// @version         1.1
 // @author          winui64
 // @github          https://github.com/winui64
 // @include         winver.exe
-// @compilerOptions -lshell32 -lshlwapi
+// @compilerOptions -lshell32 -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Redirect Winver to an .exe file.
-This is a simple mod that intercepts the traditional Winver dialog and replaces it with a custom .exe file of your choice. This can be a Winver replacement like Fluver or Modern Winver for example. 
+# Redirect Winver to an executable, command, or packaged app
 
+Set **Replacement command or target** to one of:
+
+- `C:\Tools\ModernWinver.exe`
+- `"C:\Program Files\Modern Winver\ModernWinver.exe" --about`
+- `explorer.exe shell:AppsFolder\PackageFamilyName!AppId`
+- `shell:AppsFolder\PackageFamilyName!AppId`
+- `ms-settings:about`
+- `%LOCALAPPDATA%\Microsoft\WindowsApps\YourApp.exe`
+- `cmd.exe /d /c start "" "C:\Tools\ModernWinver.exe"`
+
+Replace `PackageFamilyName!AppId` with the installed app's actual AppUserModelID.
+You can find it using PowerShell's `Get-StartApps` command.
+
+Quote a target containing spaces when supplying arguments. Existing unquoted
+file paths without arguments are still accepted. Argument quoting is preserved.
+For command-shell built-ins, pipes, or redirection, explicitly use `cmd.exe /d /c`.
+Shortcuts and registered URI protocols are also supported by Windows Shell.
+
+An empty setting or a launch error falls back to the original Winver dialog.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - replacement_exe: ""
-  $name: Replacement executable
-  $description: Absolute path to the executable to launch instead of the Winver dialog.
+  $name: Replacement command or target
+  $description: Executable path with optional arguments, shell:AppsFolder target, shortcut, or URI. Environment variables are supported.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
-#include <shlwapi.h>
+#include <objbase.h>
 #include <windhawk_utils.h>
-
-WindhawkUtils::StringSetting g_replacementExe;
+#include <cwchar>
+#include <string>
+#include <utility>
 
 using ShellAboutW_t = decltype(&ShellAboutW);
 ShellAboutW_t ShellAboutW_orig = nullptr;
 
-void LoadSettings()
-{
-    g_replacementExe =
+INT WINAPI ShellAboutW_hook(HWND hWnd, LPCWSTR szApp,
+                           LPCWSTR szOtherStuff, HICON hIcon) {
+    // Read settings for this launch, so changes take effect without shared state.
+    auto replacementSetting =
         WindhawkUtils::StringSetting::make(L"replacement_exe");
-}
+    std::wstring command = replacementSetting.get() ? replacementSetting.get() : L"";
 
-bool IsWinverProcess()
-{
-    WCHAR szPath[MAX_PATH];
-
-    if (!GetModuleFileNameW(NULL, szPath, ARRAYSIZE(szPath)))
-        return false;
-
-    LPCWSTR fileName = PathFindFileNameW(szPath);
-
-    if (!fileName)
-        return false;
-
-    return _wcsicmp(fileName, L"winver.exe") == 0;
-}
-
-INT WINAPI ShellAboutW_hook(
-    HWND hWnd,
-    LPCWSTR szApp,
-    LPCWSTR szOtherStuff,
-    HICON hIcon)
-{
-
-    const wchar_t* exePath = g_replacementExe.get();
-
-    // If no EXE configured, fall back to original behavior
-    if (!exePath || !exePath[0])
-    {
-        return ShellAboutW_orig(
-            hWnd,
-            szApp,
-            szOtherStuff,
-            hIcon
-        );
+    DWORD launchError = ERROR_SUCCESS;
+    const DWORD expandedLength =
+        ExpandEnvironmentStringsW(command.c_str(), nullptr, 0);
+    if (expandedLength) {
+        std::wstring expandedCommand(expandedLength, L'\0');
+        const DWORD writtenLength = ExpandEnvironmentStringsW(
+            command.c_str(), expandedCommand.data(), expandedLength);
+        if (!writtenLength) {
+            launchError = GetLastError();
+        } else if (writtenLength > expandedLength) {
+            launchError = ERROR_INSUFFICIENT_BUFFER;
+        } else {
+            expandedCommand.resize(writtenLength - 1);
+            command = std::move(expandedCommand);
+        }
+    } else {
+        launchError = GetLastError();
     }
 
-    DWORD attrib = GetFileAttributesW(exePath);
+    const auto firstCharacter = command.find_first_not_of(L" \t\r\n");
+    if (firstCharacter == std::wstring::npos) {
+        return ShellAboutW_orig(hWnd, szApp, szOtherStuff, hIcon);
+    }
+    command = command.substr(firstCharacter,
+        command.find_last_not_of(L" \t\r\n") - firstCharacter + 1);
 
-    if (attrib == INVALID_FILE_ATTRIBUTES ||
-        (attrib & FILE_ATTRIBUTE_DIRECTORY))
-    {
-        MessageBoxW(
-            hWnd,
-            L"The configured executable path is invalid.",
-            L"Replace Winver With EXE",
-            MB_ICONERROR
-        );
-
-        return ShellAboutW_orig(
-            hWnd,
-            szApp,
-            szOtherStuff,
-            hIcon
-        );
+    std::wstring target;
+    std::wstring arguments;
+    if (command.front() == L'"') {
+        const auto closingQuote = command.find(L'"', 1);
+        if (closingQuote == std::wstring::npos || closingQuote == 1 ||
+            (closingQuote + 1 < command.size() &&
+             command.find_first_of(L" \t\r\n", closingQuote + 1) != closingQuote + 1)) {
+            launchError = ERROR_INVALID_PARAMETER;
+        } else {
+            target = command.substr(1, closingQuote - 1);
+            arguments = command.substr(closingQuote + 1);
+        }
+    } else if (_wcsnicmp(command.c_str(), L"shell:", 6) == 0 ||
+               GetFileAttributesW(command.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        // Keep bare Shell targets and existing unquoted paths with spaces intact.
+        target = command;
+    } else {
+        const auto separator = command.find_first_of(L" \t\r\n");
+        target = command.substr(0, separator);
+        if (separator != std::wstring::npos) {
+            arguments = command.substr(separator);
+        }
     }
 
-    SHELLEXECUTEINFOW sei = {};
-    sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-    sei.hwnd = hWnd;
-    sei.lpFile = exePath;
-    sei.nShow = SW_SHOWNORMAL;
+    const auto firstArgument = arguments.find_first_not_of(L" \t\r\n");
+    arguments = firstArgument == std::wstring::npos
+        ? L"" : arguments.substr(firstArgument);
 
-    if (!ShellExecuteExW(&sei))
-    {
-        WCHAR szError[512];
+    if (launchError == ERROR_SUCCESS) {
+        const HRESULT comResult = CoInitializeEx(
+            nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
+            launchError = static_cast<DWORD>(comResult);
+        } else {
+            SHELLEXECUTEINFOW executeInfo = {};
+            executeInfo.cbSize = sizeof(executeInfo);
+            executeInfo.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+            if (_wcsnicmp(target.c_str(), L"shell:", 6) == 0) {
+                // Shell namespace apps need their Shell verb handler.
+                executeInfo.fMask |= SEE_MASK_INVOKEIDLIST;
+            }
+            executeInfo.hwnd = hWnd;
+            executeInfo.lpFile = target.c_str();
+            executeInfo.lpParameters = arguments.empty() ? nullptr : arguments.c_str();
+            executeInfo.nShow = SW_SHOWNORMAL;
 
-        FormatMessageW(
-            FORMAT_MESSAGE_FROM_SYSTEM |
-            FORMAT_MESSAGE_IGNORE_INSERTS,
-            nullptr,
-            GetLastError(),
-            0,
-            szError,
-            ARRAYSIZE(szError),
-            nullptr
-        );
-
-        MessageBoxW(
-            hWnd,
-            szError,
-            L"Failed to launch replacement executable",
-            MB_ICONERROR
-        );
-
-        return ShellAboutW_orig(
-            hWnd,
-            szApp,
-            szOtherStuff,
-            hIcon
-        );
+            if (!ShellExecuteExW(&executeInfo)) {
+                launchError = GetLastError();
+                if (launchError == ERROR_SUCCESS) {
+                    launchError = ERROR_GEN_FAILURE;
+                }
+            }
+        }
+        if (SUCCEEDED(comResult)) {
+            CoUninitialize();
+        }
     }
 
-    if (sei.hProcess)
-    {
-        CloseHandle(sei.hProcess);
+    if (launchError != ERROR_SUCCESS) {
+        WCHAR errorMessage[512] = {};
+        if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                            nullptr, launchError, 0, errorMessage,
+                            ARRAYSIZE(errorMessage), nullptr)) {
+            swprintf_s(errorMessage, ARRAYSIZE(errorMessage),
+                       L"Unable to launch the replacement (error 0x%08lX).", launchError);
+        }
+        MessageBoxW(hWnd, errorMessage, L"Failed to launch Winver replacement",
+                    MB_OK | MB_ICONERROR);
+        return ShellAboutW_orig(hWnd, szApp, szOtherStuff, hIcon);
     }
 
-    // Prevent original Winver dialog
     return TRUE;
 }
 
-void Wh_ModSettingsChanged(void)
-{
-    LoadSettings();
-}
-
-BOOL Wh_ModInit(void)
-{
-    LoadSettings();
-
-    if (!Wh_SetFunctionHook(
-        (void*)ShellAboutW,
-        (void*)ShellAboutW_hook,
-        (void**)&ShellAboutW_orig))
-    {
+BOOL Wh_ModInit(void) {
+    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(ShellAboutW),
+                            reinterpret_cast<void*>(ShellAboutW_hook),
+                            reinterpret_cast<void**>(&ShellAboutW_orig))) {
         Wh_Log(L"Failed to hook ShellAboutW");
         return FALSE;
     }
-
-    Wh_Log(L"Hook installed successfully");
-
     return TRUE;
 }

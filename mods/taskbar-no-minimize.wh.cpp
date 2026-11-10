@@ -2,7 +2,7 @@
 // @id              taskbar-no-minimize
 // @name            Taskbar: no minimize on click
 // @description     Disable the minimize window function when clicking an already active window on the taskbar
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -27,11 +27,18 @@
 Disable the "minimize window" function when clicking an already active window on
 the taskbar. When you click a taskbar button for a window that is already in the
 foreground, the window will stay in place instead of being minimized.
+
+There's an option to allow minimizing the window by double clicking on the
+taskbar button.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- minimizeOnDoubleClick: false
+  $name: Allow minimizing on double click
+  $description: >-
+    Minimize an active window when its taskbar button is double clicked.
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -43,10 +50,12 @@ foreground, the window will stay in place instead of being minimized.
 #include <windhawk_utils.h>
 
 #include <psapi.h>
+#include <windowsx.h>
 
 #include <atomic>
 
 struct {
+    bool minimizeOnDoubleClick;
     bool oldTaskbarOnWin11;
 } g_settings;
 
@@ -62,6 +71,37 @@ WinVersion g_winVersion;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
+ULONGLONG g_firstClickTickCount;
+DWORD g_firstClickMessagePos;
+void* g_firstClickTaskItem;
+
+bool IsDoubleClickDistance(DWORD pos1, DWORD pos2) {
+    return abs(GET_X_LPARAM(pos1) - GET_X_LPARAM(pos2)) <=
+               GetSystemMetrics(SM_CXDOUBLECLK) &&
+           abs(GET_Y_LPARAM(pos1) - GET_Y_LPARAM(pos2)) <=
+               GetSystemMetrics(SM_CYDOUBLECLK);
+}
+
+// Returns true if the call is the second click of a double click on the same
+// task item.
+bool IsDoubleClick(void* taskItem) {
+    ULONGLONG tickCount = GetTickCount64();
+    DWORD messagePos = GetMessagePos();
+
+    if (g_firstClickTickCount &&
+        IsDoubleClickDistance(g_firstClickMessagePos, messagePos) &&
+        g_firstClickTaskItem == taskItem &&
+        tickCount - g_firstClickTickCount <= GetDoubleClickTime()) {
+        g_firstClickTickCount = 0;
+        return true;
+    }
+
+    g_firstClickTickCount = tickCount;
+    g_firstClickMessagePos = messagePos;
+    g_firstClickTaskItem = taskItem;
+    return false;
+}
+
 using CTaskBand_SwitchTo_t = HRESULT(WINAPI*)(void* pThis,
                                               void* taskItem,
                                               BOOL noMinimize);
@@ -70,6 +110,12 @@ HRESULT WINAPI CTaskBand_SwitchTo_Hook(void* pThis,
                                        void* taskItem,
                                        BOOL noMinimize) {
     Wh_Log(L">");
+
+    if (!noMinimize && g_settings.minimizeOnDoubleClick &&
+        IsDoubleClick(taskItem)) {
+        return CTaskBand_SwitchTo_Original(pThis, taskItem, noMinimize);
+    }
+
     return CTaskBand_SwitchTo_Original(pThis, taskItem, TRUE);
 }
 
@@ -270,6 +316,8 @@ bool HookTaskbarSymbols() {
 }
 
 void LoadSettings() {
+    g_settings.minimizeOnDoubleClick =
+        Wh_GetIntSetting(L"minimizeOnDoubleClick");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
