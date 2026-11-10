@@ -5787,13 +5787,6 @@ void RefreshSmartClockSidecar(const std::shared_ptr<SmartClockSidecar>& panel) {
         panel->renderedSequence = g_sidecarSnapshot.sequence;
     }
     for (size_t i = 0; i < panel->cells.size(); ++i) {
-            if (!panel->cells[i]) continue;
-            WCHAR value[128]{};
-            FormatLineNoLock(value, ARRAYSIZE(value), formats[i]);
-            texts[i] = smartclock::ComposeSidecarMetric(i, value);
-        }
-    }
-    for (size_t i = 0; i < panel->cells.size(); ++i) {
         if (!panel->cells[i]) continue;
         auto& cell = panel->cells[i];
         cell.Text(winrt::hstring(texts[i]));
@@ -6011,9 +6004,29 @@ bool ClearSmartClockXamlState() {
     bool success = true;
     for (auto& data : *g_clockElementStyleData) {
         try {
+            // Restore the original time/date block styles and panel layout
+            // while their XAML objects still exist, before clearing weak refs.
+            auto dateBlock = data.dateTextBlock.get();
+            auto timeBlock = data.timeTextBlock.get();
             UnregisterSmartClockCallbacks(data);
             RemoveSmartClockSidecar(data.sidecar);
             data.sidecar.reset();
+            if (dateBlock) {
+                std::optional<int64_t> token;
+                ApplyTextBlockStyles(dateBlock, nullptr, false, &token);
+            }
+            if (timeBlock) {
+                std::optional<int64_t> token;
+                ApplyTextBlockStyles(timeBlock, nullptr, false, &token);
+            }
+            if (auto rootElement = data.dateTimeIconContentElement.get()) {
+                auto grid = FindChildByName(rootElement, L"ContainerGrid")
+                                .try_as<Controls::Grid>();
+                if (grid && grid.Children().Size()) {
+                    auto clock = grid.Children().GetAt(0).try_as<Controls::StackPanel>();
+                    if (clock) ApplyStackPanelStyles(clock, 0, 0, 0);
+                }
+            }
         } catch (...) {
             success = false;
             Wh_Log(L"SmartClock: XAML state cleanup failure %08X",
