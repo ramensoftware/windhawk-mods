@@ -6,7 +6,7 @@
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
 // @description:vi-VN Island ở cạnh trên kết hợp thanh menu macOS và Dynamic Island của iPhone, tích hợp đồng hồ, Trung tâm điều khiển, thông báo, trình phát nội dung và khay hệ thống. Có thể dùng Dock theo phong cách macOS để thay thanh tác vụ Windows, làm trong suốt thanh tác vụ hoặc giữ nguyên.
-// @version         3.1.0
+// @version         3.1.1
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://island.caliberda.com.br
@@ -79,6 +79,32 @@ instead of the taskbar.
    only), the transparent one, or Windows' own.
 
 Everything the mod does, in detail, is below.
+
+## What's new in 3.1.1
+
+**Fixes**
+
+* The island no longer crashes inside Windows' media controls while a
+  browser's videos (like YouTube in Chrome) or media apps keep changing, and
+  if the island ever crashes, it starts again by itself.
+* With the Fixed style's notches minimized, a notification's app icon peeks
+  out only of the notch with the bell, not out of every notch, and no longer
+  for the app you're using.
+* A click on a notification opens its app when the app's own notification
+  handler doesn't answer, instead of doing nothing.
+* An app's own counter on its taskbar button (like WhatsApp's) no longer
+  keeps its icon on the island as a waiting notification while the list is
+  empty: it counts as seen when the app comes to the front or its icon is
+  clicked, and shows again when the number grows.
+* Sleep in the power button's menu no longer hibernates PCs with Modern
+  Standby: like Start > Sleep, it turns the screen off and lets the PC go to
+  sleep.
+* QQ's and WeChat's message preview shows again when hovering their icon in
+  the taskbar's tray with tray icons on the island (#7157).
+* The settings window takes much less of the processor in its first
+  seconds: the preview's hint, the "+ Line" glow and the other hints that
+  only fade or pulse draw at most 30 times a second instead of at the
+  monitor's rate.
 
 ## What's new in 3.1
 
@@ -962,6 +988,32 @@ de tarefas.
 
 Os detalhes de cada opção estão em inglês acima e, passo a passo, no site
 [island.caliberda.com.br](https://island.caliberda.com.br).
+
+### Novidades da 3.1.1
+
+**Correções**
+
+* A ilha não cai mais dentro dos controles de mídia do Windows enquanto os
+  vídeos de um navegador (como o YouTube no Chrome) ou apps de mídia ficam
+  mudando, e, se um dia ela cair, volta sozinha.
+* Com os entalhes do estilo Fixo minimizados, o ícone do app de uma
+  notificação aparece só no entalhe do sino, não em todos os entalhes, e não
+  aparece mais para o app que você está usando.
+* Um clique numa notificação abre o app dela quando o próprio app não
+  responde ao clique da notificação, em vez de não fazer nada.
+* O contador do próprio app no botão dele da barra de tarefas (como o do
+  WhatsApp) não deixa mais o ícone dele na ilha como uma notificação
+  pendente com a lista vazia: ele conta como visto quando o app vem para a
+  frente ou o ícone é clicado, e volta quando o número aumenta.
+* Suspender no menu do botão de energia não hiberna mais os PCs com Modern
+  Standby: como Iniciar > Suspender, desliga a tela e deixa o PC dormir.
+* A prévia de mensagens do QQ e do WeChat volta a aparecer ao passar o mouse
+  no ícone deles na bandeja da barra de tarefas com ícones da bandeja na
+  ilha (#7157).
+* A janela de configurações usa bem menos o processador nos primeiros
+  segundos: a dica da prévia, o brilho do "+ Linha" e as outras dicas que só
+  esmaecem ou pulsam são desenhadas no máximo 30 vezes por segundo, em vez
+  de na taxa do monitor.
 
 ### Novidades da 3.1
 
@@ -10578,7 +10630,9 @@ std::vector<TrayIconPlace> g_trayPlaces;
 
 // An app asking where its icon is (Shell_NotifyIconGetRect): the request
 // that comes to the taskbar window. Returns the answer, or 0 to leave it to
-// the taskbar.
+// the taskbar. `underMouse`: only while the mouse is on that icon on the
+// island (#7157: QQ and WeChat open their message preview only while the
+// mouse is inside the rect, hovered in the taskbar's tray too).
 #pragma pack(push, 4)
 struct NotifyIconIdentifier32 {
     DWORD signature;
@@ -10592,7 +10646,8 @@ struct NotifyIconIdentifier32 {
 };
 #pragma pack(pop)
 
-LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
+LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData,
+                              bool underMouse) {
     if (!g_settings.showIsland || !copyData ||
         copyData->dwData != 3 ||
         copyData->cbData < sizeof(NotifyIconIdentifier32)) {
@@ -10606,6 +10661,10 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
     static const GUID kNoGuid{};
     const bool byGuid = request->guidItem != kNoGuid;
     LRESULT result = 0;
+    POINT cursor{};
+    if (underMouse && !GetCursorPos(&cursor)) {
+        return 0;
+    }
     AcquireSRWLockShared(&g_trayPlacesLock);
     for (const auto& place : g_trayPlaces) {
         const DWORD owner = (DWORD)(ULONG_PTR)place.owner;
@@ -10615,6 +10674,12 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
                          place.id == request->uID;
         if (matches) {
             const RECT& r = place.rect;
+            // (A few pixels around: its slot's padding.)
+            const RECT around{r.left - 6, r.top - 6, r.right + 6,
+                              r.bottom + 6};
+            if (underMouse && !PtInRect(&around, cursor)) {
+                break;
+            }
             result = request->request == 1
                          ? MAKELONG((short)r.left, (short)r.top)
                          : MAKELONG((short)(r.right - r.left),
@@ -11301,15 +11366,19 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         }
     }
     if (uMsg == WM_COPYDATA) {
-        // Where an icon is: on the island.
-        if (const LRESULT place =
-                OnTrayIconRectRequest((const COPYDATASTRUCT*)lParam)) {
+        // Where an icon is: on the island while the mouse is on it there;
+        // else the taskbar's answer, the island's when the taskbar has none
+        // (its tray hidden), then one meanwhile (see TrayIconRectMeanwhile).
+        const auto* copyData = (const COPYDATASTRUCT*)lParam;
+        if (const LRESULT place = OnTrayIconRectRequest(copyData, true)) {
             return place;
         }
         const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         if (!result) {
-            if (const LRESULT meanwhile =
-                    TrayIconRectMeanwhile((const COPYDATASTRUCT*)lParam)) {
+            if (const LRESULT place = OnTrayIconRectRequest(copyData, false)) {
+                return place;
+            }
+            if (const LRESULT meanwhile = TrayIconRectMeanwhile(copyData)) {
                 return meanwhile;
             }
         }
@@ -23198,6 +23267,72 @@ struct ReleaseNotes {
     PCWSTR text[kTextLanguages];
 };
 const ReleaseNotes kReleaseNotes[] = {
+    {L"3.1.1",
+     {
+         L"#Fixes\n"
+         L"The island no longer crashes inside Windows' media controls while a browser's videos (like YouTube in Chrome) keep changing, and if the island ever crashes, it starts again by itself.\n"
+         L"With the Fixed style's notches minimized, a notification's app icon peeks out only of the notch with the bell, not out of every notch, and no longer for the app you're using.\n"
+         L"A click on a notification opens its app when the app's own notification handler doesn't answer, instead of doing nothing.\n"
+         L"Sleep in the power button's menu no longer hibernates PCs with Modern Standby: like Start > Sleep, it turns the screen off and lets the PC go to sleep.\n"
+         L"QQ's and WeChat's message preview shows again when hovering their icon in the taskbar's tray with tray icons on the island: the island answers where an icon is only while the mouse is on it there (#7157).\n"
+         L"The settings window takes much less of the processor in its first seconds: the preview's hint, the \"+ Line\" glow and the other hints that only fade or pulse draw at most 30 times a second instead of at the monitor's rate.\n"
+         L"An app's own counter on its taskbar button (like WhatsApp's) no longer keeps its icon on the island as a waiting notification while the list is empty: it counts as seen when the app comes to the front or its icon is clicked, and shows again when the number grows.",
+         L"#Correções\n"
+         L"A ilha não cai mais dentro dos controles de mídia do Windows enquanto os vídeos de um navegador (como o YouTube no Chrome) ficam mudando, e, se um dia ela cair, volta sozinha.\n"
+         L"Com os entalhes do estilo Fixo minimizados, o ícone do app de uma notificação aparece só no entalhe do sino, não em todos os entalhes, e não aparece mais para o app que você está usando.\n"
+         L"Um clique numa notificação abre o app dela quando o próprio app não responde ao clique da notificação, em vez de não fazer nada.\n"
+         L"Suspender no menu do botão de energia não hiberna mais os PCs com Modern Standby: como Iniciar > Suspender, desliga a tela e deixa o PC dormir.\n"
+         L"A prévia de mensagens do QQ e do WeChat volta a aparecer ao passar o mouse no ícone deles na bandeja da barra de tarefas com ícones da bandeja na ilha: a ilha só responde onde um ícone está enquanto o mouse está nele ali (#7157).\n"
+         L"A janela de configurações usa bem menos o processador nos primeiros segundos: a dica da prévia, o brilho do \"+ Linha\" e as outras dicas que só esmaecem ou pulsam são desenhadas no máximo 30 vezes por segundo, em vez de na taxa do monitor.\n"
+         L"O contador do próprio app no botão dele da barra de tarefas (como o do WhatsApp) não deixa mais o ícone dele na ilha como uma notificação pendente com a lista vazia: ele conta como visto quando o app vem para a frente ou o ícone é clicado, e volta quando o número aumenta.",
+         L"#修复\n"
+         L"当浏览器中的视频（例如 Chrome 里的 YouTube）不断切换时，灵动岛不再在 Windows 的媒体控件中崩溃；即使灵动岛崩溃，它也会自动重新启动。\n"
+         L"固定样式的刘海最小化时，通知的应用图标只会从带铃铛的刘海中探出，而不是从每个刘海中探出；对于你正在使用的应用，也不再探出。\n"
+         L"当应用自身的通知处理程序没有响应时，点击通知会打开该应用，而不是没有任何反应。\n"
+         L"电源按钮菜单中的“睡眠”不再让支持新式待机（Modern Standby）的电脑进入休眠：与“开始 > 睡眠”一样，它会关闭屏幕并让电脑进入睡眠。\n"
+         L"在灵动岛上显示托盘图标时，将鼠标悬停在任务栏托盘中的 QQ 和微信图标上，又能看到它们的消息预览了：只有当鼠标在灵动岛上的图标上时，灵动岛才会回答图标的位置 (#7157)。\n"
+         L"设置窗口在打开后的头几秒占用的处理器大幅减少：预览的提示、“+ 分隔线”的光晕以及其他只会淡入淡出或闪烁的提示，每秒最多绘制 30 次，而不是按显示器刷新率绘制。\n"
+         L"应用在任务栏按钮上的计数（例如 WhatsApp 的）不会再在通知列表为空时，让它的图标像待处理的通知一样一直留在灵动岛上：当应用切换到前台或点击其图标时视为已读，数字增加时会再次显示。",
+         L"#Korrekturen\n"
+         L"Die Insel stürzt nicht mehr in den Mediensteuerelementen von Windows ab, während die Videos eines Browsers (wie YouTube in Chrome) ständig wechseln, und falls die Insel doch einmal abstürzt, startet sie von selbst neu.\n"
+         L"Sind die Notches des Stils „Fest“ minimiert, lugt das App-Symbol einer Benachrichtigung nur noch aus der Notch mit der Glocke hervor, nicht mehr aus jeder Notch, und nicht mehr für die App, die du gerade benutzt.\n"
+         L"Ein Klick auf eine Benachrichtigung öffnet ihre App, wenn der Benachrichtigungs-Handler der App nicht antwortet, statt nichts zu tun.\n"
+         L"„Energie sparen“ im Menü der Ein/Aus-Taste versetzt PCs mit Modern Standby nicht mehr in den Ruhezustand: wie Start > Energie sparen schaltet es den Bildschirm aus und lässt den PC schlafen.\n"
+         L"Die Nachrichtenvorschau von QQ und WeChat erscheint wieder, wenn man mit der Maus über ihr Symbol im Infobereich der Taskleiste fährt, während Infobereich-Symbole auf der Insel sind: Die Insel nennt die Position eines Symbols nur, solange die Maus dort darauf ist (#7157).\n"
+         L"Das Einstellungsfenster braucht in den ersten Sekunden viel weniger Prozessorleistung: Der Hinweis der Vorschau, das Leuchten von „+ Linie“ und die anderen Hinweise, die nur ein- und ausblenden oder pulsieren, werden höchstens 30-mal pro Sekunde gezeichnet statt mit der Bildwiederholrate des Monitors.\n"
+         L"Der eigene Zähler einer App auf ihrer Taskleisten-Schaltfläche (wie der von WhatsApp) lässt ihr Symbol nicht mehr als wartende Benachrichtigung auf der Insel, während die Liste leer ist: Er gilt als gesehen, wenn die App in den Vordergrund kommt oder ihr Symbol angeklickt wird, und erscheint wieder, wenn die Zahl steigt.",
+         L"#Correcciones\n"
+         L"La isla ya no se bloquea dentro de los controles multimedia de Windows mientras los vídeos de un navegador (como YouTube en Chrome) cambian una y otra vez, y si alguna vez se bloquea, vuelve a abrirse sola.\n"
+         L"Con las muescas del estilo Fijo minimizadas, el icono de la app de una notificación asoma solo por la muesca de la campana, no por todas, y ya no asoma para la app que estás usando.\n"
+         L"Un clic en una notificación abre su app cuando el propio controlador de notificaciones de la app no responde, en lugar de no hacer nada.\n"
+         L"Suspender en el menú del botón de encendido ya no hiberna los PC con Modern Standby: como Inicio > Suspender, apaga la pantalla y deja que el PC se suspenda.\n"
+         L"La vista previa de mensajes de QQ y WeChat vuelve a aparecer al pasar el ratón por su icono en la bandeja de la barra de tareas con iconos de la bandeja en la isla: la isla solo responde dónde está un icono mientras el ratón está sobre él allí (#7157).\n"
+         L"La ventana de configuración usa mucho menos el procesador en sus primeros segundos: la pista de la vista previa, el brillo de «+ Línea» y las demás pistas que solo se desvanecen o laten se dibujan como máximo 30 veces por segundo en lugar de a la frecuencia del monitor.\n"
+         L"El contador propio de una app en su botón de la barra de tareas (como el de WhatsApp) ya no deja su icono en la isla como una notificación pendiente con la lista vacía: cuenta como visto cuando la app pasa al frente o se hace clic en su icono, y vuelve cuando el número sube.",
+         L"#Исправления\n"
+         L"Остров больше не падает внутри медиаэлементов управления Windows, пока видео в браузере (например, YouTube в Chrome) постоянно меняются, а если остров всё же упадёт, он сам запустится снова.\n"
+         L"Когда вырезы стиля «Фиксированный» свёрнуты, значок приложения из уведомления выглядывает только из выреза с колокольчиком, а не из каждого выреза, и больше не выглядывает для приложения, которым вы пользуетесь.\n"
+         L"Щелчок по уведомлению открывает его приложение, когда собственный обработчик уведомлений приложения не отвечает, вместо того чтобы ничего не делать.\n"
+         L"«Спящий режим» в меню кнопки питания больше не переводит ПК с Modern Standby в гибернацию: как Пуск > Спящий режим, он выключает экран и даёт ПК уснуть.\n"
+         L"Предпросмотр сообщений QQ и WeChat снова появляется при наведении на их значок в трее панели задач, когда значки трея есть на острове: остров сообщает, где значок, только пока мышь на нём там (#7157).\n"
+         L"Окно настроек гораздо меньше нагружает процессор в первые секунды: подсказка предпросмотра, свечение «+ Линия» и другие подсказки, которые только появляются, гаснут или пульсируют, рисуются не чаще 30 раз в секунду, а не с частотой монитора.\n"
+         L"Собственный счётчик приложения на его кнопке панели задач (как у WhatsApp) больше не оставляет его значок на острове как ожидающее уведомление при пустом списке: он считается просмотренным, когда приложение выходит на передний план или по его значку щёлкают, и появляется снова, когда число растёт.",
+         L"#修正\n"
+         L"ブラウザーの動画（Chrome の YouTube など）が切り替わり続けても、Windows のメディアコントロール内でアイランドがクラッシュしなくなりました。万一クラッシュしても、自動で再起動します。\n"
+         L"固定スタイルのノッチを最小化しているとき、通知のアプリ アイコンはベルのあるノッチからだけ顔を出し、すべてのノッチからは出なくなりました。使用中のアプリの通知でも出なくなりました。\n"
+         L"アプリ自身の通知ハンドラーが応答しないとき、通知をクリックすると何も起きないのではなく、そのアプリが開くようになりました。\n"
+         L"電源ボタンのメニューの「スリープ」が Modern Standby の PC を休止状態にしなくなりました。スタート > スリープと同じく画面を消して PC をスリープさせます。\n"
+         L"アイランドにトレイ アイコンを表示しているとき、タスクバーのトレイにある QQ と WeChat のアイコンにマウスを合わせると、メッセージのプレビューが再び出るようになりました。アイランドがアイコンの位置を答えるのは、マウスがアイランド上のそのアイコンにあるときだけです (#7157)。\n"
+         L"設定ウィンドウを開いた直後の数秒間のプロセッサー使用量が大きく減りました。プレビューのヒント、「+ 区切り」の光、そのほかフェードや点滅だけのヒントは、モニターのリフレッシュレートではなく毎秒最大 30 回描画されます。\n"
+         L"タスクバー ボタン上のアプリ自身のカウンター（WhatsApp など）が、一覧が空なのにアイコンを待機中の通知としてアイランドに残すことはなくなりました。アプリが前面に来たときやアイコンをクリックしたときに既読扱いになり、数が増えると再び表示されます。",
+         L"#Sửa lỗi\n"
+         L"Đảo không còn bị sập trong phần điều khiển phương tiện của Windows khi video của trình duyệt (như YouTube trên Chrome) liên tục thay đổi, và nếu có lúc đảo bị sập, nó sẽ tự khởi động lại.\n"
+         L"Khi các tai thỏ của kiểu Cố định được thu nhỏ, biểu tượng ứng dụng của thông báo chỉ ló ra ở tai thỏ có chuông, không ló ra ở mọi tai thỏ nữa, và không còn ló ra với ứng dụng bạn đang dùng.\n"
+         L"Bấm vào thông báo sẽ mở ứng dụng của nó khi trình xử lý thông báo của chính ứng dụng không phản hồi, thay vì không làm gì.\n"
+         L"Ngủ trong menu nút nguồn không còn làm máy có Modern Standby ngủ đông nữa: giống Start > Sleep, nó tắt màn hình và để máy ngủ.\n"
+         L"Bản xem trước tin nhắn của QQ và WeChat lại hiện khi rê chuột lên biểu tượng của chúng trong khay của thanh tác vụ khi có biểu tượng khay trên đảo: đảo chỉ trả lời vị trí của biểu tượng khi chuột đang ở trên nó tại đảo (#7157).\n"
+         L"Cửa sổ cài đặt dùng bộ xử lý ít hơn nhiều trong những giây đầu: gợi ý của bản xem trước, ánh sáng của \"+ Vạch\" và các gợi ý khác chỉ mờ dần hoặc nhấp nháy được vẽ tối đa 30 lần mỗi giây thay vì theo tần số màn hình.\n"
+         L"Bộ đếm riêng của ứng dụng trên nút thanh tác vụ (như của WhatsApp) không còn giữ biểu tượng của nó trên đảo như một thông báo đang chờ khi danh sách trống: nó được tính là đã xem khi ứng dụng lên phía trước hoặc biểu tượng được bấm, và hiện lại khi con số tăng."}},
     {L"3.1.0",
      {
          L"#New\n"
@@ -27107,7 +27242,8 @@ void RestoreLeftoverDnd() {
 
 // Explorer keeps an eye on the island's process (told by its hello): if it
 // ends while the island's own notifications have Windows' "Do not disturb"
-// on (it crashed), explorer turns it back off.
+// on (it crashed), explorer turns it back off; and if it crashed, explorer
+// starts it again (see RestartCrashedIsland).
 HANDLE g_islandProcess;
 HANDLE g_islandProcessWait;
 DWORD g_islandProcessId;
@@ -27126,6 +27262,72 @@ DWORD WINAPI TurnLeftoverDndOffThreadProc(LPVOID) {
     return 0;
 }
 
+// Started again by explorer when the island's process crashed (Windows
+// ended it with an error), since Windhawk starts it only as one of its own
+// processes starts: at most kIslandRestarts times in kIslandRestartWindow
+// seconds, so a crash at every start doesn't go round and round.
+constexpr int kIslandRestarts = 3;
+constexpr double kIslandRestartWindow = 600;
+
+// Whether a process's exit code says it crashed: an NTSTATUS error (an
+// exception, a stack overflow, a fail-fast). The island's own ends are
+// ExitProcess(0) or (1), and Task Manager's is 1.
+bool IslandProcessCrashed(DWORD exitCode) {
+    return exitCode >= 0xC0000000;
+}
+
+// Whether one more start fits, given when the last kIslandRestarts were
+// (0: none), and if so, notes it in the oldest one's place.
+bool IslandRestartAllowed(double (&startedAt)[kIslandRestarts],
+                          int* next,
+                          double now) {
+    double& oldest = startedAt[*next];
+    if (oldest > 0 && now - oldest < kIslandRestartWindow) {
+        return false;
+    }
+    oldest = now;
+    *next = (*next + 1) % kIslandRestarts;
+    return true;
+}
+
+// (On the wait's thread, see IslandProcessEndedCallback.)
+void RestartCrashedIsland() {
+    static double startedAt[kIslandRestarts];
+    static int next;
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    DWORD exitCode = 0;
+    AcquireSRWLockShared(&g_islandWatchLock);
+    const bool known =
+        g_islandProcess && GetExitCodeProcess(g_islandProcess, &exitCode) &&
+        QueryFullProcessImageName(g_islandProcess, 0, path, &size);
+    ReleaseSRWLockShared(&g_islandWatchLock);
+    if (!known || !IslandProcessCrashed(exitCode)) {
+        return;
+    }
+    if (!IslandRestartAllowed(startedAt, &next, NowSeconds())) {
+        IslandLog(L"The island crashed again (%08X): left stopped",
+                  (unsigned)exitCode);
+        return;
+    }
+    WCHAR commandLine[MAX_PATH + 64];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", path, WH_MOD_ID);
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!CreateProcess(path, commandLine, nullptr, nullptr, FALSE,
+                       NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
+        IslandLog(L"The island crashed (%08X), starting it again failed",
+                  (unsigned)exitCode);
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    IslandLog(L"The island crashed (%08X): started again", (unsigned)exitCode);
+}
+
 VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
     // A new version's island may still be starting (the old one's process
     // can end before the new one's is up): given a few seconds to take it
@@ -27141,6 +27343,7 @@ VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
         return;
     }
     TurnLeftoverDndOffThreadProc(nullptr);
+    RestartCrashedIsland();
 }
 
 // The explorer.exe part unloading (the mod turned off or removed) while no
@@ -27198,7 +27401,9 @@ void WatchIslandProcess(HWND island) {
         return;
     }
     StopWatchingIslandProcess();
-    HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, processId);
+    // (Its exit code and path too: started again if it crashed.)
+    HANDLE process = OpenProcess(
+        SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (!process) {
         return;
     }
@@ -46371,6 +46576,10 @@ class ControlPanel : public Panel {
     // when it started (0: not on), when the settings open and when the mouse
     // comes onto the preview, for kOrderHintSeconds.
     double m_orderHintAt = 0;
+    // A decoration of the settings that only fades or pulses (a setting
+    // found, the chips' glows, the preview's hint) showing: paced at most
+    // 30 frames a second (see AnimateContents).
+    bool m_settingsPaced = false;
     bool m_onOrderStrip = false;
     void StartOrderHint();
     float OrderHintAmount(double now) const;
@@ -47217,6 +47426,18 @@ struct MediaThreadEvents {
     HANDLE events[3];
 };
 
+// How long a media session that went away (or stopped being the one shown)
+// is kept, with its handlers, before the media thread lets it go. Windows
+// may still be telling it something on its own threads: letting go of it
+// meanwhile crashed the island inside Windows.Media.MediaControl, while
+// Chrome's videos made and dropped sessions.
+constexpr double kMediaGoneSeconds = 10;
+
+// Whether a session kept since `goneAt` can be let go `now`.
+bool MediaSessionLetGo(double goneAt, double now) {
+    return now - goneAt >= kMediaGoneSeconds;
+}
+
 DWORD WINAPI MediaThreadProc(LPVOID parameter) {
     using namespace winrt::Windows::Media::Control;
     const std::unique_ptr<MediaThreadEvents> own(
@@ -47265,6 +47486,15 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                 std::shared_ptr<std::atomic<bool>> titleStale;
             };
             std::vector<WatchedSession> watched;
+            // The ones gone, kept a while (see kMediaGoneSeconds); the old
+            // current one with its timeline's handler too.
+            struct GoneSession {
+                double at = 0;
+                WatchedSession watched;
+                GlobalSystemMediaTransportControlsSession::
+                    TimelinePropertiesChanged_revoker timeline;
+            };
+            std::vector<GoneSession> gone;
             const HANDLE* events = own->events;
             SetEvent(events[1]);
 
@@ -47273,6 +47503,12 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                     WaitForMultipleObjects(3, events, FALSE, INFINITE);
                 if (wait == WAIT_OBJECT_0) {
                     break;
+                }
+                {
+                    const double now = NowSeconds();
+                    std::erase_if(gone, [&](const GoneSession& entry) {
+                        return MediaSessionLetGo(entry.at, now);
+                    });
                 }
                 try {
                     if (wait == WAIT_OBJECT_0 + 2) {
@@ -47345,6 +47581,14 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                                 winrt::auto_revoke, changed);
                             watched.push_back(std::move(entry));
                         }
+                        // (The ones taken over above are empty now.)
+                        for (auto& entry : before) {
+                            if (entry.session) {
+                                gone.push_back({NowSeconds(),
+                                                std::move(entry),
+                                                {}});
+                            }
+                        }
                     }
                     std::vector<MediaSource> sources;
                     for (auto& entry : watched) {
@@ -47409,6 +47653,16 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                         current = manager.GetCurrentSession();
                     }
                     if (current != session) {
+                        if (session) {
+                            GoneSession old;
+                            old.at = NowSeconds();
+                            old.watched.session = std::move(session);
+                            old.watched.properties =
+                                std::move(propertiesRevoker);
+                            old.watched.playback = std::move(playbackRevoker);
+                            old.timeline = std::move(timelineRevoker);
+                            gone.push_back(std::move(old));
+                        }
                         session = current;
                         propertiesRevoker = {};
                         playbackRevoker = {};
@@ -48680,6 +48934,23 @@ bool IsHibernateAllowed() {
     return allowed && allowed() != FALSE;
 }
 
+// Whether the PC has a classic sleep state (S1, S2 or S3). PCs with Modern
+// Standby (S0 low power idle) have none: SetSuspendState(FALSE) hibernates
+// there when hibernation is on, while Start > Sleep only turns the screen
+// off and lets them go to sleep. True when it can't be read (as before).
+bool HasClassicSleep() {
+    using GetPwrCapabilities_t = BOOLEAN(WINAPI*)(PSYSTEM_POWER_CAPABILITIES);
+    HMODULE powrprof = Powrprof();
+    auto capabilities = powrprof ? (GetPwrCapabilities_t)GetProcAddress(
+                                       powrprof, "GetPwrCapabilities")
+                                 : nullptr;
+    SYSTEM_POWER_CAPABILITIES caps = {};
+    if (!capabilities || !capabilities(&caps)) {
+        return true;
+    }
+    return caps.SystemS1 || caps.SystemS2 || caps.SystemS3;
+}
+
 // The one action on, if there's only one (-1 otherwise): a click on the
 // button runs it, unless it asks first.
 int OnlyPowerAction() {
@@ -48716,7 +48987,12 @@ void RunPowerAction(PowerAction action, HWND window) {
                 BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
             bool slept = false;
             DWORD error = ERROR_PROC_NOT_FOUND;
-            if (HMODULE powrprof = Powrprof()) {
+            // Modern Standby: no SetSuspendState (it would hibernate), the
+            // screen off below.
+            const bool canSuspend = hibernate || HasClassicSleep();
+            if (!canSuspend) {
+                error = ERROR_NOT_SUPPORTED;
+            } else if (HMODULE powrprof = Powrprof()) {
                 if (auto suspend = (SetSuspendState_t)GetProcAddress(
                         powrprof, "SetSuspendState")) {
                     slept = suspend(hibernate, FALSE, FALSE) != FALSE;
@@ -48728,8 +49004,9 @@ void RunPowerAction(PowerAction action, HWND window) {
             } else if (!slept) {
                 // PCs with Modern Standby don't sleep that way: turning the
                 // screen off is what puts them to sleep.
-                IslandLog(L"SetSuspendState failed (%u), turning the screen off",
-                       error);
+                IslandLog(L"Sleep: no S1-S3 or SetSuspendState failed (%u), "
+                          L"turning the screen off",
+                          error);
                 DefWindowProc(window, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
             }
             break;
@@ -74615,10 +74892,22 @@ class Island final : public DropTarget::Receiver {
     double m_appsAmount = 0;
     double m_appsVelocity = 0;
     void OpenFoldedApps(UINT forMs);
-    // Apps with a taskbar badge whose notifications were cleared in the
-    // list: not shown until their badge goes away and comes back, or a new
-    // notification of theirs arrives.
-    std::vector<std::wstring> m_clearedBadges;
+    // Apps with a taskbar badge (or counter) seen: their notifications
+    // cleared in the list, their window come to the front or their icon on
+    // the island clicked. Not shown until their badge goes away and comes
+    // back, its number grows past `count`, or a new notification of theirs
+    // arrives.
+    struct ClearedBadge {
+        std::wstring id;
+        int count = 0;
+    };
+    std::vector<ClearedBadge> m_clearedBadges;
+    // Its taskbar badge's number (0 without one, or without a number).
+    int BadgeCount(const std::wstring& appId) const;
+    bool BadgeCleared(const std::wstring& appId) const;
+    void ClearBadge(const std::wstring& appId);
+    // (ClearBadge on every island, which then updates its apps.)
+    static void ClearBadgeEverywhere(const std::wstring& appId);
     // Apps whose banner was closed with its "x", and until when: like
     // Android's snoozing, their new notifications don't open the pill for a
     // while (their sound plays, and they still go to the list and the
@@ -81232,15 +81521,20 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::WhatsNewNotice,
              kSectionWhatsNew},
             {(int)SettingKind::Choice, kChoiceNotesLanguage, kSectionWhatsNew},
+            // (A card for each version of kReleaseNotes, see the assert
+            // after this list.)
             {(int)SettingKind::WhatsNew, 0, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 1, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 2, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 3, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 4, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 5, kSectionWhatsNew},
+            {(int)SettingKind::WhatsNew, 6, kSectionWhatsNew},
             {(int)SettingKind::Logs, 0, kSectionLogs},
             {(int)SettingKind::Logs, 1, kSectionLogs},
         };
+        static_assert(kReleaseNotesCount == 7,
+                      "a What's new card above for each version");
         for (const auto& spec : kSpecs) {
             m_settings.push_back({(SettingKind)spec.kind, spec.value,
                                   spec.section, spec.follows != 0});
@@ -81940,20 +82234,23 @@ bool ControlPanel::AnimateSettings(double dt) {
         Layout();
     }
     bool moving = m_settingsScroll.Animate(dt);
-    moving |= m_flashEntry >= 0 && NowSeconds() - m_flashAt < kFlashSeconds;
-    // (The separator chips' glows, drawn once more as they end.)
-    moving |= (m_addGlowAt > 0 &&
-               NowSeconds() - m_addGlowAt < kAddGlowSeconds + 0.1) ||
-              (m_separatorNewAt > 0 &&
-               NowSeconds() - m_separatorNewAt < kSeparatorHintSeconds + 0.1);
+    // The decorations that only fade or pulse (a setting found; the
+    // separator chips' glows, drawn once more as they end; the preview's
+    // hint while it lasts): paced, see m_settingsPaced.
+    bool paced =
+        m_flashEntry >= 0 && NowSeconds() - m_flashAt < kFlashSeconds;
+    paced |= (m_addGlowAt > 0 &&
+              NowSeconds() - m_addGlowAt < kAddGlowSeconds + 0.1) ||
+             (m_separatorNewAt > 0 &&
+              NowSeconds() - m_separatorNewAt < kSeparatorHintSeconds + 0.1);
     moving |= m_appPlacesScroll.Animate(dt);
-    // (The preview's hint, while it lasts; drawn once more as it ends.)
     if (m_orderHintAt > 0) {
         if (NowSeconds() - m_orderHintAt >= kOrderHintSeconds) {
             m_orderHintAt = 0;
         }
-        moving = true;
+        paced = true;
     }
+    m_settingsPaced = paced;
     for (auto& entry : m_settings) {
         moving |= SpringTowards(entry.alpha, entry.valpha, entry.shown ? 1 : 0,
                                 0.24, dt);
@@ -82835,20 +83132,22 @@ bool ControlPanel::AnimateContents(double dt) {
     }
     std::erase_if(m_ghosts,
                   [](const Ghost& ghost) { return ghost.amount <= 0; });
-    if ((m_view == View::Settings || m_view == View::AppPlaces) &&
-        AnimateSettings(dt)) {
+    const bool settingsView =
+        m_view == View::Settings || m_view == View::AppPlaces;
+    if (settingsView && AnimateSettings(dt)) {
         moving = true;
     }
-    // A profile just saved says so for a moment.
-    if (m_view == View::Settings && NowSeconds() - m_profileSavedAt < 1.6) {
-        moving = true;
-    }
-    // A thin slider's icons bouncing (see DrawSlider).
-    if (NowSeconds() < g_sliderPulseUntil) {
-        moving = true;
-    }
-    m_idleMotion = idle && !moving;
-    return moving || idle;
+    // What only fades or pulses, at most 30 frames a second like the texts
+    // scrolling (the settings window is large: at the display's rate it
+    // took most of a core): the settings' decorations, a profile just saved
+    // saying so for a moment, a thin slider's icons bouncing (see
+    // DrawSlider).
+    const bool paced =
+        idle || (settingsView && m_settingsPaced) ||
+        (m_view == View::Settings && NowSeconds() - m_profileSavedAt < 1.6) ||
+        NowSeconds() < g_sliderPulseUntil;
+    m_idleMotion = paced && !moving;
+    return moving || paced;
 }
 
 float ControlPanel::KnobFor(int key, bool on) {
@@ -91496,7 +91795,22 @@ struct ToastActivation {
     std::wstring arguments;
     std::wstring inputId;
     std::wstring text;
+    // A click on the notification itself (not a button or a reply): if the
+    // app's handler fails soon after (kToastFallbackMs), the island opens
+    // the app instead.
+    bool openFallback = false;
+    ULONGLONG clickedAt = GetTickCount64();
 };
+
+// The apps whose notification handler failed after a click on their
+// notification (see ToastActivation::openFallback): the island opens them
+// (WM_APP_TOAST_FALLBACK, in Island::HandleMessage). Not when the failure
+// comes later than kToastFallbackMs (a server that took long to fail): the
+// app showing up by itself then would be a surprise.
+constexpr UINT WM_APP_TOAST_FALLBACK = WM_APP + 121;
+constexpr ULONGLONG kToastFallbackMs = 5000;
+SRWLOCK g_toastFallbacksLock = SRWLOCK_INIT;
+std::vector<std::wstring> g_toastFallbacks;
 
 // The app's activator is out of process and may have to start: called on a
 // thread of its own.
@@ -91521,6 +91835,15 @@ DWORD WINAPI ToastActivationThreadProc(LPVOID parameter) {
     callback = nullptr;
     if (SUCCEEDED(comResult)) {
         CoUninitialize();
+    }
+    if (FAILED(result) && activation->openFallback &&
+        GetTickCount64() - activation->clickedAt < kToastFallbackMs) {
+        AcquireSRWLockExclusive(&g_toastFallbacksLock);
+        g_toastFallbacks.push_back(activation->appId);
+        ReleaseSRWLockExclusive(&g_toastFallbacksLock);
+        if (HWND island = g_islandWnd) {
+            PostMessage(island, WM_APP_TOAST_FALLBACK, 0, 0);
+        }
     }
     return 0;
 }
@@ -91555,7 +91878,8 @@ bool ActivateToast(const std::wstring& appId,
                    const std::wstring& arguments,
                    const std::wstring& activationType,
                    const std::wstring& inputId = {},
-                   const std::wstring& text = {}) {
+                   const std::wstring& text = {},
+                   bool openFallback = false) {
     // The app (or the page it opens) can come to the front.
     AllowSetForegroundWindow(ASFW_ANY);
     if (activationType == L"protocol") {
@@ -91585,8 +91909,8 @@ bool ActivateToast(const std::wstring& appId,
         }
         return false;
     });
-    auto* activation =
-        new ToastActivation{clsid, appId, arguments, inputId, text};
+    auto* activation = new ToastActivation{clsid, appId, arguments, inputId,
+                                           text, openFallback};
     HANDLE thread = CreateThread(nullptr, 0, ToastActivationThreadProc,
                                  activation, 0, nullptr);
     if (!thread) {
@@ -91762,7 +92086,8 @@ bool OpenNotification(const std::wstring& appId, const ToastReply& reply) {
     if (!reply.launch.empty() &&
         ActivateToast(
             appId, reply.launch,
-            reply.launchType.empty() ? L"foreground" : reply.launchType)) {
+            reply.launchType.empty() ? L"foreground" : reply.launchType, {},
+            {}, true)) {
         return true;
     }
     AppWindowSearch context{&appId, nullptr};
@@ -100634,6 +100959,16 @@ void Island::OnForegroundChanged() {
     for (const auto& appId : seen) {
         MarkAppRead(appId);
         m_notifications.ClearApp(appId);
+    }
+    // Its taskbar badge too (its own counter, like WhatsApp's): seen.
+    std::vector<std::wstring> badges;
+    for (const auto& id : m_badgeApps) {
+        if (id != kWidgetsBadgeId && WindowMatchesApp(foreground, id)) {
+            badges.push_back(id);
+        }
+    }
+    for (const auto& id : badges) {
+        ClearBadgeEverywhere(id);
     }
     SetPlaceApp(PerAppPlacesOn() ? WindowAppKey(foreground) : std::wstring());
 }
@@ -113999,8 +114334,8 @@ void Island::AddUnread(const IslandToast& toast) {
         return;
     }
     const std::wstring appId = NotificationAppKey(toast.appId);
-    std::erase_if(m_clearedBadges, [&](const std::wstring& id) {
-        return _wcsicmp(id.c_str(), appId.c_str()) == 0;
+    std::erase_if(m_clearedBadges, [&](const ClearedBadge& cleared) {
+        return _wcsicmp(cleared.id.c_str(), appId.c_str()) == 0;
     });
     // (Minimized: it peeks out of the line, on the notch that shows the
     // notifications.)
@@ -114121,10 +114456,8 @@ void Island::ClearAppsFromList(const std::vector<std::wstring>& apps,
     std::erase_if(m_unreadApps,
                   [&](const UnreadApp& app) { return listed(app.id); });
     for (const auto& id : m_badgeApps) {
-        if (listed(id) &&
-            std::find(m_clearedBadges.begin(), m_clearedBadges.end(), id) ==
-                m_clearedBadges.end()) {
-            m_clearedBadges.push_back(id);
+        if (listed(id)) {
+            ClearBadge(id);
         }
     }
     if (all || m_unreadApps.empty()) {
@@ -114376,6 +114709,54 @@ int Island::AppCount(const std::wstring& appId) const {
     return count;
 }
 
+int Island::BadgeCount(const std::wstring& appId) const {
+    for (size_t i = 0; i < m_badgeApps.size() && i < m_badgeCounts.size();
+         i++) {
+        if (m_badgeApps[i] == appId) {
+            return m_badgeCounts[i];
+        }
+    }
+    return 0;
+}
+
+bool Island::BadgeCleared(const std::wstring& appId) const {
+    return std::any_of(
+        m_clearedBadges.begin(), m_clearedBadges.end(),
+        [&](const ClearedBadge& cleared) { return cleared.id == appId; });
+}
+
+// Its badge seen as it is now (see m_clearedBadges); nothing without one.
+void Island::ClearBadge(const std::wstring& appId) {
+    if (std::find(m_badgeApps.begin(), m_badgeApps.end(), appId) ==
+        m_badgeApps.end()) {
+        return;
+    }
+    const int count = BadgeCount(appId);
+    for (auto& cleared : m_clearedBadges) {
+        if (cleared.id == appId) {
+            cleared.count = std::max(cleared.count, count);
+            return;
+        }
+    }
+    m_clearedBadges.push_back({appId, count});
+}
+
+void Island::ClearBadgeEverywhere(const std::wstring& appId) {
+    // (A copy: `appId` may be one of an island's own strings.)
+    const std::wstring id = appId;
+    ForEachIsland([&](Island& island) {
+        if (island.BadgeCleared(id)) {
+            return;
+        }
+        island.ClearBadge(id);
+        if (island.BadgeCleared(id)) {
+            island.UpdateApps();
+            island.StartAnimating();
+            island.Render(true);
+        }
+    });
+}
+
 // Takes the apps with a badge from the taskbar, and the ones with unread
 // notifications: new ones grow in (and peek out of the line when the pill is
 // minimized), the others shrink away.
@@ -114385,15 +114766,24 @@ void Island::UpdateApps() {
     m_badgeCounts = g_badgeCounts;
     ReleaseSRWLockShared(&g_badgeAppsLock);
     UpdateAppCounts();
-    // A cleared badge counts again once it's gone (and comes back).
-    std::erase_if(m_clearedBadges, [&](const std::wstring& id) {
-        return std::find(m_badgeApps.begin(), m_badgeApps.end(), id) ==
-               m_badgeApps.end();
+    // A cleared badge counts again once it's gone (and comes back), or its
+    // number grew.
+    std::erase_if(m_clearedBadges, [&](const ClearedBadge& cleared) {
+        return std::find(m_badgeApps.begin(), m_badgeApps.end(),
+                         cleared.id) == m_badgeApps.end() ||
+               BadgeCount(cleared.id) > cleared.count;
     });
+    // The app in front's: seen (like its notifications, see AddUnread).
+    const HWND foreground = GetForegroundWindow();
+    for (const auto& id : m_badgeApps) {
+        if (!BadgeCleared(id) && id != kWidgetsBadgeId &&
+            WindowMatchesApp(foreground, id)) {
+            ClearBadge(id);
+        }
+    }
     std::vector<std::wstring> wanted;
     for (const auto& id : m_badgeApps) {
-        if (std::find(m_clearedBadges.begin(), m_clearedBadges.end(), id) ==
-            m_clearedBadges.end()) {
+        if (!BadgeCleared(id)) {
             wanted.push_back(id);
         }
     }
@@ -114413,7 +114803,10 @@ void Island::UpdateApps() {
         if (it == m_appEntries.end()) {
             m_appEntries.push_back({id});
             changed = true;
-            if (m_minimized && !m_bar) {
+            // Only out of the notch that shows the notifications (like
+            // AddUnread), and not for the app in front (already seen).
+            if (m_minimized && !m_bar && ShowsNotices() &&
+                !WindowMatchesApp(GetForegroundWindow(), id)) {
                 m_peekApp = id;
                 m_peekStart = NowSeconds();
             }
@@ -117399,6 +117792,9 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
                 OpenApp(appId);
                 MarkAppRead(appId);
                 m_notifications.ClearApp(appId);
+                if (badge) {
+                    ClearBadgeEverywhere(appId);
+                }
                 break;
             }
             const ToastReply reply = unread->reply;
@@ -118714,6 +119110,21 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_APP_BANNER_READ:
             OnWindowsBannersRead();
             return 0;
+
+        case WM_APP_TOAST_FALLBACK: {
+            // A notification's handler failed after its click: its app's
+            // window, tray icon or the app itself (no handler this time).
+            std::vector<std::wstring> apps;
+            AcquireSRWLockExclusive(&g_toastFallbacksLock);
+            apps.swap(g_toastFallbacks);
+            ReleaseSRWLockExclusive(&g_toastFallbacksLock);
+            for (const auto& app : apps) {
+                IslandLog(L"Notification handler failed, opening \"%s\"",
+                          app.c_str());
+                OpenNotification(app, ToastReply{});
+            }
+            return 0;
+        }
 
         case WM_APP_MEDIA:
             AcquireSRWLockShared(&g_mediaLock);
