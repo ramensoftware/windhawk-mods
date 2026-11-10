@@ -99,8 +99,10 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
     $description: If disabled, click to expand.
   - HideInFullscreen: true
     $name: Hide in browser/video fullscreen
+    $description: Context Menu overrides this setting.
   - IdleTimeout: '0'
     $name: Hide when paused/idle
+    $description: Context Menu overrides this setting.
     $options:
       - '0': Never
       - '30': After 30 seconds
@@ -138,6 +140,7 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
 - Themes:
   - ThemePreset: obsidian
     $name: Theme preset
+    $description: "Note: Color settings changed via the right-click Context Menu take priority."
     $options:
       - obsidian: Obsidian
       - graphite: Graphite
@@ -149,9 +152,10 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
       - porcelain: Porcelain (light)
   - PillOpacity: 96
     $name: Pill transparency
-    $description: 35 to 100.
+    $description: 35 to 100. Context Menu overrides this.
   - AccentColorMode: auto
     $name: Accent color mode
+    $description: Context Menu overrides this setting.
     $options:
       - auto: Auto, from album art
       - system: System accent
@@ -343,6 +347,7 @@ struct Settings {
     int offsetX = 0;
     int offsetY = 0;
     float sizeScale = 1.0f;
+    float baseSizeScale = 1.0f;
     std::wstring fontFamily;
     AccentMode accentMode = AccentMode::Auto;
     bool smoothAccent = true;
@@ -892,8 +897,11 @@ void LoadSettings() {
     if (!scale.empty()) {
         wchar_t* end;
         float parsed = wcstof(scale.c_str(), &end);
-        if (end != scale.c_str() && parsed > 0.1f && parsed < 10.0f) next.sizeScale = parsed;
+        if (end != scale.c_str() && parsed > 0.1f && parsed < 10.0f) next.baseSizeScale = parsed;
     }
+    
+    // We don't pre-multiply DPI here anymore, it's done dynamically in RenderThreadProc
+    next.sizeScale = next.baseSizeScale; 
 
     const std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
     next.targetMonitor = EqualsNoCase(mon, L"primary") ? 0 : _wtoi(mon.c_str());
@@ -904,18 +912,6 @@ void LoadSettings() {
         g_customPosSet = true;
     } else {
         g_customPosSet = false;
-    }
-
-    // Правильное вычисление DPI в зависимости от того, где физически находится плеер
-    if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
-        HMONITOR targetMon = nullptr;
-        if (g_customPosSet.load()) {
-            POINT pt = {g_customCenterX.load(), g_customTop.load()};
-            targetMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-        } else {
-            targetMon = ResolveTargetMonitor(next.targetMonitor);
-        }
-        next.sizeScale *= GetMonitorDpiScale(targetMon);
     }
 
     std::wstring font = GetStringSettingCopy(L"Themes.FontFamily");
@@ -1429,6 +1425,11 @@ DWORD WINAPI MediaThreadProc(void*) {
     using PlaybackStatus = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
 
     Manager manager{nullptr};
+    
+    static std::wstring s_cachedVlcTitle;
+    static double s_lastVlcScan = 0.0;
+    static double s_lastIconSearch = 0.0;
+    static double s_lastArtRequest = 0.0;
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         MediaSnapshot prev;
@@ -1477,55 +1478,68 @@ DWORD WINAPI MediaThreadProc(void*) {
                 next.sourceAppUserModelId = session.SourceAppUserModelId().c_str();
                 next.sourceName = FriendlyMediaSourceName(next.sourceAppUserModelId);
 
+                // VLC Hack throttled to 1Hz to reduce CPU usage
                 if (next.title.empty() && next.sourceName == L"VLC") {
-                    const std::wstring marker = L"VLC media player";
-                    HWND hwnd = nullptr;
-                    while ((hwnd = FindWindowExW(nullptr, hwnd, nullptr, nullptr)) != nullptr) {
-                        if (!IsWindowVisible(hwnd)) continue;
-                        wchar_t windowTitle[512];
-                        if (GetWindowTextW(hwnd, windowTitle, ARRAYSIZE(windowTitle)) <= 0) continue;
-                        std::wstring caption(windowTitle);
-                        while (!caption.empty() && caption.back() == L' ') caption.pop_back();
-                        if (caption.size() <= marker.size() ||
-                            caption.compare(caption.size() - marker.size(), marker.size(), marker) != 0) {
-                            continue;
+                    if (now - s_lastVlcScan > 1.0) {
+                        s_lastVlcScan = now;
+                        s_cachedVlcTitle.clear();
+                        const std::wstring marker = L"VLC media player";
+                        HWND hwnd = nullptr;
+                        while ((hwnd = FindWindowExW(nullptr, hwnd, nullptr, nullptr)) != nullptr) {
+                            if (!IsWindowVisible(hwnd)) continue;
+                            wchar_t windowTitle[512];
+                            if (GetWindowTextW(hwnd, windowTitle, ARRAYSIZE(windowTitle)) <= 0) continue;
+                            std::wstring caption(windowTitle);
+                            while (!caption.empty() && caption.back() == L' ') caption.pop_back();
+                            if (caption.size() <= marker.size() ||
+                                caption.compare(caption.size() - marker.size(), marker.size(), marker) != 0) {
+                                continue;
+                            }
+                            std::wstring image;
+                            if (!ProcessImageNameForWindow(hwnd, &image) ||
+                                ToLowerCopy(BaseNameFromPath(image)).find(L"vlc") == std::wstring::npos) {
+                                continue;
+                            }
+                            std::wstring candidate = caption.substr(0, caption.size() - marker.size());
+                            while (!candidate.empty() && (candidate.back() == L' ' || candidate.back() == L'-')) {
+                                candidate.pop_back();
+                            }
+                            if (!candidate.empty()) { s_cachedVlcTitle = candidate; break; }
                         }
-                        std::wstring image;
-                        if (!ProcessImageNameForWindow(hwnd, &image) ||
-                            ToLowerCopy(BaseNameFromPath(image)).find(L"vlc") == std::wstring::npos) {
-                            continue;
-                        }
-                        std::wstring candidate = caption.substr(0, caption.size() - marker.size());
-                        while (!candidate.empty() && (candidate.back() == L' ' || candidate.back() == L'-')) {
-                            candidate.pop_back();
-                        }
-                        if (!candidate.empty()) { next.title = candidate; break; }
                     }
+                    next.title = s_cachedVlcTitle;
                 }
 
+                // App Icon Search throttled to 5 seconds if failed
                 if (next.sourceAppUserModelId == prev.sourceAppUserModelId) {
                     next.sourceBadge = prev.sourceBadge;
                     next.sourceIcon = prev.sourceIcon;
-                    if (!next.sourceIcon) next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
+                    if (!next.sourceIcon && (now - s_lastIconSearch > 5.0)) {
+                        s_lastIconSearch = now;
+                        next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
+                    }
                 } else {
                     next.sourceBadge = MediaSourceBadge(next.sourceName);
+                    s_lastIconSearch = now;
                     next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
                 }
 
                 const bool metadataChanged = (next.title != prev.title || next.artist != prev.artist);
                 next.metaChangedAt = metadataChanged ? now : prev.metaChangedAt;
-                const bool settled = !metadataChanged && (now - prev.metaChangedAt) > 3.0;
 
-                if (settled && prev.art) {
+                // Album Art Deco throttled to avoid spamming WIC on missing art
+                if (!metadataChanged && prev.art) {
                     next.art = prev.art;
-                } else if (auto thumbnail = properties.Thumbnail()) {
-                    std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnail);
-                    BitmapPixels decoded;
-                    if (!bytes.empty() && DecodeImageBytesToPixels(bytes, &decoded)) {
-                        next.art = std::make_shared<const BitmapPixels>(std::move(decoded));
+                } else if (now - s_lastArtRequest > 1.5) {
+                    if (auto thumbnail = properties.Thumbnail()) {
+                        s_lastArtRequest = now;
+                        std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnail);
+                        BitmapPixels decoded;
+                        if (!bytes.empty() && DecodeImageBytesToPixels(bytes, &decoded)) {
+                            next.art = std::make_shared<const BitmapPixels>(std::move(decoded));
+                        }
                     }
                 }
-                if (!next.art && prev.art && !metadataChanged) next.art = prev.art;
             }
         } catch (...) {
             manager = nullptr;
@@ -1753,7 +1767,8 @@ MediaContentPoint MediaContentFromClient(int clientX, int clientY) {
         if (g_mediaHitSeq.load(std::memory_order_relaxed) == before) break;
         stamp = 0;
     }
-    if (stamp == 0 || GetTickCount64() - stamp > 500) return out;
+    // Убрано ограничение stamp в 500мс для стабильной работы кликов после простоя
+    if (stamp == 0) return out;
     if (scale < 0.05f) scale = 1.0f;
 
     const float width = right - left;
@@ -2936,6 +2951,8 @@ enum MenuId : UINT {
     ID_LANG_UKRAINIAN,
     ID_LANG_RUSSIAN,
     ID_LANG_ENGLISH,
+    
+    ID_RESET_OVERRIDES,
 };
 
 void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
@@ -3025,6 +3042,8 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(opacityMenu), Tr(L"Прозорість вікна", L"Прозрачность окна", L"Window opacity"));
     AppendMenuW(customMenu, MF_STRING | (g_disableAnimations.load() ? MF_CHECKED : 0), ID_DISABLE_ANIMATIONS, Tr(L"Вимкнути анімації", L"Отключить анимации", L"Disable animations"));
     AppendMenuW(customMenu, MF_STRING | (g_disableShadow.load() ? MF_CHECKED : 0), ID_DISABLE_SHADOW, Tr(L"Вимкнути тінь", L"Отключить тень", L"Disable shadow"));
+    AppendMenuW(customMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(customMenu, MF_STRING, ID_RESET_OVERRIDES, Tr(L"Скинути налаштування меню (до Windhawk)", L"Сбросить настройки меню (к Windhawk)", L"Reset menu overrides (to Windhawk)"));
 
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(customMenu), Tr(L"Кастомізація", L"Кастомизация", L"Customization"));
 
@@ -3236,6 +3255,20 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
             g_language = LanguageSetting::English;
             Wh_SetIntValue(L"LanguageSetting", 3);
             g_layoutDirty = true;
+            break;
+        case ID_RESET_OVERRIDES:
+            Wh_DeleteValue(L"OverrideAccentMode");
+            Wh_DeleteValue(L"OverrideCustomAccent");
+            Wh_DeleteValue(L"OverrideBgColor");
+            Wh_DeleteValue(L"OverrideTextPrimary");
+            Wh_DeleteValue(L"OverrideTextSecondary");
+            Wh_DeleteValue(L"MenuOpacityOverride");
+            Wh_DeleteValue(L"HideInFullscreen");
+            Wh_DeleteValue(L"IdleTimeoutSec");
+            Wh_SetIntValue(L"MenuOpacityOverride", -1);
+            Wh_SetIntValue(L"HideInFullscreen", -1);
+            Wh_SetIntValue(L"IdleTimeoutSec", -1);
+            LoadSettings();
             break;
         case ID_MOVE:
             g_moveMode = !g_moveMode.load();
@@ -3669,6 +3702,21 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
 
         Settings cfg = GetSettingsCopy();
+        
+        // Динамическое вычисление DPI
+        if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
+            HMONITOR targetMon = nullptr;
+            if (g_customPosSet.load()) {
+                POINT pt = {g_customCenterX.load(), g_customTop.load()};
+                targetMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            } else {
+                targetMon = ResolveTargetMonitor(cfg.targetMonitor);
+            }
+            cfg.sizeScale = cfg.baseSizeScale * GetMonitorDpiScale(targetMon);
+        } else {
+            cfg.sizeScale = cfg.baseSizeScale;
+        }
+
         if (g_customPosSet.load()) cfg.notchStyle = false;
         g_flushTop = cfg.notchStyle;
 
@@ -3743,9 +3791,15 @@ DWORD WINAPI RenderThreadProc(void*) {
                                    (g_pressedMediaButton.load() != -1);
 
         bool needsRender = false;
+        
+        const bool hoverExpanded = cfg.expandOnHover ? hover : (hover && g_clickExpanded.load());
+        const bool recentTrackChange = g_autoExpand.load() && mediaPresent && snapshot.media.playing &&
+                                       !snapshot.media.title.empty() &&
+                                       (now - snapshot.media.titleChangedAt < 5.0);
+        const bool expanded = hoverExpanded || pinned || recentTrackChange || g_dragging.load() || g_lockExpanded.load();
 
         if (wantVisible && mediaPresent && !parked) {
-            if (snapshot.media.playing ||
+            if ((snapshot.media.playing && expanded) ||
                 g_scrubbing.load() ||
                 g_pressedMediaButton.load() != -1 ||
                 g_dragging.load() ||
@@ -3763,12 +3817,6 @@ DWORD WINAPI RenderThreadProc(void*) {
             if (g_hoveredMediaButton.load() != -1) { g_hoveredMediaButton = -1; needsRender = true; }
             if (g_hoveredGear.load()) { g_hoveredGear = false; needsRender = true; }
         }
-
-        const bool recentTrackChange = g_autoExpand.load() && mediaPresent && snapshot.media.playing &&
-                                       !snapshot.media.title.empty() &&
-                                       (now - snapshot.media.titleChangedAt < 5.0);
-        const bool hoverExpanded = cfg.expandOnHover ? hover : (hover && g_clickExpanded.load());
-        const bool expanded = hoverExpanded || pinned || recentTrackChange || g_dragging.load() || g_lockExpanded.load();
 
         float targetWidth = 0.0f, targetHeight = 0.0f;
         if (wantVisible) {
@@ -3855,28 +3903,31 @@ DWORD WINAPI RenderThreadProc(void*) {
         double targetFrameMs = 1000.0 / targetFps;
 
         if (!needsRender) {
-            DWORD sleepTime = INFINITE;
+            DWORD sleepTime = 250; // Кап ожидания в 250 мс для отзывчивости
             if (wantVisible && !parked) {
                 SYSTEMTIME stTime;
                 GetLocalTime(&stTime);
                 int msToNextMinute = (60 - stTime.wSecond) * 1000 - stTime.wMilliseconds + 50;
-                sleepTime = static_cast<DWORD>(std::max(10, msToNextMinute));
+                sleepTime = static_cast<DWORD>(std::min<int>(sleepTime, std::max<int>(10, msToNextMinute)));
             }
+            if (g_captureHotkey.load() || g_moveMode.load()) sleepTime = 100;
+            
             MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, sleepTime, QS_ALLINPUT);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
             nextFrameTarget += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                 std::chrono::duration<double, std::milli>(targetFrameMs));
-            const auto nowTime = std::chrono::steady_clock::now();
-            if (nowTime < nextFrameTarget) {
+            
+            while (true) {
+                const auto nowTime = std::chrono::steady_clock::now();
+                if (nowTime >= nextFrameTarget) break;
+                if (WaitForSingleObject(g_stopEvent, 0) != WAIT_TIMEOUT) break;
                 const double remainingMs = std::chrono::duration<double, std::milli>(nextFrameTarget - nowTime).count();
-                if (remainingMs >= 1.5) MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, static_cast<DWORD>(remainingMs - 0.5), QS_ALLINPUT);
-                while (std::chrono::steady_clock::now() < nextFrameTarget &&
-                       WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+                if (remainingMs > 2.0) {
+                    Sleep(1);
+                } else {
                     std::this_thread::yield();
                 }
-            } else {
-                nextFrameTarget = nowTime;
             }
         }
     }
