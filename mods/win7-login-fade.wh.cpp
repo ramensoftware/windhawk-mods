@@ -169,6 +169,7 @@ std::atomic<HANDLE> g_monitorOffThread = NULL;
 std::atomic<bool> g_keepOrigWndProc = false;
 std::atomic<HANDLE> g_asyncFadeThread = NULL;
 UINT g_monitorOffTaskMsg = 0;
+HPOWERNOTIFY g_hPowerNotify = NULL;
 
 typedef struct _MONITOR_INFO {
     HDC hDC = NULL;
@@ -488,11 +489,14 @@ bool TurnOffMonitor(HWND hWnd, BOOL useWm = TRUE) {
     return true;
 }
 
-// Clean up the monitor info data
-void FreeMonitorsInfo() {
+// Clean up the monitor info data, and optionally restore the pre-fade gamma ramps
+void FreeMonitorsInfo(bool restore = false) {
     if (g_monitorOffFadeData.monitors) {
         for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
             if (g_monitorOffFadeData.monitors[i].hDC) {
+                if (restore) {
+                    SetDeviceGammaRamp(g_monitorOffFadeData.monitors[i].hDC, g_monitorOffFadeData.monitors[i].origGamma);
+                }
                 DeleteDC(g_monitorOffFadeData.monitors[i].hDC);
             }
         }
@@ -576,22 +580,29 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 Wh_Log(L"ChangeWindowMessageFilterEx failed, GLE=%d", GetLastError());
             }
             if (g_isWinlogon) {
-                if (!RegisterPowerSettingNotification(hWnd, &GUID_SESSION_DISPLAY_STATUS, NULL)) {
+                g_hPowerNotify = RegisterPowerSettingNotification(hWnd, &GUID_SESSION_DISPLAY_STATUS, NULL);
+                if (!g_hPowerNotify) {
                     Wh_Log(L"RegisterPowerSettingNotification failed, GLE=%d", GetLastError());
                 }
             }
             return 0;
         case WM_POWERBROADCAST: {
-            POWERBROADCAST_SETTING* setting = (POWERBROADCAST_SETTING*)lParam;
-            if (setting->PowerSetting == GUID_SESSION_DISPLAY_STATUS && setting->DataLength == sizeof(DWORD)) {
-                DWORD data = *(DWORD*)setting->Data;
-                Wh_Log(L"OverlayWndProc WM_POWERBROADCAST GUID_SESSION_DISPLAY_STATUS %d", data);
-                if (data == 1 && g_monitorOffFadeData.monitors) {
-                    // Failsafe gamma restore after monitor on message
-                    SetTimer(hWnd, 2, 3000, NULL);
+            if (wParam == PBT_POWERSETTINGCHANGE && lParam) {
+                POWERBROADCAST_SETTING* setting = (POWERBROADCAST_SETTING*)lParam;
+                if (setting->PowerSetting == GUID_SESSION_DISPLAY_STATUS && setting->DataLength == sizeof(DWORD)) {
+                    DWORD data = *(DWORD*)setting->Data;
+                    Wh_Log(L"OverlayWndProc WM_POWERBROADCAST GUID_SESSION_DISPLAY_STATUS %d", data);
+                    if (data == 1 && g_monitorOffFadeData.monitors) {
+                        // Failsafe gamma restore after monitor on message
+                        // Exact timing for this message is pretty random and thus the gamma restore logic may run while the monitor is still off
+                        // So restore it late enough
+                        // (SetDeviceGammaRamp doesn't work and silently fails while the screen is off)
+                        SetTimer(hWnd, 2, 3000, NULL);
+                    }
                 }
+                return 1;
             }
-            return 0;
+            break;
         }
         case WM_LBUTTONDOWN:
             Wh_Log(L"OverlayWndProc WM_LBUTTONDOWN");
@@ -605,15 +616,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             if (wParam == 2) {
                 if (g_monitorOffFadeData.monitors) {
                     Wh_Log(L"Restoring gamma after monitor on event...");
-                    for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
-                        if (g_monitorOffFadeData.monitors[i].hDC) {
-                            SetDeviceGammaRamp(g_monitorOffFadeData.monitors[i].hDC, g_monitorOffFadeData.monitors[i].origGamma);
-                            DeleteDC(g_monitorOffFadeData.monitors[i].hDC);
-                        }
-                    }
-                    free(g_monitorOffFadeData.monitors);
-                    g_monitorOffFadeData.monitors = NULL;
-                    g_monitorOffFadeData.monitorCount = 0;
+                    FreeMonitorsInfo(true);
                 }
             } else {
                 g_isWinlogon ? ShowWindow(hWnd, SW_HIDE) : DestroyWindow(hWnd);
@@ -659,8 +662,6 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
     // Unfortunately, monitor off APIs are all asynchronous and there is no reliable way to determine when the monitor is actually off
     // If we immediately restore the gamma right after calling the API, the screen will briefly flash back to normal brightness before turning off
     // On the other side, waiting enough seconds and setting the gamma ramps after screens are turned off, has random failures that causes the screen to be stuck at black
-    // Moreover, listening for monitor wake events with RegisterPowerSettingNotification still does not work,
-    // as the exact timing for WM_POWERBROADCAST messages is pretty random and thus the gamma restore logic may run while the monitor is still off
     // So just show an black overlay window between the fade and the monitor off to cover up the potential flash, and hide the overlay after a fixed amount of time
     MSG msg;
     if (overlayWnd) {
@@ -678,12 +679,18 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
                 if (hDefDesktop) {
                     CloseDesktop(hDefDesktop);
                 }
+                if (g_hPowerNotify) {
+                    UnregisterPowerSettingNotification(g_hPowerNotify);
+                }
                 return 0;
             } else if (result == WAIT_OBJECT_0 + 1) {
                 while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
                     if (msg.message == WM_QUIT) {
                         if (hDefDesktop) {
                             CloseDesktop(hDefDesktop);
+                        }
+                        if (g_hPowerNotify) {
+                            UnregisterPowerSettingNotification(g_hPowerNotify);
                         }
                         return 0;
                     }
@@ -699,6 +706,9 @@ DWORD WINAPI AsyncFadeThreadProc(LPVOID lpParameter) {
     }
     if (hDefDesktop) {
         CloseDesktop(hDefDesktop);
+    }
+    if (g_hPowerNotify) {
+        UnregisterPowerSettingNotification(g_hPowerNotify);
     }
     return 1;
 }
@@ -1451,7 +1461,7 @@ void Wh_ModUninit() {
         }
     }
     if (g_isWinlogon) {
-        FreeMonitorsInfo();
+        FreeMonitorsInfo(true);
     }
 
     if (g_fadeMutex) {
