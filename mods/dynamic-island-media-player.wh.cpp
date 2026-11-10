@@ -1,15 +1,32 @@
 // ==WindhawkMod==
-// @id              dynamic-island-media-player
-// @name            Dynamic Island Media Player
-// @description     A dedicated, standalone Dynamic Island media player for Windows featuring per-app positioning, custom color morphing, multilingual UI (UA/RU/EN), cubic buttons, and optimized rendering.
-// @version         1.6.0
-// @author          BOG090909
-// @github          https://github.com/BOG090909
-// @homepage        https://github.com/BOG090909/dynamic-island-media-player
-// @include         windhawk.exe
+// @id             dynamic-island-media-player
+// @name           Dynamic Island Media Player
+// @description    A dedicated, standalone Dynamic Island media player for Windows. Forked and optimized from 'Dynamic Island for Windows' by devcode90. Features per-app positioning, custom color morphing, multilingual UI, and optimized rendering.
+// @version        1.6.0
+// @author         BOG090909
+// @github         https://github.com/BOG090909
+// @homepage       https://github.com/BOG090909/dynamic-island-media-player
+// @include        windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -ld2d1 -ldwrite -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinmm -lcomdlg32 -ldwmapi -lshcore
-// @license         MIT
+// @license        MIT
 // ==/WindhawkMod==
+
+/*
+MIT License
+
+Copyright (c) 2026 BOG090909
+Copyright (c) 2023-2026 devcode90 (Himanshu)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+*/
 
 // ==WindhawkModReadme==
 /*
@@ -17,38 +34,20 @@
 
 ![Dynamic Island Preview](https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png)
 
-A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 10/11.
+A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 10/11. 
 
-While inspired by the original *Dynamic Island for Windows* by Himanshu (`devcode90`), this project is a complete architectural overhaul transformed into an isolated media tool.
-
-## Why a Standalone Mod Instead of an Upstream PR?
-
-1. **Dedicated Media Pipeline vs. Multi-Module Tool:**
-   The original upstream mod is designed as an all-in-one widget suite (Clock, Notifications, Volume, Weather, Medi, 
-etc.). This mod completely strips out unrelated background modules to deliver a zero-latency, highly optimized media experience without unnecessary background thread overhead.
-
-2. **Per-App Dynamic Screen Positioning:**
-   Supports saving unique screen positions on a per-application basis (e.g., placing the island in different screen locations when switching between Spotify, YouTube in Chrome, or desktop games).
-
-3. **Advanced Visual Styling & Color Morphing:**
-   - Native Windows System Color Picker (`ChooseColorW`) support for custom background/accent/text themes.
-   - Smooth real-time RGB color morphing palettes during playback.
-   - Dual control button aesthetics (Apple Pill vs. Windows 11 Cubic styles).
-
-4. **Trilingual Localized UI (UA / RU / EN):**
-   Full native support for Ukrainian, Russian, and English with automatic system detection and manual runtime switching.
-
-5. **Safe Hotkeys (Disabled by Default):**
-   Global hotkeys are strictly disabled by default to prevent hijacking system shortcuts like `Ctrl+N` or `Ctrl+B` in IDEs, browsers, or office tools. Users can explicitly opt-in and customize keybindings via the context menu.
+This mod is a specialized, lightweight adaptation of the incredible **[Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows)**. It strips away the extra dashboard modules (weather, hardware monitor, etc.) to focus purely on delivering the ultimate media player experience with zero bloat.
 
 ## Key Features
+- **Context Menu Priority:** The right-click context menu acts as the primary configuration source. Settings changed here persistently override default Windhawk configurations.
 - **Smart Media Tracking:** Real-time track metadata, album art, app badges, and progress scrubbing via Windows System Media Transport.
 - **Resource Efficient:** Event-driven render sleeping and direct DWM/DPI API calls to guarantee ultra-low CPU/GPU consumption.
-- **System Clock:** Integrated digital clock in both expanded and collapsed states.
-- **Accidental Track Skip Protection:** Optional double-click confirmation for previous/next actions.
+- **Per-App Dynamic Screen Positioning:** Supports saving unique screen positions on a per-application basis.
+- **Trilingual Localized UI (UA / RU / EN):** Full native support for Ukrainian, Russian, and English.
 
-## License
-MIT License — Copyright (c) 2026 BOG090909. Based on original work by Himanshu (devcode90).
+## Credits & Acknowledgements
+- **Himanshu (devcode90)** - For the original Dynamic Island for Windows framework, rendering physics, and core UI design.
+- **BOG090909** - Standalone media player adaptation, custom app-positioning logic, multilingual support, and optimization.
 */
 // ==/WindhawkModReadme==
 
@@ -100,10 +99,8 @@ MIT License — Copyright (c) 2026 BOG090909. Based on original work by Himanshu
     $description: If disabled, click to expand.
   - HideInFullscreen: true
     $name: Hide in browser/video fullscreen
-    $description: Automatically hide the island when a video or browser is playing in full screen, without hiding it in games.
   - IdleTimeout: '0'
     $name: Hide when paused/idle
-    $description: Hide the island after inactivity.
     $options:
       - '0': Never
       - '30': After 30 seconds
@@ -118,7 +115,7 @@ MIT License — Copyright (c) 2026 BOG090909. Based on original work by Himanshu
   - TargetFPS: auto
     $name: Refresh rate / FPS
     $options:
-      - auto: Auto (Match Monitor Refresh Rate)
+      - auto: Auto
       - '60': 60 FPS
       - '120': 120 FPS
       - '144': 144 FPS
@@ -161,12 +158,10 @@ MIT License — Copyright (c) 2026 BOG090909. Based on original work by Himanshu
       - custom: Custom hex
   - SmoothAccent: true
     $name: Smooth accent color transition
-    $description: Smoothly morph from the previous accent color to the new track's color instead of snapping instantly.
   - CustomAccentHex: "#4cc9f0"
     $name: Custom accent hex
   - FontFamily: ""
     $name: Font family
-    $description: Leave empty for the system default.
   - TextScale: 100
     $name: Text size
     $description: 70 to 160.
@@ -493,7 +488,6 @@ std::atomic<bool> g_hidden{false};
 std::atomic<bool> g_disableAnimations{false};
 std::atomic<bool> g_disableShadow{false};
 
-// Hotkeys are DISABLED by default for safety
 std::atomic<bool> g_hotkeyEnabled{false};
 std::atomic<unsigned> g_hotkeyMods{MOD_CONTROL};
 std::atomic<unsigned> g_hotkeyVk{'H'};
@@ -608,7 +602,6 @@ void TriggerMediaTransportCommandWithConfirmation(int cmd) {
             g_lastNextClickTime.store(0.0);
         }
     }
-
     SendMediaTransportCommand(cmd);
 }
 
@@ -634,25 +627,24 @@ bool PickColorWithDialog(HWND owner, D2D1_COLOR_F& outColor) {
 void LoadAppPositionsFromRegistry() {
     std::lock_guard lock(g_appPosMutex);
     g_appPositions.clear();
-    PCWSTR raw = Wh_GetStringSetting(L"AppPositionsData");
-    if (!raw) return;
-    std::wstring str(raw);
-    Wh_FreeStringSetting(raw);
+    wchar_t buf[4096] = {0};
+    if (Wh_GetStringValue(L"AppPositionsData", buf, ARRAYSIZE(buf))) {
+        std::wstring str(buf);
+        size_t start = 0;
+        while (start < str.size()) {
+            size_t end = str.find(L';', start);
+            if (end == std::wstring::npos) end = str.size();
+            std::wstring item = str.substr(start, end - start);
+            start = end + 1;
 
-    size_t start = 0;
-    while (start < str.size()) {
-        size_t end = str.find(L';', start);
-        if (end == std::wstring::npos) end = str.size();
-        std::wstring item = str.substr(start, end - start);
-        start = end + 1;
-
-        size_t eq = item.find(L'=');
-        size_t comma = item.find(L',', eq);
-        if (eq != std::wstring::npos && comma != std::wstring::npos) {
-            std::wstring exe = item.substr(0, eq);
-            int cx = _wtoi(item.substr(eq + 1, comma - (eq + 1)).c_str());
-            int cy = _wtoi(item.substr(comma + 1).c_str());
-            g_appPositions[exe] = {cx, cy};
+            size_t eq = item.find(L'=');
+            size_t comma = item.find(L',', eq);
+            if (eq != std::wstring::npos && comma != std::wstring::npos) {
+                std::wstring exe = item.substr(0, eq);
+                int cx = _wtoi(item.substr(eq + 1, comma - (eq + 1)).c_str());
+                int cy = _wtoi(item.substr(comma + 1).c_str());
+                g_appPositions[exe] = {cx, cy};
+            }
         }
     }
 }
@@ -820,9 +812,33 @@ bool IsBrowserOrVideoFullscreen(HWND self) {
     return false;
 }
 
-float GetPrimaryMonitorDpiScale() {
-    POINT pt = {0, 0};
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+struct MonitorEnumData { std::vector<HMONITOR> monitors; };
+
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
+    reinterpret_cast<MonitorEnumData*>(dwData)->monitors.push_back(hMonitor);
+    return TRUE;
+}
+
+HMONITOR ResolveTargetMonitor(int targetMonitorIdx) {
+    HMONITOR selected = nullptr;
+    if (targetMonitorIdx > 0) {
+        MonitorEnumData data;
+        EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(&data));
+        const int index = targetMonitorIdx - 1;
+        if (index >= 0 && index < static_cast<int>(data.monitors.size())) {
+            selected = data.monitors[index];
+        }
+    }
+    if (!selected) {
+        selected = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    }
+    return selected;
+}
+
+float GetMonitorDpiScale(HMONITOR monitor) {
+    if (!monitor) {
+        monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    }
     UINT dpiX = 96, dpiY = 96;
     GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
     return static_cast<float>(dpiX) / 96.0f;
@@ -878,8 +894,28 @@ void LoadSettings() {
         float parsed = wcstof(scale.c_str(), &end);
         if (end != scale.c_str() && parsed > 0.1f && parsed < 10.0f) next.sizeScale = parsed;
     }
+
+    const std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
+    next.targetMonitor = EqualsNoCase(mon, L"primary") ? 0 : _wtoi(mon.c_str());
+
+    if (Wh_GetIntValue(L"CustomPosSet", 0) != 0) {
+        g_customCenterX = Wh_GetIntValue(L"CustomPosX", 0);
+        g_customTop = Wh_GetIntValue(L"CustomPosY", 0);
+        g_customPosSet = true;
+    } else {
+        g_customPosSet = false;
+    }
+
+    // Правильное вычисление DPI в зависимости от того, где физически находится плеер
     if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
-        next.sizeScale *= GetPrimaryMonitorDpiScale();
+        HMONITOR targetMon = nullptr;
+        if (g_customPosSet.load()) {
+            POINT pt = {g_customCenterX.load(), g_customTop.load()};
+            targetMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        } else {
+            targetMon = ResolveTargetMonitor(next.targetMonitor);
+        }
+        next.sizeScale *= GetMonitorDpiScale(targetMon);
     }
 
     std::wstring font = GetStringSettingCopy(L"Themes.FontFamily");
@@ -888,12 +924,7 @@ void LoadSettings() {
         next.fontFamily = font.substr(fc, font.find_last_not_of(L" \t\r\n\"'") - fc + 1);
     }
 
-    const std::wstring accentMode = GetStringSettingCopy(L"Themes.AccentColorMode");
-    if (EqualsNoCase(accentMode, L"system")) next.accentMode = AccentMode::System;
-    else if (EqualsNoCase(accentMode, L"custom")) next.accentMode = AccentMode::Custom;
-    
     next.smoothAccent = Wh_GetIntSetting(L"Themes.SmoothAccent") != 0;
-    next.customAccent = ColorFromHex(GetStringSettingCopy(L"Themes.CustomAccentHex"), next.customAccent);
 
     const std::wstring fps = GetStringSettingCopy(L"Animations.TargetFPS");
     next.targetFps = (fps.empty() || EqualsNoCase(fps, L"auto")) ? 0 : std::max(0, _wtoi(fps.c_str()));
@@ -921,13 +952,11 @@ void LoadSettings() {
     next.offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
     next.offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
 
-    const std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
-    next.targetMonitor = EqualsNoCase(mon, L"primary") ? 0 : _wtoi(mon.c_str());
-
     const std::wstring shape = GetStringSettingCopy(L"Appearance.ShapeStyle");
     next.w11Style = EqualsNoCase(shape, L"w11");
     next.notchStyle = EqualsNoCase(shape, L"notch") && !IsBottomPosition(next.position);
 
+    // --- ФОРМИРУЕМ ЦВЕТА ИЗ WINDHAWK UI КАК ФОЛЛБЕКИ ---
     int themeIdx = ThemeIndexFromId(GetStringSettingCopy(L"Themes.ThemePreset"));
     if (themeIdx < 0) themeIdx = 0;
     const ThemePalette& p = kThemePalettes[themeIdx];
@@ -935,6 +964,26 @@ void LoadSettings() {
     next.textPrimaryColor = ColorFromHex(p.fg, next.textPrimaryColor);
     next.textSecondaryColor = ColorFromHex(p.sec, next.textSecondaryColor);
     next.contourBorderColor = ColorFromHex(p.border, next.contourBorderColor);
+
+    const std::wstring accentModeStr = GetStringSettingCopy(L"Themes.AccentColorMode");
+    if (EqualsNoCase(accentModeStr, L"system")) next.accentMode = AccentMode::System;
+    else if (EqualsNoCase(accentModeStr, L"custom")) next.accentMode = AccentMode::Custom;
+    
+    next.customAccent = ColorFromHex(GetStringSettingCopy(L"Themes.CustomAccentHex"), next.customAccent);
+
+    // --- ПРИМЕНЯЕМ ЖЕСТКИЕ ПЕРЕОПРЕДЕЛЕНИЯ ИЗ КОНТЕКСТНОГО МЕНЮ (НАИВЫСШИЙ ПРИОРИТЕТ) ---
+    int overrideAccentMode = Wh_GetIntValue(L"OverrideAccentMode", -1);
+    if (overrideAccentMode != -1) next.accentMode = static_cast<AccentMode>(overrideAccentMode);
+
+    wchar_t colorBuf[32];
+    if (Wh_GetStringValue(L"OverrideCustomAccent", colorBuf, ARRAYSIZE(colorBuf))) 
+        next.customAccent = ColorFromHex(colorBuf, next.customAccent);
+    if (Wh_GetStringValue(L"OverrideBgColor", colorBuf, ARRAYSIZE(colorBuf))) 
+        next.pillBgColor = ColorFromHex(colorBuf, next.pillBgColor);
+    if (Wh_GetStringValue(L"OverrideTextPrimary", colorBuf, ARRAYSIZE(colorBuf))) 
+        next.textPrimaryColor = ColorFromHex(colorBuf, next.textPrimaryColor);
+    if (Wh_GetStringValue(L"OverrideTextSecondary", colorBuf, ARRAYSIZE(colorBuf))) 
+        next.textSecondaryColor = ColorFromHex(colorBuf, next.textSecondaryColor);
 
     next.pillOpacity = Clamp(Wh_GetIntSetting(L"Themes.PillOpacity") / 100.0f, 0.35f, 1.0f);
     next.textScale = Clamp(Wh_GetIntSetting(L"Themes.TextScale") / 100.0f, 0.7f, 1.6f);
@@ -970,7 +1019,6 @@ void LoadSettings() {
     g_disableAnimations = Wh_GetIntValue(L"DisableAnimations", 0) != 0;
     g_disableShadow = Wh_GetIntValue(L"DisableShadow", 0) != 0;
 
-    // Hotkeys persistence: Off by default unless turned on by user
     g_hotkeyEnabled = Wh_GetIntValue(L"HotkeyEnabled", 0) != 0;
     g_hotkeyMods = static_cast<unsigned>(Wh_GetIntValue(L"HotkeyMods", MOD_CONTROL));
     g_hotkeyVk = static_cast<unsigned>(Wh_GetIntValue(L"HotkeyVk", 'H'));
@@ -980,14 +1028,6 @@ void LoadSettings() {
     g_hkPrevVk = static_cast<unsigned>(Wh_GetIntValue(L"HkPrevVk", 'B'));
     g_hkPlayPauseMods = static_cast<unsigned>(Wh_GetIntValue(L"HkPlayPauseMods", MOD_CONTROL));
     g_hkPlayPauseVk = static_cast<unsigned>(Wh_GetIntValue(L"HkPlayPauseVk", 'M'));
-
-    if (Wh_GetIntValue(L"CustomPosSet", 0) != 0) {
-        g_customCenterX = Wh_GetIntValue(L"CustomPosX", 0);
-        g_customTop = Wh_GetIntValue(L"CustomPosY", 0);
-        g_customPosSet = true;
-    } else {
-        g_customPosSet = false;
-    }
 
     LoadAppPositionsFromRegistry();
 
@@ -1003,22 +1043,8 @@ void LoadSettings() {
     }
 }
 
-struct MonitorEnumData { std::vector<HMONITOR> monitors; };
-
-BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
-    reinterpret_cast<MonitorEnumData*>(dwData)->monitors.push_back(hMonitor);
-    return TRUE;
-}
-
 RECT GetAnchorWorkRect(const Settings& s) {
-    HMONITOR selected = nullptr;
-    if (s.targetMonitor > 0) {
-        MonitorEnumData data;
-        EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(&data));
-        const int index = s.targetMonitor - 1;
-        if (index >= 0 && index < static_cast<int>(data.monitors.size())) selected = data.monitors[index];
-    }
-    if (!selected) selected = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR selected = ResolveTargetMonitor(s.targetMonitor);
     MONITORINFO mi = {sizeof(mi)};
     GetMonitorInfoW(selected, &mi);
     return mi.rcWork;
@@ -1502,7 +1528,7 @@ DWORD WINAPI MediaThreadProc(void*) {
                 if (!next.art && prev.art && !metadataChanged) next.art = prev.art;
             }
         } catch (...) {
-            manager = nullptr; // Reset manager on WinRT exception
+            manager = nullptr;
         }
 
         bool trackChanged = false;
@@ -1868,6 +1894,18 @@ class Renderer {
         blend.SourceConstantAlpha = static_cast<BYTE>(Clamp(activeOpacity, 0.35f, 1.0f) * 255.0f);
         blend.AlphaFormat = AC_SRC_ALPHA;
         return UpdateLayeredWindow(hwnd_, nullptr, &dst, &size, memDc_, &src, 0, &blend, ULW_ALPHA) != FALSE;
+    }
+
+    bool IsAnimationActive(float currentUnscaledWidth) const {
+        const float textLeft = MediaLayout::kArtInsetX + MediaLayout::kArtSize + 18.0f;
+        const float textRight = currentUnscaledWidth - 24.0f - 50.0f - 16.0f;
+        const float available = textRight - textLeft;
+        if (available > 0.0f) {
+            if (marqueeTitle_.layout && marqueeTitle_.metrics.widthIncludingTrailingWhitespace > available) return true;
+            if (marqueeArtist_.layout && marqueeArtist_.metrics.widthIncludingTrailingWhitespace > available) return true;
+            if (marqueeAlbum_.layout && marqueeAlbum_.metrics.widthIncludingTrailingWhitespace > available) return true;
+        }
+        return false;
     }
 
     void Shutdown() {
@@ -2800,6 +2838,7 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     else if (target == 4) { g_hkPlayPauseMods = mods; g_hkPlayPauseVk = vk; }
                     
                     g_hotkeyEnabled = true;
+                    PersistHotkeys();
                     g_captureHotkey = false;
                     HWND hSelf = g_hwnd.load();
                     if (hSelf) PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
@@ -3054,6 +3093,12 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         Wh_SetIntValue(L"IdleTimeoutSec", sec);
         LoadSettings();
     };
+    
+    auto saveColorOverride = [](PCWSTR key, D2D1_COLOR_F c) {
+        wchar_t hex[32];
+        swprintf_s(hex, L"#%02X%02X%02X", (int)(c.r * 255), (int)(c.g * 255), (int)(c.b * 255));
+        Wh_SetStringValue(key, hex);
+    };
 
     switch (cmd) {
         case ID_TOPMOST:
@@ -3111,41 +3156,33 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         case ID_SET_COLOR_ACCENT: {
             Settings s = GetSettingsCopy();
             if (PickColorWithDialog(hwnd, s.customAccent)) {
-                s.accentMode = AccentMode::Custom;
-                {
-                    std::lock_guard lock(g_settingsMutex);
-                    g_settings.customAccent = s.customAccent;
-                    g_settings.accentMode = AccentMode::Custom;
-                }
-                Wh_SetIntValue(L"Themes.AccentColorMode", 2);
-                g_layoutDirty = true;
+                Wh_SetIntValue(L"OverrideAccentMode", static_cast<int>(AccentMode::Custom));
+                saveColorOverride(L"OverrideCustomAccent", s.customAccent);
+                LoadSettings();
             }
             break;
         }
         case ID_SET_COLOR_BACKGROUND: {
             Settings s = GetSettingsCopy();
             if (PickColorWithDialog(hwnd, s.pillBgColor)) {
-                std::lock_guard lock(g_settingsMutex);
-                g_settings.pillBgColor = s.pillBgColor;
-                g_layoutDirty = true;
+                saveColorOverride(L"OverrideBgColor", s.pillBgColor);
+                LoadSettings();
             }
             break;
         }
         case ID_SET_COLOR_TEXT_PRIMARY: {
             Settings s = GetSettingsCopy();
             if (PickColorWithDialog(hwnd, s.textPrimaryColor)) {
-                std::lock_guard lock(g_settingsMutex);
-                g_settings.textPrimaryColor = s.textPrimaryColor;
-                g_layoutDirty = true;
+                saveColorOverride(L"OverrideTextPrimary", s.textPrimaryColor);
+                LoadSettings();
             }
             break;
         }
         case ID_SET_COLOR_TEXT_SECONDARY: {
             Settings s = GetSettingsCopy();
             if (PickColorWithDialog(hwnd, s.textSecondaryColor)) {
-                std::lock_guard lock(g_settingsMutex);
-                g_settings.textSecondaryColor = s.textSecondaryColor;
-                g_layoutDirty = true;
+                saveColorOverride(L"OverrideTextSecondary", s.textSecondaryColor);
+                LoadSettings();
             }
             break;
         }
@@ -3708,7 +3745,14 @@ DWORD WINAPI RenderThreadProc(void*) {
         bool needsRender = false;
 
         if (wantVisible && mediaPresent && !parked) {
-    needsRender = true;
+            if (snapshot.media.playing ||
+                g_scrubbing.load() ||
+                g_pressedMediaButton.load() != -1 ||
+                g_dragging.load() ||
+                (g_colorRainbowEnabled.load() && snapshot.media.playing) ||
+                renderer.IsAnimationActive(widthSpring.value / cfg.sizeScale)) {
+                needsRender = true;
+            }
         }
 
         if (!hover && g_clickExpanded.load()) {
@@ -3811,7 +3855,14 @@ DWORD WINAPI RenderThreadProc(void*) {
         double targetFrameMs = 1000.0 / targetFps;
 
         if (!needsRender) {
-            MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 16, QS_ALLINPUT);
+            DWORD sleepTime = INFINITE;
+            if (wantVisible && !parked) {
+                SYSTEMTIME stTime;
+                GetLocalTime(&stTime);
+                int msToNextMinute = (60 - stTime.wSecond) * 1000 - stTime.wMilliseconds + 50;
+                sleepTime = static_cast<DWORD>(std::max(10, msToNextMinute));
+            }
+            MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, sleepTime, QS_ALLINPUT);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
             nextFrameTarget += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -4026,7 +4077,7 @@ void Wh_ModAfterInit() {
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                  "CreateProcessInternalW");
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
