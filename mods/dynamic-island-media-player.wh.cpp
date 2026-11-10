@@ -179,7 +179,7 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
     $description: 70 to 160.
   $name: Colors & Theming
 */
-// ==WindhawkModSettings==
+// ==/WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
