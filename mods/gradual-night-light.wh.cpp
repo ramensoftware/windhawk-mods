@@ -442,7 +442,7 @@ struct DisplayEnhancement : IInspectable {
 struct DisplayEnhancementOperation : IInspectable {
     virtual HRESULT STDMETHODCALLTYPE put_Completed(IUnknown*) = 0;
     virtual HRESULT STDMETHODCALLTYPE get_Completed(IUnknown**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetResults(DisplayEnhancement**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetResults(IInspectable**) = 0;
 };
 
 struct DisplayEnhancementStatics : IInspectable {
@@ -453,6 +453,10 @@ struct DisplayEnhancementStatics : IInspectable {
 constexpr GUID kDisplayEnhancementStatics = {
     0x22771028, 0x1658, 0x4e5e,
     {0xab, 0x77, 0x30, 0x36, 0x91, 0xa8, 0x6f, 0xda}};
+// IDisplayEnhancementManagement from the Windows display-management symbols.
+constexpr GUID kDisplayEnhancement = {
+    0xcda29a3e, 0x9e7e, 0x4b86,
+    {0x8f, 0x5f, 0x36, 0x8a, 0xa0, 0x71, 0x00, 0x08}};
 constexpr wchar_t kDisplayEnhancementClass[] =
     L"Windows.Internal.Graphics.Display.DisplayEnhancementManagement."
     L"DisplayEnhancementManagement";
@@ -492,9 +496,15 @@ ComPtr<DisplayEnhancement> OpenDisplay(DisplayEnhancementStatics* statics,
         }
         Sleep(25);
     }
-    ComPtr<DisplayEnhancement> display;
-    Require(SUCCEEDED(operation->GetResults(display.GetAddressOf())) && display,
+    ComPtr<IInspectable> result;
+    Require(SUCCEEDED(operation->GetResults(result.GetAddressOf())) && result,
             "Cannot get the Windows display");
+    ComPtr<DisplayEnhancement> display;
+    hr = result->QueryInterface(kDisplayEnhancement,
+                                reinterpret_cast<void**>(display.GetAddressOf()));
+    if (hr == E_NOINTERFACE)
+        return nullptr;
+    Require(SUCCEEDED(hr) && display, "Cannot query the Windows display interface");
     return display;
 }
 
@@ -586,6 +596,8 @@ public:
             if (!target.monitorDevicePath[0])
                 continue;
             auto display = OpenDisplay(statics.Get(), target.monitorDevicePath);
+            if (!display)
+                continue;
             BYTE capable = 0, modern = 0, adaptive = 0;
             Require(SUCCEEDED(display->get_IsNightLightCapable(&capable)) &&
                         SUCCEEDED(display->get_EnableModernNightLight(&modern)) &&
