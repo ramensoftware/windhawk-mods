@@ -1576,11 +1576,12 @@ static bool g_isHidingSwitcher = false;
 static ULONGLONG g_showDelayDeadlineTick = 0;
 static bool g_touchpadInvocation = false;
 static bool g_keyboardPendingForegroundHandoff = false;
-// Keyboard invocation started while a shell surface (Start, Search, Action
-// Center, Quick Settings) owned the foreground. Those surfaces keep the
-// foreground right, so the switcher must claim it while the hotkey grant is
-// still fresh instead of waiting for the visible presentation.
-static bool g_keyboardShellSource = false;
+// The invocation (keyboard or touchpad) started while a shell surface (Start,
+// Search, Action Center, Quick Settings) owned the foreground. Those surfaces
+// keep the foreground right, so the switcher claims it early, while the input
+// grant is fresh, and again at commit time, instead of waiting for the visible
+// presentation.
+static bool g_shellSurfaceSource = false;
 static bool g_keyboardPendingForegroundHandoffSucceeded = false;
 // Alt release observed before keyboard foreground handoff; recheck after handoff.
 static bool g_keyboardPendingAltRelease = false;
@@ -12909,7 +12910,7 @@ static void CancelPendingShow() {
     g_showDelayDeadlineTick = 0;
     g_touchpadInvocation = false;
     g_keyboardPendingForegroundHandoff = false;
-    g_keyboardShellSource = false;
+    g_shellSurfaceSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
@@ -13683,7 +13684,7 @@ static void PresentSwitcherWindows() {
     if (!foreground) foreground = SetForegroundWindow(g_hSwitcher);
     const bool foregroundFallbackNeeded =
         (touchpadPresentation || g_keyboardPendingForegroundHandoff ||
-         g_keyboardShellSource) &&
+         g_shellSurfaceSource) &&
         GetForegroundWindow() != g_hSwitcher;
     if (foregroundFallbackNeeded) {
         // Shell-source keyboard sessions can deny the supported foreground
@@ -14352,8 +14353,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_keyboardPendingForegroundHandoff =
         !touchpadInvocation && ForegroundRequiresKeyboardHandoff(
             invocationInput, &keyboardSourceSecurity, &keyboardSelfSecurity);
-    g_keyboardShellSource = !touchpadInvocation &&
-                            IsShellSurfaceWindow(invocationInput);
+    g_shellSurfaceSource = IsShellSurfaceWindow(invocationInput);
 
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int cx, cy;
@@ -14417,13 +14417,21 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
             SetWindowPos(g_hSwitcher, HWND_TOPMOST, -32000, -32000, g_winW, g_winH, SWP_NOACTIVATE);
         }
         ShowWindow(g_hSwitcher, SW_SHOWNA);
-        if (g_keyboardShellSource) {
+        if (g_shellSurfaceSource) {
             // Shell flyouts keep the foreground right and swallow the following
-            // Tab/Alt-up input. Claim the foreground now, while the hotkey grant
-            // is fresh, so the commit-time activation of the target is allowed.
+            // input. Claim the foreground now so the commit-time activation of the
+            // target is allowed. Keyboard sessions have a fresh hotkey grant;
+            // touchpad sessions have none, so they request eligibility first.
+            if (touchpadInvocation &&
+                (!s_nativeTouchpadInvocation.token || !s_nativeTouchpadInvocation.rawAdopted)) {
+                TapUnassignedKeyForForeground();
+            }
             if (!SetForegroundWindow(g_hSwitcher) &&
                 GetForegroundWindow() != g_hSwitcher) {
                 SwitchToThisWindow(g_hSwitcher, TRUE);
+            }
+            if (GetForegroundWindow() != g_hSwitcher) {
+                Wh_Log(L"SWS: shell surface foreground claim failed source=%p", invocationInput);
             }
         }
         // Keep source window foreground during show-delay. WM_HOTKEY is delivered
@@ -14596,7 +14604,7 @@ static void HideSwitcher() {
     g_isVisible = false;
     g_isPendingShow = false;
     g_keyboardPendingForegroundHandoff = false;
-    g_keyboardShellSource = false;
+    g_shellSurfaceSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardReleaseProbeTick = 0;
@@ -14761,14 +14769,19 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         // synthetic key for every rejected retry (which can keep stealing
         // last-input eligibility while a different app owns the foreground).
         TapUnassignedKeyForForeground();
-        if (keyboardCommit && GetForegroundWindow() != g_hSwitcher) {
+        if ((keyboardCommit || g_shellSurfaceSource) &&
+            GetForegroundWindow() != g_hSwitcher) {
             // SearchHost and Start can remain foreground after the switcher is
             // created. Reclaim foreground once at commit time, while this
-            // keyboard session still owns the input handoff, before activating
-            // the selected application.
+            // session still owns the input handoff (keyboard) or right after the
+            // eligibility tap above (touchpad), before activating the selected
+            // application.
             SetForegroundWindow(g_hSwitcher);
             if (GetForegroundWindow() != g_hSwitcher) {
                 SwitchToThisWindow(g_hSwitcher, TRUE);
+            }
+            if (GetForegroundWindow() != g_hSwitcher) {
+                Wh_Log(L"SWS: shell surface foreground reclaim failed target=%p", hForegroundTarget);
             }
         }
     }
