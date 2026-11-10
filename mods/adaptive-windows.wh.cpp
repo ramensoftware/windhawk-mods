@@ -8,7 +8,7 @@
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -luser32 -lgdi32 -lshell32
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lshell32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -43,12 +43,19 @@ problem in it cannot take down the taskbar or File Explorer.
 - **Move windows with the keyboard.** Win + Alt + arrows swap the focused window with its neighbor
   on that side.
 - **Maximized windows** that return to or enter the grid go back to normal mode and take their slot.
+  Turn on *Keep maximized windows maximized* to leave them alone instead: they stay maximized,
+  outside the grid, and take their slot again when they stop being maximized.
 - **Animated border on the focused window**: color, effect (solid, pulse, rainbow, gradient), line
   width, glow, corner radius and offset, so it can match your rounded corners mod.
 - **Multiple monitors.** Each monitor has its own grid, and windows can be dragged between them,
   including monitors with different display scales. It works within the limits each window or app
   imposes: the minimum size is decided by the app (and grows with the monitor's scale), so an app
   whose minimum is wider than the monitor will overflow its right / bottom edge.
+- **Display scale aware.** The gap, the screen-edge margin and the border sizes (width, glow, offset,
+  corner radius) are set in pixels at 100% scale and scaled for each monitor, so they look the same
+  on a 100% and on a 200% monitor.
+- **Virtual desktops.** When you switch desktops, the windows of the desktop you come back to return
+  to the same slots and order, without replaying the entrance animation.
 
 ### Free resizing: when it works
 Dragging a window border adapts the grid only when all of these are true:
@@ -177,6 +184,8 @@ Explorer, então um problema nele não derruba a barra de tarefas nem o Explorad
 - **Mover janelas pelo teclado.** Win + Alt + setas trocam a janela em foco com a vizinha daquele
   lado.
 - **Janelas maximizadas** que voltam ou entram na grade passam ao modo normal e assumem o espaço.
+  Ligue *Manter janelas maximizadas* para deixá-las em paz: elas continuam maximizadas, fora da
+  grade, e assumem o espaço de novo quando deixam de estar maximizadas.
 - **Borda animada na janela em foco**: cor, efeito (fixa, pulsar, arco-íris, degradê), largura da
   linha, brilho, raio dos cantos e deslocamento, para alinhar com o seu mod de cantos arredondados.
 - **Vários monitores.** Cada monitor tem a sua própria grade, e as janelas podem ser arrastadas
@@ -184,6 +193,11 @@ Explorer, então um problema nele não derruba a barra de tarefas nem o Explorad
   impostos por cada janela ou app: o tamanho mínimo é decidido pelo app (e cresce com a escala do
   monitor), então um app cujo mínimo é maior que a largura do monitor vai passar da borda direita
   / de baixo.
+- **Respeita a escala de cada monitor.** O espaço entre janelas, a margem da borda da tela e as
+  medidas da borda (largura, brilho, deslocamento, raio dos cantos) são configurados em pixels a
+  100% de escala e ajustados a cada monitor, então ficam iguais num monitor de 100% e num de 200%.
+- **Áreas de trabalho virtuais.** Ao trocar de área, as janelas da área para a qual você volta
+  retomam os mesmos espaços e a mesma ordem, sem repetir a animação de entrada.
 
 ### Redimensionamento livre: quando funciona
 Arrastar a borda de uma janela adapta a grade apenas quando todas estas condições são verdadeiras:
@@ -294,11 +308,15 @@ os cantos.
 // ==WindhawkModSettings==
 /*
 - gap: 10
-  $name: Gap between windows (px)
-  $name:pt-BR: Espaço entre janelas (px)
+  $name: Gap between windows (px at 100% scale)
+  $name:pt-BR: Espaço entre janelas (px a 100% de escala)
+  $description: "Scaled for each monitor's display scale, so the gap looks the same on every monitor."
+  $description:pt-BR: "Ajustado à escala de cada monitor, então o espaço parece o mesmo em todos."
 - padding: 12
-  $name: Screen edge margin (px)
-  $name:pt-BR: Margem da borda da tela (px)
+  $name: Screen edge margin (px at 100% scale)
+  $name:pt-BR: Margem da borda da tela (px a 100% de escala)
+  $description: "Scaled for each monitor's display scale."
+  $description:pt-BR: "Ajustada à escala de cada monitor."
 - marginBottom: 0
   $name: "Bottom spacing (px, from the screen edge)"
   $name:pt-BR: "Espaço embaixo (px, a partir da borda da tela)"
@@ -384,6 +402,11 @@ os cantos.
   - hz144: 144 Hz
   - hz165: 165 Hz
   - hz240: 240 Hz
+- keepMaximized: false
+  $name: Keep maximized windows maximized
+  $name:pt-BR: Manter janelas maximizadas
+  $description: "Off (default): a maximized window is restored and takes its slot in the grid. On: maximized windows are left alone and stay maximized, outside the grid; the others keep their slots."
+  $description:pt-BR: "Desligado (padrão): a janela maximizada volta ao normal e assume o seu espaço na grade. Ligado: janelas maximizadas ficam como estão, fora da grade; as outras mantêm seus espaços."
 - launchSync: true
   $name: "Sync with open/close animations (e.g. MacOS Minimize Animation, Windows Animations)"
   $name:pt-BR: "Sincronizar com animações de abrir/fechar (ex.: MacOS Minimize Animation, Windows Animations)"
@@ -444,21 +467,21 @@ os cantos.
   $name: Seconds per border animation cycle
   $name:pt-BR: Segundos por ciclo da animação da borda
 - borderWidth: 1
-  $name: Border line width (px)
-  $name:pt-BR: Largura da linha da borda (px)
+  $name: Border line width (px at 100% scale)
+  $name:pt-BR: Largura da linha da borda (px a 100% de escala)
   $description: "1 = native Windows border (thin). Above 1, the mod draws the border on top, outside the window, with the chosen thickness and the effect running around the window. Use up to the value of the gap between windows."
   $description:pt-BR: "1 = borda nativa do Windows (fina). Acima de 1, o mod desenha a borda por cima, fora da janela, com a espessura escolhida e o efeito girando em volta da janela. Use até o valor do espaço entre janelas."
 - borderGlow: 0
-  $name: Glow around the border (px, 0 = no glow)
-  $name:pt-BR: Brilho em volta da borda (px, 0 = sem brilho)
+  $name: Glow around the border (px at 100% scale, 0 = no glow)
+  $name:pt-BR: Brilho em volta da borda (px a 100% de escala, 0 = sem brilho)
 - borderRadius: 8
-  $name: Border corner radius (px)
-  $name:pt-BR: Raio dos cantos da borda (px)
+  $name: Border corner radius (px at 100% scale)
+  $name:pt-BR: Raio dos cantos da borda (px a 100% de escala)
   $description: "Only applies to the drawn border (width above 1, or glow). Match it to the radius of your rounded corners mod (for example 8 is the Windows 11 default; 0 = square corners)."
   $description:pt-BR: "Só vale com a borda desenhada por cima (largura acima de 1 ou brilho). Ajuste para ficar igual ao raio do seu mod de cantos arredondados (por exemplo 8 é o padrão do Windows 11; 0 = cantos retos)."
 - borderOffset: 0
-  $name: Border offset (px)
-  $name:pt-BR: Deslocamento da borda (px)
+  $name: Border offset (px at 100% scale)
+  $name:pt-BR: Deslocamento da borda (px a 100% de escala)
   $description: "0 = flush against the window edge, outside. Positive moves it outward; negative pulls it inside the window. Useful to align it with the corners mod."
   $description:pt-BR: "0 = colada na borda da janela, por fora. Positivo afasta para fora; negativo puxa para dentro da janela. Serve para alinhar com o mod de cantos."
 - ignoreList: ""
@@ -471,9 +494,11 @@ os cantos.
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <string>
@@ -510,6 +535,7 @@ struct Config {
     int layout = 0;  // 0 auto, 1 colunas, 2 linhas, 3 grade, 4 principal esq., 5 principal em cima
     int hz = 0;    // 0 = sincronizar com o DWM; -1 = maior taxa dos monitores; senão Hz fixo
     bool launchSync = true;
+    bool keepMaximized = false;
     int corner = -1;  // -1 = não mexer; senão valor de DWM_WINDOW_CORNER_PREFERENCE
     bool borderOn = true;
     COLORREF borderColor = RGB(0x7B, 0x8C, 0xFF);
@@ -611,6 +637,7 @@ static void LoadSettings() {
         else if (f.rfind(L"hz", 0) == 0) c.hz = _wtoi(f.c_str() + 2);
         else c.hz = 0;
         c.launchSync = Wh_GetIntSetting(L"launchSync") != 0;
+        c.keepMaximized = Wh_GetIntSetting(L"keepMaximized") != 0;
     }
 
     std::wstring corners = GetStr(L"corners");
@@ -690,6 +717,7 @@ struct Item {
     RECT applied{};  // último retângulo enviado ao app durante a animação (evita chamadas repetidas)
     LONG minW = 0, minH = 0;  // tamanho mínimo da janela (retângulo externo) que o app aceita
     bool minRead = false;
+    int minTries = 0;  // consultas ao app já tentadas (a consulta é repetida se o app não respondeu a tempo)
     int learned = 0;
     UINT mDpi = 0;  // DPI em que minW/minH/lW/lH foram medidos (monitores com escala diferente mudam o mínimo em pixels)
     LONG lW = 0, lH = 0;  // mínimo aprendido na conferência (separado do informado pelo app, para poder ser descartado)
@@ -706,6 +734,7 @@ struct Item {
     int cornerApplied = -1;
     RECT lastInset{};  // diferença entre o retângulo da janela e a área visível (última medida)
     double wx = 1, wy = 1;  // proporção de largura/altura escolhida pelo usuário ao redimensionar
+    long seq = 0;  // posição na ordem da grade; g_items fica sempre ordenada por ele (ver SwapItems e OnAdd)
 };
 
 static std::vector<Item> g_items;
@@ -850,6 +879,16 @@ static int g_ovW = 0, g_ovH = 0;
 static RECT g_ovLast{};
 static HWND g_ovLastTarget = nullptr;
 
+// Espaço, margem e borda são configurados em pixels a 100% de escala e ajustados à escala de cada monitor.
+// g_scale vale para o monitor cujo layout está sendo calculado agora (definido por quem chama ComputeSlots).
+static double g_scale = 1.0;
+static double MonScale(HMONITOR m) {
+    UINT dx = 96, dy = 96;
+    if (m && SUCCEEDED(GetDpiForMonitor(m, MDT_EFFECTIVE_DPI, &dx, &dy)) && dx) return dx / 96.0;
+    return 1.0;
+}
+static int Px(int v) { return (int)std::lround(v * g_scale); }
+
 static bool UseOverlay() { return g_cfg.borderOn && (g_cfg.borderWidth > 1 || g_cfg.borderGlow > 0); }
 
 static void HideOverlay() {
@@ -901,6 +940,17 @@ static bool EnsureOverlay(int W, int H) {
     return true;
 }
 
+struct CovPx { uint32_t idx; float a; float ang; };
+struct CovKey {
+    int W, H, fw, fh, w, glow, off, rad;
+    bool operator==(const CovKey& o) const {
+        return W == o.W && H == o.H && fw == o.fw && fh == o.fh && w == o.w && glow == o.glow && off == o.off && rad == o.rad;
+    }
+};
+static std::vector<CovPx> g_cov;
+static CovKey g_covKey{};
+static bool g_covValid = false;
+
 static void DrawOverlay(HWND t) {
     DWORD cl = 0;
     if (!t || !IsWindow(t) || !IsWindowVisible(t) || IsIconic(t) ||
@@ -913,8 +963,11 @@ static void DrawOverlay(HWND t) {
     int fw = fr.right - fr.left, fh = fr.bottom - fr.top;
     if (fw < 20 || fh < 20) { HideOverlay(); return; }
 
-    const int w = g_cfg.borderWidth, glow = g_cfg.borderGlow;
-    const int off = g_cfg.borderOffset;
+    // largura, brilho, deslocamento e raio são configurados a 100% de escala: ajusta à escala do monitor da janela
+    const double sc = MonScale(MonitorFromWindow(t, MONITOR_DEFAULTTONEAREST));
+    auto sPx = [&](int v) { return (int)std::lround(v * sc); };
+    const int w = std::max(1, sPx(g_cfg.borderWidth)), glow = sPx(g_cfg.borderGlow);
+    const int off = sPx(g_cfg.borderOffset);
     const int m = w + glow + 2 + std::abs(off);
     const int W = fw + 2 * m, H = fh + 2 * m;
 
@@ -925,50 +978,57 @@ static void DrawOverlay(HWND t) {
     g_ovLast = fr;
     g_ovLastTarget = t;
 
-    double r = (double)g_cfg.borderRadius;
+    const int rad = sPx(g_cfg.borderRadius);
+    const double r = (double)rad;
     double ph = std::fmod(NowMs() / (g_cfg.borderSpeed * 1000.0), 1.0);
     double pulse = 1.0;
     if (g_cfg.borderStyle == 1) pulse = 0.35 + 0.65 * (0.5 - 0.5 * std::cos(ph * 6.283185307));
     const double cx = W / 2.0, cy = H / 2.0, hx = fw / 2.0, hy = fh / 2.0;
-    const int sB = m + (int)r + 3;  // faixas que contêm a borda; o miolo da janela fica transparente
+    const int sB = m + rad + 3;  // faixas que contêm a borda; o miolo da janela fica transparente
 
-    auto px = [&](int x, int y) {
-        double dx = std::fabs(x + 0.5 - cx) - (hx - r), dy = std::fabs(y + 0.5 - cy) - (hy - r);
-        double ox = std::max(dx, 0.0), oy = std::max(dy, 0.0);
-        double d = std::sqrt(ox * ox + oy * oy) + std::min(std::max(dx, dy), 0.0) - r - off;  // >0 = fora da linha de referência
-        double a = 0;
-        if (d > -1.0) {
+    // A cobertura (transparência) e o ângulo de cada pixel só dependem da geometria; mudam apenas quando o
+    // tamanho da janela ou as medidas da borda mudam. Ficam guardados, e a cada quadro só as cores são refeitas.
+    const CovKey key{W, H, fw, fh, w, glow, off, rad};
+    if (!g_covValid || !(key == g_covKey)) {
+        g_covKey = key;
+        g_covValid = true;
+        g_cov.clear();
+        memset(g_ovBits, 0, (size_t)W * H * sizeof(uint32_t));
+        auto px = [&](int x, int y) {
+            double dx = std::fabs(x + 0.5 - cx) - (hx - r), dy = std::fabs(y + 0.5 - cy) - (hy - r);
+            double ox = std::max(dx, 0.0), oy = std::max(dy, 0.0);
+            double d = std::sqrt(ox * ox + oy * oy) + std::min(std::max(dx, dy), 0.0) - r - off;  // >0 = fora da linha de referência
+            if (d <= -1.0) return;
             double cov1 = std::min(1.0, std::max(0.0, d + 0.5));
             double cov2 = std::min(1.0, std::max(0.0, w - d + 0.5));
-            a = cov1 * cov2;
+            double a = cov1 * cov2;
             if (glow > 0 && d > w) {
                 double g = 1.0 - (d - w) / glow;
                 if (g > 0) a = std::max(a, 0.45 * g * g * cov1);
             }
-        }
-        uint32_t out = 0;
-        if (a > 0.002) {
-            COLORREF c;
+            if (a <= 0.002) return;
             double ang = std::atan2(y + 0.5 - cy, x + 0.5 - cx) / 6.283185307 + 0.5;  // 0..1 em volta da janela
-            if (g_cfg.borderStyle == 2) c = HsvToRgb((ang + ph) * 360.0, 0.8, 1.0);
-            else if (g_cfg.borderStyle == 3) {
-                double k = 0.5 - 0.5 * std::cos((ang + ph) * 6.283185307 * 2.0);
-                c = Lerp(g_cfg.borderColor, g_cfg.borderColor2, k);
-            } else c = g_cfg.borderColor;
-            a *= pulse;
-            uint32_t A = (uint32_t)std::lround(a * 255.0);
-            uint32_t R = (GetRValue(c) * A + 127) / 255, G = (GetGValue(c) * A + 127) / 255, B = (GetBValue(c) * A + 127) / 255;
-            out = (A << 24) | (R << 16) | (G << 8) | B;
+            g_cov.push_back({(uint32_t)((size_t)y * W + x), (float)a, (float)ang});
+        };
+        for (int y = 0; y < H; y++) {
+            if (y < sB || y >= H - sB) {
+                for (int x = 0; x < W; x++) px(x, y);
+            } else {
+                for (int x = 0; x < m + 3; x++) px(x, y);
+                for (int x = W - m - 3; x < W; x++) px(x, y);
+            }
         }
-        g_ovBits[(size_t)y * W + x] = out;
-    };
-    for (int y = 0; y < H; y++) {
-        if (y < sB || y >= H - sB) {
-            for (int x = 0; x < W; x++) px(x, y);
-        } else {
-            for (int x = 0; x < m + 3; x++) px(x, y);
-            for (int x = W - m - 3; x < W; x++) px(x, y);
-        }
+    }
+    for (const CovPx& c : g_cov) {
+        COLORREF col;
+        if (g_cfg.borderStyle == 2) col = HsvToRgb((c.ang + ph) * 360.0, 0.8, 1.0);
+        else if (g_cfg.borderStyle == 3) {
+            double k = 0.5 - 0.5 * std::cos((c.ang + ph) * 6.283185307 * 2.0);
+            col = Lerp(g_cfg.borderColor, g_cfg.borderColor2, k);
+        } else col = g_cfg.borderColor;
+        uint32_t A = (uint32_t)std::lround(c.a * pulse * 255.0);
+        uint32_t R = (GetRValue(col) * A + 127) / 255, G = (GetGValue(col) * A + 127) / 255, B = (GetBValue(col) * A + 127) / 255;
+        g_ovBits[c.idx] = (A << 24) | (R << 16) | (G << 8) | B;
     }
 
     POINT dst{fr.left - m, fr.top - m}, src{0, 0};
@@ -1097,11 +1157,12 @@ static std::vector<RECT> ComputeSlotsEx(int n, RECT a, const std::vector<SIZE>& 
     if (overflow) *overflow = 0;
     if (n <= 0) return out;
     if (pad) {
-        a.left += g_cfg.padding; a.top += g_cfg.padding;
-        a.right -= g_cfg.padding; a.bottom -= g_cfg.padding;
+        const int pd = Px(g_cfg.padding);
+        a.left += pd; a.top += pd;
+        a.right -= pd; a.bottom -= pd;
     }
 
-    int gap = g_cfg.gap;
+    int gap = Px(g_cfg.gap);
     double availW = a.right - a.left, availH = a.bottom - a.top;
     auto WT = [&](int i) { return (wts && i < (int)wts->size()) ? (*wts)[i] : std::pair<double, double>(1.0, 1.0); };
 
@@ -1299,13 +1360,14 @@ static std::vector<RECT> ComputeSlots(int n, RECT a, const std::vector<SIZE>& mi
 
 // Pergunta ao app o menor tamanho de janela que ele aceita (WM_GETMINMAXINFO).
 static void QueryMin(Item& it) {
-    if (it.minRead) return;
-    it.minRead = true;
+    if (it.minRead || it.minTries >= 4) return;  // app ocupado: tenta de novo na próxima vez, até 4 vezes
+    it.minTries++;
     MINMAXINFO mmi{};
     mmi.ptMinTrackSize.x = GetSystemMetrics(SM_CXMINTRACK);
     mmi.ptMinTrackSize.y = GetSystemMetrics(SM_CYMINTRACK);
     DWORD_PTR res = 0;
     if (SendMessageTimeoutW(it.h, WM_GETMINMAXINFO, 0, (LPARAM)&mmi, SMTO_ABORTIFHUNG | SMTO_BLOCK, 20, &res)) {
+        it.minRead = true;
         it.minW = std::max<LONG>(it.minW, mmi.ptMinTrackSize.x);
         it.minH = std::max<LONG>(it.minH, mmi.ptMinTrackSize.y);
         {
@@ -1452,6 +1514,7 @@ static void UpdateMinimizedPlacements() {
         z.cx = std::max<LONG>(0, e.minW - (inset.left + inset.right));
         z.cy = std::max<LONG>(0, e.minH - (inset.top + inset.bottom));
         mins.push_back(z);
+        g_scale = MonScale(e.mon);
         auto slots = ComputeSlots((int)n + 1, UsableArea(e.mon, mi), mins, nullptr);
         if (slots.size() <= n) continue;
         RECT sl = slots[n];
@@ -1489,10 +1552,13 @@ static void Retile() {
 
         if (g_monocle) {
             RECT full = UsableArea(m, mi);
-            full.left += g_cfg.padding; full.top += g_cfg.padding;
-            full.right -= g_cfg.padding; full.bottom -= g_cfg.padding;
+            g_scale = MonScale(m);
+            const int pd = Px(g_cfg.padding);
+            full.left += pd; full.top += pd;
+            full.right -= pd; full.bottom -= pd;
             for (auto* it : list) if (it->h != g_dragHwnd) SetTarget(*it, full);
         } else {
+            g_scale = MonScale(m);
             std::vector<SIZE> mins;
             for (auto* it : list) mins.push_back(SlotMin(*it));
             std::vector<std::pair<double, double>> wts;
@@ -1655,6 +1721,23 @@ static void ProcessPending() {
 // Eventos
 // ---------------------------------------------------------------------------
 
+// Ordem das janelas na grade: cada janela tem um 'seq' e g_items fica sempre ordenada por ele.
+// Ao trocar de área de trabalho virtual o Windows esconde (cloak) as janelas da outra área; elas saem da grade
+// e, na volta, reentram juntas. Guardamos o 'seq' (e se estavam soltas) para que voltem na mesma ordem e
+// no mesmo lugar, sem repetir a animação de entrada.
+static long g_seqNext = 0;
+struct VDeskMem { HWND h; long seq; bool floating; };
+static std::vector<VDeskMem> g_vdesk;
+
+static void RememberVDesk(HWND h) {
+    DWORD c = 0;
+    if (FAILED(DwmGetWindowAttribute(h, DWMWA_CLOAKED, &c, sizeof(c))) || !(c & 2)) return;  // 2 = DWM_CLOAKED_SHELL (outra área de trabalho)
+    int i = FindItem(h);
+    if (i < 0) return;
+    g_vdesk.erase(std::remove_if(g_vdesk.begin(), g_vdesk.end(), [&](const VDeskMem& e) { return e.h == h || !IsWindow(e.h); }), g_vdesk.end());
+    g_vdesk.push_back({h, g_items[i].seq, g_items[i].floating});
+}
+
 static void ResetWeights() {
     for (auto& it : g_items) it.wx = it.wy = 1.0;
     g_mainFrac = 0;
@@ -1680,16 +1763,28 @@ static bool OnAdd(HWND h) {
     it.to = it.cur;
     if (IsZoomed(h)) {
         // janela que volta/entra maximizada: devolve ao modo normal para ela assumir a grade
+        // (com "manter maximizadas" ligado, ela fica como está, fora da grade, até deixar de estar maximizada)
         it.zoomed = true;
         it.fresh = false;
         it.snap = false;
-        ShowWindowAsync(h, SW_RESTORE);
+        if (!g_cfg.keepMaximized) ShowWindowAsync(h, SW_RESTORE);
+    }
+    it.seq = ++g_seqNext;
+    for (size_t k = 0; k < g_vdesk.size(); k++) {
+        if (g_vdesk[k].h != h) continue;
+        // voltou de outra área de trabalho virtual: retoma o lugar na ordem e o estado de solta, sem animar a entrada
+        it.seq = g_vdesk[k].seq;
+        it.floating = g_vdesk[k].floating;
+        it.fresh = false;
+        it.snap = false;
+        g_vdesk.erase(g_vdesk.begin() + k);
+        break;
     }
     ResetWeights();
     for (size_t i = 0; i < g_minimized.size();)
         if (g_minimized[i].h == h) g_minimized.erase(g_minimized.begin() + i);
         else i++;
-    g_items.push_back(it);
+    g_items.insert(std::upper_bound(g_items.begin(), g_items.end(), it.seq, [](long v, const Item& x) { return v < x.seq; }), it);
     Retile();
     if (GetForegroundWindow() == h) UpdateBorder(h);
     return true;
@@ -1734,6 +1829,7 @@ static void OnRemove(HWND h) {
 // cada janela recomeça a animação a partir de onde ela está de fato na tela.
 static void SwapItems(size_t i, size_t j) {
     std::swap(g_items[i], g_items[j]);
+    std::swap(g_items[i].seq, g_items[j].seq);  // o 'seq' acompanha a posição na grade, não a janela
     for (size_t k : {i, j}) {
         Item& it = g_items[k];
         GetWindowRect(it.h, &it.cur);
@@ -1762,7 +1858,7 @@ static void RunScheduledRetile() {
     int i = FindItem(h);
     if (i >= 0) {
         Item& it = g_items[i];
-        if (IsZoomed(h)) {
+        if (IsZoomed(h) && !g_cfg.keepMaximized) {
             // o arrasto até a borda de cima maximizou a janela: devolve ao modo normal para ela voltar à grade
             Wh_Log(L"Arrasto maximizou a janela: restaurando para voltar a grade");
             ShowWindowAsync(h, SW_RESTORE);
@@ -1825,7 +1921,8 @@ static bool ApplyResize(size_t i, const RECT& now) {
     int layout = g_layoutRt >= 0 ? g_layoutRt : g_cfg.layout;
     bool master = (layout == 4 || layout == 5) && idx.size() >= 2;
     size_t mainIdx = master ? idx[0] : (size_t)-1;
-    int gap = g_cfg.gap;
+    g_scale = MonScale(me.mon);
+    int gap = Px(g_cfg.gap);
     RECT bb{LONG_MAX, LONG_MAX, LONG_MIN, LONG_MIN};
     for (size_t j : idx) {
         bb.left = std::min(bb.left, g_items[j].to.left); bb.top = std::min(bb.top, g_items[j].to.top);
@@ -2029,8 +2126,11 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObj
                 else k++;
             OnRemove(hwnd);
             break;
-        case EVENT_OBJECT_HIDE:
         case EVENT_OBJECT_CLOAKED:
+            RememberVDesk(hwnd);
+            OnRemove(hwnd);
+            break;
+        case EVENT_OBJECT_HIDE:
             OnRemove(hwnd);
             break;
         case EVENT_SYSTEM_FOREGROUND:
@@ -2259,7 +2359,7 @@ static BOOL CALLBACK EnumProc(HWND h, LPARAM) {
         if (IsZoomed(h)) {
             // já estava maximizada quando o mod carregou: devolve ao modo normal para entrar na grade
             it.zoomed = true;
-            ShowWindowAsync(h, SW_RESTORE);
+            if (!g_cfg.keepMaximized) ShowWindowAsync(h, SW_RESTORE);
         }
         {
             wchar_t cls[64] = L"", ttl[48] = L"";
@@ -2267,6 +2367,7 @@ static BOOL CALLBACK EnumProc(HWND h, LPARAM) {
             GetWindowTextW(h, ttl, 48);
             Wh_Log(L"Janela ja aberta [%s] \"%s\"%s", cls, ttl, it.zoomed ? L" (estava maximizada)" : L"");
         }
+        it.seq = ++g_seqNext;
         g_items.push_back(it);
     }
     return TRUE;
@@ -2516,6 +2617,9 @@ static DWORD WINAPI Worker(LPVOID) {
                                           g_minimized.end());
                     }
                     EnumWindows(EnumProc, 0);  // ...e traz as que deixaram de constar
+                    if (!g_cfg.keepMaximized)
+                        for (const auto& it : g_items)
+                            if (!it.floating && IsZoomed(it.h)) ShowWindowAsync(it.h, SW_RESTORE);
                 }
                 ResetWeights();
                 for (auto& it : g_items) it.to = RECT{0, 0, 0, 0};
