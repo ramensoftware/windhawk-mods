@@ -1374,8 +1374,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     }
 
     const auto* mouseInfo = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-
-    if (mouseInfo->flags & LLMHF_INJECTED) {
+    // Added support for Touchpad Relaxed Hand Tracking
+    if ((mouseInfo->flags & LLMHF_INJECTED) && mouseInfo->dwExtraInfo != 0x52484754) {
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
