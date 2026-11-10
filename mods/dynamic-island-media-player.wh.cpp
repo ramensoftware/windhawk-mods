@@ -26,6 +26,14 @@ furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 */
 
 // ==WindhawkModReadme==
@@ -34,7 +42,7 @@ copies or substantial portions of the Software.
 
 ![Dynamic Island Preview](https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png)
 
-A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 11. 
+A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 10/11. 
 
 This mod is a specialized, lightweight adaptation of the incredible **[Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows)**. It strips away the extra dashboard modules (weather, hardware monitor, etc.) to focus purely on delivering the ultimate media player experience with zero bloat.
 
@@ -171,7 +179,7 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
     $description: 70 to 160.
   $name: Colors & Theming
 */
-// ==/WindhawkModSettings==
+// ==WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -209,10 +217,8 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
 #include <string_view>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
-#include <list>
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -390,7 +396,6 @@ struct MediaSnapshot {
     std::wstring sourceBadge;
     std::wstring trackId; 
     
-    // ПРЯМАЯ ССЫЛКА НА СЕССИЮ (Исключает промахи по AUMID)
     winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession activeSession{nullptr};
 
     std::shared_ptr<const BitmapPixels> art;
@@ -401,11 +406,6 @@ struct MediaSnapshot {
     int64_t positionTicks = 0;
     int64_t endTicks = 0;
     ULONGLONG lastUpdatedTicks = 0;
-};
-
-struct CachedArt {
-    std::shared_ptr<const BitmapPixels> pixels;
-    double negativeTimestamp = 0.0;
 };
 
 struct SharedState {
@@ -452,13 +452,6 @@ Settings GetSettingsCopy() {
 std::mutex g_stateMutex;
 SharedState g_state;
 std::atomic<uint64_t> g_artGenerationCounter{0};
-
-// Исправленный кэш и защита фоновых потоков
-std::unordered_map<std::wstring, CachedArt> g_artCache;
-std::list<std::wstring> g_artCacheOrder;
-std::unordered_set<std::wstring> g_artFetching;
-
-std::atomic<int> g_bgTaskCount{0}; // Счетчик фоновых задач для безопасной выгрузки
 
 std::atomic<HWND> g_hwnd{nullptr};
 HANDLE g_stopEvent = nullptr;
@@ -1594,82 +1587,20 @@ DWORD WINAPI MediaThreadProc(void*) {
                 bool metadataChanged = (next.trackId != prev.trackId);
                 next.metaChangedAt = metadataChanged ? now : prev.metaChangedAt;
 
-                bool foundInCache = false;
-                bool shouldFetch = false;
-                std::shared_ptr<const BitmapPixels> cachedArt = nullptr;
-
-                {
-                    std::lock_guard lock(g_stateMutex);
-                    auto it = g_artCache.find(next.trackId);
-                    if (it != g_artCache.end()) {
-                        if (it->second.pixels) {
-                            cachedArt = it->second.pixels;
-                            foundInCache = true;
-                        } else if (now - it->second.negativeTimestamp > 30.0) {
-                            shouldFetch = true; 
-                        } else {
-                            foundInCache = true; 
-                        }
-                    } else {
-                        shouldFetch = true;
-                    }
-
-                    if (shouldFetch && g_artFetching.find(next.trackId) == g_artFetching.end()) {
-                        g_artFetching.insert(next.trackId);
-                    } else {
-                        shouldFetch = false;
-                    }
-                }
-
-                if (foundInCache) {
-                    next.art = cachedArt;
-                } else if (shouldFetch) {
-                    auto thumbnailRef = properties.Thumbnail();
-                    if (!thumbnailRef) {
-                        std::lock_guard lock(g_stateMutex);
-                        g_artCache[next.trackId] = {nullptr, now};
-                        g_artFetching.erase(next.trackId);
-                        
-                        auto orderIt = std::find(g_artCacheOrder.begin(), g_artCacheOrder.end(), next.trackId);
-                        if (orderIt != g_artCacheOrder.end()) g_artCacheOrder.erase(orderIt);
-                        g_artCacheOrder.push_back(next.trackId);
-                    } else {
-                        g_bgTaskCount++;
-                        std::thread([thumbnailRef, trackId = next.trackId]() {
-                            winrt::init_apartment(winrt::apartment_type::multi_threaded);
-                            std::shared_ptr<const BitmapPixels> decodedArt = nullptr;
-                            try {
-                                std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnailRef);
-                                BitmapPixels pixels;
-                                if (!bytes.empty() && DecodeImageBytesToPixels(bytes, &pixels)) {
-                                    decodedArt = std::make_shared<const BitmapPixels>(std::move(pixels));
-                                }
-                            } catch (...) {}
-                            winrt::uninit_apartment();
-
-                            {
-                                std::lock_guard lock(g_stateMutex);
-                                g_artCache[trackId] = {decodedArt, NowSeconds()};
-                                g_artFetching.erase(trackId);
-                                
-                                auto orderIt = std::find(g_artCacheOrder.begin(), g_artCacheOrder.end(), trackId);
-                                if (orderIt != g_artCacheOrder.end()) g_artCacheOrder.erase(orderIt);
-                                g_artCacheOrder.push_back(trackId);
-
-                                if (g_artCache.size() > 20) {
-                                    g_artCache.erase(g_artCacheOrder.front());
-                                    g_artCacheOrder.pop_front();
-                                }
-
-                                if (g_state.media.trackId == trackId) {
-                                    g_state.media.art = decodedArt;
-                                }
+                // Простой синхронный запрос обложки без фоновых потоков и кеша
+                if (metadataChanged || !prev.art) {
+                    try {
+                        auto thumbnailRef = properties.Thumbnail();
+                        if (thumbnailRef) {
+                            std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnailRef);
+                            BitmapPixels pixels;
+                            if (!bytes.empty() && DecodeImageBytesToPixels(bytes, &pixels)) {
+                                next.art = std::make_shared<const BitmapPixels>(std::move(pixels));
                             }
-                            
-                            if (HWND h = g_hwnd.load()) PostMessageW(h, WM_APP_WAKE, 0, 0);
-                            g_bgTaskCount--;
-                        }).detach();
-                    }
+                        }
+                    } catch (...) {}
+                } else {
+                    next.art = prev.art;
                 }
             }
         } catch (...) {
@@ -1715,7 +1646,6 @@ DWORD WINAPI MediaThreadProc(void*) {
 }
 
 void SeekMediaToTicks(int64_t targetTicks) {
-    g_bgTaskCount++;
     std::thread([targetTicks]() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         try {
@@ -1729,7 +1659,6 @@ void SeekMediaToTicks(int64_t targetTicks) {
             }
         } catch (...) {}
         winrt::uninit_apartment();
-        g_bgTaskCount--;
     }).detach();
 }
 
@@ -1750,7 +1679,6 @@ void SendMediaTransportCommand(int cmd) {
         PostMessageW(h, WM_APP_WAKE, 0, 0);
     }
 
-    g_bgTaskCount++;
     std::thread([cmd]() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         bool sessionAttempted = false;
@@ -1777,7 +1705,6 @@ void SendMediaTransportCommand(int cmd) {
             SendNotifyMessageW(fg, WM_APPCOMMAND, (WPARAM)fg, MAKELONG(0, appCmd));
         }
         winrt::uninit_apartment();
-        g_bgTaskCount--;
     }).detach();
 }
 
@@ -4109,6 +4036,8 @@ DWORD WINAPI RenderThreadProc(void*) {
     return 0;
 }
 
+DWORD WINAPI RenderThreadProc(void*);
+DWORD WINAPI MediaThreadProc(void*);
 bool StartThreads() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return false;
@@ -4145,12 +4074,6 @@ void StopThreads() {
         }
     }
     g_renderThread = g_mediaThread = nullptr;
-
-    int waitLoops = 0;
-    while (g_bgTaskCount.load() > 0 && waitLoops < 80) {
-        Sleep(50);
-        waitLoops++;
-    }
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
