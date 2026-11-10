@@ -26,6 +26,9 @@ It arranges the windows of each monitor in a grid, animates every change with fl
 and works together with minimize / restore / open animation mods: a window is animated
 **straight to the new place assigned by the grid**, not to where it used to be.
 
+The mod runs in its own `windhawk.exe` process (a Windhawk "tool mod"), not inside Explorer, so a
+problem in it cannot take down the taskbar or File Explorer.
+
 ### Features
 - **Automatic grid.** A new window takes a slot and the others make room for it; when a window
   closes or is minimized, the rest take over the free space.
@@ -35,10 +38,11 @@ and works together with minimize / restore / open animation mods: a window is an
 - **Free resizing.** Drag a window edge and the grid adapts to the width or height you chose.
   Dragging a window by its title and dropping it over another one swaps the two; dropping it
   anywhere else sends it back to its slot.
+- **Move windows with the keyboard.** Win + Alt + arrows swap the focused window with its neighbor
+  on that side.
 - **Maximized windows** that return to or enter the grid go back to normal mode and take their slot.
-- **Animated border on the focused window** (replaces tacky-border): color, effect (solid, pulse,
-  rainbow, gradient), line width, glow, corner radius and offset, so it can match your rounded
-  corners mod.
+- **Animated border on the focused window**: color, effect (solid, pulse, rainbow, gradient), line
+  width, glow, corner radius and offset, so it can match your rounded corners mod.
 - **Multiple monitors.** Each monitor has its own grid, and windows can be dragged between them,
   including monitors with different display scales. It works within the limits each window or app
   imposes: the minimum size is decided by the app (and grows with the monitor's scale), so an app
@@ -56,38 +60,49 @@ Dragging a window border adapts the grid only when all of these are true:
 
 In the "main left" / "main top" layouts, dragging the divider of the main window changes how much of
 the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
-is opened, closed or minimized, when the layout changes (Win + Ctrl + G) and with Win + Alt + ↓.
+is opened, closed or minimized, when the layout changes and when you re-arrange everything
+(Win + Alt + Home).
 
 ### Hotkeys
 | Hotkey | Action |
 |--------|--------|
-| Win + Ctrl + G (default) | Cycle the layout: auto, columns, rows, grid, main left, main top |
-| Win + Ctrl + T (default) | Take the focused window out of the grid (it stays where it is and the others use the space); press again to put it back |
-| Win + Alt + F | Focus mode: every window on the monitor fills the screen |
-| Win + Alt + ← / → | Swap the focused window with the previous / next one |
-| Win + Alt + ↓ | Re-arrange everything and put all windows back in the grid |
-| Win + Alt + ↑ | Reserved, does nothing: it only stops Windows from snapping the window to the top half of the screen |
+| Win + Ctrl + G | Cycle the layout: auto, columns, rows, grid, main left, main top |
+| Win + Ctrl + T | Take the focused window out of the grid (it stays where it is and the others use the space); press again to put it back |
+| Win + Alt + F | Focus mode: every window on the monitor fills the screen; press again to leave |
+| Win + Alt + ← / → | Move the focused window left / right: swaps it with the window next to it on that side, whatever the layout (does nothing if there is none) |
+| Win + Alt + ↑ / ↓ | Move the focused window up / down: swaps it with the window directly above / below it (does nothing if there is none) |
+| Win + Alt + Home | Re-arrange everything and put all windows back in the grid |
 
-The Win + Alt hotkeys can use another modifier in the settings (Ctrl+Alt, Ctrl+Alt+Shift or
-Alt+Shift) if another program already uses them; restart the mod after changing. Win+Ctrl+G and Win+Ctrl+T
-are the defaults and can be changed in the settings (text fields such as "Ctrl+Alt+G" or
-"Win+T"; leave empty to turn the hotkey off). Unavailable hotkeys are reported in the Windhawk
-log (error 1409 = already in use).
+Every hotkey can be changed in the settings, and the change applies as soon as you save them:
+- **Layout, float and re-arrange** have their own text fields (for example `Ctrl+Alt+G`, `Win+T` or
+  `Alt+Home`). Write modifiers (Ctrl, Alt, Shift, Win) and one key: a letter, a digit, or Up, Down,
+  Left, Right, Home or End. Leave a field empty to turn that hotkey off.
+- **Focus mode and the four arrows** share one modifier choice: Win+Alt (default), Ctrl+Alt,
+  Ctrl+Alt+Shift or Alt+Shift.
+- Avoid combinations without Win or Ctrl: they take the key away from every other app.
 
-Win + Ctrl + T is also the default Always On Top shortcut of PowerToys: if you use both, change one of them.
+Hotkeys that cannot be registered are reported in the Windhawk log (error 1409 = already in use).
+Win + Ctrl + T is also the default Always On Top shortcut of PowerToys: if you use both, change one
+of them.
+
+#### Taking over shortcuts that are already in use
+Windows itself uses some of these combinations (Win + Alt + ↑ snaps the window to the top half of the
+screen). When a hotkey is already taken, the *Take over hotkeys* option (on by default) makes the
+mod catch that combination with a low-level keyboard hook, so the other program or Windows no longer
+receives it. Turn the option off if you do not want the mod to override other programs' shortcuts;
+the combination is then simply unavailable and reported in the log. The hook only exists while the
+mod runs, and only for the combinations that were already taken.
 
 ### Works with other animation mods
 Adaptive Windows works together with these two mods:
 
-Adaptive Windows works together with these two mods:
-
 - **MacOS Minimize Animation** (genie effect for minimize, restore and open).
 
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
+![Adaptive Windows with MacOS Minimize Animation](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
 
 - **Windows Animations**.
 
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
+![Adaptive Windows with Windows Animations](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
 
 Those mods hide the window and play their own animation. With the *sync with open/close
 animations* option on, Adaptive Windows notices this, puts the window in its final slot while it
@@ -106,7 +121,8 @@ The **Nava OS** style is the base (strong ease-out curve, new windows slide in f
 There are also Smooth (slides in from the top), Snappy (no entrance effect) and Playful (enters from the
 bottom with a slight overshoot). While moving, a window keeps a fixed size (like when dragging):
 shrinking windows shrink at the start and growing ones only grow at the end, so nothing overlaps.
-The frame rate can follow the DWM (recommended) or be fixed.
+The frame rate can follow the DWM (recommended), follow the highest refresh rate among your
+monitors, or be fixed (30 to 240 Hz).
 
 ### Taskbar and dock
 The usable area is the Windows work area. The screen-edge margin applies to all four sides. If the
@@ -122,11 +138,15 @@ arbitrary radius this way. If you already use a corner mod (for example "Custom 
 Radius"), leave this option on "do not touch" so the two do not fight over the corners.
 
 ### Ignored windows and limits
+- Settings apply as soon as you save them; there is no need to restart the mod. Changing the
+  **windows to ignore** list also takes windows out of the grid (or brings them in) right away.
 - Tool windows, always-on-top, non-focusable and non-resizable windows (panels, widgets) stay out
   of the grid, as do the ones in the **windows to ignore** list (part of the title or class,
-  separated by semicolons). The list is empty by default.
+  separated by semicolons). The list is empty by default. The Windhawk log says why each window
+  was ignored.
 - Windows that refuse to be positioned (a likely case is programs running as administrator) float
-  after a few attempts; Win + Alt + ↓ tries again.
+  after a few attempts; Win + Alt + Home tries again.
+- Moving windows with the keyboard only considers windows on the same monitor.
 
 ---
 
@@ -137,6 +157,9 @@ do **Nava OS**. Ele organiza as janelas de cada monitor, anima as mudanças com 
 e funciona junto com os mods de animação de minimizar, restaurar e abrir janelas: a janela
 é animada **já para o novo lugar definido pela grade**, e não para onde ela estava antes.
 
+O mod roda em um processo `windhawk.exe` próprio (um "tool mod" do Windhawk), e não dentro do
+Explorer, então um problema nele não derruba a barra de tarefas nem o Explorador de Arquivos.
+
 ### O que ele faz
 - **Grade automática.** Cada janela nova ocupa um espaço da grade e as outras abrem espaço para
   ela; ao fechar ou minimizar uma janela, as demais ocupam o espaço livre.
@@ -146,10 +169,11 @@ e funciona junto com os mods de animação de minimizar, restaurar e abrir janel
 - **Redimensionamento livre.** Arraste a borda de uma janela e a grade se adapta à largura ou à
   altura que você escolheu. Arrastar uma janela pelo meio e soltá-la sobre outra troca as duas
   de lugar; soltá-la em qualquer outro ponto a devolve ao seu espaço.
+- **Mover janelas pelo teclado.** Win + Alt + setas trocam a janela em foco com a vizinha daquele
+  lado.
 - **Janelas maximizadas** que voltam ou entram na grade passam ao modo normal e assumem o espaço.
-- **Borda animada na janela em foco** (substitui o uso do tacky-border): cor, efeito (fixa,
-  pulsar, arco-íris, degradê), largura da linha, brilho, raio dos cantos e deslocamento, para
-  alinhar com o seu mod de cantos arredondados.
+- **Borda animada na janela em foco**: cor, efeito (fixa, pulsar, arco-íris, degradê), largura da
+  linha, brilho, raio dos cantos e deslocamento, para alinhar com o seu mod de cantos arredondados.
 - **Vários monitores.** Cada monitor tem a sua própria grade, e as janelas podem ser arrastadas
   entre eles, inclusive entre monitores de escalas diferentes. Funciona dentro dos limites
   impostos por cada janela ou app: o tamanho mínimo é decidido pelo app (e cresce com a escala do
@@ -169,37 +193,48 @@ Arrastar a borda de uma janela adapta a grade apenas quando todas estas condiç�
 Nos layouts "principal à esquerda" / "principal em cima", arrastar a divisória da janela principal
 muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
 escolhidos são descartados quando uma janela é aberta, fechada ou minimizada, quando o layout muda
-(Win + Ctrl + G) e com Win + Alt + ↓.
+e quando você reorganiza tudo (Win + Alt + Home).
 
 ### Atalhos
 | Atalho | Ação |
 |--------|------|
-| Win + Ctrl + G (padrão) | Troca o layout: automático, colunas, linhas, grade, principal à esquerda, principal em cima |
-| Win + Ctrl + T (padrão) | Tira a janela em foco da grade (ela fica onde está e as outras ocupam o espaço); apertar de novo devolve à grade |
-| Win + Alt + F | Modo foco: todas as janelas do monitor ocupam a tela toda |
-| Win + Alt + ← / → | Troca a janela em foco com a anterior / a próxima |
-| Win + Alt + ↓ | Reorganiza tudo e devolve todas as janelas à grade |
-| Win + Alt + ↑ | Reservado, não faz nada: apenas impede o Windows de encaixar a janela na metade de cima da tela |
+| Win + Ctrl + G | Troca o layout: automático, colunas, linhas, grade, principal à esquerda, principal em cima |
+| Win + Ctrl + T | Tira a janela em foco da grade (ela fica onde está e as outras ocupam o espaço); apertar de novo devolve à grade |
+| Win + Alt + F | Modo foco: todas as janelas do monitor ocupam a tela toda; apertar de novo sai do modo |
+| Win + Alt + ← / → | Move a janela em foco para a esquerda / direita: troca de lugar com a janela vizinha daquele lado, qualquer que seja o layout (não faz nada se não houver) |
+| Win + Alt + ↑ / ↓ | Sobe / desce a janela em foco: troca de lugar com a janela logo acima / abaixo dela (não faz nada se não houver) |
+| Win + Alt + Home | Reorganiza tudo e devolve todas as janelas à grade |
 
-Os atalhos com Win + Alt podem trocar de modificador nas configurações (Ctrl+Alt, Ctrl+Alt+Shift
-ou Alt+Shift) caso outro programa já os use; reinicie o mod depois de mudar. Win+Ctrl+G e Win+Ctrl+T são
-os padrões e podem ser trocados nas configurações (campos de texto como "Ctrl+Alt+G" ou "Win+T";
-deixe vazio para desligar o atalho). Atalhos indisponíveis aparecem no log do Windhawk
-(erro 1409 = já em uso).
+Todos os atalhos podem ser trocados nas configurações, e a mudança vale assim que você salva:
+- **Layout, soltar/prender e reorganizar** têm campos de texto próprios (por exemplo `Ctrl+Alt+G`,
+  `Win+T` ou `Alt+Home`). Escreva os modificadores (Ctrl, Alt, Shift, Win) e uma tecla: uma letra,
+  um dígito, ou Up, Down, Left, Right, Home ou End. Deixe o campo vazio para desligar o atalho.
+- **Modo foco e as quatro setas** compartilham uma única escolha de modificadores: Win+Alt
+  (padrão), Ctrl+Alt, Ctrl+Alt+Shift ou Alt+Shift.
+- Evite combinações sem Win ou Ctrl: elas tiram a tecla de todos os outros apps.
 
-Win + Ctrl + T também é o atalho padrão do Always On Top do PowerToys: se você usa os dois, troque um deles.
+Atalhos que não puderem ser registrados aparecem no log do Windhawk (erro 1409 = já em uso).
+Win + Ctrl + T também é o atalho padrão do Always On Top do PowerToys: se você usa os dois, troque
+um deles.
+
+#### Assumir atalhos que já estão em uso
+O próprio Windows usa algumas dessas combinações (Win + Alt + ↑ encaixa a janela na metade de cima
+da tela). Quando um atalho já está ocupado, a opção *Assumir atalhos* (ligada por padrão) faz o mod
+capturar essa combinação com um gancho de teclado de baixo nível, e o outro programa ou o Windows
+deixa de recebê-la. Desligue a opção se não quiser que o mod sobrescreva atalhos de outros
+programas; a combinação fica então indisponível e é registrada no log. O gancho só existe enquanto o
+mod está ligado, e só para as combinações que já estavam ocupadas.
 
 ### Funciona junto com outros mods de animação
 O Adaptive Windows funciona junto com estes dois mods:
-Adaptive Windows works together with these two mods:
 
-- **MacOS Minimize Animation** (genie effect for minimize, restore and open).
+- **MacOS Minimize Animation** (efeito genie ao minimizar, restaurar e abrir).
 
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
+![Adaptive Windows com o MacOS Minimize Animation](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
 
 - **Windows Animations**.
 
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
+![Adaptive Windows com o Windows Animations](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
 
 Esses mods escondem a janela e tocam a animação sozinhos. Com *Sincronizar com animações de
 abrir/fechar* ligado, o Adaptive Windows percebe isso, posiciona a janela no espaço final enquanto
@@ -218,15 +253,16 @@ O estilo **Nava OS** é a base (curva de saída forte, janela nova entra desliza
 Há também os estilos Suave (entra deslizando de cima), Rápido (sem efeito de entrada) e Elástico
 (entra de baixo com leve ressalto). Durante o movimento a janela mantém o tamanho (como ao
 arrastar): as que diminuem encolhem no início e as que crescem só crescem no final, sem
-sobreposição. A taxa de quadros pode seguir o DWM (recomendado) ou ser fixada.
+sobreposição. A taxa de quadros pode seguir o DWM (recomendado), seguir a maior taxa de
+atualização entre os monitores, ou ser fixa (de 30 a 240 Hz).
 
 ### Barra de tarefas e dock
 A área útil é a área de trabalho do Windows. A **Margem da borda da tela** vale para os quatro
 lados. Se a barra de tarefas estiver escondida, as janelas respeitam apenas a borda da tela.
 **Espaço embaixo** (0 = automático) serve para docks desenhados por outro mod: informe a distância
-da borda da tela até o topo do dock. A barra de tarefas pode ficar em qualquer lado de qualquer monitor: a grade segue a área
-de trabalho do Windows e é refeita quando um monitor é conectado ou removido, a resolução muda, ou a
-barra é movida ou muda a opção de ocultar automaticamente.
+da borda da tela até o topo do dock. A barra de tarefas pode ficar em qualquer lado de qualquer
+monitor: a grade segue a área de trabalho do Windows e é refeita quando um monitor é conectado ou
+removido, a resolução muda, ou a barra é movida ou muda a opção de ocultar automaticamente.
 
 ### Cantos
 Usa a preferência de cantos do próprio Windows 11 (padrão, arredondado, pequeno, quadrado).
@@ -235,11 +271,15 @@ O Windows não permite raio arbitrário por esta via. Se você já usa um mod de
 os cantos.
 
 ### Janelas ignoradas e limites
+- As configurações valem assim que você as salva, sem reiniciar o mod. Mudar a lista de
+  **Janelas a ignorar** também tira janelas da grade (ou as traz) na hora.
 - Ficam fora da grade janelas de ferramenta, sempre no topo, sem foco, sem moldura redimensionável
   (por exemplo, painéis e widgets), e as da lista **Janelas a ignorar** (parte do título ou da
-  classe, separadas por ponto e vírgula). A lista vem vazia por padrão.
+  classe, separadas por ponto e vírgula). A lista vem vazia por padrão. O log do Windhawk diz por
+  que cada janela foi ignorada.
 - Janelas que não aceitam ser posicionadas (um caso provável são programas executados como
-  administrador) passam a flutuar depois de algumas tentativas; Win + Alt + ↓ tenta de novo.
+  administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home tenta de novo.
+- Mover janelas pelo teclado só considera janelas do mesmo monitor.
 */
 // ==/WindhawkModReadme==
 
@@ -342,18 +382,23 @@ os cantos.
   $description: "If a new window appears hidden by another mod (DWM cloak), it is placed in its final slot right away, without its own animation, while the other windows make room at the same time. This way the other mod's animation already lands in the right place."
   $description:pt-BR: "Se uma janela nova aparece escondida por outro mod (cloak do DWM), ela é posicionada no lugar final na hora, sem animação própria, enquanto as outras abrem espaço ao mesmo tempo. Assim a animação do outro mod acontece já no lugar certo."
 - layoutHotkey: "Win+Ctrl+G"
-  $name: Hotkey to cycle the layout (restart the mod after changing)
-  $name:pt-BR: Atalho para trocar de layout (reinicie o mod ao mudar)
+  $name: Hotkey to cycle the layout
+  $name:pt-BR: Atalho para trocar de layout
   $description: "Write modifiers and a key, such as Win+Ctrl+G, Ctrl+Alt+L or Win+Shift+G. Accepted modifiers: Ctrl, Alt, Shift, Win. Leave empty to turn it off. If it shows as unavailable in the log (error 1409), another program already uses that combination. Avoid combinations without Win or Ctrl: they take the key away from every other app."
   $description:pt-BR: "Escreva modificadores e tecla, como Win+Ctrl+G, Ctrl+Alt+L ou Win+Shift+G. Modificadores aceitos: Ctrl, Alt, Shift, Win. Deixe vazio para desligar. Se aparecer como indisponível no log (erro 1409), outro programa já usa essa combinação. Evite combinações sem Win ou Ctrl: elas tiram a tecla de todos os outros apps."
 - floatHotkey: "Win+Ctrl+T"
-  $name: Hotkey to float/re-tile the focused window (restart the mod after changing)
-  $name:pt-BR: Atalho para soltar/prender a janela em foco (reinicie o mod ao mudar)
+  $name: Hotkey to float/re-tile the focused window
+  $name:pt-BR: Atalho para soltar/prender a janela em foco
   $description: "Same format as the layout hotkey. Leave empty to turn it off."
   $description:pt-BR: "Mesmo formato do atalho de layout. Deixe vazio para desligar."
+- retileHotkey: "Win+Alt+Home"
+  $name: Hotkey to re-arrange all windows
+  $name:pt-BR: Atalho para reorganizar todas as janelas
+  $description: "Re-arranges everything and puts all windows back in the grid. Same format as the other hotkeys (for example Alt+Home or Win+Alt+Home); the key can also be Up, Down, Left, Right, Home or End. Leave empty to turn it off."
+  $description:pt-BR: "Reorganiza tudo e devolve todas as janelas à grade. Mesmo formato dos outros atalhos (por exemplo Alt+Home ou Win+Alt+Home); a tecla também pode ser Up, Down, Left, Right, Home ou End. Deixe vazio para desligar."
 - hotkeys: winalt
-  $name: Modifiers of the other hotkeys (restart the mod after changing)
-  $name:pt-BR: Modificadores dos atalhos (reinicie o mod ao mudar)
+  $name: Modifiers of the other hotkeys
+  $name:pt-BR: Modificadores dos atalhos
   $description: "If the hotkeys show as unavailable in the log (error 1409), another program already uses these keys. Change them here."
   $description:pt-BR: "Se os atalhos aparecerem como indisponíveis no log (erro 1409), outro programa já usa essas teclas. Troque aqui."
   $options:
@@ -361,6 +406,11 @@ os cantos.
   - ctrlalt: Ctrl+Alt
   - ctrlaltshift: Ctrl+Alt+Shift
   - altshift: Alt+Shift
+- forceHotkeys: true
+  $name: Take over hotkeys that Windows or another program already uses (keyboard hook)
+  $name:pt-BR: Assumir atalhos que o Windows ou outro programa já usa (gancho de teclado)
+  $description: "If a hotkey cannot be registered because it is already in use (error 1409 in the log, which happens with Win+Alt+Up), the mod catches that key combination itself with a low-level keyboard hook and keeps it from the other program. Turn it off if you do not want the mod to override other programs' shortcuts."
+  $description:pt-BR: "Se um atalho não puder ser registrado porque já está em uso (erro 1409 no log, o que acontece com Win+Alt+Seta para cima), o mod captura essa combinação sozinho com um gancho de teclado e não deixa o outro programa recebê-la. Desligue se não quiser que o mod sobrescreva atalhos de outros programas."
 - borderColor: "7B8CFF"
   $name: Focused window border color (RGB hex; empty = off)
   $name:pt-BR: Cor da borda da janela em foco (RGB hex; vazio = desligado)
@@ -495,6 +545,12 @@ static bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
             else if (tok == L"alt") m |= MOD_ALT;
             else if (tok == L"shift") m |= MOD_SHIFT;
             else if (tok == L"win") m |= MOD_WIN;
+            else if (tok == L"up") key = VK_UP;
+            else if (tok == L"home") key = VK_HOME;
+            else if (tok == L"end") key = VK_END;
+            else if (tok == L"down") key = VK_DOWN;
+            else if (tok == L"left") key = VK_LEFT;
+            else if (tok == L"right") key = VK_RIGHT;
             else if (tok.size() == 1 && iswalnum(tok[0])) key = (UINT)towupper(tok[0]);
             else if (!tok.empty()) return false;
             tok.clear();
@@ -664,7 +720,7 @@ static DWORD g_threadId = 0;
 static std::atomic<bool> g_stop{false};
 
 static const UINT WM_APP_RELOAD = WM_APP + 1;
-static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_BLOCK = 7;
+static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_UP = 7, HK_DOWN = 8;
 
 static int FindItem(HWND h) {
     for (size_t i = 0; i < g_items.size(); i++)
@@ -1994,17 +2050,54 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObj
 // Atalhos
 // ---------------------------------------------------------------------------
 
-static void SwapFocused(int dir) {
+// Move a janela em foco na direção da seta: troca de lugar com a janela vizinha naquele lado, procurada pela
+// posição real na tela (mesmo monitor), qualquer que seja o layout. dir: 0 = cima, 1 = esquerda, 2 = direita, 3 = baixo.
+static void SwapFocusedDir(int dir) {
     HWND fg = GetForegroundWindow();
     int i = FindItem(fg);
     if (i < 0 || g_items[i].floating) return;
-    int j = i;
-    for (;;) {
-        j += dir;
-        if (j < 0 || j >= (int)g_items.size()) return;
-        if (!g_items[j].floating && g_items[j].mon == g_items[i].mon) break;
+    if (g_items[i].to.right <= g_items[i].to.left) return;  // ainda sem posição final calculada
+    auto vis = [&](const Item& it) {
+        RECT r = it.to;
+        r.left += it.lastInset.left; r.top += it.lastInset.top;
+        r.right -= it.lastInset.right; r.bottom -= it.lastInset.bottom;
+        return r;
+    };
+    const RECT t = vis(g_items[i]);
+    int best = -1;
+    LONG bestGap = LONG_MAX, bestOv = 0;
+    for (size_t j = 0; j < g_items.size(); j++) {
+        if ((int)j == i) continue;
+        const Item& o = g_items[j];
+        if (o.floating || o.mon != g_items[i].mon || IsZoomed(o.h) || IsIconic(o.h) || o.to.right <= o.to.left) continue;
+        const RECT r = vis(o);
+        LONG ov, gap;
+        if (dir == 0) {  // cima: sobreposta na horizontal e acima
+            ov = std::min(r.right, t.right) - std::max(r.left, t.left);
+            if (r.top >= t.top) continue;
+            gap = t.top - r.bottom;
+        } else if (dir == 1) {  // esquerda: sobreposta na vertical e à esquerda
+            ov = std::min(r.bottom, t.bottom) - std::max(r.top, t.top);
+            if (r.left >= t.left) continue;
+            gap = t.left - r.right;
+        } else if (dir == 2) {  // direita
+            ov = std::min(r.bottom, t.bottom) - std::max(r.top, t.top);
+            if (r.left <= t.left) continue;
+            gap = r.left - t.right;
+        } else {  // baixo: sobreposta na horizontal e abaixo
+            ov = std::min(r.right, t.right) - std::max(r.left, t.left);
+            if (r.top <= t.top) continue;
+            gap = r.top - t.bottom;
+        }
+        if (ov <= 0 || gap < -4) continue;  // não é vizinha daquele lado (gap negativo = sobrepõe)
+        if (gap < bestGap || (gap == bestGap && ov > bestOv)) { best = (int)j; bestGap = gap; bestOv = ov; }
     }
-    SwapItems((size_t)i, (size_t)j);
+    if (best < 0) {
+        Wh_Log(L"Atalho mover janela (%s): nao ha janela desse lado da que esta em foco",
+               dir == 0 ? L"cima" : dir == 1 ? L"esquerda" : dir == 2 ? L"direita" : L"baixo");
+        return;
+    }
+    SwapItems((size_t)i, (size_t)best);
     Retile();
 }
 
@@ -2047,9 +2140,10 @@ static void OnHotkey(int id) {
             Retile();
             break;
         }
-        case HK_BLOCK: break;  // só impede o Windows de tratar a combinação (encaixe na metade de cima)
-        case HK_LEFT: SwapFocused(-1); break;
-        case HK_RIGHT: SwapFocused(+1); break;
+        case HK_UP: SwapFocusedDir(0); break;
+        case HK_LEFT: SwapFocusedDir(1); break;
+        case HK_RIGHT: SwapFocusedDir(2); break;
+        case HK_DOWN: SwapFocusedDir(3); break;
         case HK_RETILE:
             ResetWeights();
             for (auto& it : g_items) { it.lW = it.lH = 0; it.learned = 0; }
@@ -2224,6 +2318,106 @@ static void RunDisplayRetile() {
     Retile();
 }
 
+struct HotkeyDef { int id; UINT mods, vk; };
+static std::vector<HotkeyDef> g_keys;
+
+// Atalhos que o RegisterHotKey recusou (erro 1409: o Windows ou outro programa já os registrou, como o
+// Win+Alt+Seta para cima). Quando a opção está ligada, um gancho de teclado de baixo nível os captura
+// antes do sistema e avisa a thread de trabalho.
+static const UINT WM_APP_LLHK = WM_APP + 2;
+static std::vector<HotkeyDef> g_hookKeys;
+static HHOOK g_kbHook = nullptr;
+static DWORD g_hookThread = 0;
+static int g_hookHeldId = 0;  // atalho do gancho com a tecla ainda pressionada (evita repetir ao segurar)
+
+static bool KeyIsDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+static LRESULT CALLBACK LowLevelKbProc(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION) {
+        const KBDLLHOOKSTRUCT* k = (const KBDLLHOOKSTRUCT*)lp;
+        if (!(k->flags & LLKHF_INJECTED)) {  // ignora o que o próprio mod injeta
+            const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
+            const bool up = wp == WM_KEYUP || wp == WM_SYSKEYUP;
+            for (const auto& hk : g_hookKeys) {
+                if (k->vkCode != hk.vk) continue;
+                if (down) {
+                    UINT now = 0;
+                    if (KeyIsDown(VK_CONTROL)) now |= MOD_CONTROL;
+                    if (KeyIsDown(VK_MENU)) now |= MOD_ALT;
+                    if (KeyIsDown(VK_SHIFT)) now |= MOD_SHIFT;
+                    if (KeyIsDown(VK_LWIN) || KeyIsDown(VK_RWIN)) now |= MOD_WIN;
+                    if (now != (hk.mods & 0xF)) continue;  // só vale com exatamente esses modificadores
+                    if (g_hookHeldId != hk.id) {
+                        g_hookHeldId = hk.id;
+                        PostThreadMessageW(g_hookThread, WM_APP_LLHK, (WPARAM)hk.id, 0);
+                        // tecla "vazia" no meio da combinação: impede que soltar Win/Alt abra o menu Iniciar ou a barra de menus
+                        INPUT in[2] = {};
+                        in[0].type = in[1].type = INPUT_KEYBOARD;
+                        in[0].ki.wVk = in[1].ki.wVk = 0xFF;
+                        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                        SendInput(2, in, sizeof(INPUT));
+                    }
+                    return 1;  // engole a tecla: o Windows não a recebe
+                }
+                if (up && g_hookHeldId == hk.id) { g_hookHeldId = 0; return 1; }
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+static void UnregisterHotkeys() {
+    for (auto& k : g_keys) UnregisterHotKey(nullptr, k.id);
+    g_keys.clear();
+    if (g_kbHook) { UnhookWindowsHookEx(g_kbHook); g_kbHook = nullptr; }
+    g_hookKeys.clear();
+    g_hookHeldId = 0;
+}
+
+// Registra os atalhos a partir das configurações; pode ser chamada de novo quando elas mudam.
+static void RegisterHotkeys() {
+    UnregisterHotkeys();
+    std::wstring hk = GetStr(L"hotkeys");
+    UINT mods = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
+    if (hk == L"ctrlalt") mods = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
+    else if (hk == L"altshift") mods = MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
+    else if (hk == L"ctrlaltshift") mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
+    g_keys = {{HK_MONOCLE, mods, 'F'}, {HK_LEFT, mods, VK_LEFT}, {HK_RIGHT, mods, VK_RIGHT},
+              {HK_UP, mods, VK_UP}, {HK_DOWN, mods, VK_DOWN}};
+    {
+        UINT m2, k2;
+        if (ParseHotkey(GetStr(L"layoutHotkey"), &m2, &k2)) g_keys.push_back({HK_LAYOUT, m2, k2});
+        else if (!GetStr(L"layoutHotkey").empty()) Wh_Log(L"Atalho de layout invalido: use algo como Win+Ctrl+G");
+        if (ParseHotkey(GetStr(L"retileHotkey"), &m2, &k2)) g_keys.push_back({HK_RETILE, m2, k2});
+        else if (!GetStr(L"retileHotkey").empty()) Wh_Log(L"Atalho de reorganizar invalido: use algo como Alt+Home");
+        if (ParseHotkey(GetStr(L"floatHotkey"), &m2, &k2)) g_keys.push_back({HK_FLOAT, m2, k2});
+        else if (!GetStr(L"floatHotkey").empty()) Wh_Log(L"Atalho de soltar janela invalido: use algo como Win+Ctrl+T");
+    }
+    const bool force = Wh_GetIntSetting(L"forceHotkeys") != 0;
+    for (auto& k : g_keys) {
+        if (RegisterHotKey(nullptr, k.id, k.mods, k.vk)) {
+            Wh_Log(L"Atalho registrado (id %d, tecla %u, modificadores %x)", k.id, k.vk, k.mods & 0xff);
+        } else {
+            DWORD err = GetLastError();
+            if (err == ERROR_HOTKEY_ALREADY_REGISTERED && force) {
+                g_hookKeys.push_back(k);
+                Wh_Log(L"Atalho (id %d, tecla %u, modificadores %x) ja usado por outro programa: assumido pelo gancho de teclado",
+                       k.id, k.vk, k.mods & 0xff);
+            } else
+                Wh_Log(L"Atalho (tecla %u) indisponivel (erro %lu; 1409 = ja registrado por outro programa/instancia)",
+                       k.vk, err);
+        }
+    }
+    if (!g_hookKeys.empty()) {
+        g_hookThread = GetCurrentThreadId();
+        g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbProc, GetModuleHandleW(nullptr), 0);
+        if (!g_kbHook) {
+            Wh_Log(L"Nao foi possivel instalar o gancho de teclado (erro %lu)", GetLastError());
+            g_hookKeys.clear();
+        }
+    }
+}
+
 static DWORD WINAPI Worker(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg;
@@ -2237,28 +2431,7 @@ static DWORD WINAPI Worker(LPVOID) {
     hooks[4] = SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     hooks[5] = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
 
-    std::wstring hk = GetStr(L"hotkeys");
-    UINT mods = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
-    if (hk == L"ctrlalt") mods = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
-    else if (hk == L"altshift") mods = MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
-    else if (hk == L"ctrlaltshift") mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
-    struct HK { int id; UINT mods, vk; };
-    std::vector<HK> keys = {{HK_MONOCLE, mods, 'F'}, {HK_LEFT, mods, VK_LEFT}, {HK_RIGHT, mods, VK_RIGHT}, {HK_RETILE, mods, VK_DOWN},
-                           {HK_BLOCK, mods, VK_UP}};  // reservada sem ação: com Win+Alt o Windows encaixaria a janela na metade de cima
-    {
-        UINT m2, k2;
-        if (ParseHotkey(GetStr(L"layoutHotkey"), &m2, &k2)) keys.push_back({HK_LAYOUT, m2, k2});
-        else if (!GetStr(L"layoutHotkey").empty()) Wh_Log(L"Atalho de layout invalido: use algo como Win+Ctrl+G");
-        if (ParseHotkey(GetStr(L"floatHotkey"), &m2, &k2)) keys.push_back({HK_FLOAT, m2, k2});
-        else if (!GetStr(L"floatHotkey").empty()) Wh_Log(L"Atalho de soltar janela invalido: use algo como Win+Ctrl+T");
-    }
-    for (auto& k : keys) {
-        if (RegisterHotKey(nullptr, k.id, k.mods, k.vk)) {
-            Wh_Log(L"Atalho registrado (id %d, tecla %u, modificadores %x)", k.id, k.vk, k.mods & 0xff);
-        } else
-            Wh_Log(L"Atalho (tecla %u) indisponivel (erro %lu; 1409 = ja registrado por outro programa/instancia)",
-                   k.vk, GetLastError());
-    }
+    RegisterHotkeys();
 
     UpdateInterval();
     g_frameTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
@@ -2275,11 +2448,29 @@ static DWORD WINAPI Worker(LPVOID) {
         double tA = NowMs();
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) { g_stop = true; break; }
-            if (msg.message == WM_HOTKEY) {
+            if (msg.message == WM_HOTKEY || msg.message == WM_APP_LLHK) {
                 OnHotkey((int)msg.wParam);
             } else if (msg.message == WM_APP_RELOAD) {
+                Wh_Log(L"Configuracoes alteradas: recarregando");
                 LoadSettings();  // g_cfg and friends are only touched by this thread after startup
                 UpdateInterval();
+                RegisterHotkeys();  // atalhos novos valem na hora, sem reiniciar o mod
+                {
+                    // a lista de janelas ignoradas mudou: tira da grade as que passaram a constar nela...
+                    std::vector<HWND> drop;
+                    for (const auto& it : g_items) {
+                        wchar_t cls[64] = L"";
+                        GetClassNameW(it.h, cls, 64);
+                        if (IsIgnored(it.h, cls)) drop.push_back(it.h);
+                    }
+                    for (HWND h : drop) {
+                        OnRemove(h);  // (registra a janela como "minimizada"; aqui ela só foi ignorada)
+                        g_minimized.erase(std::remove_if(g_minimized.begin(), g_minimized.end(),
+                                                         [&](const MinEntry& e) { return e.h == h; }),
+                                          g_minimized.end());
+                    }
+                    EnumWindows(EnumProc, 0);  // ...e traz as que deixaram de constar
+                }
                 ResetWeights();
                 for (auto& it : g_items) it.to = RECT{0, 0, 0, 0};
                 UpdateBorder(GetForegroundWindow());
@@ -2322,7 +2513,7 @@ static DWORD WINAPI Worker(LPVOID) {
 
     // limpeza
     if (g_frameTimer) { CloseHandle(g_frameTimer); g_frameTimer = nullptr; }
-    for (auto& k : keys) UnregisterHotKey(nullptr, k.id);
+    UnregisterHotkeys();
     for (auto h : hooks) if (h) UnhookWinEvent(h);
     for (auto& it : g_items) {
         SetBorder(it.h, false);
