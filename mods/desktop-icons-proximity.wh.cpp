@@ -2,7 +2,7 @@
 // @id              desktop-icons-proximity
 // @name            Desktop Icons Proximity Reveal
 // @description     Hide desktop icons until you hover over them or a custom area, with smooth fades and separate icon groups.
-// @version         1.0.2
+// @version         1.0.3
 // @author          CTabdul15
 // @github          https://github.com/CTabdul15
 // @include         explorer.exe
@@ -13,6 +13,8 @@
 // ==WindhawkModReadme==
 /*
 # Desktop Icons Proximity Reveal
+
+![Desktop Icons Proximity Reveal demo](https://raw.githubusercontent.com/CTabdul15/windhawk-mods/assets/desktop-icons-proximity-preview.gif)
 
 Hide desktop icons when you are not using them. Hover near an icon or over a
 custom area to fade them back in.
@@ -33,16 +35,34 @@ Features:
 
 ## Setup
 
-1. Click **Edit boxes** in the control panel.
-2. Drag around your icons to add areas.
-3. Click **Save & apply**.
+1. Enable **Show box editor panel** in Settings and apply.
+2. Click **Edit boxes**. All icons appear, including those outside saved areas.
+   Drag around your icons to add areas.
+3. Click **Save & apply** or **Cancel** to restore normal hiding.
+   Switch the panel setting off to close it.
 
-Use **Show box editor panel** in Settings to open or close the panel. Separate
-groups are enabled by default. Without active areas, hovering near any icon
+The panel stays closed at startup. If its setting is already on, switch it off
+and on again to reopen it.
+
+Separate groups are enabled by default. Without active areas, hovering near any icon
 shows all icons. Recycle Bin and folders work too.
 
-**Note:** Requires Windows 10/11 x64. Keep Windows' **Show desktop icons** enabled
-and disable other icon hiding tools. Redraw your areas after changing monitors.
+## How this differs from other mods
+
+[Desktop Icon Section Auto-Hide](https://windhawk.net/mods/desktop-icon-section-autohide)
+uses a single section or box. This mod adds up to 32 separately animated areas,
+a drag-to-draw editor, and temporary visibility for newly created items.
+[Flashlight Desktop Icons](https://windhawk.net/mods/flashlight-desktop-icons) and
+[Spotlight](https://windhawk.net/mods/transparent-desktop-icons-spotlight) reveal
+icons near the cursor rather than inside saved groups.
+[Smooth Desktop Icons Auto-Hide](https://windhawk.net/mods/smooth-desktop-icons-auto-hide)
+and [ZenDesktop](https://windhawk.net/mods/zen-desktop-toggle-icons) focus on hiding
+and restoring the desktop as a whole.
+
+**Note:** Requires Windows 10/11 x64. Keep Windows' **Show desktop icons** enabled.
+Hidden icons retain their Windows click targets; icons outside all boxes stay
+hidden unless selected, whitelisted, temporarily revealed, or accessed by keyboard.
+Redraw areas after changing monitors; avoid running other icon hiding mods.
 
 Rendering hooks adapted from [Desktop Icons Transparency by zed712969-crypto](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp).
 */
@@ -71,12 +91,12 @@ Rendering hooks adapted from [Desktop Icons Transparency by zed712969-crypto](ht
 - independentBoxes: true
   $name: Reveal each box independently
   $description: When enabled, hovering over a box reveals only the icons whose image centers are inside it. Other boxes stay hidden. Overlaps use the highest visibility. Requires active reveal boxes.
-- showEditorPanel: true
+- showEditorPanel: false
   $name: Show box editor panel
   $description: Enable and apply to open the editor control panel. Disable and apply to close it and cancel any unsaved drawing. The desktop is dimmed only after clicking Edit boxes. No keyboard shortcut is registered.
 - showPreview: false
   $name: Show box outlines
-  $description: Click-through preview of all active boxes. Updates when settings are applied. The panel also has a live Show outlines checkbox.
+  $description: Click-through preview of all active boxes. Updates when settings are applied. The panel checkbox saves its preview preference. Changing this setting overrides it.
 - manualBox: false
   $name: Use numeric box when saved boxes are inactive
   $description: Optional single numeric rectangle. Normally leave off and draw multiple boxes using the control panel.
@@ -104,15 +124,6 @@ Rendering hooks adapted from [Desktop Icons Transparency by zed712969-crypto](ht
 */
 // ==/WindhawkModSettings==
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-#ifndef _WIN32_IE
-#define _WIN32_IE 0x0A00
-#endif
-#include <windows.h>
 #include <commctrl.h>
 #include <algorithm>
 #include <atomic>
@@ -135,6 +146,24 @@ static thread_local bool g_inDesktopPaint = false;
 static thread_local bool g_inDirectHook = false;
 static thread_local bool g_inTextHook = false;
 
+static void WakeWorker() {
+    if (g_wake)
+        SetEvent(g_wake);
+}
+static void RequestDesktopUpdate() {
+    HWND list = g_list.load();
+    if (list && !g_stop.load())
+        PostMessageW(list, g_tick, 0, 0);
+    WakeWorker();
+}
+// Editor transitions are infrequent. Complete this UI-thread refresh before
+// showing the overlay so hidden icons are painted underneath it immediately.
+static void RefreshEditorDesktop() {
+    HWND list = g_list.load();
+    if (list && !g_stop.load())
+        SendMessageW(list, g_tick, 3, 0);
+    WakeWorker();
+}
 // Configuration is copied under a lock; all native UI state belongs to the
 // worker.
 static constexpr size_t kMaxBoxes = 32;
@@ -149,7 +178,7 @@ static SRWLOCK g_boxLock = SRWLOCK_INIT;
 static BoxState g_boxState{};
 static RECT g_numericBox{0, 0, 350, 1000};
 static std::atomic<bool> g_manualBox{false}, g_preview{false},
-    g_showControls{true};
+    g_showControls{false};
 static std::atomic<bool> g_editorActive{false}, g_panelRequest{false};
 static std::atomic<unsigned> g_previewRevision{1};
 static HWND g_outlineWindow = nullptr, g_editorWindow = nullptr,
@@ -201,6 +230,7 @@ static void CommitState(const BoxState& state) {
     g_boxState = state;
     ReleaseSRWLockExclusive(&g_boxLock);
     ++g_previewRevision;
+    RequestDesktopUpdate();
 }
 static std::vector<RECT> ActiveBoxes() {
     std::vector<RECT> boxes;
@@ -213,7 +243,6 @@ static std::vector<RECT> ActiveBoxes() {
     ReleaseSRWLockShared(&g_boxLock);
     return boxes;
 }
-static bool InRevealArea(HWND w, POINT p);
 static bool StoreState(const BoxState& state) {
     // One complete snapshot, then a readback. A failed save never silently
     // applies.
@@ -286,11 +315,13 @@ static void CloseEditor() {
         g_editorWindow = nullptr;
     }
     ++g_previewRevision;
+    RefreshEditorDesktop();
 }
-static void ShowPanel() {
+static void ShowPanel(bool activate = true) {
     if (g_panel) {
-        ShowWindow(g_panel, SW_SHOW);
-        SetForegroundWindow(g_panel);
+        ShowWindow(g_panel, activate ? SW_SHOW : SW_SHOWNOACTIVATE);
+        if (activate)
+            SetForegroundWindow(g_panel);
     }
 }
 static void SaveEditor() {
@@ -305,10 +336,6 @@ static void SaveEditor() {
     if (!StoreState(next)) {
         UpdatePanel(
             L"SAVE FAILED: Windhawk could not store/verify the boxes.\r\nYour edits remain open. Try again; Cancel keeps the previous active boxes.");
-        MessageBoxW(
-            g_panel,
-            L"Could not save and verify the boxes. Your edits remain open and have not been applied.",
-            L"Save failed", MB_OK | MB_ICONERROR);
         return;
     }
     CommitState(next);
@@ -319,7 +346,7 @@ static void SaveEditor() {
         success, ARRAYSIZE(success), L"Saved and applied %u box(es).\r\n%ls",
         (unsigned)next.count,
         next.count
-            ? L"Entering ANY box now reveals ALL desktop icons."
+            ? L"Saved boxes are active. Visibility follows your reveal settings."
             : L"No boxes remain. Icon proximity is active unless the numeric box is enabled.");
     UpdatePanel(success);
 }
@@ -436,6 +463,8 @@ static void StartEditor() {
         return;
     }
     g_editorActive = true;
+    ++g_previewRevision;
+    RefreshEditorDesktop();
     // An owned toolbar stays above the overlay even after clicking the overlay.
     SetWindowLongPtrW(g_panel, GWLP_HWNDPARENT,
                       reinterpret_cast<LONG_PTR>(g_editorWindow));
@@ -465,6 +494,47 @@ static HWND AddControl(HWND parent,
                  TRUE);
     return control;
 }
+static HFONT g_panelFont = nullptr;
+static HWND g_hideButton = nullptr;
+static void LayoutPanel(HWND window) {
+    UINT dpi = GetDpiForWindow(window);
+    NONCLIENTMETRICSW metrics{};
+    metrics.cbSize = sizeof(metrics);
+    LOGFONTW font{};
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics),
+                                   &metrics, 0, dpi))
+        font = metrics.lfMessageFont;
+    else {
+        font.lfHeight = -MulDiv(9, dpi, 72);
+        wcscpy_s(font.lfFaceName, L"Segoe UI");
+    }
+    HFONT nextFont = CreateFontIndirectW(&font);
+    struct ControlPosition {
+        HWND handle;
+        int x, y, width, height;
+    };
+    ControlPosition controls[] = {
+        {g_status, 12, 12, 536, 52},      {g_editButton, 12, 76, 124, 30},
+        {g_saveButton, 144, 76, 124, 30}, {g_cancelButton, 276, 76, 84, 30},
+        {g_undoButton, 368, 76, 88, 30},  {g_clearButton, 464, 76, 84, 30},
+        {g_modeButton, 12, 118, 190, 30}, {g_previewButton, 220, 118, 160, 30},
+        {g_hideButton, 424, 118, 124, 30}};
+    for (const auto& item : controls) {
+        SetWindowPos(item.handle, nullptr, MulDiv(item.x, dpi, 96),
+                     MulDiv(item.y, dpi, 96), MulDiv(item.width, dpi, 96),
+                     MulDiv(item.height, dpi, 96),
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        if (nextFont)
+            SendMessageW(item.handle, WM_SETFONT,
+                         reinterpret_cast<WPARAM>(nextFont), TRUE);
+    }
+    if (nextFont) {
+        if (g_panelFont)
+            DeleteObject(g_panelFont);
+        g_panelFont = nextFont;
+    }
+}
+
 static LRESULT CALLBACK PanelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_CREATE) {
         g_status = AddControl(w, L"STATIC", L"", SS_LEFT, 12, 12, 536, 52, 0);
@@ -489,9 +559,24 @@ static LRESULT CALLBACK PanelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         g_previewButton =
             AddControl(w, L"BUTTON", L"Show outlines",
                        BS_AUTOCHECKBOX | WS_TABSTOP, 220, 118, 160, 30, 107);
-        AddControl(w, L"BUTTON", L"Hide panel", BS_PUSHBUTTON | WS_TABSTOP, 424,
-                   118, 124, 30, 108);
+        g_hideButton =
+            AddControl(w, L"BUTTON", L"Hide panel", BS_PUSHBUTTON | WS_TABSTOP,
+                       424, 118, 124, 30, 108);
+        LayoutPanel(w);
         return 0;
+    }
+    if (msg == WM_DPICHANGED) {
+        auto rectangle = reinterpret_cast<RECT*>(lp);
+        SetWindowPos(w, nullptr, rectangle->left, rectangle->top,
+                     rectangle->right - rectangle->left,
+                     rectangle->bottom - rectangle->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        LayoutPanel(w);
+        return 0;
+    }
+    if (msg == WM_DESTROY && g_panelFont) {
+        DeleteObject(g_panelFont);
+        g_panelFont = nullptr;
     }
     if (msg == WM_COMMAND && HIWORD(wp) == BN_CLICKED) {
         switch (LOWORD(wp)) {
@@ -534,9 +619,16 @@ static LRESULT CALLBACK PanelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
             case 107:
                 g_preview = SendMessageW(g_previewButton, BM_GETCHECK, 0, 0) ==
                             BST_CHECKED;
+                Wh_SetIntValue(L"previewOverride", g_preview.load() ? 1 : 0);
                 ++g_previewRevision;
+                RequestDesktopUpdate();
                 break;
             case 108:
+                if (g_editorActive.load()) {
+                    CloseEditor();
+                    UpdatePanel(
+                        L"Canceled. Previous saved boxes are unchanged.");
+                }
                 ShowWindow(w, SW_HIDE);
                 break;
         }
@@ -573,7 +665,7 @@ static std::vector<DesktopItem> g_knownItems;
 static std::vector<TemporaryItem> g_temporaryItems;
 static bool g_itemsInitialized = false;
 static int g_renameIndex = -1;
-static ULONGLONG g_lastItemScan = 0, g_suppressNewUntil = 0;
+static ULONGLONG g_suppressNewUntil = 0;
 static unsigned g_seenRulesRevision = 0, g_previousButtons = 0;
 static std::wstring NormalizeIconName(std::wstring name) {
     auto first = name.find_first_not_of(L" \t\r\n");
@@ -682,6 +774,11 @@ static bool GrantTemporary(const DesktopItem& identity, ULONGLONG now) {
             return false;
         }
     }
+    if (g_temporaryItems.empty()) {
+        g_previousButtons = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? 1 : 0) |
+                            ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? 2 : 0) |
+                            ((GetAsyncKeyState(VK_MBUTTON) & 0x8000) ? 4 : 0);
+    }
     g_temporaryItems.push_back({identity, NewItemDeadline(now)});
     return true;
 }
@@ -703,105 +800,142 @@ static int EditingItem(HWND list) {
     return g_renameIndex >= 0 ? g_renameIndex
                               : ListView_GetNextItem(list, -1, LVNI_FOCUSED);
 }
+// Cached item names and whitelist matches are rebuilt only after shell changes
+// or a rule change. Animation paints never request icon display names.
+static bool g_itemsDirty = true;
+static unsigned g_itemRetryBudget = 3;
+static ULONGLONG g_itemRetryAt = 0;
+static std::vector<bool> g_cachedWhitelist;
+static void MarkItemsDirty(HWND list) {
+    g_itemsDirty = true;
+    g_itemRetryBudget = 3;
+    if (list && !g_stop.load())
+        PostMessageW(list, g_tick, 0, 0);
+}
 static bool SpecialItemVisible(HWND list, int index) {
     if (g_keepSelectedVisible.load() &&
         (ListView_GetItemState(list, index, LVIS_SELECTED) & LVIS_SELECTED))
         return true;
-    // Editing is protected even if the new-item feature is disabled or times
-    // out.
     if (EditingItem(list) == index)
         return true;
-    auto identity = ReadDesktopItem(list, index);
-    return IsAlwaysVisible(identity.name) ||
-           IsTemporary(identity, GetTickCount64());
+    if (index < 0 || (size_t)index >= g_knownItems.size())
+        return false;
+    return ((size_t)index < g_cachedWhitelist.size() &&
+            g_cachedWhitelist[index]) ||
+           IsTemporary(g_knownItems[index], GetTickCount64());
+}
+static void RefreshItemCache(HWND list, ULONGLONG now) {
+    auto items = ReadDesktopSnapshot(list);
+    bool incomplete = false;
+    if (g_itemsInitialized) {
+        for (const auto& identity : items) {
+            bool known = false;
+            for (const auto& previous : g_knownItems) {
+                if (!previous.name.empty() &&
+                    SameDesktopItem(previous, identity)) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known)
+                GrantTemporary(identity, now);
+        }
+    }
+    g_cachedWhitelist.clear();
+    g_cachedWhitelist.reserve(items.size());
+    for (const auto& identity : items) {
+        incomplete |= identity.name.empty();
+        g_cachedWhitelist.push_back(IsAlwaysVisible(identity.name));
+    }
+    g_knownItems = std::move(items);
+    g_itemsInitialized = true;
+    g_itemsDirty = false;
+    g_itemRetryAt = 0;
+    if (incomplete && g_itemRetryBudget) {
+        --g_itemRetryBudget;
+        g_itemRetryAt = now + 150;
+    }
+    InvalidateRect(list, nullptr, TRUE);
 }
 static void UpdateItemPolicies(HWND list, ULONGLONG now) {
     bool changed = false;
     unsigned revision = g_rulesRevision.load();
     if (revision != g_seenRulesRevision) {
         g_seenRulesRevision = revision;
-        changed = true;
+        g_itemsDirty = true;
     }
+    if (g_itemsDirty || (g_itemRetryAt && now >= g_itemRetryAt))
+        RefreshItemCache(list, now);
     if (!g_revealNewItems.load() && !g_temporaryItems.empty()) {
         g_temporaryItems.clear();
         changed = true;
     }
-    unsigned buttons = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? 1 : 0) |
-                       ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? 2 : 0) |
-                       ((GetAsyncKeyState(VK_MBUTTON) & 0x8000) ? 4 : 0);
-    bool clicked = (buttons & ~g_previousButtons) != 0;
-    g_previousButtons = buttons;
     int editing = EditingItem(list);
-    if (clicked && g_dismissNewOnClick.load() && !g_temporaryItems.empty()) {
-        POINT p{};
-        GetCursorPos(&p);
-        HWND hitWindow = WindowFromPoint(p);
-        int hit = -1;
-        if (hitWindow == list || (hitWindow && IsChild(list, hitWindow))) {
-            if (hitWindow == ListView_GetEditControl(list))
-                hit = editing;
-            else {
-                ScreenToClient(list, &p);
-                LVHITTESTINFO test{};
-                test.pt = p;
-                hit = ListView_HitTest(list, &test);
+    if (editing >= 0 && (size_t)editing < g_knownItems.size())
+        changed |= GrantTemporary(g_knownItems[editing], now);
+    // The slow policy timer runs only while temporary items or editing exist.
+    if (!g_temporaryItems.empty() && g_dismissNewOnClick.load()) {
+        unsigned buttons = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? 1 : 0) |
+                           ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? 2 : 0) |
+                           ((GetAsyncKeyState(VK_MBUTTON) & 0x8000) ? 4 : 0);
+        bool clicked = (buttons & ~g_previousButtons) != 0;
+        g_previousButtons = buttons;
+        if (clicked) {
+            POINT p{};
+            GetCursorPos(&p);
+            HWND hitWindow = WindowFromPoint(p);
+            int hit = -1;
+            if (hitWindow == list || (hitWindow && IsChild(list, hitWindow))) {
+                if (hitWindow == ListView_GetEditControl(list))
+                    hit = editing;
+                else {
+                    ScreenToClient(list, &p);
+                    LVHITTESTINFO test{};
+                    test.pt = p;
+                    hit = ListView_HitTest(list, &test);
+                }
             }
-        }
-        DesktopItem clickedItem =
-            hit >= 0 ? ReadDesktopItem(list, hit) : DesktopItem{};
-        auto previousSize = g_temporaryItems.size();
-        std::erase_if(g_temporaryItems, [&](const TemporaryItem& item) {
-            return !SameDesktopItem(item.identity, clickedItem);
-        });
-        if (g_temporaryItems.size() != previousSize) {
-            changed = true;
-            g_suppressNewUntil = now + 500;
-            // Absorb any concurrent rename/reorder so a dismissed icon isn't
-            // re-added.
-            g_knownItems = ReadDesktopSnapshot(list);
-            g_itemsInitialized = true;
-            g_lastItemScan = now;
+            DesktopItem clickedItem =
+                hit >= 0 && (size_t)hit < g_knownItems.size()
+                    ? g_knownItems[hit]
+                    : DesktopItem{};
+            auto count = g_temporaryItems.size();
+            std::erase_if(g_temporaryItems, [&](const TemporaryItem& item) {
+                return !SameDesktopItem(item.identity, clickedItem);
+            });
+            if (g_temporaryItems.size() != count) {
+                changed = true;
+                g_suppressNewUntil = now + 500;
+                g_itemsDirty = true;
+            }
         }
     }
-    if (editing >= 0)
-        changed |= GrantTemporary(ReadDesktopItem(list, editing), now);
-    if (!g_itemsInitialized || now - g_lastItemScan >= 250) {
-        auto snapshot = ReadDesktopSnapshot(list);
-        if (g_itemsInitialized) {
-            for (const auto& identity : snapshot) {
-                bool known = false;
-                for (const auto& previous : g_knownItems)
-                    if (SameDesktopItem(previous, identity)) {
-                        known = true;
-                        break;
-                    }
-                if (!known)
-                    changed |= GrantTemporary(identity, now);
-            }
-        }
-        g_knownItems = std::move(snapshot);
-        g_itemsInitialized = true;
-        g_lastItemScan = now;
-        auto previousSize = g_temporaryItems.size();
-        std::erase_if(g_temporaryItems, [&](const TemporaryItem& item) {
-            if (item.until && now >= item.until)
-                return true;
-            for (const auto& identity : g_knownItems)
-                if (SameDesktopItem(item.identity, identity))
-                    return false;
+    auto count = g_temporaryItems.size();
+    std::erase_if(g_temporaryItems, [&](const TemporaryItem& item) {
+        if (item.until && now >= item.until)
             return true;
-        });
-        changed |= g_temporaryItems.size() != previousSize;
-    }
+        if (g_itemRetryAt)
+            return false;
+        for (const auto& identity : g_knownItems)
+            if (SameDesktopItem(item.identity, identity))
+                return false;
+        return true;
+    });
+    changed |= g_temporaryItems.size() != count;
     if (changed)
         InvalidateRect(list, nullptr, TRUE);
+    if (g_itemsDirty && !g_stop.load())
+        PostMessageW(list, g_tick, 0, 0);
 }
 static void ResetItemPolicies() {
     g_knownItems.clear();
+    g_cachedWhitelist.clear();
     g_temporaryItems.clear();
     g_itemsInitialized = false;
+    g_itemsDirty = true;
+    g_itemRetryBudget = 3;
+    g_itemRetryAt = 0;
     g_renameIndex = -1;
-    g_lastItemScan = 0;
     g_suppressNewUntil = 0;
     g_seenRulesRevision = 0;
     g_previousButtons = 0;
@@ -811,6 +945,7 @@ struct RegionFade {
     RECT box;
     double alpha;
     ULONGLONG lastInside;
+    double target = 0;
 };
 // All region animations and item drawing context live on the desktop UI thread.
 static std::vector<RegionFade> g_regions;
@@ -860,9 +995,8 @@ static bool UpdateRegions(const std::vector<RECT>& boxes,
             state.lastInside = now;
         bool delayed = state.lastInside != 0 &&
                        now - state.lastInside < (ULONGLONG)g_delay.load();
-        state.alpha = FadeToward(
-            state.alpha, (forceVisible || hovered || delayed) ? 100.0 : 0.0,
-            step);
+        state.target = (forceVisible || hovered || delayed) ? 100.0 : 0.0;
+        state.alpha = FadeToward(state.alpha, state.target, step);
         changed |= (int)std::lround(state.alpha) != before;
         next.push_back(state);
     }
@@ -901,7 +1035,8 @@ DesktopParentSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
                 InvalidateRect(list, nullptr, TRUE);
                 auto result = DefSubclassProc(w, msg, wp, lp);
                 if (result)
-                    g_renameIndex = -1;  // Shell rejected editing.
+                    g_renameIndex = -1;
+                MarkItemsDirty(list);
                 return result;
             }
             if (header->code == LVN_ENDLABELEDITW ||
@@ -913,7 +1048,7 @@ DesktopParentSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
                                    GetTickCount64());
                 auto result = DefSubclassProc(w, msg, wp, lp);
                 g_renameIndex = -1;
-                g_lastItemScan = 0;
+                MarkItemsDirty(list);
                 InvalidateRect(list, nullptr, TRUE);
                 return result;
             }
@@ -932,9 +1067,10 @@ DesktopParentSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
             }
             if (header->code == LVN_INSERTITEM) {
                 auto change = reinterpret_cast<NMLISTVIEW*>(lp);
-                GrantTemporary(ReadDesktopItem(list, change->iItem),
-                               GetTickCount64());
-                g_lastItemScan = 0;
+                if (g_itemsInitialized)
+                    GrantTemporary(ReadDesktopItem(list, change->iItem),
+                                   GetTickCount64());
+                MarkItemsDirty(list);
                 InvalidateRect(list, nullptr, TRUE);
             }
         }
@@ -964,16 +1100,43 @@ DesktopParentSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
             }
         }
     }
-    if (msg == WM_NCDESTROY)
+    if (msg == WM_NCDESTROY) {
         g_parent = nullptr;
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(w,
+                                                         DesktopParentSubclass);
+    }
     return DefSubclassProc(w, msg, wp, lp);
 }
 
-// These variables are accessed only on the desktop UI thread.
+// The following state is owned by the desktop UI thread.
 static ULONGLONG g_lastNear = 0, g_lastTick = 0;
 static double g_alpha = 100;
-static bool g_dragging = false;
-
+static bool g_dragging = false, g_mouseTracking = false;
+static char g_timerTokens[3];
+static bool g_timerRunning[3]{};
+static UINT_PTR DesktopTimerId(int index) {
+    return reinterpret_cast<UINT_PTR>(&g_timerTokens[index]);
+}
+static void SetDesktopTimer(HWND list, int index, bool needed, UINT interval) {
+    if (needed && !g_timerRunning[index])
+        g_timerRunning[index] =
+            SetTimer(list, DesktopTimerId(index), interval, nullptr) != 0;
+    else if (!needed && g_timerRunning[index]) {
+        KillTimer(list, DesktopTimerId(index));
+        g_timerRunning[index] = false;
+    }
+}
+static void StopDesktopTimers(HWND list) {
+    for (int i = 0; i < 3; ++i) {
+        KillTimer(list, DesktopTimerId(i));
+        g_timerRunning[i] = false;
+    }
+    if (g_mouseTracking) {
+        TRACKMOUSEEVENT track{sizeof(track), TME_CANCEL | TME_LEAVE, list, 0};
+        TrackMouseEvent(&track);
+        g_mouseTracking = false;
+    }
+}
 static void Repaint(HWND w) {
     InvalidateRect(w, nullptr, TRUE);
 }
@@ -992,13 +1155,11 @@ static bool IsDesktopSurface(HWND list, POINT p) {
 static bool NearAnyIcon(HWND w, POINT p) {
     ScreenToClient(w, &p);
     int count = ListView_GetItemCount(w);
-    // Per-monitor DPI; the setting remains consistent at common scaling levels.
     int radius = MulDiv(g_distance.load(), GetDpiForWindow(w), 96);
     for (int i = 0; i < count; ++i) {
         RECT r{};
         if (!ListView_GetItemRect(w, i, &r, LVIR_ICON))
             continue;
-        // Circular distance to the icon rectangle, not its entire row/cell.
         double dx =
             std::max({double(r.left - p.x), 0.0, double(p.x - r.right)});
         double dy =
@@ -1008,8 +1169,7 @@ static bool NearAnyIcon(HWND w, POINT p) {
     }
     return false;
 }
-static bool InRevealArea(HWND w, POINT p) {
-    auto boxes = ActiveBoxes();
+static bool InRevealArea(HWND w, POINT p, const std::vector<RECT>& boxes) {
     if (boxes.empty())
         return NearAnyIcon(w, p);
     for (const auto& r : boxes)
@@ -1018,103 +1178,143 @@ static bool InRevealArea(HWND w, POINT p) {
     return false;
 }
 static void Tick(HWND w) {
+    if (g_stop.load())
+        return;
     ULONGLONG now = GetTickCount64();
     UpdateItemPolicies(w, now);
-    if (!g_lastTick)
-        g_lastTick = now;
-    auto elapsed = std::min<ULONGLONG>(now - g_lastTick, 100);
+    auto elapsed = g_timerRunning[0] && g_lastTick
+                       ? std::min<ULONGLONG>(now - g_lastTick, 100)
+                       : 0;
     g_lastTick = now;
+    auto boxes = ActiveBoxes();
     POINT p{};
-    bool cursorNearIcon =
-        GetCursorPos(&p) && IsDesktopSurface(w, p) && InRevealArea(w, p);
+    bool onDesktop = GetCursorPos(&p) && IsDesktopSurface(w, p);
+    bool hovered = onDesktop && InRevealArea(w, p, boxes);
     bool editing = ListView_GetEditControl(w) != nullptr;
     GUITHREADINFO gui{};
     gui.cbSize = sizeof(gui);
     bool menu = GetGUIThreadInfo(GetCurrentThreadId(), &gui) &&
                 (gui.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE));
-    bool held = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-    if (!held)
+    if (g_dragging && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000))
         g_dragging = false;
-    if (cursorNearIcon || editing || menu || g_dragging ||
-        g_editorActive.load())
+    bool editor = g_editorActive.load();
+    bool forced = now < g_forceRevealUntil;
+    bool hold = editing || menu || g_dragging;
+    if (hovered || hold || editor)
         g_lastNear = now;
-    double target =
-        (cursorNearIcon || editing || menu || g_dragging ||
-         g_editorActive.load() || now - g_lastNear < (ULONGLONG)g_delay.load())
-            ? 100.0
-            : 0.0;
+    bool delayed = g_lastNear && now - g_lastNear < (ULONGLONG)g_delay.load();
+    double target = hovered || hold || editor || forced || delayed ? 100 : 0;
     int duration = g_fade.load();
-    double step = duration ? 100.0 * elapsed / duration : 100.0;
-    g_alpha = target > g_alpha ? std::min(target, g_alpha + step)
-                               : std::max(target, g_alpha - step);
-    auto boxes = ActiveBoxes();
+    double step = editor || !duration ? 100.0 : 100.0 * elapsed / duration;
+    g_alpha = editor ? 100.0 : FadeToward(g_alpha, target, step);
     bool independent = g_independent.load() && !boxes.empty();
-    bool modeChanged = independent != g_regionsEnabled;
+    bool changedMode = independent != g_regionsEnabled;
     g_regionsEnabled = independent;
+    bool animation = false, waiting = false;
     if (independent) {
-        bool forceVisible = g_editorActive.load() || now < g_forceRevealUntil;
-        bool onDesktop = GetCursorPos(&p) && IsDesktopSurface(w, p);
-        bool changed =
-            UpdateRegions(boxes, p, onDesktop, editing || menu || g_dragging,
-                          forceVisible, now, step);
-        int maximum = forceVisible ? 100 : 0;
-        for (const auto& region : g_regions)
+        bool changed = UpdateRegions(boxes, p, onDesktop, hold,
+                                     editor || forced, now, step);
+        int maximum = editor || forced ? 100 : 0;
+        for (const auto& region : g_regions) {
             maximum = std::max(maximum, (int)std::lround(region.alpha));
-        bool globalChanged = g_opacity.exchange(maximum) != maximum;
-        if (changed || globalChanged || modeChanged || forceVisible)
+            animation |= region.alpha != region.target;
+            bool inside = onDesktop && InHoverBox(p, region.box);
+            waiting |= !inside && !hold && region.lastInside &&
+                       now - region.lastInside < (ULONGLONG)g_delay.load();
+        }
+        bool changedAlpha = g_opacity.exchange(maximum) != maximum;
+        if (changed || changedAlpha || changedMode)
             Repaint(w);
     } else {
         g_regions.clear();
         int alpha = (int)std::lround(g_alpha);
-        if (g_opacity.exchange(alpha) != alpha || modeChanged)
+        if (g_opacity.exchange(alpha) != alpha || changedMode)
             Repaint(w);
+        animation = g_alpha != target;
+        waiting = delayed && !hovered && !hold && !editor;
     }
+    SetDesktopTimer(w, 0, !editor && (animation || waiting || forced), 16);
+    SetDesktopTimer(w, 1, !editor && g_opacity.load() > 0, 150);
+    SetDesktopTimer(
+        w, 2, !g_temporaryItems.empty() || editing || g_itemRetryAt != 0, 100);
 }
 static LRESULT CALLBACK
 DesktopSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
     if (msg == g_tick) {
+        if (wp == 2) {
+            StopDesktopTimers(w);
+            return 0;
+        }
+        if (wp == 1)
+            MarkItemsDirty(w);
         Tick(w);
+        if (wp == 1 || wp == 3) {
+            Repaint(w);
+            UpdateWindow(w);
+        }
         return 0;
+    }
+    if (msg == WM_TIMER) {
+        for (int i = 0; i < 3; ++i) {
+            if (wp == DesktopTimerId(i)) {
+                Tick(w);
+                return 0;
+            }
+        }
+    }
+    if (msg == WM_MOUSEMOVE) {
+        if (!g_mouseTracking) {
+            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, w, 0};
+            g_mouseTracking = TrackMouseEvent(&track) != FALSE;
+        }
+        Tick(w);
+    }
+    if (msg == WM_MOUSELEAVE) {
+        g_mouseTracking = false;
+        Tick(w);
     }
     if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN ||
         msg == WM_MBUTTONDOWN) {
-        // A click in blank space alone must not reveal the icons.
         if (g_opacity.load() > 0)
             g_dragging = true;
+        Tick(w);
     }
-    // Modifiers alone should not trigger the temporary reveal before Ctrl+A.
-    if (msg == WM_KEYDOWN && g_keepSelectedVisible.load() &&
-        (wp == VK_CONTROL || wp == VK_SHIFT || wp == VK_MENU || wp == VK_LWIN ||
-         wp == VK_RWIN))
-        return DefSubclassProc(w, msg, wp, lp);
-    // Let Explorer perform Select All even while every icon is hidden.
-    if (msg == WM_KEYDOWN && wp == 'A' && g_keepSelectedVisible.load() &&
-        (GetKeyState(VK_CONTROL) & 0x8000)) {
+    if (msg == WM_LBUTTONUP || msg == WM_CAPTURECHANGED) {
+        g_dragging = false;
+        Tick(w);
+    }
+    if (msg == WM_KEYDOWN) {
+        bool modifier = wp == VK_CONTROL || wp == VK_SHIFT || wp == VK_MENU ||
+                        wp == VK_LWIN || wp == VK_RWIN;
+        bool selectAll = wp == 'A' && (GetKeyState(VK_CONTROL) & 0x8000);
+        int focused = ListView_GetNextItem(w, -1, LVNI_FOCUSED);
+        if (!modifier && !selectAll &&
+            (g_opacity.load() < 100 ||
+             (focused >= 0 && ItemOpacity(w, focused) < 100)))
+            Reveal(w);
+        // Preserve native type-to-find, navigation, rename and Delete behavior.
         auto result = DefSubclassProc(w, msg, wp, lp);
-        InvalidateRect(w, nullptr, TRUE);
+        if (!modifier) {
+            focused = ListView_GetNextItem(w, -1, LVNI_FOCUSED);
+            if (focused >= 0 && ItemOpacity(w, focused) < 100)
+                Reveal(w);
+            Tick(w);
+            Repaint(w);
+        }
         return result;
-    }
-    // A visible selection can be operated on normally (arrows, Delete, F2,
-    // etc.).
-    bool visibleSelection = msg == WM_KEYDOWN && g_keepSelectedVisible.load() &&
-                            ListView_GetSelectedCount(w) > 0;
-    if (msg == WM_KEYDOWN && !visibleSelection &&
-        (g_opacity.load() < 100 ||
-         (g_regionsEnabled && GetTickCount64() >= g_forceRevealUntil))) {
-        Reveal(w);
-        return 0;
     }
     if (msg == WM_PAINT || msg == WM_PRINTCLIENT) {
         bool previous = g_inDesktopPaint;
         g_inDesktopPaint = true;
-        int previousItemOpacity = g_itemOpacity;
+        int previousOpacity = g_itemOpacity;
         g_itemOpacity = -1;
         auto result = DefSubclassProc(w, msg, wp, lp);
         g_inDesktopPaint = previous;
-        g_itemOpacity = previousItemOpacity;
+        g_itemOpacity = previousOpacity;
         return result;
     }
     if (msg == WM_NCDESTROY) {
+        StopDesktopTimers(w);
         g_list = nullptr;
         g_lastTick = 0;
         g_dragging = false;
@@ -1122,9 +1322,23 @@ DesktopSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
         g_regionsEnabled = false;
         g_forceRevealUntil = 0;
         ResetItemPolicies();
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(w, DesktopSubclass);
+        WakeWorker();
+    }
+    bool itemsChanged = msg == LVM_INSERTITEMW || msg == LVM_INSERTITEMA ||
+                        msg == LVM_DELETEITEM || msg == LVM_DELETEALLITEMS ||
+                        msg == LVM_SETITEMCOUNT || msg == LVM_SETITEMW ||
+                        msg == LVM_SETITEMA || msg == LVM_SETITEMTEXTW ||
+                        msg == LVM_SETITEMTEXTA || msg == LVM_SORTITEMS ||
+                        msg == LVM_SORTITEMSEX;
+    if (itemsChanged) {
+        auto result = DefSubclassProc(w, msg, wp, lp);
+        MarkItemsDirty(w);
+        return result;
     }
     return DefSubclassProc(w, msg, wp, lp);
 }
+
 static BOOL CALLBACK FindDesktop(HWND root, LPARAM param) {
     HWND view = FindWindowExW(root, nullptr, L"SHELLDLL_DefView", nullptr);
     HWND list = view ? FindWindowExW(view, nullptr, L"SysListView32", nullptr)
@@ -1157,26 +1371,23 @@ static DWORD WINAPI Worker(void*) {
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
     bool panelReady = RegisterClassExW(&wc) != 0;
     if (panelReady) {
-        RECT outer{0, 0, 560, 164};
-        AdjustWindowRectEx(&outer, WS_CAPTION | WS_SYSMENU, FALSE,
-                           WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
+        UINT dpi = GetDpiForSystem();
+        RECT outer{0, 0, MulDiv(560, dpi, 96), MulDiv(164, dpi, 96)};
+        AdjustWindowRectExForDpi(&outer, WS_CAPTION | WS_SYSMENU, FALSE,
+                                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW, dpi);
         g_panel = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kPanelClass,
             L"Desktop Icons - Reveal Boxes", WS_CAPTION | WS_SYSMENU, 80, 80,
             outer.right - outer.left, outer.bottom - outer.top, nullptr,
             nullptr, g_overlayModule, nullptr);
         UpdatePanel();
-        if (g_showControls.load())
-            ShowPanel();
     }
     unsigned lastRevision = 0;
     bool previousVisible = false;
+    UINT_PTR discoveryTimer = 0;
     while (!g_stop.load()) {
         MSG message{};
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            // Handle Enter/Escape on THIS worker's windows, including focused
-            // buttons. Saving no longer depends on the full-screen overlay
-            // having keyboard focus.
             if (g_editorActive.load() && message.message == WM_KEYDOWN) {
                 if (message.wParam == VK_RETURN) {
                     SaveEditor();
@@ -1196,7 +1407,7 @@ static DWORD WINAPI Worker(void*) {
         }
         if (g_panelRequest.exchange(false)) {
             if (g_showControls.load())
-                ShowPanel();
+                ShowPanel(false);
             else {
                 CloseEditor();
                 if (g_panel)
@@ -1204,33 +1415,34 @@ static DWORD WINAPI Worker(void*) {
             }
             UpdatePanel();
         }
-        bool visible = g_preview.load() && !g_editorActive.load() &&
-                       !ActiveBoxes().empty();
-        if (visible && overlayReady && !g_outlineWindow)
-            g_outlineWindow = CreateOverlay(false);
         unsigned revision = g_previewRevision.load();
-        if (g_outlineWindow) {
-            if (visible != previousVisible)
-                ShowWindow(g_outlineWindow,
-                           visible ? SW_SHOWNOACTIVATE : SW_HIDE);
-            if (visible && (revision != lastRevision || !previousVisible)) {
-                SetWindowPos(g_outlineWindow, HWND_TOPMOST,
-                             GetSystemMetrics(SM_XVIRTUALSCREEN),
-                             GetSystemMetrics(SM_YVIRTUALSCREEN),
-                             GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                             GetSystemMetrics(SM_CYVIRTUALSCREEN),
-                             SWP_NOACTIVATE);
-                InvalidateRect(g_outlineWindow, nullptr, FALSE);
-                // Keep toolbar above preview, too.
-                if (g_panel && IsWindowVisible(g_panel))
-                    SetWindowPos(g_panel, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if (revision != lastRevision) {
+            bool visible = g_preview.load() && !g_editorActive.load() &&
+                           !ActiveBoxes().empty();
+            if (visible && overlayReady && !g_outlineWindow)
+                g_outlineWindow = CreateOverlay(false);
+            if (g_outlineWindow) {
+                if (visible != previousVisible)
+                    ShowWindow(g_outlineWindow,
+                               visible ? SW_SHOWNOACTIVATE : SW_HIDE);
+                if (visible) {
+                    SetWindowPos(g_outlineWindow, HWND_TOPMOST,
+                                 GetSystemMetrics(SM_XVIRTUALSCREEN),
+                                 GetSystemMetrics(SM_YVIRTUALSCREEN),
+                                 GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                                 GetSystemMetrics(SM_CYVIRTUALSCREEN),
+                                 SWP_NOACTIVATE);
+                    InvalidateRect(g_outlineWindow, nullptr, FALSE);
+                    if (g_panel && IsWindowVisible(g_panel))
+                        SetWindowPos(g_panel, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
             }
+            previousVisible = visible && g_outlineWindow;
+            lastRevision = revision;
         }
-        previousVisible = visible && g_outlineWindow;
-        lastRevision = revision;
-        HWND w = g_list.load();
-        if (!w || !IsWindow(w)) {
+        HWND list = g_list.load();
+        if (!list || !IsWindow(list)) {
             HWND found = nullptr;
             EnumWindows(FindDesktop, reinterpret_cast<LPARAM>(&found));
             if (found) {
@@ -1241,22 +1453,25 @@ static DWORD WINAPI Worker(void*) {
                             found, DesktopSubclass, 0)) {
                         g_parent = parent;
                         g_list = found;
-                        w = found;
+                        list = found;
+                        PostMessageW(found, g_tick, 1, 0);
                     } else
                         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                             parent, DesktopParentSubclass);
                 }
             }
         }
-        if (w && IsWindow(w)) {
-            DWORD_PTR ignored;
-            SendMessageTimeoutW(w, g_tick, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK,
-                                100, &ignored);
-        }
-        if (MsgWaitForMultipleObjects(1, &g_wake, FALSE, 16, QS_ALLINPUT) ==
-            WAIT_OBJECT_0)
-            break;
+        if (list && discoveryTimer) {
+            KillTimer(nullptr, discoveryTimer);
+            discoveryTimer = 0;
+        } else if (!list && !discoveryTimer)
+            discoveryTimer = SetTimer(nullptr, 0, 2000, nullptr);
+        // No periodic worker wakeups while the desktop exists. UI changes,
+        // settings, shutdown, and the temporary discovery timer wake this pump.
+        MsgWaitForMultipleObjects(1, &g_wake, FALSE, INFINITE, QS_ALLINPUT);
     }
+    if (discoveryTimer)
+        KillTimer(nullptr, discoveryTimer);
     CloseEditor();
     if (g_outlineWindow) {
         DestroyWindow(g_outlineWindow);
@@ -1539,15 +1754,15 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc,
     return ExtTextOutW_Original(hdc, x, y, options, lprect, lpString, c, lpDx);
 }
 
+static bool g_settingsLoaded = false;
+static bool g_lastPreviewSetting = false;
 static void LoadSettings() {
     g_keepSelectedVisible = Wh_GetIntSetting(L"keepSelectedVisible") != 0;
     g_revealNewItems = Wh_GetIntSetting(L"showNewItems") != 0;
     g_dismissNewOnClick = Wh_GetIntSetting(L"dismissNewOnClick") != 0;
     g_newItemSeconds = std::clamp(Wh_GetIntSetting(L"newItemSeconds"), 0, 300);
-    PCWSTR names = Wh_GetStringSetting(L"alwaysVisible");
-    auto patterns = ParseIconPatterns(names ? names : L"");
-    if (names)
-        Wh_FreeStringSetting(names);
+    auto names = WindhawkUtils::StringSetting::make(L"alwaysVisible");
+    auto patterns = ParseIconPatterns(names.get());
     AcquireSRWLockExclusive(&g_rulesLock);
     g_alwaysVisible = std::move(patterns);
     ReleaseSRWLockExclusive(&g_rulesLock);
@@ -1555,8 +1770,19 @@ static void LoadSettings() {
     g_hoverPadding = std::clamp(Wh_GetIntSetting(L"boxHoverPadding"), 0, 1000);
     g_independent = Wh_GetIntSetting(L"independentBoxes") != 0;
     g_manualBox = Wh_GetIntSetting(L"manualBox") != 0;
-    g_showControls = Wh_GetIntSetting(L"showEditorPanel") != 0;
-    g_preview = Wh_GetIntSetting(L"showPreview") != 0;
+    bool show = Wh_GetIntSetting(L"showEditorPanel") != 0;
+    bool previousShow = g_showControls.exchange(show);
+    if (g_settingsLoaded && previousShow != show)
+        g_panelRequest = true;
+    bool previewSetting = Wh_GetIntSetting(L"showPreview") != 0;
+    if (!g_settingsLoaded) {
+        int savedPreview = Wh_GetIntValue(L"previewOverride", -1);
+        g_preview = savedPreview < 0 ? previewSetting : savedPreview != 0;
+    } else if (previewSetting != g_lastPreviewSetting) {
+        g_preview = previewSetting;
+        Wh_DeleteValue(L"previewOverride");
+    }
+    g_lastPreviewSetting = previewSetting;
     int x = std::clamp(Wh_GetIntSetting(L"boxX"), -131072, 131072);
     int y = std::clamp(Wh_GetIntSetting(L"boxY"), -131072, 131072);
     int width = std::clamp(Wh_GetIntSetting(L"boxWidth"), 5, 65536);
@@ -1568,7 +1794,8 @@ static void LoadSettings() {
     g_delay = std::clamp(Wh_GetIntSetting(L"hideDelay"), 0, 5000);
     g_fade = std::clamp(Wh_GetIntSetting(L"fadeDuration"), 0, 2000);
     ++g_previewRevision;
-    g_panelRequest = true;
+    RequestDesktopUpdate();
+    g_settingsLoaded = true;
 }
 BOOL Wh_ModInit() {
     DWORD shellPid = 0;
@@ -1586,25 +1813,12 @@ BOOL Wh_ModInit() {
                 valid = false;
         if (valid)
             CommitState(saved);
-    } else if (Wh_GetIntValue(L"box.valid", 0)) {
-        // Import the single saved box from v0.2 if present.
-        RECT r{Wh_GetIntValue(L"box.left", 0), Wh_GetIntValue(L"box.top", 0),
-               Wh_GetIntValue(L"box.right", 0),
-               Wh_GetIntValue(L"box.bottom", 0)};
-        if (ValidBox(r)) {
-            saved = {};
-            saved.magic = kBoxesMagic;
-            saved.count = 1;
-            saved.enabled = 1;
-            saved.boxes[0] = r;
-            CommitState(saved);
-        }
     }
     LoadSettings();
     g_tick = RegisterWindowMessageW(L"DesktopIconsProximityReveal.Tick.0.1");
     if (!g_tick)
         return FALSE;
-    g_wake = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_wake)
         return FALSE;
     bool ok = WindhawkUtils::SetFunctionHook(ImageList_DrawIndirect,
@@ -1650,7 +1864,10 @@ void Wh_ModUninit() {
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    HWND w = g_list.exchange(nullptr);
+    HWND w = g_list.load();
+    if (w && IsWindow(w))
+        SendMessageW(w, g_tick, 2, 0);
+    g_list = nullptr;
     g_opacity = 100;
     HWND parent = g_parent.exchange(nullptr);
     if (parent && IsWindow(parent))
