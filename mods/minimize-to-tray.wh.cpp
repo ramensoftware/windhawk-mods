@@ -2,7 +2,7 @@
 // @id              minimize-to-tray
 // @name            Minimize to tray
 // @description     Right-click a window's minimize button to hide it in the system tray.
-// @version         1.1
+// @version         1.1.1
 // @author          0Allu
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/minimize-to-tray
