@@ -17591,8 +17591,7 @@ static bool PendingTouchpadLiftObserved() {
     ULONG phase = RawThreeFingerStatePhase(state);
     ULONGLONG stateTick = g_touchpadRawThreeFingerLastTick.load(
         std::memory_order_acquire);
-    if (phase == SWS_RAW_THREE_PHASE_LIFTED ||
-        phase == SWS_RAW_THREE_PHASE_LOST) {
+    if (phase == SWS_RAW_THREE_PHASE_LIFTED) {
         // A same-serial lift is the normal path. A newer serial is also a
         // completed edge for this pending session, provided its timestamp is
         // not older than the pending start.
@@ -17600,8 +17599,11 @@ static bool PendingTouchpadLiftObserved() {
                (!s_touchpadRapidPendingRawSerial ||
                 serial >= s_touchpadRapidPendingRawSerial);
     }
+    // A lost stream (reader stopped, gestures disabled, device removed) is not
+    // proof of a lift, the same rule as the idle timeout: the native boundary
+    // or that timeout decides the session instead.
     // The reader may publish its lift before the UI receives the frame. Keep
-    // the UI-side state as a fallback when the shared phase is still live.
+    // the UI-side state as a fallback when the shared phase is live or lost.
     return s_rawGestureTips == 0 && s_rawGestureSawThree;
 }
 
