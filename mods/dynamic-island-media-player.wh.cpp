@@ -41,13 +41,9 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
 ## Key Features
 - **Context Menu Priority:** The right-click context menu acts as the primary configuration source. Settings changed here persistently override default Windhawk configurations.
 - **Smart Media Tracking:** Real-time track metadata, album art, app badges, and progress scrubbing via Windows System Media Transport.
-- **Resource Efficient:** Event-driven render sleeping and direct DWM/DPI API calls to guarantee ultra-low CPU/GPU consumption.
+- **Optimized Rendering:** Hybrid event-driven architecture with intelligent sleep throttling guarantees ultra-low CPU/GPU consumption.
 - **Per-App Dynamic Screen Positioning:** Supports saving unique screen positions on a per-application basis.
 - **Trilingual Localized UI (UA / RU / EN):** Full native support for Ukrainian, Russian, and English.
-
-## Credits & Acknowledgements
-- **Himanshu (devcode90)** - For the original Dynamic Island for Windows framework, rendering physics, and core UI design.
-- **BOG090909** - Standalone media player adaptation, custom app-positioning logic, multilingual support, and optimization.
 */
 // ==/WindhawkModReadme==
 
@@ -209,8 +205,10 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
+#include <list>
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -386,6 +384,11 @@ struct MediaSnapshot {
     std::wstring sourceAppUserModelId;
     std::wstring sourceName;
     std::wstring sourceBadge;
+    std::wstring trackId; 
+    
+    // ПРЯМАЯ ССЫЛКА НА СЕССИЮ (Исключает промахи по AUMID)
+    winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession activeSession{nullptr};
+
     std::shared_ptr<const BitmapPixels> art;
     std::shared_ptr<const BitmapPixels> sourceIcon;
     double titleChangedAt = 0.0;
@@ -394,6 +397,11 @@ struct MediaSnapshot {
     int64_t positionTicks = 0;
     int64_t endTicks = 0;
     ULONGLONG lastUpdatedTicks = 0;
+};
+
+struct CachedArt {
+    std::shared_ptr<const BitmapPixels> pixels;
+    double negativeTimestamp = 0.0;
 };
 
 struct SharedState {
@@ -440,6 +448,13 @@ Settings GetSettingsCopy() {
 std::mutex g_stateMutex;
 SharedState g_state;
 std::atomic<uint64_t> g_artGenerationCounter{0};
+
+// Исправленный кэш и защита фоновых потоков
+std::unordered_map<std::wstring, CachedArt> g_artCache;
+std::list<std::wstring> g_artCacheOrder;
+std::unordered_set<std::wstring> g_artFetching;
+
+std::atomic<int> g_bgTaskCount{0}; // Счетчик фоновых задач для безопасной выгрузки
 
 std::atomic<HWND> g_hwnd{nullptr};
 HANDLE g_stopEvent = nullptr;
@@ -511,7 +526,6 @@ HHOOK g_captureHook = nullptr;
 bool ProcessImageNameForWindow(HWND hwnd, std::wstring* imageName);
 std::wstring BaseNameFromPath(std::wstring path);
 std::wstring ToLowerCopy(std::wstring value);
-void SendMediaTransportCommand(int cmd);
 
 double NowSeconds() {
     using clock = std::chrono::steady_clock;
@@ -585,6 +599,8 @@ std::wstring GetForegroundExeName() {
     return L"";
 }
 
+void SendMediaTransportCommand(int cmd);
+
 void TriggerMediaTransportCommandWithConfirmation(int cmd) {
     if (g_confirmTrackChange.load()) {
         const double now = NowSeconds();
@@ -632,9 +648,12 @@ bool PickColorWithDialog(HWND owner, D2D1_COLOR_F& outColor) {
 void LoadAppPositionsFromRegistry() {
     std::lock_guard lock(g_appPosMutex);
     g_appPositions.clear();
-    wchar_t buf[4096] = {0};
-    if (Wh_GetStringValue(L"AppPositionsData", buf, ARRAYSIZE(buf))) {
-        std::wstring str(buf);
+    
+    const int bufSize = 32768; 
+    auto buf = std::make_unique<wchar_t[]>(bufSize);
+    
+    if (Wh_GetStringValue(L"AppPositionsData", buf.get(), bufSize)) {
+        std::wstring str(buf.get());
         size_t start = 0;
         while (start < str.size()) {
             size_t end = str.find(L';', start);
@@ -661,6 +680,17 @@ void SaveAppPositionsToRegistry() {
         serialized += exe + L"=" + std::to_wstring(pos.centerX) + L"," + std::to_wstring(pos.top) + L";";
     }
     Wh_SetStringValue(L"AppPositionsData", serialized.c_str());
+}
+
+void SaveRainbowPalette() {
+    std::lock_guard lock(g_rainbowMutex);
+    std::wstring s;
+    for (const auto& c : g_rainbowPalette) {
+        wchar_t hex[32];
+        swprintf_s(hex, L"#%02X%02X%02X,", static_cast<int>(c.r * 255), static_cast<int>(c.g * 255), static_cast<int>(c.b * 255));
+        s += hex;
+    }
+    Wh_SetStringValue(L"RainbowPalette", s.c_str());
 }
 
 D2D1_COLOR_F ColorFromHex(std::wstring text, D2D1_COLOR_F fallback) {
@@ -900,7 +930,6 @@ void LoadSettings() {
         if (end != scale.c_str() && parsed > 0.1f && parsed < 10.0f) next.baseSizeScale = parsed;
     }
     
-    // We don't pre-multiply DPI here anymore, it's done dynamically in RenderThreadProc
     next.sizeScale = next.baseSizeScale; 
 
     const std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
@@ -952,7 +981,6 @@ void LoadSettings() {
     next.w11Style = EqualsNoCase(shape, L"w11");
     next.notchStyle = EqualsNoCase(shape, L"notch") && !IsBottomPosition(next.position);
 
-    // --- ФОРМИРУЕМ ЦВЕТА ИЗ WINDHAWK UI КАК ФОЛЛБЕКИ ---
     int themeIdx = ThemeIndexFromId(GetStringSettingCopy(L"Themes.ThemePreset"));
     if (themeIdx < 0) themeIdx = 0;
     const ThemePalette& p = kThemePalettes[themeIdx];
@@ -967,7 +995,6 @@ void LoadSettings() {
     
     next.customAccent = ColorFromHex(GetStringSettingCopy(L"Themes.CustomAccentHex"), next.customAccent);
 
-    // --- ПРИМЕНЯЕМ ЖЕСТКИЕ ПЕРЕОПРЕДЕЛЕНИЯ ИЗ КОНТЕКСТНОГО МЕНЮ (НАИВЫСШИЙ ПРИОРИТЕТ) ---
     int overrideAccentMode = Wh_GetIntValue(L"OverrideAccentMode", -1);
     if (overrideAccentMode != -1) next.accentMode = static_cast<AccentMode>(overrideAccentMode);
 
@@ -1010,6 +1037,28 @@ void LoadSettings() {
         g_idleTimeoutSec = idleStr.empty() ? 0 : _wtoi(idleStr.c_str());
     }
     next.idleTimeoutSec = g_idleTimeoutSec.load();
+
+    wchar_t palBuf[1024];
+    if (Wh_GetStringValue(L"RainbowPalette", palBuf, ARRAYSIZE(palBuf))) {
+        std::wstring s(palBuf);
+        std::vector<D2D1_COLOR_F> loaded;
+        size_t pos = 0;
+        while (pos < s.size()) {
+            size_t comma = s.find(L',', pos);
+            if (comma == std::wstring::npos) comma = s.size();
+            std::wstring hex = s.substr(pos, comma - pos);
+            if (!hex.empty()) {
+                loaded.push_back(ColorFromHex(hex, D2D1::ColorF(0)));
+            }
+            pos = comma + 1;
+        }
+        if (!loaded.empty()) {
+            std::lock_guard lock(g_rainbowMutex);
+            g_rainbowPalette = std::move(loaded);
+        }
+    }
+    int rSpeed = Wh_GetIntValue(L"RainbowSpeed", -1);
+    if (rSpeed != -1) g_colorRainbowSpeed = rSpeed / 10.0f;
 
     g_clickThrough = Wh_GetIntValue(L"ClickThrough", 0) != 0;
     g_disableAnimations = Wh_GetIntValue(L"DisableAnimations", 0) != 0;
@@ -1393,31 +1442,6 @@ std::vector<uint8_t> ReadWinRtStreamBytes(
     return bytes;
 }
 
-winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession SelectActiveMediaSession(
-    winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager const& manager) {
-    using PlaybackStatus =
-        winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
-
-    auto isPlaying = [](auto const& candidate) -> bool {
-        if (!candidate) return false;
-        try {
-            return candidate.GetPlaybackInfo().PlaybackStatus() == PlaybackStatus::Playing;
-        } catch (...) {
-            return false;
-        }
-    };
-
-    winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession current = nullptr;
-    try { current = manager.GetCurrentSession(); } catch (...) {}
-    if (isPlaying(current)) return current;
-    try {
-        for (auto const& candidate : manager.GetSessions()) {
-            if (isPlaying(candidate)) return candidate;
-        }
-    } catch (...) {}
-    return current;
-}
-
 DWORD WINAPI MediaThreadProc(void*) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
@@ -1429,7 +1453,8 @@ DWORD WINAPI MediaThreadProc(void*) {
     static std::wstring s_cachedVlcTitle;
     static double s_lastVlcScan = 0.0;
     static double s_lastIconSearch = 0.0;
-    static double s_lastArtRequest = 0.0;
+    static std::wstring s_preferredAumid;
+    static double s_lastPlayingTime = 0.0;
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         MediaSnapshot prev;
@@ -1442,9 +1467,47 @@ DWORD WINAPI MediaThreadProc(void*) {
 
         try {
             if (!manager) manager = Manager::RequestAsync().get();
-            auto session = manager ? SelectActiveMediaSession(manager)
-                                   : winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession{nullptr};
+
+            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
+            if (manager) {
+                bool foundPlaying = false;
+                for (auto const& candidate : manager.GetSessions()) {
+                    if (candidate) {
+                        try {
+                            if (candidate.GetPlaybackInfo().PlaybackStatus() == PlaybackStatus::Playing) {
+                                session = candidate;
+                                foundPlaying = true;
+                                break;
+                            }
+                        } catch (...) {}
+                    }
+                }
+
+                if (foundPlaying) {
+                    s_preferredAumid = session.SourceAppUserModelId().c_str();
+                    s_lastPlayingTime = now;
+                } else {
+                    auto currentSystemSession = manager.GetCurrentSession();
+                    std::wstring currentSystemAumid;
+                    if (currentSystemSession) currentSystemAumid = currentSystemSession.SourceAppUserModelId().c_str();
+
+                    if (!s_preferredAumid.empty() && currentSystemAumid != s_preferredAumid && (now - s_lastPlayingTime < 10.0)) {
+                        for (auto const& candidate : manager.GetSessions()) {
+                            if (candidate.SourceAppUserModelId().c_str() == s_preferredAumid) {
+                                session = candidate;
+                                break;
+                            }
+                        }
+                    }
+                    if (!session) {
+                        session = currentSystemSession;
+                        if (session) s_preferredAumid = session.SourceAppUserModelId().c_str();
+                    }
+                }
+            }
+
             if (session) {
+                next.activeSession = session; 
                 auto properties = session.TryGetMediaPropertiesAsync().get();
                 auto playback = session.GetPlaybackInfo();
                 auto timeline = session.GetTimelineProperties();
@@ -1477,8 +1540,8 @@ DWORD WINAPI MediaThreadProc(void*) {
 
                 next.sourceAppUserModelId = session.SourceAppUserModelId().c_str();
                 next.sourceName = FriendlyMediaSourceName(next.sourceAppUserModelId);
+                next.trackId = next.sourceAppUserModelId + L"|" + next.title + L"|" + next.artist + L"|" + next.albumTitle;
 
-                // VLC Hack throttled to 1Hz to reduce CPU usage
                 if (next.title.empty() && next.sourceName == L"VLC") {
                     if (now - s_lastVlcScan > 1.0) {
                         s_lastVlcScan = now;
@@ -1508,9 +1571,9 @@ DWORD WINAPI MediaThreadProc(void*) {
                         }
                     }
                     next.title = s_cachedVlcTitle;
+                    next.trackId = next.sourceAppUserModelId + L"|VLC_HACK|" + next.title;
                 }
 
-                // App Icon Search throttled to 5 seconds if failed
                 if (next.sourceAppUserModelId == prev.sourceAppUserModelId) {
                     next.sourceBadge = prev.sourceBadge;
                     next.sourceIcon = prev.sourceIcon;
@@ -1524,20 +1587,84 @@ DWORD WINAPI MediaThreadProc(void*) {
                     next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
                 }
 
-                const bool metadataChanged = (next.title != prev.title || next.artist != prev.artist);
+                bool metadataChanged = (next.trackId != prev.trackId);
                 next.metaChangedAt = metadataChanged ? now : prev.metaChangedAt;
 
-                // Album Art Deco throttled to avoid spamming WIC on missing art
-                if (!metadataChanged && prev.art) {
-                    next.art = prev.art;
-                } else if (now - s_lastArtRequest > 1.5) {
-                    if (auto thumbnail = properties.Thumbnail()) {
-                        s_lastArtRequest = now;
-                        std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnail);
-                        BitmapPixels decoded;
-                        if (!bytes.empty() && DecodeImageBytesToPixels(bytes, &decoded)) {
-                            next.art = std::make_shared<const BitmapPixels>(std::move(decoded));
+                bool foundInCache = false;
+                bool shouldFetch = false;
+                std::shared_ptr<const BitmapPixels> cachedArt = nullptr;
+
+                {
+                    std::lock_guard lock(g_stateMutex);
+                    auto it = g_artCache.find(next.trackId);
+                    if (it != g_artCache.end()) {
+                        if (it->second.pixels) {
+                            cachedArt = it->second.pixels;
+                            foundInCache = true;
+                        } else if (now - it->second.negativeTimestamp > 30.0) {
+                            shouldFetch = true; 
+                        } else {
+                            foundInCache = true; 
                         }
+                    } else {
+                        shouldFetch = true;
+                    }
+
+                    if (shouldFetch && g_artFetching.find(next.trackId) == g_artFetching.end()) {
+                        g_artFetching.insert(next.trackId);
+                    } else {
+                        shouldFetch = false;
+                    }
+                }
+
+                if (foundInCache) {
+                    next.art = cachedArt;
+                } else if (shouldFetch) {
+                    auto thumbnailRef = properties.Thumbnail();
+                    if (!thumbnailRef) {
+                        std::lock_guard lock(g_stateMutex);
+                        g_artCache[next.trackId] = {nullptr, now};
+                        g_artFetching.erase(next.trackId);
+                        
+                        auto orderIt = std::find(g_artCacheOrder.begin(), g_artCacheOrder.end(), next.trackId);
+                        if (orderIt != g_artCacheOrder.end()) g_artCacheOrder.erase(orderIt);
+                        g_artCacheOrder.push_back(next.trackId);
+                    } else {
+                        g_bgTaskCount++;
+                        std::thread([thumbnailRef, trackId = next.trackId]() {
+                            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+                            std::shared_ptr<const BitmapPixels> decodedArt = nullptr;
+                            try {
+                                std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnailRef);
+                                BitmapPixels pixels;
+                                if (!bytes.empty() && DecodeImageBytesToPixels(bytes, &pixels)) {
+                                    decodedArt = std::make_shared<const BitmapPixels>(std::move(pixels));
+                                }
+                            } catch (...) {}
+                            winrt::uninit_apartment();
+
+                            {
+                                std::lock_guard lock(g_stateMutex);
+                                g_artCache[trackId] = {decodedArt, NowSeconds()};
+                                g_artFetching.erase(trackId);
+                                
+                                auto orderIt = std::find(g_artCacheOrder.begin(), g_artCacheOrder.end(), trackId);
+                                if (orderIt != g_artCacheOrder.end()) g_artCacheOrder.erase(orderIt);
+                                g_artCacheOrder.push_back(trackId);
+
+                                if (g_artCache.size() > 20) {
+                                    g_artCache.erase(g_artCacheOrder.front());
+                                    g_artCacheOrder.pop_front();
+                                }
+
+                                if (g_state.media.trackId == trackId) {
+                                    g_state.media.art = decodedArt;
+                                }
+                            }
+                            
+                            if (HWND h = g_hwnd.load()) PostMessageW(h, WM_APP_WAKE, 0, 0);
+                            g_bgTaskCount--;
+                        }).detach();
                     }
                 }
             }
@@ -1551,10 +1678,15 @@ DWORD WINAPI MediaThreadProc(void*) {
             std::lock_guard lock(g_stateMutex);
             const MediaSnapshot& cur = g_state.media;
             trackChanged = next.available && !next.title.empty() && next.playing &&
-                           (next.title != cur.title || next.artist != cur.artist || !cur.playing);
+                           (next.trackId != cur.trackId || !cur.playing);
             next.titleChangedAt = trackChanged ? now : cur.titleChangedAt;
             anyChange = next.available != cur.available || next.playing != cur.playing ||
-                        next.title != cur.title;
+                        next.trackId != cur.trackId;
+            
+            if (!next.art && prev.art && next.trackId == prev.trackId) {
+                next.art = prev.art;
+            }
+            
             g_state.media = std::move(next);
         }
 
@@ -1579,44 +1711,22 @@ DWORD WINAPI MediaThreadProc(void*) {
 }
 
 void SeekMediaToTicks(int64_t targetTicks) {
+    g_bgTaskCount++;
     std::thread([targetTicks]() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         try {
-            using Manager = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
-            auto manager = Manager::RequestAsync().get();
-            if (manager) {
-                std::wstring aumid;
-                {
-                    std::lock_guard lock(g_stateMutex);
-                    aumid = g_state.media.sourceAppUserModelId;
-                }
-                winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
-                for (auto const& s : manager.GetSessions()) {
-                    if (s.SourceAppUserModelId().c_str() == aumid) { session = s; break; }
-                }
-                if (!session) session = manager.GetCurrentSession();
-                if (session) session.TryChangePlaybackPositionAsync(targetTicks).get();
+            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
+            {
+                std::lock_guard lock(g_stateMutex);
+                session = g_state.media.activeSession;
+            }
+            if (session) {
+                session.TryChangePlaybackPositionAsync(targetTicks).get();
             }
         } catch (...) {}
+        winrt::uninit_apartment();
+        g_bgTaskCount--;
     }).detach();
-}
-
-winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession ResolveMediaSession() {
-    using Manager = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
-    auto manager = Manager::RequestAsync().get();
-    if (!manager) return nullptr;
-
-    std::wstring aumid;
-    {
-        std::lock_guard lock(g_stateMutex);
-        aumid = g_state.media.sourceAppUserModelId;
-    }
-    if (!aumid.empty()) {
-        for (auto const& s : manager.GetSessions()) {
-            if (s.SourceAppUserModelId().c_str() == aumid) return s;
-        }
-    }
-    return manager.GetCurrentSession();
 }
 
 void SendMediaTransportCommand(int cmd) {
@@ -1636,11 +1746,16 @@ void SendMediaTransportCommand(int cmd) {
         PostMessageW(h, WM_APP_WAKE, 0, 0);
     }
 
+    g_bgTaskCount++;
     std::thread([cmd]() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         bool sessionAttempted = false;
         try {
-            auto session = ResolveMediaSession();
+            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
+            {
+                std::lock_guard lock(g_stateMutex);
+                session = g_state.media.activeSession;
+            }
             if (session) {
                 sessionAttempted = true;
                 if (cmd == 0) session.TrySkipPreviousAsync().get();
@@ -1654,16 +1769,11 @@ void SendMediaTransportCommand(int cmd) {
         if (!sessionAttempted) {
             HWND fg = GetForegroundWindow();
             if (!fg) fg = GetDesktopWindow();
-            
-            WORD appCmd = 0;
-            if (cmd == 0) appCmd = 12;
-            else if (cmd == 1) appCmd = 14;
-            else if (cmd == 2) appCmd = 11;
-
-            if (appCmd != 0) {
-                SendNotifyMessageW(fg, WM_APPCOMMAND, (WPARAM)fg, MAKELONG(0, appCmd));
-            }
+            WORD appCmd = (cmd == 0) ? 12 : ((cmd == 1) ? 14 : 11);
+            SendNotifyMessageW(fg, WM_APPCOMMAND, (WPARAM)fg, MAKELONG(0, appCmd));
         }
+        winrt::uninit_apartment();
+        g_bgTaskCount--;
     }).detach();
 }
 
@@ -1767,7 +1877,6 @@ MediaContentPoint MediaContentFromClient(int clientX, int clientY) {
         if (g_mediaHitSeq.load(std::memory_order_relaxed) == before) break;
         stamp = 0;
     }
-    // Убрано ограничение stamp в 500мс для стабильной работы кликов после простоя
     if (stamp == 0) return out;
     if (scale < 0.05f) scale = 1.0f;
 
@@ -3213,21 +3322,27 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         case ID_ADD_RAINBOW_COLOR: {
             D2D1_COLOR_F newCol = D2D1::ColorF(0xff0000);
             if (PickColorWithDialog(hwnd, newCol)) {
-                std::lock_guard lock(g_rainbowMutex);
-                g_rainbowPalette.push_back(newCol);
+                {
+                    std::lock_guard lock(g_rainbowMutex);
+                    g_rainbowPalette.push_back(newCol);
+                }
+                SaveRainbowPalette();
                 g_layoutDirty = true;
             }
             break;
         }
         case ID_RESET_RAINBOW_COLORS: {
-            std::lock_guard lock(g_rainbowMutex);
-            g_rainbowPalette = { D2D1::ColorF(0x4cc9f0), D2D1::ColorF(0x7209b7), D2D1::ColorF(0xf72585) };
+            {
+                std::lock_guard lock(g_rainbowMutex);
+                g_rainbowPalette = { D2D1::ColorF(0x4cc9f0), D2D1::ColorF(0x7209b7), D2D1::ColorF(0xf72585) };
+            }
+            SaveRainbowPalette();
             g_layoutDirty = true;
             break;
         }
-        case ID_RAINBOW_SPEED_SLOW:   g_colorRainbowSpeed = 0.5f; break;
-        case ID_RAINBOW_SPEED_NORMAL: g_colorRainbowSpeed = 1.0f; break;
-        case ID_RAINBOW_SPEED_FAST:   g_colorRainbowSpeed = 2.0f; break;
+        case ID_RAINBOW_SPEED_SLOW:   g_colorRainbowSpeed = 0.5f; Wh_SetIntValue(L"RainbowSpeed", 5); break;
+        case ID_RAINBOW_SPEED_NORMAL: g_colorRainbowSpeed = 1.0f; Wh_SetIntValue(L"RainbowSpeed", 10); break;
+        case ID_RAINBOW_SPEED_FAST:   g_colorRainbowSpeed = 2.0f; Wh_SetIntValue(L"RainbowSpeed", 20); break;
         case ID_BUTTON_STYLE_DEFAULT:
             Wh_SetIntValue(L"ButtonStyle", 0);
             LoadSettings();
@@ -3362,6 +3477,21 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     static POINT s_dragWindow = {0, 0};
 
     switch (msg) {
+        case WM_DPICHANGED: {
+            RECT* prcNewWindow = reinterpret_cast<RECT*>(lParam);
+            SetWindowPos(hwnd, nullptr, prcNewWindow->left, prcNewWindow->top,
+                         prcNewWindow->right - prcNewWindow->left,
+                         prcNewWindow->bottom - prcNewWindow->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            g_layoutDirty = true;
+            return 0;
+        }
+        
+        case WM_DISPLAYCHANGE: {
+            g_layoutDirty = true;
+            return 0;
+        }
+        
         case WM_NCHITTEST: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
@@ -3668,6 +3798,9 @@ DWORD WINAPI RenderThreadProc(void*) {
     bool prevCtrlState = false;
     std::wstring lastFgApp;
     int lastMinute = -1;
+    
+    int cachedRefreshRate = 60;
+    double lastRefreshCheck = 0.0;
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         MSG message = {};
@@ -3703,10 +3836,24 @@ DWORD WINAPI RenderThreadProc(void*) {
 
         Settings cfg = GetSettingsCopy();
         
-        // Динамическое вычисление DPI
+        bool hasAppPos = false;
+        int appX = 0, appY = 0;
+        if (!currentFgApp.empty()) {
+            std::lock_guard lock(g_appPosMutex);
+            auto it = g_appPositions.find(currentFgApp);
+            if (it != g_appPositions.end()) {
+                hasAppPos = true;
+                appX = it->second.centerX;
+                appY = it->second.top;
+            }
+        }
+
         if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
             HMONITOR targetMon = nullptr;
-            if (g_customPosSet.load()) {
+            if (hasAppPos) {
+                POINT pt = {appX, appY};
+                targetMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            } else if (g_customPosSet.load()) {
                 POINT pt = {g_customCenterX.load(), g_customTop.load()};
                 targetMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
             } else {
@@ -3897,13 +4044,8 @@ DWORD WINAPI RenderThreadProc(void*) {
                             pinned, now, isInteracting);
         }
 
-        int targetFps = cfg.targetFps;
-        if (targetFps <= 0) targetFps = GetMonitorRefreshRate(hwnd);
-        targetFps = ClampInt(targetFps, 30, 1000);
-        double targetFrameMs = 1000.0 / targetFps;
-
         if (!needsRender) {
-            DWORD sleepTime = 250; // Кап ожидания в 250 мс для отзывчивости
+            DWORD sleepTime = 250; 
             if (wantVisible && !parked) {
                 SYSTEMTIME stTime;
                 GetLocalTime(&stTime);
@@ -3915,6 +4057,17 @@ DWORD WINAPI RenderThreadProc(void*) {
             MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, sleepTime, QS_ALLINPUT);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
+            int targetFps = cfg.targetFps;
+            if (targetFps <= 0) {
+                if (now - lastRefreshCheck > 5.0) {
+                    cachedRefreshRate = GetMonitorRefreshRate(hwnd);
+                    lastRefreshCheck = now;
+                }
+                targetFps = cachedRefreshRate;
+            }
+            targetFps = ClampInt(targetFps, 30, 1000);
+            double targetFrameMs = 1000.0 / targetFps;
+            
             nextFrameTarget += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                 std::chrono::duration<double, std::milli>(targetFrameMs));
             
@@ -3923,10 +4076,10 @@ DWORD WINAPI RenderThreadProc(void*) {
                 if (nowTime >= nextFrameTarget) break;
                 if (WaitForSingleObject(g_stopEvent, 0) != WAIT_TIMEOUT) break;
                 const double remainingMs = std::chrono::duration<double, std::milli>(nextFrameTarget - nowTime).count();
-                if (remainingMs > 2.0) {
+                if (remainingMs > 1.0) {
                     Sleep(1);
                 } else {
-                    std::this_thread::yield();
+                    Sleep(0);
                 }
             }
         }
@@ -3957,8 +4110,23 @@ bool StartThreads() {
     if (!g_stopEvent) return false;
 
     g_renderThread = CreateThread(nullptr, 0, RenderThreadProc, nullptr, 0, nullptr);
-    if (!g_renderThread) return false;
+    if (!g_renderThread) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return false;
+    }
+    
     g_mediaThread = CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
+    if (!g_mediaThread) {
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_renderThread, INFINITE);
+        CloseHandle(g_renderThread);
+        g_renderThread = nullptr;
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return false;
+    }
+    
     return true;
 }
 
@@ -3968,11 +4136,17 @@ void StopThreads() {
     HANDLE handles[] = {g_renderThread, g_mediaThread};
     for (HANDLE h : handles) {
         if (h) {
-            WaitForSingleObject(h, 3000);
+            WaitForSingleObject(h, 2000); 
             CloseHandle(h);
         }
     }
     g_renderThread = g_mediaThread = nullptr;
+
+    int waitLoops = 0;
+    while (g_bgTaskCount.load() > 0 && waitLoops < 80) {
+        Sleep(50);
+        waitLoops++;
+    }
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
