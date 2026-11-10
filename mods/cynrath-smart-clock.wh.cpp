@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              cynrath-smart-clock
-// @name            Windhawk Smart Clock
-// @name:tr-TR      Windhawk Akıllı Saat
+// @name            Taskbar Smart Clock
+// @name:tr-TR      Görev Çubuğu Akıllı Saat
 // @description     Bilingual EN/TR customizable taskbar clock with network, CPU, GPU and RAM metrics.
 // @description:tr-TR Türkçe/İngilizce saat, ağ hızı, işlemci, ekran kartı ve bellek göstergesi.
 // @version         0.2.7
@@ -43,6 +43,26 @@ The inherited CPU temperature metric can be an ACPI thermal-zone average,
 not an authenticated processor package sensor. Alert colors are informative
 only. / CPU sıcaklığı ACPI bölge ortalaması olabilir; renkler yalnızca bilgi
 amaçlıdır, donanım güvenliği sınırı olarak kullanılmamalıdır.
+
+**Patterns / Biçimler:** In `replace` mode, the original
+[`%time%`, `%date%`, `%weekday%`, `%cpu%`, `%gpu%`, `%ram%`,
+`%download_speed%` and related formatting tokens](https://windhawk.net/mods/taskbar-clock-customization)
+remain supported. New additions include:
+- `%unix%` — Unix timestamp (seconds since UTC epoch).
+- `%time<n>_tz<m>%` and `%date<n>_tz<m>%` — extra formats
+  from TimeFormat/DateFormat and the configured TimeZones entry.
+See the linked original mod for the full inherited token list.
+/ Türkçe: `replace` modunun tüm temel biçimleri yukarıdaki kaynakta
+listelenir. Yeni `%unix%` ve `%time<n>_tz<m>%` /
+`%date<n>_tz<m>%` biçimleri de desteklenir.
+
+**Compared with other mods / Diğer modlardan farkı:**
+- Taskbar Clock Customization replaces custom clock strings; this mod's
+  default keeps the **native Windows date/time** and adds a two-row
+  metrics panel beside it, with adaptive per-value colors.
+- Taskbar System Info displays metrics independently in the taskbar;
+  this mod integrates compact metrics specifically next to the native clock.
+  It is a derivative, not a replacement for either project's maintenance.
 
 Source / Kaynak: https://github.com/Cynrath/windhawk-smart-clock
 Original author / Orijinal geliştirici: m417z, Taskbar Clock Customization 1.8.1
@@ -5181,7 +5201,14 @@ void PublishSmartClockSnapshotNoLock() {
         L"%upload_speed% MB/s"
     };
     std::array<std::wstring, 6> sample{};
-    GetLocalTime(&g_formatTime);
+    // A clock refresh hook can spoof GetLocalTime to adjust its timer.
+    // Use the original call while sampling so the snapshot always has
+    // the actual wall-clock time.
+    if (GetLocalTime_Original) {
+        GetLocalTime_Original(&g_formatTime);
+    } else {
+        GetLocalTime(&g_formatTime);
+    }
     ++g_formatIndex;
 
     // The sidecar ALWAYS displays MB/s numeric values. Ignore the inherited
