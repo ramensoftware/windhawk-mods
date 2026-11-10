@@ -4,7 +4,6 @@
 // @description     Use local videos, GIFs, and images as the Windows 11 lock screen and optional sign-in wallpaper.
 // @version         0.2.1
 // @author          sunnyturtle01
-// @github          https://github.com/sunnyturtle01
 // @license         MIT
 // @include         LockApp.exe
 // @include         explorer.exe
@@ -57,7 +56,7 @@ see the selected wallpaper. Test this feature in a VM before using it elsewhere.
 Test in a VM. The visual tree can vary across Windows builds. A synchronous
 UI dispatch can delay unloading if Windows becomes unresponsive.
 
-Adapted from the user-supplied Quy Lock Screen material mod. UI discovery
+Adapted from the original lock screen prototype. UI discovery
 informed by Lock Screen Clock Styler by ali0zdas (MIT).
 https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler
 */
@@ -112,7 +111,7 @@ namespace imaging = winrt::Windows::UI::Xaml::Media::Imaging;
 
 HANDLE stopEvent = nullptr, worker = nullptr;
 
-// Included in the single-file mod by build-quy-background.cjs.
+// Media import helpers.
 // File preparation runs with the signed-in user's rights in Explorer.
 #include <aclapi.h>
 #include <sddl.h>
@@ -227,7 +226,7 @@ struct CacheLock {
             SDDL_REVISION_1, &descriptor, nullptr));
         LocalMemory freeDescriptor{reinterpret_cast<HLOCAL>(descriptor)};
         SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES), descriptor, FALSE};
-        auto name = L"Global\\QuyMotionBackground.MediaImport.v1." + userSid;
+        auto name = L"Global\\LockscreenMotionBackground.MediaImport.v1." + userSid;
         mutex = CreateMutexW(&attributes, FALSE, name.c_str());
         checkWin32(mutex != nullptr);
         for (;;) {
@@ -288,7 +287,7 @@ std::wstring cacheFolder() {
     winrt::check_hresult(SHGetKnownFolderPath(FOLDERID_PublicPictures, KF_FLAG_DEFAULT, nullptr, &raw));
     std::wstring folder(raw);
     CoTaskMemFree(raw);
-    return folder + L"\\QuyMotionBackground-" + userSid;
+    return folder + L"\\LockscreenMotionBackground-" + userSid;
 }
 
 std::wstring importFile(std::wstring const& source, std::wstring const& folder) {
@@ -649,7 +648,7 @@ std::wstring folderPath() {
     std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> path(raw, CoTaskMemFree);
     std::wstring base(path.get());
     if (!mediaPicker::plainLocalPath(base)) winrt::throw_hresult(E_ACCESSDENIED);
-    return base + L"\\QuyMotionBackground";
+    return base + L"\\LockscreenMotionBackground";
 }
 
 bool matchesPath(HANDLE handle, std::wstring const& path) {
@@ -829,8 +828,8 @@ DWORD WINAPI run(void*) {
 }
 } // namespace mediaPicker
 
-#define QUY_SIGN_IN_VM
-#define QUY_SIGN_IN_AUTO
+#define LOCKSCREEN_SIGN_IN_VM
+#define LOCKSCREEN_SIGN_IN_AUTO
 // All XAML state belongs to the LockApp UI thread.
 [[clang::no_destroy]] c::Grid mediaRoot{nullptr};
 [[clang::no_destroy]] x::UIElement mediaLayer{nullptr};
@@ -1002,7 +1001,7 @@ void refreshUi() {
 
 using UiProc = void(*)();
 UINT runMessage = 0;
-#ifdef QUY_SIGN_IN_VM
+#ifdef LOCKSCREEN_SIGN_IN_VM
 bool signInProcess = false;
 #endif
 std::atomic<HWND> dispatchWindow{nullptr};
@@ -1051,7 +1050,7 @@ BOOL CALLBACK findWindow(HWND window, LPARAM value) {
     GetWindowThreadProcessId(window, &pid);
     wchar_t name[128]{};
     PCWSTR target = L"Windows.UI.Core.CoreWindow";
-#ifdef QUY_SIGN_IN_VM
+#ifdef LOCKSCREEN_SIGN_IN_VM
     if (signInProcess) target = L"LogonUI Logon Window";
 #endif
     if (pid == GetCurrentProcessId() && GetClassNameW(window, name, ARRAYSIZE(name)) &&
@@ -1088,11 +1087,11 @@ struct BufferBytes : IUnknown {
 };
 constexpr GUID bufferBytesId{0x905a0fef, 0xbc53, 0x11df, {0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda}};
 
-#ifdef QUY_SIGN_IN_AUTO
+#ifdef LOCKSCREEN_SIGN_IN_AUTO
 uint64_t frameSelection = 0, paintedSelection = 0;
 #else
 constexpr wchar_t folder[] = L"C:\\WindhawkTest";
-constexpr wchar_t packPath[] = L"C:\\WindhawkTest\\quy-sign-in.qframes";
+constexpr wchar_t packPath[] = L"C:\\WindhawkTest\\sign-in.qframes";
 #endif
 constexpr wchar_t lastStartKey[] = L"SignInLastStartTick.v1";
 Header header{};
@@ -1134,7 +1133,7 @@ bool enabled() {
     return Wh_GetIntSetting(L"BackgroundEnabled") && Wh_GetIntSetting(L"SignInBackground");
 }
 
-#ifdef QUY_SIGN_IN_AUTO
+#ifdef LOCKSCREEN_SIGN_IN_AUTO
 bool loadPack(uint64_t key) {
     const auto path = signInCache::folderPath();
     mediaPicker::Handle directory(signInCache::openFolder(path));
@@ -1200,7 +1199,7 @@ bool failed = false;
 void paint() {
     try {
         if (failed || !enabled()) { clear(); return; }
-#ifdef QUY_SIGN_IN_AUTO
+#ifdef LOCKSCREEN_SIGN_IN_AUTO
         if (paintedSelection != frameSelection) {
             clear();
             paintedSelection = frameSelection;
@@ -1250,7 +1249,7 @@ bool restartBackoff() {
 }
 
 DWORD WINAPI watch(void*) {
-#ifndef QUY_SIGN_IN_AUTO
+#ifndef LOCKSCREEN_SIGN_IN_AUTO
     try {
         if (!loadPack()) {
             Wh_Log(L"Sign-in frame pack missing or invalid; using Windows wallpaper");
@@ -1269,7 +1268,7 @@ DWORD WINAPI watch(void*) {
 #endif
     HWND window = nullptr;
     while (!mediaPicker::stopping()) {
-#ifdef QUY_SIGN_IN_AUTO
+#ifdef LOCKSCREEN_SIGN_IN_AUTO
         if (GetTickCount64() >= nextCheck) {
             nextCheck = GetTickCount64() + 1000;
             try {
@@ -1305,7 +1304,7 @@ DWORD WINAPI watch(void*) {
             dispatch(window, paint);
         }
         bool playing = window != nullptr;
-#ifdef QUY_SIGN_IN_AUTO
+#ifdef LOCKSCREEN_SIGN_IN_AUTO
         playing = playing && frameSelection;
 #endif
         WaitForSingleObject(stopEvent, playing ? 1000 / signInPack::fps : 250);
@@ -1321,7 +1320,7 @@ BOOL Wh_ModInit() {
     name = name ? name + 1 : executable;
     const bool explorer = _wcsicmp(name, L"explorer.exe") == 0;
     auto start = explorer ? mediaPicker::run : watchLockScreen;
-#ifdef QUY_SIGN_IN_VM
+#ifdef LOCKSCREEN_SIGN_IN_VM
     signInProcess = _wcsicmp(name, L"LogonUI.exe") == 0;
     if (signInProcess) {
         if (!signIn::enabled()) return FALSE;
@@ -1333,7 +1332,7 @@ BOOL Wh_ModInit() {
         try { mediaPicker::initIdentity(); }
         catch (...) { Wh_Log(L"Could not initialize the media cache identity"); return FALSE; }
     }
-    runMessage = RegisterWindowMessageW(L"QuyMotionBackground_RunOnUi_v1");
+    runMessage = RegisterWindowMessageW(L"LockscreenMotionBackground_RunOnUi_v1");
     if (!runMessage) return FALSE;
     stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!stopEvent) return FALSE;
@@ -1355,7 +1354,7 @@ void Wh_ModUninit() {
     }
     if (HWND window = lastWindow.exchange(nullptr); window && IsWindow(window)) {
         auto cleanup = resetUi;
-#ifdef QUY_SIGN_IN_VM
+#ifdef LOCKSCREEN_SIGN_IN_VM
         if (signInProcess) cleanup = signIn::clear;
 #endif
         if (!dispatch(window, cleanup))
