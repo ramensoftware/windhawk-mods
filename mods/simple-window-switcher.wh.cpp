@@ -2632,11 +2632,22 @@ struct CornerModRaw {
 
 struct CornerModStorage {
     bool resolved = false;
+    // A storage path didn't fit its buffer: the corner mod is treated as absent.
+    bool unavailable = false;
     bool portable = false;
     HKEY hive = HKEY_LOCAL_MACHINE;
     WCHAR registryMods[MAX_PATH] = L"SOFTWARE\\Windhawk\\Engine\\Mods";
     WCHAR iniMods[MAX_PATH] = {};
 };
+
+// Formats a storage path into a fixed buffer. Returns false, with an empty
+// buffer, when the result would not fit; callers treat that as "not found".
+template <size_t N, typename... Args>
+static bool FormatStoragePath(WCHAR (&buffer)[N], PCWSTR format, Args... args) {
+    if (_snwprintf_s(buffer, N, _TRUNCATE, format, args...) >= 0) return true;
+    buffer[0] = L'\0';
+    return false;
+}
 
 static bool ReadRegistryDword(HKEY hKey, PCWSTR valueName, DWORD* value) {
     if (!hKey || !value) return false;
@@ -2687,7 +2698,9 @@ static bool OwnProcessIsExcluded(ReadEntry readEntry) {
 static bool ReadCornerModFromRegistry(const CornerModStorage& storage,
                                       PCWSTR modId, CornerModRaw* raw) {
     WCHAR modPath[MAX_PATH];
-    swprintf_s(modPath, L"%s\\%s", storage.registryMods, modId);
+    if (!FormatStoragePath(modPath, L"%s\\%s", storage.registryMods, modId)) {
+        return false;
+    }
     HKEY hKey = NULL;
     if (RegOpenKeyExW(storage.hive, modPath, 0, KEY_READ | KEY_WOW64_64KEY,
                       &hKey) != ERROR_SUCCESS) {
@@ -2699,9 +2712,9 @@ static bool ReadCornerModFromRegistry(const CornerModStorage& storage,
     }
     RegCloseKey(hKey);
 
-    // A missing Settings key means the mod runs with its defaults.
     WCHAR settingsPath[MAX_PATH];
-    swprintf_s(settingsPath, L"%s\\Settings", modPath);
+    if (!FormatStoragePath(settingsPath, L"%s\\Settings", modPath)) return false;
+    // A missing Settings key means the mod runs with its defaults.
     HKEY hSet = NULL;
     if (RegOpenKeyExW(storage.hive, settingsPath, 0,
                       KEY_READ | KEY_WOW64_64KEY, &hSet) != ERROR_SUCCESS) {
@@ -2728,8 +2741,10 @@ static bool ReadCornerModFromRegistry(const CornerModStorage& storage,
 static bool ReadCornerModFromIni(const CornerModStorage& storage, PCWSTR modId,
                                  CornerModRaw* raw) {
     WCHAR file[MAX_PATH * 2];
-    swprintf_s(file, L"%s\\%s.ini", storage.iniMods, modId);
-    if (GetFileAttributesW(file) == INVALID_FILE_ATTRIBUTES) return false;
+    if (!FormatStoragePath(file, L"%s\\%s.ini", storage.iniMods, modId) ||
+        GetFileAttributesW(file) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
 
     raw->disabled = GetPrivateProfileIntW(L"Mod", L"Disabled", 0, file) != 0;
 
@@ -2770,7 +2785,10 @@ static const CornerModStorage& GetCornerModStorage() {
     if (!slash) return storage;
     *slash = L'\0';
     WCHAR ini[MAX_PATH * 2];
-    swprintf_s(ini, L"%s\\windhawk.ini", exe);
+    if (!FormatStoragePath(ini, L"%s\\windhawk.ini", exe)) {
+        storage.unavailable = true;
+        return storage;
+    }
 
     if (GetPrivateProfileIntW(L"Storage", L"Portable", 0, ini) != 0) {
         WCHAR raw[MAX_PATH * 2], data[MAX_PATH * 2];
@@ -2780,13 +2798,14 @@ static const CornerModStorage& GetCornerModStorage() {
             data[0]) {
             bool absolute = (data[0] == L'\\' && data[1] == L'\\') ||
                             (iswalpha(data[0]) && data[1] == L':');
-            if (absolute) {
-                swprintf_s(storage.iniMods, L"%s\\Engine\\Mods", data);
-            } else {
-                swprintf_s(storage.iniMods, L"%s\\%s\\Engine\\Mods", exe,
-                           data);
-            }
+            const bool formatted =
+                absolute ? FormatStoragePath(storage.iniMods,
+                                             L"%s\\Engine\\Mods", data)
+                         : FormatStoragePath(storage.iniMods,
+                                             L"%s\\%s\\Engine\\Mods", exe,
+                                             data);
             storage.portable = true;
+            storage.unavailable = !formatted;
         }
         return storage;
     }
@@ -2808,7 +2827,9 @@ static const CornerModStorage& GetCornerModStorage() {
             }
             if (hive && *sub) {
                 storage.hive = hive;
-                swprintf_s(storage.registryMods, L"%s\\Engine\\Mods", sub);
+                storage.unavailable =
+                    !FormatStoragePath(storage.registryMods,
+                                       L"%s\\Engine\\Mods", sub);
             }
         }
     }
@@ -2873,6 +2894,7 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
     const WCHAR* modIds[] = {L"custom-corner-radius",
                              L"local@custom-corner-radius"};
     for (const WCHAR* modId : modIds) {
+        if (storage.unavailable) break;
         CornerModRaw raw;
         bool found = storage.portable
                          ? ReadCornerModFromIni(storage, modId, &raw)
