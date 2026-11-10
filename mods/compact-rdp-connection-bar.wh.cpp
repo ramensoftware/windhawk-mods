@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar in Remote Desktop Connection
-// @version         1.0.0
+// @version         1.0.1
 // @author          hsb5
 // @github          https://github.com/hsb5/
 // @include         mstsc.exe
@@ -41,7 +41,6 @@ Shrinks the top connection bar in Remote Desktop Connection (mstsc.exe) to save 
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <windowsx.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
 
@@ -50,7 +49,6 @@ static int g_gapWidth = 100;
 static HWND g_leftToolbar = nullptr;
 static HWND g_rightToolbar = nullptr;
 static RECT g_textRect = {0};
-static bool g_layoutDone = false;
 
 // Original layout for restoration
 static RECT g_originalBBarRect = {0};
@@ -58,25 +56,124 @@ static RECT g_originalLeftRect = {0};
 static RECT g_originalRightRect = {0};
 static bool g_haveOriginalLayout = false;
 
+// Thread-local paint flag (reviewer fix #5)
+static thread_local bool t_inBarPaint = false;
+
 // Hook function types
+using DrawTextW_t = int (WINAPI*)(HDC, LPCWSTR, int, LPRECT, UINT);
+using DrawTextExW_t = int (WINAPI*)(HDC, LPWSTR, int, LPRECT, UINT, LPDRAWTEXTPARAMS);
 using CreateWindowExW_t = HWND (WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+
+DrawTextW_t DrawTextW_Original;
+DrawTextExW_t DrawTextExW_Original;
 CreateWindowExW_t CreateWindowExW_Original;
 
-// Subclass procedure for BBar
+// Find toolbars in BBar (reviewer fix #3 - use locals, only commit when both found)
+static bool FindToolbars(HWND bbar, HWND* leftOut, HWND* rightOut) {
+    HWND child = NULL;
+    wchar_t cls[64];
+    int index = 0;
+    HWND left = nullptr, right = nullptr;
+    
+    while ((child = FindWindowExW(bbar, child, NULL, NULL)) != NULL) {
+        GetClassNameW(child, cls, 64);
+        // Reviewer fix: exact match instead of wcsstr
+        if (wcscmp(cls, L"ToolbarWindow32") == 0) {
+            if (index == 0) right = child;
+            else if (index == 1) left = child;
+            index++;
+        }
+    }
+    
+    if (left && right) {
+        *leftOut = left;
+        *rightOut = right;
+        return true;
+    }
+    return false;
+}
+
+// Apply compact layout (reviewer fix #6 - DPI scaling, fix #4 - save originals)
+static bool ApplyLayout(HWND hwnd) {
+    HWND left = nullptr, right = nullptr;
+    if (!FindToolbars(hwnd, &left, &right)) {
+        return false;
+    }
+    
+    // Commit globals only when both toolbars found (reviewer fix #3)
+    g_leftToolbar = left;
+    g_rightToolbar = right;
+    g_bbar = hwnd;
+    
+    // Save original layout on first time (reviewer fix #4)
+    if (!g_haveOriginalLayout) {
+        GetWindowRect(hwnd, &g_originalBBarRect);
+        GetWindowRect(g_leftToolbar, &g_originalLeftRect);
+        GetWindowRect(g_rightToolbar, &g_originalRightRect);
+        g_haveOriginalLayout = true;
+    }
+    
+    int dpi = GetDpiForWindow(hwnd);
+    int scaledGap = MulDiv(g_gapWidth, dpi, 96);
+    
+    RECT leftRect, rightRect, bbarRect, clientRect;
+    GetWindowRect(g_leftToolbar, &leftRect);
+    GetWindowRect(g_rightToolbar, &rightRect);
+    GetWindowRect(hwnd, &bbarRect);
+    GetClientRect(hwnd, &clientRect);  // Reviewer fix #6 - real height
+    
+    int leftWidth = leftRect.right - leftRect.left;
+    int rightWidth = rightRect.right - rightRect.left;
+    int bbarHeight = bbarRect.bottom - bbarRect.top;
+    
+    int compactWidth = leftWidth + scaledGap + rightWidth;
+    
+    // Reviewer fix: center the bar instead of keeping right edge
+    int bbarWidth = bbarRect.right - bbarRect.left;
+    int newLeft = bbarRect.left + (bbarWidth - compactWidth) / 2;
+    
+    SetWindowPos(hwnd, NULL, newLeft, bbarRect.top, compactWidth, bbarHeight,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    
+    SetWindowPos(g_leftToolbar, NULL, 0, 0, leftWidth, bbarHeight,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(g_rightToolbar, NULL, leftWidth + scaledGap, 0, rightWidth, bbarHeight,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    
+    // Text rect - use real client height (reviewer fix #6)
+    g_textRect.left = leftWidth;
+    g_textRect.right = leftWidth + scaledGap;
+    g_textRect.top = 0;
+    g_textRect.bottom = clientRect.bottom;
+    
+    Wh_Log(L"Layout applied: %dx%d, text zone: %d-%d", compactWidth, bbarHeight, g_textRect.left, g_textRect.right);
+    return true;
+}
+
+// Subclass proc - 5th param is dwRefData, not subclass ID (reviewer fix)
 static LRESULT CALLBACK BBar_SubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
-                                          DWORD_PTR refData) {
+                                          DWORD_PTR dwRefData) {
     if (msg == WM_PAINT) {
-        // Get toolbar positions for text rect
+        // Apply layout if toolbars exist and we haven't yet
+        if (!g_haveOriginalLayout) {
+            if (!ApplyLayout(hwnd)) {
+                return DefSubclassProc(hwnd, msg, wp, lp);
+            }
+        }
+        
+        // Compute text rect from current toolbar positions
         if (g_leftToolbar && g_rightToolbar && IsWindow(g_leftToolbar) && IsWindow(g_rightToolbar)) {
-            RECT leftRect, rightRect, clientRect;
+            RECT leftRect, rightRect;
             GetWindowRect(g_leftToolbar, &leftRect);
             GetWindowRect(g_rightToolbar, &rightRect);
-            GetClientRect(hwnd, &clientRect);
             
             POINT leftPt = {leftRect.right, 0};
             POINT rightPt = {rightRect.left, 0};
             ScreenToClient(hwnd, &leftPt);
             ScreenToClient(hwnd, &rightPt);
+            
+            RECT clientRect;
+            GetClientRect(hwnd, &clientRect);
             
             g_textRect.left = leftPt.x;
             g_textRect.right = rightPt.x;
@@ -84,61 +181,25 @@ static LRESULT CALLBACK BBar_SubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
             g_textRect.bottom = clientRect.bottom;
         }
         
-        // Apply layout if not done yet
-        if (!g_layoutDone && g_leftToolbar && g_rightToolbar) {
-            // Save original layout on first paint
-            if (!g_haveOriginalLayout) {
-                GetWindowRect(hwnd, &g_originalBBarRect);
-                GetWindowRect(g_leftToolbar, &g_originalLeftRect);
-                GetWindowRect(g_rightToolbar, &g_originalRightRect);
-                g_haveOriginalLayout = true;
-            }
-            
-            // Calculate compact width
-            int dpi = GetDpiForWindow(hwnd);
-            int scaledGap = MulDiv(g_gapWidth, dpi, 96);
-            
-            RECT leftRect, rightRect, bbarRect;
-            GetWindowRect(g_leftToolbar, &leftRect);
-            GetWindowRect(g_rightToolbar, &rightRect);
-            GetWindowRect(hwnd, &bbarRect);
-            
-            int leftWidth = leftRect.right - leftRect.left;
-            int rightWidth = rightRect.right - rightRect.left;
-            int bbarHeight = bbarRect.bottom - bbarRect.top;
-            
-            int compactWidth = leftWidth + scaledGap + rightWidth;
-            
-            // Resize BBar (keep center)
-            int bbarWidth = bbarRect.right - bbarRect.left;
-            int newLeft = bbarRect.left + (bbarWidth - compactWidth) / 2;
-            SetWindowPos(hwnd, NULL, newLeft, bbarRect.top, compactWidth, bbarHeight,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-            
-            // Position toolbars
-            SetWindowPos(g_leftToolbar, NULL, 0, 0, leftWidth, bbarHeight,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-            SetWindowPos(g_rightToolbar, NULL, leftWidth + scaledGap, 0, rightWidth, bbarHeight,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-            
-            g_layoutDone = true;
-        }
-        
-        // Let native paint happen
-        return DefSubclassProc(hwnd, msg, wp, lp);
+        t_inBarPaint = true;
+        LRESULT r = DefSubclassProc(hwnd, msg, wp, lp);
+        t_inBarPaint = false;
+        return r;
     }
     
     if (msg == WM_DESTROY) {
-        RemoveWindowSubclass(hwnd, BBar_SubclassProc, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc);
         g_bbar = nullptr;
-        g_layoutDone = false;
+        g_leftToolbar = nullptr;
+        g_rightToolbar = nullptr;
+        g_haveOriginalLayout = false;
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
     
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
-// Hook CreateWindowExW to catch BBar creation
+// Reviewer fix #1: Hook CreateWindowExW instead of timer
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
                                   DWORD dwStyle, int x, int y, int nWidth, int nHeight,
                                   HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
@@ -146,36 +207,18 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
                                          x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
     if (hwnd && lpClassName) {
-        // Check if this is BBarWindowClass (handle both string and atom)
         wchar_t className[64] = {0};
         if (GetClassNameW(hwnd, className, 64) && wcscmp(className, L"BBarWindowClass") == 0) {
             Wh_Log(L"BBar created: %p", hwnd);
-            g_bbar = hwnd;
-            
-            // Find toolbars
-            HWND child = NULL;
-            wchar_t cls[64];
-            int index = 0;
-            while ((child = FindWindowExW(hwnd, child, NULL, NULL)) != NULL) {
-                GetClassNameW(child, cls, 64);
-                if (wcscmp(cls, L"ToolbarWindow32") == 0) {
-                    if (index == 0) g_rightToolbar = child;
-                    else if (index == 1) g_leftToolbar = child;
-                    index++;
-                }
-            }
-            
-            // Subclass the bar
-            if (g_leftToolbar && g_rightToolbar) {
-                WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0);
-            }
+            // Subclass immediately - layout will be applied on first paint
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0);
         }
     }
     
     return hwnd;
 }
 
-// Find existing BBar (for when mod is enabled mid-session)
+// Reviewer fix #1: Handle existing BBar in Wh_ModAfterInit
 static void FindExistingBBar() {
     HWND desktop = GetDesktopWindow();
     HWND hwnd = NULL;
@@ -186,27 +229,30 @@ static void FindExistingBBar() {
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid != myPid) continue;
         
-        g_bbar = hwnd;
-        
-        // Find toolbars
-        HWND child = NULL;
-        wchar_t cls[64];
-        int index = 0;
-        while ((child = FindWindowExW(hwnd, child, NULL, NULL)) != NULL) {
-            GetClassNameW(child, cls, 64);
-            if (wcscmp(cls, L"ToolbarWindow32") == 0) {
-                if (index == 0) g_rightToolbar = child;
-                else if (index == 1) g_leftToolbar = child;
-                index++;
-            }
-        }
-        
-        if (g_leftToolbar && g_rightToolbar) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0);
-            Wh_Log(L"Found existing BBar: %p", hwnd);
-        }
+        Wh_Log(L"Found existing BBar: %p", hwnd);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BBar_SubclassProc, 0);
         break;
     }
+}
+
+// Reviewer fix #5: Don't modify caller's rect, don't touch DT_CALCRECT, use thread_local
+int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) {
+    if (t_inBarPaint && g_bbar && lprc && !(format & DT_CALCRECT)) {
+        RECT rc = g_textRect;  // Local copy, not caller's rect
+        format = (format & ~(DT_LEFT | DT_RIGHT)) | DT_CENTER;
+        return DrawTextW_Original(hdc, lpchText, cchText, &rc, format);
+    }
+    return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
+}
+
+int WINAPI DrawTextExW_Hook(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, 
+                             UINT format, LPDRAWTEXTPARAMS lpdtp) {
+    if (t_inBarPaint && g_bbar && lprc && !(format & DT_CALCRECT)) {
+        RECT rc = g_textRect;  // Local copy
+        format = (format & ~(DT_LEFT | DT_RIGHT)) | DT_CENTER;
+        return DrawTextExW_Original(hdc, lpchText, cchText, &rc, format, lpdtp);
+    }
+    return DrawTextExW_Original(hdc, lpchText, cchText, lprc, format, lpdtp);
 }
 
 BOOL Wh_ModInit() {
@@ -214,23 +260,21 @@ BOOL Wh_ModInit() {
     if (g_gapWidth < 0) g_gapWidth = 0;
     if (g_gapWidth > 500) g_gapWidth = 500;
     
-    // Hook CreateWindowExW to catch BBar creation
+    // Reviewer fix: use WindhawkUtils::SetFunctionHook (type-safe)
+    WindhawkUtils::SetFunctionHook(DrawTextW, DrawTextW_Hook, &DrawTextW_Original);
+    WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
-    
-    // Also hook DrawTextW/DrawTextExW for text centering
-    // (These hooks are lightweight and safe)
     
     Wh_Log(L"Init: gap=%d", g_gapWidth);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // Find bar that already exists (when enabled mid-session)
     FindExistingBBar();
 }
 
+// Reviewer fix #2 & #4: proper subclass removal + layout restore
 void Wh_ModUninit() {
-    // Remove subclass properly
     if (g_bbar && IsWindow(g_bbar)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_bbar, BBar_SubclassProc);
         
@@ -266,8 +310,6 @@ void Wh_ModUninit() {
     g_bbar = nullptr;
     g_leftToolbar = nullptr;
     g_rightToolbar = nullptr;
-    g_layoutDone = false;
     g_haveOriginalLayout = false;
-    
     Wh_Log(L"Unloaded");
 }
