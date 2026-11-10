@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-10T21:00:37.000Z</updated>
+    <updated>2026-11-10T22:02:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Outlook Refined 0.6.2]]></title>
+        <id>https://windhawk.net/mods/outlook-refined#87d003102cd41f3f7d71e51b44ab84ce8a0f1d7f</id>
+        <link href="https://windhawk.net/mods/outlook-refined"/>
+        <updated>2026-11-10T22:02:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Credit the author in the readme, with a link to their site.</li>
+<li>Align the agenda and its divider with the favorites list above them. The agenda was positioned against the navigation pane while the list sits inside Outlook's own scrolling container, so the two halves of the pane never shared an edge.</li>
+<li>Give the folder names back 18px. The element holding the folder tree reserves a scrollbar gutter while its own overflow is hidden, so nothing is ever drawn in it; releasing the reservation takes the pane from 163px of usable width to 181px on a 197px pane and leaves 8px on both sides.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Analytic Endeavors</name>
+            <uri>https://github.com/ae-reid-havens</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Fluent Media Player 1.7.0]]></title>
         <id>https://windhawk.net/mods/taskbar-fluent-media-player#de5105a2c7c6cfb971bd7e3646713506a961ef71</id>
@@ -778,23 +794,6 @@ a description does.</p>
         <author>
             <name>Muhammad Ragib Hasin</name>
             <uri>https://github.com/RagibHasin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#2cd9c600bfe13afb4fba68ec907a4b8084acc0a3</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2026-11-09T06:10:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a possible hang or crash in some cases (a v1.11 regression). One example is clicking on the language tray icon.</li>
-<li>Fixed issues with thumbnail previews (a v1.11 regression). In some cases, new previews didn't appear, or closed previews stayed.</li>
-<li>Fixed incorrect styling for taskbar items in some cases after the mod is re-enabled or settings are changed.</li>
-<li>Minor updates to themes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
