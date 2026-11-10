@@ -60,8 +60,7 @@ static BOOL WINAPI ReadConsoleW_Hook(
         pInputControl
     );
 
-    if (!result || !lpBuffer || !lpNumberOfCharsRead ||
-        *lpNumberOfCharsRead == 0) {
+    if (!result || !lpBuffer || !lpNumberOfCharsRead || *lpNumberOfCharsRead == 0) {
         return result;
     }
 
@@ -72,55 +71,51 @@ static BOOL WINAPI ReadConsoleW_Hook(
 
     WCHAR* input = static_cast<WCHAR*>(lpBuffer);
     DWORD count = *lpNumberOfCharsRead;
-    DWORD end = count;
 
-    while (end > 0 &&
-           (input[end - 1] == L'\r' || input[end - 1] == L'\n')) {
-        --end;
+    // Nur agieren, wenn die Eingabe tatsächlich mit Enter (CRLF) abgeschickt wurde
+    if (count < 2 || input[count - 2] != L'\r' || input[count - 1] != L'\n') {
+        return result;
     }
 
+    DWORD end = count - 2;
     DWORD start = 0;
 
-    while (start < end &&
-           (input[start] == L' ' || input[start] == L'\t')) {
+    // Führende Leerzeichen und Tabs überspringen
+    while (start < end && (input[start] == L' ' || input[start] == L'\t')) {
         ++start;
     }
 
-    while (end > start &&
-           (input[end - 1] == L' ' || input[end - 1] == L'\t')) {
+    // Angehängte Leerzeichen und Tabs überspringen
+    while (end > start && (input[end - 1] == L' ' || input[end - 1] == L'\t')) {
         --end;
     }
 
-    if (end - start != 3 ||
-        _wcsnicmp(input + start, L"ver", 3) != 0) {
+    // Prüfen, ob die exakte Eingabe "ver" lautet
+    if (end - start != 3 || _wcsnicmp(input + start, L"ver", 3) != 0) {
         return result;
     }
 
     PCWSTR setting = Wh_GetStringSetting(L"custom_text");
-
-    std::wstring customText =
-        setting ? setting : L"Microsoft Windows [Version 6.1.7601]";
+    std::wstring customText = setting ? setting : L"Microsoft Windows [Version 6.1.7601]";
 
     if (setting) {
         Wh_FreeStringSetting(setting);
     }
 
-    std::wstring replacement = L"echo.&echo " + customText + L"\r\n";
+    // Text direkt auf den Bildschirm ausgeben. Verhindert CMD-Syntaxfehler bei Sonderzeichen (&, >, |, etc.)
+    std::wstring output = L"\r\n" + customText + L"\r\n";
+    DWORD written;
+    WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), output.c_str(),
+                  static_cast<DWORD>(output.size()), &written, nullptr);
 
-    if (replacement.size() > nNumberOfCharsToRead) {
-        Wh_Log(L"Custom text is too long for the console input buffer.");
-        return result;
+    // Einen "rem"-Kommentar an CMD übergeben, damit CMD die Eingabe ignoriert und keinen Fehler wirft
+    constexpr WCHAR kNoop[] = L"rem\r\n";
+    if (nNumberOfCharsToRead >= (sizeof(kNoop) / sizeof(WCHAR)) - 1) {
+        memcpy(lpBuffer, kNoop, sizeof(kNoop) - sizeof(WCHAR));
+        *lpNumberOfCharsRead = (sizeof(kNoop) / sizeof(WCHAR)) - 1;
     }
 
-    memcpy(
-        lpBuffer,
-        replacement.c_str(),
-        replacement.size() * sizeof(WCHAR)
-    );
-
-    *lpNumberOfCharsRead = static_cast<DWORD>(replacement.size());
-
-    Wh_Log(L"Replaced ver using the custom text setting.");
+    Wh_Log(L"Replaced ver using the custom text setting securely via WriteConsoleW.");
 
     return result;
 }
@@ -154,4 +149,3 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 // ==WindhawkModEnd==
-
