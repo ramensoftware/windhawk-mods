@@ -105,6 +105,9 @@ Everything the mod does, in detail, is below.
   seconds: the preview's hint, the "+ Line" glow and the other hints that
   only fade or pulse draw at most 30 times a second instead of at the
   monitor's rate.
+* Dock: games' icons (like Steam's) and other apps without an icon of their
+  own in the Start menu no longer go empty when Windows' icon cache is out of
+  date, nor show a small icon magnified (#7207).
 
 ## What's new in 3.1
 
@@ -1014,6 +1017,9 @@ Os detalhes de cada opção estão em inglês acima e, passo a passo, no site
   segundos: a dica da prévia, o brilho do "+ Linha" e as outras dicas que só
   esmaecem ou pulsam são desenhadas no máximo 30 vezes por segundo, em vez
   de na taxa do monitor.
+* Dock: os ícones de jogos (como os da Steam) e de outros apps sem ícone
+  próprio no menu Iniciar não ficam mais vazios quando o cache de ícones do
+  Windows está desatualizado, nem mostram um ícone pequeno ampliado (#7207).
 
 ### Novidades da 3.1
 
@@ -4933,7 +4939,8 @@ bool GetAppsArea(HMONITOR monitor, int* left, int* right) {
 bool IsTaskbarHidden(HWND hTaskbarWnd, const RECT& monitorRect);
 HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size);
 HBITMAP PinnedShortcutIconBitmap(const std::wstring& appId, int size);
-HBITMAP AppWindowIconBitmap(const std::wstring& appId, HWND window);
+HBITMAP AppWindowIconBitmap(const std::wstring& appId, HWND window, int size);
+bool BitmapIsBlank(HBITMAP bitmap);
 HWND FindTaskbarAppWindow(const std::wstring& appId);
 
 // An app's icon kept by the island or a panel (see LoadAppIcon). One explorer
@@ -7662,17 +7669,25 @@ DWORD WINAPI BigIconThreadProc(LPVOID) {
             // them (a browser profile's picture); only then its window's
             // program, for an app without any like TeamViewer; not for a
             // packaged app: its window may be the frame of another process.)
-            HBITMAP bitmap = PinnedShortcutIconBitmap(appId, pixels);
+            // (An empty picture counts as none, see BitmapIsBlank.)
+            auto drawn = [](HBITMAP picture) {
+                if (picture && BitmapIsBlank(picture)) {
+                    DeleteObject(picture);
+                    picture = nullptr;
+                }
+                return picture;
+            };
+            HBITMAP bitmap = drawn(PinnedShortcutIconBitmap(appId, pixels));
             if (!bitmap) {
-                bitmap = LoadAppIconBitmap(nullptr, appId, pixels);
+                bitmap = drawn(LoadAppIconBitmap(nullptr, appId, pixels));
             }
             if (!bitmap && window &&
                 appId.find(L'!') == std::wstring::npos) {
-                bitmap = LoadAppIconBitmap(window, appId, pixels);
+                bitmap = drawn(LoadAppIconBitmap(window, appId, pixels));
             }
             // (None from the shell: its window's own, as the taskbar shows.)
             if (!bitmap) {
-                bitmap = AppWindowIconBitmap(appId, window);
+                bitmap = drawn(AppWindowIconBitmap(appId, window, pixels));
             }
             AcquireSRWLockExclusive(&g_bigIconJobsLock);
             auto it = std::find_if(
@@ -13730,17 +13745,64 @@ HBITMAP WindowRelaunchIconBitmap(const std::wstring& appId, int size) {
     return bitmap;
 }
 
-// The icon an app's window has (the one it gives with WM_GETICON, or its
-// class's), for an app the shell has no icon for: what the taskbar draws.
-// Its window as found on the taskbar's thread (see TakeBigIcon), else one
-// with its ID.
-HBITMAP AppWindowIconBitmap(const std::wstring& appId, HWND window) {
+std::wstring ProcessImagePath(DWORD processId);
+
+// Whether a picture is empty: every pixel transparent and black. A stale
+// entry of Windows' icon cache gives one (Steam games' dock icons showed
+// nothing until the cache was rebuilt, #7207).
+bool BitmapIsBlank(HBITMAP bitmap) {
+    BITMAP info{};
+    if (!GetObject(bitmap, sizeof(info), &info) || info.bmWidth <= 0 ||
+        !info.bmHeight) {
+        return false;
+    }
+    const int width = info.bmWidth;
+    const int height = std::abs(info.bmHeight);
+    BITMAPINFO header{};
+    header.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32,
+                        BI_RGB};
+    std::vector<uint32_t> pixels((size_t)width * height);
+    HDC screen = GetDC(nullptr);
+    const bool read = GetDIBits(screen, bitmap, 0, height, pixels.data(),
+                                &header, DIB_RGB_COLORS) == height;
+    ReleaseDC(nullptr, screen);
+    return read && std::all_of(pixels.begin(), pixels.end(),
+                               [](uint32_t pixel) { return pixel == 0; });
+}
+
+// The icon an app's window has, for an app the shell has no icon for: its
+// program's, as big as asked (read from the file, not Windows' icon cache),
+// else the one it gives with WM_GETICON or its class's (what the taskbar
+// draws, small: magnified on the dock, #7207). Its window as found on the
+// taskbar's thread (see TakeBigIcon), else one with its ID.
+HBITMAP AppWindowIconBitmap(const std::wstring& appId, HWND window, int size) {
     std::pair<const std::wstring*, HWND> search{&appId, window};
     if (!search.second) {
         EnumWindows(FindAppIdWindowProc, reinterpret_cast<LPARAM>(&search));
     }
     if (!search.second || !IsWindow(search.second)) {
         return nullptr;
+    }
+    // (Not a packaged app's program: its window may be the frame of another
+    // process.)
+    DWORD processId = 0;
+    if (appId.find(L'!') == std::wstring::npos &&
+        GetWindowThreadProcessId(search.second, &processId)) {
+        const std::wstring program = ProcessImagePath(processId);
+        HICON picture = nullptr;
+        if (IsLocalDrivePath(program) &&
+            PrivateExtractIcons(program.c_str(), 0, size, size, &picture,
+                                nullptr, 1, 0) == 1 &&
+            picture) {
+            HBITMAP bitmap = IconBitmap(picture);
+            DestroyIcon(picture);
+            if (bitmap && !BitmapIsBlank(bitmap)) {
+                return bitmap;
+            }
+            if (bitmap) {
+                DeleteObject(bitmap);
+            }
+        }
     }
     HICON icon = nullptr;
     for (WPARAM kind : {(WPARAM)ICON_BIG, (WPARAM)ICON_SMALL2,
@@ -13896,7 +13958,6 @@ std::vector<std::wstring> ReadPinnedAppIds() {
 }
 
 DWORD SessionProcessId(PCWSTR exe);
-std::wstring ProcessImagePath(DWORD processId);
 
 // An app known only by its program's file name (a media app without an ID of
 // its own, like "Spotify.exe" or "vlc.exe"): that program's path while it
@@ -23276,7 +23337,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Sleep in the power button's menu no longer hibernates PCs with Modern Standby: like Start > Sleep, it turns the screen off and lets the PC go to sleep.\n"
          L"QQ's and WeChat's message preview shows again when hovering their icon in the taskbar's tray with tray icons on the island: the island answers where an icon is only while the mouse is on it there (#7157).\n"
          L"The settings window takes much less of the processor in its first seconds: the preview's hint, the \"+ Line\" glow and the other hints that only fade or pulse draw at most 30 times a second instead of at the monitor's rate.\n"
-         L"An app's own counter on its taskbar button (like WhatsApp's) no longer keeps its icon on the island as a waiting notification while the list is empty: it counts as seen when the app comes to the front or its icon is clicked, and shows again when the number grows.",
+         L"An app's own counter on its taskbar button (like WhatsApp's) no longer keeps its icon on the island as a waiting notification while the list is empty: it counts as seen when the app comes to the front or its icon is clicked, and shows again when the number grows.\n"
+         L"Dock: games' icons (like Steam's) and other apps without an icon of their own in the Start menu no longer go empty when Windows' icon cache is out of date, nor show a small icon magnified: the program's own icon is read as big as the dock shows it (#7207).",
          L"#Correções\n"
          L"A ilha não cai mais dentro dos controles de mídia do Windows enquanto os vídeos de um navegador (como o YouTube no Chrome) ficam mudando, e, se um dia ela cair, volta sozinha.\n"
          L"Com os entalhes do estilo Fixo minimizados, o ícone do app de uma notificação aparece só no entalhe do sino, não em todos os entalhes, e não aparece mais para o app que você está usando.\n"
@@ -23284,7 +23346,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Suspender no menu do botão de energia não hiberna mais os PCs com Modern Standby: como Iniciar > Suspender, desliga a tela e deixa o PC dormir.\n"
          L"A prévia de mensagens do QQ e do WeChat volta a aparecer ao passar o mouse no ícone deles na bandeja da barra de tarefas com ícones da bandeja na ilha: a ilha só responde onde um ícone está enquanto o mouse está nele ali (#7157).\n"
          L"A janela de configurações usa bem menos o processador nos primeiros segundos: a dica da prévia, o brilho do \"+ Linha\" e as outras dicas que só esmaecem ou pulsam são desenhadas no máximo 30 vezes por segundo, em vez de na taxa do monitor.\n"
-         L"O contador do próprio app no botão dele da barra de tarefas (como o do WhatsApp) não deixa mais o ícone dele na ilha como uma notificação pendente com a lista vazia: ele conta como visto quando o app vem para a frente ou o ícone é clicado, e volta quando o número aumenta.",
+         L"O contador do próprio app no botão dele da barra de tarefas (como o do WhatsApp) não deixa mais o ícone dele na ilha como uma notificação pendente com a lista vazia: ele conta como visto quando o app vem para a frente ou o ícone é clicado, e volta quando o número aumenta.\n"
+         L"Dock: os ícones de jogos (como os da Steam) e de outros apps sem ícone próprio no menu Iniciar não ficam mais vazios quando o cache de ícones do Windows está desatualizado, nem mostram um ícone pequeno ampliado: o ícone do próprio programa é lido do tamanho que a dock mostra (#7207).",
          L"#修复\n"
          L"当浏览器中的视频（例如 Chrome 里的 YouTube）不断切换时，灵动岛不再在 Windows 的媒体控件中崩溃；即使灵动岛崩溃，它也会自动重新启动。\n"
          L"固定样式的刘海最小化时，通知的应用图标只会从带铃铛的刘海中探出，而不是从每个刘海中探出；对于你正在使用的应用，也不再探出。\n"
@@ -23292,7 +23355,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"电源按钮菜单中的“睡眠”不再让支持新式待机（Modern Standby）的电脑进入休眠：与“开始 > 睡眠”一样，它会关闭屏幕并让电脑进入睡眠。\n"
          L"在灵动岛上显示托盘图标时，将鼠标悬停在任务栏托盘中的 QQ 和微信图标上，又能看到它们的消息预览了：只有当鼠标在灵动岛上的图标上时，灵动岛才会回答图标的位置 (#7157)。\n"
          L"设置窗口在打开后的头几秒占用的处理器大幅减少：预览的提示、“+ 分隔线”的光晕以及其他只会淡入淡出或闪烁的提示，每秒最多绘制 30 次，而不是按显示器刷新率绘制。\n"
-         L"应用在任务栏按钮上的计数（例如 WhatsApp 的）不会再在通知列表为空时，让它的图标像待处理的通知一样一直留在灵动岛上：当应用切换到前台或点击其图标时视为已读，数字增加时会再次显示。",
+         L"应用在任务栏按钮上的计数（例如 WhatsApp 的）不会再在通知列表为空时，让它的图标像待处理的通知一样一直留在灵动岛上：当应用切换到前台或点击其图标时视为已读，数字增加时会再次显示。\n"
+         L"程序坞：游戏（例如 Steam 游戏）以及其他在开始菜单中没有自己图标的应用，在 Windows 图标缓存过期时不再显示为空白，也不再显示被放大的小图标：会按程序坞显示的尺寸读取程序自身的图标 (#7207)。",
          L"#Korrekturen\n"
          L"Die Insel stürzt nicht mehr in den Mediensteuerelementen von Windows ab, während die Videos eines Browsers (wie YouTube in Chrome) ständig wechseln, und falls die Insel doch einmal abstürzt, startet sie von selbst neu.\n"
          L"Sind die Notches des Stils „Fest“ minimiert, lugt das App-Symbol einer Benachrichtigung nur noch aus der Notch mit der Glocke hervor, nicht mehr aus jeder Notch, und nicht mehr für die App, die du gerade benutzt.\n"
@@ -23300,7 +23364,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"„Energie sparen“ im Menü der Ein/Aus-Taste versetzt PCs mit Modern Standby nicht mehr in den Ruhezustand: wie Start > Energie sparen schaltet es den Bildschirm aus und lässt den PC schlafen.\n"
          L"Die Nachrichtenvorschau von QQ und WeChat erscheint wieder, wenn man mit der Maus über ihr Symbol im Infobereich der Taskleiste fährt, während Infobereich-Symbole auf der Insel sind: Die Insel nennt die Position eines Symbols nur, solange die Maus dort darauf ist (#7157).\n"
          L"Das Einstellungsfenster braucht in den ersten Sekunden viel weniger Prozessorleistung: Der Hinweis der Vorschau, das Leuchten von „+ Linie“ und die anderen Hinweise, die nur ein- und ausblenden oder pulsieren, werden höchstens 30-mal pro Sekunde gezeichnet statt mit der Bildwiederholrate des Monitors.\n"
-         L"Der eigene Zähler einer App auf ihrer Taskleisten-Schaltfläche (wie der von WhatsApp) lässt ihr Symbol nicht mehr als wartende Benachrichtigung auf der Insel, während die Liste leer ist: Er gilt als gesehen, wenn die App in den Vordergrund kommt oder ihr Symbol angeklickt wird, und erscheint wieder, wenn die Zahl steigt.",
+         L"Der eigene Zähler einer App auf ihrer Taskleisten-Schaltfläche (wie der von WhatsApp) lässt ihr Symbol nicht mehr als wartende Benachrichtigung auf der Insel, während die Liste leer ist: Er gilt als gesehen, wenn die App in den Vordergrund kommt oder ihr Symbol angeklickt wird, und erscheint wieder, wenn die Zahl steigt.\n"
+         L"Dock: Symbole von Spielen (wie denen von Steam) und anderen Apps ohne eigenes Symbol im Startmenü bleiben nicht mehr leer, wenn der Symbolcache von Windows veraltet ist, und zeigen kein vergrößertes kleines Symbol mehr: Das eigene Symbol des Programms wird so groß gelesen, wie das Dock es zeigt (#7207).",
          L"#Correcciones\n"
          L"La isla ya no se bloquea dentro de los controles multimedia de Windows mientras los vídeos de un navegador (como YouTube en Chrome) cambian una y otra vez, y si alguna vez se bloquea, vuelve a abrirse sola.\n"
          L"Con las muescas del estilo Fijo minimizadas, el icono de la app de una notificación asoma solo por la muesca de la campana, no por todas, y ya no asoma para la app que estás usando.\n"
@@ -23308,7 +23373,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Suspender en el menú del botón de encendido ya no hiberna los PC con Modern Standby: como Inicio > Suspender, apaga la pantalla y deja que el PC se suspenda.\n"
          L"La vista previa de mensajes de QQ y WeChat vuelve a aparecer al pasar el ratón por su icono en la bandeja de la barra de tareas con iconos de la bandeja en la isla: la isla solo responde dónde está un icono mientras el ratón está sobre él allí (#7157).\n"
          L"La ventana de configuración usa mucho menos el procesador en sus primeros segundos: la pista de la vista previa, el brillo de «+ Línea» y las demás pistas que solo se desvanecen o laten se dibujan como máximo 30 veces por segundo en lugar de a la frecuencia del monitor.\n"
-         L"El contador propio de una app en su botón de la barra de tareas (como el de WhatsApp) ya no deja su icono en la isla como una notificación pendiente con la lista vacía: cuenta como visto cuando la app pasa al frente o se hace clic en su icono, y vuelve cuando el número sube.",
+         L"El contador propio de una app en su botón de la barra de tareas (como el de WhatsApp) ya no deja su icono en la isla como una notificación pendiente con la lista vacía: cuenta como visto cuando la app pasa al frente o se hace clic en su icono, y vuelve cuando el número sube.\n"
+         L"Dock: los iconos de juegos (como los de Steam) y de otras apps sin icono propio en el menú Inicio ya no quedan vacíos cuando la caché de iconos de Windows está desactualizada, ni muestran un icono pequeño ampliado: el icono del propio programa se lee al tamaño en que lo muestra el dock (#7207).",
          L"#Исправления\n"
          L"Остров больше не падает внутри медиаэлементов управления Windows, пока видео в браузере (например, YouTube в Chrome) постоянно меняются, а если остров всё же упадёт, он сам запустится снова.\n"
          L"Когда вырезы стиля «Фиксированный» свёрнуты, значок приложения из уведомления выглядывает только из выреза с колокольчиком, а не из каждого выреза, и больше не выглядывает для приложения, которым вы пользуетесь.\n"
@@ -23316,7 +23382,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"«Спящий режим» в меню кнопки питания больше не переводит ПК с Modern Standby в гибернацию: как Пуск > Спящий режим, он выключает экран и даёт ПК уснуть.\n"
          L"Предпросмотр сообщений QQ и WeChat снова появляется при наведении на их значок в трее панели задач, когда значки трея есть на острове: остров сообщает, где значок, только пока мышь на нём там (#7157).\n"
          L"Окно настроек гораздо меньше нагружает процессор в первые секунды: подсказка предпросмотра, свечение «+ Линия» и другие подсказки, которые только появляются, гаснут или пульсируют, рисуются не чаще 30 раз в секунду, а не с частотой монитора.\n"
-         L"Собственный счётчик приложения на его кнопке панели задач (как у WhatsApp) больше не оставляет его значок на острове как ожидающее уведомление при пустом списке: он считается просмотренным, когда приложение выходит на передний план или по его значку щёлкают, и появляется снова, когда число растёт.",
+         L"Собственный счётчик приложения на его кнопке панели задач (как у WhatsApp) больше не оставляет его значок на острове как ожидающее уведомление при пустом списке: он считается просмотренным, когда приложение выходит на передний план или по его значку щёлкают, и появляется снова, когда число растёт.\n"
+         L"Док: значки игр (например, из Steam) и других приложений без собственного значка в меню «Пуск» больше не становятся пустыми, когда кэш значков Windows устарел, и не показываются увеличенными маленькими: значок самой программы читается в том размере, в котором его показывает док (#7207).",
          L"#修正\n"
          L"ブラウザーの動画（Chrome の YouTube など）が切り替わり続けても、Windows のメディアコントロール内でアイランドがクラッシュしなくなりました。万一クラッシュしても、自動で再起動します。\n"
          L"固定スタイルのノッチを最小化しているとき、通知のアプリ アイコンはベルのあるノッチからだけ顔を出し、すべてのノッチからは出なくなりました。使用中のアプリの通知でも出なくなりました。\n"
@@ -23324,7 +23391,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"電源ボタンのメニューの「スリープ」が Modern Standby の PC を休止状態にしなくなりました。スタート > スリープと同じく画面を消して PC をスリープさせます。\n"
          L"アイランドにトレイ アイコンを表示しているとき、タスクバーのトレイにある QQ と WeChat のアイコンにマウスを合わせると、メッセージのプレビューが再び出るようになりました。アイランドがアイコンの位置を答えるのは、マウスがアイランド上のそのアイコンにあるときだけです (#7157)。\n"
          L"設定ウィンドウを開いた直後の数秒間のプロセッサー使用量が大きく減りました。プレビューのヒント、「+ 区切り」の光、そのほかフェードや点滅だけのヒントは、モニターのリフレッシュレートではなく毎秒最大 30 回描画されます。\n"
-         L"タスクバー ボタン上のアプリ自身のカウンター（WhatsApp など）が、一覧が空なのにアイコンを待機中の通知としてアイランドに残すことはなくなりました。アプリが前面に来たときやアイコンをクリックしたときに既読扱いになり、数が増えると再び表示されます。",
+         L"タスクバー ボタン上のアプリ自身のカウンター（WhatsApp など）が、一覧が空なのにアイコンを待機中の通知としてアイランドに残すことはなくなりました。アプリが前面に来たときやアイコンをクリックしたときに既読扱いになり、数が増えると再び表示されます。\n"
+         L"Dock：ゲーム（Steam のものなど）や、スタートメニューに専用アイコンがないアプリのアイコンが、Windows のアイコンキャッシュが古いときに空になったり、小さなアイコンが拡大表示されたりしなくなりました。プログラム自身のアイコンを Dock の表示サイズで読み込みます (#7207)。",
          L"#Sửa lỗi\n"
          L"Đảo không còn bị sập trong phần điều khiển phương tiện của Windows khi video của trình duyệt (như YouTube trên Chrome) liên tục thay đổi, và nếu có lúc đảo bị sập, nó sẽ tự khởi động lại.\n"
          L"Khi các tai thỏ của kiểu Cố định được thu nhỏ, biểu tượng ứng dụng của thông báo chỉ ló ra ở tai thỏ có chuông, không ló ra ở mọi tai thỏ nữa, và không còn ló ra với ứng dụng bạn đang dùng.\n"
@@ -23332,7 +23400,8 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Ngủ trong menu nút nguồn không còn làm máy có Modern Standby ngủ đông nữa: giống Start > Sleep, nó tắt màn hình và để máy ngủ.\n"
          L"Bản xem trước tin nhắn của QQ và WeChat lại hiện khi rê chuột lên biểu tượng của chúng trong khay của thanh tác vụ khi có biểu tượng khay trên đảo: đảo chỉ trả lời vị trí của biểu tượng khi chuột đang ở trên nó tại đảo (#7157).\n"
          L"Cửa sổ cài đặt dùng bộ xử lý ít hơn nhiều trong những giây đầu: gợi ý của bản xem trước, ánh sáng của \"+ Vạch\" và các gợi ý khác chỉ mờ dần hoặc nhấp nháy được vẽ tối đa 30 lần mỗi giây thay vì theo tần số màn hình.\n"
-         L"Bộ đếm riêng của ứng dụng trên nút thanh tác vụ (như của WhatsApp) không còn giữ biểu tượng của nó trên đảo như một thông báo đang chờ khi danh sách trống: nó được tính là đã xem khi ứng dụng lên phía trước hoặc biểu tượng được bấm, và hiện lại khi con số tăng."}},
+         L"Bộ đếm riêng của ứng dụng trên nút thanh tác vụ (như của WhatsApp) không còn giữ biểu tượng của nó trên đảo như một thông báo đang chờ khi danh sách trống: nó được tính là đã xem khi ứng dụng lên phía trước hoặc biểu tượng được bấm, và hiện lại khi con số tăng.\n"
+         L"Dock: biểu tượng của trò chơi (như của Steam) và các ứng dụng khác không có biểu tượng riêng trong menu Start không còn bị trống khi bộ nhớ đệm biểu tượng của Windows đã cũ, cũng không còn hiện biểu tượng nhỏ bị phóng to: biểu tượng của chính chương trình được đọc ở đúng kích thước Dock hiển thị (#7207)."}},
     {L"3.1.0",
      {
          L"#New\n"
@@ -27316,7 +27385,9 @@ DWORD ProcessIntegrityLevel(HANDLE process) {
 // at its hello while it runs (the hello's sender is known only by its
 // window's class): Windhawk's own image, at Explorer's integrity level (the
 // one it would run at, started again by Explorer: an elevated one isn't).
-// Its path then, or empty.
+// Its path then, or empty. (On Windhawk 2.0 the island's process is
+// windhawk-mod.exe, which Windhawk starts itself, with its own arguments:
+// not started again here.)
 std::wstring IslandRestartPath(HANDLE process) {
     WCHAR image[MAX_PATH];
     DWORD size = ARRAYSIZE(image);
@@ -27358,13 +27429,35 @@ void RestartCrashedIsland() {
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
+    // Launched as the tool mod snippet does (see Wh_ModAfterInit):
+    // CreateProcessInternalW is the one Windhawk hooks to load the mod in the
+    // new process (on ARM64, CreateProcessW may not go through the hook, and
+    // Windhawk itself would start).
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+    }
+    const auto createProcess =
+        kernelModule ? (CreateProcessInternalW_t)GetProcAddress(
+                           kernelModule, "CreateProcessInternalW")
+                     : nullptr;
     // (The mod may have started unloading meanwhile: "Do not disturb" above
     // can take a moment.)
     if (g_unloading) {
         return;
     }
-    if (!CreateProcess(path.c_str(), commandLine, nullptr, nullptr, FALSE,
-                       NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
+    if (!createProcess ||
+        !createProcess(nullptr, path.c_str(), commandLine, nullptr, nullptr,
+                       FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si,
+                       &pi, nullptr)) {
         IslandLog(L"The island crashed (%08X), starting it again failed",
                   (unsigned)exitCode);
         return;
@@ -98871,7 +98964,8 @@ std::wstring LogsText() {
 }
 
 // Windhawk's own window (where the dock's options are), from the folder
-// the island's process runs from.
+// the island's process runs from (windhawk.exe on Windhawk 1.7.3; on 2.0,
+// windhawk-mod.exe, with windhawk.exe beside it).
 void OpenWindhawk() {
     WCHAR path[MAX_PATH];
     const DWORD length = GetModuleFileName(nullptr, path, ARRAYSIZE(path));
