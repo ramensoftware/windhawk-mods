@@ -2,12 +2,12 @@
 // @id              pwa-tray-center
 // @name            PWA Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.1.900
+// @version         0.5.320
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -ld3d11 -ldxgi -ldcomp
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -80,6 +80,12 @@ Volume bar in Media tab controls Chrome's system-wide volume (same as Windows vo
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Notifications.h>
 
+// DXGI / Direct3D / DirectComposition: after WinRT, which must come first.
+#include <d2d1_1.h>
+#include <d3d11.h>
+#include <dcomp.h>
+#include <dxgi1_2.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -111,6 +117,7 @@ constexpr UINT kMenuIdHideToCenter = 0x0B80;
 constexpr UINT kMsgListChanged = WM_APP + 1;
 constexpr UINT kMsgMouseHotkey = WM_APP + 4;  // mouse button pressed while the shortcut is chosen (wParam vk, lParam mods)
 constexpr UINT kMsgHookSync = WM_APP + 5;     // hook thread: make the hooks match the settings
+constexpr UINT kMsgWindowHidden = WM_APP + 8;  // a PWA window was hidden: show its note if the center is open
 constexpr UINT kMsgPlainClick = WM_APP + 7;   // plain press while a shortcut is chosen (point in wParam/lParam)
 constexpr UINT kMsgOutsidePress = WM_APP + 6; // a mouse press seen by a hook (Hermes closes on an outside press)
 
@@ -143,7 +150,7 @@ const GUID kIidD2DFactory = {
 const GUID kIidDWriteFactory = {
     0xb859ee5a, 0xd838, 0x4b5b, {0xa2, 0xe8, 0x1a, 0xdc, 0x7d, 0x93, 0xdb, 0x48}};
 
-enum class Backdrop { Mica, Acrylic, Solid };
+enum class Backdrop { Mica, Solid };
 enum class AppDisplay { Both, Icons, Names };
 enum class PanelMode { Hermes, Titan };
 
@@ -467,7 +474,7 @@ enum PrefId {
 
 // Option labels, in the order of the values of their enum.
 const wchar_t* const kOptPanelMode[] = {L"Hermes (Quick)", L"Titan (Pinned)"};
-const wchar_t* const kOptBackdrop[] = {L"Mica", L"Acrylic", L"Solid color"};
+const wchar_t* const kOptBackdrop[] = {L"Mica", L"Solid color"};
 const wchar_t* const kOptAppDisplay[] = {L"Icon and name", L"Icons only", L"Names only"};
 const wchar_t* const kOptNotifPos[] = {L"Top left", L"Top right", L"Bottom left",
                                        L"Bottom right", L"Top center", L"Bottom center"};
@@ -1243,6 +1250,7 @@ HANDLE g_workThread = nullptr;
 HANDLE g_workWake = nullptr;
 std::atomic<bool> g_workStop{false};
 std::atomic<bool> g_stopping{false};  // set when the mod unloads: no thread is started after this
+std::vector<std::pair<HWND, ULONGLONG>> g_pendingHidden;  // hidden windows waiting for a note (window, tick); guarded by g_mutex
 std::atomic<ULONGLONG> g_pollUntil{0};
 
 template <typename Op>
@@ -1879,13 +1887,11 @@ constexpr wchar_t kGlyphVolMute[] = L"\xE74F";
 constexpr wchar_t kGlyphVol1[] = L"\xE993";
 constexpr wchar_t kGlyphVol2[] = L"\xE994";
 constexpr wchar_t kGlyphVol3[] = L"\xE995";
-constexpr wchar_t kGlyphView[] = L"\xE890";        // notification: Show
-constexpr wchar_t kGlyphOpenWindow[] = L"\xE8A7";  // notification: Open
 
 // Custom title bar
 constexpr float kTitleBarH = 40.0f;
 constexpr float kCloseButtonW = 46.0f;
-constexpr wchar_t kAppVersion[] = L"v0.1.900";
+constexpr wchar_t kAppVersion[] = L"v" WH_MOD_VERSION;
 
 constexpr float kPanelW = 400.0f, kPanelH = 480.0f;  // 440 content + 40 title bar
 constexpr float kPad = 12.0f;
@@ -2032,16 +2038,19 @@ struct CoverEntry {
 enum class NotifSeverity { Info, Success, Warning, Error };
 
 constexpr float kNoteW = 280.0f;
-constexpr float kNoteH = 72.0f;
+constexpr float kNoteMinH = 48.0f;  // a note is at least this tall
+constexpr float kNoteMaxH = 140.0f; // and at most this tall (longer text is cut)
 constexpr float kNoteGap = 8.0f;
 constexpr float kNoteHideMs = 4000.0f;
 constexpr size_t kNoteMax = 3;
 
 // A notification drawn inside the panel. One card style for every severity.
 struct Note {
+    float h = 48.0f;  // height, from the text (see NoteHeight)
     int id = 0;
     NotifSeverity sev = NotifSeverity::Info;
     PCWSTR glyph = nullptr;  // custom icon, else the severity icon
+    ID2D1Bitmap* icon = nullptr;  // app icon, shown instead of the glyph
     std::wstring title;
     std::wstring message;
     float x = 0;          // resting x, DIP
@@ -2061,7 +2070,7 @@ struct Note {
 struct Panel {
     HWND hwnd = nullptr;
     int dpi = 96;
-    bool solid = false;  // opaque background (no Mica/Acrylic)
+    bool solid = false;  // opaque background (no Mica)
     Theme th;
 
     // Placement.
@@ -2074,21 +2083,30 @@ struct Panel {
     int pxH = 0;
     float hDip = 0;
 
-    // Direct2D / DirectWrite.
-    Cp<ID2D1DCRenderTarget> rt;
+    // Direct2D on a DXGI composition swap chain (premultiplied alpha), shown by
+    // DirectComposition. The swap chain's transparent pixels let Mica through.
+    Cp<ID3D11Device> d3d;
+    Cp<IDXGIDevice> dxgi;
+    Cp<ID2D1Device> d2dDevice;
+    Cp<ID2D1RenderTarget> rt;          // owns the device context
+    ID2D1DeviceContext* dc = nullptr;  // the same object, borrowed
     Cp<ID2D1SolidColorBrush> brush;
+    Cp<IDXGISwapChain1> swap;
+    Cp<ID2D1Bitmap1> target;           // back buffer of the swap chain, as target
+    Cp<IDCompositionDevice> dcomp;
+    Cp<IDCompositionTarget> dcTarget;
+    Cp<IDCompositionVisual> dcVisual;
+    // Direct2D / DirectWrite.
     Cp<IDWriteTextFormat> fName, fBody, fBodyWrap, fSmall, fTimeRight, fButton, fIcon,
         fIconBig, fIconHuge, fTab, fCenter, fBadge, fLetter, fDiag, fMenu,
         fMenuIcon;
     std::unordered_map<std::wstring, ID2D1Bitmap*> bmps;  // owned, may be null
     std::unordered_map<std::wstring, CoverEntry> covers;  // owned
 
-    // Back buffer.
-    HDC memDC = nullptr;
-    HBITMAP dib = nullptr;
-    HGDIOBJ oldBmp = nullptr;
+    // Back buffer: size and DPI of the swap chain's target.
     int bbW = 0;
     int bbH = 0;
+    float bbDpi = 0;
 
     // Data.
     std::vector<AppInfo> all;       // matching PWA windows
@@ -2569,13 +2587,23 @@ ID2D1Bitmap* AppBitmap(Panel& p, const AppInfo& a) {
 
 // Text layouts made for drawing and measuring, reused between frames. Cleared
 // when the panel closes, the next open makes them again.
-std::unordered_map<std::wstring, IDWriteTextLayout*> g_layoutCache;
+struct LayoutEntry {
+    IDWriteTextFormat* format;
+    float width;
+    float height;
+    IDWriteTextLayout* layout;
+};
+std::unordered_map<std::wstring, std::vector<LayoutEntry>> g_layoutCache;
+int g_layoutCount = 0;
 
 void ClearLayoutCache() {
     for (auto& kv : g_layoutCache) {
-        kv.second->Release();
+        for (const LayoutEntry& e : kv.second) {
+            e.layout->Release();
+        }
     }
     g_layoutCache.clear();
+    g_layoutCount = 0;
 }
 
 void ReleasePanelBitmaps(Panel& p) {
@@ -2595,66 +2623,144 @@ void ReleasePanelBitmaps(Panel& p) {
 }
 
 bool CreateGfx(Panel& p) {
-    D2D1_RENDER_TARGET_PROPERTIES props = {};
-    props.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-    props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
-    props.usage = D2D1_RENDER_TARGET_USAGE_NONE;
-    props.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
-    if (FAILED(g_d2d->CreateDCRenderTarget(&props, p.rt.Put()))) {
+    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                                   D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
+                                   D3D11_SDK_VERSION, p.d3d.Put(), nullptr, nullptr);
+    if (FAILED(hr)) {
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
+                               D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
+                               D3D11_SDK_VERSION, p.d3d.Put(), nullptr, nullptr);
+    }
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = p.d3d->QueryInterface(__uuidof(IDXGIDevice), (void**)p.dxgi.Put());
+    if (FAILED(hr)) {
         return false;
     }
 
+    // Same factory as g_d2d (its geometries must stay usable with this target).
+    Cp<ID2D1Factory1> factory1;
+    hr = g_d2d->QueryInterface(__uuidof(ID2D1Factory1), (void**)factory1.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = factory1->CreateDevice(p.dxgi.p, p.d2dDevice.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    ID2D1DeviceContext* dc = nullptr;
+    hr = p.d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc);
+    if (FAILED(hr)) {
+        return false;
+    }
+    p.rt.p = dc;
+    p.dc = dc;
+
     D2D1_COLOR_F white = {1, 1, 1, 1};
-    if (FAILED(p.rt->CreateSolidColorBrush(&white, nullptr, p.brush.Put()))) {
+    hr = p.rt->CreateSolidColorBrush(&white, nullptr, p.brush.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    // Swap chain for composition: premultiplied alpha, so that transparent
+    // pixels are see-through and the Mica backdrop shows behind them.
+    Cp<IDXGIAdapter> adapter;
+    Cp<IDXGIFactory2> factory2;
+    hr = p.dxgi->GetAdapter(adapter.Put());
+    if (SUCCEEDED(hr)) {
+        hr = adapter->GetParent(__uuidof(IDXGIFactory2), (void**)factory2.Put());
+    }
+    if (FAILED(hr)) {
+        return false;
+    }
+    DXGI_SWAP_CHAIN_DESC1 sd = {};
+    sd.Width = (UINT)(std::max)(p.pxW, 1);
+    sd.Height = (UINT)(std::max)(p.pxH, 1);
+    sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sd.SampleDesc.Count = 1;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.BufferCount = 2;
+    sd.Scaling = DXGI_SCALING_STRETCH;
+    sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    sd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    hr = factory2->CreateSwapChainForComposition(p.d3d.p, &sd, nullptr, p.swap.Put());
+    if (FAILED(hr)) {
         return false;
     }
     return CreateTextFormats(p);
 }
 
+// Connects the swap chain to the window with DirectComposition. Needs the window.
+bool AttachComposition(Panel& p) {
+    HRESULT hr = DCompositionCreateDevice(p.dxgi.p, __uuidof(IDCompositionDevice),
+                                          (void**)p.dcomp.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = p.dcomp->CreateTargetForHwnd(p.hwnd, TRUE, p.dcTarget.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = p.dcomp->CreateVisual(p.dcVisual.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = p.dcVisual->SetContent(p.swap.p);
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = p.dcTarget->SetRoot(p.dcVisual.p);
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = p.dcomp->Commit();
+    return SUCCEEDED(hr);
+}
+
 void FreeBackBuffer(Panel& p) {
-    if (p.memDC && p.oldBmp) {
-        SelectObject(p.memDC, p.oldBmp);
+    if (p.dc) {
+        p.dc->SetTarget(nullptr);
     }
-    if (p.dib) {
-        DeleteObject(p.dib);
-    }
-    if (p.memDC) {
-        DeleteDC(p.memDC);
-    }
-    p.memDC = nullptr;
-    p.dib = nullptr;
-    p.oldBmp = nullptr;
+    p.target.Reset();
     p.bbW = p.bbH = 0;
+    p.bbDpi = 0;
 }
 
 bool EnsureBackBuffer(Panel& p) {
-    if (p.dib && p.bbW == p.pxW && p.bbH == p.pxH) {
+    const int w = (std::max)(p.pxW, 1);
+    const int h = (std::max)(p.pxH, 1);
+    const float dpi = (float)(p.dpi * p.ui);
+    if (p.target && p.bbW == w && p.bbH == h && p.bbDpi == dpi) {
         return true;
     }
-    FreeBackBuffer(p);
-
-    HDC screen = GetDC(nullptr);
-    p.memDC = CreateCompatibleDC(screen);
-
-    BITMAPINFO bi = {};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = p.pxW;
-    bi.bmiHeader.biHeight = -p.pxH;  // top-down
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    p.dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    ReleaseDC(nullptr, screen);
-
-    if (!p.dib || !p.memDC) {
-        FreeBackBuffer(p);
+    FreeBackBuffer(p);  // no references to the old buffer are left before a resize
+    if (!p.swap || !p.dc) {
         return false;
     }
-    p.oldBmp = SelectObject(p.memDC, p.dib);
-    p.bbW = p.pxW;
-    p.bbH = p.pxH;
+    HRESULT hr = p.swap->ResizeBuffers(0, (UINT)w, (UINT)h, DXGI_FORMAT_UNKNOWN, 0);
+    if (FAILED(hr)) {
+        return false;
+    }
+    Cp<IDXGISurface> surface;
+    hr = p.swap->GetBuffer(0, __uuidof(IDXGISurface), (void**)surface.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    D2D1_BITMAP_PROPERTIES1 bp = {};
+    bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bp.dpiX = dpi;
+    bp.dpiY = dpi;
+    bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    hr = p.dc->CreateBitmapFromDxgiSurface(surface.p, &bp, p.target.Put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    p.dc->SetTarget(p.target.p);
+    p.bbW = w;
+    p.bbH = h;
+    p.bbDpi = dpi;
     return true;
 }
 
@@ -2760,7 +2866,7 @@ void ApplyBackdrop(Panel& p) {
     p.solid = true;
     Backdrop b = (Backdrop)g_backdrop.load();
     if (b != Backdrop::Solid && GetWindowsBuild() >= 22621) {
-        int type = b == Backdrop::Mica ? 2 : 3;  // DWMSBT_MAINWINDOW / TRANSIENT
+        const int type = 2;  // DWMSBT_MAINWINDOW (Mica)
         if (SUCCEEDED(DwmSetWindowAttribute(
                 p.hwnd, 38 /*DWMWA_SYSTEMBACKDROP_TYPE*/, &type, sizeof(type)))) {
             MARGINS margins = {-1, -1, -1, -1};
@@ -2827,21 +2933,23 @@ IDWriteTextLayout* CachedLayout(const std::wstring& s,
                                 float height) {
     const float w = (std::max)(0.0f, width);
     const float h = (std::max)(0.0f, height);
-    std::wstring key = std::to_wstring((uintptr_t)f) + L"|" +
-                       std::to_wstring(w) + L"|" + std::to_wstring(h) + L"|" + s;
-    auto it = g_layoutCache.find(key);
+    auto it = g_layoutCache.find(s);
     if (it != g_layoutCache.end()) {
-        return it->second;
+        for (const LayoutEntry& e : it->second) {
+            if (e.format == f && e.width == w && e.height == h) {
+                return e.layout;
+            }
+        }
     }
-    if (g_layoutCache.size() >= 1024) {
+    if (g_layoutCount >= 1024) {
         ClearLayoutCache();
     }
     IDWriteTextLayout* layout = nullptr;
-    if (FAILED(g_dwrite->CreateTextLayout(s.c_str(), (UINT32)s.size(), f, w, h,
-                                          &layout))) {
+    if (FAILED(g_dwrite->CreateTextLayout(s.c_str(), (UINT32)s.size(), f, w, h, &layout))) {
         return nullptr;
     }
-    g_layoutCache.emplace(key, layout);
+    g_layoutCache[s].push_back({f, w, h, layout});
+    ++g_layoutCount;
     return layout;
 }
 
@@ -3339,27 +3447,33 @@ void ClampScroll(Panel& p, int tab) {
     p.scrollT[tab] = (std::max)(0.0f, (std::min)(p.scrollT[tab], maxScroll));
 }
 
-// Fluent press spring for the play/pause button. Uses the values the Windows
-// Design team recommends for a Scale spring: DampingRatio 0.7, Period 50 ms.
-// While the button is held it is pulled to kPressScale, after release it
-// springs back to 1 with a small overshoot.
-constexpr float kPressScale = 0.92f;
-constexpr float kSpringZeta = 0.7f;
-constexpr float kSpringPeriod = 0.05f;
+// Press spring for the play/pause button, with Material 3 Expressive spatial values
+// (stiffness and damping ratio, mass 1). Pressing settles quickly without bounce;
+// release bounces back a little, the way Pixel buttons do.
+constexpr float kPressScale = 0.9f;
+constexpr float kPressStiffness = 1400.0f;   // standard spatial fast
+constexpr float kPressDamping = 0.9f;
+constexpr float kReleaseStiffness = 800.0f;  // expressive spatial fast
+constexpr float kReleaseDamping = 0.6f;
 
 // Advances the spring by dt seconds. Returns true while it is still moving.
+// The velocity carries over when the target changes mid-motion, so a quick
+// tap or a release during the press animation stays continuous.
 bool StepPressSpring(Panel& p, float dt) {
     float target = 1.0f;
+    bool pressing = false;
     if (KindOf(p.pressed) == kHitMediaPlay && p.hovered == p.pressed) {
         target = kPressScale;
+        pressing = true;
     }
-    const float w = 2.0f * 3.14159265f / kSpringPeriod;  // natural frequency
+    const float k = pressing ? kPressStiffness : kReleaseStiffness;
+    const float zeta = pressing ? kPressDamping : kReleaseDamping;
+    const float c = 2.0f * zeta * std::sqrt(k);  // damping coefficient
     const float h = 0.002f;  // fixed sub-step keeps the integration stable
     float t = dt;
     while (t > 0) {
         float s = t < h ? t : h;
-        float acc = -w * w * (p.pressScale - target) -
-                    2.0f * kSpringZeta * w * p.pressVel;
+        float acc = -k * (p.pressScale - target) - c * p.pressVel;
         p.pressVel += acc * s;
         p.pressScale += p.pressVel * s;
         t -= s;
@@ -3422,30 +3536,28 @@ int EdgeDir() {
     return SwipeDirFor((NotifPos)g_notifPos.load()) < 0 ? -1 : 1;
 }
 
-// Stacks the live notes from the chosen edge, the newest nearest to it.
 void LayoutNotes(Panel& p) {
     const NotifPos pos = (NotifPos)g_notifPos.load();
     const bool top = pos == NotifPos::TopLeft || pos == NotifPos::TopRight ||
                      pos == NotifPos::Top;
     const bool left = pos == NotifPos::TopLeft || pos == NotifPos::BottomLeft;
     const bool center = pos == NotifPos::Top || pos == NotifPos::Bottom;
-    const float step = kNoteH + kNoteGap;
     const float x = center ? (kPanelW - kNoteW) / 2
                            : (left ? kPad : kPanelW - kPad - kNoteW);
-    int k = 0;
+    // Stacked from the chosen edge, the newest nearest to it. Every note has its own height.
+    float used = 0;
     for (size_t i = p.notes.size(); i-- > 0;) {
         Note& n = p.notes[i];
         if (n.leaving) {
             continue;
         }
         n.x = x;
-        n.targetY = top ? kTitleBarH + kPad + k * step
-                        : kPanelH - kPad - kNoteH - k * step;
+        n.targetY = top ? kTitleBarH + kPad + used : kPanelH - kPad - n.h - used;
         if (n.fresh) {
             n.y = n.targetY;
             n.fresh = false;
         }
-        ++k;
+        used += n.h + kNoteGap;
     }
 }
 
@@ -3502,19 +3614,23 @@ void DrawNotes(Panel& p) {
         if (n.leaving) {
             fade *= Clamp01(1.0f - std::fabs(n.dragDx) / (kNoteW * 0.6f));
         }
-        AddHit(p, MakeId(kHitNote, n.id), Rc(x, n.y, kNoteW, kNoteH));
+        AddHit(p, MakeId(kHitNote, n.id), Rc(x, n.y, kNoteW, n.h));
         if (fade <= 0.01f) {
             continue;
         }
         p.alpha = saveAlpha * fade;
         p.ox = x;
         p.oy = n.y;
-        FillRR(p, Rc(0, 0, kNoteW, kNoteH), kRadiusOverlay, th.menuBg);
-        StrokeRR(p, Rc(0, 0, kNoteW, kNoteH), kRadiusOverlay, th.menuBorder);
-        DrawTxt(p, n.glyph ? n.glyph : SeverityGlyph(n.sev), p.fIconBig.p,
-                Rc(12, 0, 36, kNoteH), SeverityColor(th, n.sev));
+        FillRR(p, Rc(0, 0, kNoteW, n.h), kRadiusOverlay, th.menuBg);
+        StrokeRR(p, Rc(0, 0, kNoteW, n.h), kRadiusOverlay, th.menuBorder);
+        if (n.icon) {
+            DrawBmp(p, n.icon, Rc(12, 11, 28, 28));
+        } else {
+            DrawTxt(p, n.glyph ? n.glyph : SeverityGlyph(n.sev), p.fIconBig.p,
+                    Rc(12, 1, 36, n.h), SeverityColor(th, n.sev));
+        }
         DrawTxt(p, n.title, p.fName.p, Rc(56, 10, kNoteW - 70, 20), th.text);
-        DrawTxt(p, n.message, p.fBodyWrap.p, Rc(56, 30, kNoteW - 70, 34),
+        DrawTxt(p, n.message, p.fBodyWrap.p, Rc(56, 30, kNoteW - 70, n.h - 36),
                 th.textSecondary);
     }
     p.alpha = saveAlpha;
@@ -3523,11 +3639,28 @@ void DrawNotes(Panel& p) {
 }
 
 // Shows a notification inside the panel.
+// Height of a note: the title line, then the message wrapped to the text width.
+float NoteHeight(Panel& p, const std::wstring& message) {
+    const float bodyH = message.empty() ? 0.0f : MeasureH(message, p.fBodyWrap.p, kNoteW - 70.0f);
+    return (std::min)(kNoteMaxH, (std::max)(kNoteMinH, 30.0f + bodyH + 12.0f));
+}
+
+// Icon of a running PWA window, for the notes about it.
+ID2D1Bitmap* WindowBitmap(Panel& p, HWND hwnd) {
+    for (const AppInfo& a : p.all) {
+        if (a.hwnd == hwnd) {
+            return AppBitmap(p, a);
+        }
+    }
+    return nullptr;
+}
+
 void PushNote(Panel& p,
               NotifSeverity sev,
               const std::wstring& title,
               const std::wstring& message,
-              PCWSTR glyph = nullptr) {
+              PCWSTR glyph = nullptr,
+              ID2D1Bitmap* icon = nullptr) {
     if (g_panelMode == (int)PanelMode::Hermes) {
         return;  // Hermes shows no notifications
     }
@@ -3553,6 +3686,8 @@ void PushNote(Panel& p,
     n.message = message;
     n.swipeDir = SwipeDirFor((NotifPos)g_notifPos.load());
     n.glyph = glyph;
+    n.h = NoteHeight(p, message);
+    n.icon = icon;
     TweenJump(n.enter, 0.0f);
     TweenSet(n.enter, 1.0f, 167, kEaseOut);
     p.notes.push_back(n);
@@ -3591,7 +3726,7 @@ bool UpdateAnims(Panel& p, ULONGLONG now) {
     }
     active |= StepPressSpring(p, dt);
     active |= StepNotes(p, dt);
-    if (!p.hlKey.empty() && now - p.hlTick < 2600) {
+    if (!p.hlKey.empty() && now - p.hlTick < 1450) {
         active = true;
     }
     float k = 1.0f - std::exp(-dt * 20.0f);
@@ -3657,7 +3792,7 @@ void DrawTitleBar(Panel& p) {
     // Right side: Hidden count in pill badge + close button
     size_t n = p.hiddenIdx.size();
     std::wstring hiddenText =
-        std::to_wstring(n) + (n == 1 ? L" hidden PWA" : L" hidden PWAs");
+        n == 0 ? std::wstring(L"\x00AF\\_(\x30C4)_/\x00AF") : std::to_wstring(n) + (n == 1 ? L" hidden PWA" : L" hidden PWAs");
     
     float pillW = (std::max)(64.0f, MeasureW(hiddenText, p.fBadge.p) + 16.0f);
     float pillH = 18.0f;
@@ -3743,23 +3878,23 @@ void DrawTabs(Panel& p) {
     FillRR(p, Rc(cx - 10, kTabsY + kTabsH - 4, 20, 3), 1.5f, t.accent);
 }
 
-// Highlight after a jump from the PWAs tab: waits 500 ms, lights up, fades out.
+// Highlight after a jump from the PWAs tab: short wait, 400 ms light up, 100 ms fade out.
 float MediaHighlight(const Panel& p, const std::wstring& key) {
     if (p.hlKey.empty() || key != p.hlKey) {
         return 0.0f;
     }
     const long long t = (long long)(NowMs() - p.hlTick);
-    if (t < 500) {
+    if (t < 150) {
         return 0.0f;
     }
-    if (t < 700) {
-        return (float)(t - 500) / 200.0f;
+    if (t < 550) {
+        return (float)(t - 150) / 400.0f;
     }
-    if (t < 2200) {
+    if (t < 1250) {
         return 1.0f;
     }
-    if (t < 2500) {
-        return 1.0f - (float)(t - 2200) / 300.0f;
+    if (t < 1350) {
+        return 1.0f - (float)(t - 1250) / 100.0f;
     }
     return 0.0f;
 }
@@ -3798,6 +3933,102 @@ void DrawScrollingLine(Panel& p, const std::wstring& s, IDWriteTextFormat* fmt,
     DrawTxt(p, s, fmt,
             Rc(box.left - offset + (float)step, box.top, textW + 4.0f, h), c);
     PopClip(p);
+}
+
+// Progress bar (Material 3 Expressive, Pixel style). The played part is a sine wave
+// that travels along the track, the rest is a straight line. Both stop a little short
+// of a thick vertical separator that marks the position. The wave flattens near 0%
+// and 100%, and it stops while the track is paused.
+constexpr float kWaveLength = 24.0f;   // DIP per wave
+constexpr float kWaveAmp = 0.0f;       // half height, DIP (0 = straight bar)
+constexpr float kWaveStroke = 6.0f;    // DIP, the bar's thickness
+constexpr float kSeparatorW = 5.0f;    // DIP, the vertical separator
+constexpr float kSeparatorH = 20.0f;   // DIP
+constexpr float kSeparatorGap = 5.0f;  // visible gap between the bar and the separator
+
+// Strokes an open polyline with round caps. Points are in panel coordinates.
+void StrokePolyline(Panel& p, const std::vector<D2D1_POINT_2F>& pts,
+                    const D2D1_COLOR_F& c, ID2D1StrokeStyle* style) {
+    if (pts.size() < 2) {
+        return;
+    }
+    ID2D1PathGeometry* geom = nullptr;
+    if (FAILED(g_d2d->CreatePathGeometry(&geom))) {
+        return;
+    }
+    ID2D1GeometrySink* sink = nullptr;
+    if (SUCCEEDED(geom->Open(&sink))) {
+        sink->BeginFigure(pts[0], D2D1_FIGURE_BEGIN_HOLLOW);
+        for (size_t i = 1; i < pts.size(); ++i) {
+            sink->AddLine(pts[i]);
+        }
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->Close();
+        sink->Release();
+        SetBrush(p, c);
+        p.rt->DrawGeometry(geom, p.brush.p, kWaveStroke, style);
+    }
+    geom->Release();
+}
+
+// `track` is the bar's rectangle in panel coordinates before the scroll offset;
+// its vertical centre is the bar's centre line.
+void DrawWavyTrack(Panel& p, const D2D1_RECT_F& track, double frac, bool playing,
+                   bool separator) {
+    const float cy = (track.top + track.bottom) / 2.0f;
+    const float left = track.left;
+    const float right = track.right;
+    const float xEnd = left + (right - left) * (float)frac;
+
+    // The wave is static: its phase does not move, so no frames are requested for it.
+
+    // Full height in the middle, flat near both ends.
+    const double edge = (std::min)(frac / 0.1, (1.0 - frac) / 0.05);
+    const float amp = kWaveAmp * (float)Clamp01(edge);
+
+    // Both parts stop short of the separator: the distance from its centre to the
+    // end of each part is half its width, the gap, and the round cap of the bar.
+    const float reach = kSeparatorW / 2.0f + kSeparatorGap + kWaveStroke / 2.0f;
+    const float xA = xEnd - reach;  // end of the played part
+    const float xB = xEnd + reach;  // start of the unplayed part
+
+    D2D1_STROKE_STYLE_PROPERTIES sp = {};
+    sp.startCap = D2D1_CAP_STYLE_ROUND;
+    sp.endCap = D2D1_CAP_STYLE_ROUND;
+    sp.dashCap = D2D1_CAP_STYLE_ROUND;
+    sp.lineJoin = D2D1_LINE_JOIN_ROUND;
+    ID2D1StrokeStyle* style = nullptr;
+    if (FAILED(g_d2d->CreateStrokeStyle(&sp, nullptr, 0, &style))) {
+        return;
+    }
+
+    // Played part: the wave, from the start of the track to the separator.
+    std::vector<D2D1_POINT_2F> wave;
+    for (float x = left; x < xA; x += 1.5f) {
+        const float phase = x - left;
+        wave.push_back({x + p.ox,
+                        cy + p.oy + amp * (float)std::sin(2.0 * 3.14159265 * phase / kWaveLength)});
+    }
+    if (xA > left) {
+        const float phase = xA - left;
+        wave.push_back({xA + p.ox,
+                        cy + p.oy + amp * (float)std::sin(2.0 * 3.14159265 * phase / kWaveLength)});
+    }
+    StrokePolyline(p, wave, p.th.accent, style);
+
+    // Unplayed part: a straight line.
+    if (xB < right) {
+        StrokePolyline(p, {{xB + p.ox, cy + p.oy}, {right + p.ox, cy + p.oy}}, p.th.track,
+                       style);
+    }
+    style->Release();
+
+    // The thick separator: always visible while the track can be seeked (Pixel style).
+    if (separator) {
+        FillRR(p, Rc(xEnd - kSeparatorW / 2.0f, cy - kSeparatorH / 2.0f, kSeparatorW,
+                     kSeparatorH),
+               kSeparatorW / 2.0f, p.th.accent);
+    }
 }
 
 // Play / pause button of a media card. The same in both views.
@@ -3851,7 +4082,8 @@ void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     StrokeRR(p, card, kRadiusCtl, t.cardBorder);
     const float hl = MediaHighlight(p, m.key);
     if (hl > 0.0f) {
-        FillRR(p, card, kRadiusCtl, WithAlpha(t.accent, 0.12f * hl));
+        FillRR(p, card, kRadiusCtl, WithAlpha(t.accent, 0.25f * hl));
+        StrokeRR(p, card, kRadiusCtl, WithAlpha(t.accent, hl));
         StrokeRR(p, card, kRadiusCtl, WithAlpha(t.accent, hl));
     }
 
@@ -3879,10 +4111,7 @@ void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     DrawTxt(p, MediaSourceName(p, m), p.fSmall.p, Rc(tx + 18, srcY, tw - 18, 16),
             WithAlpha(t.textSecondary, 0.8f));
 
-    // Progress bar. It moves while the track plays.
-    if (m.playing) {
-        p.animating = true;
-    }
+    // Progress bar: redrawn on the panel's timer tick while a track plays.
     float trackW = W - 2 * kPad - 24;
     D2D1_RECT_F track = Rc(L, y + 92, trackW, 4);
     if ((size_t)i < p.trackRects.size()) {
@@ -3900,18 +4129,7 @@ void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     if (m.canSeek) {
         AddHit(p, seekId, Rc(L, y + 84, trackW, 20));
     }
-    FillRR(p, track, 2.0f, t.track);
-    if (frac > 0) {
-        D2D1_RECT_F fill = track;
-        fill.right = fill.left + (float)(trackW * frac);
-        FillRR(p, fill, 2.0f, t.accent);
-    }
-    if (m.canSeek && (p.hovered == seekId || seeking)) {
-        float cx = track.left + (float)(trackW * frac);
-        float cy = track.top + 2;
-        FillCircle(p, cx, cy, 9.0f, t.dark ? Col(0xFF454545) : Col(0xFFFFFFFF));
-        FillCircle(p, cx, cy, seeking ? 4.0f : 5.0f, t.accent);
-    }
+    DrawWavyTrack(p, track, frac, m.playing, m.canSeek);
     DrawTxt(p, FormatTime(pos), p.fSmall.p, Rc(L, y + 104, 70, 16), t.textSecondary);
     if (dur > 0) {
         DrawTxt(p, FormatTime(dur), p.fTimeRight.p,
@@ -4025,18 +4243,7 @@ void DrawCoverProgress(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& r
         DrawTxt(p, L"-" + FormatTime((std::max)(0LL, dur - pos)), p.fTimeRight.p,
                 Rc(L + trackW / 2, labelTop, trackW / 2, 14.0f), labelCol);
     }
-    FillRR(p, track, 2.0f, t.track);
-    if (frac > 0) {
-        D2D1_RECT_F fill = track;
-        fill.right = fill.left + (float)(trackW * frac);
-        FillRR(p, fill, 2.0f, t.accent);
-    }
-    if (m.canSeek && (p.hovered == seekId || seeking)) {
-        const float cx = track.left + (float)(trackW * frac);
-        const float cy = track.top + 2;
-        FillCircle(p, cx, cy, 9.0f, t.dark ? Col(0xFF454545) : Col(0xFFFFFFFF));
-        FillCircle(p, cx, cy, seeking ? 4.0f : 5.0f, t.accent);
-    }
+    DrawWavyTrack(p, track, frac, m.playing, m.canSeek);
 }
 
 // Compact view: only the cover, with the normal card's border. Hover darkens it
@@ -4095,14 +4302,19 @@ void DrawMediaCover(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& r) {
         p.alpha = baseAlpha;
     }
 
-    if (m.playing && hv > 0.0f) {
-        p.animating = true;
-    }
     const float showA = p.seekingIdx == i ? 1.0f : hv;
     if (showA > 0.0f) {
         p.alpha = baseAlpha * showA;
         DrawCoverProgress(p, i, m, r);
         p.alpha = baseAlpha;
+    }
+
+    // Jump highlight, same as the normal card: accent frame and a light tint.
+    const float hl = MediaHighlight(p, m.key);
+    if (hl > 0.0f) {
+        FillRR(p, r, kRadiusCtl, WithAlpha(t.accent, 0.25f * hl));
+        StrokeRR(p, r, kRadiusCtl, WithAlpha(t.accent, hl));
+        StrokeRR(p, r, kRadiusCtl, WithAlpha(t.accent, hl));
     }
 }
 
@@ -4398,7 +4610,7 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
             StrokeRR(p, r, kRadiusCtl, t.accent);
         }
 
-        D2D1_RECT_F ir = Rc(r.left + 10, r.top + 12, 28, 28);
+        D2D1_RECT_F ir = Rc(r.left + 10, r.top + 13, 28, 28);
         if (ID2D1Bitmap* b = AppBitmap(p, a)) {
             DrawBmp(p, b, ir);
         } else {
@@ -4788,8 +5000,8 @@ void DrawMenu(Panel& p) {
     p.alpha = p.menuT.v;
     p.oy = p.menuDy.v;
     D2D1_RECT_F r = p.menuRect;
-    // With Mica/Acrylic the area under the menu was left transparent (see
-    // DrawPanel), so a translucent tint shows the backdrop through.
+    // With Mica the area under the menu was left transparent (see DrawPanel),
+    // so a translucent tint shows the backdrop through.
     FillRR(p, r, kRadiusOverlay, p.solid ? t.menuBg : t.menuBgMica);
     StrokeRR(p, r, kRadiusOverlay, t.menuBorder);
 
@@ -4913,25 +5125,174 @@ int NextWordStart(const std::wstring& t, int i) {
     return i;
 }
 
-// Double click: selects the run of one class around the character at idx.
-void SelectDlgWordAt(Panel& p, int idx) {
-    const std::wstring& t = p.dlgText;
-    if (t.empty()) {
+constexpr size_t kDialogMaxLen = 40;
+
+// Clipboard text as Unicode, or empty.
+std::wstring ReadClipboardText(HWND owner) {
+    std::wstring out;
+    if (!OpenClipboard(owner)) {
+        return out;
+    }
+    if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
+        if (const wchar_t* text = (const wchar_t*)GlobalLock(h)) {
+            out = text;
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    return out;
+}
+
+// One editable text. The category dialog field and the search field both edit
+// through these functions, so keys and selection behave the same in both.
+struct TextEdit {
+    std::wstring& text;
+    int& caret;
+    int& anchor;  // -1 = no selection
+    size_t maxLen;
+};
+
+TextEdit DlgEdit(Panel& p) {
+    return TextEdit{p.dlgText, p.dlgCaret, p.dlgSelAnchor, kDialogMaxLen};
+}
+
+bool TEHasSel(const TextEdit& e) {
+    return e.anchor >= 0 && e.anchor != e.caret;
+}
+
+void TESelRange(const TextEdit& e, int& a, int& b) {
+    if (TEHasSel(e)) {
+        a = (std::min)(e.anchor, e.caret);
+        b = (std::max)(e.anchor, e.caret);
+    } else {
+        a = b = e.caret;
+    }
+}
+
+void TEDeleteSel(TextEdit e) {
+    int a = 0, b = 0;
+    TESelRange(e, a, b);
+    e.text.erase((size_t)a, (size_t)(b - a));
+    e.caret = a;
+    e.anchor = -1;
+}
+
+// Replaces the selection with `in`: printable characters only, up to the length limit.
+void TEInsert(TextEdit e, const std::wstring& in) {
+    if (TEHasSel(e)) {
+        TEDeleteSel(e);
+    }
+    for (wchar_t ch : in) {
+        if (ch < 32 || ch == 127 || e.text.size() >= e.maxLen) {
+            continue;
+        }
+        e.text.insert((size_t)e.caret, 1, ch);
+        ++e.caret;
+    }
+    e.anchor = -1;
+}
+
+void TEBackspace(TextEdit e) {
+    if (TEHasSel(e)) {
+        TEDeleteSel(e);
+    } else if (e.caret > 0) {
+        e.text.erase((size_t)(e.caret - 1), 1);
+        --e.caret;
+        e.anchor = -1;
+    }
+}
+
+void TEDeleteFwd(TextEdit e) {
+    if (TEHasSel(e)) {
+        TEDeleteSel(e);
+    } else if (e.caret < (int)e.text.size()) {
+        e.text.erase((size_t)e.caret, 1);
+        e.anchor = -1;
+    }
+}
+
+void TESelectAll(TextEdit e) {
+    if (!e.text.empty()) {
+        e.anchor = 0;
+        e.caret = (int)e.text.size();
+    }
+}
+
+// Double click: selects the run of one character class around idx.
+void TESelectWord(TextEdit e, int idx) {
+    if (e.text.empty()) {
         return;
     }
-    const int n = (int)t.size();
-    int i = idx < n ? idx : n - 1;
-    const int cls = CharClassOf(t[(size_t)i]);
+    const int n = (int)e.text.size();
+    const int i = idx < n ? idx : n - 1;
+    const int cls = CharClassOf(e.text[(size_t)i]);
     int a = i;
     int b = i + 1;
-    while (a > 0 && CharClassOf(t[(size_t)a - 1]) == cls) {
+    while (a > 0 && CharClassOf(e.text[(size_t)a - 1]) == cls) {
         --a;
     }
-    while (b < n && CharClassOf(t[(size_t)b]) == cls) {
+    while (b < n && CharClassOf(e.text[(size_t)b]) == cls) {
         ++b;
     }
-    p.dlgSelAnchor = a;
-    p.dlgCaret = b;
+    e.anchor = a;
+    e.caret = b;
+}
+
+// Arrows, Home and End. Shift extends the selection, Ctrl jumps by word.
+bool TEMove(TextEdit e, WPARAM vk, bool shift, bool ctrl) {
+    if (vk != VK_LEFT && vk != VK_RIGHT && vk != VK_HOME && vk != VK_END) {
+        return false;
+    }
+    const int len = (int)e.text.size();
+    int target = e.caret;
+    if (vk == VK_LEFT) {
+        target = ctrl ? PrevWordStart(e.text, e.caret) : (e.caret > 0 ? e.caret - 1 : 0);
+    } else if (vk == VK_RIGHT) {
+        target = ctrl ? NextWordStart(e.text, e.caret) : (e.caret < len ? e.caret + 1 : len);
+    } else if (vk == VK_HOME) {
+        target = 0;
+    } else {
+        target = len;
+    }
+    // Without Shift an existing selection collapses to its edge.
+    if (!shift && TEHasSel(e) && (vk == VK_LEFT || vk == VK_RIGHT)) {
+        int a = 0, b = 0;
+        TESelRange(e, a, b);
+        target = vk == VK_LEFT ? a : b;
+    }
+    if (shift) {
+        if (e.anchor < 0) {
+            e.anchor = e.caret;
+        }
+    } else {
+        e.anchor = -1;
+    }
+    e.caret = target;
+    if (e.anchor == e.caret) {
+        e.anchor = -1;
+    }
+    return true;
+}
+
+void TECopy(TextEdit e, HWND owner) {
+    if (!TEHasSel(e)) {
+        return;
+    }
+    int a = 0, b = 0;
+    TESelRange(e, a, b);
+    SetClipboardText(owner, e.text.substr((size_t)a, (size_t)(b - a)));
+}
+
+void TEPaste(TextEdit e, HWND owner) {
+    const std::wstring text = ReadClipboardText(owner);
+    if (!text.empty()) {
+        TEInsert(e, text);
+    }
+}
+
+
+void SelectDlgWordAt(Panel& p, int idx) {
+    TESelectWord(DlgEdit(p), idx);
     p.dlgTyping = false;
 }
 
@@ -5099,6 +5460,10 @@ void SetSearchFocus(Panel& p, bool on) {
     StartAnim(p);
 }
 
+TextEdit SearchEdit(Panel& p) {
+    return TextEdit{p.searchText, p.searchCaret, p.searchSelAnchor, kSearchMaxLen};
+}
+
 // The text changed: back to the top of the list, the caret shows.
 void SearchEdited(Panel& p) {
     p.searchCaretOn = true;
@@ -5107,193 +5472,89 @@ void SearchEdited(Panel& p) {
     StartAnim(p);
 }
 
-void DeleteSearchSel(Panel& p) {
-    int a = 0, b = 0;
-    SearchSelRange(p, a, b);
-    p.searchText.erase((size_t)a, (size_t)(b - a));
-    p.searchCaret = a;
-    p.searchSelAnchor = -1;
-}
 
-// Replaces the selection (if any) with `in`, keeping only printable characters
-// and respecting the length limit.
-void InsertSearchText(Panel& p, const std::wstring& in) {
-    if (HasSearchSel(p)) {
-        DeleteSearchSel(p);
-    }
-    for (wchar_t ch : in) {
-        if (ch < 32 || ch == 127 || p.searchText.size() >= kSearchMaxLen) {
-            continue;
-        }
-        p.searchText.insert((size_t)p.searchCaret, 1, ch);
-        ++p.searchCaret;
-    }
-    p.searchSelAnchor = -1;
-}
 
-void CopySearchSel(Panel& p) {
-    if (HasSearchSel(p)) {
-        int a = 0, b = 0;
-        SearchSelRange(p, a, b);
-        SetClipboardText(p.hwnd, p.searchText.substr((size_t)a, (size_t)(b - a)));
-    }
-}
 
-void PasteSearch(Panel& p) {
-    if (!OpenClipboard(p.hwnd)) {
-        return;
-    }
-    if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
-        if (const wchar_t* text = (const wchar_t*)GlobalLock(h)) {
-            InsertSearchText(p, std::wstring(text));
-            GlobalUnlock(h);
-        }
-    }
-    CloseClipboard();
-}
 
-// Double click: selects the run of one character class around idx.
 void SelectSearchWordAt(Panel& p, int idx) {
-    const std::wstring& t = p.searchText;
-    if (t.empty()) {
-        return;
-    }
-    const int n = (int)t.size();
-    const int i = idx < n ? idx : n - 1;
-    const int cls = CharClassOf(t[(size_t)i]);
-    int a = i;
-    int b = i + 1;
-    while (a > 0 && CharClassOf(t[(size_t)a - 1]) == cls) {
-        --a;
-    }
-    while (b < n && CharClassOf(t[(size_t)b]) == cls) {
-        ++b;
-    }
-    p.searchSelAnchor = a;
-    p.searchCaret = b;
+    TESelectWord(SearchEdit(p), idx);
     StartAnim(p);
 }
 
-// Typed characters, Backspace and the Ctrl shortcuts.
 void SearchChar(Panel& p, wchar_t c) {
     if (!p.searchFocused) {
         return;
     }
     p.searchCaretOn = true;
     if (c >= 32 && c != 127) {
-        InsertSearchText(p, std::wstring(1, c));
+        TEInsert(SearchEdit(p), std::wstring(1, c));
         SearchEdited(p);
         return;
     }
     switch (c) {
         case 1:  // Ctrl+A
-            if (!p.searchText.empty()) {
-                p.searchSelAnchor = 0;
-                p.searchCaret = (int)p.searchText.size();
-            }
+            TESelectAll(SearchEdit(p));
             break;
         case 3:  // Ctrl+C
-            CopySearchSel(p);
+            TECopy(SearchEdit(p), p.hwnd);
             break;
         case 24:  // Ctrl+X
-            if (HasSearchSel(p)) {
-                CopySearchSel(p);
-                DeleteSearchSel(p);
+            if (TEHasSel(SearchEdit(p))) {
+                TECopy(SearchEdit(p), p.hwnd);
+                TEDeleteSel(SearchEdit(p));
                 SearchEdited(p);
                 return;
             }
             break;
         case 22:  // Ctrl+V
-            PasteSearch(p);
+            TEPaste(SearchEdit(p), p.hwnd);
             SearchEdited(p);
             return;
         case 8:  // Backspace
-            if (HasSearchSel(p)) {
-                DeleteSearchSel(p);
-            } else if (p.searchCaret > 0) {
-                p.searchText.erase((size_t)(p.searchCaret - 1), 1);
-                --p.searchCaret;
-                p.searchSelAnchor = -1;
-            } else {
-                break;
+            if (HasSearchSel(p) || p.searchCaret > 0) {
+                TEBackspace(SearchEdit(p));
+                SearchEdited(p);
+                return;
             }
-            SearchEdited(p);
-            return;
+            break;
         default:
             break;
     }
     StartAnim(p);
 }
 
-// Arrows, Home, End, Delete and Escape. True if the key was used.
 bool SearchKeyDown(Panel& p, WPARAM vk) {
     if (!p.searchFocused) {
         return false;
     }
     p.searchCaretOn = true;
-    const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    const int len = (int)p.searchText.size();
     switch (vk) {
         case VK_ESCAPE:
+            // While the field has the focus, Escape clears the text, then leaves the field.
+            // It does not close the panel.
             if (!p.searchText.empty()) {
                 p.searchText.clear();
                 p.searchCaret = 0;
                 p.searchSelAnchor = -1;
                 SearchEdited(p);
-                return true;
+            } else {
+                SetSearchFocus(p, false);
             }
-            SetSearchFocus(p, false);
-            return false;  // not used up: Escape keeps its usual job
+            return true;
         case VK_RETURN:
             return true;
         case VK_DELETE:
-            if (HasSearchSel(p)) {
-                DeleteSearchSel(p);
-                SearchEdited(p);
-            } else if (p.searchCaret < len) {
-                p.searchText.erase((size_t)p.searchCaret, 1);
-                p.searchSelAnchor = -1;
-                SearchEdited(p);
-            }
-            StartAnim(p);
+            TEDeleteFwd(SearchEdit(p));
+            SearchEdited(p);
             return true;
         case VK_LEFT:
         case VK_RIGHT:
         case VK_HOME:
-        case VK_END: {
-            int target = p.searchCaret;
-            if (vk == VK_LEFT) {
-                target = ctrl ? PrevWordStart(p.searchText, p.searchCaret)
-                              : (p.searchCaret > 0 ? p.searchCaret - 1 : 0);
-            } else if (vk == VK_RIGHT) {
-                target = ctrl ? NextWordStart(p.searchText, p.searchCaret)
-                              : (p.searchCaret < len ? p.searchCaret + 1 : len);
-            } else if (vk == VK_HOME) {
-                target = 0;
-            } else {
-                target = len;
-            }
-            // Without Shift an existing selection collapses to its edge.
-            if (!shift && HasSearchSel(p) && (vk == VK_LEFT || vk == VK_RIGHT)) {
-                int a = 0, b = 0;
-                SearchSelRange(p, a, b);
-                target = vk == VK_LEFT ? a : b;
-            }
-            if (shift) {
-                if (p.searchSelAnchor < 0) {
-                    p.searchSelAnchor = p.searchCaret;
-                }
-            } else {
-                p.searchSelAnchor = -1;
-            }
-            p.searchCaret = target;
-            if (p.searchSelAnchor == p.searchCaret) {
-                p.searchSelAnchor = -1;
-            }
+        case VK_END:
+            TEMove(SearchEdit(p), vk, (GetKeyState(VK_SHIFT) & 0x8000) != 0,
+                   (GetKeyState(VK_CONTROL) & 0x8000) != 0);
             StartAnim(p);
             return true;
-        }
         default:
             return false;
     }
@@ -5401,9 +5662,8 @@ void BuildDiagReport(Panel& p) {
 }
 
 void DrawPanel(Panel& p) {
-    ID2D1DCRenderTarget* rt = p.rt.p;
-    RECT rc = {0, 0, p.pxW, p.pxH};
-    if (FAILED(rt->BindDC(p.memDC, &rc))) {
+    ID2D1RenderTarget* rt = p.rt.p;
+    if (!p.target) {
         return;
     }
     rt->SetDpi((float)(p.dpi * p.ui), (float)(p.dpi * p.ui));
@@ -5420,9 +5680,8 @@ void DrawPanel(Panel& p) {
     D2D1_COLOR_F bg = p.solid ? t.bgSolid : D2D1_COLOR_F{0, 0, 0, 0};
     rt->Clear(&bg);
 
-    // Mica/Acrylic context menu: everything except a rounded hole under the
-    // menu goes through a layer, so the hole stays transparent and the
-    // backdrop shows through it.
+    // Mica context menu: everything except a rounded hole under the menu goes
+    // through a layer, so the hole stays transparent and the backdrop shows through it.
     ID2D1RectangleGeometry* gOuter = nullptr;
     ID2D1RoundedRectangleGeometry* gHole = nullptr;
     ID2D1GeometryGroup* gGroup = nullptr;
@@ -5542,6 +5801,11 @@ void DrawPanel(Panel& p) {
     p.alpha = p.openAlpha.v;
 
     rt->EndDraw(nullptr, nullptr);
+    // Present: the composition swap chain is shown with its alpha.
+    p.swap->Present(0, 0);
+    if (p.dcomp) {
+        p.dcomp->Commit();
+    }
     if (gGroup) {
         gGroup->Release();
     }
@@ -5863,7 +6127,6 @@ void DialogCommit(Panel& p) {
 }
 
 // Text input of the dialog: typed characters, Backspace, Ctrl+V.
-constexpr size_t kDialogMaxLen = 40;
 
 void PushDlgUndo(Panel& p) {
     p.dlgUndo.push_back({p.dlgText, p.dlgCaret});
@@ -5874,66 +6137,23 @@ void PushDlgUndo(Panel& p) {
 }
 
 void DeleteDlgSelection(Panel& p) {
-    int a = 0, b = 0;
-    DlgSelRange(p, a, b);
-    p.dlgText.erase((size_t)a, (size_t)(b - a));
-    p.dlgCaret = a;
-    p.dlgSelAnchor = -1;
+    TEDeleteSel(DlgEdit(p));
 }
 
-// Replaces the selection (if any) with `in`, keeping only printable characters
-// and respecting the length limit.
 void InsertDlgText(Panel& p, const std::wstring& in) {
-    if (HasDlgSel(p)) {
-        DeleteDlgSelection(p);
-    }
-    for (wchar_t ch : in) {
-        if (ch < 32 || ch == 127 || p.dlgText.size() >= kDialogMaxLen) {
-            continue;
-        }
-        p.dlgText.insert((size_t)p.dlgCaret, 1, ch);
-        ++p.dlgCaret;
-    }
-    p.dlgSelAnchor = -1;
+    TEInsert(DlgEdit(p), in);
 }
 
 void CopyDlgSelection(Panel& p) {
-    if (!HasDlgSel(p)) {
-        return;
-    }
-    int a = 0, b = 0;
-    DlgSelRange(p, a, b);
-    const std::wstring text = p.dlgText.substr((size_t)a, (size_t)(b - a));
-    if (!OpenClipboard(p.hwnd)) {
-        return;
-    }
-    EmptyClipboard();
-    HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t));
-    if (mem) {
-        void* dst = GlobalLock(mem);
-        if (dst) {
-            memcpy(dst, text.c_str(), (text.size() + 1) * sizeof(wchar_t));
-            GlobalUnlock(mem);
-            SetClipboardData(CF_UNICODETEXT, mem);  // the system owns it now
-        } else {
-            GlobalFree(mem);
-        }
-    }
-    CloseClipboard();
+    TECopy(DlgEdit(p), p.hwnd);
 }
 
 void PasteDlg(Panel& p) {
-    if (!OpenClipboard(p.hwnd)) {
-        return;
+    const std::wstring text = ReadClipboardText(p.hwnd);
+    if (!text.empty()) {
+        PushDlgUndo(p);
+        InsertDlgText(p, text);
     }
-    if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
-        if (const wchar_t* text = (const wchar_t*)GlobalLock(h)) {
-            PushDlgUndo(p);
-            InsertDlgText(p, std::wstring(text));
-            GlobalUnlock(h);
-        }
-    }
-    CloseClipboard();
 }
 
 void DlgUndo(Panel& p) {
@@ -5977,10 +6197,7 @@ void DialogChar(Panel& p, wchar_t c) {
         p.dlgTyping = false;
         switch (c) {
             case 1:  // Ctrl+A
-                if (!p.dlgText.empty()) {
-                    p.dlgSelAnchor = 0;
-                    p.dlgCaret = (int)p.dlgText.size();
-                }
+                TESelectAll(DlgEdit(p));
                 break;
             case 3:  // Ctrl+C
                 CopyDlgSelection(p);
@@ -6002,14 +6219,9 @@ void DialogChar(Panel& p, wchar_t c) {
                 DlgRedo(p);
                 break;
             case 8:  // Backspace
-                if (HasDlgSel(p)) {
+                if (HasDlgSel(p) || p.dlgCaret > 0) {
                     PushDlgUndo(p);
-                    DeleteDlgSelection(p);
-                } else if (p.dlgCaret > 0) {
-                    PushDlgUndo(p);
-                    p.dlgText.erase((size_t)(p.dlgCaret - 1), 1);
-                    --p.dlgCaret;
-                    p.dlgSelAnchor = -1;
+                    TEBackspace(DlgEdit(p));
                 }
                 break;
             default:
@@ -6019,7 +6231,6 @@ void DialogChar(Panel& p, wchar_t c) {
     StartAnim(p);
 }
 
-// Returns true if the key was used by the dialog.
 bool DialogKeyDown(Panel& p, WPARAM vk) {
     if (vk != VK_RETURN && vk != VK_ESCAPE && !p.dlgFocused) {
         return false;
@@ -6035,57 +6246,16 @@ bool DialogKeyDown(Panel& p, WPARAM vk) {
         case VK_LEFT:
         case VK_RIGHT:
         case VK_HOME:
-        case VK_END: {
+        case VK_END:
             p.dlgTyping = false;
-            const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            const int len = (int)p.dlgText.size();
-            int target = p.dlgCaret;
-            const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            if (vk == VK_LEFT) {
-                if (ctrl) {
-                    target = PrevWordStart(p.dlgText, p.dlgCaret);
-                } else {
-                    target = p.dlgCaret > 0 ? p.dlgCaret - 1 : 0;
-                }
-            } else if (vk == VK_RIGHT) {
-                if (ctrl) {
-                    target = NextWordStart(p.dlgText, p.dlgCaret);
-                } else {
-                    target = p.dlgCaret < len ? p.dlgCaret + 1 : len;
-                }
-            } else if (vk == VK_HOME) {
-                target = 0;
-            } else {
-                target = len;
-            }
-            // Without Shift an existing selection collapses to its edge.
-            if (!shift && HasDlgSel(p) && (vk == VK_LEFT || vk == VK_RIGHT)) {
-                int a = 0, b = 0;
-                DlgSelRange(p, a, b);
-                target = vk == VK_LEFT ? a : b;
-            }
-            if (shift) {
-                if (p.dlgSelAnchor < 0) {
-                    p.dlgSelAnchor = p.dlgCaret;
-                }
-            } else {
-                p.dlgSelAnchor = -1;
-            }
-            p.dlgCaret = target;
-            if (p.dlgSelAnchor == p.dlgCaret) {
-                p.dlgSelAnchor = -1;
-            }
+            TEMove(DlgEdit(p), vk, (GetKeyState(VK_SHIFT) & 0x8000) != 0,
+                   (GetKeyState(VK_CONTROL) & 0x8000) != 0);
             break;
-        }
         case VK_DELETE:
             p.dlgTyping = false;
-            if (HasDlgSel(p)) {
+            if (HasDlgSel(p) || p.dlgCaret < (int)p.dlgText.size()) {
                 PushDlgUndo(p);
-                DeleteDlgSelection(p);
-            } else if (p.dlgCaret < (int)p.dlgText.size()) {
-                PushDlgUndo(p);
-                p.dlgText.erase((size_t)p.dlgCaret, 1);
-                p.dlgSelAnchor = -1;
+                TEDeleteFwd(DlgEdit(p));
             }
             break;
         default:
@@ -6123,7 +6293,7 @@ void LaunchOrRestore(Panel& p, int libIdx) {
         return;
     }
     const LibApp& l = g_library[libIdx];
-    PushNote(p, NotifSeverity::Info, L"Opening app", l.name, kGlyphOpenWindow);
+    PushNote(p, NotifSeverity::Info, L"Opening app", l.name, nullptr, LibBitmap(p, l));
     if (const AppInfo* run = FindRunning(p, l)) {
         RequestRestore(run->hwnd);
     } else {
@@ -6300,20 +6470,14 @@ void ExecMenuCmd(Panel& p, const MenuItem& it, const MenuCtx& ctx) {
             ApplyPref(p, it.arg / 16, it.arg % 16);
             break;
         case kCmdShow:
+        case kCmdShowPWA:
             PushNote(p, NotifSeverity::Info, L"Showing window",
-                     PanelAppName(p, ctx.hwnd), kGlyphView);
+                     PanelAppName(p, ctx.hwnd), nullptr, WindowBitmap(p, ctx.hwnd));
             RequestRestore(ctx.hwnd);
             CloseIfHermes();
             break;
         case kCmdQuit:
             RequestQuit(ctx.hwnd);
-            break;
-        case kCmdShowPWA:
-            // Show PWA window from media card context menu
-            PushNote(p, NotifSeverity::Info, L"Showing window",
-                     PanelAppName(p, ctx.hwnd), kGlyphView);
-            RequestRestore(ctx.hwnd);
-            CloseIfHermes();
             break;
         case kCmdClosePWA:
             // Close PWA app from media card context menu
@@ -6604,7 +6768,7 @@ void OnContextMenu(Panel& p, int hit, float x, float y) {
     OpenMenu(p, std::move(items), ctx, x, y);
 }
 
-// Jumps to the Media tab and highlights the card (after 500 ms).
+// Jumps to the Media tab and highlights the card (after 150 ms).
 void ShowMediaHighlight(Panel& p, const std::wstring& key) {
     SelectTab(p, kTabMedia);
     p.hlKey = key;
@@ -6810,7 +6974,7 @@ void Activate(Panel& p, int hit) {
             if (p.selectedTab == kTabApps && idx < (int)p.frameHwnds.size()) {
                 HWND h = p.frameHwnds[idx];
                 PushNote(p, NotifSeverity::Info, L"Showing window",
-                         PanelAppName(p, h), kGlyphView);
+                         PanelAppName(p, h), nullptr, WindowBitmap(p, h));
                 RequestRestore(h);
                 CloseIfHermes();
             } else if (p.selectedTab == kTabLibrary && idx < (int)p.frameLib.size()) {
@@ -6826,7 +6990,7 @@ void Activate(Panel& p, int hit) {
         case kHitRow:
             if (idx < (int)p.frameHwnds.size()) {
                 PushNote(p, NotifSeverity::Info, L"Showing window",
-                         PanelAppName(p, p.frameHwnds[idx]), kGlyphView);
+                         PanelAppName(p, p.frameHwnds[idx]), nullptr, WindowBitmap(p, p.frameHwnds[idx]));
                 RequestRestore(p.frameHwnds[idx]);
                 CloseIfHermes();
             }
@@ -7156,6 +7320,8 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+void ShowPendingHiddenNotes(Panel& p);
+
 LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_NCCREATE && g_panel) {
         g_panel->hwnd = hwnd;
@@ -7172,12 +7338,33 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_ERASEBKGND:
             return 1;
 
+        case WM_NCCALCSIZE:
+            // No frame or caption is drawn: the client area is the whole window.
+            if (wParam) {
+                return 0;
+            }
+            break;
+
+        case WM_NCHITTEST:
+            // The whole window is client area: clicks go to the panel, not to the caption.
+            return HTCLIENT;
+
+        case WM_GETMINMAXINFO: {
+            // Fixed size: the window can be neither resized nor maximized by the user.
+            // The frame style stays, so Mica keeps working.
+            MINMAXINFO* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
+            mmi->ptMinTrackSize.x = mmi->ptMaxTrackSize.x = p->pxW;
+            mmi->ptMinTrackSize.y = mmi->ptMaxTrackSize.y = p->pxH;
+            mmi->ptMaxSize.x = p->pxW;
+            mmi->ptMaxSize.y = p->pxH;
+            return 0;
+        }
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
+            BeginPaint(hwnd, &ps);
             if (EnsureBackBuffer(*p)) {
                 DrawPanel(*p);
-                BitBlt(hdc, 0, 0, p->pxW, p->pxH, p->memDC, 0, 0, SRCCOPY);
             }
             EndPaint(hwnd, &ps);
             return 0;
@@ -7760,9 +7947,14 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     PostMessageW(hwnd, WM_CLOSE, 0, 0);
                     return 0;
                 }
+                ShowPendingHiddenNotes(*p);
                 // Redraw only when something on screen has changed.
                 std::wstring sig = PanelStateSignature(*p);
-                if (sig != p->stateSig) {
+                bool playing = false;
+                for (const auto& m : p->media) {
+                    playing |= m.playing;
+                }
+                if (sig != p->stateSig || playing) {
                     p->stateSig = sig;
                     InvalidateRect(hwnd, nullptr, FALSE);
                 }
@@ -7833,6 +8025,44 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void ShowTrayMenu(HWND host);
+
+// Notes about PWA windows hidden to the center. Checked on every panel tick, so a
+// note appears while the center is open; a window the worker has not listed yet
+// stays pending for up to 10 seconds.
+void ShowPendingHiddenNotes(Panel& p) {
+    std::vector<std::pair<HWND, ULONGLONG>> pending;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_pendingHidden.empty()) {
+            return;
+        }
+        pending.swap(g_pendingHidden);
+    }
+    const ULONGLONG now = GetTickCount64();
+    std::vector<std::pair<HWND, ULONGLONG>> keep;
+    for (const auto& item : pending) {
+        if (now - item.second > 10000) {
+            continue;  // too old: the window was probably shown again
+        }
+        const AppInfo* found = nullptr;
+        for (const AppInfo& a : p.all) {
+            if (a.hwnd == item.first) {
+                found = &a;
+                break;
+            }
+        }
+        if (found && found->hidden) {
+            PushNote(p, NotifSeverity::Info, L"Hidden to PWA Center", found->name,
+                     nullptr, AppBitmap(p, *found));
+        } else if (IsWindow(item.first)) {
+            keep.push_back(item);
+        }
+    }
+    if (!keep.empty()) {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_pendingHidden.insert(g_pendingHidden.begin(), keep.begin(), keep.end());
+    }
+}
 
 void ShowPanel(HWND host) {
     if (g_panel) {
@@ -7911,7 +8141,6 @@ void ShowPanel(HWND host) {
 
     RequestMediaPoll(2500);
     CollectWindowsSnapshot();
-    CollectVolumeSnapshot();
     if (!RefreshData(*p)) {
         ReleasePanelBitmaps(*p);
         delete p;
@@ -7930,9 +8159,13 @@ void ShowPanel(HWND host) {
     SetForegroundWindow(host);
 
     g_panel = p;
-    HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kPanelClass,
-                                L"", WS_POPUP | WS_CLIPCHILDREN, x, y, p->pxW,
-                                p->pxH, nullptr, nullptr, hInstance, nullptr);
+    // Overlapped window with no GDI surface: DirectComposition shows the swap chain,
+    // and DWM draws the system backdrop (Mica) behind its transparent pixels.
+    const DWORD kPanelStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
+    // WS_EX_TOOLWINDOW keeps the panel out of Alt+Tab and the taskbar, as it was when it was a popup.
+    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP, kPanelClass,
+                                L"", kPanelStyle, x, y, p->pxW, p->pxH, nullptr, nullptr,
+                                hInstance, nullptr);
     if (!hwnd) {
         g_panel = nullptr;
         ReleasePanelBitmaps(*p);
@@ -7942,7 +8175,17 @@ void ShowPanel(HWND host) {
     }
     p->hwnd = hwnd;
 
+    AttachComposition(*p);
+
     ApplyBackdrop(*p);
+
+    // Makes Windows send WM_NCCALCSIZE right away: until it does, the standard frame and
+    // caption stay on the window (Microsoft's custom-frame note).
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    // Turns off DWM's own non-client drawing: no caption buttons or frame. Mica stays.
+    DWMNCRENDERINGPOLICY ncPolicy = DWMNCRP_DISABLED;
+    DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &ncPolicy, sizeof(ncPolicy));
 
     // Open animation: the content slides in and fades (Fluent "enter").
     TweenJump(p->openDy, p->bottomAnchored ? 20.0f : -20.0f);
@@ -7962,6 +8205,7 @@ void ShowPanel(HWND host) {
     UpdateModeHook();
     ShowWindow(hwnd, SW_SHOW);
     StartAnim(*p);
+    ShowPendingHiddenNotes(*p);
 
     ActivateWindow(hwnd, true);
     SetFocus(hwnd);
@@ -8228,6 +8472,12 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
 
+        case kMsgWindowHidden:
+            if (g_panel) {
+                ShowPendingHiddenNotes(*g_panel);
+            }
+            return 0;
+
         case kMsgPlainClick:
             if (g_panel && g_panel->hotkeyListening) {
                 POINT pt = {(LONG)(int32_t)(uint32_t)wParam, (LONG)(int32_t)(uint32_t)lParam};
@@ -8244,20 +8494,9 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case kMsgMouseHotkey:
+            // Only presses with a modifier come here (see HotkeyMouseHookProc).
             if (g_panel && g_panel->hotkeyListening) {
-                const UINT vk = (UINT)wParam;
-                const UINT mods = (UINT)lParam;
-                if (!(mods & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
-                    // A plain click ends the choice when it is outside the panel.
-                    POINT pt = {};
-                    RECT wr = {};
-                    GetCursorPos(&pt);
-                    if (GetWindowRect(g_panel->hwnd, &wr) && !PtInRect(&wr, pt)) {
-                        CancelHotkeyCapture(*g_panel);
-                    }
-                } else {
-                    ApplyHotkeyPref(*g_panel, (int)(vk | (mods << 16)));
-                }
+                ApplyHotkeyPref(*g_panel, (int)((UINT)wParam | ((UINT)lParam << 16)));
             }
             return 0;
 
@@ -8416,6 +8655,16 @@ bool HideToCenter(HWND hWnd) {
     SetWindowFlags(hWnd, &hidden, &tick);
     RequestMediaPoll(4000);
     NotifyListChanged();
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_pendingHidden.emplace_back(hWnd, GetTickCount64());
+        if (g_pendingHidden.size() > 16) {
+            g_pendingHidden.erase(g_pendingHidden.begin());
+        }
+    }
+    if (HWND host = g_hostHwnd.load()) {
+        PostMessageW(host, kMsgWindowHidden, 0, 0);
+    }
     return true;
 }
 
