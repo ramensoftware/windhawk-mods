@@ -7087,6 +7087,17 @@ static void InvalidateWindowIcon(HWND window) {
     s_windowIconCells.erase(it);
 }
 
+// While the switcher is hidden, destroy events aren't observed (see
+// SetObjectEventHookMode), so cells of windows destroyed meanwhile are dropped
+// when the next session starts.
+static void PruneDestroyedWindowIconCells() {
+    std::vector<HWND> destroyed;
+    for (const auto& pair : s_windowIconCells) {
+        if (!IsWindow(pair.first)) destroyed.push_back(pair.first);
+    }
+    for (HWND window : destroyed) InvalidateWindowIcon(window);
+}
+
 // WM_GETICON returns a fixed (usually 32px) icon that looks blurry when scaled
 // up to 48/64. PrivateExtractIconsW pulls the best-matching frame from the
 // exe's icon resource at the exact requested size for a crisp result.
@@ -7812,6 +7823,40 @@ static void CancelTwoFingerTapDismiss();
 // UI settings snapshot on the switcher thread.
 static bool TouchpadHandlingEnabled() {
     return g_touchpadGesturesEnabled.load() && !g_touchpadReaderStopping.load();
+}
+
+// The object hook follows the session. While a session exists it observes
+// show, hide and destroy for live list updates. While hidden, only touchpad
+// handling needs it: the hidden sticky shield suppresses Task View and the
+// native switcher on show. Otherwise no object events are delivered while
+// hidden. The foreground hook (MRU tracking) stays installed throughout.
+enum class ObjectEventHookMode { None, ShowOnly, Full };
+static ObjectEventHookMode s_objectEventHookMode = ObjectEventHookMode::None;
+
+static void SetObjectEventHookMode(ObjectEventHookMode mode) {
+    if (mode == s_objectEventHookMode &&
+        (mode == ObjectEventHookMode::None || s_hWinEventHook)) {
+        return;
+    }
+    if (s_hWinEventHook) {
+        UnhookWinEvent(s_hWinEventHook);
+        s_hWinEventHook = NULL;
+    }
+    s_objectEventHookMode = mode;
+    if (mode == ObjectEventHookMode::None) return;
+    const bool full = mode == ObjectEventHookMode::Full;
+    s_hWinEventHook = SetWinEventHook(full ? EVENT_OBJECT_DESTROY : EVENT_OBJECT_SHOW,
+                                      full ? EVENT_OBJECT_HIDE : EVENT_OBJECT_SHOW, NULL,
+                                      WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!s_hWinEventHook) {
+        Wh_Log(L"SWS: SetWinEventHook failed (object mode=%d error=%u)", (int)mode,
+               GetLastError());
+    }
+}
+
+static void ApplyHiddenObjectEventHook() {
+    SetObjectEventHookMode(TouchpadHandlingEnabled() ? ObjectEventHookMode::ShowOnly
+                                                     : ObjectEventHookMode::None);
 }
 static bool TouchpadStickyLaunchEnabled() {
     return g_touchpadStickyLaunchEnabled.load();
@@ -14640,6 +14685,10 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         g_isDarkMode = darkMode;
         if (s_iconRulesThemed) ResetWindowIconSettings();
     }
+    // Observe the session's window changes before enumerating, so a window
+    // shown during the build isn't missed.
+    SetObjectEventHookMode(ObjectEventHookMode::Full);
+    PruneDestroyedWindowIconCells();
     BuildWindowList();
     RemoveStaleUwpEntriesForPresentation();
 
@@ -14702,6 +14751,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         s_combinedRawLiftHandled = false;
         s_commitStarted = false;
         PublishNativeSwipePolicy();
+        ApplyHiddenObjectEventHook();
         return;
     }
     if (DockLayoutActive()) {
@@ -14745,14 +14795,6 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     };
     g_backdropPresentationResolved = false;
 
-    if (!s_hWinEventHook) {
-        s_hWinEventHook = SetWinEventHook(
-            EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
-            NULL, WinEventShowHideProc,
-            0, 0,
-            WINEVENT_OUTOFCONTEXT
-        );
-    }
     if (!s_hForegroundEventHook) {
         s_hForegroundEventHook = SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
@@ -15016,6 +15058,7 @@ static void HideSwitcher() {
         KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
     }
     g_isHidingSwitcher = false;
+    ApplyHiddenObjectEventHook();
     // Once hidden, a background controller cannot suppress shell gestures.
     // Explorer's source-specific PTP hook covers the reader's release grace.
     RefreshTouchpadGestureKinds();
@@ -19971,6 +20014,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         ResetScrollWheelAccumulators();
         SWS_UnregisterHotkeys();
         LoadSettings();
+        if (!g_isVisible && !g_isPendingShow) ApplyHiddenObjectEventHook();
         if (!g_settings.handleTouchpadGestures) {
             s_rawGestureTips = 0;
             s_rawIgnoreUntilLift = false;
@@ -20319,10 +20363,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         FinishAnimations();
         StopAnimationTicker();
         FreeCachedBuffers();
-        if (s_hWinEventHook) {
-            UnhookWinEvent(s_hWinEventHook);
-            s_hWinEventHook = NULL;
-        }
+        SetObjectEventHookMode(ObjectEventHookMode::None);
         if (s_hForegroundEventHook) {
             UnhookWinEvent(s_hForegroundEventHook);
             s_hForegroundEventHook = NULL;
@@ -21965,13 +22006,10 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     s_hForegroundEventHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL,
         WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    s_hWinEventHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL,
-        WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!s_hForegroundEventHook || !s_hWinEventHook) {
-        Wh_Log(L"SWS: SetWinEventHook failed (object=%p foreground=%p error=%u)",
-               s_hWinEventHook, s_hForegroundEventHook, GetLastError());
+    if (!s_hForegroundEventHook) {
+        Wh_Log(L"SWS: SetWinEventHook failed (foreground error=%u)", GetLastError());
     }
+    ApplyHiddenObjectEventHook();
 
     g_hCloseBtnWnd = CreateSWSWindow(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT |
