@@ -3,7 +3,7 @@
 // @name            Octagonal Windows
 // @description     Makes Windows 11 window borders octagonal.
 // @version         1.0
-// @author          jer-10000
+// @author          JER-10000
 // @github          https://github.com/jer-10000
 // @include         dwm.exe
 // @architecture    x86-64
