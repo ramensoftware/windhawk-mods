@@ -30,6 +30,8 @@ Works with the taskbar on any edge (top, bottom, left, right) and on every
 monitor. A monitor without a taskbar ("Show my taskbar on all displays" off)
 gets the frame on all four edges.
 
+![Round Everything Interface](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/demo.gif)
+
 ## Themes
 
 Pick a **Theme** and you are done: each one sets everything - the frame, its
@@ -39,25 +41,44 @@ corners, borders and shadows inside `dwm.exe`.
 * **Solid** (the default) - a plain solid frame, light or dark with the
   Windows mode, traced by a fine edge line that follows the mode too;
   rounded windows with borders.
+
+  ![Solid](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/solid.png)
 * **Tape** - a thin, grainy acrylic film, light or dark with the Windows
   mode, shaded towards its inner edge, a soft inner shadow, rounded windows
   with borders.
+
+  ![Tape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/tape.png)
 * **Frost** - a thick frame of frosted glass, blurred and tinted with the
   active window's color and lit along its edge by the bevel, running along
   the taskbar's edge too; a deep inner shadow, rounded windows with shadows.
+
+  ![Frost](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/frost.png)
 * **Bleed** - no frame at all: just the rounded screen corners in the
   active window's color, as if the window bled into them; rounded windows
   reach right up to them.
+
+  ![Bleed](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/bleed.png)
 * **Windows** - the taskbar's own light or dark acrylic with a fine
   rim, Windows' 8 px corners on every window, maximized ones with a border
   and a shadow.
+
+  ![Windows, dark](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/windows-dark.png)
+  ![Windows, light](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/windows-light.png)
 * **Eclipse** - no frame to speak of: the rounded screen corners in the
   active window's color, ringed by an accent-colored line along them and
   the taskbar's edge; rounded windows with accent borders (black on
   inactive windows).
+
+  ![Eclipse](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/eclipse.png)
 * **Phantom** - no fill at all: an edge line in the accent color traces the
   rounded screen over a deep inner shadow; rounded windows with accent
   borders.
+
+  ![Phantom](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/phantom.png)
+* **Custom** - your own: every setting in the sections named "Custom theme",
+  as you set them.
+
+  ![Custom](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/custom.png)
 
 The few values worth changing on a theme without leaving it are under
 **Overrides** - frame thickness, screen corner radius, monitor corner radius, frame color and its
@@ -304,8 +325,11 @@ contributed there; use one mod or the other for window corners, not both.
   Windows to the whole monitor, which the shell takes for a full-screen app
   (the taskbar drops behind them, Do not disturb turns on). Their own fix
   for it needs a monitor edge with no reserved space, and the mod reserves
-  all four, so the mod moves such a window back to the work area plus its
-  sizing border; nothing in the app moves.
+  all four, so the mod moves an ArtCraft app's window back to the work area
+  plus its sizing border, once per maximize; nothing in the app moves.
+  Other apps that maximize the same way are left as they are (some use it as
+  their own full-screen mode): with the frame on, the shell may take them
+  for full-screen apps while maximized, and the frame hides for them too.
 * A frame thickness of 0 with a radius gives you just the rounded screen corners
   against the taskbar (the *Eclipse* theme, give or take its accent line).
 
@@ -603,6 +627,7 @@ constexpr int kEdgeNone = -1;  // monitor without a taskbar
 // The theme forced on a taskbar for the title-bar color source.
 enum WantedTheme { kThemeNone = 0, kThemeLight = 1, kThemeDark = 2 };
 int DetectEdge(const RECT& taskbar, const RECT& monitor);  // defined with the layout code
+bool TaskbarSpansMonitor(const RECT& taskbar, const RECT& monitor);  // likewise
 enum Corner : int { kCornerTL = 0, kCornerTR = 1, kCornerBR = 2, kCornerBL = 3 };
 
 constexpr WCHAR kFrameClassName[] = L"RoundEverything_Frame";
@@ -2534,6 +2559,10 @@ struct TaskbarWants {
     winrt::event_token layoutToken{};
     winrt::weak_ref<wux::XamlRoot> rootWatched;      // XamlRoot the Changed handler is on
     winrt::event_token rootToken{};
+    // The window's rectangle as last seen on its strip, and whether it is
+    // stretched over its monitor right now (see TaskbarSpansMonitor).
+    RECT strip{};
+    bool spanning = false;
 };
 
 // Keyed by taskbar HWND. Touched only on the taskbar thread. Not destroyed
@@ -2863,7 +2892,7 @@ int LiveTaskbarEdge(HWND taskbar, int fallback) {
     mi.cbSize = sizeof(mi);
     HMONITOR monitor = MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST);
     if (!GetWindowRect(taskbar, &rect) || rect.right <= rect.left || rect.bottom <= rect.top ||
-        !monitor || !GetMonitorInfoW(monitor, &mi)) {
+        !monitor || !GetMonitorInfoW(monitor, &mi) || TaskbarSpansMonitor(rect, mi.rcMonitor)) {
         return fallback;
     }
     return DetectEdge(rect, mi.rcMonitor);
@@ -3148,6 +3177,16 @@ BOOL CALLBACK SecondaryTaskbarEnumProc(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
+// A taskbar window covering (nearly) its whole monitor is no taskbar strip:
+// the shell stretches a taskbar's window over its monitor for a moment now
+// and then (Show desktop does it to a secondary taskbar, for about two
+// seconds), with no edge to it. The strip it was on is kept meanwhile.
+bool TaskbarSpansMonitor(const RECT& taskbar, const RECT& monitor) {
+    LONG width = taskbar.right - taskbar.left, height = taskbar.bottom - taskbar.top;
+    return width * 4 >= (monitor.right - monitor.left) * 3 &&
+           height * 4 >= (monitor.bottom - monitor.top) * 3;
+}
+
 int DetectEdge(const RECT& taskbar, const RECT& monitor) {
     LONG width = taskbar.right - taskbar.left;
     LONG height = taskbar.bottom - taskbar.top;
@@ -3330,8 +3369,10 @@ std::wstring ComputeLayouts(std::vector<Layout>& layouts) {
             taskbarRect.bottom > taskbarRect.top) {
             usable = true;
             SeenTaskbar& seen = g_seenTaskbars[mon.handle];
-            if (!shown && seen.hwnd == taskbar && seen.edge != kEdgeNone &&
-                !IsRectEmpty(&seen.rect)) {
+            // Hidden (auto-hide, slid out) or stretched over the monitor for
+            // a moment (see TaskbarSpansMonitor): still on the strip it was.
+            if ((!shown || TaskbarSpansMonitor(taskbarRect, mon.rect)) && seen.hwnd == taskbar &&
+                seen.edge != kEdgeNone && !IsRectEmpty(&seen.rect)) {
                 edge = seen.edge;
                 taskbarRect = seen.rect;
             } else {
@@ -5705,25 +5746,16 @@ bool PaintOverlay(Overlay& overlay, COLORREF rgb) {
 // Full-screen detection
 // ---------------------------------------------------------------------------
 
-// Screen capture and color picker tools cover the screen with a topmost,
-// borderless window while they work (ShareX's region capture and color
-// picker, Snipping Tool's overlay): a full-screen app as far as its window
-// goes, but hiding the frame then would take it out of the very screen being
-// captured or picked from. Their windows are told by their program - nothing
-// about the window itself sets them apart from a game. The answer per
-// process is kept (by process id, re-read when the id is reused).
-bool IsCaptureToolWindow(HWND hwnd) {
-    static const PCWSTR kTools[] = {
-        L"ShareX.exe",          L"Greenshot.exe",    L"ScreenClippingHost.exe",
-        L"SnippingTool.exe",    L"Snagit32.exe",     L"SnagitCapture.exe",
-        L"PowerToys.ColorPickerUI.exe", L"PowerToys.MeasureToolUI.exe",
-        L"Lightshot.exe",       L"flameshot.exe",    L"PicPick.exe",
-    };
-    struct Known {
-        FILETIME created;
-        bool tool;
-    };
-    static std::unordered_map<DWORD, Known> known;
+// Whether the window's program is one of `names` (executable file names,
+// case ignored). The answer per process is kept in `known` (by process id,
+// re-read when the id is reused). The mod's thread only.
+struct KnownProcess {
+    FILETIME created;
+    bool match;
+};
+template <size_t N>
+bool ProgramIsOneOf(HWND hwnd, const PCWSTR (&names)[N],
+                    std::unordered_map<DWORD, KnownProcess>& known) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (!pid) {
@@ -5738,24 +5770,54 @@ bool IsCaptureToolWindow(HWND hwnd) {
     auto it = known.find(pid);
     if (it != known.end() && CompareFileTime(&it->second.created, &created) == 0) {
         CloseHandle(process);
-        return it->second.tool;
+        return it->second.match;
     }
-    bool tool = false;
+    bool match = false;
     WCHAR path[MAX_PATH];
     DWORD size = ARRAYSIZE(path);
     if (QueryFullProcessImageNameW(process, 0, path, &size)) {
         PCWSTR name = wcsrchr(path, L'\\');
         name = name ? name + 1 : path;
-        for (PCWSTR candidate : kTools) {
-            tool = tool || _wcsicmp(name, candidate) == 0;
+        for (PCWSTR candidate : names) {
+            match = match || _wcsicmp(name, candidate) == 0;
         }
     }
     CloseHandle(process);
     if (known.size() > 256) {
         known.clear();
     }
-    known[pid] = {created, tool};
-    return tool;
+    known[pid] = {created, match};
+    return match;
+}
+
+// Screen capture and color picker tools cover the screen with a topmost,
+// borderless window while they work (ShareX's region capture and color
+// picker, Snipping Tool's overlay): a full-screen app as far as its window
+// goes, but hiding the frame then would take it out of the very screen being
+// captured or picked from. Their windows are told by their program - nothing
+// about the window itself sets them apart from a game.
+bool IsCaptureToolWindow(HWND hwnd) {
+    static const PCWSTR kTools[] = {
+        L"ShareX.exe",          L"Greenshot.exe",    L"ScreenClippingHost.exe",
+        L"SnippingTool.exe",    L"Snagit32.exe",     L"SnagitCapture.exe",
+        L"PowerToys.ColorPickerUI.exe", L"PowerToys.MeasureToolUI.exe",
+        L"Lightshot.exe",       L"flameshot.exe",    L"PicPick.exe",
+    };
+    static std::unordered_map<DWORD, KnownProcess> known;
+    return ProgramIsOneOf(hwnd, kTools, known);
+}
+
+// The apps whose caption-less maximize the mod trims (see
+// TrimCaptionlessMaximize): the ArtCraft apps, by executable.
+bool IsCaptionTrimApp(HWND hwnd) {
+    static const PCWSTR kApps[] = {
+        L"photocraft.exe",   L"vectorcraft.exe",  L"filmcraft.exe",     L"lightcraft.exe",
+        L"pdfcraft.exe",     L"effectcraft.exe",  L"designcraft.exe",   L"figcraft.exe",
+        L"texturecraft.exe", L"materialcraft.exe", L"wordcraft.exe",    L"soundcraft.exe",
+        L"deckcraft.exe",    L"cadcraft.exe",     L"gridcraft.exe",
+    };
+    static std::unordered_map<DWORD, KnownProcess> known;
+    return ProgramIsOneOf(hwnd, kApps, known);
 }
 
 bool IsIgnoredWindowClass(HWND hwnd) {
@@ -5803,15 +5865,48 @@ bool IsIgnoredWindowClass(HWND hwnd) {
 
 // A maximized window with a sizing frame and no caption: an app drawing its
 // own title bar, which Windows sizes to the whole monitor (see
-// TrimCaptionlessMaximize, which puts it back on the work area). Not a
-// full-screen app: those drop the sizing frame too (a browser in F11, a
-// game).
+// TrimCaptionlessMaximize, which puts the ArtCraft apps back on the work
+// area).
 bool IsCaptionlessMaximize(HWND hwnd) {
     if (!hwnd || !IsZoomed(hwnd) || IsIconic(hwnd)) {
         return false;
     }
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     return (style & WS_CAPTION) != WS_CAPTION && (style & WS_THICKFRAME) && !(style & WS_CHILD);
+}
+
+// The trims made (see TrimCaptionlessMaximize): one per maximize of a window
+// on a monitor. A record lasts while the window stays maximized on that
+// monitor; a restore, a move to another monitor or the window going away
+// ends it. The mod's thread only.
+struct CaptionTrim {
+    HMONITOR monitor;
+    ULONGLONG at;        // GetTickCount64 when the trim was asked for
+    bool undoneLogged;   // the app put its size back, and that was logged
+};
+std::unordered_map<HWND, CaptionTrim> g_captionTrims;
+// The trim is asynchronous: for this long after it a window still covering
+// the monitor is taken to be on its way to the work area; after it, to have
+// put its size back.
+constexpr ULONGLONG kCaptionTrimSettleMs = 1000;
+
+void ForgetEndedCaptionTrims() {
+    for (auto it = g_captionTrims.begin(); it != g_captionTrims.end();) {
+        HWND hwnd = it->first;
+        if (!IsWindow(hwnd) || !IsZoomed(hwnd) ||
+            MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != it->second.monitor) {
+            it = g_captionTrims.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// The window was just trimmed and hasn't reached the work area yet.
+bool CaptionTrimPending(HWND hwnd) {
+    auto it = g_captionTrims.find(hwnd);
+    return it != g_captionTrims.end() &&
+           GetTickCount64() - it->second.at < kCaptionTrimSettleMs;
 }
 
 // Walks the top-level windows in z-order. A visible, uncloaked window in the
@@ -5862,10 +5957,11 @@ bool HasFullscreenWindow(const Layout& layout, HWND confirmed, HWND* fullscreenW
             if (IsCaptureToolWindow(hwnd)) {
                 continue;
             }
-            // A caption-less maximize is about to be trimmed to the work area
+            // An ArtCraft app the mod just trimmed to the work area
             // (asynchronously, so a tick can still find it over the monitor):
-            // an ordinary maximized window, which hides nothing.
-            if (IsCaptionlessMaximize(hwnd) && !(exStyle & WS_EX_TOPMOST)) {
+            // an ordinary maximized window, which hides nothing. One that put
+            // its size back counts as what it is.
+            if (CaptionTrimPending(hwnd) && !(exStyle & WS_EX_TOPMOST)) {
                 return false;
             }
             // A full-screen app is the window the user is in, or was in when
@@ -7541,6 +7637,34 @@ void OnTaskbarWindowPosChanged(HWND hwnd, const WINDOWPOS* pos) {
     if (it == g_wants->end()) {
         return;
     }
+    // Stretched over its monitor for a moment (see TaskbarSpansMonitor):
+    // nothing to follow, and back on the same strip afterwards nothing
+    // changed either. The frame stays as it is throughout.
+    {
+        TaskbarWants& wants = it->second;
+        RECT rect{};
+        MONITORINFO mi{sizeof(mi)};
+        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (GetWindowRect(hwnd, &rect) && monitor && GetMonitorInfoW(monitor, &mi)) {
+            if (TaskbarSpansMonitor(rect, mi.rcMonitor)) {
+                if (!wants.spanning) {
+                    wants.spanning = true;
+                    Wh_Log(L"taskbar %p: window stretched over its monitor (%ld,%ld,%ld,%ld) - "
+                           L"kept on its strip",
+                           hwnd, rect.left, rect.top, rect.right, rect.bottom);
+                }
+                return;
+            }
+            bool back = wants.spanning;
+            wants.spanning = false;
+            bool same = EqualRect(&rect, &wants.strip) != FALSE;
+            wants.strip = rect;
+            if (back && same) {
+                Wh_Log(L"taskbar %p: window back on its strip", hwnd);
+                return;
+            }
+        }
+    }
     // Edge or size changed: the frame on this monitor goes away with the
     // taskbar and comes back once the tree is whole again (a slide along the
     // same edge - auto-hide - is left alone).
@@ -7576,6 +7700,17 @@ void WatchTaskbarLayout(HWND taskbar) try {
         return;
     }
     TaskbarWants& wants = (*g_wants)[taskbar];
+    if (IsRectEmpty(&wants.strip) && !wants.spanning) {
+        // The strip a stretch over the monitor is told from (see
+        // OnTaskbarWindowPosChanged), until the window's first move sets it.
+        RECT rect{};
+        MONITORINFO mi{sizeof(mi)};
+        HMONITOR monitor = MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST);
+        if (GetWindowRect(taskbar, &rect) && monitor && GetMonitorInfoW(monitor, &mi) &&
+            !TaskbarSpansMonitor(rect, mi.rcMonitor)) {
+            wants.strip = rect;
+        }
+    }
     auto content = TaskbarXamlContent(taskbar);
     auto element = content ? content.try_as<wux::FrameworkElement>() : nullptr;
     auto watched = wants.watched.get();
@@ -9322,14 +9457,40 @@ void HookForegroundLocation(HWND foreground);
 // area plus its sizing border themselves, but they find that border from an
 // edge where the work area meets the monitor, and the mod reserves all four
 // edges, so they leave it covering the monitor. The mod does the trim for
-// them: a maximized window with a sizing frame and no caption, covering a
-// framed monitor, is moved to the work area plus its sizing border (their
-// own trim then leaves it as it is, and winit keeps the client area on the
-// work area, so nothing in the app moves). Asynchronous: the mod's thread
-// never waits on the app's.
+// them: an ArtCraft app's window (by executable - an app of any other kind
+// with that style may be in a full-screen mode of its own, and is left
+// alone), maximized with a sizing frame and no caption and covering a framed
+// monitor, is moved to the work area plus its sizing border (their own trim
+// then leaves it as it is, and winit keeps the client area on the work
+// area, so nothing in the app moves). Once per maximize (see
+// g_captionTrims): an app that puts its size back keeps it, so the mod and
+// the app never take turns. Asynchronous: the mod's thread never waits on
+// the app's.
 std::vector<HWND> g_trimLogged;  // windows already logged as trimmed
 void TrimCaptionlessMaximize(HWND hwnd) {
+    ForgetEndedCaptionTrims();
     if (!IsCaptionlessMaximize(hwnd)) {
+        return;
+    }
+    auto done = g_captionTrims.find(hwnd);
+    if (done != g_captionTrims.end()) {
+        // Trimmed already in this maximize. Still over the monitor once the
+        // trim had time to land: the app put its size back, and keeps it.
+        RECT r{};
+        MONITORINFO mi{sizeof(mi)};
+        if (!done->second.undoneLogged &&
+            GetTickCount64() - done->second.at >= kCaptionTrimSettleMs &&
+            GetWindowRect(hwnd, &r) && GetMonitorInfoW(done->second.monitor, &mi) &&
+            r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top &&
+            r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom) {
+            done->second.undoneLogged = true;
+            Wh_Log(L"window %p: put its size back over the whole monitor after the trim - left "
+                   L"as it is until its next maximize",
+                   hwnd);
+        }
+        return;
+    }
+    if (!IsCaptionTrimApp(hwnd)) {
         return;
     }
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
@@ -9358,6 +9519,10 @@ void TrimCaptionlessMaximize(HWND hwnd) {
                  wanted.bottom - wanted.top,
                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOCOPYBITS |
                      SWP_ASYNCWINDOWPOS);
+    if (g_captionTrims.size() > 64) {
+        g_captionTrims.clear();  // not expected: records end with each maximize
+    }
+    g_captionTrims[hwnd] = {monitor, GetTickCount64(), false};
     if (std::find(g_trimLogged.begin(), g_trimLogged.end(), hwnd) == g_trimLogged.end() &&
         g_trimLogged.size() < 64) {
         g_trimLogged.push_back(hwnd);
@@ -9401,9 +9566,10 @@ void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
             g_titleEventPending = true;  // maximized or restored
             g_titleEventTick = GetTickCount64();
         }
-        if (zoomed) {
-            TrimCaptionlessMaximize(hwnd);
-        }
+        // On every change, not only maximized ones: a restore ends the
+        // window's trim record, so a maximize right after it is trimmed
+        // again (nothing else is done for a window not maximized).
+        TrimCaptionlessMaximize(hwnd);
         lastWindow = hwnd;
         lastZoomed = zoomed;
     }
@@ -10567,12 +10733,15 @@ SetRectangle_t SetRectangle_Original;
 // is set (its geometry, rectangle and radius), and every frame of a restore
 // sets it again with each radius divided by the stretch along its axis,
 // which on screen is the window's own radius; the last frames, at no
-// stretch, put back the radius as it was. The geometry belongs to the
-// window's border, so it is forgotten with the border (see
-// ForgetBorderObject), none is kept unless the destructor hooks are in, and
-// it is only used within a second of being set: DWM sets it as a restore
-// begins (the window takes its restored size), so a geometry the border has
-// since replaced is never called into.
+// stretch, put back the radius as it was.
+// The geometry is DWM's object, called into later, so its lifetime is
+// tracked like the others': the record goes when the geometry is destroyed
+// (its destructor is hooked, see ForgetClipGeometry) or its border is (see
+// ForgetBorderObject). Without all three destructor hooks no record is kept
+// and restores keep Windows' stretched corner. A record is also used only
+// within a second of being set (DWM sets the clip as a restore begins, as
+// the window takes its restored size) and only while it is the last clip
+// the border set for its window.
 struct ContentClip {
     void* border = nullptr;
     void* geometry = nullptr;  // CRectangleGeometryProxy*
@@ -10584,18 +10753,58 @@ struct ContentClip {
 constexpr ULONGLONG kContentClipFreshMs = 1000;
 std::mutex g_contentClipsMutex;
 std::unordered_map<HWND, ContentClip> g_contentClips;
+std::unordered_map<void*, HWND> g_clipGeometryWindows;  // geometry -> its record's window
+std::atomic<bool> g_clipGeometryLifetimeTracked{false};  // its destructor is hooked
 thread_local void* g_clipBorder;    // the CWindowBorder whose content clip is being set
 thread_local void* g_clipGeometry;  // and the geometry it is set on
+
+// Under g_contentClipsMutex.
+void EraseContentClipLocked(std::unordered_map<HWND, ContentClip>::iterator it) {
+    g_clipGeometryWindows.erase(it->second.geometry);
+    g_contentClips.erase(it);
+}
 
 void ForgetContentClips(void* border) {
     std::lock_guard<std::mutex> lock(g_contentClipsMutex);
     for (auto it = g_contentClips.begin(); it != g_contentClips.end();) {
         if (it->second.border == border) {
-            it = g_contentClips.erase(it);
+            auto next = std::next(it);
+            EraseContentClipLocked(it);
+            it = next;
         } else {
             ++it;
         }
     }
+}
+
+// A geometry being destroyed: its record goes with it.
+void ForgetClipGeometry(void* geometry) {
+    std::lock_guard<std::mutex> lock(g_contentClipsMutex);
+    auto index = g_clipGeometryWindows.find(geometry);
+    if (index == g_clipGeometryWindows.end()) {
+        return;
+    }
+    auto it = g_contentClips.find(index->second);
+    g_clipGeometryWindows.erase(index);
+    if (it != g_contentClips.end() && it->second.geometry == geometry) {
+        g_contentClips.erase(it);
+    }
+}
+
+// CRectangleGeometryProxy's destructor, in whichever form udwm.dll has it:
+// the destructor itself, or only the deleting destructor its vtable points
+// to (when the compiler folded the destructor into it).
+using GeometryDestructor_t = void(WINAPI*)(void* self);
+GeometryDestructor_t RectangleGeometryDestructor_Original;
+void WINAPI RectangleGeometryDestructor_Hook(void* self) {
+    ForgetClipGeometry(self);
+    RectangleGeometryDestructor_Original(self);
+}
+using GeometryDeletingDestructor_t = void*(WINAPI*)(void* self, unsigned int flags);
+GeometryDeletingDestructor_t RectangleGeometryDeletingDestructor_Original;
+void* WINAPI RectangleGeometryDeletingDestructor_Hook(void* self, unsigned int flags) {
+    ForgetClipGeometry(self);
+    return RectangleGeometryDeletingDestructor_Original(self, flags);
 }
 
 using SetClipRectangle_t = void(WINAPI*)(void* self, void* geometry, const RECT* rect);
@@ -10624,6 +10833,13 @@ void FitContentClip(HWND hwnd, float width, float height) {
     if (IsZoomed(hwnd)) {
         return;  // a maximize shrinks the window: its clip stays inside the animated one
     }
+    if (!g_clipGeometryLifetimeTracked) {
+        return;  // no record is kept then; checked here too, for the record's sake
+    }
+    // The record is copied out and the call made after the lock: DWM
+    // creates, uses and destroys these objects on one thread, the one
+    // running this hook (as with RunFitRefreshes), so a geometry found here
+    // can't be destroyed before the call below returns.
     ContentClip clip;
     {
         std::lock_guard<std::mutex> lock(g_contentClipsMutex);
@@ -11169,15 +11385,21 @@ void TakeContentClip(void* geometry, float& left, float& top, float& right, floa
         FitToWorkArea(hwnd, left, top, right, bottom)) {
         WantFitRefresh(hwnd);
     }
-    if (!g_objectLifetimesTracked) {
-        return;
+    if (!g_objectLifetimesTracked || !g_clipGeometryLifetimeTracked) {
+        return;  // a geometry that could be freed unseen is never kept
     }
     std::lock_guard<std::mutex> lock(g_contentClipsMutex);
     if (g_contentClips.size() > 4096) {
         g_contentClips.clear();  // windows long gone
+        g_clipGeometryWindows.clear();
+    }
+    auto it = g_contentClips.find(hwnd);
+    if (it != g_contentClips.end() && it->second.geometry != geometry) {
+        g_clipGeometryWindows.erase(it->second.geometry);  // replaced by this one
     }
     g_contentClips[hwnd] = {g_clipBorder, geometry, left, top, right, bottom,
                             radius,       flag,     GetTickCount64()};
+    g_clipGeometryWindows[geometry] = hwnd;
 }
 
 // The window's thread and class, as its identity beyond the handle.
@@ -11842,6 +12064,25 @@ BOOL Init() {
             WindowBorderDestructor_Hook,
             true,
         },
+        // The content clip's geometry (see ContentClip): either form will do.
+        {
+            {LR"(public: virtual __cdecl CRectangleGeometryProxy::~CRectangleGeometryProxy(void))",
+             LR"(protected: virtual __cdecl CRectangleGeometryProxy::~CRectangleGeometryProxy(void))",
+             LR"(private: virtual __cdecl CRectangleGeometryProxy::~CRectangleGeometryProxy(void))",
+             LR"(public: __cdecl CRectangleGeometryProxy::~CRectangleGeometryProxy(void))",
+             LR"(protected: __cdecl CRectangleGeometryProxy::~CRectangleGeometryProxy(void))"},
+            &RectangleGeometryDestructor_Original,
+            RectangleGeometryDestructor_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual void * __cdecl CRectangleGeometryProxy::`scalar deleting destructor'(unsigned int))",
+             LR"(protected: virtual void * __cdecl CRectangleGeometryProxy::`scalar deleting destructor'(unsigned int))",
+             LR"(private: virtual void * __cdecl CRectangleGeometryProxy::`scalar deleting destructor'(unsigned int))"},
+            &RectangleGeometryDeletingDestructor_Original,
+            RectangleGeometryDeletingDestructor_Hook,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks))) {
@@ -11855,6 +12096,14 @@ BOOL Init() {
     FindWindowData3DOffset();
     g_objectLifetimesTracked =
         TopLevelWindowDestructor_Original && WindowBorderDestructor_Original;
+    g_clipGeometryLifetimeTracked =
+        RectangleGeometryDestructor_Original || RectangleGeometryDeletingDestructor_Original;
+    Wh_Log(L"[dwm] clip geometry destructor: %s",
+           RectangleGeometryDestructor_Original
+               ? L"~CRectangleGeometryProxy"
+               : RectangleGeometryDeletingDestructor_Original
+                     ? L"scalar deleting destructor"
+                     : L"not found - restores keep Windows' stretched corner");
     Wh_Log(L"[dwm] hooks installed (maximized border and shadow: %s%s%s%s%s%s)",
            SetBorderParameters_Original ? L"available" : L"SetBorderParameters not found",
            SetBorderParameters_Original && g_hwndOffset < 0 ? L", for every maximized window"
@@ -11864,7 +12113,7 @@ BOOL Init() {
                    SetRectangle_Original && g_windowData3DOffset >= 0
                ? L""
                : L"; animated clip not found: windows animate with Windows' corners",
-           SetClipRectangle_Original && g_objectLifetimesTracked
+           SetClipRectangle_Original && g_objectLifetimesTracked && g_clipGeometryLifetimeTracked
                ? L""
                : L"; content clip not tracked: a restore stretches the window's corner",
            g_objectLifetimesTracked
