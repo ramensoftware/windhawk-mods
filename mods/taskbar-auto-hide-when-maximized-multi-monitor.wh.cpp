@@ -69,6 +69,10 @@ with robust startup, display power-cycle recovery, and shell timer integration o
   and turns auto-hide on via the primary tray.
 - Setting changes are guarded against modal message loop re-entrancy, eliminating
   cascading warning dialogs.
+- While the mod runs, Explorer's "A toolbar is already hidden on this side of your
+  screen" message is not shown. Explorer raises it when two taskbar windows briefly
+  claim the same screen edge while the taskbars are being created (at sign-in or
+  after a display change); with auto-hide kept on, it appeared at every sign-in.
 - When unloaded or disabled cleanly in Windhawk (`Wh_ModUninit`), the mod restores
   your original auto-hide setting.
 - Note: If Explorer terminates abnormally or crashes, the setting in `StuckRects3`
@@ -1948,6 +1952,20 @@ void WINAPI CSecondaryTray__ResetZorder_Hook(void* pThis, int flags) {
     }
 }
 
+// When a taskbar can't register as the auto-hide bar for its screen edge
+// (another taskbar window still holds that edge, as happens while Explorer
+// creates or rebuilds the taskbars at sign-in or after a display change),
+// the shell posts itself a message that shows "A toolbar is already hidden
+// on this side of your screen". With auto-hide kept on by this mod, that
+// dialog appears at every sign-in. This function only posts that message;
+// the shell's own collision handling runs in its caller, and the mod turns
+// auto-hide back on if the shell drops it.
+using TrayUI__AutoHideCollision_t = void(WINAPI*)(void* pThis);
+TrayUI__AutoHideCollision_t TrayUI__AutoHideCollision_Original;
+void WINAPI TrayUI__AutoHideCollision_Hook(void* pThis) {
+    Wh_Log(L"Skipping the shell's \"toolbar already hidden\" warning");
+}
+
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis,
                                           HWND hWnd,
                                           UINT Msg,
@@ -2875,6 +2893,12 @@ bool HookTaskbarSymbols() {
             {LR"(private: void __cdecl CSecondaryTray::_ResetZorder(int))"},
             &CSecondaryTray__ResetZorder_Original,
             CSecondaryTray__ResetZorder_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl TrayUI::_AutoHideCollision(void))"},
+            &TrayUI__AutoHideCollision_Original,
+            TrayUI__AutoHideCollision_Hook,
             true,
         },
         {
