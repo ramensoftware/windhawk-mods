@@ -2620,8 +2620,29 @@ static bool IsWin11OrGreater() {
 static int g_systemDwmRadius = 8;
 static int g_systemDwmSmallRadius = 4;
 static bool g_customCornerRadiusModActive = false;
-static HANDLE g_hDwmCornerWatchThread = NULL;
-static HANDLE g_hDwmCornerWatchStopEvent = NULL;
+
+// custom-corner-radius changes the corners DWM draws and exposes no API, so its
+// settings are read from Windhawk's own storage: the registry for a regular
+// install, an INI file for a portable one. Both are located through
+// windhawk.ini, next to windhawk.exe. This runs on demand, each time the
+// switcher is shown, so no watcher is needed.
+struct CornerModRaw {
+    bool disabled = false;
+    bool hasRadius = false;
+    bool hasSmallRadius = false;
+    int radius = 12;       // custom-corner-radius default
+    int smallRadius = 6;   // custom-corner-radius default
+    bool excludesThisProcess = false;
+    WCHAR perCorner[128] = {};
+};
+
+struct CornerModStorage {
+    bool resolved = false;
+    bool portable = false;
+    HKEY hive = HKEY_LOCAL_MACHINE;
+    WCHAR registryMods[MAX_PATH] = L"SOFTWARE\\Windhawk\\Engine\\Mods";
+    WCHAR iniMods[MAX_PATH] = {};
+};
 
 static bool ReadRegistryDword(HKEY hKey, PCWSTR valueName, DWORD* value) {
     if (!hKey || !value) return false;
@@ -2632,75 +2653,240 @@ static bool ReadRegistryDword(HKEY hKey, PCWSTR valueName, DWORD* value) {
            type == REG_DWORD && size == sizeof(*value);
 }
 
-static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadius) {
-    const WCHAR* modKeys[] = {
-        L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius",
-        L"SOFTWARE\\Windhawk\\Engine\\Mods\\local@custom-corner-radius"
+static bool ReadRegistryString(HKEY hKey, PCWSTR valueName, WCHAR* buffer,
+                               DWORD bufferChars) {
+    if (!hKey || !buffer || bufferChars < 2) return false;
+    DWORD type = 0;
+    DWORD size = (bufferChars - 1) * sizeof(WCHAR);
+    if (RegQueryValueExW(hKey, valueName, NULL, &type, (LPBYTE)buffer,
+                         &size) != ERROR_SUCCESS ||
+        type != REG_SZ) {
+        return false;
+    }
+    buffer[size / sizeof(WCHAR)] = L'\0';
+    return true;
+}
+
+// custom-corner-radius 1.4+ keeps the original corners for windows of the
+// programs in "excludedPrograms" (process name or full path, case-insensitive).
+// The switcher belongs to the current process, so a match means DWM leaves its
+// corners alone. `readEntry(i, buffer, chars)` returns false when entry i is
+// missing; like the mod, the scan stops at the first empty entry.
+template <typename ReadEntry>
+static bool OwnProcessIsExcluded(ReadEntry readEntry) {
+    WCHAR path[MAX_PATH * 2];
+    DWORD len = GetModuleFileNameW(NULL, path, ARRAYSIZE(path));
+    if (!len || len >= ARRAYSIZE(path)) return false;
+    PCWSTR fileName = wcsrchr(path, L'\\');
+    fileName = fileName ? fileName + 1 : path;
+
+    for (int i = 0; i < 256; i++) {
+        WCHAR entry[MAX_PATH * 2];
+        if (!readEntry(i, entry, (DWORD)ARRAYSIZE(entry)) || !*entry) break;
+        if (_wcsicmp(entry, path) == 0 || _wcsicmp(entry, fileName) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ReadCornerModFromRegistry(const CornerModStorage& storage,
+                                      PCWSTR modId, CornerModRaw* raw) {
+    WCHAR modPath[MAX_PATH];
+    swprintf_s(modPath, L"%s\\%s", storage.registryMods, modId);
+    HKEY hKey = NULL;
+    if (RegOpenKeyExW(storage.hive, modPath, 0, KEY_READ | KEY_WOW64_64KEY,
+                      &hKey) != ERROR_SUCCESS) {
+        return false;
+    }
+    DWORD disabled = 0;
+    if (ReadRegistryDword(hKey, L"Disabled", &disabled)) {
+        raw->disabled = disabled != 0;
+    }
+    RegCloseKey(hKey);
+
+    // A missing Settings key means the mod runs with its defaults.
+    WCHAR settingsPath[MAX_PATH];
+    swprintf_s(settingsPath, L"%s\\Settings", modPath);
+    HKEY hSet = NULL;
+    if (RegOpenKeyExW(storage.hive, settingsPath, 0,
+                      KEY_READ | KEY_WOW64_64KEY, &hSet) != ERROR_SUCCESS) {
+        raw->hasRadius = raw->hasSmallRadius = true;
+        return true;
+    }
+    DWORD value = 0;
+    raw->hasRadius = ReadRegistryDword(hSet, L"radius", &value);
+    if (raw->hasRadius) raw->radius = (int)value;
+    raw->hasSmallRadius = ReadRegistryDword(hSet, L"smallRadius", &value);
+    if (raw->hasSmallRadius) raw->smallRadius = (int)value;
+    ReadRegistryString(hSet, L"perCornerRadius", raw->perCorner,
+                       ARRAYSIZE(raw->perCorner));
+    raw->excludesThisProcess = OwnProcessIsExcluded(
+        [&](int i, WCHAR* buffer, DWORD chars) {
+            WCHAR name[32];
+            swprintf_s(name, L"excludedPrograms[%d]", i);
+            return ReadRegistryString(hSet, name, buffer, chars);
+        });
+    RegCloseKey(hSet);
+    return true;
+}
+
+static bool ReadCornerModFromIni(const CornerModStorage& storage, PCWSTR modId,
+                                 CornerModRaw* raw) {
+    WCHAR file[MAX_PATH * 2];
+    swprintf_s(file, L"%s\\%s.ini", storage.iniMods, modId);
+    if (GetFileAttributesW(file) == INVALID_FILE_ATTRIBUTES) return false;
+
+    raw->disabled = GetPrivateProfileIntW(L"Mod", L"Disabled", 0, file) != 0;
+
+    // A missing [Settings] section means the mod runs with its defaults.
+    WCHAR text[128];
+    auto readValue = [&](PCWSTR key, WCHAR* out, DWORD chars) {
+        GetPrivateProfileStringW(L"Settings", key, L"\x01", out, chars, file);
+        return wcscmp(out, L"\x01") != 0;
     };
+    raw->hasRadius = readValue(L"radius", text, ARRAYSIZE(text));
+    if (raw->hasRadius) raw->radius = (int)wcstol(text, NULL, 10);
+    raw->hasSmallRadius = readValue(L"smallRadius", text, ARRAYSIZE(text));
+    if (raw->hasSmallRadius) raw->smallRadius = (int)wcstol(text, NULL, 10);
+    if (!readValue(L"perCornerRadius", raw->perCorner,
+                   ARRAYSIZE(raw->perCorner))) {
+        raw->perCorner[0] = L'\0';
+    }
+    raw->excludesThisProcess = OwnProcessIsExcluded(
+        [&](int i, WCHAR* buffer, DWORD chars) {
+            WCHAR name[32];
+            swprintf_s(name, L"excludedPrograms[%d]", i);
+            return readValue(name, buffer, chars);
+        });
+    return true;
+}
 
-    for (const auto* modKeyPath : modKeys) {
-        HKEY hKey = NULL;
-        LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, modKeyPath, 0,
-                                  KEY_READ | KEY_WOW64_64KEY, &hKey);
-        if (lRes != ERROR_SUCCESS) {
-            continue;
+// windhawk.ini [Storage]: Portable, AppDataPath, RegistryKey. Falls back to the
+// regular HKLM install layout when the file or a key can't be read.
+static const CornerModStorage& GetCornerModStorage() {
+    static CornerModStorage storage;
+    if (storage.resolved) return storage;
+    storage.resolved = true;
+
+    WCHAR exe[MAX_PATH * 2];
+    DWORD len = GetModuleFileNameW(NULL, exe, ARRAYSIZE(exe));
+    if (!len || len >= ARRAYSIZE(exe)) return storage;
+    WCHAR* slash = wcsrchr(exe, L'\\');
+    if (!slash) return storage;
+    *slash = L'\0';
+    WCHAR ini[MAX_PATH * 2];
+    swprintf_s(ini, L"%s\\windhawk.ini", exe);
+
+    if (GetPrivateProfileIntW(L"Storage", L"Portable", 0, ini) != 0) {
+        WCHAR raw[MAX_PATH * 2], data[MAX_PATH * 2];
+        if (GetPrivateProfileStringW(L"Storage", L"AppDataPath", L"", raw,
+                                     ARRAYSIZE(raw), ini) &&
+            ExpandEnvironmentStringsW(raw, data, ARRAYSIZE(data)) &&
+            data[0]) {
+            bool absolute = (data[0] == L'\\' && data[1] == L'\\') ||
+                            (iswalpha(data[0]) && data[1] == L':');
+            if (absolute) {
+                swprintf_s(storage.iniMods, L"%s\\Engine\\Mods", data);
+            } else {
+                swprintf_s(storage.iniMods, L"%s\\%s\\Engine\\Mods", exe,
+                           data);
+            }
+            storage.portable = true;
         }
+        return storage;
+    }
 
-        DWORD disabled = 0;
-        bool modActive = true;
-        if (ReadRegistryDword(hKey, L"Disabled", &disabled)) {
-            modActive = (disabled == 0);
-        }
-        RegCloseKey(hKey);
-
-        if (modActive) {
-            WCHAR settingsPath[MAX_PATH];
-            swprintf_s(settingsPath, L"%s\\Settings", modKeyPath);
-            HKEY hSetKey = NULL;
-            lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, settingsPath, 0,
-                                 KEY_READ | KEY_WOW64_64KEY, &hSetKey);
-            if (lRes == ERROR_SUCCESS) {
-                DWORD rVal = (DWORD)-1;
-                bool hasRadius = ReadRegistryDword(hSetKey, L"radius", &rVal);
-                DWORD sVal = (DWORD)-1;
-                bool hasSmallRadius =
-                    ReadRegistryDword(hSetKey, L"smallRadius", &sVal);
-                RegCloseKey(hSetKey);
-
-                int finalRadius = 8;
-                if (hasRadius) {
-                    if (rVal == (DWORD)-1) {
-                        finalRadius = IsWin11OrGreater() ? 8 : 0;
-                    } else {
-                        finalRadius = (int)rVal;
-                    }
-                } else {
-                    finalRadius = 12; // custom-corner-radius mod default is 12
-                }
-
-                int finalSmallRadius = 4;
-                if (hasSmallRadius) {
-                    if (sVal == (DWORD)-1) {
-                        finalSmallRadius = IsWin11OrGreater() ? 4 : 0;
-                    } else {
-                        finalSmallRadius = (int)sVal;
-                    }
-                } else {
-                    if (hasRadius && rVal != (DWORD)-1) {
-                        finalSmallRadius = (int)roundf((float)rVal * 0.5f);
-                    } else {
-                        finalSmallRadius = 6; // custom-corner-radius mod default is 6
-                    }
-                }
-
-                if (finalRadius < 0) finalRadius = 0;
-                if (finalSmallRadius < 0) finalSmallRadius = 0;
-
-                if (outRadius) *outRadius = finalRadius;
-                if (outSmallRadius) *outSmallRadius = finalSmallRadius;
-                return true;
+    WCHAR key[MAX_PATH];
+    if (GetPrivateProfileStringW(L"Storage", L"RegistryKey", L"", key,
+                                 ARRAYSIZE(key), ini) &&
+        key[0]) {
+        WCHAR* sub = wcschr(key, L'\\');
+        if (sub) {
+            *sub++ = L'\0';
+            HKEY hive = NULL;
+            if (_wcsicmp(key, L"HKLM") == 0 ||
+                _wcsicmp(key, L"HKEY_LOCAL_MACHINE") == 0) {
+                hive = HKEY_LOCAL_MACHINE;
+            } else if (_wcsicmp(key, L"HKCU") == 0 ||
+                       _wcsicmp(key, L"HKEY_CURRENT_USER") == 0) {
+                hive = HKEY_CURRENT_USER;
+            }
+            if (hive && *sub) {
+                storage.hive = hive;
+                swprintf_s(storage.registryMods, L"%s\\Engine\\Mods", sub);
             }
         }
+    }
+    return storage;
+}
+
+// Mirrors how custom-corner-radius 1.4 resolves the window radius when
+// "perCornerRadius" (four comma-separated integers) is set: negative corners
+// follow "radius", and the largest corner is the radius DWM works with.
+static bool ParseCornerModPerCorner(PCWSTR text, int corners[4]) {
+    int values[4];
+    PCWSTR p = text;
+    for (int i = 0; i < 4; i++) {
+        PWSTR end = NULL;
+        values[i] = (int)wcstol(p, &end, 10);
+        if (end == p) return false;
+        while (iswspace(*end)) end++;
+        if (*end != (i < 3 ? L',' : L'\0')) return false;
+        p = end + 1;
+    }
+    for (int i = 0; i < 4; i++) corners[i] = values[i];
+    return true;
+}
+
+static void ResolveCornerModRadii(const CornerModRaw& raw, int* outRadius,
+                                  int* outSmallRadius) {
+    const int nativeRadius = IsWin11OrGreater() ? 8 : 0;
+    const int nativeSmallRadius = IsWin11OrGreater() ? 4 : 0;
+
+    int radius = raw.radius;  // -1 keeps the original radius
+    int corners[4] = {-1, -1, -1, -1};
+    if (raw.perCorner[0]) ParseCornerModPerCorner(raw.perCorner, corners);
+    bool hasCornerRadius = false;
+    for (int c : corners) {
+        if (c >= 0) hasCornerRadius = true;
+    }
+    if (radius < 0 && hasCornerRadius) radius = nativeRadius ? nativeRadius : 8;
+    if (hasCornerRadius) {
+        int maxRadius = radius;
+        for (int c : corners) {
+            maxRadius = (std::max)(maxRadius, c < 0 ? radius : c);
+        }
+        radius = maxRadius;
+    }
+
+    int small = raw.smallRadius;
+    if (!raw.hasSmallRadius) {
+        // Only very old mod versions lack smallRadius.
+        small = (raw.hasRadius && radius >= 0)
+                    ? (int)roundf((float)radius * 0.5f)
+                    : 6;
+    }
+
+    *outRadius = radius < 0 ? nativeRadius : radius;
+    *outSmallRadius = small < 0 ? nativeSmallRadius : small;
+}
+
+// Returns true when custom-corner-radius is enabled and affects this process,
+// with the corner radii DWM now draws. Otherwise returns the Windows defaults.
+static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadius) {
+    const CornerModStorage& storage = GetCornerModStorage();
+    const WCHAR* modIds[] = {L"custom-corner-radius",
+                             L"local@custom-corner-radius"};
+    for (const WCHAR* modId : modIds) {
+        CornerModRaw raw;
+        bool found = storage.portable
+                         ? ReadCornerModFromIni(storage, modId, &raw)
+                         : ReadCornerModFromRegistry(storage, modId, &raw);
+        if (!found || raw.disabled) continue;
+        if (raw.excludesThisProcess) break;
+        ResolveCornerModRadii(raw, outRadius, outSmallRadius);
+        return true;
     }
 
     // Native OS Fallback
@@ -2711,60 +2897,15 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
 
 static void DetectSystemDwmCornerRadius() {
     int r = 8, s = 4;
-    g_customCornerRadiusModActive = DetectSystemDwmCornerRadiusValues(&r, &s);
+    const bool active = DetectSystemDwmCornerRadiusValues(&r, &s);
+    if (active != g_customCornerRadiusModActive || r != g_systemDwmRadius ||
+        s != g_systemDwmSmallRadius) {
+        Wh_Log(L"SWS: corner radius mod active=%d radius=%d small=%d", active,
+               r, s);
+    }
+    g_customCornerRadiusModActive = active;
     g_systemDwmRadius = r;
     g_systemDwmSmallRadius = s;
-}
-
-static DWORD WINAPI DwmCornerWatchThread(LPVOID lpParam) {
-    const HWND targetWindow = (HWND)lpParam;
-    int lastRadius = 0, lastSmallRadius = 0;
-    DetectSystemDwmCornerRadiusValues(&lastRadius, &lastSmallRadius);
-    HKEY hKey = NULL;
-    LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                              L"SOFTWARE\\Windhawk\\Engine\\Mods", 0,
-                              KEY_NOTIFY | KEY_READ | KEY_WOW64_64KEY, &hKey);
-    if (lRes != ERROR_SUCCESS) {
-        return 0;
-    }
-
-    HANDLE hChangeEvt = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!hChangeEvt) {
-        RegCloseKey(hKey);
-        return 0;
-    }
-
-    HANDLE waitHandles[2] = { g_hDwmCornerWatchStopEvent, hChangeEvt };
-
-    while (true) {
-        lRes = RegNotifyChangeKeyValue(
-            hKey, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
-            hChangeEvt, TRUE);
-        if (lRes != ERROR_SUCCESS) {
-            break;
-        }
-
-        DWORD dwWait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
-        if (dwWait == WAIT_OBJECT_0) {
-            break;
-        } else if (dwWait == WAIT_OBJECT_0 + 1) {
-            Sleep(50);
-
-            int newR = 8, newS = 4;
-            DetectSystemDwmCornerRadiusValues(&newR, &newS);
-            if (newR != lastRadius || newS != lastSmallRadius) {
-                lastRadius = newR;
-                lastSmallRadius = newS;
-                PostMessage(targetWindow, WM_SWS_SETTINGS_CHANGED, 0, 0);
-            }
-        } else {
-            break;
-        }
-    }
-
-    CloseHandle(hChangeEvt);
-    RegCloseKey(hKey);
-    return 0;
 }
 
 struct ThumbCacheState {
@@ -21342,12 +21483,6 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
         SWS_CLASSNAME, L"",
         WS_POPUP, 0, 0, 0, 0, g_hSwitcher, NULL, GetModuleHandleW(NULL), NULL);
 
-    g_hDwmCornerWatchStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (g_hDwmCornerWatchStopEvent) {
-        g_hDwmCornerWatchThread = CreateThread(
-            NULL, 0, DwmCornerWatchThread, g_hSwitcher, 0, NULL);
-    }
-
     BOOL bExclude = TRUE;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_EXCLUDED_FROM_PEEK, &bExclude, sizeof(bExclude));
 
@@ -21486,16 +21621,6 @@ thread_exit:
     DestroyBackdropWindow();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     RemoveNativeSwipePolicy();
-    if (g_hDwmCornerWatchStopEvent) SetEvent(g_hDwmCornerWatchStopEvent);
-    if (g_hDwmCornerWatchThread) {
-        WaitForSingleObject(g_hDwmCornerWatchThread, INFINITE);
-        CloseHandle(g_hDwmCornerWatchThread);
-        g_hDwmCornerWatchThread = NULL;
-    }
-    if (g_hDwmCornerWatchStopEvent) {
-        CloseHandle(g_hDwmCornerWatchStopEvent);
-        g_hDwmCornerWatchStopEvent = NULL;
-    }
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     ReleaseTouchpadGestureTakeover();
     g_presentationRegions.clear();
