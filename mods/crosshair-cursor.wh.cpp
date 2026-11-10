@@ -51,6 +51,15 @@ The mod runs in its own process instead of inside Explorer. Disabling or
 removing it restores the pointer scheme from Mouse settings. If a crash leaves
 the arrow hidden, open Mouse settings and reapply the pointer scheme, or
 enable this mod again and then disable it.
+
+## Changelog
+
+### 0.9
+- The toggle hotkey's off state is remembered the next time the mod starts.
+- Hiding the crosshair restores the pointer scheme from Mouse settings.
+
+### 0.8
+- Initial release.
 */
 // ==/WindhawkModReadme==
 
