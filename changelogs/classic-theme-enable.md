@@ -1,3 +1,7 @@
+## 1.2.9 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fb8301d1b70fb42a7ea75afed4d86e309a61f104/mods/classic-theme-enable.wh.cpp))
+
+* Add a link to [Classic Explorerframe for 24H2 and later](https://windhawk.net/mods/classic-explorerframe).
+
 ## 1.2.8 ([Oct 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dbea5d2e6a76c803eb7b33b5dbe77a0e37adc78c/mods/classic-theme-enable.wh.cpp))
 
 * Add a new fix for 24H2, 25H2, 26H2 build 9444+ to readme

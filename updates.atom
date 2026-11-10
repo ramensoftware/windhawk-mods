@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-10T02:01:23.000Z</updated>
+    <updated>2026-11-10T03:02:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.2.9]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#fb8301d1b70fb42a7ea75afed4d86e309a61f104</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2026-11-10T03:02:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a link to <a href="https://windhawk.net/mods/classic-explorerframe">Classic Explorerframe for 24H2 and later</a>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paste Clipboard Content to Explorer 2.0]]></title>
         <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#dfc704860c91247102c2d0699ff3d3b46a05d654</id>
@@ -931,102 +945,6 @@ Not detectable on laptops with ACPI-only power buttons, use Trigger hotkey or Li
         <author>
             <name>Thiago Silva</name>
             <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Logitech Battery Tray 0.1.2]]></title>
-        <id>https://windhawk.net/mods/logitech-battery-tray#f70719f6c2867dd2743e24eab6b2fa36972e0b71</id>
-        <link href="https://windhawk.net/mods/logitech-battery-tray"/>
-        <updated>2026-11-08T19:01:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Logitech Battery Tray</h1>
-<p>Battery indicators for supported Logitech devices, with automatic discovery,
-charging status and optional percentage labels.</p>
-<h2>Screenshots</h2>
-<p>Horizontal taskbar with a battery tooltip:</p>
-<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/horizontal.png" alt="Logitech battery indicators on a horizontal taskbar"></p>
-<p>Vertical taskbar with stacked device indicators:</p>
-<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/vertical.png" alt="Logitech battery indicators on a vertical taskbar"></p>
-<h2>Compatibility and scope</h2>
-<p>Windows 10/11: standard notification icons provide the compatibility backend.
-On supported Windows 11 x64/ARM64 taskbars, Auto uses native XAML battery buttons
-on the primary taskbar. Unrecognized taskbar layouts use notification icons
-instead of an overlay. 32-bit Windows uses notification icons only.
-Native icons show the percentage and a tooltip; charging is green. Windows
-controls their placement and overflow visibility. XAML placement, button styling
-and click-to-open settings do not apply to notification icons.</p>
-<p>Select <strong>Native notification icons</strong> to test or force the compatibility backend.
-Successful compilation is not a claim of runtime testing on every Windows build.</p>
-<p>Unlike BT Battery Monitor (generic Bluetooth battery reporting), this mod reads
-Logitech G HUB and Logitech HID++ battery data, including supported USB receivers.
-It runs in Explorer because its optional XAML backend modifies Explorer's own
-taskbar visual tree. No pairing, firmware or device configuration is changed.</p>
-<h2>Battery sources</h2>
-<p>The XAML backend uses built-in Segoe Fluent Icons and standard Windows buttons
-and tooltips. Its battery glyph changes with the reported charge level, with an
-optional smaller icon indicating the device type.</p>
-<p>G HUB must be running to use its data; direct HID++ reading works independently.
-The G HUB client connects only to 127.0.0.1:9010. It requests /devices/list and
-/battery/&lt;deviceId&gt;/state, subscribes to /battery/state/changed, and uses a
-persistent query connection with a 30-second fallback poll by default. Failed
-connections retry with exponential backoff, up to 60 seconds. Events update
-readings independently of fallback polling.
-Updates cannot arrive earlier than G HUB reports them.</p>
-<p>The HID++ provider reads compatible Logitech devices through Unifying, Bolt,
-LIGHTSPEED, USB and accessible Bluetooth HID++ interfaces. It supports battery
-features 0x1004, 0x1000, 0x1001, 0x1F20 and legacy HID++ 1.0 registers.
-Voltage-based and coarse readings are marked with an approximation sign.
-G HUB readings take priority when available. Models using other protocols may
-not report a battery level; support for every Logitech model is not guaranteed.</p>
-<h2>Discovery and language</h2>
-<p>All detected, supported battery devices are shown by default. No model-specific
-rules are shipped. Optional visibility rules match a device name or model;
-empty rules are ignored, * and ? are supported, and the last match wins.
-The user-facing tooltip contains no internal IDs or provider diagnostics.
-Tooltip translations follow the preferred Windows UI languages, with English
-as fallback. Reload the mod after changing Windows display languages.
-The mod description and settings default to English, with Russian localization
-for Windhawk's Russian interface. Tooltips follow Windows UI languages independently.</p>
-<p>When G HUB stops, HID++ provides readings for compatible devices. Fully
-disconnected devices are hidden; confirmed charging remains visible even when
-the device is inactive. Repeated explicit HID++ offline reports and failed G HUB
-queries use a five-second grace. Missing HID++ replies are treated as an unknown
-connection state, retaining the last reading for up to thirty seconds of failed
-communication. A hidden HID++ device needs two valid readings at
-least one second apart before reappearing, with no intervening failed reading.
-These windows absorb temporary failures, not indefinitely cache charging state.
-Provider requests run outside the taskbar UI thread. Reconnection is automatic.
-Windows HID arrival/removal and receiver notifications trigger rediscovery;
-three-minute scanning also handles devices that do not send connection events.
-An already-open device that missed its initial probe is retried separately,
-with increasing delays up to 60 seconds, without rescanning every HID interface.
-Event-capable HID++ features use the configured fallback interval. ADC (0x1F20)
-and legacy register devices use a two-second poll because they may lack events.
-Presence confirmation temporarily uses a short interval to avoid delayed recovery.
-The XAML UI updates on data, size and theme changes, without a periodic repaint.
-In Auto mode, a transient XAML failure must last 30 seconds before notification
-icons appear; missing taskbar symbols select the compatibility backend immediately.
-While the native fallback is active, unsuccessful XAML attachment attempts back
-off up to 60 seconds. Layout, DPI and theme changes trigger an immediate retry.
-On supported left/right taskbars, indicators are stacked vertically and the
-percentage is placed below the icons. Button width follows the taskbar width;
-the configured button width applies to horizontal taskbars only.</p>
-<h2>Credits and limitations</h2>
-<p>Disable direct HID++ reading before updating device firmware. Persistent HID
-handles are read-only; write access is opened only for each battery/probe request.
-This reduces sharing conflicts, but cannot guarantee compatibility with tools
-that require exclusive access. Firmware updates with this mod have not been tested.</p>
-<p>The G HUB interface is unofficial and may change with G HUB updates.
-XAML root access is adapted from Taskbar Folder Menus by sb4ssman:
-https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp
-G HUB protocol: https://github.com/someweirdhuman/LogiBAT
-G HUB events: https://github.com/bmrussell/LGBattery
-Icons: https://learn.microsoft.com/windows/apps/design/iconography/segoe-fluent-icons-font
-HID++: https://github.com/Logitech/cpg-docs/tree/master/hidpp20
-Battery features: https://github.com/pwr-Solaar/Solaar</p>
-]]></content>
-        <author>
-            <name>uMk0</name>
-            <uri>https://github.com/umk0</uri>
         </author>
     </entry>
 </feed>
