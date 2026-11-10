@@ -101,13 +101,14 @@ You can change these options in Windhawk:
 - **Windows preview compatibility:** The runtime bridge requires the built-in Windows text Preview Handler and compatible File Explorer association behavior. It may not work on every Windows version or with every custom file association. It does not add a missing Windows archive provider.
 - **Preview Host and unload:** Disabling the mod waits for active workers and COM preview objects to finish before the DLL can unload. If `prevhost.exe` still holds a preview object or class factory (including for normal `.txt` previews), Windhawk may remain blocked until the hosting Explorer window is closed, a different file is selected, or `prevhost.exe` exits. A stalled Shell provider can prevent shutdown indefinitely. The mod never forces a process restart.
 - **Broker security:** Requests are restricted to the current user's Preview Host session, validated local archive paths and live Preview windows, but other code executing inside the same Preview Host remains in the same trust boundary. This architecture is not equivalent to fully isolating every preview provider.
+- **Archive locations:** Broker operations require files on a local drive reported as fixed by Windows, without junctions, symbolic links or other reparse points in the path. Network shares and drives reported as removable (including many USB drives) are rejected. The read-only recovery list may still display their contents when Windows supports the format, but broker-based open, copy, drag and extraction are unavailable there.
 - **Cross-process controls:** The interactive native list is owned by Explorer and parented into `prevhost.exe`. Windows can connect their input queues, so a stalled Shell drag or other synchronous provider operation may temporarily delay input in Explorer.
 - **Trusted archives only for extraction:** The native Shell backend does not enforce its own limit on the amount of data after decompression. A small archive can contain a very large amount of data. Avoid extracting files from unknown sources.
 - **Windows provider support:** Some archives, compression methods, or password-protected files may not work. Archive Preview does not provide a password entry window.
 - **Transfers:** Copy, paste, drag and drop, and opening files depend on what the Windows archive provider and destination app support. Some apps need physical files and may not accept virtual files.
 - **Opening active content:** Direct opening of executable files, scripts, and other risky file types is blocked. Extracting them is a separate action and should only be done with trusted files.
 - **Large archives:** Loading a large archive may take time. A Windows Shell provider can block inside a system call, so progress and cancellation may not respond immediately.
-- **Unavailable formats:** If both the native browser and recovery list cannot read a selected archive, the mod stops retrying it until the selection changes.
+- **Unavailable formats:** If the native browser fails for the selected archive, it stops retrying and keeps the recovery list when available. If recovery also fails, the error stays visible until a different selection or a new preview session. Temporary broker startup errors are retried for a bounded period.
 - **Dates in ZIP folders:** When a folder has no stored date, Archive Preview may show a date derived from items inside it. This is not always the folder's original date.
 - **Selection limit:** Native transfer requests support up to **4,096 selected items** at a time.
 
@@ -1374,6 +1375,9 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
     bool brokerLoadFailed_{};
     bool fallbackLoadFailed_{};
     bool terminalLoadFailure_{};
+    // Only startup pipe errors receive a bounded grace period. A rejected
+    // archive or failed Shell enumeration must never reattach on a timer.
+    ULONGLONG brokerStartupFailureAt_{};
     bool brokerThemeKnown_{};
     bool brokerThemeDark_{};
     bool brokerCanGoBack_{};
@@ -1685,12 +1689,23 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         if (terminalLoadFailure_ || !brokerLoadFailed_ ||
             !fallbackLoadFailed_) return;
         terminalLoadFailure_ = true;
-        // Stop attaching the broker for this selection. A fresh Initialize()
-        // or Unload()/Stop() resets the state for the next file.
+        // Both providers failed for this selection. Do not retry on timer ticks.
         SyncGrip(true);
         error_ = L"Windows cannot read this archive. Select another file to try again.";
         SetStatus(error_);
         Layout();
+    }
+    void MarkBrokerLoadFailed() {
+        if (selectionRetired_ || !uiReady_ || brokerLoadFailed_) return;
+        brokerLoadFailed_ = true;
+        brokerStartupFailureAt_ = 0;
+        brokerBrowserReady_ = false;
+        brokerCanGoBack_ = false;
+        // Remove the failed broker list, even when fallback enumeration works.
+        // In particular, no subsequent timer may create another broker model.
+        SyncGrip(true);
+        StopRetryingFailedArchive();
+        if (!terminalLoadFailure_) EnsureFallbackContent();
     }
     static DWORD WINAPI FallbackWorker(LPVOID raw) {
         std::unique_ptr<std::shared_ptr<FallbackJob>> holder(
@@ -1709,7 +1724,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         return 0;
     }
     void QueueFallback(Column& col, size_t previousPage = SIZE_MAX) {
-        if (terminalLoadFailure_ || g_hostShutdown.load(std::memory_order_acquire) ||
+        if (terminalLoadFailure_ || fallbackLoadFailed_ ||
+            g_hostShutdown.load(std::memory_order_acquire) ||
             col.populated || !window_ || !archiveId_ || !col.folderId) return;
         if (fallbackJob_ && fallbackJob_->list == col.list &&
             fallbackJob_->page == col.page) return;
@@ -1863,11 +1879,22 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                     currentFailure = self->gripState_->serial ==
                         static_cast<ULONGLONG>(wp);
                 }
-                if (currentFailure && !self->selectionRetired_ && self->uiReady_) {
-                    self->brokerBrowserReady_ = false;
-                    self->brokerCanGoBack_ = false;
-                    self->EnsureFallbackContent();
+                if (!currentFailure || self->selectionRetired_ || !self->uiReady_ ||
+                    self->brokerLoadFailed_) return 0;
+                const HRESULT result = static_cast<HRESULT>(static_cast<DWORD>(lp));
+                const bool starting = result == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
+                    result == HRESULT_FROM_WIN32(ERROR_PIPE_BUSY);
+                if (starting) {
+                    const ULONGLONG now = GetTickCount64();
+                    if (!self->brokerStartupFailureAt_) self->brokerStartupFailureAt_ = now;
+                    // Give an on-demand broker a limited chance to initialize.
+                    // On persistent connection failures, keep the recovery view
+                    // instead of retrying forever (including offline brokers).
+                    if (now - self->brokerStartupFailureAt_ < 8000) return 0;
                 }
+                // E_ACCESSDENIED, broken pipe, invalid paths and model failures
+                // are not startup errors. Only a new selection can retry them.
+                self->MarkBrokerLoadFailed();
                 return 0;
             }
             case kAsyncFallbackResultMessage:
@@ -2004,12 +2031,13 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                 // the preview's ancestor visible. Do NOT tear it down then.
                 // Only a confirmed selection change or Unload invalidates it.
                 if (!self->uiReady_ || self->selectionRetired_ ||
+                    self->brokerLoadFailed_ || self->terminalLoadFailure_ ||
                     !self->window_ || !self->brokerBoundList_) return 0;
                 if (!self->cols_.empty() && self->cols_.back()->list) {
                     self->brokerBrowserReady_ = true;
-                    self->brokerLoadFailed_ = false;
-                    self->fallbackLoadFailed_ = false;
-                    self->terminalLoadFailure_ = false;
+                    self->brokerStartupFailureAt_ = 0;
+                    // READY only means the broker's HWND exists. It is NOT
+                    // proof that the Shell model has enumerated successfully.
                     // A slow first attach can start a fallback enumeration.
                     // It is no longer needed after the broker is ready.
                     if (self->fallbackJob_)
@@ -2032,14 +2060,9 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
                 }
                 return 0;
             case ARCHIVE_BROWSER_FAILED:
-                if (self->selectionRetired_ || !self->uiReady_ ||
-                    self->terminalLoadFailure_) return 0;
-                self->brokerBrowserReady_ = false;
-                self->brokerCanGoBack_ = false;
-                self->brokerLoadFailed_ = true;
-                self->StopRetryingFailedArchive();
-                if (!self->terminalLoadFailure_)
-                    self->EnsureFallbackContent();
+                // A model failure is definitive for this selection. If a
+                // recovery page works, keep it and do NOT recreate the broker.
+                self->MarkBrokerLoadFailed();
                 return 0;
             case ARCHIVE_PROXY_CLICK:
             case ARCHIVE_PROXY_DOUBLECLICK:
@@ -2994,7 +3017,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
     // Attach/detach runs on a tracked IPC worker so the preview UI does not
     // block on the broker. The broker still owns the native transfer ListView.
     void SyncGrip(bool clear = false) {
-        if (terminalLoadFailure_ && !clear) return;
+        if ((terminalLoadFailure_ || brokerLoadFailed_) && !clear) return;
         HWND current = (!clear && !cols_.empty()) ? cols_.back()->list : nullptr;
         if (!window_ || archive_.empty() ||
             (archive_.find_first_of(L"\\/:") == std::wstring::npos)) current = nullptr;
@@ -3015,6 +3038,12 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         bool start = false;
         {
             std::lock_guard<std::mutex> lock(state->mutex);
+            // A timer must not invalidate an in-flight worker's serial for
+            // the exact same request. Otherwise the UI discards a real failure
+            // as stale and can keep issuing GRIP_UPDATE indefinitely.
+            if (state->running && state->desired == current &&
+                state->desiredArchive == archive_ && state->hwnd == window_)
+                return;
             state->desired = current;
             state->desiredArchive = archive_;
             state->hwnd = window_;
@@ -3180,7 +3209,8 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
     }
     void EnsureFallbackContent() {
         if (cols_.empty() || brokerBrowserReady_ || selectionRetired_ ||
-            terminalLoadFailure_ || g_hostShutdown.load(std::memory_order_acquire)) return;
+            terminalLoadFailure_ || fallbackLoadFailed_ ||
+            g_hostShutdown.load(std::memory_order_acquire)) return;
         Column& col = *cols_.back();
         if (!col.populated) QueueFallback(col);
         else if (col.list && IsWindow(col.list))
@@ -3294,6 +3324,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         brokerLoadFailed_ = false;
         fallbackLoadFailed_ = false;
         terminalLoadFailure_ = false;
+        brokerStartupFailureAt_ = 0;
         brokerThemeKnown_ = false;
         brokerCanGoBack_ = false;
         brokerSelectionCount_ = 0;
@@ -3407,6 +3438,7 @@ public:
                 brokerLoadFailed_ = false;
                 fallbackLoadFailed_ = false;
                 terminalLoadFailure_ = false;
+                brokerStartupFailureAt_ = 0;
                 brokerAttachAttempt_ = 0;
                 error_.clear();
                 if (toolbar_) ShowWindow(toolbar_, SW_SHOWNOACTIVATE);
