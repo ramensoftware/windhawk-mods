@@ -14248,6 +14248,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     PublishNativeSwipePolicy();
     HWND invocationInput = invocationSource ? invocationSource : GetForegroundWindow();
     HWND invocationWindow = CanonicalAltTabWindow(invocationInput);
+    const bool shellSource = IsShellSurfaceWindow(invocationInput);
     s_switchAnimationSource = invocationWindow;
     g_sameAppSessionKey[0] = L'\0';
     if (g_isAltBacktickSameApp) {
@@ -14293,11 +14294,18 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_consumeEscUp = false;
     g_drillInAfterReveal = false;
     g_selectedIndex = 0;
-    int invocationIndex = -1;
-    if (!touchpadInvocation) {
-        invocationIndex = FindEntryContainingWindow(invocationWindow);
+    // Sticky sessions and touchpad invocations (which step from entry 0 on their
+    // own) keep the first entry. Alt+Tab starts on the entry after the current
+    // window.
+    if (!touchpadInvocation && !sticky) {
+        const int invocationIndex = FindEntryContainingWindow(invocationWindow);
         if (invocationIndex >= 0) {
             g_selectedIndex = (invocationIndex + 1) % (int)g_windows.size();
+        } else if (shellSource) {
+            // Start, Search and similar flyouts are not list entries. Entry 0 is
+            // the window that was active before the flyout opened, so the next
+            // entry is the one after it.
+            g_selectedIndex = 1 % (int)g_windows.size();
         } else {
             int fallbackIndex = FindNextEntryAfterInvocation(invocationInput);
             if (fallbackIndex >= 0) g_selectedIndex = fallbackIndex;
@@ -14362,8 +14370,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_keyboardPendingForegroundHandoff =
         !touchpadInvocation && ForegroundRequiresKeyboardHandoff(
             invocationInput, &keyboardSourceSecurity, &keyboardSelfSecurity);
-    g_keyboardShellSource = !touchpadInvocation &&
-                            IsShellSurfaceWindow(invocationInput);
+    g_keyboardShellSource = !touchpadInvocation && shellSource;
 
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int cx, cy;
