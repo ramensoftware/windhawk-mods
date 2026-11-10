@@ -2,7 +2,7 @@
 // @id              winpager
 // @name            WinPager
 // @description     A KDE Plasma-style virtual desktop pager in the Windows 11 taskbar: live window outlines, click or scroll to switch, drag windows between desktops
-// @version         0.1.1
+// @version         0.1.2
 // @author          seanmamasde
 // @github          https://github.com/seanmamasde
 // @homepage        https://github.com/seanmamasde/WinPager
@@ -59,7 +59,7 @@ The mod runs in its own process; it isn't injected into explorer.exe.
   $name: Show application icons on window outlines
 - showOnlyCurrentScreen: true
   $name: Show only current screen
-  $description: Puts a pager on each monitor's taskbar. Off shows one pager on the main taskbar with every monitor.
+  $description: Puts a pager on each monitor's taskbar. Off, or with no taskbars on the other monitors, one pager on the main taskbar shows every monitor.
 - wrapPage: false
   $name: Navigation wraps around
 - displayedText: none
@@ -809,6 +809,7 @@ public:
     bool alive() const { return hwnd_ && IsWindow(hwnd_) && IsWindow(taskbar_); }
     void update(bool relayout, bool redraw);
     void restyle();
+    void trackStart();
     void raise() {
         if (alive() && GetWindow(taskbar_, GW_CHILD) != hwnd_)
             SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -839,6 +840,7 @@ private:
     float scale_ = 1;
     int x_ = 0, y_ = 0, w_ = 0, h_ = 0, itemW_ = 0, itemH_ = 0, gap_ = 1, count_ = 0;
     int first_ = 0, shown_ = 1;  // desktops drawn: shown_ of the count_, from first_ on
+    int startLeft_ = 0;          // taskbar x of the Start button (trackStart), 0 = not seen yet
     int hover_ = -1;
     int wheel_ = 0;
     bool tracking_ = false;
@@ -899,6 +901,7 @@ private:
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 class Pager;
 class Osd;
@@ -930,6 +933,7 @@ public:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     Microsoft::WRL::ComPtr<ID2D1Layer> layer;
     bool hotkeyOk[2] = {true, true};
+    bool perScreen = false;  // each pager shows just its own screen (see rebuildPagers)
 
     int currentDesktop() const { return pending_ >= 0 ? pending_ : model.current; }
     void pagerDied() { PostMessageW(hwnd_, WM_APP_TASKBARS, 0, 0); }
@@ -972,6 +976,7 @@ private:
     HWND systemOsd_ = nullptr;       // explorer's shared OSD host (volume, brightness, "Desktop N")
     ULONGLONG switchTick_ = 0;
     std::unordered_map<HWND, Microsoft::WRL::ComPtr<ID2D1Bitmap>> icons_;
+    std::unordered_set<LPARAM> iconRequests_;  // fetchIcon's in flight: a WM_APP_ICON lParam that isn't one isn't ours
 };
 
 // ---- src/pager.cpp, continued ----
@@ -1494,6 +1499,18 @@ LRESULT CALLBACK Pager::proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return p->handle(msg, wp, lp);
 }
 
+// Explorer keeps its hidden legacy Start window over the XAML Start button, but its old layout code also keeps parking it
+// at the taskbar's leading edge, where it usually stays on a secondary taskbar: remember where it last sat over the button.
+// shortcut: a move that Explorer undoes before this thread reads it is missed until the next one; read the XAML Start
+// button through UI Automation if that shows.
+void Pager::trackStart() {
+    RECT r;
+    if (HWND st = FindWindowExW(taskbar_, nullptr, L"Start", nullptr); st && GetWindowRect(st, &r) && r.left < r.right) {
+        MapWindowPoints(nullptr, taskbar_, reinterpret_cast<POINT*>(&r), 2);
+        if (r.left > 0) startLeft_ = r.left;
+    }
+}
+
 void Pager::layout() {
     const Settings& s = app_.settings;
     RECT tb{};
@@ -1504,7 +1521,7 @@ void Pager::layout() {
         label_ = textFormat(app_.dwrite.Get(), L"Segoe UI Variable Small", DWRITE_FONT_WEIGHT_NORMAL, 12 * scale_, true);
     }
     monitor_ = MonitorFromWindow(taskbar_, MONITOR_DEFAULTTONEAREST);
-    if (s.showOnlyCurrentScreen) {
+    if (app_.perScreen) {
         MONITORINFO mi{sizeof mi};
         GetMonitorInfoW(monitor_, &mi);
         area_ = mi.rcMonitor;
@@ -1544,15 +1561,12 @@ void Pager::layout() {
     }
     shown_ = s.maxDesktops > 0 ? std::min(count_, s.maxDesktops) : count_;
     // The taskbar only makes room for its own items (the Widgets button's fixed slot), so beside a centered row of
-    // buttons show just the desktops that fit. Explorer keeps its hidden legacy Start window over the XAML Start button,
-    // and moving it fires the LOCATIONCHANGE that relayouts us.
-    RECT start;
-    if (HWND st = centered ? FindWindowExW(taskbar_, nullptr, L"Start", nullptr) : nullptr;
-        st && GetWindowRect(st, &start) && start.right > start.left) {
-        MapWindowPoints(nullptr, taskbar_, reinterpret_cast<POINT*>(&start), 2);
+    // buttons show just the desktops that fit.
+    trackStart();
+    if (centered && startLeft_) {
         // shortcut: the row's right end is mirrored from its left end, which is off once a crowded row gets pushed right
         // by the Widgets button; read the buttons through UI Automation if the tray-side position needs that case.
-        const int room = leading ? start.left - 2 * pad - aep : right - (tb.right - start.left) - 2 * pad;
+        const int room = leading ? startLeft_ - 2 * pad - aep : right - (tb.right - startLeft_) - 2 * pad;
         shown_ = std::min(shown_, fittingDesktops(room, itemW_, gap_));
     }
     w_ = shown_ * itemW_ + (shown_ - 1) * gap_;
@@ -1592,7 +1606,7 @@ FRect Pager::itemRect(int i) const {
 }
 
 bool Pager::shows(const Win& w, int desktop) const {
-    return (w.desktop == desktop || w.desktop < 0) && (!app_.settings.showOnlyCurrentScreen || w.monitor == monitor_);
+    return (w.desktop == desktop || w.desktop < 0) && (!app_.perScreen || w.monitor == monitor_);
 }
 
 int Pager::desktopAt(POINT p) const {
@@ -1704,7 +1718,7 @@ void Pager::showTip(int i) {
     MapWindowPoints(hwnd_, nullptr, reinterpret_cast<POINT*>(&a), 2);
     RECT bar;
     GetWindowRect(taskbar_, &bar);
-    tip_.show(a, bar, i, app_.settings.showOnlyCurrentScreen ? monitor_ : nullptr, scale_);
+    tip_.show(a, bar, i, app_.perScreen ? monitor_ : nullptr, scale_);
 }
 
 void Pager::endDrag(bool drop) {
@@ -2039,6 +2053,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         openSettings();
         return 0;
     case WM_APP_ICON: {  // fetchIcon's answer; its handles are ours to free
+        if (!iconRequests_.erase(lp)) return 0;  // another app's stray WM_APP message
         const std::unique_ptr<IconRequest> r(reinterpret_cast<IconRequest*>(lp));
         ComPtr<IWICBitmap> wb;
         if (r->icon) wic->CreateBitmapFromHICON(r->icon, &wb);
@@ -2116,9 +2131,13 @@ void CALLBACK App::onWinEvent(HWINEVENTHOOK, DWORD ev, HWND h, LONG obj, LONG ch
     case EVENT_OBJECT_LOCATIONCHANGE:
         if (tracked) {
             a->schedule(kGeometry);
-        } else if (std::ranges::any_of(a->pagers_, [h](const auto& p) { return p->taskbar() == h || GetParent(h) == p->taskbar(); })) {
-            a->schedule(kLayout);  // taskbar resized or the tray grew
+            return;
         }
+        for (auto& p : a->pagers_)
+            if (p->taskbar() == h || GetParent(h) == p->taskbar()) {
+                p->trackStart();       // now: Explorer may park its Start window again before the relayout
+                a->schedule(kLayout);  // taskbar resized, the tray grew or Start moved
+            }
         return;
     case EVENT_OBJECT_NAMECHANGE:
         if (tracked) a->schedule(kTitles);
@@ -2261,6 +2280,9 @@ void App::rebuildPagers() {
     }
     if (settings.showOnlyCurrentScreen)
         for (HWND h = nullptr; (h = FindWindowExW(nullptr, h, L"Shell_SecondaryTrayWnd", nullptr));) bars.push_back(h);
+    // As KDE's pager does, one pager shows every screen, unless the other screens have taskbars (Windows' "Show my
+    // taskbar on all displays") for pagers of their own
+    perScreen = bars.size() > 1;
     std::erase_if(pagers_, [&](const auto& p) { return !p->alive() || std::ranges::find(bars, p->taskbar()) == bars.end(); });
     for (HWND b : bars)
         if (std::ranges::none_of(pagers_, [b](const auto& p) { return p->taskbar() == b; }))
@@ -2354,7 +2376,7 @@ ID2D1Bitmap* App::icon(HWND h) {
     auto [it, fresh] = icons_.try_emplace(h);
     if (fresh) {  // drawn without one until WM_APP_ICON
         std::unique_ptr<IconRequest> r(new IconRequest{hwnd_, h});
-        if (TrySubmitThreadpoolCallback(fetchIcon, r.get(), nullptr)) r.release();
+        if (TrySubmitThreadpoolCallback(fetchIcon, r.get(), nullptr)) iconRequests_.insert(reinterpret_cast<LPARAM>(r.release()));
     }
     return it->second.Get();
 }
