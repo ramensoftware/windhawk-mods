@@ -27247,6 +27247,9 @@ void RestoreLeftoverDnd() {
 HANDLE g_islandProcess;
 HANDLE g_islandProcessWait;
 DWORD g_islandProcessId;
+// Its image, when it may be started again after a crash (see
+// IslandRestartPath; empty: it may not).
+std::wstring g_islandRestartPath;
 SRWLOCK g_islandWatchLock = SRWLOCK_INIT;
 
 // (On a thread of its own: explorer's threads have their own apartments.)
@@ -27290,19 +27293,56 @@ bool IslandRestartAllowed(double (&startedAt)[kIslandRestarts],
     return true;
 }
 
+// A process's integrity level (its mandatory label's RID), 0 if it can't
+// be read.
+DWORD ProcessIntegrityLevel(HANDLE process) {
+    HANDLE token;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        return 0;
+    }
+    alignas(TOKEN_MANDATORY_LABEL) BYTE buffer[64];
+    DWORD size;
+    DWORD level = 0;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
+                            &size)) {
+        PSID sid = ((TOKEN_MANDATORY_LABEL*)buffer)->Label.Sid;
+        level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return level;
+}
+
+// Whether the island's process may be started again if it crashes, read
+// at its hello while it runs (the hello's sender is known only by its
+// window's class): Windhawk's own image, at Explorer's integrity level (the
+// one it would run at, started again by Explorer: an elevated one isn't).
+// Its path then, or empty.
+std::wstring IslandRestartPath(HANDLE process) {
+    WCHAR image[MAX_PATH];
+    DWORD size = ARRAYSIZE(image);
+    if (!QueryFullProcessImageName(process, 0, image, &size) ||
+        _wcsicmp(PathFindFileName(image), L"windhawk.exe") != 0) {
+        return {};
+    }
+    const DWORD theirs = ProcessIntegrityLevel(process);
+    if (!theirs || theirs != ProcessIntegrityLevel(GetCurrentProcess())) {
+        return {};
+    }
+    return image;
+}
+
 // (On the wait's thread, see IslandProcessEndedCallback.)
 void RestartCrashedIsland() {
     static double startedAt[kIslandRestarts];
     static int next;
-    WCHAR path[MAX_PATH];
-    DWORD size = ARRAYSIZE(path);
+    std::wstring path;
     DWORD exitCode = 0;
     AcquireSRWLockShared(&g_islandWatchLock);
     const bool known =
-        g_islandProcess && GetExitCodeProcess(g_islandProcess, &exitCode) &&
-        QueryFullProcessImageName(g_islandProcess, 0, path, &size);
+        g_islandProcess && GetExitCodeProcess(g_islandProcess, &exitCode);
+    path = g_islandRestartPath;
     ReleaseSRWLockShared(&g_islandWatchLock);
-    if (!known || !IslandProcessCrashed(exitCode)) {
+    if (!known || path.empty() || !IslandProcessCrashed(exitCode)) {
         return;
     }
     if (!IslandRestartAllowed(startedAt, &next, NowSeconds())) {
@@ -27311,13 +27351,19 @@ void RestartCrashedIsland() {
         return;
     }
     WCHAR commandLine[MAX_PATH + 64];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", path, WH_MOD_ID);
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", path.c_str(),
+               WH_MOD_ID);
     STARTUPINFO si{
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
-    if (!CreateProcess(path, commandLine, nullptr, nullptr, FALSE,
+    // (The mod may have started unloading meanwhile: "Do not disturb" above
+    // can take a moment.)
+    if (g_unloading) {
+        return;
+    }
+    if (!CreateProcess(path.c_str(), commandLine, nullptr, nullptr, FALSE,
                        NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
         IslandLog(L"The island crashed (%08X), starting it again failed",
                   (unsigned)exitCode);
@@ -27380,6 +27426,7 @@ void StopWatchingIslandProcess() {
     g_islandProcessWait = nullptr;
     g_islandProcess = nullptr;
     g_islandProcessId = 0;
+    g_islandRestartPath.clear();
     ReleaseSRWLockExclusive(&g_islandWatchLock);
     if (wait) {
         // Waits for a callback that's running.
@@ -27411,6 +27458,7 @@ void WatchIslandProcess(HWND island) {
     if (!process) {
         return;
     }
+    std::wstring restartPath = IslandRestartPath(process);
     HANDLE wait = nullptr;
     if (!RegisterWaitForSingleObject(
             &wait, process, IslandProcessEndedCallback, nullptr, INFINITE,
@@ -27422,6 +27470,7 @@ void WatchIslandProcess(HWND island) {
     g_islandProcess = process;
     g_islandProcessWait = wait;
     g_islandProcessId = processId;
+    g_islandRestartPath = std::move(restartPath);
     ReleaseSRWLockExclusive(&g_islandWatchLock);
 }
 
@@ -47178,6 +47227,9 @@ std::wstring g_mediaChosenApp;
 int g_mediaChosenOccurrence = 0;
 std::vector<std::pair<MediaCommand, double>> g_mediaCommands;
 HANDLE g_mediaThread;
+// Set by the media thread as it stops (it ends a while later, see
+// MediaThreadProc).
+HANDLE g_mediaStoppedEvent;
 HANDLE g_mediaStopEvent;
 HANDLE g_mediaChangedEvent;
 HANDLE g_mediaCommandEvent;
@@ -47423,11 +47475,12 @@ void SendMediaCommand(MediaCommand command, double position = 0) {
     }
 }
 
-// The media thread's own copies of its events (stop, changed, command), so
-// StopMediaWatch can give up waiting for it (a media app's call that hangs)
-// and close the island's; the thread closes these when it ends.
+// The media thread's own copies of its events (stop, changed, command, and
+// the one it sets as it stops), so StopMediaWatch can give up waiting for it
+// (a media app's call that hangs) and close the island's; the thread closes
+// these when it ends.
 struct MediaThreadEvents {
-    HANDLE events[3];
+    HANDLE events[4];
 };
 
 // How long a media session that went away (or stopped being the one shown)
@@ -47503,8 +47556,15 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
             SetEvent(events[1]);
 
             for (;;) {
+                // (Woken when the oldest one gone is due, too.)
+                DWORD timeout = INFINITE;
+                if (!gone.empty()) {
+                    const double due =
+                        gone.front().at + kMediaGoneSeconds - NowSeconds();
+                    timeout = due > 0 ? (DWORD)std::ceil(due * 1000) : 0;
+                }
                 const DWORD wait =
-                    WaitForMultipleObjects(3, events, FALSE, INFINITE);
+                    WaitForMultipleObjects(3, events, FALSE, timeout);
                 if (wait == WAIT_OBJECT_0) {
                     break;
                 }
@@ -47513,6 +47573,9 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                     std::erase_if(gone, [&](const GoneSession& entry) {
                         return MediaSessionLetGo(entry.at, now);
                     });
+                }
+                if (wait == WAIT_TIMEOUT) {
+                    continue;
                 }
                 try {
                     if (wait == WAIT_OBJECT_0 + 2) {
@@ -47808,6 +47871,21 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                     IslandLog(L"Media: %08X", (unsigned)e.code());
                 }
             }
+            // Stopped: the island isn't kept waiting (see StopMediaWatch),
+            // and the sessions are let go only kMediaGoneSeconds after they
+            // went, like while it ran (the ones still watched went just
+            // now). (Gone ones are oldest first.)
+            SetEvent(events[3]);
+            double letGoAt = 0;
+            if (session || !watched.empty()) {
+                letGoAt = NowSeconds() + kMediaGoneSeconds;
+            } else if (!gone.empty()) {
+                letGoAt = gone.back().at + kMediaGoneSeconds;
+            }
+            const double left = letGoAt - NowSeconds();
+            if (left > 0) {
+                Sleep((DWORD)std::ceil(left * 1000));
+            }
         }
     }
     winrt::uninit_apartment();
@@ -47824,13 +47902,15 @@ void StartMediaWatch() {
     g_mediaStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     g_mediaChangedEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     g_mediaCommandEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!g_mediaStopEvent || !g_mediaChangedEvent || !g_mediaCommandEvent) {
+    g_mediaStoppedEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_mediaStopEvent || !g_mediaChangedEvent || !g_mediaCommandEvent ||
+        !g_mediaStoppedEvent) {
         return;
     }
     auto* own = new MediaThreadEvents{};
     int copied = 0;
-    for (HANDLE event :
-         {g_mediaStopEvent, g_mediaChangedEvent, g_mediaCommandEvent}) {
+    for (HANDLE event : {g_mediaStopEvent, g_mediaChangedEvent,
+                         g_mediaCommandEvent, g_mediaStoppedEvent}) {
         if (!DuplicateHandle(GetCurrentProcess(), event, GetCurrentProcess(),
                              &own->events[copied], 0, FALSE,
                              DUPLICATE_SAME_ACCESS)) {
@@ -47838,7 +47918,7 @@ void StartMediaWatch() {
         }
         copied++;
     }
-    if (copied == 3) {
+    if (copied == ARRAYSIZE(own->events)) {
         g_mediaThread =
             CreateThread(nullptr, 0, MediaThreadProc, own, 0, nullptr);
     }
@@ -47853,15 +47933,17 @@ void StartMediaWatch() {
 void StopMediaWatch() {
     if (g_mediaThread) {
         SetEvent(g_mediaStopEvent);
+        // Until it stops (it ends a while later, letting its sessions go).
         // (A media app's call that hangs: the thread ends by itself later,
         // with its own events.)
-        WaitForSingleObject(g_mediaThread, 5000);
+        const HANDLE stopped[] = {g_mediaThread, g_mediaStoppedEvent};
+        WaitForMultipleObjects(ARRAYSIZE(stopped), stopped, FALSE, 5000);
         CloseHandle(g_mediaThread);
         g_mediaThread = nullptr;
     }
     AcquireSRWLockExclusive(&g_mediaEventsLock);
-    for (HANDLE* event :
-         {&g_mediaStopEvent, &g_mediaChangedEvent, &g_mediaCommandEvent}) {
+    for (HANDLE* event : {&g_mediaStopEvent, &g_mediaChangedEvent,
+                          &g_mediaCommandEvent, &g_mediaStoppedEvent}) {
         if (*event) {
             CloseHandle(*event);
             *event = nullptr;
@@ -91813,8 +91895,12 @@ struct ToastActivation {
 // app showing up by itself then would be a surprise.
 constexpr UINT WM_APP_TOAST_FALLBACK = WM_APP + 121;
 constexpr ULONGLONG kToastFallbackMs = 5000;
+struct ToastFallback {
+    std::wstring appId;
+    ULONGLONG clickedAt;
+};
 SRWLOCK g_toastFallbacksLock = SRWLOCK_INIT;
-std::vector<std::wstring> g_toastFallbacks;
+std::vector<ToastFallback> g_toastFallbacks;
 
 // The app's activator is out of process and may have to start: called on a
 // thread of its own.
@@ -91843,7 +91929,8 @@ DWORD WINAPI ToastActivationThreadProc(LPVOID parameter) {
     if (FAILED(result) && activation->openFallback &&
         GetTickCount64() - activation->clickedAt < kToastFallbackMs) {
         AcquireSRWLockExclusive(&g_toastFallbacksLock);
-        g_toastFallbacks.push_back(activation->appId);
+        g_toastFallbacks.push_back(
+            {activation->appId, activation->clickedAt});
         ReleaseSRWLockExclusive(&g_toastFallbacksLock);
         if (HWND island = g_islandWnd) {
             PostMessage(island, WM_APP_TOAST_FALLBACK, 0, 0);
@@ -119126,14 +119213,20 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_APP_TOAST_FALLBACK: {
             // A notification's handler failed after its click: its app's
             // window, tray icon or the app itself (no handler this time).
-            std::vector<std::wstring> apps;
+            // (Not one queued while the island's window was being made
+            // again, long after its click.)
+            std::vector<ToastFallback> apps;
             AcquireSRWLockExclusive(&g_toastFallbacksLock);
             apps.swap(g_toastFallbacks);
             ReleaseSRWLockExclusive(&g_toastFallbacksLock);
+            const ULONGLONG now = GetTickCount64();
             for (const auto& app : apps) {
+                if (now - app.clickedAt >= kToastFallbackMs * 2) {
+                    continue;
+                }
                 IslandLog(L"Notification handler failed, opening \"%s\"",
-                          app.c_str());
-                OpenNotification(app, ToastReply{});
+                          app.appId.c_str());
+                OpenNotification(app.appId, ToastReply{});
             }
             return 0;
         }
