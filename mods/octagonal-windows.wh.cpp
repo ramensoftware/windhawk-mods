@@ -645,9 +645,10 @@ long WINAPI SetRectangle_Hook(void* pThis,
                                  topLeftY*radiusMultiplier, topRightX*radiusMultiplier, topRightY*radiusMultiplier, bottomLeftX*radiusMultiplier,
                                  bottomLeftY*radiusMultiplier, bottomRightX*radiusMultiplier, bottomRightY*radiusMultiplier, flag);
     }else{
-        return SetRectangle_Original(pThis, left, top, right, bottom, 
-                                0, 0, 0, 0, 0, 0, 0, 0,
-                                flag);
+        return SetRectangle_Original(pThis, left, top, right, bottom, topLeftX,
+                                     topLeftY, topRightX, topRightY,
+                                     bottomLeftX, bottomLeftY, bottomRightX,
+                                     bottomRightY, flag);
     }
 }
 
