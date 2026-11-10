@@ -209,7 +209,11 @@ bool Fetch(Reading& next) {
     DWORD status=0,len=sizeof(status);
     if(ok)ok=WinHttpQueryHeaders(request,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,nullptr,&status,&len,nullptr)&&status==200;
     std::string body;
-    while(ok){if(GetTickCount64()>deadline || WaitForSingleObject(stopEvent,0)==WAIT_OBJECT_0){ok=false;break;}DWORD available=0,read=0; if(!WinHttpQueryDataAvailable(request,&available)){ok=false;break;} if(!available)break;
+    while(ok){
+        if(GetTickCount64()>deadline || WaitForSingleObject(stopEvent,0)==WAIT_OBJECT_0){ok=false;break;}
+        DWORD available=0,read=0;
+        if(!WinHttpQueryDataAvailable(request,&available)){ok=false;break;}
+        if(!available)break;
         if(body.size()+available>65536){ok=false;break;}
         size_t old=body.size();body.resize(old+available);
         if(!WinHttpReadData(request,body.data()+old,available,&read)){ok=false;break;}body.resize(old+read);
@@ -224,7 +228,13 @@ bool Fetch(Reading& next) {
         Number(current,"wind_speed_10m",next.wind)&&Number(current,"wind_direction_10m",next.windDirection);
     p=body.find("\"daily\":");
     if(p!=body.npos){auto daily=body.substr(p);next.daily=Number(daily,"temperature_2m_max",next.high)&&Number(daily,"temperature_2m_min",next.low);}
-    p=current.find("\"time\":\"");if(p!=current.npos){p+=8;auto end=current.find('"',p);auto time=current.substr(p,end-p);next.time=std::wstring(time.begin(),time.end());}
+    p=current.find("\"time\":\"");
+    if(p!=current.npos){
+        p+=8;
+        auto end=current.find('"',p);
+        auto time=current.substr(p,end-p);
+        next.time=std::wstring(time.begin(),time.end());
+    }
     return true;
 }
 void UpdateStatus() {
@@ -245,7 +255,10 @@ void DrawIcon(Graphics& g,float x,float y,float scale,int code,bool day) {
     auto state=g.Save();g.TranslateTransform(x,y);g.ScaleTransform(scale,scale);
     SolidBrush sun(Mocha(kYellow)),cloud(Mocha(kText));
     if(code<3){g.FillEllipse(&sun,0.f,0.f,14.f,14.f);if(!day){SolidBrush cut(Mocha(kBase));g.FillEllipse(&cut,5.f,-2.f,12.f,12.f);}}
-    if(code!=0){g.FillEllipse(&cloud,3.f,6.f,10.f,10.f);g.FillEllipse(&cloud,9.f,3.f,12.f,12.f);g.FillEllipse(&cloud,16.f,7.f,8.f,9.f);g.FillRectangle(&cloud,7.f,11.f,13.f,5.f);}
+    if(code!=0){
+        g.FillEllipse(&cloud,3.f,6.f,10.f,10.f);g.FillEllipse(&cloud,9.f,3.f,12.f,12.f);
+        g.FillEllipse(&cloud,16.f,7.f,8.f,9.f);g.FillRectangle(&cloud,7.f,11.f,13.f,5.f);
+    }
     if(code>=51){Pen drops(Mocha(kBlue),1.5f);g.DrawLine(&drops,9.f,18.f,7.f,21.f);g.DrawLine(&drops,18.f,18.f,16.f,21.f);}
     g.Restore(state);
 }
@@ -324,7 +337,10 @@ void DrawRowText(HDC dc,int w,int h,float scale,const Reading& r) {
 void Paint() {
     if(!weatherWindow)return;
     RECT client;GetClientRect(weatherWindow,&client);int w=client.right,h=client.bottom;if(!w||!h)return;
-    HDC dc=GetDC(nullptr),mem=CreateCompatibleDC(dc);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=w;info.bmiHeader.biHeight=-h;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+    HDC dc=GetDC(nullptr),mem=CreateCompatibleDC(dc);
+    BITMAPINFO info{};
+    info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=w;info.bmiHeader.biHeight=-h;
+    info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
     void* bits;HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(mem,bitmap);memset(bits,0,w*h*4);
     Reading r;{std::lock_guard lock(dataMutex);r=reading;}
     float scale=GetDpiForWindow(weatherWindow)/96.f;
@@ -348,7 +364,9 @@ float Card(Graphics* g,const Reading& r) {
     Font hero(face,38,FontStyleRegular,UnitPixel),heading(face,16,FontStyleBold,UnitPixel),body(face,14,FontStyleRegular,UnitPixel),small(face,13,FontStyleRegular,UnitPixel);
     SolidBrush text(Mocha(kText)),muted(Mocha(kSubtext0)),faint(Mocha(kOverlay1)),warn(Mocha(kPeach));
     StringFormat format(StringFormat::GenericTypographic());
-    format.SetLineAlignment(StringAlignmentCenter);format.SetFormatFlags(StringFormatFlagsNoWrap|StringFormatFlagsMeasureTrailingSpaces);format.SetTrimming(StringTrimmingEllipsisCharacter);
+    format.SetLineAlignment(StringAlignmentCenter);
+    format.SetFormatFlags(StringFormatFlagsNoWrap|StringFormatFlagsMeasureTrailingSpaces);
+    format.SetTrimming(StringTrimmingEllipsisCharacter);
     float y=kPad;
     auto put=[&](const std::wstring& s,const Font& font,Brush& brush,float x,float height)->float {
         if(!g)return 0;
@@ -394,13 +412,20 @@ void RenderCard() {
     // Open above a bottom taskbar and below a top one, aligned with the weather's left edge.
     bool bottom=bar.top>(monitor.rcMonitor.top+monitor.rcMonitor.bottom)/2;
     POINT dest{std::clamp(anchor.left-margin,monitor.rcMonitor.left-margin,monitor.rcMonitor.right-w+margin),bottom?bar.top-gap-h+margin:bar.bottom+gap-margin};
-    HDC dc=GetDC(nullptr),mem=CreateCompatibleDC(dc);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=w;info.bmiHeader.biHeight=-h;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+    HDC dc=GetDC(nullptr),mem=CreateCompatibleDC(dc);
+    BITMAPINFO info{};
+    info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=w;info.bmiHeader.biHeight=-h;
+    info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
     void* bits;HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(mem,bitmap);memset(bits,0,w*h*4);
     {
         Bitmap canvas(w,h,w*4,PixelFormat32bppPARGB,(BYTE*)bits);
         Graphics g(&canvas);g.SetSmoothingMode(SmoothingModeAntiAlias);g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
         g.ScaleTransform(scale,scale);g.TranslateTransform(kShadow,kShadow);
-        for(int i=10;i>=1;i--){GraphicsPath shade;RoundedRect(shade,-(float)i,2.f-i,kCardWidth+2*i,height+2*i,8.f+i);SolidBrush brush(Color(6,0,0,0));g.FillPath(&brush,&shade);}
+        for(int i=10;i>=1;i--){
+            GraphicsPath shade;RoundedRect(shade,-(float)i,2.f-i,kCardWidth+2*i,height+2*i,8.f+i);
+            SolidBrush brush(Color(6,0,0,0));
+            g.FillPath(&brush,&shade);
+        }
         GraphicsPath fill;RoundedRect(fill,0,0,kCardWidth,height,8);SolidBrush base(WithAlpha(kBase,246));g.FillPath(&base,&fill);
         GraphicsPath edge;RoundedRect(edge,0.5f,0.5f,kCardWidth-1,height-1,7.5f);Pen border(Mocha(kSurface1),1.f);g.DrawPath(&border,&edge);
         Card(&g,r);
@@ -413,7 +438,11 @@ void ShowCard() {
     if(!cardWindow)return;
     bool visible=IsWindowVisible(cardWindow);if(!visible)cardAlpha=0;
     RenderCard();
-    if(!visible){ShowWindow(cardWindow,SW_SHOWNOACTIVATE);SetWindowPos(cardWindow,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);SetTimer(weatherWindow,kFadeTimer,15,nullptr);}
+    if(!visible){
+        ShowWindow(cardWindow,SW_SHOWNOACTIVATE);
+        SetWindowPos(cardWindow,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+        SetTimer(weatherWindow,kFadeTimer,15,nullptr);
+    }
 }
 void HideCard() { if(cardWindow){KillTimer(weatherWindow,kFadeTimer);ShowWindow(cardWindow,SW_HIDE);} }
 int ContentWidth() {
@@ -425,7 +454,10 @@ int ContentWidth() {
 }
 void Layout(HWND hwnd) {
     HWND parent=FindWindowW(L"Shell_TrayWnd",nullptr);if(!parent)return;
-    RECT r;GetClientRect(parent,&r);int dpi=GetDpiForWindow(parent);int contentWidth=ContentWidth();int x=MulDiv(left,dpi,96),w=MulDiv(contentWidth,dpi,96),padding=MulDiv(4,dpi,96);
+    RECT r;GetClientRect(parent,&r);
+    int dpi=GetDpiForWindow(parent);
+    int contentWidth=ContentWidth();
+    int x=MulDiv(left,dpi,96),w=MulDiv(contentWidth,dpi,96),padding=MulDiv(4,dpi,96);
     if(GetParent(hwnd)!=parent)SetParent(hwnd,parent);
     SetWindowPos(hwnd,HWND_TOP,x,padding,w,std::max(1L,r.bottom-2*padding),SWP_NOACTIVATE|SWP_SHOWWINDOW);
     SetPropW(parent,kRightProperty,(HANDLE)(INT_PTR)(left+contentWidth));Paint();UpdateStatus();
@@ -480,7 +512,11 @@ DWORD WINAPI UiWorker(void*) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     WNDCLASSW wc{};wc.lpfnWndProc=WindowProc;wc.hInstance=instance;wc.lpszClassName=kClass;wc.hCursor=LoadCursor(nullptr,IDC_ARROW);RegisterClassW(&wc);
     WNDCLASSW card{};card.lpfnWndProc=DefWindowProcW;card.hInstance=instance;card.lpszClassName=kCardClass;RegisterClassW(&card);
-    WNDCLASSW controller{};controller.lpfnWndProc=ControllerProc;controller.hInstance=instance;controller.lpszClassName=kControllerClass;RegisterClassW(&controller);
+    WNDCLASSW controller{};
+    controller.lpfnWndProc=ControllerProc;
+    controller.hInstance=instance;
+    controller.lpszClassName=kControllerClass;
+    RegisterClassW(&controller);
     // Hidden top-level window receives system resume and clock notifications.
     controllerWindow=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,kControllerClass,L"Weather lifecycle",WS_POPUP,0,0,0,0,nullptr,nullptr,instance,nullptr);
     if(!controllerWindow){Wh_Log(L"Weather controller creation failed");return 0;}
@@ -495,7 +531,25 @@ DWORD WINAPI UiWorker(void*) {
 }
 DWORD WINAPI FetchWorker(void*) {
     HANDLE events[]{stopEvent,refreshEvent};DWORD wait=0;
-    while(WaitForMultipleObjects(2,events,FALSE,wait)!=WAIT_OBJECT_0){Reading next;bool ok=Fetch(next);{std::lock_guard lock(dataMutex);if(ok){next.updates=reading.updates+1;reading=next;}else reading.failed=true;}if(ok)SaveCachedReading(next);if(weatherWindow)PostMessageW(weatherWindow,kDataMessage,0,0);if(ok){Wh_Log(L"Weather update succeeded");}else{Wh_Log(L"Weather request failed; retry scheduled");}wait=ok?interval*60000:60000;}
+    while(WaitForMultipleObjects(2,events,FALSE,wait)!=WAIT_OBJECT_0){
+        Reading next;
+        bool ok=Fetch(next);
+        {
+            std::lock_guard lock(dataMutex);
+            if(ok){
+                next.updates=reading.updates+1;
+                reading=next;
+            } else reading.failed=true;
+        }
+        if(ok)SaveCachedReading(next);
+        if(weatherWindow)PostMessageW(weatherWindow,kDataMessage,0,0);
+        if(ok){
+            Wh_Log(L"Weather update succeeded");
+        } else {
+            Wh_Log(L"Weather request failed; retry scheduled");
+        }
+        wait=ok?interval*60000:60000;
+    }
     return 0;
 }
 }
@@ -505,15 +559,38 @@ BOOL Wh_ModInit() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(LPCWSTR)&Wh_ModInit,(HMODULE*)&instance);
     GdiplusStartupInput input;if(GdiplusStartup(&graphicsToken,&input,nullptr)!=Ok)return FALSE;
     stopEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr);refreshEvent=CreateEventW(nullptr,FALSE,FALSE,nullptr);
-    if(!stopEvent||!refreshEvent){if(stopEvent)CloseHandle(stopEvent);if(refreshEvent)CloseHandle(refreshEvent);GdiplusShutdown(graphicsToken);return FALSE;}
+    if(!stopEvent||!refreshEvent){
+        if(stopEvent)CloseHandle(stopEvent);
+        if(refreshEvent)CloseHandle(refreshEvent);
+        GdiplusShutdown(graphicsToken);
+        return FALSE;
+    }
     uiThread=CreateThread(nullptr,0,UiWorker,nullptr,0,nullptr);
     if(uiThread)fetchThread=CreateThread(nullptr,0,FetchWorker,nullptr,0,nullptr);
-    if(!uiThread||!fetchThread){SetEvent(stopEvent);if(controllerWindow)PostMessageW(controllerWindow,WM_CLOSE,0,0);if(uiThread){WaitForSingleObject(uiThread,INFINITE);CloseHandle(uiThread);}CloseHandle(stopEvent);CloseHandle(refreshEvent);GdiplusShutdown(graphicsToken);return FALSE;}
+    if(!uiThread||!fetchThread){
+        SetEvent(stopEvent);
+        if(controllerWindow)PostMessageW(controllerWindow,WM_CLOSE,0,0);
+        if(uiThread){
+            WaitForSingleObject(uiThread,INFINITE);
+            CloseHandle(uiThread);
+        }
+        CloseHandle(stopEvent);
+        CloseHandle(refreshEvent);
+        GdiplusShutdown(graphicsToken);
+        return FALSE;
+    }
     return TRUE;
 }
 void Wh_ModUninit() {
     SetEvent(stopEvent);if(controllerWindow)PostMessageW(controllerWindow,WM_CLOSE,0,0);
-    if(fetchThread){WaitForSingleObject(fetchThread,INFINITE);CloseHandle(fetchThread);}if(uiThread){WaitForSingleObject(uiThread,INFINITE);CloseHandle(uiThread);}
+    if(fetchThread){
+        WaitForSingleObject(fetchThread,INFINITE);
+        CloseHandle(fetchThread);
+    }
+    if(uiThread){
+        WaitForSingleObject(uiThread,INFINITE);
+        CloseHandle(uiThread);
+    }
     CloseHandle(stopEvent);CloseHandle(refreshEvent);d2dFactory.Reset();writeFactory.Reset();GdiplusShutdown(graphicsToken);
 }
 BOOL Wh_ModSettingsChanged(BOOL* reload) { *reload=TRUE; return TRUE; }
