@@ -1540,12 +1540,11 @@ static HWINEVENTHOOK s_hForegroundEventHook = NULL;
 static void AddWindowEntry(HWND hWnd, bool removeIfIneligible = true);
 static void ClearPendingActivationListTarget();
 static void ReconcilePendingActivationListTarget();
-static bool CloseSwitcherEntry(int idx, PCWSTR source = L"unknown");
+static bool CloseSwitcherEntry(int idx);
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 static bool IsApplicationFrameWindowClass(HWND hWnd);
 static bool IsUwpFrameDefinitelyStale(HWND hWnd);
-static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
-                                     HRESULT sourceHr, PCWSTR phase);
+static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady);
 static bool ShouldHideUwpThumbnail(HWND hWnd, bool thumbnailReady);
 static bool RemoveStaleUwpEntriesForPresentation();
 static void LogInvalidUwpThumbnailSource(HWND hWnd, HTHUMBNAIL hThumb,
@@ -3871,7 +3870,7 @@ static DockPreviewSlideTransition g_dockPreviewSlide;
 
 static bool g_calculatingLayoutTargets = false;
 static void StartAnimationTicker();
-static void TriggerSelectionAnimation(int prevSelected);
+static void TriggerSelectionAnimation();
 static void RegisterThumbnailsEarly();
 static void ComputeLayout(HMONITOR hMon);
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
@@ -3939,7 +3938,7 @@ static void RetargetSelectionFromPresented(const RectF& presented) {
     }
     g_animSelectionCurrent = local;
     g_animSelectionStart = local;
-    TriggerSelectionAnimation(-1);
+    TriggerSelectionAnimation();
 }
 
 static bool IsItemTransitionActive(const ItemTransitionMotion& motion) {
@@ -5065,9 +5064,8 @@ static void CaptureOutgoingSnapshot() {
     g_scrollTransition.preservingThumbnails = true;
 }
 
-static void TriggerSelectionAnimation(int prevSelected) {
+static void TriggerSelectionAnimation() {
     InvalidateStaticCache();
-    (void)prevSelected;
     if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) return;
     RECT newCell = g_windows[g_selectedIndex].rcCell;
     if (newCell.left == 0 && newCell.right == 0 && newCell.top == 0 && newCell.bottom == 0) return;
@@ -5507,7 +5505,7 @@ static void UpdateThumbnailAnimations() {
             }
             if (hT) {
                 UpdateUwpFrameValidation(
-                    w, dwmSourceReady, sourceHr, L"animation-register");
+                    w, dwmSourceReady);
             }
         }
 
@@ -6507,8 +6505,7 @@ static void InitializeUwpFrameValidation(WindowEntry& entry) {
     entry.uwpInvalidSourceChecks = 0;
 }
 
-static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
-                                     HRESULT sourceHr, PCWSTR phase) {
+static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady) {
     if (!IsApplicationFrameWindowClass(entry.hWnd)) {
         entry.uwpValidationStartTick = 0;
         entry.uwpInvalidSourceChecks = 0;
@@ -8954,7 +8951,7 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
                 w.thumbnailSourceReady = false;
             }
             bool stale = UpdateUwpFrameValidation(
-                w, dwmSourceReady, sourceHr, L"source-refresh");
+                w, dwmSourceReady);
             return readyChanged || stale;
         }
         RECT wr = {0};
@@ -8963,7 +8960,7 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
         src.cy = wr.bottom - wr.top;
         if (src.cx <= 0 || src.cy <= 0) {
             return hT ? UpdateUwpFrameValidation(
-                            w, dwmSourceReady, sourceHr, L"source-refresh")
+                            w, dwmSourceReady)
                       : false;
         }
     }
@@ -8971,7 +8968,7 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
     bool readyChanged = w.thumbnailSourceReady != sourceReady;
     w.thumbnailSourceReady = sourceReady;
     bool stale = hT ? UpdateUwpFrameValidation(
-                          w, dwmSourceReady, sourceHr, L"source-refresh")
+                          w, dwmSourceReady)
                     : false;
     bool changed = (abs(w.sourceSize.cx - src.cx) > 1 || abs(w.sourceSize.cy - src.cy) > 1);
     if (changed || w.sourceSize.cx <= 0 || w.sourceSize.cy <= 0) {
@@ -9007,7 +9004,7 @@ static void RegisterThumbnailsEarly() {
             }
             if (hT) {
                 UpdateUwpFrameValidation(
-                    w, dwmSourceReady, sourceHr, L"early-register");
+                    w, dwmSourceReady);
             }
         } else {
             SIZE src = {0};
@@ -9026,7 +9023,7 @@ static void RegisterThumbnailsEarly() {
                 w.thumbnailSourceReady = false;
             }
             UpdateUwpFrameValidation(
-                w, dwmSourceReady, sourceHr, L"early-refresh");
+                w, dwmSourceReady);
         }
         for (HWND m : g_hMirrorSwitchers) {
             if (!w.hThumbs.count(m)) {
@@ -9071,7 +9068,7 @@ static void UpdateDockThumbnailDwm() {
             }
             if (hT) {
                 UpdateUwpFrameValidation(
-                    selWnd, dwmSourceReady, sourceHr, L"dock-register");
+                    selWnd, dwmSourceReady);
             }
         }
 
@@ -9176,7 +9173,7 @@ static void UpdateDockPreviewForSelection() {
     UpdateDockThumbnailDwm();
 }
 
-static void ComputeDockLayout(HMONITOR hMon, const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
+static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
     int monW = mi.rcWork.right - mi.rcWork.left;
     int monH = mi.rcWork.bottom - mi.rcWork.top;
     int maxW = monW * g_settings.maxWidthPercent / 100;
@@ -9398,7 +9395,7 @@ static void ComputeLayout(HMONITOR hMon) {
         // Shrink-to-fit does not apply to Dock; clear any scale left by a
         // previous Default/Badge layout so Dock title and icon sizes stay normal.
         g_autoFitScalePct = 100;
-        ComputeDockLayout(hMon, mi, dpiX, dpiY);
+        ComputeDockLayout(mi, dpiX, dpiY);
         return;
     }
 
@@ -10025,7 +10022,7 @@ static void RegisterThumbnails() {
                 }
             }
             if (hT) {
-                UpdateUwpFrameValidation(w, dwmSourceReady, sourceHr, L"register");
+                UpdateUwpFrameValidation(w, dwmSourceReady);
             }
         } else {
             SIZE src = {0};
@@ -10043,7 +10040,7 @@ static void RegisterThumbnails() {
                        !IsApplicationFrameWindowClass(w.hWnd)) {
                 w.thumbnailSourceReady = false;
             }
-            UpdateUwpFrameValidation(w, dwmSourceReady, sourceHr, L"refresh");
+            UpdateUwpFrameValidation(w, dwmSourceReady);
         }
         UpdateEntrySourceCrop(w);
         for (HWND m : g_hMirrorSwitchers) {
@@ -11053,7 +11050,7 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 }
 
 // Shared drawing routine for both layered and buffered paint paths
-static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int rowTitleH, int iconSz, int cornerRadius, int closeBtnReserve, bool isHovered, float alpha = 1.0f) {
+static void DrawTaskEntry(HDC hdc, WindowEntry& e, int padLeft, int rowTitleH, int iconSz, int cornerRadius, int closeBtnReserve, bool isHovered, float alpha = 1.0f) {
     if (alpha <= 0.01f) return;
 
     // DrawText's rectangle clips negative side bearings and ClearType fringes.
@@ -11394,7 +11391,7 @@ static void DrawDockIconStrip(HDC hdc) {
     RestoreDC(hdc, saved);
 }
 
-static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSelectionFill) {
+static void DrawDockContentInner(HDC hdc, bool fillBg, bool includeSelectionFill) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right;
 
@@ -11505,7 +11502,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
 // Shared drawing routine for both layered and buffered paint paths
 static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSelectionFill) {
     if (DockLayoutActive()) {
-        DrawDockContentInner(hdc, fillBg, hWnd, includeSelectionFill);
+        DrawDockContentInner(hdc, fillBg, includeSelectionFill);
         return;
     }
 
@@ -11555,7 +11552,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
             e.rcThumbSlot = dep.rcThumbCurrent;
             e.hIcon = dep.hIcon;
             wcsncpy_s(e.title, dep.title, _TRUNCATE);
-            DrawTaskEntry(hdc, e, hWnd, padLeft, rowTitleH, iconSz, cornerRadius, closeBtnReserve, false, dep.alpha);
+            DrawTaskEntry(hdc, e, padLeft, rowTitleH, iconSz, cornerRadius, closeBtnReserve, false, dep.alpha);
         }
     }
 
@@ -11569,7 +11566,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
 
         bool isHovered = (i == g_hoverIndex && g_hoverWnd == hWnd);
         float itemAlpha = (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f;
-        DrawTaskEntry(hdc, e, hWnd, padLeft, rowTitleH, iconSz, cornerRadius, closeBtnReserve, isHovered, itemAlpha);
+        DrawTaskEntry(hdc, e, padLeft, rowTitleH, iconSz, cornerRadius, closeBtnReserve, isHovered, itemAlpha);
     }
 
     // Restore clip
@@ -11632,7 +11629,7 @@ static void ComputeBadgeIconPosition(const RECT& rcThumbActual, int iconSz,
     *pOutIconY = iconY + DpiScale(g_settings.badgeIconOffsetY, g_dpiY);
 }
 
-static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false, HWND hWnd = NULL, float motionAlpha = 1.0f,
+static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false, float motionAlpha = 1.0f,
                                  std::shared_ptr<OwnedWindowIcon> iconOwner = {}) {
     if (!BadgeLayoutActive() || !g_settings.showIcon || !hIcon) return;
     int iconSz = GetHeaderIconSizePx();
@@ -11923,7 +11920,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
 
-            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon, NULL, NULL, NULL, false, snap.hWnd, snap.alpha,
+            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon, NULL, NULL, NULL, false, snap.alpha,
                                  snap.iconCell ? snap.iconCell->icon : nullptr);
         }
     }
@@ -11938,7 +11935,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
-            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon, NULL, NULL, NULL, false, dep.hWnd, dep.alpha,
+            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon, NULL, NULL, NULL, false, dep.alpha,
                                  dep.iconCell ? dep.iconCell->icon : nullptr);
         }
     }
@@ -11974,7 +11971,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         int drawnIconY = e.drawnIconY + offY;
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e),
                                   (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
                                   e.iconCell ? e.iconCell->icon : nullptr);
         }
@@ -12300,7 +12297,7 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
         int drawnIconY = e.drawnIconY;
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e),
                                  (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
                                  e.iconCell ? e.iconCell->icon : nullptr);
         }
@@ -12461,7 +12458,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
             int drawnIconY = e.drawnIconY;
             int drawnIconSz = e.drawnIconSz;
             if (!DockLayoutActive()) {
-                DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
+                DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e),
                                      (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
                                      e.iconCell ? e.iconCell->icon : nullptr);
             }
@@ -15468,7 +15465,7 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
     StartAnimationTicker();
 }
 
-static void UpdateDockSelectionWithDynamicResize(int prevSelected) {
+static void UpdateDockSelectionWithDynamicResize() {
     if (!DockLayoutActive() || !DockShowPreview()) {
         UpdateDockPreviewForSelection();
         return;
@@ -15484,7 +15481,6 @@ static void UpdateDockSelectionWithDynamicResize(int prevSelected) {
         return;
     }
 
-    (void)prevSelected;
     CaptureLayoutTransitionStart();
 
     HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
@@ -15498,7 +15494,6 @@ static void CycleLinear(int delta) {
     RectF selectionFrom = SelectionRectWithViewport();
     g_isPaginatedView = false;
     int n = (int)g_windows.size();
-    int prevSelected = g_selectedIndex;
     g_selectedIndex = ((g_selectedIndex + delta) % n + n) % n;
 
     if (DockLayoutActive()) {
@@ -15535,7 +15530,7 @@ static void CycleLinear(int delta) {
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
             ScrollDockWithDynamicResize(targetStart, g_selectedIndex, dir, SCROLL_ROW, selectionFrom);
         } else {
-            UpdateDockSelectionWithDynamicResize(prevSelected);
+            UpdateDockSelectionWithDynamicResize();
             RetargetSelectionFromPresented(selectionFrom);
             UpdateChevronAnimationTargets(false);
             InvalidateStaticCache();
@@ -17266,7 +17261,7 @@ static bool QueueCloseWindow(HWND hw) {
     return true;
 }
 
-static bool CloseSwitcherEntry(int idx, PCWSTR source) {
+static bool CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return false;
     if (g_windows[idx].isDesktopItem) return false;
 
@@ -17642,7 +17637,7 @@ static RECT RawNavigationCell(int index) {
 // Move only within the current visual row (horizontal layout) or column
 // (vertical layout). This intentionally does not advance into the next line;
 // that is what makes a touchpad edge behave like the native switcher.
-static bool NavigateRawWithinLine(bool horizontalSwipe, int delta) {
+static bool NavigateRawWithinLine(int delta) {
     if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size() || !delta) return false;
     RECT current = RawNavigationCell(g_selectedIndex);
     if (IsRectEmpty(&current)) return false;
@@ -17692,7 +17687,7 @@ static bool TouchpadNavigate(bool horizontalSwipe, int delta) {
         }
         return g_selectedIndex != previous;
     }
-    return NavigateRawWithinLine(horizontalSwipe, delta);
+    return NavigateRawWithinLine(delta);
 }
 
 // Select first horizontal-swipe target without wrapping into a later row.
@@ -17736,7 +17731,7 @@ static bool SelectInitialTouchpadTarget(int direction) {
     return g_selectedIndex != previous;
 }
 
-static bool NavigateRawTouchpad(bool horizontal, int delta, int travel) {
+static bool NavigateRawTouchpad(bool horizontal, int delta) {
     if (g_windows.empty()) return false;
     return TouchpadNavigate(horizontal, delta);
 }
@@ -18060,7 +18055,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
             const int closeIndex = g_selectedIndex;
             const HWND closeTarget = g_windows[closeIndex].hWnd;
             if (g_isSticky) BeginStickyTwoFingerTapOwnership(closeTarget);
-            bool requested = CloseSwitcherEntry(closeIndex, L"twoFingerTap");
+            bool requested = CloseSwitcherEntry(closeIndex);
             if (g_isSticky && !requested) {
                 ClearStickyTwoFingerTapOwnership();
             }
@@ -18334,7 +18329,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
             if (g_settings.reverseScrollDirection) {
                 delta = -delta;
             }
-            if (!NavigateRawTouchpad(true, delta, dx)) {
+            if (!NavigateRawTouchpad(true, delta)) {
                 // Do not accumulate outward travel while parked on a spatial edge.
                 s_rawGestureAnchorX = x;
                 s_rawGestureAnchorY = y;
@@ -18426,7 +18421,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
         }
         s_rawCommandEligible = false;
         int delta = g_settings.reverseScrollDirection ? -physicalDir : physicalDir;
-        if (!NavigateRawTouchpad(false, delta, dy)) {
+        if (!NavigateRawTouchpad(false, delta)) {
             s_rawGestureAnchorX = x;
             s_rawGestureAnchorY = y;
             s_rawRowTick = 0;
@@ -19352,7 +19347,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             bool isCtrlW = (wParam == 'W' && (GetKeyState(VK_CONTROL) & 0x8000) != 0);
             if (wParam == 'Q' || wParam == VK_DELETE || isCtrlW) {
                 bool isRepeat = (lParam & 0x40000000) != 0;
-                if (!isRepeat) CloseSwitcherEntry(g_selectedIndex, L"keyboard");
+                if (!isRepeat) CloseSwitcherEntry(g_selectedIndex);
                 return 0;
             }
         }
@@ -19598,7 +19593,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (wasClose) {
             POINT pt = {x, y};
             if (pressedIdx >= 0 && HitTestCloseButton(g_windows[pressedIdx], pt)) {
-                CloseSwitcherEntry(pressedIdx, L"closeButton");
+                CloseSwitcherEntry(pressedIdx);
             }
             return 0;
         }
@@ -19641,7 +19636,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
             int idx = g_settings.showThumbnails ? HitTestThumb(x, y) : HitTest(x, y);
             if (idx < 0) idx = HitTest(x, y);
-            if (idx >= 0) CloseSwitcherEntry(idx, L"middleClick");
+            if (idx >= 0) CloseSwitcherEntry(idx);
         }
         return 0;
     }
@@ -21686,8 +21681,8 @@ static TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
 
 static void UpdateRawTwoFingerTapMouseEvidence(
     TouchpadReaderStroke& stroke, const std::vector<TouchpadContact>& contacts,
-    ULONG tips, ULONG previousTips, ULONG packedPos, double rangeX,
-    double rangeY, ULONGLONG now) {
+    ULONG tips, ULONG previousTips, double rangeX, double rangeY,
+    ULONGLONG now) {
     const double slopScale = static_cast<double>(SWS_RAW_TAP_SLOP) / 65535.0;
     const LONG slopX = (LONG)(std::max)(1.0, rangeX * slopScale);
     const LONG slopY = (LONG)(std::max)(1.0, rangeY * slopScale);
@@ -21705,7 +21700,7 @@ static void UpdateRawTwoFingerTapMouseEvidence(
         stroke.twoFingerTapContactCount = 0;
         stroke.twoFingerTapPartialRelease = false;
     };
-    auto invalidate = [&](PCWSTR reason) {
+    auto invalidate = [&]() {
         DWORD serial = stroke.twoFingerTapMouseSerial;
         if (!serial) return;
         g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
@@ -21742,11 +21737,11 @@ static void UpdateRawTwoFingerTapMouseEvidence(
 
     if (!stroke.twoFingerTapMouseSerial) return;
     if (now - stroke.twoFingerTapStartTick > SWS_RAW_TAP_MAX_MS) {
-        invalidate(L"timeout");
+        invalidate();
         return;
     }
     if (tips > 2 || activeCount > 2) {
-        invalidate(L"extra-finger");
+        invalidate();
         return;
     }
     if (tips == 0) {
@@ -21793,7 +21788,7 @@ static void UpdateRawTwoFingerTapMouseEvidence(
         invalidReason = L"contact-reland";
     }
     if (invalidReason) {
-        invalidate(invalidReason);
+        invalidate();
         return;
     }
     if (tips == 1 && !stroke.twoFingerTapPartialRelease) {
@@ -21932,7 +21927,7 @@ static void TouchpadReaderProcessFrame(TouchpadDevice& dev, HANDLE hDevice) {
     ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
     if (g_touchpadActiveDevice == hDevice) {
         UpdateRawTwoFingerTapMouseEvidence(readerStroke, dev.frame, tips,
-                                           previousTips, packedPos, dev.rangeX,
+                                           previousTips, dev.rangeX,
                                            dev.rangeY, now);
     }
 
