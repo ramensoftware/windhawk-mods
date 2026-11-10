@@ -2,7 +2,7 @@
 // @id              bookmark-bar-for-file-explorer
 // @name            Bookmark Bar for File Explorer
 // @description     Adds a Chrome-style bookmarks bar to File Explorer with nested folders, drag & drop and a full Bookmark Manager
-// @version         2.5.28
+// @version         2.5.29
 // @author          classiclover75-netizen
 // @github          https://github.com/classiclover75-netizen
 // @include         explorer.exe
@@ -101,26 +101,9 @@ Bookmark Manager modeled on Chrome's.
 - Windows 11 with the modern (tabbed) File Explorer.
 
 ## Notes
-- **Restart File Explorer once after installing or updating the mod.** The bar
-  is usually added to already open windows right away, but a restart makes sure
-  every window, and the taskbar's Explorer process, starts cleanly with the
-  current version. To restart File Explorer:
-  1. Press **Ctrl+Shift+Esc** to open Task Manager.
-  2. On the **Processes** tab, find **Windows Explorer**.
-  3. Right-click it and choose **Restart** (the taskbar disappears for a moment).
-
-  Or from Command Prompt: press **Win+R**, type `cmd` and press **Enter**, then
-  run this line (administrator rights are not needed; a normal Command Prompt
-  is best, because File Explorer started from an elevated one would also run
-  as administrator):
-
-  ```
-  taskkill /f /im explorer.exe & start explorer.exe
-  ```
-
-  Signing out and back in, or restarting the PC, works too.
-- Disabling and enabling the mod again doesn't need a restart: the bar is
-  removed as soon as the mod is disabled and comes back when it is enabled.
+- No File Explorer restart is needed when the mod is installed, updated,
+  disabled or enabled: the bar is added to windows that are already open and
+  removed as soon as the mod is disabled.
 - Bookmarks are saved in a file in the mod's storage folder, separately for
   each Windows account, and persist across restarts.
 - Bookmarks pointing to network locations show a generic icon, so that an
@@ -874,28 +857,39 @@ bool ReadValidStoreLocked(std::wstring& text, std::vector<BookmarkNode>* nodes) 
 // failed (an edit built on an empty list must never replace the file).
 // ---------------------------------------------------------------------------
 
+// Size, last-write time and file ID. Every save replaces the file (MoveFileExW),
+// which gives it a new file ID, so even two saves of the same size within one
+// timestamp tick are told apart.
 struct StoreStamp {
     bool missing = false;
     ULONGLONG size = 0;
     FILETIME lastWrite{};
+    ULONGLONG fileId = 0;
 };
 
 bool SameStamp(const StoreStamp& a, const StoreStamp& b) {
     if (a.missing || b.missing) return a.missing == b.missing;
-    return a.size == b.size && CompareFileTime(&a.lastWrite, &b.lastWrite) == 0;
+    return a.size == b.size && a.fileId == b.fileId && CompareFileTime(&a.lastWrite, &b.lastWrite) == 0;
 }
 
 bool GetStoreStampLocked(StoreStamp& stamp) {
     stamp = StoreStamp{};
     if (g_storageFile.empty()) return false;
-    WIN32_FILE_ATTRIBUTE_DATA data{};
-    if (!GetFileAttributesExW(g_storageFile.c_str(), GetFileExInfoStandard, &data)) {
+    HANDLE file = CreateFileW(g_storageFile.c_str(), FILE_READ_ATTRIBUTES,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
         stamp.missing = (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND);
         return stamp.missing;
     }
-    stamp.size = (static_cast<ULONGLONG>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
-    stamp.lastWrite = data.ftLastWriteTime;
+    BY_HANDLE_FILE_INFORMATION info{};
+    const bool ok = GetFileInformationByHandle(file, &info) != FALSE;
+    CloseHandle(file);
+    if (!ok) return false;
+    stamp.size = (static_cast<ULONGLONG>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+    stamp.lastWrite = info.ftLastWriteTime;
+    stamp.fileId = (static_cast<ULONGLONG>(info.nFileIndexHigh) << 32) | info.nFileIndexLow;
     return true;
 }
 
@@ -4424,10 +4418,8 @@ void UnregisterWindowClasses() {
     UnregisterClassW(kDropLineClass, inst);
     UnregisterClassW(kEditDlgClass, inst);
     UnregisterClassW(kChoiceDlgClass, inst);
-    if (g_dropLineBrush) {
-        DeleteObject(g_dropLineBrush);
-        g_dropLineBrush = nullptr;
-    }
+    // Windows deletes a class's background brush when the class is unregistered
+    g_dropLineBrush = nullptr;
 }
 
 // ============================================================================
@@ -5297,6 +5289,9 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
     panel.Children().Clear();
 
     muxc::StackPanel row;
+    // Handlers on the row's buttons hold it weakly: a strong reference would form
+    // a cycle (row -> button -> handler -> row) that keeps every old row alive.
+    auto weakRow = winrt::make_weak(row);
     row.Orientation(muxc::Orientation::Horizontal);
     row.Spacing(4);
     row.Margin(mux::Thickness{6, 0, 6, 0});
@@ -5353,7 +5348,9 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
         TrackAddHandler(btn, 
             mux::UIElement::PointerPressedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
-                [weakPanel, row, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
+                [weakPanel, weakRow, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
+                    auto row = weakRow.get();
+                    if (!row) return;
                     auto p = weakPanel.get();
                     auto* st = p ? FindBarState(p) : nullptr;
                     auto b = sender.try_as<muxc::Button>();
@@ -5374,7 +5371,9 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
         TrackAddHandler(btn, 
             mux::UIElement::PointerMovedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
-                [weakPanel, row, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
+                [weakPanel, weakRow, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
+                    auto row = weakRow.get();
+                    if (!row) return;
                     auto p = weakPanel.get();
                     auto* st = p ? FindBarState(p) : nullptr;
                     auto b = sender.try_as<muxc::Button>();
