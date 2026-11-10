@@ -4,7 +4,7 @@
 // @description     Shrinks the top connection bar in Remote Desktop Connection
 // @version         1.0.1
 // @author          hsb5
-// @github          https://github.com/hsb5/
+// @github          https://github.com/hsb5
 // @include         mstsc.exe
 // @compilerOptions -luser32 -lcomctl32
 // ==/WindhawkMod==
