@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              task-manager-pause-button
 // @name            Task Manager Pause Button
-// @description     Add a native Pause/Resume button to the Processes and Details pages of Windows 11 Task Manager.
+// @description     Add a native Pause/Resume button to Processes and Details in Windows 11 Task Manager.
 // @version         1.0.0
 // @author          Luiz Bizzio
 // @github          https://github.com/luizbizzio
@@ -17,75 +17,46 @@
 # Task Manager Pause Button
 
 Add a native **Pause / Resume** button next to **Run new task** in the
-Windows 11 Task Manager. The button uses the same style as other Task Manager
-commands.
+Windows 11 Task Manager on the Processes and Details pages.
 
 ![Task Manager Pause Button](https://raw.githubusercontent.com/luizbizzio/task-manager-pause-button/main/assets/task-manager-pause-button-cover.png)
 
 ## How to use
 
-1. Open Task Manager.
-2. Go to **Processes** or **Details**.
-3. Click **Pause** to stop the list from updating.
-4. Click **Resume** to start updating the list again.
+1. Open Task Manager and select **Processes** or **Details**.
+2. Click **Pause** to stop the list from updating.
+3. Click **Resume** to start updating again.
 
-The Pause / Resume state stays in sync when you switch between the two pages.
-The mod does not pause apps or other Windows processes. It only affects the
-Task Manager view.
+Both pages share the same Pause / Resume state. The mod does not suspend apps,
+stop Windows processes, or change the Real time update speed setting.
 
-## Limitations
+## Compatibility and limitations
 
-- Uses Task Manager's built-in Ctrl-key refresh hold. It does not change the
-  **Real time update speed** setting.
-- Some Ctrl-based actions inside Task Manager may act differently while
-  the button is set to **Pause**.
-- Currently detects the command bar in English and Portuguese.
-- Uses internal Windows XAML interfaces. A Windows update may change the
-  Task Manager interface and require an update to this mod.
-- Does not change the Windows Registry or install a separate program.
+- Works with the Windows 11 Task Manager XAML interface. Windows updates may
+  change private Task Manager functions or controls.
+- Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
+  directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
+  may behave as if Ctrl is held. This does not affect other applications.
+- Detects the command bar by its button labels in English and Portuguese.
+  Other Task Manager display languages may not show the button.
+- The button uses English labels, even if Task Manager is in Portuguese.
+- If the button is missing, close and reopen Task Manager with the mod enabled.
+- No settings or background applications are needed.
 
-## Troubleshooting
+## Source and feedback
 
-If the button does not appear, make sure the mod is enabled, close and reopen
-Task Manager, and open **Processes** or **Details**. Check the Windhawk log for
-XAML-related errors if the problem continues.
+[GitHub](https://github.com/luizbizzio/task-manager-pause-button)
 
-## Project
-
-Find the source code, report bugs, or suggest changes on
-[GitHub](https://github.com/luizbizzio/task-manager-pause-button).
-
-Author: **Luiz Bizzio**. Licensed under **Apache 2.0**.
+Author: Luiz Bizzio. License: Apache-2.0.
 */
 // ==/WindhawkModReadme==
 
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Luiz Bizzio
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// Uses Windows.UI.Xaml visual-tree diagnostics (an internal Windows interface).
-// No registry writes, no settings.json writes, no separate overlay window.
-// Task Manager's private XAML tree can change between Windows versions.
-// The Pause button requests the Task Manager Ctrl-key refresh hold.
-// It does NOT change the native Real time update speed setting, and does
-// NOT suspend or pause any operating system processes.
-// The internal refresh mechanism may differ between Windows builds.
 
 #include <windows.h>
-#include <ocidl.h>
-#include <xamlom.h>
-// The system XAML WinRT projection declares a GetCurrentTime method.
+#include <inspectable.h>
+#include <windhawk_utils.h>
 #ifdef GetCurrentTime
 #undef GetCurrentTime
 #endif
@@ -96,429 +67,613 @@ Author: **Luiz Bizzio**. Licensed under **Apache 2.0**.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Core.h>
 #include <atomic>
-#include <vector>
 #include <mutex>
+#include <vector>
 #include <algorithm>
-#include <cwchar>
+#include <cstdint>
 
 namespace mux = winrt::Windows::UI::Xaml;
 namespace muxc = winrt::Windows::UI::Xaml::Controls;
 namespace muxm = winrt::Windows::UI::Xaml::Media;
-namespace wuc = winrt::Windows::UI::Core;
 namespace wf = winrt::Windows::Foundation;
 
 namespace {
-constexpr GUID kTapClsid = {0xED8B42B2, 0x71A1, 0x4B8D,
-                            {0xB7, 0x31, 0xF4, 0x1B, 0xAC, 0x6A, 0x41, 0x92}};
-constexpr wchar_t kPauseButtonName[] = L"WindhawkTaskManagerPauseButton";
+constexpr wchar_t kButtonName[] = L"WindhawkTaskManagerPauseButton";
+
 std::atomic<bool> g_stopping{false};
 std::atomic<bool> g_paused{false};
+std::atomic<unsigned> g_insertions{0};
 
-using GetKeyState_t = SHORT(WINAPI*)(int);
-using GetAsyncKeyState_t = SHORT(WINAPI*)(int);
-using GetKeyboardState_t = BOOL(WINAPI*)(PBYTE);
-GetKeyState_t g_originalGetKeyState = nullptr;
-GetAsyncKeyState_t g_originalGetAsyncKeyState = nullptr;
-GetKeyboardState_t g_originalGetKeyboardState = nullptr;
+uintptr_t g_taskBegin{};
+uintptr_t g_taskEnd{};
 
-bool IsCtrl(int vk) {
+using GetKeyState_t = decltype(&GetKeyState);
+GetKeyState_t g_getKeyOriginal{};
+
+bool IsCtrl(int vk) noexcept {
     return vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL;
 }
 
+bool CalledByTaskManager(uintptr_t returnAddress) noexcept {
+    return returnAddress >= g_taskBegin && returnAddress < g_taskEnd;
+}
+
 SHORT WINAPI GetKeyState_Hook(int vk) {
-    SHORT result = g_originalGetKeyState(vk);
-    if (!g_stopping.load() && g_paused.load() && IsCtrl(vk))
-        result = static_cast<SHORT>(result | 0x8000);
-    return result;
-}
-
-SHORT WINAPI GetAsyncKeyState_Hook(int vk) {
-    SHORT result = g_originalGetAsyncKeyState(vk);
-    if (!g_stopping.load() && g_paused.load() && IsCtrl(vk))
-        result = static_cast<SHORT>(result | 0x8000);
-    return result;
-}
-
-BOOL WINAPI GetKeyboardState_Hook(PBYTE state) {
-    BOOL result = g_originalGetKeyboardState(state);
-    if (result && state && !g_stopping.load() && g_paused.load()) {
-        state[VK_CONTROL] |= 0x80;
-        state[VK_LCONTROL] |= 0x80;
+    SHORT value = g_getKeyOriginal(vk);
+    if (g_paused.load(std::memory_order_relaxed) &&
+        !g_stopping.load(std::memory_order_relaxed) && IsCtrl(vk) &&
+        CalledByTaskManager(reinterpret_cast<uintptr_t>(__builtin_return_address(0)))) {
+        value = static_cast<SHORT>(value | 0x8000);
     }
-    return result;
+    return value;
 }
 
-struct Entry {
+struct BarEntry {
     winrt::weak_ref<muxc::CommandBar> bar;
     winrt::weak_ref<muxc::AppBarButton> button;
-    wuc::CoreDispatcher dispatcher{nullptr};
-    winrt::event_token token{};
-    DWORD threadId{};
+    DWORD ownerThread{};
+    winrt::event_token clickToken{};
+    uint64_t entryId{};
+    bool clickDetached{};
+    bool removedFromBar{};
 };
-std::mutex g_entriesMutex;
-std::vector<Entry> g_entries;
 
-// WinRT XAML elements must be updated on the UI thread that owns them.
-// Entries contain weak references so old pages can be collected normally.
+std::mutex g_barsMutex;
+std::vector<BarEntry> g_bars;
+std::atomic<uint64_t> g_nextEntryId{1};
+thread_local bool g_addingButton = false;
+
+void TryInsertButton(muxc::CommandBar const& bar);
+void SyncButtons();
+
 void UpdateButton(muxc::AppBarButton const& button) {
-    const bool paused = g_paused.load();
-    const wchar_t* label = paused ? L"Resume" : L"Pause";
-    if (button.Label() == label) return;
-    button.Label(label);
-    button.Icon(muxc::SymbolIcon(paused ? muxc::Symbol::Play
-                                        : muxc::Symbol::Pause));
-}
-
-void PruneDeadEntriesOnCurrentThread() {
-    const DWORD threadId = GetCurrentThreadId();
-    std::lock_guard<std::mutex> lock(g_entriesMutex);
-    g_entries.erase(std::remove_if(g_entries.begin(), g_entries.end(),
-        [threadId](Entry const& entry) {
-            if (entry.threadId != threadId) return false;
-            try {
-                return !entry.button.get() || !entry.bar.get();
-            } catch (...) {
-                return true;
-            }
-        }), g_entries.end());
-}
-
-void SyncAllButtons() {
-    std::vector<Entry> snapshot;
-    {
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-        snapshot = g_entries;
-    }
-    const DWORD currentThreadId = GetCurrentThreadId();
-    for (auto const& entry : snapshot) {
-        if (entry.threadId == currentThreadId) {
-            try {
-                if (auto button = entry.button.get()) UpdateButton(button);
-            } catch (...) {
-                // An old page may have been destroyed between snapshots.
-            }
-        } else if (entry.dispatcher) {
-            try {
-                auto weakButton = entry.button;
-                entry.dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
-                    [weakButton] {
-                        if (g_stopping.load()) return;
-                        try {
-                            if (auto button = weakButton.get()) UpdateButton(button);
-                        } catch (...) {
-                            // The UI element no longer exists.
-                        }
-                    });
-            } catch (...) {
-                // Dispatcher is shutting down.
-            }
-        }
-    }
+    const bool paused = g_paused.load(std::memory_order_relaxed);
+    const wchar_t* caption = paused ? L"Resume" : L"Pause";
+    if (button.Label() == caption) return;
+    button.Label(caption);
+    button.Icon(muxc::SymbolIcon(paused ? muxc::Symbol::Play : muxc::Symbol::Pause));
 }
 
 void TogglePause() {
-    bool expected = g_paused.load();
-    while (!g_paused.compare_exchange_weak(expected, !expected)) {
-    }
-    SyncAllButtons();
+    bool was = g_paused.load(std::memory_order_relaxed);
+    while (!g_paused.compare_exchange_weak(was, !was, std::memory_order_relaxed)) {}
+    SyncButtons();
 }
 
-void RemoveEntry(Entry const& entry) {
+void TryInsertButton(muxc::CommandBar const& bar) {
+    if (!bar || g_stopping.load(std::memory_order_acquire) || g_addingButton) return;
+    struct Guard {
+        Guard() { g_addingButton = true; }
+        ~Guard() { g_addingButton = false; }
+    } guard;
+
+    muxc::AppBarButton button{nullptr};
+    winrt::event_token clickToken{};
+    bool clickAttached = false;
+    bool inserted = false;
     try {
-        auto button = entry.button.get();
-        if (!button) return;
-        button.Click(entry.token);
-        auto bar = entry.bar.get();
-        if (!bar) return;
         auto commands = bar.PrimaryCommands();
+        if (!commands) return;
+
+        bool hasRun = false;
+        bool hasEnd = false;
+        uint32_t place = 0;
         for (uint32_t i = 0; i < commands.Size(); ++i) {
             auto item = commands.GetAt(i).try_as<muxc::AppBarButton>();
-            if (item == button) {
-                commands.RemoveAt(i);
+            if (!item) continue;
+            if (item.Name() == kButtonName) return;
+            auto caption = item.Label();
+            if (caption == L"Run new task" || caption == L"Executar nova tarefa") {
+                hasRun = true;
+                place = i + 1;
+            }
+            if (caption == L"End task" || caption == L"Finalizar tarefa")
+                hasEnd = true;
+        }
+        if (!hasRun || !hasEnd) return;
+
+        button = muxc::AppBarButton();
+        button.Name(kButtonName);
+        UpdateButton(button);
+        clickToken = button.Click([](auto const&, auto const&) {
+            if (!g_stopping.load(std::memory_order_acquire)) TogglePause();
+        });
+        clickAttached = true;
+        commands.InsertAt(place, button);
+        inserted = true;
+
+        BarEntry entry;
+        entry.bar = winrt::make_weak(bar);
+        entry.button = winrt::make_weak(button);
+        entry.ownerThread = GetCurrentThreadId();
+        entry.clickToken = clickToken;
+        entry.entryId = g_nextEntryId.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lock(g_barsMutex);
+            g_bars.push_back(std::move(entry));
+        }
+        const auto count = g_insertions.fetch_add(1) + 1;
+        if (count <= 8) Wh_Log(L"[TMPB] Native Pause button inserted (%u)", count);
+    } catch (...) {
+        HRESULT error = winrt::to_hresult();
+        // Avoid leaving a live Click handler behind if tracking the button fails.
+        try {
+            if (button && clickAttached) button.Click(clickToken);
+        } catch (...) {}
+        if (inserted) {
+            try {
+                auto commands = bar.PrimaryCommands();
+                if (commands) {
+                    for (uint32_t i = 0; i < commands.Size(); ++i) {
+                        auto candidate = commands.GetAt(i).try_as<muxc::AppBarButton>();
+                        if (candidate && candidate == button) {
+                            commands.RemoveAt(i);
+                            break;
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
+        Wh_Log(L"[TMPB] Button insertion failed: 0x%08X", error);
+    }
+}
+
+// Synchronous work on the XAML thread, using the standard in-process
+// WH_CALLWNDPROC approach. Tokens, not pointers, are passed in LPARAM.
+// A timed-out request is canceled under the same lock the hook uses to start.
+constexpr DWORD kUiTimeoutMs = 5000;
+UINT g_dispatchMsg{};
+struct UiRequest {
+    uint64_t token{};
+    DWORD threadId{};
+    bool (*callback)(DWORD){};
+    HANDLE completion{};
+    bool started{};
+    bool canceled{};
+    bool callbackSucceeded{};
+};
+std::mutex g_requestMutex;
+std::vector<UiRequest*> g_requests;
+std::atomic<uint64_t> g_nextToken{1};
+
+// A dead UI thread cannot invoke any of its XAML callbacks again.
+// Treat an unknown or access-denied thread as live, for a safe unload.
+bool UiThreadTerminated(DWORD threadId) {
+    HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+    if (!thread) return GetLastError() == ERROR_INVALID_PARAMETER;
+    DWORD status = WaitForSingleObject(thread, 0);
+    CloseHandle(thread);
+    return status == WAIT_OBJECT_0;
+}
+
+// A hook callback may remain callable if unhooking fails. Never return from
+// unload while that callback could still point into the module.
+void UnhookDispatchSafely(HHOOK hook, DWORD threadId) {
+    if (!hook) return;
+    unsigned attempts = 0;
+    for (;;) {
+        if (UnhookWindowsHookEx(hook)) return;
+        DWORD error = GetLastError();
+        if (error == ERROR_INVALID_HOOK_HANDLE || UiThreadTerminated(threadId))
+            return;
+        if (++attempts % 50 == 0) {
+            Wh_Log(L"[TMPB] Waiting to remove UI dispatch hook thread=%lu error=%lu",
+                   threadId, error);
+        }
+        Sleep(100);
+    }
+}
+
+LRESULT CALLBACK DispatchHook(int code, WPARAM wp, LPARAM lp) {
+    UiRequest* request = nullptr;
+    if (code == HC_ACTION && g_dispatchMsg) {
+        auto* msg = reinterpret_cast<CWPSTRUCT*>(lp);
+        if (msg && msg->message == g_dispatchMsg) {
+            std::lock_guard<std::mutex> lock(g_requestMutex);
+            for (auto* candidate : g_requests) {
+                if (candidate->token == static_cast<uint64_t>(msg->lParam) &&
+                    candidate->threadId == GetCurrentThreadId() &&
+                    !candidate->canceled && !candidate->started) {
+                    candidate->started = true;
+                    request = candidate;
+                    break;
+                }
+            }
+        }
+    }
+    if (request) {
+        try {
+            request->callbackSucceeded = request->callback(request->threadId);
+        } catch (...) {
+            request->callbackSucceeded = false;
+            Wh_Log(L"[TMPB] UI callback exception");
+        }
+    }
+    LRESULT next = CallNextHookEx(nullptr, code, wp, lp);
+    // Signal only after the entire hook chain returned, so cleanup does not
+    // consider a callback complete while CallNextHookEx is still executing.
+    if (request) SetEvent(request->completion);
+    return next;
+}
+
+HWND FindThreadWindow(DWORD threadId) {
+    HWND result = nullptr;
+    EnumThreadWindows(threadId, [](HWND hwnd, LPARAM param) -> BOOL {
+        *reinterpret_cast<HWND*>(param) = hwnd;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+bool RunOnUiThread(DWORD threadId, bool (*callback)(DWORD)) {
+    if (threadId == GetCurrentThreadId()) {
+        try {
+            return callback(threadId);
+        } catch (...) {
+            Wh_Log(L"[TMPB] Same-thread UI callback exception");
+            return false;
+        }
+    }
+    HWND hwnd = FindThreadWindow(threadId);
+    if (!hwnd) return false;
+    UiRequest request;
+    request.token = g_nextToken.fetch_add(1, std::memory_order_relaxed);
+    request.threadId = threadId;
+    request.callback = callback;
+    request.completion = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!request.completion) return false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_requestMutex);
+        g_requests.push_back(&request);
+    }
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, DispatchHook, nullptr, threadId);
+    DWORD_PTR ignored{};
+    bool sent = false;
+    if (hook) {
+        sent = SendMessageTimeoutW(hwnd, g_dispatchMsg, 0,
+            static_cast<LPARAM>(request.token),
+            SMTO_BLOCK | SMTO_ABORTIFHUNG, kUiTimeoutMs, &ignored) != 0;
+    }
+    bool started = false;
+    {
+        std::lock_guard<std::mutex> lock(g_requestMutex);
+        request.canceled = true;
+        started = request.started;
+    }
+    // If the callback started, its stack request cannot be freed until
+    // execution completes. Also allow the owner thread to exit.
+    if (started && WaitForSingleObject(request.completion, 0) != WAIT_OBJECT_0) {
+        HANDLE owner = OpenThread(SYNCHRONIZE, FALSE, threadId);
+        if (owner) {
+            HANDLE handles[] = {request.completion, owner};
+            const DWORD waitResult = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+            CloseHandle(owner);
+            if (waitResult == WAIT_FAILED && !UiThreadTerminated(threadId))
+                WaitForSingleObject(request.completion, INFINITE);
+        } else if (!UiThreadTerminated(threadId)) {
+            WaitForSingleObject(request.completion, INFINITE);
+        }
+    }
+    const bool completed = started &&
+        WaitForSingleObject(request.completion, 0) == WAIT_OBJECT_0;
+    const bool callbackSucceeded = completed && request.callbackSucceeded;
+
+    // SetEvent runs immediately before the hook returns. If the synchronous
+    // send timed out, a subsequent successful message proves the first hook
+    // invocation has fully unwound before the request and DLL are released.
+    if (started && !sent && !UiThreadTerminated(threadId)) {
+        unsigned attempts = 0;
+        for (;;) {
+            HWND barrierWindow = FindThreadWindow(threadId);
+            DWORD_PTR barrierResult{};
+            if (barrierWindow && SendMessageTimeoutW(barrierWindow, WM_NULL, 0, 0,
+                    SMTO_BLOCK | SMTO_ABORTIFHUNG, kUiTimeoutMs, &barrierResult))
                 break;
+            if (UiThreadTerminated(threadId)) break;
+            if (++attempts % 4 == 0)
+                Wh_Log(L"[TMPB] Waiting for UI callback to finish thread=%lu", threadId);
+            Sleep(250);
+        }
+    }
+    UnhookDispatchSafely(hook, threadId);
+    {
+        std::lock_guard<std::mutex> lock(g_requestMutex);
+        auto it = std::find(g_requests.begin(), g_requests.end(), &request);
+        if (it != g_requests.end()) g_requests.erase(it);
+    }
+    CloseHandle(request.completion);
+    if (!completed || !callbackSucceeded) {
+        Wh_Log(L"[TMPB] UI dispatch incomplete thread=%lu sent=%d started=%d completed=%d callbackOK=%d",
+               threadId, sent, started, completed, callbackSucceeded);
+    } else if (!sent) {
+        Wh_Log(L"[TMPB] UI message timed out but callback finished thread=%lu", threadId);
+    }
+    return callbackSucceeded;
+}
+
+void PruneExpiredEntriesOnCurrentThread() {
+    DWORD threadId = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(g_barsMutex);
+    g_bars.erase(std::remove_if(g_bars.begin(), g_bars.end(),
+        [threadId](BarEntry const& entry) {
+            if (entry.ownerThread != threadId) return false;
+            try { return !entry.button.get(); }
+            catch (...) { return false; }
+        }), g_bars.end());
+}
+
+std::vector<DWORD> KnownThreads() {
+    std::vector<DWORD> result;
+    std::lock_guard<std::mutex> lock(g_barsMutex);
+    for (auto const& entry : g_bars) {
+        if (std::find(result.begin(), result.end(), entry.ownerThread) == result.end())
+            result.push_back(entry.ownerThread);
+    }
+    return result;
+}
+
+bool SyncThreadButtons(DWORD threadId) {
+    std::vector<BarEntry> entries;
+    {
+        std::lock_guard<std::mutex> lock(g_barsMutex);
+        for (auto const& e : g_bars)
+            if (e.ownerThread == threadId) entries.push_back(e);
+    }
+    bool success = true;
+    for (auto const& entry : entries) {
+        try {
+            if (auto button = entry.button.get()) UpdateButton(button);
+        } catch (...) {
+            success = false;
+        }
+    }
+    return success;
+}
+
+void SyncButtons() {
+    for (auto threadId : KnownThreads()) {
+        if (g_stopping.load(std::memory_order_acquire)) return;
+        if (!RunOnUiThread(threadId, SyncThreadButtons))
+            Wh_Log(L"[TMPB] Could not sync thread %lu", threadId);
+    }
+}
+
+std::atomic<unsigned> g_cleanupFailures{0};
+
+// Called only on the owner XAML thread. Preserve each entry until both its
+// Click handler and the command-bar item have been removed successfully.
+// That way a transient failure can be retried without losing the token.
+bool RemoveThreadButtonsAndEvents(DWORD threadId) {
+    std::vector<BarEntry> entries;
+    {
+        std::lock_guard<std::mutex> lock(g_barsMutex);
+        for (auto const& entry : g_bars)
+            if (entry.ownerThread == threadId) entries.push_back(entry);
+    }
+
+    bool allRemoved = true;
+    for (auto const& entry : entries) {
+        bool detached = entry.clickDetached;
+        bool removed = entry.removedFromBar;
+        muxc::AppBarButton button{nullptr};
+
+        try {
+            button = entry.button.get();
+        } catch (...) {
+            ++g_cleanupFailures;
+            Wh_Log(L"[TMPB] Button lookup failed: 0x%08X", winrt::to_hresult());
+            allRemoved = false;
+            continue;
+        }
+
+        if (!button) {
+            // No live button means no live Click event source.
+            detached = true;
+            removed = true;
+        }
+
+        if (!detached) {
+            try {
+                button.Click(entry.clickToken);
+                detached = true;
+            } catch (...) {
+                ++g_cleanupFailures;
+                Wh_Log(L"[TMPB] Click event detach failed: 0x%08X", winrt::to_hresult());
+            }
+        }
+
+        // Do not remove UI objects while their callbacks remain attached.
+        if (detached && !removed) {
+            try {
+                if (auto bar = entry.bar.get()) {
+                    auto commands = bar.PrimaryCommands();
+                    if (commands) {
+                        for (uint32_t i = commands.Size(); i > 0; --i) {
+                            auto item = commands.GetAt(i - 1).try_as<muxc::AppBarButton>();
+                            if (item && item.Name() == kButtonName)
+                                commands.RemoveAt(i - 1);
+                        }
+                    }
+                }
+                removed = true;
+            } catch (...) {
+                ++g_cleanupFailures;
+                Wh_Log(L"[TMPB] Button removal failed: 0x%08X", winrt::to_hresult());
+            }
+        }
+
+        // Store progress across attempts. Do not hold the mutex while
+        // calling XAML APIs, which could trigger unrelated callbacks.
+        {
+            std::lock_guard<std::mutex> lock(g_barsMutex);
+            auto it = std::find_if(g_bars.begin(), g_bars.end(),
+                [&entry](BarEntry const& item) {
+                    return item.entryId == entry.entryId;
+                });
+            if (it != g_bars.end()) {
+                it->clickDetached = detached;
+                it->removedFromBar = removed;
+                if (detached && removed) g_bars.erase(it);
+            }
+        }
+        if (!detached || !removed) allRemoved = false;
+    }
+    return allRemoved;
+}
+
+bool HasEntriesForThread(DWORD threadId) {
+    std::lock_guard<std::mutex> lock(g_barsMutex);
+    return std::any_of(g_bars.begin(), g_bars.end(),
+        [threadId](BarEntry const& entry) {
+            return entry.ownerThread == threadId;
+        });
+}
+
+void ForgetTerminatedThread(DWORD threadId) {
+    std::lock_guard<std::mutex> lock(g_barsMutex);
+    g_bars.erase(std::remove_if(g_bars.begin(), g_bars.end(),
+        [threadId](BarEntry const& entry) {
+            return entry.ownerThread == threadId;
+        }), g_bars.end());
+}
+
+bool FindTaskManagerRange() {
+    auto* start = reinterpret_cast<BYTE*>(GetModuleHandleW(nullptr));
+    if (!start) return false;
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(start);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(start + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+    g_taskBegin = reinterpret_cast<uintptr_t>(start);
+    g_taskEnd = g_taskBegin + nt->OptionalHeader.SizeOfImage;
+    return g_taskBegin < g_taskEnd;
+}
+
+
+// Called on the XAML thread during page navigation.
+void FindCommandBars(mux::FrameworkElement const& page) {
+    if (g_stopping.load(std::memory_order_relaxed)) return;
+    try {
+        mux::DependencyObject root = page;
+        for (unsigned i = 0; i < 48; ++i) {
+            auto parent = muxm::VisualTreeHelper::GetParent(root);
+            if (!parent) break;
+            root = parent;
+        }
+        std::vector<mux::DependencyObject> stack;
+        stack.push_back(root);
+        unsigned scanned = 0;
+        while (!stack.empty() && scanned < 5000 && !g_stopping.load()) {
+            auto element = stack.back();
+            stack.pop_back();
+            ++scanned;
+            if (auto bar = element.try_as<muxc::CommandBar>()) {
+                TryInsertButton(bar);
+            }
+            int children = muxm::VisualTreeHelper::GetChildrenCount(element);
+            for (int i = children - 1; i >= 0; --i) {
+                stack.push_back(muxm::VisualTreeHelper::GetChild(element, i));
             }
         }
     } catch (...) {
-        static std::atomic<unsigned> failures{0};
-        if (failures.fetch_add(1) < 3)
-            Wh_Log(L"XAML Pause button cleanup failed: 0x%08X", winrt::to_hresult());
+        Wh_Log(L"[TMPB] Visual tree search failed: 0x%08X", winrt::to_hresult());
     }
 }
 
-void InsertPauseButton(muxc::CommandBar const& bar) {
-    if (g_stopping.load()) return;
-    auto commands = bar.PrimaryCommands();
-    bool hasRun = false;
-    bool hasEnd = false;
-    uint32_t insertion = 0;
-    for (uint32_t i = 0; i < commands.Size(); ++i) {
-        auto current = commands.GetAt(i).try_as<muxc::AppBarButton>();
-        if (!current) continue;
-        if (current.Name() == kPauseButtonName) {
-            // This bar already contains our button. A visual-tree notification
-            // can run many times for the same command bar; do not insert twice.
-            UpdateButton(current);
-            return;
-        }
-        const auto label = current.Label();
-        if (label == L"Run new task" || label == L"Executar nova tarefa") {
-            hasRun = true;
-            insertion = i + 1;
-        }
-        if (label == L"End task" || label == L"Finalizar tarefa") hasEnd = true;
-    }
-    // The Processes and Details bars have both commands. Ignore other pages.
-    if (!hasRun || !hasEnd) return;
+// ABI projection: IPageOverrides::OnNavigatedTo(void*) belongs to a
+// winrt::impl::produce COM interface, not the native implementation class.
+// Its self argument is a COM interface pointer, so query it rather than
+// treating it as an implementation::ProcessesPage pointer.
+using OnNavigatedTo_t = HRESULT(__cdecl*)(void*, void*);
+OnNavigatedTo_t g_onNavigatedToOriginal = nullptr;
+constexpr wchar_t kOnNavigatedToSymbol[] =
+    L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)";
 
-    PruneDeadEntriesOnCurrentThread();
+void CapturePageFromInterface(void* self) {
+    if (!self || g_stopping.load(std::memory_order_acquire)) return;
+    try {
+        winrt::com_ptr<::IInspectable> object;
+        HRESULT hr = reinterpret_cast<::IUnknown*>(self)->QueryInterface(
+            __uuidof(::IInspectable), object.put_void());
+        if (FAILED(hr) || !object) return;
 
-    auto button = muxc::AppBarButton();
-    button.Name(kPauseButtonName);
-    UpdateButton(button);
-    auto clickToken = button.Click([](auto const&, auto const&) {
-        if (!g_stopping.load()) TogglePause();
-    });
-    // Insert directly after Run new task. No Win32 overlay or registry edits.
-    commands.InsertAt(insertion, button);
-    Entry entry;
-    entry.bar = winrt::make_weak(bar);
-    entry.button = winrt::make_weak(button);
-    entry.token = clickToken;
-    entry.dispatcher = button.Dispatcher();
-    entry.threadId = GetCurrentThreadId();
-    {
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-        g_entries.push_back(std::move(entry));
+        wf::IInspectable inspectable{nullptr};
+        winrt::copy_from_abi(inspectable, object.get());
+        auto page = inspectable.try_as<mux::FrameworkElement>();
+        if (!page) return;
+        PruneExpiredEntriesOnCurrentThread();
+        FindCommandBars(page);
+    } catch (...) {
+        Wh_Log(L"[TMPB] Page capture failed: 0x%08X", winrt::to_hresult());
     }
-    static std::atomic<bool> firstInsertion{false};
-    if (!firstInsertion.exchange(true))
-        Wh_Log(L"Native XAML Pause/Resume button ready in Task Manager");
 }
 
-class TreeWatcher : public winrt::implements<TreeWatcher, IVisualTreeServiceCallback2,
-                                               winrt::non_agile> {
-    winrt::com_ptr<IXamlDiagnostics> diagnostics;
-public:
-    explicit TreeWatcher(winrt::com_ptr<IXamlDiagnostics> const& diag)
-        : diagnostics(diag) {}
-
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation,
-                                                 VisualElement element,
-                                                 VisualMutationType mutation) noexcept override {
-        if (mutation != Add || g_stopping.load() || !element.Type) return S_OK;
-        // CommandBar may be announced before it receives its built-in buttons.
-        // Also look when an AppBarButton enters the visual tree.
-        if (!wcsstr(element.Type, L"CommandBar") &&
-            !wcsstr(element.Type, L"AppBarButton")) return S_OK;
-        try {
-            winrt::com_ptr<::IInspectable> native;
-            if (FAILED(diagnostics->GetIInspectableFromHandle(element.Handle, native.put())) ||
-                !native) return S_OK;
-            wf::IInspectable object{nullptr};
-            // IInspectable projection owns a separate AddRef.
-            // Projected WinRT objects do not have a .attach() member.
-            winrt::copy_from_abi(object, native.get());
-            if (auto bar = object.try_as<muxc::CommandBar>()) {
-                InsertPauseButton(bar);
-            } else if (auto child = object.try_as<mux::DependencyObject>()) {
-                for (int depth = 0; depth < 32 && child; ++depth) {
-                    if (auto bar = child.try_as<muxc::CommandBar>()) {
-                        InsertPauseButton(bar);
-                        break;
-                    }
-                    child = muxm::VisualTreeHelper::GetParent(child);
-                }
-            }
-        } catch (...) {
-            static std::atomic<unsigned> failures{0};
-            if (failures.fetch_add(1) < 3)
-                Wh_Log(L"XAML visual-tree callback failed: 0x%08X", winrt::to_hresult());
-        }
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle,
-                                                     VisualElementState,
-                                                     LPCWSTR) noexcept override {
-        return S_OK;
-    }
-};
-
-class Tap : public winrt::implements<Tap, IObjectWithSite, winrt::non_agile> {
-    winrt::com_ptr<IVisualTreeService3> service;
-    winrt::com_ptr<TreeWatcher> watcher;
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) noexcept override {
-        try {
-            if (service && watcher) {
-                service->UnadviseVisualTreeChange(watcher.get());
-                watcher = nullptr;
-                service = nullptr;
-            }
-            if (!site || g_stopping.load()) return S_OK;
-            if (FAILED(site->QueryInterface(__uuidof(IVisualTreeService3),
-                                           service.put_void()))) return E_NOINTERFACE;
-            watcher = winrt::make_self<TreeWatcher>(service.as<IXamlDiagnostics>());
-            struct Work {
-                winrt::com_ptr<IVisualTreeService3> service;
-                winrt::com_ptr<TreeWatcher> watcher;
-            };
-            auto work = new Work{service, watcher};
-            HANDLE thread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
-                auto work = static_cast<Work*>(param);
-                HRESULT hr = work->service->AdviseVisualTreeChange(work->watcher.get());
-                if (FAILED(hr))
-                    Wh_Log(L"AdviseVisualTreeChange failed: 0x%08X", hr);
-                delete work;
-                return 0;
-            }, work, 0, nullptr);
-            if (!thread) {
-                delete work;
-                return HRESULT_FROM_WIN32(GetLastError());
-            }
-            CloseHandle(thread);
-            return S_OK;
-        } catch (...) { return winrt::to_hresult(); }
-    }
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID iid, void** result) noexcept override {
-        if (!result) return E_POINTER;
-        *result = nullptr;
-        return service ? service->QueryInterface(iid, result) : E_FAIL;
-    }
-};
-
-class TapFactory : public winrt::implements<TapFactory, IClassFactory,
-                                              winrt::non_agile> {
-public:
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* outer, REFIID iid,
-                                             void** result) noexcept override {
-        if (!result) return E_POINTER;
-        *result = nullptr;
-        if (outer) return CLASS_E_NOAGGREGATION;
-        try { return winrt::make<Tap>().as(iid, result); }
-        catch (...) { return winrt::to_hresult(); }
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override { return S_OK; }
-};
-} // namespace
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-extern "C" __declspec(dllexport) HRESULT WINAPI DllGetClassObject(
-    REFCLSID clsid, REFIID iid, void** result) {
-    if (!result) return E_POINTER;
-    *result = nullptr;
-    if (clsid != kTapClsid) return CLASS_E_CLASSNOTAVAILABLE;
-    try { return winrt::make<TapFactory>().as(iid, result); }
-    catch (...) { return winrt::to_hresult(); }
+HRESULT __cdecl OnNavigatedTo_Hook(void* self, void* args) {
+    HRESULT result = g_onNavigatedToOriginal(self, args);
+    if (SUCCEEDED(result) && !g_stopping.load()) CapturePageFromInterface(self);
+    return result;
 }
 
-extern "C" __declspec(dllexport) HRESULT WINAPI DllCanUnloadNow() {
-    return S_FALSE;
-}
-#pragma clang diagnostic pop
-
-namespace {
-using InitDiagnostics_t = HRESULT(WINAPI*)(LPCWSTR, DWORD, LPCWSTR,
-                                           LPCWSTR, CLSID, LPCWSTR);
-
-bool StartDiagnostics() {
-    HMODULE xaml = GetModuleHandleW(L"Windows.UI.Xaml.dll");
-    if (!xaml) {
-        Wh_Log(L"System XAML is not loaded; skipping native system-XAML injection");
-        return false;
-    }
-    auto initialize = reinterpret_cast<InitDiagnostics_t>(
-        GetProcAddress(xaml, "InitializeXamlDiagnosticsEx"));
-    if (!initialize) {
-        Wh_Log(L"Windows.UI.Xaml.dll has no InitializeXamlDiagnosticsEx export");
-        return false;
-    }
-
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-        reinterpret_cast<LPCWSTR>(&DllGetClassObject), &self)) {
-        Wh_Log(L"Cannot pin the XAML tap module: %lu", GetLastError());
-        return false;
-    }
-    // XAML diagnostics may keep native callback pointers for the lifetime of
-    // Taskmgr.exe. Pinning avoids use-after-free after mod recompilation.
-    WCHAR tapPath[MAX_PATH]{};
-    if (!GetModuleFileNameW(self, tapPath, ARRAYSIZE(tapPath))) return false;
-
-    HRESULT hr = E_FAIL;
-    for (int i = 1; i <= 512 && !g_stopping.load(); ++i) {
-        WCHAR endpoint[80]{};
-        swprintf(endpoint, ARRAYSIZE(endpoint), L"VisualDiagConnection%d", i);
-        // For system XAML, use a null diagnostics DLL path, as in the
-        // original Windhawk XAML visual tree monitoring reference.
-        hr = initialize(endpoint, GetCurrentProcessId(), nullptr,
-                        tapPath, kTapClsid, nullptr);
-        if (SUCCEEDED(hr)) {
-            Wh_Log(L"System XAML diagnostics connected: %s", endpoint);
-            return true;
-        }
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) break;
-    }
-    Wh_Log(L"System XAML diagnostics connection failed: 0x%08X", hr);
-    return false;
-}
-
-DWORD WINAPI InitThread(LPVOID) {
-    // Task Manager can load XAML after injection, so retry briefly.
-    for (int i = 0; i < 60 && !g_stopping.load(); ++i) {
-        if (GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
-            StartDiagnostics();
-            return 0;
-        }
-        Sleep(250);
-    }
-    if (!g_stopping.load()) {
-        Wh_Log(L"No Windows.UI.Xaml.dll after 15s; system-XAML integration unavailable on this Task Manager build");
-    }
-    return 0;
-}
 } // namespace
 
 BOOL Wh_ModInit() {
     g_stopping = false;
     g_paused = false;
+    g_insertions = 0;
+    g_cleanupFailures = 0;
+    g_dispatchMsg = RegisterWindowMessageW(
+        L"Windhawk.TaskManagerPauseButton.SynchronousUI");
+    if (!g_dispatchMsg || !FindTaskManagerRange()) return FALSE;
+
+    HMODULE host = GetModuleHandleW(nullptr);
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{kOnNavigatedToSymbol}, &g_onNavigatedToOriginal, OnNavigatedTo_Hook},
+    };
+    if (!WindhawkUtils::HookSymbols(host, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"[TMPB] Page navigation symbol unavailable. No UI was changed.");
+        return FALSE;
+    }
+
+    // Restrict Ctrl simulation to the single API observed in the tested build,
+    // with a return-address check for calls from Taskmgr.exe itself.
     if (!Wh_SetFunctionHook(reinterpret_cast<void*>(GetKeyState),
-                            reinterpret_cast<void*>(GetKeyState_Hook),
-                            reinterpret_cast<void**>(&g_originalGetKeyState))) return FALSE;
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(GetAsyncKeyState),
-                            reinterpret_cast<void*>(GetAsyncKeyState_Hook),
-                            reinterpret_cast<void**>(&g_originalGetAsyncKeyState))) return FALSE;
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(GetKeyboardState),
-                            reinterpret_cast<void*>(GetKeyboardState_Hook),
-                            reinterpret_cast<void**>(&g_originalGetKeyboardState))) return FALSE;
-    HANDLE thread = CreateThread(nullptr, 0, InitThread, nullptr, 0, nullptr);
-    if (thread) CloseHandle(thread);
-    return thread != nullptr;
+        reinterpret_cast<void*>(GetKeyState_Hook),
+        reinterpret_cast<void**>(&g_getKeyOriginal))) return FALSE;
+
+    Wh_Log(L"[TMPB] Ready: navigation hook and minimal button Click callback.");
+    return TRUE;
+}
+
+void Wh_ModBeforeUninit() {
+    g_stopping.store(true, std::memory_order_release);
+    g_paused.store(false, std::memory_order_release);
 }
 
 void Wh_ModUninit() {
-    g_stopping = true;
-    g_paused = false;
-    std::vector<Entry> entries;
-    {
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-        entries.swap(g_entries);
-    }
-    for (auto const& entry : entries) {
-        if (entry.threadId == GetCurrentThreadId()) {
-            RemoveEntry(entry);
-        } else if (entry.dispatcher) {
-            try {
-                // The tap DLL remains pinned while a diagnostics watcher exists.
-                // Do not block the unload thread waiting for the XAML UI loop.
-                entry.dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
-                    [entry] { RemoveEntry(entry); });
-            } catch (...) {
-                // The Task Manager window may already be closing.
+    g_stopping.store(true, std::memory_order_release);
+    g_paused.store(false, std::memory_order_release);
+    auto threads = KnownThreads();
+    unsigned terminatedThreads = 0;
+    for (auto threadId : threads) {
+        unsigned attempts = 0;
+        while (HasEntriesForThread(threadId)) {
+            if (UiThreadTerminated(threadId)) {
+                // Events from a terminated XAML thread can never fire again.
+                ForgetTerminatedThread(threadId);
+                ++terminatedThreads;
+                break;
             }
+            RunOnUiThread(threadId, RemoveThreadButtonsAndEvents);
+            if (!HasEntriesForThread(threadId)) break;
+            if (++attempts % 4 == 0) {
+                Wh_Log(L"[TMPB] Waiting for safe UI cleanup thread=%lu attempts=%u; close a hung Task Manager",
+                       threadId, attempts);
+            }
+            Sleep(250);
         }
     }
+    Wh_Log(L"[TMPB] Uninit finished: inserted=%u terminatedThreads=%u cleanupErrors=%u",
+           g_insertions.load(), terminatedThreads, g_cleanupFailures.load());
 }
