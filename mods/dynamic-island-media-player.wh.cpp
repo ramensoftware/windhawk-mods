@@ -34,7 +34,7 @@ copies or substantial portions of the Software.
 
 ![Dynamic Island Preview](https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png)
 
-A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 10/11. 
+A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 11. 
 
 This mod is a specialized, lightweight adaptation of the incredible **[Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows)**. It strips away the extra dashboard modules (weather, hardware monitor, etc.) to focus purely on delivering the ultimate media player experience with zero bloat.
 
@@ -44,6 +44,10 @@ This mod is a specialized, lightweight adaptation of the incredible **[Dynamic I
 - **Optimized Rendering:** Hybrid event-driven architecture with intelligent sleep throttling guarantees ultra-low CPU/GPU consumption.
 - **Per-App Dynamic Screen Positioning:** Supports saving unique screen positions on a per-application basis.
 - **Trilingual Localized UI (UA / RU / EN):** Full native support for Ukrainian, Russian, and English.
+
+## Credits & Acknowledgements
+- **Himanshu (devcode90)** - For the original Dynamic Island for Windows framework, rendering physics, and core UI design.
+- **BOG090909** - Standalone media player adaptation, custom app-positioning logic, multilingual support, and optimization.
 */
 // ==/WindhawkModReadme==
 
