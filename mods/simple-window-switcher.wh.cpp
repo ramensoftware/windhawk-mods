@@ -1557,6 +1557,9 @@ static void LogInvalidUwpThumbnailSource(HWND hWnd, HTHUMBNAIL hThumb,
                                          PCWSTR phase);
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
+// Dock: the pointer is over the central preview of g_hoverIndex, not over its
+// icon entry. The close button belongs to the icon entry, so it stays hidden.
+static bool g_hoverDockPreviewOnly = false;
 static int g_hoverThumbIndex = -1;
 static bool g_isPaginatedView = false;
 static bool g_isDryRunLayout = false;
@@ -4572,7 +4575,7 @@ static void UpdateMicrointeractionTargets() {
                              !g_windows[i].isDesktopItem && !IsWindowTruncated(i))
                                 ? 1.0f
                                 : 0.0f;
-        if (DockLayoutActive() && DockCloseButtonIsHidden()) targetAlpha = 0.0f;
+        if (DockLayoutActive() && (DockCloseButtonIsHidden() || g_hoverDockPreviewOnly)) targetAlpha = 0.0f;
         UpdateCloseButtonMotionTarget(w, targetAlpha);
         float targetScale = (ThumbnailHoverIsZoom() && i == g_hoverThumbIndex && !IsWindowTruncated(i)) ?
                                 (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
@@ -16303,10 +16306,12 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     // Entry hover (for close button, selection, card hover)
     int entryIdx = (cDir != 0) ? -1 : HitTest(x, y);
+    bool dockPreviewOnly = false;
     if (DockLayoutActive() && entryIdx < 0 && DockShowPreview() && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
         POINT pt = { x, y };
         if (PtInRect(&g_rcCentralPreview, pt)) {
             entryIdx = g_selectedIndex;
+            dockPreviewOnly = true;
         }
     }
 
@@ -16318,14 +16323,15 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     bool closeHovered = false;
     if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() &&
-        !g_windows[entryIdx].isDesktopItem && !IsWindowTruncated(entryIdx)) {
+        !g_windows[entryIdx].isDesktopItem && !IsWindowTruncated(entryIdx) && !dockPreviewOnly) {
         if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
             POINT pt = { x, y };
             closeHovered = HitTestCloseButton(g_windows[entryIdx], pt);
         }
     }
 
-    bool entryHoverChanged = (entryIdx != g_hoverIndex || g_hoverWnd != hWnd);
+    bool entryHoverChanged = (entryIdx != g_hoverIndex || g_hoverWnd != hWnd ||
+                              dockPreviewOnly != g_hoverDockPreviewOnly);
     bool thumbHoverChanged = (thumbIdx != g_hoverThumbIndex || g_hoverWnd != hWnd);
     bool closeHoverChanged = (closeHovered != g_isCloseHovered);
 
@@ -16341,6 +16347,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
     if (entryHoverChanged || thumbHoverChanged || closeHoverChanged || rectChanged || chevronHoverChanged) {
         InvalidateStaticCache();
         g_hoverIndex = entryIdx;
+        g_hoverDockPreviewOnly = dockPreviewOnly;
         g_hoverThumbIndex = thumbIdx;
         g_hoverWnd = hWnd;
         g_isCloseHovered = closeHovered;
@@ -16369,12 +16376,12 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             }
             g_animCloseBtnAlpha = (entryIdx >= 0 && entryIdx < (int)g_windows.size() &&
                                    g_settings.showCloseButton && !g_windows[entryIdx].isDesktopItem &&
-                                   !IsWindowTruncated(entryIdx)) ? 1.0f : 0.0f;
+                                   !IsWindowTruncated(entryIdx) && !dockPreviewOnly) ? 1.0f : 0.0f;
             g_animCloseBtnHoverAlpha = (closeHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
             for (int i = 0; i < (int)g_windows.size(); i++) {
                 bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton &&
                                         !g_windows[i].isDesktopItem && !IsWindowTruncated(i));
-                if (DockLayoutActive() && DockCloseButtonIsHidden()) shouldShowClose = false;
+                if (DockLayoutActive() && (DockCloseButtonIsHidden() || dockPreviewOnly)) shouldShowClose = false;
                 SnapCloseButtonMotion(g_windows[i], shouldShowClose ? 1.0f : 0.0f);
                 float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
                 g_windows[i].hoverScale = s;
