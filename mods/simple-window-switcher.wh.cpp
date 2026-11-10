@@ -1479,7 +1479,7 @@ static bool IsNativeAltTabWindow(HWND hWnd) {
         return false;
     }
 
-    // 3. Z-Band check: Alt+Tab is strictly assigned to ZBID_SYSTEM_TOOLS (16)
+    // 3. Z-Band check: Alt+Tab is assigned to ZBID_SYSTEM_TOOLS (16)
     if (!pGetWindowBand) {
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
@@ -4676,9 +4676,10 @@ struct IconAlphaScratch {
 };
 static std::map<int, IconAlphaScratch> s_iconAlphaScratch;
 
-// UI-owned shadow records retain the exact icon allocation, even after its
-// window/cell retires. A draw also holds the record across reentrant cache
-// removal. The bitmap is destroyed before the retained icon is released.
+// UI-owned shadow records keep their icon object alive, even after the window
+// or cell that used it is gone. A draw also holds the record, so it stays valid
+// if a nested callback removes it from the cache. The bitmap is destroyed
+// before the icon it was built from is released.
 struct WindowIconShadow {
     std::shared_ptr<OwnedWindowIcon> owner;
     std::unique_ptr<Gdiplus::Bitmap> bitmap;
@@ -4740,7 +4741,8 @@ static bool EnsureSwsDibSurface(HDC reference, int width, int height,
 }
 
 // Only actual presentation (or the scheduled scroll finish-copy) rebuilds a
-// canvas dirtied by icon results. Clearing first preserves reentrant dirties.
+// canvas dirtied by icon results. The dirty flag is cleared before redrawing, so
+// an icon result that arrives during the redraw marks the canvas dirty again.
 static void RefreshScrollIconCanvas() {
     if (!s_scrollIconCanvasDirty || !s_cachedScrollToDC ||
         s_cachedScrollToW <= 0 || s_cachedScrollToH <= 0) return;
@@ -4869,9 +4871,9 @@ static void StartAnimationTicker() {
         // Keep ordinary waitable-timer/timeout fallbacks accurate, but do not
         // retain a timer-resolution request while the switcher is idle.
         s_animationTimerResolutionOwned = timeBeginPeriod(1) == TIMERR_NOERROR;
-        // Use the cached interval on the animation-critical path. Refresh-rate
-        // maintenance is performed at invocation/display-change boundaries,
-        // never as a synchronous restart cost.
+        // Use the cached frame interval here. The refresh rate is re-read when
+        // the switcher is invoked or the display changes, not when an animation
+        // starts.
         if (g_animPerfFreq.QuadPart == 0) {
             QueryPerformanceFrequency(&g_animPerfFreq);
         }
@@ -6054,7 +6056,7 @@ static void GetResolvedCornerRadiiDIP(int* outStdDIP, int* outSmallDIP) {
         smallDIP = g_systemDwmSmallRadius;
     }
 
-    // Invariant: if standard radius is 0 (square mode), all child elements are strictly 0
+    // If the standard radius is 0 (square corners), the small radius is 0 too.
     if (stdDIP <= 0) {
         stdDIP = 0;
         smallDIP = 0;
@@ -6636,8 +6638,8 @@ static std::map<HWND, PendingCloseRequest> s_pendingCloseRequests;
 static std::vector<HWND> g_mruWindows;
 
 // Resolve popups and owned helper windows to the same Alt+Tab representative
-// used by MRU ordering and initial selection. Keeping this identity canonical
-// prevents a normal window's popup/root mismatch from selecting itself again.
+// used by MRU ordering and initial selection. Using the same window everywhere
+// prevents a popup/root mismatch from selecting a normal window a second time.
 static HWND CanonicalAltTabWindow(HWND hWnd) {
     if (!hWnd || IsSwitcherWindow(hWnd)) return nullptr;
     HWND hTarget = hWnd;
@@ -6837,10 +6839,12 @@ static void ForgetWindowIconShadows(HICON icon) {
     }
 }
 
-// Switcher UI only. Retired snapshots still drawing their icons are live here;
-// once they drop, the next presented frame releases their cache records. The
-// record's strong owner prevents handle reuse before this liveness check, so
-// neither worker releases nor reentrant UI invalidation can leave an ABA key.
+// Switcher UI only. Icons of outgoing snapshots that are still being drawn count
+// as live here; once those snapshots are dropped, the next presented frame
+// releases their cache records. Each record holds a strong reference to its icon
+// object, so the HICON value cannot be reused by a different icon before this
+// check runs. That way neither a worker thread releasing icons nor a nested UI
+// callback can leave a cache key that points at a reused handle.
 static void SweepWindowIconShadows() {
     if (s_iconShadowCache.empty()) return;
     // One contiguous allocation per sweep, rather than one node per live icon.
@@ -7329,7 +7333,7 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
         // Shell cloaked (DWM_CLOAKED_SHELL):
         // In Gaming Full Screen Experience (Xbox Mode) or Tablet Mode, the Windows
         // Shell cloaks background desktop windows on the current desktop.
-        // These are valid open applications and MUST be shown in Alt+Tab!
+        // These are valid open applications and must be shown in Alt+Tab.
         if (g_pVirtualDesktopManager) {
             BOOL onCurrent = FALSE;
             if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hWnd, &onCurrent))) {
@@ -7522,7 +7526,7 @@ static void ClearRawTwoFingerTapOutcome() {
 static DWORD RawTwoFingerTapMouseRemainingMs(ULONGLONG state, ULONGLONG now);
 static void CancelTwoFingerTapDismiss();
 // Settings callbacks run outside the switcher thread. These atomics are the
-// cross-thread source of truth until WM_SWS_SETTINGS_CHANGED reloads the full
+// current values for other threads until WM_SWS_SETTINGS_CHANGED reloads the full
 // UI settings snapshot on the switcher thread.
 static bool TouchpadHandlingEnabled() {
     return g_touchpadGesturesEnabled.load() && !g_touchpadReaderStopping.load();
@@ -10091,7 +10095,7 @@ static void RegisterThumbnails() {
             // the window's visual style including rounded corners on Windows 11.
             // For iconic windows, DWM's default style introduces an extraneous drop shadow
             // halo around the cached thumbnail that spills past rcDestination; setting
-            // RECTSOURCE clips it strictly to rcThumbActual.
+            // RECTSOURCE clips it to rcThumbActual.
             bool needsCrop = (IsIconic(w.hWnd) || g_thumbSourceRects.count(hThumb) ||
                              (w.rcSourceCrop.left != 0 || w.rcSourceCrop.top != 0 ||
                               w.rcSourceCrop.right != w.sourceSize.cx || w.rcSourceCrop.bottom != w.sourceSize.cy))
@@ -10944,9 +10948,10 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     graphics.DrawLine(&xPen, cx + glyphSpan, cy - glyphSpan, cx - glyphSpan, cy + glyphSpan);
 }
 
-// Multi-pass Fluent elevation drop shadow behind a thumbnail. Drawn in the
-// content layer below the DWM thumbnail, producing a subtle, soft ambient
-// feathering with perfectly centered zero-offset distribution (cumulative alpha ~15% dark / ~10% light).
+// Soft drop shadow behind a thumbnail, drawn in the content layer below the
+// DWM thumbnail. It is five stacked black rounded rectangles, each grown by
+// baseSpread on every side (no vertical offset) with a low alpha, so the
+// shadow fades out toward its edge.
 struct ThumbnailShadowPass {
     int baseSpread;     // Outward expansion in base pixels (at 96 DPI)
     BYTE alphaDark;     // Pass alpha for dark mode (0-255)
@@ -11747,8 +11752,8 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
                         gfx.DrawImage(pBmp, x, y, iconSz, iconSz);
                     }
                 }
-                // The local record pins the bitmap and icon through this draw,
-                // even if a reentrant UI callback removes its cache entry.
+                // The local record keeps the bitmap and icon alive through this
+                // draw, even if a nested UI callback removes its cache entry.
             }
         }
         if (iconDim * motionAlpha < 0.99f) {
@@ -16216,7 +16221,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
         }
     }
 
-    // Thumbnail hover (strictly when cursor is over thumbnail itself, or entire card for zoom)
+    // Thumbnail hover: only while the cursor is over the thumbnail itself, or over the whole card when hover zoom is on
     int thumbIdx = (cDir != 0 || !g_settings.showThumbnails) ? -1 : HitTestThumb(x, y);
     if (thumbIdx < 0 && entryIdx >= 0 && g_settings.showThumbnails && !DockLayoutActive() && ThumbnailHoverIsZoom()) {
         thumbIdx = entryIdx;
@@ -18720,7 +18725,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (wParam == SWS_ALT_POLL_TIMER_ID) {
             if (g_isTouchpadGestureActive && !s_altSessionOwner) {
-                return 0; // Physical Alt key polling strictly disabled during touchpad gestures
+                return 0; // Physical Alt key polling is skipped during touchpad gestures
             }
             if (g_isPendingShow && g_keyboardPendingForegroundHandoff &&
                 g_keyboardPendingAltRelease &&
