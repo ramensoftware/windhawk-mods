@@ -899,6 +899,7 @@ BOOL Wh_ModInit() {
     HMODULE host = GetModuleHandleW(nullptr);
     // Resolve the known working entry point independently. Optional page
     // hooks must never prevent the Processes button from working.
+    // Taskmgr.exe
     WindhawkUtils::SYMBOL_HOOK processesHook[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
          &g_processesToOriginal, ProcessesNavigatedTo_Hook},
@@ -913,6 +914,7 @@ BOOL Wh_ModInit() {
 
     // Each optional hook has its own symbol resolution and failure handling.
     // A missing or unhookable optional symbol is not a fatal error.
+    // Taskmgr.exe
     WindhawkUtils::SYMBOL_HOOK detailsHook[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
          &g_detailsToOriginal, DetailsNavigatedTo_Hook, true},
@@ -921,6 +923,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Optional DetailsPage::OnNavigatedTo: call=%s symbol=%s",
            detailsOk ? L"ok" : L"failed", g_detailsToOriginal ? L"found" : L"missing");
 
+    // Taskmgr.exe
     WindhawkUtils::SYMBOL_HOOK processesExitHook[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
          &g_processesFromOriginal, ProcessesNavigatedFrom_Hook, true},
@@ -931,6 +934,7 @@ BOOL Wh_ModInit() {
            processesExitOk ? L"ok" : L"failed",
            g_processesFromOriginal ? L"found" : L"missing");
 
+    // Taskmgr.exe
     WindhawkUtils::SYMBOL_HOOK detailsExitHook[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
          &g_detailsFromOriginal, DetailsNavigatedFrom_Hook, true},
