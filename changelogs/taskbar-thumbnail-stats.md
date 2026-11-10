@@ -1,3 +1,9 @@
+## 1.7 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9991c026f4999fc45d962f6ecdc027da47dadacf/mods/taskbar-thumbnail-stats.wh.cpp))
+
+- New "Title at the bottom" option: moves the window name and the close button to a row at the bottom of the thumbnail, closer to the mouse pointer, with configurable top spacing and an optional separator line
+- New "Close button" option: show it only when the mouse is over the thumbnail (Windows default) or always
+- New "Widen small thumbnails to fit the line" option: thumbnails of small windows are made wide enough to show the whole line instead of shortening it with "…"
+
 ## 1.6 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7c0eb2df5fdc4a39f3f0fc1065c8d7b2bf50fffd/mods/taskbar-thumbnail-stats.wh.cpp))
 
 * new "Single line" option (on by default)

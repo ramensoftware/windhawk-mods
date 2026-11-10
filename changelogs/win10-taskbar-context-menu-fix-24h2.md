@@ -1,3 +1,7 @@
+## 1.3 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c625b14307c1e1465dab82dc6d657ba2a1cfcc41/mods/win10-taskbar-context-menu-fix-24h2.wh.cpp))
+
+* Fix taskmgr item not working on 26100.1
+
 ## 1.2 ([Mar 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/49305bed9ea78e471a174bc599d3de9d08df0a9a/mods/win10-taskbar-context-menu-fix-24h2.wh.cpp))
 
 Localize locking the taskbar item
