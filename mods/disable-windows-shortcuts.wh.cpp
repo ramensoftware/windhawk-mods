@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.3.0
+// @version         1.3.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -270,6 +270,9 @@ Required only if you use the **"Block hotkey"** option on Special Shortcuts, or 
   - DisableWinShiftS: false
     $name: Win+Shift+S
     $description: Snipping Tool screenshot
+  - DisableWinShiftT: false
+    $name: Win+Shift+T
+    $description: Snipping Tool text extractor (OCR)
   - DisableWinAltK: false
     $name: Win+Alt+K
     $description: Toggle microphone (calls)
@@ -380,6 +383,7 @@ struct Settings
     bool DisableWinSpace;
     bool DisableWinShiftR;
     bool DisableWinShiftS;
+    bool DisableWinShiftT;
     bool DisableWinAltK;
     bool DisableWinPeriod;
     bool DisableWinSemicolon;
@@ -459,6 +463,7 @@ bool StandardShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinShiftM == b.DisableWinShiftM &&
            a.DisableWinShiftR == b.DisableWinShiftR &&
            a.DisableWinShiftS == b.DisableWinShiftS &&
+           a.DisableWinShiftT == b.DisableWinShiftT &&
            a.DisableWinComma == b.DisableWinComma &&
            a.DisableWinPause == b.DisableWinPause &&
            a.DisableWinCtrlD == b.DisableWinCtrlD &&
@@ -571,6 +576,7 @@ void LoadSettings()
     g_settings.DisableWinCtrlS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlS");
     g_settings.DisableWinShiftR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftR");
     g_settings.DisableWinShiftS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftS");
+    g_settings.DisableWinShiftT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftT");
     g_settings.DisableWinAltK = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltK");
     g_settings.DisableWinPeriod = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPeriod");
     g_settings.DisableWinSemicolon = Wh_GetIntSetting(L"StandardShortcuts.DisableWinSemicolon");
@@ -637,6 +643,7 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case 'M': block = g_settings.DisableWinShiftM; break;
                 case 'R': block = g_settings.DisableWinShiftR; break;
                 case 'S': block = g_settings.DisableWinShiftS; break;
+                case 'T': block = g_settings.DisableWinShiftT; break;
                 case VK_LEFT: block = g_settings.DisableWinShiftLeft; break;
                 case VK_RIGHT: block = g_settings.DisableWinShiftRight; break;
                 case VK_UP: block = g_settings.DisableWinShiftUp; break;
