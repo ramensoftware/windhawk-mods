@@ -13005,7 +13005,9 @@ static bool s_twoFingerTapRecoveryPending = false;
 // classifies the gesture; this override prevents Windows from promoting it
 // into a right-click before the raw close command reaches the UI thread.
 static bool s_twoFingerTapRestoreOwned = false;
-static bool s_twoFingerTapOverrideActive = false;
+// Also read by the mouse hook thread: while it is set, Windows produces no
+// promoted right-click, so the hook has nothing to wait for or consume.
+static std::atomic<bool> s_twoFingerTapOverrideActive{false};
 static bool s_twoFingerTapParametersUnavailable = false;
 static DWORD s_twoFingerTapParameterError = ERROR_SUCCESS;
 
@@ -13431,13 +13433,16 @@ static bool SuppressTwoFingerTapMouse(WPARAM message) {
         return true;
     }
     if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load()) return false;
+    // With Windows' two-finger tap turned off, every right-click is physical.
+    if (s_twoFingerTapOverrideActive.load(std::memory_order_acquire)) return false;
     ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
         std::memory_order_acquire);
     DWORD remaining = RawTwoFingerTapMouseRemainingMs(state, now);
     if (!remaining && g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire)) {
-        // The promoted mouse packet can win a few milliseconds over the raw
-        // reader's publication. Wait only on this visible-session path, then
-        // suppress before Windows can move focus to the underlying window.
+        // Only where the live override is unavailable: the promoted mouse
+        // packet can win a few milliseconds over the raw reader's publication.
+        // Wait a bounded time on this visible-session path, then suppress
+        // before Windows can move focus to the underlying window.
         const ULONGLONG waitStart = now;
         const ULONGLONG waitDeadline =
             waitStart + SWS_TOUCHPAD_TWO_FINGER_EVIDENCE_WAIT_MS;
