@@ -32,11 +32,6 @@
   $name: Alternating rows by default
   $description: >-
     Tint every other source line when a text file is previewed.
-- debugLog: false
-  $name: Write a diagnostic log file
-  $description: >-
-    Append diagnostics to %TEMP%\quick-look.log. Leave it off unless you are
-    tracking down a problem: every line is a disk write.
 */
 // ==/WindhawkModSettings==
 
@@ -137,7 +132,6 @@ child of the window instead of a window that follows it.
 | Remember the text preview options | On | Keeps wrap, line numbers, whitespace dots and alternating rows as you left them for the next window or session. |
 | Line numbers by default | Off | The gutter used when the options are not remembered. |
 | Alternating rows by default | Off | The alternating row color used when the options are not remembered. |
-| Write a diagnostic log file | Off | Appends diagnostics to `%TEMP%\quick-look.log`. Off because every line is a disk write. |
 
 ## What each file shows
 
@@ -163,11 +157,11 @@ child of the window instead of a window that follows it.
 
 ## Troubleshooting
 
-- **Space does nothing.** Press **Ctrl + Alt + Shift + L**: it forces the panel toggle and bypasses the
-  focus check. If that opens the panel, the mod is loaded and the focus detection is the blocker.
-- **Something looks wrong.** Enable **Write a diagnostic log file** in the mod settings, reproduce it,
-  and attach `%TEMP%\quick-look.log` to the issue. **F8** dumps the Explorer window tree to the Windhawk
-  log and **Ctrl + Alt + Shift + D** dumps the foreground tree even while the panel is hidden.
+- **Space does nothing.** Space opens the preview only while the file list (or the panel itself) has the
+  focus. Click a file or an empty area of the list and try again. The key is left alone in the address
+  bar, the search box and while a file is being renamed.
+- **Something looks wrong.** Turn on logging for this mod in Windhawk (the mod's **Advanced** tab),
+  reproduce the problem and attach the Windhawk log to the issue.
 - **A document shows only text.** That is by design: modern Office and OpenDocument files are read as
   text, so layout, images and colors are not part of the preview.
 
@@ -197,6 +191,7 @@ Copyright (c) 2026-present David Ravelo.
 #include <shobjidl.h>
 #include <shlguid.h>
 #include <exdisp.h>
+#include <ocidl.h>
 #include <servprov.h>
 #include <oleidl.h>
 #include <commctrl.h>
@@ -208,6 +203,8 @@ Copyright (c) 2026-present David Ravelo.
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -236,60 +233,6 @@ static std::wstring Fmt(const wchar_t* format, ...) {
     buffer[ARRAYSIZE(buffer) - 1] = L'\0';
     va_end(args);
     return buffer;
-}
-
-// Diagnostics are off unless the user enables them: a log line is a disk write,
-// and the log is also called from places that must stay fast.
-static std::atomic<bool> g_debugLog{false};
-
-// Diagnostic log written to %TEMP%\quick-look.log in addition to the Windhawk
-// log. It is the only way to see what happens inside explorer.exe when the
-// mod's UI thread is the thing under test.
-static void QlLog(const wchar_t* format, ...) {
-    if (!g_debugLog.load(std::memory_order_relaxed)) {
-        return;
-    }
-    wchar_t message[2048];
-    va_list args;
-    va_start(args, format);
-    _vsnwprintf(message, ARRAYSIZE(message) - 1, format, args);
-    message[ARRAYSIZE(message) - 1] = L'\0';
-    va_end(args);
-
-    wchar_t line[2200];
-    _snwprintf(line, ARRAYSIZE(line) - 1, L"[%lu] %s",
-               (unsigned long)GetTickCount(), message);
-    line[ARRAYSIZE(line) - 1] = L'\0';
-
-    Wh_Log(L"%s", line);
-
-    wchar_t tempPath[MAX_PATH] = {};
-    DWORD tempLength = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
-    if (!tempLength || tempLength >= ARRAYSIZE(tempPath)) {
-        return;
-    }
-    std::wstring path = tempPath;
-    path += L"quick-look.log";
-
-    HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return;
-    }
-
-    int bytes = WideCharToMultiByte(CP_UTF8, 0, line, -1, nullptr, 0,
-                                    nullptr, nullptr);
-    if (bytes > 1) {
-        std::string utf8(static_cast<size_t>(bytes), '\0');
-        WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8.data(), bytes,
-                            nullptr, nullptr);
-        DWORD written = 0;
-        WriteFile(file, utf8.data(), static_cast<DWORD>(bytes - 1), &written,
-                  nullptr);
-        WriteFile(file, "\r\n", 2, &written, nullptr);
-    }
-    CloseHandle(file);
 }
 
 static UINT GetDpiForWindowSafe(HWND hwnd) {
@@ -347,8 +290,6 @@ static void ReleaseCom(T*& pointer) {
     }
 }
 
-static void DumpExplorerTree(HWND top);
-
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -379,6 +320,12 @@ static const UINT QL_WM_TEXT_LOADED = WM_APP + 21;
 static const UINT QL_WM_IMAGE_LOADED = WM_APP + 22;
 // A worker thread finished probing the selected item.
 static const UINT QL_WM_PROBE_DONE = WM_APP + 23;
+// Messages sent to Explorer's own top-level windows. They are registered at
+// init (RegisterWindowMessageW), so their numbers can never collide with a
+// message Explorer, another mod or a future Windows build already uses.
+static UINT QL_WM_TOGGLE = 0;
+static UINT QL_WM_SETTINGS = 0;
+static UINT QL_WM_CLEANUP = 0;
 
 enum class QlView {
     Details,
@@ -396,6 +343,8 @@ struct FolderEntry {
     HICON smallIcon = nullptr;
     HICON largeIcon = nullptr;
 };
+
+class NavigationEvents;
 
 struct PanelState {
     HWND top = nullptr;
@@ -416,6 +365,14 @@ struct PanelState {
     std::vector<UINT> columnWidths;
     bool columnsSaved = false;
     bool viewChangedLogged = false;
+
+    // The Explorer tab's browser object, and the connection that tells the
+    // panel the moment that tab starts to navigate (item: columns must be given
+    // back before Explorer saves the folder's view settings).
+    IWebBrowser2* webBrowser = nullptr;
+    IConnectionPoint* navPoint = nullptr;
+    DWORD navCookie = 0;
+    NavigationEvents* navEvents = nullptr;
 
     COLORREF background = CLR_INVALID;
     COLORREF text = CLR_INVALID;
@@ -573,11 +530,11 @@ struct PanelState {
 
 static std::map<HWND, PanelState*> g_states;
 static CRITICAL_SECTION g_stateLock;
-static std::atomic<bool> g_anyOpen{false};
-static std::atomic<bool> g_enabled{true};
 // Media Foundation is started once; the video frame fallback needs it.
 static std::atomic<bool> g_mediaFoundation{false};
 static std::atomic<bool> g_unloading{false};
+// Set by Wh_ModUninit: workers stop what they are doing as soon as they see it.
+static std::atomic<bool> g_stopWorkers{false};
 static std::atomic<bool> g_swallowSpaceUp{false};
 static std::atomic<bool> g_reflowColumns{true};
 // Text preview toggles. They live for the session, like the panel width.
@@ -612,6 +569,10 @@ static std::atomic<int> g_panelWidthDip{0};
 static HINSTANCE g_instance = nullptr;
 
 static void LayoutPanelContent(PanelState* state);
+static void CloseState(PanelState* state);
+static void DestroyState(PanelState* state, bool removeFromMap);
+static void ConnectNavigationEvents(PanelState* state);
+static void DisconnectNavigationEvents(PanelState* state);
 static void ClampScroll(PanelState* state);
 static void SyncExplorerBrowser(PanelState* state);
 static void DestroyExplorerBrowser(PanelState* state);
@@ -635,17 +596,28 @@ static bool IsWindows11OrLater();
 static void DrawViewMenuLineGlyph(HDC dc, const RECT& rect, QlView mode,
                                   int iconSize, COLORREF color, UINT dpi);
 
-static void RecomputeAnyOpen() {
+// Top-level windows that have a panel open. The keyboard hook reads this, so
+// Esc is only taken for a window whose own panel is open.
+static std::mutex g_topsMutex;
+static std::set<HWND> g_openTops;
+
+static bool IsTopWithOpenPanel(HWND top) {
+    std::lock_guard<std::mutex> lock(g_topsMutex);
+    return g_openTops.count(top) != 0;
+}
+
+static void RecomputeOpenTops() {
+    std::set<HWND> tops;
     EnterCriticalSection(&g_stateLock);
-    bool any = false;
     for (const auto& entry : g_states) {
         if (entry.second && entry.second->open) {
-            any = true;
-            break;
+            tops.insert(entry.second->top);
         }
     }
     LeaveCriticalSection(&g_stateLock);
-    g_anyOpen = any;
+
+    std::lock_guard<std::mutex> lock(g_topsMutex);
+    g_openTops = std::move(tops);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,7 +710,8 @@ static void EnumerateFolderEntries(
         if (entries.size() >= 5000) {
             break;
         }
-        if ((++counter & 63) == 0 && token && token->load() != generation) {
+        if ((++counter & 63) == 0 &&
+            (g_stopWorkers.load() || (token && token->load() != generation))) {
             break;
         }
 
@@ -2522,60 +2495,80 @@ static bool ReadDocumentContent(const std::wstring& path, std::wstring& raw,
 // ---------------------------------------------------------------------------
 //
 // Explorer's UI thread must never wait for a disk, a network share, a cloud
-// placeholder or a shell extension, so every such call runs on a worker. A
-// worker holds a reference on this module for as long as it runs, so it can
-// never execute code that Windhawk has already unloaded.
+// placeholder or a shell extension, so every such call runs on a worker. The
+// handle of every worker is kept in a list: Wh_ModUninit asks the workers to
+// stop and waits for each one before it returns, so no worker can ever run code
+// of a mod image that Windhawk has already unloaded.
 
 static std::atomic<int> g_activeWorkers{0};
 static const int kMaxActiveWorkers = 12;
 
+static std::mutex g_workersMutex;
+static std::vector<HANDLE> g_workerHandles;
+
 struct WorkerStart {
     LPTHREAD_START_ROUTINE proc;
     void* parameter;
-    HMODULE module;
-    bool counted;
 };
 
 static DWORD WINAPI WorkerTrampoline(void* parameter) {
     WorkerStart start = *static_cast<WorkerStart*>(parameter);
     delete static_cast<WorkerStart*>(parameter);
     start.proc(start.parameter);
-    if (start.counted) {
-        g_activeWorkers--;
-    }
-    if (start.module) {
-        FreeLibraryAndExitThread(start.module, 0);
-    }
+    g_activeWorkers--;
     return 0;
 }
 
-static bool StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter,
-                        HANDLE* outThread = nullptr, bool counted = true) {
-    HMODULE module = nullptr;
-    // Without UNCHANGED_REFCOUNT this takes a reference on the module.
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                       reinterpret_cast<LPCWSTR>(proc), &module);
-    WorkerStart* start = new WorkerStart{proc, parameter, module, counted};
-    if (counted) {
-        g_activeWorkers++;
+// Closes the handles of the workers that already finished. Caller holds
+// g_workersMutex.
+static void PruneFinishedWorkersLocked() {
+    for (auto it = g_workerHandles.begin(); it != g_workerHandles.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_workerHandles.erase(it);
+        } else {
+            ++it;
+        }
     }
+}
+
+static bool StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter) {
+    std::lock_guard<std::mutex> lock(g_workersMutex);
+    if (g_stopWorkers.load()) {
+        return false;
+    }
+    PruneFinishedWorkersLocked();
+
+    WorkerStart* start = new WorkerStart{proc, parameter};
+    g_activeWorkers++;
     HANDLE thread = CreateThread(nullptr, 0, WorkerTrampoline, start, 0, nullptr);
     if (!thread) {
-        if (counted) {
-            g_activeWorkers--;
-        }
-        if (module) {
-            FreeLibrary(module);
-        }
+        g_activeWorkers--;
         delete start;
         return false;
     }
-    if (outThread) {
-        *outThread = thread;
-    } else {
+    g_workerHandles.push_back(thread);
+    return true;
+}
+
+// Called by Wh_ModUninit: no new worker starts, and every running one is
+// cancelled (a blocking file call is interrupted) and waited for.
+static void StopAllWorkers() {
+    std::vector<HANDLE> handles;
+    {
+        std::lock_guard<std::mutex> lock(g_workersMutex);
+        g_stopWorkers = true;
+        handles.swap(g_workerHandles);
+    }
+    for (HANDLE thread : handles) {
+        // The wait has no timeout: returning while a worker still runs would
+        // unmap code it is executing. The cancel is repeated because a worker
+        // can enter a new blocking call after the first one.
+        while (WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
+            CancelSynchronousIo(thread);
+        }
         CloseHandle(thread);
     }
-    return true;
 }
 
 struct TextLoadResult {
@@ -2645,7 +2638,7 @@ static void ApplyTextLoadResult(PanelState* state, TextLoadResult* result) {
     state->textLoading = false;
 
     if (!result->isText) {
-        QlLog(L"text: no text preview for %s", result->path.c_str());
+        Wh_Log(L"text: no text preview for %s", result->path.c_str());
         if (result->document) {
             // Not a document the built-in reader understands: try the Windows
             // preview handler, then the properties view.
@@ -2670,7 +2663,7 @@ static void ApplyTextLoadResult(PanelState* state, TextLoadResult* result) {
     if (state->panel && IsWindow(state->panel)) {
         InvalidateRect(state->panel, nullptr, TRUE);
     }
-    QlLog(L"text: %s bytes=%llu lines=%u encoding=%s",
+    Wh_Log(L"text: %s bytes=%llu lines=%u encoding=%s",
           result->path.c_str(), (unsigned long long)result->bytes,
           (unsigned)state->textLines.size(), result->encoding.c_str());
 }
@@ -3566,12 +3559,6 @@ static void PositionPdfPreview(PanelState* state) {
     state->previewHandler->SetRect(&body);
 }
 
-// Also looks under SystemFileAssociations, where some programs register their
-// preview handler instead of on the extension itself.
-// What went wrong the last time a preview handler failed; shown in the panel
-// so a failure can be reported without turning the log on.
-static std::wstring g_previewDiag;
-
 #ifndef CLSCTX_ACTIVATE_32_BIT_SERVER
 #define CLSCTX_ACTIVATE_32_BIT_SERVER 0x40000
 #endif
@@ -3579,6 +3566,8 @@ static std::wstring g_previewDiag;
 #define CLSCTX_ACTIVATE_64_BIT_SERVER 0x80000
 #endif
 
+// Also looks under SystemFileAssociations, where some programs register their
+// preview handler instead of on the extension itself.
 static bool FindPreviewHandlerClsid(const std::wstring& extension,
                                     CLSID& clsid) {
     // First ask the shell, which is how Explorer itself resolves the handler:
@@ -3680,18 +3669,24 @@ static HRESULT InitializePreviewHandler(IUnknown* unknown,
 // preview pane uses), so the page is rendered by the system and not by this mod.
 // It serves PDFs and every document format a program has registered a handler
 // for (Office, OpenDocument, ...). `extension` includes the leading dot.
+// `diag` (optional) receives what went wrong when the handler fails; it belongs
+// to the caller, so two Explorer windows loading a preview at the same time
+// never share it.
 static bool LoadPdfPreview(PanelState* state,
-                           const std::wstring& extension = L".pdf") {
+                           const std::wstring& extension = L".pdf",
+                           std::wstring* diag = nullptr) {
     if (!state || !state->panel || !IsWindow(state->panel)) {
         return false;
     }
     UnloadPdfPreview(state);
 
-    g_previewDiag.clear();
+    std::wstring localDiag;
+    std::wstring& diagOut = diag ? *diag : localDiag;
+    diagOut.clear();
     CLSID clsid = {};
     if (!FindPreviewHandlerClsid(extension, clsid)) {
-        g_previewDiag = L"no preview handler is registered for " + extension;
-        QlLog(L"preview: no handler registered for %s", extension.c_str());
+        diagOut = L"no preview handler is registered for " + extension;
+        Wh_Log(L"preview: no handler registered for %s", extension.c_str());
         return false;
     }
     wchar_t clsidText[64] = {};
@@ -3700,16 +3695,17 @@ static bool LoadPdfPreview(PanelState* state,
     // A 32-bit Office has its handler in the 32-bit registry view, which a
     // 64-bit Explorer does not see by default: retry asking COM for a 32-bit
     // (then 64-bit) server explicitly.
-    // The handler is created in turn out of process (the surrogate Explorer's
-    // preview pane uses), in process and as a 32-bit server. Each way gets the
-    // full initialization cascade and the first one that accepts the file wins.
+    // The handler is created out of process only (the prevhost.exe surrogate
+    // Explorer's own preview pane uses), then as a 32-bit server. It is never
+    // loaded into explorer.exe: a handler that crashes or hangs must not take
+    // the shell down with it. Each way gets the full initialization cascade and
+    // the first one that accepts the file wins.
     struct CreateAttempt {
         DWORD context;
         const wchar_t* name;
     };
     const CreateAttempt attempts[] = {
         {CLSCTX_LOCAL_SERVER, L"out-of-process"},
-        {CLSCTX_INPROC_SERVER, L"in-process"},
         {CLSCTX_LOCAL_SERVER | CLSCTX_ACTIVATE_32_BIT_SERVER, L"32-bit"},
     };
     IUnknown* unknown = nullptr;
@@ -3722,7 +3718,7 @@ static bool LoadPdfPreview(PanelState* state,
         HRESULT createHr = CoCreateInstance(clsid, nullptr, attempt.context,
                                             IID_IUnknown,
                                             (void**)&candidate);
-        QlLog(L"preview: %s create hr=0x%08lX", attempt.name,
+        Wh_Log(L"preview: %s create hr=0x%08lX", attempt.name,
               (unsigned long)createHr);
         trace += Fmt(L"%s: ", attempt.name);
         if (FAILED(createHr) || !candidate) {
@@ -3742,13 +3738,13 @@ static bool LoadPdfPreview(PanelState* state,
     }
     if (!unknown) {
         if (!created) {
-            g_previewDiag = Fmt(L"cannot create handler %s (0x%08lX)",
+            diagOut = Fmt(L"cannot create handler %s (0x%08lX)",
                                 clsidText, (unsigned long)lastCreate);
         } else {
-            g_previewDiag = Fmt(L"handler %s refused the file (%s)",
+            diagOut = Fmt(L"handler %s refused the file (%s)",
                                 clsidText, trace.c_str());
         }
-        QlLog(L"preview: failed: %s", g_previewDiag.c_str());
+        Wh_Log(L"preview: failed: %s", diagOut.c_str());
         return false;
     }
 
@@ -3775,7 +3771,7 @@ static bool LoadPdfPreview(PanelState* state,
         if (SUCCEEDED(hr)) {
             state->mediaHandler = true;
         } else {
-            g_previewDiag = Fmt(L"handler %s failed to render (0x%08lX)",
+            diagOut = Fmt(L"handler %s failed to render (0x%08lX)",
                                 clsidText, (unsigned long)hr);
             UnloadPdfPreview(state);
         }
@@ -3784,7 +3780,7 @@ static bool LoadPdfPreview(PanelState* state,
     }
 
     unknown->Release();
-    QlLog(L"pdf: handler=%p hr=0x%08lX", (void*)state->previewHandler,
+    Wh_Log(L"pdf: handler=%p hr=0x%08lX", (void*)state->previewHandler,
           (unsigned long)hr);
     return state->mediaHandler;
 }
@@ -3885,7 +3881,7 @@ static void ApplyImageLoadResult(PanelState* state, ImageLoadResult* result) {
         state->mediaSourceHeight = result->sourceHeight;
         state->mediaBytes = result->bytes;
     }
-    QlLog(L"image: %s bitmap=%p size=%dx%d source=%dx%d", result->path.c_str(),
+    Wh_Log(L"image: %s bitmap=%p size=%dx%d source=%dx%d", result->path.c_str(),
           (void*)state->mediaBitmap, state->mediaWidth, state->mediaHeight,
           state->mediaSourceWidth, state->mediaSourceHeight);
     if (state->panel && IsWindow(state->panel)) {
@@ -4238,7 +4234,8 @@ static void FreeProbeResult(ProbeResult* result) {
 
 static void RunProbe(ProbeResult* result) {
     auto stale = [&]() {
-        return result->token && result->token->load() != result->generation;
+        return g_stopWorkers.load() ||
+               (result->token && result->token->load() != result->generation);
     };
 
     WIN32_FILE_ATTRIBUTE_DATA data = {};
@@ -4298,10 +4295,10 @@ static void RunProbe(ProbeResult* result) {
             if (result->thumbnail) {
                 result->thumbnailWidth = frameWidth;
                 result->thumbnailHeight = frameHeight;
-                QlLog(L"video frame: media foundation %s %dx%d",
+                Wh_Log(L"video frame: media foundation %s %dx%d",
                       result->path.c_str(), frameWidth, frameHeight);
             } else {
-                QlLog(L"video frame: no thumbnail and no decoder for %s",
+                Wh_Log(L"video frame: no thumbnail and no decoder for %s",
                       result->path.c_str());
             }
         }
@@ -4404,11 +4401,11 @@ static void FallbackDocumentPreview(PanelState* state, ULONGLONG size) {
     ShowMediaLoading(state);
     state->mediaPreview = true;
     state->mediaPending = false;
-    if (!LoadPdfPreview(state, L"." + extension)) {
+    std::wstring diag;
+    if (!LoadPdfPreview(state, L"." + extension, &diag)) {
         ClearMediaPreview(state);
         state->propNote =
-            L"No preview is available for this document: " + g_previewDiag +
-            L".";
+            L"No preview is available for this document: " + diag + L".";
     }
 }
 
@@ -4619,101 +4616,16 @@ static void TickSpinner(PanelState* state) {
 }
 
 // ---------------------------------------------------------------------------
-// Cross-thread execution
-// ---------------------------------------------------------------------------
-
-using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
-
-struct RunParam {
-    RunFromWindowThreadProc_t proc;
-    PVOID parameter;
-};
-
-static std::atomic<RunParam*> g_runParam{nullptr};
-static UINT g_runMessage = 0;
-static std::mutex g_runMutex;
-
-static LRESULT CALLBACK RunCallWndProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION) {
-        CWPSTRUCT* cwp = reinterpret_cast<CWPSTRUCT*>(lParam);
-        RunParam* param = g_runParam.load();
-        if (cwp && cwp->message == g_runMessage && param) {
-            param->proc(param->parameter);
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-// Runs `proc` on the thread that owns `hwnd`. The wait is bounded and aborts if
-// that thread is hung, so a stuck window can never stall the caller for good.
-static bool RunFromWindowThread(HWND hwnd, RunFromWindowThreadProc_t proc,
-                                PVOID parameter, DWORD timeoutMs = 5000) {
-    DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
-    if (!threadId) {
-        return false;
-    }
-    if (threadId == GetCurrentThreadId()) {
-        proc(parameter);
-        return true;
-    }
-
-    std::lock_guard<std::mutex> lock(g_runMutex);
-    if (!g_runMessage) {
-        g_runMessage = RegisterWindowMessageW(
-            L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    }
-    if (!g_runMessage) {
-        return false;
-    }
-
-    RunParam param = {proc, parameter};
-    g_runParam = &param;
-
-    HHOOK hook =
-        SetWindowsHookExW(WH_CALLWNDPROC, RunCallWndProc, nullptr, threadId);
-    if (!hook) {
-        g_runParam = nullptr;
-        return false;
-    }
-
-    DWORD_PTR ignored = 0;
-    LRESULT sent = SendMessageTimeoutW(hwnd, g_runMessage, 0, 0,
-                                       SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs,
-                                       &ignored);
-
-    UnhookWindowsHookEx(hook);
-    g_runParam = nullptr;
-    return sent != 0;
-}
-
-// The Explorer windows that already carry the mod's subclass. The keyboard hook
-// consults this instead of installing a subclass itself, because installing one
-// means waiting for the Explorer thread.
-static std::mutex g_topsMutex;
-static std::set<HWND> g_subclassedTops;
-
-static void RegisterTop(HWND hwnd) {
-    std::lock_guard<std::mutex> lock(g_topsMutex);
-    g_subclassedTops.insert(hwnd);
-}
-
-static void UnregisterTop(HWND hwnd) {
-    std::lock_guard<std::mutex> lock(g_topsMutex);
-    g_subclassedTops.erase(hwnd);
-}
-
-static bool IsTopSubclassed(HWND hwnd) {
-    std::lock_guard<std::mutex> lock(g_topsMutex);
-    return g_subclassedTops.count(hwnd) != 0;
-}
-
-// ---------------------------------------------------------------------------
 // Shell view and selection
 // ---------------------------------------------------------------------------
 
-static IShellView* GetActiveShellView(HWND top, HWND* outTab) {
+static IShellView* GetActiveShellView(HWND top, HWND* outTab,
+                                      IWebBrowser2** outBrowser = nullptr) {
     if (outTab) {
         *outTab = nullptr;
+    }
+    if (outBrowser) {
+        *outBrowser = nullptr;
     }
     if (!top) {
         return nullptr;
@@ -4730,7 +4642,7 @@ static IShellView* GetActiveShellView(HWND top, HWND* outTab) {
     HWND activeTab = FindWindowExW(top, nullptr, L"ShellTabWindowClass", nullptr);
     long count = 0;
     shellWindows->get_Count(&count);
-    QlLog(L"view: top=%p activeTab=%p count=%ld", (void*)top,
+    Wh_Log(L"view: top=%p activeTab=%p count=%ld", (void*)top,
           (void*)activeTab, count);
 
     IShellView* result = nullptr;
@@ -4787,6 +4699,10 @@ static IShellView* GetActiveShellView(HWND top, HWND* outTab) {
                         *outTab = tabWindow ? tabWindow
                                             : (activeTab ? activeTab : top);
                     }
+                    if (outBrowser) {
+                        browser->AddRef();
+                        *outBrowser = browser;
+                    }
                 }
             }
         }
@@ -4798,7 +4714,7 @@ static IShellView* GetActiveShellView(HWND top, HWND* outTab) {
     }
 
     ReleaseCom(shellWindows);
-    QlLog(L"view result: top=%p result=%p tab=%p", (void*)top,
+    Wh_Log(L"view result: top=%p result=%p tab=%p", (void*)top,
           (void*)result, (void*)(outTab ? *outTab : nullptr));
     return result;
 }
@@ -4961,10 +4877,10 @@ static void OpenPathExternally(PanelState* state, const std::wstring& path) {
                    (attributes & FILE_ATTRIBUTE_DIRECTORY);
     }
     if (isFolder) {
-        QlLog(L"open folder properties: %s", path.c_str());
+        Wh_Log(L"open folder properties: %s", path.c_str());
         SHObjectProperties(state->panel, SHOP_FILEPATH, path.c_str(), nullptr);
     } else {
-        QlLog(L"open file: %s", path.c_str());
+        Wh_Log(L"open file: %s", path.c_str());
         ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
                       SW_SHOWNORMAL);
     }
@@ -5059,7 +4975,7 @@ static void EnsureBrowserListSubclass(PanelState* state) {
     state->browserListWnd = best;
     SetWindowSubclass(best, BrowserListSubclassProc, 4,
                       reinterpret_cast<DWORD_PTR>(state));
-    QlLog(L"browser list subclass: hwnd=%p class=%s", (void*)best,
+    Wh_Log(L"browser list subclass: hwnd=%p class=%s", (void*)best,
           ClassNameOf(best).c_str());
 }
 
@@ -5085,7 +5001,7 @@ static void ApplyBrowserViewMode(PanelState* state) {
 
     folderView->SetViewModeAndIconSize(mode, iconSize);
     ReleaseCom(folderView);
-    QlLog(L"browser view mode: %d icon=%d", (int)mode, iconSize);
+    Wh_Log(L"browser view mode: %d icon=%d", (int)mode, iconSize);
 }
 
 static void ReleaseBrowserColumns(PanelState* state) {
@@ -5174,7 +5090,7 @@ static bool SaveBrowserColumns(PanelState* state) {
     state->browserColumnWidths = std::move(widths);
     state->browserColumnsSaved = true;
 
-    QlLog(L"browser columns saved: count=%u valid=%u", count, valid);
+    Wh_Log(L"browser columns saved: count=%u valid=%u", count, valid);
     return true;
 }
 
@@ -5312,7 +5228,7 @@ static void ScaleBrowserColumns(PanelState* state) {
             state->browserColumnKeys[i], &info);
     }
 
-    QlLog(L"browser columns fitted: client=%d available=%d name=%d others=%lld count=%u window=%p class=%s",
+    Wh_Log(L"browser columns fitted: client=%d available=%d name=%d others=%lld count=%u window=%p class=%s",
           clientWidth, available, widths[nameIndex], othersTotal,
           (unsigned)count, (void*)targetWindow,
           ClassNameOf(targetWindow).c_str());
@@ -5338,7 +5254,7 @@ static void RestoreBrowserColumns(PanelState* state) {
         state->browserColumnManager->SetColumnInfo(
             state->browserColumnKeys[i], &info);
     }
-    QlLog(L"browser columns restored");
+    Wh_Log(L"browser columns restored");
     ReleaseBrowserColumns(state);
 }
 
@@ -5387,7 +5303,7 @@ static bool RemoveBorderStyles(HWND hwnd, bool force) {
         SetWindowLongW(hwnd, GWL_EXSTYLE, newExStyle);
     }
     if (changed) {
-        QlLog(L"border removed: hwnd=%p class=%s style=%08lX->%08lX ex=%08lX->%08lX",
+        Wh_Log(L"border removed: hwnd=%p class=%s style=%08lX->%08lX ex=%08lX->%08lX",
               (void*)hwnd, ClassNameOf(hwnd).c_str(), (unsigned long)style,
               (unsigned long)newStyle, (unsigned long)exStyle,
               (unsigned long)newExStyle);
@@ -5519,7 +5435,7 @@ static void FitBrowserOverflow(PanelState* state) {
     state->browserExtraReserve =
         std::min(Scale(160, dpi),
                  state->browserExtraReserve + overflow + Scale(2, dpi));
-    QlLog(L"browser overflow: %d px, extra reserve now %d (attempt %d)",
+    Wh_Log(L"browser overflow: %d px, extra reserve now %d (attempt %d)",
           overflow, state->browserExtraReserve, state->browserFitAttempts);
     ScaleBrowserColumns(state);
 }
@@ -5777,7 +5693,7 @@ static void PumpResultsItems(PanelState* state) {
     } else {
         state->resultsPending.clear();
         state->resultsPendingPos = 0;
-        QlLog(L"results folder: items=%u", (unsigned)state->filtered.size());
+        Wh_Log(L"results folder: items=%u", (unsigned)state->filtered.size());
         ScheduleThemeBrowserView(state);
         ArmBrowserSettle(state);
     }
@@ -5802,7 +5718,7 @@ static void FillResults(PanelState* state) {
     HRESULT hr = state->explorerBrowser->FillFromObject(items, EBF_NODROPTARGET);
     ReleaseCom(items);
     state->resultsMode = SUCCEEDED(hr);
-    QlLog(L"results folder: fill hr=0x%08lX filtered=%u seeded=%d",
+    Wh_Log(L"results folder: fill hr=0x%08lX filtered=%u seeded=%d",
           (unsigned long)hr, (unsigned)state->filtered.size(), seeded ? 1 : 0);
 
     if (SUCCEEDED(hr) && seeded) {
@@ -5868,7 +5784,7 @@ static void ApplyBrowserFilter(PanelState* state) {
         RecreateBrowser(state, false);
         SyncExplorerBrowser(state);
         ArmBrowserSettle(state);
-        QlLog(L"results folder: back to the folder view");
+        Wh_Log(L"results folder: back to the folder view");
         return;
     }
 
@@ -5910,7 +5826,7 @@ static void OnBrowserViewCreated(PanelState* state, IShellView* view) {
     state->browserViewWnd = viewWindow;
     state->browserListWnd = nullptr;
 
-    QlLog(L"browser view created: view=%p window=%p class=%s", (void*)view,
+    Wh_Log(L"browser view created: view=%p window=%p class=%s", (void*)view,
           (void*)viewWindow, ClassNameOf(viewWindow).c_str());
 
     state->browserThemed = false;
@@ -6009,7 +5925,7 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
         // This panel is a preview, never a navigator. The navigation is
         // cancelled. A folder turns the request into an open, so it shows its
         // Properties instead of being entered; an archive just stays put.
-        QlLog(L"navigation blocked: %s (root=%s)", target.c_str(),
+        Wh_Log(L"navigation blocked: %s (root=%s)", target.c_str(),
               state_->browserPath.c_str());
         if (!state_->archivePreview) {
             RequestOpenPath(state_, target);
@@ -6036,7 +5952,7 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
 
     HRESULT STDMETHODCALLTYPE OnNavigationFailed(
         PCIDLIST_ABSOLUTE) override {
-        QlLog(L"browser navigation failed");
+        Wh_Log(L"browser navigation failed");
         return S_OK;
     }
 
@@ -6167,7 +6083,7 @@ static bool EnsureExplorerBrowser(PanelState* state) {
                                       CLSCTX_INPROC_SERVER,
                                       IID_IExplorerBrowser, (void**)&browser);
         if (FAILED(hr) || !browser) {
-            QlLog(L"browser create failed: 0x%08X", (unsigned)hr);
+            Wh_Log(L"browser create failed: 0x%08X", (unsigned)hr);
             return false;
         }
 
@@ -6178,7 +6094,7 @@ static bool EnsureExplorerBrowser(PanelState* state) {
 
         hr = browser->Initialize(state->panel, &rect, &settings);
         if (FAILED(hr)) {
-            QlLog(L"browser initialize failed: 0x%08X", (unsigned)hr);
+            Wh_Log(L"browser initialize failed: 0x%08X", (unsigned)hr);
             browser->Release();
             return false;
         }
@@ -6195,7 +6111,7 @@ static bool EnsureExplorerBrowser(PanelState* state) {
 
         state->explorerBrowser = browser;
         RemoveBrowserBorders(state, true);
-        QlLog(L"browser created: browser=%p", (void*)browser);
+        Wh_Log(L"browser created: browser=%p", (void*)browser);
     }
 
     return true;
@@ -6291,7 +6207,7 @@ static void SyncExplorerBrowser(PanelState* state) {
             state->explorerBrowser->BrowseToObject(item, 0);
             ReleaseCom(item);
         } else {
-            QlLog(L"browser browse failed: %s", state->folderPath.c_str());
+            Wh_Log(L"browser browse failed: %s", state->folderPath.c_str());
         }
     }
     ApplyBrowserFilter(state);
@@ -6309,10 +6225,10 @@ static void RefreshSelection(PanelState* state) {
     HWND viewWindow = nullptr;
     if (FAILED(state->shellView->GetWindow(&viewWindow)) ||
         viewWindow != state->view) {
-        if (!state->viewChangedLogged) {
-            state->viewChangedLogged = true;
-            QlLog(L"selection: view changed, reopen the panel");
-        }
+        // The folder view was replaced: the user navigated somewhere else.
+        // The panel belongs to the old view, so it is closed.
+        Wh_Log(L"selection: view changed, closing the panel");
+        CloseState(state);
         return;
     }
 
@@ -6327,7 +6243,7 @@ static void RefreshSelection(PanelState* state) {
             LayoutPanelContent(state);
         }
         InvalidateRect(state->panel, nullptr, TRUE);
-        QlLog(L"selection: path=%s debug=%s", path.c_str(), debug.c_str());
+        Wh_Log(L"selection: path=%s debug=%s", path.c_str(), debug.c_str());
     }
 
     if (state->explorerBrowser) {
@@ -6827,7 +6743,7 @@ static void UpdatePanelColors(PanelState* state) {
     }
 
     if (counts.empty()) {
-        QlLog(L"colors: no pixels sampled, falling back to system colors");
+        Wh_Log(L"colors: no pixels sampled, falling back to system colors");
         state->background = GetSysColor(COLOR_WINDOW);
         state->text = GetSysColor(COLOR_WINDOWTEXT);
         state->accent = GetUserAccentColor();
@@ -6872,7 +6788,7 @@ static void UpdatePanelColors(PanelState* state) {
     state->accent = accent;
     RefreshFilterBrush(state);
 
-    QlLog(L"colors: bg=%06X text=%06X accent=%06X sysBg=%06X sysText=%06X points=%u bgCount=%d textCount=%d took=%lu",
+    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X sysBg=%06X sysText=%06X points=%u bgCount=%d textCount=%d took=%lu",
           (unsigned)background, (unsigned)text, (unsigned)accent,
           (unsigned)GetSysColor(COLOR_WINDOW),
           (unsigned)GetSysColor(COLOR_WINDOWTEXT),
@@ -7844,7 +7760,7 @@ static bool SaveColumns(PanelState* state, IShellView* shellView) {
     if (FAILED(shellView->QueryInterface(IID_IFolderView2,
                                          (void**)&folderView)) ||
         !folderView) {
-        QlLog(L"columns: no IFolderView2");
+        Wh_Log(L"columns: no IFolderView2");
         return false;
     }
 
@@ -7856,7 +7772,7 @@ static bool SaveColumns(PanelState* state, IShellView* shellView) {
     ReleaseCom(folderView);
 
     if (!details) {
-        QlLog(L"columns: view is not Details");
+        Wh_Log(L"columns: view is not Details");
         return false;
     }
 
@@ -7864,14 +7780,14 @@ static bool SaveColumns(PanelState* state, IShellView* shellView) {
     if (FAILED(shellView->QueryInterface(IID_IColumnManager,
                                          (void**)&columnManager)) ||
         !columnManager) {
-        QlLog(L"columns: no IColumnManager");
+        Wh_Log(L"columns: no IColumnManager");
         return false;
     }
 
     UINT count = 0;
     if (FAILED(columnManager->GetColumnCount(CM_ENUM_VISIBLE, &count)) ||
         count == 0) {
-        QlLog(L"columns: no visible columns");
+        Wh_Log(L"columns: no visible columns");
         ReleaseCom(columnManager);
         return false;
     }
@@ -7879,7 +7795,7 @@ static bool SaveColumns(PanelState* state, IShellView* shellView) {
     std::vector<PROPERTYKEY> keys(count);
     if (FAILED(columnManager->GetColumns(CM_ENUM_VISIBLE, keys.data(),
                                         count))) {
-        QlLog(L"columns: GetColumns failed");
+        Wh_Log(L"columns: GetColumns failed");
         ReleaseCom(columnManager);
         return false;
     }
@@ -7908,7 +7824,7 @@ static bool SaveColumns(PanelState* state, IShellView* shellView) {
     }
 
     if (!validWidths) {
-        QlLog(L"columns: no usable widths");
+        Wh_Log(L"columns: no usable widths");
         ReleaseCom(columnManager);
         return false;
     }
@@ -7919,7 +7835,7 @@ static bool SaveColumns(PanelState* state, IShellView* shellView) {
     state->columnWidths = std::move(widths);
     state->columnsSaved = true;
 
-    QlLog(L"columns saved: count=%u valid=%u took=%lu", count, validWidths,
+    Wh_Log(L"columns saved: count=%u valid=%u took=%lu", count, validWidths,
           (unsigned long)(GetTickCount64() - start));
     return true;
 }
@@ -7962,7 +7878,7 @@ static void ScaleColumns(PanelState* state, int targetWidth, UINT dpi) {
         state->columnManager->SetColumnInfo(state->columnKeys[i], &info);
     }
 
-    QlLog(L"columns scaled: count=%u total=%lld target=%d usable=%d scale=%.3f took=%lu",
+    Wh_Log(L"columns scaled: count=%u total=%lld target=%d usable=%d scale=%.3f took=%lu",
           count, total, targetWidth, usable, scale,
           (unsigned long)(GetTickCount64() - start));
 }
@@ -7982,7 +7898,7 @@ static void RestoreColumns(PanelState* state) {
         state->columnManager->SetColumnInfo(state->columnKeys[i], &info);
     }
 
-    QlLog(L"columns restored: count=%u took=%lu", count,
+    Wh_Log(L"columns restored: count=%u took=%lu", count,
           (unsigned long)(GetTickCount64() - start));
 }
 
@@ -8096,7 +8012,7 @@ static void LayoutState(PanelState* state) {
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     LayoutPanelContent(state);
     if (!state->liveResize)
-        QlLog(L"layout: view=%p parent=%p client=%ld,%ld viewFull=%ld,%ld,%ld,%ld panel=%ld,%ld,%ld,%ld view=%dx%d",
+        Wh_Log(L"layout: view=%p parent=%p client=%ld,%ld viewFull=%ld,%ld,%ld,%ld panel=%ld,%ld,%ld,%ld view=%dx%d",
           (void*)state->view, (void*)state->parent, client.right, client.bottom,
           state->viewFull.left, state->viewFull.top, state->viewFull.right,
           state->viewFull.bottom, panel.left, panel.top, panel.right,
@@ -8158,6 +8074,7 @@ static void CloseState(PanelState* state) {
         return;
     }
     state->open = false;
+    DisconnectNavigationEvents(state);
     state->pendingOpenPath.clear();
     state->loadGeneration++;
     if (state->loadToken) {
@@ -8194,10 +8111,145 @@ static void CloseState(PanelState* state) {
     if (state->view && IsWindow(state->view)) {
         SetFocus(state->view);
     }
-    RecomputeAnyOpen();
-    QlLog(L"closed: tab=%p view=%p", (void*)state->tab, (void*)state->view);
+    RecomputeOpenTops();
     Wh_Log(L"panel closed for tab=%p view=%p", (void*)state->tab,
            (void*)state->view);
+}
+
+// ---------------------------------------------------------------------------
+// Navigation events of the Explorer tab
+// ---------------------------------------------------------------------------
+//
+// With "Shrink columns to fit the panel" the real folder view carries the
+// shrunk column widths while the panel is open, and Explorer saves a folder's
+// widths when it leaves the folder. So the panel listens to the tab's
+// DWebBrowserEvents2::BeforeNavigate2 and closes (which restores the columns)
+// before the navigation starts.
+
+static const IID kDiidWebBrowserEvents2 = {
+    0x34A715A0, 0x6587, 0x11D0, {0x92, 0x4A, 0x00, 0x20, 0xAF, 0xC7, 0xAC, 0x4D}};
+static const DISPID kDispBeforeNavigate2 = 250;
+
+class NavigationEvents final : public IDispatch {
+   public:
+    explicit NavigationEvents(PanelState* state) : state_(state) {}
+
+    void Detach() { state_ = nullptr; }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid,
+                                             void** ppvObject) override {
+        if (!ppvObject) {
+            return E_POINTER;
+        }
+        if (riid == IID_IUnknown || riid == IID_IDispatch ||
+            riid == kDiidWebBrowserEvents2) {
+            *ppvObject = static_cast<IDispatch*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppvObject = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&ref_));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG value = InterlockedDecrement(&ref_);
+        if (!value) {
+            delete this;
+        }
+        return static_cast<ULONG>(value);
+    }
+
+    HRESULT STDMETHODCALLTYPE GetTypeInfoCount(UINT* count) override {
+        if (count) {
+            *count = 0;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetTypeInfo(UINT, LCID, ITypeInfo**) override {
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetIDsOfNames(REFIID, LPOLESTR*, UINT, LCID,
+                                            DISPID*) override {
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE Invoke(DISPID dispIdMember, REFIID, LCID, WORD,
+                                     DISPPARAMS*, VARIANT*, EXCEPINFO*,
+                                     UINT*) override {
+        if (dispIdMember == kDispBeforeNavigate2 && state_ && state_->open) {
+            PanelState* state = state_;
+            // CloseState disconnects this sink; keep it alive until we return.
+            AddRef();
+            Wh_Log(L"navigation starting: closing the panel");
+            CloseState(state);
+            Release();
+        }
+        return S_OK;
+    }
+
+   private:
+    LONG ref_ = 1;
+    PanelState* state_ = nullptr;
+};
+
+static void ConnectNavigationEvents(PanelState* state) {
+    if (!state || !state->webBrowser || state->navPoint) {
+        return;
+    }
+    IConnectionPointContainer* container = nullptr;
+    if (FAILED(state->webBrowser->QueryInterface(
+            IID_IConnectionPointContainer, (void**)&container)) ||
+        !container) {
+        Wh_Log(L"navigation events: no connection point container");
+        return;
+    }
+    IConnectionPoint* point = nullptr;
+    HRESULT hr = container->FindConnectionPoint(kDiidWebBrowserEvents2, &point);
+    container->Release();
+    if (FAILED(hr) || !point) {
+        Wh_Log(L"navigation events: no connection point (0x%08X)",
+               (unsigned)hr);
+        return;
+    }
+    NavigationEvents* sink = new NavigationEvents(state);
+    DWORD cookie = 0;
+    hr = point->Advise(static_cast<IDispatch*>(sink), &cookie);
+    if (FAILED(hr)) {
+        Wh_Log(L"navigation events: advise failed (0x%08X)", (unsigned)hr);
+        sink->Release();
+        point->Release();
+        return;
+    }
+    state->navPoint = point;
+    state->navCookie = cookie;
+    state->navEvents = sink;
+}
+
+static void DisconnectNavigationEvents(PanelState* state) {
+    if (!state) {
+        return;
+    }
+    if (state->navEvents) {
+        state->navEvents->Detach();
+    }
+    if (state->navPoint) {
+        if (state->navCookie) {
+            state->navPoint->Unadvise(state->navCookie);
+        }
+        state->navPoint->Release();
+        state->navPoint = nullptr;
+    }
+    state->navCookie = 0;
+    if (state->navEvents) {
+        state->navEvents->Release();
+        state->navEvents = nullptr;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -8212,13 +8264,23 @@ static LRESULT CALLBACK ParentSubclassProc(HWND hwnd, UINT message,
 
     if (message == WM_SIZE) {
         LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
-        QlLog(L"WM_SIZE: hwnd=%p %ux%u open=%d", (void*)hwnd,
+        Wh_Log(L"WM_SIZE: hwnd=%p %ux%u open=%d", (void*)hwnd,
               (unsigned)LOWORD(lParam), (unsigned)HIWORD(lParam),
               state && state->open ? 1 : 0);
         if (state && state->open) {
             LayoutState(state);
         }
         return result;
+    }
+
+    // The window or tab this state is keyed on is going away: give the columns
+    // back and free everything (browser, preview handler, GDI objects) now,
+    // while the view still exists, instead of keeping it for the whole session.
+    if (message == WM_DESTROY && state && hwnd == state->tab) {
+        Wh_Log(L"window destroyed: freeing the panel state for %p",
+               (void*)hwnd);
+        DestroyState(state, true);
+        return DefSubclassProc(hwnd, message, wParam, lParam);
     }
 
     if (message == WM_NCDESTROY) {
@@ -8430,7 +8492,7 @@ static void ApplyViewSelection(PanelState* state, QlView mode, int iconSize,
         InvalidateRect(state->panel, nullptr, TRUE);
     }
     ArmBrowserSettle(state);
-    QlLog(L"view menu: %s", label ? label : L"");
+    Wh_Log(L"view menu: %s", label ? label : L"");
 }
 
 // The view menu is a small popup window drawn entirely by the mod, so it looks
@@ -8665,15 +8727,7 @@ static LRESULT CALLBACK ViewMenuWndProc(HWND hwnd, UINT message, WPARAM wParam,
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-static void EnsureMenuClass() {
-    static bool registered = false;
-    if (registered) {
-        return;
-    }
-    if (g_menuClass.empty()) {
-        g_menuClass = Fmt(L"QuickLookViewMenu_%p_%u", (void*)g_instance,
-                          (unsigned)GetTickCount64());
-    }
+static bool RegisterMenuClass() {
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.style = CS_DROPSHADOW;
@@ -8684,9 +8738,9 @@ static void EnsureMenuClass() {
     if (!RegisterClassExW(&windowClass) &&
         GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
         Wh_Log(L"RegisterClassExW (menu) failed: %lu", GetLastError());
-        return;
+        return false;
     }
-    registered = true;
+    return true;
 }
 
 static void ShowViewMenu(HWND hwnd, PanelState* state) {
@@ -8697,8 +8751,6 @@ static void ShowViewMenu(HWND hwnd, PanelState* state) {
         CloseViewMenu(state);
         return;
     }
-    EnsureMenuClass();
-
     ViewPopup* popup = new ViewPopup();
     popup->state = state;
     const bool win11 = IsWindows11OrLater();
@@ -8814,7 +8866,7 @@ static void ShowViewMenu(HWND hwnd, PanelState* state) {
         WS_POPUP, point.x, point.y, width, height, owner, nullptr, g_instance,
         popup);
     if (!window) {
-        QlLog(L"view menu create failed: err=%lu", GetLastError());
+        Wh_Log(L"view menu create failed: err=%lu", GetLastError());
         delete popup;
         return;
     }
@@ -9340,16 +9392,9 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-static void EnsurePanelClass() {
-    static bool registered = false;
-    if (registered) {
-        return;
-    }
-    if (g_panelClass.empty()) {
-        g_panelClass = Fmt(L"QuickLookPanel_%p_%u", (void*)g_instance,
-                           (unsigned)GetTickCount64());
-    }
-
+// Registered once, in Wh_ModInit, so there is no lazily initialized state shared
+// between Explorer's window threads.
+static bool RegisterPanelClass() {
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
@@ -9361,14 +9406,44 @@ static void EnsurePanelClass() {
     if (!RegisterClassExW(&windowClass) &&
         GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
         Wh_Log(L"RegisterClassExW failed: %lu", GetLastError());
-        return;
+        return false;
     }
-    registered = true;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
 // Per-window setup
 // ---------------------------------------------------------------------------
+
+// Results that a worker posted to the panel and the panel never got to process
+// would be dropped with the window and leak (a bitmap, a file listing...).
+static void DrainPanelResults(HWND panel) {
+    if (!panel) {
+        return;
+    }
+    MSG message = {};
+    while (PeekMessageW(&message, panel, QL_WM_TEXT_LOADED, QL_WM_PROBE_DONE,
+                        PM_REMOVE | PM_NOYIELD)) {
+        if (message.message == QL_WM_PROBE_DONE) {
+            ProbeResult* result = reinterpret_cast<ProbeResult*>(message.lParam);
+            if (result) {
+                FreeProbeResult(result);
+                delete result;
+            }
+        } else if (message.message == QL_WM_TEXT_LOADED) {
+            delete reinterpret_cast<TextLoadResult*>(message.lParam);
+        } else if (message.message == QL_WM_IMAGE_LOADED) {
+            ImageLoadResult* result =
+                reinterpret_cast<ImageLoadResult*>(message.lParam);
+            if (result) {
+                if (result->bitmap) {
+                    DeleteObject(result->bitmap);
+                }
+                delete result;
+            }
+        }
+    }
+}
 
 static void DestroyState(PanelState* state, bool removeFromMap) {
     if (!state) {
@@ -9379,6 +9454,8 @@ static void DestroyState(PanelState* state, bool removeFromMap) {
         CloseState(state);
     }
     CloseViewMenu(state);
+    DisconnectNavigationEvents(state);
+    ReleaseCom(state->webBrowser);
     DestroyExplorerBrowser(state);
     if (state->columnsSaved) {
         RestoreColumns(state);
@@ -9410,6 +9487,7 @@ static void DestroyState(PanelState* state, bool removeFromMap) {
     ReleaseBackBuffer(state);
     ReleaseCom(state->shellView);
     if (state->panel && IsWindow(state->panel)) {
+        DrainPanelResults(state->panel);
         DestroyWindow(state->panel);
     }
     if (state->parent && IsWindow(state->parent)) {
@@ -9443,16 +9521,18 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
     }
 
     HWND tab = nullptr;
-    IShellView* shellView = GetActiveShellView(top, &tab);
+    IWebBrowser2* webBrowser = nullptr;
+    IShellView* shellView = GetActiveShellView(top, &tab, &webBrowser);
     if (!shellView) {
-        QlLog(L"ensure: no active shell view for top=%p", (void*)top);
+        Wh_Log(L"ensure: no active shell view for top=%p", (void*)top);
         return nullptr;
     }
 
     HWND viewWindow = nullptr;
     shellView->GetWindow(&viewWindow);
     if (!viewWindow) {
-        QlLog(L"ensure: shell view has no window for top=%p", (void*)top);
+        Wh_Log(L"ensure: shell view has no window for top=%p", (void*)top);
+        ReleaseCom(webBrowser);
         shellView->Release();
         return nullptr;
     }
@@ -9461,7 +9541,7 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
     if (!parent) {
         parent = tab ? tab : top;
     }
-    QlLog(L"ensure: top=%p tab=%p view=%p class=%s parent=%p class=%s",
+    Wh_Log(L"ensure: top=%p tab=%p view=%p class=%s parent=%p class=%s",
           (void*)top, (void*)tab, (void*)viewWindow,
           ClassNameOf(viewWindow).c_str(), (void*)parent,
           ClassNameOf(parent).c_str());
@@ -9493,19 +9573,19 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
                         reinterpret_cast<POINT*>(&state->viewFull), 2);
         GetClientRect(parent, &state->parentClient);
 
-        EnsurePanelClass();
         state->panel = CreateWindowExW(
             0, g_panelClass.c_str(), L"",
             WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, 0, 0, 10, 10, parent,
             nullptr, g_instance, state);
         if (!state->panel) {
-            QlLog(L"panel create failed: parent=%p class=%s err=%lu",
+            Wh_Log(L"panel create failed: parent=%p class=%s err=%lu",
                   (void*)parent, ClassNameOf(parent).c_str(), GetLastError());
             delete state;
+            ReleaseCom(webBrowser);
             shellView->Release();
             return nullptr;
         }
-        QlLog(L"panel created: panel=%p parent=%p", (void*)state->panel,
+        Wh_Log(L"panel created: panel=%p parent=%p", (void*)state->panel,
               (void*)parent);
 
         UINT dpi = GetDpiForWindowSafe(state->panel);
@@ -9523,7 +9603,7 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
                          (WPARAM)state->filterFont, TRUE);
             ShowWindow(state->filterEdit, SW_HIDE);
         } else {
-            QlLog(L"filter edit create failed: err=%lu", GetLastError());
+            Wh_Log(L"filter edit create failed: err=%lu", GetLastError());
         }
 
         SetWindowSubclass(parent, ParentSubclassProc, 1, (DWORD_PTR)state);
@@ -9542,6 +9622,8 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
 
     state->path = GetSelectedPath(shellView, &state->debug);
     state->viewChangedLogged = false;
+    ReleaseCom(state->webBrowser);
+    state->webBrowser = webBrowser;
     ReleaseCom(state->shellView);
     state->shellView = shellView;
     shellView->AddRef();
@@ -9554,71 +9636,20 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
 }
 
 // ---------------------------------------------------------------------------
-// Tree dump
-// ---------------------------------------------------------------------------
-
-static BOOL CALLBACK DumpChildProc(HWND child, LPARAM parameter) {
-    int* count = reinterpret_cast<int*>(parameter);
-    if (*count >= 120) {
-        return FALSE;
-    }
-    RECT rect = {};
-    GetWindowRect(child, &rect);
-    wchar_t text[96] = {};
-    GetWindowTextW(child, text, ARRAYSIZE(text));
-    Wh_Log(L"  tree[%d] hwnd=%p class=%s parent=%s visible=%d rect=%d,%d,%d,%d text=%s",
-           (*count)++, child, ClassNameOf(child).c_str(),
-           ClassNameOf(GetParent(child)).c_str(),
-           IsWindowVisible(child) ? 1 : 0, rect.left, rect.top, rect.right,
-           rect.bottom, text);
-    return TRUE;
-}
-
-static void DumpExplorerTree(HWND top) {
-    if (!IsWindow(top)) {
-        Wh_Log(L"dump: no window");
-        return;
-    }
-    RECT rect = {};
-    GetWindowRect(top, &rect);
-    Wh_Log(L"dump: top=%p class=%s rect=%d,%d,%d,%d", (void*)top,
-           ClassNameOf(top).c_str(), rect.left, rect.top, rect.right,
-           rect.bottom);
-
-    DWORD threadId = GetWindowThreadProcessId(top, nullptr);
-    GUITHREADINFO info = {};
-    info.cbSize = sizeof(info);
-    if (GetGUIThreadInfo(threadId, &info)) {
-        Wh_Log(L"dump: focus=%p class=%s", (void*)info.hwndFocus,
-               ClassNameOf(info.hwndFocus).c_str());
-    }
-
-    int count = 0;
-    EnumChildWindows(top, DumpChildProc, reinterpret_cast<LPARAM>(&count));
-    Wh_Log(L"dump: %d child windows", count);
-}
-
-// ---------------------------------------------------------------------------
 // Actions on the Explorer UI thread
 // ---------------------------------------------------------------------------
 
 struct ToggleParam {
     HWND top;
-    int action;  // 0 = toggle, 1 = close, 2 = dump
+    int action;  // 0 = toggle, 1 = close
     bool handled;
     bool open;
 };
 
 static void ToggleOnExplorerThread(ToggleParam* param) {
-    QlLog(L"toggle: action=%d top=%p", param->action, (void*)param->top);
+    Wh_Log(L"toggle: action=%d top=%p", param->action, (void*)param->top);
     if (g_unloading.load()) {
         param->handled = false;
-        return;
-    }
-
-    if (param->action == 2) {
-        DumpExplorerTree(param->top);
-        param->handled = true;
         return;
     }
 
@@ -9628,7 +9659,7 @@ static void ToggleOnExplorerThread(ToggleParam* param) {
     IShellView* activeView = nullptr;
     PanelState* state = EnsureState(param->top, &activeView);
     if (!state) {
-        QlLog(L"toggle: no state, handled=false");
+        Wh_Log(L"toggle: no state, handled=false");
         param->handled = false;
         if (activeView) {
             activeView->Release();
@@ -9638,7 +9669,7 @@ static void ToggleOnExplorerThread(ToggleParam* param) {
         }
         return;
     }
-    QlLog(L"toggle: state=%p open=%d tab=%p view=%p", (void*)state,
+    Wh_Log(L"toggle: state=%p open=%d tab=%p view=%p", (void*)state,
           state->open ? 1 : 0, (void*)state->tab, (void*)state->view);
 
     if (param->action == 0) {
@@ -9653,9 +9684,10 @@ static void ToggleOnExplorerThread(ToggleParam* param) {
                 ResetTextOptionsToDefaults();
             }
             state->open = true;
+            ConnectNavigationEvents(state);
             LayoutState(state);
             LoadSelectedItem(state);
-            RecomputeAnyOpen();
+            RecomputeOpenTops();
             SetTimer(state->panel, QL_TIMER_SELECTION, 120, nullptr);
             Wh_Log(L"panel opened for tab=%p view=%p path=%s",
                    (void*)state->tab, (void*)state->view,
@@ -9676,7 +9708,7 @@ static void ToggleOnExplorerThread(ToggleParam* param) {
     if (uninitialize) {
         CoUninitialize();
     }
-    QlLog(L"toggle done: handled=%d open=%d", param->handled ? 1 : 0,
+    Wh_Log(L"toggle done: handled=%d open=%d", param->handled ? 1 : 0,
           param->open ? 1 : 0);
 }
 
@@ -9685,8 +9717,6 @@ static void ToggleOnExplorerThread(ToggleParam* param) {
 // with RPC_E_CANTCALLOUT_ININPUTSYNCCALL (0x8001010D). The hook therefore posts
 // this message to the Explorer top-level window, and this subclass runs the
 // real work from the normal message loop.
-static const UINT QL_WM_TOGGLE = WM_APP + 10;
-static const UINT QL_WM_SETTINGS = WM_APP + 11;
 
 static void RefreshSettingsOnExplorerThread(HWND top) {
     IShellView* activeView = nullptr;
@@ -9707,14 +9737,15 @@ static void RefreshSettingsOnExplorerThread(HWND top) {
         ResetTextOptionsToDefaults();
     }
     state->open = true;
+    ConnectNavigationEvents(state);
     LayoutState(state);
     LoadSelectedItem(state);
-    RecomputeAnyOpen();
+    RecomputeOpenTops();
     SetTimer(state->panel, QL_TIMER_SELECTION, 120, nullptr);
     if (activeView) {
         activeView->Release();
     }
-    QlLog(L"settings applied: top=%p reflow=%d open=%d", (void*)top,
+    Wh_Log(L"settings applied: top=%p reflow=%d open=%d", (void*)top,
           g_reflowColumns.load() ? 1 : 0, state->open ? 1 : 0);
 }
 
@@ -9734,58 +9765,28 @@ static void RefreshColorsOnExplorerThread(HWND top) {
             InvalidateRect(state->panel, nullptr, TRUE);
         }
     }
-    QlLog(L"colors refreshed: top=%p states=%u", (void*)top,
+    Wh_Log(L"colors refreshed: top=%p states=%u", (void*)top,
           (unsigned)states.size());
 }
 
-static LRESULT CALLBACK TopSubclassProc(HWND hwnd, UINT message,
-                                        WPARAM wParam, LPARAM lParam,
-                                        UINT_PTR subclassId,
-                                        DWORD_PTR referenceData) {
-    if (message == QL_WM_TOGGLE) {
-        QlLog(L"top message: hwnd=%p action=%d", (void*)hwnd, (int)wParam);
-        ToggleParam param = {};
-        param.top = hwnd;
-        param.action = (int)wParam;
-        ToggleOnExplorerThread(&param);
-        return 0;
+// Closes every open panel of a window, which gives the Details columns back.
+static void CloseOpenPanelsOnThread(HWND top) {
+    std::vector<PanelState*> states;
+    EnterCriticalSection(&g_stateLock);
+    for (const auto& entry : g_states) {
+        if (entry.second && entry.second->top == top && entry.second->open) {
+            states.push_back(entry.second);
+        }
     }
+    LeaveCriticalSection(&g_stateLock);
 
-    if (message == QL_WM_SETTINGS) {
-        QlLog(L"top settings: hwnd=%p", (void*)hwnd);
-        RefreshSettingsOnExplorerThread(hwnd);
-        return 0;
-    }
-
-    // 0x0320: the accent / colorization color changed.
-    if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED ||
-        message == WM_SYSCOLORCHANGE || message == 0x0320) {
-        RefreshColorsOnExplorerThread(hwnd);
-    }
-
-    if (message == WM_NCDESTROY) {
-        UnregisterTop(hwnd);
-        RemoveWindowSubclass(hwnd, TopSubclassProc, subclassId);
-    }
-
-    return DefSubclassProc(hwnd, message, wParam, lParam);
-}
-
-static void WINAPI InstallTopSubclassProc(PVOID parameter) {
-    HWND hwnd = reinterpret_cast<HWND>(parameter);
-    if (SetWindowSubclass(hwnd, TopSubclassProc, 3, 0)) {
-        RegisterTop(hwnd);
+    for (PanelState* state : states) {
+        CloseState(state);
     }
 }
 
-static void EnsureTopSubclass(HWND top) {
-    if (top && IsWindow(top)) {
-        RunFromWindowThread(top, InstallTopSubclassProc, top);
-    }
-}
-
-static void WINAPI CleanupOnThread(PVOID parameter) {
-    HWND top = reinterpret_cast<HWND>(parameter);
+// Frees every panel state of a window. Runs on the window's own thread.
+static void DestroyStatesForTop(HWND top) {
     std::vector<PanelState*> states;
 
     EnterCriticalSection(&g_stateLock);
@@ -9803,13 +9804,56 @@ static void WINAPI CleanupOnThread(PVOID parameter) {
     for (PanelState* state : states) {
         DestroyState(state, false);
     }
+    RecomputeOpenTops();
+}
 
-    if (top && IsWindow(top)) {
-        RemoveWindowSubclass(top, TopSubclassProc, 3);
+static LRESULT CALLBACK TopSubclassProc(HWND hwnd, UINT message,
+                                        WPARAM wParam, LPARAM lParam,
+                                        DWORD_PTR referenceData) {
+    if (message == QL_WM_TOGGLE) {
+        Wh_Log(L"top message: hwnd=%p action=%d", (void*)hwnd, (int)wParam);
+        ToggleParam param = {};
+        param.top = hwnd;
+        param.action = (int)wParam;
+        ToggleOnExplorerThread(&param);
+        return 0;
     }
-    UnregisterTop(top);
 
-    RecomputeAnyOpen();
+    if (message == QL_WM_SETTINGS) {
+        Wh_Log(L"top settings: hwnd=%p", (void*)hwnd);
+        RefreshSettingsOnExplorerThread(hwnd);
+        return 0;
+    }
+
+    // Sent by Wh_ModUninit: undo everything the mod did to this window, on this
+    // window's own thread.
+    if (message == QL_WM_CLEANUP) {
+        DestroyStatesForTop(hwnd);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TopSubclassProc);
+        return 0;
+    }
+
+    // 0x0320: the accent / colorization color changed.
+    if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED ||
+        message == WM_SYSCOLORCHANGE || message == 0x0320) {
+        RefreshColorsOnExplorerThread(hwnd);
+    }
+
+    // Closing the window: the Details columns go back to normal before
+    // Explorer saves the folder's view settings.
+    if (message == WM_CLOSE) {
+        CloseOpenPanelsOnThread(hwnd);
+    }
+
+    if (message == WM_DESTROY) {
+        DestroyStatesForTop(hwnd);
+    }
+
+    if (message == WM_NCDESTROY) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TopSubclassProc);
+    }
+
+    return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
 static BOOL CALLBACK EnumExplorerWindowProc(HWND hwnd, LPARAM parameter) {
@@ -9871,18 +9915,15 @@ static bool IsFileViewFocus(HWND top) {
     return false;
 }
 
-// Wakes the maintenance thread, which installs the subclass on Explorer windows
-// that do not have it yet.
-static HANDLE g_maintEvent = nullptr;
-
 // A low-level keyboard hook runs inside the system's input pipeline: while it
 // runs, the keyboard of the whole machine waits. So this callback only reads
 // cheap state and posts messages. It never waits for an Explorer thread, never
 // touches the disk and never logs; if the Explorer window is busy or hung the
-// key is simply handed on.
+// key is simply handed on. It only ever acts on Space and Esc, and only when
+// the foreground window is one of this process's Explorer windows.
 static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
                                              LPARAM lParam) {
-    if (code != HC_ACTION) {
+    if (code != HC_ACTION || g_unloading.load()) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
@@ -9918,34 +9959,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
     lastKey = key->vkCode;
     lastTick = now;
 
-    const bool control = IsPressed(VK_CONTROL);
-    const bool alt = IsPressed(VK_MENU);
-    const bool shift = IsPressed(VK_SHIFT);
-
-    if (key->vkCode == 'Q' && control && alt && shift) {
-        g_enabled = !g_enabled.load();
-        return 1;
-    }
-
-    if ((key->vkCode == 'D' || key->vkCode == 'L') && control && alt && shift) {
-        HWND target = GetForegroundWindow();
-        DWORD targetProcessId = 0;
-        if (target) {
-            GetWindowThreadProcessId(target, &targetProcessId);
-        }
-        if (IsExplorerClass(target) &&
-            targetProcessId == GetCurrentProcessId()) {
-            if (IsTopSubclassed(target)) {
-                PostMessageW(target, QL_WM_TOGGLE, key->vkCode == 'D' ? 2 : 0,
-                             0);
-            } else if (g_maintEvent) {
-                SetEvent(g_maintEvent);
-            }
-        }
-        return 1;
-    }
-
-    if (!g_enabled.load()) {
+    if (key->vkCode != VK_SPACE && key->vkCode != VK_ESCAPE) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
@@ -9960,54 +9974,43 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
-    // A window without the subclass cannot answer, so never swallow a key for
-    // it: wake the maintenance thread and let the key through.
-    if (!IsTopSubclassed(foreground)) {
-        if (g_maintEvent) {
-            SetEvent(g_maintEvent);
-        }
-        g_swallowSpaceUp = false;
-        return CallNextHookEx(nullptr, code, wParam, lParam);
-    }
-
     if (key->vkCode == VK_SPACE) {
+        const bool control = IsPressed(VK_CONTROL);
+        const bool alt = IsPressed(VK_MENU);
+        const bool shift = IsPressed(VK_SHIFT);
         if (control || alt || shift) {
             g_swallowSpaceUp = false;
             return CallNextHookEx(nullptr, code, wParam, lParam);
         }
 
-        bool focus = IsFileViewFocus(foreground);
-
-        if (repeat) {
-            if (focus || g_anyOpen.load()) {
-                g_swallowSpaceUp = true;
-                return 1;
-            }
+        // Only when the file list (or the panel) of this window has the focus:
+        // in the address bar, the search box or a rename edit, Space is typing.
+        if (!IsFileViewFocus(foreground)) {
             g_swallowSpaceUp = false;
             return CallNextHookEx(nullptr, code, wParam, lParam);
         }
 
-        if (focus) {
-            if (PostMessageW(foreground, QL_WM_TOGGLE, 0, 0)) {
-                g_swallowSpaceUp = true;
-                return 1;
-            }
+        if (repeat) {
+            g_swallowSpaceUp = true;
+            return 1;
+        }
+
+        if (PostMessageW(foreground, QL_WM_TOGGLE, 0, 0)) {
+            g_swallowSpaceUp = true;
+            return 1;
         }
 
         g_swallowSpaceUp = false;
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
-    if (key->vkCode == VK_ESCAPE && g_anyOpen.load()) {
+    // Esc: only for the window whose own panel is open, and only when the
+    // focus is on the file list or the panel. A rename, the address bar and the
+    // search box keep their Esc.
+    if (IsTopWithOpenPanel(foreground) && IsFileViewFocus(foreground)) {
         if (PostMessageW(foreground, QL_WM_TOGGLE, 1, 0)) {
             return 1;
         }
-        return CallNextHookEx(nullptr, code, wParam, lParam);
-    }
-
-    if (key->vkCode == VK_F8) {
-        PostMessageW(foreground, QL_WM_TOGGLE, 2, 0);
-        return 1;
     }
 
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -10022,9 +10025,6 @@ static DWORD g_hookThreadId = 0;
 static HHOOK g_keyboardHook = nullptr;
 
 static DWORD WINAPI HookThreadProc(LPVOID) {
-    g_hookThreadId = GetCurrentThreadId();
-    QlLog(L"hook thread start: tid=%u", g_hookThreadId);
-
     HMODULE module = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -10036,10 +10036,10 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     g_keyboardHook =
         SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, module, 0);
     if (!g_keyboardHook) {
-        QlLog(L"hook install failed: err=%lu", GetLastError());
+        Wh_Log(L"hook install failed: err=%lu", GetLastError());
     } else {
-        QlLog(L"hook installed: hook=%p module=%p", (void*)g_keyboardHook,
-              (void*)module);
+        Wh_Log(L"hook installed: hook=%p module=%p", (void*)g_keyboardHook,
+               (void*)module);
     }
 
     MSG message;
@@ -10055,28 +10055,21 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     return 0;
 }
 
-// Installs the subclass on Explorer windows as they appear, off the input path.
-// It waits on an event, so the keyboard hook can wake it the moment a window
-// without the subclass gets a key press.
-static HANDLE g_maintThread = nullptr;
-
-static DWORD WINAPI MaintenanceThreadProc(void*) {
-    while (!g_unloading.load()) {
-        for (HWND window : GetExplorerWindows()) {
-            if (g_unloading.load()) {
-                break;
-            }
-            if (!IsTopSubclassed(window)) {
-                EnsureTopSubclass(window);
-            }
-        }
-        if (g_maintEvent) {
-            WaitForSingleObject(g_maintEvent, 1500);
-        } else {
-            Sleep(1500);
-        }
+// Quits the hook thread and waits for it, however long that takes: the hook
+// callback and the message loop live in this mod's image, so the image must not
+// be unmapped while the thread can still run.
+static void StopHookThread() {
+    if (!g_hookThread) {
+        return;
     }
-    return 0;
+    // WM_QUIT is posted again until the thread is gone: a post made before the
+    // thread created its message queue is lost.
+    while (WaitForSingleObject(g_hookThread, 50) == WAIT_TIMEOUT) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+    g_hookThreadId = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -10084,7 +10077,6 @@ static DWORD WINAPI MaintenanceThreadProc(void*) {
 // ---------------------------------------------------------------------------
 
 static void LoadSettings() {
-    g_debugLog = Wh_GetIntSetting(L"debugLog") != 0;
     g_reflowColumns = Wh_GetIntSetting(L"reflowColumns") != 0;
     g_textRememberOptions = Wh_GetIntSetting(L"textRememberOptions") != 0;
     g_defaultTextLineNumbers = Wh_GetIntSetting(L"textLineNumbers") != 0;
@@ -10100,14 +10092,42 @@ static void LoadSettings() {
     } else {
         ResetTextOptionsToDefaults();
     }
-    QlLog(L"settings: reflowColumns=%d rememberTextOptions=%d numbers=%d zebra=%d",
+    Wh_Log(L"settings: reflowColumns=%d rememberTextOptions=%d numbers=%d zebra=%d",
           g_reflowColumns.load() ? 1 : 0,
           g_textRememberOptions.load() ? 1 : 0,
           g_textLineNumbers.load() ? 1 : 0, g_textZebra.load() ? 1 : 0);
 }
 
+// Explorer windows are subclassed when they are created, so nothing has to
+// look for them afterwards.
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+static CreateWindowExW_t CreateWindowExW_Original;
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                        LPCWSTR lpWindowName, DWORD dwStyle,
+                                        int X, int Y, int nWidth, int nHeight,
+                                        HWND hWndParent, HMENU hMenu,
+                                        HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hwnd || g_unloading.load()) {
+        return hwnd;
+    }
+
+    bool textualClassName =
+        ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (textualClassName && (_wcsicmp(lpClassName, L"CabinetWClass") == 0 ||
+                             _wcsicmp(lpClassName, L"ExploreWClass") == 0)) {
+        Wh_Log(L"Explorer window created: %p", (void*)hwnd);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TopSubclassProc, 0);
+    }
+    return hwnd;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Quick Look initializing");
+    InitializeCriticalSection(&g_stateLock);
     LoadSettings();
     g_panelWidthDip = std::max(0, Wh_GetIntValue(L"panelWidthDip", 0));
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -10116,79 +10136,98 @@ BOOL Wh_ModInit() {
     if (!g_instance) {
         g_instance = GetModuleHandleW(nullptr);
     }
-    RefreshWindowsAccent();
-    // Media Foundation is started once, for the video frame fallback.
-    g_mediaFoundation = SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET));
 
-    g_panelClass = Fmt(L"QuickLookPanel_%p_%u", (void*)g_instance,
-                       (unsigned)GetTickCount64());
-    QlLog(L"init: pid=%u instance=%p panelClass=%s", GetCurrentProcessId(),
-          (void*)g_instance, g_panelClass.c_str());
-
-    InitializeCriticalSection(&g_stateLock);
-
-    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
-    if (!g_hookThread) {
-        Wh_Log(L"CreateThread failed: %lu", GetLastError());
+    QL_WM_TOGGLE = RegisterWindowMessageW(L"QuickLook_Toggle_" WH_MOD_ID);
+    QL_WM_SETTINGS = RegisterWindowMessageW(L"QuickLook_Settings_" WH_MOD_ID);
+    QL_WM_CLEANUP = RegisterWindowMessageW(L"QuickLook_Cleanup_" WH_MOD_ID);
+    if (!QL_WM_TOGGLE || !QL_WM_SETTINGS || !QL_WM_CLEANUP) {
+        Wh_Log(L"RegisterWindowMessageW failed: %lu", GetLastError());
         return FALSE;
     }
 
-    g_maintEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    StartWorker(MaintenanceThreadProc, nullptr, &g_maintThread, false);
+    // Both window classes are registered here, once, before any Explorer
+    // window thread can need them.
+    g_panelClass = Fmt(L"QuickLookPanel_%p_%u", (void*)g_instance,
+                       (unsigned)GetTickCount64());
+    g_menuClass = Fmt(L"QuickLookViewMenu_%p_%u", (void*)g_instance,
+                      (unsigned)GetTickCount64());
+    if (!RegisterPanelClass()) {
+        return FALSE;
+    }
+    if (!RegisterMenuClass()) {
+        UnregisterClassW(g_panelClass.c_str(), g_instance);
+        return FALSE;
+    }
+
+    RefreshWindowsAccent();
+    // Media Foundation is started once, for the video frame fallback.
+    g_mediaFoundation = SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET));
+    Wh_Log(L"init: pid=%u instance=%p panelClass=%s", GetCurrentProcessId(),
+           (void*)g_instance, g_panelClass.c_str());
+
+    if (!Wh_SetFunctionHook((void*)CreateWindowExW,
+                            (void*)CreateWindowExW_Hook,
+                            (void**)&CreateWindowExW_Original)) {
+        Wh_Log(L"Failed to hook CreateWindowExW");
+        return FALSE;
+    }
 
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
+    // The windows that already exist; the ones created from now on are caught by
+    // the CreateWindowExW hook.
     auto windows = GetExplorerWindows();
-    QlLog(L"after init: pid=%u explorer windows=%u", GetCurrentProcessId(),
-          (unsigned)windows.size());
+    Wh_Log(L"after init: pid=%u explorer windows=%u", GetCurrentProcessId(),
+           (unsigned)windows.size());
     for (HWND window : windows) {
-        EnsureTopSubclass(window);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(window, TopSubclassProc,
+                                                      0);
         Wh_Log(L"Explorer window: %p", (void*)window);
     }
+
+    // Started last, so every window that exists can already answer a key.
+    DWORD threadId = 0;
+    g_hookThread =
+        CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &threadId);
+    if (!g_hookThread) {
+        Wh_Log(L"CreateThread failed: %lu", GetLastError());
+        return;
+    }
+    g_hookThreadId = threadId;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    // A registered message: a window without the mod's subclass ignores it.
     for (HWND window : GetExplorerWindows()) {
         PostMessageW(window, QL_WM_SETTINGS, 0, 0);
     }
 }
 
 void Wh_ModUninit() {
-    QlLog(L"uninit: pid=%u", GetCurrentProcessId());
     Wh_Log(L"Quick Look unloading");
     g_unloading = true;
 
-    if (g_hookThreadId) {
-        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-    }
-    if (g_hookThread) {
-        WaitForSingleObject(g_hookThread, 3000);
-        CloseHandle(g_hookThread);
-        g_hookThread = nullptr;
-    }
+    // 1. Nothing can start new work any more: the key hook goes first, then
+    //    every worker is cancelled and waited for.
+    StopHookThread();
+    StopAllWorkers();
 
-    if (g_maintEvent) {
-        SetEvent(g_maintEvent);
-    }
-    if (g_maintThread) {
-        if (WaitForSingleObject(g_maintThread, 4000) == WAIT_OBJECT_0) {
-            CloseHandle(g_maintThread);
-            g_maintThread = nullptr;
-            if (g_maintEvent) {
-                CloseHandle(g_maintEvent);
-                g_maintEvent = nullptr;
-            }
-        }
-    }
-
+    // 2. Every Explorer window undoes what the mod did to it, on its own
+    //    thread. A plain blocking SendMessage: waiting for a busy window is
+    //    better than leaving a subclass behind that would crash Explorer on
+    //    the window's next message.
     for (HWND window : GetExplorerWindows()) {
-        RunFromWindowThread(window, CleanupOnThread, window, 10000);
+        SendMessageW(window, QL_WM_CLEANUP, 0, 0);
     }
 
-    RecomputeAnyOpen();
+    RecomputeOpenTops();
+
+    if (g_mediaFoundation.exchange(false)) {
+        MFShutdown();
+    }
 
     if (g_instance && !g_panelClass.empty()) {
         UnregisterClassW(g_panelClass.c_str(), g_instance);
