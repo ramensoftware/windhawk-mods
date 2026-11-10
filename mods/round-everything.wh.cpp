@@ -36,31 +36,39 @@ Pick a **Theme** and you are done: each one sets everything - the frame, its
 fill, the bevel, the inner shadow, the monitor corners, and the window
 corners, borders and shadows inside `dwm.exe`.
 
-* **Slate** (the default) - a dark solid frame that takes the active window's
-  title-bar color, a soft inner shadow, rounded windows with shadows.
-* **Colored film** - a thin acrylic film in the active window's color, a
-  soft inner shadow, rounded windows with borders.
-* **Frost ink** - a thicker acrylic frame with a lit bevel along its
-  edge, blurred and tinted with the window's color.
-* **Crescents fade** - the acrylic film along the taskbar's edge and the
-  one opposite only; the two sides stay open. Rounded windows with borders.
-* **Modern Windows** - the taskbar's own light or dark acrylic with a fine
-  rim, Windows' 8 px corners on every window, maximized ones bordered.
-* **Rectangular frame** - a square frame in the active window's color with a
-  bright edge line, square windows with borders.
-* **Crescent adaptive** - no frame to speak of: the rounded screen corners in
-  the active window's color, a hairline along them and the taskbar's edge,
+* **Solid** (the default) - a plain solid frame, light or dark with the
+  Windows mode, traced by a fine edge line that follows the mode too;
   rounded windows with borders.
+* **Tape** - a thin, grainy acrylic film, light or dark with the Windows
+  mode, shaded towards its inner edge, a soft inner shadow, rounded windows
+  with borders.
+* **Frost** - a thick frame of frosted glass, blurred and tinted with the
+  active window's color and lit along its edge by the bevel, running along
+  the taskbar's edge too; a deep inner shadow, rounded windows with shadows.
+* **Bleed** - no frame at all: just the rounded screen corners in the
+  active window's color, as if the window bled into them; rounded windows
+  reach right up to them.
+* **Windows** - the taskbar's own light or dark acrylic with a fine
+  rim, Windows' 8 px corners on every window, maximized ones with a border
+  and a shadow.
+* **Eclipse** - no frame to speak of: the rounded screen corners in the
+  active window's color, ringed by an accent-colored line along them and
+  the taskbar's edge; rounded windows with accent borders (black on
+  inactive windows).
+* **Phantom** - no fill at all: an edge line in the accent color traces the
+  rounded screen over a deep inner shadow; rounded windows with accent
+  borders.
 
 The few values worth changing on a theme without leaving it are under
 **Overrides** - frame thickness, screen corner radius, monitor corner radius, frame color and its
 source, fill, work-area inset, window corner radius - each applying only when
-set. **General** (DPI scaling, monitors, battery saver) applies with every theme.
-Everything else in the settings belongs to the **Custom** theme, which uses
-every setting as it is. To start a Custom theme from a ready-made one, apply
-that theme: the mod logs its values as Custom theme settings, in the form
-Windhawk's settings editor takes in its text (YAML) mode - paste them in and
-tweak.
+set. **General** (DPI scaling, monitors, battery saver, rounding apps Windows leaves square) applies with every theme.
+Everything else - the sections named "Custom theme" - belongs to the
+**Custom** theme, which uses those settings as you set them. To start a Custom theme from a ready-made one, apply
+that theme: the mod logs its values, with the General and Overrides groups,
+as the mod's settings in Windhawk's own JSON form (a couple of log rows,
+broken between values) - paste them into the mod's advanced settings, then
+switch the theme to Custom and tweak.
 
 ## How it works
 
@@ -133,7 +141,8 @@ Peek, to learn which window is being peeked.
   is Top Taskbar Bleed's.
 * **Acrylic glass bevel** (off by default) – the frame's inner edge is lit
   as a rounded bevel of acrylic glass: a specular highlight, a Fresnel rim
-  and an edge line in a color of your choice, from one or two lights (one
+  and an edge line in a color of your choice (or the accent color, or a
+  light|dark pair following the Windows mode), from one or two lights (one
   from each side, so both the top and the bottom edge catch a highlight)
   whose directions and strengths, the bevel's width and curvature are
   configurable (an edge shade darkens the acrylic glass towards the edge
@@ -182,7 +191,8 @@ Peek, to learn which window is being peeked.
   it slides out, the frame paints those two corners as well.
 * **Inner shadow** – the frame and the taskbar can cast a soft shadow onto
   the screen content along all four edges of the rounded screen, following
-  its corners, so the screen reads as recessed behind the frame. Blur, color,
+  its corners, so the screen reads as recessed behind the frame. Blur, color
+  (the accent color, or a light|dark pair following the Windows mode, too),
   opacity and offset are configurable (the offset works like a CSS inset
   box-shadow: a positive horizontal offset thickens the shadow on the left
   edge, a positive vertical one on the top edge). The shadow is a
@@ -210,7 +220,14 @@ windows square. With any option of this group on, the mod also runs inside
 corner radius** set, every window that Windows would round - normal, snapped
 or maximized - gets that one radius (0 draws them square; -1 leaves the
 corners to Windows), and maximized windows are rounded too, so they sit in
-the rounded screen like cards. With **Border on maximized windows** and
+the rounded screen like cards. Apps that draw their whole frame themselves,
+which Windows leaves square (Autodesk AutoCAD 2013, Design Review), are
+rounded as well with *Round apps Windows leaves square* (General, on by
+default): DWM's "don't round" for an app window is answered "round"
+(`CTopLevelWindow::GetEffectiveCornerStyle`). Maximized, such a window's
+rectangle hangs past the work area - DWM knows of no invisible borders to
+leave out - so its border and clip are cut to the work area, where its
+content is. With **Border on maximized windows** and
 **Shadow on maximized windows** on - with or without a radius - maximized
 windows also keep the one-pixel
 border Windows drops while a window is maximized, and the topmost one on each
@@ -233,8 +250,9 @@ clip to the stretch, so its corners don't widen with it.
 **Custom border colors** replaces the gray one-pixel border Windows draws
 around every window with colors of your own - one for the active window,
 one for the others - in `#AARRGGBB` form, so the border can be as faint or
-as opaque as you like, or `accent` for the Windows accent color (followed
-within a second as it changes; the explorer.exe part hands it over, since
+as opaque as you like, or `accent` for the Windows accent color - or a light
+and a dark one separated by `|`, following the app mode (both followed
+within a second as they change; the explorer.exe part hands them over, since
 dwm.exe runs under an account of its own whose settings aren't yours). It applies
 in the same border hook to floating, snapped and (with the option above)
 maximized windows; menus, tooltips and windows that hid their own border are
@@ -281,8 +299,15 @@ contributed there; use one mod or the other for window corners, not both.
   as Taskbar auto-hide when maximized, work the same way. The plain layered
   fallback frame stops at the taskbar's strip, so there the wallpaper shows
   while the taskbar is hidden.
+* Apps with a title bar of their own that drop the caption style while
+  maximized (the ArtCraft apps - PhotoCraft and the rest) are sized by
+  Windows to the whole monitor, which the shell takes for a full-screen app
+  (the taskbar drops behind them, Do not disturb turns on). Their own fix
+  for it needs a monitor edge with no reserved space, and the mod reserves
+  all four, so the mod moves such a window back to the work area plus its
+  sizing border; nothing in the app moves.
 * A frame thickness of 0 with a radius gives you just the rounded screen corners
-  against the taskbar (the *Crescent adaptive* theme, give or take a hairline).
+  against the taskbar (the *Eclipse* theme, give or take its accent line).
 
 ## Credits
 
@@ -296,18 +321,18 @@ same license.
 
 // ==WindhawkModSettings==
 /*
-- theme: slate
+- theme: solid
   $name: Theme
-  $description: A ready-made theme sets everything - frame, fill, bevel, shadow, corners, the window corners, borders and shadows inside dwm.exe - and the settings further down are ignored, except the few under "Overrides". Custom uses every setting below as it is.
+  $description: A ready-made theme sets everything - frame, fill, bevel, shadow, corners, the window corners, borders and shadows inside dwm.exe - and the settings further down are ignored, except the few under "Overrides". Custom uses the settings in the sections named "Custom theme", as you set them.
   $options:
-  - slate: Slate - a dark solid frame in the active window's color, soft inner shadow, rounded windows with shadows (the default)
-  - film: Colored film - a thin acrylic film in the active window's color, soft inner shadow, rounded windows with borders
-  - ink: Frost ink - a thicker acrylic frame with a lit bevel along its edge, blurred and tinted with the window's color
-  - fade: Crescents fade - the acrylic film along the taskbar's edge and the opposite one only, the sides open, rounded windows with borders
-  - modern: Modern Windows - the taskbar's own light or dark acrylic with a fine rim, Windows' 8 px corners on every window, maximized ones bordered
-  - rectangle: Rectangular frame - a square frame in the active window's color with a bright edge line, square windows with borders
-  - crescent: Crescent adaptive - no frame to speak of, just the rounded screen corners in the active window's color with a hairline along them and the taskbar's edge, rounded windows with borders
-  - custom: Custom - every setting below, as it is
+  - solid: Solid - a plain solid frame, light or dark with the Windows mode, traced by a fine edge line, rounded windows with borders (the default)
+  - tape: Tape - a thin, grainy acrylic film, light or dark with the Windows mode, shaded towards its inner edge, a soft inner shadow, rounded windows with borders
+  - frost: Frost - a thick frame of frosted glass, blurred and tinted with the active window's color and lit along its edge, running along the taskbar's edge too, a deep inner shadow, rounded windows with shadows
+  - bleed: Bleed - no frame, just the rounded screen corners in the active window's color, as if the window bled into them, rounded windows reaching them
+  - windows: Windows - the taskbar's own light or dark acrylic with a fine rim, Windows' 8 px corners on every window, maximized ones with a border and a shadow
+  - eclipse: Eclipse - no frame to speak of, just the rounded screen corners in the active window's color, ringed by an accent-colored line along them and the taskbar's edge, rounded windows with accent borders
+  - phantom: Phantom - no fill, just the accent-colored edge line around the rounded screen over a deep inner shadow, rounded windows with accent borders
+  - custom: Custom - the settings in the "Custom theme" sections below, as you set them
 - overrides:
   - offset: -1
     $name: Frame thickness (px)
@@ -360,6 +385,9 @@ same license.
   - batterySaverSolid: true
     $name: Solid while battery saver is on
     $description: Like Windows' own acrylic, the acrylic fills turn into the solid fill (the frame color) while battery saver is on, and come back when it is off.
+  - roundSquareApps: true
+    $name: Round apps Windows leaves square
+    $description: Some apps draw their whole frame themselves and Windows leaves their corners square (Autodesk AutoCAD 2013, Design Review). With this on their windows get the window corner radius too, maximized included. Turn it off if an app looks wrong rounded.
   $name: General
   $description: Applies with every theme.
 - frame:
@@ -372,13 +400,13 @@ same license.
   - radius: 28
     $name: Screen corner radius (px)
     $description: Radius of the four corners of the rounded screen, including the two where the frame meets the taskbar.
-  - customColor: "#3C3C3C"
+  - customColor: "#EEEEEE|#1C1C1C"
     $name: Frame color
     $description: "The frame's color - the solid fill, or the acrylic's tint, under the taskbar too. #RRGGBB for one color; several separated by commas for a gradient (#FF0000,#00FF00); a color for light mode and one for dark mode separated by | (#F3F3F3|#202020), each of which can be a gradient (light1,light2|dark1,dark2); `accent` anywhere for the Windows accent color, in a shade that keeps the taskbar's labels readable - darker on a dark taskbar (the shade Windows itself uses for an accent-colored taskbar), lighter on a light one. Empty uses the accent color. A gradient runs through the solid fill and the custom acrylic's tint and luminosity alike; Windows' default keeps its own colors."
   - gradientAngle: 0
     $name: Gradient angle (deg)
     $description: Direction of a gradient frame color - 0 runs left to right, 90 top to bottom, 45 from the top-left corner to the bottom-right one.
-  - colorSource: titlebar
+  - colorSource: custom
     $name: Frame color source
     $description: Where the frame color comes from. "Title bar" replaces the frame color above, on each monitor with a maximized window, with the color of that window's title bar (its fourth row of pixels, as on screen) - the solid fill, the acrylic's tint and luminosity, and the taskbar's background follow it, easing from one color to the next, and the taskbar switches to the light or the dark theme to stay readable on it. Ignored by the Windows' default fill.
     $options:
@@ -402,19 +430,19 @@ same license.
   - blur: 0
     $name: Extra blur (px)
     $description: Blur added on top of what DWM already applies - the backdrop DWM hands to a window is blurred to begin with, about as much as Windows' own acrylic, and there is no sharper one to be had. 0 keeps just DWM's blur; 30 doubles up to the full acrylic softness.
-  - tintOpacity: 0
+  - tintOpacity: 20
     $name: Tint opacity (%)
     $description: How much of the frame color is laid over the blurred content. 0 shows the blur as it is, 100 hides it under the color.
   - luminosityOpacity: 50
     $name: Luminosity opacity (%)
     $description: How much the frame color's brightness replaces the brightness of the blurred content while its hues stay - what keeps Windows' acrylic readable over any wallpaper (it uses 85-96). 0 leaves the content's brightness alone.
-  - saturation: 80
+  - saturation: 100
     $name: Saturation (%)
     $description: Saturation of the blurred content before it is tinted. 100 leaves it alone; Windows' acrylic boosts it to 125.
   - noiseOpacity: 0
     $name: Noise opacity (%)
     $description: Strength of the fine grain laid over the surface (Windows' acrylic uses 2). 0 turns it off.
-  - noiseDensity: 0
+  - noiseDensity: 100
     $name: Noise density (%)
     $description: Share of the pixels that carry a grain.
   $name: Custom theme - custom acrylic values
@@ -423,40 +451,43 @@ same license.
   - enabled: false
     $name: Lit bevel
     $description: Lights the frame along its inner edge as a rounded bevel of acrylic glass - a specular highlight, a Fresnel rim and an edge line - so the frame reads as a thick pane of acrylic glass. Rasterized once with the frame; costs nothing while the screen changes.
-  - width: 8
+  - width: 16
     $name: Bevel width (px)
   - curvature: 20
     $name: Curvature (x0.1)
     $description: Profile of the bevel - 10 is linear, 20 a rounder dome, 5 a sharp lip.
-  - light: 70
+  - light: "70|70"
     $name: Light (%)
-    $description: Strength of the main light. It lights the inner edges that face it - from the top, the screen's bottom edge (and a bottom taskbar's top edge).
+    $description: Strength of the main light. It lights the inner edges that face it - from the top, the screen's bottom edge (and a bottom taskbar's top edge). Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
   - lightAngle: 90
     $name: Light angle (deg)
     $description: 0 lights from the right, 90 from the top, 135 from the top-left.
-  - light2: 70
+  - light2: "100|70"
     $name: Second light (%)
-    $description: Strength of a second light, for the edges the main one can't reach - from below, the screen's top edge (and a top taskbar's bottom edge). 100 lights both edges alike; 0 turns it off.
+    $description: Strength of a second light, for the edges the main one can't reach - from below, the screen's top edge (and a top taskbar's bottom edge). 100 lights both edges alike; 0 turns it off. Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
   - light2Angle: 270
     $name: Second light angle (deg)
-  - specular: 50
+  - specular: "100|30"
     $name: Specular (%)
-  - shininess: 55
+    $description: Strength of the highlight the lights leave on the bevel. Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
+  - shininess: "55|55"
     $name: Specular tightness
-  - fresnel: 50
+    $description: How tight the highlight is (1 to 200; higher is a smaller, sharper highlight). Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
+  - fresnel: "100|100"
     $name: Fresnel rim (%)
-  - edgeLine: 5
+    $description: The bright rim the glass shows where it curves away. Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
+  - edgeLine: "10|100"
     $name: Edge line (%)
-    $description: A thin line right at the inner edge; the percentage is its opacity.
-  - edgeLineColor: "#FFFFFF"
+    $description: A thin line right at the inner edge; the percentage is its opacity. Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
+  - edgeLineColor: "#FFFFFF|#404040"
     $name: Edge line color
-    $description: Hex color (#RRGGBB) of the edge line. White reads as a highlight; a tint of the frame color as a rim.
-  - edgeShade: 80
+    $description: "#RRGGBB, or accent for the Windows accent color; or a light and a dark one separated by | (e.g. '#000000|#FFFFFF'), following the Windows mode. White reads as a highlight; a tint of the frame color as a rim."
+  - edgeShade: "50|30"
     $name: Edge shade (%)
-    $description: Darkens the acrylic glass towards its inner edge.
-  $name: Custom theme - acrylic glass bevel
+    $description: Darkens the acrylic glass towards its inner edge. Or a light and a dark value separated by | (e.g. 70|40), following the Windows mode.
+  $name: Custom theme - bevel
 - innerShadow:
-  - enabled: true
+  - enabled: false
     $name: Inner shadow
     $description: A soft shadow cast by the frame and the taskbar onto the screen content, along all four edges of the rounded screen.
   - blur: 12
@@ -466,7 +497,7 @@ same license.
     $name: Opacity (%)
   - color: "#000000"
     $name: Color
-    $description: Hex color (#RRGGBB).
+    $description: "#RRGGBB, or accent for the Windows accent color; or a light and a dark one separated by | (e.g. '#000000|#202020'), following the Windows mode."
   - offsetX: 0
     $name: Horizontal offset (px)
     $description: Shifts the shadow like a CSS inset box-shadow - a positive value makes it thicker on the left edge and thinner on the right, a negative value the other way round (-60 to 60).
@@ -486,7 +517,7 @@ same license.
   - maximizedShadow: false
     $name: Shadow on maximized windows
     $description: Windows drops a window's drop shadow while it is maximized. With this on, maximized (and snapped) windows keep the drop shadow floating windows have - the topmost one on each monitor, so the shadows of maximized windows stacked on one monitor don't pile up.
-  - maximizedBorder: false
+  - maximizedBorder: true
     $name: Border on maximized windows
     $description: Windows drops a window's one-pixel border while it is maximized. With this on, maximized (and snapped) windows keep the border floating windows have - which suits windows sitting inside the frame.
   - borderColors: false
@@ -494,10 +525,10 @@ same license.
     $description: Color every window's one-pixel border yourself - floating, snapped and maximized windows alike (maximized ones need "Border on maximized windows") - with the two colors below instead of the gray Windows uses. Menus and tooltips are left alone.
   - activeBorderColor: accent
     $name: Active window border color
-    $description: "#AARRGGBB (the first pair is opacity, 00 to FF), #RRGGBB for opaque, or `accent` for the Windows accent color."
+    $description: "#AARRGGBB (the first pair is opacity, 00 to FF), #RRGGBB for opaque, or accent for the Windows accent color; or a light and a dark one separated by | (e.g. '#3C3C3C|accent'), following the app mode."
   - inactiveBorderColor: "#3C3C3C"
     $name: Inactive window border color
-    $description: Same format. Leave empty to use the active color for inactive windows too.
+    $description: Same format, light|dark pairs included. Leave empty to use the active color for inactive windows too.
   $name: Custom theme - windows (DWM)
 */
 // ==/WindhawkModSettings==
@@ -548,6 +579,7 @@ same license.
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -590,6 +622,9 @@ constexpr WCHAR kAccentProp[] = L"RoundEverything_Accent";
 // 0x__RRGGBB, the top byte 0xFF while the option is on and 0x01 while it is
 // off; absent when not known.
 constexpr WCHAR kBorderAccentProp[] = L"RoundEverything_BorderAccent";
+// The user's app mode, for border colors given as a light|dark pair: 1 light,
+// 2 dark (dwm.exe can't read the user's settings either).
+constexpr WCHAR kAppsModeProp[] = L"RoundEverything_AppsMode";
 // Messages to the mod's control window (all handled on the mod's UI thread).
 constexpr UINT kMsgReload = WM_APP + 1;            // settings changed (or anything else
                                                    // that wants a tick now)
@@ -665,7 +700,7 @@ struct Settings {
     bool scaleWithDpi = true;
     COLORREF customColor = RGB(0x3C, 0x3C, 0x3C);  // the frame color (a gradient's average)
     std::vector<COLORREF> fillColors{RGB(0x3C, 0x3C, 0x3C)};  // the gradient's colors, or the one
-    std::wstring colorText = L"#3C3C3C";  // the frame color as given (for the theme YAML)
+    std::wstring colorText = L"#3C3C3C";  // the frame color as given (for the theme export)
     int gradientAngle = 0;                // degrees: 0 left to right, 90 top to bottom
     int colorSource = 0;         // colorSource: 0 custom, 1 the maximized window's title bar
     int opacity = 100;
@@ -690,6 +725,14 @@ struct Settings {
     int fresnel = 50;            // %
     int edgeLine = 5;            // %
     COLORREF edgeLineColor = RGB(255, 255, 255);
+    std::wstring edgeLineText = L"#FFFFFF";   // the edge line color as given
+    // The bevel's strengths as given (a value, or a light|dark pair): light,
+    // light2, specular, shininess, fresnel, edgeLine, edgeShade.
+    std::wstring bevelValueTexts[7];
+    std::wstring shadowColorText = L"#000000";  // the inner shadow color as given
+    // The edge line or shadow color follows the accent, or it or one of the
+    // bevel's strengths the Windows mode (a light|dark pair).
+    bool extraColorsAccent = false, extraColorsMode = false;
     int edgeShade = 80;          // %
     bool shadow = true;
     int shadowBlur = 12;
@@ -941,7 +984,11 @@ struct Bevel {
     int width = 8, curvature = 20;
     int light = 70, lightAngle = 90, light2 = 70, light2Angle = 270;
     int specular = 50, shininess = 55, fresnel = 50;
-    int edgeLine = 5, edgeShade = 80;  // the edge line white
+    int edgeLine = 5, edgeShade = 80;
+    // The edge line color as the setting gives it (light|dark, accent). The
+    // default is the border Windows' taskbar draws with transparency effects
+    // off, light and dark.
+    PCWSTR edgeLineSpec = L"#BEBEBE|#404040";
 };
 struct ThemeDef {
     PCWSTR id;
@@ -959,6 +1006,18 @@ struct ThemeDef {
     int workAreaInset;
     int windowRadius;  // -1 Windows' own corners, 0 square
     bool maximizedShadow, maximizedBorder;
+    int opacity = 100;        // the frame's fill, %
+    int gradientAngle = 0;    // degrees (a one-color frame has none to show)
+    int shadowOpacity = 100;  // the inner shadow's, %
+    // Custom border colors: the accent for the active window, and for the
+    // others this color (#AARRGGBB; the setting's default unless given).
+    bool borderColors = false;
+    uint32_t inactiveBorderArgb = 0xFF3C3C3C;
+    // The frame color as the setting gives it (a light|dark pair, a
+    // gradient, accent), `color` only should it not be read. The default is
+    // the fill of Windows' taskbar with transparency effects off, light and
+    // dark.
+    PCWSTR colorSpec = L"#EEEEEE|#1C1C1C";
 };
 // A bevel reduced to its rim: no lighting, the full Fresnel edge, an edge
 // shade - the minimum width and curvature the settings allow.
@@ -966,51 +1025,73 @@ constexpr Bevel kRimBevel{.enabled = true, .width = 1, .curvature = 1, .light = 
                           .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1,
                           .fresnel = 100, .edgeLine = 0, .edgeShade = 80};
 constexpr ThemeDef kThemes[] = {
-    {.id = L"slate", .offset = 16, .radius = 28, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
-     .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
-     .noiseDensity = 0, .bevel = {}, .shadow = true, .shadowBlur = 12, .monitorCornerRadius = 20,
-     .workAreaInset = 12, .windowRadius = 20, .maximizedShadow = true,
-     .maximizedBorder = false},
-    {.id = L"film", .offset = 16, .radius = 28, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
-     .fill = 1, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
-     .noiseDensity = 0, .bevel = {}, .shadow = true, .shadowBlur = 12, .monitorCornerRadius = 20,
-     .workAreaInset = 12, .windowRadius = 20, .maximizedShadow = false,
-     .maximizedBorder = true},
-    {.id = L"ink", .offset = 20, .radius = 32, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
-     .fill = 1, .blur = 12, .tint = 20, .luminosity = 40, .saturation = 110, .noiseOpacity = 2,
-     .noiseDensity = 100, .bevel = {.enabled = true}, .shadow = true, .shadowBlur = 16,
-     .monitorCornerRadius = 24, .workAreaInset = 12, .windowRadius = 24,
-     .maximizedShadow = true, .maximizedBorder = false},
-    // Only the taskbar's edge and the one opposite carry the frame; the two
-    // between them sit at the screen edge.
-    {.id = L"fade", .offset = 16, .edgeOffset = {-1, 0, -1, 0}, .radius = 20,
-     .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1, .fill = 1, .blur = 0, .tint = 0,
-     .luminosity = 50, .saturation = 80, .noiseOpacity = 0, .noiseDensity = 0, .bevel = {},
-     .shadow = false, .shadowBlur = 12, .monitorCornerRadius = 16,
-     .workAreaInset = 8, .windowRadius = 16, .maximizedShadow = false, .maximizedBorder = true},
-    {.id = L"modern", .offset = 16, .radius = 10, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
-     .fill = 2, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
-     .noiseDensity = 0, .bevel = kRimBevel, .shadow = false, .shadowBlur = 12,
-     .monitorCornerRadius = 0, .workAreaInset = 12, .windowRadius = 8,
-     .maximizedShadow = false, .maximizedBorder = true},
-    {.id = L"rectangle", .offset = 16, .radius = 0, .color = RGB(0x3C, 0x3C, 0x3C),
-     .colorSource = 1, .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80,
-     .noiseOpacity = 0, .noiseDensity = 0,
-     .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
-               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 100,
-               .edgeLine = 50, .edgeShade = 100},
-     .shadow = false, .shadowBlur = 12, .monitorCornerRadius = 0,
-     .workAreaInset = 0, .windowRadius = 0, .maximizedShadow = false, .maximizedBorder = true},
-    // A one-pixel frame inside the bezel ring: the edge line runs along it,
-    // around the rounded screen corners and along the taskbar's edge.
-    {.id = L"crescent", .offset = 1, .radius = 20, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+    // A plain solid frame, light or dark with the Windows mode, traced by a
+    // fine edge line that follows the mode too.
+    {.id = L"solid", .offset = 16, .radius = 28, .color = RGB(0x1C, 0x1C, 0x1C), .colorSource = 0,
      .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
      .noiseDensity = 0,
      .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
                .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 0,
-               .edgeLine = 50, .edgeShade = 0},
-     .shadow = false, .shadowBlur = 12, .monitorCornerRadius = 20,
-     .workAreaInset = 0, .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true},
+               .edgeLine = 100, .edgeShade = 0},
+     .shadow = false, .shadowBlur = 32, .monitorCornerRadius = 20, .workAreaInset = 12,
+     .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true, .shadowOpacity = 50},
+    // An acrylic film with a fine grain, light or dark with the Windows mode,
+    // the bevel reduced to its edge shade: darker towards the inner edge,
+    // like the edge of a tape.
+    {.id = L"tape", .offset = 16, .radius = 28, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 0,
+     .fill = 1, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 4,
+     .noiseDensity = 100,
+     .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 0,
+               .edgeLine = 0, .edgeShade = 80},
+     .shadow = true, .shadowBlur = 8, .monitorCornerRadius = 20, .workAreaInset = 12,
+     .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true, .shadowOpacity = 80},
+    // Frosted glass: blurred and tinted acrylic with the full lit bevel, the
+    // glass running 4 px along the taskbar's edge too.
+    {.id = L"frost", .offset = 20, .edgeOffset = {4, -1, -1, -1}, .radius = 32,
+     .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1, .fill = 1, .blur = 12, .tint = 20,
+     .luminosity = 40, .saturation = 110, .noiseOpacity = 2, .noiseDensity = 100,
+     .bevel = {.enabled = true}, .shadow = true, .shadowBlur = 20, .monitorCornerRadius = 24,
+     .workAreaInset = 12, .windowRadius = 24, .maximizedShadow = true,
+     .maximizedBorder = false},
+    // No frame at all: the rounded screen corners alone, in the active
+    // window's color, as if the window bled into them.
+    {.id = L"bleed", .offset = 0, .radius = 20, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0,
+     .bevel = {.enabled = false, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 0,
+               .edgeLine = 0, .edgeShade = 80},
+     .shadow = false, .shadowBlur = 12, .monitorCornerRadius = 20, .workAreaInset = 0,
+     .windowRadius = 18, .maximizedShadow = false, .maximizedBorder = false},
+    {.id = L"windows", .offset = 16, .radius = 10, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 2, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0, .bevel = kRimBevel, .shadow = false, .shadowBlur = 16,
+     .monitorCornerRadius = 0, .workAreaInset = 12, .windowRadius = 8,
+     .maximizedShadow = true, .maximizedBorder = true, .shadowOpacity = 80},
+    // A one-pixel frame inside the bezel ring: the edge line, in the accent
+    // color, runs along it, around the rounded screen corners and along the
+    // taskbar's edge.
+    {.id = L"eclipse", .offset = 1, .radius = 20, .color = RGB(0x3C, 0x3C, 0x3C), .colorSource = 1,
+     .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80, .noiseOpacity = 0,
+     .noiseDensity = 0,
+     .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 0,
+               .edgeLine = 100, .edgeShade = 0, .edgeLineSpec = L"accent"},
+     .shadow = false, .shadowBlur = 12, .monitorCornerRadius = 20, .workAreaInset = 0,
+     .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true,
+     .borderColors = true, .inactiveBorderArgb = 0xFF000000},
+    // No fill at all: the bevel's full Fresnel rim and an accent edge line
+    // trace the rounded screen over a deep inner shadow.
+    {.id = L"phantom", .offset = 16, .radius = 24, .color = RGB(0x3C, 0x3C, 0x3C),
+     .colorSource = 0, .fill = 0, .blur = 0, .tint = 0, .luminosity = 50, .saturation = 80,
+     .noiseOpacity = 0, .noiseDensity = 0,
+     .bevel = {.enabled = true, .width = 1, .curvature = 1, .light = 0, .lightAngle = 0,
+               .light2 = 0, .light2Angle = 0, .specular = 0, .shininess = 1, .fresnel = 100,
+               .edgeLine = 100, .edgeShade = 0, .edgeLineSpec = L"accent"},
+     .shadow = true, .shadowBlur = 24, .monitorCornerRadius = 0, .workAreaInset = 8,
+     .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true, .opacity = 0,
+     .gradientAngle = 45, .shadowOpacity = 80, .borderColors = true},
 };
 const ThemeDef* FindTheme(PCWSTR id) {
     for (const ThemeDef& theme : kThemes) {
@@ -1307,6 +1388,85 @@ bool SystemUsesLightTheme() {
 // on the primary taskbar window at the regular tick rate - the taskbar may
 // have been re-created - and removed when the mod unloads. The fast ticks
 // while a frame waits for its taskbar skip it.
+// The Windows accent color as the user picked it (no shade): what the dwm.exe
+// part is given, and the bevel's edge line when set to `accent`. Read as the
+// user - UISettings, else dwmapi's colorization color.
+bool PlainAccentColor(COLORREF& out) {
+    if (g_uiSettings) {
+        try {
+            wu::Color c = g_uiSettings.GetColorValue(wuvm::UIColorType::Accent);
+            out = RGB(c.R, c.G, c.B);
+            return true;
+        } catch (winrt::hresult_error const&) {
+        }
+    }
+    DWORD color = 0;
+    BOOL opaque = FALSE;
+    if (FAILED(DwmGetColorizationColor(&color, &opaque))) {
+        return false;
+    }
+    out = RGB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+    return true;
+}
+
+// A color as given for the edge line or the inner shadow: "#RRGGBB" or
+// "accent" (the plain accent color), or a light and a dark one separated by
+// "|", for the Windows mode (each side "#RRGGBB" or "accent"). False when it
+// can't be read; `usesAccent` / `usesMode` say what it follows.
+bool ParseModeColor(PCWSTR text, COLORREF& out, bool& usesAccent, bool& usesMode) {
+    std::wstring spec(text ? text : L"");
+    size_t bar = spec.find(L'|');
+    if (bar != std::wstring::npos) {
+        usesMode = true;
+        spec = SystemUsesLightTheme() ? spec.substr(0, bar) : spec.substr(bar + 1);
+    }
+    size_t b = spec.find_first_not_of(L" \t'\""), e = spec.find_last_not_of(L" \t'\"");
+    spec = b == std::wstring::npos ? std::wstring() : spec.substr(b, e - b + 1);
+    if (_wcsicmp(spec.c_str(), L"accent") == 0) {
+        usesAccent = true;
+        return PlainAccentColor(out);
+    }
+    COLORREF c = ParseHexColor(spec.c_str(), 0xFFFFFFFF);
+    if (c == 0xFFFFFFFF) {
+        return false;
+    }
+    out = c;
+    return true;
+}
+
+// A number setting that may also be a light and a dark value separated by
+// "|", for the Windows mode (the bevel's strengths); clamped to [lo, hi].
+// These settings were numbers before they took text: a value saved then
+// reads as no text, and is read as the number it is. `text` gets the value
+// as given, for the theme export.
+int ModeIntSetting(PCWSTR key, int lo, int hi, bool& usesMode, std::wstring& text) {
+    auto value = WindhawkUtils::StringSetting::make(key);
+    std::wstring spec = value.get();
+    size_t b = spec.find_first_not_of(L" \t'\""), e = spec.find_last_not_of(L" \t'\"");
+    spec = b == std::wstring::npos ? std::wstring() : spec.substr(b, e - b + 1);
+    if (!spec.empty()) {
+        std::wstring part = spec;
+        bool pair = false;
+        size_t bar = spec.find(L'|');
+        if (bar != std::wstring::npos) {
+            pair = true;
+            part = SystemUsesLightTheme() ? spec.substr(0, bar) : spec.substr(bar + 1);
+        }
+        size_t pb = part.find_first_not_of(L" \t"), pe = part.find_last_not_of(L" \t");
+        part = pb == std::wstring::npos ? std::wstring() : part.substr(pb, pe - pb + 1);
+        wchar_t* end = nullptr;
+        long v = part.empty() ? 0 : wcstol(part.c_str(), &end, 10);
+        if (!part.empty() && end && *end == L'\0') {
+            usesMode = usesMode || pair;
+            text = spec;
+            return std::clamp(static_cast<int>(v), lo, hi);
+        }
+    }
+    int v = Wh_GetIntSetting(key);
+    text = std::to_wstring(v);
+    return std::clamp(v, lo, hi);
+}
+
 void PublishAccentColor(ULONGLONG now) {
     static ULONGLONG lastPublished = 0;
     if (lastPublished && now - lastPublished < kTickIntervalMs - 50) {
@@ -1317,27 +1477,21 @@ void PublishAccentColor(ULONGLONG now) {
     if (!taskbar) {
         return;
     }
-    uint32_t argb = 0;
-    bool known = false;
-    if (g_uiSettings) {
-        try {
-            wu::Color c = g_uiSettings.GetColorValue(wuvm::UIColorType::Accent);
-            argb = 0xFF000000u | (static_cast<uint32_t>(c.R) << 16) |
-                   (static_cast<uint32_t>(c.G) << 8) | c.B;
-            known = true;
-        } catch (winrt::hresult_error const&) {
-        }
+    COLORREF plain = 0;
+    if (!PlainAccentColor(plain)) {
+        return;
     }
-    if (!known) {
-        DWORD color = 0;
-        BOOL opaque = FALSE;
-        if (FAILED(DwmGetColorizationColor(&color, &opaque))) {
-            return;
-        }
-        argb = 0xFF000000u | (color & 0x00FFFFFF);  // the user's own, read as the user
-    }
+    uint32_t argb = 0xFF000000u | (static_cast<uint32_t>(GetRValue(plain)) << 16) |
+                    (static_cast<uint32_t>(GetGValue(plain)) << 8) | GetBValue(plain);
     if (reinterpret_cast<ULONG_PTR>(GetPropW(taskbar, kAccentProp)) != argb) {
         SetPropW(taskbar, kAccentProp, reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(argb)));
+    }
+    DWORD appsLight = 1, modeSize = sizeof(appsLight);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &appsLight, &modeSize);
+    ULONG_PTR mode = appsLight ? 1 : 2;
+    if (reinterpret_cast<ULONG_PTR>(GetPropW(taskbar, kAppsModeProp)) != mode) {
+        SetPropW(taskbar, kAppsModeProp, reinterpret_cast<HANDLE>(mode));
     }
 
     DWORD prevalence = 0, accent = 0, size = sizeof(DWORD);
@@ -1490,113 +1644,144 @@ int FillIndex(PCWSTR value) {
     return 0;
 }
 
-// A ready-made theme as the Custom theme's settings, in Windhawk's YAML, so
-// it can be pasted into the settings editor's text mode and tweaked from
-// there (a mod can't write its own settings). Logged when a theme is first
-// applied in the session and whenever another theme is picked - not for
-// every settings load (an override changed, the Windows mode changed).
+// "#RRGGBB" for a color, as the settings write it.
 std::wstring HexColor(COLORREF c) {
     WCHAR text[16];
     swprintf_s(text, L"#%02X%02X%02X", GetRValue(c), GetGValue(c), GetBValue(c));
     return text;
 }
+// A ready-made theme's values are logged as the mod's settings (see
+// LogThemeAsJson), so they can be pasted into the settings and tweaked from
+// there as the Custom theme (a mod can't write its own settings): when a
+// theme is first applied in the session and whenever another one is picked,
+// not at every settings load (an override changed, the Windows mode changed).
 std::wstring g_loggedTheme;  // the theme last logged; cleared while Custom is picked
-void LogThemeAsYaml(const ThemeDef& theme, const Settings& s, int fill) {
+
+// A log message is cut at 1024 characters (Windhawk's buffer), the
+// "[line:function]: " prefix included.
+constexpr size_t kLogLineRoom = 960;
+
+// The theme's values as Windhawk stores a mod's settings - one JSON object,
+// flat "group.key" names, switches as 1/0 - with the General and Overrides
+// groups as they are set now, ready to paste into the mod's settings (the
+// advanced editor's JSON). "theme" keeps the theme's name, so pasting
+// changes nothing on screen; the values go into the Custom theme settings,
+// and switching to Custom then looks the same. The object is longer than a
+// log message can be, so it goes out in rows broken after a comma - JSON
+// takes line breaks between values - every row from the one call below, so
+// a column selection (Shift+Alt) copies them without the prefixes.
+void LogThemeAsJson(const ThemeDef& theme, const Settings& s, int fill) {
     if (g_loggedTheme == theme.id) {
         return;
     }
     g_loggedTheme = theme.id;
     static const PCWSTR fillNames[] = {L"solid", L"acrylic", L"system"};
-    std::wstring y;
-    y += L"theme: custom\n";
-    y += L"overrides:\n  offset: -1\n  radius: -1\n  monitorCornerRadius: -1\n  customColor: ''\n  gradientAngle: -1\n  colorSource: theme\n"
-         L"  fill: theme\n  workAreaInset: -1\n  windowCornerRadius: -2\n";
-    y += L"general:\n";
-    y += L"  scaleWithDpi: " + std::wstring(s.scaleWithDpi ? L"true" : L"false") + L"\n";
-    y += L"  monitors: " + std::wstring(s.primaryOnly ? L"primary" : L"all") + L"\n";
-    y += L"  batterySaverSolid: " + std::wstring(s.batterySaverSolid ? L"true" : L"false") + L"\n";
-    y += L"frame:\n";
-    y += L"  offset: " + std::to_wstring(s.offset) + L"\n";
-    y += L"  edgeOffsetsClockwise: '" + std::to_wstring(s.edgeOffset[0]) + L"," +
-         std::to_wstring(s.edgeOffset[1]) + L"," + std::to_wstring(s.edgeOffset[2]) + L"," +
-         std::to_wstring(s.edgeOffset[3]) + L"'\n";
-    y += L"  radius: " + std::to_wstring(s.radius) + L"\n";
-    y += L"  customColor: '" + s.colorText + L"'\n";
-    y += L"  gradientAngle: " + std::to_wstring(s.gradientAngle) + L"\n";
-    y += L"  colorSource: " + std::wstring(s.colorSource ? L"titlebar" : L"custom") + L"\n";
-    y += L"  opacity: " + std::to_wstring(s.opacity) + L"\n";
-    y += L"  fill: " + std::wstring(fillNames[std::clamp(fill, 0, 2)]) + L"\n";
-    y += L"  workAreaInset: " + std::to_wstring(s.workAreaInset) + L"\n";
-    y += L"customAcrylic:\n";
-    y += L"  blur: " + std::to_wstring(s.backdropBlur) + L"\n";
-    y += L"  tintOpacity: " + std::to_wstring(s.tintOpacity) + L"\n";
-    y += L"  luminosityOpacity: " + std::to_wstring(s.luminosityOpacity) + L"\n";
-    y += L"  saturation: " + std::to_wstring(s.saturation) + L"\n";
-    y += L"  noiseOpacity: " + std::to_wstring(s.noiseOpacity) + L"\n";
-    y += L"  noiseDensity: " + std::to_wstring(s.noiseDensity) + L"\n";
-    y += L"bevel:\n";
-    y += L"  enabled: " + std::wstring(s.bevel ? L"true" : L"false") + L"\n";
-    y += L"  width: " + std::to_wstring(s.bevelWidth) + L"\n";
-    y += L"  curvature: " + std::to_wstring(s.bevelCurvature) + L"\n";
-    y += L"  light: " + std::to_wstring(s.light) + L"\n";
-    y += L"  lightAngle: " + std::to_wstring(s.lightAngle) + L"\n";
-    y += L"  light2: " + std::to_wstring(s.light2) + L"\n";
-    y += L"  light2Angle: " + std::to_wstring(s.light2Angle) + L"\n";
-    y += L"  specular: " + std::to_wstring(s.specular) + L"\n";
-    y += L"  shininess: " + std::to_wstring(s.shininess) + L"\n";
-    y += L"  fresnel: " + std::to_wstring(s.fresnel) + L"\n";
-    y += L"  edgeLine: " + std::to_wstring(s.edgeLine) + L"\n";
-    y += L"  edgeLineColor: '" + HexColor(s.edgeLineColor) + L"'\n";
-    y += L"  edgeShade: " + std::to_wstring(s.edgeShade) + L"\n";
-    y += L"innerShadow:\n";
-    y += L"  enabled: " + std::wstring(s.shadow ? L"true" : L"false") + L"\n";
-    y += L"  blur: " + std::to_wstring(s.shadowBlur) + L"\n";
-    y += L"  opacity: " + std::to_wstring(s.shadowOpacity) + L"\n";
-    y += L"  color: '" + HexColor(s.shadowColor) + L"'\n";
-    y += L"  offsetX: " + std::to_wstring(s.shadowOffsetX) + L"\n";
-    y += L"  offsetY: " + std::to_wstring(s.shadowOffsetY) + L"\n";
-    y += L"monitorCorners:\n";
-    y += L"  radius: " + std::to_wstring(s.monitorCornerRadius) + L"\n";
-    y += L"windowCorners:\n";
-    y += L"  radius: " + std::to_wstring(theme.windowRadius) + L"\n";
-    y += L"  maximizedShadow: " + std::wstring(theme.maximizedShadow ? L"true" : L"false") + L"\n";
-    y += L"  maximizedBorder: " + std::wstring(theme.maximizedBorder ? L"true" : L"false") + L"\n";
-    y += L"  borderColors: false\n  activeBorderColor: accent\n"
-         L"  inactiveBorderColor: '#3C3C3C'\n";
+    std::vector<std::wstring> items;
+    auto str = [](const std::wstring& v) {
+        std::wstring q = L"\"";
+        for (wchar_t c : v) {
+            if (c == L'"' || c == L'\\') {
+                q += L'\\';
+            }
+            q += c;
+        }
+        return q + L"\"";
+    };
+    auto put = [&](PCWSTR key, const std::wstring& json) {
+        items.push_back(L"\"" + std::wstring(key) + L"\":" + json);
+    };
+    auto num = [&](PCWSTR key, int v) { put(key, std::to_wstring(v)); };
+    auto flag = [&](PCWSTR key, bool on) { put(key, on ? L"1" : L"0"); };
+    auto text = [&](PCWSTR key, const std::wstring& v) { put(key, str(v)); };
+    auto setting = [](PCWSTR key) {
+        auto value = WindhawkUtils::StringSetting::make(key);
+        return std::wstring(value.get());
+    };
 
-    // Ready to copy: each part starts on a line of its own. A log message
-    // has a length limit, so the block goes out in parts of whole sections;
-    // the log's own prefix lines between them are to be left out.
-    Wh_Log(L"theme \"%s\" as Custom theme settings (YAML) - copy the lines below, "
-           L"without the log prefix lines:",
-           theme.id);
+    text(L"theme", theme.id);
+    // Overrides and General: as they are set now.
+    for (PCWSTR key : {L"overrides.offset", L"overrides.radius", L"overrides.monitorCornerRadius"}) {
+        num(key, Wh_GetIntSetting(key));
+    }
+    text(L"overrides.customColor", setting(L"overrides.customColor"));
+    num(L"overrides.gradientAngle", Wh_GetIntSetting(L"overrides.gradientAngle"));
+    text(L"overrides.colorSource", setting(L"overrides.colorSource"));
+    text(L"overrides.fill", setting(L"overrides.fill"));
+    num(L"overrides.workAreaInset", Wh_GetIntSetting(L"overrides.workAreaInset"));
+    num(L"overrides.windowCornerRadius", Wh_GetIntSetting(L"overrides.windowCornerRadius"));
+    flag(L"general.scaleWithDpi", s.scaleWithDpi);
+    text(L"general.monitors", s.primaryOnly ? L"primary" : L"all");
+    flag(L"general.batterySaverSolid", s.batterySaverSolid);
+    flag(L"general.roundSquareApps", Wh_GetIntSetting(L"general.roundSquareApps") != 0);
+    // The theme's own values.
+    num(L"frame.offset", s.offset);
+    text(L"frame.edgeOffsetsClockwise",
+         std::to_wstring(s.edgeOffset[0]) + L"," + std::to_wstring(s.edgeOffset[1]) + L"," +
+             std::to_wstring(s.edgeOffset[2]) + L"," + std::to_wstring(s.edgeOffset[3]));
+    num(L"frame.radius", s.radius);
+    text(L"frame.customColor", s.colorText);
+    num(L"frame.gradientAngle", s.gradientAngle);
+    text(L"frame.colorSource", s.colorSource ? L"titlebar" : L"custom");
+    num(L"frame.opacity", s.opacity);
+    text(L"frame.fill", fillNames[std::clamp(fill, 0, 2)]);
+    num(L"frame.workAreaInset", s.workAreaInset);
+    num(L"customAcrylic.blur", s.backdropBlur);
+    num(L"customAcrylic.tintOpacity", s.tintOpacity);
+    num(L"customAcrylic.luminosityOpacity", s.luminosityOpacity);
+    num(L"customAcrylic.saturation", s.saturation);
+    num(L"customAcrylic.noiseOpacity", s.noiseOpacity);
+    num(L"customAcrylic.noiseDensity", s.noiseDensity);
+    flag(L"bevel.enabled", s.bevel);
+    num(L"bevel.width", s.bevelWidth);
+    num(L"bevel.curvature", s.bevelCurvature);
+    text(L"bevel.light", s.bevelValueTexts[0]);
+    num(L"bevel.lightAngle", s.lightAngle);
+    text(L"bevel.light2", s.bevelValueTexts[1]);
+    num(L"bevel.light2Angle", s.light2Angle);
+    text(L"bevel.specular", s.bevelValueTexts[2]);
+    text(L"bevel.shininess", s.bevelValueTexts[3]);
+    text(L"bevel.fresnel", s.bevelValueTexts[4]);
+    text(L"bevel.edgeLine", s.bevelValueTexts[5]);
+    text(L"bevel.edgeLineColor", s.edgeLineText);
+    text(L"bevel.edgeShade", s.bevelValueTexts[6]);
+    flag(L"innerShadow.enabled", s.shadow);
+    num(L"innerShadow.blur", s.shadowBlur);
+    num(L"innerShadow.opacity", s.shadowOpacity);
+    text(L"innerShadow.color", s.shadowColorText);
+    num(L"innerShadow.offsetX", s.shadowOffsetX);
+    num(L"innerShadow.offsetY", s.shadowOffsetY);
+    num(L"monitorCorners.radius", s.monitorCornerRadius);
+    num(L"windowCorners.radius", theme.windowRadius);
+    flag(L"windowCorners.maximizedShadow", theme.maximizedShadow);
+    flag(L"windowCorners.maximizedBorder", theme.maximizedBorder);
+    flag(L"windowCorners.borderColors", theme.borderColors);
+    text(L"windowCorners.activeBorderColor", L"accent");
     {
-        const std::wstring& body = y;
-        std::wstring part;
-        for (size_t at = 0; at < body.size();) {
-            // One top-level section: its key line and the indented lines under it.
-            size_t end = body.find(L'\n', at);
-            end = end == std::wstring::npos ? body.size() : end + 1;
-            while (end < body.size() && body[end] == L' ') {
-                size_t next = body.find(L'\n', end);
-                end = next == std::wstring::npos ? body.size() : next + 1;
-            }
-            if (!part.empty() && part.size() + (end - at) > 700) {
-                if (part.back() == L'\n') {
-                    part.pop_back();
-                }
-                Wh_Log(L"\n%s", part.c_str());
-                part.clear();
-            }
-            part.append(body, at, end - at);
-            at = end;
+        uint32_t argb = theme.inactiveBorderArgb;
+        WCHAR hex[16];
+        // #RRGGBB when opaque, as the setting is written; #AARRGGBB otherwise.
+        if ((argb >> 24) == 0xFF) {
+            swprintf_s(hex, L"#%06X", argb & 0xFFFFFF);
+        } else {
+            swprintf_s(hex, L"#%08X", argb);
         }
-        if (!part.empty()) {
-            if (part.back() == L'\n') {
-                part.pop_back();
-            }
-            Wh_Log(L"\n%s", part.c_str());
+        text(L"windowCorners.inactiveBorderColor", hex);
+    }
+
+    // Rows: items joined with commas, each row ending after one, within
+    // the room a log message has.
+    std::vector<std::wstring> rows(1, L"{");
+    for (size_t i = 0; i < items.size(); i++) {
+        std::wstring item = items[i] + (i + 1 < items.size() ? L"," : L"}");
+        if (rows.back().size() + item.size() > kLogLineRoom) {
+            rows.emplace_back();
         }
+        rows.back() += item;
+    }
+    Wh_Log(L"theme \"%s\" as the mod's settings (JSON, %zu rows) - copy the rows below together:",
+           theme.id, rows.size());
+    for (const std::wstring& row : rows) {
+        Wh_Log(L"%s", row.c_str());
     }
 }
 
@@ -1645,23 +1830,35 @@ void LoadSettings() {
     s.bevel = Wh_GetIntSetting(L"bevel.enabled") != 0;
     s.bevelWidth = std::clamp(Wh_GetIntSetting(L"bevel.width"), 1, 200);
     s.bevelCurvature = std::clamp(Wh_GetIntSetting(L"bevel.curvature"), 1, 100);
-    s.light = std::clamp(Wh_GetIntSetting(L"bevel.light"), 0, 100);
+    s.light = ModeIntSetting(L"bevel.light", 0, 100, s.extraColorsMode, s.bevelValueTexts[0]);
     s.lightAngle = Wh_GetIntSetting(L"bevel.lightAngle");
-    s.light2 = std::clamp(Wh_GetIntSetting(L"bevel.light2"), 0, 100);
+    s.light2 = ModeIntSetting(L"bevel.light2", 0, 100, s.extraColorsMode, s.bevelValueTexts[1]);
     s.light2Angle = Wh_GetIntSetting(L"bevel.light2Angle");
-    s.specular = std::clamp(Wh_GetIntSetting(L"bevel.specular"), 0, 100);
-    s.shininess = std::clamp(Wh_GetIntSetting(L"bevel.shininess"), 1, 200);
-    s.fresnel = std::clamp(Wh_GetIntSetting(L"bevel.fresnel"), 0, 100);
-    s.edgeLine = std::clamp(Wh_GetIntSetting(L"bevel.edgeLine"), 0, 100);
+    s.specular =
+        ModeIntSetting(L"bevel.specular", 0, 100, s.extraColorsMode, s.bevelValueTexts[2]);
+    s.shininess =
+        ModeIntSetting(L"bevel.shininess", 1, 200, s.extraColorsMode, s.bevelValueTexts[3]);
+    s.fresnel = ModeIntSetting(L"bevel.fresnel", 0, 100, s.extraColorsMode, s.bevelValueTexts[4]);
+    s.edgeLine =
+        ModeIntSetting(L"bevel.edgeLine", 0, 100, s.extraColorsMode, s.bevelValueTexts[5]);
     auto edgeLineColor = WindhawkUtils::StringSetting::make(L"bevel.edgeLineColor");
-    s.edgeLineColor = ParseHexColor(edgeLineColor.get(), RGB(255, 255, 255));
-    s.edgeShade = std::clamp(Wh_GetIntSetting(L"bevel.edgeShade"), 0, 100);
+    s.edgeLineText = edgeLineColor.get();
+    if (!ParseModeColor(edgeLineColor.get(), s.edgeLineColor, s.extraColorsAccent,
+                        s.extraColorsMode)) {
+        s.edgeLineColor = RGB(255, 255, 255);
+    }
+    s.edgeShade =
+        ModeIntSetting(L"bevel.edgeShade", 0, 100, s.extraColorsMode, s.bevelValueTexts[6]);
 
     s.shadow = Wh_GetIntSetting(L"innerShadow.enabled") != 0;
     s.shadowBlur = std::clamp(Wh_GetIntSetting(L"innerShadow.blur"), 0, 60);
     s.shadowOpacity = std::clamp(Wh_GetIntSetting(L"innerShadow.opacity"), 0, 100);
     auto shadowColor = WindhawkUtils::StringSetting::make(L"innerShadow.color");
-    s.shadowColor = ParseHexColor(shadowColor.get(), RGB(0, 0, 0));
+    s.shadowColorText = shadowColor.get();
+    if (!ParseModeColor(shadowColor.get(), s.shadowColor, s.extraColorsAccent,
+                        s.extraColorsMode)) {
+        s.shadowColor = RGB(0, 0, 0);
+    }
     s.shadowOffsetX = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetX"), -60, 60);
     s.shadowOffsetY = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetY"), -60, 60);
 
@@ -1704,11 +1901,14 @@ void LoadSettings() {
         s.radius = theme->radius;
         s.fillColors = {theme->color};
         s.colorText = HexColor(theme->color);
-        s.gradientAngle = 0;
+        s.gradientAngle = theme->gradientAngle;
         deps = {};
+        if (theme->colorSpec && ParseFillColors(theme->colorSpec, s.fillColors, &deps)) {
+            s.colorText = theme->colorSpec;
+        }
         s.colorSource = theme->colorSource;
         fill = theme->fill;
-        s.opacity = 100;
+        s.opacity = theme->opacity;
         if (fillWanted != 1) {
             s.backdropBlur = theme->blur;
             s.tintOpacity = theme->tint;
@@ -1728,17 +1928,31 @@ void LoadSettings() {
         s.shininess = theme->bevel.shininess;
         s.fresnel = theme->bevel.fresnel;
         s.edgeLine = theme->bevel.edgeLine;
-        s.edgeLineColor = RGB(255, 255, 255);
+        s.extraColorsAccent = false;
+        s.extraColorsMode = false;
+        s.edgeLineText = theme->bevel.edgeLineSpec;
+        if (!ParseModeColor(theme->bevel.edgeLineSpec, s.edgeLineColor, s.extraColorsAccent,
+                            s.extraColorsMode)) {
+            s.edgeLineColor = RGB(255, 255, 255);
+        }
         s.edgeShade = theme->bevel.edgeShade;
+        {
+            const int values[7] = {s.light,    s.light2,   s.specular, s.shininess,
+                                   s.fresnel,  s.edgeLine, s.edgeShade};
+            for (int k = 0; k < 7; k++) {
+                s.bevelValueTexts[k] = std::to_wstring(values[k]);
+            }
+        }
         s.shadow = theme->shadow;
         s.shadowBlur = theme->shadowBlur;
-        s.shadowOpacity = 100;
+        s.shadowOpacity = theme->shadowOpacity;
         s.shadowColor = RGB(0, 0, 0);
+        s.shadowColorText = L"#000000";
         s.shadowOffsetX = 0;
         s.shadowOffsetY = 0;
         s.monitorCornerRadius = theme->monitorCornerRadius;
         s.workAreaInset = theme->workAreaInset;
-        LogThemeAsYaml(*theme, s, theme->fill);  // the theme itself, before the overrides
+        LogThemeAsJson(*theme, s, theme->fill);  // the theme itself, before the overrides
 
         // The overrides, each where set. A frame color override is meant to
         // be seen: it also takes the color source off the title bar, unless
@@ -1807,6 +2021,10 @@ void LoadSettings() {
         s.noiseDensity = 100;
     }
 
+    // The edge line, the shadow and the bevel's strengths follow the accent
+    // and the mode too.
+    deps.accent = deps.accent || s.extraColorsAccent;
+    deps.mode = deps.mode || s.extraColorsMode;
     g_colorDeps = deps;
     g_colorLoadedLight = SystemUsesLightTheme();
     g_colorLoadedAccent = CurrentAccentColor();
@@ -3448,9 +3666,6 @@ void DrawBezelRing(Gdiplus::Graphics& graphics, const RECT& rect, const Layout& 
 
 // Everything in the frame window that doesn't follow the frame color.
 void DrawStaticLayer(Gdiplus::Graphics& graphics, const Layout& layout) {
-    int width = layout.overlayRect.right - layout.overlayRect.left;
-    int height = layout.overlayRect.bottom - layout.overlayRect.top;
-
     RECT inner = layout.innerRect;
     OffsetRect(&inner, -layout.overlayRect.left, -layout.overlayRect.top);
 
@@ -3567,7 +3782,12 @@ void DrawBevelLighting(const Layout& layout, const std::vector<BYTE>& coverage,
         }
         spec *= specular;
         double fres = std::pow(1.0 - std::clamp(nz, 0.0, 1.0), 3.0) * fresnel;
-        double s = std::clamp(d / 1.5, 0.0, 1.0);
+        // The edge line: the frame's innermost pixel row (its center half a
+        // pixel in) at the full strength, so the line shows the color as
+        // given, fading out over the next three quarters of a pixel. (Faded
+        // from the edge itself, it reached that row at three quarters
+        // strength, and the frame or the content behind showed through.)
+        double s = std::clamp((d - 0.75) / 0.75, 0.0, 1.0);
         line += (1.0 - s * s * (3.0 - 2.0 * s)) * edgeLine;
         light += spec + fres;
         shade += (1.0 - t) * (1.0 - t) * edgeShade;
@@ -5485,6 +5705,59 @@ bool PaintOverlay(Overlay& overlay, COLORREF rgb) {
 // Full-screen detection
 // ---------------------------------------------------------------------------
 
+// Screen capture and color picker tools cover the screen with a topmost,
+// borderless window while they work (ShareX's region capture and color
+// picker, Snipping Tool's overlay): a full-screen app as far as its window
+// goes, but hiding the frame then would take it out of the very screen being
+// captured or picked from. Their windows are told by their program - nothing
+// about the window itself sets them apart from a game. The answer per
+// process is kept (by process id, re-read when the id is reused).
+bool IsCaptureToolWindow(HWND hwnd) {
+    static const PCWSTR kTools[] = {
+        L"ShareX.exe",          L"Greenshot.exe",    L"ScreenClippingHost.exe",
+        L"SnippingTool.exe",    L"Snagit32.exe",     L"SnagitCapture.exe",
+        L"PowerToys.ColorPickerUI.exe", L"PowerToys.MeasureToolUI.exe",
+        L"Lightshot.exe",       L"flameshot.exe",    L"PicPick.exe",
+    };
+    struct Known {
+        FILETIME created;
+        bool tool;
+    };
+    static std::unordered_map<DWORD, Known> known;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        return false;
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return false;
+    }
+    FILETIME created{}, exited{}, kernel{}, user{};
+    GetProcessTimes(process, &created, &exited, &kernel, &user);
+    auto it = known.find(pid);
+    if (it != known.end() && CompareFileTime(&it->second.created, &created) == 0) {
+        CloseHandle(process);
+        return it->second.tool;
+    }
+    bool tool = false;
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        PCWSTR name = wcsrchr(path, L'\\');
+        name = name ? name + 1 : path;
+        for (PCWSTR candidate : kTools) {
+            tool = tool || _wcsicmp(name, candidate) == 0;
+        }
+    }
+    CloseHandle(process);
+    if (known.size() > 256) {
+        known.clear();
+    }
+    known[pid] = {created, tool};
+    return tool;
+}
+
 bool IsIgnoredWindowClass(HWND hwnd) {
     WCHAR className[128];
     if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
@@ -5526,6 +5799,19 @@ bool IsIgnoredWindowClass(HWND hwnd) {
     }
 
     return false;
+}
+
+// A maximized window with a sizing frame and no caption: an app drawing its
+// own title bar, which Windows sizes to the whole monitor (see
+// TrimCaptionlessMaximize, which puts it back on the work area). Not a
+// full-screen app: those drop the sizing frame too (a browser in F11, a
+// game).
+bool IsCaptionlessMaximize(HWND hwnd) {
+    if (!hwnd || !IsZoomed(hwnd) || IsIconic(hwnd)) {
+        return false;
+    }
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    return (style & WS_CAPTION) != WS_CAPTION && (style & WS_THICKFRAME) && !(style & WS_CHILD);
 }
 
 // Walks the top-level windows in z-order. A visible, uncloaked window in the
@@ -5572,6 +5858,16 @@ bool HasFullscreenWindow(const Layout& layout, HWND confirmed, HWND* fullscreenW
         }
 
         if (RectContains(rect, layout.monitorRect)) {
+            // A capture tool's overlay: looked through, as if it weren't there.
+            if (IsCaptureToolWindow(hwnd)) {
+                continue;
+            }
+            // A caption-less maximize is about to be trimmed to the work area
+            // (asynchronously, so a tick can still find it over the monitor):
+            // an ordinary maximized window, which hides nothing.
+            if (IsCaptionlessMaximize(hwnd) && !(exStyle & WS_EX_TOPMOST)) {
+                return false;
+            }
             // A full-screen app is the window the user is in, or was in when
             // it went full-screen: a desktop-sized window that is never in
             // the foreground (wallpaper hosts, widget layers) doesn't count.
@@ -8791,6 +9087,8 @@ void FollowFrameColors(ULONGLONG now) {
     ApplyThemes(now);
 }
 
+void TrimCaptionlessMaximize(HWND hwnd);  // with the window event hooks, below
+
 void Tick(bool forceRebuild) {
     if (g_inTick || g_unloading) {
         return;
@@ -8895,6 +9193,10 @@ void Tick(bool forceRebuild) {
     ApplyXamlCorners(now);
 
     ApplyFills(now);
+
+    // The fallback for a maximize no location event announced (see
+    // TrimCaptionlessMaximize).
+    TrimCaptionlessMaximize(GetForegroundWindow());
 
     UpdateVisibility();
 
@@ -9011,6 +9313,62 @@ void CALLBACK TaskbarWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
 
 void HookForegroundLocation(HWND foreground);
 
+// Apps with a title bar of their own that take the caption style off while
+// maximized - the ArtCraft apps (PhotoCraft and the rest, on winit) do it
+// to stay borderless - are sized by Windows to the whole monitor, taskbar
+// included, and the shell takes such a window for a full-screen app: it
+// drops the taskbar behind it (transparent here, its buttons out of reach)
+// and turns on Do not disturb. Those apps trim the window back to the work
+// area plus its sizing border themselves, but they find that border from an
+// edge where the work area meets the monitor, and the mod reserves all four
+// edges, so they leave it covering the monitor. The mod does the trim for
+// them: a maximized window with a sizing frame and no caption, covering a
+// framed monitor, is moved to the work area plus its sizing border (their
+// own trim then leaves it as it is, and winit keeps the client area on the
+// work area, so nothing in the app moves). Asynchronous: the mod's thread
+// never waits on the app's.
+std::vector<HWND> g_trimLogged;  // windows already logged as trimmed
+void TrimCaptionlessMaximize(HWND hwnd) {
+    if (!IsCaptionlessMaximize(hwnd)) {
+        return;
+    }
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+    MONITORINFO mi{sizeof(mi)};
+    RECT r{};
+    if (!monitor || !FindOverlay(monitor) || !GetMonitorInfoW(monitor, &mi) ||
+        !GetWindowRect(hwnd, &r)) {
+        return;
+    }
+    auto covers = [&](const RECT& rect) {
+        return rect.left <= mi.rcMonitor.left && rect.top <= mi.rcMonitor.top &&
+               rect.right >= mi.rcMonitor.right && rect.bottom >= mi.rcMonitor.bottom;
+    };
+    if (!covers(r)) {
+        return;
+    }
+    UINT dpi = GetDpiForWindow(hwnd);
+    int border = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) +
+                 GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+    RECT wanted{mi.rcWork.left - border, mi.rcWork.top - border, mi.rcWork.right + border,
+                mi.rcWork.bottom + border};
+    if (covers(wanted)) {
+        return;  // the work area reserves less than the border: nothing to win
+    }
+    SetWindowPos(hwnd, nullptr, wanted.left, wanted.top, wanted.right - wanted.left,
+                 wanted.bottom - wanted.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOCOPYBITS |
+                     SWP_ASYNCWINDOWPOS);
+    if (std::find(g_trimLogged.begin(), g_trimLogged.end(), hwnd) == g_trimLogged.end() &&
+        g_trimLogged.size() < 64) {
+        g_trimLogged.push_back(hwnd);
+        WCHAR cls[64] = L"";
+        GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+        Wh_Log(L"window %p (%s): maximized without a caption over the whole monitor - trimmed "
+               L"to the work area, so the shell doesn't take it for a full-screen app",
+               hwnd, cls);
+    }
+}
+
 // A foreground change anywhere, or the foreground window moving or resizing
 // (the moment it can go full-screen - F11, a game switching modes), triggers
 // a tick right away so the frame hides in the same instant.
@@ -9025,6 +9383,7 @@ void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
         lastWindow = hwnd;
         lastZoomed = hwnd && IsZoomed(hwnd);
         g_titleEventPending = true;  // an activation alone has no zoom to wait for
+        TrimCaptionlessMaximize(hwnd);
     } else if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND ||
                event == EVENT_SYSTEM_MOVESIZEEND) {
         // A window leaving or arriving under the frames: the tick (and the
@@ -9041,6 +9400,9 @@ void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
         if (hwnd != lastWindow || zoomed != lastZoomed) {
             g_titleEventPending = true;  // maximized or restored
             g_titleEventTick = GetTickCount64();
+        }
+        if (zoomed) {
+            TrimCaptionlessMaximize(hwnd);
         }
         lastWindow = hwnd;
         lastZoomed = zoomed;
@@ -9451,6 +9813,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
         RemovePropW(taskbar, kAccentProp);
         RemovePropW(taskbar, kBorderAccentProp);
+        RemovePropW(taskbar, kAppsModeProp);
     }
     DestroyWindow(ctrl);
     UnregisterClassW(kFrameClassName, g_module);
@@ -9481,6 +9844,9 @@ std::atomic<bool> g_customBorderColors{false};
 // Monitors set to the primary one: windows on the other monitors, where
 // there is no frame, keep Windows' corners, border and shadow.
 std::atomic<bool> g_primaryOnly{false};
+// Round app windows whose corner style DWM itself sets to "don't round" (see
+// GetEffectiveCornerStyle_Hook).
+std::atomic<bool> g_roundSquareApps{true};
 std::atomic<uint32_t> g_activeBorderArgb{0xFFFFFFFF};    // the accent, once read
 std::atomic<uint32_t> g_inactiveBorderArgb{0xFF3C3C3C};
 
@@ -9546,26 +9912,68 @@ bool ParseBorderColor(PCWSTR text, uint32_t& argb, bool& isAccent) {
     argb = length == 6 ? (0xFF000000 | (uint32_t)value) : (uint32_t)value;
     return true;
 }
-// Which of the two colors follow the accent color (re-read by the
-// decoration timer, so a change of accent color is picked up).
-std::atomic<bool> g_activeBorderIsAccent{false};
-std::atomic<bool> g_inactiveBorderIsAccent{false};
-// `fallbackAccent`: a setting that can't be read falls back to the accent
-// color (the active border's default) rather than to `fallback`.
-bool LoadBorderColor(PCWSTR key, std::atomic<uint32_t>& into, std::atomic<bool>& isAccent,
-                     uint32_t fallback, bool fallbackAccent = false) {
-    auto text = WindhawkUtils::StringSetting::make(key);
-    uint32_t argb = 0;
-    bool accent = false;
-    bool ok = *text.get() && ParseBorderColor(text.get(), argb, accent);
-    if (!ok && fallbackAccent && AccentColor(argb)) {
-        into = argb;
-        isAccent = true;
-        return false;
+// The user's app mode as the explorer.exe part publishes it (see
+// kAppsModeProp): true for light. Dark while it isn't published.
+bool AppsUseLightMode() {
+    HWND taskbar = PublishingTaskbar();
+    return taskbar && reinterpret_cast<ULONG_PTR>(GetPropW(taskbar, kAppsModeProp)) == 1;
+}
+
+// A border color as given: one color (see ParseBorderColor), or a light and a
+// dark one separated by "|", for the user's app mode - the mode windows are
+// drawn in. `follows`: it depends on the accent or the mode.
+bool ParseBorderSpec(const std::wstring& given, uint32_t& argb, bool& follows) {
+    std::wstring spec = given;
+    follows = false;
+    size_t bar = spec.find(L'|');
+    if (bar != std::wstring::npos) {
+        follows = true;
+        spec = AppsUseLightMode() ? spec.substr(0, bar) : spec.substr(bar + 1);
     }
-    into = ok ? argb : fallback;
-    isAccent = ok && accent;
+    size_t b = spec.find_first_not_of(L" \t'\""), e = spec.find_last_not_of(L" \t'\"");
+    spec = b == std::wstring::npos ? std::wstring() : spec.substr(b, e - b + 1);
+    bool isAccent = false;
+    bool ok = !spec.empty() && ParseBorderColor(spec.c_str(), argb, isAccent);
+    follows = follows || isAccent;
     return ok;
+}
+
+// The two border colors as given (the settings, or a theme's), resolved into
+// g_activeBorderArgb / g_inactiveBorderArgb now and, while either follows the
+// accent or the mode, again by the decoration timer once a second.
+std::mutex g_borderSpecMutex;
+std::wstring g_activeBorderSpec, g_inactiveBorderSpec;
+std::atomic<bool> g_borderColorsFollow{false};
+
+// True when a resolved color changed.
+bool ResolveBorderColors(bool log) {
+    std::wstring active, inactive;
+    {
+        std::lock_guard<std::mutex> lock(g_borderSpecMutex);
+        active = g_activeBorderSpec;
+        inactive = g_inactiveBorderSpec;
+    }
+    uint32_t activeArgb = 0xFFFFFFFF, inactiveArgb = 0;
+    bool activeFollows = false, inactiveFollows = false;
+    bool activeOk = ParseBorderSpec(active, activeArgb, activeFollows);
+    if (!activeOk && AccentColor(activeArgb)) {
+        activeFollows = true;  // the default: the accent color
+    }
+    bool inactiveOk = ParseBorderSpec(inactive, inactiveArgb, inactiveFollows);
+    if (!inactiveOk) {
+        inactiveArgb = activeArgb;  // empty or not understood: the active color
+        inactiveFollows = activeFollows;
+    }
+    g_borderColorsFollow = activeFollows || inactiveFollows;
+    bool changed = g_activeBorderArgb.exchange(activeArgb) != activeArgb;
+    changed = (g_inactiveBorderArgb.exchange(inactiveArgb) != inactiveArgb) || changed;
+    if (log) {
+        Wh_Log(L"[dwm] border colors: active #%08X%s, inactive #%08X%s%s", activeArgb,
+               activeOk ? L"" : L" (setting not understood, the accent used)", inactiveArgb,
+               inactiveOk ? L"" : L" (setting empty or not understood, active color used)",
+               g_borderColorsFollow ? L"; following the accent / mode" : L"");
+    }
+    return changed;
 }
 
 // Windows' full rounding radius at 100%; anything smaller is the "small"
@@ -9577,14 +9985,19 @@ void LoadDwmSettings() {
     g_maximizedBorder = Wh_GetIntSetting(L"windowCorners.maximizedBorder") != 0;
     g_maximizedShadow = Wh_GetIntSetting(L"windowCorners.maximizedShadow") != 0;
     g_customBorderColors = Wh_GetIntSetting(L"windowCorners.borderColors") != 0;
-    // A ready-made theme sets these outright (the border colors stay off);
-    // the window corner radius can be overridden.
+    // A ready-made theme sets these outright (its border colors, when it has
+    // them, are the accent and its own inactive color); the window corner
+    // radius can be overridden.
     auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
+    bool themeColors = false;
+    uint32_t themeInactive = 0xFF3C3C3C;
     if (const ThemeDef* theme = FindTheme(themeSetting.get())) {
         radius = theme->windowRadius;
         g_maximizedShadow = theme->maximizedShadow;
         g_maximizedBorder = theme->maximizedBorder;
-        g_customBorderColors = false;
+        g_customBorderColors = theme->borderColors;
+        themeColors = theme->borderColors;
+        themeInactive = theme->inactiveBorderArgb;
         int wanted = Wh_GetIntSetting(L"overrides.windowCornerRadius");
         if (wanted >= -1) {
             radius = wanted;
@@ -9594,26 +10007,30 @@ void LoadDwmSettings() {
     g_radius = radius < 0 ? -1 : radius;
     auto monitors = WindhawkUtils::StringSetting::make(L"general.monitors");
     g_primaryOnly = wcscmp(monitors.get(), L"primary") == 0;
+    g_roundSquareApps = Wh_GetIntSetting(L"general.roundSquareApps") != 0;
     g_enabled = g_radius >= 0 || g_maximizedBorder || g_maximizedShadow || g_customBorderColors;
+    if (themeColors) {
+        WCHAR hex[16];
+        swprintf_s(hex, L"#%08X", themeInactive);
+        std::lock_guard<std::mutex> lock(g_borderSpecMutex);
+        g_activeBorderSpec = L"accent";
+        g_inactiveBorderSpec = hex;
+    } else if (g_customBorderColors) {
+        auto active = WindhawkUtils::StringSetting::make(L"windowCorners.activeBorderColor");
+        auto inactive = WindhawkUtils::StringSetting::make(L"windowCorners.inactiveBorderColor");
+        std::lock_guard<std::mutex> lock(g_borderSpecMutex);
+        g_activeBorderSpec = active.get();
+        g_inactiveBorderSpec = inactive.get();
+    }
     if (g_customBorderColors) {
-        bool active = LoadBorderColor(L"windowCorners.activeBorderColor", g_activeBorderArgb,
-                                      g_activeBorderIsAccent, 0xFFFFFFFF, true);
-        // Empty or invalid: the active color for inactive windows too.
-        bool inactive = LoadBorderColor(L"windowCorners.inactiveBorderColor",
-                                        g_inactiveBorderArgb, g_inactiveBorderIsAccent,
-                                        g_activeBorderArgb);
-        if (!inactive) {
-            g_inactiveBorderIsAccent = g_activeBorderIsAccent.load();
-        }
-        Wh_Log(L"[dwm] border colors: active #%08X%s, inactive #%08X%s", g_activeBorderArgb.load(),
-               active ? L"" : L" (setting not understood, default used)",
-               g_inactiveBorderArgb.load(),
-               inactive ? L"" : L" (setting empty or not understood, active color used)");
+        ResolveBorderColors(true);
     }
     Wh_Log(L"[dwm] window corner radius %d (-1 = Windows' corners, 0 = square), maximized "
-           L"border %s, maximized shadow %s, custom border colors %s",
+           L"border %s, maximized shadow %s, custom border colors %s, apps Windows leaves "
+           L"square %s",
            g_radius.load(), g_maximizedBorder ? L"on" : L"off",
-           g_maximizedShadow ? L"on" : L"off", g_customBorderColors ? L"on" : L"off");
+           g_maximizedShadow ? L"on" : L"off", g_customBorderColors ? L"on" : L"off",
+           g_roundSquareApps ? L"rounded" : L"left square");
 }
 
 // CTopLevelWindow::GetRadiusFromCornerStyle: pure style -> radius mapping
@@ -9652,6 +10069,59 @@ bool OnFramedMonitor(HWND hwnd) {
         return true;
     }
     return MonitorOf(hwnd) == MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+// A maximized window that draws its whole frame itself has no invisible
+// resize borders as far as DWM knows: its border and content clip are its
+// whole window rectangle, which hangs past the work area by the sizing border
+// on every side - so its rounded corners land outside the work area, in the
+// strip between it and the frame, and the app's content shows a square
+// corner. A standard window's are already inside it (the invisible borders
+// excluded). The rectangle, in the window's coordinates, is cut to the work
+// area; false when it is left as it is.
+std::mutex g_overhangLogMutex;
+std::vector<HWND> g_overhangLogged;
+template <typename T>
+bool FitToWorkArea(HWND hwnd, T& left, T& top, T& right, T& bottom) {
+    if (!hwnd || !IsZoomed(hwnd)) {
+        return false;
+    }
+    RECT wr{};
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetWindowRect(hwnd, &wr) || !GetMonitorInfoW(MonitorOf(hwnd), &mi)) {
+        return false;
+    }
+    LONG width = wr.right - wr.left, height = wr.bottom - wr.top;
+    // Only a rectangle in the window's coordinates.
+    if (left < -1 || top < -1 || right > width + 1 || bottom > height + 1) {
+        return false;
+    }
+    T workLeft = static_cast<T>(mi.rcWork.left - wr.left);
+    T workTop = static_cast<T>(mi.rcWork.top - wr.top);
+    T workRight = static_cast<T>(mi.rcWork.right - wr.left);
+    T workBottom = static_cast<T>(mi.rcWork.bottom - wr.top);
+    T l = std::max(left, workLeft), t = std::max(top, workTop);
+    T r = std::min(right, workRight), b = std::min(bottom, workBottom);
+    if (r - l < 64 || b - t < 64 || (l == left && t == top && r == right && b == bottom)) {
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_overhangLogMutex);
+        if (std::find(g_overhangLogged.begin(), g_overhangLogged.end(), hwnd) ==
+                g_overhangLogged.end() &&
+            g_overhangLogged.size() < 64) {
+            g_overhangLogged.push_back(hwnd);
+            Wh_Log(L"[dwm] window %p: maximized past its work area (%ld,%ld-%ld,%ld in a "
+                   L"%ldx%ld window) - border and clip cut to it",
+                   hwnd, static_cast<long>(left), static_cast<long>(top),
+                   static_cast<long>(right), static_cast<long>(bottom), width, height);
+        }
+    }
+    left = l;
+    top = t;
+    right = r;
+    bottom = b;
+    return true;
 }
 
 // The window's HWND, read from DWM's CWindowData the way Custom Window
@@ -9745,6 +10215,103 @@ bool RoundedByMod(HWND hwnd, RoundedWindow& out) {
     }
     out = it->second;
     return true;
+}
+
+// CTopLevelWindow::GetEffectiveCornerStyle: the window's corner style as DWM
+// settles it. DWM answers "don't round" (DWMWCP_DONOTROUND) not only for a
+// window that asks for it, but also for many it decides to leave square
+// itself - apps that draw their whole frame (Autodesk AutoCAD 2013, Design
+// Review), turning DWM's frame off - and those then never reach the radius
+// hook below. With the option on, an app window (a caption or a sizing frame;
+// not a tool window, nor a layered window that draws its own shape) answered
+// "don't round" is answered "round" instead, so DWM's whole rounding path
+// runs for it - clip, border, shadow - and the mod's radius with it, the way
+// Custom Window Corner Radius promotes tooltips. DWM's answer can't tell the
+// two cases apart, hence the option. Menus, tooltips and other popups are
+// left alone.
+constexpr int kCornerStyleDoNotRound = 1;  // DWMWCP_DONOTROUND
+constexpr int kCornerStyleRound = 2;       // DWMWCP_ROUND
+using GetEffectiveCornerStyle_t = int(WINAPI*)(void* self);
+GetEffectiveCornerStyle_t GetEffectiveCornerStyle_Original;
+// Guards the records below: the windows rounded, and those already logged.
+std::mutex g_promotedMutex;
+std::vector<HWND> g_promotedLogged;  // windows already logged as promoted
+
+bool IsAppFrame(HWND hwnd);  // with the border colors, below
+
+// A layered window is left square only when it draws its own shape: one
+// that hands the system its image (UpdateLayeredWindow) has no layered
+// attributes to read, and one with a color key cuts its shape out. A window
+// made see-through as a whole keeps its frame - AltSnap does that to the
+// window it drags, and leaving it square then (DWM asks again only at the
+// next visual update, a click elsewhere) kept it square after the drag. A
+// window already rounded this way before it turned layered stays rounded
+// whatever its attributes say: AltSnap sets the layered style a moment
+// before the attributes, and DWM may ask in between.
+std::vector<HWND> g_layeredLogged;  // windows already logged as left square (layered)
+std::unordered_set<HWND> g_promotedWindows;  // windows rounded by the hook below
+bool DrawsOwnShape(HWND hwnd) {
+    COLORREF key = 0;
+    BYTE alpha = 255;
+    DWORD flags = 0;
+    return !GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags) || (flags & LWA_COLORKEY);
+}
+
+bool RoundableAppWindow(HWND hwnd) {
+    if (!IsAppFrame(hwnd)) {
+        return false;
+    }
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if ((style & WS_CHILD) || (ex & WS_EX_TOOLWINDOW)) {
+        return false;
+    }
+    if ((ex & WS_EX_LAYERED) && DrawsOwnShape(hwnd)) {
+        std::lock_guard<std::mutex> lock(g_promotedMutex);
+        if (g_promotedWindows.count(hwnd)) {
+            return true;  // a frame before it turned layered
+        }
+        if (std::find(g_layeredLogged.begin(), g_layeredLogged.end(), hwnd) ==
+                g_layeredLogged.end() &&
+            g_layeredLogged.size() < 64) {
+            g_layeredLogged.push_back(hwnd);
+            WCHAR cls[64] = L"";
+            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+            Wh_Log(L"[dwm] window %p (%s): Windows leaves it square and it draws its own "
+                   L"shape (layered) - left square",
+                   hwnd, cls);
+        }
+        return false;
+    }
+    return true;
+}
+
+int WINAPI GetEffectiveCornerStyle_Hook(void* self) {
+    int style = GetEffectiveCornerStyle_Original(self);
+    if (style != kCornerStyleDoNotRound || !g_enabled || !g_roundSquareApps ||
+        g_radius.load() <= 0) {
+        return style;
+    }
+    HWND hwnd = WindowHandleOf(self);
+    if (!hwnd || !RoundableAppWindow(hwnd) || !OnFramedMonitor(hwnd)) {
+        return style;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_promotedMutex);
+        if (g_promotedWindows.size() > 4096) {
+            g_promotedWindows.clear();  // handles of windows long gone
+        }
+        g_promotedWindows.insert(hwnd);
+        if (std::find(g_promotedLogged.begin(), g_promotedLogged.end(), hwnd) ==
+                g_promotedLogged.end() &&
+            g_promotedLogged.size() < 64) {
+            g_promotedLogged.push_back(hwnd);
+            WCHAR cls[64] = L"";
+            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+            Wh_Log(L"[dwm] window %p (%s): Windows leaves it square - rounded", hwnd, cls);
+        }
+    }
+    return kCornerStyleRound;
 }
 
 float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
@@ -10044,9 +10611,10 @@ void WINAPI SetClipRectangle_Hook(void* self, void* geometry, const RECT* rect) 
 }
 
 // Defined with the border records further down, whose border-to-window map
-// it reads.
-void RememberContentClip(void* geometry, float left, float top, float right, float bottom,
-                         float radius, bool flag);
+// it reads: the content clip as it is set, cut to the work area for a
+// window maximized past it (see FitToWorkArea), and remembered.
+void TakeContentClip(void* geometry, float& left, float& top, float& right, float& bottom,
+                     float radius, bool flag);
 
 std::atomic<ULONGLONG> g_contentClipLogged{0};  // one log line per restore
 
@@ -10096,7 +10664,7 @@ long WINAPI SetRectangle_Hook(void* self, float left, float top, float right, fl
                      bottomRightX == topLeftX && bottomRightY == topLeftX;
     HWND transition = nullptr;
     if (g_enabled && oneRadius && g_clipBorder && self == g_clipGeometry && !g_animatedWindow3D) {
-        RememberContentClip(self, left, top, right, bottom, topLeftX, flag);
+        TakeContentClip(self, left, top, right, bottom, topLeftX, flag);
     } else if (g_animatedWindow3D && g_enabled && !g_inCreateRectangleGeometry && oneRadius) {
         PointAndSizeL rect{static_cast<LONG>(left), static_cast<LONG>(top),
                            static_cast<LONG>(right - left), static_cast<LONG>(bottom - top)};
@@ -10523,20 +11091,85 @@ void WINAPI WindowBorderDestructor_Hook(void* self) {
 
 // A content clip as it is set: kept for the window its border belongs to
 // (see ContentClip).
-void RememberContentClip(void* geometry, float left, float top, float right, float bottom,
-                         float radius, bool flag) {
-    if (!g_objectLifetimesTracked) {
+// A window cut to its work area (see FitToWorkArea) that is resized - the
+// trim of a caption-less maximize, say - gets its new clip through the hooks,
+// but DWM moves its border on the resize without SetBorderParameters, so the
+// border would stay on the whole window rectangle, past the content, until
+// the window's next visual update (a click elsewhere). The decoration timer
+// asks for that update at once. A window is asked for once per window
+// rectangle, so the update it causes, cut the same way, asks for nothing.
+std::mutex g_fitRefreshMutex;
+std::unordered_map<HWND, RECT> g_fitRefreshedFor;
+std::vector<HWND> g_fitRefreshWanted;
+void RushDecorPass(HMONITOR monitor, HMONITOR other);  // with the timer, below
+
+void WantFitRefresh(HWND hwnd) {
+    RECT r{};
+    if (!GetWindowRect(hwnd, &r)) {
         return;
     }
+    {
+        std::lock_guard<std::mutex> lock(g_fitRefreshMutex);
+        auto it = g_fitRefreshedFor.find(hwnd);
+        if (it != g_fitRefreshedFor.end() && EqualRect(&it->second, &r)) {
+            return;
+        }
+        if (g_fitRefreshedFor.size() > 256) {
+            g_fitRefreshedFor.clear();  // windows long gone
+        }
+        g_fitRefreshedFor[hwnd] = r;
+        g_fitRefreshWanted.push_back(hwnd);
+    }
+    RushDecorPass(MonitorOf(hwnd), nullptr);
+}
+
+// On the timer (DWM's thread, as the hooks): the visual updates asked for.
+// Destructors run on this thread too, so a record found here is alive for
+// the call.
+void RunFitRefreshes() {
+    std::vector<HWND> wanted;
+    {
+        std::lock_guard<std::mutex> lock(g_fitRefreshMutex);
+        wanted.swap(g_fitRefreshWanted);
+    }
+    if (!UpdateWindowVisuals || !g_objectLifetimesTracked) {
+        return;
+    }
+    for (HWND hwnd : wanted) {
+        void* window = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_borderStateMutex);
+            auto it = g_borderRecords.find(hwnd);
+            if (it != g_borderRecords.end()) {
+                window = it->second.window;
+            }
+        }
+        if (window) {
+            UpdateWindowVisuals(window);
+        }
+    }
+}
+
+void TakeContentClip(void* geometry, float& left, float& top, float& right, float& bottom,
+                     float radius, bool flag) {
     HWND hwnd = nullptr;
+    bool eligible = false;
     {
         std::lock_guard<std::mutex> lock(g_borderStateMutex);
         auto it = g_borderStates.find(g_clipBorder);
         if (it != g_borderStates.end()) {
             hwnd = it->second.hwnd;
+            eligible = it->second.eligible;
         }
     }
     if (!hwnd) {
+        return;
+    }
+    if (eligible && radius > 0.0f && g_radius.load() > 0 &&
+        FitToWorkArea(hwnd, left, top, right, bottom)) {
+        WantFitRefresh(hwnd);
+    }
+    if (!g_objectLifetimesTracked) {
         return;
     }
     std::lock_guard<std::mutex> lock(g_contentClipsMutex);
@@ -10786,26 +11419,15 @@ bool ArmDecorTimer(HWND dwmWnd, UINT ms) {
 bool DecorationWanted() {
     return g_enabled && (g_maximizedShadow || g_maximizedBorder || g_customBorderColors);
 }
-// The accent color, re-read once a second while a border color follows it.
+// The border colors resolved again once a second while either follows the
+// accent color or the app mode.
 void FollowAccentColor() {
     static int ticks = 0;
-    if (!g_customBorderColors || !(g_activeBorderIsAccent || g_inactiveBorderIsAccent) ||
-        ++ticks % 10 != 0) {
+    if (!g_customBorderColors || !g_borderColorsFollow || ++ticks % 10 != 0) {
         return;
     }
-    uint32_t accent = 0;
-    if (!AccentColor(accent)) {
-        return;
-    }
-    bool changed = false;
-    if (g_activeBorderIsAccent && g_activeBorderArgb.exchange(accent) != accent) {
-        changed = true;
-    }
-    if (g_inactiveBorderIsAccent && g_inactiveBorderArgb.exchange(accent) != accent) {
-        changed = true;
-    }
-    if (changed) {
-        RequestDwmRefresh(L"accent color");  // floating windows too
+    if (ResolveBorderColors(false)) {
+        RequestDwmRefresh(L"border colors");  // floating windows too
     }
 }
 void CALLBACK DecorTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
@@ -10832,6 +11454,7 @@ void CALLBACK DecorTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
     }
     FollowAccentColor();
     DecorPass(urgent);
+    RunFitRefreshes();
     g_urgentMonitor2 = nullptr;
 }
 
@@ -10997,6 +11620,15 @@ HRESULT WINAPI SetBorderParameters_Hook(void* self, const RECT* rect, float radi
     if (shadowStyle == 0 && d.shadowStyle > 0) {
         shadowStyle = d.shadowStyle;
     }
+    // A window maximized past its work area (an app drawing its own frame):
+    // the border, and with it the clip, cut to the work area.
+    RECT fitted{};
+    if (rect && query.eligible && radius > 0.0f) {
+        fitted = *rect;
+        if (FitToWorkArea(hwnd, fitted.left, fitted.top, fitted.right, fitted.bottom)) {
+            rect = &fitted;
+        }
+    }
     HRESULT hr =
         SetBorderParameters_Original(self, rect, radius, dpi, &used, borderStyle, shadowStyle);
     if (known && rect) {
@@ -11116,6 +11748,13 @@ BOOL Init() {
     // Both access specifiers are listed: older Windows 11 builds export
     // these members as private, newer ones as public.
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
+        {
+            {LR"(private: enum CORNER_STYLE __cdecl CTopLevelWindow::GetEffectiveCornerStyle(void))",
+             LR"(public: enum CORNER_STYLE __cdecl CTopLevelWindow::GetEffectiveCornerStyle(void))"},
+            &GetEffectiveCornerStyle_Original,
+            GetEffectiveCornerStyle_Hook,
+            true,  // optional: without it, apps Windows leaves square stay square
+        },
         {
             {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
              LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))"},
