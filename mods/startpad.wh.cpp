@@ -8,7 +8,7 @@
 // @donateUrl       https://www.paypal.me/frankh1993
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32
+// @compilerOptions -lole32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32 -ldwmapi -lpowrprof
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -130,6 +130,8 @@ Both mods replace the Start menu with a fullscreen app launcher, and **they cann
 
 #include <windows.h>
 #include <windowsx.h>
+#include <dwmapi.h>
+#include <powrprof.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <sddl.h>
@@ -140,6 +142,7 @@ Both mods replace the Start menu with a fullscreen app launcher, and **they cann
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -167,6 +170,9 @@ Both mods replace the Start menu with a fullscreen app launcher, and **they cann
 #ifndef SHUTDOWN_HYBRID
 #define SHUTDOWN_HYBRID 0x00000200
 #endif
+#ifndef ERROR_SHUTDOWN_USERS_LOGGED_ON
+#define ERROR_SHUTDOWN_USERS_LOGGED_ON 1190L
+#endif
 
 namespace {
 
@@ -179,7 +185,6 @@ constexpr UINT WM_LP_QUIT = WM_APP + 6;
 constexpr UINT WM_LP_PAGESTEP = WM_APP + 7;
 
 constexpr UINT_PTR kAnimTimer = 1;
-constexpr UINT_PTR kPageTimer = 2;
 constexpr UINT_PTR kHoldTimer = 3;
 constexpr UINT_PTR kDragTimer = 4;
 constexpr UINT_PTR kCaretTimer = 5;
@@ -208,7 +213,7 @@ struct UiStrings {
         *openFileLoc, *hideApp, *createFolder, *editHiddenApps,
         *searchHiddenApps, *doneEditing, *renameFolder, *ungroupFolder,
         *removeFromFolder, *resetLayout, *resetConfirmMsg, *resetConfirmTitle,
-        *lock, *signOut, *sleep, *shutDown, *restart;
+        *lock, *signOut, *sleep, *shutDown, *restart, *othersSignedInMsg;
 };
 
 const UiStrings& GetStrings() {
@@ -218,7 +223,8 @@ const UiStrings& GetStrings() {
         L"Rename", L"Ungroup folder", L"Remove from folder",
         L"Reset layout",
         L"Are you sure you want to reset the layout?\n\nAll custom icon positions and folders will be removed.",
-        L"Reset layout", L"Lock", L"Sign out", L"Sleep", L"Shut down", L"Restart"
+        L"Reset layout", L"Lock", L"Sign out", L"Sleep", L"Shut down", L"Restart",
+        L"Someone else is still using this PC. If you shut down or restart now, they could lose unsaved work.\n\nContinue anyway?"
     };
     static const UiStrings kEs = {
         L"Buscar aplicaciones", L"Sin resultados", L"Carpeta", L"Abrir", L"Ejecutar como administrador", L"Abrir ubicaci\u00F3n del archivo",
@@ -226,7 +232,8 @@ const UiStrings& GetStrings() {
         L"Cambiar nombre", L"Desagrupar carpeta", L"Quitar de la carpeta",
         L"Restablecer dise\u00F1o",
         L"\u00BFEst\u00E1s seguro de que deseas restablecer el dise\u00F1o?\n\nSe eliminar\u00E1n todas las carpetas y posiciones personalizadas.",
-        L"Restablecer dise\u00F1o", L"Bloquear", L"Cerrar sesi\u00F3n", L"Suspender", L"Apagar", L"Reiniciar"
+        L"Restablecer dise\u00F1o", L"Bloquear", L"Cerrar sesi\u00F3n", L"Suspender", L"Apagar", L"Reiniciar",
+        L"Otra persona sigue usando este equipo. Si lo apagas o reinicias ahora, podr\u00EDa perder el trabajo no guardado.\n\n\u00BFContinuar de todos modos?"
     };
     static const UiStrings kFr = {
         L"Rechercher des applications", L"Aucun r\u00E9sultat", L"Dossier", L"Ouvrir", L"Ex\u00E9cuter en tant qu\u2019administrateur", L"Ouvrir l\u2019emplacement du fichier",
@@ -234,7 +241,8 @@ const UiStrings& GetStrings() {
         L"Renommer", L"Dissocier le dossier", L"Retirer du dossier",
         L"R\u00E9initialiser la disposition",
         L"Voulez-vous vraiment r\u00E9initialiser la disposition ?\n\nTous les dossiers et positions personnalis\u00E9s seront supprim\u00E9s.",
-        L"R\u00E9initialiser la disposition", L"Verrouiller", L"Se d\u00E9connecter", L"Mettre en veille", L"Arr\u00EAter", L"Red\u00E9marrer"
+        L"R\u00E9initialiser la disposition", L"Verrouiller", L"Se d\u00E9connecter", L"Mettre en veille", L"Arr\u00EAter", L"Red\u00E9marrer",
+        L"Une autre personne utilise encore ce PC. Si vous l\u2019arr\u00EAtez ou le red\u00E9marrez maintenant, elle risque de perdre son travail non enregistr\u00E9.\n\nContinuer quand m\u00EAme ?"
     };
     static const UiStrings kDe = {
         L"Programme suchen", L"Keine Ergebnisse", L"Ordner", L"\u00D6ffnen", L"Als Administrator ausf\u00FChren", L"Dateispeicherort \u00F6ffnen",
@@ -242,7 +250,8 @@ const UiStrings& GetStrings() {
         L"Umbenennen", L"Ordner aufl\u00F6sen", L"Aus Ordner entfernen",
         L"Layout zur\u00FCcksetzen",
         L"M\u00F6chten Sie das Layout wirklich zur\u00FCcksetzen?\n\nAlle benutzerdefinierten Positionen und Ordner werden entfernt.",
-        L"Layout zur\u00FCcksetzen", L"Sperren", L"Abmelden", L"Energie sparen", L"Herunterfahren", L"Neu starten"
+        L"Layout zur\u00FCcksetzen", L"Sperren", L"Abmelden", L"Energie sparen", L"Herunterfahren", L"Neu starten",
+        L"Eine andere Person verwendet diesen PC noch. Wenn Sie ihn jetzt herunterfahren oder neu starten, gehen m\u00F6glicherweise nicht gespeicherte Daten verloren.\n\nTrotzdem fortfahren?"
     };
     static const UiStrings kIt = {
         L"Cerca applicazioni", L"Nessun risultato", L"Cartella", L"Apri", L"Esegui come amministratore", L"Apri percorso file",
@@ -250,7 +259,8 @@ const UiStrings& GetStrings() {
         L"Rinomina", L"Separa cartella", L"Rimuovi dalla cartella",
         L"Reimposta layout",
         L"Sei sicuro di voler reimpostare il layout?\n\nTutte le cartelle e le posizioni personalizzate verranno rimosse.",
-        L"Reimposta layout", L"Blocca", L"Disconnetti", L"Sospendi", L"Arresta il sistema", L"Riavvia"
+        L"Reimposta layout", L"Blocca", L"Disconnetti", L"Sospendi", L"Arresta il sistema", L"Riavvia",
+        L"Un\u2019altra persona sta ancora usando questo PC. Se arresti o riavvii il sistema ora, potrebbe perdere il lavoro non salvato.\n\nContinuare comunque?"
     };
     static const UiStrings kPt = {
         L"Pesquisar aplicativos", L"Sem resultados", L"Pasta", L"Abrir", L"Executar como administrador", L"Abrir local do arquivo",
@@ -258,7 +268,8 @@ const UiStrings& GetStrings() {
         L"Renomear", L"Desagrupar pasta", L"Remover da pasta",
         L"Redefinir layout",
         L"Tem certeza de que deseja redefinir o layout?\n\nTodas as pastas e posi\u00E7\u00F5es personalizadas ser\u00E3o removidas.",
-        L"Redefinir layout", L"Bloquear", L"Sair", L"Suspender", L"Desligar", L"Reiniciar"
+        L"Redefinir layout", L"Bloquear", L"Sair", L"Suspender", L"Desligar", L"Reiniciar",
+        L"Outra pessoa ainda est\u00E1 usando este PC. Se voc\u00EA desligar ou reiniciar agora, ela poder\u00E1 perder trabalhos n\u00E3o salvos.\n\nContinuar mesmo assim?"
     };
     static const UiStrings kRu = {
         L"\u041F\u043E\u0438\u0441\u043A \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0439", L"\u041D\u0435\u0442 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u0432", L"\u041F\u0430\u043F\u043A\u0430",
@@ -267,7 +278,8 @@ const UiStrings& GetStrings() {
         L"\u041F\u0435\u0440\u0435\u0438\u043C\u0435\u043D\u043E\u0432\u0430\u0442\u044C", L"\u0420\u0430\u0437\u0433\u0440\u0443\u043F\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443", L"\u0423\u0431\u0440\u0430\u0442\u044C \u0438\u0437 \u043F\u0430\u043F\u043A\u0438",
         L"\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u043C\u0430\u043A\u0435\u0442",
         L"\u0412\u044B \u0443\u0432\u0435\u0440\u0435\u043D\u044B, \u0447\u0442\u043E \u0445\u043E\u0442\u0438\u0442\u0435 \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u043C\u0430\u043A\u0435\u0442?\n\n\u0412\u0441\u0435 \u043F\u0430\u043F\u043A\u0438 \u0438 \u043F\u043E\u0437\u0438\u0446\u0438\u0438 \u0437\u043D\u0430\u0447\u043A\u043E\u0432 \u0431\u0443\u0434\u0443\u0442 \u0441\u0431\u0440\u043E\u0448\u0435\u043D\u044B.",
-        L"\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u043C\u0430\u043A\u0435\u0442", L"\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u0442\u044C", L"\u0412\u044B\u0439\u0442\u0438", L"\u0421\u043F\u044F\u0449\u0438\u0439 \u0440\u0435\u0436\u0438\u043C", L"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435 \u0440\u0430\u0431\u043E\u0442\u044B", L"\u041F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0430"
+        L"\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u043C\u0430\u043A\u0435\u0442", L"\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u0442\u044C", L"\u0412\u044B\u0439\u0442\u0438", L"\u0421\u043F\u044F\u0449\u0438\u0439 \u0440\u0435\u0436\u0438\u043C", L"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435 \u0440\u0430\u0431\u043E\u0442\u044B", L"\u041F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0430",
+        L"\u042D\u0442\u0438\u043C \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u043E\u043C \u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F \u043A\u0442\u043E-\u0442\u043E \u0435\u0449\u0435. \u0415\u0441\u043B\u0438 \u0432\u044B\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0438\u043B\u0438 \u043F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0435\u0433\u043E \u0441\u0435\u0439\u0447\u0430\u0441, \u043D\u0435\u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u043C\u043E\u0433\u0443\u0442 \u0431\u044B\u0442\u044C \u043F\u043E\u0442\u0435\u0440\u044F\u043D\u044B.\n\n\u0412\u0441\u0435 \u0440\u0430\u0432\u043D\u043E \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C?"
     };
     static const UiStrings kZh = {
         L"\u641C\u7D22\u5E94\u7528\u7A0B\u5E8F", L"\u65E0\u7ED3\u679C", L"\u6587\u4EF6\u5939", L"\u6253\u5F00", L"\u4EE5\u7BA1\u7406\u5458\u8EAB\u4EFD\u8FD0\u884C", L"\u6253\u5F00\u6587\u4EF6\u4F4D\u7F6E",
@@ -275,7 +287,8 @@ const UiStrings& GetStrings() {
         L"\u91CD\u547D\u540D", L"\u89E3\u6563\u6587\u4EF6\u5939", L"\u4ECE\u6587\u4EF6\u5939\u4E2D\u79FB\u9664",
         L"\u91CD\u7F6E\u5E03\u5C40",
         L"\u786E\u5B9A\u8981\u91CD\u7F6E\u5E03\u5C40\u5417\uFF1F\n\n\u6240\u6709\u81EA\u5B9A\u4E49\u56FE\u6807\u4F4D\u7F6E\u548C\u6587\u4EF6\u5939\u90FD\u5C06\u88AB\u79FB\u9664\u3002",
-        L"\u91CD\u7F6E\u5E03\u5C40", L"\u9501\u5B9A", L"\u6CE8\u9500", L"\u7761\u7720", L"\u5173\u673A", L"\u91CD\u542F"
+        L"\u91CD\u7F6E\u5E03\u5C40", L"\u9501\u5B9A", L"\u6CE8\u9500", L"\u7761\u7720", L"\u5173\u673A", L"\u91CD\u542F",
+        L"\u8FD8\u6709\u5176\u4ED6\u4EBA\u6B63\u5728\u4F7F\u7528\u6B64\u7535\u8111\u3002\u5982\u679C\u73B0\u5728\u5173\u673A\u6216\u91CD\u542F\uFF0C\u4ED6\u4EEC\u53EF\u80FD\u4F1A\u4E22\u5931\u672A\u4FDD\u5B58\u7684\u5DE5\u4F5C\u3002\n\n\u4ECD\u8981\u7EE7\u7EED\u5417\uFF1F"
     };
     static const UiStrings kJa = {
         L"\u30A2\u30D7\u30EA\u3092\u691C\u7D22", L"\u7D50\u679C\u306A\u3057", L"\u30D5\u30A9\u30EB\u30C0\u30FC", L"\u958B\u304F", L"\u7BA1\u7406\u8005\u3068\u3057\u3066\u5B9F\u884C", L"\u30D5\u30A1\u30A4\u30EB\u306E\u5834\u6240\u3092\u958B\u304F",
@@ -283,7 +296,8 @@ const UiStrings& GetStrings() {
         L"\u540D\u524D\u306E\u5909\u66F4", L"\u30D5\u30A9\u30EB\u30C0\u30FC\u3092\u89E3\u9664", L"\u30D5\u30A9\u30EB\u30C0\u30FC\u304B\u3089\u524A\u9664",
         L"\u30EC\u30A4\u30A2\u30A6\u30C8\u3092\u30EA\u30BB\u30C3\u30C8",
         L"\u30EC\u30A4\u30A2\u30A6\u30C8\u3092\u30EA\u30BB\u30C3\u30C8\u3057\u3066\u3082\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F\n\n\u3059\u3079\u3066\u306E\u30AB\u30B9\u30BF\u30E0\u914D\u7F6E\u3068\u30D5\u30A9\u30EB\u30C0\u30FC\u304C\u524A\u9664\u3055\u308C\u307E\u3059\u3002",
-        L"\u30EC\u30A4\u30A2\u30A6\u30C8\u3092\u30EA\u30BB\u30C3\u30C8", L"\u30ED\u30C3\u30AF", L"\u30B5\u30A4\u30F3\u30A2\u30A6\u30C8", L"\u30B9\u30EA\u30FC\u30D7", L"\u30B7\u30E3\u30C3\u30C8\u30C0\u30A6\u30F3", L"\u518D\u8D77\u52D5"
+        L"\u30EC\u30A4\u30A2\u30A6\u30C8\u3092\u30EA\u30BB\u30C3\u30C8", L"\u30ED\u30C3\u30AF", L"\u30B5\u30A4\u30F3\u30A2\u30A6\u30C8", L"\u30B9\u30EA\u30FC\u30D7", L"\u30B7\u30E3\u30C3\u30C8\u30C0\u30A6\u30F3", L"\u518D\u8D77\u52D5",
+        L"\u4ED6\u306E\u30E6\u30FC\u30B6\u30FC\u304C\u3053\u306E PC \u3092\u4F7F\u7528\u3057\u3066\u3044\u307E\u3059\u3002\u4ECA\u3059\u3050\u30B7\u30E3\u30C3\u30C8\u30C0\u30A6\u30F3\u307E\u305F\u306F\u518D\u8D77\u52D5\u3059\u308B\u3068\u3001\u4FDD\u5B58\u3055\u308C\u3066\u3044\u306A\u3044\u4F5C\u696D\u5185\u5BB9\u304C\u5931\u308F\u308C\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002\n\n\u7D9A\u884C\u3057\u307E\u3059\u304B\uFF1F"
     };
     static const UiStrings kKo = {
         L"\uC560\uD50C\uB9AC\uCF00\uC774\uC158 \uAC80\uC0C9", L"\uACB0\uACFC \uC5C6\uC74C", L"\uD3F4\uB354", L"\uC5F4\uAE30", L"\uAD00\uB9AC\uC790 \uAD8C\uD55C\uC73C\uB85C \uC2E4\uD589", L"\uD30C\uC77C \uC704\uCE58 \uC5F4\uAE30",
@@ -291,7 +305,8 @@ const UiStrings& GetStrings() {
         L"\uC774\uB984 \uBC14\uAFB8\uAE30", L"\uD3F4\uB354 \uD574\uC81C", L"\uD3F4\uB354\uC5D0\uC11C \uC81C\uAC70",
         L"\uB808\uC774\uC544\uC6C3 \uCD08\uAE30\uD654",
         L"\uB808\uC774\uC544\uC6C3\uC744 \uCD08\uAE30\uD654\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?\n\n\uBAA8\uB4E0 \uC0AC\uC6A9\uC790 \uC9C0\uC815 \uC544\uC774\uCF58 \uC704\uCE58\uC640 \uD3F4\uB354\uAC00 \uC81C\uAC70\uB429\uB2C8\uAE4C.",
-        L"\uB808\uC774\uC544\uC6C3 \uCD08\uAE30\uD654", L"\uC7A0\uAE08", L"\uB85C\uADF8\uC544\uC6C3", L"\uC808\uC804", L"\uC2DC\uC2A4\uD15C \uC885\uB8CC", L"\uB2E4\uC2DC \uC2DC\uC791"
+        L"\uB808\uC774\uC544\uC6C3 \uCD08\uAE30\uD654", L"\uC7A0\uAE08", L"\uB85C\uADF8\uC544\uC6C3", L"\uC808\uC804", L"\uC2DC\uC2A4\uD15C \uC885\uB8CC", L"\uB2E4\uC2DC \uC2DC\uC791",
+        L"\uB2E4\uB978 \uC0AC\uB78C\uC774 \uC544\uC9C1 \uC774 PC\uB97C \uC0AC\uC6A9\uD558\uACE0 \uC788\uC2B5\uB2C8\uB2E4. \uC9C0\uAE08 \uC885\uB8CC\uD558\uAC70\uB098 \uB2E4\uC2DC \uC2DC\uC791\uD558\uBA74 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uC791\uC5C5\uC744 \uC783\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\n\n\uACC4\uC18D\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?"
     };
 
     LANGID id = GetUserDefaultUILanguage();
@@ -389,22 +404,14 @@ void LoadSettings() {
     InterlockedExchange(&g_optHideUninstallers, Wh_GetIntSetting(L"features.hideUninstallers") ? 1 : 0);
     InterlockedExchange(&g_optPower, Wh_GetIntSetting(L"features.showPowerButton") ? 1 : 0);
 
-    int style = 0;
-    PCWSTR st = Wh_GetStringSetting(L"visuals.visualStyle");
-    if (st) {
-        if (wcscmp(st, L"windows") == 0) style = 1;
-        Wh_FreeStringSetting(st);
-    }
-    InterlockedExchange(&g_optStyle, style);
+    auto st = WindhawkUtils::StringSetting::make(L"visuals.visualStyle");
+    InterlockedExchange(&g_optStyle, wcscmp(st, L"windows") == 0 ? 1 : 0);
 
     int blur = 2;
-    PCWSTR s = Wh_GetStringSetting(L"visuals.blur");
-    if (s) {
-        if (wcscmp(s, L"off") == 0) blur = 0;
-        else if (wcscmp(s, L"light") == 0) blur = 1;
-        else if (wcscmp(s, L"strong") == 0) blur = 3;
-        Wh_FreeStringSetting(s);
-    }
+    auto s = WindhawkUtils::StringSetting::make(L"visuals.blur");
+    if (wcscmp(s, L"off") == 0) blur = 0;
+    else if (wcscmp(s, L"light") == 0) blur = 1;
+    else if (wcscmp(s, L"strong") == 0) blur = 3;
     InterlockedExchange(&g_optBlur, blur);
 
     int savedSearchHidden = Wh_GetIntValue(L"searchHiddenApps", 0);
@@ -578,16 +585,10 @@ void UpdateThemeColors() {
         g_isLightTheme = false;
     }
 
-    using Fn = HRESULT(WINAPI*)(DWORD*, BOOL*);
-    static Fn fn = [] {
-        HMODULE m = LoadLibraryW(L"dwmapi.dll");
-        return m ? reinterpret_cast<Fn>(GetProcAddress(m, "DwmGetColorizationColor"))
-                 : nullptr;
-    }();
     DWORD argb = 0;
     BOOL opaque = FALSE;
     BYTE ar = 0, ag = 120, ab = 212;
-    if (fn && SUCCEEDED(fn(&argb, &opaque))) {
+    if (SUCCEEDED(DwmGetColorizationColor(&argb, &opaque))) {
         ar = (argb >> 16) & 0xFF;
         ag = (argb >> 8) & 0xFF;
         ab = argb & 0xFF;
@@ -916,12 +917,7 @@ RECT GetViewCellBounds(const Layout& l, int viewIdx) {
 LPARAM g_pageChain = 0;
 
 void WaitVBlank() {
-    using Fn = HRESULT(WINAPI*)();
-    static Fn fn = [] {
-        HMODULE m = LoadLibraryW(L"dwmapi.dll");
-        return m ? reinterpret_cast<Fn>(GetProcAddress(m, "DwmFlush")) : nullptr;
-    }();
-    if (fn) fn();
+    DwmFlush();
 }
 
 // Per-page alpha snapshots (cells only, no backdrop) used while pages slide.
@@ -1157,7 +1153,6 @@ void OnPageTimer() {
         g_pagePos = (double)g_page;
         g_pageVel = 0.0;
         g_pageAnimating = false;
-        KillTimer(g_wnd, kPageTimer);
         g_gridCacheValid = false;
         RedrawRect(GetPageSwipeRect(l), true);
         UpdateWindow(g_wnd);
@@ -1905,7 +1900,6 @@ void Refilter() {
     g_pagePos = 0.0;
     g_pageVel = 0.0;
     g_pageAnimating = false;
-    if (g_wnd) KillTimer(g_wnd, kPageTimer);
     if (!g_query.empty() && !g_view.empty()) {
         g_sel = 0;
         g_keyNav = true;
@@ -4235,7 +4229,6 @@ void ApplyVisual() {
 void HideNow() {
     if (!g_wnd) return;
     KillTimer(g_wnd, kAnimTimer);
-    KillTimer(g_wnd, kPageTimer);
     KillTimer(g_wnd, kHoldTimer);
     KillTimer(g_wnd, kDragTimer);
     KillTimer(g_wnd, kCaretTimer);
@@ -4525,21 +4518,22 @@ bool EnableShutdownPrivilege() {
 
 void DoSleep() {
     EnableShutdownPrivilege();
-    using Fn = BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
-    HMODULE m = LoadLibraryW(L"powrprof.dll");
-    if (!m) return;
-    auto fn = reinterpret_cast<Fn>(GetProcAddress(m, "SetSuspendState"));
-    if (fn) fn(FALSE, FALSE, FALSE);
-    FreeLibrary(m);
+    SetSuspendState(FALSE, FALSE, FALSE);
 }
 
 void DoShutdownOrRestart(bool restart) {
     EnableShutdownPrivilege();
-    DWORD flags = SHUTDOWN_FORCE_OTHERS | SHUTDOWN_INSTALL_UPDATES |
+    DWORD flags = SHUTDOWN_INSTALL_UPDATES |
                   (restart ? SHUTDOWN_RESTART : (SHUTDOWN_POWEROFF | SHUTDOWN_HYBRID));
-    if (InitiateShutdownW(nullptr, nullptr, 0, flags,
-                          SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_MINOR_OTHER) !=
-        ERROR_SUCCESS) {
+    DWORD reason = SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_MINOR_OTHER;
+    DWORD err = InitiateShutdownW(nullptr, nullptr, 0, flags, reason);
+    if (err == ERROR_SHUTDOWN_USERS_LOGGED_ON) {
+        const UiStrings& str = GetStrings();
+        if (MessageBoxW(nullptr, str.othersSignedInMsg, restart ? str.restart : str.shutDown,
+                        MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TOPMOST) == IDYES) {
+            InitiateShutdownW(nullptr, nullptr, 0, flags | SHUTDOWN_FORCE_OTHERS, reason);
+        }
+    } else if (err != ERROR_SUCCESS) {
         ExitWindowsEx(restart ? EWX_REBOOT : EWX_SHUTDOWN, 0);
     }
 }
@@ -4690,7 +4684,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_TIMER:
             if (wp == kAnimTimer) OnAnimTimer();
-            else if (wp == kPageTimer) OnPageTimer();
             else if (wp == kHoverTimer) OnHoverTimer();
             else if (wp == kFolderAnimTimer) OnFolderAnimTimer();
             else if (wp == kSnapTimer) OnSnapTimer();
@@ -4925,7 +4918,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (!FolderActive() && !g_dragMoved && std::abs(dx) > S(10)) {
                     g_dragMoved = true;
                     g_pageAnimating = false;
-                    KillTimer(hwnd, kPageTimer);
                     KillTimer(hwnd, kHoverTimer);
                     g_pageVel = 0.0;
                     g_dragLastX = x;
@@ -5384,7 +5376,6 @@ DWORD WINAPI ThreadProc(LPVOID) {
         g_shellNotifyId = 0;
     }
     KillTimer(g_wnd, kAnimTimer);
-    KillTimer(g_wnd, kPageTimer);
     KillTimer(g_wnd, kCaretTimer);
     KillTimer(g_wnd, kHoverTimer);
     KillTimer(g_wnd, kFolderAnimTimer);
