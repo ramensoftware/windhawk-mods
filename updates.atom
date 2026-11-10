@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-10T00:01:58.000Z</updated>
+    <updated>2026-11-10T01:04:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 4.1]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#7047a595d7d4de175f55b420edfb05d9f832d278</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-11-10T01:04:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a link to <a href="https://windhawk.net/mods/classic-explorerframe">Classic Explorerframe for 24H2 and later</a> mod</li>
+<li>Minor refactoring</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/mac-os-27-finder-bar#490977e5b6cf20cdba95d86f1203e8f8be44e012</id>
@@ -1014,45 +1029,6 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Snowfall 1.0]]></title>
-        <id>https://windhawk.net/mods/desktop-snowfall#be5856fcd480efbfe0843219dea54843673763fe</id>
-        <link href="https://windhawk.net/mods/desktop-snowfall"/>
-        <updated>2026-11-08T19:01:39.000Z</updated>
-        <content type="html"><![CDATA[<h1>Desktop Snowfall</h1>
-<p>Snow falls over your desktop. Flakes land on the top edge of your windows and on
-the taskbar and slowly build up snow drifts of different heights.</p>
-<p><img src="https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif" alt="Desktop Snowfall demo"></p>
-<ul>
-<li>The snow follows the window. Toss a window up and the snow flies up in loose
-clumps and lands back with a little bounce. Pull it down or shrink it from
-the top and the snow hangs in the air for a moment before it falls back onto
-the window.</li>
-<li>Make a window narrower and the snow on the cut-off part falls down.</li>
-<li>Optionally, the snow slides off windows moved sideways: it stays where it is,
-and the part the window slides out from under falls down.</li>
-<li>Sweep the snow off with the mouse cursor - it falls down to the windows below
-or to the taskbar.</li>
-<li>The wind blows powder off the drifts, and now and then a lump slides off a
-window corner.</li>
-<li>Works with the default taskbar, an auto-hidden taskbar (the snow rides along
-when it slides in and out) and custom taskbar styles (for example, floating
-&quot;dock&quot; themes of the Windows 11 Taskbar Styler mod): the snow lies on the
-visible taskbar parts.</li>
-</ul>
-<p>The snow is drawn on the GPU on a transparent, click-through overlay, so it
-never gets in the way of mouse input. The overlay is hidden automatically while
-a fullscreen app (a game or a video) is in the foreground. The mod runs in its
-own process, separately from Explorer.</p>
-<p>The overlay is redrawn every frame, so the snow keeps the GPU a little busy even
-when nothing else on the screen changes. On a laptop running on battery, a lower
-frame rate limit (for example, 30) saves power.</p>
-]]></content>
-        <author>
-            <name>mikybuilds</name>
-            <uri>https://github.com/mikybuilds</uri>
         </author>
     </entry>
 </feed>

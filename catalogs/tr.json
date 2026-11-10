@@ -14373,7 +14373,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0.12181860744308436,
-        "updated": 1793815355000,
+        "updated": 1794272652000,
         "users": 469
       },
       "metadata": {
@@ -14388,7 +14388,7 @@
           "explorer.exe"
         ],
         "name": "ExplorerFrame and menubar fixes fork",
-        "version": "4.0"
+        "version": "4.1"
       }
     },
     "restore-legacy-network-tray": {

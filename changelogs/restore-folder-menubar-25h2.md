@@ -1,3 +1,8 @@
+## 4.1 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7047a595d7d4de175f55b420edfb05d9f832d278/mods/restore-folder-menubar-25h2.wh.cpp))
+
+* Add a link to [Classic Explorerframe for 24H2 and later](https://windhawk.net/mods/classic-explorerframe) mod
+* Minor refactoring
+
 ## 4.0 ([Nov 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7c6cbfe42f4b774fbfa8bda4e99a80cdb860269/mods/restore-folder-menubar-25h2.wh.cpp))
 
 * Add compatibility with explorerframe.dll spoofing
