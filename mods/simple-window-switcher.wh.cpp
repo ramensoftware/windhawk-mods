@@ -6761,10 +6761,30 @@ struct PendingCloseRequest {
     UINT fallbackMessage = WM_CLOSE;
     WPARAM fallbackWParam = 0;
     ULONGLONG deadline = 0;
+    // The user reached the window (or its prompt) after the close request. An
+    // app that answered the close with a prompt drawn inside its own window
+    // can't be told apart from one that ignored it, so the fallback must not
+    // repeat the close after the user has dealt with that prompt.
+    bool fallbackSuppressed = false;
 };
 
 static std::vector<HWND> s_pendingCloseWindows;
 static std::map<HWND, PendingCloseRequest> s_pendingCloseRequests;
+
+// Foreground changes outside a visible session (or during its exit) come from
+// the user or from a commit, not from the close itself. Restoring a minimized
+// target inside a sticky session therefore doesn't count.
+static void NoteCloseTargetEngaged(HWND hWnd) {
+    if (!hWnd || s_pendingCloseRequests.empty()) return;
+    if ((g_isVisible || g_isPendingShow) && !g_animExitActive) return;
+    HWND root = GetAncestor(hWnd, GA_ROOTOWNER);
+    for (HWND candidate : {hWnd, root}) {
+        auto request = s_pendingCloseRequests.find(candidate);
+        if (request != s_pendingCloseRequests.end()) {
+            request->second.fallbackSuppressed = true;
+        }
+    }
+}
 
 // Activation MRU (Most Recently Used) tracking
 static std::vector<HWND> g_mruWindows;
@@ -17395,6 +17415,7 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     // session and never changes the closing frame.
     if (event == EVENT_SYSTEM_FOREGROUND) {
         if (!IsSwitcherWindow(hwnd)) {
+            NoteCloseTargetEngaged(hwnd);
             UpdateMruWindow(hwnd);
             if (!g_animExitActive && (g_isVisible || g_isPendingShow)) {
                 AddWindowEntry(hwnd, false);
@@ -19243,6 +19264,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     it = s_pendingCloseWindows.erase(it);
                 } else if (now < request->second.deadline) {
                     ++it;
+                } else if (request->second.state == CloseRequestState::PrimaryQueued &&
+                           request->second.fallbackSuppressed) {
+                    // The user is handling the window's own prompt. Leave the
+                    // outcome to them; destruction is still tracked by the
+                    // shell hook and WinEvent paths.
+                    if (s_stickyTwoFingerTapCloseTarget == h) {
+                        ClearStickyTwoFingerTapOwnership();
+                    }
+                    s_pendingCloseRequests.erase(request);
+                    it = s_pendingCloseWindows.erase(it);
                 } else if (request->second.state == CloseRequestState::PrimaryQueued) {
                     PendingCloseRequest& pending = request->second;
                     if (PostCloseMessage(h, pending.fallbackMessage,
@@ -20071,6 +20102,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (code == HSHELL_WINDOWACTIVATED || code == 4) {
             HWND hAct = (HWND)lParam;
             if (hAct && !IsSwitcherWindow(hAct)) {
+                NoteCloseTargetEngaged(hAct);
                 UpdateMruWindow(hAct);
                 if (g_isVisible || g_isPendingShow) {
                     AddWindowEntry(hAct, false);
