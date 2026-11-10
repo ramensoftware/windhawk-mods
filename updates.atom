@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-10T01:04:12.000Z</updated>
+    <updated>2026-11-10T02:01:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 2.0]]></title>
+        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#dfc704860c91247102c2d0699ff3d3b46a05d654</id>
+        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
+        <updated>2026-11-10T02:01:23.000Z</updated>
+        <content type="html"><![CDATA[<p><a href="https://github.com/ramensoftware/windhawk-mods/issues/6778">Add features by user Aliipey</a>:</p>
+<ul>
+<li>Optionally detect the text type and use it as the file extension</li>
+<li>Select the pasted file and enter rename mode (optional)</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 4.1]]></title>
         <id>https://windhawk.net/mods/restore-folder-menubar-25h2#7047a595d7d4de175f55b420edfb05d9f832d278</id>
@@ -1011,24 +1027,6 @@ Battery features: https://github.com/pwr-Solaar/Solaar</p>
         <author>
             <name>uMk0</name>
             <uri>https://github.com/umk0</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorerframe for 24H2 and later 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorerframe#d2a11c71d707fe8e7c32b56e5cfa23de18e70f61</id>
-        <link href="https://windhawk.net/mods/classic-explorerframe"/>
-        <updated>2026-11-08T19:01:44.000Z</updated>
-        <content type="html"><![CDATA[<p>Restores classic Explorerframe.dll on Windows 11 24H2 and later. This allows to restore the toolbars in the folder windows, including
-the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar and the toolbars provided by the mod
-<a href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe">Flexible Explorer Toolbars Deluxe</a>, such as the Search bar.</p>
-<p>Note that to enable the menubar you need to install in addition the mod <a href="https://windhawk.net/mods/restore-folder-menubar-25h2">ExplorerFrame and menubar fixes fork</a>.</p>
-<p>This mod downloads the classic Explorerframe.dll from the Microsoft's symbols server and stores it into the mod's storage. You need a working internet access at the first mod's activation.</p>
-<p>Restart Explorer after enabling or disabling the mod. At the first activation the file is downloaded in the background, so wait a few seconds before restarting, otherwise the mod takes effect only at the following Explorer start.</p>
-<p>Mods that hook ExplorerFrame.dll and happen to load before this mod might have no effect, because folder windows don't use the copy they hooked.</p>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

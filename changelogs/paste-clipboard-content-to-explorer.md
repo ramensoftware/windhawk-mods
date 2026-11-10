@@ -1,3 +1,9 @@
+## 2.0 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dfc704860c91247102c2d0699ff3d3b46a05d654/mods/paste-clipboard-content-to-explorer.wh.cpp))
+
+[Add features by user Aliipey](https://github.com/ramensoftware/windhawk-mods/issues/6778):
+* Optionally detect the text type and use it as the file extension
+* Select the pasted file and enter rename mode (optional)
+
 ## 1.7 ([Jun 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d5e5e1b6cab2f2637193915b3ad2b5249219536b/mods/paste-clipboard-content-to-explorer.wh.cpp))
 
 Narrow down the command range to fix bugs

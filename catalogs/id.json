@@ -12789,7 +12789,7 @@
         "ratingUsers": 81,
         "reviews": 0,
         "trendingSorting": 0.8360573077930512,
-        "updated": 1780344050000,
+        "updated": 1794276083000,
         "users": 3602
       },
       "metadata": {
@@ -12801,7 +12801,7 @@
           "*"
         ],
         "name": "Paste Clipboard Content to Explorer",
-        "version": "1.7"
+        "version": "2.0"
       }
     },
     "per-app-language-preferences": {
