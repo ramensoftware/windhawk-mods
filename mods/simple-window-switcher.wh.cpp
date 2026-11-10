@@ -1249,14 +1249,6 @@ struct WindowIconCell {
     std::shared_ptr<OwnedWindowIcon> icon;
 };
 
-enum class UwpFrameValidation : unsigned char {
-    NotApplicationFrame,
-    Pending,
-    LiveCoreWindow,
-    LiveThumbnail,
-    Stale,
-};
-
 static constexpr DWORD SWS_UWP_VALIDATION_GRACE_MS = 1000;
 static constexpr unsigned int SWS_UWP_INVALID_SOURCE_LIMIT = 5;
 
@@ -1266,7 +1258,6 @@ struct WindowEntry {
     RECT rcCell; RECT rcThumbActual; RECT rcThumbSlot;
     SIZE sourceSize;           // Raw DWM surface size
     bool thumbnailSourceReady = false;
-    UwpFrameValidation uwpValidation = UwpFrameValidation::NotApplicationFrame;
     ULONGLONG uwpValidationStartTick = 0;
     unsigned int uwpInvalidSourceChecks = 0;
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
@@ -1649,7 +1640,6 @@ static SIZE g_backdropPaintSize = {};
 
 // The plate is presented with the switcher and follows its shared entrance and
 // exit timeline. It never appears later or remains after the switcher hides.
-static float g_backdropFadeAlpha = 0.0f;
 static bool g_backdropEntranceFadeActive = false;
 static bool g_backdropExitFadeActive = false;
 static bool g_backdropPresentationResolved = false;
@@ -1836,7 +1826,6 @@ static bool PrepareBackdropSurfaceForBitmap(Gdiplus::Bitmap* bitmap, int w, int 
 
 static void BackdropApplyAlpha(HWND hWnd, float alpha) {
     if (!hWnd || !IsWindow(hWnd)) return;
-    g_backdropFadeAlpha = alpha;
     SetLayeredWindowAttributes(hWnd, 0, (BYTE)(alpha * 255.0f + 0.5f), LWA_ALPHA);
 }
 
@@ -2588,7 +2577,6 @@ static HANDLE g_restartExplorerPromptGate = NULL;
 static IsShellWindow_t g_IsShellManagedWindow = nullptr;
 static IsShellWindow_t g_IsShellFrameWindow = nullptr;
 static GhostWindowFromHungWindow_t g_GhostWindowFromHungWindow = nullptr;
-static GhostWindowFromHungWindow_t g_HungWindowFromGhostWindow = nullptr;
 static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr;
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
@@ -2598,9 +2586,6 @@ static bool g_isClosePressed = false;
 static HANDLE g_explorerIpcThread = NULL;
 static DWORD g_explorerIpcThreadId = 0;
 static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
-static int g_switcherBaseX = 0;
-static int g_switcherBaseY = 0;
-static bool g_switcherBaseInitialized = false;
 static bool g_isWin11OrGreater = false;
 
 static bool IsWin11OrGreater() {
@@ -3775,9 +3760,7 @@ static float g_animChevronAlphaNext = 0.0f;
 static float g_animChevronAlphaTargetPrev = 0.0f;
 static float g_animChevronAlphaTargetNext = 0.0f;
 static float g_animChevronProgressPrev = 1.0f;
-static float g_animChevronStartAlphaPrev = 0.0f;
 static float g_animChevronProgressNext = 1.0f;
-static float g_animChevronStartAlphaNext = 0.0f;
 static float g_animChevronHoverAlphaPrev = 0.0f;
 static float g_animChevronHoverAlphaNext = 0.0f;
 static float g_animChevronDuration = 0.167f;
@@ -3799,7 +3782,6 @@ enum ScrollNavType {
 
 struct OutgoingItemSnapshot {
     HWND hWnd = NULL;
-    int windowIndex = -1;
     RECT rcCell;
     RECT rcThumbActual;
     RECT rcThumbSlot;
@@ -5051,7 +5033,6 @@ static void CaptureOutgoingSnapshot() {
         OutgoingItemSnapshot snap;
         snap.hWnd = w.hWnd;
         snap.isDesktopItem = w.isDesktopItem;
-        snap.windowIndex = i;
         snap.rcCell = w.rcCell;
         snap.rcThumbActual = w.rcThumbActual;
         snap.rcThumbSlot = w.rcThumbSlot;
@@ -5846,9 +5827,6 @@ static void OnAnimationTick() {
             int finalW = (int)roundf(g_layoutTransition.rcWndTarget.right - g_layoutTransition.rcWndTarget.left);
             int finalH = (int)roundf(g_layoutTransition.rcWndTarget.bottom - g_layoutTransition.rcWndTarget.top);
             SetSwitcherLayoutBounds(finalCx, finalCy, finalW, finalH);
-            g_switcherBaseX = finalCx;
-            g_switcherBaseY = finalCy;
-            g_switcherBaseInitialized = true;
             ApplySwitcherRegion();
 
             InvalidateStaticCache();
@@ -5876,9 +5854,6 @@ static void OnAnimationTick() {
             int curW = (int)roundf(curWnd.right - curWnd.left);
             int curH = (int)roundf(curWnd.bottom - curWnd.top);
             SetSwitcherLayoutBounds(curCx, curCy, curW, curH);
-            g_switcherBaseX = curCx;
-            g_switcherBaseY = curCy;
-            g_switcherBaseInitialized = true;
 
             if (DockLayoutActive()) {
                 g_rcDockIconStrip = InterpolateLayoutRect(g_layoutTransition.rcDockStripStart, g_layoutTransition.rcDockStripTarget, t);
@@ -6353,7 +6328,6 @@ static bool ResolveAPIs() {
     g_IsShellManagedWindow = (IsShellWindow_t)GetProcAddress(h, (LPCSTR)2574);
     g_IsShellFrameWindow = (IsShellWindow_t)GetProcAddress(h, (LPCSTR)2573);
     g_GhostWindowFromHungWindow = (GhostWindowFromHungWindow_t)GetProcAddress(h, "GhostWindowFromHungWindow");
-    g_HungWindowFromGhostWindow = (GhostWindowFromHungWindow_t)GetProcAddress(h, "HungWindowFromGhostWindow");
     g_SetWindowCompositionAttribute = (SetWindowCompositionAttribute_t)GetProcAddress(h, "SetWindowCompositionAttribute");
 
     return true;
@@ -6529,49 +6503,29 @@ static bool IsUwpFrameDefinitelyStale(HWND hWnd) {
 }
 
 static void InitializeUwpFrameValidation(WindowEntry& entry) {
-    if (!IsApplicationFrameWindowClass(entry.hWnd)) {
-        entry.uwpValidation = UwpFrameValidation::NotApplicationFrame;
-        entry.uwpValidationStartTick = 0;
-        entry.uwpInvalidSourceChecks = 0;
-        return;
-    }
-
     entry.uwpValidationStartTick = 0;
     entry.uwpInvalidSourceChecks = 0;
-    if (IsUwpFrameDefinitelyStale(entry.hWnd)) {
-        entry.uwpValidation = UwpFrameValidation::Stale;
-    } else if (FindUwpCoreWindow(entry.hWnd)) {
-        entry.uwpValidation = UwpFrameValidation::LiveCoreWindow;
-    } else {
-        // CoreWindow may appear after Explorer restores an existing UWP frame.
-        // Keep the visible frame pending until DWM supplies a usable thumbnail.
-        entry.uwpValidation = UwpFrameValidation::Pending;
-    }
 }
 
 static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
                                      HRESULT sourceHr, PCWSTR phase) {
     if (!IsApplicationFrameWindowClass(entry.hWnd)) {
-        entry.uwpValidation = UwpFrameValidation::NotApplicationFrame;
         entry.uwpValidationStartTick = 0;
         entry.uwpInvalidSourceChecks = 0;
         return false;
     }
 
     if (IsUwpFrameDefinitelyStale(entry.hWnd)) {
-        entry.uwpValidation = UwpFrameValidation::Stale;
         return true;
     }
 
     if (FindUwpCoreWindow(entry.hWnd)) {
-        entry.uwpValidation = UwpFrameValidation::LiveCoreWindow;
         entry.uwpValidationStartTick = 0;
         entry.uwpInvalidSourceChecks = 0;
         return false;
     }
 
     if (thumbnailReady) {
-        entry.uwpValidation = UwpFrameValidation::LiveThumbnail;
         entry.uwpValidationStartTick = 0;
         entry.uwpInvalidSourceChecks = 0;
         return false;
@@ -6580,7 +6534,6 @@ static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
     // Hidden enumeration and Show Delay are setup time, not visible validation
     // time. Do not consume recovery grace before presentation begins.
     if (!g_isVisible) {
-        entry.uwpValidation = UwpFrameValidation::Pending;
         return false;
     }
 
@@ -6591,15 +6544,9 @@ static bool UpdateUwpFrameValidation(WindowEntry& entry, bool thumbnailReady,
     if (entry.uwpInvalidSourceChecks < 0xFFFFu) {
         ++entry.uwpInvalidSourceChecks;
     }
-    entry.uwpValidation = UwpFrameValidation::Pending;
-    const bool expired =
-        entry.uwpInvalidSourceChecks >= SWS_UWP_INVALID_SOURCE_LIMIT &&
-        now >= entry.uwpValidationStartTick &&
-        now - entry.uwpValidationStartTick >= SWS_UWP_VALIDATION_GRACE_MS;
-    if (expired) {
-        entry.uwpValidation = UwpFrameValidation::Stale;
-    }
-    return expired;
+    return entry.uwpInvalidSourceChecks >= SWS_UWP_INVALID_SOURCE_LIMIT &&
+           now >= entry.uwpValidationStartTick &&
+           now - entry.uwpValidationStartTick >= SWS_UWP_VALIDATION_GRACE_MS;
 }
 
 static bool ShouldPruneUwpEntry(const WindowEntry& entry) {
@@ -6682,7 +6629,6 @@ struct PendingCloseRequest {
     WPARAM primaryWParam = SC_CLOSE;
     UINT fallbackMessage = WM_CLOSE;
     WPARAM fallbackWParam = 0;
-    bool restoreRequested = false;
     ULONGLONG deadline = 0;
 };
 
@@ -7653,14 +7599,12 @@ struct TouchpadProcessSecurity {
     int uiAccess = -1;
     DWORD error = ERROR_SUCCESS;
     bool restrictedToken = false;
-    bool queryDenied = false;
     bool unknown = false;
 };
 
 static void MarkTouchpadSecurityFailure(TouchpadProcessSecurity& result,
                                         DWORD error) {
     if (!result.error) result.error = error;
-    result.queryDenied |= error == ERROR_ACCESS_DENIED;
     result.unknown = true;
 }
 
@@ -7814,7 +7758,6 @@ static bool s_twoFingerTapDismissPending = false;
 static DWORD s_stickyTwoFingerTapSerial = 0;
 static ULONGLONG s_stickyTwoFingerTapOwnershipDeadline = 0;
 static bool s_stickyTwoFingerTapCloseRequested = false;
-static bool s_stickyTwoFingerTapMousePairConsumed = false;
 static bool s_stickyTwoFingerTapFocusRestoreActive = false;
 static HWND s_stickyTwoFingerTapCloseTarget = nullptr;
 static ULONGLONG s_rawTouchpadShieldFocusStartTick = 0;
@@ -7828,11 +7771,6 @@ static bool s_touchpadCommitActivation = false;
 static bool s_touchpadPending = false;
 static ULONGLONG s_touchpadRapidPendingTick = 0;
 static ULONGLONG s_touchpadRapidPendingRawSerial = 0;
-static ULONG s_touchpadRapidPendingRawPhase = 0u;
-static int s_touchpadRapidPendingInitialIndex = -1;
-static int s_touchpadRapidPendingTargetIndex = -1;
-static int s_touchpadRapidPendingDirection = 0;
-static bool s_touchpadRapidPendingCommitted = false;
 static bool s_touchpadRapidRevealReanchorPending = false;
 static DWORD s_touchpadRapidPendingGeneration = 0;
 
@@ -8043,7 +7981,6 @@ static DWORD RawSwipeMarkerRemainingMs(HANDLE marker, ULONGLONG tick) {
     return age < lifetime ? lifetime - age : 0;
 }
 
-#define SWS_RAW_THREE_PHASE_NONE 0u
 #define SWS_RAW_THREE_PHASE_LIVE 1u
 #define SWS_RAW_THREE_PHASE_LIFTED 2u
 #define SWS_RAW_THREE_PHASE_LOST 3u
@@ -8237,7 +8174,6 @@ static void ClearStickyTwoFingerTapOwnership() {
     s_stickyTwoFingerTapSerial = 0;
     s_stickyTwoFingerTapOwnershipDeadline = 0;
     s_stickyTwoFingerTapCloseRequested = false;
-    s_stickyTwoFingerTapMousePairConsumed = false;
     s_stickyTwoFingerTapFocusRestoreActive = false;
     s_stickyTwoFingerTapCloseTarget = nullptr;
 }
@@ -8293,10 +8229,6 @@ static void BeginStickyTwoFingerTapOwnership(HWND target) {
     s_stickyTwoFingerTapOwnershipDeadline =
         now + SWS_STICKY_TWO_FINGER_CLOSE_TIMEOUT_MS;
     s_stickyTwoFingerTapCloseRequested = true;
-    s_stickyTwoFingerTapMousePairConsumed =
-        s_stickyTwoFingerTapSerial &&
-        g_touchpadRawTwoFingerTapConsumedSerial.load(std::memory_order_acquire) ==
-            s_stickyTwoFingerTapSerial;
     s_stickyTwoFingerTapCloseTarget = target;
     SetTimer(g_hSwitcher, SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID,
              SWS_STICKY_TWO_FINGER_CLOSE_TIMEOUT_MS, nullptr);
@@ -11020,17 +10952,16 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
 // feathering with perfectly centered zero-offset distribution (cumulative alpha ~15% dark / ~10% light).
 struct ThumbnailShadowPass {
     int baseSpread;     // Outward expansion in base pixels (at 96 DPI)
-    int baseYOffset;    // Directional offset in base pixels (0 for centered)
     BYTE alphaDark;     // Pass alpha for dark mode (0-255)
     BYTE alphaLight;    // Pass alpha for light mode (0-255)
 };
 
 static const ThumbnailShadowPass kThumbnailShadowPasses[5] = {
-    { 10, 0,  2, 1 },  // Pass 0: Wide subtle ambient feather
-    {  7, 0,  3, 2 },  // Pass 1: Soft diffusion body
-    {  5, 0,  4, 3 },  // Pass 2: Centered ambient body
-    {  3, 0,  6, 4 },  // Pass 3: Centered core
-    {  1, 0,  7, 5 }   // Pass 4: Subtle contact occlusion edge
+    { 10,  2, 1 },  // Pass 0: Wide subtle ambient feather
+    {  7,  3, 2 },  // Pass 1: Soft diffusion body
+    {  5,  4, 3 },  // Pass 2: Centered ambient body
+    {  3,  6, 4 },  // Pass 3: Centered core
+    {  1,  7, 5 }   // Pass 4: Subtle contact occlusion edge
 };
 
 static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float alphaMult = 1.0f, float elevationScale = 1.0f) {
@@ -12987,11 +12918,6 @@ static void CancelPendingShow() {
     s_touchpadPending = false;
     s_touchpadRapidPendingTick = 0;
     s_touchpadRapidPendingRawSerial = 0;
-    s_touchpadRapidPendingRawPhase = 0;
-    s_touchpadRapidPendingInitialIndex = -1;
-    s_touchpadRapidPendingTargetIndex = -1;
-    s_touchpadRapidPendingDirection = 0;
-    s_touchpadRapidPendingCommitted = false;
     s_touchpadRapidRevealReanchorPending = false;
     CancelTwoFingerTapDismiss();
     g_isPendingShow = false;
@@ -13893,9 +13819,6 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     int y = g_pendingSwitcherRect.top;
     int w = g_pendingSwitcherRect.right - g_pendingSwitcherRect.left;
     int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
-    g_switcherBaseX = x;
-    g_switcherBaseY = y;
-    g_switcherBaseInitialized = true;
 
     // Build backdrop only after pending sessions have proved they need a visual
     // reveal. Direct touchpad commits must not pay this cost before release.
@@ -13970,11 +13893,6 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     s_touchpadPending = false;
     s_touchpadRapidPendingTick = 0;
     s_touchpadRapidPendingRawSerial = 0;
-    s_touchpadRapidPendingRawPhase = 0;
-    s_touchpadRapidPendingInitialIndex = -1;
-    s_touchpadRapidPendingTargetIndex = -1;
-    s_touchpadRapidPendingDirection = 0;
-    s_touchpadRapidPendingCommitted = false;
     s_touchpadRapidRevealReanchorPending = rapidPending;
     if (touchpadPending && s_nativeTouchpadInvocation.token &&
         s_nativeTouchpadInvocation.rawAdopted) {
@@ -14254,9 +14172,6 @@ static void SetSwitcherLayoutBounds(int x, int y, int w, int h, UINT flags) {
         return;
     }
     SetPresentationWindowLayout(g_hSwitcher, x, y, w, h, flags);
-    g_switcherBaseX = x;
-    g_switcherBaseY = y;
-    g_switcherBaseInitialized = true;
     for (HWND hMirror : g_hMirrorSwitchers) {
         if (!IsWindow(hMirror)) continue;
         RECT layout = {};
@@ -14441,9 +14356,6 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int cx, cy;
     GetSwitcherPosition(mi.rcWork, &cx, &cy);
-    g_switcherBaseX = cx;
-    g_switcherBaseY = cy;
-    g_switcherBaseInitialized = true;
 
     g_pendingSwitcherRect = {
         cx,
@@ -14481,9 +14393,6 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         if (s_touchpadPending) {
             s_touchpadRapidPendingTick = invocationTick;
             s_touchpadRapidPendingRawSerial = RawThreeFingerStateSerial(rawState);
-            s_touchpadRapidPendingRawPhase = RawThreeFingerStatePhase(rawState);
-            s_touchpadRapidPendingInitialIndex = g_selectedIndex;
-            s_touchpadRapidPendingTargetIndex = g_selectedIndex;
         }
         RefreshTouchpadGestureKinds();
         g_showDelayDeadlineTick = invocationTick + effectiveDelay;
@@ -14604,11 +14513,6 @@ static void HideSwitcher() {
     s_touchpadPending = false;
     s_touchpadRapidPendingTick = 0;
     s_touchpadRapidPendingRawSerial = 0;
-    s_touchpadRapidPendingRawPhase = 0;
-    s_touchpadRapidPendingInitialIndex = -1;
-    s_touchpadRapidPendingTargetIndex = -1;
-    s_touchpadRapidPendingDirection = 0;
-    s_touchpadRapidPendingCommitted = false;
     s_touchpadRapidRevealReanchorPending = false;
     PublishMouseHookPolicy();
     CancelRawTouchpadStroke();
@@ -14634,7 +14538,6 @@ static void HideSwitcher() {
 
     g_showAllMonitors = false;
     CancelPendingShow();
-    g_switcherBaseInitialized = false;
 
     if (g_hCloseBtnWnd) {
         ShowWindow(g_hCloseBtnWnd, SW_HIDE);
@@ -16203,14 +16106,12 @@ static void UpdateChevronAnimationTargets(bool immediate) {
     float newTargetNext = hasNext ? 1.0f : 0.0f;
 
     if (newTargetPrev != g_animChevronAlphaTargetPrev) {
-        g_animChevronStartAlphaPrev = g_animChevronAlphaPrev;
         g_animChevronTransformStartPrev = g_animChevronTransformPrev;
         StartOpacityMotion(g_chevronRevealPrev, g_animChevronAlphaPrev, newTargetPrev);
         StartMotionTrack(g_animChevronProgressPrev);
         g_animChevronAlphaTargetPrev = newTargetPrev;
     }
     if (newTargetNext != g_animChevronAlphaTargetNext) {
-        g_animChevronStartAlphaNext = g_animChevronAlphaNext;
         g_animChevronTransformStartNext = g_animChevronTransformNext;
         StartOpacityMotion(g_chevronRevealNext, g_animChevronAlphaNext, newTargetNext);
         StartMotionTrack(g_animChevronProgressNext);
@@ -17346,7 +17247,6 @@ static bool QueueCloseWindow(HWND hw) {
         SetLastError(ERROR_SUCCESS);
         BOOL restored = ShowWindowAsync(hw, SW_RESTORE);
         DWORD error = restored ? ERROR_SUCCESS : GetLastError();
-        request.restoreRequested = restored != FALSE;
         if (!restored) {
             Wh_Log(L"SWS: close restore queued hwnd=%p requested=0 error=%u",
                    hw, error);
@@ -17583,14 +17483,8 @@ static bool BeginHorizontalTouchpadInvocation(int initialStep, HWND invocationSo
     // Start blur during the hidden detection window. Presentation still waits
     // for the bounded budget at reveal, so it never appears late afterward.
     PrepareBackdropBlur();
-    s_touchpadRapidPendingInitialIndex = g_selectedIndex;
-    s_touchpadRapidPendingDirection = direction;
-    s_touchpadRapidPendingTargetIndex = g_selectedIndex;
-    s_touchpadRapidPendingCommitted = false;
-    if (!g_windows.empty() && !s_touchpadRapidPendingCommitted) {
-        SelectInitialTouchpadTarget(s_touchpadRapidPendingDirection);
-        s_touchpadRapidPendingTargetIndex = g_selectedIndex;
-        s_touchpadRapidPendingCommitted = true;
+    if (!g_windows.empty()) {
+        SelectInitialTouchpadTarget(direction);
     }
 
     ArmRapidPendingTimer();
