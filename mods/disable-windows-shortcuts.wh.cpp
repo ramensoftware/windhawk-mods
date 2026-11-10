@@ -937,6 +937,57 @@ void PromptForExplorerRestart(RestartPromptEvent event)
     }, (LPVOID)(INT_PTR)event, 0, nullptr);
 }
 
+// Windhawk keeps the enabled state of each mod in the "Disabled" value under this key.
+// The layout is not documented, so any failure is reported as "unknown" and the prompt
+// then simply behaves as if the mod could not be re-enabled while it is shown.
+constexpr WCHAR kModConfigKey[] = L"SOFTWARE\\Windhawk\\Engine\\Mods\\disable-windows-shortcuts";
+
+// Returns 1 if the mod is disabled, 0 if it is enabled, -1 if the state is unknown.
+int ReadModDisabledState()
+{
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModConfigKey, 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &hKey) != ERROR_SUCCESS)
+        return -1;
+
+    DWORD type = 0;
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    LSTATUS status = RegQueryValueExW(hKey, L"Disabled", nullptr, &type, (LPBYTE)&value, &size);
+    RegCloseKey(hKey);
+
+    if (status != ERROR_SUCCESS || type != REG_DWORD)
+        return -1;
+
+    return value != 0 ? 1 : 0;
+}
+
+// Waits for the restart prompt thread to finish. The prompt is closed (as "No") when it has been
+// shown for 30 seconds, or when the mod was disabled and gets enabled again while it is shown.
+// In the second case the shortcuts stay blocked after the reload, so the prompt is moot.
+// WM_CLOSE is re-posted until the thread exits, because the dialog may not exist yet.
+void WaitForPromptOrReEnable(bool watchReEnable)
+{
+    const ULONGLONG deadline = GetTickCount64() + 30000;
+    bool closeRequested = false;
+
+    while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
+    {
+        if (!closeRequested)
+        {
+            closeRequested = GetTickCount64() >= deadline ||
+                             (watchReEnable && ReadModDisabledState() == 0);
+        }
+
+        if (closeRequested)
+        {
+            if (HWND promptWindow = g_restartExplorerPromptWindow.load())
+            {
+                PostMessage(promptWindow, WM_CLOSE, 0, 0);
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Low Level Keyboard Hook Implementation (AHK Method)
 // ============================================================================
@@ -1383,6 +1434,10 @@ void Wh_ModUninit()
 
         if (IsMainExplorer())
         {
+            // Only a genuine disable (Disabled == 1) is watched for a re-enable. After an
+            // uninstall the key is gone and after an update it stays 0, so neither is watched.
+            bool watchReEnable = (ReadModDisabledState() == 1);
+
             // 2. Prompt to restore standard shortcuts only if this Explorer process actually
             // had registrations blocked by the hook. Gated on the in-memory flag (not on stored
             // values, which are already deleted on uninstall) so the prompt is skipped on
@@ -1396,19 +1451,10 @@ void Wh_ModUninit()
                                                      : RestartPromptEvent::ModDisabled);
             }
 
-            // 3. Safe bounded wait (30s) matching step 1 re-posting pattern
+            // 3. Bounded wait (30s) that also ends early if the mod is re-enabled meanwhile
             if (g_restartExplorerPromptThread)
             {
-                if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
-                {
-                    while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
-                    {
-                        if (HWND promptWindow = g_restartExplorerPromptWindow.load())
-                        {
-                            PostMessage(promptWindow, WM_CLOSE, 0, 0);
-                        }
-                    }
-                }
+                WaitForPromptOrReEnable(watchReEnable);
                 CloseHandle(g_restartExplorerPromptThread);
                 g_restartExplorerPromptThread = nullptr;
             }
