@@ -4,6 +4,7 @@
 // @description     Preview the file or folder selected in File Explorer with Space, in a panel docked inside the window.
 // @version         1.0.0
 // @author          David Ravelo
+// @github          https://github.com/DavidRaveloU
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lcomctl32 -luuid -luxtheme -lwindowscodecs -lmsimg32 -ladvapi32 -lshlwapi -lmfplat -lmfreadwrite -lmfuuid
@@ -2335,7 +2336,7 @@ static std::wstring ExtractRtf(const std::string& rtf) {
                 }
                 i += 3;
             } else if (next == '~') {
-                if (!skip) out.push_back(L' ');
+                if (!skip) out.push_back(L'\u00A0');
                 i++;
             } else if ((next >= 'a' && next <= 'z') ||
                        (next >= 'A' && next <= 'Z')) {
@@ -10195,6 +10196,4 @@ void Wh_ModUninit() {
     if (g_instance && !g_menuClass.empty()) {
         UnregisterClassW(g_menuClass.c_str(), g_instance);
     }
-    // Media Foundation is deliberately left started: a probe thread may still
-    // hold a source reader, and shutting it down under it would crash Explorer.
 }
