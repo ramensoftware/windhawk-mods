@@ -4676,6 +4676,52 @@ static void PackSpawnTool() {
     if (sei.hProcess) CloseHandle(sei.hProcess);
 }
 
+// Tool-process callbacks. The engine and the mod validator expect the
+// WhTool_* names from the tool mod template; Wh_ModInit below dispatches
+// into them when running inside the dedicated tool process.
+BOOL WhTool_ModInit() {
+    g_packIsTool = true;
+
+    HANDLE mutex = CreateMutex(nullptr, TRUE,
+                               L"windhawk-tool-mod_" WH_MOD_ID);
+    if (!mutex) {
+        Wh_Log(L"CreateMutex failed");
+        ExitProcess(1);
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+        ExitProcess(1);
+    }
+
+    if (!snapCommander::ToolModInit()) {
+        Wh_Log(L"snapCommander tool init failed");
+        ExitProcess(1);
+    }
+    if (!moveToMonitor::ToolModInit()) {
+        Wh_Log(L"moveToMonitor tool init failed");
+        ExitProcess(1);
+    }
+
+    IMAGE_DOS_HEADER* dosHeader =
+        (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+    IMAGE_NT_HEADERS* ntHeaders =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    void* entryPoint =
+        (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+    Wh_SetFunctionHook(entryPoint, (void*)PackEntryPointHook, nullptr);
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    snapCommander::ToolModSettingsChanged();
+    moveToMonitor::ToolModSettingsChanged();
+}
+
+void WhTool_ModUninit() {
+    snapCommander::ToolModUninit();
+    moveToMonitor::ToolModUninit();
+}
+
 BOOL Wh_ModInit() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
@@ -4702,36 +4748,7 @@ BOOL Wh_ModInit() {
     }
 
     if (ourTool) {
-        g_packIsTool = true;
-
-        HANDLE mutex = CreateMutex(nullptr, TRUE,
-                                   L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!mutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!snapCommander::ToolModInit()) {
-            Wh_Log(L"snapCommander tool init failed");
-            ExitProcess(1);
-        }
-        if (!moveToMonitor::ToolModInit()) {
-            Wh_Log(L"moveToMonitor tool init failed");
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-        void* entryPoint =
-            (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, (void*)PackEntryPointHook, nullptr);
-        return TRUE;
+        return WhTool_ModInit();
     }
 
     if (PackIsWindhawkProcess()) {
@@ -4754,8 +4771,7 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     if (g_packIsTool) {
-        snapCommander::ToolModSettingsChanged();
-        moveToMonitor::ToolModSettingsChanged();
+        WhTool_ModSettingsChanged();
         return;
     }
     if (g_packDragInited) {
@@ -4765,9 +4781,9 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_packIsTool) {
-        snapCommander::ToolModUninit();
-        moveToMonitor::ToolModUninit();
+        WhTool_ModUninit();
         ExitProcess(0);
+        return;
     }
     if (g_packDragInited) {
         altSnapDrag::ModUninit();
