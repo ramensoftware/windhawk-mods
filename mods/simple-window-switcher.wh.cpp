@@ -21019,18 +21019,33 @@ static bool TryHookNativeSwipe() {
         void* targets[5]{};
         // Use the canonical undecorated names returned by Windhawk's symbol
         // provider. All five targets must resolve before any hook is queued.
+        // The entries are optional so that a name missing on this Windows build
+        // is known (and cached) after one lookup instead of being retried; a
+        // false return is then a real lookup error, which a retry can fix.
         WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
-            {{L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const *,struct INTERACTION_CONTEXT_OUTPUT const *)"}, &targets[0], nullptr},
-            {{L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const *,int,int)"}, &targets[1], nullptr},
-            {{L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const *,int,int,int,int)"}, &targets[2], nullptr},
-            {{L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void)"}, &targets[3], nullptr},
+            {{L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const *,struct INTERACTION_CONTEXT_OUTPUT const *)"}, &targets[0], nullptr, true},
+            {{L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const *,int,int)"}, &targets[1], nullptr, true},
+            {{L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const *,int,int,int,int)"}, &targets[2], nullptr, true},
+            {{L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void)"}, &targets[3], nullptr, true},
             // MSDIA separates the pointer levels as "* *", not "**". Exact
             // matching is required; one missing target disables this whole set.
-            {{L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * *)"}, &targets[4], nullptr},
+            {{L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * *)"}, &targets[4], nullptr, true},
         };
-        bool resolved = WindhawkUtils::HookSymbols(module, twinuiDllHooks,
-                                                  ARRAYSIZE(twinuiDllHooks));
-        for (void* target : targets) resolved = resolved && target;
+        const bool lookedUp = WindhawkUtils::HookSymbols(module, twinuiDllHooks,
+                                                         ARRAYSIZE(twinuiDllHooks));
+        const bool resolved = std::all_of(std::begin(targets), std::end(targets),
+                                          [](void* target) { return target != nullptr; });
+        if (lookedUp && !resolved) {
+            // The lookup succeeded, so a missing target won't appear later.
+            unsigned int resolvedMask = 0;
+            for (size_t i = 0; i < ARRAYSIZE(targets); ++i) {
+                if (targets[i]) resolvedMask |= 1u << i;
+            }
+            s_nativeSwipeHookGaveUp = true;
+            Wh_Log(L"SWS: native PTP swipe symbols unavailable on this build (resolved=0x%02X expected=0x1F); source gate stays disabled",
+                   resolvedMask);
+            return true;
+        }
         if (!resolved) {
             ++s_nativeSwipeHookAttempts;
             if (s_nativeSwipeHookAttempts == 1 || s_nativeSwipeHookAttempts % 5 == 0) {
