@@ -1778,7 +1778,8 @@ static void BackdropFreeOutput(BackdropBuildOutput* output) {
 static bool PrepareBackdropSurfaceForBitmap(Gdiplus::Bitmap* bitmap, int w, int h,
                                             BackdropBuildOutput* output) {
     if (!bitmap || !output || w <= 0 || h <= 0) return false;
-    output->bitmap = bitmap;
+    // `output` takes ownership of `bitmap` only on success. On every failure
+    // path the caller still owns it and deletes it.
     output->paintDC = CreateCompatibleDC(NULL);
     if (!output->paintDC) {
         BackdropFreeOutput(output);
@@ -1820,6 +1821,7 @@ static bool PrepareBackdropSurfaceForBitmap(Gdiplus::Bitmap* bitmap, int w, int 
         return false;
     }
     output->paintSize = { w, h };
+    output->bitmap = bitmap;
     return true;
 }
 
