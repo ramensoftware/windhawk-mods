@@ -3008,6 +3008,7 @@ static void UpdateDockThumbnailDwm();
 static void UpdateDockPreviewForSelection();
 static void FinishAnimations();
 static void StartExitAnimation(bool activateSelectedWindow);
+static void RunDeferredExitActivation();
 static void UpdateHoverFromCursor(bool allowAnimation = true);
 static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation = true);
 static void GetOverflowState(bool& hasPrev, bool& hasNext);
@@ -4981,8 +4982,12 @@ static void CompleteExitAnimation() {
     // including when accessibility settings interrupt the exit.
     g_animExitProgress = 0.0f;
     g_animExitCurrentAlpha = 0.0f;
-    HideSwitcherPresentationWindows();
     BackdropApplyAlpha(g_hBackdropWnd, 0.0f);
+    // A commit to a window on another virtual desktop starts here, with the
+    // backdrop and switcher already faded out. The switcher windows are hidden
+    // right after, well before Windows begins the desktop switch animation.
+    RunDeferredExitActivation();
+    HideSwitcherPresentationWindows();
     HideSwitcher();
 }
 
@@ -5758,7 +5763,6 @@ static void OnAnimationTick() {
     if (g_animExitActive) {
         if (g_animExitProgress <= 0.0f &&
             (!ThemeIs(L"none") || g_presentationOpacity.progress >= 1.0f)) {
-            HideSwitcherPresentationWindows();
             CompleteExitAnimation();
             return;
         } else {
@@ -14510,6 +14514,9 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
 
 static void HideSwitcher() {
     if (g_isHidingSwitcher) return;
+    // Never lose a commit that was waiting for the exit fade (for example when a
+    // new gesture interrupts the fade).
+    RunDeferredExitActivation();
     CancelTwoFingerTapDismiss();
     ClearStickyTwoFingerTapOwnership();
     InvalidateSwsFocusRecoverySession();
@@ -14830,6 +14837,31 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     }
 }
 
+// Activating a window on another virtual desktop starts the Windows desktop
+// switch animation, which shows a frozen copy of this desktop for its whole
+// length. Anything still faded in at that moment (such as the backdrop) would
+// stay on screen until the animation ends, so such a commit waits until the exit
+// fade has finished.
+static HWND s_deferredExitTarget = nullptr;
+static std::vector<HWND> s_deferredExitRestore;
+
+static bool WindowOnOtherVirtualDesktop(HWND hWnd) {
+    BOOL onCurrent = TRUE;
+    return hWnd && g_pVirtualDesktopManager &&
+           SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(
+               hWnd, &onCurrent)) &&
+           !onCurrent;
+}
+
+static void RunDeferredExitActivation() {
+    HWND target = s_deferredExitTarget;
+    if (!target) return;
+    std::vector<HWND> restoreWindows;
+    restoreWindows.swap(s_deferredExitRestore);
+    s_deferredExitTarget = nullptr;
+    ActivateExitedWindow(target, restoreWindows);
+}
+
 static void ShowDesktop() {
     IShellDispatch4* shell = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
@@ -14925,8 +14957,14 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     // Both release paths hand off before visual teardown. The exit guard and
     // click-through state are established before external calls can reenter.
     if (activateSelectedWindow) {
-        if (activateDesktop) ShowDesktop();
-        else ActivateExitedWindow(hTarget, restoreWindows);
+        if (activateDesktop) {
+            ShowDesktop();
+        } else if (WindowOnOtherVirtualDesktop(hTarget)) {
+            s_deferredExitTarget = hTarget;
+            s_deferredExitRestore = std::move(restoreWindows);
+        } else {
+            ActivateExitedWindow(hTarget, restoreWindows);
+        }
     }
 }
 
