@@ -2,7 +2,7 @@
 // @id              outlook-refined
 // @name            Outlook Refined
 // @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.6.1
+// @version         0.6.2
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
@@ -14,6 +14,10 @@
 // ==WindhawkModReadme==
 /*
 # Outlook Refined
+
+By Reid Havens, co-founder of
+[Analytic Endeavors](https://go.analyticendeavors.com/outlook-refined), who builds tools
+like this one for the community.
 
 Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
 adds one script to each Outlook window when the window is created, and the
@@ -664,7 +668,34 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
 
   // ==== CSS ====
   let fs;
+
+  // How far the favorites list sits inside the pane. The agenda is positioned against the
+  // pane, so without this it lines up with nothing: the list is inside Outlook's own
+  // scrolling container, which is inset on both sides and gives up another 8px or so to its
+  // scrollbar. Measured live rather than assumed, because both depend on the pane width and
+  // on how the viewer's scrollbars are drawn. The fallbacks are what a default pane measures.
+  function agendaInsets() {
+    // 8 on both sides: what a default pane measures once the gutter above is released. The
+    // old 24 on the right described the layout before that, and left the agenda's contents
+    // 16px short of the rows above on any pass that fell back.
+    const fallback = { left: 8, right: 8 };
+    const pane = document.querySelector(PANE);
+    const list = document.querySelector(FAVS);
+    if (!pane || !list) return fallback;
+    const p = pane.getBoundingClientRect();
+    const l = list.getBoundingClientRect();
+    if (!p.width || !l.width) return fallback;
+    const left = Math.round(l.left - p.left);
+    const right = Math.round(p.right - l.right);
+    // A collapsing pane, or a list Outlook is still building, measures as nonsense.
+    if (left < 0 || right < 0 || left > 60 || right > 60) return fallback;
+    return { left, right };
+  }
+
+  let lastInset = null;
   function buildCss() {
+    const inset = agendaInsets();
+    lastInset = inset;
     // Read Outlook's label size once the tree exists, before rename rules zero it.
     // A row a rename rule already zeroed reads 0px, so take the first one that is not.
     const label = [...document.querySelectorAll('[role="treeitem"] > span')].find(s => parseFloat(getComputedStyle(s).fontSize) > 0);
@@ -757,6 +788,13 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     out.push(`.olkt-menu .olkt-sep{height:1px;margin:4px 6px;background:var(--colorNeutralStroke2,#3a3a3a)}`);
     out.push(`.olkt-menu .olkt-sub{padding:6px 12px 2px;font-size:11px;letter-spacing:.06em;color:var(--colorNeutralForeground3,#a3a3a3)}`);
     out.push(`.olkt-tree{box-sizing:border-box!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:auto!important;scrollbar-color:auto!important}`);
+    // The element holding the tree reserves a scrollbar gutter it never draws in: measured on
+    // a live pane it keeps 18px while its own overflow is hidden, so the folder names were
+    // squeezed into 163px of a 197px pane. Releasing the reservation hands those pixels back
+    // and leaves only the tree's real scrollbar. Keyed on Outlook's own role rather than on
+    // the olkt-tree class, which layoutAgenda only adds once the agenda has drawn, so the
+    // width would otherwise come back for nobody but the few who turn the agenda on.
+    out.push(`${PANE} div:has(> [role="tree"]){scrollbar-gutter:auto!important}`);
     // A scrollbar like Outlook's own: thin, no arrows, a rounded thumb in the theme's stroke
     // colour, shown while the pointer is over the tree. (scrollbar-width or scrollbar-color
     // would switch these ::-webkit-scrollbar rules off, so neither is set.)
@@ -768,10 +806,18 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     out.push(`.olkt-tree:hover::-webkit-scrollbar-thumb{background-color:var(--colorNeutralStroke1,#666)}`);
     out.push(`.olkt-tree::-webkit-scrollbar-thumb:hover{background-color:var(--colorNeutralStroke1Hover,#888)}`);
     out.push(`.olkt-tree > .customScrollBar{flex:none!important;height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}`);
-    out.push(`.olkt-agenda{position:absolute;left:0;right:2px;bottom:0;z-index:15;box-sizing:border-box;display:flex;flex-direction:column;padding:0 8px 6px 6px;font-size:12px;color:var(--colorNeutralForeground1,#e6e6e6)}`);
+    // The contents line up with the favorites list above, not with the pane: the list sits
+    // inside Outlook's own scrolling container, which is inset from the pane and gives up
+    // more to its scrollbar. Measured against a live pane, that left the agenda 8px wider on
+    // the left and 24px wider on the right than the rows above it, so no edge lined up.
+    // The insets go in the padding rather than in left/right, so the box still spans the pane
+    // and its opaque background still covers everything scrolling underneath, including rows
+    // wider than the favorites list. The divider is a flex item and follows the content box;
+    // the grip is absolutely positioned and stays full width.
+    out.push(`.olkt-agenda{position:absolute;left:0;right:2px;bottom:0;z-index:15;box-sizing:border-box;display:flex;flex-direction:column;padding:0 ${Math.max(0, inset.right - 2)}px 6px ${inset.left}px;font-size:12px;color:var(--colorNeutralForeground1,#e6e6e6)}`);
     // Outlook hides the pane by sliding its own tree out; ours would stay behind.
     out.push(`body:has(button[aria-label="Show navigation pane"]) ${PANE} :is(.olkt-agenda,.olkt-resize){display:none}`);
-    out.push(`.olkt-agenda::before{content:"";flex:none;height:1px;margin:0 2px 0 6px;background:var(--colorNeutralStroke2,#3a3a3a)}`);
+    out.push(`.olkt-agenda::before{content:"";flex:none;height:1px;margin:0;background:var(--colorNeutralStroke2,#3a3a3a)}`);
     out.push(`.olkt-agenda-grip{position:absolute;left:0;right:0;top:-3px;height:7px;cursor:row-resize;z-index:2}`);
     out.push(`.olkt-agenda-grip:hover{background:var(--colorBrandStroke1,#4aa3f0);opacity:.5}`);
     out.push(`.olkt-feed{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:transparent transparent}`);
@@ -3072,6 +3118,15 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       list.addEventListener('drop', onListRelease, true);
       list.addEventListener('pointerup', onListRelease, true);
       list.addEventListener('pointerdown', onFavPress, true);
+    }
+    // The agenda's padding is measured from this list, which does not exist on the first
+    // pass, so the first stylesheet is built from the fallbacks. Rebuild it once, as soon as
+    // the real numbers differ; buildCss records them, so this settles in one pass. Only when
+    // the agenda is on: nothing else uses the insets, and measuring here forces a layout on
+    // every mutation batch.
+    if (cfg.agenda) {
+      const inset = agendaInsets();
+      if (!lastInset || inset.left !== lastInset.left || inset.right !== lastInset.right) { render(); return; }
     }
     ensureCompose(list);
     if (adoptNewFavorites(list)) { save(); return; }
