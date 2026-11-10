@@ -2,7 +2,7 @@
 // @id              auto-pause-on-disconnect
 // @name            Auto-Pause on Disconnect
 // @description     Pause, mute or unmute automatically when an external audio device connects or disconnects (wired headphones, Bluetooth, USB DAC).
-// @version         1.2.0
+// @version         1.0.0
 // @author          DpakB
 // @homepage        https://dpakb.com
 // @github          https://github.com/DeepakBalaraman
