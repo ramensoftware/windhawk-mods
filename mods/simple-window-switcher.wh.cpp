@@ -61,7 +61,7 @@ Choose a layout under **Appearance → Layout → Switcher Layout**.
 | --- | --- |
 | Default | Classic window grid with horizontal or vertical orientation and configurable header and thumbnail placement. |
 | Badge (macOS-style) | Thumbnail cards with an overlaid application icon and a title above or below the preview. Requires thumbnails to be enabled. |
-| Dock | An application-icon strip with an optional central preview of the selected window and configurable close-button and group-indicator placement. |
+| Dock | An application-icon strip with an optional central preview of the selected window and configurable close-button and group-indicator placement. The close button appears only while the pointer is over that application icon. |
 
 ## Controls
 
@@ -158,6 +158,11 @@ navigation can change the selection while the UI remains hidden.
     restored only when the switcher is inactive.
 - Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
   Acrylic on Windows 10; backdrop blur is a separate, optional setting.
+- With **Corner Preference** set to Default, the switcher and its Auto corner
+  settings follow the Windows corner radius, including changes made by the
+  [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
+  mod on regular and portable Windhawk installs. Rounded, Rounded small, and
+  Custom keep their own radii.
 - With [Windows Animations](https://windhawk.net/mods/windows-animations) 1.3.7 or
   newer, confirmed keyboard and touchpad selections also play its window-switch
   animation, and minimized windows are restored through its restore animation.
