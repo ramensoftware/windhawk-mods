@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-09T23:05:22.000Z</updated>
+    <updated>2026-11-10T00:01:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/mac-os-27-finder-bar#490977e5b6cf20cdba95d86f1203e8f8be44e012</id>
+        <link href="https://windhawk.net/mods/mac-os-27-finder-bar"/>
+        <updated>2026-11-10T00:01:58.000Z</updated>
+        <content type="html"><![CDATA[<h1>Mac OS 27 Finder Bar</h1>
+<p>A <a href="https://windhawk.net">Windhawk</a> mod that adds a macOS 27-style menu bar to the top of the screen in Windows 11: the menus of the app in front on the left, and system status, Control Center, notifications and the clock on the right, all in live glass.</p>
+<p>Available in English, Português, Español, Français, Deutsch, Italiano and 中文（简体）. The language follows Windows automatically, or can be picked in the settings.</p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/bar.png" alt="The bar"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.png" alt="Control Center"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/notifications.png" alt="Notifications"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/logo-menu.png" alt="Logo menu"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png" alt="Settings window"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.gif" alt="Control Center in action"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/weather.gif" alt="Animated weather widget"></p>
+<hr>
+<h2>Left side</h2>
+<ul>
+<li><strong>Logo menu</strong>: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and <strong>Menu Bar Settings…</strong></li>
+<li><strong>Active app name</strong> (shown as <em>Finder</em> for the desktop and File Explorer, a name you can change): hide the app, hide others, open file location, close window, quit, force quit</li>
+<li><strong>Global menu</strong>:
+<ul>
+<li>apps with a classic menu bar (Win32): the app's real menus</li>
+<li>modern apps: the app's menu bar read through UI Automation when it exists</li>
+<li>browsers, File Explorer, Office, VS Code and other apps: ready-made menus that send the app's own keyboard shortcuts</li>
+<li>a <strong>Window</strong> menu with the app's open windows</li>
+</ul>
+</li>
+<li><strong>Help</strong> menu with a search across all the app's menus; ← → move between menus (optional Ctrl+F2 opens the bar from the keyboard)</li>
+</ul>
+<h2>Right side</h2>
+<ul>
+<li><strong>Display</strong>: dark mode, night light, projection modes</li>
+<li>Keyboard layout (when there is more than one), emoji, on-screen keyboard</li>
+<li><strong>Battery</strong> (percentage, charging, time remaining), <strong>Wi-Fi</strong> (current network, available and known networks), <strong>Bluetooth</strong> and <strong>Sound</strong> (scroll on the icon to change the volume, right-click to mute, switch output and input)</li>
+<li><strong>Now Playing</strong>: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave</li>
+<li><strong>Focus</strong> (when Do Not Disturb is on), <strong>Search</strong> (Windows Search or Siri Plus Launchpad), <strong>microphone and camera</strong> (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), <strong>Weather</strong> (Open-Meteo, MET Norway or wttr.in, no account needed) and the <strong>Notifications</strong> button</li>
+<li><strong>Clock</strong>: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable</li>
+<li>An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings</li>
+</ul>
+<h2>Control Center</h2>
+<p>Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound and audio output, plus tiles you can add: night light, airplane mode, screenshot, <strong>screen recording</strong>, <strong>power mode</strong>, <strong>energy saver</strong> (one click turns it on and off), <strong>magnifier</strong>, lock screen, calculator, Task Manager, emoji and show desktop.</p>
+<ul>
+<li><strong>Edit Controls</strong> lets you add, remove, move and resize tiles</li>
+<li>Clicking <strong>power mode</strong> opens a box under Edit Controls, as wide as the panel, with the Windows 11 power modes and power plans (repeated plans are hidden)</li>
+<li>Tile names that don't fit scroll when the mouse is over the tile</li>
+<li>Tiles can be pills or rounded squares; a tile that is on shows a colored circle or turns into a whole white pill</li>
+<li>Optional: blur and dim the screen while the Control Center is open; cascade or fade animation when it opens</li>
+</ul>
+<h2>Notice pills</h2>
+<p>Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (glass, liquid glass or dark), size, position, duration and opening and closing animations are all configurable.</p>
+<h2>Notifications</h2>
+<p>Turn on <strong>Windows notifications</strong> in logo → <strong>Menu Bar Settings…</strong> → <strong>Notice pills</strong> (off by default) and the bar shows your apps' notifications:</p>
+<ul>
+<li>in the pill and in the bell panel, grouped by app</li>
+<li><strong>reply</strong> to messages (like WhatsApp) right from the pill, when the app supports replies</li>
+<li><strong>drag</strong> a notification aside in the panel to clear it</li>
+<li><strong>Only the bar shows notifications</strong>: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off</li>
+</ul>
+<h2>Bar and glass</h2>
+<ul>
+<li>Bar background: fully transparent (default), Windows blur glass, or liquid glass (experimental); opaque when the active app is maximized (optional)</li>
+<li><strong>Live glass</strong>: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)</li>
+<li>Menus use their own frosted glass (with a transparency slider) or <strong>the same glass as the Control Center</strong></li>
+<li>Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height</li>
+<li>Hides with full-screen apps, can hide automatically until the mouse touches the top, and shows on every monitor (each optional)</li>
+</ul>
+<h2>Settings</h2>
+<p>Logo → <strong>Menu Bar Settings…</strong> opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics file paths, plus <strong>Reset the bar's settings</strong>, which puts the window's options back to their defaults if the bar ever doesn't show up.</p>
+<h2>What changes Windows settings</h2>
+<p>Some Control Center tiles and menu items change real Windows settings, the same ones Windows' own quick settings change. They stay changed after the mod is turned off, as they would if you used Windows' quick settings:</p>
+<ul>
+<li><strong>Dark mode</strong>: the app and system light/dark theme (sets both to the same value)</li>
+<li><strong>Night light</strong>: on or off</li>
+<li><strong>Power mode and power plan</strong>: picking a power mode also switches the plan to Balanced, as Windows requires</li>
+<li><strong>Energy saver</strong> and <strong>Do Not Disturb</strong></li>
+<li><strong>Brightness</strong>, <strong>default audio device</strong>, <strong>volume and mute</strong>, <strong>microphone mute</strong>, <strong>Wi-Fi and Bluetooth radios</strong>, <strong>Wi-Fi network</strong> and <strong>display mode</strong> (projection)</li>
+</ul>
+<p>Nothing is changed unless you click the matching tile or item.</p>
+<h2>Network use</h2>
+<p>The mod only goes online for features you set up yourself (the calendar reads local .ics files only, never the network):</p>
+<ul>
+<li><strong>Weather</strong>, once you pick a place: the place search uses OpenStreetMap Nominatim or Open-Meteo, and the forecast comes from the service you choose (Open-Meteo, MET Norway or wttr.in) with the place's coordinates rounded to about 1 km. Turning the weather icon off stops all requests.</li>
+<li><strong>App update count</strong> (off by default, in Windhawk's settings): runs <code>winget upgrade</code>, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.</li>
+</ul>
+<h2>Privacy</h2>
+<p>The copy pill only says &quot;Copied&quot; or &quot;Cut&quot;: it never shows what was copied, and it skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.</p>
+<h2>How it runs</h2>
+<p>The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so if it ever fails, the taskbar and desktop keep working. Explorer keeps only a small hook that copies the tray icons' registrations to the bar. If that process is ended by hand, turn the mod off and on again in Windhawk to bring the bar back.</p>
+<h2>Known limitations</h2>
+<ul>
+<li>Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.</li>
+<li>Bluetooth lists classic (non-BLE) devices and opens Settings to connect and disconnect.</li>
+<li>Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.</li>
+<li>Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.</li>
+<li>Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.</li>
+<li>With live glass (and the bar's liquid background), the bar and panels don't show up in screenshots.</li>
+<li>If Windhawk itself runs as administrator (portable mode started elevated), the bar doesn't show the tray icons: letting the shell's tray data reach an elevated bar would also let any app send it fake icons.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Thiago Silva</name>
+            <uri>https://github.com/brideinflame-rgb</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1/10 UAC Recreation 1.2.0]]></title>
         <id>https://windhawk.net/mods/win7-uac-recreation#d6dbe47b119ed3d072863bd4ade4ef14b2ce95bd</id>
@@ -948,73 +1053,6 @@ frame rate limit (for example, 30) saves power.</p>
         <author>
             <name>mikybuilds</name>
             <uri>https://github.com/mikybuilds</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ubuntu Unity Desktop 1.0]]></title>
-        <id>https://windhawk.net/mods/ubuntu-unity-desktop#c5baa1f5353722223213b7b0379a4b1d9019de07</id>
-        <link href="https://windhawk.net/mods/ubuntu-unity-desktop"/>
-        <updated>2026-11-08T19:01:35.000Z</updated>
-        <content type="html"><![CDATA[<h1>Ubuntu Unity Desktop</h1>
-<p>Turns Windows 11 into the <strong>Ubuntu Unity 7</strong> desktop (Ubuntu 12.04 - 16.04): a panel along the top, the launcher
-along the left and the Dash instead of the Start menu. Everything runs inside Explorer: there is no separate
-program to install, and turning the mod off gives you the normal Windows desktop back right away.</p>
-<h2>What you get</h2>
-<p><strong>The panel (top bar)</strong></p>
-<ul>
-<li>The title of the window in front, and for a maximized window its minimize / restore / close buttons: the
-window loses its own title bar, like in Unity.</li>
-<li><strong>Tabs in the panel</strong>: maximize a browser (Brave, Chrome, Edge, ...) or another window with tabs and its
-whole tab row moves into the panel, with the sites' icons. Click a tab to switch, x to close it, + for a new one.</li>
-<li>Drag a maximized window down out of the panel to restore it, and drop it back on the panel to maximize it.</li>
-<li>Indicators on the right: background apps (tray icons), keyboard language, network, messages, volume (with a
-slider), clock (with a calendar) and the session menu (lock, log out, restart, shut down).</li>
-</ul>
-<p><strong>The launcher (left bar)</strong></p>
-<ul>
-<li>Pinned and running apps, with a pip per open window and an arrow for the app in front. Click to open, switch
-or minimize; right-click to pin / unpin, run as administrator, open the file location or quit.</li>
-<li>Hover for the app's name and live previews of its windows.</li>
-<li>Drag icons to reorder them, onto each other to make a group, or off the launcher to unpin them.</li>
-<li><strong>Music controls</strong> (cover, play / pause, previous / next) slide open under the app that plays music.</li>
-<li><strong>Discord call buttons</strong> (mute, deafen, hang up) slide open under Discord while you're in a call.</li>
-<li>Drag the launcher's right edge to make it (and its icons) bigger or smaller. The trash sits at the bottom.</li>
-</ul>
-<p><strong>The Dash (Start menu)</strong></p>
-<ul>
-<li>Opens with the Windows key, Ctrl+Esc or the button at the top of the launcher.</li>
-<li>Type to search apps, settings and files; lenses and filters like Unity's; widgets (clock, music, weather app, system, disks) on Home.</li>
-<li>Resize it with the grip in its corner (the size is remembered) or maximize it.</li>
-</ul>
-<p><strong>And more</strong></p>
-<ul>
-<li>Unity's animations: windows fly into the launcher when minimized, the launcher icons pop and wiggle, the panel
-and launcher slide away for full-screen games and videos.</li>
-<li>Glass (blur or acrylic), your accent colour or any colour, dark (Ambiance) or light (Radiance) panel.</li>
-</ul>
-<h2>Settings</h2>
-<p>Everything can be adjusted in the mod's settings, grouped by panel, launcher, Dash, look, windows and Windows
-integration: sizes, opacity, glass, clock format, which indicators show, animation speed, tabs in the panel, and
-whether the Windows taskbar is hidden.</p>
-<h2>Good to know</h2>
-<ul>
-<li>Windows 11, 64-bit. The shell lives on the main screen. With the taskbar hidden, other screens have no taskbar
-(and no launcher) at all; their windows stay where they are.</li>
-<li><strong>The taskbar's &quot;automatically hide&quot; setting is turned on while the mod runs</strong> (that gives its room on the screen
-back) and is set back as it was when you turn the mod off. If Explorer is killed or crashes and the mod is
-removed before it runs again, it may stay on: switch it off under Settings &gt; Personalization &gt; Taskbar.</li>
-<li>The Windows key and Ctrl+Esc open the Dash; shortcuts like Win+E, Win+R and Win+Shift+S keep working. If
-Windows' own Start menu opens anyway, the mod closes it and shows the Dash.</li>
-<li>Tabs in the panel read the window's tabs through Windows' accessibility interface. They work best with
-Chromium browsers (Brave, Chrome, Edge, Vivaldi, Opera). The new-tab button and the Discord call buttons are
-found by their names in English and Dutch apps.</li>
-<li>The shell's texts are in English, or in Dutch when Windows is.</li>
-<li>The Dash's weather card opens Windows' own Weather app: the mod itself never connects to the internet.</li>
-</ul>
-]]></content>
-        <author>
-            <name>dion</name>
-            <uri>https://github.com/dismedan-dion</uri>
         </author>
     </entry>
 </feed>
