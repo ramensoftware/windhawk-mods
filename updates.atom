@@ -2,12 +2,131 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-10T20:03:22.000Z</updated>
+    <updated>2026-11-10T21:00:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.7.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-fluent-media-player#de5105a2c7c6cfb971bd7e3646713506a961ef71</id>
+        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
+        <updated>2026-11-10T21:00:37.000Z</updated>
+        <content type="html"><![CDATA[<h3>The big ones</h3>
+<ul>
+<li><strong>Its own settings window.</strong> Right-click the player and pick Settings. It's built in the Windows 11 style with Mica, sorted into pages, and changes show on the player while you make them. It comes in 15 languages and follows your Windows language by default.</li>
+<li><strong>Settings live in the mod now.</strong> The first time 1.7 runs, it copies everything from Windhawk's settings page, so you don't lose anything. Save keeps your changes, and closing only warns you if something really differs from what's saved.</li>
+<li><strong>Move any part of the player.</strong> Album art, track info, buttons and the visualizer can each be detached and placed somewhere else on the taskbar or tray, with their own background and monitor.</li>
+<li><strong>Progress bar.</strong> It can sit under any part of the player or the whole thing, on its own line or drawn on top. Click or drag it to seek.</li>
+<li><strong>Vertical taskbars.</strong> If yours is docked left or right, the text and album art turn to read along it and the buttons stack up.</li>
+<li><strong>Monitor buttons.</strong> Pick a monitor by clicking its button, numbered like Windows. Click the selected one again to hide the player. Monitors that aren't connected stay gray and become available when you plug them in.</li>
+</ul>
+<h3>Visualizer</h3>
+<ul>
+<li>&quot;Only listen to the app in the player&quot;, on by default, so a Discord call or a game won't move the bars (Windows 11). (#93, #85)</li>
+<li>New: it can fill the background behind the whole player.</li>
+<li>New: Line style, and a Micro version that fits next to the artist text. (#16)</li>
+<li>Pick which audio device it listens to, including recording devices. (#17, #50)</li>
+<li>Hide it when nothing is playing. (#14)</li>
+<li>Tune each of the 7 frequency bands.</li>
+</ul>
+<h3>Player and layout</h3>
+<ul>
+<li>Set the order of album art, text, buttons and visualizer. (#32)</li>
+<li>&quot;Media player offset&quot; moves the player without making the taskbar wider, which helps with floating Taskbar Styler themes. (#88)</li>
+<li>Reorder the media buttons and right-click menu items.</li>
+<li>Hide the whole player while paused, after a delay you choose. (#14)</li>
+<li>Hide the Windows Widgets button.</li>
+</ul>
+<h3>Text</h3>
+<ul>
+<li>Show the album name instead of the artist, or only when there's no cover. (#38)</li>
+<li>Custom text formats with <code>%title%</code>, <code>%artist%</code>, <code>%album%</code> and <code>%artist_or_album%</code>. (#38)</li>
+<li>Show the playback time (like 2:02/4:24) instead of the artist.</li>
+<li>Hide the text when nothing is playing.</li>
+</ul>
+<h3>Clicks and apps</h3>
+<ul>
+<li>Choose an app to open when you click the player with nothing playing. (#23)</li>
+<li>New click actions: minimize, open or minimize, and close the media app. (#53)</li>
+<li>&quot;Only show these apps&quot; mode, and the app filter moved out of Debug into Behaviour. (#64)</li>
+</ul>
+<h3>Mini player</h3>
+<ul>
+<li>Seek bar, with its own color. (#62)</li>
+<li>Background options: Acrylic, solid color, album colors gradient or blurred cover. (#48)</li>
+<li>Corner radius setting, and the bottom icon row can be turned off. (#84)</li>
+</ul>
+<h3>Settings window extras</h3>
+<ul>
+<li>Choose the window's background: Mica, Mica Alt, Acrylic or Acrylic Thin. Acrylic shows what's behind the window, so it works with live wallpapers that Mica can't see, and has its own transparency and blur sliders.</li>
+<li>The title bar can match the window, stay as Windows draws it, or take any color.</li>
+<li>The page fades at its top and bottom edges while you scroll.</li>
+<li>Any color can follow the album, including the window's own accent, which fades to the new color when the song changes.</li>
+<li>Report a bug from inside the window. You choose whether to attach errors, crash info, the log and your settings. Reports also include your PC name and Windows user name, and the form says so.</li>
+<li>Reset to Windhawk's settings, in Other.</li>
+<li>An Animations switch, which also follows Windows' own setting.</li>
+</ul>
+<h3>Fixes</h3>
+<p><strong>Windows updates</strong></p>
+<ul>
+<li>Works again after the updates that changed the system tray and the September taskbar update. (#69, #78, #79, #83, #89, #91)</li>
+<li>If the button the player sits next to doesn't exist on your build, the player goes to the start of the tray instead of disappearing.</li>
+<li>The player no longer vanishes when Do Not Disturb is on.</li>
+</ul>
+<p><strong>Startup and stability</strong></p>
+<ul>
+<li>If the player doesn't make it onto the taskbar at startup, the mod tries again. (#67, #68, #73, #82)</li>
+<li>Media keys keep working after an Explorer restart. (#52)</li>
+<li>The player corrects itself if it ends up on the wrong side of its tray button.</li>
+<li>Security report: fixes for callback handling, the shell32 and windhawk.exe lookups, image handling and unloading. (#71)</li>
+</ul>
+<p><strong>Which app it follows</strong></p>
+<ul>
+<li>The player stays on the app that's playing instead of a paused one. (#22)</li>
+<li>It no longer flashes another app when tracks change. (#34)</li>
+<li>Ignored apps stay out of session switching, and the ignore list also matches the browser's exe. (#66, #70, #77)</li>
+</ul>
+<p><strong>Album art and colors</strong></p>
+<ul>
+<li>Covers up to 24 MB show up. (#81)</li>
+<li>Old art no longer stays when a browser track has none. (#33)</li>
+<li>The Album color works on the progress bar, the visualizer and everything else, including with album art turned off.</li>
+<li>With no album art, dynamic visualizer colors go back to your normal color. (#58)</li>
+<li>Solid backgrounds survive switching between light and dark. (#57)</li>
+</ul>
+<p><strong>Visualizer</strong></p>
+<ul>
+<li>Keeps reacting when you switch the player to another app, like Clipchamp, Firefox or Snipping Tool.</li>
+<li>Much lower GPU use when nothing is playing. (#41)</li>
+</ul>
+<p><strong>Monitors</strong></p>
+<ul>
+<li>Text scrolling and the visualizer keep working after the player moves to another monitor.</li>
+</ul>
+<p><strong>Input and placement</strong></p>
+<ul>
+<li>Pause works reliably in Zen browser. (#26)</li>
+<li>Right and middle double-click actions fire again.</li>
+<li>&quot;Hide when no media&quot; no longer keeps taking up space. (#14)</li>
+<li>Fixed the gap with &quot;Right of Widgets&quot;, and the player going under the icons with Taskbar Styler &quot;Borderless&quot;. (#74)</li>
+</ul>
+<h3>Not in this version</h3>
+<ul>
+<li>Showing the player on several monitors at the same time is still planned. (#15, #90)</li>
+</ul>
+<h3>Thanks</h3>
+<ul>
+<li>Net-zen for the StackPanel tray patch (#87).</li>
+<li>Everyone who reported bugs and tested the alphas on the Windhawk Discord.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.7]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-stats#9991c026f4999fc45d962f6ecdc027da47dadacf</id>
@@ -676,20 +795,6 @@ a description does.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Tweaks 2.0]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#e6cdfc29ed28f771f7ab0fc11485b963ccfa8c40</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2026-11-09T01:00:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for Spotify 1.3.4 to 1.3.9 (CEF 156)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>
