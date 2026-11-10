@@ -27401,9 +27401,13 @@ void WatchIslandProcess(HWND island) {
         return;
     }
     StopWatchingIslandProcess();
-    // (Its exit code and path too: started again if it crashed.)
+    // (Its exit code and path too: started again if it crashed. If that
+    // can't be had, only its end, as before: no restart then.)
     HANDLE process = OpenProcess(
         SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        process = OpenProcess(SYNCHRONIZE, FALSE, processId);
+    }
     if (!process) {
         return;
     }
@@ -114766,6 +114770,14 @@ void Island::UpdateApps() {
     m_badgeCounts = g_badgeCounts;
     ReleaseSRWLockShared(&g_badgeAppsLock);
     UpdateAppCounts();
+    // (A number that went down is the one it grows from: a new message
+    // after some were read elsewhere brings it back.)
+    for (auto& cleared : m_clearedBadges) {
+        if (std::find(m_badgeApps.begin(), m_badgeApps.end(), cleared.id) !=
+            m_badgeApps.end()) {
+            cleared.count = std::min(cleared.count, BadgeCount(cleared.id));
+        }
+    }
     // A cleared badge counts again once it's gone (and comes back), or its
     // number grew.
     std::erase_if(m_clearedBadges, [&](const ClearedBadge& cleared) {
