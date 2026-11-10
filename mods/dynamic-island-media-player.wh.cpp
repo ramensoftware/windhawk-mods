@@ -61,7 +61,7 @@ The goal is to provide a more focused and customizable Dynamic Island experience
 
 - **Per-App Dynamic Screen Positioning:** Supports saving unique screen positions on a per-application basis.
 
-- **Trilingual Localized UI (UA / RU / EN): Full native support for Ukrainian, Russian, and English.
+- **Trilingual Localized UI (UA / RU / EN):** Full native support for Ukrainian, Russian, and English.
 
 ## Credits & Acknowledgements
 - **Himanshu (devcode90)** - For the original Dynamic Island for Windows framework, rendering physics, and core UI design.
