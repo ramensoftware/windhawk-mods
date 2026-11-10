@@ -1576,12 +1576,11 @@ static bool g_isHidingSwitcher = false;
 static ULONGLONG g_showDelayDeadlineTick = 0;
 static bool g_touchpadInvocation = false;
 static bool g_keyboardPendingForegroundHandoff = false;
-// The invocation (keyboard or touchpad) started while a shell surface (Start,
-// Search, Action Center, Quick Settings) owned the foreground. Those surfaces
-// keep the foreground right, so the switcher claims it early, while the input
-// grant is fresh, and again at commit time, instead of waiting for the visible
-// presentation.
-static bool g_shellSurfaceSource = false;
+// Keyboard invocation started while a shell surface (Start, Search, Action
+// Center, Quick Settings) owned the foreground. Those surfaces keep the
+// foreground right, so the switcher must claim it while the hotkey grant is
+// still fresh instead of waiting for the visible presentation.
+static bool g_keyboardShellSource = false;
 static bool g_keyboardPendingForegroundHandoffSucceeded = false;
 // Alt release observed before keyboard foreground handoff; recheck after handoff.
 static bool g_keyboardPendingAltRelease = false;
@@ -7773,6 +7772,11 @@ static ULONGLONG s_touchpadActivationRetryDeadline = 0;
 static HWND s_pendingActivationListTarget = NULL;
 static ULONGLONG s_pendingActivationListDeadline = 0;
 static bool s_touchpadCommitActivation = false;
+// Touchpad commit that found a shell flyout (Start, Search, Quick Settings) in
+// the foreground: tick when its dismissal was requested (0 = none pending) and
+// whether Escape was already sent a second time.
+static ULONGLONG s_shellDismissStartTick = 0;
+static bool s_shellDismissResent = false;
 // Release tracking also protects ordinary delayed touchpad sessions.
 static bool s_touchpadPending = false;
 static ULONGLONG s_touchpadRapidPendingTick = 0;
@@ -12914,7 +12918,7 @@ static void CancelPendingShow() {
     g_showDelayDeadlineTick = 0;
     g_touchpadInvocation = false;
     g_keyboardPendingForegroundHandoff = false;
-    g_shellSurfaceSource = false;
+    g_keyboardShellSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
@@ -13688,7 +13692,7 @@ static void PresentSwitcherWindows() {
     if (!foreground) foreground = SetForegroundWindow(g_hSwitcher);
     const bool foregroundFallbackNeeded =
         (touchpadPresentation || g_keyboardPendingForegroundHandoff ||
-         g_shellSurfaceSource) &&
+         g_keyboardShellSource) &&
         GetForegroundWindow() != g_hSwitcher;
     if (foregroundFallbackNeeded) {
         // Shell-source keyboard sessions can deny the supported foreground
@@ -14237,6 +14241,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     s_touchpadActivationRetryTarget = NULL;
     s_touchpadActivationRetryDeadline = 0;
     s_touchpadCommitActivation = false;
+    s_shellDismissStartTick = 0;
     // Publish intent before layout/icon work so the raw reader can mark a
     // three-finger stroke during this invocation's scheduling window.
     g_touchpadSwitcherActive.store(true);
@@ -14357,7 +14362,8 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_keyboardPendingForegroundHandoff =
         !touchpadInvocation && ForegroundRequiresKeyboardHandoff(
             invocationInput, &keyboardSourceSecurity, &keyboardSelfSecurity);
-    g_shellSurfaceSource = IsShellSurfaceWindow(invocationInput);
+    g_keyboardShellSource = !touchpadInvocation &&
+                            IsShellSurfaceWindow(invocationInput);
 
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int cx, cy;
@@ -14421,15 +14427,10 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
             SetWindowPos(g_hSwitcher, HWND_TOPMOST, -32000, -32000, g_winW, g_winH, SWP_NOACTIVATE);
         }
         ShowWindow(g_hSwitcher, SW_SHOWNA);
-        if (g_shellSurfaceSource) {
+        if (g_keyboardShellSource) {
             // Shell flyouts keep the foreground right and swallow the following
-            // input. Claim the foreground now so the commit-time activation of the
-            // target is allowed. Keyboard sessions have a fresh hotkey grant;
-            // touchpad sessions have none, so they request eligibility first.
-            if (touchpadInvocation &&
-                (!s_nativeTouchpadInvocation.token || !s_nativeTouchpadInvocation.rawAdopted)) {
-                TapUnassignedKeyForForeground();
-            }
+            // Tab/Alt-up input. Claim the foreground now, while the hotkey grant
+            // is fresh, so the commit-time activation of the target is allowed.
             if (!SetForegroundWindow(g_hSwitcher) &&
                 GetForegroundWindow() != g_hSwitcher) {
                 SwitchToThisWindow(g_hSwitcher, TRUE);
@@ -14611,7 +14612,7 @@ static void HideSwitcher() {
     g_isVisible = false;
     g_isPendingShow = false;
     g_keyboardPendingForegroundHandoff = false;
-    g_shellSurfaceSource = false;
+    g_keyboardShellSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardReleaseProbeTick = 0;
@@ -14722,6 +14723,28 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
     return false;
 }
 
+// Shell flyouts lock the foreground against background processes and only the
+// physical Alt key lifts the lock, which a touchpad gesture does not produce.
+// Closing the flyout is a system-initiated foreground change, so the commit
+// closes it first and activates the target once it is gone.
+static bool ShellSurfaceHoldsForeground() {
+    HWND hForeground = GetForegroundWindow();
+    return hForeground && hForeground != g_hSwitcher &&
+           IsShellSurfaceWindow(hForeground);
+}
+
+static void TapEscapeKey() {
+    INPUT inputs[2] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_ESCAPE;
+    inputs[1] = inputs[0];
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+}
+
+#define SWS_SHELL_DISMISS_RESEND_MS 350
+#define SWS_SHELL_DISMISS_TIMEOUT_MS 1200
+
 static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows) {
     if (!hTarget || !IsWindow(hTarget)) {
         ClearPendingActivationListTarget();
@@ -14772,35 +14795,61 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         const bool keyboardCommit = s_altSessionOwner &&
                                     !g_isTouchpadGestureActive &&
                                     !s_rawSessionOwned;
-        // Make one foreground-eligibility request for this handoff, not one
-        // synthetic key for every rejected retry (which can keep stealing
-        // last-input eligibility while a different app owns the foreground).
-        TapUnassignedKeyForForeground();
-        if ((keyboardCommit || g_shellSurfaceSource) &&
-            GetForegroundWindow() != g_hSwitcher) {
-            // SearchHost and Start can remain foreground after the switcher is
-            // created. Reclaim foreground once at commit time, while this
-            // session still owns the input handoff (keyboard) or right after the
-            // eligibility tap above (touchpad), before activating the selected
-            // application.
-            SetForegroundWindow(g_hSwitcher);
-            if (GetForegroundWindow() != g_hSwitcher) {
-                SwitchToThisWindow(g_hSwitcher, TRUE);
-            }
-            if (GetForegroundWindow() != g_hSwitcher) {
-                Wh_Log(L"SWS: shell surface foreground reclaim failed target=%p", hForegroundTarget);
+        if (!keyboardCommit && ShellSurfaceHoldsForeground()) {
+            s_shellDismissStartTick = GetTickCount64();
+            s_shellDismissResent = false;
+            Wh_Log(L"SWS: shell surface dismiss before activate fg=%p target=%p",
+                   GetForegroundWindow(), hForegroundTarget);
+            TapEscapeKey();
+        } else {
+            // Make one foreground-eligibility request for this handoff, not one
+            // synthetic key for every rejected retry (which can keep stealing
+            // last-input eligibility while a different app owns the foreground).
+            TapUnassignedKeyForForeground();
+            if (keyboardCommit && GetForegroundWindow() != g_hSwitcher) {
+                // SearchHost and Start can remain foreground after the switcher
+                // is created. Reclaim foreground once at commit time, while this
+                // keyboard session still owns the input handoff, before
+                // activating the selected application.
+                SetForegroundWindow(g_hSwitcher);
+                if (GetForegroundWindow() != g_hSwitcher) {
+                    SwitchToThisWindow(g_hSwitcher, TRUE);
+                }
+                if (GetForegroundWindow() != g_hSwitcher) {
+                    Wh_Log(L"SWS: shell surface foreground reclaim failed target=%p", hForegroundTarget);
+                }
             }
         }
     }
-    const bool alreadyForeground = !ownerRestorePending &&
+    bool dismissWait = false;
+    if (s_shellDismissStartTick) {
+        const ULONGLONG elapsed = GetTickCount64() - s_shellDismissStartTick;
+        if (elapsed < SWS_SHELL_DISMISS_TIMEOUT_MS && ShellSurfaceHoldsForeground()) {
+            // Activating now would be denied. Wait for the flyout to close; a
+            // Search box with text may need a second Escape.
+            dismissWait = true;
+            if (!s_shellDismissResent && elapsed > SWS_SHELL_DISMISS_RESEND_MS) {
+                s_shellDismissResent = true;
+                TapEscapeKey();
+            }
+        } else {
+            Wh_Log(L"SWS: shell surface dismiss done=%d after %llums target=%p",
+                   !ShellSurfaceHoldsForeground(), elapsed, hForegroundTarget);
+            s_shellDismissStartTick = 0;
+            // The dismissal reset the input state, so ask for foreground
+            // eligibility again right before the activation.
+            TapUnassignedKeyForForeground();
+        }
+    }
+    const bool alreadyForeground = !ownerRestorePending && !dismissWait &&
                                    GetForegroundWindow() == hForegroundTarget;
     bool activationSkipped = alreadyForeground;
     BOOL foregroundOk = alreadyForeground;
-    if (!ownerRestorePending && !alreadyForeground) {
+    if (!ownerRestorePending && !dismissWait && !alreadyForeground) {
         foregroundOk = SetForegroundWindow(hForegroundTarget);
         if (!foregroundOk) SwitchToThisWindow(hForegroundTarget, TRUE);
     }
-    bool active = !ownerRestorePending &&
+    bool active = !ownerRestorePending && !dismissWait &&
                   GetForegroundWindow() == hForegroundTarget;
     if (!active || ownerRestorePending) {
         s_pendingActivationListTarget = hTarget;
@@ -14810,7 +14859,7 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         ClearPendingActivationListTarget();
     }
     if (!retrying || active) {
-        if (!active) {
+        if (!active && !dismissWait) {
             Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=0 skipped=%d",
                    hForegroundTarget, foregroundOk, activationSkipped);
         }
@@ -14818,10 +14867,12 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     if (active) {
         s_touchpadActivationRetryTarget = NULL;
         s_touchpadActivationRetryDeadline = 0;
+        s_shellDismissStartTick = 0;
         if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
         UpdateMruWindow(hTarget);
         s_touchpadCommitActivation = false;
-    } else if (g_hSwitcher && ((!g_isVisible && !g_isPendingShow) || g_animExitActive)) {
+    } else if (g_hSwitcher && ((!g_isVisible && !g_isPendingShow) || g_animExitActive ||
+                               dismissWait)) {
         // Foreground activation may be denied transiently after the raw input
         // process releases the switcher, or while the visual exit is still
         // running. Retry without blocking this message pump; never attach to
@@ -14830,7 +14881,7 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
             // The absolute deadline is established once. Resetting it here on
             // each failed attempt made the 600 ms retry run for many seconds.
             s_touchpadActivationRetryDeadline = GetTickCount64() +
-                (ownerRestorePending ? 3000u : 600u);
+                (ownerRestorePending ? 3000u : (dismissWait ? 1800u : 600u));
             SetTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID, 40, NULL);
         }
         s_touchpadActivationRetryTarget = ownerRestorePending ? hTarget : hForegroundTarget;
@@ -18807,6 +18858,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 s_touchpadActivationRetryTarget = NULL;
                 s_touchpadActivationRetryDeadline = 0;
                 s_touchpadCommitActivation = false;
+                s_shellDismissStartTick = 0;
                 return 0;
             }
             HWND target = s_touchpadActivationRetryTarget;
