@@ -2,7 +2,7 @@
 // @id              bookmark-bar-for-file-explorer
 // @name            Bookmark Bar for File Explorer
 // @description     Adds a Chrome-style bookmarks bar to File Explorer with nested folders, drag & drop and a full Bookmark Manager
-// @version         2.5.17
+// @version         2.5.28
 // @author          classiclover75-netizen
 // @github          https://github.com/classiclover75-netizen
 // @include         explorer.exe
@@ -101,11 +101,28 @@ Bookmark Manager modeled on Chrome's.
 - Windows 11 with the modern (tabbed) File Explorer.
 
 ## Notes
-- No File Explorer restart is needed: the bar is added to already open
-  windows as soon as the mod is enabled, and removed when it is disabled.
+- **Restart File Explorer once after installing or updating the mod.** The bar
+  is usually added to already open windows right away, but a restart makes sure
+  every window, and the taskbar's Explorer process, starts cleanly with the
+  current version. To restart File Explorer:
+  1. Press **Ctrl+Shift+Esc** to open Task Manager.
+  2. On the **Processes** tab, find **Windows Explorer**.
+  3. Right-click it and choose **Restart** (the taskbar disappears for a moment).
+
+  Or from Command Prompt: press **Win+R**, type `cmd` and press **Enter**, then
+  run this line (administrator rights are not needed; a normal Command Prompt
+  is best, because File Explorer started from an elevated one would also run
+  as administrator):
+
+  ```
+  taskkill /f /im explorer.exe & start explorer.exe
+  ```
+
+  Signing out and back in, or restarting the PC, works too.
+- Disabling and enabling the mod again doesn't need a restart: the bar is
+  removed as soon as the mod is disabled and comes back when it is enabled.
 - Bookmarks are saved in a file in the mod's storage folder, separately for
-  each Windows account, and persist across restarts. Bookmarks saved by older
-  versions are moved to this file automatically.
+  each Windows account, and persist across restarts.
 - Bookmarks pointing to network locations show a generic icon, so that an
   unreachable server never slows down File Explorer.
 - This mod and *Explorer Folder Bookmarks Bar* both add a bar to the same place
@@ -208,17 +225,15 @@ namespace wjson = winrt::Windows::Data::Json;
 namespace wdt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wf = winrt::Windows::Foundation;
 
-// Shown in the Bookmark Manager. Keep in sync with @version in the header above.
-constexpr wchar_t kModVersion[] = L"2.5.17";
+// Shown in the Bookmark Manager (taken from @version in the header)
+constexpr const wchar_t* kModVersion = WH_MOD_VERSION;
 
 constexpr wchar_t kBarName[] = L"WindhawkExplorerChromeBookmarksBar";
 constexpr wchar_t kFrameProperty[] = L"WindhawkExplorerChromeBookmarksFrame";
-// Older versions stored all bookmarks in this single mod storage value, shared
-// by every account on the PC. It is moved to the per-account file on first load.
-constexpr wchar_t kLegacyStorageKey[] = L"chromeBookmarksJson";
 constexpr wchar_t kExportFileName[] = L"explorer-bookmarks-backup.json";
 constexpr wchar_t kMgrClass[] = L"WindhawkChromeBookmarkManagerWnd2";
 constexpr wchar_t kEditDlgClass[] = L"WindhawkChromeEditBookmarkDlg2";
+constexpr wchar_t kChoiceDlgClass[] = L"WindhawkChromeBookmarkChoiceDlg";
 constexpr wchar_t kDropLineClass[] = L"WindhawkChromeBookmarkDropLine";
 
 constexpr double kRowHeight = 38.0;
@@ -240,6 +255,8 @@ constexpr BYTE kFolderTintR = 66;
 constexpr BYTE kFolderTintG = 133;
 constexpr BYTE kFolderTintB = 244;
 constexpr UINT_PTR kOpenTimerId = 0x57484231;
+// Asks Explorer to refresh its window backdrop shortly after the bar was added
+constexpr UINT_PTR kBackdropTimerId = 0x57484233;
 
 constexpr CLSID kShellWindows = {
     0x9ba05972, 0xf6a8, 0x11cf,
@@ -275,9 +292,9 @@ struct ClipboardState {
 
 std::mutex g_dataMutex;
 ClipboardState g_clipboard;
-[[clang::no_destroy]] std::vector<std::wstring> g_undoStack;
+std::vector<std::wstring> g_undoStack;
 // Per-account bookmarks file in the mod storage folder (set in InitStorage).
-[[clang::no_destroy]] std::wstring g_storageFile;
+std::wstring g_storageFile;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_extensionHooked = false;
 std::atomic<bool> g_frameHooked = false;
@@ -286,8 +303,6 @@ std::atomic<bool> g_frameHookAttempted = false;
 std::atomic<bool> g_bookmarkHotkey = true;
 std::atomic<int> g_themeSetting = 0;  // 0 = system, 1 = light, 2 = dark
 // Window classes registered by this load (reset on every load, see Wh_ModInit)
-bool g_editClassRegistered = false;
-bool g_mgrClassRegistered = false;
 
 // Drag state for rows inside a folder dropdown
 struct FlyoutDragCtx {
@@ -310,6 +325,10 @@ struct OpenFlyout {
     NodePath folder;
     muxc::Flyout flyout{nullptr};
     std::function<void()> rebuild;
+    // Revoked before the flyout is hidden on unload, so no handler (mod code)
+    // can run after the bar is removed
+    winrt::event_token openedToken{};
+    winrt::event_token closedToken{};
 };
 
 struct BarState {
@@ -330,6 +349,8 @@ struct BarState {
     double oldNavMinHeight = 0;
     double appliedGridMinHeight = 0;
     double appliedNavMinHeight = 0;
+    winrt::event_token rootDragOverToken{};
+    winrt::event_token rootDropToken{};
 
     // Bar drag & drop
     int dragSourceIndex = -1;
@@ -352,15 +373,19 @@ struct BarState {
 [[clang::no_destroy]] thread_local std::optional<std::list<BarState>> g_bars{std::in_place};
 thread_local unsigned g_frameRows = 0;
 thread_local HHOOK g_messageHook = nullptr;
-[[clang::no_destroy]] thread_local std::vector<HWND> g_frames;
+thread_local std::vector<HWND> g_frames;
 [[clang::no_destroy]] thread_local std::deque<std::function<void()>> g_frameTasks;
-[[clang::no_destroy]] thread_local std::optional<NodePath> g_pendingScope;
+thread_local std::optional<NodePath> g_pendingScope;
 
 void NotifyExplorerBars();
 void RefreshThreadBars();
 void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& scope);
 void OpenBookmarkManagerWindow(HWND ownerExplorer, const NodePath& folder);
 void RestoreNudgedIslands();
+void AddPathsAsBookmarks(HWND owner, const NodePath& folder, const std::vector<std::wstring>& paths);
+using ChoiceButtons = std::vector<std::pair<int, std::wstring>>;
+int ShowChoiceDialog(HWND owner, const std::wstring& heading, const std::wstring& body, const ChoiceButtons& buttons,
+                     int defaultId, int cancelId);
 
 // Win32 callbacks (crash-guarded wrappers; the real code is in *Impl)
 LRESULT CALLBACK EditBookmarkWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -720,9 +745,6 @@ std::vector<BookmarkNode> DeserializeNodes(const std::wstring& jsonText) {
 // ---------------------------------------------------------------------------
 
 constexpr size_t kStorageMaxBytes = 16 * 1024 * 1024;
-// Older versions could only read back about 16,000 characters, so any value
-// they wrote fits easily in this buffer.
-constexpr size_t kLegacyReadChars = 4 * 1024 * 1024;
 constexpr size_t kUndoLimit = 30;
 
 enum class StoreRead { Ok, Missing, Error };
@@ -837,33 +859,101 @@ bool ReadValidStoreLocked(std::wstring& text, std::vector<BookmarkNode>* nodes) 
     return false;
 }
 
-// Older versions kept the bookmarks in one machine-wide value. The first account
-// that loads this version takes them; the value is removed only after the file
-// has been written and read back intact.
-void MigrateLegacyValueLocked() {
-    std::wstring existing;
-    if (ReadStoreFileLocked(existing) != StoreRead::Missing) return;
-    std::wstring value(kLegacyReadChars, L'\0');
-    size_t chars = Wh_GetStringValue(kLegacyStorageKey, value.data(), value.size());
-    if (chars == 0 || chars >= value.size()) return;
-    value.resize(chars);
+// ---------------------------------------------------------------------------
+// In-memory copy and change detection
+//
+// The parsed bookmarks are kept in memory and reused while the file's size and
+// last-write time are unchanged, so frequent callers (drag moves, dropdowns,
+// menus) don't read and parse the file each time. A change made by another
+// window thread or another explorer.exe process changes the stamp, and the file
+// is read again.
+//
+// Each thread remembers the stamp of the file its last load came from. An edit
+// is load -> modify -> save, so SaveBookmarks refuses to write when the file has
+// changed since that load (someone else saved in between), or when that load
+// failed (an edit built on an empty list must never replace the file).
+// ---------------------------------------------------------------------------
+
+struct StoreStamp {
+    bool missing = false;
+    ULONGLONG size = 0;
+    FILETIME lastWrite{};
+};
+
+bool SameStamp(const StoreStamp& a, const StoreStamp& b) {
+    if (a.missing || b.missing) return a.missing == b.missing;
+    return a.size == b.size && CompareFileTime(&a.lastWrite, &b.lastWrite) == 0;
+}
+
+bool GetStoreStampLocked(StoreStamp& stamp) {
+    stamp = StoreStamp{};
+    if (g_storageFile.empty()) return false;
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!GetFileAttributesExW(g_storageFile.c_str(), GetFileExInfoStandard, &data)) {
+        DWORD error = GetLastError();
+        stamp.missing = (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND);
+        return stamp.missing;
+    }
+    stamp.size = (static_cast<ULONGLONG>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
+    stamp.lastWrite = data.ftLastWriteTime;
+    return true;
+}
+
+struct StoreCache {
+    bool valid = false;
+    StoreStamp stamp;
+    std::wstring text;
     std::vector<BookmarkNode> nodes;
-    if (!TryDeserializeNodes(value, nodes)) {
-        Wh_Log(L"Storage: the old bookmarks value can't be parsed; it is left in place");
-        return;
+};
+StoreCache g_storeCache;  // guarded by g_dataMutex
+
+struct LoadBase {
+    bool set = false;    // this thread has loaded at least once
+    bool valid = false;  // the last load succeeded
+    StoreStamp stamp;
+};
+thread_local LoadBase t_loadBase;
+
+// Reads the stored bookmarks, from memory when the file is unchanged. Returns
+// false when the file can't be read; `stamp` receives the file's stamp.
+bool ReadStoreCachedLocked(std::wstring* text, std::vector<BookmarkNode>* nodes, StoreStamp& stamp) {
+    const bool stamped = GetStoreStampLocked(stamp);
+    if (stamped && g_storeCache.valid && SameStamp(g_storeCache.stamp, stamp)) {
+        if (text) *text = g_storeCache.text;
+        if (nodes) *nodes = g_storeCache.nodes;
+        return true;
     }
-    if (!WriteStoreFileLocked(value)) return;
-    std::wstring check;
-    if (ReadStoreFileLocked(check) == StoreRead::Ok && check == value) {
-        Wh_DeleteValue(kLegacyStorageKey);
-        Wh_Log(L"Storage: moved the old bookmarks to this account's file");
+    std::wstring raw;
+    std::vector<BookmarkNode> parsed;
+    const bool ok = stamped && ReadValidStoreLocked(raw, &parsed);
+    g_storeCache.valid = false;
+    if (ok) {
+        // The stamp was taken before reading: if the file changed in between,
+        // the next call sees a different stamp and reads it again.
+        g_storeCache.valid = true;
+        g_storeCache.stamp = stamp;
+        g_storeCache.text = raw;
+        g_storeCache.nodes = parsed;
     }
+    if (text) *text = std::move(raw);
+    if (nodes) *nodes = std::move(parsed);
+    return ok;
+}
+
+// After this process wrote the file: the writing thread's base is the new file.
+void AfterOwnWriteLocked() {
+    g_storeCache.valid = false;
+    StoreStamp stamp;
+    t_loadBase.set = true;
+    t_loadBase.valid = GetStoreStampLocked(stamp);
+    t_loadBase.stamp = stamp;
 }
 
 void InitStorage() {
     std::lock_guard lock(g_dataMutex);
     g_storageFile.clear();
     g_undoStack.clear();
+    g_storeCache = StoreCache{};
     std::wstring dir(32768, L'\0');
     size_t chars = Wh_GetModStoragePath(dir.data(), dir.size());
     if (chars == 0 || chars >= dir.size()) {
@@ -879,18 +969,16 @@ void InitStorage() {
     std::wstring sid = CurrentUserSid();
     if (sid.empty()) Wh_Log(L"Storage: can't read the account SID; using a shared file");
     g_storageFile = dir + L"\\bookmarks" + (sid.empty() ? std::wstring() : L"-" + sid) + L".json";
-    try {
-        MigrateLegacyValueLocked();
-    } catch (...) {
-        Wh_Log(L"Storage: migration failed");
-    }
 }
 
 std::vector<BookmarkNode> LoadBookmarks() {
     std::vector<BookmarkNode> nodes;
-    std::wstring raw;
+    StoreStamp stamp;
     std::lock_guard lock(g_dataMutex);
-    ReadValidStoreLocked(raw, &nodes);
+    const bool ok = ReadStoreCachedLocked(nullptr, &nodes, stamp);
+    t_loadBase.set = true;
+    t_loadBase.valid = ok;
+    t_loadBase.stamp = stamp;
     return nodes;
 }
 
@@ -899,18 +987,32 @@ std::vector<BookmarkNode> LoadBookmarks() {
 bool SaveBookmarks(const std::vector<BookmarkNode>& nodes, bool replaceUnreadable) {
     std::wstring json = SerializeNodes(nodes);
     bool ok = false;
+    bool refreshOnly = false;
     {
         std::lock_guard lock(g_dataMutex);
         std::wstring prev;
-        bool prevValid = ReadValidStoreLocked(prev, nullptr);
-        if (!prevValid && !replaceUnreadable) return false;
-        ok = WriteStoreFileLocked(json);
-        if (ok && prevValid && prev != json) {
-            g_undoStack.push_back(prev.empty() ? SerializeNodes({}) : prev);
-            if (g_undoStack.size() > kUndoLimit) g_undoStack.erase(g_undoStack.begin());
+        StoreStamp current;
+        const bool prevValid = ReadStoreCachedLocked(&prev, nullptr, current);
+        if (!replaceUnreadable) {
+            if (!prevValid) return false;
+            if (t_loadBase.set && (!t_loadBase.valid || !SameStamp(t_loadBase.stamp, current))) {
+                Wh_Log(L"Storage: the bookmarks changed since they were loaded; this edit is not saved");
+                refreshOnly = true;
+            }
+        }
+        if (!refreshOnly) {
+            ok = WriteStoreFileLocked(json);
+            if (ok) {
+                if (prevValid && prev != json) {
+                    g_undoStack.push_back(prev.empty() ? SerializeNodes({}) : prev);
+                    if (g_undoStack.size() > kUndoLimit) g_undoStack.erase(g_undoStack.begin());
+                }
+                AfterOwnWriteLocked();
+            }
         }
     }
-    if (ok) NotifyExplorerBars();
+    // A refused edit still refreshes the bars, so they show the current bookmarks
+    if (ok || refreshOnly) NotifyExplorerBars();
     return ok;
 }
 
@@ -926,6 +1028,7 @@ bool UndoLastChange() {
         std::wstring prev = std::move(g_undoStack.back());
         g_undoStack.pop_back();
         ok = WriteStoreFileLocked(prev);
+        if (ok) AfterOwnWriteLocked();
     }
     if (ok) NotifyExplorerBars();
     return ok;
@@ -1130,7 +1233,85 @@ UINT UninitBarsMessage() {
 
 // Message hooks of all threads (all removed on unload)
 std::mutex g_hooksMutex;
-[[clang::no_destroy]] std::vector<HHOOK> g_allHooks;
+std::vector<HHOOK> g_allHooks;
+
+// Work queued on a thread's DispatcherQueue holds one of these tokens, whether
+// it runs or the queue discards it. Wh_ModUninit waits until none is left.
+std::atomic<unsigned> g_pendingScans = 0;
+
+struct PendingScanToken {
+    PendingScanToken() { ++g_pendingScans; }
+    ~PendingScanToken() { --g_pendingScans; }
+    PendingScanToken(const PendingScanToken&) = delete;
+    PendingScanToken& operator=(const PendingScanToken&) = delete;
+};
+
+// ---------------------------------------------------------------------------
+// XAML event handlers
+//
+// Every handler the mod adds to a XAML object is recorded here (per UI thread)
+// and removed before the mod is unloaded. A XAML object that still held one
+// would call into the unloaded DLL when it raises the event, or when it is
+// destroyed later and releases the handler. Explorer then fails fast
+// (0xC0000409, a Control Flow Guard check on a call into unloaded code).
+// ---------------------------------------------------------------------------
+
+struct HandlerRevoker {
+    winrt::weak_ref<wf::IInspectable> source;
+    std::function<void(const wf::IInspectable&)> revoke;
+};
+[[clang::no_destroy]] thread_local std::vector<HandlerRevoker> g_handlerRevokers;
+thread_local size_t g_revokersAdded = 0;
+
+// Objects that are gone have released their handlers already
+void PruneHandlerRevokers() {
+    std::erase_if(g_handlerRevokers, [](const HandlerRevoker& r) { return !r.source.get(); });
+}
+
+template <typename T, typename Revoke>
+void TrackRevoker(const T& element, Revoke revoke) {
+    try {
+        HandlerRevoker r;
+        r.source = winrt::make_weak(element.template as<wf::IInspectable>());
+        r.revoke = [revoke](const wf::IInspectable& source) {
+            if (auto e = source.try_as<T>()) revoke(e);
+        };
+        g_handlerRevokers.push_back(std::move(r));
+        if (++g_revokersAdded >= 256) {
+            g_revokersAdded = 0;
+            PruneHandlerRevokers();
+        }
+    } catch (...) {
+        Wh_Log(L"TrackRevoker: exception");
+    }
+}
+
+// Records an event handler (token) so it can be removed later; returns the token.
+template <typename T, typename Revoke>
+winrt::event_token TrackEvent(const T& element, winrt::event_token token, Revoke revoke) {
+    TrackRevoker(element, [token, revoke](const T& e) { revoke(e, token); });
+    return token;
+}
+
+// AddHandler with removal recorded (used for handledEventsToo handlers).
+template <typename T>
+void TrackAddHandler(const T& element, const mux::RoutedEvent& routedEvent, const wf::IInspectable& handler,
+                     bool handledEventsToo) {
+    element.AddHandler(routedEvent, handler, handledEventsToo);
+    TrackRevoker(element, [routedEvent, handler](const T& e) { e.RemoveHandler(routedEvent, handler); });
+}
+
+// Removes every recorded handler of this thread's XAML objects.
+void RevokeThreadHandlers() {
+    auto list = std::move(g_handlerRevokers);
+    g_handlerRevokers.clear();
+    g_revokersAdded = 0;
+    for (auto it = list.rbegin(); it != list.rend(); ++it) {
+        try {
+            if (auto source = it->source.get()) it->revoke(source);
+        } catch (...) {}
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Modal operations
@@ -1277,7 +1458,7 @@ void ForOwnUiThreads(void (*callback)()) {
 // Pending reads of dropped items. A completion that ran after unloading would
 // call into the unloaded DLL, so Wh_ModUninit cancels them and waits.
 std::mutex g_dropReadsMutex;
-[[clang::no_destroy]] std::vector<wf::IAsyncInfo> g_dropReads;
+[[clang::no_destroy]] std::optional<std::vector<wf::IAsyncInfo>> g_dropReads{std::in_place};
 std::atomic<unsigned> g_pendingDrops = 0;
 
 // Unregisters a pending drop read when its completion handler finishes.
@@ -1289,7 +1470,7 @@ struct DropReadGuard {
     ~DropReadGuard() {
         {
             std::lock_guard lock(g_dropReadsMutex);
-            std::erase(g_dropReads, info);
+            if (g_dropReads) std::erase(*g_dropReads, info);
         }
         --g_pendingDrops;
     }
@@ -1303,7 +1484,7 @@ void ReadDroppedItems(const mux::DragEventArgs& args, Handler handler) {
     ++g_pendingDrops;
     {
         std::lock_guard lock(g_dropReadsMutex);
-        g_dropReads.push_back(info);
+        if (g_dropReads) g_dropReads->push_back(info);
     }
     op.Completed([handler = std::move(handler), info](
                      wf::IAsyncOperation<wf::Collections::IVectorView<winrt::Windows::Storage::IStorageItem>> const& asyncInfo,
@@ -1315,6 +1496,29 @@ void ReadDroppedItems(const mux::DragEventArgs& args, Handler handler) {
         } catch (...) {
             Wh_Log(L"Dropped items: exception");
         }
+    });
+}
+
+// Reads the dropped items' paths in the background, then adds them as bookmarks
+// on the UI thread (where the duplicate question can be shown).
+void ReadDroppedPaths(const mux::DragEventArgs& args, HWND frame, const NodePath& folder) {
+    auto queue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+    if (!queue) return;
+    ReadDroppedItems(args, [queue, frame, folder](auto const& items) {
+        std::vector<std::wstring> paths;
+        for (const auto& item : items) {
+            std::wstring p(item.Path().c_str());
+            if (!p.empty()) paths.push_back(std::move(p));
+        }
+        if (paths.empty() || g_unloading) return;
+        queue.TryEnqueue([token = std::make_shared<PendingScanToken>(), frame, folder, paths]() {
+            if (g_unloading) return;
+            try {
+                AddPathsAsBookmarks(frame, folder, paths);
+            } catch (...) {
+                Wh_Log(L"Adding dropped items: exception");
+            }
+        });
     });
 }
 
@@ -1386,7 +1590,7 @@ struct OpenRequest {
 };
 
 std::mutex g_openMutex;
-[[clang::no_destroy]] std::map<HWND, std::deque<OpenRequest>> g_openQueues;
+std::map<HWND, std::deque<OpenRequest>> g_openQueues;
 
 void QueueOpenTargets(HWND frame, const std::vector<std::wstring>& paths, OpenDisposition disp) {
     if (paths.empty() || g_unloading) return;
@@ -1802,6 +2006,117 @@ bool ClipboardHasData() {
     return g_clipboard.hasData;
 }
 
+// ---------------------------------------------------------------------------
+// Duplicate bookmarks
+//
+// Adding a file or folder that is already bookmarked (anywhere: on the bar or in
+// any folder) asks first. The same path may be kept in several places on
+// purpose, so the user decides each time.
+// ---------------------------------------------------------------------------
+
+// Collects where a bookmark of `path` already is, e.g. "Bookmarks bar" or "t-1 > Sub".
+void FindItemLocations(const std::vector<BookmarkNode>& nodes, const std::wstring& path,
+                       const std::wstring& where, std::vector<std::wstring>& out) {
+    for (const auto& n : nodes) {
+        if (n.type == NodeType::Item && _wcsicmp(n.path.c_str(), path.c_str()) == 0) {
+            if (std::find(out.begin(), out.end(), where) == out.end()) out.push_back(where);
+        } else if (n.type == NodeType::FolderBox) {
+            const std::wstring sub = (where == L"Bookmarks bar") ? n.name : where + L" \u203A " + n.name;
+            FindItemLocations(n.children, path, sub, out);
+        }
+    }
+}
+
+std::wstring JoinLocations(const std::vector<std::wstring>& locations) {
+    std::wstring text;
+    for (size_t i = 0; i < locations.size(); ++i) {
+        if (i) text += L", ";
+        text += locations[i];
+    }
+    return text;
+}
+
+// Asks before adding bookmarks whose path is already bookmarked. Returns the
+// bookmarks to add: all of them, only the new ones, or none. Runs a message box,
+// so it must be called on a UI thread outside of hooks and XAML event handlers.
+std::vector<BookmarkNode> ConfirmDuplicates(HWND owner, const std::vector<BookmarkNode>& existing,
+                                            std::vector<BookmarkNode> candidates) {
+    struct Dup {
+        size_t index;
+        std::vector<std::wstring> locations;
+    };
+    std::vector<Dup> dups;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (candidates[i].type != NodeType::Item || candidates[i].path.empty()) continue;
+        std::vector<std::wstring> locations;
+        FindItemLocations(existing, candidates[i].path, L"Bookmarks bar", locations);
+        if (!locations.empty()) dups.push_back({i, std::move(locations)});
+    }
+    if (dups.empty()) return candidates;
+
+    constexpr int kAddAll = 101;
+    constexpr int kAddNew = 102;
+    int answer = IDCANCEL;
+    if (candidates.size() == 1) {
+        const std::wstring heading = L"\u201C" + candidates[0].name + L"\u201D is already bookmarked";
+        const std::wstring body = L"It is already in: " + JoinLocations(dups[0].locations) +
+                                  L".\n\nDo you want to add it again?";
+        answer = ShowChoiceDialog(owner, heading, body, {{kAddAll, L"Add again"}, {IDCANCEL, L"Don\u2019t add"}},
+                                  IDCANCEL, IDCANCEL);
+    } else {
+        const std::wstring heading = std::to_wstring(dups.size()) +
+                                     (dups.size() == 1 ? L" item is already bookmarked" : L" items are already bookmarked");
+        std::wstring body;
+        const size_t shown = std::min<size_t>(dups.size(), 10);
+        for (size_t i = 0; i < shown; ++i) {
+            body += L"\u2022  " + candidates[dups[i].index].name + L"  (" + JoinLocations(dups[i].locations) + L")\n";
+        }
+        if (dups.size() > shown) body += L"\u2026 and " + std::to_wstring(dups.size() - shown) + L" more\n";
+        body += L"\nDo you want to add them again?";
+        answer = ShowChoiceDialog(owner, heading, body,
+                                  {{kAddAll, L"Add all"}, {kAddNew, L"Add only new items"}, {IDCANCEL, L"Cancel"}},
+                                  kAddNew, IDCANCEL);
+    }
+    if (answer == kAddAll) return candidates;
+    if (answer == kAddNew) {
+        std::vector<BookmarkNode> fresh;
+        size_t d = 0;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            if (d < dups.size() && dups[d].index == i) {
+                ++d;
+                continue;
+            }
+            fresh.push_back(std::move(candidates[i]));
+        }
+        return fresh;
+    }
+    return {};
+}
+
+// Adds file/folder paths as bookmarks to `folder` (empty = the bar), asking
+// about duplicates first. Runs on a UI thread.
+void AddPathsAsBookmarks(HWND owner, const NodePath& folder, const std::vector<std::wstring>& paths) {
+    if (g_unloading || paths.empty()) return;
+    std::vector<BookmarkNode> candidates;
+    for (const auto& raw : paths) {
+        if (raw.empty()) continue;
+        BookmarkNode n;
+        n.type = NodeType::Item;
+        n.path = NormalizePath(raw);
+        n.name = DefaultLabel(n.path);
+        candidates.push_back(std::move(n));
+    }
+    if (candidates.empty()) return;
+    candidates = ConfirmDuplicates(owner, LoadBookmarks(), std::move(candidates));
+    if (candidates.empty() || g_unloading) return;
+    // Loaded again after the question, so a change made meanwhile isn't lost
+    auto list = LoadBookmarks();
+    auto* kids = FolderChildren(list, folder);
+    if (!kids) return;
+    for (auto& n : candidates) kids->push_back(std::move(n));
+    SaveBookmarks(list);
+}
+
 void DoCutOrCopy(const std::vector<NodePath>& rawPaths, bool isCut) {
     auto paths = NormalizeSelection(rawPaths);
     if (paths.empty()) return;
@@ -1844,7 +2159,7 @@ void PasteTargetFor(const std::vector<BookmarkNode>& list, const std::vector<Nod
     }
 }
 
-void DoPaste(const NodePath& folder, int index) {
+void DoPaste(const NodePath& folder, int index, HWND owner = nullptr) {
     ClipboardState clip;
     {
         std::lock_guard lock(g_dataMutex);
@@ -1856,9 +2171,15 @@ void DoPaste(const NodePath& folder, int index) {
             g_clipboard.nodes.clear();
         }
     }
+    std::vector<BookmarkNode> nodes = std::move(clip.nodes);
+    if (!clip.isCut) {
+        // Pasting a copy adds bookmarks that already exist: ask first
+        nodes = ConfirmDuplicates(owner ? owner : GetActiveWindow(), LoadBookmarks(), std::move(nodes));
+        if (nodes.empty() || g_unloading) return;
+    }
     auto list = LoadBookmarks();
     if (!FolderChildren(list, folder)) return;
-    InsertNodes(list, folder, index, clip.nodes);
+    InsertNodes(list, folder, index, nodes);
     SaveBookmarks(list);
 }
 
@@ -1882,10 +2203,13 @@ void SortFolderByName(const NodePath& folder) {
     SaveBookmarks(list);
 }
 
-void RegisterFreshClass(WNDCLASSEXW& wc) {
-    // Old registration (from a previous mod load) may point at unloaded code
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    RegisterClassExW(&wc);
+// The mod's own module handle. The window classes are registered with it, so
+// they belong to the mod and not to explorer.exe.
+HINSTANCE ModuleInstance() {
+    HMODULE mod = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&ModuleInstance), &mod);
+    return mod;
 }
 
 // ============================================================================
@@ -1902,13 +2226,10 @@ struct UiColors {
 };
 
 int ReadThemeSetting() {
-    int r = 0;
-    if (PCWSTR v = Wh_GetStringSetting(L"theme")) {
-        if (wcscmp(v, L"light") == 0) r = 1;
-        else if (wcscmp(v, L"dark") == 0) r = 2;
-        Wh_FreeStringSetting(v);
-    }
-    return r;
+    auto theme = WindhawkUtils::StringSetting::make(L"theme");
+    if (wcscmp(theme.get(), L"light") == 0) return 1;
+    if (wcscmp(theme.get(), L"dark") == 0) return 2;
+    return 0;
 }
 
 bool SystemUsesDarkApps() {
@@ -2309,18 +2630,6 @@ LRESULT CALLBACK EditBookmarkWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 bool ShowEditModal(HWND owner, EditDialogData& data) {
     ModalScope scope;
     if (!scope.active) return false;
-    bool& registered = g_editClassRegistered;
-    if (!registered) {
-        WNDCLASSEXW wc{};
-        wc.cbSize = sizeof(wc);
-        wc.lpfnWndProc = EditBookmarkWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
-        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-        wc.lpszClassName = kEditDlgClass;
-        RegisterFreshClass(wc);
-        registered = true;
-    }
 
     const RECT wr = CenteredWindowRect(owner, 465, data.folderOnly ? 200 : 440, WindowDpi(owner));
     const int x = wr.left, y = wr.top, width = wr.right - wr.left, height = wr.bottom - wr.top;
@@ -2332,7 +2641,7 @@ bool ShowEditModal(HWND owner, EditDialogData& data) {
     HWND hDlg = CreateWindowExW(
         WS_EX_DLGMODALFRAME, kEditDlgClass, winTitle,
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        x, y, width, height, owner, nullptr, GetModuleHandleW(nullptr), &data);
+        x, y, width, height, owner, nullptr, ModuleInstance(), &data);
 
     if (!hDlg) return false;
     if (owner) EnableWindow(owner, FALSE);
@@ -2358,6 +2667,276 @@ bool ShowEditModal(HWND owner, EditDialogData& data) {
         SetForegroundWindow(owner);
     }
     return data.confirmed;
+}
+
+// ---------------------------------------------------------------------------
+// Question dialog (e.g. duplicate bookmarks), styled like the edit dialog: a
+// larger heading, a warning icon, buttons with clear labels, and light/dark
+// colors from the mod's Theme setting (System default follows Windows).
+// ---------------------------------------------------------------------------
+
+struct ChoiceDialogData {
+    std::wstring heading;
+    std::wstring body;
+    ChoiceButtons buttons;
+    int defaultId = IDCANCEL;
+    int cancelId = IDCANCEL;
+    int result = IDCANCEL;
+    UINT dpi = 96;
+    bool dark = false;
+    UiColors colors{};
+    HBRUSH hBg = nullptr;
+    HFONT hHeading = nullptr;
+    HFONT hBody = nullptr;
+    HICON hIcon = nullptr;
+    RECT iconRc{};
+    RECT headingRc{};
+    RECT bodyRc{};
+    std::vector<HWND> buttonWnds;
+};
+
+void ChoiceFreeResources(ChoiceDialogData* d) {
+    if (d->hHeading) DeleteObject(d->hHeading);
+    if (d->hBody) DeleteObject(d->hBody);
+    if (d->hIcon) DestroyIcon(d->hIcon);
+    d->hHeading = nullptr;
+    d->hBody = nullptr;
+    d->hIcon = nullptr;
+}
+
+// Creates the DPI-dependent resources, measures the text, places the buttons and
+// sizes the window. `suggested` is the rectangle from WM_DPICHANGED, if any.
+void ChoiceLayout(HWND hwnd, ChoiceDialogData* d, HWND owner, const RECT* suggested) {
+    ChoiceFreeResources(d);
+    auto S = [d](int v) { return ScaleForDpi(v, d->dpi); };
+    d->hHeading = CreateUiFont(20, FW_SEMIBOLD, d->dpi);
+    d->hBody = CreateUiFont(14, FW_NORMAL, d->dpi);
+    const int iconSize = S(32);
+    LoadIconWithScaleDown(nullptr, IDI_WARNING, iconSize, iconSize, &d->hIcon);
+
+    const int pad = S(24);
+    const int clientW = S(460);
+    const int textX = pad + iconSize + S(16);
+    const int textW = clientW - textX - pad;
+
+    HDC hdc = GetDC(hwnd);
+    RECT hr{0, 0, textW, 0};
+    HFONT old = reinterpret_cast<HFONT>(SelectObject(hdc, d->hHeading));
+    DrawTextW(hdc, d->heading.c_str(), -1, &hr, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    RECT br{0, 0, textW, 0};
+    SelectObject(hdc, d->hBody);
+    DrawTextW(hdc, d->body.c_str(), -1, &br, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    std::vector<int> widths;
+    for (const auto& [id, text] : d->buttons) {
+        SIZE sz{};
+        GetTextExtentPoint32W(hdc, text.c_str(), static_cast<int>(text.size()), &sz);
+        widths.push_back(std::max<int>(S(96), sz.cx + S(32)));
+    }
+    SelectObject(hdc, old);
+    ReleaseDC(hwnd, hdc);
+
+    int y = pad;
+    d->iconRc = RECT{pad, y, pad + iconSize, y + iconSize};
+    d->headingRc = RECT{textX, y, textX + textW, y + (hr.bottom - hr.top)};
+    y = d->headingRc.bottom + S(10);
+    d->bodyRc = RECT{textX, y, textX + textW, y + (br.bottom - br.top)};
+    y = std::max<int>(d->bodyRc.bottom, d->iconRc.bottom) + S(24);
+
+    const int btnH = S(32);
+    const int gap = S(8);
+    int x = clientW - pad;
+    for (size_t i = d->buttons.size(); i-- > 0;) {
+        x -= widths[i];
+        if (i < d->buttonWnds.size() && d->buttonWnds[i]) {
+            MoveWindow(d->buttonWnds[i], x, y, widths[i], btnH, TRUE);
+            SendMessageW(d->buttonWnds[i], WM_SETFONT, reinterpret_cast<WPARAM>(d->hBody), TRUE);
+        }
+        x -= gap;
+    }
+    const int clientH = y + btnH + pad;
+
+    const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE));
+    const DWORD exStyle = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+    RECT wr{0, 0, clientW, clientH};
+    AdjustWindowRectExForDpi(&wr, style, FALSE, exStyle, d->dpi);
+    const int w = wr.right - wr.left;
+    const int h = wr.bottom - wr.top;
+    int px = 0, py = 0;
+    if (suggested) {
+        px = suggested->left;
+        py = suggested->top;
+    } else {
+        RECT anchor{};
+        if (!owner || !GetWindowRect(owner, &anchor)) {
+            POINT pt{};
+            GetCursorPos(&pt);
+            anchor = RECT{pt.x, pt.y, pt.x, pt.y};
+        }
+        px = anchor.left + ((anchor.right - anchor.left) - w) / 2;
+        py = anchor.top + ((anchor.bottom - anchor.top) - h) / 2;
+        MONITORINFO mi{sizeof(mi)};
+        if (GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST), &mi)) {
+            px = std::clamp<int>(px, mi.rcWork.left, std::max<int>(mi.rcWork.left, mi.rcWork.right - w));
+            py = std::clamp<int>(py, mi.rcWork.top, std::max<int>(mi.rcWork.top, mi.rcWork.bottom - h));
+        }
+    }
+    SetWindowPos(hwnd, nullptr, px, py, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+    InvalidateRect(hwnd, nullptr, TRUE);
+}
+
+static LRESULT ChoiceDialogWndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto* d = reinterpret_cast<ChoiceDialogData*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (msg) {
+        case WM_CREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            d = reinterpret_cast<ChoiceDialogData*>(cs->lpCreateParams);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(d));
+            d->dpi = WindowDpi(hwnd);
+            d->dark = IsDarkThemeActive();
+            d->colors = ThemeColors(d->dark);
+            d->hBg = CreateSolidBrush(d->colors.bg);
+            for (const auto& [id, text] : d->buttons) {
+                DWORD style = WS_CHILD | WS_VISIBLE | WS_TABSTOP | (id == d->defaultId ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON);
+                d->buttonWnds.push_back(CreateWindowExW(0, L"BUTTON", text.c_str(), style, 0, 0, 10, 10, hwnd,
+                                                        reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+                                                        nullptr, nullptr));
+            }
+            ChoiceLayout(hwnd, d, cs->hwndParent, nullptr);
+            ApplyTitleBarTheme(hwnd, d->dark);
+            ThemeChildControls(hwnd, d->dark);
+            return 0;
+        }
+        case DM_GETDEFID:
+            if (d) return MAKELRESULT(d->defaultId, DC_HASDEFID);
+            break;
+        case WM_ERASEBKGND:
+            if (d && d->hBg) {
+                RECT rc{};
+                GetClientRect(hwnd, &rc);
+                FillRect(reinterpret_cast<HDC>(wParam), &rc, d->hBg);
+                return 1;
+            }
+            break;
+        case WM_PAINT: {
+            PAINTSTRUCT ps{};
+            HDC hdc = BeginPaint(hwnd, &ps);
+            if (d) {
+                if (d->hIcon) {
+                    DrawIconEx(hdc, d->iconRc.left, d->iconRc.top, d->hIcon, d->iconRc.right - d->iconRc.left,
+                               d->iconRc.bottom - d->iconRc.top, 0, nullptr, DI_NORMAL);
+                }
+                SetBkMode(hdc, TRANSPARENT);
+                HFONT old = reinterpret_cast<HFONT>(SelectObject(hdc, d->hHeading));
+                SetTextColor(hdc, d->colors.text);
+                RECT hr = d->headingRc;
+                DrawTextW(hdc, d->heading.c_str(), -1, &hr, DT_WORDBREAK | DT_NOPREFIX);
+                SelectObject(hdc, d->hBody);
+                RECT br = d->bodyRc;
+                DrawTextW(hdc, d->body.c_str(), -1, &br, DT_WORDBREAK | DT_NOPREFIX);
+                SelectObject(hdc, old);
+            }
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_CTLCOLORBTN:
+            if (d && d->hBg) return reinterpret_cast<LRESULT>(d->hBg);
+            break;
+        case WM_COMMAND:
+            if (d && HIWORD(wParam) == BN_CLICKED) {
+                const int id = LOWORD(wParam);
+                for (const auto& button : d->buttons) {
+                    if (button.first == id) {
+                        d->result = id;
+                        DestroyWindow(hwnd);
+                        return 0;
+                    }
+                }
+                if (id == IDCANCEL) {
+                    d->result = d->cancelId;
+                    DestroyWindow(hwnd);
+                    return 0;
+                }
+            }
+            break;
+        case WM_DPICHANGED:
+            if (d) {
+                d->dpi = HIWORD(wParam);
+                ChoiceLayout(hwnd, d, nullptr, reinterpret_cast<RECT*>(lParam));
+            }
+            return 0;
+        case WM_CLOSE:
+            if (d) d->result = d->cancelId;
+            DestroyWindow(hwnd);
+            return 0;
+        case WM_DESTROY:
+            if (d) {
+                ChoiceFreeResources(d);
+                if (d->hBg) DeleteObject(d->hBg);
+                d->hBg = nullptr;
+            }
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK ChoiceDialogWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    try {
+        return ChoiceDialogWndProcImpl(hwnd, msg, wParam, lParam);
+    } catch (...) {
+        Wh_Log(L"ChoiceDialogWndProc: exception");
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+}
+
+// Shows the question and returns the id of the chosen button (cancelId when the
+// dialog is closed, or when it can't be shown because the mod is unloading).
+int ShowChoiceDialog(HWND owner, const std::wstring& heading, const std::wstring& body, const ChoiceButtons& buttons,
+                     int defaultId, int cancelId) {
+    ModalScope scope;
+    if (!scope.active) return cancelId;
+    if (!owner) owner = GetActiveWindow();
+    if (owner) owner = GetAncestor(owner, GA_ROOT);
+
+    ChoiceDialogData data;
+    data.heading = heading;
+    data.body = body;
+    data.buttons = buttons;
+    data.defaultId = defaultId;
+    data.cancelId = cancelId;
+    data.result = cancelId;
+
+    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, kChoiceDlgClass, kMsgBoxTitle,
+                                WS_POPUP | WS_CAPTION | WS_SYSMENU, 0, 0, 10, 10, owner, nullptr,
+                                ModuleInstance(), &data);
+    if (!hDlg) return cancelId;
+    if (owner) EnableWindow(owner, FALSE);
+    HWND previousDialog = g_threadEditDialog;
+    g_threadEditDialog = hDlg;  // closed by CloseThreadModals on unload
+    MessageBeep(MB_ICONWARNING);
+    ShowWindow(hDlg, SW_SHOW);
+    for (size_t i = 0; i < data.buttons.size() && i < data.buttonWnds.size(); ++i) {
+        if (data.buttons[i].first == defaultId) SetFocus(data.buttonWnds[i]);
+    }
+
+    MSG msg{};
+    while (IsWindow(hDlg) && GetMessageW(&msg, nullptr, 0, 0)) {
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) {
+            data.result = cancelId;
+            DestroyWindow(hDlg);
+            break;
+        }
+        if (!IsDialogMessageW(hDlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    g_threadEditDialog = previousDialog;
+    if (msg.message == WM_QUIT) PostQuitMessage(static_cast<int>(msg.wParam));
+    if (owner) {
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+    }
+    return data.result;
 }
 
 void EditNodeFlow(HWND owner, const NodePath& path) {
@@ -2391,14 +2970,15 @@ void AddBookmarkFlow(HWND owner, const NodePath& folder, int index, const std::w
     d.folder = folder;
     if (!ShowEditModal(owner, d)) return;
 
-    auto list = LoadBookmarks();
-    NodePath dest = d.folder;
-    if (!FolderChildren(list, dest)) dest.clear();
-    if (dest != folder) index = -1;
     BookmarkNode n;
     n.type = NodeType::Item;
     n.name = d.name;
     n.path = d.path;
+    if (ConfirmDuplicates(owner, LoadBookmarks(), {n}).empty()) return;
+    auto list = LoadBookmarks();
+    NodePath dest = d.folder;
+    if (!FolderChildren(list, dest)) dest.clear();
+    if (dest != folder) index = -1;
     InsertNodes(list, dest, index, {n});
     SaveBookmarks(list);
 }
@@ -2533,8 +3113,8 @@ enum MgrCmd : int {
     CMD_EXPORT,
 };
 
-[[clang::no_destroy]] std::mutex g_mgrNavMutex;
-[[clang::no_destroy]] NodePath g_mgrNavPath;
+std::mutex g_mgrNavMutex;
+NodePath g_mgrNavPath;
 
 HWND MgrFrame(ManagerWindowData* d) {
     if (d && IsTrackedFrame(d->hOwnerExplorer)) return d->hOwnerExplorer;
@@ -2954,7 +3534,7 @@ void MgrExecute(HWND hwnd, ManagerWindowData* d, int cmd, const std::vector<Node
             } else {
                 PasteTargetFor(list, targets, d->currentFolder, folder, index);
             }
-            DoPaste(folder, index);
+            DoPaste(folder, index, hwnd);
             MgrRefresh(d);
             break;
         }
@@ -3285,7 +3865,7 @@ static LRESULT BookmarkManagerWndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LP
                                   IDC_MGR_EMPTY, d->hFontUI);
 
             d->hDropLine = CreateWindowExW(0, kDropLineClass, nullptr, WS_CHILD, 0, 0, 10, 2,
-                                           d->hList, nullptr, GetModuleHandleW(nullptr), nullptr);
+                                           d->hList, nullptr, ModuleInstance(), nullptr);
 
             MgrApplyTheme(hwnd, d);
             MgrLayout(hwnd, d);
@@ -3552,7 +4132,7 @@ static LRESULT BookmarkManagerWndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LP
                         }
                         const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
                         if (ctrl && kd->wVKey == 'V' && targets.empty()) {
-                            DoPaste({}, -1);
+                            DoPaste({}, -1, hwnd);
                             MgrRefresh(d);
                             return 0;
                         }
@@ -3768,31 +4348,6 @@ void OpenBookmarkManagerWindow(HWND ownerExplorer, const NodePath& folder) {
         return;
     }
 
-    bool& registered = g_mgrClassRegistered;
-    if (!registered) {
-        INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES};
-        InitCommonControlsEx(&icc);
-
-        WNDCLASSEXW wc{};
-        wc.cbSize = sizeof(wc);
-        wc.lpfnWndProc = BookmarkManagerWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
-        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-        wc.lpszClassName = kMgrClass;
-        wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-        RegisterFreshClass(wc);
-
-        WNDCLASSEXW lc{};
-        lc.cbSize = sizeof(lc);
-        lc.lpfnWndProc = DropLineWndProc;
-        lc.hInstance = GetModuleHandleW(nullptr);
-        lc.hbrBackground = CreateSolidBrush(RGB(26, 115, 232));  // Chrome blue
-        lc.lpszClassName = kDropLineClass;
-        RegisterFreshClass(lc);
-        registered = true;
-    }
-
     const RECT wr = CenteredWindowRect(ownerExplorer, 1040, 660, WindowDpi(ownerExplorer));
     const int x = wr.left, y = wr.top, width = wr.right - wr.left, height = wr.bottom - wr.top;
 
@@ -3802,8 +4357,77 @@ void OpenBookmarkManagerWindow(HWND ownerExplorer, const NodePath& folder) {
 
     HWND w = CreateWindowExW(0, kMgrClass, L"Bookmarks - File Explorer",
                              WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE,
-                             x, y, width, height, nullptr, nullptr, GetModuleHandleW(nullptr), data);
+                             x, y, width, height, nullptr, nullptr, ModuleInstance(), data);
     if (!w) delete data;
+}
+
+// Registered once in Wh_ModInit and unregistered in Wh_ModUninit.
+HBRUSH g_dropLineBrush = nullptr;
+
+bool RegisterModClass(const WNDCLASSEXW& wc) {
+    if (RegisterClassExW(&wc)) return true;
+    if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
+        // Left over from a previous load that ended abnormally
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        if (RegisterClassExW(&wc)) return true;
+    }
+    Wh_Log(L"RegisterClassExW(%s) failed: %u", wc.lpszClassName, GetLastError());
+    return false;
+}
+
+void RegisterWindowClasses() {
+    INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES};
+    InitCommonControlsEx(&icc);
+    const HINSTANCE inst = ModuleInstance();
+
+    WNDCLASSEXW edit{};
+    edit.cbSize = sizeof(edit);
+    edit.lpfnWndProc = EditBookmarkWndProc;
+    edit.hInstance = inst;
+    edit.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    edit.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    edit.lpszClassName = kEditDlgClass;
+    RegisterModClass(edit);
+
+    WNDCLASSEXW mgr{};
+    mgr.cbSize = sizeof(mgr);
+    mgr.lpfnWndProc = BookmarkManagerWndProc;
+    mgr.hInstance = inst;
+    mgr.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    mgr.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    mgr.lpszClassName = kMgrClass;
+    mgr.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    RegisterModClass(mgr);
+
+    WNDCLASSEXW choice{};
+    choice.cbSize = sizeof(choice);
+    choice.lpfnWndProc = ChoiceDialogWndProc;
+    choice.hInstance = inst;
+    choice.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    choice.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    choice.lpszClassName = kChoiceDlgClass;
+    RegisterModClass(choice);
+
+    if (!g_dropLineBrush) g_dropLineBrush = CreateSolidBrush(RGB(26, 115, 232));  // Chrome blue
+    WNDCLASSEXW line{};
+    line.cbSize = sizeof(line);
+    line.lpfnWndProc = DropLineWndProc;
+    line.hInstance = inst;
+    line.hbrBackground = g_dropLineBrush;
+    line.lpszClassName = kDropLineClass;
+    RegisterModClass(line);
+}
+
+void UnregisterWindowClasses() {
+    const HINSTANCE inst = ModuleInstance();
+    UnregisterClassW(kMgrClass, inst);
+    UnregisterClassW(kDropLineClass, inst);
+    UnregisterClassW(kEditDlgClass, inst);
+    UnregisterClassW(kChoiceDlgClass, inst);
+    if (g_dropLineBrush) {
+        DeleteObject(g_dropLineBrush);
+        g_dropLineBrush = nullptr;
+    }
 }
 
 // ============================================================================
@@ -3849,16 +4473,17 @@ muxc::MenuFlyout BuildChromeBookmarkContextMenu(const mux::FrameworkElement& anc
                     c.Focus(mux::FocusState::Pointer);
                 }
             }};
-        mi.AddHandler(mux::UIElement::PointerEnteredEvent(), winrt::box_value(hoverFocus), true);
-        mi.AddHandler(mux::UIElement::PointerMovedEvent(), winrt::box_value(hoverFocus), true);
-        mi.Click([weakAnchor, action, scope](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+        TrackAddHandler(mi, mux::UIElement::PointerEnteredEvent(), winrt::box_value(hoverFocus), true);
+        TrackAddHandler(mi, mux::UIElement::PointerMovedEvent(), winrt::box_value(hoverFocus), true);
+        TrackEvent(mi, mi.Click([weakAnchor, action, scope](wf::IInspectable const&, mux::RoutedEventArgs const&) {
             mux::FrameworkElement a = weakAnchor.get();
             HWND frame = ExplorerWindowForElement(a);
             PostToFrame(frame, [frame, action, scope]() {
                 g_pendingScope = scope;
                 action(frame);
             });
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.Click(t); });
         menu.Items().Append(mi);
     };
     auto sep = [&]() { menu.Items().Append(muxc::MenuFlyoutSeparator{}); };
@@ -3887,7 +4512,7 @@ muxc::MenuFlyout BuildChromeBookmarkContextMenu(const mux::FrameworkElement& anc
         addItem(L"Cut", true, [path](HWND) { DoCutOrCopy({path}, true); });
         addItem(L"Copy", true, [path](HWND) { DoCutOrCopy({path}, false); });
     }
-    addItem(L"Paste", canPaste, [insertFolder, insertIndex](HWND) { DoPaste(insertFolder, insertIndex); });
+    addItem(L"Paste", canPaste, [insertFolder, insertIndex](HWND f) { DoPaste(insertFolder, insertIndex, f); });
     if (node) {
         addItem(L"Delete", true, [path](HWND) { DoDelete({path}); });
     }
@@ -3904,9 +4529,50 @@ muxc::MenuFlyout BuildChromeBookmarkContextMenu(const mux::FrameworkElement& anc
     return menu;
 }
 
+// The right-click menu that is open on this thread, if any. Its item handlers are
+// mod code, so it is closed (handlers revoked first) when the bar is removed.
+struct OpenContextMenu {
+    muxc::MenuFlyout menu{nullptr};
+    winrt::event_token openedToken{};
+    winrt::event_token closedToken{};
+};
+[[clang::no_destroy]] thread_local std::optional<OpenContextMenu> g_openContextMenu;
+
+void CloseOpenContextMenu() {
+    if (!g_openContextMenu) return;
+    OpenContextMenu open = std::move(*g_openContextMenu);
+    g_openContextMenu.reset();
+    if (!open.menu) return;
+    try {
+        if (open.openedToken) open.menu.Opened(open.openedToken);
+    } catch (...) {}
+    try {
+        if (open.closedToken) open.menu.Closed(open.closedToken);
+    } catch (...) {}
+    try {
+        open.menu.Hide();
+    } catch (...) {}
+}
+
 // Show a context menu at the pointer in "standard" mode (pointer, not keyboard focus)
 void ShowContextMenuAt(const muxc::MenuFlyout& menu, const mux::FrameworkElement& fe,
                        const muxi::ContextRequestedEventArgs& args) {
+    if (g_unloading) return;
+    CloseOpenContextMenu();
+    g_openContextMenu.emplace();
+    g_openContextMenu->menu = menu;
+    {
+        auto weakClosing = winrt::make_weak(menu);
+        g_openContextMenu->closedToken = TrackEvent(menu, menu.Closed([weakClosing](wf::IInspectable const&, wf::IInspectable const&) {
+            auto m = weakClosing.get();
+            if (!m || !g_openContextMenu || g_openContextMenu->menu != m) return;
+            try {
+                if (g_openContextMenu->openedToken) m.Opened(g_openContextMenu->openedToken);
+            } catch (...) {}
+            g_openContextMenu.reset();
+        }),
+           [](const auto& e, winrt::event_token t) { e.Closed(t); });
+    }
     try {
         menu.ShouldConstrainToRootBounds(false);
     } catch (...) {}
@@ -3923,9 +4589,10 @@ void ShowContextMenuAt(const muxc::MenuFlyout& menu, const mux::FrameworkElement
         // (Shift+F10 / Menu key) the first item stays highlighted.
         auto weakMenu = winrt::make_weak(menu);
         auto dq = fe.DispatcherQueue();
-        menu.Opened([weakMenu, dq](wf::IInspectable const&, wf::IInspectable const&) {
+        g_openContextMenu->openedToken = TrackEvent(menu, menu.Opened([weakMenu, dq](wf::IInspectable const&, wf::IInspectable const&) {
             if (!dq) return;
-            dq.TryEnqueue(winrt::Microsoft::UI::Dispatching::DispatcherQueuePriority::Low, [weakMenu]() {
+            dq.TryEnqueue(winrt::Microsoft::UI::Dispatching::DispatcherQueuePriority::Low,
+                          [token = std::make_shared<PendingScanToken>(), weakMenu]() {
                 try {
                     auto m = weakMenu.get();
                     if (!m || m.Items().Size() == 0) return;
@@ -3946,7 +4613,7 @@ void ShowContextMenuAt(const muxc::MenuFlyout& menu, const mux::FrameworkElement
                     }
                     // Up/Down while the menu itself has focus: select the first/last item
                     auto weakM2 = winrt::make_weak(m);
-                    presenter.AddHandler(
+                    TrackAddHandler(presenter, 
                         mux::UIElement::KeyDownEvent(),
                         winrt::box_value(muxi::KeyEventHandler{
                             [weakM2](wf::IInspectable const& sender, muxi::KeyRoutedEventArgs const& e) {
@@ -3973,7 +4640,8 @@ void ShowContextMenuAt(const muxc::MenuFlyout& menu, const mux::FrameworkElement
                     presenter.Focus(mux::FocusState::Programmatic);
                 } catch (...) {}
             });
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.Opened(t); });
     }
     menu.ShowAt(fe, opts);
 }
@@ -4186,14 +4854,15 @@ void BuildFolderFlyoutList(const muxc::StackPanel& listPanel, const NodePath& fo
         // Keyboard selection (like Chrome): shown only for arrow-key navigation, using
         // our own highlight instead of the system focus rectangle; cleared on focus loss.
         row.UseSystemFocusVisuals(false);
-        row.LostFocus([](wf::IInspectable const& s, mux::RoutedEventArgs const&) {
+        TrackEvent(row, row.LostFocus([](wf::IInspectable const& s, mux::RoutedEventArgs const&) {
             if (auto b = s.try_as<muxc::Button>()) b.Background(FlyoutClearBrush());
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.LostFocus(t); });
 
         auto dragCtx = std::make_shared<FlyoutDragCtx>();
         std::wstring cPath = child.path;
 
-        row.Click([weakPanel, weakAnchor, cPath, isFolder, childPath, dragCtx](wf::IInspectable const& sender,
+        TrackEvent(row, row.Click([weakPanel, weakAnchor, cPath, isFolder, childPath, dragCtx](wf::IInspectable const& sender,
                                                                                mux::RoutedEventArgs const&) {
             if (dragCtx->suppressClick) {
                 dragCtx->suppressClick = false;
@@ -4212,9 +4881,10 @@ void BuildFolderFlyoutList(const muxc::StackPanel& listPanel, const NodePath& fo
             HWND frame = ExplorerWindowForElement(anchor);
             HideAllFlyouts(weakPanel);
             QueueOpenTargets(frame, {cPath}, ctrl ? OpenDisposition::NewTab : OpenDisposition::CurrentTab);
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.Click(t); });
 
-        row.AddHandler(
+        TrackAddHandler(row, 
             mux::UIElement::PointerPressedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [dragCtx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
@@ -4232,7 +4902,7 @@ void BuildFolderFlyoutList(const muxc::StackPanel& listPanel, const NodePath& fo
                 }}),
             true);
 
-        row.AddHandler(
+        TrackAddHandler(row, 
             mux::UIElement::PointerMovedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [weakPanel, dragCtx, folder, childIdx, weakList, folderFlags](
@@ -4349,7 +5019,7 @@ void BuildFolderFlyoutList(const muxc::StackPanel& listPanel, const NodePath& fo
                 }}),
             true);
 
-        row.AddHandler(
+        TrackAddHandler(row, 
             mux::UIElement::PointerReleasedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [weakPanel, dragCtx, folder, childIdx](wf::IInspectable const& sender,
@@ -4389,12 +5059,13 @@ void BuildFolderFlyoutList(const muxc::StackPanel& listPanel, const NodePath& fo
                 }}),
             true);
 
-        row.ContextRequested([childPath](mux::UIElement const& sender, muxi::ContextRequestedEventArgs const& args) {
+        TrackEvent(row, row.ContextRequested([childPath](mux::UIElement const& sender, muxi::ContextRequestedEventArgs const& args) {
             args.Handled(true);
             auto fe = sender.try_as<mux::FrameworkElement>();
             if (!fe) return;
             ShowContextMenuAt(BuildChromeBookmarkContextMenu(fe, childPath), fe, args);
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.ContextRequested(t); });
 
         listPanel.Children().Append(row);
     }
@@ -4437,6 +5108,7 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
     g_flyoutOpenByKeyboard = false;
     sv.IsTabStop(true);
     sv.UseSystemFocusVisuals(false);
+    winrt::event_token flyOpenedToken{};
     {
         auto weakSv = winrt::make_weak(sv);
         auto weakList = winrt::make_weak(listPanel);
@@ -4444,7 +5116,7 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
         auto weakAnchor = winrt::make_weak(windowAnchor);
 
         // Up/Down: move the selection. Right/Enter: open a sub-folder. Left: close the submenu.
-        sv.PreviewKeyDown([weakList, weakFly, weakAnchor, weakPanel, folder, submenu](
+        TrackEvent(sv, sv.PreviewKeyDown([weakList, weakFly, weakAnchor, weakPanel, folder, submenu](
                               wf::IInspectable const&, muxi::KeyRoutedEventArgs const& e) {
             using VK = winrt::Windows::System::VirtualKey;
             auto lp = weakList.get();
@@ -4491,12 +5163,13 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
                 default:
                     break;
             }
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.PreviewKeyDown(t); });
 
         // Any mouse movement clears the keyboard selection (like Chrome). The position is
         // compared so that synthetic events without real movement are ignored.
         auto lastPt = std::make_shared<std::optional<wf::Point>>();
-        sv.AddHandler(
+        TrackAddHandler(sv, 
             mux::UIElement::PointerMovedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [weakSv, weakList, lastPt](wf::IInspectable const&, muxi::PointerRoutedEventArgs const& e) {
@@ -4519,10 +5192,10 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
 
         // On open: via mouse -> no selection; via keyboard -> select the first item
         auto dq = sv.DispatcherQueue();
-        fly.Opened([weakSv, weakList, dq, openedByKeyboard](wf::IInspectable const&, wf::IInspectable const&) {
+        flyOpenedToken = TrackEvent(fly, fly.Opened([weakSv, weakList, dq, openedByKeyboard](wf::IInspectable const&, wf::IInspectable const&) {
             if (!dq) return;
             dq.TryEnqueue(winrt::Microsoft::UI::Dispatching::DispatcherQueuePriority::Low,
-                          [weakSv, weakList, openedByKeyboard]() {
+                          [token = std::make_shared<PendingScanToken>(), weakSv, weakList, openedByKeyboard]() {
                 try {
                     auto s = weakSv.get();
                     auto lp = weakList.get();
@@ -4535,7 +5208,8 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
                     }
                 } catch (...) {}
             });
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.Opened(t); });
     }
 
     uint64_t id = 0;
@@ -4554,10 +5228,11 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
             auto a = weakAnchor.get();
             if (lp && f && a) BuildFolderFlyoutList(lp, folder, weakPanel, f, a);
         };
+        of.openedToken = flyOpenedToken;
         st->openFlyouts.push_back(std::move(of));
     }
 
-    fly.Closed([weakPanel, id](wf::IInspectable const&, wf::IInspectable const&) {
+    winrt::event_token flyClosedToken = TrackEvent(fly, fly.Closed([weakPanel, id](wf::IInspectable const&, wf::IInspectable const&) {
         bool needRefresh = false;
         if (auto p2 = weakPanel.get()) {
             if (auto* st2 = FindBarState(p2)) {
@@ -4570,7 +5245,13 @@ void ShowFolderFlyout(const winrt::weak_ref<muxc::StackPanel>& weakPanel, const 
             }
         }
         if (needRefresh) NotifyExplorerBars();
-    });
+    }),
+           [](const auto& e, winrt::event_token t) { e.Closed(t); });
+    if (st) {
+        for (auto& o : st->openFlyouts) {
+            if (o.id == id) o.closedToken = flyClosedToken;
+        }
+    }
 
     try {
         fly.ShouldConstrainToRootBounds(false);
@@ -4661,14 +5342,15 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
         const int itemIdx = static_cast<int>(i);
         const NodePath nodePath{itemIdx};
 
-        btn.ContextRequested([nodePath](mux::UIElement const& sender, muxi::ContextRequestedEventArgs const& args) {
+        TrackEvent(btn, btn.ContextRequested([nodePath](mux::UIElement const& sender, muxi::ContextRequestedEventArgs const& args) {
             args.Handled(true);
             auto fe = sender.try_as<mux::FrameworkElement>();
             if (!fe) return;
             ShowContextMenuAt(BuildChromeBookmarkContextMenu(fe, nodePath), fe, args);
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.ContextRequested(t); });
 
-        btn.AddHandler(
+        TrackAddHandler(btn, 
             mux::UIElement::PointerPressedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [weakPanel, row, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
@@ -4689,7 +5371,7 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
                 }}),
             true);
 
-        btn.AddHandler(
+        TrackAddHandler(btn, 
             mux::UIElement::PointerMovedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [weakPanel, row, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
@@ -4743,7 +5425,7 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
                 }}),
             true);
 
-        btn.AddHandler(
+        TrackAddHandler(btn, 
             mux::UIElement::PointerReleasedEvent(),
             winrt::box_value(muxi::PointerEventHandler{
                 [weakPanel, itemIdx](wf::IInspectable const& sender, muxi::PointerRoutedEventArgs const& args) {
@@ -4789,7 +5471,7 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
         if (!isFolder) {
             muxc::ToolTipService::SetToolTip(btn, winrt::box_value(node.name + L"\n" + node.path));
             std::wstring targetPath = node.path;
-            btn.Click([weakPanel, itemIdx, targetPath](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+            TrackEvent(btn, btn.Click([weakPanel, itemIdx, targetPath](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
                 if (auto p = weakPanel.get()) {
                     if (auto* st = FindBarState(p)) {
                         if (st->suppressClickIndex == itemIdx) {
@@ -4802,44 +5484,33 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
                 auto fe = sender.try_as<mux::FrameworkElement>();
                 HWND frame = ExplorerWindowForElement(fe);
                 QueueOpenTargets(frame, {targetPath}, ctrl ? OpenDisposition::NewTab : OpenDisposition::CurrentTab);
-            });
+            }),
+           [](const auto& e, winrt::event_token t) { e.Click(t); });
         } else {
             muxc::ToolTipService::SetToolTip(btn, winrt::box_value(node.name));
 
             // External File Explorer drag & drop onto this folder
             const std::wstring dropCaption = L"Add to folder (" + node.name + L")";
-            btn.DragOver([dropCaption](wf::IInspectable const&, mux::DragEventArgs const& args) {
+            TrackEvent(btn, btn.DragOver([dropCaption](wf::IInspectable const&, mux::DragEventArgs const& args) {
                 if (args.DataView().Contains(wdt::StandardDataFormats::StorageItems())) {
                     args.AcceptedOperation(wdt::DataPackageOperation::Link);
                     args.DragUIOverride().Caption(dropCaption);
                     args.DragUIOverride().IsCaptionVisible(true);
                     args.Handled(true);
                 }
-            });
+            }),
+           [](const auto& e, winrt::event_token t) { e.DragOver(t); });
 
-            btn.Drop([itemIdx](wf::IInspectable const&, mux::DragEventArgs const& args) {
+            TrackEvent(btn, btn.Drop([itemIdx](wf::IInspectable const& sender, mux::DragEventArgs const& args) {
                 args.Handled(true);
                 if (!args.DataView().Contains(wdt::StandardDataFormats::StorageItems())) return;
-                ReadDroppedItems(args, [itemIdx](auto const& items) {
-                    auto list = LoadBookmarks();
-                    auto* kids = FolderChildren(list, NodePath{itemIdx});
-                    if (!kids) return;
-                    for (const auto& item : items) {
-                        std::wstring p(item.Path().c_str());
-                        if (!p.empty()) {
-                            p = NormalizePath(p);
-                            BookmarkNode n;
-                            n.type = NodeType::Item;
-                            n.name = DefaultLabel(p);
-                            n.path = p;
-                            kids->push_back(std::move(n));
-                        }
-                    }
-                    SaveBookmarks(list);
-                });
-            });
+                HWND frame = nullptr;
+                if (auto fe = sender.try_as<mux::FrameworkElement>()) frame = ExplorerWindowForElement(fe);
+                ReadDroppedPaths(args, frame, NodePath{itemIdx});
+            }),
+           [](const auto& e, winrt::event_token t) { e.Drop(t); });
 
-            btn.Click([weakPanel, itemIdx](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+            TrackEvent(btn, btn.Click([weakPanel, itemIdx](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
                 if (auto p = weakPanel.get()) {
                     if (auto* st = FindBarState(p)) {
                         if (st->suppressClickIndex == itemIdx) {
@@ -4852,7 +5523,8 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
                 if (!b) return;
                 g_flyoutOpenByKeyboard = b.FocusState() == mux::FocusState::Keyboard;
                 ShowFolderFlyout(weakPanel, NodePath{itemIdx}, b, b, false);
-            });
+            }),
+           [](const auto& e, winrt::event_token t) { e.Click(t); });
         }
 
         row.Children().Append(btn);
@@ -4898,23 +5570,9 @@ void OnBarDragOver(const mux::DragEventArgs& args) {
     args.DragUIOverride().IsCaptionVisible(true);
 }
 
-void OnBarDrop(const mux::DragEventArgs& args) {
+void OnBarDrop(const mux::DragEventArgs& args, HWND frame) {
     if (g_unloading || !args.DataView().Contains(wdt::StandardDataFormats::StorageItems())) return;
-    ReadDroppedItems(args, [](auto const& items) {
-        auto list = LoadBookmarks();
-        for (const auto& item : items) {
-            std::wstring p(item.Path().c_str());
-            if (!p.empty()) {
-                p = NormalizePath(p);
-                BookmarkNode n;
-                n.type = NodeType::Item;
-                n.path = p;
-                n.name = DefaultLabel(p);
-                list.push_back(std::move(n));
-            }
-        }
-        SaveBookmarks(list);
-    });
+    ReadDroppedPaths(args, frame, NodePath{});
 }
 
 muxc::Grid FindNavigationGrid(const mux::DependencyObject& root, int depth) {
@@ -4934,39 +5592,129 @@ muxc::Grid FindNavigationGrid(const mux::DependencyObject& root, int depth) {
 // Removes all bars of this thread from Explorer and restores the original layout.
 // Required on unload: otherwise the bar's event handlers (mod code) could run after
 // the mod is unloaded and crash Explorer.
+// Revokes a dropdown's Opened/Closed handlers, then hides it.
+void CloseTrackedFlyout(OpenFlyout& f) {
+    if (!f.flyout) return;
+    try {
+        if (f.openedToken) f.flyout.Opened(f.openedToken);
+    } catch (...) {}
+    try {
+        if (f.closedToken) f.flyout.Closed(f.closedToken);
+    } catch (...) {}
+    f.openedToken = {};
+    f.closedToken = {};
+    try {
+        f.flyout.Hide();
+    } catch (...) {}
+}
+
+// Posts a WM_SIZE with the window's current size, so Explorer lays out its
+// header again after the current XAML layout pass (no mod code runs for it).
+void PostFrameRelayout(HWND window) {
+    if (!window || !IsWindow(window) || IsIconic(window)) return;
+    RECT rc{};
+    if (GetClientRect(window, &rc)) {
+        PostMessageW(window, WM_SIZE, IsZoomed(window) ? SIZE_MAXIMIZED : SIZE_RESTORED,
+                     MAKELPARAM(rc.right, rc.bottom));
+    }
+}
+
+void PostThreadFramesRelayout() {
+    for (HWND w : g_frames) PostFrameRelayout(w);
+}
+
+// The header island is made taller (DesiredSizeHook) only while this thread
+// really shows a bar. When that changes, the windows are laid out again, so an
+// island never keeps extra height without a bar in it (a black strip).
+void UpdateFrameRowCount() {
+    unsigned rows = 0;
+    if (g_bars) {
+        for (const auto& st : *g_bars) {
+            if (st.strip.get()) {
+                rows = 1;
+                break;
+            }
+        }
+    }
+    if (rows != g_frameRows) {
+        g_frameRows = rows;
+        if (!g_unloading) PostThreadFramesRelayout();
+    }
+}
+
+// Removes one bar from Explorer's header and restores what was changed. Values
+// are restored only if they are still the ones the mod set, so a header that
+// Explorer rebuilt or changed meanwhile is left alone.
+void RemoveBarVisuals(BarState& st) {
+    auto root = st.barRoot.get();
+    if (root) {
+        try {
+            if (st.rootDragOverToken) root.DragOver(st.rootDragOverToken);
+            if (st.rootDropToken) root.Drop(st.rootDropToken);
+        } catch (...) {}
+    }
+    st.rootDragOverToken = {};
+    st.rootDropToken = {};
+    if (auto grid = st.grid.get()) {
+        try {
+            if (root) {
+                uint32_t idx = 0;
+                if (grid.Children().IndexOf(root, idx)) grid.Children().RemoveAt(idx);
+            }
+            auto rows = grid.RowDefinitions();
+            if (st.addedRow) {
+                uint32_t r = 0;
+                if (rows.IndexOf(st.addedRow, r)) rows.RemoveAt(r);
+            }
+            if (st.createdFirstRow && rows.Size() == 1) rows.Clear();
+            if (grid.MinHeight() == st.appliedGridMinHeight) grid.MinHeight(st.oldGridMinHeight);
+            grid.InvalidateMeasure();
+        } catch (...) {}
+    }
+    if (auto nav = st.navControl.get()) {
+        try {
+            if (nav.MinHeight() == st.appliedNavMinHeight) nav.MinHeight(st.oldNavMinHeight);
+            nav.InvalidateMeasure();
+        } catch (...) {}
+    }
+    if (auto host = st.hostGrid.get()) {
+        try {
+            auto rows = host.RowDefinitions();
+            if (st.commandRow && rows.Size() == 3 && rows.GetAt(2) == st.commandRow &&
+                st.commandRow.Height().GridUnitType == mux::GridUnitType::Auto) {
+                st.commandRow.Height(st.oldCommandRowHeight);
+            }
+            host.InvalidateMeasure();
+        } catch (...) {}
+    }
+    st.grid = nullptr;
+    st.hostGrid = nullptr;
+    st.navControl = nullptr;
+    st.barRoot = nullptr;
+    st.strip = nullptr;
+    st.buttons = nullptr;
+    st.addedRow = nullptr;
+    st.commandRow = nullptr;
+    st.createdFirstRow = false;
+}
+
 void RemoveThreadBars() {
+    CloseOpenContextMenu();
     if (!g_bars) return;
     for (auto& st : *g_bars) {
         try {
-            for (auto& f : st.openFlyouts) {
-                try {
-                    if (f.flyout) f.flyout.Hide();
-                } catch (...) {}
-            }
+            for (auto& f : st.openFlyouts) CloseTrackedFlyout(f);
             st.openFlyouts.clear();
 
             if (auto cb = st.commandBar.get(); cb && st.loadedToken) {
                 cb.Loaded(st.loadedToken);  // revoke
             }
-
-            auto grid = st.grid.get();
-            auto barRoot = st.barRoot.get();
-            if (grid && barRoot) {
-                uint32_t idx = 0;
-                if (grid.Children().IndexOf(barRoot, idx)) grid.Children().RemoveAt(idx);
-                if (st.addedRow) {
-                    uint32_t r = 0;
-                    if (grid.RowDefinitions().IndexOf(st.addedRow, r)) grid.RowDefinitions().RemoveAt(r);
-                }
-                if (st.createdFirstRow && grid.RowDefinitions().Size() == 1) grid.RowDefinitions().Clear();
-                grid.MinHeight(st.oldGridMinHeight);
-                if (auto nav = st.navControl.get()) nav.MinHeight(st.oldNavMinHeight);
-                if (st.commandRow) st.commandRow.Height(st.oldCommandRowHeight);
-                grid.InvalidateMeasure();
-                if (auto host = st.hostGrid.get()) host.InvalidateMeasure();
-            }
+            RemoveBarVisuals(st);
         } catch (...) {}
     }
+    try {
+        RevokeThreadHandlers();
+    } catch (...) {}
     try {
         RestoreNudgedIslands();
     } catch (...) {}
@@ -4994,22 +5742,24 @@ void RemoveThreadMessageHook() {
 // already going away, so the layout is not restored here.
 void CleanupClosedFrameState(HWND window) {
     std::erase(g_frames, window);
+    CloseOpenContextMenu();
     if (g_bars) {
         for (auto it = g_bars->begin(); it != g_bars->end();) {
             if (it->frame == window || (g_frames.empty())) {
-                for (auto& f : it->openFlyouts) {
-                    try {
-                        if (f.flyout) f.flyout.Hide();
-                    } catch (...) {}
-                }
+                for (auto& f : it->openFlyouts) CloseTrackedFlyout(f);
                 it = g_bars->erase(it);
             } else {
                 ++it;
             }
         }
     }
-    if (!g_frames.empty()) return;
+    if (!g_frames.empty()) {
+        UpdateFrameRowCount();
+        PruneHandlerRevokers();
+        return;
+    }
     try {
+        RevokeThreadHandlers();
         RestoreNudgedIslands();
     } catch (...) {}
     g_frameRows = 0;
@@ -5023,10 +5773,13 @@ static LRESULT FrameSubclassProcImpl(HWND window, UINT message, WPARAM wParam, L
     if (message == UninitBarsMessage()) {
         RemoveThreadBars();
         KillTimer(window, kOpenTimerId);
+        KillTimer(window, kBackdropTimerId);
         RemoveThreadMessageHook();
-        RECT rc{};
-        if (GetClientRect(window, &rc)) {
-            PostMessageW(window, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
+        // Ask Explorer to recalculate its stock header now that the bar is gone
+        if (!IsIconic(window)) {
+            SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            PostFrameRelayout(window);
         }
         return 0;
     }
@@ -5047,9 +5800,23 @@ static LRESULT FrameSubclassProcImpl(HWND window, UINT message, WPARAM wParam, L
         if (!g_unloading) ProcessOpenQueue(window);
         return 0;
     }
+    if (message == WM_TIMER && wParam == kBackdropTimerId) {
+        KillTimer(window, kBackdropTimerId);
+        // The header became taller after Explorer had set up the window's
+        // backdrop (Mica) for the stock height; in light mode the line under
+        // the command bar then stays black until the window is deactivated.
+        // This notification makes Explorer set the backdrop up again.
+        if (!g_unloading) {
+            LRESULT r = DefSubclassProc(window, WM_DWMCOMPOSITIONCHANGED, 0, 0);
+            (void)r;
+            RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
+        return 0;
+    }
     if (message == WM_NCDESTROY) {
         RemovePropW(window, kFrameProperty);
         KillTimer(window, kOpenTimerId);
+        KillTimer(window, kBackdropTimerId);
         {
             std::lock_guard lock(g_openMutex);
             g_openQueues.erase(window);
@@ -5082,6 +5849,7 @@ bool TrackFrame(HWND window) {
 }
 
 void TryInstallBar(const muxc::CommandBar& commandBar) {
+    BarState* state = nullptr;
     try {
         if (g_unloading || !g_frameHooked) return;
         auto root = commandBar.XamlRoot();
@@ -5089,7 +5857,6 @@ void TryInstallBar(const muxc::CommandBar& commandBar) {
         auto grid = FindNavigationGrid(root.Content(), 0);
         if (!grid) return;
 
-        BarState* state = nullptr;
         for (auto& item : *g_bars) {
             if (item.commandBar.get() == commandBar) {
                 state = &item;
@@ -5100,16 +5867,31 @@ void TryInstallBar(const muxc::CommandBar& commandBar) {
         if (HWND frame = IslandWindow(commandBar); TrackFrame(frame)) {
             state->frame = frame;
         }
+
         for (const auto& child : grid.Children()) {
             auto el = child.try_as<mux::FrameworkElement>();
             if (el && el.Name() == kBarName) return;
+        }
+        if (state->addedRow || state->strip.get()) {
+            // Explorer rebuilt its navigation bar (e.g. after a theme change):
+            // undo the stale installation before adding the bar to the new one
+            for (auto& f : state->openFlyouts) CloseTrackedFlyout(f);
+            state->openFlyouts.clear();
+            RemoveBarVisuals(*state);
         }
 
         auto nav = muxm::VisualTreeHelper::GetParent(grid).try_as<mux::FrameworkElement>();
         auto host = nav ? muxm::VisualTreeHelper::GetParent(nav).try_as<muxc::Grid>() : nullptr;
         if (!host) return;
         auto hostRows = host.RowDefinitions();
-        if (hostRows.Size() != 3 || muxc::Grid::GetRow(nav) != 1) return;
+        // The known Explorer header has rows [Auto, *, *] with the navigation bar
+        // in row 1. Any other layout (another Windows build) is left untouched.
+        if (hostRows.Size() != 3 || muxc::Grid::GetRow(nav) != 1 ||
+            hostRows.GetAt(0).Height().GridUnitType != mux::GridUnitType::Auto ||
+            hostRows.GetAt(1).Height().GridUnitType != mux::GridUnitType::Star ||
+            hostRows.GetAt(2).Height().GridUnitType != mux::GridUnitType::Star) {
+            return;
+        }
 
         const double origGridH = std::max<double>(grid.ActualHeight(), grid.DesiredSize().Height);
         const double origNavH = std::max<double>(nav.ActualHeight(), nav.DesiredSize().Height);
@@ -5150,12 +5932,13 @@ void TryInstallBar(const muxc::CommandBar& commandBar) {
         barRoot.AllowDrop(true);
         barRoot.Children().Append(strip);
 
-        barRoot.ContextRequested([](mux::UIElement const& sender, muxi::ContextRequestedEventArgs const& args) {
+        TrackEvent(barRoot, barRoot.ContextRequested([](mux::UIElement const& sender, muxi::ContextRequestedEventArgs const& args) {
             args.Handled(true);
             auto fe = sender.try_as<mux::FrameworkElement>();
             if (!fe) return;
             ShowContextMenuAt(BuildChromeBookmarkContextMenu(fe, NodePath{}), fe, args);
-        });
+        }),
+           [](const auto& e, winrt::event_token t) { e.ContextRequested(t); });
 
         muxm::TranslateTransform barOffset;
         barOffset.Y(-kRowOpticalLift);
@@ -5177,25 +5960,92 @@ void TryInstallBar(const muxc::CommandBar& commandBar) {
             nav.MinHeight(state->appliedNavMinHeight);
         }
 
-        barRoot.DragOver([](wf::IInspectable const&, mux::DragEventArgs const& args) { OnBarDragOver(args); });
-        barRoot.Drop([](wf::IInspectable const&, mux::DragEventArgs const& args) { OnBarDrop(args); });
+        state->rootDragOverToken =
+            TrackEvent(barRoot, barRoot.DragOver([](wf::IInspectable const&, mux::DragEventArgs const& args) { OnBarDragOver(args); }),
+           [](const auto& e, winrt::event_token t) { e.DragOver(t); });
+        state->rootDropToken = TrackEvent(barRoot, barRoot.Drop([](wf::IInspectable const& sender, mux::DragEventArgs const& args) {
+            HWND frame = nullptr;
+            if (auto fe = sender.try_as<mux::FrameworkElement>()) frame = ExplorerWindowForElement(fe);
+            OnBarDrop(args, frame);
+        }),
+           [](const auto& e, winrt::event_token t) { e.Drop(t); });
 
         grid.Children().Append(barRoot);
         grid.InvalidateMeasure();
         host.InvalidateMeasure();
 
-        g_frameRows = 1;
         RefreshPanel(buttons, std::nullopt);
+        UpdateFrameRowCount();
+        // This window's island must take the new height even when the thread
+        // already showed a bar in another window
+        PostFrameRelayout(state->frame);
+        if (state->frame) SetTimer(state->frame, kBackdropTimerId, 300, nullptr);
+    } catch (...) {
+        Wh_Log(L"TryInstallBar failed: %08X", static_cast<unsigned>(winrt::to_hresult().value));
+        if (state) {
+            try {
+                RemoveBarVisuals(*state);
+            } catch (...) {}
+            UpdateFrameRowCount();
+        }
+    }
+}
 
-        if (state->frame) {
-            RECT rc{};
-            if (GetClientRect(state->frame, &rc)) {
-                PostMessageW(state->frame, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
+// Is this element, or one of its parents, a text field?
+bool IsInsideTextField(mux::DependencyObject element) {
+    for (int depth = 0; element && depth < 12; ++depth) {
+        if (element.try_as<muxc::TextBox>() || element.try_as<muxc::RichEditBox>() ||
+            element.try_as<muxc::PasswordBox>() || element.try_as<muxc::AutoSuggestBox>()) {
+            return true;
+        }
+        element = muxm::VisualTreeHelper::GetParent(element);
+    }
+    return false;
+}
+
+// Is the keyboard focus inside File Explorer's XAML (address bar, search box,
+// tabs, command bar) rather than in the file list or navigation pane?
+bool IsXamlHostWindow(HWND focus, HWND frame) {
+    for (HWND h = focus; h && h != frame; h = GetParent(h)) {
+        wchar_t cls[96]{};
+        if (!GetClassNameW(h, cls, ARRAYSIZE(cls))) continue;
+        if (wcsncmp(cls, L"Microsoft.UI.", 13) == 0 || wcsstr(cls, L"InputSite") ||
+            wcsstr(cls, L"DesktopWindowXamlSource")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Decides whether Ctrl+B is left to the focused control. True in a Win32 edit
+// box (e.g. renaming a file), in a XAML text field (address bar, search box),
+// and in the XAML part of the window when the focused element can't be found.
+bool IsTextInputFocused(HWND focus, HWND frame) {
+    wchar_t cls[64]{};
+    if (focus && GetClassNameW(focus, cls, ARRAYSIZE(cls)) &&
+        (_wcsicmp(cls, L"Edit") == 0 || _wcsnicmp(cls, L"RichEdit", 8) == 0)) {
+        return true;
+    }
+    if (!IsXamlHostWindow(focus, frame)) return false;
+    bool found = false;
+    try {
+        if (g_bars) {
+            for (const auto& state : *g_bars) {
+                auto bar = state.commandBar.get();
+                auto root = bar ? bar.XamlRoot() : nullptr;
+                if (!root) continue;
+                auto focused = muxi::FocusManager::GetFocusedElement(root).try_as<mux::DependencyObject>();
+                if (!focused) continue;
+                found = true;
+                if (IsInsideTextField(focused)) return true;
             }
         }
-    } catch (...) {
-        Wh_Log(L"TryInstallBar failed");
-    }
+        if (auto focused = muxi::FocusManager::GetFocusedElement().try_as<mux::DependencyObject>()) {
+            found = true;
+            if (IsInsideTextField(focused)) return true;
+        }
+    } catch (...) {}
+    return !found;
 }
 
 static LRESULT ThreadMessageHookImpl(int code, WPARAM wParam, LPARAM lParam) {
@@ -5275,9 +6125,11 @@ static LRESULT ThreadMessageHookImpl(int code, WPARAM wParam, LPARAM lParam) {
 
     if (code == HC_ACTION && wParam == PM_REMOVE && !g_unloading && g_bookmarkHotkey &&
         msg->message == WM_KEYDOWN && msg->wParam == 'B' &&
-        !(msg->lParam & (1 << 30)) && (GetKeyState(VK_CONTROL) & 0x8000)) {
+        !(msg->lParam & (1 << 30)) && (GetKeyState(VK_CONTROL) & 0x8000) &&
+        !(GetKeyState(VK_SHIFT) & 0x8000) && !(GetKeyState(VK_MENU) & 0x8000)) {
         HWND frame = msg->hwnd ? GetAncestor(msg->hwnd, GA_ROOT) : nullptr;
-        if (IsExplorerFrame(frame)) {
+        // While typing (address bar, search box, rename box) Ctrl+B is left alone
+        if (IsExplorerFrame(frame) && !IsTextInputFocused(msg->hwnd, frame)) {
             msg->message = WM_NULL;
             auto sel = SelectedItems(frame);
             if (sel.empty()) {
@@ -5285,15 +6137,8 @@ static LRESULT ThreadMessageHookImpl(int code, WPARAM wParam, LPARAM lParam) {
                 if (!cur.empty()) sel.push_back(cur);
             }
             if (!sel.empty()) {
-                auto list = LoadBookmarks();
-                for (const auto& p : sel) {
-                    BookmarkNode n;
-                    n.type = NodeType::Item;
-                    n.path = p;
-                    n.name = DefaultLabel(p);
-                    list.push_back(std::move(n));
-                }
-                SaveBookmarks(list);
+                // Posted: the duplicate question must not run inside this hook
+                PostToFrame(frame, [frame, sel]() { AddPathsAsBookmarks(frame, NodePath{}, sel); });
             }
         }
     }
@@ -5317,13 +6162,20 @@ void TrackCommandBar(const muxc::CommandBar& commandBar) try {
             return;
         }
     }
+    // Tabs come and go: forget bars whose command bar and strip are both gone
+    g_bars->remove_if([](BarState& st) {
+        if (st.commandBar.get() || st.strip.get()) return false;
+        for (auto& f : st.openFlyouts) CloseTrackedFlyout(f);
+        return true;
+    });
     g_bars->emplace_back();
     BarState& state = g_bars->back();
     state.commandBar = winrt::make_weak(commandBar);
     auto weakBar = state.commandBar;
-    state.loadedToken = commandBar.Loaded([weakBar](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+    state.loadedToken = TrackEvent(commandBar, commandBar.Loaded([weakBar](wf::IInspectable const&, mux::RoutedEventArgs const&) {
         if (auto bar = weakBar.get()) TryInstallBar(bar);
-    });
+    }),
+           [](const auto& e, winrt::event_token t) { e.Loaded(t); });
     TryInstallBar(commandBar);
     if (!g_messageHook) {
         g_messageHook = SetWindowsHookExW(WH_GETMESSAGE, ThreadMessageHook, nullptr, GetCurrentThreadId());
@@ -5412,7 +6264,7 @@ struct IslandNudge {
     int width;
     int height;
 };
-[[clang::no_destroy]] thread_local std::vector<IslandNudge> g_islandNudges;
+thread_local std::vector<IslandNudge> g_islandNudges;
 thread_local UINT_PTR g_nudgeTimer = 0;
 
 // Puts nudged islands back to their size (unless something else resized them
@@ -5494,15 +6346,6 @@ void DiscoverCurrentThreadWindows() {
 // queued on the thread's DispatcherQueue and run a moment later, when XAML is
 // idle. Each queued task holds a token; Wh_ModUninit waits until no token is
 // left, whether the task ran or the queue discarded it.
-
-std::atomic<unsigned> g_pendingScans = 0;
-
-struct PendingScanToken {
-    PendingScanToken() { ++g_pendingScans; }
-    ~PendingScanToken() { --g_pendingScans; }
-    PendingScanToken(const PendingScanToken&) = delete;
-    PendingScanToken& operator=(const PendingScanToken&) = delete;
-};
 
 void ScheduleCurrentThreadScan() try {
     if (g_unloading) return;
@@ -5735,11 +6578,14 @@ BOOL Wh_ModInit() try {
     g_extensionHooked = false;
     g_frameHookAttempted = false;
     g_extensionHookAttempted = false;
-    g_editClassRegistered = false;
-    g_mgrClassRegistered = false;
+    {
+        std::lock_guard lock(g_dropReadsMutex);
+        g_dropReads.emplace();
+    }
     g_bookmarkHotkey = Wh_GetIntSetting(L"bookmarkHotkey") != 0;
     g_themeSetting = ReadThemeSetting();
     InitStorage();
+    RegisterWindowClasses();
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     auto loadLib = kernelBase ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelBase, "LoadLibraryExW")) : nullptr;
     if (!loadLib || !WindhawkUtils::SetFunctionHook(loadLib, LoadLibraryExWHook, &g_loadLibraryOriginal)) {
@@ -5810,7 +6656,7 @@ void Wh_ModUninit() try {
         std::vector<wf::IAsyncInfo> reads;
         {
             std::lock_guard lock(g_dropReadsMutex);
-            reads = g_dropReads;
+            if (g_dropReads) reads = *g_dropReads;
         }
         for (const auto& read : reads) {
             try {
@@ -5822,7 +6668,7 @@ void Wh_ModUninit() try {
     }
     {
         std::lock_guard lock(g_dropReadsMutex);
-        g_dropReads.clear();
+        g_dropReads.reset();
     }
     for (unsigned pass = 0; g_pendingScans != 0; ++pass) {
         if (pass == 50) Wh_Log(L"Wh_ModUninit: still waiting for %u queued scan(s)", g_pendingScans.load());
@@ -5859,10 +6705,7 @@ void Wh_ModUninit() try {
         g_allHooks.clear();
     }
 
-    HINSTANCE inst = GetModuleHandleW(nullptr);
-    UnregisterClassW(kMgrClass, inst);
-    UnregisterClassW(kDropLineClass, inst);
-    UnregisterClassW(kEditDlgClass, inst);
+    UnregisterWindowClasses();
 } catch (...) {
     Wh_Log(L"Wh_ModUninit: exception");
 }
