@@ -84,16 +84,19 @@ Every hotkey can be changed in the settings, and the change applies as soon as y
 - Avoid combinations without Win or Ctrl: they take the key away from every other app.
 
 Hotkeys that cannot be registered are reported in the Windhawk log (error 1409 = already in use).
+Win + Alt + ↑ is one of them unless you turn on *Take over hotkeys* (see below).
 Win + Ctrl + T is also the default Always On Top shortcut of PowerToys: if you use both, change one
 of them.
 
 #### Taking over shortcuts that are already in use
-Windows itself uses some of these combinations (Win + Alt + ↑ snaps the window to the top half of the
-screen). When a hotkey is already taken, the *Take over hotkeys* option (on by default) makes the
-mod catch that combination with a low-level keyboard hook, so the other program or Windows no longer
-receives it. Turn the option off if you do not want the mod to override other programs' shortcuts;
-the combination is then simply unavailable and reported in the log. The hook only exists while the
-mod runs, and only for the combinations that were already taken.
+Windows itself uses some of these combinations: Win + Alt + ↑ snaps the window to the top half of the
+screen, so with the default settings it is unavailable to the mod (the log reports error 1409) and
+Windows keeps handling it. The mod never overrides another program's shortcut unless you ask it to.
+To use Win + Alt + ↑, turn on the *Take over hotkeys* option (off by default) or pick another set
+of modifiers for the arrows. With the option on, whenever a hotkey is already taken the mod
+catches that combination with a low-level keyboard hook, so the other program or Windows no longer
+receives it. The hook runs in a thread of its own, exists only while the mod runs, and only for the
+combinations that were already taken.
 
 ### Works with other animation mods
 Adaptive Windows works together with these two mods:
@@ -216,16 +219,19 @@ Todos os atalhos podem ser trocados nas configurações, e a mudança vale assim
 - Evite combinações sem Win ou Ctrl: elas tiram a tecla de todos os outros apps.
 
 Atalhos que não puderem ser registrados aparecem no log do Windhawk (erro 1409 = já em uso).
+Win + Alt + ↑ é um deles, a menos que você ligue *Assumir atalhos* (veja abaixo).
 Win + Ctrl + T também é o atalho padrão do Always On Top do PowerToys: se você usa os dois, troque
 um deles.
 
 #### Assumir atalhos que já estão em uso
-O próprio Windows usa algumas dessas combinações (Win + Alt + ↑ encaixa a janela na metade de cima
-da tela). Quando um atalho já está ocupado, a opção *Assumir atalhos* (ligada por padrão) faz o mod
-capturar essa combinação com um gancho de teclado de baixo nível, e o outro programa ou o Windows
-deixa de recebê-la. Desligue a opção se não quiser que o mod sobrescreva atalhos de outros
-programas; a combinação fica então indisponível e é registrada no log. O gancho só existe enquanto o
-mod está ligado, e só para as combinações que já estavam ocupadas.
+O próprio Windows usa algumas dessas combinações: Win + Alt + ↑ encaixa a janela na metade de cima
+da tela, então com as configurações padrão ela fica indisponível para o mod (o log mostra o erro
+1409) e o Windows continua tratando-a. O mod nunca sobrescreve o atalho de outro programa se você
+não pedir. Para usar Win + Alt + ↑, ligue a opção *Assumir atalhos* (desligada por padrão) ou escolha
+outros modificadores para as setas. Com a opção ligada, sempre que um atalho já estiver ocupado o
+mod captura essa combinação com um gancho de teclado de baixo nível, e o outro programa ou o
+Windows deixa de recebê-la. O gancho roda numa thread própria, só existe enquanto o mod está ligado,
+e só para as combinações que já estavam ocupadas.
 
 ### Funciona junto com outros mods de animação
 O Adaptive Windows funciona junto com estes dois mods:
@@ -408,11 +414,11 @@ os cantos.
   - ctrlalt: Ctrl+Alt
   - ctrlaltshift: Ctrl+Alt+Shift
   - altshift: Alt+Shift
-- forceHotkeys: true
+- forceHotkeys: false
   $name: Take over hotkeys that Windows or another program already uses (keyboard hook)
   $name:pt-BR: Assumir atalhos que o Windows ou outro programa já usa (gancho de teclado)
-  $description: "If a hotkey cannot be registered because it is already in use (error 1409 in the log, which happens with Win+Alt+Up), the mod catches that key combination itself with a low-level keyboard hook and keeps it from the other program. Turn it off if you do not want the mod to override other programs' shortcuts."
-  $description:pt-BR: "Se um atalho não puder ser registrado porque já está em uso (erro 1409 no log, o que acontece com Win+Alt+Seta para cima), o mod captura essa combinação sozinho com um gancho de teclado e não deixa o outro programa recebê-la. Desligue se não quiser que o mod sobrescreva atalhos de outros programas."
+  $description: "If a hotkey cannot be registered because it is already in use (error 1409 in the log, which happens with Win+Alt+Up), the mod catches that key combination itself with a low-level keyboard hook and keeps it from the other program. Off by default, so the mod never overrides other programs' shortcuts unless you ask it to."
+  $description:pt-BR: "Se um atalho não puder ser registrado porque já está em uso (erro 1409 no log, o que acontece com Win+Alt+Seta para cima), o mod captura essa combinação sozinho com um gancho de teclado e não deixa o outro programa recebê-la. Desligada por padrão, para o mod nunca sobrescrever atalhos de outros programas sem você pedir."
 - borderColor: "7B8CFF"
   $name: Focused window border color (RGB hex; empty = off)
   $name:pt-BR: Cor da borda da janela em foco (RGB hex; vazio = desligado)
@@ -1541,7 +1547,7 @@ static void StepAnimations() {
 }
 
 // Depois que a animação termina, confere se o app realmente aceitou o tamanho final.
-// Se não, reaplica (até 3 vezes) e, com o log ligado, registra o que ocorreu
+// Se não, reaplica (até 8 vezes) e registra o que ocorreu no log
 // (janela maximizada, tamanho mínimo do app, etc.). Retorna true se ainda há conferências pendentes.
 static bool VerifyItems() {
     double now = NowMs();
@@ -1562,14 +1568,10 @@ static bool VerifyItems() {
         {
             wchar_t cls[64] = L"";
             GetClassNameW(it.h, cls, 64);
-            MINMAXINFO mm{};
-            mm.ptMaxTrackSize.x = mm.ptMaxTrackSize.y = -1;
-            DWORD_PTR rr = 0;
-            SendMessageTimeoutW(it.h, WM_GETMINMAXINFO, 0, (LPARAM)&mm, SMTO_ABORTIFHUNG | SMTO_BLOCK, 20, &rr);
-            Wh_Log(L"Conferencia (%d) [%s]: esperado %ldx%ld em (%ld,%ld), real %ldx%ld em (%ld,%ld)%s (maximo do app %ldx%ld)",
+            Wh_Log(L"Conferencia (%d) [%s]: esperado %ldx%ld em (%ld,%ld), real %ldx%ld em (%ld,%ld)%s",
                    it.verifyTries + 1, cls, t.right - t.left, t.bottom - t.top, t.left, t.top,
                    r.right - r.left, r.bottom - r.top, r.left, r.top,
-                   IsZoomed(it.h) ? L" [janela maximizada]" : L"", (long)mm.ptMaxTrackSize.x, (long)mm.ptMaxTrackSize.y);
+                   IsZoomed(it.h) ? L" [janela maximizada]" : L"");
         }
         // o app não aceitou: aprende o tamanho mínimo dele e refaz o layout respeitando-o
         // só aprende o mínimo se a janela ficou NO lugar esperado (senão foi movida/restaurada pelo usuário ou pelo app)
@@ -2326,11 +2328,14 @@ static std::vector<HotkeyDef> g_keys;
 // Atalhos que o RegisterHotKey recusou (erro 1409: o Windows ou outro programa já os registrou, como o
 // Win+Alt+Seta para cima). Quando a opção está ligada, um gancho de teclado de baixo nível os captura
 // antes do sistema e avisa a thread de trabalho.
+// O gancho roda numa thread própria que só bombeia mensagens: cada tecla do sistema espera o retorno do
+// callback, e a thread de trabalho passa longos trechos sem bombear (animação, SendMessageTimeout...).
 static const UINT WM_APP_LLHK = WM_APP + 2;
-static std::vector<HotkeyDef> g_hookKeys;
-static HHOOK g_kbHook = nullptr;
-static DWORD g_hookThread = 0;
-static int g_hookHeldId = 0;  // atalho do gancho com a tecla ainda pressionada (evita repetir ao segurar)
+static std::vector<HotkeyDef> g_hookKeys;  // só a thread do gancho lê; quem as escreve é a de trabalho, com o gancho parado
+static DWORD g_hookTarget = 0;             // thread de trabalho, que recebe WM_APP_LLHK
+static int g_hookHeldId = 0;               // só a thread do gancho usa (evita repetir ao segurar a tecla)
+static HANDLE g_hookThreadH = nullptr;
+static DWORD g_hookThreadId = 0;
 
 static bool KeyIsDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
@@ -2351,7 +2356,7 @@ static LRESULT CALLBACK LowLevelKbProc(int code, WPARAM wp, LPARAM lp) {
                     if (now != (hk.mods & 0xF)) continue;  // só vale com exatamente esses modificadores
                     if (g_hookHeldId != hk.id) {
                         g_hookHeldId = hk.id;
-                        PostThreadMessageW(g_hookThread, WM_APP_LLHK, (WPARAM)hk.id, 0);
+                        PostThreadMessageW(g_hookTarget, WM_APP_LLHK, (WPARAM)hk.id, 0);
                         // tecla "vazia" no meio da combinação: impede que soltar Win/Alt abra o menu Iniciar ou a barra de menus
                         INPUT in[2] = {};
                         in[0].type = in[1].type = INPUT_KEYBOARD;
@@ -2368,12 +2373,57 @@ static LRESULT CALLBACK LowLevelKbProc(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(nullptr, code, wp, lp);
 }
 
+struct HookStart { HANDLE ready; bool ok; };
+
+static DWORD WINAPI HookThread(LPVOID param) {
+    HookStart* st = (HookStart*)param;
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // cria a fila de mensagens antes de avisar
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbProc, GetModuleHandleW(nullptr), 0);
+    if (!hook) Wh_Log(L"Nao foi possivel instalar o gancho de teclado (erro %lu)", GetLastError());
+    st->ok = hook != nullptr;
+    SetEvent(st->ready);  // st deixa de valer a partir daqui
+    if (!hook) return 0;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    UnhookWindowsHookEx(hook);
+    return 0;
+}
+
+// Chamadas só pela thread de trabalho. g_hookKeys já deve estar preenchida.
+static void StartHookThread() {
+    g_hookTarget = GetCurrentThreadId();
+    g_hookHeldId = 0;
+    HookStart st{CreateEventW(nullptr, TRUE, FALSE, nullptr), false};
+    if (!st.ready) { g_hookKeys.clear(); return; }
+    g_hookThreadH = CreateThread(nullptr, 0, HookThread, &st, 0, &g_hookThreadId);
+    if (g_hookThreadH) WaitForSingleObject(st.ready, INFINITE);  // a thread só instala o gancho e sinaliza
+    CloseHandle(st.ready);
+    if (!g_hookThreadH || !st.ok) {
+        if (g_hookThreadH) { WaitForSingleObject(g_hookThreadH, INFINITE); CloseHandle(g_hookThreadH); }
+        g_hookThreadH = nullptr;
+        g_hookKeys.clear();
+    }
+}
+
+static void StopHookThread() {
+    if (g_hookThreadH) {
+        do {
+            PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        } while (WaitForSingleObject(g_hookThreadH, 100) == WAIT_TIMEOUT);
+        CloseHandle(g_hookThreadH);
+        g_hookThreadH = nullptr;
+    }
+    g_hookKeys.clear();
+    g_hookHeldId = 0;
+}
+
 static void UnregisterHotkeys() {
     for (auto& k : g_keys) UnregisterHotKey(nullptr, k.id);
     g_keys.clear();
-    if (g_kbHook) { UnhookWindowsHookEx(g_kbHook); g_kbHook = nullptr; }
-    g_hookKeys.clear();
-    g_hookHeldId = 0;
+    StopHookThread();
 }
 
 // Registra os atalhos a partir das configurações; pode ser chamada de novo quando elas mudam.
@@ -2406,18 +2456,12 @@ static void RegisterHotkeys() {
                 Wh_Log(L"Atalho (id %d, tecla %u, modificadores %x) ja usado por outro programa: assumido pelo gancho de teclado",
                        k.id, k.vk, k.mods & 0xff);
             } else
-                Wh_Log(L"Atalho (tecla %u) indisponivel (erro %lu; 1409 = ja registrado por outro programa/instancia)",
+                Wh_Log(L"Atalho (tecla %u) indisponivel (erro %lu; 1409 = ja registrado por outro programa/instancia; "
+                       L"a opcao 'Assumir atalhos' permite ao mod assumi-lo)",
                        k.vk, err);
         }
     }
-    if (!g_hookKeys.empty()) {
-        g_hookThread = GetCurrentThreadId();
-        g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbProc, GetModuleHandleW(nullptr), 0);
-        if (!g_kbHook) {
-            Wh_Log(L"Nao foi possivel instalar o gancho de teclado (erro %lu)", GetLastError());
-            g_hookKeys.clear();
-        }
-    }
+    if (!g_hookKeys.empty()) StartHookThread();
 }
 
 static DWORD WINAPI Worker(LPVOID) {
