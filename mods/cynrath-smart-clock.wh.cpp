@@ -5,7 +5,7 @@
 // @description     Bilingual EN/TR customizable taskbar clock with network, CPU, GPU and RAM metrics.
 // @description:tr-TR Türkçe/İngilizce saat, ağ hızı, işlemci, ekran kartı ve bellek göstergesi.
 // @version         0.2.7
-// @author          Cynrath (based on m417z)
+// @author          Cynrath
 // @github          https://github.com/Cynrath
 // @homepage        https://github.com/Cynrath/windhawk-smart-clock
 // @license         GPL-3.0
@@ -1296,12 +1296,13 @@ struct ClockElementStyleData {
     std::optional<int64_t> timeVisibilityPropertyChangedToken;
     std::optional<int64_t> dateTextChangedToken;
     std::optional<int64_t> timeTextChangedToken;
-    winrt::weak_ref<Controls::Grid> sidecarGrid;
+    winrt::weak_ref<Controls::TextBlock> dateTextBlock;
+    winrt::weak_ref<Controls::TextBlock> timeTextBlock;
     std::shared_ptr<struct SmartClockSidecar> sidecar;
 };
 
 // Guards the clock element style settings, their enabled flag and index, and
-// g_clockElementStyleData. The style settings are kept out of g_settings so
+// g_clockElementStyleData-> The style settings are kept out of g_settings so
 // that the XAML thread applying them never waits for g_formatLineMutex, which
 // formatting holds across slow work. When both are taken, g_formatLineMutex
 // comes first.
@@ -1309,7 +1310,84 @@ std::mutex g_clockElementStyleMutex;
 bool g_clockElementStyleEnabled;
 DWORD g_clockElementStyleIndex;
 ClockElementStyleSettings g_clockElementStyleSettings;
-std::vector<ClockElementStyleData> g_clockElementStyleData;
+// XAML objects in this container must only be released on their XAML thread.
+// If Explorer shuts down before cleanup, deliberately leak the container
+// rather than invoke XAML destructors on the process-exit thread.
+[[clang::no_destroy]] std::optional<std::vector<ClockElementStyleData>>
+    g_clockElementStyleData{std::in_place};
+
+
+// Adapted from Windhawk Taskbar Clock Spacer (GPL-3.0): dispatch cleanup to
+// the taskbar XAML thread rather than destroying UI objects on the engine thread.
+HWND FindSmartClockTaskbarWindow() {
+    HWND result = nullptr;
+    EnumWindows(
+        [](HWND window, LPARAM parameter) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32]{};
+            if (GetWindowThreadProcessId(window, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassNameW(window, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(parameter) = window;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+using SmartClockUiProc = void (*)(void*);
+struct SmartClockUiDispatch {
+    SmartClockUiProc function;
+    void* context;
+    bool executed = false;
+    bool succeeded = false;
+};
+std::atomic<UINT> g_smartClockUiDispatchMessage{0};
+
+bool RunSmartClockOnUiThread(HWND window, SmartClockUiProc func, void* context) {
+    const UINT message = RegisterWindowMessageW(
+        L"Windhawk_SmartClock_UiCleanup_" WH_MOD_ID);
+    if (!message) return false;
+    const DWORD uiThreadId = GetWindowThreadProcessId(window, nullptr);
+    if (!uiThreadId) return false;
+    if (uiThreadId == GetCurrentThreadId()) {
+        try { func(context); return true; }
+        catch (...) { Wh_Log(L"SmartClock: UI cleanup callback failed"); return false; }
+    }
+    g_smartClockUiDispatchMessage.store(message, std::memory_order_release);
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto* call = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                const UINT expected =
+                    g_smartClockUiDispatchMessage.load(std::memory_order_acquire);
+                if (expected && call->message == expected) {
+                    auto* dispatch =
+                        reinterpret_cast<SmartClockUiDispatch*>(call->lParam);
+                    if (dispatch && !dispatch->executed) {
+                        dispatch->executed = true;
+                        try {
+                            dispatch->function(dispatch->context);
+                            dispatch->succeeded = true;
+                        } catch (...) {
+                            Wh_Log(L"SmartClock: UI cleanup callback failed");
+                        }
+                    }
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, uiThreadId);
+    if (!hook) return false;
+    SmartClockUiDispatch dispatch{func, context};
+    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
+    UnhookWindowsHookEx(hook);
+    return dispatch.succeeded;
+}
 
 using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
 GetDpiForWindow_t pGetDpiForWindow;
@@ -5082,6 +5160,53 @@ using ThreadPoolTimer_CreateTimer_lambda_t = LPVOID(WINAPI*)(DWORD_PTR** param1,
 ThreadPoolTimer_CreateTimer_lambda_t
     ThreadPoolTimer_CreateTimer_lambda_Original;
 
+
+// Published from the clock's existing worker refresh. The XAML DispatcherTimer
+// never acquires g_formatLineMutex or invokes PDH/DXGI/D3DKMT APIs.
+std::mutex g_sidecarSnapshotMutex;
+struct SmartClockSnapshot {
+    std::array<std::wstring, 6> texts;
+    uint64_t sequence = 0;
+    bool ready = false;
+};
+[[clang::no_destroy]] SmartClockSnapshot g_sidecarSnapshot;
+
+void PublishSmartClockSnapshotNoLock() {
+    if (g_settings.smartPanel.layout != SmartClockLayout::Sidecar ||
+        !g_settings.smartPanel.visible) return;
+
+    constexpr std::wstring_view formats[] = {
+        L"%ram%", L"%vram%", L"%cpu% %cpu_temp%",
+        L"%gpu% %gpu_temp%", L"%download_speed% MB/s",
+        L"%upload_speed% MB/s"
+    };
+    std::array<std::wstring, 6> sample{};
+    GetLocalTime(&g_formatTime);
+    ++g_formatIndex;
+
+    // The sidecar ALWAYS displays MB/s numeric values. Ignore the inherited
+    // clock's user-configurable network units to avoid incorrect MB/s suffixes.
+    const auto previousNetworkFormat = g_settings.dataCollection.networkMetricsFormat;
+    g_settings.dataCollection.networkMetricsFormat =
+        NetworkMetricsFormat::mbsNumberOnly;
+    try {
+        for (size_t i = 0; i < sample.size(); ++i) {
+            WCHAR value[128]{};
+            FormatLineNoLock(value, ARRAYSIZE(value), formats[i]);
+            sample[i] = smartclock::ComposeSidecarMetric(i, value);
+        }
+    } catch (...) {
+        g_settings.dataCollection.networkMetricsFormat = previousNetworkFormat;
+        throw;
+    }
+    g_settings.dataCollection.networkMetricsFormat = previousNetworkFormat;
+
+    std::lock_guard<std::mutex> guard(g_sidecarSnapshotMutex);
+    g_sidecarSnapshot.texts = std::move(sample);
+    ++g_sidecarSnapshot.sequence;
+    g_sidecarSnapshot.ready = true;
+}
+
 void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
     LPVOID pThis,
     LPVOID param1,
@@ -5107,6 +5232,15 @@ void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
     g_inRefreshIcon = true;
 
     original(pThis, param1);
+
+    // The original clock refresh runs on a worker; do potentially expensive
+    // PDH sampling here, not in the XAML panel timer.
+    try {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        PublishSmartClockSnapshotNoLock();
+    } catch (...) {
+        Wh_Log(L"SmartClock: metric snapshot failed %08X", winrt::to_hresult());
+    }
 
     g_inRefreshIcon = false;
     g_refreshIconNeedToAdjustTimer = false;
@@ -5610,25 +5744,22 @@ struct SmartClockSidecar {
     bool tickSubscribed = false;
     std::shared_ptr<SmartClockRenderState> colors;
     SmartClockPanelSettings settings;
+    uint64_t renderedSequence = 0;
 };
 
 
 void RefreshSmartClockSidecar(const std::shared_ptr<SmartClockSidecar>& panel) {
     if (!panel) return;
-    constexpr std::wstring_view formats[] = {
-        L"%ram%", L"%vram%",
-        L"%cpu% %cpu_temp%", L"%gpu% %gpu_temp%",
-        L"%download_speed% MB/s", L"%upload_speed% MB/s"
-    };
     std::array<std::wstring, 6> texts{};
     {
-        // Acquire the formatting lock for all metrics in one sample.
-        std::lock_guard<std::mutex> guard(g_formatLineMutex);
-        SYSTEMTIME now{};
-        GetLocalTime(&now);
-        g_formatTime = now;
-        ++g_formatIndex;
-        for (size_t i = 0; i < panel->cells.size(); ++i) {
+        std::lock_guard<std::mutex> guard(g_sidecarSnapshotMutex);
+        if (!g_sidecarSnapshot.ready ||
+            g_sidecarSnapshot.sequence == panel->renderedSequence)
+            return;
+        texts = g_sidecarSnapshot.texts;
+        panel->renderedSequence = g_sidecarSnapshot.sequence;
+    }
+    for (size_t i = 0; i < panel->cells.size(); ++i) {
             if (!panel->cells[i]) continue;
             WCHAR value[128]{};
             FormatLineNoLock(value, ARRAYSIZE(value), formats[i]);
@@ -5818,27 +5949,86 @@ void RemoveSmartClockSidecar(const std::shared_ptr<SmartClockSidecar>& state) {
     }
 }
 
+
+// Always unregister callbacks from the same TextBlock on which they were
+// registered. Re-templating creates new blocks with different identities.
+void UnregisterSmartClockCallbacks(ClockElementStyleData& data) {
+    auto unregister = [&](winrt::weak_ref<Controls::TextBlock>& reference,
+                          std::optional<int64_t>& textToken,
+                          std::optional<int64_t>& visibilityToken) {
+        auto textBlock = reference.get();
+        if (textBlock) {
+            if (textToken) {
+                textBlock.UnregisterPropertyChangedCallback(
+                    Controls::TextBlock::TextProperty(), *textToken);
+            }
+            if (visibilityToken) {
+                textBlock.UnregisterPropertyChangedCallback(
+                    UIElement::VisibilityProperty(), *visibilityToken);
+            }
+        }
+        textToken.reset();
+        visibilityToken.reset();
+        reference = {};
+    };
+    unregister(data.dateTextBlock, data.dateTextChangedToken,
+               data.dateVisibilityPropertyChangedToken);
+    unregister(data.timeTextBlock, data.timeTextChangedToken,
+               data.timeVisibilityPropertyChangedToken);
+}
+
+bool ClearSmartClockXamlState() {
+    std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
+    if (!g_clockElementStyleData) return true;
+
+    bool success = true;
+    for (auto& data : *g_clockElementStyleData) {
+        try {
+            UnregisterSmartClockCallbacks(data);
+            RemoveSmartClockSidecar(data.sidecar);
+            data.sidecar.reset();
+        } catch (...) {
+            success = false;
+            Wh_Log(L"SmartClock: XAML state cleanup failure %08X",
+                   winrt::to_hresult());
+        }
+    }
+    if (success) {
+        // Must execute on XAML owner thread; optional is no_destroy.
+        g_clockElementStyleData.reset();
+    }
+    return success;
+}
+
 void ApplyDateTimeIconContentStyles(
     FrameworkElement dateTimeIconContentElement) {
     std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
 
+    if (!g_clockElementStyleData) return;
     ClockElementStyleData* clockElementStyleData = nullptr;
 
-    for (auto it = g_clockElementStyleData.begin();
-         it != g_clockElementStyleData.end();) {
-        auto& data = *it;
-        auto element = data.dateTimeIconContentElement.get();
-        if (!element) {
-            it = g_clockElementStyleData.erase(it);
-            continue;
+    // Prune ALL stale clocks, not just entries preceding the first match.
+    for (auto it = g_clockElementStyleData->begin();
+         it != g_clockElementStyleData->end();) {
+        if (!it->dateTimeIconContentElement.get()) {
+            try {
+                UnregisterSmartClockCallbacks(*it);
+                RemoveSmartClockSidecar(it->sidecar);
+                it->sidecar.reset();
+            } catch (...) {
+                Wh_Log(L"SmartClock: stale clock cleanup failed %08X",
+                       winrt::to_hresult());
+            }
+            it = g_clockElementStyleData->erase(it);
+        } else {
+            ++it;
         }
-
-        if (element == dateTimeIconContentElement) {
+    }
+    for (auto& data : *g_clockElementStyleData) {
+        if (data.dateTimeIconContentElement.get() == dateTimeIconContentElement) {
             clockElementStyleData = &data;
             break;
         }
-
-        ++it;
     }
 
     bool clockElementStyleEnabled = g_clockElementStyleEnabled;
@@ -5861,9 +6051,12 @@ void ApplyDateTimeIconContentStyles(
         return;
     }
 
-    if (clockElementStyleData && clockElementStyleData->sidecar) {
-        RemoveSmartClockSidecar(clockElementStyleData->sidecar);
-        clockElementStyleData->sidecar.reset();
+    if (clockElementStyleData) {
+        UnregisterSmartClockCallbacks(*clockElementStyleData);
+        if (clockElementStyleData->sidecar) {
+            RemoveSmartClockSidecar(clockElementStyleData->sidecar);
+            clockElementStyleData->sidecar.reset();
+        }
     }
     if (containerGridElement.Children().Size() == 0) return;
     auto stackPanel = containerGridElement.Children().GetAt(0).try_as<Controls::StackPanel>();
@@ -5894,10 +6087,10 @@ void ApplyDateTimeIconContentStyles(
     }
 
     if (!clockElementStyleData) {
-        g_clockElementStyleData.push_back(ClockElementStyleData{
+        g_clockElementStyleData->push_back(ClockElementStyleData{
             .dateTimeIconContentElement = dateTimeIconContentElement,
         });
-        clockElementStyleData = &g_clockElementStyleData.back();
+        clockElementStyleData = &g_clockElementStyleData->back();
     }
 
     const ClockElementStyleSettings* styleSettings =
@@ -5911,21 +6104,9 @@ void ApplyDateTimeIconContentStyles(
     bool noWrap = fixedWidth || maxWidth;
 
     ApplyStackPanelStyles(stackPanel, fixedWidth, maxWidth, textSpacing);
-    // Tear down callbacks before replacing styles or installing new handlers.
-    if (clockElementStyleData) {
-        if (clockElementStyleData->timeTextChangedToken) {
-            timeInnerTextBlock.UnregisterPropertyChangedCallback(
-                Controls::TextBlock::TextProperty(),
-                *clockElementStyleData->timeTextChangedToken);
-            clockElementStyleData->timeTextChangedToken.reset();
-        }
-        if (clockElementStyleData->dateTextChangedToken) {
-            dateInnerTextBlock.UnregisterPropertyChangedCallback(
-                Controls::TextBlock::TextProperty(),
-                *clockElementStyleData->dateTextChangedToken);
-            clockElementStyleData->dateTextChangedToken.reset();
-        }
-    }
+    // Keep only weak references to the precise blocks we are modifying.
+    clockElementStyleData->dateTextBlock = dateInnerTextBlock;
+    clockElementStyleData->timeTextBlock = timeInnerTextBlock;
     ApplyTextBlockStyles(
         dateInnerTextBlock, styleSettings && !preserveNative ? &styleSettings->dateStyle : nullptr,
         noWrap, &clockElementStyleData->dateVisibilityPropertyChangedToken);
@@ -7515,26 +7696,9 @@ void Wh_ModBeforeUninit() {
 
     ApplySettings();
 
-    // Wait for styles to be restored.
-    for (int i = 0; i < 20; i++) {
-        bool allRestored = true;
-
-        {
-            std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
-            for (const auto& data : g_clockElementStyleData) {
-                if (data.styleIndex < styleIndex) {
-                    allRestored = false;
-                    break;
-                }
-            }
-        }
-
-        if (allRestored) {
-            break;
-        }
-
-        Sleep(100);
-    }
+    // No polling: XAML callback/timer removal must be performed synchronously
+    // on the taskbar UI thread in Wh_ModUninit, even if a clock is not loaded.
+    (void)styleIndex;
 }
 
 // Stops the background work that feeds the format tokens, and keeps it stopped
@@ -7554,6 +7718,27 @@ void StopFormattingBackgroundWork() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    if (g_winVersion >= WinVersion::Win11) {
+        // Never hold g_formatLineMutex while calling the UI dispatcher.
+        // The timer reads only the snapshot, and the XAML callback uses
+        // g_clockElementStyleMutex on the UI thread.
+        bool cleaned = false;
+        for (int attempt = 0; attempt < 5 && !cleaned; ++attempt) {
+            HWND taskbar = FindSmartClockTaskbarWindow();
+            if (!taskbar) break;
+            bool callbackCleared = false;
+            const bool dispatched = RunSmartClockOnUiThread(taskbar, [](void* context) {
+                auto* result = static_cast<bool*>(context);
+                *result = ClearSmartClockXamlState();
+            }, &callbackCleared);
+            cleaned = dispatched && callbackCleared;
+            if (!cleaned) Sleep(100);
+        }
+        if (!cleaned) {
+            Wh_Log(L"SmartClock: XAML cleanup unavailable; thread-affine state retained");
+        }
+    }
 
     StopFormattingBackgroundWork();
 
