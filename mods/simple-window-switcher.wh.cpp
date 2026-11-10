@@ -8268,6 +8268,25 @@ static void RetainStickyTwoFingerTapForeground() {
         if (closeCompleted) ClearStickyTwoFingerTapOwnership();
         return;
     }
+    // A prompt from an app being closed (such as a save prompt of another
+    // window in a "close all" group, or an unowned dialog) keeps the focus.
+    // The closing windows themselves don't count: a restored target is still
+    // taken back so the sticky switcher stays usable.
+    DWORD foregroundPid = 0;
+    if (foreground &&
+        std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(),
+                  foreground) == s_pendingCloseWindows.end() &&
+        GetWindowThreadProcessId(foreground, &foregroundPid) && foregroundPid) {
+        for (HWND pending : s_pendingCloseWindows) {
+            DWORD pendingPid = 0;
+            if (IsWindow(pending) &&
+                GetWindowThreadProcessId(pending, &pendingPid) &&
+                pendingPid == foregroundPid) {
+                ClearStickyTwoFingerTapOwnership();
+                return;
+            }
+        }
+    }
     s_stickyTwoFingerTapFocusRestoreActive = true;
     BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
