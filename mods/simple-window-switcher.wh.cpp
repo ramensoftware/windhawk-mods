@@ -127,8 +127,8 @@ shorten this delay. Normal invocations can activate the selection before the UI
 appears; releasing a sticky launch keeps its session open.
 
 **Rapid Switching (Hide UI for Quick Actions)** is enabled by default. Normal
-keyboard launches use at least 125ms, and horizontal touchpad launches
-use at least 125ms. A larger Show Delay takes precedence; the delays are not added.
+keyboard launches and horizontal touchpad launches use at least 125ms. A larger
+Show Delay takes precedence; the delays are not added.
 During hidden rapid touchpad switching, selection stays on the initial neighbor.
 Sticky launches use only Show Delay, with no automatic minimum.
 
@@ -7317,9 +7317,12 @@ static bool IsDesktopSourceWindow(HWND hWnd) {
 typedef BOOL (WINAPI *pfnIsGamingFullScreenExperienceActive)();
 
 static bool IsGamingExperienceActive() {
-    static HMODULE s_hGamemode = LoadLibraryW(L"api-ms-win-gaming-experience-l1-1-0.dll");
+    static HMODULE s_hGamemode = LoadLibraryExW(
+        L"api-ms-win-gaming-experience-l1-1-0.dll", nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!s_hGamemode) {
-        s_hGamemode = LoadLibraryW(L"gamemode.dll");
+        s_hGamemode = LoadLibraryExW(L"gamemode.dll", nullptr,
+                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (!s_hGamemode) return false;
     static pfnIsGamingFullScreenExperienceActive s_pfn = 
@@ -14832,11 +14835,12 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
                                     !g_isTouchpadGestureActive &&
                                     !s_rawSessionOwned;
         if (!keyboardCommit && ShellSurfaceHoldsForeground()) {
+            HWND shellForeground = GetForegroundWindow();
+            TapEscapeKey();
             s_shellDismissStartTick = GetTickCount64();
             s_shellDismissResent = false;
             Wh_Log(L"SWS: shell surface dismiss before activate fg=%p target=%p",
-                   GetForegroundWindow(), hForegroundTarget);
-            TapEscapeKey();
+                   shellForeground, hForegroundTarget);
         } else {
             // Make one foreground-eligibility request for this handoff, not one
             // synthetic key for every rejected retry (which can keep stealing
@@ -21688,6 +21692,10 @@ thread_exit:
     g_presentationMaterialStates.clear();
     g_presentationWindows.clear();
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
+    if (g_backdropClassRegistered) {
+        UnregisterClassW(SWS_BACKDROP_CLASSNAME, GetModuleHandleW(NULL));
+        g_backdropClassRegistered = false;
+    }
     if (g_hFont) { DeleteObject(g_hFont); g_hFont = NULL; }
     if (g_hTheme) { CloseThemeData(g_hTheme); g_hTheme = NULL; }
     BufferedPaintUnInit();
@@ -22581,6 +22589,7 @@ bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -22631,20 +22640,25 @@ BOOL Wh_ModInit() {
 
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
-            void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
+            auto pRegisterHotKey = reinterpret_cast<RegisterHotKey_t>(
+                GetProcAddress(hUser32, "RegisterHotKey"));
             if (pRegisterHotKey) {
-                Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
+                WindhawkUtils::SetFunctionHook(pRegisterHotKey, RegisterHotKey_Hook,
+                                               &RegisterHotKey_Original);
             }
-            void* pShowWindow = (void*)GetProcAddress(hUser32, "ShowWindow");
+            auto pShowWindow = reinterpret_cast<ShowWindow_t>(
+                GetProcAddress(hUser32, "ShowWindow"));
             if (pShowWindow) {
-                Wh_SetFunctionHook(pShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
+                WindhawkUtils::SetFunctionHook(pShowWindow, ShowWindow_Hook,
+                                               &ShowWindow_Original);
             }
         }
 
         // These private member-function signatures are not stdcall on x86.
         // The ShowWindow filter remains available there without an ABI guess.
 #if !defined(_M_IX86)
-        HMODULE hTwinui = LoadLibraryW(L"twinui.pcshell.dll");
+        HMODULE hTwinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
+                                         LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hTwinui) {
             // Queue the same complete hook set on both initial and retry paths.
             // Windhawk applies initial hooks after Wh_ModInit returns.
