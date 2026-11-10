@@ -19,6 +19,8 @@
 
 ![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/adaptive-windows-demo.gif)
 
+![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/Navegacaolivre.gif)
+
 ## English
 
 An automatic tiling window manager for Windows 11, inspired by the **Nava OS** concept videos.
