@@ -588,8 +588,6 @@ void FindCommandBars(mux::FrameworkElement const& page) {
 // treating it as an implementation::ProcessesPage pointer.
 using OnNavigatedTo_t = HRESULT(__cdecl*)(void*, void*);
 OnNavigatedTo_t g_onNavigatedToOriginal = nullptr;
-constexpr wchar_t kOnNavigatedToSymbol[] =
-    L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)";
 
 void CapturePageFromInterface(void* self) {
     if (!self || g_stopping.load(std::memory_order_acquire)) return;
@@ -629,7 +627,8 @@ BOOL Wh_ModInit() {
 
     HMODULE host = GetModuleHandleW(nullptr);
     WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
-        {{kOnNavigatedToSymbol}, &g_onNavigatedToOriginal, OnNavigatedTo_Hook},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
+         &g_onNavigatedToOriginal, OnNavigatedTo_Hook},
     };
     if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks, ARRAYSIZE(taskmgrExeHooks))) {
         Wh_Log(L"[TMPB] Page navigation symbol unavailable. No UI was changed.");
