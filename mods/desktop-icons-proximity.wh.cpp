@@ -2,7 +2,7 @@
 // @id              desktop-icons-proximity
 // @name            Desktop Icons Proximity Reveal
 // @description     Hide desktop icons until you hover over them or a custom area, with smooth fades and separate icon groups.
-// @version         1.0.0
+// @version         1.0.1
 // @author          CTabdul15
 // @github          https://github.com/CTabdul15
 // @include         explorer.exe
@@ -25,7 +25,9 @@ Features:
 * Preview your areas and save them between sessions.
 * Keep new folders and shortcuts visible while naming them, then hide them after
   an outside click or a configurable timeout (15 seconds by default).
-* Keep selected icons visible using **Always-visible icons (whitelist)**.
+* Selected icons stay visible until deselected; press **Ctrl+A** to reveal all.
+  Disable **Keep selected icons visible** to turn this off.
+* Keep icons permanently visible using **Always-visible icons (whitelist)**.
   Enter desktop names separated by semicolons, such as `Recycle Bin; Steam; Discord`.
   Names ignore case; `*` and `?` wildcards are supported.
 
@@ -48,6 +50,9 @@ Rendering hooks adapted from [Desktop Icons Transparency by zed712969-crypto](ht
 
 // ==WindhawkModSettings==
 /*
+- keepSelectedVisible: true
+  $name: Keep selected icons visible
+  $description: Selected icons stay visible until you deselect them. Press Ctrl+A on the desktop to select and reveal all icons. Applies even outside reveal areas.
 - alwaysVisible: ""
   $name: Always-visible icons (whitelist)
   $description: Desktop icon names separated by semicolons, for example Recycle Bin; Steam; Discord. Use the names shown on your desktop. Case-insensitive; .lnk/.url suffixes are optional. Wildcards * and ? are supported.
@@ -369,6 +374,7 @@ static SRWLOCK g_rulesLock=SRWLOCK_INIT;
 static std::vector<std::wstring> g_alwaysVisible;
 static std::atomic<unsigned> g_rulesRevision{1};
 static std::atomic<bool> g_revealNewItems{true},g_dismissNewOnClick{true};
+static std::atomic<bool> g_keepSelectedVisible{true};
 static std::atomic<int> g_newItemSeconds{15};
 struct DesktopItem { LPARAM cookie=0;std::wstring name; };
 struct TemporaryItem { DesktopItem identity;ULONGLONG until=0; };
@@ -466,6 +472,7 @@ static int EditingItem(HWND list) {
     return g_renameIndex>=0 ? g_renameIndex : ListView_GetNextItem(list,-1,LVNI_FOCUSED);
 }
 static bool SpecialItemVisible(HWND list,int index) {
+    if (g_keepSelectedVisible.load() && (ListView_GetItemState(list,index,LVIS_SELECTED)&LVIS_SELECTED)) return true;
     // Editing is protected even if the new-item feature is disabled or times out.
     if (EditingItem(list)==index) return true;
     auto identity=ReadDesktopItem(list,index);
@@ -601,6 +608,15 @@ static LRESULT CALLBACK DesktopParentSubclass(HWND w,UINT msg,WPARAM wp,LPARAM l
                 g_renameIndex=-1;g_lastItemScan=0;
                 InvalidateRect(list,nullptr,TRUE);return result;
             }
+            if (g_keepSelectedVisible.load() && header->code==LVN_ITEMCHANGED) {
+                auto change=reinterpret_cast<NMLISTVIEW*>(lp);
+                if ((change->uChanged&LVIF_STATE) && ((change->uOldState^change->uNewState)&LVIS_SELECTED))
+                    InvalidateRect(list,nullptr,TRUE);
+            }
+            if (g_keepSelectedVisible.load() && header->code==LVN_ODSTATECHANGED) {
+                auto change=reinterpret_cast<NMLVODSTATECHANGE*>(lp);
+                if ((change->uOldState^change->uNewState)&LVIS_SELECTED) InvalidateRect(list,nullptr,TRUE);
+            }
             if (header->code==LVN_INSERTITEM) {
                 auto change=reinterpret_cast<NMLISTVIEW*>(lp);
                 GrantTemporary(ReadDesktopItem(list,change->iItem),GetTickCount64());
@@ -720,7 +736,20 @@ static LRESULT CALLBACK DesktopSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp, 
         // A click in blank space alone must not reveal the icons.
         if (g_opacity.load() > 0) g_dragging = true;
     }
-    if (msg == WM_KEYDOWN && (g_opacity.load() < 100 ||
+    // Modifiers alone should not trigger the temporary reveal before Ctrl+A.
+    if (msg==WM_KEYDOWN && g_keepSelectedVisible.load() &&
+        (wp==VK_CONTROL || wp==VK_SHIFT || wp==VK_MENU || wp==VK_LWIN || wp==VK_RWIN))
+        return DefSubclassProc(w,msg,wp,lp);
+    // Let Explorer perform Select All even while every icon is hidden.
+    if (msg==WM_KEYDOWN && wp=='A' && g_keepSelectedVisible.load() &&
+        (GetKeyState(VK_CONTROL)&0x8000)) {
+        auto result=DefSubclassProc(w,msg,wp,lp);
+        InvalidateRect(w,nullptr,TRUE);
+        return result;
+    }
+    // A visible selection can be operated on normally (arrows, Delete, F2, etc.).
+    bool visibleSelection=msg==WM_KEYDOWN && g_keepSelectedVisible.load() && ListView_GetSelectedCount(w)>0;
+    if (msg == WM_KEYDOWN && !visibleSelection && (g_opacity.load() < 100 ||
         (g_regionsEnabled && GetTickCount64()>=g_forceRevealUntil))) {
         Reveal(w);
         return 0;
@@ -1057,6 +1086,7 @@ BOOL WINAPI ExtTextOutW_Hook(
 
 
 static void LoadSettings() {
+    g_keepSelectedVisible=Wh_GetIntSetting(L"keepSelectedVisible")!=0;
     g_revealNewItems=Wh_GetIntSetting(L"showNewItems")!=0;
     g_dismissNewOnClick=Wh_GetIntSetting(L"dismissNewOnClick")!=0;
     g_newItemSeconds=std::clamp(Wh_GetIntSetting(L"newItemSeconds"),0,300);
