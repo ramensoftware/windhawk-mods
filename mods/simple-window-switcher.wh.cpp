@@ -43,14 +43,16 @@ improvements by [Asteski](https://github.com/Asteski) and
   or accent colors; configurable fonts, highlights, shadows, and corner radii.
 - Optional desktop-snapshot or wallpaper backdrop blur behind the switcher.
 - Application grouping with individual-window drill-in, window-count badges,
-  and configurable group closing and restoration.
+  and configurable group closing and restoration. Web apps installed from Edge
+  or Chrome form their own groups, with their own names and icons.
 - Recent-window ordering, live window-list updates, and options to hide, sort,
   or mark minimized windows.
 - Optional Desktop entry with a live desktop preview and shell toggle action.
 - Multi-monitor display and filtering, DPI-aware sizing, and current/all virtual
   desktop filtering. All virtual desktops are included by default.
-- Window exclusions by title or executable name, custom application names/icons,
-  and an option to use the native switcher in Xbox Mode.
+- Window exclusions by title or executable name, custom application names and
+  light/dark icons by executable name and/or window title, and an option to use
+  the native switcher in Xbox Mode.
 - Keyboard, mouse, scroll-wheel, and supported precision-touchpad controls.
 
 ## Layouts
@@ -91,7 +93,9 @@ entry or close button cancels the click.
 
 Close commands request a normal application close; applications can still ask to
 save changes. Closing a grouped entry follows **Grouping → Group Close Button
-Behavior**, which defaults to closing its most recent window.
+Behavior**, which defaults to closing its most recent window. In sticky mode, a
+window that answers the close with a prompt is brought forward so the prompt can
+be answered; once you have reached it, the close is not repeated.
 
 ### Touchpad
 
@@ -177,7 +181,7 @@ navigation can change the selection while the UI remains hidden.
 - **Accessibility**: invocation delay, navigation, monitor/desktop filtering,
   optional Desktop entry, and minimized-window options.
 - **Touchpad / Excluded Windows / Custom Header**: gesture controls, exclusion
-  patterns, Xbox Mode exclusion, and per-application names/icons.
+  patterns, Xbox Mode exclusion, and names/icons per application or window title.
 
 ## Troubleshooting logs
 
@@ -903,15 +907,18 @@ nothing failed.
 - customHeader:
   - - process: ""
       $name: Process Name
-      $description: "Executable name to match. * and ? are wildcards. Example: chrome.exe or *code.exe"
+      $description: "Executable name to match. * and ? are wildcards. Leave empty to match by window title only. Example: chrome.exe or *code.exe"
+    - windowTitle: ""
+      $name: Window Title
+      $description: "Window title to match. * and ? are wildcards. Leave empty to match any title. Example: *Facebook*"
     - iconPath: ""
       $name: Icon Path
-      $description: "Path to an .ico, .exe or .dll; its first icon is used. Leave empty to keep the default icon. Example: C:\\Icons\\myapp.ico"
+      $description: "Path to an .ico, .exe or .dll; its first icon is used. For separate light and dark theme icons, use Light | Dark (one side may be empty to use the other in both themes). Leave empty to keep the default icon. Example: C:\\Icons\\light.ico | C:\\Icons\\dark.ico"
     - appName: ""
       $name: Application Name
       $description: "Name shown instead of the detected application name. Leave empty to keep the default. Used by the Application Name title modes when grouping is on."
   $name: Custom Header
-  $description: Set a custom icon and/or name for applications by executable name. The first matching rule wins.
+  $description: Set a custom icon and/or name for applications by executable name, window title, or both (both must match when both are set). The first matching rule wins, so put specific rules above general ones.
 
 */
 // ==/WindhawkModSettings==
@@ -6906,11 +6913,30 @@ static int GetMruRank(HWND h) {
 static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx);
 
 struct CustomHeaderRule {
-    std::wstring pattern;   // executable name pattern; wildcards * and ? supported
-    std::wstring iconPath;  // .ico / .exe / .dll to extract the icon from (optional)
-    std::wstring appName;   // custom display name overriding the detected one (optional)
+    std::wstring pattern;      // executable name pattern; wildcards * and ? supported (optional)
+    std::wstring titlePattern; // window title pattern; wildcards * and ? supported (optional)
+    std::wstring iconPath;     // .ico / .exe / .dll, or "Light | Dark" (optional)
+    std::wstring appName;      // custom display name overriding the detected one (optional)
 };
 static std::vector<CustomHeaderRule> g_customHeaderRules;
+// Some rule names different icons for the light and dark theme.
+static bool s_iconRulesThemed = false;
+
+// "Light | Dark" picks a side by theme; an empty side uses the other one, and a
+// single path is used in both themes. Surrounding spaces and quotes are ignored.
+static std::wstring ResolveThemedIconPath(const std::wstring& setting, bool darkMode) {
+    auto trim = [](const std::wstring& value) -> std::wstring {
+        const auto first = value.find_first_not_of(L" \t\r\n\"");
+        if (first == std::wstring::npos) return {};
+        return value.substr(first, value.find_last_not_of(L" \t\r\n\"") - first + 1);
+    };
+    const auto separator = setting.find(L'|');
+    if (separator == std::wstring::npos) return trim(setting);
+    const auto light = trim(setting.substr(0, separator));
+    const auto dark = trim(setting.substr(separator + 1));
+    if (darkMode) return dark.empty() ? light : dark;
+    return light.empty() ? dark : light;
+}
 
 // No shell I/O, application messages or resolution occur while holding either
 // lock. Pending includes the active request AND results awaiting UI consumption.
@@ -6925,6 +6951,7 @@ struct WindowIconRequest {
     std::shared_ptr<WindowIconCell> cell;
     ULONGLONG generation = 0;
     std::shared_ptr<const std::vector<CustomHeaderRule>> rules;
+    bool darkMode = false; // theme for "Light | Dark" custom icons
 };
 struct WindowIconResult {
     WindowIconRequest request;
@@ -7045,6 +7072,11 @@ static void ResetWindowIconSettings() {
     for (const auto& pair : s_windowIconCells) pair.second->retired.store(true);
     ++s_iconSettingsGeneration;
     s_iconRules = std::make_shared<const std::vector<CustomHeaderRule>>(g_customHeaderRules);
+    s_iconRulesThemed = std::any_of(
+        g_customHeaderRules.begin(), g_customHeaderRules.end(), [](const CustomHeaderRule& rule) {
+            return ResolveThemedIconPath(rule.iconPath, false) !=
+                   ResolveThemedIconPath(rule.iconPath, true);
+        });
 }
 
 static void InvalidateWindowIcon(HWND window) {
@@ -7103,55 +7135,132 @@ static HICON LoadCustomIconFromPath(const std::wstring& path, int sizePx) {
     return NULL;
 }
 
-// If the window's executable name matches a user-defined rule, return its
-// custom icon. The first matching rule wins; this overrides all other sources.
-static HICON TryGetCustomIcon(HWND hWnd, int sizePx) {
-    if (!s_resolvingIcons || IconResolutionCancelled()) return NULL;
-    const auto& rules = *s_resolvingIconRequest->rules;
-    if (rules.empty()) return NULL;
+// Executable file name of the window's process, or an empty string.
+static void GetWindowExeName(HWND hWnd, WCHAR (&out)[MAX_PATH]) {
+    out[0] = 0;
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
-    if (!pid) return NULL;
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) return NULL;
-    WCHAR exePath[MAX_PATH] = {0};
-    DWORD size = MAX_PATH;
-    BOOL ok = !IconResolutionCancelled() && QueryFullProcessImageNameW(hProc, 0, exePath, &size);
-    CloseHandle(hProc);
-    if (!ok || !exePath[0]) return NULL;
-    WCHAR* fileName = PathFindFileNameW(exePath);
-    for (const auto& rule : rules) {
-        if (PathMatchSpecW(fileName, rule.pattern.c_str())) {
-            return LoadCustomIconFromPath(rule.iconPath, sizePx);
-        }
+    if (!pid) return;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return;
+    WCHAR exePath[MAX_PATH] = {};
+    DWORD size = ARRAYSIZE(exePath);
+    if (QueryFullProcessImageNameW(process, 0, exePath, &size)) {
+        wcscpy_s(out, PathFindFileNameW(exePath));
     }
-    return NULL;
+    CloseHandle(process);
 }
 
-// If the window's executable name matches a user-defined rule with a custom
-// application name, copy it into `out` and return true. The first matching rule
-// wins; an empty field keeps the detected default, not a later matching rule.
+// First user-defined rule matching the window. A rule names an executable
+// pattern, a window title pattern, or both; every pattern it names must match.
+static const CustomHeaderRule* FindCustomHeaderRule(
+    HWND hWnd, const std::vector<CustomHeaderRule>& rules) {
+    if (rules.empty()) return nullptr;
+    WCHAR fileName[MAX_PATH];
+    GetWindowExeName(hWnd, fileName);
+    WCHAR title[1024] = {};
+    bool readTitle = false;
+    for (const auto& rule : rules) {
+        if (!rule.pattern.empty() &&
+            (!fileName[0] || !PathMatchSpecW(fileName, rule.pattern.c_str()))) continue;
+        if (!rule.titlePattern.empty()) {
+            if (!readTitle) {
+                // No message to the window: a hung app can't block this.
+                InternalGetWindowText(hWnd, title, ARRAYSIZE(title));
+                readTitle = true;
+            }
+            if (!PathMatchSpecW(title, rule.titlePattern.c_str())) continue;
+        }
+        return &rule;
+    }
+    return nullptr;
+}
+
+// If a user-defined rule matches the window, return its custom icon for the
+// request's theme. The first matching rule wins; this overrides all other sources.
+static HICON TryGetCustomIcon(HWND hWnd, int sizePx) {
+    if (!s_resolvingIcons || IconResolutionCancelled()) return NULL;
+    const auto* rule = FindCustomHeaderRule(hWnd, *s_resolvingIconRequest->rules);
+    if (!rule || IconResolutionCancelled()) return NULL;
+    return LoadCustomIconFromPath(
+        ResolveThemedIconPath(rule->iconPath, s_resolvingIconRequest->darkMode), sizePx);
+}
+
+// If a user-defined rule with a custom application name matches the window,
+// copy it into `out` and return true. The first matching rule wins; an empty
+// field keeps the detected default, not a later matching rule.
 static bool TryGetCustomAppName(HWND hWnd, WCHAR* out, size_t cch) {
-    if (g_customHeaderRules.empty()) return false;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (!pid) return false;
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) return false;
-    WCHAR exePath[MAX_PATH] = {0};
-    DWORD size = MAX_PATH;
-    BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath, &size);
-    CloseHandle(hProc);
-    if (!ok || !exePath[0]) return false;
-    WCHAR* fileName = PathFindFileNameW(exePath);
-    for (const auto& rule : g_customHeaderRules) {
-        if (PathMatchSpecW(fileName, rule.pattern.c_str())) {
-            if (rule.appName.empty()) return false;
-            wcsncpy_s(out, cch, rule.appName.c_str(), _TRUNCATE);
-            return true;
+    const auto* rule = FindCustomHeaderRule(hWnd, g_customHeaderRules);
+    if (!rule || rule->appName.empty()) return false;
+    wcsncpy_s(out, cch, rule->appName.c_str(), _TRUNCATE);
+    return true;
+}
+
+static std::wstring ReadWindowStringProperty(IPropertyStore* store, REFPROPERTYKEY key) {
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    std::wstring result;
+    if (SUCCEEDED(store->GetValue(key, &value)) && value.vt == VT_LPWSTR && value.pwszVal)
+        result = value.pwszVal;
+    PropVariantClear(&value);
+    return result;
+}
+
+// App ID of a web app window (an installed Edge/Chrome site), or an empty
+// string. Such windows belong to the browser's process, so without this they
+// would be grouped, named and iconed as the browser. The window property store
+// is read from window properties; no message is sent to the window.
+static std::wstring GetWebAppId(HWND hWnd, std::wstring* iconResource = nullptr,
+                                std::wstring* displayName = nullptr) {
+    IPropertyStore* store = nullptr;
+    if (FAILED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&store))) || !store) return {};
+    auto id = ReadWindowStringProperty(store, PKEY_AppUserModel_ID);
+    if (!id.empty() && id.find(L"_crx_") == std::wstring::npos) {
+        // Sites installed from the Microsoft Store run in Edge under their
+        // package's ID. Other packaged apps (and UWP frames) are not web apps.
+        bool storeWebApp = false;
+        if (id.find(L'!') != std::wstring::npos &&
+            !(g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd))) {
+            WCHAR fileName[MAX_PATH];
+            GetWindowExeName(hWnd, fileName);
+            storeWebApp = _wcsicmp(fileName, L"msedge.exe") == 0;
+        }
+        if (!storeWebApp &&
+            ReadWindowStringProperty(store, PKEY_AppUserModel_RelaunchCommand)
+                    .find(L"--app-id=") == std::wstring::npos) {
+            id.clear();
         }
     }
-    return false;
+    if (!id.empty() && iconResource)
+        *iconResource = ReadWindowStringProperty(store, PKEY_AppUserModel_RelaunchIconResource);
+    if (!id.empty() && displayName)
+        *displayName = ReadWindowStringProperty(store, PKEY_AppUserModel_RelaunchDisplayNameResource);
+    store->Release();
+    return id;
+}
+
+static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx);
+
+static HICON ResolveWebAppIcon(const std::wstring& id, const std::wstring& resource, int sizePx) {
+    auto key = id + L"_" + std::to_wstring(sizePx);
+    auto& cache = s_resolvingIcons->uwpIcons;
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second->handle;
+    if (IconResolutionCancelled()) return NULL;
+    HICON icon = NULL;
+    if (!resource.empty()) {
+        WCHAR location[MAX_PATH] = {};
+        DWORD length = ExpandEnvironmentStringsW(resource.c_str(), location, ARRAYSIZE(location));
+        if (length && length <= ARRAYSIZE(location)) {
+            int index = PathParseIconLocationW(location);
+            if (SHDefExtractIconW(location, index, 0, &icon, nullptr, sizePx) != S_OK && icon) {
+                DestroyIcon(icon);
+                icon = NULL;
+            }
+        }
+    }
+    if (!icon && !IconResolutionCancelled()) icon = ResolveIconFromAumid(id.c_str(), sizePx);
+    return icon ? CacheWorkerSourceIcon(cache, key, icon) : NULL;
 }
 
 static HICON ResolveWindowIcon(HWND hWnd, int sizePx) {
@@ -7160,11 +7269,17 @@ static HICON ResolveWindowIcon(HWND hWnd, int sizePx) {
     HICON hIcon = TryGetCustomIcon(hWnd, sizePx);
     if (hIcon) return hIcon;
 
+    // A web app uses its own icon, not the browser's executable icon.
+    std::wstring webAppIcon;
+    const auto webAppId = GetWebAppId(hWnd, &webAppIcon);
+    if (IconResolutionCancelled()) return NULL;
+    if (!webAppId.empty()) hIcon = ResolveWebAppIcon(webAppId, webAppIcon, sizePx);
+
     // A crisp exe icon extracted at the exact target size beats the WM_GETICON
     // result, which is a fixed ~32px frame: blurry when upscaled to 48/64 and
     // pixelated when downscaled to 16 (GDI does no smoothing in DrawIconEx).
     // PrivateExtractIconsW picks the best-matching frame at the requested size.
-    if (!hIcon) {
+    if (webAppId.empty()) {
         hIcon = TryGetCrispExeIcon(hWnd, sizePx);
     }
     DWORD_PTR iconResult = 0;
@@ -7174,6 +7289,7 @@ static HICON ResolveWindowIcon(HWND hWnd, int sizePx) {
             hIcon = (HICON)iconResult;
     }
     if (IconResolutionCancelled()) return NULL;
+    if (!hIcon && !webAppId.empty()) hIcon = TryGetCrispExeIcon(hWnd, sizePx);
     if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
     if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
     // UWP / Modern Packaged apps: Explorer IPC extracts authentic AUMID/IShellItem icons
@@ -7244,7 +7360,7 @@ static HICON LoadWindowIcon(HWND hWnd, std::shared_ptr<WindowIconCell>* outCell,
             cell->requestGeneration = ++s_iconRequestGeneration;
             cell->pending = true;
             ++state->pending;
-            state->queue.push_back({cell, cell->requestGeneration, s_iconRules});
+            state->queue.push_back({cell, cell->requestGeneration, s_iconRules, g_isDarkMode});
             SetEvent(state->wake);
         }
         ReleaseSRWLockExclusive(&state->lock);
@@ -8799,6 +8915,12 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
 // unrelated apps; those are keyed per-window to avoid over-grouping.
 static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch) {
     out[0] = 0;
+    // Web apps are grouped by their own app ID, apart from their browser.
+    const auto webAppId = GetWebAppId(hWnd);
+    if (!webAppId.empty()) {
+        _snwprintf_s(out, cch, _TRUNCATE, L"aumid:%s", webAppId.c_str());
+        return;
+    }
     if (g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd)) {
         swprintf_s(out, cch, L"hwnd:%p", (void*)hWnd);
         return;
@@ -8822,9 +8944,34 @@ static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch) {
 // Human-readable application name for a window, taken from the executable's
 // FileDescription version-info field (e.g. "Google Chrome"), falling back to
 // the executable file name without extension.
+// Resolved web app display names by app ID (switcher thread only). Resolving
+// an indirect "@..." name reads resources, so it is done once per app.
+static std::map<std::wstring, std::wstring> s_webAppNames;
+
 static void GetAppName(HWND hWnd, WCHAR* out, size_t cch) {
     out[0] = 0;
     if (TryGetCustomAppName(hWnd, out, cch)) return;
+    std::wstring webAppName;
+    const auto webAppId = GetWebAppId(hWnd, nullptr, &webAppName);
+    if (!webAppId.empty()) {
+        auto cached = s_webAppNames.find(webAppId);
+        if (cached == s_webAppNames.end()) {
+            std::wstring name;
+            if (!webAppName.empty() && webAppName.front() == L'@') {
+                WCHAR resolved[256] = {};
+                if (SUCCEEDED(SHLoadIndirectString(webAppName.c_str(), resolved,
+                                                   ARRAYSIZE(resolved), nullptr)))
+                    name = resolved;
+            } else {
+                name = webAppName;
+            }
+            if (s_webAppNames.size() >= 128) s_webAppNames.clear();
+            cached = s_webAppNames.emplace(webAppId, std::move(name)).first;
+        }
+        // Without a display name, the title modes keep the window's own title.
+        wcsncpy_s(out, cch, cached->second.c_str(), _TRUNCATE);
+        return;
+    }
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     if (!pid) return;
@@ -14486,6 +14633,13 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
 
     g_hCurrentMonitor = hMon;
     UpdateRefreshRateTiming();
+    // The icon requests queued while building the list carry the theme, so a
+    // themed custom icon is resolved again only when the theme has changed.
+    const bool darkMode = ShouldUseDarkMode();
+    if (g_isDarkMode != darkMode) {
+        g_isDarkMode = darkMode;
+        if (s_iconRulesThemed) ResetWindowIconSettings();
+    }
     BuildWindowList();
     RemoveStaleUwpEntriesForPresentation();
 
@@ -14494,7 +14648,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         return;
     }
 
-    g_isDarkMode = ShouldUseDarkMode(); g_isSticky = sticky;
+    g_isSticky = sticky;
 
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_drilledIn = false;
@@ -20756,8 +20910,9 @@ static void LoadSettings() {
     g_touchpadStickyLaunchEnabled.store(g_settings.stickyTouchpadMode);
     PublishNativeSwipePolicy();
 
-    // Custom per-process header (array of { process, iconPath, appName }).
+    // Custom header (array of { process, windowTitle, iconPath, appName }).
     g_customHeaderRules.clear();
+    s_webAppNames.clear();
     auto trimWs = [](std::wstring s) -> std::wstring {
         size_t a = s.find_first_not_of(L" \t\r\n");
         if (a == std::wstring::npos) return L"";
@@ -20769,20 +20924,24 @@ static void LoadSettings() {
     int blankRun = 0;
     for (int i = 0; i < 512; i++) {
         PCWSTR proc = Wh_GetStringSetting(L"customHeader[%d].process", i);
+        PCWSTR title = Wh_GetStringSetting(L"customHeader[%d].windowTitle", i);
         PCWSTR icon = Wh_GetStringSetting(L"customHeader[%d].iconPath", i);
         PCWSTR name = Wh_GetStringSetting(L"customHeader[%d].appName", i);
         bool hasProc = proc && *proc;
+        bool hasTitle = title && *title;
         bool hasIcon = icon && *icon;
         bool hasName = name && *name;
-        if (hasProc && (hasIcon || hasName)) {
-            std::wstring p = trimWs(proc);
+        if ((hasProc || hasTitle) && (hasIcon || hasName)) {
+            std::wstring p = hasProc ? trimWs(proc) : L"";
+            std::wstring tp = hasTitle ? trimWs(title) : L"";
             std::wstring ip = hasIcon ? trimWs(icon) : L"";
             std::wstring an = hasName ? trimWs(name) : L"";
-            if (!p.empty() && (!ip.empty() || !an.empty()))
-                g_customHeaderRules.push_back({p, ip, an});
+            if ((!p.empty() || !tp.empty()) && (!ip.empty() || !an.empty()))
+                g_customHeaderRules.push_back({p, tp, ip, an});
         }
-        blankRun = (!hasProc && !hasIcon && !hasName) ? blankRun + 1 : 0;
+        blankRun = (!hasProc && !hasTitle && !hasIcon && !hasName) ? blankRun + 1 : 0;
         if (proc) Wh_FreeStringSetting(proc);
+        if (title) Wh_FreeStringSetting(title);
         if (icon) Wh_FreeStringSetting(icon);
         if (name) Wh_FreeStringSetting(name);
         if (blankRun >= 8) break;
