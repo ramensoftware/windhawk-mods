@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.6
+// @version         1.7
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
@@ -43,13 +43,20 @@ include the child processes too, to get closer to what Task Manager shows.
 The line can use the Windows accent color, a custom color or no background
 at all, and the font size and text color can be customized.
 
+Optional layout tweaks: the window name and the close button can be moved to
+the bottom of the thumbnail, closer to the mouse pointer (with an optional
+separator line), the close button can be always shown, and thumbnails of
+small windows can be widened to fit the whole line.
+
+![Layout options](https://i.imgur.com/s1RDMVX.png)
+
 Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
 not work with taskbar replacements such as StartAllBack or ExplorerPatcher.
 
 If enabled in the settings, clicking the line opens a process manager on the
 program: Process Explorer (Sysinternals) with the process already selected, if
-it's installed, or Task Manager otherwise. Task Manager has no way to be opened on a specific
-process, so there you have to find it yourself.
+it's installed, or Task Manager otherwise. Task Manager has no way to be
+opened on a specific process, so there you have to find it yourself.
 
 The statistics are collected on a background thread, so the taskbar is never
 slowed down, and only while a thumbnail is actually visible.
@@ -88,6 +95,33 @@ slowed down, and only while a thumbnail is actually visible.
   $options:
   - overlay: Over the preview image, at its bottom
   - below: Below the preview image
+- closeButton: hover
+  $name: Close button
+  $options:
+  - hover: Shown when the mouse is over the thumbnail (Windows default)
+  - always: Always shown
+- widenToFit: false
+  $name: Widen small thumbnails to fit the line
+  $description: >-
+    Thumbnails of small windows are narrow, so the line gets shortened with
+    "…". With this option the thumbnail is made wide enough to show the whole
+    line
+- titleAtBottom: false
+  $name: Title at the bottom
+  $description: >-
+    Move the window name and the close button to a row at the bottom of the
+    thumbnail, below the statistics, so they're closer to the mouse pointer
+- titleSeparator: false
+  $name: Separator above the title
+  $description: >-
+    With the title at the bottom, draw a thin line between the statistics and
+    the title row, in the color of the line background (or of the text, when
+    the line has no background)
+- topSpacing: 8
+  $name: Top spacing with the title at the bottom
+  $description: >-
+    Space in pixels above the preview image when the title is at the bottom,
+    so the image doesn't touch the top edge of the thumbnail (0 to disable)
 - singleLine: true
   $name: Single line
   $description: >-
@@ -152,6 +186,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -169,6 +204,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.h>
@@ -195,6 +231,11 @@ struct Settings {
     bool showProcessCount = true;
     bool includeChildren = true;
     Position position = Position::overlay;
+    bool titleAtBottom = false;
+    int topSpacing = 8;
+    bool titleSeparator = false;
+    bool widenToFit = false;
+    bool closeButtonAlways = false;
     bool singleLine = true;
     double fontSize = 10;
     BackgroundMode background = BackgroundMode::accent;
@@ -1159,11 +1200,36 @@ struct ViewState {
     std::vector<Controls::RowDefinition> addedRows;
     Position injectedPosition = Position::overlay;
 
+    // Title moved to the bottom: what's needed to restore the original layout.
+    bool titleMoved = false;
+    bool injectedTitleAtBottom = false;
+
+    // Close button always visible: the visual state setters/animations that
+    // hide it, removed from their collections (restored on cleanup).
+    bool injectedCloseButtonAlways = false;
+    Controls::Button closeButton{nullptr};
+    std::vector<std::pair<SetterBaseCollection, SetterBase>> removedSetters;
+    std::vector<std::pair<Media::Animation::TimelineCollection,
+                          Media::Animation::Timeline>>
+        removedTimelines;
+    std::vector<Controls::RowDefinition> originalRowOrder;
+    struct MovedChild {
+        FrameworkElement element{nullptr};
+        int32_t row;
+        int32_t rowSpan;
+    };
+    std::vector<MovedChild> movedChildren;
+    int injectedTopSpacing = 0;
+    bool injectedTitleSeparator = false;
+    Controls::Border separator{nullptr};
+    std::vector<std::pair<FrameworkElement, Thickness>> adjustedMargins;
+
     DispatcherTimer timer{nullptr};
     bool timerRunning = false;
     int timerInterval = 0;
     int styleGeneration = 0;
     bool fastPolling = false;  // Waiting for the first result.
+    double widenedMinWidth = 0;  // MinWidth set on the thumbnail, if any.
 
     winrt::event_token loadedToken{};
     winrt::event_token unloadedToken{};
@@ -1303,6 +1369,357 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
             }
             break;
     }
+
+    // Separator above the title: the color of the line background, or of the
+    // text when the line has no background.
+    if (state.separator) {
+        std::optional<Color> separatorColor = background;
+        if (!separatorColor || separatorColor->A == 0) {
+            switch (settings.textColor) {
+                case TextColorMode::white:
+                    separatorColor = ColorHelper::FromArgb(255, 255, 255, 255);
+                    break;
+                case TextColorMode::black:
+                    separatorColor = ColorHelper::FromArgb(255, 0, 0, 0);
+                    break;
+                case TextColorMode::custom:
+                    separatorColor = settings.textCustomColor;
+                    break;
+                case TextColorMode::automatic:
+                    // Neutral gray, visible on light and dark themes.
+                    separatorColor = ColorHelper::FromArgb(255, 128, 128, 128);
+                    break;
+            }
+            separatorColor->A = 0x99;
+        }
+        state.separator.Background(Media::SolidColorBrush(*separatorColor));
+    }
+}
+
+// Logs the structure of the thumbnail grid once (diagnostics for the
+// "title at the bottom" option).
+void LogGridStructure(Controls::Grid const& grid) {
+    static std::atomic<bool> logged;
+    if (logged.exchange(true)) {
+        return;
+    }
+
+    auto rows = grid.RowDefinitions();
+    std::wstring text = L"Thumbnail grid rows:";
+    for (uint32_t i = 0; i < rows.Size(); i++) {
+        auto height = rows.GetAt(i).Height();
+        WCHAR buf[64];
+        swprintf_s(buf, L" [%u: %s %.0f]", i,
+                   height.GridUnitType == GridUnitType::Auto   ? L"auto"
+                   : height.GridUnitType == GridUnitType::Star ? L"star"
+                                                               : L"px",
+                   height.Value);
+        text += buf;
+    }
+    Wh_Log(L"%s", text.c_str());
+
+    for (const auto& child : grid.Children()) {
+        auto fe = child.try_as<FrameworkElement>();
+        if (!fe) {
+            continue;
+        }
+        Wh_Log(L"  child %s #%s row=%d span=%d",
+               winrt::get_class_name(fe).c_str(), fe.Name().c_str(),
+               Controls::Grid::GetRow(fe), Controls::Grid::GetRowSpan(fe));
+    }
+}
+
+// Moves the row with the window name and the close button to the bottom of
+// the grid, after the image (and after the statistics row, if any).
+bool MoveTitleToBottom(ViewState& state, Controls::Grid const& grid) {
+    auto rows = grid.RowDefinitions();
+    int32_t rowCount = (int32_t)rows.Size();
+    if (rowCount < 2) {
+        Wh_Log(L"Title at the bottom: the grid has %d rows, not supported",
+               rowCount);
+        return false;
+    }
+
+    // The direct child of the grid that contains the window name.
+    auto title = FindDescendant(grid, 4, [](DependencyObject const& o) {
+        auto tb = o.try_as<Controls::TextBlock>();
+        return tb && tb.Name() == L"DisplayNameTextBlock";
+    });
+    DependencyObject titleChild = title;
+    while (titleChild) {
+        auto parent = Media::VisualTreeHelper::GetParent(titleChild);
+        if (!parent || parent == grid) {
+            break;
+        }
+        titleChild = parent;
+    }
+    auto titleElement =
+        titleChild ? titleChild.try_as<FrameworkElement>() : nullptr;
+    if (!titleElement ||
+        Media::VisualTreeHelper::GetParent(titleElement) != grid) {
+        Wh_Log(L"Title at the bottom: window name not found");
+        return false;
+    }
+
+    int32_t titleRow = Controls::Grid::GetRow(titleElement);
+    if (titleRow < 0 || titleRow >= rowCount) {
+        return false;
+    }
+
+    // New order: the other rows (image, statistics) keep their order, the
+    // title row goes last.
+    std::vector<Controls::RowDefinition> originalOrder;
+    std::vector<int32_t> newIndexOf(rowCount);
+    int32_t next = 0;
+    for (int32_t i = 0; i < rowCount; i++) {
+        originalOrder.push_back(rows.GetAt(i));
+        if (i != titleRow) {
+            newIndexOf[i] = next++;
+        }
+    }
+    newIndexOf[titleRow] = rowCount - 1;
+
+    // Move the children first (their rows refer to the original order).
+    std::vector<ViewState::MovedChild> movedChildren;
+    for (const auto& child : grid.Children()) {
+        auto fe = child.try_as<FrameworkElement>();
+        if (!fe) {
+            continue;
+        }
+
+        int32_t row = std::clamp(Controls::Grid::GetRow(fe), 0, rowCount - 1);
+        int32_t span = std::max(Controls::Grid::GetRowSpan(fe), 1);
+        int32_t last = std::min(row + span, rowCount) - 1;
+
+        int32_t newRow;
+        int32_t newSpan;
+        if (fe == state.border && state.injectedPosition == Position::overlay) {
+            // Over the image: all the rows except the title.
+            newRow = 0;
+            newSpan = std::max(rowCount - 1, 1);
+        } else if (row == 0 && last == rowCount - 1) {
+            // Spans everything (e.g. a background): unchanged.
+            continue;
+        } else {
+            int32_t first = rowCount;
+            int32_t end = -1;
+            for (int32_t i = row; i <= last; i++) {
+                first = std::min(first, newIndexOf[i]);
+                end = std::max(end, newIndexOf[i]);
+            }
+            newRow = first;
+            newSpan = end - first + 1;
+        }
+
+        if (newRow == row && newSpan == Controls::Grid::GetRowSpan(fe)) {
+            continue;
+        }
+
+        movedChildren.push_back(
+            {fe, Controls::Grid::GetRow(fe), Controls::Grid::GetRowSpan(fe)});
+        Controls::Grid::SetRow(fe, newRow);
+        Controls::Grid::SetRowSpan(fe, newSpan);
+    }
+
+    // Then reorder the row definitions.
+    rows.Clear();
+    for (int32_t i = 0; i < rowCount; i++) {
+        if (i != titleRow) {
+            rows.Append(originalOrder[i]);
+        }
+    }
+    rows.Append(originalOrder[titleRow]);
+
+    // The title row used to give some room at the top: without it the image
+    // would touch the top edge of the thumbnail.
+    int topSpacing = GetSettings()->topSpacing;
+    std::vector<std::pair<FrameworkElement, Thickness>> adjustedMargins;
+    if (topSpacing > 0) {
+        for (const auto& child : grid.Children()) {
+            auto fe = child.try_as<FrameworkElement>();
+            if (!fe || fe == state.border ||
+                Controls::Grid::GetRow(fe) != 0 ||
+                Controls::Grid::GetRowSpan(fe) >= rowCount) {
+                continue;  // Not in the first row, or a full-size background.
+            }
+            Thickness margin = fe.Margin();
+            adjustedMargins.push_back({fe, margin});
+            margin.Top += topSpacing;
+            fe.Margin(margin);
+        }
+    }
+
+    state.titleMoved = true;
+    state.adjustedMargins = std::move(adjustedMargins);
+
+    // Optional thin line at the top of the title row. Its color is set by
+    // ApplyStyle.
+    if (GetSettings()->titleSeparator) {
+        Controls::Border separator;
+        separator.Height(1);
+        separator.VerticalAlignment(VerticalAlignment::Top);
+        separator.HorizontalAlignment(HorizontalAlignment::Stretch);
+        separator.Margin(ThicknessHelper::FromLengths(8, 0, 8, 0));
+        separator.IsHitTestVisible(false);
+        Controls::Grid::SetRow(separator, rowCount - 1);
+        Controls::Grid::SetColumnSpan(separator, 100);
+        grid.Children().Append(separator);
+        state.separator = separator;
+    }
+    state.originalRowOrder = std::move(originalOrder);
+    state.movedChildren = std::move(movedChildren);
+    return true;
+}
+
+void RestoreTitle(ViewState& state, Controls::Grid const& grid) {
+    if (!state.titleMoved) {
+        return;
+    }
+
+    for (const auto& [fe, margin] : state.adjustedMargins) {
+        fe.Margin(margin);
+    }
+    state.adjustedMargins.clear();
+
+    if (state.separator) {
+        uint32_t index;
+        if (grid.Children().IndexOf(state.separator, index)) {
+            grid.Children().RemoveAt(index);
+        }
+        state.separator = nullptr;
+    }
+
+    for (const auto& moved : state.movedChildren) {
+        Controls::Grid::SetRow(moved.element, moved.row);
+        Controls::Grid::SetRowSpan(moved.element, moved.rowSpan);
+    }
+
+    // Only if the rows are still the ones we reordered.
+    auto rows = grid.RowDefinitions();
+    if (grid && rows.Size() == state.originalRowOrder.size()) {
+        rows.Clear();
+        for (const auto& row : state.originalRowOrder) {
+            rows.Append(row);
+        }
+    }
+
+    state.titleMoved = false;
+    state.originalRowOrder.clear();
+    state.movedChildren.clear();
+}
+
+bool IsCloseButtonTarget(DependencyObject const& closeButton,
+                         winrt::Windows::Foundation::IInspectable const& target) {
+    if (!target) {
+        return false;
+    }
+    if (auto obj = target.try_as<DependencyObject>()) {
+        return obj == closeButton;
+    }
+    return winrt::unbox_value_or<winrt::hstring>(target, L"") ==
+           L"CloseButton";
+}
+
+// Keeps the close button always visible, by removing from the visual states
+// of the thumbnail what hides it (they are per-thumbnail instances).
+void ForceCloseButtonVisible(ViewState& state, Controls::Grid const& grid) {
+    auto found = FindDescendant(grid, 3, [](DependencyObject const& o) {
+        auto button = o.try_as<Controls::Button>();
+        return button && button.Name() == L"CloseButton";
+    });
+    auto closeButton = found ? found.try_as<Controls::Button>() : nullptr;
+    if (!closeButton) {
+        Wh_Log(L"Close button not found");
+        return;
+    }
+
+    int removedSetters = 0, removedTimelines = 0, failed = 0;
+    for (FrameworkElement owner : {grid.as<FrameworkElement>(),
+                                   state.element.get()}) {
+        if (!owner) {
+            continue;
+        }
+        for (const auto& group : VisualStateManager::GetVisualStateGroups(owner)) {
+            for (const auto& visualState : group.States()) {
+                auto setters = visualState.Setters();
+                for (int32_t i = (int32_t)setters.Size() - 1; i >= 0; i--) {
+                    auto setter = setters.GetAt(i).try_as<Setter>();
+                    if (!setter || !setter.Target() ||
+                        !IsCloseButtonTarget(closeButton,
+                                             setter.Target().Target())) {
+                        continue;
+                    }
+                    try {
+                        state.removedSetters.push_back({setters, setter});
+                        setters.RemoveAt(i);
+                        removedSetters++;
+                    } catch (...) {
+                        state.removedSetters.pop_back();
+                        failed++;
+                    }
+                }
+
+                auto storyboard = visualState.Storyboard();
+                if (!storyboard) {
+                    continue;
+                }
+                auto timelines = storyboard.Children();
+                for (int32_t i = (int32_t)timelines.Size() - 1; i >= 0; i--) {
+                    auto timeline = timelines.GetAt(i);
+                    if (Media::Animation::Storyboard::GetTargetName(timeline) !=
+                        L"CloseButton") {
+                        continue;
+                    }
+                    try {
+                        state.removedTimelines.push_back({timelines, timeline});
+                        timelines.RemoveAt(i);
+                        removedTimelines++;
+                    } catch (...) {
+                        state.removedTimelines.pop_back();
+                        failed++;
+                    }
+                }
+            }
+        }
+    }
+
+    closeButton.Visibility(Visibility::Visible);
+    closeButton.Opacity(1.0);
+    state.closeButton = closeButton;
+
+    static std::atomic<bool> logged;
+    if (!logged.exchange(true)) {
+        Wh_Log(L"Close button always visible: removed %d setters, %d "
+               L"animations, %d failed",
+               removedSetters, removedTimelines, failed);
+    }
+}
+
+void RestoreCloseButton(ViewState& state) {
+    for (auto it = state.removedSetters.rbegin();
+         it != state.removedSetters.rend(); ++it) {
+        try {
+            it->first.Append(it->second);
+        } catch (...) {
+        }
+    }
+    for (auto it = state.removedTimelines.rbegin();
+         it != state.removedTimelines.rend(); ++it) {
+        try {
+            it->first.Append(it->second);
+        } catch (...) {
+        }
+    }
+    if (state.closeButton) {
+        try {
+            state.closeButton.ClearValue(UIElement::VisibilityProperty());
+            state.closeButton.ClearValue(UIElement::OpacityProperty());
+        } catch (...) {
+        }
+    }
+    state.removedSetters.clear();
+    state.removedTimelines.clear();
+    state.closeButton = nullptr;
 }
 
 // Removes exactly what was injected (the line and our own row definitions).
@@ -1327,6 +1744,9 @@ void RemoveInjected(ViewState& state) {
 
     if (auto grid = state.grid.get()) {
         try {
+            RestoreTitle(state, grid);
+            RestoreCloseButton(state);
+
             if (state.border) {
                 uint32_t index;
                 if (grid.Children().IndexOf(state.border, index)) {
@@ -1352,6 +1772,14 @@ void RemoveInjected(ViewState& state) {
     state.border = nullptr;
     state.textBlock = nullptr;
     state.addedRows.clear();
+    state.titleMoved = false;
+    state.originalRowOrder.clear();
+    state.movedChildren.clear();
+    state.removedSetters.clear();
+    state.removedTimelines.clear();
+    state.closeButton = nullptr;
+    state.adjustedMargins.clear();
+    state.separator = nullptr;
 }
 
 bool InjectStats(ViewState& state) {
@@ -1366,12 +1794,20 @@ bool InjectStats(ViewState& state) {
     }
 
     Position position = GetSettings()->position;
+    bool titleAtBottom = GetSettings()->titleAtBottom;
+    int topSpacing = GetSettings()->topSpacing;
+    bool titleSeparator = GetSettings()->titleSeparator;
+    bool closeButtonAlways = GetSettings()->closeButtonAlways;
 
     if (state.border) {
         // Still in place? The template may have been applied again, with a
         // new grid, or the position setting may have changed.
         uint32_t index;
         if (state.grid.get() == grid && state.injectedPosition == position &&
+            state.injectedTitleAtBottom == titleAtBottom &&
+            state.injectedTopSpacing == topSpacing &&
+            state.injectedTitleSeparator == titleSeparator &&
+            state.injectedCloseButtonAlways == closeButtonAlways &&
             grid.Children().IndexOf(state.border, index)) {
             return true;
         }
@@ -1439,6 +1875,19 @@ bool InjectStats(ViewState& state) {
     state.textBlock = textBlock;
     state.addedRows = std::move(addedRows);
     state.injectedPosition = position;
+    state.injectedTitleAtBottom = titleAtBottom;
+    state.injectedTopSpacing = topSpacing;
+    state.injectedTitleSeparator = titleSeparator;
+
+    if (titleAtBottom) {
+        LogGridStructure(grid);
+        MoveTitleToBottom(state, grid);
+    }
+
+    state.injectedCloseButtonAlways = closeButtonAlways;
+    if (closeButtonAlways) {
+        ForceCloseButtonVisible(state, grid);
+    }
 
     // Clicks on the line open a process manager instead of switching to the
     // window: the pointer events are marked as handled so that the thumbnail
@@ -1492,6 +1941,47 @@ void ReleaseTimer(ViewState& state) {
     }
 }
 
+// Makes the thumbnail wide enough for the whole line ("Widen small
+// thumbnails to fit the line"), or restores its original width.
+void UpdateThumbnailWidth(ViewState& state,
+                          FrameworkElement const& element,
+                          const Settings& settings) {
+    if (!settings.widenToFit || !state.textBlock) {
+        if (state.widenedMinWidth > 0) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            state.widenedMinWidth = 0;
+        }
+        return;
+    }
+
+    auto text = state.textBlock.Text();
+    if (text.empty()) {
+        return;
+    }
+
+    // Measure the full line with a detached copy of the text block, so the
+    // layout of the thumbnail isn't disturbed.
+    Controls::TextBlock measure;
+    measure.FontSize(state.textBlock.FontSize());
+    measure.FontFamily(state.textBlock.FontFamily());
+    measure.TextWrapping(TextWrapping::NoWrap);
+    measure.Text(text);
+    measure.Measure(winrt::Windows::Foundation::Size{
+        std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::infinity()});
+
+    // Text + padding of the line + its margins + some room for the
+    // thumbnail's own padding.
+    double required = measure.DesiredSize().Width + 12 + 12 + 16;
+
+    // Only grow while the thumbnail is shown: shrinking at every value change
+    // would make it jump.
+    if (required > state.widenedMinWidth + 0.5) {
+        element.MinWidth(required);
+        state.widenedMinWidth = required;
+    }
+}
+
 void UpdateView(const std::shared_ptr<ViewState>& state) {
     if (g_unloading) {
         return;
@@ -1512,6 +2002,12 @@ void UpdateView(const std::shared_ptr<ViewState>& state) {
     if (state->styleGeneration != g_styleGeneration) {
         state->styleGeneration = g_styleGeneration;
         ApplyStyle(*state, *settings);
+        // New font size or option turned off: measure again from scratch.
+        if (state->widenedMinWidth > 0) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            state->widenedMinWidth = 0;
+        }
+        UpdateThumbnailWidth(*state, element, *settings);
     }
 
     // Until the first result arrives, poll quickly so that the line shows up
@@ -1554,6 +2050,8 @@ void UpdateView(const std::shared_ptr<ViewState>& state) {
     state->textBlock.Text(*text);
     state->border.Visibility(text->empty() ? Visibility::Collapsed
                                            : Visibility::Visible);
+
+    UpdateThumbnailWidth(*state, element, *settings);
 }
 
 void StartTimer(const std::shared_ptr<ViewState>& state) {
@@ -1778,6 +2276,10 @@ void CleanupViewState(const std::shared_ptr<ViewState>& state) {
     ReleaseTimer(*state);
 
     if (auto element = state->element.get()) {
+        if (state->widenedMinWidth > 0) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            state->widenedMinWidth = 0;
+        }
         if (state->loadedToken) {
             element.Loaded(state->loadedToken);
         }
@@ -1991,6 +2493,15 @@ void LoadSettings() {
     settings->includeChildren = Wh_GetIntSetting(L"includeChildren");
 
     auto position = WindhawkUtils::StringSetting::make(L"position");
+    settings->titleAtBottom = Wh_GetIntSetting(L"titleAtBottom");
+    int topSpacing = Wh_GetIntSetting(L"topSpacing");
+    settings->topSpacing = (topSpacing >= 0 && topSpacing <= 40) ? topSpacing : 8;
+    settings->titleSeparator = Wh_GetIntSetting(L"titleSeparator");
+    settings->widenToFit = Wh_GetIntSetting(L"widenToFit");
+    settings->closeButtonAlways =
+        wcscmp(WindhawkUtils::StringSetting::make(L"closeButton").get(),
+               L"always") == 0;
+
     settings->position = wcscmp(position.get(), L"below") == 0 ? Position::below
                                                          : Position::overlay;
 
