@@ -1315,6 +1315,28 @@ void EnsureTaskbarTopmost(HWND hTaskbarWnd) {
            (DWORD)(ULONG_PTR)hTaskbarWnd);
 }
 
+// The shell takes the topmost flag off a taskbar when it reports a fullscreen
+// ("rude") window on its monitor, and puts it back when that window leaves.
+// When the window leaves into a maximized state instead (e.g. a browser
+// leaving F11), the mod suppresses the shell's rudeness report for it, so the
+// shell's own restore never comes and the bar stays under every window: the
+// screen edge no longer reveals it. Queue the bars on that monitor for one
+// EnsureTaskbarTopmost check; it waits while a true fullscreen window is
+// there. Must only be called on the taskbar thread.
+void QueueTopmostCheckForMonitor(HMONITOR monitor) {
+    std::unordered_set<HWND> secondaryTaskbarWindows;
+    HWND hPrimary = FindTaskbarWindows(&secondaryTaskbarWindows);
+    if (hPrimary &&
+        MonitorFromWindow(hPrimary, MONITOR_DEFAULTTONEAREST) == monitor) {
+        g_taskbarsPendingTopmostCheck.insert(hPrimary);
+    }
+    for (HWND hSec : secondaryTaskbarWindows) {
+        if (MonitorFromWindow(hSec, MONITOR_DEFAULTTONEAREST) == monitor) {
+            g_taskbarsPendingTopmostCheck.insert(hSec);
+        }
+    }
+}
+
 // May run on the WinEvent thread. The topmost check happens in the posted
 // update handler, on the taskbar thread that owns the pending set.
 void AdjustAllTaskbars() {
@@ -1871,6 +1893,7 @@ void WINAPI TrayUI_RudenessChanged_Hook(void* pThis, int isRude) {
     if (isRude) {
         HMONITOR primaryMonitor =
             MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        QueueTopmostCheckForMonitor(primaryMonitor);
         MONITORINFO monitorInfo{
             .cbSize = sizeof(MONITORINFO),
         };
@@ -1903,6 +1926,11 @@ void WINAPI CSecondaryTray_OnRudeWindowStateChange_Hook(void* pThis,
                                                         void* pMonitor,
                                                         int flags,
                                                         HWND hRudeWnd) {
+    if ((flags & 1) && hRudeWnd) {
+        QueueTopmostCheckForMonitor(
+            MonitorFromWindow(hRudeWnd, MONITOR_DEFAULTTONEAREST));
+    }
+
     if ((flags & 1) && hRudeWnd && !IsWindowExcluded(hRudeWnd)) {
         HMONITOR monitor = MonitorFromWindow(hRudeWnd, MONITOR_DEFAULTTONEAREST);
         MONITORINFO monitorInfo{
@@ -1964,6 +1992,57 @@ using TrayUI__AutoHideCollision_t = void(WINAPI*)(void* pThis);
 TrayUI__AutoHideCollision_t TrayUI__AutoHideCollision_Original;
 void WINAPI TrayUI__AutoHideCollision_Hook(void* pThis) {
     Wh_Log(L"Skipping the shell's \"toolbar already hidden\" warning");
+}
+
+// One tick of the mod's retract timer, which asks the shell to hide a bar
+// once the pointer has been off it for 400 ms. A hide request made while the
+// pointer is still on the bar does nothing, and the shell doesn't always try
+// again after the pointer leaves, so without this timer the bar can stay up
+// until some unrelated window event. Returns true when the delay expired and
+// the caller should request the hide; the timer is then stopped.
+bool RetractTimerTick(HWND hWnd, HMONITOR monitor) {
+    if (ShouldKeepTaskbarShown(hWnd, monitor)) {
+        KillTimer(hWnd, kModRetractTimer);
+        RemoveProp(hWnd, kModRetractLeftTickProp);
+        return false;
+    }
+
+    if (IsCursorOverTaskbar(hWnd) || IsTaskbarOrChildForeground(hWnd)) {
+        RemoveProp(hWnd, kModRetractLeftTickProp);
+        return false;
+    }
+
+    bool isExpanded = false;
+    if (g_winVersion >= WinVersion::Win11 && !g_settings.oldTaskbarOnWin11) {
+        isExpanded = IsTaskbarFullyShown(hWnd, monitor);
+    } else {
+        isExpanded = IsTaskbarOnScreen(hWnd, monitor);
+    }
+
+    // If neither expanded nor on screen, stop the retract timer.
+    if (!isExpanded && !IsTaskbarOnScreen(hWnd, monitor)) {
+        KillTimer(hWnd, kModRetractTimer);
+        RemoveProp(hWnd, kModRetractLeftTickProp);
+        return false;
+    }
+
+    DWORD currentTick = GetTickCount();
+    DWORD leftTick = (DWORD)(ULONG_PTR)GetProp(hWnd, kModRetractLeftTickProp);
+    if (leftTick == 0) {
+        SetProp(hWnd, kModRetractLeftTickProp, (HANDLE)(ULONG_PTR)currentTick);
+        return false;
+    }
+
+    if (currentTick - leftTick < 400) {
+        return false;
+    }
+
+    RemoveProp(hWnd, kModRetractLeftTickProp);
+    RemoveProp(hWnd, L"Windhawk_WasFullyShown");
+    KillTimer(hWnd, kModRetractTimer);
+
+    Wh_Log(L"Retract timeout expired for taskbar %08X", (DWORD)(ULONG_PTR)hWnd);
+    return true;
 }
 
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis,
@@ -2048,49 +2127,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     } else if (Msg == WM_TIMER && wParam == kModRetractTimer) {
         HMONITOR monitor =
             GetTaskbarMonitor(hWnd, TrayUI_GetStuckMonitor_Original(pThis));
-        bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
-
-        if (keepShown) {
-            KillTimer(hWnd, kModRetractTimer);
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        if (IsCursorOverTaskbar(hWnd) || IsTaskbarOrChildForeground(hWnd)) {
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        bool isExpanded = false;
-        if (g_winVersion >= WinVersion::Win11 && !g_settings.oldTaskbarOnWin11) {
-            isExpanded = IsTaskbarFullyShown(hWnd, monitor);
-        } else {
-            isExpanded = IsTaskbarOnScreen(hWnd, monitor);
-        }
-
-        // If neither expanded nor on screen, stop the retract timer.
-        if (!isExpanded && !IsTaskbarOnScreen(hWnd, monitor)) {
-            KillTimer(hWnd, kModRetractTimer);
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            return 0;
-        }
-
-        DWORD currentTick = GetTickCount();
-        DWORD leftTick = (DWORD)(ULONG_PTR)GetProp(hWnd, kModRetractLeftTickProp);
-        if (leftTick == 0) {
-            SetProp(hWnd, kModRetractLeftTickProp,
-                    (HANDLE)(ULONG_PTR)currentTick);
-            return 0;
-        }
-
-        if (currentTick - leftTick >= 400) {
-            RemoveProp(hWnd, kModRetractLeftTickProp);
-            RemoveProp(hWnd, L"Windhawk_WasFullyShown");
-            KillTimer(hWnd, kModRetractTimer);
-
-            Wh_Log(L"Retract timeout expired for taskbar %08X",
-                   (DWORD)(ULONG_PTR)hWnd);
-
+        if (RetractTimerTick(hWnd, monitor)) {
             if (EnsureAutoHideEnabled()) {
                 PostHideRequest(hWnd, L"retract timer");
             } else if (g_autoHideEnableFailed) {
@@ -2098,9 +2135,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 TrayUI__Hide_Original(pThis);
                 SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
             }
-            return 0;
         }
-
         return 0;
     } else if (Msg == g_getTaskbarRectRegisteredMsg) {
         HMONITOR monitor = (HMONITOR)wParam;
@@ -2128,6 +2163,16 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         EnsureTaskbarTopmost(hWnd);
 
         if (!g_wasAutoHideProcessed) {
+            // The mod can't know what happened to the bars before it loaded
+            // (or while it was off), so check each one's topmost flag once.
+            std::unordered_set<HWND> secondaryTaskbarWindows;
+            FindTaskbarWindows(&secondaryTaskbarWindows);
+            for (HWND hSec : secondaryTaskbarWindows) {
+                g_taskbarsPendingTopmostCheck.insert(hSec);
+            }
+            g_taskbarsPendingTopmostCheck.insert(hWnd);
+            EnsureTaskbarTopmost(hWnd);
+
             RecordOriginalAutoHideState(hWnd);
             if (!GetAutoHideEnabled(hWnd)) {
                 SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
@@ -2226,10 +2271,26 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
         EndHideEpisode(hWnd, L"window destroyed");
         g_lastExpandDecision.erase(hWnd);
+        KillTimer(hWnd, kModRetractTimer);
+        RemoveProp(hWnd, kModRetractLeftTickProp);
+        RemoveProp(hWnd, L"Windhawk_WasFullyShown");
         g_taskbarsKeptShown.erase(pThis);
         g_taskbarToViewCoordinator.erase(hWnd);
         g_taskbarsPendingTopmostCheck.erase(hWnd);
         g_taskbarWndByObject.erase(pThis);
+    } else if (Msg == WM_TIMER && wParam == kModRetractTimer) {
+        HMONITOR monitor = GetTaskbarMonitor(
+            hWnd, CSecondaryTray_GetMonitor_Original(QueryViaVtable(
+                      pThis, CSecondaryTray_vftable_ISecondaryTray)));
+        if (RetractTimerTick(hWnd, monitor)) {
+            if (EnsureAutoHideEnabled()) {
+                PostHideRequest(hWnd, L"retract timer");
+            } else if (g_autoHideEnableFailed) {
+                CSecondaryTray__AutoHide_Original(pThis, true);
+                SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
+            }
+        }
+        return 0;
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
         if (g_settings.primaryMonitorOnly) {
             if (wParam) {
@@ -2297,6 +2358,7 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                 }
             } else {
                 EndHideEpisode(hWnd, L"pointer or flyout on the taskbar");
+                SetTimer(hWnd, kModRetractTimer, 100, nullptr);
             }
         } else {
             EndHideEpisode(hWnd, keepShown ? L"kept shown" : L"no longer expanded");
