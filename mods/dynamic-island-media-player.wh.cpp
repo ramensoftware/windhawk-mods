@@ -7,7 +7,7 @@
 // @github         https://github.com/BOG090909
 // @homepage       https://github.com/BOG090909/dynamic-island-media-player
 // @include        windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -ld2d1 -ldwrite -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinmm -lcomdlg32 -ldwmapi -lshcore
+// @compilerOptions -lole32 -loleaut32 -ld2d1 -ldwrite -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinmm -lcomdlg32 -lcomctl32 -ldwmapi -lshcore
 // @license        MIT
 // ==/WindhawkMod==
 
@@ -210,6 +210,7 @@ The goal is to provide a more focused and customizable Dynamic Island experience
 #include <mmsystem.h>
 #include <objbase.h>
 #include <commdlg.h>
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <shellscalingapi.h>
 #include <wrl/client.h>
@@ -411,7 +412,7 @@ struct MediaSnapshot {
 
     std::shared_ptr<const BitmapPixels> art;
     std::shared_ptr<const BitmapPixels> sourceIcon;
-    // Обложка предыдущего трека для crossfade.
+    // Previous track artwork used during the crossfade.
     std::shared_ptr<const BitmapPixels> previousArt;
     double artTransitionStartedAt = 0.0;
     double titleChangedAt = 0.0;
@@ -659,10 +660,196 @@ bool PickColorWithDialog(HWND owner, D2D1_COLOR_F& outColor) {
     if (ChooseColorW(&cc)) {
         outColor = D2D1::ColorF(GetRValue(cc.rgbResult) / 255.0f,
                                 GetGValue(cc.rgbResult) / 255.0f,
-                                GetBValue(cc.rgbResult) / 255.0f, 1.0f);
+                                GetBValue(cc.rgbResult) / 255.0f, outColor.a);
         return true;
     }
     return false;
+}
+
+
+struct OpacityDialogState {
+    int initialPercent = 100;
+    int selectedPercent = 100;
+    bool accepted = false;
+    HWND slider = nullptr;
+    HWND valueLabel = nullptr;
+};
+
+constexpr int kOpacitySliderId = 4101;
+constexpr int kOpacityValueId = 4102;
+constexpr int kOpacityOkId = 4103;
+constexpr int kOpacityCancelId = 4104;
+
+LRESULT CALLBACK OpacityDialogProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    auto* state = reinterpret_cast<OpacityDialogState*>(
+        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+    if (message == WM_NCCREATE) {
+        auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        state = static_cast<OpacityDialogState*>(create->lpCreateParams);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+    }
+
+    switch (message) {
+        case WM_CREATE: {
+            state = reinterpret_cast<OpacityDialogState*>(
+                GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+            if (!state) return -1;
+
+            const DWORD labelStyle = WS_CHILD | WS_VISIBLE;
+            CreateWindowExW(0, L"STATIC", Tr(L"Прозорість", L"Прозрачность", L"Opacity"),
+                            labelStyle, 18, 18, 250, 22, hwnd, nullptr,
+                            GetModuleHandleW(nullptr), nullptr);
+
+            state->slider = CreateWindowExW(
+                0, TRACKBAR_CLASSW, L"",
+                WS_CHILD | WS_VISIBLE | TBS_AUTOTICKS | TBS_TOOLTIPS,
+                18, 48, 300, 42, hwnd,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpacitySliderId)),
+                GetModuleHandleW(nullptr), nullptr);
+            if (!state->slider) return -1;
+            SendMessageW(state->slider, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+            SendMessageW(state->slider, TBM_SETTICFREQ, 10, 0);
+            SendMessageW(state->slider, TBM_SETPOS, TRUE, state->initialPercent);
+
+            wchar_t valueText[32];
+            swprintf_s(valueText, L"%d%%", state->initialPercent);
+            state->valueLabel = CreateWindowExW(
+                0, L"STATIC", valueText, labelStyle | SS_RIGHT,
+                270, 18, 48, 22, hwnd,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpacityValueId)),
+                GetModuleHandleW(nullptr), nullptr);
+
+            CreateWindowExW(0, L"BUTTON", Tr(L"Застосувати", L"Применить", L"Apply"),
+                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                            150, 108, 80, 28, hwnd,
+                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpacityOkId)),
+                            GetModuleHandleW(nullptr), nullptr);
+            CreateWindowExW(0, L"BUTTON", Tr(L"Скасувати", L"Отмена", L"Cancel"),
+                            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                            238, 108, 80, 28, hwnd,
+                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpacityCancelId)),
+                            GetModuleHandleW(nullptr), nullptr);
+            return 0;
+        }
+
+        case WM_HSCROLL:
+            if (state && reinterpret_cast<HWND>(lParam) == state->slider) {
+                state->selectedPercent = static_cast<int>(
+                    SendMessageW(state->slider, TBM_GETPOS, 0, 0));
+                wchar_t valueText[32];
+                swprintf_s(valueText, L"%d%%", state->selectedPercent);
+                SetWindowTextW(state->valueLabel, valueText);
+            }
+            return 0;
+
+        case WM_COMMAND:
+            if (state) {
+                const int controlId = LOWORD(wParam);
+                if (controlId == kOpacityOkId) {
+                    state->selectedPercent = static_cast<int>(
+                        SendMessageW(state->slider, TBM_GETPOS, 0, 0));
+                    state->accepted = true;
+                    DestroyWindow(hwnd);
+                    return 0;
+                }
+                if (controlId == kOpacityCancelId) {
+                    DestroyWindow(hwnd);
+                    return 0;
+                }
+            }
+            break;
+
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+
+    }
+
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+bool PickOpacityWithDialog(HWND owner, float& opacity) {
+    INITCOMMONCONTROLSEX controls = { sizeof(controls), ICC_BAR_CLASSES };
+    InitCommonControlsEx(&controls);
+
+    static const wchar_t kOpacityDialogClass[] = L"Windhawk.DynamicIslandOpacityDialog";
+    static std::once_flag registerClassOnce;
+    static bool classRegistered = false;
+    std::call_once(registerClassOnce, [] {
+        WNDCLASSEXW wc = { sizeof(wc) };
+        wc.lpfnWndProc = OpacityDialogProc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
+        wc.lpszClassName = kOpacityDialogClass;
+        classRegistered = RegisterClassExW(&wc) != 0 ||
+                          GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    });
+    if (!classRegistered) return false;
+
+    OpacityDialogState state;
+    state.initialPercent = ClampInt(
+        static_cast<int>(std::round(opacity * 100.0f)), 0, 100);
+    state.selectedPercent = state.initialPercent;
+
+    HWND dialog = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        kOpacityDialogClass,
+        Tr(L"Прозорість кольору", L"Прозрачность цвета", L"Color opacity"),
+        WS_CAPTION | WS_SYSMENU | WS_POPUP,
+        CW_USEDEFAULT, CW_USEDEFAULT, 354, 184,
+        owner, nullptr, GetModuleHandleW(nullptr), &state);
+    if (!dialog) return false;
+
+    RECT windowRect = {};
+    GetWindowRect(dialog, &windowRect);
+    const int width = windowRect.right - windowRect.left;
+    const int height = windowRect.bottom - windowRect.top;
+    RECT ownerRect = {};
+    if (owner && GetWindowRect(owner, &ownerRect)) {
+        SetWindowPos(dialog, HWND_TOPMOST,
+                     ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2,
+                     ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2,
+                     0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    if (owner) EnableWindow(owner, FALSE);
+    ShowWindow(dialog, SW_SHOW);
+    SetForegroundWindow(dialog);
+    SetFocus(state.slider);
+
+    MSG msg = {};
+    while (IsWindow(dialog)) {
+        const BOOL result = GetMessageW(&msg, nullptr, 0, 0);
+        if (result <= 0) {
+            if (result == 0) PostQuitMessage(static_cast<int>(msg.wParam));
+            break;
+        }
+        if (!IsDialogMessageW(dialog, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if (owner) {
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+    }
+
+    if (state.accepted) {
+        opacity = state.selectedPercent / 100.0f;
+        return true;
+    }
+    return false;
+}
+
+bool PickColorAndOpacityWithDialog(HWND owner, D2D1_COLOR_F& color) {
+    D2D1_COLOR_F selected = color;
+    if (!PickColorWithDialog(owner, selected)) return false;
+    if (!PickOpacityWithDialog(owner, selected.a)) return false;
+    color = selected;
+    return true;
 }
 
 void LoadAppPositionsFromRegistry() {
@@ -707,7 +894,7 @@ void SaveRainbowPalette() {
     std::wstring s;
     for (const auto& c : g_rainbowPalette) {
         wchar_t hex[32];
-        swprintf_s(hex, L"#%02X%02X%02X,", static_cast<int>(c.r * 255), static_cast<int>(c.g * 255), static_cast<int>(c.b * 255));
+        swprintf_s(hex, L"#%02X%02X%02X%02X,", static_cast<int>(c.r * 255), static_cast<int>(c.g * 255), static_cast<int>(c.b * 255), static_cast<int>(c.a * 255));
         s += hex;
     }
     Wh_SetStringValue(L"RainbowPalette", s.c_str());
@@ -1488,7 +1675,6 @@ DWORD WINAPI MediaThreadProc(void*) {
     static double s_lastVlcScan = 0.0;
     static double s_lastIconSearch = 0.0;
     static std::wstring s_preferredAumid;
-    static double s_lastPlayingTime = 0.0;
     static double s_lastAvailableTime = 0.0;
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
@@ -1531,12 +1717,11 @@ DWORD WINAPI MediaThreadProc(void*) {
                 }
 
                 if (foundPlaying) {
-                    // Активно воспроизводимая сессия всегда имеет приоритет.
+                    // A currently playing session always takes priority.
                     s_preferredAumid = session.SourceAppUserModelId().c_str();
-                    s_lastPlayingTime = now;
                 } else {
-                    // Если ничего не воспроизводится, продолжаем использовать
-                    // последнее выбранное приложение, в том числе на паузе.
+                    // If nothing is playing, keep using the
+                    // previously selected app, including while it is paused.
                     if (!s_preferredAumid.empty()) {
                         for (auto const& candidate : manager.GetSessions()) {
                             try {
@@ -1550,8 +1735,8 @@ DWORD WINAPI MediaThreadProc(void*) {
                         }
                     }
 
-                    // Не переключаемся на CurrentSession браузера,
-                    // если ранее уже был выбран другой источник.
+                    // Do not switch to the browser CurrentSession
+                    // if another source has already been selected.
                     if (!session && s_preferredAumid.empty()) {
                         auto currentSystemSession = manager.GetCurrentSession();
 
@@ -1650,9 +1835,9 @@ DWORD WINAPI MediaThreadProc(void*) {
                     next.trackId = next.sourceAppUserModelId + L"|VLC_HACK|" + next.title;
                 }
 
-                // Получаем обложку текущего трека из Windows Media Session.
-                // Запрос не выполняется на каждом 200-мс цикле: если обложка
-                // временно недоступна, повторяем попытку не чаще одного раза в 2 сек.
+                // Retrieve the current track artwork from the Windows Media Session.
+                // Do not request artwork on every 200 ms polling cycle. If it is
+                // temporarily unavailable, retry no more than once every 2 seconds.
                 const bool sameArtTrack = next.trackId == prev.trackId;
                 if (sameArtTrack) {
                     next.art = prev.art;
@@ -1687,11 +1872,11 @@ DWORD WINAPI MediaThreadProc(void*) {
                             }
                         }
                     } catch (...) {
-                        // Не ломаем обновление метаданных, если источник не отдал обложку.
+                        // Do not interrupt metadata updates if the source does not provide artwork.
                     }
                 }
 
-                // После завершения crossfade больше не храним предыдущую обложку.
+                // Release the previous artwork after the crossfade completes.
                 if (next.art && next.artTransitionStartedAt > 0.0 &&
                     now - next.artTransitionStartedAt >= 0.5) {
                     next.previousArt.reset();
@@ -1714,18 +1899,16 @@ DWORD WINAPI MediaThreadProc(void*) {
         } catch (...) {
             selectedSession = nullptr;
             manager = nullptr;
-        }
-
-        // Если Windows временно потеряла медиасессию,
-        // сохраняем последнее состояние на 3 секунды.
-        if (!next.available && prev.available &&
-            s_lastAvailableTime > 0.0 &&
-            (now - s_lastAvailableTime) < 3.0) {
-            next = prev;
+            next = MediaSnapshot{};
         }
 
         if (next.available) {
             s_lastAvailableTime = now;
+        } else if (prev.available && s_lastAvailableTime > 0.0 &&
+                   (now - s_lastAvailableTime) < 3.0) {
+            // Keep the last snapshot briefly after the media session disappears.
+            // Do not refresh the timestamp while holding the previous snapshot.
+            next = prev;
         }
 
         bool trackChanged = false;
@@ -2137,7 +2320,7 @@ class Renderer {
         bool onDark = true;
     };
 
-    static D2D1_COLOR_F WithAlpha(D2D1_COLOR_F c, float a) { c.a = Clamp(a, 0.0f, 1.0f); return c; }
+    static D2D1_COLOR_F WithAlpha(D2D1_COLOR_F c, float a) { c.a = Clamp(c.a * a, 0.0f, 1.0f); return c; }
 
     static D2D1_COLOR_F MixColor(const D2D1_COLOR_F& a, const D2D1_COLOR_F& b, float t) {
         return D2D1::ColorF(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t,
@@ -2278,7 +2461,7 @@ class Renderer {
             currentAccent_.r += (target.r - currentAccent_.r) * k;
             currentAccent_.g += (target.g - currentAccent_.g) * k;
             currentAccent_.b += (target.b - currentAccent_.b) * k;
-            currentAccent_.a = 1.0f;
+            currentAccent_.a += (target.a - currentAccent_.a) * k;
             if (std::abs(currentAccent_.r - target.r) > 0.001f ||
                 std::abs(currentAccent_.g - target.g) > 0.001f ||
                 std::abs(currentAccent_.b - target.b) > 0.001f) {
@@ -2578,15 +2761,15 @@ class Renderer {
             MediaSnapshot oldMedia = media;
             oldMedia.art = media.previousArt;
 
-            // Старая обложка постепенно исчезает.
+            // Fade out the previous artwork.
             DrawAlbumArt(oldMedia, artRect, 16.0f, false,
                          1.0f - progress, true);
 
-            // Новая постепенно появляется.
+            // Fade in the new artwork.
             DrawAlbumArt(media, artRect, 16.0f, true,
                          progress, false);
         } else if (media.previousArt && !media.art) {
-            // Новая обложка ещё загружается — показываем старую.
+            // Keep showing the previous artwork while the new image loads.
             MediaSnapshot oldMedia = media;
             oldMedia.art = media.previousArt;
             DrawAlbumArt(oldMedia, artRect, 16.0f, false);
@@ -2731,7 +2914,7 @@ class Renderer {
 
     void DrawMoveOverlay(D2D1_RECT_F rect, float radius) {
         D2D1_COLOR_F bg = pillBgColor_;
-        bg.a = 0.82f;
+        bg.a = Clamp(bg.a * 0.82f, 0.0f, 1.0f);
         auto overlay = MakeBrush(bg);
         FillIslandShape(rect, radius, overlay.Get());
 
@@ -2792,7 +2975,7 @@ class Renderer {
         const float r = radius * (1.0f - 0.13f * press);
 
         const D2D1_COLOR_F resting = D2D1::ColorF(1, 1, 1, primary ? (hovered ? 0.16f : 0.080f) : (hovered ? 0.09f : 0.040f));
-        const D2D1_COLOR_F pressedBg = D2D1::ColorF(currentAccent_.r, currentAccent_.g, currentAccent_.b, primary ? 0.28f : 0.18f);
+        const D2D1_COLOR_F pressedBg = D2D1::ColorF(currentAccent_.r, currentAccent_.g, currentAccent_.b, currentAccent_.a * (primary ? 0.28f : 0.18f));
         auto bg = MakeBrush(MixColor(resting, pressedBg, press));
 
         const bool isCubic = (cfg_->buttonStyle == ButtonStyle::Cubic);
@@ -3252,7 +3435,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowEnabled.load() ? MF_CHECKED : 0), ID_TOGGLE_RAINBOW, Tr(L"Увімкнути переливання", L"Включить переливание", L"Enable morphing"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(rainbowMenu, MF_STRING, ID_ADD_RAINBOW_COLOR, Tr(L"+ Додати колір у палітру...", L"+ Добавить цвет в палитру...", L"+ Add color to palette..."));
-    AppendMenuW(rainbowMenu, MF_STRING, ID_RESET_RAINBOW_COLORS, Tr(L"Скинути палітуру переливання", L"Сбросить палитру перелива", L"Reset morphing palette"));
+    AppendMenuW(rainbowMenu, MF_STRING, ID_RESET_RAINBOW_COLORS, Tr(L"Скинути палітру переливання", L"Сбросить палитру перелива", L"Reset morphing palette"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowSpeed.load() == 0.5f ? MF_CHECKED : 0), ID_RAINBOW_SPEED_SLOW, Tr(L"Повільно", L"Медленно", L"Slow"));
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowSpeed.load() == 1.0f ? MF_CHECKED : 0), ID_RAINBOW_SPEED_NORMAL, Tr(L"Звичайна", L"Обычная", L"Normal"));
@@ -3265,7 +3448,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
 
     HMENU langMenu = CreatePopupMenu();
     const LanguageSetting curLang = g_language.load();
-    AppendMenuW(langMenu, MF_STRING | (curLang == LanguageSetting::System ? MF_CHECKED : 0), ID_LANG_SYSTEM, L"Авто (Системна / System)");
+    AppendMenuW(langMenu, MF_STRING | (curLang == LanguageSetting::System ? MF_CHECKED : 0), ID_LANG_SYSTEM, Tr(L"Авто (системна)", L"Авто (системная)", L"Auto (system)"));
     AppendMenuW(langMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(langMenu, MF_STRING | (curLang == LanguageSetting::Ukrainian ? MF_CHECKED : 0), ID_LANG_UKRAINIAN, L"Українська");
     AppendMenuW(langMenu, MF_STRING | (curLang == LanguageSetting::Russian ? MF_CHECKED : 0), ID_LANG_RUSSIAN, L"Русский");
@@ -3363,7 +3546,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     
     auto saveColorOverride = [](PCWSTR key, D2D1_COLOR_F c) {
         wchar_t hex[32];
-        swprintf_s(hex, L"#%02X%02X%02X", (int)(c.r * 255), (int)(c.g * 255), (int)(c.b * 255));
+        swprintf_s(hex, L"#%02X%02X%02X%02X", (int)(c.r * 255), (int)(c.g * 255), (int)(c.b * 255), (int)(c.a * 255));
         Wh_SetStringValue(key, hex);
     };
 
@@ -3445,7 +3628,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         case ID_OPACITY_40:  setOpacityVal(40);  break;
         case ID_SET_COLOR_ACCENT: {
             Settings s = GetSettingsCopy();
-            if (PickColorWithDialog(hwnd, s.customAccent)) {
+            if (PickColorAndOpacityWithDialog(hwnd, s.customAccent)) {
                 Wh_SetIntValue(L"OverrideAccentMode", static_cast<int>(AccentMode::Custom));
                 saveColorOverride(L"OverrideCustomAccent", s.customAccent);
                 LoadSettings();
@@ -3454,7 +3637,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         }
         case ID_SET_COLOR_BACKGROUND: {
             Settings s = GetSettingsCopy();
-            if (PickColorWithDialog(hwnd, s.pillBgColor)) {
+            if (PickColorAndOpacityWithDialog(hwnd, s.pillBgColor)) {
                 saveColorOverride(L"OverrideBgColor", s.pillBgColor);
                 LoadSettings();
             }
@@ -3462,7 +3645,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         }
         case ID_SET_COLOR_TEXT_PRIMARY: {
             Settings s = GetSettingsCopy();
-            if (PickColorWithDialog(hwnd, s.textPrimaryColor)) {
+            if (PickColorAndOpacityWithDialog(hwnd, s.textPrimaryColor)) {
                 saveColorOverride(L"OverrideTextPrimary", s.textPrimaryColor);
                 LoadSettings();
             }
@@ -3470,7 +3653,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         }
         case ID_SET_COLOR_TEXT_SECONDARY: {
             Settings s = GetSettingsCopy();
-            if (PickColorWithDialog(hwnd, s.textSecondaryColor)) {
+            if (PickColorAndOpacityWithDialog(hwnd, s.textSecondaryColor)) {
                 saveColorOverride(L"OverrideTextSecondary", s.textSecondaryColor);
                 LoadSettings();
             }
@@ -3483,7 +3666,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
             break;
         case ID_ADD_RAINBOW_COLOR: {
             D2D1_COLOR_F newCol = D2D1::ColorF(0xff0000);
-            if (PickColorWithDialog(hwnd, newCol)) {
+            if (PickColorAndOpacityWithDialog(hwnd, newCol)) {
                 {
                     std::lock_guard lock(g_rainbowMutex);
                     g_rainbowPalette.push_back(newCol);
