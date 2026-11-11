@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.5.0
+// @version 0.5.1
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -78,7 +78,9 @@ mod's Settings tab. The cards follow Start's light and dark themes.
 The interface uses English by default and also supports Simplified Chinese.
 The mod makes no outbound requests.
 
-On a narrow display, the cards move into a scrollable section below Start.
+With a centered taskbar and enough horizontal room, the cards use both sides
+of Start. Phone Link stays in its native column. On a narrow display, the
+cards move into a scrollable section below Start.
 If there is too little vertical space to add that section, a **Cards** button
 opens them inside Start instead. The layout updates when the display rotates
 or its work area changes.
@@ -93,10 +95,11 @@ Available cards:
 
 ## Screenshot
 
-Portrait layout captured from Windows Start on an x64 Surface Pro 11.
-Media, network and storage labels use sample data.
+Landscape layout captured on a Surface Pro 11, showing Start, Phone Link, and
+the adjacent cards. Personal details are masked. This screenshot shows the
+local prototype's weather card; the catalog version does not include weather.
 
-![Start Sidecar cards below Start in portrait mode](https://raw.githubusercontent.com/Yizuka17/windhawk-mods/4b5afbde54c544ebdd4dbca0903a9b9edf03a0bd/assets/start-sidecar/portrait.jpg)
+![Landscape Start menu with Phone Link and Start Sidecar cards](https://raw.githubusercontent.com/Yizuka17/windhawk-mods/480656ad12ed9282f85c6fae9345b28a310a6d98/assets/start-sidecar/landscape.jpg)
 
 ## Compatibility
 
@@ -1269,6 +1272,8 @@ static event_token g_visible{}, g_activated{}, g_closed{}, g_sizeChanged{},
     g_layoutTimer{nullptr};
 [[clang::no_destroy]] static c::Border g_card{nullptr};
 [[clang::no_destroy]] static c::Grid g_host{nullptr};
+[[clang::no_destroy]] static c::ScrollViewer g_leftFlank{nullptr},
+    g_rightFlank{nullptr};
 [[clang::no_destroy]] static std::optional<std::vector<c::ColumnDefinition>>
     g_addedColumns;
 [[clang::no_destroy]] static c::TextBlock g_clock{nullptr}, g_date{nullptr},
@@ -1288,6 +1293,7 @@ struct WorkArea {
     bool operator==(WorkArea const&) const = default;
 };
 static WorkArea g_workArea;
+static bool g_centeredTaskbar = false;
 
 static WorkArea GetWorkArea() {
     const HWND hwnd = g_hwnd.load();
@@ -1299,6 +1305,28 @@ static WorkArea GetWorkArea() {
         return {};
     return {(monitor.rcWork.right - monitor.rcWork.left) * 96.0 / dpi,
             (monitor.rcWork.bottom - monitor.rcWork.top) * 96.0 / dpi};
+}
+
+static bool IsCenteredTaskbar() {
+    DWORD alignment = 1, size = sizeof(alignment);
+    auto status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &alignment, &size);
+    if (status == ERROR_FILE_NOT_FOUND)
+        alignment = 1;
+    else if (status != ERROR_SUCCESS)
+        return false;
+    if (alignment != 1)
+        return false;
+
+    RECT rect{};
+    const auto taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (taskbar && GetWindowRect(taskbar, &rect))
+        return rect.right - rect.left >= rect.bottom - rect.top;
+    APPBARDATA bar{sizeof(bar)};
+    return !SHAppBarMessage(ABM_GETTASKBARPOS, &bar) ||
+           bar.rc.right - bar.rc.left >= bar.rc.bottom - bar.rc.top;
 }
 
 struct SavedProperty {
@@ -1461,6 +1489,13 @@ static void RemoveCard() {
     }
     RemoveBottom();
     try {
+        if (g_host) {
+            for (auto const& flank : {g_leftFlank, g_rightFlank}) {
+                uint32_t at;
+                if (flank && g_host.Children().IndexOf(flank, at))
+                    g_host.Children().RemoveAt(at);
+            }
+        }
         if (g_host && g_card) {
             uint32_t at;
             if (g_host.Children().IndexOf(g_card, at))
@@ -1489,6 +1524,8 @@ static void RemoveCard() {
             }
     g_saved.reset();
     g_addedColumns.reset();
+    g_leftFlank = nullptr;
+    g_rightFlank = nullptr;
     g_card = nullptr;
     g_host = nullptr;
     g_clock = nullptr;
@@ -1907,9 +1944,14 @@ inline void Reflow() {
 inline constexpr double kPanelHeight = 176;
 inline constexpr double kGap = 4;
 
+static unsigned ModuleCount(svc::Config const& settings) {
+    return unsigned(settings.media) + unsigned(settings.network) +
+           unsigned(settings.storage) +
+           unsigned(settings.quick && (settings.volume || settings.brightness));
+}
+
 static bool HasCards(svc::Config const& settings) {
-    return settings.media || settings.network || settings.storage ||
-           (settings.quick && (settings.volume || settings.brightness));
+    return ModuleCount(settings) != 0;
 }
 
 template <typename Add>
@@ -2293,7 +2335,10 @@ static void CompactOverview(double width) {
     c::Grid::SetRow(settings, 0);
     c::Grid::SetColumn(settings, 1);
     header.Children().Append(title);
-    header.Children().Append(settings);
+    if (width >= 330)
+        header.Children().Append(settings);
+    else
+        c::Grid::SetColumn(settings, 0);
     content.Children().Append(header);
 
     c::Grid values;
@@ -2314,6 +2359,8 @@ static void CompactOverview(double width) {
         values.Children().Append(metrics[i]);
     }
     content.Children().Append(values);
+    if (width < 330)
+        content.Children().Append(settings);
     g_card.ClearValue(x::FrameworkElement::WidthProperty());
     g_card.MinHeight(0);
     g_card.Padding({12, 12, 12, 12});
@@ -2395,6 +2442,101 @@ static void BuildStackedRow(x::DependencyObject const& root,
     cards::bottom.Width(width);
     cards::bottom.HorizontalAlignment(x::HorizontalAlignment::Left);
     cards::bottom.Child(scroll);
+}
+
+static void BuildCenteredFlanks(c::Grid const& host,
+                                c::Grid const& main,
+                                c::Border const& native,
+                                svc::Config const& settings,
+                                double leftWidth,
+                                double rightWidth,
+                                double gap) {
+    g_host = host;
+    c::StackPanel left, right;
+    left.Spacing(6);
+    right.Spacing(6);
+    if (settings.overview) {
+        BuildOverview(native, settings);
+        CompactOverview(leftWidth);
+        left.Children().Append(g_card);
+    }
+    const auto moduleCount = cards::ModuleCount(settings);
+    unsigned module = 0;
+    bool movedSmallCard = false;
+    cards::Populate(
+        native, settings, [&](c::Border const& card, double weight) {
+            const bool small = weight <= 1;
+            card.MinHeight(small ? 142 : cards::kPanelHeight);
+            bool useLeft = settings.overview
+                               ? moduleCount >= 4 && small && !movedSmallCard
+                               : module % 2 == 1;
+            movedSmallCard |= useLeft && small;
+            ++module;
+            (useLeft ? left : right).Children().Append(card);
+        });
+    auto makeSide = [&](c::StackPanel const& content, double width,
+                        bool atLeft) {
+        c::ScrollViewer scroll;
+        scroll.Name(atLeft ? L"StartSidecarCenteredLeft"
+                           : L"StartSidecarCenteredRight");
+        scroll.HorizontalScrollMode(c::ScrollMode::Disabled);
+        scroll.HorizontalScrollBarVisibility(c::ScrollBarVisibility::Disabled);
+        scroll.VerticalScrollBarVisibility(c::ScrollBarVisibility::Auto);
+        scroll.Width(width);
+        scroll.Height(main.ActualHeight());
+        scroll.VerticalAlignment(x::VerticalAlignment::Top);
+        scroll.HorizontalAlignment(atLeft ? x::HorizontalAlignment::Left
+                                          : x::HorizontalAlignment::Right);
+        scroll.Margin(atLeft ? x::Thickness{0, 0, gap, 0}
+                             : x::Thickness{gap, 0, 0, 0});
+        scroll.Content(content);
+        return scroll;
+    };
+    if (left.Children().Size()) {
+        const auto index = c::Grid::GetColumn(main);
+        // Keep the existing Start/Phone Link columns and their spans together.
+        for (auto child : host.Children()) {
+            auto element = child.try_as<x::FrameworkElement>();
+            if (!element)
+                continue;
+            const auto column = c::Grid::GetColumn(element);
+            const auto span = c::Grid::GetColumnSpan(element);
+            if (column >= index) {
+                Save(element, c::Grid::ColumnProperty());
+                c::Grid::SetColumn(element, column + 1);
+            } else if (column + span > index) {
+                Save(element, c::Grid::ColumnSpanProperty());
+                c::Grid::SetColumnSpan(element, span + 1);
+            }
+        }
+        c::ColumnDefinition column;
+        column.Width({leftWidth + gap, x::GridUnitType::Pixel});
+        host.ColumnDefinitions().InsertAt(index, column);
+        g_addedColumns->push_back(column);
+        g_leftFlank = makeSide(left, leftWidth, true);
+        c::Grid::SetColumn(g_leftFlank, index);
+        c::Grid::SetRow(g_leftFlank, c::Grid::GetRow(main));
+        host.Children().Append(g_leftFlank);
+    }
+    if (right.Children().Size()) {
+        const auto index = host.ColumnDefinitions().Size();
+        c::ColumnDefinition column;
+        column.Width({rightWidth + gap, x::GridUnitType::Pixel});
+        host.ColumnDefinitions().Append(column);
+        g_addedColumns->push_back(column);
+        g_rightFlank = makeSide(right, rightWidth, false);
+        c::Grid::SetColumn(g_rightFlank, index);
+        c::Grid::SetRow(g_rightFlank, c::Grid::GetRow(main));
+        host.Children().Append(g_rightFlank);
+    }
+    Track(main.SizeChanged(auto_revoke, [](auto const&, auto const& args) {
+        GuardUi([&] {
+            if (g_leftFlank)
+                g_leftFlank.Height(args.NewSize().Height);
+            if (g_rightFlank)
+                g_rightFlank.Height(args.NewSize().Height);
+        });
+    }));
 }
 
 static void ShowCompactPanel(bool show, bool focus) {
@@ -2493,12 +2635,16 @@ static void BuildCompact(c::Grid const& main,
     main.Children().Append(g_compactLayer);
 }
 
-static void RefreshLayout(x::UIElement const& root, WorkArea work) {
+static void RefreshLayout(x::UIElement const& root,
+                          WorkArea work,
+                          bool centered = false) {
     try {
         if (g_layoutReady && g_layoutRoot == root && g_workArea == work &&
-            (!g_card || g_card.Parent()) &&
+            g_centeredTaskbar == centered && (!g_card || g_card.Parent()) &&
             (!cards::bottom || cards::bottom.Parent()) &&
-            (!g_compactLayer || g_compactLayer.Parent())) {
+            (!g_compactLayer || g_compactLayer.Parent()) &&
+            (!g_leftFlank || g_leftFlank.Parent()) &&
+            (!g_rightFlank || g_rightFlank.Parent())) {
             UpdateData();
             if (g_core && g_core.Visible() && g_update)
                 g_update.Start();
@@ -2509,6 +2655,7 @@ static void RefreshLayout(x::UIElement const& root, WorkArea work) {
             element.UpdateLayout();
         g_layoutRoot = root;
         g_workArea = work;
+        g_centeredTaskbar = centered;
         auto settings = std::atomic_load(&svc::config);
         auto nativeBorder =
             Resolve(root, L"RightCompanion/CompanionRoot/AcrylicBorder")
@@ -2564,8 +2711,28 @@ static void RefreshLayout(x::UIElement const& root, WorkArea work) {
             nativeHeight +
             (bottomEnabled ? cards::kPanelHeight + cards::kGap : 0);
         const bool portrait = work.height > work.width;
+        const double flankWidth = std::clamp(width, 230.0, 290.0);
+        const bool leftFlank =
+            settings->overview || cards::ModuleCount(*settings) > 1;
+        const double centeredWidth = requiredWidth -
+                                     (settings->overview ? width + gap : 0) +
+                                     (leftFlank ? width + gap : 0) +
+                                     (bottomEnabled ? flankWidth + gap : 0);
+        const bool centeredFits =
+            centered && !portrait && centeredWidth + 4 <= work.width &&
+            nativeHeight <= work.height && host.ColumnDefinitions().Size() &&
+            main.Parent() == host;
+        if ((settings->overview || bottomEnabled) && centeredFits) {
+            BuildCenteredFlanks(host, main, nativeBorder, *settings, width,
+                                flankWidth, gap);
+            g_layoutReady = true;
+            UpdateData();
+            if (g_update)
+                g_update.Start();
+            return;
+        }
         if ((settings->overview || bottomEnabled) &&
-            (portrait || requiredWidth > work.width ||
+            (portrait || centered || requiredWidth > work.width ||
              requiredHeight > work.height)) {
             auto mainBackground =
                 Resolve(main, L"AcrylicBorder").try_as<c::Border>();
@@ -2636,7 +2803,7 @@ static void EnsureLayout() {
     if (g_unloading || !svc::visible)
         return;
     if (auto window = x::Window::Current(); window && window.Content())
-        RefreshLayout(window.Content(), GetWorkArea());
+        RefreshLayout(window.Content(), GetWorkArea(), IsCenteredTaskbar());
 }
 static void QueueLayout() {
     if (g_unloading || !svc::visible || !g_layoutTimer)
