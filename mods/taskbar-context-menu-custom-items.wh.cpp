@@ -183,6 +183,12 @@ struct MenuItemSettings {
     std::wstring icon;
     bool runAsAdmin = false;
     bool hideWindow = false;
+
+    // The text shown in the menu and in the log. An item without a label is
+    // shown as its command.
+    const std::wstring& DisplayName() const {
+        return name.empty() ? command : name;
+    }
 };
 
 enum class Placement {
@@ -368,7 +374,7 @@ DWORD WINAPI LaunchThread(LPVOID param) {
 // prompt can't block the taskbar.
 void Launch(const MenuItemSettings& item) {
     auto request = std::make_unique<LaunchRequest>();
-    request->name = item.name;
+    request->name = item.DisplayName();
     request->command = item.command;
     request->arguments = item.arguments;
     request->runAsAdmin = item.runAsAdmin;
@@ -530,7 +536,7 @@ wuxc::MenuFlyoutItemBase CreateMenuItem(const MenuItemSettings& settings) {
 
     wuxc::MenuFlyoutItem item;
     item.Name(kInjectedElementName);
-    item.Text(settings.name.empty() ? settings.command : settings.name);
+    item.Text(settings.DisplayName());
 
     if (!settings.icon.empty()) {
         bool isCodePoint;
@@ -560,7 +566,7 @@ wuxc::MenuFlyoutItemBase CreateMenuItem(const MenuItemSettings& settings) {
         tracked.clickToken =
             item.Click([settings](wf::IInspectable const&,
                                   wux::RoutedEventArgs const&) {
-                Wh_Log(L"Clicked \"%s\"", settings.name.c_str());
+                Wh_Log(L"Clicked \"%s\"", settings.DisplayName().c_str());
                 Launch(settings);
             });
         tracked.hasClickHandler = true;
