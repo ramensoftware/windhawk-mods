@@ -63,7 +63,7 @@ Choose a layout under **Appearance → Layout → Switcher Layout**.
 | --- | --- |
 | Default | Classic window grid with horizontal or vertical orientation and configurable header and thumbnail placement. |
 | Badge (macOS-style) | Thumbnail cards with an overlaid application icon and a title above or below the preview. Requires thumbnails to be enabled. |
-| Dock | An application-icon strip with an optional central preview of the selected window and configurable close-button and group-indicator placement. The close button appears only while the pointer is over that application icon. |
+| Dock | An application-icon strip, or a paged grid of icons, with an optional central preview of the selected window and configurable close-button and group-indicator placement. The close button appears only while the pointer is over that application icon. |
 
 ## Controls
 
@@ -651,13 +651,22 @@ nothing failed.
           - fillAndBorder: Fill and Border
         - dockMaxVisibleIcons: '7'
           $name: Max Visible Icons in Strip
-          $description: Number of icons shown at once. Extra windows scroll into view.
+          $description: Number of icons shown at once. Extra windows scroll into view. In grid view, Grid Columns applies instead.
           $options:
           - '5': 5 Icons
           - '7': 7 Icons (Default)
           - '9': 9 Icons
           - '11': 11 Icons
           - '0': Fit Screen Width
+        - dockUseGrid: false
+          $name: Show Icons in a Grid
+          $description: Use rows and columns instead of a single strip. Extra icons appear on additional pages.
+        - dockGridRows: 2
+          $name: Grid Rows
+          $description: Maximum rows per page. The grid uses fewer rows when space is limited.
+        - dockGridColumns: 7
+          $name: Grid Columns
+          $description: Maximum columns per page. The grid uses fewer columns when space is limited.
         - dockSwitcherPadding: 11
           $name: Dock Layout Padding (px)
           $description: Padding between the switcher border and the dock elements, in pixels.
@@ -1400,6 +1409,9 @@ struct Settings {
     int dockIconSpacing;
     WCHAR dockHighlightStyle[32];
     int dockMaxVisibleIcons;
+    bool dockUseGrid;
+    int dockGridRows;
+    int dockGridColumns;
     WCHAR dockCloseButtonPosition[32];
     WCHAR dockGroupIndicatorPosition[32];
     // Grouped indicator
@@ -3287,6 +3299,9 @@ static bool ThumbnailHoverIsZoom() { return s_cachedSettings.thumbnailHoverIsZoo
 static bool DockLayoutActive() {
     return s_cachedSettings.dockLayoutActive;
 }
+static bool DockGridActive() {
+    return DockLayoutActive() && g_settings.dockUseGrid;
+}
 static bool BadgeLayoutActive() {
     return s_cachedSettings.badgeLayoutActive;
 }
@@ -3393,6 +3408,9 @@ static RECT g_rcCentralPreviewSlot = { 0, 0, 0, 0 };
 static RECT g_rcCentralPreview = { 0, 0, 0, 0 };
 static RECT g_rcDockTitleBar = { 0, 0, 0, 0 };
 static RECT g_rcDockIconStrip = { 0, 0, 0, 0 };
+// Dock grid view: columns and icons per page of the last layout.
+static int g_dockGridColumns = 1;
+static int g_dockGridCapacity = 1;
 // ── Animation Engine ─────────────────────────────────────────────────────────
 
 struct CubicBezierEasing {
@@ -9631,9 +9649,28 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
         }
     }
     if (fitCount < 1) fitCount = 1;
-    int maxLimit = g_settings.dockMaxVisibleIcons > 0 ? g_settings.dockMaxVisibleIcons : fitCount;
+    bool showPreview = DockShowPreview();
+    int titleH = g_settings.showTitle ? std::max(GetHeaderRowHeightPx(), DpiScale(20, dpiY)) : 0;
+    int rowSpacing = DpiScale(g_settings.dockIconSpacing, dpiY);
+    int rows = 1;
+    if (g_settings.dockUseGrid) {
+        // Rows that fit beside the title, preview and padding (same spacing as
+        // the layout below; the preview keeps at least its minimum height).
+        int reservedH = 2 * masterPadY + titleH;
+        if (showPreview) {
+            reservedH += DpiScale(12, dpiY) + 1 + DpiScale(8, dpiY) +
+                         DpiScale(12, dpiY) + DpiScale(16, dpiY);
+            if (g_settings.showTitle) reservedH += DpiScale(12, dpiY);
+        } else if (g_settings.showTitle) {
+            reservedH += DpiScale(12, dpiY) + 1 + DpiScale(15, dpiY) + DpiScale(4, dpiY);
+        }
+        int fitRows = std::max(1, (maxH - reservedH + rowSpacing) / (cellH + rowSpacing));
+        rows = std::min(fitRows, g_settings.dockGridRows);
+    }
+    int maxLimit = g_settings.dockUseGrid ? g_settings.dockGridColumns :
+                   (g_settings.dockMaxVisibleIcons > 0 ? g_settings.dockMaxVisibleIcons : fitCount);
     int visibleCount = std::min(n, std::min(fitCount, maxLimit));
-    int chevReserve = (g_settings.showOverflowIndicator && n > visibleCount) ? DpiScale(26, dpiX) : 0;
+    int chevReserve = (g_settings.showOverflowIndicator && n > visibleCount * rows) ? DpiScale(26, dpiX) : 0;
     if (chevReserve) {
         int available = std::max(0, availStripW - 2 * chevReserve);
         fitCount = std::max(1, (available + spacing) / std::max(1, cellW + spacing));
@@ -9641,20 +9678,26 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
     }
     int totalIconsW = visibleCount * cellW + (visibleCount - 1) * spacing;
     int totalStripW = totalIconsW + 2 * chevReserve;
+    int columns = visibleCount;
+    rows = std::min(rows, (n - 1) / columns + 1);
+    int stripH = rows * cellH + (rows - 1) * rowSpacing;
+    if (g_settings.dockUseGrid) {
+        // Whole pages: the page holding the selection is shown.
+        g_dockGridColumns = columns;
+        g_dockGridCapacity = columns * rows;
+        g_layoutStartIndex = g_selectedIndex / g_dockGridCapacity * g_dockGridCapacity;
+        visibleCount = std::min(g_dockGridCapacity, n - g_layoutStartIndex);
+    }
 
-    bool showPreview = DockShowPreview();
     int prevW = 0;
     int prevH = 0;
     int previewSlotH = 0;
-
-    int titleH = g_settings.showTitle ? GetHeaderRowHeightPx() : 0;
-    if (g_settings.showTitle && titleH < DpiScale(20, dpiY)) titleH = DpiScale(20, dpiY);
 
     if (showPreview) {
         int maxPrevH = DpiScale(g_settings.dockPreviewHeight > 0 ? g_settings.dockPreviewHeight : 280, dpiY);
         // Match the actual top/bottom strip, preview-slot and title spacings.
         // Only the preview is shrinkable; do not clip icons, title or padding.
-        int reservedH = 2 * masterPadY + cellH + titleH +
+        int reservedH = 2 * masterPadY + stripH + titleH +
                         DpiScale(12, dpiY) + 1 + DpiScale(8, dpiY) +
                         DpiScale(12, dpiY) +
                         (g_settings.showTitle ? DpiScale(12, dpiY) : 0);
@@ -9686,8 +9729,8 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
     if (DockIconIsTop()) {
         curY = masterPadY;
         // 1. Icon Strip (11px from window top)
-        g_rcDockIconStrip = { masterPadX, curY, g_winW - masterPadX, curY + cellH };
-        curY += cellH;
+        g_rcDockIconStrip = { masterPadX, curY, g_winW - masterPadX, curY + stripH };
+        curY += stripH;
 
         if (showPreview) {
             // Divider between icons and preview: 12px from icons, 1px divider, 8px to preview
@@ -9758,8 +9801,8 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
         }
 
         // 3. Icon Strip (11px to window bottom)
-        g_rcDockIconStrip = { masterPadX, curY, g_winW - masterPadX, curY + cellH };
-        curY += cellH + masterPadY;
+        g_rcDockIconStrip = { masterPadX, curY, g_winW - masterPadX, curY + stripH };
+        curY += stripH + masterPadY;
         g_winH = curY;
     }
 
@@ -9773,8 +9816,8 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
         auto& w = g_windows[i];
         if (i >= g_layoutStartIndex && i < g_layoutStartIndex + visibleCount) {
             int idx = i - g_layoutStartIndex;
-            int cellX = stripStartX + idx * (cellW + spacing);
-            int cellY = g_rcDockIconStrip.top;
+            int cellX = stripStartX + (idx % columns) * (cellW + spacing);
+            int cellY = g_rcDockIconStrip.top + (idx / columns) * (cellH + rowSpacing);
             w.rcCell = { cellX, cellY, cellX + cellW, cellY + cellH };
             if (showPreview && i == g_selectedIndex) {
                 w.rcThumbActual = g_rcCentralPreview;
@@ -16107,9 +16150,17 @@ static void CycleLinear(int delta) {
             if (targetStart > n - visibleCount) targetStart = std::max(0, n - visibleCount);
         }
 
+        // Grid view shows whole pages: the selection's page starts the layout.
+        if (g_settings.dockUseGrid) {
+            targetStart = g_selectedIndex / g_dockGridCapacity * g_dockGridCapacity;
+        }
+
         if (needsScroll && targetStart != g_layoutStartIndex) {
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
-            ScrollDockWithDynamicResize(targetStart, g_selectedIndex, dir, SCROLL_ROW, selectionFrom);
+            // Grid pages share no icons, so slide a whole page, not one cell.
+            ScrollDockWithDynamicResize(targetStart, g_selectedIndex, dir,
+                                        g_settings.dockUseGrid ? SCROLL_PAGE : SCROLL_ROW,
+                                        selectionFrom);
         } else {
             UpdateDockSelectionWithDynamicResize();
             RetargetSelectionFromPresented(selectionFrom);
@@ -16195,6 +16246,13 @@ static void CyclePage(int dir) {
     int n = (int)g_windows.size();
 
     if (DockLayoutActive()) {
+        if (g_settings.dockUseGrid) {
+            int newStart = g_layoutStartIndex + dir * g_dockGridCapacity;
+            if (newStart >= 0 && newStart < n) {
+                ScrollDockWithDynamicResize(newStart, newStart, dir, SCROLL_PAGE, selectionFrom);
+            }
+            return;
+        }
         CaptureOutgoingSnapshot();
         int visibleCount = 0;
         for (int k = 0; k < n; k++) {
@@ -16385,6 +16443,20 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
     if (g_windows.empty()) return;
     RectF selectionFrom = SelectionRectWithViewport();
     if (DockLayoutActive()) {
+        if (g_settings.dockUseGrid) {
+            // Rows are counted over all pages, so moving past a page's last
+            // row continues on the next page in the same column.
+            int n = (int)g_windows.size();
+            int rowCount = (n - 1) / g_dockGridColumns + 1;
+            int row = g_selectedIndex / g_dockGridColumns;
+            int targetRow = row + vertDelta;
+            if (wrap) targetRow = (targetRow % rowCount + rowCount) % rowCount;
+            if (targetRow < 0 || targetRow >= rowCount || targetRow == row) return;
+            int target = std::min(n - 1, targetRow * g_dockGridColumns +
+                                         g_selectedIndex % g_dockGridColumns);
+            CycleLinear(target - g_selectedIndex);
+            return;
+        }
         if (wrap) {
             CycleLinear(vertDelta);
         } else {
@@ -18221,12 +18293,11 @@ static RECT RawNavigationCell(int index) {
 // Move only within the current visual row (horizontal layout) or column
 // (vertical layout). This intentionally does not advance into the next line;
 // that is what makes a touchpad edge behave like the native switcher.
-static bool NavigateRawWithinLine(int delta) {
+static bool NavigateRawWithinLine(int delta, bool verticalLayout) {
     if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size() || !delta) return false;
     RECT current = RawNavigationCell(g_selectedIndex);
     if (IsRectEmpty(&current)) return false;
 
-    const bool verticalLayout = LayoutIsVertical();
     const int lineCoord = verticalLayout ? current.left : current.top;
     std::vector<int> line;
     for (int i = 0; i < (int)g_windows.size(); ++i) {
@@ -18258,6 +18329,16 @@ static bool TouchpadNavigate(bool horizontalSwipe, int delta) {
     if (g_windows.empty() || !delta) return false;
     const bool verticalLayout = LayoutIsVertical();
     const bool crossLine = (horizontalSwipe == verticalLayout);
+    if (DockGridActive()) {
+        // Grid view moves like the Default layout: horizontal swipes stay in
+        // the row, vertical swipes change rows and pages.
+        if (horizontalSwipe) return NavigateRawWithinLine(delta, false);
+        int previous = g_selectedIndex;
+        for (int step = 0; step < abs(delta); ++step) {
+            CycleDirectional(delta > 0 ? 1 : -1, false);
+        }
+        return g_selectedIndex != previous;
+    }
     if (DockLayoutActive()) {
         if (!horizontalSwipe) return false;
         int previous = g_selectedIndex;
@@ -18271,7 +18352,7 @@ static bool TouchpadNavigate(bool horizontalSwipe, int delta) {
         }
         return g_selectedIndex != previous;
     }
-    return NavigateRawWithinLine(delta);
+    return NavigateRawWithinLine(delta, verticalLayout);
 }
 
 // Select first horizontal-swipe target without wrapping into a later row.
@@ -18281,11 +18362,12 @@ static bool SelectInitialTouchpadTarget(int direction) {
     if (g_windows.empty() || !direction) return false;
 
     int previous = g_selectedIndex;
-    if (DockLayoutActive()) {
+    if (DockLayoutActive() && !DockGridActive()) {
         CycleLinear(direction);
-    } else if (LayoutIsVertical()) {
+    } else if (LayoutIsVertical() && !DockLayoutActive()) {
         CycleDirectional(direction, false);
     } else {
+        // Default horizontal layout and the dock grid: stay in the first row.
         RECT current = RawNavigationCell(g_selectedIndex);
         if (IsRectEmpty(&current)) return false;
 
@@ -19947,7 +20029,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 CycleLinear(-1);
                 return 0;
             }
-            if (!LayoutIsVertical()) {
+            // The dock is horizontal whatever the task-list orientation.
+            if (!LayoutIsVertical() || DockLayoutActive()) {
                 if (wParam == VK_LEFT) { CycleLinear(-1); return 0; }
                 if (wParam == VK_RIGHT) { CycleLinear(1); return 0; }
                 if (wParam == VK_UP) { CycleDirectional(-1); return 0; }
@@ -20776,6 +20859,9 @@ static void LoadSettings() {
         g_settings.dockMaxVisibleIcons = Wh_GetIntSetting(L"Appearance.DockLayout.dockMaxVisibleIcons");
     }
     if (g_settings.dockMaxVisibleIcons < 0) g_settings.dockMaxVisibleIcons = 7;
+    g_settings.dockUseGrid = Wh_GetIntSetting(L"Appearance.DockLayout.dockUseGrid") != 0;
+    g_settings.dockGridRows = std::clamp(LoadIntSetting(L"Appearance.DockLayout.dockGridRows", 2), 1, 32);
+    g_settings.dockGridColumns = std::clamp(LoadIntSetting(L"Appearance.DockLayout.dockGridColumns", 7), 1, 32);
     g_settings.dockSwitcherPadding = LoadIntSetting(L"Appearance.DockLayout.dockSwitcherPadding", 11);
     if (g_settings.dockSwitcherPadding < 0) g_settings.dockSwitcherPadding = 11;
 
