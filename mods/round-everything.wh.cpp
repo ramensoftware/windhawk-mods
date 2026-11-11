@@ -2280,6 +2280,23 @@ void RemoveAsyncHooks() {
     g_asyncHooks.clear();
 }
 
+// Logs the symbols a lookup didn't find (each entry: a short name and the
+// pointer the lookup fills); returns whether all were found.
+struct SymbolCheck {
+    PCWSTR name;
+    void* const* address;
+};
+bool LogMissingSymbols(PCWSTR module, std::initializer_list<SymbolCheck> checks) {
+    bool all = true;
+    for (const SymbolCheck& check : checks) {
+        if (!*check.address) {
+            all = false;
+            Wh_Log(L"%s: symbol not found: %s", module, check.name);
+        }
+    }
+    return all;
+}
+
 // ---- taskbar.dll: XAML root of a taskbar window ----------------------------
 
 void* CTaskBand_ITaskListWndSite_vftable;
@@ -2296,6 +2313,30 @@ CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
 
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+// Drops the reference a returned std::shared_ptr holds. _Decref is an
+// inline STL member a rebuild of taskbar.dll can leave out, so without it the
+// same is done by hand, with MSVC's layout of std::_Ref_count_base (the
+// vtable - _Destroy, _Delete_this - then the use and weak counts, 32-bit).
+void ReleaseSharedPtrControl(void* control) {
+    if (!control) {
+        return;
+    }
+    if (std__Ref_count_base__Decref_Original) {
+        std__Ref_count_base__Decref_Original(control);
+        return;
+    }
+    using Member_t = void(WINAPI*)(void* self);
+    auto* uses = reinterpret_cast<volatile LONG*>(static_cast<BYTE*>(control) + sizeof(void*));
+    auto* weaks = uses + 1;
+    if (InterlockedDecrement(uses) == 0) {
+        void** vtable = *static_cast<void***>(control);
+        reinterpret_cast<Member_t>(vtable[0])(control);  // _Destroy
+        if (InterlockedDecrement(weaks) == 0) {
+            reinterpret_cast<Member_t>(vtable[1])(control);  // _Delete_this
+        }
+    }
+}
 
 wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
@@ -2345,7 +2386,7 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
 
     auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
 
-    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+    ReleaseSharedPtrControl(taskbarHostSharedPtr[1]);
 
     return result;
 }
@@ -2384,8 +2425,9 @@ wux::XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
     }
 
     void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
-    if (!taskBand) {
-        return nullptr;  // taskbar still being constructed
+    if (!taskBand || !CSecondaryTaskBand_ITaskListWndSite_vftable ||
+        !CSecondaryTaskBand_GetTaskbarHost_Original) {
+        return nullptr;  // taskbar still being constructed, or symbols missing
     }
 
     void* taskBandForTaskListWndSite = taskBand;
@@ -2427,31 +2469,46 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    // Address lookups only - nothing is actually hooked.
+    // Address lookups only - nothing is actually hooked. All optional: what
+    // a missing one costs is decided below (the names other taskbar mods
+    // have used across builds are listed too).
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
+            nullptr,
+            true,
         },
         {
             {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CSecondaryTaskBand_ITaskListWndSite_vftable,
+            nullptr,
+            true,
         },
         {
-            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )",
+             LR"(protected: class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
             &TaskbarHost_FrameHeight_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
             &CSecondaryTaskBand_GetTaskbarHost_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
             &std__Ref_count_base__Decref_Original,
+            nullptr,
+            true,
         },
     };
 
@@ -2459,7 +2516,33 @@ bool HookTaskbarDllSymbols() {
         Wh_Log(L"HookSymbols failed (taskbar.dll)");
         return false;
     }
+    LogMissingSymbols(
+        L"taskbar.dll",
+        {
+            {L"CTaskBand vftable (ITaskListWndSite)",
+             reinterpret_cast<void* const*>(&CTaskBand_ITaskListWndSite_vftable)},
+            {L"CTaskBand::GetTaskbarHost",
+             reinterpret_cast<void* const*>(&CTaskBand_GetTaskbarHost_Original)},
+            {L"TaskbarHost::FrameHeight",
+             reinterpret_cast<void* const*>(&TaskbarHost_FrameHeight_Original)},
+            {L"CSecondaryTaskBand vftable (ITaskListWndSite)",
+             reinterpret_cast<void* const*>(&CSecondaryTaskBand_ITaskListWndSite_vftable)},
+            {L"CSecondaryTaskBand::GetTaskbarHost",
+             reinterpret_cast<void* const*>(&CSecondaryTaskBand_GetTaskbarHost_Original)},
+            {L"std::_Ref_count_base::_Decref (released by hand without it)",
+             reinterpret_cast<void* const*>(&std__Ref_count_base__Decref_Original)},
+        });
 
+    // The primary taskbar's host is what everything inside the taskbars
+    // starts from; secondary taskbars need their own pair on top.
+    if (!CTaskBand_ITaskListWndSite_vftable || !CTaskBand_GetTaskbarHost_Original ||
+        !TaskbarHost_FrameHeight_Original) {
+        return false;
+    }
+    if (!CSecondaryTaskBand_ITaskListWndSite_vftable ||
+        !CSecondaryTaskBand_GetTaskbarHost_Original) {
+        Wh_Log(L"taskbar.dll: secondary taskbars are left as they are");
+    }
     return true;
 }
 
@@ -10480,18 +10563,19 @@ int WINAPI GetEffectiveCornerStyle_Hook(void* self) {
     return kCornerStyleRound;
 }
 
-float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
-    float r = GetFloatCornerRadiusForCurrentStyle_Original(self);
-    if (!g_enabled) {
-        return r;
-    }
-
-    float base = GetRadiusFromCornerStyle(self);
+// The radius a window is given, from its style's radius (`base`) and the one
+// DWM would give it (`r`: 0 when it squares the window - maximized, snapped
+// or full-screen - else `base`). Notes what was decided for the border
+// update that follows (see SetBorderParameters). `own` is what the hooked
+// function returns where the mod leaves the window to Windows: `r` from
+// GetFloatCornerRadiusForCurrentStyle, `base` from GetRadiusFromCornerStyle
+// (the radius before DWM squares the window, which it still does after).
+float RadiusForWindow(void* self, float base, float r, float own) {
     if (base < kFullRoundRadius) {
         HWND hwnd = WindowHandleOf(self);
         NoteRounded(hwnd, false);
         g_lastRadiusQuery = {true, false, hwnd, self, r};
-        return r;  // DONOTROUND or the small style: not ours to change
+        return own;  // DONOTROUND or the small style: not ours to change
     }
 
     HWND hwnd = WindowHandleOf(self);
@@ -10500,7 +10584,7 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
         // treats the window as one of DWM's own (not squared by us).
         NoteRounded(hwnd, false);
         g_lastRadiusQuery = {true, false, hwnd, self, r};
-        return r;
+        return own;
     }
     bool squared = r == 0.0f;  // maximized or full-screen: Windows squares it
     NoteRounded(hwnd, true, base, squared);
@@ -10509,7 +10593,15 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
     // shadow); otherwise the one radius, maximized or not (0: square).
     float given = radius < 0 ? r : static_cast<float>(radius);
     g_lastRadiusQuery = {true, squared, hwnd, self, given, true};
-    return given;
+    return radius < 0 ? own : given;
+}
+
+float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
+    float r = GetFloatCornerRadiusForCurrentStyle_Original(self);
+    if (!g_enabled) {
+        return r;
+    }
+    return RadiusForWindow(self, GetRadiusFromCornerStyle(self), r, r);
 }
 
 // Corners while a window animates. Windows animates a window into and out of
@@ -11916,10 +12008,49 @@ void RequestDwmRefresh(const wchar_t* why) {
 }
 
 
+// The fallback for builds without GetFloatCornerRadiusForCurrentStyle (it can
+// be renamed or inlined into UpdateWindowVisuals by an update): the radius is
+// decided where the style's radius is asked for, as Custom Window Corner
+// Radius does, with DWM's own test for a window it squares. The animation
+// clip asks too (through the DPI-adjusted radius); there DWM's value passes
+// through, as AnimatedClipRadius scales it itself.
+using IsMaximizedOrSnapped_t = bool(WINAPI*)(void* self);
+IsMaximizedOrSnapped_t IsMaximizedOrSnapped;  // resolved, not hooked (optional)
+GetRadiusFromCornerStyle_t GetRadiusFromCornerStyle_Original;  // the fallback's trampoline
+std::atomic<bool> g_radiusFromStyleHooked{false};
+
+float WINAPI GetRadiusFromCornerStyle_Hook(void* self) {
+    float base = GetRadiusFromCornerStyle_Original(self);
+    if (!g_enabled || g_animatedWindow3D) {
+        return base;
+    }
+    bool squared = false;
+    if (IsMaximizedOrSnapped) {
+        squared = IsMaximizedOrSnapped(self);
+    } else if (HWND hwnd = WindowHandleOf(self)) {
+        squared = IsZoomed(hwnd) != FALSE;  // maximized; snapped ones can't be told
+    }
+    return RadiusForWindow(self, base, squared ? 0.0f : base, base);
+}
+
 // Two or more Dwminit warnings in the Application log within the last
 // minute mean DWM has just been crashing and restarting; a mod that keeps
 // hooking it could be the reason, so the dwm.exe part stays out (as Custom
-// Window Corner Radius does) until the next sign-in or mod reload.
+// Window Corner Radius does) until the next sign-in or mod reload. Only
+// asked when the mod itself was loaded into dwm.exe within the last minute:
+// DWM logs such warnings around a sign-in after an update too, with no mod
+// involved.
+bool LoadedIntoDwmRecently() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULONGLONG now = (static_cast<ULONGLONG>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    ULONGLONG last = 0;
+    Wh_GetBinaryValue(L"dwmLastInitTime", &last, sizeof(last));
+    Wh_SetBinaryValue(L"dwmLastInitTime", &now, sizeof(now));
+    constexpr ULONGLONG kOneMinute = 60ULL * 10000000ULL;  // FILETIME units
+    return last && now >= last && now - last <= kOneMinute;
+}
+
 bool DwmRestartedRecently() {
     HANDLE log = OpenEventLogW(nullptr, L"Application");
     if (!log) {
@@ -11956,7 +12087,7 @@ bool DwmRestartedRecently() {
 
 BOOL Init() {
     LoadDwmSettings();
-    if (DwmRestartedRecently()) {
+    if (LoadedIntoDwmRecently() && DwmRestartedRecently()) {
         Wh_Log(L"[dwm] DWM restarted twice in the last minute - staying out of dwm.exe");
         return FALSE;
     }
@@ -11977,16 +12108,33 @@ BOOL Init() {
             GetEffectiveCornerStyle_Hook,
             true,  // optional: without it, apps Windows leaves square stay square
         },
+        // Every entry is optional: what each missing one costs is decided
+        // below, so an update renaming one function costs that feature
+        // rather than the whole dwm.exe part.
         {
             {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
-             LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))"},
-            &GetRadiusFromCornerStyle,  // address only, no hook
+             LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
+             LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )",
+             LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )"},
+            &GetRadiusFromCornerStyle,  // address only here (see the fallback below)
+            nullptr,
+            true,
         },
         {
             {LR"(public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))",
-             LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))"},
+             LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))",
+             LR"(public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void)const )",
+             LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void)const )"},
             &GetFloatCornerRadiusForCurrentStyle_Original,
             GetFloatCornerRadiusForCurrentStyle_Hook,
+            true,  // optional: GetRadiusFromCornerStyle is hooked instead
+        },
+        {
+            {LR"(public: bool __cdecl CTopLevelWindow::IsMaximizedOrSnapped(void)const )",
+             LR"(private: bool __cdecl CTopLevelWindow::IsMaximizedOrSnapped(void)const )"},
+            &IsMaximizedOrSnapped,  // address only, for the fallback
+            nullptr,
+            true,
         },
         {
             {LR"(public: long __cdecl CWindowBorder::SetBorderParameters(struct tagRECT const &,float,int,struct _D3DCOLORVALUE const &,enum CWindowBorder::BorderStyle,enum CWindowBorder::ShadowStyle))"},
@@ -12088,6 +12236,65 @@ BOOL Init() {
     if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks))) {
         Wh_Log(L"[dwm] HookSymbols failed (udwm.dll)");
         return FALSE;
+    }
+    LogMissingSymbols(
+        L"[dwm] udwm.dll",
+        {
+            {L"CTopLevelWindow::GetRadiusFromCornerStyle",
+             reinterpret_cast<void* const*>(&GetRadiusFromCornerStyle)},
+            {L"CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle",
+             reinterpret_cast<void* const*>(&GetFloatCornerRadiusForCurrentStyle_Original)},
+            {L"CTopLevelWindow::IsMaximizedOrSnapped",
+             reinterpret_cast<void* const*>(&IsMaximizedOrSnapped)},
+            {L"CTopLevelWindow::GetEffectiveCornerStyle",
+             reinterpret_cast<void* const*>(&GetEffectiveCornerStyle_Original)},
+            {L"CWindowBorder::SetBorderParameters",
+             reinterpret_cast<void* const*>(&SetBorderParameters_Original)},
+            {L"CTopLevelWindow::GetWindowData", reinterpret_cast<void* const*>(&GetWindowData)},
+            {L"CTopLevelWindow::UpdateWindowVisuals",
+             reinterpret_cast<void* const*>(&UpdateWindowVisuals)},
+            {L"CWindowData::IsGhostWindow", reinterpret_cast<void* const*>(&IsGhostWindowCode)},
+            {L"CTopLevelWindow3D::UpdateAnimatedResources",
+             reinterpret_cast<void* const*>(&UpdateAnimatedResources_Original)},
+            {L"ResourceHelper::CreateRectangleGeometry",
+             reinterpret_cast<void* const*>(&CreateRectangleGeometry_Original)},
+            {L"CTopLevelWindow3D::SetWindowData",
+             reinterpret_cast<void* const*>(&SetWindowData3DCode)},
+            {L"CRectangleGeometryProxy::SetRectangle",
+             reinterpret_cast<void* const*>(&SetRectangle_Original)},
+            {L"CWindowBorder::SetClipRectangle",
+             reinterpret_cast<void* const*>(&SetClipRectangle_Original)},
+            {L"CTopLevelWindow::~CTopLevelWindow",
+             reinterpret_cast<void* const*>(&TopLevelWindowDestructor_Original)},
+            {L"CWindowBorder::~CWindowBorder",
+             reinterpret_cast<void* const*>(&WindowBorderDestructor_Original)},
+        });
+    // The window radius: decided in GetFloatCornerRadiusForCurrentStyle, or
+    // without it in GetRadiusFromCornerStyle; with neither the mod has
+    // nothing to round with.
+    if (!GetRadiusFromCornerStyle) {
+        Wh_Log(L"[dwm] no corner radius function found - staying out of dwm.exe");
+        return FALSE;
+    }
+    if (!GetFloatCornerRadiusForCurrentStyle_Original) {
+        WindhawkUtils::SYMBOL_HOOK fallbackHooks[] = {
+            {
+                {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
+                 LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
+                 LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )",
+                 LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )"},
+                &GetRadiusFromCornerStyle_Original,
+                GetRadiusFromCornerStyle_Hook,
+            },
+        };
+        if (!WindhawkUtils::HookSymbols(udwm, fallbackHooks, ARRAYSIZE(fallbackHooks))) {
+            Wh_Log(L"[dwm] GetRadiusFromCornerStyle couldn't be hooked - staying out of dwm.exe");
+            return FALSE;
+        }
+        g_radiusFromStyleHooked = true;
+        Wh_Log(L"[dwm] radius decided in GetRadiusFromCornerStyle (maximized and snapped "
+               L"windows told by %s)",
+               IsMaximizedOrSnapped ? L"IsMaximizedOrSnapped" : L"IsZoomed: maximized only");
     }
 
     if (GetWindowData) {
