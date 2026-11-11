@@ -75,10 +75,14 @@ corners, borders and shadows inside `dwm.exe`.
   borders.
 
   ![Phantom](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/phantom.png)
+* **Neon** - a thin solid frame, light or black with the Windows mode, lit
+  by the full bevel: an accent edge line along the rounded screen and an
+  accent glow cast inwards over it; rounded windows with black borders (gray
+  on inactive windows).
+
+  ![Neon](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/neon.png)
 * **Custom** - your own: every setting in the sections named "Custom theme",
   as you set them.
-
-  ![Custom](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/round-everything/custom.png)
 
 The few values worth changing on a theme without leaving it are under
 **Overrides** - frame thickness, screen corner radius, monitor corner radius, frame color and its
@@ -356,6 +360,7 @@ same license.
   - windows: Windows - the taskbar's own light or dark acrylic with a fine rim, Windows' 8 px corners on every window, maximized ones with a border and a shadow
   - eclipse: Eclipse - no frame to speak of, just the rounded screen corners in the active window's color, ringed by an accent-colored line along them and the taskbar's edge, rounded windows with accent borders
   - phantom: Phantom - no fill, just the accent-colored edge line around the rounded screen over a deep inner shadow, rounded windows with accent borders
+  - neon: Neon - a thin solid frame, light or black with the Windows mode, lit by the full bevel, an accent edge line and an accent glow cast inwards over the screen, rounded windows with black borders
   - custom: Custom - the settings in the "Custom theme" sections below, as you set them
 - overrides:
   - offset: -1
@@ -1014,6 +1019,10 @@ struct Bevel {
     // default is the border Windows' taskbar draws with transparency effects
     // off, light and dark.
     PCWSTR edgeLineSpec = L"#BEBEBE|#404040";
+    // The strengths as the settings give them, where a theme has a light and a
+    // dark value (light, light2, specular, shininess, fresnel, edgeLine,
+    // edgeShade - "light|dark"); a null one is the number above, both modes.
+    PCWSTR strengthSpecs[7] = {};
 };
 struct ThemeDef {
     PCWSTR id;
@@ -1038,11 +1047,13 @@ struct ThemeDef {
     // others this color (#AARRGGBB; the setting's default unless given).
     bool borderColors = false;
     uint32_t inactiveBorderArgb = 0xFF3C3C3C;
+    PCWSTR activeBorderSpec = L"accent";  // the active window's, as the setting gives it
     // The frame color as the setting gives it (a light|dark pair, a
     // gradient, accent), `color` only should it not be read. The default is
     // the fill of Windows' taskbar with transparency effects off, light and
     // dark.
     PCWSTR colorSpec = L"#EEEEEE|#1C1C1C";
+    PCWSTR shadowColorSpec = L"#000000";  // the inner shadow's (light|dark, accent)
 };
 // A bevel reduced to its rim: no lighting, the full Fresnel edge, an edge
 // shade - the minimum width and curvature the settings allow.
@@ -1117,6 +1128,21 @@ constexpr ThemeDef kThemes[] = {
      .shadow = true, .shadowBlur = 24, .monitorCornerRadius = 0, .workAreaInset = 8,
      .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true, .opacity = 0,
      .gradientAngle = 45, .shadowOpacity = 80, .borderColors = true},
+    // A thin solid frame, light or black with the Windows mode, lit by the
+    // full bevel - an accent edge line and an accent glow cast inwards over
+    // the screen; black and gray window borders.
+    {.id = L"neon", .offset = 8, .radius = 28, .color = RGB(0x00, 0x00, 0x00), .colorSource = 0,
+     .fill = 0, .blur = 0, .tint = 20, .luminosity = 50, .saturation = 100, .noiseOpacity = 0,
+     .noiseDensity = 100,
+     .bevel = {.enabled = true, .width = 1, .curvature = 20, .light = 70, .lightAngle = 90,
+               .light2 = 70, .light2Angle = 270, .specular = 30, .shininess = 55,
+               .fresnel = 100, .edgeLine = 70, .edgeShade = 30, .edgeLineSpec = L"accent",
+               .strengthSpecs = {L"70|70", L"100|70", L"100|30", L"55|55", L"100|100",
+                                 L"100|70", L"50|30"}},
+     .shadow = true, .shadowBlur = 12, .monitorCornerRadius = 20, .workAreaInset = 12,
+     .windowRadius = 20, .maximizedShadow = false, .maximizedBorder = true,
+     .borderColors = true, .inactiveBorderArgb = 0xFF3C3C3C, .activeBorderSpec = L"#000000",
+     .colorSpec = L"#EEEEEE|#000000", .shadowColorSpec = L"accent"},
 };
 const ThemeDef* FindTheme(PCWSTR id) {
     for (const ThemeDef& theme : kThemes) {
@@ -1464,28 +1490,40 @@ bool ParseModeColor(PCWSTR text, COLORREF& out, bool& usesAccent, bool& usesMode
 // These settings were numbers before they took text: a value saved then
 // reads as no text, and is read as the number it is. `text` gets the value
 // as given, for the theme export.
-int ModeIntSetting(PCWSTR key, int lo, int hi, bool& usesMode, std::wstring& text) {
-    auto value = WindhawkUtils::StringSetting::make(key);
-    std::wstring spec = value.get();
+// The value of such a spec for the current mode, clamped to [lo, hi]; false
+// if it isn't a number or a pair of them. `spec` comes back trimmed.
+bool ParseModeInt(std::wstring& spec, int lo, int hi, int& value, bool& usesMode) {
     size_t b = spec.find_first_not_of(L" \t'\""), e = spec.find_last_not_of(L" \t'\"");
     spec = b == std::wstring::npos ? std::wstring() : spec.substr(b, e - b + 1);
-    if (!spec.empty()) {
-        std::wstring part = spec;
-        bool pair = false;
-        size_t bar = spec.find(L'|');
-        if (bar != std::wstring::npos) {
-            pair = true;
-            part = SystemUsesLightTheme() ? spec.substr(0, bar) : spec.substr(bar + 1);
-        }
-        size_t pb = part.find_first_not_of(L" \t"), pe = part.find_last_not_of(L" \t");
-        part = pb == std::wstring::npos ? std::wstring() : part.substr(pb, pe - pb + 1);
-        wchar_t* end = nullptr;
-        long v = part.empty() ? 0 : wcstol(part.c_str(), &end, 10);
-        if (!part.empty() && end && *end == L'\0') {
-            usesMode = usesMode || pair;
-            text = spec;
-            return std::clamp(static_cast<int>(v), lo, hi);
-        }
+    if (spec.empty()) {
+        return false;
+    }
+    std::wstring part = spec;
+    bool pair = false;
+    size_t bar = spec.find(L'|');
+    if (bar != std::wstring::npos) {
+        pair = true;
+        part = SystemUsesLightTheme() ? spec.substr(0, bar) : spec.substr(bar + 1);
+    }
+    size_t pb = part.find_first_not_of(L" \t"), pe = part.find_last_not_of(L" \t");
+    part = pb == std::wstring::npos ? std::wstring() : part.substr(pb, pe - pb + 1);
+    wchar_t* end = nullptr;
+    long v = part.empty() ? 0 : wcstol(part.c_str(), &end, 10);
+    if (part.empty() || !end || *end != L'\0') {
+        return false;
+    }
+    usesMode = usesMode || pair;
+    value = std::clamp(static_cast<int>(v), lo, hi);
+    return true;
+}
+
+int ModeIntSetting(PCWSTR key, int lo, int hi, bool& usesMode, std::wstring& text) {
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    std::wstring spec = setting.get();
+    int value = 0;
+    if (ParseModeInt(spec, lo, hi, value, usesMode)) {
+        text = spec;
+        return value;
     }
     int v = Wh_GetIntSetting(key);
     text = std::to_wstring(v);
@@ -1780,7 +1818,7 @@ void LogThemeAsJson(const ThemeDef& theme, const Settings& s, int fill) {
     flag(L"windowCorners.maximizedShadow", theme.maximizedShadow);
     flag(L"windowCorners.maximizedBorder", theme.maximizedBorder);
     flag(L"windowCorners.borderColors", theme.borderColors);
-    text(L"windowCorners.activeBorderColor", L"accent");
+    text(L"windowCorners.activeBorderColor", theme.activeBorderSpec);
     {
         uint32_t argb = theme.inactiveBorderArgb;
         WCHAR hex[16];
@@ -1962,17 +2000,30 @@ void LoadSettings() {
         }
         s.edgeShade = theme->bevel.edgeShade;
         {
-            const int values[7] = {s.light,    s.light2,   s.specular, s.shininess,
-                                   s.fresnel,  s.edgeLine, s.edgeShade};
+            // A strength the theme gives as a light|dark pair takes the
+            // current mode's value (same ranges as the settings).
+            int* values[7] = {&s.light,   &s.light2,   &s.specular, &s.shininess,
+                              &s.fresnel, &s.edgeLine, &s.edgeShade};
+            const int lows[7] = {0, 0, 0, 1, 0, 0, 0};
+            const int highs[7] = {100, 100, 100, 200, 100, 100, 100};
             for (int k = 0; k < 7; k++) {
-                s.bevelValueTexts[k] = std::to_wstring(values[k]);
+                std::wstring spec =
+                    theme->bevel.strengthSpecs[k] ? theme->bevel.strengthSpecs[k] : L"";
+                if (ParseModeInt(spec, lows[k], highs[k], *values[k], s.extraColorsMode)) {
+                    s.bevelValueTexts[k] = spec;
+                } else {
+                    s.bevelValueTexts[k] = std::to_wstring(*values[k]);
+                }
             }
         }
         s.shadow = theme->shadow;
         s.shadowBlur = theme->shadowBlur;
         s.shadowOpacity = theme->shadowOpacity;
-        s.shadowColor = RGB(0, 0, 0);
-        s.shadowColorText = L"#000000";
+        s.shadowColorText = theme->shadowColorSpec;
+        if (!ParseModeColor(theme->shadowColorSpec, s.shadowColor, s.extraColorsAccent,
+                            s.extraColorsMode)) {
+            s.shadowColor = RGB(0, 0, 0);
+        }
         s.shadowOffsetX = 0;
         s.shadowOffsetY = 0;
         s.monitorCornerRadius = theme->monitorCornerRadius;
@@ -10235,11 +10286,12 @@ void LoadDwmSettings() {
     g_maximizedShadow = Wh_GetIntSetting(L"windowCorners.maximizedShadow") != 0;
     g_customBorderColors = Wh_GetIntSetting(L"windowCorners.borderColors") != 0;
     // A ready-made theme sets these outright (its border colors, when it has
-    // them, are the accent and its own inactive color); the window corner
+    // them, are its own active and inactive colors); the window corner
     // radius can be overridden.
     auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
     bool themeColors = false;
     uint32_t themeInactive = 0xFF3C3C3C;
+    PCWSTR themeActive = L"accent";
     if (const ThemeDef* theme = FindTheme(themeSetting.get())) {
         radius = theme->windowRadius;
         g_maximizedShadow = theme->maximizedShadow;
@@ -10247,6 +10299,7 @@ void LoadDwmSettings() {
         g_customBorderColors = theme->borderColors;
         themeColors = theme->borderColors;
         themeInactive = theme->inactiveBorderArgb;
+        themeActive = theme->activeBorderSpec;
         int wanted = Wh_GetIntSetting(L"overrides.windowCornerRadius");
         if (wanted >= -1) {
             radius = wanted;
@@ -10262,7 +10315,7 @@ void LoadDwmSettings() {
         WCHAR hex[16];
         swprintf_s(hex, L"#%08X", themeInactive);
         std::lock_guard<std::mutex> lock(g_borderSpecMutex);
-        g_activeBorderSpec = L"accent";
+        g_activeBorderSpec = themeActive;
         g_inactiveBorderSpec = hex;
     } else if (g_customBorderColors) {
         auto active = WindhawkUtils::StringSetting::make(L"windowCorners.activeBorderColor");
