@@ -97,7 +97,8 @@ magnified with its label shown.*
   adapts to the wallpaper automatically.
 
 Each style also follows the **Panel tone** setting: Light, Dark, or Auto. The
-transparent style ignores the tone.
+transparent style ignores the tone. The default is **Transparent**; select a
+panel style in the mod settings.
 
 ## How it works
 
