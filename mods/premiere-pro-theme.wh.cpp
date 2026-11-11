@@ -412,12 +412,14 @@ Both layouts of each are accepted now; a length on neither list is still
 refused, so a later build that grows a table loses that entry point and says so
 in the log, rather than hooking whatever the slot has become.
 
-**Premiere 27.0 (2027) grew them all again**, the Direct2D supplier among them
-(29 to 34 slots). That one gates the whole interface layer, so on 27.0 the
-earlier layouts hooked nothing at all. The pen and brush stay at slots 9 and
-10 and the rectangle fill at 7 of 50; the swatch draw and the skin and popup
-draws each moved one slot. These layouts were measured against the 27.0.0
-executable by the contributor who reported them.
+**Premiere 27.0 (2027) grew them again**, the Direct2D supplier among them (29
+to 34 slots). That one gates the whole interface layer, so on 27.0 the earlier
+layouts hooked nothing at all. The pen and brush stay at slots 9 and 10 and the
+rectangle fill at 7 of 50; `UI_Swatch`, `V7SwatchSkin` and both popup skins
+each moved their draw one slot. These layouts were measured against the 27.0.0
+executable by the contributor who reported them. No 27.0 length has been
+measured for `Theme`, `ThemeClient` or `BaseSwatchSkin`: if those grew too,
+their hooks are refused there and the log names the length each one met.
 
 When a table has a length nobody has measured yet, the log now says which
 length it met — for the supplier, in a line of its own. That line, from a
@@ -2246,7 +2248,17 @@ static bool ContentScopesMatter() {
 static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
     const Settings& s = CurrentSettings();
 
-    if (!s.brushHook || !in || InContentScope()) {
+    /*
+        As in ConvertColorRef: a slot taken by position need not be the method
+        measured — PaintRect is found that way on a build with no module — and
+        what it was handed need not be a color. Anything in the first page or
+        misaligned for a float is not one, null included, and is left alone
+        rather than read.
+    */
+    auto address = reinterpret_cast<uintptr_t>(in);
+
+    if (!s.brushHook || address < 0x10000 ||
+        (address & (alignof(DvaColorRGBA) - 1)) != 0 || InContentScope()) {
         return false;
     }
 
@@ -3519,13 +3531,14 @@ static bool InstallStaticToolkitHooks() {
                       &count);
 
     /*
-        The rect fill, which is where utils::DrawFillRect ends up; see
-        FillRect_Hook. Its table is the surface's, not the supplier's. Most of
-        the panel backgrounds are painted through it, so a build where it is
-        refused keeps the stock gray behind every panel.
+        The rect fill, OSSurfaceInterface::PaintRect, which is where
+        utils::DrawFillRect ends up; see SurfaceFillRect_Hook. Its table is the
+        surface's, not the supplier's. Most of the panel backgrounds are
+        painted through it, so a build where it is refused keeps the stock
+        gray behind every panel.
     */
     InstallHookFromVtable(executable, kSurfaceClass, kSurfaceLayouts,
-                          L"d2d::FillRect",
+                          L"d2d::PaintRect",
                           reinterpret_cast<void*>(SurfaceFillRect_Hook),
                           reinterpret_cast<void**>(&SurfaceFillRect_Original),
                           &count);
