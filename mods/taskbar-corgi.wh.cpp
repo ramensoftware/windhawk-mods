@@ -5,8 +5,8 @@
 // @version         1.1
 // @author          Dimitris Katsimpris
 // @github          https://github.com/dimitriskatsimpris
-// @include         explorer.exe
-// @compilerOptions -lgdi32 -lole32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -lole32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -14,6 +14,8 @@
 # Taskbar Corgi
 
 A small pixel-art corgi that lives on top of your taskbar.
+
+![Taskbar Corgi](https://raw.githubusercontent.com/dimitriskatsimpris/windhawk-mods/taskbar-corgi-assets/taskbar-corgi.gif)
 
 - **Walks** back and forth, **sits** for a while and takes **naps** (with
   little floating z's).
@@ -36,9 +38,10 @@ A small pixel-art corgi that lives on top of your taskbar.
 
 Coats: red and white, tricolour, sable and fluffy cream.
 
-The corgis are click-through, so they never block anything, and they hide
-while a fullscreen app or game is in front. Optionally they chase the mouse
-cursor (off by default).
+The corgis live on the main taskbar, at the bottom of the screen. They are
+click-through, so they never block anything, and they hide while a fullscreen
+app or game is in front. Optionally they chase the mouse cursor (off by
+default). The mod runs in its own process, not inside Explorer.
 */
 // ==/WindhawkModReadme==
 
@@ -89,6 +92,8 @@ cursor (off by default).
 #include <windows.h>
 
 #include <mmdeviceapi.h>
+#include <shellapi.h>
+#include <windhawk_utils.h>
 
 #include <cmath>
 #include <cstdint>
@@ -485,17 +490,16 @@ constexpr int kMouthX = 22;  // snout column in standing frames
 constexpr int kMaxCorgis = 3;
 constexpr int kMealHours[] = {8, 13, 19};
 
+constexpr UINT kTickMs = 33;
+constexpr UINT kHiddenTickMs = 500;
 constexpr UINT kMsgReloadSettings = WM_APP + 1;
 constexpr PCWSTR kClassName = L"WindhawkTaskbarCorgi";
 
-const GUID kClsidMMDeviceEnumerator = {
-    0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-const GUID kIidIMMDeviceEnumerator = {
-    0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+// IAudioMeterInformation is only forward-declared in the bundled headers, so
+// its IID and vtable are declared here.
 const GUID kIidIAudioMeterInformation = {
     0xC02216F6, 0x8C67, 0x4B5B, {0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64}};
 
-// IAudioMeterInformation is only forward-declared in the bundled headers.
 struct AudioMeter : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* peak) = 0;
     virtual HRESULT STDMETHODCALLTYPE GetMeteringChannelCount(UINT* count) = 0;
@@ -564,6 +568,7 @@ struct Stage {
     int h = 0;
     bool shown = false;
     uint64_t lastHash = 0;
+    RECT drawn = {};  // area covered by the last frame's items
 };
 
 // One thing to draw: a canvas at a screen position.
@@ -675,7 +680,32 @@ void PresentStage(int x, int y, int w, int h, int scale) {
         g_stage.bits = static_cast<uint32_t*>(bits);
     }
 
-    memset(g_stage.bits, 0, (size_t)w * h * sizeof(uint32_t));
+    // Only the area covered by the items in this frame or the previous one
+    // changes, so only that part is cleared and sent to the window.
+    bool moved = !g_stage.shown || resized || x != g_stage.x || y != g_stage.y;
+    RECT drawn = {};
+    for (int i = 0; i < g_itemCount; i++) {
+        const Item& item = g_items[i];
+        RECT r = {item.x - x, item.y - y,
+                  item.x - x + item.canvas.w * scale,
+                  item.y - y + item.canvas.h * scale};
+        UnionRect(&drawn, &drawn, &r);
+    }
+    RECT bounds = {0, 0, w, h};
+    RECT dirty = bounds;
+    if (!moved) {
+        UnionRect(&dirty, &g_stage.drawn, &drawn);
+        IntersectRect(&dirty, &dirty, &bounds);
+    }
+    g_stage.drawn = drawn;
+    if (IsRectEmpty(&dirty)) {
+        return;
+    }
+
+    for (int py = dirty.top; py < dirty.bottom; py++) {
+        memset(g_stage.bits + (size_t)py * w + dirty.left, 0,
+               (dirty.right - dirty.left) * sizeof(uint32_t));
+    }
     for (int i = 0; i < g_itemCount; i++) {
         const Item& item = g_items[i];
         const Canvas& c = item.canvas;
@@ -703,16 +733,25 @@ void PresentStage(int x, int y, int w, int h, int scale) {
         }
     }
 
-    // Only pass a position when it changes, so the window doesn't move.
-    bool moved = !g_stage.shown || resized || x != g_stage.x || y != g_stage.y;
+    // Only pass a position when it changes, so the window doesn't move. The
+    // size has to be passed every time, or the new picture isn't shown.
     POINT dst = {x, y};
     SIZE size = {w, h};
     POINT src = {0, 0};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    if (!UpdateLayeredWindow(g_stage.hwnd, nullptr, moved ? &dst : nullptr,
-                             &size, g_stage.dc, &src, 0, &blend, ULW_ALPHA)) {
-        Wh_Log(L"UpdateLayeredWindow failed: %u", GetLastError());
+    UPDATELAYEREDWINDOWINFO info = {};
+    info.cbSize = sizeof(info);
+    info.pptDst = moved ? &dst : nullptr;
+    info.psize = &size;
+    info.hdcSrc = g_stage.dc;
+    info.pptSrc = &src;
+    info.pblend = &blend;
+    info.dwFlags = ULW_ALPHA;
+    info.prcDirty = moved ? nullptr : &dirty;
+    if (!UpdateLayeredWindowIndirect(g_stage.hwnd, &info)) {
+        Wh_Log(L"UpdateLayeredWindowIndirect failed: %u", GetLastError());
         g_stage.lastHash = 0;
+        g_stage.drawn = bounds;  // send everything again next frame
     }
     g_stage.x = x;
     g_stage.y = y;
@@ -823,6 +862,9 @@ Env g_env;
 uint32_t g_rng = 1;
 ULONGLONG g_lastTick = 0;
 UINT_PTR g_timer = 0;
+UINT g_tickInterval = 0;
+ULONGLONG g_edgeCheckTick = 0;
+bool g_taskbarAtBottom = true;
 bool g_mealsInitialized = false;
 
 AudioMeter* g_meter = nullptr;
@@ -835,7 +877,6 @@ bool g_music = false;
 
 HANDLE g_thread = nullptr;
 DWORD g_threadId = 0;
-HANDLE g_stopEvent = nullptr;
 
 double Rand() {
     g_rng ^= g_rng << 13;
@@ -853,18 +894,17 @@ void LoadSettings() {
     s.size = (int)Clamp(Wh_GetIntSetting(L"size"), 1, 8);
     s.corgis = (int)Clamp(Wh_GetIntSetting(L"corgis"), 1, kMaxCorgis);
 
-    PCWSTR coat = Wh_GetStringSetting(L"coat");
+    auto coat = WindhawkUtils::StringSetting::make(L"coat");
     s.coat = wcscmp(coat, L"tricolor") == 0 ? kTricolor
              : wcscmp(coat, L"sable") == 0  ? kSable
              : wcscmp(coat, L"cream") == 0  ? kCream
                                             : kRed;
-    Wh_FreeStringSetting(coat);
 
     s.dance = Wh_GetIntSetting(L"danceToMusic") != 0;
     s.dayNight = Wh_GetIntSetting(L"dayNight") != 0;
     s.hats = Wh_GetIntSetting(L"hats") != 0;
 
-    PCWSTR birthday = Wh_GetStringSetting(L"birthday");
+    auto birthday = WindhawkUtils::StringSetting::make(L"birthday");
     int month = 0;
     int day = 0;
     if (swscanf(birthday, L"%d-%d", &month, &day) == 2 && month >= 1 &&
@@ -872,7 +912,6 @@ void LoadSettings() {
         s.birthMonth = month;
         s.birthDay = day;
     }
-    Wh_FreeStringSetting(birthday);
 
     s.fetch = Wh_GetIntSetting(L"fetch") != 0;
     s.bowl = Wh_GetIntSetting(L"foodBowl") != 0;
@@ -921,8 +960,8 @@ void ReleaseMeter() {
 
 void AcquireMeter() {
     IMMDeviceEnumerator* enumerator = nullptr;
-    if (FAILED(CoCreateInstance(kClsidMMDeviceEnumerator, nullptr, CLSCTX_ALL,
-                                kIidIMMDeviceEnumerator,
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
                                 reinterpret_cast<void**>(&enumerator)))) {
         return;
     }
@@ -1179,7 +1218,7 @@ void UpdateCorgi(int i) {
         if (nearby) {
             if (std::fabs(dist) > 6.0 * s) {
                 c.state = State::Chase;
-                MoveToward(c, c.x + dist, runSpeed);
+                MoveToward(c, Clamp(c.x + dist, e.minX, e.maxX), runSpeed);
             } else {
                 c.state = State::Watch;
             }
@@ -1270,7 +1309,11 @@ void UpdateCorgi(int i) {
             }
             double ballX = g_ball.x + 2.5 * s;
             int dir = ballX > DogCenter(c) ? 1 : -1;
-            if (MoveToward(c, CanvasXFor(ballX, kMouthX, dir), runSpeed)) {
+            // Clamped like every other target: at a screen edge the mouth
+            // can't always line up with the ball, and that's close enough.
+            double target =
+                Clamp(CanvasXFor(ballX, kMouthX, dir), e.minX, e.maxX);
+            if (MoveToward(c, target, runSpeed)) {
                 c.dir = dir;
                 g_ball.carrier = i;
                 c.state = State::Carry;
@@ -1562,27 +1605,39 @@ void RenderBowl() {
     item.y = g_env.ground - sprite.h * g_env.scale;
 }
 
-bool IsFullscreenAppActive(const RECT& monitor) {
-    HWND fg = GetForegroundWindow();
-    if (!fg) {
-        return false;
-    }
+bool IsFullscreenAppActive() {
+    QUERY_USER_NOTIFICATION_STATE state;
+    return SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+           (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+            state == QUNS_PRESENTATION_MODE);
+}
 
-    WCHAR cls[64];
-    if (GetClassNameW(fg, cls, ARRAYSIZE(cls))) {
-        for (PCWSTR skip : {L"Progman", L"WorkerW", L"Shell_TrayWnd"}) {
-            if (wcscmp(cls, skip) == 0) {
-                return false;
-            }
+// The corgis only live on a taskbar at the bottom of the screen. Checked once
+// a second, since it asks the taskbar.
+bool IsTaskbarAtBottom() {
+    ULONGLONG now = GetTickCount64();
+    if (now - g_edgeCheckTick >= 1000) {
+        g_edgeCheckTick = now;
+        APPBARDATA abd = {};
+        abd.cbSize = sizeof(abd);
+        if (SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
+            g_taskbarAtBottom = abd.uEdge == ABE_BOTTOM;
         }
     }
+    return g_taskbarAtBottom;
+}
 
-    RECT r;
-    if (!GetWindowRect(fg, &r)) {
-        return false;
+// Ticks at 30 fps while the corgis are shown, and slowly while they're hidden.
+void SetTickInterval(UINT ms) {
+    if (ms != g_tickInterval) {
+        g_timer = SetTimer(nullptr, g_timer, ms, nullptr);
+        g_tickInterval = ms;
     }
-    return r.left <= monitor.left && r.top <= monitor.top &&
-           r.right >= monitor.right && r.bottom >= monitor.bottom;
+}
+
+void HideAndSlowDown() {
+    HideStage();
+    SetTickInterval(kHiddenTickMs);
 }
 
 void Tick() {
@@ -1597,16 +1652,18 @@ void Tick() {
     mi.cbSize = sizeof(mi);
     if (!taskbar || !GetWindowRect(taskbar, &e.taskbar) ||
         !GetMonitorInfoW(MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY),
-                         &mi)) {
-        HideStage();
+                         &mi) ||
+        !IsTaskbarAtBottom()) {
+        HideAndSlowDown();
         return;
     }
     e.monitor = mi.rcMonitor;
 
-    if (g_settings.hideInFullscreen && IsFullscreenAppActive(e.monitor)) {
-        HideStage();
+    if (g_settings.hideInFullscreen && IsFullscreenAppActive()) {
+        HideAndSlowDown();
         return;
     }
+    SetTickInterval(kTickMs);
 
     UINT dpi = GetDpiForWindow(taskbar);
     e.scale = (int)std::lround(g_settings.size * (dpi ? dpi : 96) / 96.0);
@@ -1673,22 +1730,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);  // create the queue
 
-    // Only the explorer.exe instance that owns the taskbar gets corgis.
-    for (;;) {
-        HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (taskbar) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(taskbar, &pid);
-            if (pid != GetCurrentProcessId()) {
-                return 0;
-            }
-            break;
-        }
-        if (WaitForSingleObject(g_stopEvent, 500) == WAIT_OBJECT_0) {
-            return 0;
-        }
-    }
-
     HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     g_rng = (uint32_t)GetTickCount64() | 1;
 
@@ -1697,30 +1738,36 @@ DWORD WINAPI WorkerThread(LPVOID) {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = g_hInstance;
     wc.lpszClassName = kClassName;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
+    } else if (!CreateStage()) {
+        Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
+    } else {
+        LoadSettings();
+        ApplySettings();
+        SetTickInterval(kTickMs);
 
-    LoadSettings();
-    ApplySettings();
-    CreateStage();
-    g_timer = SetTimer(nullptr, 0, 33, nullptr);
-
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (!msg.hwnd) {
-            if (msg.message == WM_TIMER && msg.wParam == g_timer) {
-                Tick();
-                continue;
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            if (!msg.hwnd) {
+                if (msg.message == WM_TIMER && msg.wParam == g_timer) {
+                    Tick();
+                    continue;
+                }
+                if (msg.message == kMsgReloadSettings) {
+                    LoadSettings();
+                    ApplySettings();
+                    continue;
+                }
             }
-            if (msg.message == kMsgReloadSettings) {
-                LoadSettings();
-                ApplySettings();
-                continue;
-            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+
+        KillTimer(nullptr, g_timer);
+        g_timer = 0;
+        g_tickInterval = 0;
     }
 
-    KillTimer(nullptr, g_timer);
     DestroyStage();
     ReleaseMeter();
     UnregisterClassW(kClassName, g_hInstance);
@@ -1732,35 +1779,25 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&WndProc), &g_hInstance);
 
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
-        return FALSE;
-    }
     g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, &g_threadId);
-    if (!g_thread) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-        return FALSE;
-    }
-    return TRUE;
+    return g_thread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_threadId) {
         PostThreadMessageW(g_threadId, kMsgReloadSettings, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (!g_thread) {
         return;
     }
-    SetEvent(g_stopEvent);
     while (!PostThreadMessageW(g_threadId, WM_QUIT, 0, 0)) {
         if (WaitForSingleObject(g_thread, 10) == WAIT_OBJECT_0) {
             break;
@@ -1768,8 +1805,185 @@ void Wh_ModUninit() {
     }
     WaitForSingleObject(g_thread, INFINITE);
     CloseHandle(g_thread);
-    CloseHandle(g_stopEvent);
     g_thread = nullptr;
-    g_stopEvent = nullptr;
     g_threadId = 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
