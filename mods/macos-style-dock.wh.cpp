@@ -6309,7 +6309,16 @@ std::wstring UserValueName(PCWSTR name) {
     return std::wstring(name) + L"_" + sid;
 }
 
-bool KeepTaskbarShown() { return !g_unloading; }
+using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
+TrayUI__Hide_t TrayUI__Hide_Original;
+using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
+CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
+
+// Only with the hook that keeps the taskbar from hiding: without taskbar.dll's
+// symbols, turning auto-hide on would really hide it, and the dock with it.
+// Otherwise the dock stays as Windows lays the taskbar out, and a setting left
+// on by an earlier session is put back.
+bool KeepTaskbarShown() { return !g_unloading && TrayUI__Hide_Original; }
 
 void ApplyAutoHide() {
     HWND tb = FindTaskbar();
@@ -6328,15 +6337,11 @@ void ApplyAutoHide() {
     Wh_SetIntValue(UserValueName(L"autoHideBefore").c_str(), g_autoHideBefore);
 }
 
-using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
-TrayUI__Hide_t TrayUI__Hide_Original;
 void WINAPI TrayUI__Hide_Hook(void* pThis) {
     if (!KeepTaskbarShown()) return TrayUI__Hide_Original(pThis);
     if (HWND tb = FindTaskbar()) KillTimer(tb, kTrayHideTimer);
 }
 
-using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
-CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
     if (!KeepTaskbarShown()) CSecondaryTray__AutoHide_Original(pThis, param1);
 }
