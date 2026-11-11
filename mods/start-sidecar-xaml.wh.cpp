@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.5.1
+// @version 0.5.2
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -76,6 +76,7 @@ companion layout. There is no separate overlay window or external layout file.
 Configure individual cards, device title, overview width and spacing in this
 mod's Settings tab. The cards follow Start's light and dark themes.
 The interface uses English by default and also supports Simplified Chinese.
+Cards outside the native menu reuse Start's shadow when available.
 The mod makes no outbound requests.
 
 With a centered taskbar and enough horizontal room, the cards use both sides
@@ -1272,6 +1273,11 @@ static event_token g_visible{}, g_activated{}, g_closed{}, g_sizeChanged{},
     g_layoutTimer{nullptr};
 [[clang::no_destroy]] static c::Border g_card{nullptr};
 [[clang::no_destroy]] static c::Grid g_host{nullptr};
+[[clang::no_destroy]] static c::Grid g_sideOverview{nullptr};
+[[clang::no_destroy]] static c::Border g_shadowSource{nullptr};
+[[clang::no_destroy]] static std::optional<std::vector<c::Border>>
+    g_shadowCasters;
+static float g_shadowElevation = 0;
 [[clang::no_destroy]] static c::ScrollViewer g_leftFlank{nullptr},
     g_rightFlank{nullptr};
 [[clang::no_destroy]] static std::optional<std::vector<c::ColumnDefinition>>
@@ -1381,22 +1387,61 @@ static void LabelControl(x::FrameworkElement const& control,
     c::ToolTipService::SetToolTip(control, box_value(text));
 }
 
+static void BindSurfaceProperty(c::Border const& target,
+                                c::Border const& source,
+                                x::DependencyProperty const& property,
+                                const wchar_t* path) {
+    x::Data::Binding binding;
+    binding.Source(source);
+    binding.Path(x::PropertyPath(path));
+    target.SetBinding(property, binding);
+}
+
 static void ApplyNativeSurface(c::Border const& card, c::Border const& native) {
     // The native brush can be replaced on a theme change. A binding keeps both
     // the acrylic and the stroke in sync with the native surface.
-    auto bind = [&](x::DependencyProperty const& property,
-                    const wchar_t* path) {
-        x::Data::Binding binding;
-        binding.Source(native);
-        binding.Path(x::PropertyPath(path));
-        card.SetBinding(property, binding);
-    };
     if (native.Background())
-        bind(c::Border::BackgroundProperty(), L"Background");
+        BindSurfaceProperty(card, native, c::Border::BackgroundProperty(),
+                            L"Background");
     if (native.BorderBrush())
-        bind(c::Border::BorderBrushProperty(), L"BorderBrush");
+        BindSurfaceProperty(card, native, c::Border::BorderBrushProperty(),
+                            L"BorderBrush");
     card.BorderThickness(native.BorderThickness());
     card.CornerRadius(native.CornerRadius());
+}
+
+static c::Grid WrapSurface(c::Border const& card, bool shadow = true) {
+    c::Grid surface;
+    if (shadow && g_shadowSource) {
+        c::Border caster;
+        caster.Name(L"StartSidecarShadow");
+        caster.IsHitTestVisible(false);
+        caster.CornerRadius(card.CornerRadius());
+        caster.Translation({0, 0, g_shadowSource.Translation().z});
+        BindSurfaceProperty(caster, g_shadowSource,
+                            x::UIElement::ShadowProperty(), L"Shadow");
+        BindSurfaceProperty(caster, g_shadowSource,
+                            x::UIElement::VisibilityProperty(), L"Visibility");
+        BindSurfaceProperty(caster, g_shadowSource,
+                            x::UIElement::OpacityProperty(), L"Opacity");
+        surface.Children().Append(caster);
+        if (!g_shadowCasters)
+            g_shadowCasters.emplace();
+        g_shadowCasters->push_back(caster);
+    }
+    surface.Children().Append(card);
+    return surface;
+}
+
+static void SyncShadowElevation() {
+    if (!g_shadowSource || !g_shadowCasters)
+        return;
+    float elevation = g_shadowSource.Translation().z;
+    if (elevation == g_shadowElevation)
+        return;
+    g_shadowElevation = elevation;
+    for (auto const& caster : *g_shadowCasters)
+        caster.Translation({0, 0, elevation});
 }
 static void LoadSettings() {
     auto settings = std::make_shared<svc::Config>();
@@ -1496,9 +1541,9 @@ static void RemoveCard() {
                     g_host.Children().RemoveAt(at);
             }
         }
-        if (g_host && g_card) {
+        if (g_host && g_sideOverview) {
             uint32_t at;
-            if (g_host.Children().IndexOf(g_card, at))
+            if (g_host.Children().IndexOf(g_sideOverview, at))
                 g_host.Children().RemoveAt(at);
         }
         if (g_host && g_addedColumns) {
@@ -1526,6 +1571,10 @@ static void RemoveCard() {
     g_addedColumns.reset();
     g_leftFlank = nullptr;
     g_rightFlank = nullptr;
+    g_sideOverview = nullptr;
+    g_shadowCasters.reset();
+    g_shadowSource = nullptr;
+    g_shadowElevation = 0;
     g_card = nullptr;
     g_host = nullptr;
     g_clock = nullptr;
@@ -1540,6 +1589,7 @@ static void RemoveCard() {
     g_gpu = nullptr;
 }
 static void UpdateData() {
+    SyncShadowElevation();
     auto snapshot = svc::Snapshot();
     UpdateBottom(snapshot);
     if (!g_card || !g_clock)
@@ -1912,8 +1962,8 @@ inline void Reflow() {
         return;
     if (companion && Visible(companion))
         width += companion.ActualWidth();
-    if (g_card)
-        width += g_card.Width() + g_card.Margin().Left;
+    if (g_sideOverview)
+        width += g_sideOverview.Width() + g_sideOverview.Margin().Left;
     bottom.Width(width);
     tileGrid.Width(width);
     double totalWeight = 0;
@@ -2141,9 +2191,10 @@ inline bool Build(x::DependencyObject const& root, c::Border const& native) {
         c::ColumnDefinition definition;
         definition.Width({200, x::GridUnitType::Pixel});
         grid.ColumnDefinitions().Append(definition);
-        c::Grid::SetColumn(card, column);
-        card.Margin({column ? 4.0 : 0, 0, 0, 0});
-        grid.Children().Append(card);
+        auto surface = WrapSurface(card);
+        c::Grid::SetColumn(surface, column);
+        surface.Margin({column ? 4.0 : 0, 0, 0, 0});
+        grid.Children().Append(surface);
         tiles->push_back(card);
         tileWeights.push_back(weight);
         column++;
@@ -2370,21 +2421,22 @@ static void CompactOverview(double width) {
 
 static c::ScrollViewer BuildStackedCards(c::Border const& native,
                                          svc::Config const& settings,
-                                         double width) {
+                                         double width,
+                                         bool shadow = true) {
     c::StackPanel stack;
     stack.Spacing(6);
     stack.Margin({0, 0, 6, 0});
     if (settings.overview) {
         BuildOverview(native, settings);
         CompactOverview(width);
-        stack.Children().Append(g_card);
+        stack.Children().Append(WrapSurface(g_card, shadow));
     }
     std::vector<c::Border> smallerCards;
     cards::Populate(native, settings,
                     [&](c::Border const& card, double weight) {
                         if (weight > 1.0) {
                             card.Height(cards::kPanelHeight);
-                            stack.Children().Append(card);
+                            stack.Children().Append(WrapSurface(card, shadow));
                         } else {
                             card.MinHeight(142);
                             smallerCards.push_back(card);
@@ -2406,12 +2458,12 @@ static c::ScrollViewer BuildStackedCards(c::Border const& native,
                 row.Height({1, x::GridUnitType::Auto});
                 grid.RowDefinitions().Append(row);
             }
-            auto const& card = smallerCards[i];
-            c::Grid::SetColumn(card, i % columns);
-            c::Grid::SetRow(card, i / columns);
+            auto surface = WrapSurface(smallerCards[i], shadow);
+            c::Grid::SetColumn(surface, i % columns);
+            c::Grid::SetRow(surface, i / columns);
             if (i + 1 == smallerCards.size())
-                c::Grid::SetColumnSpan(card, columns - i % columns);
-            grid.Children().Append(card);
+                c::Grid::SetColumnSpan(surface, columns - i % columns);
+            grid.Children().Append(surface);
         }
         stack.Children().Append(grid);
     }
@@ -2458,7 +2510,7 @@ static void BuildCenteredFlanks(c::Grid const& host,
     if (settings.overview) {
         BuildOverview(native, settings);
         CompactOverview(leftWidth);
-        left.Children().Append(g_card);
+        left.Children().Append(WrapSurface(g_card));
     }
     const auto moduleCount = cards::ModuleCount(settings);
     unsigned module = 0;
@@ -2472,7 +2524,7 @@ static void BuildCenteredFlanks(c::Grid const& host,
                                : module % 2 == 1;
             movedSmallCard |= useLeft && small;
             ++module;
-            (useLeft ? left : right).Children().Append(card);
+            (useLeft ? left : right).Children().Append(WrapSurface(card));
         });
     auto makeSide = [&](c::StackPanel const& content, double width,
                         bool atLeft) {
@@ -2599,7 +2651,7 @@ static void BuildCompact(c::Grid const& main,
     layout.Children().Append(header);
 
     auto scroll = BuildStackedCards(
-        native, settings, std::max(100.0, g_compactLayer.Width() - 40));
+        native, settings, std::max(100.0, g_compactLayer.Width() - 40), false);
     c::Grid::SetRow(scroll, 1);
     layout.Children().Append(scroll);
     g_compactPanel.Child(layout);
@@ -2641,6 +2693,7 @@ static void RefreshLayout(x::UIElement const& root,
     try {
         if (g_layoutReady && g_layoutRoot == root && g_workArea == work &&
             g_centeredTaskbar == centered && (!g_card || g_card.Parent()) &&
+            (!g_sideOverview || g_sideOverview.Parent()) &&
             (!cards::bottom || cards::bottom.Parent()) &&
             (!g_compactLayer || g_compactLayer.Parent()) &&
             (!g_leftFlank || g_leftFlank.Parent()) &&
@@ -2672,6 +2725,14 @@ static void RefreshLayout(x::UIElement const& root,
         if (!main || !host || !frame || main.ActualWidth() < 100 ||
             main.ActualHeight() < 100)
             return;
+        for (const wchar_t* name :
+             {L"StartDropShadow", L"RootGridDropShadow", L"DropShadow",
+              L"RightCompanionDropShadow"}) {
+            if (auto shadow = Find(host, name).try_as<c::Border>()) {
+                g_shadowSource = shadow;
+                break;
+            }
+        }
         g_saved.emplace();
         g_addedColumns.emplace();
         g_cardEvents.emplace();
@@ -2762,10 +2823,12 @@ static void RefreshLayout(x::UIElement const& root,
             return;
         }
         BuildOverview(nativeBorder, *settings);
-        g_card.Width(width);
-        g_card.HorizontalAlignment(x::HorizontalAlignment::Left);
-        g_card.Margin({gap, 0, 0, 0});
-        g_card.VerticalAlignment(x::VerticalAlignment::Stretch);
+        g_card.ClearValue(x::FrameworkElement::WidthProperty());
+        g_sideOverview = WrapSurface(g_card);
+        g_sideOverview.Width(width);
+        g_sideOverview.HorizontalAlignment(x::HorizontalAlignment::Left);
+        g_sideOverview.Margin({gap, 0, 0, 0});
+        g_sideOverview.VerticalAlignment(x::VerticalAlignment::Stretch);
         g_host = host;
         uint32_t existing = host.ColumnDefinitions().Size();
         if (existing == 0) {
@@ -2779,9 +2842,9 @@ static void RefreshLayout(x::UIElement const& root,
         added.Width({width + gap, x::GridUnitType::Pixel});
         host.ColumnDefinitions().Append(added);
         g_addedColumns->push_back(added);
-        c::Grid::SetColumn(g_card, existing);
-        c::Grid::SetRow(g_card, 0);
-        host.Children().Append(g_card);
+        c::Grid::SetColumn(g_sideOverview, existing);
+        c::Grid::SetRow(g_sideOverview, 0);
+        host.Children().Append(g_sideOverview);
         g_layoutReady = BuildBottom(root, nativeBorder);
         if (!g_layoutReady) {
             RemoveCard();
