@@ -2,7 +2,7 @@
 // @id              outlook-refined
 // @name            Outlook Refined
 // @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.6.2
+// @version         0.6.3
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
@@ -2165,7 +2165,11 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       out.push(`${CALNAV} div:has([role="grid"]){width:auto!important;max-width:100%!important;box-sizing:border-box}`);
       out.push(`${CALNAV} [role="grid"]{margin-left:0!important;width:auto!important}`);
       out.push(`${CALNAV} div:has(> button[aria-label*="select to change the month"]){width:auto!important}`);
-      out.push(`${CALNAV} button[aria-label*="select to change the month"]{flex:1 1 auto!important;min-width:0!important;width:auto!important;padding-left:3px!important}`);
+      // The month and year button also carries a 20px left indent, which at a narrowed pane is
+      // the difference between fitting and not: measured at 180px, the header splits as 20px
+      // margin, 91px button and 56px arrows, while the longest labels ("September 2027") need
+      // 104px and the button clips at overflow hidden. Dropping the indent gives it 111px.
+      out.push(`${CALNAV} button[aria-label*="select to change the month"]{flex:1 1 auto!important;min-width:0!important;width:auto!important;margin-left:0!important;padding-left:3px!important}`);
       out.push(`${CALNAV} [role="grid"] :is(td,th){padding-left:0!important;padding-right:0!important}`);
     }
     if (S.calendarRowPerAccount) {
