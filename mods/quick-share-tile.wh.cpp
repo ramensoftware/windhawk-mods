@@ -8,7 +8,7 @@
 // @include         ShellHost.exe
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lruntimeobject -lole32 -loleaut32 -lshell32 -lgdi32 -luuid
-// @license         MIT
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -19,6 +19,10 @@ with a **Quick Share** launcher.
 
 Keep your Quick Settings layout intact while giving the native
 Nearby sharing tile a new purpose.
+
+## Preview
+
+![Before and after](https://raw.githubusercontent.com/ThePsychof/QuickShare-Tile/main/Before%26After.png)
 
 ## Features
 
@@ -60,6 +64,12 @@ Logs the Quick Settings visual tree for troubleshooting.
 - This mod launches Quick Share; it does not implement
   Quick Share functionality.
 
+## Credits
+
+Parts of the ControlCenter.dll hooking and cleanup logic are based on
+[refined-quick-settings-and-sound](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/refined-quick-settings-and-sound.wh.cpp)
+(GPL-3.0-only). This mod is therefore also released under GPL-3.0-only.
+
 ## Uninstallation
 
 Disable or remove the mod through Windhawk.
@@ -94,6 +104,7 @@ its label, icon, click behavior and keyboard navigation.
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -657,7 +668,9 @@ private:
     std::vector<AppliedTile> tiles_;
 };
 
-std::vector<std::unique_ptr<QuickSettingsViewHook>> g_views;
+[[clang::no_destroy]] std::optional<
+    std::vector<std::unique_ptr<QuickSettingsViewHook>>>
+    g_views{std::in_place};
 
 bool DispatchCleanup(CoreDispatcher const& dispatcher, std::function<void()> action) {
     if (!dispatcher) {
@@ -710,11 +723,11 @@ void DiscoverView(void* object) {
         return;
     }
 
-    for (auto it = g_views.begin(); it != g_views.end();) {
+    for (auto it = g_views->begin(); it != g_views->end();) {
         auto existingView = (*it)->View();
         if (!existingView) {
             (*it)->Restore();
-            it = g_views.erase(it);
+            it = g_views->erase(it);
             continue;
         }
         if (existingView == view) {
@@ -726,7 +739,7 @@ void DiscoverView(void* object) {
 
     auto state = std::make_unique<QuickSettingsViewHook>(view);
     if (state->Attach()) {
-        g_views.push_back(std::move(state));
+        g_views->push_back(std::move(state));
     }
 }
 
@@ -835,7 +848,8 @@ void Wh_ModUninit() {
     std::vector<std::unique_ptr<QuickSettingsViewHook>> views;
     {
         std::lock_guard lock(g_viewsMutex);
-        views.swap(g_views);
+        views.swap(*g_views);
+        g_views.reset();
     }
 
     for (auto& view : views) {
