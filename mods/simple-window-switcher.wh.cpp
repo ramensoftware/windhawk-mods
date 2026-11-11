@@ -163,11 +163,11 @@ navigation can change the selection while the UI remains hidden.
     restored only when the switcher is inactive.
 - Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
   Acrylic on Windows 10; backdrop blur is a separate, optional setting.
-- With **Corner Preference** set to Default, the switcher and its Auto corner
-  settings follow the Windows corner radius, including changes made by the
+- The switcher and its Auto corner settings follow **Corner Preference**. With
+  Default, that is the Windows corner radius, including changes made by the
   [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
-  mod on regular and portable Windhawk installs. Rounded, Rounded small, and
-  Custom keep their own radii.
+  mod on regular and portable Windhawk installs. Squared, Rounded, Rounded small,
+  and Custom take precedence over it for the switcher and all of its elements.
 - On Windows 11, Mica and Acrylic keep their material at every corner radius.
   Radii that Windows does not draw itself use a material drawn by the switcher,
   which has no Windows drop shadow.
@@ -442,28 +442,28 @@ nothing failed.
           $name: Round Task Borders and Close Button
           $description: Apply rounded corners to the selected task border and close button.
           $options:
-          - auto: Auto (Enabled when Windows rounds window corners)
+          - auto: Auto (Enabled when the switcher's corners are rounded)
           - true: Enabled
           - false: Disabled
         - roundThumbnailCorners: auto
           $name: Round Thumbnail Corners
           $description: Round the corners of window thumbnails. Uses the radius from Corner Preference.
           $options:
-          - auto: Auto (Enabled when Windows rounds window corners)
+          - auto: Auto (Enabled when the switcher's corners are rounded)
           - true: Enabled
           - false: Disabled
         - roundGroupIndicator: auto
           $name: Round Group Indicator
           $description: Round the corners of the group indicator. Uses the radius from Corner Preference.
           $options:
-          - auto: Auto (Enabled when Windows rounds window corners)
+          - auto: Auto (Enabled when the switcher's corners are rounded)
           - true: Enabled
           - false: Disabled
         - roundBadgeIconBackground: auto
           $name: Round Badge Icon Background
           $description: Round the corners of the badge icon background (Badge layout). Uses the radius from Corner Preference.
           $options:
-          - auto: Auto (Enabled when Windows rounds window corners)
+          - auto: Auto (Enabled when the switcher's corners are rounded)
           - true: Enabled
           - false: Disabled
       $name: Corners
@@ -21242,10 +21242,15 @@ static void LoadSettings() {
     g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
     if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
-    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", g_systemDwmRadius > 0);
-    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", g_systemDwmRadius > 0);
-    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", g_systemDwmRadius > 0);
-    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", g_systemDwmRadius > 0);
+    // Auto element rounding follows the switcher's own corner radius: the Windows
+    // radius for Default, otherwise the selected Corner Preference.
+    int resolvedCornerDIP = 0;
+    GetResolvedCornerRadiiDIP(&resolvedCornerDIP, nullptr);
+    const bool autoRoundCorners = resolvedCornerDIP > 0;
+    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", autoRoundCorners);
+    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", autoRoundCorners);
+    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", autoRoundCorners);
+    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", autoRoundCorners);
     LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
     LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
     LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
