@@ -168,6 +168,9 @@ navigation can change the selection while the UI remains hidden.
   [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
   mod on regular and portable Windhawk installs. Rounded, Rounded small, and
   Custom keep their own radii.
+- On Windows 11, Mica and Acrylic keep their material at every corner radius.
+  Radii that Windows does not draw itself use a material drawn by the switcher,
+  which has no Windows drop shadow.
 - With [Windows Animations](https://windhawk.net/mods/windows-animations) 1.3.7 or
   newer, confirmed keyboard and touchpad selections also play its window-switch
   animation, and minimized windows are restored through its restore animation.
@@ -966,6 +969,14 @@ nothing failed.
 #include <algorithm>
 #include <gdiplus.h>
 #include <windhawk_utils.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Composition.Desktop.h>
 
 #ifndef WM_DWMNCRENDERINGCHANGED
 #define WM_DWMNCRENDERINGCHANGED 0x031F
@@ -3281,8 +3292,9 @@ static bool ThemeIs(const WCHAR* v) {
     if (wcscmp(v, L"backdrop") == 0) return s_cachedSettings.themeIsBackdrop;
     return wcscmp(g_settings.theme, v) == 0;
 }
+static bool UsesLayeredPresentation();
 static bool ShouldFillBackground() {
-    return ThemeIs(L"none");
+    return UsesLayeredPresentation();
 }
 static bool ScrollIs(const WCHAR* v) { return wcscmp(g_settings.scrollWheelBehavior, v) == 0; }
 static bool LayoutIsVertical() { return wcscmp(g_settings.taskListOrientation, L"vertical") == 0; }
@@ -3617,12 +3629,545 @@ enum class PresentationMaterialState {
     Mica,
     NativeAcrylic,
     LegacyAcrylic,
+    ComposedMica,
+    ComposedAcrylic,
 };
 static std::map<HWND, PresentationMaterialState> g_presentationMaterialStates;
 static constexpr DWORD kDwmAttributeCaptionColor = 35;
 static constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;
 static constexpr COLORREF kDwmColorNone = 0xFFFFFFFE;
 static bool s_applyingThemeToWindow = false;
+
+// Composed material. Windows 11 draws Mica and Acrylic only at its own corner
+// shapes: square, small, standard (or the custom-corner-radius values). A
+// window region can cut any other radius, but DWM then replaces the material
+// with its flat fallback. For those radii the switcher draws the material
+// itself: a click-through window directly below each presentation surface
+// hosts a composition backdrop clipped to the exact radius, and the surface
+// switches to the layered renderer the None theme uses.
+static void GetResolvedCornerRadiiDIP(int* outStdDIP, int* outSmallDIP);
+
+#define SWS_MATERIAL_CLASSNAME L"WindhawkSWS_Material"
+
+MIDL_INTERFACE("29E691FA-4567-4DCA-B319-D0F207EB6807")
+ISwsCompositorDesktopInterop : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE CreateDesktopWindowTarget(
+        HWND hwndTarget, BOOL isTopmost, void** result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnsureOnThread(DWORD threadId) = 0;
+};
+
+MIDL_INTERFACE("0D8FB190-F122-5B8D-9FDD-543B0D8EB7F3")
+ISwsCompositorWithBlurredWallpaper : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE TryCreateBlurredWallpaperBackdropBrush(
+        void** result) = 0;
+};
+
+// ABI layout of Windows.Graphics.Effects.IGraphicsEffect.
+MIDL_INTERFACE("CB51C0CE-8FE6-4636-B202-861FAA07D8F3")
+ISwsGraphicsEffect : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_Name(HSTRING* name) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_Name(HSTRING name) = 0;
+};
+
+MIDL_INTERFACE("2FC57384-A068-44D7-A331-30982FCF7177")
+ISwsGraphicsEffectD2D1Interop : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
+        LPCWSTR name, UINT* index, int* mapping) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** source) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) = 0;
+};
+
+static const GUID kSwsIidUnknown = {0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+static const GUID kSwsIidInspectable = {0xAF86E2E0, 0xB12D, 0x4C6A, {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}};
+static const GUID kSwsIidGraphicsEffect = {0xCB51C0CE, 0x8FE6, 0x4636, {0xB2, 0x02, 0x86, 0x1F, 0xAA, 0x07, 0xD8, 0xF3}};
+static const GUID kSwsIidGraphicsEffectSource = {0x2D8F9DDC, 0x4339, 0x4EB9, {0x92, 0x16, 0xF9, 0xDE, 0xB7, 0x56, 0x58, 0xA2}};
+static const GUID kSwsIidEffectD2D1Interop = {0x2FC57384, 0xA068, 0x44D7, {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
+static const GUID kSwsIidPropertyValue = {0x4BD682DD, 0x7554, 0x40E9, {0x9A, 0x9B, 0x82, 0x65, 0x4E, 0xDE, 0x7E, 0x62}};
+static const GUID kSwsIidCompositorDesktopInterop = {0x29E691FA, 0x4567, 0x4DCA, {0xB3, 0x19, 0xD0, 0xF2, 0x07, 0xEB, 0x68, 0x07}};
+static const GUID kSwsIidBlurredWallpaper = {0x0D8FB190, 0xF122, 0x5B8D, {0x9F, 0xDD, 0x54, 0x3B, 0x0D, 0x8E, 0xB7, 0xF3}};
+static const GUID kSwsClsidD2D1ColorMatrix = {0x921F03D6, 0x641C, 0x47DF, {0x85, 0x2D, 0xB4, 0xBB, 0x61, 0x53, 0xAE, 0x11}};
+
+// D2D ColorMatrix over one source, handed to the compositor as an effect.
+class SwsColorMatrixEffect final : public ISwsGraphicsEffect,
+                                   public ISwsGraphicsEffectD2D1Interop {
+public:
+    SwsColorMatrixEffect(const float (&matrix)[20], IUnknown* source)
+        : source_(source) {
+        memcpy(matrix_, matrix, sizeof(matrix_));
+        if (source_) source_->AddRef();
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** out) override {
+        if (!out) return E_POINTER;
+        if (riid == kSwsIidUnknown || riid == kSwsIidInspectable ||
+            riid == kSwsIidGraphicsEffect || riid == kSwsIidGraphicsEffectSource) {
+            // IGraphicsEffectSource adds no methods to IInspectable.
+            *out = static_cast<ISwsGraphicsEffect*>(this);
+        } else if (riid == kSwsIidEffectD2D1Interop) {
+            *out = static_cast<ISwsGraphicsEffectD2D1Interop*>(this);
+        } else {
+            *out = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return (ULONG)InterlockedIncrement(&refs_);
+    }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG refs = InterlockedDecrement(&refs_);
+        if (!refs) delete this;
+        return (ULONG)refs;
+    }
+    HRESULT STDMETHODCALLTYPE GetIids(ULONG* count, IID** iids) override {
+        if (!count || !iids) return E_POINTER;
+        *count = 0;
+        *iids = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetRuntimeClassName(HSTRING* name) override {
+        if (!name) return E_POINTER;
+        *name = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetTrustLevel(TrustLevel* level) override {
+        if (!level) return E_POINTER;
+        *level = BaseTrust;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_Name(HSTRING* name) override {
+        if (!name) return E_POINTER;
+        *name = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE put_Name(HSTRING) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) override {
+        if (!id) return E_POINTER;
+        *id = kSwsClsidD2D1ColorMatrix;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, int*) override {
+        return E_INVALIDARG;
+    }
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) override {
+        if (!count) return E_POINTER;
+        *count = 3;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) override {
+        if (!value) return E_POINTER;
+        *value = nullptr;
+        try {
+            winrt::Windows::Foundation::IInspectable property{nullptr};
+            using winrt::Windows::Foundation::PropertyValue;
+            if (index == 0) {
+                property = PropertyValue::CreateSingleArray(
+                    winrt::array_view<const float>(matrix_, matrix_ + 20));
+            } else if (index == 1) {
+                property = PropertyValue::CreateUInt32(1);  // premultiplied alpha
+            } else if (index == 2) {
+                property = PropertyValue::CreateBoolean(true);  // clamp output
+            } else {
+                return E_INVALIDARG;
+            }
+            return static_cast<IUnknown*>(winrt::get_abi(property))
+                ->QueryInterface(kSwsIidPropertyValue, value);
+        } catch (...) {
+            return E_FAIL;
+        }
+    }
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** source) override {
+        if (!source) return E_POINTER;
+        *source = nullptr;
+        if (index != 0 || !source_) return E_INVALIDARG;
+        source_->AddRef();
+        *source = source_;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) override {
+        if (!count) return E_POINTER;
+        *count = 1;
+        return S_OK;
+    }
+
+private:
+    ~SwsColorMatrixEffect() {
+        if (source_) source_->Release();
+    }
+    LONG refs_ = 1;
+    float matrix_[20];
+    IUnknown* source_;
+};
+
+// out = offset + lumaGain * luma + chromaGain * (channel - luma), Rec. 709 luma.
+// Fitted per pixel against DWM's own transient Acrylic and Mica on Windows 11
+// 26100, over the same wallpaper, solid and saturated color backdrops.
+struct SwsMaterialRecipe {
+    float offset;
+    float lumaGain;
+    float chromaGain;
+    COLORREF fallback;  // DWM's solid fill when material effects are off
+};
+static const SwsMaterialRecipe kSwsMaterialRecipes[4] = {
+    {0.2030f, 0.3860f, 0.9699f, RGB(0x54, 0x54, 0x54)},   // Acrylic, dark
+    {0.5139f, 0.3748f, 0.6936f, RGB(0xD3, 0xD3, 0xD3)},   // Acrylic, light
+    {0.1293f, -0.0162f, 0.1594f, RGB(0x20, 0x20, 0x20)},  // Mica, dark
+    {0.9573f, -0.0215f, 0.0693f, RGB(0xF3, 0xF3, 0xF3)},  // Mica, light
+};
+
+struct SwsComposedMaterial {
+    HWND window = nullptr;
+    winrt::Windows::UI::Composition::Desktop::DesktopWindowTarget target{nullptr};
+    winrt::Windows::UI::Composition::ContainerVisual root{nullptr};
+    winrt::Windows::UI::Composition::RectangleClip clip{nullptr};
+    winrt::Windows::UI::Composition::SpriteVisual fill{nullptr};
+    int recipe = -1;
+    bool effects = false;
+    int width = 0;
+    int height = 0;
+    int radius = -1;
+    DWORD affinity = WDA_NONE;
+};
+// Keyed by presentation surface. All composition objects live on the switcher
+// thread and are released by ReleaseSwsComposition before it exits.
+[[clang::no_destroy]] static std::map<HWND, SwsComposedMaterial> g_composedMaterials;
+[[clang::no_destroy]] static winrt::Windows::UI::Composition::Compositor g_swsCompositor{nullptr};
+[[clang::no_destroy]] static winrt::Windows::System::DispatcherQueueController g_swsCompositionQueue{nullptr};
+static bool g_swsCompositionFailed = false;
+static bool g_swsMaterialClassRegistered = false;
+// Windows 11 21H2 has no transient system backdrop; Acrylic is composed there.
+static bool g_nativeTransientBackdropUnsupported = false;
+// True while the presentation surfaces use the layered renderer over composed
+// material windows.
+static bool g_presentationComposed = false;
+
+static bool UsesLayeredPresentation() {
+    return ThemeIs(L"none") || g_presentationComposed;
+}
+
+// The DWM corner preference that draws radiusDIP exactly, or -1.
+static int NativeCornerPreferenceForRadius(int radiusDIP) {
+    if (radiusDIP <= 0) return 1;                       // DWMWCP_DONOTROUND
+    if (radiusDIP == g_systemDwmRadius) return 2;       // DWMWCP_ROUND
+    if (radiusDIP == g_systemDwmSmallRadius) return 3;  // DWMWCP_ROUNDSMALL
+    return -1;
+}
+
+static bool CornerPreferenceIsDefault() {
+    const WCHAR* pref = g_settings.cornerPreference;
+    return wcscmp(pref, L"none") != 0 && wcscmp(pref, L"roundSmall") != 0 &&
+           wcscmp(pref, L"round") != 0 && wcscmp(pref, L"custom") != 0;
+}
+
+static bool ComposedMaterialWanted() {
+    if (!IsWin11OrGreater() || g_swsCompositionFailed) return false;
+    if (ThemeIs(L"backdrop") && g_nativeTransientBackdropUnsupported) return true;
+    if (!ThemeIs(L"mica") && !ThemeIs(L"backdrop")) return false;
+    if (CornerPreferenceIsDefault()) return false;
+    int radiusDIP = 0;
+    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    return NativeCornerPreferenceForRadius(radiusDIP) < 0;
+}
+
+// DWM draws its solid fallback instead of Mica/Acrylic when transparency
+// effects are off, energy saver is on, or high contrast is on.
+static bool MaterialEffectsEnabled() {
+    DWORD transparency = 1;
+    DWORD size = sizeof(transparency);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"EnableTransparency", RRF_RT_REG_DWORD, nullptr,
+                     &transparency, &size) == ERROR_SUCCESS &&
+        transparency == 0) {
+        return false;
+    }
+    HIGHCONTRASTW highContrast = {};
+    highContrast.cbSize = sizeof(highContrast);
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast),
+                              &highContrast, 0) &&
+        (highContrast.dwFlags & HCF_HIGHCONTRASTON)) {
+        return false;
+    }
+    SYSTEM_POWER_STATUS power = {};
+    if (GetSystemPowerStatus(&power) && power.SystemStatusFlag == 1) {
+        return false;
+    }
+    return true;
+}
+
+static bool EnsureSwsCompositor() {
+    if (g_swsCompositor) return true;
+    if (g_swsCompositionFailed) return false;
+    try {
+        if (!winrt::Windows::System::DispatcherQueue::GetForCurrentThread()) {
+            struct SwsDispatcherQueueOptions {
+                DWORD dwSize;
+                int threadType;
+                int apartmentType;
+            };
+            using CreateDispatcherQueueController_t =
+                HRESULT(WINAPI*)(SwsDispatcherQueueOptions, void**);
+            HMODULE coreMessaging = GetModuleHandleW(L"CoreMessaging.dll");
+            if (!coreMessaging) {
+                coreMessaging = LoadLibraryExW(L"CoreMessaging.dll", nullptr,
+                                               LOAD_LIBRARY_SEARCH_SYSTEM32);
+            }
+            auto create = coreMessaging
+                              ? (CreateDispatcherQueueController_t)GetProcAddress(
+                                    coreMessaging, "CreateDispatcherQueueController")
+                              : nullptr;
+            if (!create) winrt::throw_hresult(E_NOINTERFACE);
+            // DQTYPE_THREAD_CURRENT, DQTAT_COM_STA: the switcher thread pumps it.
+            SwsDispatcherQueueOptions options = {sizeof(options), 2, 2};
+            winrt::check_hresult(
+                create(options, winrt::put_abi(g_swsCompositionQueue)));
+        }
+        g_swsCompositor = winrt::Windows::UI::Composition::Compositor();
+        return true;
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"SWS: composition unavailable (0x%08X)", (unsigned)e.code());
+    } catch (...) {
+        Wh_Log(L"SWS: composition unavailable");
+    }
+    g_swsCompositionFailed = true;
+    return false;
+}
+
+static LRESULT CALLBACK SwsMaterialWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
+                                           LPARAM lParam) {
+    switch (uMsg) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_ERASEBKGND:
+            return 1;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static winrt::Windows::UI::Composition::CompositionBrush CreateComposedMaterialBrush(
+    bool mica, const SwsMaterialRecipe& recipe, bool effects) {
+    namespace wuc = winrt::Windows::UI::Composition;
+    const winrt::Windows::UI::Color fallbackColor{
+        255, GetRValue(recipe.fallback), GetGValue(recipe.fallback),
+        GetBValue(recipe.fallback)};
+    if (!effects) return g_swsCompositor.CreateColorBrush(fallbackColor);
+
+    wuc::CompositionBrush backdrop{nullptr};
+    if (mica) {
+        ISwsCompositorWithBlurredWallpaper* wallpaper = nullptr;
+        if (SUCCEEDED(static_cast<IUnknown*>(winrt::get_abi(g_swsCompositor))
+                          ->QueryInterface(kSwsIidBlurredWallpaper,
+                                           (void**)&wallpaper)) &&
+            wallpaper) {
+            void* brush = nullptr;
+            HRESULT hr = wallpaper->TryCreateBlurredWallpaperBackdropBrush(&brush);
+            wallpaper->Release();
+            if (SUCCEEDED(hr) && brush) {
+                wuc::CompositionBackdropBrush wallpaperBrush{nullptr};
+                winrt::attach_abi(wallpaperBrush, brush);
+                backdrop = wallpaperBrush;
+            }
+        }
+    } else {
+        backdrop = g_swsCompositor.CreateHostBackdropBrush();
+    }
+    if (!backdrop) return g_swsCompositor.CreateColorBrush(fallbackColor);
+
+    const float luma[3] = {0.2126f, 0.7152f, 0.0722f};
+    float matrix[20] = {};
+    for (int in = 0; in < 3; ++in) {
+        for (int out = 0; out < 3; ++out) {
+            matrix[in * 4 + out] =
+                recipe.lumaGain * luma[in] +
+                recipe.chromaGain * ((in == out ? 1.0f : 0.0f) - luma[in]);
+        }
+    }
+    matrix[15] = 1.0f;  // alpha
+    matrix[16] = matrix[17] = matrix[18] = recipe.offset;
+
+    wuc::CompositionEffectSourceParameter source(L"Backdrop");
+    auto graphicsSource =
+        source.as<winrt::Windows::Graphics::Effects::IGraphicsEffectSource>();
+    auto* effect = new SwsColorMatrixEffect(
+        matrix, static_cast<IUnknown*>(winrt::get_abi(graphicsSource)));
+    winrt::Windows::Graphics::Effects::IGraphicsEffect graphicsEffect{nullptr};
+    winrt::attach_abi(graphicsEffect, static_cast<ISwsGraphicsEffect*>(effect));
+    auto brush = g_swsCompositor.CreateEffectFactory(graphicsEffect).CreateBrush();
+    brush.SetSourceParameter(L"Backdrop", backdrop);
+    return brush;
+}
+
+static void DestroyComposedMaterial(HWND presentation) {
+    auto it = g_composedMaterials.find(presentation);
+    if (it == g_composedMaterials.end()) return;
+    SwsComposedMaterial material = std::move(it->second);
+    g_composedMaterials.erase(it);
+    try {
+        if (material.target) material.target.Root(nullptr);
+    } catch (...) {
+    }
+    material.fill = nullptr;
+    material.clip = nullptr;
+    material.root = nullptr;
+    material.target = nullptr;
+    if (material.window && IsWindow(material.window)) {
+        DestroyWindow(material.window);
+    }
+}
+
+// Creates (or refreshes the brush of) the material window for a surface.
+static bool EnsureComposedMaterial(HWND presentation) {
+    if (!presentation || !EnsureSwsCompositor()) return false;
+    SwsComposedMaterial& material = g_composedMaterials[presentation];
+    try {
+        if (!material.window) {
+            HINSTANCE instance = GetModuleHandleW(NULL);
+            if (!g_swsMaterialClassRegistered) {
+                WNDCLASSEXW wc = {};
+                wc.cbSize = sizeof(wc);
+                wc.lpfnWndProc = SwsMaterialWndProc;
+                wc.hInstance = instance;
+                wc.lpszClassName = SWS_MATERIAL_CLASSNAME;
+                wc.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
+                if (!RegisterClassExW(&wc)) winrt::throw_last_error();
+                g_swsMaterialClassRegistered = true;
+            }
+            // Same band as the switcher, so it can sit directly below it.
+            material.window = CreateSWSWindow(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT |
+                    WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOPMOST,
+                SWS_MATERIAL_CLASSNAME, L"", WS_POPUP, 0, 0, 0, 0, NULL, NULL,
+                instance, NULL);
+            if (!material.window) winrt::throw_last_error();
+            INT corner = 1;  // DWMWCP_DONOTROUND: the clip owns the shape
+            DwmSetWindowAttribute(material.window, 33, &corner, sizeof(corner));
+            COLORREF border = kDwmColorNone;
+            DwmSetWindowAttribute(material.window, 34, &border, sizeof(border));
+            BOOL hostBackdrop = TRUE;  // DWMWA_USE_HOSTBACKDROPBRUSH
+            DwmSetWindowAttribute(material.window, 17, &hostBackdrop,
+                                  sizeof(hostBackdrop));
+            BOOL noTransitions = TRUE;
+            DwmSetWindowAttribute(material.window, DWMWA_TRANSITIONS_FORCEDISABLED,
+                                  &noTransitions, sizeof(noTransitions));
+
+            ISwsCompositorDesktopInterop* interop = nullptr;
+            winrt::check_hresult(
+                static_cast<IUnknown*>(winrt::get_abi(g_swsCompositor))
+                    ->QueryInterface(kSwsIidCompositorDesktopInterop,
+                                     (void**)&interop));
+            HRESULT targetHr = interop->CreateDesktopWindowTarget(
+                material.window, FALSE, winrt::put_abi(material.target));
+            interop->Release();
+            winrt::check_hresult(targetHr);
+            material.root = g_swsCompositor.CreateContainerVisual();
+            material.root.RelativeSizeAdjustment({1.0f, 1.0f});
+            material.clip = g_swsCompositor.CreateRectangleClip();
+            material.root.Clip(material.clip);
+            material.fill = g_swsCompositor.CreateSpriteVisual();
+            material.fill.RelativeSizeAdjustment({1.0f, 1.0f});
+            material.root.Children().InsertAtTop(material.fill);
+            material.target.Root(material.root);
+            material.width = material.height = 0;
+            material.radius = -1;
+        }
+
+        const bool mica = ThemeIs(L"mica");
+        const int recipe = (mica ? 2 : 0) + (g_isDarkMode ? 0 : 1);
+        const bool effects = MaterialEffectsEnabled();
+        if (recipe != material.recipe || effects != material.effects) {
+            winrt::Windows::UI::Composition::CompositionBrush brush{nullptr};
+            try {
+                brush = CreateComposedMaterialBrush(
+                    mica, kSwsMaterialRecipes[recipe], effects);
+            } catch (winrt::hresult_error const& e) {
+                Wh_Log(L"SWS: composed material brush failed (0x%08X)",
+                       (unsigned)e.code());
+                brush = CreateComposedMaterialBrush(
+                    mica, kSwsMaterialRecipes[recipe], false);
+            }
+            material.fill.Brush(brush);
+            material.recipe = recipe;
+            material.effects = effects;
+        }
+        return true;
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"SWS: composed material setup failed (0x%08X)", (unsigned)e.code());
+    } catch (...) {
+        Wh_Log(L"SWS: composed material setup failed");
+    }
+    DestroyComposedMaterial(presentation);
+    g_swsCompositionFailed = true;
+    return false;
+}
+
+// Keeps a surface's material window at its rect, directly below it, and shown
+// only while it is. aboutToShow covers WM_WINDOWPOSCHANGING, so the material
+// is up before the surface's first composed frame.
+static void SyncComposedMaterial(HWND presentation, bool aboutToShow) {
+    auto it = g_composedMaterials.find(presentation);
+    if (it == g_composedMaterials.end() || !it->second.window) return;
+    SwsComposedMaterial& material = it->second;
+    RECT rc = {};
+    if (!IsWindow(presentation) || !GetWindowRect(presentation, &rc)) return;
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    const bool visible = g_presentationComposed && w > 0 && h > 0 &&
+                         (aboutToShow || IsWindowVisible(presentation));
+    if (!visible) {
+        if (IsWindowVisible(material.window)) ShowWindow(material.window, SW_HIDE);
+        return;
+    }
+    // Same pixel radius as the layered surface's corner mask.
+    const int radius = (std::min)(GetWindowCornerRadiusPx(), (std::min)(w, h) / 2);
+    if (w != material.width || h != material.height || radius != material.radius) {
+        try {
+            material.clip.Right((float)w);
+            material.clip.Bottom((float)h);
+            const winrt::Windows::Foundation::Numerics::float2 corner{
+                (float)radius, (float)radius};
+            material.clip.TopLeftRadius(corner);
+            material.clip.TopRightRadius(corner);
+            material.clip.BottomRightRadius(corner);
+            material.clip.BottomLeftRadius(corner);
+            material.width = w;
+            material.height = h;
+            material.radius = radius;
+        } catch (...) {
+        }
+    }
+    DWORD affinity = WDA_NONE;
+    if (GetWindowDisplayAffinity(presentation, &affinity) &&
+        affinity != material.affinity &&
+        SetWindowDisplayAffinity(material.window, affinity)) {
+        material.affinity = affinity;
+    }
+    SetWindowPos(material.window, presentation, rc.left, rc.top, w, h,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+static void ReleaseSwsComposition() {
+    while (!g_composedMaterials.empty()) {
+        DestroyComposedMaterial(g_composedMaterials.begin()->first);
+    }
+    g_presentationComposed = false;
+    g_swsCompositor = nullptr;
+    if (g_swsCompositionQueue) {
+        try {
+            g_swsCompositionQueue.ShutdownQueueAsync();
+        } catch (...) {
+        }
+        g_swsCompositionQueue = nullptr;
+    }
+    if (g_swsMaterialClassRegistered) {
+        UnregisterClassW(SWS_MATERIAL_CLASSNAME, GetModuleHandleW(NULL));
+        g_swsMaterialClassRegistered = false;
+    }
+}
 static void SetSwitcherLayoutBounds(int x, int y, int w, int h,
                                     UINT flags = SWP_NOACTIVATE);
 
@@ -4912,7 +5457,7 @@ static void RefreshScrollIconCanvas() {
     if (s_cachedScrollToBits)
         memset(s_cachedScrollToBits, 0, (size_t)s_cachedScrollToW * s_cachedScrollToH * sizeof(DWORD));
     SelectClipRgn(s_cachedScrollToDC,
-                  ThemeIs(L"none") ? NULL :
+                  UsesLayeredPresentation() ? NULL :
                   GetCachedRoundRectRgn(s_cachedScrollToW, s_cachedScrollToH, GetWindowCornerRadiusPx()));
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
 }
@@ -5166,7 +5711,7 @@ static void CaptureOutgoingSnapshot() {
             } else {
                 int radius = GetWindowCornerRadiusPx();
                 if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
-                HRGN hClip = ThemeIs(L"none") ? NULL : GetCachedRoundRectRgn(w, h, radius);
+                HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, radius);
                 SelectClipRgn(s_cachedStaticDC, hClip);
                 DrawSwitcherStaticContent(s_cachedStaticDC, ShouldFillBackground(), g_hSwitcher);
                 g_staticContentDirty = false;
@@ -5274,7 +5819,7 @@ static void PreRenderScrollCanvases() {
         BitBlt(s_cachedScrollFromDC, 0, 0, w, h, s_cachedStaticDC, 0, 0, SRCCOPY);
     } else {
         if (s_cachedScrollFromBits) memset(s_cachedScrollFromBits, 0, (size_t)w * h * sizeof(DWORD));
-        HRGN hClip = ThemeIs(L"none") ? NULL : GetCachedRoundRectRgn(w, h, radius);
+        HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, radius);
         SelectClipRgn(s_cachedScrollFromDC, hClip);
         DrawSwitcherStaticContent(s_cachedScrollFromDC, ShouldFillBackground(), g_hSwitcher);
     }
@@ -5283,7 +5828,7 @@ static void PreRenderScrollCanvases() {
     if (s_cachedScrollToBits) memset(s_cachedScrollToBits, 0, (size_t)w * h * sizeof(DWORD));
     // Layered canvases keep a rectangular background. Only the final presented
     // frame is rounded; moving an already-rounded canvas exposes alpha holes.
-    HRGN hClip = ThemeIs(L"none") ? NULL : GetCachedRoundRectRgn(w, h, radius);
+    HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, radius);
     SelectClipRgn(s_cachedScrollToDC, hClip);
     s_scrollIconCanvasDirty = false;
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
@@ -6186,18 +6731,20 @@ static int GetHeaderRowHeightPx() {
     return h;
 }
 static INT GetCornerPref() {
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) return 1; // DWMWCP_DONOTROUND
-    if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) return 3; // DWMWCP_ROUNDSMALL
-    if (wcscmp(g_settings.cornerPreference, L"round") == 0) return 2; // DWMWCP_ROUND
-    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        if (g_settings.customCornerRadius <= 0) return 1; // DONOTROUND (0px sharp rectangle)
-        if (g_settings.customCornerRadius <= 5) return 3; // ROUNDSMALL (~4px)
-        return 2; // ROUND (~8px)
+    if (CornerPreferenceIsDefault()) {
+        // "default" or legacy "auto". A zero DWM radius means square corners.
+        if (g_systemDwmRadius <= 0) return 1; // DWMWCP_DONOTROUND
+        return 0; // DWMWCP_DEFAULT (Let Windows / DWM mod decide)
     }
-    // "default" or legacy "auto":
-    // If DWM system radius is 0, explicitly tell DWM not to round
-    if (g_systemDwmRadius <= 0) return 1; // DWMWCP_DONOTROUND
-    return 0; // DWMWCP_DEFAULT (Let Windows / DWM mod decide)
+    int radiusDIP = 0;
+    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    int exact = NativeCornerPreferenceForRadius(radiusDIP);
+    if (exact >= 0) return exact;
+    // DWM can't draw this radius; the composed material owns the shape. If it
+    // is unavailable, use the nearest DWM shape rather than a region.
+    return abs(radiusDIP - g_systemDwmSmallRadius) < abs(radiusDIP - g_systemDwmRadius)
+               ? 3   // DWMWCP_ROUNDSMALL
+               : 2;  // DWMWCP_ROUND
 }
 
 static void GetResolvedCornerRadiiDIP(int* outStdDIP, int* outSmallDIP) {
@@ -6275,22 +6822,13 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
 
     // Apply clipping only at layout boundaries. HideSwitcher leaves the region
     // untouched, avoiding a DWM shape transition while thumbnails are retired.
-    // Native Win11 Acrylic owns standard corner clipping. Legacy Acrylic and
-    // custom radii still need an explicit region.
+    // A region drops DWM's Mica and native Acrylic to a flat fallback, so only
+    // legacy accent Acrylic is cut here. Radii DWM can't draw use the composed
+    // material, whose layered surface has no region either.
     const auto nativeAcrylic = g_nativeAcrylicWindows.find(hWnd);
     const bool nativeAcrylicActive =
         nativeAcrylic != g_nativeAcrylicWindows.end() && nativeAcrylic->second;
-    const bool micaCustomRegion =
-        ThemeIs(L"mica") && wcscmp(g_settings.cornerPreference, L"custom") == 0 &&
-        g_settings.customCornerRadius > 0 &&
-        (!g_customCornerRadiusModActive ||
-         g_settings.customCornerRadius != g_systemDwmRadius);
-    const bool backdropRegion = ThemeIs(L"backdrop") && !nativeAcrylicActive;
-    const bool backdropCustomRegion =
-        ThemeIs(L"backdrop") && nativeAcrylicActive &&
-        wcscmp(g_settings.cornerPreference, L"custom") == 0 &&
-        g_settings.customCornerRadius > 0;
-    const bool useRegion = backdropRegion || backdropCustomRegion || micaCustomRegion;
+    const bool useRegion = ThemeIs(L"backdrop") && !nativeAcrylicActive;
     if (!useRegion || (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
         ClearPresentationWindowRegion(hWnd);
         return;
@@ -10863,7 +11401,7 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpa
 
     COLORREF bg = (overrideBg != CLR_INVALID) ? overrideBg : GetBgColor();
     // In layered mode, punch fully transparent corners to force thumbnail clipping.
-    BYTE alpha = (ThemeIs(L"none") && !forceOpaque) ? 0 : 255;
+    BYTE alpha = (UsesLayeredPresentation() && !forceOpaque) ? 0 : 255;
 
     Gdiplus::Graphics graphics(hdc);
     if (alpha == 0) {
@@ -11709,6 +12247,9 @@ static void FillSwitcherBackground(HDC hdc, const RECT& rect, bool fillBg) {
         pixel = { (BYTE)(GetBValue(color) * alpha / 255),
                   (BYTE)(GetGValue(color) * alpha / 255),
                   (BYTE)(GetRValue(color) * alpha / 255), alpha };
+    } else if (g_presentationComposed) {
+        // The material shows through; alpha 1 keeps the surface hit-testable.
+        pixel = { 0, 0, 0, 1 };
     }
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -11859,7 +12400,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, bool includeSelectionFill
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right;
 
-    if (fillBg && ThemeIs(L"none")) {
+    if (fillBg && UsesLayeredPresentation()) {
         FillSwitcherBackground(hdc, rcClient, true);
     }
 
@@ -11973,7 +12514,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right, h = rcClient.bottom;
 
-    if (fillBg && ThemeIs(L"none")) {
+    if (fillBg && UsesLayeredPresentation()) {
         FillSwitcherBackground(hdc, rcClient, true);
     }
 
@@ -13214,7 +13755,7 @@ static void PaintSwitcher() {
     SweepWindowIconShadows();
     if (g_scrollTransition.active) RefreshScrollIconCanvas();
     ApplyPresentationWindowOffset();
-    if (ThemeIs(L"none")) {
+    if (UsesLayeredPresentation()) {
         // Layered window path: draw to off-screen DIB, UpdateLayeredWindow
         RECT rc; GetClientRect(g_hSwitcher, &rc);
         int w = rc.right, h = rc.bottom;
@@ -14421,6 +14962,11 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
 
 }
 
+static void ApplyLayeredPresentationStyle(HWND hWnd);
+static void ApplyComposedPresentation(HWND hWnd);
+static void ApplyNativePresentationMaterial(
+    HWND hWnd, PresentationMaterialState previousMaterial);
+
 static void ApplyThemeToWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd) || s_applyingThemeToWindow) return;
     s_applyingThemeToWindow = true;
@@ -14446,6 +14992,31 @@ static void ApplyThemeToWindow(HWND hWnd) {
         hWnd, DWMWA_NCRENDERING_POLICY, &ncPolicy, sizeof(ncPolicy));
 
     if (ThemeIs(L"none")) {
+        DestroyComposedMaterial(hWnd);
+        if (hWnd == g_hSwitcher) g_presentationComposed = false;
+        ApplyLayeredPresentationStyle(hWnd);
+        g_nativeAcrylicWindows[hWnd] = false;
+        g_presentationMaterialStates[hWnd] = PresentationMaterialState::None;
+        return;
+    }
+
+    // Radii DWM can't draw keep Mica/Acrylic through the composed material.
+    if (ComposedMaterialWanted() && EnsureComposedMaterial(hWnd)) {
+        ApplyComposedPresentation(hWnd);
+        return;
+    }
+    DestroyComposedMaterial(hWnd);
+    if (hWnd == g_hSwitcher && g_presentationComposed) {
+        g_presentationComposed = false;
+        InvalidateStaticCache();
+    }
+    ApplyNativePresentationMaterial(hWnd, previousMaterial);
+}
+
+// Layered presentation for the None theme and the composed material: no DWM
+// material, square DWM corners, and the per-pixel alpha surface owns the shape.
+static void ApplyLayeredPresentationStyle(HWND hWnd) {
+    {
         // 1. Explicitly clear all DWM system backdrops on Windows 11
         if (IsWin11OrGreater()) {
             int noneVal = 1; // DWMSBT_NONE
@@ -14487,11 +15058,23 @@ static void ApplyThemeToWindow(HWND hWnd) {
 
         // 7. Flush style and DWM non-client state
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-        g_nativeAcrylicWindows[hWnd] = false;
-        g_presentationMaterialStates[hWnd] = PresentationMaterialState::None;
-        return;
     }
+}
 
+static void ApplyComposedPresentation(HWND hWnd) {
+    ApplyLayeredPresentationStyle(hWnd);
+    g_nativeAcrylicWindows[hWnd] = false;
+    g_presentationMaterialStates[hWnd] = ThemeIs(L"mica")
+        ? PresentationMaterialState::ComposedMica
+        : PresentationMaterialState::ComposedAcrylic;
+    if (hWnd == g_hSwitcher && !g_presentationComposed) {
+        g_presentationComposed = true;
+        InvalidateStaticCache();
+    }
+}
+
+static void ApplyNativePresentationMaterial(
+    HWND hWnd, PresentationMaterialState previousMaterial) {
     // --- Non-layered path (Mica / Acrylic) ---
     // Strip WS_EX_LAYERED: Windows DWM never renders hardware system backdrops
     // (Mica DWMSBT_MAINWINDOW) or Windows 10/11 acrylic composition blur on
@@ -14565,6 +15148,15 @@ static void ApplyThemeToWindow(HWND hWnd) {
                 hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */,
                 &transientBackdrop, sizeof(transientBackdrop));
             nativeAcrylic = SUCCEEDED(hr);
+            if (!nativeAcrylic && !g_nativeTransientBackdropUnsupported) {
+                // Windows 11 21H2 has no transient backdrop. Compose Acrylic
+                // there, since legacy accent Acrylic ignores rounded corners.
+                g_nativeTransientBackdropUnsupported = true;
+                if (EnsureComposedMaterial(hWnd)) {
+                    ApplyComposedPresentation(hWnd);
+                    return;
+                }
+            }
         }
 
         // Keep legacy accent Acrylic for Windows 10 and unsupported Win11
@@ -14641,6 +15233,7 @@ static void DestroyMirrorSwitchers() {
         g_presentationRegions.erase(hMirror);
         g_nativeAcrylicWindows.erase(hMirror);
         g_presentationMaterialStates.erase(hMirror);
+        DestroyComposedMaterial(hMirror);
         if (IsWindow(hMirror)) {
             ShowWindow(hMirror, SW_HIDE);
             DestroyWindow(hMirror);
@@ -19157,6 +19750,16 @@ static void HandleQueuedRawTouchpadFrame(WPARAM wParam) {
 }
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // Composed material windows follow their surface: position, size, z-order
+    // and visibility. Processing continues below.
+    if (!g_composedMaterials.empty()) {
+        if (uMsg == WM_WINDOWPOSCHANGING) {
+            const auto* pos = reinterpret_cast<const WINDOWPOS*>(lParam);
+            if (pos && (pos->flags & SWP_SHOWWINDOW)) SyncComposedMaterial(hWnd, true);
+        } else if (uMsg == WM_WINDOWPOSCHANGED) {
+            SyncComposedMaterial(hWnd, false);
+        }
+    }
     if (uMsg == WM_SWS_MOUSE_COMMAND) {
         MouseCommand command;
         if (!TakeMouseCommand((DWORD)wParam, &command) ||
@@ -19850,7 +20453,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
 
     // WM_PAINT for Acrylic (non-layered) path
-    if (uMsg == WM_PAINT && !ThemeIs(L"none") && g_isVisible) {
+    if (uMsg == WM_PAINT && !UsesLayeredPresentation() && g_isVisible) {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
         RECT rc; GetClientRect(hWnd, &rc);
@@ -22262,6 +22865,7 @@ thread_exit:
     g_nativeAcrylicWindows.clear();
     g_presentationMaterialStates.clear();
     g_presentationWindows.clear();
+    ReleaseSwsComposition();
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
     if (g_backdropClassRegistered) {
         UnregisterClassW(SWS_BACKDROP_CLASSNAME, GetModuleHandleW(NULL));
