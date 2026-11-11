@@ -130,7 +130,9 @@ struct XamlFixture {
         root.dock.background = background;
     }
     void Prepare(DockInsets insets = {4, 4}) {
-        PrepareStatePlates(root, buttons, tray, insets);
+        Measurements m{.insets = insets};
+        m.trayInsets = insets;
+        PrepareStatePlates(root, buttons, tray, m);
         Pump(10);
     }
     unsigned RimRed() {
@@ -768,6 +770,23 @@ void MotionChecks() {
     StopLiquidMotionTracking();
     g_roots.clear();
 }
+void TrayIconChecks() {
+    XamlFixture fixture;
+    auto& root = fixture.root;
+    root.frame = fixture.host;
+    root.taskbar = fixture.window.handle;
+    g_grayscaleTrayIcons = true;
+    PrepareTrayIcon(fixture.notifyIcon, fixture.trayImage, root.taskbar);
+    Check(g_trayIcons.size() == 1 && g_trayIcons.front().taskbar == root.taskbar,
+        "T01 a tray overlay is keyed to the taskbar that owns it");
+    // Publication fails on a shift the HWND property cannot hold. Losing the association must release the
+    // overlays keyed to it: nothing can find them under a null key afterwards.
+    Check(!PublishTray(root, NAN) && !root.taskbar, "T02 a non-finite shift drops the association");
+    Check(g_trayIcons.empty() &&
+          Hosting::ElementCompositionPreview::GetElementVisual(fixture.trayImage).Opacity() == 1,
+        "T02 losing the association restores its tray overlays");
+    g_grayscaleTrayIcons = false;
+}
 #endif
 }
 int main(int argc, char** argv) {
@@ -785,7 +804,7 @@ int main(int argc, char** argv) {
             regression::ForegroundChecks();
         if (mode == "all" || mode == "scheduler") regression::SchedulerChecks();
 #ifndef UW_BASELINE
-        if (mode == "all" || mode == "tray-icons")
+        if (mode == "all" || mode == "tray-icons") regression::TrayIconChecks();
         if (mode == "all" || mode == "capture") regression::CaptureChecks();
         if (mode == "all" || mode == "motion") regression::MotionChecks();
 #endif

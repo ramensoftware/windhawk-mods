@@ -57,8 +57,8 @@ adaptive width modes. Quick Settings, notifications, and the calendar follow
 the moved tray. Windows taskbar alignment must be set to Center.
 
 Choose **Dock theme** in the taskbar settings editor: Windows, Glass, Frosted glass, or
-Liquid glass. Liquid glass captures only desktop and app windows below the
-taskbar and refracts them with a GPU shader. The taskbar remains visible in
+Liquid glass. Liquid glass captures the desktop and up to seven app windows below
+the taskbar and refracts them with a GPU shader. The taskbar remains visible in
 screenshots and screen sharing. All themes follow the same animated dock
 outline. Liquid keeps the native fill transparent while capture or GPU setup
 is unavailable, and transient GPU failures are retried automatically. High
@@ -132,8 +132,9 @@ Color changes fade between colors. High contrast always retains Windows' colors.
 Turning it off restores original icons without deleting your saved choices.
 The toggle is saved as `enabled` in `[settings.tray]` and defaults to on.
 **Use grayscale** removes their color while preserving transparency and live
-icon updates. **Choose image** assigns a local PNG, ICO, JPEG, BMP, GIF, or TIFF
-to an icon; **Use original** removes that assignment. Grayscale also applies
+icon updates. **Choose icon** then **Local image** assigns a local PNG, ICO,
+JPEG, BMP, GIF, or TIFF to an icon; **Use original** removes that assignment.
+Grayscale also applies
 to custom images. System glyphs are excluded. Assignments use Windows' icon
 identifiers and are saved in `[settings.tray.icons]`. **Choose icon → Dashboard
 Icons** searches the [Dashboard Icons](https://dashboardicons.com/icons) catalog,
@@ -196,7 +197,9 @@ This is the mod's only settings file; Windhawk has no separate customization
 values. The first click creates a missing file from built-in defaults.
 The `[settings]`, `[settings.button]`, `[settings.liquid]`, `[settings.tray]`,
 `[settings.adaptive]`, and `[settings.ui]` tables hold the
-settings; missing or invalid fields use built-in defaults. The settings reader supports
+settings; a missing or invalid field uses its built-in default, and a file the
+reader cannot parse runs every default until it is repaired. The settings reader
+supports
 single-line strings, booleans, decimal numbers, named tables, `#` comments,
 and double-quoted light/dark path pairs for tray assignments.
 The editor applies saved changes immediately. **Reload** discards unsaved edits
@@ -287,8 +290,9 @@ layout.
 If native controls do not fit, the visual tree is unsupported, taskbar
 ownership changes, or more than 64 task buttons are realized, that taskbar stays
 in its native XAML layout. Layout and capacity fallbacks recover on a later
-layout pass; a taskbar whose translation, clip or tree ownership was taken over
-stays native until the mod is re-enabled. The configured frame height remains
+layout pass; a taskbar whose translation, clip or tree ownership was taken over,
+or whose layout pass failed ten times in a row, stays native until the mod is
+re-enabled. The configured frame height remains
 active until the mod is disabled because Windows exposes it as a process-wide
 setting.
 */
@@ -428,6 +432,7 @@ constexpr UINT kEditorBackdropSourcesMessage = WM_APP + 58;
 constexpr UINT kRefreshPlateFillsMessage = WM_APP + 60;
 constexpr UINT_PTR kEditorBackdropTimerId = 58;
 constexpr UINT_PTR kDiscoveryTimerId = 59;
+constexpr UINT_PTR kApplySettingsTimerId = 60;
 constexpr UINT_PTR kLiquidTimerId = 45;
 // A transient measurement fails a handful of consecutive layout passes at most;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
@@ -1564,7 +1569,7 @@ void StopCatalogThumbnails(CatalogIconPicker& picker) {
 
 void RetireCatalogThumbnails(CatalogIconPicker& picker) {
     for (auto const& job : picker.thumbnailJobs) {
-        job->cancel = true;
+        CancelCatalogJob(*job);
         if (job->done) JoinCatalogJob(*job);
         else picker.retiredJobs.push_back(job);
     }
@@ -1643,7 +1648,7 @@ struct TrayEditorRow {
 };
 
 constexpr int kEditorSave = 7101, kEditorReload = 7102, kEditorOpenFile = 7103,
-              kEditorRefreshPreview = 7104, kEditorRefreshTray = 7105;
+              kEditorRefreshPreview = 7104;
 constexpr PCWSTR kEditorClass = L"Windhawk.UltrawideSettings." WH_MOD_ID;
 constexpr PCWSTR kEditorFrameProperty = L"Windhawk.UltrawideSettings.Frame";
 constexpr int kEditorCaptionHeight = 48, kEditorCaptionButtonWidth = 46;
@@ -1830,8 +1835,6 @@ struct SettingsEditor {
     Controls::StackPanel trayList{nullptr};
     Controls::ToggleSwitch trayEnabled{nullptr};
     Controls::TextBlock trayStatus{nullptr};
-    Controls::Button refreshTray{nullptr};
-    Controls::Button::Click_revoker refreshTrayClick;
     winrt::com_ptr<IFileOpenDialog> filePicker;
     CatalogIconPicker iconPicker;
     std::optional<std::string> originalText;
@@ -1954,7 +1957,7 @@ std::wstring EditorFieldError(EditorControl const& control, SettingField const& 
     if (field.kind != SettingKind::Number || EditorNumber(control.input.as<Controls::TextBox>(),field,value))
         return {};
     return (field.displayDivisor == 1 ? std::wstring(L"Enter a whole number from ") :
-            std::wstring(L"Enter a value with up to two decimals from ")) +
+            L"Enter a value in steps of " + EditorNumberText(1, field) + L" from ") +
         EditorNumberText(field.minimum,field) + L" to " + EditorNumberText(field.maximum,field) + L".";
 }
 
@@ -3229,11 +3232,7 @@ void CreateEditorContent(SettingsEditor& editor) {
           <StackPanel x:Name="TrayFields"/>
           <TextBlock Text="Turning customization off keeps your choices saved." FontSize="12"
                      TextWrapping="Wrap" Margin="0,4,0,16"/>
-          <Grid Margin="0,0,0,12">
-            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <TextBlock Text="App tray icons" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <Button x:Name="RefreshTray" Grid.Column="1" Content="Refresh" HorizontalAlignment="Right"/>
-          </Grid>
+          <TextBlock Text="App tray icons" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,12"/>
           <TextBlock x:Name="TrayStatus" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
           <StackPanel x:Name="TrayList"/>
         </StackPanel>
@@ -3316,7 +3315,6 @@ void CreateEditorContent(SettingsEditor& editor) {
     auto ui = find(L"UiFields").as<Controls::StackPanel>();
     editor.trayList = find(L"TrayList").as<Controls::StackPanel>();
     editor.trayStatus = find(L"TrayStatus").as<Controls::TextBlock>();
-    editor.refreshTray = find(L"RefreshTray").as<Controls::Button>();
     editor.syncing = true;
     constexpr size_t displayOrder[]{
         0, 1, 36, 100, 101, 102, 103, 104, 112, 118, 110, 111, 113, 116, 117, 119, 114, 115, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
@@ -3618,13 +3616,12 @@ void CreateEditorContent(SettingsEditor& editor) {
         [command](auto const&, auto const&) { command(kEditorReload); });
     editor.openFileClick = editor.openFile.Click(winrt::auto_revoke,
         [command](auto const&, auto const&) { command(kEditorOpenFile); });
-    editor.refreshTrayClick = editor.refreshTray.Click(winrt::auto_revoke,
-        [command](auto const&, auto const&) { command(kEditorRefreshTray); });
     editor.enableLiquidClick=editor.enableLiquid.Click(winrt::auto_revoke,
         [&editor](auto const&,auto const&) {
             editor.syncing=true;
-            editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex(int(DockTheme::Liquid));
-            editor.controls[9].input.as<Controls::ComboBox>().SelectedIndex(0);
+            auto theme=editor.controls[0].input.as<Controls::ComboBox>();
+            if(theme.SelectedIndex()==int(DockTheme::Liquid)) editor.controls[9].input.as<Controls::ComboBox>().SelectedIndex(0);
+            else theme.SelectedIndex(int(DockTheme::Liquid));
             editor.syncing=false;EditorChanged(editor);
         });
     CreateEditorPreview(editor);
@@ -3864,7 +3861,6 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
             if (id == kEditorSave) { SaveEditor(*editor); return 0; }
             if (id == kEditorReload) { ReloadEditor(*editor); RequestPreviewMetrics(*editor); return 0; }
             if (id == kEditorRefreshPreview) { RequestPreviewMetrics(*editor); return 0; }
-            if (id == kEditorRefreshTray) { RequestTrayCatalog(*editor); return 0; }
             if (id == kEditorOpenFile) {
                 if (!OpenSettingsFile()) EditorStatus(*editor, L"Could not open the TOML file.");
                 return 0;
@@ -4038,12 +4034,12 @@ DWORD WINAPI SettingsEditorThread(void*) {
             if (editor.captionPressedTokens[i])
                 editor.captionButtons[i].UnregisterPropertyChangedCallback(
                     Controls::Primitives::ButtonBase::IsPressedProperty(), *editor.captionPressedTokens[i]);
-        editor.refreshTrayClick.revoke();
         editor.enableLiquidClick.revoke();
         editor.sections.clear();
         editor.trayRows.clear();
         CloseCatalogPicker(editor);
         editor.preview.refreshClick.revoke();
+        editor.valid = false; // Preview readers skip the controls this tail clears; WM_DESTROY closes the preview again.
         CloseEditorPreview(editor);
         CloseEditorSurface(editor);
         editor.controls = {};
@@ -4124,7 +4120,7 @@ struct SettingsMenuEntry {
     winrt::weak_ref<Controls::MenuFlyoutSeparator> separator;
     winrt::event_token click{};
 };
-std::vector<SettingsMenuEntry> g_settingsMenus;
+[[clang::no_destroy]] std::vector<SettingsMenuEntry> g_settingsMenus; // Owner thread only.
 constexpr PCWSTR kSettingsMenuName = L"WindhawkUltrawideLocalSettings";
 
 void RemoveSettingsMenuEntry(SettingsMenuEntry const& entry) {
@@ -4293,8 +4289,12 @@ bool IsModModuleName(std::wstring_view name, std::wstring_view id) {
 }
 
 bool ModLoaded(std::span<const std::wstring_view> ids) {
-    HANDLE snapshot = CreateToolhelp32Snapshot(
-        TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+    // TH32CS_SNAPMODULE fails with ERROR_BAD_LENGTH while another module loads; retry a few times.
+    HANDLE snapshot = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < 5 && snapshot == INVALID_HANDLE_VALUE; ++attempt) {
+        snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+        if (snapshot == INVALID_HANDLE_VALUE && GetLastError() != ERROR_BAD_LENGTH) break;
+    }
     if (snapshot == INVALID_HANDLE_VALUE) return false;
     MODULEENTRY32W module{};
     module.dwSize = sizeof(module);
@@ -5997,7 +5997,7 @@ struct LoadedTrayView {
     winrt::weak_ref<FrameworkElement> element;
     winrt::event_token sizeChanged{};
 };
-std::vector<LoadedTrayView> g_loadedTrayViews;
+[[clang::no_destroy]] std::vector<LoadedTrayView> g_loadedTrayViews; // Owner thread only.
 
 // WGC sessions can outlive DWM without reporting a D3D device removal. Track
 // compositor identity separately so cached frames never survive that boundary.
@@ -7105,9 +7105,9 @@ float4 ps(VertexOutput input) : SV_Target {
                             renderer->pendingPresent)
                             waitable = renderer->frameLatencyWaitable;
                     }
-                    DWORD waited = waitable
-                                        ? WaitForSingleObject(waitable, 100)
-                                        : WAIT_FAILED;
+                    // A null waitable means another thread already stored this renderer's failure.
+                    DWORD waited = waitable ? WaitForSingleObject(waitable, 100) : WAIT_FAILED;
+                    DWORD error = waitable && waited == WAIT_FAILED ? GetLastError() : 0;
                     if (waited == WAIT_OBJECT_0) {
                         std::chrono::steady_clock::time_point deadline;
                         HANDLE timer{};
@@ -7123,6 +7123,7 @@ float4 ps(VertexOutput input) : SV_Target {
                             due.QuadPart = -std::chrono::ceil<Tick>(remaining).count();
                             waited = SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE) ?
                                 WaitForSingleObject(timer, 100) : WAIT_FAILED;
+                            if (waited == WAIT_FAILED) error = GetLastError();
                         }
                     }
                     std::lock_guard lock(renderer->mutex);
@@ -7130,8 +7131,7 @@ float4 ps(VertexOutput input) : SV_Target {
                         renderer->presentWorkPending = false;
                         return;
                     }
-                    if (!waitable || waited == WAIT_FAILED) {
-                        DWORD error = GetLastError();
+                    if (waitable && waited == WAIT_FAILED) {
                         renderer->failure =
                             error ? HRESULT_FROM_WIN32(error) : E_FAIL;
                     } else if (waited == WAIT_OBJECT_0 && renderer->running &&
@@ -7286,7 +7286,8 @@ float4 ps(VertexOutput input) : SV_Target {
             bool accepted{};
             {
                 std::lock_guard lock(mutex);
-                if (running) {
+                // Another caller may have installed a live source since the first lock.
+                if (running && !(geometrySource && !geometrySource->closed)) {
                     geometrySource = source;
                     source->active = true;
                     accepted = true;
@@ -7408,13 +7409,8 @@ float4 ps(VertexOutput input) : SV_Target {
         sources = {source};
     }
 
-    // imageSize is filled in by RenderLocked, so the caller's copy always
-    // differs from the stored one; compare everything else.
     static bool SameLensInput(LensConstants const& a, LensConstants const& b) {
-        constexpr size_t offset = sizeof(a.imageSize);
-        return memcmp(reinterpret_cast<char const*>(&a) + offset,
-                      reinterpret_cast<char const*>(&b) + offset,
-                      sizeof(a) - offset) == 0;
+        return memcmp(&a, &b, sizeof(a)) == 0;
     }
 
     static bool SameMotionGeometry(LensConstants const& a,
@@ -9207,7 +9203,7 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
                 resourceColor(resources,L"SystemControlHighlightAltChromeWhiteBrush",foregrounds[1]);
             };
             buttonPalette(editor.save,true);
-            for(auto const& button:{editor.reload,editor.openFile,editor.enableLiquid,editor.refreshTray})
+            for(auto const& button:{editor.reload,editor.openFile,editor.enableLiquid})
                 buttonPalette(button);
             for(auto const& section:editor.sections) buttonPalette(section.header);
             for(auto const& row:editor.trayRows) {buttonPalette(row.choose);buttonPalette(row.reset);}
@@ -9531,7 +9527,6 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         addButton(editor.reload, neutralTint);
         addButton(editor.openFile, neutralTint);
         if (page == 1) addButton(editor.enableLiquid, neutralTint, true);
-        if (page == 2) addButton(editor.refreshTray, neutralTint, true);
         for (auto const& section : editor.sections)
             if (section.page == page) addButton(section.header, neutralTint, true);
         if (page == 2)
@@ -10031,7 +10026,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             return Media::SolidColorBrush(color);
         };
         preview.clock.Foreground(foreground(0));
-        auto appColor = toggle(2) ? GrayscalePixel(0xFF3CC8FAu) : 0xFF3CC8FAu;
+        auto appColor = editor.trayEnabled.IsOn() && toggle(2) ? GrayscalePixel(0xFF3CC8FAu) : 0xFF3CC8FAu;
         preview.icons[0].Foreground(Media::SolidColorBrush(winrt::Windows::UI::Color{
             255, static_cast<BYTE>(appColor >> 16), static_cast<BYTE>(appColor >> 8), static_cast<BYTE>(appColor)}));
         preview.icons[1].Foreground(foreground(1));
@@ -10311,6 +10306,17 @@ void WithdrawTray(Root& root) {
     root.publishedShift = nullptr;
 }
 
+void RestoreTrayIcons(Root& root);
+// Losing or replacing the association releases what was published and owned under the old HWND before the
+// handle is forgotten: RestoreTrayIcons finds its states by that key. RestoreRoot keeps the association for a
+// reversible fallback, so it is not routed through here.
+void DropTaskbar(Root& root) {
+    WithdrawTray(root);
+    try { RestoreTrayIcons(root); }
+    catch (...) { Wh_Log(L"[UWTRAY] restoration-error"); }
+    root.taskbar = nullptr;
+}
+
 bool ResolveTaskbar(Root& root, double host) {
     // UWP lacks WinUI's ContentIslandEnvironment HWND accessor. Match one
     // native taskbar by owner thread, full width and raster scale, once per
@@ -10356,8 +10362,7 @@ bool ResolveTaskbar(Root& root, double host) {
     }
     if (match != root.taskbar) {
         StopLiquid(root);
-        WithdrawTray(root);
-        root.taskbar = nullptr;
+        DropTaskbar(root);
     }
     if (!match) {
         if (!root.mappingReported)
@@ -10375,8 +10380,7 @@ bool PublishTray(Root& root, double shift) {
     if (!root.taskbar) return false;
     double scale = root.frame.XamlRoot().RasterizationScale();
     if (!std::isfinite(scale * shift) || std::abs(scale * shift) > INT_MAX) {
-        WithdrawTray(root);
-        root.taskbar = nullptr;
+        DropTaskbar(root);
         return false;
     }
     HANDLE value = EncodeShift(static_cast<int>(std::lround(scale * shift)));
@@ -10389,18 +10393,16 @@ bool PublishTray(Root& root, double shift) {
         if (root.follower &&
             !SetProp(root.taskbar, kTrayDispatcher, g_dispatch)) {
             root.publishedShift = value;
-            WithdrawTray(root);
-            root.taskbar = nullptr;
+            DropTaskbar(root);
             return false;
         }
         root.publishedShift = value;
         return true;
     }
     HWND failed = root.taskbar;
-    WithdrawTray(root);
-    root.taskbar = nullptr;
-    Wh_Log(L"[UWPANEL] publication failed taskbar=%p error=%lu", failed,
-           GetLastError());
+    DWORD error = GetLastError();
+    DropTaskbar(root);
+    Wh_Log(L"[UWPANEL] publication failed taskbar=%p error=%lu", failed, error);
     return false;
 }
 
@@ -11637,7 +11639,8 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
                 // but never overwrite the external one on this plate.
                 state.rim = nullptr;
                 state.rimThemeReady = false;
-                state.blocked = true;
+                BlockStatePlate(state);
+                return;
             }
         }
         if (g_keepButtonRim && !state.blocked && !state.rim &&
@@ -12123,6 +12126,7 @@ void PrepareTrayIcon(FrameworkElement const& element, Controls::Image const& ima
             if (g_fontColorMode != FontColorMode::Adaptive)
                 state->light = g_fontColorMode == FontColorMode::Light ||
                     (g_fontColorMode == FontColorMode::Default && element.ActualTheme() == ElementTheme::Dark);
+            state->taskbar = taskbar;
             UpdateTrayIconGeometry(*state);
             return;
         }
@@ -13792,6 +13796,7 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
 
 void DiscoverExisting(HWND taskbar);
 void ApplySavedSettings(HWND editor);
+HWND g_pendingApplyEditor{}; // Owner thread only: the editor to answer once the layout is no longer busy.
 
 void RefreshWatchedFrames() {
     std::vector<winrt::weak_ref<FrameworkElement>> frames;
@@ -13845,6 +13850,11 @@ void RefreshItemStates() {
 LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
     if(message==kRefreshPlateFillsMessage) {
         RefreshQueuedPlateFills();
+        return 0;
+    }
+    if (message == WM_TIMER && wp == kApplySettingsTimerId) {
+        KillTimer(window, kApplySettingsTimerId);
+        ApplySavedSettings(std::exchange(g_pendingApplyEditor, nullptr));
         return 0;
     }
     if (message == WM_TIMER && wp == kDiscoveryTimerId) {
@@ -14242,7 +14252,10 @@ void ApplySavedSettings(HWND editor) {
     ActiveScope active;
     if (g_stopping) return;
     if (g_busy) {
-        PostMessageW(g_dispatch, kApplySettingsMessage, reinterpret_cast<WPARAM>(editor), 0);
+        // A timer, as discovery uses: a nested COM message pump inside the busy
+        // scope would dispatch a repost at once and spin until the scope exits.
+        g_pendingApplyEditor = editor;
+        SetTimer(g_dispatch, kApplySettingsTimerId, 50, nullptr);
         return;
     }
     bool applied = false;

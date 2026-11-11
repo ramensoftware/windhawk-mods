@@ -28,7 +28,8 @@ subprocess.run([str(compiler / 'bin/clang++.exe'), *flags,
                 '-O2', '-Wall', '-Wextra', '-Werror', '-static',
                 str(folder / 'fix-regressions.cpp'),
                 '-lole32', '-loleaut32', '-lruntimeobject', '-ldwmapi',
-                '-lwindowsapp', '-ld3d11', '-ldxgi', '-ld3dcompiler',
+                '-lwindowsapp', '-ld3d11', '-ldxgi', '-ld3dcompiler', '-ld2d1', '-ldxguid',
+                '-lwinhttp', '-lwindowscodecs', '-lshell32', '-lshcore', '-luuid',
                 '-luser32', '-lkernel32', '-lgdi32', '-o', str(output)], check=True)
 manifest = b'''<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
 <assemblyIdentity name="Windhawk.Ultrawide.FixChecks" version="1.0.0.0" type="win32"/>
