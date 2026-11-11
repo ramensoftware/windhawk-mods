@@ -2,12 +2,206 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-10T22:02:02.000Z</updated>
+    <updated>2026-11-11T05:03:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Top Taskbar Bleed 1.2.0]]></title>
+        <id>https://windhawk.net/mods/top-taskbar-bleed#fd16d4dc5e0d1e00d0fe5af20c46178a71d1303f</id>
+        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
+        <updated>2026-11-11T05:03:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The first four rows of the title bar are sampled instead of one, so a hairline, a recorder border or a row of a gradient can’t decide the color</li>
+<li>New setting “Custom colors”: programs whose maximized windows bleed a fixed #RRGGBB color instead of their sampled title bar, applied as soon as the window has landed, without sampling its title bar</li>
+<li>Programs in “Custom colors” and “Excluded programs” can be named by a piece of their install path (\helium) as well as by executable, for forks that keep another program’s executable name, like Helium running as chrome.exe</li>
+<li>README and setting descriptions updated</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#074ed83b4b131627bfd23bf64957fbc721906920</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-11T05:03:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hides when the taskbar is auto-hidden or made transparent.</li>
+<li>Smoothly follows the taskbar auto-hide animation with zero delay.</li>
+<li>Detects fullscreen windows (F11, media players, games) much faster.</li>
+<li>Fixed an issue where the HUD would remain visible when the taskbar was retracted.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/lemon-web-stack</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Translucent Menus 1.0.2]]></title>
+        <id>https://windhawk.net/mods/explorer-translucent-menus#835b475ed345822f8b1527367ac17306e4b85c8e</id>
+        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
+        <updated>2026-11-11T05:03:02.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Translucent Menus</h1>
+<p>Apply translucent materials to classic Win32 popup menus in File Explorer.
+Windows continues to provide menu items, layout, commands, keyboard navigation,
+and shell extensions. Windows 11's modern context menu is left unchanged.</p>
+<p>This is an Explorer-only, menu-focused alternative to the archived
+<a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> project.
+It covers classic popup menus hosted by <code>explorer.exe</code>, including desktop and
+File Explorer context menus. It leaves the main Explorer window background,
+ordinary controls, and other processes unchanged.</p>
+<h2>Screenshots</h2>
+<p>Materials in light and dark themes</p>
+<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/01-materials-light-dark.png" alt="materials"></p>
+<p>Tint and transparency adjustments</p>
+<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/02-tint-transparency.png" alt="tint"></p>
+<p>Borders and submenus</p>
+<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png" alt="borders"></p>
+<h2>Requirements</h2>
+<ul>
+<li>Windows 11 22H2 or later (build 22621+), 64-bit.</li>
+<li>Desktop composition and Windows transparency effects enabled.</li>
+<li>No other renderer modifying the same Explorer menus.</li>
+</ul>
+<p>To open a classic context menu on Windows 11, select <strong>Show more options</strong> or
+use <strong>Shift+F10</strong>. Select <strong>Native</strong> to disable all hooks. For a temporary bypass,
+enable <strong>Hold Ctrl to bypass</strong> in the settings, then hold <strong>Ctrl</strong> before opening
+a menu.</p>
+<h2>Materials</h2>
+<table>
+<thead>
+<tr>
+<th>Material</th>
+<th>Tint opacity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Native</td>
+<td>No modifications</td>
+</tr>
+<tr>
+<td>Solid</td>
+<td>Always opaque</td>
+</tr>
+<tr>
+<td>Transparent</td>
+<td>Adjustable, no blur</td>
+</tr>
+<tr>
+<td>Acrylic</td>
+<td>Adjustable tint over blur</td>
+</tr>
+<tr>
+<td>Modern Acrylic</td>
+<td>Adjustable tint color, fixed opacity</td>
+</tr>
+<tr>
+<td>System Acrylic</td>
+<td>Fixed Windows recipe</td>
+</tr>
+<tr>
+<td>Mica / Mica Alt</td>
+<td>Fixed Windows recipes</td>
+</tr>
+</tbody>
+</table>
+<p>Tint opacity changes the material, not text or icons. Theme selection controls
+the light or dark palette. Hover highlight opacity can be adjusted separately.
+Unrecognized saved material values use Acrylic.</p>
+<h2>Appearance</h2>
+<p>Enable <strong>Hide menu border</strong> to suppress the outline on modified menus. This
+preserves menu dimensions and works with rounded or square corners. Native
+mode and Ctrl bypass retain the complete Windows appearance.
+The option also protects the outline setting from later Shell/UxTheme updates
+while the modified menu is being tracked.</p>
+<p>Legacy icon repair converts copied RGB bitmaps to premultiplied alpha. Optional
+background removal clears only matching corner-connected white, black, or
+magenta regions. Disable background removal for icons with intentional borders.
+Transfers that declare per-pixel alpha, and bitmaps with ambiguous partial
+alpha, retain the original GDI behavior. The mod does not guess whether an
+existing alpha bitmap is straight or premultiplied.</p>
+<h2>Scope and rendering approach</h2>
+<p>This mod keeps the Shell's immersive owner-draw enabled and preserves native
+menu layout, commands, and shell extensions. Effects are scoped to supported
+classic popups while a menu is tracked. Preparation validates resources before
+applying effects and exposes the popup to drawing hooks only after commit.
+Only successful state changes are recorded for cleanup. Unassociated memory
+DCs are left to Windows; owner-draw memory DCs require an exact synchronous
+WM_DRAWITEM match.
+GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
+a tracked menu. The scope is the popup effect, rather than a replacement for
+Explorer's overall interface rendering.</p>
+<p><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> and
+<a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a> already
+offer translucent classic menus. Translucent Windows shares background-effect
+configuration between windows and flyouts, with menu drawing integrated into
+its broader theme-rendering path. Win32 UI Modernizer lets users disable its
+Explorer section and other general features, but its modern menu modes disable
+immersive owner-draw and also modernize ComboBox dropdowns.</p>
+<p>The purpose of this separate implementation is to provide a dedicated popup
+renderer that retains the Shell's owner-draw path and can accompany a separate
+Explorer background renderer. Restricting process targets or adding material
+presets alone does not provide that rendering behavior. An equivalent mode in
+a broader UI mod would need to isolate menu rendering and preserve immersive
+owner-draw as well.</p>
+<h2>Compatibility</h2>
+<p>Menu effects from these mods conflict when enabled on the same Explorer popups:</p>
+<ul>
+<li><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>:
+<strong>Flyout effects</strong> also renders classic menus, dropdowns, and tooltips.
+Disable that option to remove its flyout effects.</li>
+<li><a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a>: set
+<strong>Menus and dropdowns</strong> to <strong>Native (no modernization)</strong>. Both modern modes
+apply their own acrylic rendering and disable immersive owner-draw.</li>
+</ul>
+<p>These settings turn off their direct menu features. Their remaining Explorer
+effects and shared drawing hooks depend on other settings, so compatibility
+must be evaluated with the configuration in use. To avoid their remaining hooks
+in Explorer while continuing to use them in other applications, exclude
+<code>explorer.exe</code> from their targets in Windhawk's Advanced tab.</p>
+<p>This mod is also compatible with
+<a href="https://github.com/Maplespe/ExplorerBlurMica">ExplorerBlurMica</a>, which supplies
+the main Explorer window backdrop. This mod keeps its effects confined to classic
+popup menus and leaves the main window backdrop to ExplorerBlurMica.</p>
+<p>Unknown owner-drawn menus, custom background brushes, high contrast, remote
+sessions, disabled transparency, and recognized conflicting renderers are
+left unchanged. Settings changes reload the mod. Menu opening animations follow
+the Windows settings and the caller's flags, including when effects are active.</p>
+<p>Menus whose previous system-backdrop value cannot be read stay native. Unreadable
+optional dark-mode and corner preferences are left unchanged. Recorded values
+are restored on live-window cleanup; failed restores remain pending for retry.
+There are no public getters for prior blur regions or extended-frame margins,
+and the Accent getter is unavailable on some builds. Cleanup of those states is
+best-effort, not a lossless restoration guarantee for an unknown renderer. A
+missing border-color snapshot likewise uses the Windows default on cleanup.
+Destroyed popup HWNDs release their window-owned effects without extra resets.</p>
+<p>The implementation uses version-dependent Windows interfaces: the composition
+attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
+message 0x1e2, and Shell window properties. It does not read private Shell item
+structures, patch instructions, download symbols, or replace the menu loop.</p>
+<h2>Troubleshooting</h2>
+<p>Enable log output in Windhawk's Advanced tab to record menu preparation,
+material and border application results, native fallback reasons, and cleanup.
+There is no separate logging setting in this mod. Native mode registers no
+menu hooks, so it reports initialization rather than individual menu openings.</p>
+<h2>Credits and license</h2>
+<p>Informed by <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>,
+<a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>, and
+<a href="https://github.com/Bolt-Scripts/custom-cached-context-menu">Custom Cached Context Menu</a>.
+This implementation is distributed under GPL-3.0-or-later.</p>
+]]></content>
+        <author>
+            <name>alkali210</name>
+            <uri>https://github.com/alkali210</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Outlook Refined 0.6.2]]></title>
         <id>https://windhawk.net/mods/outlook-refined#87d003102cd41f3f7d71e51b44ab84ce8a0f1d7f</id>
@@ -650,150 +844,6 @@ a description does.</p>
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.4]]></title>
-        <id>https://windhawk.net/mods/smooth-scroll-win32#32cc0039878a297b8bdf1c41be8dc3b12337d7d9</id>
-        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
-        <updated>2026-11-09T17:01:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Scroll File Explorer's folder view by pixels through Explorer's own pan path instead of UI Automation, with the native distance per notch (at most a third of the view). It works in grouped views and no longer brings background windows to the front.</li>
-<li>Scroll Task Manager and Control Panel DirectUI pages smoothly by pixels; Control Panel pages no longer ignore the wheel from time to time.</li>
-<li>Draw tree views, list boxes, multi-line text boxes and Details-view lists at pixel offsets, so they glide instead of jumping a line at a time. RichEdit boxes and icon views scroll by pixels directly.</li>
-<li>Stop the legacy list box animation from playing underneath the mod's.</li>
-<li>Pace frames with the compositor clock at the monitor's full refresh rate.</li>
-<li>Ease Smooth Only mode like WinUI and finish every scroll at an even pace.</li>
-<li>Remove the Scroll Multiplier and Smooth Speed settings; the distance follows the Windows &quot;lines per notch&quot; setting, which halves it for anyone who used the previous default multiplier (2x).</li>
-</ul>
-]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac Island & Dock 3.1.0]]></title>
-        <id>https://windhawk.net/mods/mac-island-dock#ad5c9dd895db50eb11675af7a29aa988981b2e2d</id>
-        <link href="https://windhawk.net/mods/mac-island-dock"/>
-        <updated>2026-11-09T17:01:19.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Arranging the pill</strong></p>
-<ul>
-<li>&quot;Change the order with Ctrl + drag on the island&quot; (Style tab, on by default): hold Ctrl and drag an item on the island (Island, Fixed or Bar) to another place, or into another notch (the notches start again when the bell's notch changes, as from the settings); with the app in front having its own order, that one changes. While Ctrl is held with the mouse on the pill, its items jiggle; the item held is dimmed, its icon follows the mouse and a line shows where it goes. An idea of Thiago Silva's.</li>
-<li>The settings' preview shows that its icons are dragged: for 10 seconds when the settings open, and when the mouse comes onto it, the icons jiggle, a hand carries one past the next one and back, and the line under it says so (Ctrl + drag on the island too). Pressing an icon stops it; with animations off, only the line.</li>
-</ul>
-<p><strong>Panels and your commands</strong></p>
-<ul>
-<li>&quot;Open panels with the mouse&quot; (Look tab, off by default, #6654): a panel opens when the mouse rests on its item for a moment, without taking the focus from the app in front, and closes a moment after the mouse leaves the pill and the panel. Only items whose click just opens a panel do it; the media buttons, a timer's start, a pinned command, the microphone, the quick actions and a power button that runs its only action still need a click. A click on the item, or inside the panel, keeps it open like a clicked one; moving to another such item switches to its panel.</li>
-<li>Files, folders, shortcuts or a web link (http or https) dropped on the commands' icon or a command's button become your commands, each a button on the pill, named after what it opens (anywhere on the pill when the shelf is off or doesn't take them; only with the commands on the pill). Only the path or link is kept; one already there is just put on the pill (#6654).</li>
-</ul>
-<p><strong>Look</strong></p>
-<ul>
-<li>&quot;Island font&quot; and &quot;Clock font&quot; (Look tab): a font from your PC for the pill's and the panels' texts, and one of its own for the clock on the pill and in the calendar; Windows' font dialog, per profile (#6648, #6609).</li>
-<li>&quot;Items in the bar&quot; (Look tab): Automatic (as before), at its left end, in the middle or at its right end (#6922).</li>
-<li>&quot;Bar: items keep their side of the clock&quot; (Look tab): with the clock in the middle, the items keep their side of the clock, at the screen's corners, as items come and go (#6639).</li>
-<li>The calendar's clock and date are centered, and &quot;Events in the calendar&quot; (on by default) can leave only the clock and the month (#6609).</li>
-<li>The visualizer can come only for the apps you choose (&quot;Apps that bring the visualizer&quot;, from what played and what was heard), also players without Windows' media controls, its bars following that app's sound; sliders &quot;Bars' height&quot;, &quot;Bars' width&quot; and &quot;Room between the bars&quot; (#6204, #6924). The bars are now seven, the middle one the tallest: the sound reaches it first and goes out to the ones at its sides a moment later, like a wave, with the beat (a beat kicks the middle up) or smooth.</li>
-<li>The panels' scroll bars (the apps launcher, notes, tasks, notifications and the other long lists) can be dragged by their thumb, and a click above or below it moves a page; they get wider under the mouse, like Windows 11's.</li>
-<li>With &quot;Light and shadow like macOS 27&quot;: the control center's sliders are thin lines with icons that grow with the level (the sun turns) and bounce as it changes, the mouse following the same line; buttons and tiles that are on show a white circle with the icon in the accent color. Over the Liquid Glass, a long pill's ends fade into the glass's tint, inside its round shape, instead of a dark block. By Thiago Silva.</li>
-<li>&quot;Hide a notch with nothing in it&quot; (Style tab, #6651): a notch with no items disappears, the one with the bell too; it comes back when an item or a notification comes to it, and while items are dragged between the notches in the settings. The strip kept on the screen stays the same.</li>
-<li>&quot;Ring with the battery's charge&quot; (Animations tab, #6071): a ring along the edge shows the charge, on the battery's notch or the pill, or on every notch; green above 40%, yellow down to 20%, red below; not as the line, nor on the Bar style.</li>
-</ul>
-<p><strong>On the pill</strong></p>
-<ul>
-<li>&quot;Lyrics as an icon&quot; (What's playing tab, #6684): a single icon while the song has lyrics; a click opens them.</li>
-<li>&quot;Always on the pill, even with nothing playing&quot; (#6905): the note stays on the pill with nothing playing.</li>
-<li>&quot;Only play and pause&quot; for the pill's media buttons (#6907).</li>
-<li>Touch keyboard (#6160), Windows Settings and Win+X (#6922) buttons, in the control center and on the pill, off until you choose them.</li>
-<li>A click on the network's speed opens a Network tab in the usage panel: the last minute's download and upload graphs, their peaks and a Task Manager button (#6932).</li>
-<li>&quot;See-through only on the desktop&quot; (Look tab, #7005): the see-through bar goes back to its usual look while a window is maximized on its monitor.</li>
-<li>&quot;Clock against the screen's edge&quot; (Hiding tab, #6997): the small pill with the time touches the edge, straight on that side and as thin as its text.</li>
-<li>&quot;Long notification texts scroll under the mouse&quot; (Banners tab, #6200): a notification's text stays on one line and scrolls to its end and back, instead of opening on up to three lines.</li>
-<li>Hibernate in the power button's menu, only when Windows allows hibernation (#6886); each power action can be turned off, with only one on the button runs it, and asking before restarting, shutting down or signing out is an option (System tab, #6609).</li>
-</ul>
-<p><strong>Hiding</strong></p>
-<ul>
-<li>&quot;The minimize arrow keeps the island open&quot; (Hiding tab, #6725): with the line on, the minimize arrow can keep that monitor's island open until it's clicked again; Win+J still minimizes it.</li>
-<li>&quot;The edge zone as wide as the pill&quot; (Hiding tab, #6525): the edge zone that brings the pill back follows the pill's width, also with the line invisible.</li>
-<li>&quot;Shortcut: let clicks through the pill&quot; (Hiding tab, #6718): a recorded shortcut lets clicks pass through the pill to what's under it while it stays shown; a bubble says when it's on.</li>
-<li>&quot;Stay over borderless full-screen apps&quot; (Hiding tab, #6740, off by default): the island stays over borderless full-screen apps; games in exclusive full screen still draw over it (README note on performance and anti-cheat).</li>
-</ul>
-<p><strong>Launcher, media and more</strong></p>
-<ul>
-<li>&quot;Apps (launcher)&quot; (Apps and tools tab, off by default, #7058): a pill item whose panel lists the shell's Apps folder (what Start lists: shortcuts and the Store's apps, each once), read on a thread when it opens (again after a minute), with a search box (case and accents ignored; Enter opens the first one, Esc clears), the favorites first (a star on each row, kept per account) and all apps in Start's order; icons load for the rows in view only; a shortcut's row has a button that shows its program in Explorer; apps start as the user and unelevated when Windhawk runs as administrator.</li>
-<li>&quot;Media panel style&quot; (What's playing tab, #7042): the usual look (default), Pixel (as Android 13-15 draws it: the cover filling the card under its shade, a smooth wavy progress line moving while playing and flat when paused, the play button turning from a circle into a rounded square), One UI (a card in the cover's color, plain buttons), Windows 11 (the Quick Settings card, the cover on the right), or only the cover with the buttons over it; long titles and artists scroll in the panel in every look; &quot;Only the cover on the pill&quot; (#7038); &quot;Media buttons size&quot; for the pill's previous / play / next and &quot;Media panel size&quot; up to 200% (#7041), kept within the pill's height and the screen.</li>
-<li>&quot;What's playing on the minimized line&quot; (Hiding tab, off by default, #7045): while something plays, the minimized line becomes a thin pill with the song's cover and the visualizer's bars (the bars run only while it shows); the mouse on it opens the island.</li>
-<li>One switch for each status notice: the charger, the low battery, Bluetooth audio, &quot;Do not disturb&quot; (on by default, as before) and the desktop switched to, with its number and name (off by default, #7091, #7014).</li>
-<li>&quot;The bell opens Windows' notification center&quot; and &quot;World clocks inside the clock&quot; (a list under the mouse on the clock), both off by default (#7089).</li>
-<li>Virtual desktops renamed with a pencil in their list (Windows 11 24H2 and later, through the shell's own desktop service, on a thread; the pencil stays away where the service isn't there).</li>
-<li>Separator lines on the pill: a &quot;+ Line&quot; chip in the settings' preview strip (with a hint, a glow when a What's new link or the settings search for &quot;separator&quot;/&quot;line&quot; leads to it) adds one, glowing on the pill for a moment, dragged between two groups (Island, Fixed and Bar, upright too), a click takes it away; &quot;dock.separator&quot; (off by default): a thin line in the dock between the pinned apps and the others, drawn only, the taskbar's buttons untouched.</li>
-<li>A hex box (#RRGGBB) under the buttons of the color dialog every color of the island's settings opens.</li>
-<li>&quot;Weather icons&quot; (Tools tab): emoji (default, as before), the chosen icon pack's pictures, Meteocons (MIT, in color) or Weather Icons (SIL OFL 1.1), downloaded once when chosen like the icon packs; emoji for a sky a set has no picture for.</li>
-<li>A keyboard shortcut for each of your commands (recorded in the command's editor, up to 16, clashes with the island's shortcuts and other commands refused; the keyboard hook stays off with none) (#6165).</li>
-<li>&quot;Show VLC 3 from its window's title&quot; (What's playing tab, off by default, #6164): VLC 3 publishes nothing to Windows' media controls, so while it makes sound its window's title shows as what's playing, with play/pause, previous and next pressed as the buttons of its taskbar thumbnail (a posted WM_APPCOMMAND crashes VLC 3.0's Qt filter); VLC has its own chip among the media apps (chosen, it shows with another app playing; another app chosen keeps its place), its program icon stands in for the cover on the pill and in the panel, and with another player paused too the one that played last shows; no cover or time (VLC 3 tells neither).</li>
-<li>The Fixed style and the Bar have their own list of icons per app (items, clock and order while that app is in front; the place and size stay the Island style's only) (#6162).</li>
-</ul>
-<p><strong>Fixes</strong></p>
-<ul>
-<li>The Bar no longer flickers at the screen's corners with apps that round them (Roundly, Monitor Rounded Edges): windows that let clicks through no longer count as covering the island (#6954).</li>
-<li>Song lyrics: a song not found by its exact title and artist is looked for again with the bare title and the first artist; &quot;Artist - Topic&quot; and &quot;Artist • Album&quot; are read as the artist (SimpMusic and YouTube Music, #6612).</li>
-<li>Brightness of external monitors (DDC/CI): the calls go one at a time, and if Windows stops in the middle of one (a blue screen some monitors, docks or hubs cause), the island turns this brightness off at the next start and says so in a notice; it stays off, whatever a profile or a backup put back holds, until it's turned on again in the settings (#6966).</li>
-<li>On Insider builds with Windows' newer taskbar, which has none of the parts the dock styles, the taskbar is left as Windows draws it instead of cut at the bottom and restyled over and over (#6888).</li>
-<li>Calendars from .ics files: an event in a time zone of its own (TZID) shows at your local time, whichever way the file names the zone: Windows' name (Outlook), an IANA one (Apple and most others) or a zone the file itself describes. A zone nothing knows is read as local, with a line in the log (#7020).</li>
-<li>Apple Music shows once in the mixer and its slider changes what you hear: the programs of one Store app (Apple Music plays through a helper, AMPLibraryAgent.exe) are one entry, with the app's name and icon. The same in the control panel's mixer (#7043).</li>
-<li>Panels too tall for a short screen or a large scale now stop at the screen's edge and scroll, instead of being cut. The calendar keeps its month whole, its rows shorter and its big clock gone if needed, and scrolls its events; the lyrics and the shelf shorten their own lists (#7046).</li>
-<li>Recycle Bin: when Windows isn't ready to count or watch it (right after the PC starts, for example), the island tries again ten seconds later instead of keeping an old count, and it counts the bin again each time its panel opens; &quot;Empty the bin&quot; also works while the count is unknown (#7048).</li>
-<li>Battery charging between 85% and 94%: the charging battery shows, instead of the font's energy saver battery, the glyph right after the charging ones (#6922).</li>
-<li>Wi-Fi: the network's name and signal are read when it connects (and every five minutes), the signal's changes coming from Windows' own notices, instead of reading the network on each change: on newer Windows 11 builds each read counts as using the location, which kept Windows' location icon on.</li>
-<li>Dock with the &quot;Disable grouping on the taskbar&quot; mod: the app ID's suffix that mod adds for each extra window is left out, so those windows get the app's sharp, large icons (#7029).</li>
-<li>Dock: a taskbar button reused for an app opened right after another one closed kept the closed app's sharp icon when none was found for the new one (the Riot Client showed FileZilla's, reported on Discord). That picture is no longer left on it (also when the taskbar changes the button's picture a moment before its app ID), and an app the shell has no icon for gets its program's or its window's icon, its window found also when the app sets its ID on its process (like TeamViewer).</li>
-<li>The &quot;Taskbar&quot; setting says the dock is for Windows 11 only: on Windows 10 the taskbar stays as it is and only the island works (#7059).</li>
-<li>Media panel: two sources of the same app (two Chrome tabs, for example) show each one's title on its chip instead of the app's name twice.</li>
-<li>Drawing: a frame lost because the graphics driver couldn't make pictures smaller the smooth way is drawn again at once the plain way, the panels in their own window too.</li>
-<li>Weather: when the weather service doesn't answer, the log says why (WinHTTP's error), for blocked connections.</li>
-<li>&quot;Do not disturb&quot; notice: it comes when you turn it on or off, not each time Windows turns it on by itself for an app in full screen or a game (its automatic rules); the notice follows the profile you chose, Windows' state only when that can't be read (#7091).</li>
-<li>Tray icons answer clicks again with UAC off or on the Administrator account: 3.0 refused clicks from an elevated island to elevated apps, and with UAC off every process is elevated, explorer too; the refusal now applies only when explorer isn't elevated (a real UAC line), and the log says when it refuses (#7092).</li>
-<li>Calendar reminders: one that came due with the notifications list open, a notification arriving or a panel opening over it waits and shows; one the PC slept through shows once as missed (up to 12 hours, an all-day event's until its day ends); the reminder's sound follows the island's &quot;Do not disturb&quot; that silences reminders (#6156).</li>
-<li>Taskbar progress filling the pill: the log names the programs it comes from as a fill starts.</li>
-<li>Dock: the bubble drawn for an app's count (sharp when magnified) takes the color of the app's own badge, the average of its solid pixels without the number's white (Telegram's gray for archived chats, for example), instead of always red (#7095).</li>
-<li>Tray: an app asking where its icon is right after adding it (Electron's tray.getBounds() after new Tray(), as Medal does) got 0x0 with the taskbar's tray hidden, since the island places an icon a frame later; Medal then removed the icon and quit when its window closed. When neither the island's places nor the taskbar answer, a known icon now gets the island's middle until its real place comes (#7106, from the reporter's patch).</li>
-<li>Lyrics: the lyrics item steps aside when the pill's title already shows the line sung now (the swap, or a player that writes the line in its own title), compared without case or surrounding spaces (#7105).</li>
-<li>Dock: the room above the icons is 12 instead of 8 at 46 px (in proportion to the icon size), so the icons sit closer to the middle with the dots' room below (#7103).</li>
-<li>Switching a monitor's profile starts and stops what that island shows (net speed, weather, AI usage, updates; at start too, the watches only another monitor's profile wants); what's playing stops being watched once media, its buttons, lyrics and the visualizer are all off; a paused download no longer redraws its fill on every frame; a shutdown in the middle of a call to a monitor no longer turns external monitors' brightness (DDC/CI) off with a false crash notice at the next start; an icon folder or a notification's picture on another PC's share no longer stalls the island; clipboard text without its end is read only up to its block.</li>
-</ul>
-<p><strong>Other</strong></p>
-<ul>
-<li>The Vietnamese texts were reviewed to sound more natural, by caotu2k5.</li>
-<li>The file's header has the GPL-3.0 notice (the mod was already under GPL-3.0), with caliberda's copyright and m417z's for the taskbar XAML part, and the README a License section.</li>
-<li>The README has a &quot;Not planned, and why&quot; section, with how to try one of the island's yourself.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Font Fallback Override 2.0]]></title>
-        <id>https://windhawk.net/mods/dwrite-font-fallback-override#07ddbcff6810b5b69ed7fda33e3dff7151668060</id>
-        <link href="https://windhawk.net/mods/dwrite-font-fallback-override"/>
-        <updated>2026-11-09T17:01:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for classic GDI APIs:
-<ul>
-<li><code>DrawTextExW</code></li>
-<li><code>DrawThemeText</code></li>
-<li><code>DrawThemeTextEx</code></li>
-<li><code>DrawShadowText</code></li>
-<li><code>TextOutW</code></li>
-<li><code>ExtTextOutW</code></li>
-</ul>
-</li>
-</ul>
-]]></content>
-        <author>
-            <name>Muhammad Ragib Hasin</name>
-            <uri>https://github.com/RagibHasin</uri>
         </author>
     </entry>
 </feed>

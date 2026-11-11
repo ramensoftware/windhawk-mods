@@ -1,3 +1,10 @@
+## 1.2.0 ([Nov 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fd16d4dc5e0d1e00d0fe5af20c46178a71d1303f/mods/top-taskbar-bleed.wh.cpp))
+
+* The first four rows of the title bar are sampled instead of one, so a hairline, a recorder border or a row of a gradient can’t decide the color
+* New setting “Custom colors”: programs whose maximized windows bleed a fixed #RRGGBB color instead of their sampled title bar, applied as soon as the window has landed, without sampling its title bar
+* Programs in “Custom colors” and “Excluded programs” can be named by a piece of their install path (\helium\) as well as by executable, for forks that keep another program’s executable name, like Helium running as chrome.exe
+* README and setting descriptions updated
+
 ## 1.1.1 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6913ece9a195fd9b8c2492b74f6004c2a2e0df5b/mods/top-taskbar-bleed.wh.cpp))
 
 * Periodic (10 s) island health check on the taskbar thread: detached panels are re-attached and committed to again, live ones repaired (position above the background, visibility, opacity, stroke and fill state), each repair logged; the check touches only what the mod itself placed or changed, so Styler themes, Dynamic Taskbar Transparency and the Opacity Tuner are left alone

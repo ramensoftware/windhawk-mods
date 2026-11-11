@@ -2,12 +2,172 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-10T00:01:58.000Z</updated>
+    <updated>2026-11-11T05:03:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Translucent Menus 1.0.2]]></title>
+        <id>https://windhawk.net/mods/explorer-translucent-menus#835b475ed345822f8b1527367ac17306e4b85c8e</id>
+        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
+        <updated>2026-11-11T05:03:02.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Translucent Menus</h1>
+<p>Apply translucent materials to classic Win32 popup menus in File Explorer.
+Windows continues to provide menu items, layout, commands, keyboard navigation,
+and shell extensions. Windows 11's modern context menu is left unchanged.</p>
+<p>This is an Explorer-only, menu-focused alternative to the archived
+<a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> project.
+It covers classic popup menus hosted by <code>explorer.exe</code>, including desktop and
+File Explorer context menus. It leaves the main Explorer window background,
+ordinary controls, and other processes unchanged.</p>
+<h2>Screenshots</h2>
+<p>Materials in light and dark themes</p>
+<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/01-materials-light-dark.png" alt="materials"></p>
+<p>Tint and transparency adjustments</p>
+<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/02-tint-transparency.png" alt="tint"></p>
+<p>Borders and submenus</p>
+<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png" alt="borders"></p>
+<h2>Requirements</h2>
+<ul>
+<li>Windows 11 22H2 or later (build 22621+), 64-bit.</li>
+<li>Desktop composition and Windows transparency effects enabled.</li>
+<li>No other renderer modifying the same Explorer menus.</li>
+</ul>
+<p>To open a classic context menu on Windows 11, select <strong>Show more options</strong> or
+use <strong>Shift+F10</strong>. Select <strong>Native</strong> to disable all hooks. For a temporary bypass,
+enable <strong>Hold Ctrl to bypass</strong> in the settings, then hold <strong>Ctrl</strong> before opening
+a menu.</p>
+<h2>Materials</h2>
+<table>
+<thead>
+<tr>
+<th>Material</th>
+<th>Tint opacity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Native</td>
+<td>No modifications</td>
+</tr>
+<tr>
+<td>Solid</td>
+<td>Always opaque</td>
+</tr>
+<tr>
+<td>Transparent</td>
+<td>Adjustable, no blur</td>
+</tr>
+<tr>
+<td>Acrylic</td>
+<td>Adjustable tint over blur</td>
+</tr>
+<tr>
+<td>Modern Acrylic</td>
+<td>Adjustable tint color, fixed opacity</td>
+</tr>
+<tr>
+<td>System Acrylic</td>
+<td>Fixed Windows recipe</td>
+</tr>
+<tr>
+<td>Mica / Mica Alt</td>
+<td>Fixed Windows recipes</td>
+</tr>
+</tbody>
+</table>
+<p>Tint opacity changes the material, not text or icons. Theme selection controls
+the light or dark palette. Hover highlight opacity can be adjusted separately.
+Unrecognized saved material values use Acrylic.</p>
+<h2>Appearance</h2>
+<p>Enable <strong>Hide menu border</strong> to suppress the outline on modified menus. This
+preserves menu dimensions and works with rounded or square corners. Native
+mode and Ctrl bypass retain the complete Windows appearance.
+The option also protects the outline setting from later Shell/UxTheme updates
+while the modified menu is being tracked.</p>
+<p>Legacy icon repair converts copied RGB bitmaps to premultiplied alpha. Optional
+background removal clears only matching corner-connected white, black, or
+magenta regions. Disable background removal for icons with intentional borders.
+Transfers that declare per-pixel alpha, and bitmaps with ambiguous partial
+alpha, retain the original GDI behavior. The mod does not guess whether an
+existing alpha bitmap is straight or premultiplied.</p>
+<h2>Scope and rendering approach</h2>
+<p>This mod keeps the Shell's immersive owner-draw enabled and preserves native
+menu layout, commands, and shell extensions. Effects are scoped to supported
+classic popups while a menu is tracked. Preparation validates resources before
+applying effects and exposes the popup to drawing hooks only after commit.
+Only successful state changes are recorded for cleanup. Unassociated memory
+DCs are left to Windows; owner-draw memory DCs require an exact synchronous
+WM_DRAWITEM match.
+GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
+a tracked menu. The scope is the popup effect, rather than a replacement for
+Explorer's overall interface rendering.</p>
+<p><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> and
+<a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a> already
+offer translucent classic menus. Translucent Windows shares background-effect
+configuration between windows and flyouts, with menu drawing integrated into
+its broader theme-rendering path. Win32 UI Modernizer lets users disable its
+Explorer section and other general features, but its modern menu modes disable
+immersive owner-draw and also modernize ComboBox dropdowns.</p>
+<p>The purpose of this separate implementation is to provide a dedicated popup
+renderer that retains the Shell's owner-draw path and can accompany a separate
+Explorer background renderer. Restricting process targets or adding material
+presets alone does not provide that rendering behavior. An equivalent mode in
+a broader UI mod would need to isolate menu rendering and preserve immersive
+owner-draw as well.</p>
+<h2>Compatibility</h2>
+<p>Menu effects from these mods conflict when enabled on the same Explorer popups:</p>
+<ul>
+<li><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>:
+<strong>Flyout effects</strong> also renders classic menus, dropdowns, and tooltips.
+Disable that option to remove its flyout effects.</li>
+<li><a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a>: set
+<strong>Menus and dropdowns</strong> to <strong>Native (no modernization)</strong>. Both modern modes
+apply their own acrylic rendering and disable immersive owner-draw.</li>
+</ul>
+<p>These settings turn off their direct menu features. Their remaining Explorer
+effects and shared drawing hooks depend on other settings, so compatibility
+must be evaluated with the configuration in use. To avoid their remaining hooks
+in Explorer while continuing to use them in other applications, exclude
+<code>explorer.exe</code> from their targets in Windhawk's Advanced tab.</p>
+<p>This mod is also compatible with
+<a href="https://github.com/Maplespe/ExplorerBlurMica">ExplorerBlurMica</a>, which supplies
+the main Explorer window backdrop. This mod keeps its effects confined to classic
+popup menus and leaves the main window backdrop to ExplorerBlurMica.</p>
+<p>Unknown owner-drawn menus, custom background brushes, high contrast, remote
+sessions, disabled transparency, and recognized conflicting renderers are
+left unchanged. Settings changes reload the mod. Menu opening animations follow
+the Windows settings and the caller's flags, including when effects are active.</p>
+<p>Menus whose previous system-backdrop value cannot be read stay native. Unreadable
+optional dark-mode and corner preferences are left unchanged. Recorded values
+are restored on live-window cleanup; failed restores remain pending for retry.
+There are no public getters for prior blur regions or extended-frame margins,
+and the Accent getter is unavailable on some builds. Cleanup of those states is
+best-effort, not a lossless restoration guarantee for an unknown renderer. A
+missing border-color snapshot likewise uses the Windows default on cleanup.
+Destroyed popup HWNDs release their window-owned effects without extra resets.</p>
+<p>The implementation uses version-dependent Windows interfaces: the composition
+attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
+message 0x1e2, and Shell window properties. It does not read private Shell item
+structures, patch instructions, download symbols, or replace the menu loop.</p>
+<h2>Troubleshooting</h2>
+<p>Enable log output in Windhawk's Advanced tab to record menu preparation,
+material and border application results, native fallback reasons, and cleanup.
+There is no separate logging setting in this mod. Native mode registers no
+menu hooks, so it reports initialization rather than individual menu openings.</p>
+<h2>Credits and license</h2>
+<p>Informed by <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>,
+<a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>, and
+<a href="https://github.com/Bolt-Scripts/custom-cached-context-menu">Custom Cached Context Menu</a>.
+This implementation is distributed under GPL-3.0-or-later.</p>
+]]></content>
+        <author>
+            <name>alkali210</name>
+            <uri>https://github.com/alkali210</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/mac-os-27-finder-bar#490977e5b6cf20cdba95d86f1203e8f8be44e012</id>
@@ -2139,47 +2299,6 @@ live capture is used automatically.</li>
         <author>
             <name>Soham</name>
             <uri>https://github.com/Soham-Barate</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Large Icons View for File Explorer 2.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-large-icons-view#a26e2956e4c66bab4a5b54df88463a7e8703cd3b</id>
-        <link href="https://windhawk.net/mods/explorer-large-icons-view"/>
-        <updated>2026-11-06T02:03:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>Large Icons View for File Explorer</h1>
-<p>Keeps File Explorer folders in <strong>Large icons</strong> view. The icon size is
-configurable: 96 pixels matches Windows' own Large icons.</p>
-<p><img src="https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/large-icons-before-after.png" alt="The same folder in Details view and with the mod enabled"></p>
-<h2>How it works</h2>
-<p>The view is switched when a folder opens in a File Explorer window, without
-waiting or polling.</p>
-<ul>
-<li><strong>Keep enforcing</strong> (default): if you switch a folder to another view, it is
-switched back to large icons.</li>
-<li>With <strong>Keep enforcing</strong> off, every folder opens in large icons, but a view
-you pick manually stays until you navigate to another folder.</li>
-</ul>
-<p>It applies to file-system folders (local, removable and network drives). The
-desktop, Open/Save dialogs, Home, This PC, the Recycle Bin and other virtual
-folders are not affected. Folder contents are never read, moved or changed.</p>
-<h2>Disabling the mod and restoring views</h2>
-<p>When <em>Remember each folder's view settings</em> is on (the Windows default),
-Explorer saves the view of each folder you open. Every folder opened while the
-mod is enabled is therefore saved in large icons, and keeps that view after the
-mod is disabled or removed.</p>
-<p>To restore the default view of all folders, open <strong>Folder Options &gt; View</strong> and
-select <strong>Reset Folders</strong>.</p>
-<h2>Credits and links</h2>
-<p>Original project by <strong>Dev_Maycon</strong>, developed with AI assistance. Licensed
-under <strong>GPL-3.0-only</strong>.</p>
-<ul>
-<li>Repository: <a href="https://github.com/MayconDIS/Windhawk_Mods">MayconDIS/Windhawk_Mods</a>.</li>
-<li>GitHub profile: <a href="https://github.com/MayconDIS">MayconDIS</a>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev_Maycon</name>
-            <uri>https://github.com/MayconDIS</uri>
         </author>
     </entry>
 </feed>

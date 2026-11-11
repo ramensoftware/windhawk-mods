@@ -7270,6 +7270,34 @@
         "version": "1.0.0"
       }
     },
+    "explorer-translucent-menus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794373382000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794373382000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "alkali210",
+        "compilerOptions": "-ldwmapi -luxtheme -lgdi32 -ladvapi32 -lcomctl32 -lmsimg32",
+        "description": "Translucent materials and optional borderless classic context menus for File Explorer",
+        "github": "https://github.com/alkali210",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Explorer Translucent Menus",
+        "version": "1.0.2"
+      }
+    },
     "explorer-tree-click-expand": {
       "details": {
         "defaultSorting": 730,
@@ -17549,7 +17577,7 @@
         "ratingUsers": 11,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794157449000,
+        "updated": 1794373388000,
         "users": 72
       },
       "metadata": {
@@ -17563,7 +17591,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Live HUD",
-        "version": "1.1"
+        "version": "1.1.1"
       }
     },
     "taskbar-margin": {
@@ -19360,7 +19388,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 3.6583767710667714,
-        "updated": 1794160830000,
+        "updated": 1794373393000,
         "users": 240
       },
       "metadata": {
@@ -19376,7 +19404,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Top Taskbar Bleed",
-        "version": "1.1.1"
+        "version": "1.2.0"
       }
     },
     "tortoisegit-progress-animation-background-fix": {

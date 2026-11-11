@@ -2,7 +2,7 @@
 // @id              top-taskbar-bleed
 // @name            Top Taskbar Bleed
 // @description     Bleeds the color of a maximized window's title bar into a top-docked taskbar behind the task buttons
-// @version         1.1.1
+// @version         1.2.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -36,8 +36,8 @@ How it works:
   maximized window (the first maximized window in z-order on that monitor -
   not necessarily the foreground window, so a small dialog on top of a
   maximized app doesn't cancel the bleed).
-- A row of the window's title bar (the 4th from its top edge) is captured
-  from the screen and reduced to its dominant color (so a bit of text or an icon can't skew it);
+- The first four rows of the window's title bar are captured from the screen
+  and reduced to their dominant color (so a bit of text or an icon can't skew it);
   that color is the panel and decides the taskbar theme. Pixels covered by
   another window - a flyout, a thumbnail, a tooltip, a dialog near the title
   bar - are left out,
@@ -69,14 +69,23 @@ How it works:
 Supports multiple monitors (each taskbar follows its own monitor).
 
 Settings: **Poll interval** (how often a static title bar is re-checked; window
-changes are event-driven regardless), **Excluded programs** (executables whose
-windows should never trigger the bleed), **Transparent taskbar when nothing is
+changes are event-driven regardless), **Excluded programs** (programs whose
+windows should never trigger the bleed), **Custom colors** (programs whose
+maximized windows bleed a fixed `#RRGGBB` color instead of their sampled title
+bar - for an app whose top rows don't show its real title bar color: a custom
+frame, a hairline, content drawn at the very top), **Transparent taskbar when nothing is
 maximized** (the taskbar's own background and border line are hidden, so the
 wallpaper shows through whenever no bleed is showing - the taskbar is then
 either bled or transparent, never stock; a taskbar the mod leaves idle, such
 as a bottom taskbar without **Any taskbar position**, keeps its background),
 and the experimental **Gradient
 bleed** and **Any taskbar position** toggles described above.
+
+A program is named by its executable (`chrome.exe`). A program that keeps
+another one's executable name - a browser fork like Helium, which runs as
+`chrome.exe` - is named by a piece of its install path instead, anything with
+a backslash in it: `\helium\` or `helium\application\chrome.exe` (Task
+Manager > Open file location shows the path).
 
 The panel is a regular XAML `Border` named `TaskbarBleedPanel`, so its shape can
 be styled with *Windows 11 Taskbar Styler* like any other taskbar element.
@@ -93,7 +102,7 @@ drives those (the background is a gradient brush).
   XAML diagnostics, so the mod coexists with Windows 11 Taskbar Styler and other
   XAML-diagnostics consumers. The bleed applies as soon as the mod is enabled.
 - Cost: with a maximized window present, each poll is one small screen
-  readback (a 1px-high strip) plus a window enumeration; it doesn't register in
+  readback (a 4px-high strip) plus a window enumeration; it doesn't register in
   Task Manager at either rate, and the fast rate only runs during a transition.
   With no maximized window the poll timer is off, and window events are only
   acted on when they come from a maximized window or the window being
@@ -139,7 +148,16 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
   $description: How often the window's title bar is re-checked while nothing is happening. Window changes (switching, maximizing, minimizing) are picked up from events immediately regardless; this only decides how soon a title bar that recolors on its own (a tab switch, an app theme change) is followed. Lower is more responsive, higher costs less.
 - ExcludedProcesses: [""]
   $name: Excluded programs
-  $description: Executable names (e.g. game.exe) whose windows never trigger the bleed.
+  $description: Programs whose windows never trigger the bleed. An executable name (game.exe), or - for a program that keeps another one's executable name, like a browser fork running as chrome.exe - a piece of its install path (\helium\ or helium\application\chrome.exe).
+- CustomColors:
+  - - Process: ""
+      $name: Program
+      $description: "Executable name (notepad.exe), or a piece of the install path for a program that keeps another one's executable name, like a browser fork running as chrome.exe (\\helium\\ or helium\\application\\chrome.exe)."
+    - Color: ""
+      $name: Color
+      $description: "Hex color (#RRGGBB) bled for this program's maximized windows instead of the sampled title bar color."
+  $name: Custom colors
+  $description: Programs whose title bar is not sampled. For an app whose top rows don't show its real title bar color (a custom frame, a hairline, content drawn at the very top), set the color to bleed here.
 - TransparentIdle: false
   $name: Transparent taskbar when nothing is maximized
   $description: Hide the taskbar's own background and border line, so the wallpaper shows through whenever no bleed is showing. The bleed covers the taskbar as usual while a window is maximized.
@@ -206,7 +224,8 @@ using Gradient = std::array<Rgb, kGradientPoints>;
 
 struct Settings {
     int pollIntervalMs = 250;                     // steady-state re-check of a static title bar
-    std::vector<std::wstring> excludedProcesses;  // lowercase basenames
+    std::vector<std::wstring> excludedProcesses;  // program patterns (see ProcessMatches)
+    std::vector<std::pair<std::wstring, Rgb>> customColors;  // program pattern -> fixed bleed color
     bool gradient = false;                        // experimental: four-point gradient instead of one color
     bool anyDock = false;                         // experimental: paint bottom/left/right taskbars too
     bool transparentIdle = false;                 // hide the taskbar background (and stroke) while no panel shows
@@ -227,13 +246,64 @@ std::wstring ToLowerBasename(std::wstring s) {
     return s;
 }
 
+// A program setting names either an executable ("chrome.exe") or, when it
+// contains a path separator, a piece of the executable's full path
+// ("\helium\" or "helium\application\chrome.exe"), for forks that keep the
+// original executable name. Lowercase, forward slashes folded to backslashes.
+std::wstring NormalizeProcessPattern(std::wstring s) {
+    for (auto& c : s) c = c == L'/' ? L'\\' : (wchar_t)std::towlower(c);
+    while (!s.empty() && iswspace(s.back())) s.pop_back();
+    size_t i = 0;
+    while (i < s.size() && iswspace(s[i])) i++;
+    return s.substr(i);
+}
+
+// `pathLower` is the lowercase full image path of a process.
+bool ProcessMatches(const std::wstring& pattern, const std::wstring& pathLower) {
+    if (pattern.empty() || pathLower.empty()) return false;
+    if (pattern.find(L'\\') == std::wstring::npos) return ToLowerBasename(pathLower) == pattern;
+    return pathLower.find(pattern) != std::wstring::npos;
+}
+
+// "#RRGGBB" / "RRGGBB" (an "#AARRGGBB" alpha is ignored); spaces around it allowed.
+bool ParseHexColor(const wchar_t* text, Rgb& out) {
+    std::wstring t = text ? text : L"";
+    while (!t.empty() && iswspace(t.back())) t.pop_back();
+    size_t i = 0;
+    while (i < t.size() && iswspace(t[i])) i++;
+    if (i < t.size() && t[i] == L'#') i++;
+    std::wstring hex = t.substr(i);
+    if (hex.size() == 8) hex = hex.substr(2);
+    if (hex.size() != 6) return false;
+    int v[6];
+    for (int k = 0; k < 6; k++) {
+        wchar_t c = (wchar_t)std::towlower(hex[k]);
+        if (c >= L'0' && c <= L'9') v[k] = c - L'0';
+        else if (c >= L'a' && c <= L'f') v[k] = 10 + c - L'a';
+        else return false;
+    }
+    out = Rgb{v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5]};
+    return true;
+}
+
 void LoadSettings() {
     Settings s;
 
     for (int i = 0;; i++) {
         auto p = WindhawkUtils::StringSetting::make(L"ExcludedProcesses[%d]", i);
         if (!*p.get()) break;
-        s.excludedProcesses.push_back(ToLowerBasename(p.get()));
+        s.excludedProcesses.push_back(NormalizeProcessPattern(p.get()));
+    }
+    for (int i = 0;; i++) {
+        auto p = WindhawkUtils::StringSetting::make(L"CustomColors[%d].Process", i);
+        if (!*p.get()) break;
+        auto c = WindhawkUtils::StringSetting::make(L"CustomColors[%d].Color", i);
+        Rgb color;
+        if (ParseHexColor(c.get(), color)) {
+            s.customColors.emplace_back(NormalizeProcessPattern(p.get()), color);
+        } else {
+            Wh_Log(L"custom color for %s ignored: \"%s\" is not #RRGGBB", p.get(), c.get());
+        }
     }
     s.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"PollIntervalMs"), 50, 60000);
     s.gradient = Wh_GetIntSetting(L"Experimental.Gradient") != 0;
@@ -722,7 +792,10 @@ struct TrackState {
     bool active = false;        // panel currently showing
     bool notTopLogged = false;
     HWND coveredBy = nullptr;   // window hiding the whole title bar (Task View); kept across Deactivate
-    int stripShift = 0;         // rows the sampled row was moved down past something thin lying on it
+    int stripShift = 0;         // rows the strip was moved down past something lying on its top row
+    bool customColorKnown = false;  // customColor looked up for the current target (and settings)
+    bool hasCustomColor = false;
+    Rgb customColor{};
     Rgb committed{};            // dominant color of what the panel shows
     Gradient committedGradient{};
     Gradient lastGradient{};    // of the last sample
@@ -758,24 +831,33 @@ bool GetFrameBounds(HWND hwnd, RECT& rc) {
     return GetWindowRect(hwnd, &rc) != FALSE;
 }
 
-std::wstring ProcessBasename(HWND hwnd) {
+// Lowercase full image path of the window's process ("" if unreadable).
+std::wstring ProcessImagePath(HWND hwnd) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     HANDLE h = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
     if (!h) return L"";
     WCHAR path[MAX_PATH * 2];
     DWORD len = ARRAYSIZE(path);
-    std::wstring base;
-    if (QueryFullProcessImageNameW(h, 0, path, &len)) base = ToLowerBasename(path);
+    std::wstring result;
+    if (QueryFullProcessImageNameW(h, 0, path, &len)) {
+        result = path;
+        for (auto& c : result) c = (wchar_t)std::towlower(c);
+    }
     CloseHandle(h);
-    return base;
+    return result;
+}
+
+std::wstring ProcessBasename(HWND hwnd) {
+    return ToLowerBasename(ProcessImagePath(hwnd));
 }
 
 bool IsProcessExcluded(HWND hwnd, const Settings& s) {
     if (s.excludedProcesses.empty()) return false;
-    std::wstring base = ProcessBasename(hwnd);
-    return !base.empty() &&
-           std::find(s.excludedProcesses.begin(), s.excludedProcesses.end(), base) != s.excludedProcesses.end();
+    std::wstring path = ProcessImagePath(hwnd);
+    for (const auto& pattern : s.excludedProcesses)
+        if (ProcessMatches(pattern, path)) return true;
+    return false;
 }
 
 std::wstring DescribeWindow(HWND hwnd) {
@@ -987,16 +1069,15 @@ bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
     return horizontal && std::abs(tb.top - mon.top) < std::abs(tb.bottom - mon.bottom);
 }
 
-// The row sampled across the window's title bar: the 4th visible row (a
-// maximized window's 1px DWM border sits in the off-screen frame zone, so
-// the first visible row is already title bar). A few rows in clears the
-// borders screen recorders draw around a recorded taskbar (1-3px, on the
-// rows right below it) and any 1px line an app paints along its own top,
-// while staying well above the toolbar icons and caption buttons some apps
-// place near the top of the title bar. One row only: it is still thousands
-// of pixels for the histogram.
-constexpr LONG kSampleRowOffset = 3;
-constexpr LONG kSampleRows = 1;
+// The strip sampled across the window's title bar: its first four visible
+// rows (a maximized window's 1px DWM border sits in the off-screen frame
+// zone, so the first visible row is already title bar). Four rows, not one:
+// the dominant color is then the title bar's even when one row is something
+// else - a hairline an app paints along its top, a row of a gradient - while
+// staying above the toolbar icons and caption buttons some apps place near
+// the top of the title bar. (Anything lying on the strip's top row moves the
+// strip down past it first; see OpaqueOver.)
+constexpr LONG kSampleRows = 4;
 
 // The frame is clipped to the work area first (some hosts report a maximized
 // frame that extends under the taskbar by the invisible border width), and then
@@ -1014,7 +1095,6 @@ RECT ComputeStrip(const RECT& frame, const RECT& work, HWND taskbar) {
         wr.left < tb.right && wr.right > tb.left) {
         top = tb.bottom;
     }
-    top += kSampleRowOffset;
     RECT r{wr.left, top, wr.right, top + kSampleRows};
     RECT clipped;
     if (!IntersectRect(&clipped, &r, &work)) return RECT{0, 0, 0, 0};
@@ -1209,10 +1289,11 @@ bool RegionCovers(HWND hwnd, const RECT& wndRect, const RECT& rect) {
 // where it counts, and window regions, which say where a window really is.
 // Used twice: with a rect reaching kCoverDepth into the window to find a
 // cover (a full-screen app or overlay: the title bar isn't on screen, so
-// there is nothing to bleed and the panel hides), and with the one-row strip
-// to find something thin lying on the title bar's sampled row (the border
-// of a screen recorder's frame when the taskbar alone is recorded), which
-// just moves the sampled row down past it, up to kMaxStripShift rows.
+// there is nothing to bleed and the panel hides), and with the strip's top
+// row to find something lying on it (the 1-3px border a screen recorder draws
+// right below a recorded taskbar, which a 2-3px border would otherwise win
+// the histogram with), which just moves the strip down a row at a time until
+// its top row is clear, up to kMaxStripShift rows.
 constexpr int kCoverDepth = 16;
 constexpr int kMaxStripShift = 8;
 HWND OpaqueOver(const std::vector<ZWindow>& zorder, HWND target, const RECT& rect) {
@@ -1496,12 +1577,13 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
             st.coveredBy = cover;
             return;
         }
-        // Something thin on the sampled row only (a recorder's frame border):
-        // sample the row below it.
+        // Something lying on the strip's top row (a recorder's frame border):
+        // start the strip below it.
         int shift = 0;
         HWND thin = nullptr;
         while (shift < kMaxStripShift && strip.bottom < wr.bottom) {
-            HWND over = OpaqueOver(ctx.zorder, target, strip);
+            RECT topRow{strip.left, strip.top, strip.right, strip.top + 1};
+            HWND over = OpaqueOver(ctx.zorder, target, topRow);
             if (!over) break;
             thin = over;
             OffsetRect(&strip, 0, 1);
@@ -1509,10 +1591,10 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         }
         if (shift != st.stripShift) {
             if (shift) {
-                Wh_Log(L"taskbar %p: title bar row covered by %s, sampling %d px lower", taskbar,
+                Wh_Log(L"taskbar %p: title bar strip covered by %s, sampling %d px lower", taskbar,
                        DescribeWindow(thin).c_str(), shift);
             } else {
-                Wh_Log(L"taskbar %p: title bar row clear again", taskbar);
+                Wh_Log(L"taskbar %p: title bar strip clear again", taskbar);
             }
             st.stripShift = shift;
             st.lastHash = 0;  // a different row: don't compare against the old one
@@ -1532,11 +1614,46 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         Wh_Log(L"taskbar %p: target %s strip=(%d,%d,%d,%d)%s%s", taskbar, DescribeWindow(target).c_str(),
                strip.left, strip.top, strip.right, strip.bottom, zOrderSwitch ? L" (z-order switch)" : L"",
                st.holdSince ? L" (holding for landing)" : L"");
+        st.customColorKnown = false;
+    }
+
+    // A program with a custom color: the color is applied as is, with the same
+    // landing hold as a sampled one (the strip is still captured while the
+    // hold runs, only to tell when the window has arrived), so its bleed
+    // appears when every other app's does.
+    if (!st.customColorKnown) {
+        st.customColorKnown = true;
+        st.hasCustomColor = false;
+        if (!ctx.settings->customColors.empty()) {
+            std::wstring path = ProcessImagePath(target);
+            for (const auto& [pattern, color] : ctx.settings->customColors) {
+                if (ProcessMatches(pattern, path)) {
+                    st.hasCustomColor = true;
+                    st.customColor = color;
+                    Wh_Log(L"taskbar %p: %s matches \"%s\", custom color #%02X%02X%02X", taskbar, path.c_str(),
+                           pattern.c_str(), color.r, color.g, color.b);
+                    break;
+                }
+            }
+        }
+    }
+    if (st.hasCustomColor && !st.holdSince) {
+        Gradient g;
+        g.fill(st.customColor);
+        st.changedThisTick = false;
+        st.haveLastSample = false;
+        st.lastGradient = g;
+        if (!st.active || targetChanged || g != st.committedGradient) Commit(st, taskbar, st.customColor, g);
+        return;
     }
 
     std::vector<uint32_t> px;
     if (!CaptureStrip(strip, g_captures[taskbar], px) || px.empty()) {
-        HandleBlocked(st, taskbar, target);
+        if (st.hasCustomColor) {
+            st.holdSince = 0;  // can't see the landing; the next tick commits the fixed color
+            st.holdStartPx.clear();
+        }
+        HandleBlocked(st, taskbar, target);  // a sampled target stays held: the next capture judges the landing
         return;
     }
 
@@ -1578,7 +1695,13 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         Wh_Log(L"taskbar %p: target %s after %llu ms", taskbar, landed ? L"landed" : L"hold expired", held);
         st.holdSince = 0;
         st.holdStartPx.clear();
-        Commit(st, taskbar, sampled, st.lastGradient);
+        if (st.hasCustomColor) {
+            st.lastGradient.fill(st.customColor);
+            st.haveLastSample = false;
+            Commit(st, taskbar, st.customColor, st.lastGradient);
+        } else {
+            Commit(st, taskbar, sampled, st.lastGradient);
+        }
         return;
     }
 
@@ -1818,7 +1941,10 @@ DWORD WINAPI TrackerThreadProc(LPVOID) {
             } else if (msg.message == WM_TRACKER_SETTINGS) {
                 // The gradient option changes what a static strip maps to;
                 // drop the cached samples so the next tick recomputes them.
-                for (auto& kv : g_track) kv.second.haveLastSample = false;
+                for (auto& kv : g_track) {
+                    kv.second.haveLastSample = false;
+                    kv.second.customColorKnown = false;
+                }
                 ScheduleDebouncedTick();
             } else if (msg.message == WM_TRACKER_ISLAND_ATTACHED) {
                 // A new panel starts hidden, and the tracker's state for that

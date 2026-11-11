@@ -1,3 +1,10 @@
+## 1.1.1 ([Nov 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/074ed83b4b131627bfd23bf64957fbc721906920/mods/taskbar-live-hud-radar.wh.cpp))
+
+* Hides when the taskbar is auto-hidden or made transparent.
+* Smoothly follows the taskbar auto-hide animation with zero delay.
+* Detects fullscreen windows (F11, media players, games) much faster.
+* Fixed an issue where the HUD would remain visible when the taskbar was retracted.
+
 ## 1.1 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/df8b56732c81d756c4f32247780be4448a6f11c1/mods/taskbar-live-hud-radar.wh.cpp))
 
 * Added real-time CPU & RAM history mini-graph (Ctrl + Right Click).
