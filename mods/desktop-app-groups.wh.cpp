@@ -55,11 +55,17 @@ in a popup beside it.
 
 ## How groups are stored
 
-A group is an ordinary folder on your desktop. Inside it are your shortcuts,
-plus two hidden files: `desktop.ini` (which marks the folder as a group and
-holds its settings and app order) and the group's icon. If you uninstall the
-mod, your groups stay as normal folders with your shortcuts in them, so
-nothing is lost.
+A group is an ordinary folder on your desktop with your shortcuts in it, so
+if you uninstall the mod, nothing is lost. Inside it are two hidden files
+that Windows needs to show the group's icon: the icon itself and a
+`desktop.ini` that points to it.
+
+The mod's own data for each group (that it's a group, your app order and
+the group's own settings) is kept in Windhawk's storage on this PC. If you'd
+like groups to keep that data when your desktop is synced to another PC,
+copied or backed up, turn on "Keep group data inside the group folders" in
+the Settings tab: it's then kept in each group's `desktop.ini` instead (see
+the setting's description for the side effects).
 
 ## Uninstalling
 
@@ -67,7 +73,9 @@ Groups are normal folders, so they stay on your desktop with your shortcuts
 in them. Each one keeps what Windows needs to show its custom icon: its last
 group icon, the hidden `desktop.ini` and `group-icon-....ico` files inside
 it, and the folder's read-only flag (which, for folders, only tells Windows
-to look for a `desktop.ini`; it doesn't make anything read-only).
+to look for a `desktop.ini`; it doesn't make anything read-only). If you
+turned on "Keep group data inside the group folders", each `desktop.ini`
+also still has the group's app order and settings.
 
 To turn a group back into a plain folder, either move the shortcuts out and
 delete the folder, or:
@@ -100,6 +108,9 @@ In this Settings tab:
 - **Blurred popup background.** The popup uses a solid background if
   Windows' Transparency effects setting is off.
 - **Animate the popup** when it opens and closes.
+- **Keep group data inside the group folders:** off by default. Turn it on
+  if your desktop is synced between PCs (for example with OneDrive) and you
+  want your groups to stay groups everywhere.
 
 Layout and behaviour settings for groups are in each popup's gear panel.
 
@@ -129,6 +140,9 @@ Made for Windows 11.
 - animatePopup: true
   $name: Animate the popup
   $description: Grow out of the group's icon when opening, and shrink back into it when closing, like Start menu folders.
+- groupDataInFolder: false
+  $name: Keep group data inside the group folders (for syncing)
+  $description: "Off (recommended): each group's app order, its own settings and its group status are kept in Windhawk's storage on this PC. On: they're kept in the hidden desktop.ini file inside each group instead, so they go with the folder when your desktop is synced (for example by OneDrive), copied or backed up, and the folders are still groups on another PC or after reinstalling the mod. Side effects of turning it on: the mod writes to that file every time you rearrange a group or change its settings, so syncing services upload it again each time; and the data stays in the folders if you uninstall the mod. Changing this moves your existing groups' data over."
 */
 // ==/WindhawkModSettings==
 
@@ -170,6 +184,7 @@ Made for Windows 11.
 #include <climits>
 #include <cmath>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -210,6 +225,11 @@ struct {
     bool animatePopup;
 } g_settings;
 
+// Whether each group's data is kept in its desktop.ini (true) or in
+// Windhawk's storage (false). See section 5. "atomic" because the group
+// watcher thread reads it too.
+std::atomic<bool> g_dataInFolder{false};
+
 void LoadSettings() {
     // Text settings must be freed after reading them.
     PCWSTR trigger = Wh_GetStringSetting(L"groupTrigger");
@@ -234,6 +254,7 @@ void LoadSettings() {
 
     g_settings.blurredPopup = Wh_GetIntSetting(L"blurredPopup") != 0;
     g_settings.animatePopup = Wh_GetIntSetting(L"animatePopup") != 0;
+    g_dataInFolder = Wh_GetIntSetting(L"groupDataInFolder") != 0;
 }
 
 // ---- 2. Finding the desktop icon list ---------------------------------------
@@ -669,23 +690,36 @@ void AskDesktopToPlace(const std::wstring& path, POINT position) {
 // A group is a normal folder on your desktop. That keeps it simple and safe:
 // if you uninstall the mod, your shortcuts are still in an ordinary folder.
 //
-// To tell groups apart from your other folders, each group has a hidden
-// "desktop.ini" file, a standard Windows file for folder settings:
+// Each group also has some data of the mod's own: a marker saying "this
+// folder is a group", the order you arranged its apps in, its own settings
+// from the gear panel, and which icon it has. Where that's kept depends on
+// the "Keep group data inside the group folders" setting:
+//
+//   - Off (the default): in the mod's storage in Windhawk, on this PC. Each
+//     group is recognised by its folder's file ID, a number Windows gives
+//     every file and folder, which stays the same when the folder is renamed
+//     or moved around the same drive.
+//   - On: in the group's hidden "desktop.ini" file (a standard Windows file
+//     for folder settings), so the data goes wherever the folder goes.
+//
+// Either way, desktop.ini holds the line Windows needs to show the group's
+// icon. With the setting on, the mod's data is in there too:
 //
 //   [.ShellClassInfo]
 //   IconResource=C:\...\group-icon-123.ico,0   <- the group's icon
-//   [DesktopAppGroups]
+//   [DesktopAppGroups]                         <- only with the setting on:
 //   IsGroup=1                                  <- "this folder is a group"
 //   IconVersion=2                              <- which icon style it has
 //   IconFingerprint=123456                     <- which apps the icon shows
+//   Order=Notepad.lnk|Paint.lnk                <- your arrangement
+//   Tint=255                                   <- the group's own settings
+//
+// When the setting changes, each group's data is moved over (MoveGroupData).
+// If the drive has no file IDs (some network drives), the data stays in
+// desktop.ini whatever the setting, since there's nothing else to recognise
+// the folder by.
 
 const WCHAR kGroupIniSection[] = L"DesktopAppGroups";
-
-bool IsGroupFolder(const std::wstring& folderPath) {
-    std::wstring iniPath = folderPath + L"\\desktop.ini";
-    return GetPrivateProfileIntW(kGroupIniSection, L"IsGroup", 0,
-                                 iniPath.c_str()) == 1;
-}
 
 std::wstring ReadGroupIniValue(const std::wstring& folderPath, PCWSTR section,
                                PCWSTR key) {
@@ -758,11 +792,309 @@ void WriteGroupIniValue(const std::wstring& folderPath, PCWSTR section,
     SetFileAttributesW(iniPath.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
 }
 
-void MarkAsGroup(const std::wstring& folderPath) {
-    WriteGroupIniValue(folderPath, kGroupIniSection, L"IsGroup", L"1");
+// Lists the names in a group's [DesktopAppGroups] section (none if it has
+// no such section).
+std::vector<std::wstring> ReadGroupIniNames(const std::wstring& folderPath) {
+    std::wstring iniPath = folderPath + L"\\desktop.ini";
+    std::vector<WCHAR> buffer(8 * 1024, L'\0');
+    // Asking for a value with no name (nullptr) gives the list of names,
+    // each ending with a 0.
+    DWORD length = GetPrivateProfileStringW(kGroupIniSection, nullptr, L"", buffer.data(),
+                                            (DWORD)buffer.size(), iniPath.c_str());
+    std::vector<std::wstring> names;
+    for (DWORD start = 0; start < length;) {
+        std::wstring name = buffer.data() + start;
+        if (name.empty()) {
+            break;
+        }
+        names.push_back(name);
+        start += (DWORD)name.size() + 1;
+    }
+    return names;
+}
 
-    // Windows only reads a folder's desktop.ini if the folder has the
-    // "read-only" flag. (For folders this flag doesn't make anything
+// --- Group data in Windhawk's storage ----------------------------------------
+//
+// Each group's data is one stored text value, named "Group-" plus the
+// folder's ID, holding lines of "name=value" (the same names as in
+// desktop.ini). A list of all the IDs is kept as well, in "Groups", so the
+// mod can tidy up after groups deleted while it wasn't running.
+//
+// Windhawk doesn't promise its storage functions are safe to use from two
+// threads at once, and both the desktop's thread and the group watcher need
+// group data. So every use of the storage holds g_storageLock, and a copy of
+// all group data is kept in memory (g_groupData) for quick reading.
+
+std::mutex g_storageLock;
+using GroupValues = std::map<std::wstring, std::wstring>;
+std::map<std::wstring, GroupValues> g_groupData;  // Folder ID -> its values.
+
+// Reads a stored text value ("" if there's none). Hold g_storageLock.
+std::wstring ReadStoredText(PCWSTR name) {
+    std::vector<WCHAR> buffer(64 * 1024, L'\0');
+    Wh_GetStringValue(name, buffer.data(), buffer.size());
+    return buffer.data();
+}
+
+// The same, for use without holding the lock.
+std::wstring LoadStoredText(PCWSTR name) {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    return ReadStoredText(name);
+}
+
+void StoreText(PCWSTR name, PCWSTR text) {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    Wh_SetStringValue(name, text);
+}
+
+void DeleteStoredValue(PCWSTR name) {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    Wh_DeleteValue(name);
+}
+
+// A file or folder's ID, as text: "V", its drive's serial number (16
+// hexadecimal digits), "F", and its file ID (32 hexadecimal digits). "" if Windows can't tell us (for
+// example, the drive doesn't have file IDs).
+std::wstring FileIdText(HANDLE file) {
+    FILE_ID_INFO info = {};
+    if (!GetFileInformationByHandleEx(file, FileIdInfo, &info, sizeof(info))) {
+        return L"";
+    }
+    bool allZero = true;
+    for (BYTE b : info.FileId.Identifier) {
+        allZero = allZero && b == 0;
+    }
+    if (allZero) {
+        return L"";  // Some drives answer, but with no real ID.
+    }
+    const WCHAR digits[] = L"0123456789ABCDEF";
+    auto hex = [&](const BYTE* bytes, size_t count) {
+        std::wstring text;
+        for (size_t i = 0; i < count; i++) {
+            text += digits[bytes[i] >> 4];
+            text += digits[bytes[i] & 15];
+        }
+        return text;
+    };
+    return L"V" + hex((const BYTE*)&info.VolumeSerialNumber, sizeof(info.VolumeSerialNumber)) +
+           L"F" + hex(info.FileId.Identifier, sizeof(info.FileId.Identifier));
+}
+
+// Opens a folder just to read its information. FILE_FLAG_BACKUP_SEMANTICS
+// is what allows opening folders (not just files).
+HANDLE OpenForInfo(const std::wstring& path) {
+    return CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                       OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+}
+
+std::wstring GroupIdOf(const std::wstring& folderPath) {
+    HANDLE folder = OpenForInfo(folderPath);
+    if (folder == INVALID_HANDLE_VALUE) {
+        return L"";
+    }
+    std::wstring id = FileIdText(folder);
+    CloseHandle(folder);
+    return id;
+}
+
+// Loads all stored group data into memory. Called once, at startup.
+void LoadStoredGroups() {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    g_groupData.clear();
+    std::wstring list = ReadStoredText(L"Groups");
+    for (size_t start = 0; start < list.size();) {
+        size_t end = list.find(L'|', start);
+        if (end == std::wstring::npos) {
+            end = list.size();
+        }
+        std::wstring id = list.substr(start, end - start);
+        start = end + 1;
+        if (id.empty()) {
+            continue;
+        }
+        std::wstring text = ReadStoredText((L"Group-" + id).c_str());
+        GroupValues values;
+        for (size_t lineStart = 0; lineStart < text.size();) {
+            size_t lineEnd = text.find(L'\n', lineStart);
+            if (lineEnd == std::wstring::npos) {
+                lineEnd = text.size();
+            }
+            std::wstring line = text.substr(lineStart, lineEnd - lineStart);
+            lineStart = lineEnd + 1;
+            size_t equals = line.find(L'=');
+            if (equals != std::wstring::npos && equals > 0) {
+                values[line.substr(0, equals)] = line.substr(equals + 1);
+            }
+        }
+        if (!values.empty()) {
+            g_groupData[id] = values;
+        }
+    }
+}
+
+// Saves the list of IDs. Hold g_storageLock.
+void SaveGroupIdList() {
+    std::wstring list;
+    for (const auto& group : g_groupData) {
+        if (!list.empty()) {
+            list += L"|";
+        }
+        list += group.first;
+    }
+    Wh_SetStringValue(L"Groups", list.c_str());
+}
+
+// Saves one group's data from memory. Hold g_storageLock.
+bool SaveStoredGroup(const std::wstring& id) {
+    std::wstring text;
+    for (const auto& value : g_groupData[id]) {
+        text += value.first + L"=" + value.second + L"\n";
+    }
+    return Wh_SetStringValue((L"Group-" + id).c_str(), text.c_str());
+}
+
+bool GetStoredGroupValue(const std::wstring& id, PCWSTR name, std::wstring* value) {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    auto group = g_groupData.find(id);
+    if (group == g_groupData.end()) {
+        return false;
+    }
+    auto entry = group->second.find(name);
+    if (entry == group->second.end()) {
+        return false;
+    }
+    *value = entry->second;
+    return true;
+}
+
+// Sets (or, with nullptr, removes) one value of a group's stored data.
+void SetStoredGroupValue(const std::wstring& id, PCWSTR name, PCWSTR value) {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    bool isNew = g_groupData.find(id) == g_groupData.end();
+    if (value) {
+        g_groupData[id][name] = value;
+    } else if (isNew) {
+        return;
+    } else {
+        g_groupData[id].erase(name);
+        if (g_groupData[id].empty()) {
+            g_groupData.erase(id);
+            Wh_DeleteValue((L"Group-" + id).c_str());
+            SaveGroupIdList();
+            return;
+        }
+    }
+    SaveStoredGroup(id);
+    if (isNew) {
+        SaveGroupIdList();
+    }
+}
+
+// Removes all of a group's stored data, when the group is removed.
+void ForgetStoredGroup(const std::wstring& id) {
+    if (id.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    if (g_groupData.erase(id)) {
+        Wh_DeleteValue((L"Group-" + id).c_str());
+        SaveGroupIdList();
+    }
+}
+
+// --- Group data, wherever it's kept ------------------------------------------
+
+// Should this group's data be in its desktop.ini? `id` is the folder's ID.
+bool WantDataInFolder(const std::wstring& id) {
+    return g_dataInFolder || id.empty();
+}
+
+// Moves a group's data to where the setting says it belongs, if it's in the
+// other place. Each value is copied first, and only removed from the old
+// place once it's safely saved in the new one.
+void MoveGroupData(const std::wstring& folderPath, const std::wstring& id) {
+    if (WantDataInFolder(id)) {
+        if (id.empty()) {
+            return;
+        }
+        GroupValues values;
+        {
+            std::lock_guard<std::mutex> lock(g_storageLock);
+            auto group = g_groupData.find(id);
+            if (group == g_groupData.end()) {
+                return;  // Nothing stored: already in the folder, or not a group.
+            }
+            values = group->second;
+        }
+        for (const auto& value : values) {
+            WriteGroupIniValue(folderPath, kGroupIniSection, value.first.c_str(),
+                               value.second.c_str());
+        }
+        if (ReadGroupIniNames(folderPath).size() < values.size()) {
+            Wh_Log(L"Couldn't move the data for \"%s\" into its folder", folderPath.c_str());
+            return;
+        }
+        ForgetStoredGroup(id);
+        Wh_Log(L"Moved the data for \"%s\" into its desktop.ini", folderPath.c_str());
+    } else {
+        std::vector<std::wstring> names = ReadGroupIniNames(folderPath);
+        if (names.empty()) {
+            return;  // Nothing in desktop.ini: already in storage, or not a group.
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_storageLock);
+            bool isNew = g_groupData.find(id) == g_groupData.end();
+            for (const std::wstring& name : names) {
+                g_groupData[id][name] = ReadGroupIniValue(folderPath, kGroupIniSection,
+                                                          name.c_str());
+            }
+            if (!SaveStoredGroup(id)) {
+                Wh_Log(L"Couldn't save the data for \"%s\" in storage", folderPath.c_str());
+                return;
+            }
+            if (isNew) {
+                SaveGroupIdList();
+            }
+        }
+        // Writing "no name" (nullptr) removes the whole section.
+        WriteGroupIniValue(folderPath, kGroupIniSection, nullptr, nullptr);
+        Wh_Log(L"Moved the data for \"%s\" into Windhawk's storage", folderPath.c_str());
+    }
+}
+
+// Reads one value of a group's data ("" if it has none).
+std::wstring ReadGroupValue(const std::wstring& folderPath, PCWSTR name) {
+    std::wstring id = GroupIdOf(folderPath);
+    std::wstring value;
+    if (!id.empty() && GetStoredGroupValue(id, name, &value)) {
+        return value;
+    }
+    return ReadGroupIniValue(folderPath, kGroupIniSection, name);
+}
+
+// Sets (or, with nullptr, removes) one value of a group's data, in the place
+// the setting says. Any data still in the other place is moved first, so
+// the group's data is never split between the two.
+void WriteGroupValue(const std::wstring& folderPath, PCWSTR name, PCWSTR value) {
+    std::wstring id = GroupIdOf(folderPath);
+    MoveGroupData(folderPath, id);
+    if (WantDataInFolder(id)) {
+        WriteGroupIniValue(folderPath, kGroupIniSection, name, value);
+    } else {
+        SetStoredGroupValue(id, name, value);
+    }
+}
+
+bool IsGroupFolder(const std::wstring& folderPath) {
+    return ReadGroupValue(folderPath, L"IsGroup") == L"1";
+}
+
+void MarkAsGroup(const std::wstring& folderPath) {
+    WriteGroupValue(folderPath, L"IsGroup", L"1");
+
+    // Windows only reads a folder's desktop.ini (for the icon) if the folder
+    // has the "read-only" flag. (For folders this flag doesn't make anything
     // read-only; it just means "has custom settings".)
     DWORD folderAttributes = GetFileAttributesW(folderPath.c_str());
     if (folderAttributes != INVALID_FILE_ATTRIBUTES) {
@@ -777,8 +1109,8 @@ void MarkAsGroup(const std::wstring& folderPath) {
 //
 //   - The all-groups value is kept in the mod's own storage (Wh_SetIntValue),
 //     which Windhawk keeps safe between restarts.
-//   - A group's own value is kept in its desktop.ini, next to IsGroup, so it
-//     goes wherever the group goes. A group with no value of its own uses the
+//   - A group's own value is kept with the rest of the group's data (see the
+//     start of this section). A group with no value of its own uses the
 //     all-groups one.
 
 enum GroupSettingId {
@@ -831,13 +1163,13 @@ bool IsPresetTint(int tint) {
     return false;
 }
 
-// The all-groups values, kept in memory. Windhawk doesn't promise its storage
-// functions are safe to use from two threads at once, so only the desktop's
-// thread uses them; the group watcher thread reads these copies instead.
-// ("atomic" makes it safe for one thread to read while another writes.)
+// The all-groups values, kept in memory so they're quick to read from any
+// thread. ("atomic" makes it safe for one thread to read while another
+// writes.)
 std::atomic<int> g_allGroupsValues[kGroupSettingCount];
 
 void LoadAllGroupsSettings() {
+    std::lock_guard<std::mutex> lock(g_storageLock);
     for (int id = 0; id < kGroupSettingCount; id++) {
         g_allGroupsValues[id] =
             Wh_GetIntValue(kGroupSettings[id].key, kGroupSettings[id].defaultValue);
@@ -850,12 +1182,13 @@ int GetAllGroupsSetting(GroupSettingId id) {
 
 void SetAllGroupsSetting(GroupSettingId id, int value) {
     g_allGroupsValues[id] = value;
+    std::lock_guard<std::mutex> lock(g_storageLock);
     Wh_SetIntValue(kGroupSettings[id].key, value);
 }
 
 // Does this group have its own value for a setting? If so, it's put in `value`.
 bool GetGroupOwnSetting(const std::wstring& folderPath, GroupSettingId id, int* value) {
-    std::wstring text = ReadGroupIniValue(folderPath, kGroupIniSection, kGroupSettings[id].key);
+    std::wstring text = ReadGroupValue(folderPath, kGroupSettings[id].key);
     if (text.empty()) {
         return false;
     }
@@ -864,13 +1197,11 @@ bool GetGroupOwnSetting(const std::wstring& folderPath, GroupSettingId id, int* 
 }
 
 void SetGroupOwnSetting(const std::wstring& folderPath, GroupSettingId id, int value) {
-    WriteGroupIniValue(folderPath, kGroupIniSection, kGroupSettings[id].key,
-                       std::to_wstring(value).c_str());
+    WriteGroupValue(folderPath, kGroupSettings[id].key, std::to_wstring(value).c_str());
 }
 
 void ClearGroupOwnSetting(const std::wstring& folderPath, GroupSettingId id) {
-    // Writing "no value" (nullptr) deletes the line from desktop.ini.
-    WriteGroupIniValue(folderPath, kGroupIniSection, kGroupSettings[id].key, nullptr);
+    WriteGroupValue(folderPath, kGroupSettings[id].key, nullptr);  // nullptr: remove it.
 }
 
 // The value that applies to a group: its own if it has one, otherwise the
@@ -900,8 +1231,8 @@ std::wstring FileNameOf(const std::wstring& path) {
 // sorted the way Explorer sorts ("App 2" before "App 10"). Hidden files,
 // like desktop.ini and the icon, are skipped.
 //
-// The order is saved in desktop.ini as file names separated by "|", a
-// character that can't appear in file names:
+// The order is saved with the group's data as file names separated by "|",
+// a character that can't appear in file names:
 //   Order=Notepad.lnk|Paint.lnk|Calculator.lnk
 std::vector<GroupEntry> ListGroupFiles(const std::wstring& folderPath) {
     std::vector<GroupEntry> entries;
@@ -942,7 +1273,7 @@ std::vector<GroupEntry> ListGroupFiles(const std::wstring& folderPath) {
     std::vector<std::wstring> savedOrder;
     std::wstring orderText;
     if (GetGroupSetting(folderPath, kSettingSort) == 0) {
-        orderText = ReadGroupIniValue(folderPath, kGroupIniSection, L"Order");
+        orderText = ReadGroupValue(folderPath, L"Order");
     }
     for (size_t start = 0; start < orderText.size();) {
         size_t end = orderText.find(L'|', start);
@@ -1379,8 +1710,7 @@ const int kIconVersion = 2;
 
 // Does this group already have an up-to-date icon file that exists?
 bool GroupHasIcon(const std::wstring& folderPath) {
-    if (GetPrivateProfileIntW(kGroupIniSection, L"IconVersion", 0,
-                              (folderPath + L"\\desktop.ini").c_str()) != kIconVersion) {
+    if (_wtoi(ReadGroupValue(folderPath, L"IconVersion").c_str()) != kIconVersion) {
         return false;
     }
     std::wstring resource = ReadGroupIniValue(folderPath, L".ShellClassInfo",
@@ -1440,7 +1770,7 @@ bool ApplyGroupIcon(const std::wstring& folderPath,
     // Set the folder's icon with Windows' official function for it, the one
     // behind Properties > Customize > Change Icon. It updates desktop.ini and
     // tells Explorer to forget its cached copy of the folder's settings.
-    // (It only changes the icon line, so our [DesktopAppGroups] marker stays.)
+    // (It only changes the icon line, so any [DesktopAppGroups] data stays.)
     EnsureUnicodeGroupIni(folderPath);  // Before Windows creates it the old way.
     std::vector<WCHAR> iconPathBuffer(iconPath.begin(), iconPath.end());
     iconPathBuffer.push_back(L'\0');
@@ -1455,10 +1785,8 @@ bool ApplyGroupIcon(const std::wstring& folderPath,
         Wh_Log(L"  Couldn't set the folder icon (error 0x%08X)", (unsigned)result);
         return false;
     }
-    WriteGroupIniValue(folderPath, kGroupIniSection, L"IconVersion",
-                       std::to_wstring(kIconVersion).c_str());
-    WriteGroupIniValue(folderPath, kGroupIniSection, L"IconFingerprint",
-                       fingerprint.c_str());
+    WriteGroupValue(folderPath, L"IconVersion", std::to_wstring(kIconVersion).c_str());
+    WriteGroupValue(folderPath, L"IconFingerprint", fingerprint.c_str());
 
     // Delete older icon files.
     WIN32_FIND_DATAW found;
@@ -1487,12 +1815,12 @@ bool ApplyGroupIcon(const std::wstring& folderPath,
 }
 
 // Redraws a group's icon, unless it already shows these apps. Skipping
-// unneeded redraws also stops our own desktop.ini writes (which the watcher
-// sees as changes) from causing endless redraws.
+// unneeded redraws also stops our own writes (which the watcher can see as
+// changes) from causing endless redraws.
 void RefreshGroupIcon(const std::wstring& folderPath,
                       const std::vector<GroupEntry>& apps) {
     if (GroupHasIcon(folderPath) &&
-        ReadGroupIniValue(folderPath, kGroupIniSection, L"IconFingerprint") ==
+        ReadGroupValue(folderPath, L"IconFingerprint") ==
             IconFingerprint(apps, GetGroupSetting(folderPath, kSettingTint))) {
         return;
     }
@@ -1555,6 +1883,8 @@ void RemoveAttributes(const std::wstring& path, DWORD attributesToRemove) {
 // the folder if it's empty. If some apps did get moved in, the folder stays
 // (unhidden), so nothing disappears from view.
 void CleanUpFailedGroup(const std::wstring& groupPath) {
+    ForgetStoredGroup(GroupIdOf(groupPath));  // Its icon details, if any were saved.
+
     WIN32_FIND_DATAW found;
     HANDLE search = FindFirstFileW((groupPath + L"\\*").c_str(), &found);
     if (search != INVALID_HANDLE_VALUE) {
@@ -1574,6 +1904,8 @@ void CleanUpFailedGroup(const std::wstring& groupPath) {
         Wh_Log(L"Kept \"%s\" because some files were moved into it", groupPath.c_str());
     }
 }
+
+void RequestGroupCheck(const std::wstring& folderPath);  // In section 7.
 
 bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathOut) {
     std::wstring desktopPath = GetDesktopFolderPath();
@@ -1609,7 +1941,7 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
     // permission), the folder would be left hidden with some shortcuts
     // already in it. At the next start, RecoverUnfinishedGroup finds this note
     // and puts things right.
-    Wh_SetStringValue(L"UnfinishedGroup", groupPath.c_str());
+    StoreText(L"UnfinishedGroup", groupPath.c_str());
     Wh_Log(L"Created \"%s\"", groupPath.c_str());
 
     // 2. Draw the icon from the apps where they are now, in the same order
@@ -1635,7 +1967,7 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
                                            IID_PPV_ARGS(&destination)))) {
         Wh_Log(L"Couldn't start the file move");
         CleanUpFailedGroup(groupPath);
-        Wh_DeleteValue(L"UnfinishedGroup");
+        DeleteStoredValue(L"UnfinishedGroup");
         return false;
     }
 
@@ -1656,7 +1988,7 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
     if (FAILED(result) || aborted) {
         Wh_Log(L"The move didn't finish (error 0x%08X)", (unsigned)result);
         CleanUpFailedGroup(groupPath);
-        Wh_DeleteValue(L"UnfinishedGroup");
+        DeleteStoredValue(L"UnfinishedGroup");
         return false;
     }
 
@@ -1666,9 +1998,14 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
     MarkAsGroup(groupPath);
     RemoveAttributes(groupPath, FILE_ATTRIBUTE_HIDDEN);
     *groupPathOut = groupPath;
-    Wh_DeleteValue(L"UnfinishedGroup");  // Finished.
+    DeleteStoredValue(L"UnfinishedGroup");  // Finished.
     SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW | SHCNF_FLUSHNOWAIT, groupPath.c_str(),
                    nullptr);
+
+    // Have the group watcher look at the new group once it's complete. (It
+    // also hears about the apps arriving, but that's before the group was
+    // marked, so it might have skipped it.)
+    RequestGroupCheck(groupPath);
     return true;
 }
 
@@ -1697,8 +2034,8 @@ HANDLE g_watcherStopEvent = nullptr;
 // Asking the watcher to check a group straight away.
 //
 // The watcher only hears about files being added, removed or renamed. Some
-// changes, like saving a new app order, only *edit* desktop.ini, so it never
-// hears about those. Instead, the popup asks it directly with
+// changes, like saving a new app order, don't add or remove any file, so it
+// never hears about those. Instead, the popup asks it directly with
 // RequestGroupCheck.
 //
 // The popup and the watcher run on different threads, at the same time. If
@@ -1732,6 +2069,7 @@ bool IsIconFile(const std::wstring& fileName) {
 void DissolveGroup(const std::wstring& folderPath,
                    const std::vector<GroupEntry>& entries) {
     ULONGLONG startTime = GetTickCount64();
+    std::wstring id = GroupIdOf(folderPath);  // While the folder still exists.
 
     // Safety check: is everything in the folder either the last app, or one
     // of our own files?
@@ -1846,6 +2184,8 @@ void DissolveGroup(const std::wstring& folderPath,
                            folderAttributes & ~(FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_DIRECTORY));
     }
     if (RemoveDirectoryW(folderPath.c_str())) {
+        ForgetStoredGroup(id);
+
         // Tell Explorer the folder is gone, right now. Without this, the
         // desktop waits for its own file watching to catch up, and if
         // Explorer still had the folder open, Windows only finishes deleting
@@ -1867,6 +2207,9 @@ void CheckGroup(const std::wstring& folderPath) {
     if (!IsGroupFolder(folderPath)) {
         return;  // Not a group (or no longer exists).
     }
+    // Make sure its data is where the setting says (it may have just been
+    // changed, or the group may be from an older version of the mod).
+    MoveGroupData(folderPath, GroupIdOf(folderPath));
     std::vector<GroupEntry> entries = ListGroupFiles(folderPath);
     if (GetGroupSetting(folderPath, kSettingRemoveWhenOneLeft) && entries.size() <= 1) {
         DissolveGroup(folderPath, entries);
@@ -1985,8 +2328,7 @@ DWORD WINAPI GroupWatcherThread(LPVOID) {
                 }
             } else {
                 // Something inside a folder. Only direct contents matter, and
-                // not icon files. (desktop.ini changes do count: that's how a
-                // brand-new group gets noticed once it's marked as a group.)
+                // not icon files.
                 std::wstring fileName = path.substr(firstSlash + 1);
                 if (fileName.find(L'\\') == std::wstring::npos && !IsIconFile(fileName)) {
                     changedGroups.insert(path.substr(0, firstSlash));
@@ -3228,7 +3570,7 @@ void SaveGroupOrder(const std::wstring& folderPath, const std::vector<PopupItem>
         }
         order += FileNameOf(item.path);
     }
-    WriteGroupIniValue(folderPath, kGroupIniSection, L"Order", order.c_str());
+    WriteGroupValue(folderPath, L"Order", order.c_str());
 
     // Ask the group watcher (section 7) to redraw the group's icon now, in
     // the background, so the popup's animation stays smooth. (It only
@@ -4934,11 +5276,12 @@ LRESULT CALLBACK DefViewSubclassProc(HWND window, UINT message, WPARAM wParam,
 // failed group: removed if it's empty, or unhidden if shortcuts were already
 // moved into it, so they're never left out of sight.
 void RecoverUnfinishedGroup() {
-    WCHAR path[MAX_PATH * 2] = L"";
-    if (Wh_GetStringValue(L"UnfinishedGroup", path, ARRAYSIZE(path)) == 0 || !path[0]) {
+    std::wstring pathText = LoadStoredText(L"UnfinishedGroup");
+    if (pathText.empty()) {
         return;
     }
-    Wh_DeleteValue(L"UnfinishedGroup");
+    DeleteStoredValue(L"UnfinishedGroup");
+    PCWSTR path = pathText.c_str();
 
     DWORD attributes = GetFileAttributesW(path);
     if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -4951,6 +5294,82 @@ void RecoverUnfinishedGroup() {
     }
     SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW | SHCNF_FLUSHNOWAIT, path, nullptr);
     Wh_Log(L"Recovered \"%s\", left unfinished when Explorer stopped", path);
+}
+
+// Forgets the stored data of groups whose folders no longer exist: deleted
+// while the mod wasn't running, or emptied from the Recycle Bin. (A folder
+// in the Recycle Bin still exists, so a group you restore from there is
+// still a group.)
+//
+// Windows can open a file by its ID (OpenFileById), which tells us whether a
+// folder with that ID still exists, wherever it is on the drive. To be safe,
+// this first checks that it works for the Desktop folder itself, and only
+// looks at groups on the same drive as the Desktop.
+void ForgetDeletedGroups() {
+    HANDLE desktop = OpenForInfo(GetDesktopFolderPath());
+    if (desktop == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    std::wstring desktopId = FileIdText(desktop);
+
+    // Turns the hexadecimal digits back into an ID for OpenFileById.
+    // (The parts are always in the same places: "V" + 16 digits + "F" + 32.)
+    const size_t kDriveLength = 17;
+    auto descriptorFor = [&](const std::wstring& id, FILE_ID_DESCRIPTOR* descriptor) {
+        size_t start = kDriveLength;
+        if (id.size() != kDriveLength + 1 + 32 || id[start] != L'F') {
+            return false;
+        }
+        *descriptor = {};
+        descriptor->dwSize = sizeof(*descriptor);
+        descriptor->Type = ExtendedFileIdType;
+        for (int i = 0; i < 16; i++) {
+            std::wstring pair = id.substr(start + 1 + i * 2, 2);
+            descriptor->ExtendedFileId.Identifier[i] = (BYTE)wcstoul(pair.c_str(), nullptr, 16);
+        }
+        return true;
+    };
+    // 1 = exists, 0 = doesn't, -1 = couldn't tell.
+    auto exists = [&](const std::wstring& id) {
+        FILE_ID_DESCRIPTOR descriptor;
+        if (!descriptorFor(id, &descriptor)) {
+            return -1;
+        }
+        HANDLE file = OpenFileById(desktop, &descriptor, FILE_READ_ATTRIBUTES,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                   nullptr, FILE_FLAG_BACKUP_SEMANTICS);
+        if (file != INVALID_HANDLE_VALUE) {
+            CloseHandle(file);
+            return 1;
+        }
+        DWORD error = GetLastError();
+        return (error == ERROR_INVALID_PARAMETER || error == ERROR_FILE_NOT_FOUND) ? 0 : -1;
+    };
+
+    std::vector<std::wstring> gone;
+    if (!desktopId.empty() && exists(desktopId) == 1) {
+        std::wstring drive = desktopId.substr(0, kDriveLength);
+        std::vector<std::wstring> ids;
+        {
+            std::lock_guard<std::mutex> lock(g_storageLock);
+            for (const auto& group : g_groupData) {
+                ids.push_back(group.first);
+            }
+        }
+        for (const std::wstring& id : ids) {
+            if (id.compare(0, drive.size(), drive) == 0 && exists(id) == 0) {
+                gone.push_back(id);
+            }
+        }
+    }
+    CloseHandle(desktop);
+
+    for (const std::wstring& id : gone) {
+        ForgetStoredGroup(id);
+    }
+    if (!gone.empty()) {
+        Wh_Log(L"Forgot the data of %d deleted group(s)", (int)gone.size());
+    }
 }
 
 //
@@ -4972,6 +5391,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 // Only the explorer.exe that owns the desktop gets here, so
                 // only one copy of the mod does this.
                 RecoverUnfinishedGroup();
+                ForgetDeletedGroups();
                 g_desktopList = list;
                 LogDesktopIcons(list);
 
@@ -5024,7 +5444,6 @@ void StopWorker() {
 
 // ---- 12. Windhawk callbacks -------------------------------------------------
 
-// Called first. Returning FALSE tells Windhawk to unload the mod.
 // Registers the popup's and settings panel's window classes, once per load.
 // The names get a number that's different every time the mod loads, so a
 // class left behind by an earlier load (whose message handler no longer
@@ -5040,11 +5459,13 @@ void RegisterWindowClasses() {
     }
 }
 
+// Called first. Returning FALSE tells Windhawk to unload the mod.
 BOOL Wh_ModInit() {
     Wh_Log(L"Desktop App Groups: starting in explorer.exe process %u",
            (unsigned)GetCurrentProcessId());
     LoadSettings();
     LoadAllGroupsSettings();
+    LoadStoredGroups();
     RegisterPlacementMessages();
 
     // Remember which DLL we are, for registering the popup's window class.
@@ -5080,9 +5501,20 @@ void Wh_ModAfterInit() {
 // Called when the user changes a setting. Re-read settings and list the icons
 // again so you can see the difference straight away.
 void Wh_ModSettingsChanged() {
+    bool wasInFolder = g_dataInFolder;
     StopWorker();
     LoadSettings();
     StartWorker();
+
+    // If "Keep group data inside the group folders" changed, have the group
+    // watcher move every group's data over now. (If the watcher isn't running
+    // yet, it checks every group when it starts anyway.)
+    if (g_dataInFolder != wasInFolder && g_watcherThread) {
+        std::wstring desktopPath = GetDesktopFolderPath();
+        for (const std::wstring& group : FindAllGroups(desktopPath)) {
+            RequestGroupCheck(desktopPath + L"\\" + group);
+        }
+    }
 }
 
 // Called when the mod is disabled or Explorer exits. Everything the mod set up
