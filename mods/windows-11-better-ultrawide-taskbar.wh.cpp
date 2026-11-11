@@ -8927,22 +8927,50 @@ void ApplyDockShape(LiquidRenderer::LensConstants& lens, DockOutline const& outl
     }
 }
 
+// The dock's part of the lens constants: its box and corner radius in the taskbar's DIP, its outline, border and optics,
+// packed in pixels at `scale`. The live stage, the preview and the harness pack the dock through here; each caller
+// appends its button lenses afterwards.
+LiquidRenderer::LensConstants DockLens(double left, double top, double width, double height, double radius,
+                                       DockOutline const& outline, DockBorder border, LiquidSettings optics,
+                                       double scale) {
+    LiquidRenderer::LensConstants lens{};
+    lens.center[0] = static_cast<float>((left + width / 2) * scale);
+    lens.center[1] = static_cast<float>((top + height / 2) * scale);
+    lens.halfSize[0] = static_cast<float>(width * scale / 2);
+    lens.halfSize[1] = static_cast<float>(height * scale / 2);
+    lens.radius = static_cast<float>(radius * scale);
+    lens.optics = optics;
+    ScaleLiquidSettings(lens.optics, float(scale));
+    ApplyBorder(lens, border, float(scale));
+    ApplyDockShape(lens, outline, float(scale));
+    return lens;
+}
+
+// The one writer of the per-lens arrays: the lens is the intersection of its native rounded rectangle and its clip,
+// drawn with these shape parameters and tint, faded by `fade` (0 visible, 1 gone). Whole-set policy stays with the caller.
+uint32_t StoreLens(LiquidRenderer::LensConstants& lens, float4 nativeRect, float4 clipRect, float4 radii, float4 shape,
+                   float4 tint, float fade) {
+    auto index = lens.lensCount++;
+    auto store = [](float (&target)[4], float4 value) {
+        target[0] = value.x; target[1] = value.y; target[2] = value.z; target[3] = value.w;
+    };
+    store(lens.lensNativeRects[index], nativeRect);
+    store(lens.lensRects[index], clipRect);
+    store(lens.lensRadii[index], radii);
+    store(lens.lensShapeParams[index], shape);
+    store(lens.lensTints[index], tint);
+    lens.lensFades[index][0] = fade;
+    return index;
+}
+
 // Both callers supply measured/synthetic device-pixel rectangles. Appearance
 // decisions happen before packing; this function never changes a XAML element.
 uint32_t AppendButtonLens(LiquidRenderer::LensConstants& lens,
                           float4 nativeRect,float4 clipRect,float4 radii,float3 shape,
                           bool attention,double opacity) {
-    auto index=lens.lensCount++;
-    auto store=[](float (&target)[4],float4 value) {
-        target[0]=value.x;target[1]=value.y;target[2]=value.z;target[3]=value.w;
-    };
-    store(lens.lensNativeRects[index],nativeRect);
-    store(lens.lensRects[index],clipRect);
-    store(lens.lensRadii[index],radii);
-    store(lens.lensShapeParams[index],{shape.x,shape.y,shape.z,0});
-    store(lens.lensTints[index],{kButtonAttentionTint.R/255.0f,kButtonAttentionTint.G/255.0f,
-        kButtonAttentionTint.B/255.0f,attention?1.0f:0.0f});
-    lens.lensFades[index][0]=1-static_cast<float>(std::clamp(opacity,0.0,1.0));
+    auto index=StoreLens(lens,nativeRect,clipRect,radii,{shape.x,shape.y,shape.z,0},
+        {kButtonAttentionTint.R/255.0f,kButtonAttentionTint.G/255.0f,kButtonAttentionTint.B/255.0f,attention?1.0f:0.0f},
+        1-static_cast<float>(std::clamp(opacity,0.0,1.0)));
     lens.lensRefraction=lens.optics.refraction*.78f;
     lens.alertTintOpacity=.22f;
     lens.lensBlend=.72f;
@@ -9510,20 +9538,14 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
             float right = std::min(bounds.X + bounds.Width, clip.X + clip.Width);
             float bottom = std::min(bounds.Y + bounds.Height, clip.Y + clip.Height);
             if (right <= left || bottom <= top) return;
-            auto i = target.lensCount++;
-            float clipped[]{(left + right) * scale / 2, (top + bottom) * scale / 2,
-                            (right - left) * scale / 2, (bottom - top) * scale / 2};
-            float native[]{(bounds.X + bounds.Width / 2) * scale, (bounds.Y + bounds.Height / 2) * scale,
-                           bounds.Width * scale / 2, bounds.Height * scale / 2};
-            std::copy_n(clipped, 4, target.lensRects[i]);
-            std::copy_n(native, 4, target.lensNativeRects[i]);
-            float radii[]{float(radius.TopLeft) * scale, float(radius.TopRight) * scale,
-                          float(radius.BottomRight) * scale, float(radius.BottomLeft) * scale};
-            std::copy_n(radii, 4, target.lensRadii[i]);
-            target.lensShapeParams[i][0] = 1;
-            target.lensShapeParams[i][3] = kind;
-            float color[]{tint.R/255.0f, tint.G/255.0f, tint.B/255.0f, tint.A/255.0f};
-            std::copy_n(color, 4, target.lensTints[i]);
+            StoreLens(target,
+                      {(bounds.X + bounds.Width / 2) * scale, (bounds.Y + bounds.Height / 2) * scale,
+                       bounds.Width * scale / 2, bounds.Height * scale / 2},
+                      {(left + right) * scale / 2, (top + bottom) * scale / 2, (right - left) * scale / 2,
+                       (bottom - top) * scale / 2},
+                      {float(radius.TopLeft) * scale, float(radius.TopRight) * scale, float(radius.BottomRight) * scale,
+                       float(radius.BottomLeft) * scale},
+                      {1, 0, 0, kind}, {tint.R / 255.0f, tint.G / 255.0f, tint.B / 255.0f, tint.A / 255.0f}, 0);
         };
         auto addLayer = [&](FrameworkElement const& element, CornerRadius radius, float kind,
                             Color tint = Color{}, bool scrolled = false) {
@@ -10024,15 +10046,8 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                 preview.renderer = std::move(renderer);
                 preview.glassPointer = std::make_unique<GlassPointerBinding>(preview.canvas, preview.canvas, preview.renderer);
             }
-            LiquidRenderer::LensConstants lens{};
-            lens.center[0] = static_cast<float>(left + dockWidth / 2);
-            lens.center[1] = static_cast<float>(y + dockHeight / 2);
-            lens.halfSize[0] = static_cast<float>(dockWidth / 2);
-            lens.halfSize[1] = static_cast<float>(dockHeight / 2);
-            lens.radius = static_cast<float>(radius);
-            lens.optics = ReadLiquidSettings(EditorPageValues(editor, 1));
-            ApplyBorder(lens, border, 1);
-            ApplyDockShape(lens, outline, 1);
+            auto lens = DockLens(left, y, dockWidth, dockHeight, radius, outline, border,
+                                 ReadLiquidSettings(EditorPageValues(editor, 1)), 1);
             if (lens.optics.shadowOpacity > 0) {
                 // The mask shape is fixed at construction, so a change of geometry kind rebuilds the shadow.
                 if (preview.shadow && bool(preview.shadowGeometry.try_as<CompositionPathGeometry>()) != traced) {
@@ -13005,21 +13020,9 @@ void PrepareLiquid(Root& root, Measurements const& m) {
                 dock.background, dock.attachedVisual);
             attached = true;
         }
-        auto insets = m.insets;
         double dockHeight = m.visibleDockHeight();
-        LiquidRenderer::LensConstants lens{};
-        lens.center[0] = static_cast<float>(
-            (dockLeft + dockWidth / 2) * scale);
-        lens.center[1] = static_cast<float>(
-            (insets.top + dockHeight / 2) * scale);
-        lens.halfSize[0] = static_cast<float>(dockWidth * scale / 2);
-        lens.halfSize[1] = static_cast<float>(dockHeight * scale / 2);
-        lens.radius = static_cast<float>(
-            EffectiveDockRadius(dockWidth, dockHeight) * scale);
-        lens.optics = g_liquidSettings;
-        ScaleLiquidSettings(lens.optics, float(scale));
-        ApplyBorder(lens, g_dockBorder, float(scale));
-        ApplyDockShape(lens, m.outline, float(scale));
+        auto lens = DockLens(dockLeft, m.insets.top, dockWidth, dockHeight, EffectiveDockRadius(dockWidth, dockHeight),
+                             m.outline, g_dockBorder, g_liquidSettings, scale);
         auto accepted=AddButtonLenses(root, lens, scale);
         if (!dock.liquid->UpdateGeometry(
                 taskbarRect, pixelWidth, pixelHeight, lens, float(scale)))
