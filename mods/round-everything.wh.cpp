@@ -10336,9 +10336,11 @@ void LoadDwmSettings() {
 }
 
 // CTopLevelWindow::GetRadiusFromCornerStyle: pure style -> radius mapping
-// with no maximized check. Resolved, not hooked.
+// with no maximized check. Hooked, for builds without
+// GetFloatCornerRadiusForCurrentStyle (see GetRadiusFromCornerStyle_Hook);
+// the trampoline is the style's radius for the hook below.
 using GetRadiusFromCornerStyle_t = float(WINAPI*)(void* self);
-GetRadiusFromCornerStyle_t GetRadiusFromCornerStyle;
+GetRadiusFromCornerStyle_t GetRadiusFromCornerStyle_Original;
 
 // CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle: returns 0 for
 // maximized / full-screen windows even when the style is rounded.
@@ -10654,7 +10656,7 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* self) {
     if (!g_enabled) {
         return r;
     }
-    return RadiusForWindow(self, GetRadiusFromCornerStyle(self), r, r);
+    return RadiusForWindow(self, GetRadiusFromCornerStyle_Original(self), r, r);
 }
 
 // Corners while a window animates. Windows animates a window into and out of
@@ -12066,15 +12068,15 @@ void RequestDwmRefresh(const wchar_t* why) {
 // decided where the style's radius is asked for, as Custom Window Corner
 // Radius does, with DWM's own test for a window it squares. The animation
 // clip asks too (through the DPI-adjusted radius); there DWM's value passes
-// through, as AnimatedClipRadius scales it itself.
+// through, as AnimatedClipRadius scales it itself. Hooked on every build (one
+// symbol lookup per module, so one symbol cache): with
+// GetFloatCornerRadiusForCurrentStyle there, it passes the radius through.
 using IsMaximizedOrSnapped_t = bool(WINAPI*)(void* self);
 IsMaximizedOrSnapped_t IsMaximizedOrSnapped;  // resolved, not hooked (optional)
-GetRadiusFromCornerStyle_t GetRadiusFromCornerStyle_Original;  // the fallback's trampoline
-std::atomic<bool> g_radiusFromStyleHooked{false};
 
 float WINAPI GetRadiusFromCornerStyle_Hook(void* self) {
     float base = GetRadiusFromCornerStyle_Original(self);
-    if (!g_enabled || g_animatedWindow3D) {
+    if (GetFloatCornerRadiusForCurrentStyle_Original || !g_enabled || g_animatedWindow3D) {
         return base;
     }
     bool squared = false;
@@ -12169,8 +12171,8 @@ BOOL Init() {
              LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
              LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )",
              LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )"},
-            &GetRadiusFromCornerStyle,  // address only here (see the fallback below)
-            nullptr,
+            &GetRadiusFromCornerStyle_Original,
+            GetRadiusFromCornerStyle_Hook,  // passes through unless it's the fallback
             true,
         },
         {
@@ -12180,7 +12182,7 @@ BOOL Init() {
              LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void)const )"},
             &GetFloatCornerRadiusForCurrentStyle_Original,
             GetFloatCornerRadiusForCurrentStyle_Hook,
-            true,  // optional: GetRadiusFromCornerStyle is hooked instead
+            true,  // optional: GetRadiusFromCornerStyle_Hook decides the radius then
         },
         {
             {LR"(public: bool __cdecl CTopLevelWindow::IsMaximizedOrSnapped(void)const )",
@@ -12294,7 +12296,7 @@ BOOL Init() {
         L"[dwm] udwm.dll",
         {
             {L"CTopLevelWindow::GetRadiusFromCornerStyle",
-             reinterpret_cast<void* const*>(&GetRadiusFromCornerStyle)},
+             reinterpret_cast<void* const*>(&GetRadiusFromCornerStyle_Original)},
             {L"CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle",
              reinterpret_cast<void* const*>(&GetFloatCornerRadiusForCurrentStyle_Original)},
             {L"CTopLevelWindow::IsMaximizedOrSnapped",
@@ -12325,27 +12327,11 @@ BOOL Init() {
     // The window radius: decided in GetFloatCornerRadiusForCurrentStyle, or
     // without it in GetRadiusFromCornerStyle; with neither the mod has
     // nothing to round with.
-    if (!GetRadiusFromCornerStyle) {
+    if (!GetRadiusFromCornerStyle_Original) {
         Wh_Log(L"[dwm] no corner radius function found - staying out of dwm.exe");
         return FALSE;
     }
     if (!GetFloatCornerRadiusForCurrentStyle_Original) {
-        // udwm.dll
-        WindhawkUtils::SYMBOL_HOOK fallbackHooks[] = {
-            {
-                {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
-                 LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
-                 LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )",
-                 LR"(public: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void)const )"},
-                &GetRadiusFromCornerStyle_Original,
-                GetRadiusFromCornerStyle_Hook,
-            },
-        };
-        if (!WindhawkUtils::HookSymbols(udwm, fallbackHooks, ARRAYSIZE(fallbackHooks))) {
-            Wh_Log(L"[dwm] GetRadiusFromCornerStyle couldn't be hooked - staying out of dwm.exe");
-            return FALSE;
-        }
-        g_radiusFromStyleHooked = true;
         Wh_Log(L"[dwm] radius decided in GetRadiusFromCornerStyle (maximized and snapped "
                L"windows told by %s)",
                IsMaximizedOrSnapped ? L"IsMaximizedOrSnapped" : L"IsZoomed: maximized only");
