@@ -17,7 +17,7 @@
 /*
 # Alt+Tab Modern Cards
 
-**English** | [Português](#português)
+**English** 
 
 Replaces Alt+Tab with modern card layouts of your **live windows**, moved
 by smooth spring animations.
