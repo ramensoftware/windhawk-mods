@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              search-menu-extensions
 // @name            New Windows Search Extensions
-// @description     For the NEW Windows 11 Insider search box (composer search, build 26320+), not classic Start/taskbar search. Adds a calculator, unit converter, "kill <process>" and your own keyword commands and web searches to the results. Other mods and scripts can add results too
+// @description     For the NEW Windows 11 Insider search box (composer search, build 26320+), not classic search. Adds a calculator, unit converter, "kill <process>" and custom keyword commands. Other mods and scripts can add results too
 // @version         0.1.0
 // @author          TurtlesMaster1
 // @github          https://github.com/TurtlesMaster1
@@ -31,13 +31,15 @@ Adds new kinds of results to the new search box, mixed in with the native ones:
   `sqrt cbrt abs sin cos tan asin acos atan ln log log2 exp round floor ceil`.
 * **Unit converter**: `5 km in mi`, `72 f to c`, `1.5 gb in mb`, `3 cups to ml`.
   Length, weight, volume, time, speed, data size and temperature.
-* **Kill process**: `kill note` lists running processes whose name contains
-  "note" with their memory use; Enter ends the selected one. `kill` on its own
-  lists the biggest processes.
+* **Kill process**: `kill note` lists the running processes whose name contains
+  "note", with their memory use; Enter ends the selected one. It's ended at
+  once, like "End task" in Task Manager, so unsaved work in it is lost. Only
+  processes you're allowed to end are listed.
 * **Custom commands**: your own keywords, set in the mod settings. A keyword can
   open a program, file, folder or URL. Put `{query}` in the command to pass on
   what you type after the keyword: with the default `g` command, `g windhawk`
-  searches Google for "windhawk".
+  searches Google for "windhawk". Such a command shows up once you've typed
+  something after the keyword.
 
 Each one can be turned off in the settings.
 
@@ -183,7 +185,7 @@ Library to client:
   next time you open search. Providers registered later (other mods, pipe
   clients) are picked up live.
 * When the mod is disabled or updated, Windows may still hold some of its
-  objects (items it's showing, finished queries). The library then restarts the
+  objects (items it's showing, finished queries). The mod then restarts the
   composer instead of unloading under them; search reopens normally next time.
 * **Card buttons:** cards render under the selected row and you can update them
   live (`WSE_UpdateCard` / `updateCard`). But Windows ignores Action.Submit
@@ -206,7 +208,7 @@ Library to client:
   $description: Type a sum ("12*7.5", "sqrt(2)") or a conversion ("5 km in mi", "72 f to c"). Enter copies the result
 - killProcess: true
   $name: Kill process
-  $description: Type "kill" and part of a process name. Enter ends the selected process
+  $description: Type "kill" and part of a process name. Enter ends the selected process at once, without asking it to save
 - commands:
   - - keyword: g
       $name: Keyword
@@ -216,7 +218,7 @@ Library to client:
       $description: Shown in the results
     - command: https://www.google.com/search?q={query}
       $name: Program, file, folder or URL
-      $description: "{query}" is replaced by the text typed after the keyword
+      $description: Put {query} where the text typed after the keyword should go
     - args: ""
       $name: Arguments
       $description: Optional, for programs. Can contain {query} too
@@ -2339,6 +2341,21 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
     std::map<std::wstring, UINT64> providers;  // id -> handle
     std::atomic<bool> closed{false};
 
+    // Query handles are shared by all providers: only accept results for this client's own.
+    bool OwnsQuery(UINT64 qh) {
+        std::shared_ptr<Provider> p;
+        {
+            std::lock_guard l(g_queriesLock);
+            auto it = g_queries.find(qh);
+            if (it != g_queries.end()) p = it->second->provider.lock();
+        }
+        if (!p) return false;
+        std::lock_guard l(provLock);
+        for (auto& [id, h] : providers)
+            if (h == p->handle) return true;
+        return false;
+    }
+
     void Send(wdj::JsonObject const& o) {
         if (closed) return;
         std::string line = ToUtf8(std::wstring(o.Stringify())) + "\n";
@@ -2438,7 +2455,8 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
             UINT64 q = _wcstoui64(JStr(o, L"queryId").c_str(), nullptr, 10);
             bool done = !o.HasKey(L"done") || o.GetNamedValue(L"done").ValueType() != wdj::JsonValueType::Boolean ||
                         o.GetNamedBoolean(L"done");
-            SubmitResults(q, ItemsOf(o), done);
+            if (OwnsQuery(q)) SubmitResults(q, ItemsOf(o), done);
+            else Error(L"unknown query");
         } else if (op == L"setItems") {
             if (UINT64 h = Lookup(o)) SetStaticItems(h, ItemsOf(o));
             else Error(L"unknown provider");
@@ -2969,25 +2987,32 @@ static void CalcQuery(UINT64 q, std::wstring const& text) {
                   TRUE);
 }
 
-// "kill <part of a process name>": Enter ends that process.
+static ULONGLONG ProcessCreated(HANDLE h) {
+    FILETIME c{}, e, k, u;
+    return GetProcessTimes(h, &c, &e, &k, &u) ? ((ULONGLONG)c.dwHighDateTime << 32) | c.dwLowDateTime : 0;
+}
+
+// "kill <part of a process name>": Enter ends that process. Nothing is listed until a name is
+// typed, so "kill" + Enter can't end something by accident.
 static void KillQuery(UINT64 q, std::wstring const& text) {
     std::wstring t = Lower(Trim(text));
-    if (t.rfind(L"kill", 0) != 0 || (t.size() > 4 && t[4] != L' ')) {
+    std::wstring filter = t.rfind(L"kill ", 0) == 0 ? Trim(t.substr(5)) : L"";
+    if (filter.empty()) {
         SubmitResults(q, L"[]", TRUE);
         return;
     }
-    std::wstring filter = Trim(t.substr(4));
-    struct Proc { DWORD pid; std::wstring name, path; SIZE_T mem; };
+    struct Proc { DWORD pid; ULONGLONG created; std::wstring name, path; SIZE_T mem; };
     std::vector<Proc> procs;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap != INVALID_HANDLE_VALUE) {
         PROCESSENTRY32W pe{sizeof(pe)};
         for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
             if (pe.th32ProcessID <= 4) continue;
-            if (!filter.empty() && !StrStrIW(pe.szExeFile, filter.c_str())) continue;
-            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
-            if (!h) continue;  // not ours to end either
-            Proc p{pe.th32ProcessID, pe.szExeFile, L"", 0};
+            if (!StrStrIW(pe.szExeFile, filter.c_str())) continue;
+            // Only list what we could actually end.
+            HANDLE h = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+            if (!h) continue;
+            Proc p{pe.th32ProcessID, ProcessCreated(h), pe.szExeFile, L"", 0};
             PROCESS_MEMORY_COUNTERS pmc{sizeof(pmc)};
             if (K32GetProcessMemoryInfo(h, &pmc, sizeof(pmc))) p.mem = pmc.WorkingSetSize;
             wchar_t path[MAX_PATH];
@@ -3006,7 +3031,7 @@ static void KillQuery(UINT64 q, std::wstring const& text) {
         wchar_t sub[128];
         swprintf(sub, 128, L"PID %lu \u00b7 %.0f MB \u00b7 Enter to end it", p.pid, p.mem / 1048576.0);
         if (json.size() > 1) json += L",";
-        json += L"{\"id\":\"" + std::to_wstring(p.pid) + L"\",\"title\":" + JsonEscape(L"End " + p.name) +
+        json += L"{\"id\":\"" + std::to_wstring(p.pid) + L":" + std::to_wstring(p.created) + L"\",\"title\":" + JsonEscape(L"End " + p.name) +
                 L",\"subtitle\":" + JsonEscape(sub) + L",\"icon\":" +
                 (p.path.empty() ? std::wstring(L"{\"glyph\":\"\\uE71A\"}") : L"{\"path\":" + JsonEscape(p.path) + L"}") +
                 L",\"score\":" + Num(score, 3) + L"}";
@@ -3014,20 +3039,25 @@ static void KillQuery(UINT64 q, std::wstring const& text) {
     }
     SubmitResults(q, json + L"]", TRUE);
 }
+// The id is "<pid>:<creation time>": PIDs are reused, so make sure it's still the listed process.
 static void KillInvoke(std::wstring const& item) {
-    DWORD pid = wcstoul(item.c_str(), nullptr, 10);
-    if (pid <= 4) return;
-    HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
-    BOOL ok = h && TerminateProcess(h, 1);
-    if (h) CloseHandle(h);
-    Wh_Log(L"kill %lu: %s", pid, ok ? L"ok" : L"failed");
+    wchar_t* end = nullptr;
+    DWORD pid = wcstoul(item.c_str(), &end, 10);
+    ULONGLONG created = end && *end == L':' ? wcstoull(end + 1, nullptr, 10) : 0;
+    if (pid <= 4 || !created) return;
+    HANDLE h = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return;
+    bool same = ProcessCreated(h) == created;
+    BOOL ok = same && TerminateProcess(h, 1);
+    CloseHandle(h);
+    Wh_Log(L"kill %lu: %s", pid, ok ? L"ok" : same ? L"failed" : L"process changed");
 }
 
 // Custom commands from the settings: keyword -> program, file or URL. "{query}" stands for
 // whatever is typed after the keyword.
 struct CustomCommand { std::wstring keyword, title, command, args; };
 static std::mutex g_commandsLock;
-[[clang::no_destroy]] static std::vector<CustomCommand> g_commands;
+static std::vector<CustomCommand> g_commands;  // plain strings
 
 static std::wstring UrlEncode(std::wstring const& s) {
     int n = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0, nullptr, nullptr);
@@ -3057,15 +3087,16 @@ static void CommandsQuery(UINT64 q, std::wstring const& text) {
         auto& c = cmds[i];
         std::wstring kw = Lower(c.keyword), rest;
         if (HasQuery(c.command) || HasQuery(c.args)) {
-            // "g cats": the keyword, then the text to pass on
-            if (lt != kw && lt.rfind(kw + L" ", 0) != 0) continue;
+            // "g cats": the keyword, then the text to pass on. The bare keyword shows nothing.
+            if (lt.rfind(kw + L" ", 0) != 0) continue;
             rest = Trim(t.substr(kw.size()));
+            if (rest.empty()) continue;
         } else if (lt != kw && (lt.size() < 2 || (kw.rfind(lt, 0) != 0 && !StrStrIW(c.title.c_str(), lt.c_str())))) {
             continue;
         }
         bool url = c.command.find(L"://") != std::wstring::npos;
         std::wstring command = FillQuery(c.command, url ? UrlEncode(rest) : rest), args = FillQuery(c.args, rest);
-        std::wstring title = FillQuery(c.title.empty() ? c.command : c.title, rest.empty() ? std::wstring(L"\u2026") : rest);
+        std::wstring title = FillQuery(c.title.empty() ? c.command : c.title, rest);
         if (json.size() > 1) json += L",";
         json += L"{\"id\":\"c" + std::to_wstring(i) + L"\",\"title\":" + JsonEscape(title) + L",\"subtitle\":" +
                 JsonEscape(args.empty() ? command : command + L" " + args) + L",\"icon\":{\"glyph\":\"" +
@@ -3077,7 +3108,7 @@ static void CommandsQuery(UINT64 q, std::wstring const& text) {
 
 static std::wstring StringSetting(const wchar_t* fmt, int i) {
     PCWSTR s = Wh_GetStringSetting(fmt, i);
-    std::wstring r = s ? s : L"";
+    std::wstring r = s;
     Wh_FreeStringSetting(s);
     return r;
 }
@@ -3240,10 +3271,6 @@ void Wh_ModUninit() {
     {
         std::lock_guard l(g_queriesLock);
         g_queries.clear();
-    }
-    {
-        std::lock_guard l(g_commandsLock);
-        std::vector<CustomCommand>().swap(g_commands);
     }
     ReleaseFactories();
     // Windows may still hold objects whose code lives in this DLL (definitions, items' delegates,
