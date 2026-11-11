@@ -2,7 +2,7 @@
 // @id              premiere-pro-theme
 // @name            Premiere Pro Theme
 // @description     Recolors the Adobe Premiere Pro interface — panels, timeline, monitors, window frame and menu bar — with a choice of very dark palettes.
-// @version         1.0.2
+// @version         1.1.0
 // @author          Threshold Editor
 // @license         MIT
 // @include         Adobe Premiere Pro.exe
@@ -411,6 +411,18 @@ that never pass through the theme. The Direct2D surface went from 46 slots to
 Both layouts of each are accepted now; a length on neither list is still
 refused, so a later build that grows a table loses that entry point and says so
 in the log, rather than hooking whatever the slot has become.
+
+**Premiere 27.0 (2027) grew them all again**, the Direct2D supplier among them
+(29 to 34 slots). That one gates the whole interface layer, so on 27.0 the
+earlier layouts hooked nothing at all. The pen and brush stay at slots 9 and
+10 and the rectangle fill at 7 of 50; the swatch draw and the skin and popup
+draws each moved one slot. These layouts were measured against the 27.0.0
+executable by the contributor who reported them.
+
+When a table has a length nobody has measured yet, the log now says which
+length it met — for the supplier, in a line of its own. That line, from a
+Premiere update that left the panels gray, is all it takes to add the next
+build.
 
 ## Questions, bugs and palettes
 
@@ -3023,8 +3035,10 @@ static size_t VtableLength(HMODULE module, void* const* vtable) {
 
     Adobe adds virtuals between releases. 26.5 grew OSSurfaceInterface from 46
     slots to 48 with the rectangle fill staying where it was, and UI_Swatch
-    from 139 to 142 with UI_Draw moving from 29 to 30. A length that is not on
-    the list is a layout nobody measured, and is still refused.
+    from 139 to 142 with UI_Draw moving from 29 to 30. 27.0 grew them again,
+    and the supplier with them, which gates the whole layer. A length that is
+    not on the list is a layout nobody measured, and is still refused — and
+    logged with its length, which is what it takes to measure the next one.
 */
 struct VtableLayout {
     size_t slots;
@@ -3050,7 +3064,9 @@ static const VtableLayout* LayoutOfLength(const VtableLayout* layouts,
     when the image holds no class of that name, or when more than one table
     answers to it. Ambiguity counts as not found, because a hook has to go
     somewhere known rather than somewhere likely. `length`, when it is not
-    null, receives the length of the table found.
+    null, receives the length of the table found — or, when nothing was found
+    because the class's one table has a length on none of `layouts`, that
+    length, so the caller can say which layout it met. Zero otherwise.
 */
 static void* const* FindVtableByName(HMODULE module, const char* className,
                                      const VtableLayout* layouts,
@@ -3059,6 +3075,8 @@ static void* const* FindVtableByName(HMODULE module, const char* className,
     void* const* found = nullptr;
     size_t foundLength = 0;
     size_t matches = 0;
+    size_t unmeasuredLength = 0;
+    size_t unmeasured = 0;
 
     // With its terminator, so ".?AVV6PopupSkin@..." cannot match a longer name.
     size_t nameLength = strlen(className) + 1;
@@ -3111,6 +3129,9 @@ static void* const* FindVtableByName(HMODULE module, const char* className,
                     matches++;
                     found = vtable;
                     foundLength = slots;
+                } else if (slots) {
+                    unmeasured++;
+                    unmeasuredLength = slots;
                 }
 
                 return matches < 2;
@@ -3123,6 +3144,10 @@ static void* const* FindVtableByName(HMODULE module, const char* className,
     });
 
     if (matches != 1) {
+        if (length) {
+            *length = matches == 0 && unmeasured == 1 ? unmeasuredLength : 0;
+        }
+
         return nullptr;
     }
 
@@ -3349,6 +3374,12 @@ static void InstallHookFromVtable(HMODULE module, const char* className,
     const VtableLayout* layout = vtable ? LayoutOfLength(layouts, slots) : nullptr;
 
     if (!layout) {
+        if (!vtable && slots) {
+            Wh_Log(L"%s: its table has %u slots, a layout this version was not "
+                   L"measured against",
+                   label, static_cast<unsigned>(slots));
+        }
+
         Wh_Log(L"absent in this version: %s", label);
 
         if (count) {
@@ -3396,12 +3427,14 @@ struct ContentVtable {
 };
 
 static const ContentVtable kContentVtables[kContentDrawCount] = {
-    // 139 slots through 26.3; 142 from 26.5, with UI_Draw one slot later.
-    {".?AVUI_Swatch@controls@dvaui@@", {{139, 29}, {142, 30}}},
-    {".?AVV7SwatchSkin@v7@skins@dvaui@@", {{7, 3}}},
+    // 139 slots through 26.3, 142 from 26.5 and 149 from 27.0: each release
+    // added virtuals ahead of UI_Draw.
+    {".?AVUI_Swatch@controls@dvaui@@", {{139, 29}, {142, 30}, {149, 31}}},
+    // 27.0 added one slot ahead of each of these draws.
+    {".?AVV7SwatchSkin@v7@skins@dvaui@@", {{7, 3}, {8, 4}}},
     {".?AVBaseSwatchSkin@csnext@skins@dvaui@@", {{12, 3}}},
-    {".?AVV7PopupSkin@v7@skins@dvaui@@", {{30, 10}}},
-    {".?AVV6PopupSkin@v6@skins@dvaui@@", {{31, 10}}},
+    {".?AVV7PopupSkin@v7@skins@dvaui@@", {{30, 10}, {31, 11}}},
+    {".?AVV6PopupSkin@v6@skins@dvaui@@", {{31, 10}, {32, 11}}},
 };
 
 static void InstallOneStaticContentHook(HMODULE module, size_t index, void* hook,
@@ -3422,12 +3455,14 @@ static void InstallStaticContentHooks(HMODULE module, HookCount& count,
 }
 
 // The two brush slots are named where they are hooked, each with its body
-// check, so only the length is read from this one.
+// check, so only the length is read from this one. 27.0 added five slots after
+// the brush; the pen and the brush stay at 9 and 10.
 constexpr char kSupplierClass[] = ".?AVOSSupplier@d2d@drawbot@dvaui@@";
-constexpr VtableLayout kSupplierLayouts[kMostLayouts] = {{29, 0}};
+constexpr VtableLayout kSupplierLayouts[kMostLayouts] = {{29, 0}, {34, 0}};
 
+// 26.5 and 27.0 each added two slots after the rectangle fill, the seventh.
 constexpr char kSurfaceClass[] = ".?AVOSSurfaceInterface@d2d@drawbot@dvaui@@";
-constexpr VtableLayout kSurfaceLayouts[kMostLayouts] = {{46, 7}, {48, 7}};
+constexpr VtableLayout kSurfaceLayouts[kMostLayouts] = {{46, 7}, {48, 7}, {50, 7}};
 
 volatile LONG g_toolkitProbed = FALSE;
 
@@ -3449,8 +3484,21 @@ static bool InstallStaticToolkitHooks() {
     HMODULE executable = GetModuleHandleW(nullptr);
     ULONGLONG started = GetTickCount64();
 
-    void* const* supplier =
-        FindVtableByName(executable, kSupplierClass, kSupplierLayouts, nullptr);
+    size_t supplierSlots = 0;
+    void* const* supplier = FindVtableByName(executable, kSupplierClass,
+                                             kSupplierLayouts, &supplierSlots);
+
+    if (!supplier && supplierSlots) {
+        /*
+            The toolkit is in here, in a build whose tables nobody has
+            measured. Said once, because this is the line that turns a report
+            of "the panels did not change" into the next entry on the list.
+        */
+        Wh_Log(L"the toolkit is linked into the executable, but its Direct2D "
+               L"supplier has %u slots, a layout this version was not measured "
+               L"against, so the interface layer is left alone",
+               static_cast<unsigned>(supplierSlots));
+    }
 
     if (!supplier || !Claim(&g_dvauiHooked)) {
         return false;
