@@ -91,14 +91,18 @@ magnified with its label shown.*
 - **Acrylic**: stronger blur, higher saturation, a thicker tint, and more
   visible grain, similar to a Windows flyout.
 - **Mica**: a wallpaper-tinted, low-saturation, nearly opaque panel. It is
-  quiet, power-friendly, and suited to an always-visible dock.
+  quiet and suited to an always-visible dock.
 - **Liquid Glass**: a milky blur with a specular rim, an iridescent inner
-  line, pointer-following highlights, and a subtle edge refraction. Its tone
-  adapts to the wallpaper automatically.
+  line, pointer-following highlights, and a faint edge refraction. Its tone
+  follows the Panel tone setting and adapts to the wallpaper in Auto mode.
 
 Each style also follows the **Panel tone** setting: Light, Dark, or Auto. The
 transparent style ignores the tone. The default is **Transparent**; select a
 panel style in the mod settings.
+
+When upgrading from 1.x, the old transparent-background toggle and glass
+sliders are replaced by Background style and Panel tone; choose a panel style
+again if you previously used the glass panel.
 
 ## How it works
 
