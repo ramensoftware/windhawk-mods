@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.5.2
+// @version 0.5.3
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -202,6 +202,8 @@ SOFTWARE.
 #include <functional>
 #include <optional>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.System.h>
 
@@ -1277,6 +1279,8 @@ static event_token g_visible{}, g_activated{}, g_closed{}, g_sizeChanged{},
 [[clang::no_destroy]] static c::Border g_shadowSource{nullptr};
 [[clang::no_destroy]] static std::optional<std::vector<c::Border>>
     g_shadowCasters;
+[[clang::no_destroy]] static std::optional<
+    std::vector<Windows::UI::Composition::Visual>> g_shadowMotion;
 static float g_shadowElevation = 0;
 [[clang::no_destroy]] static c::ScrollViewer g_leftFlank{nullptr},
     g_rightFlank{nullptr};
@@ -1346,7 +1350,7 @@ struct SavedProperty {
     g_cardEvents;
 static void RemoveBottom();
 static void UpdateBottom(svc::Data const&);
-static bool BuildBottom(x::DependencyObject const&, c::Border const&);
+static bool BuildBottom(x::DependencyObject const&, c::Border const&, double);
 
 template <typename F>
 static void GuardUi(F&& action) noexcept {
@@ -1413,6 +1417,8 @@ static void ApplyNativeSurface(c::Border const& card, c::Border const& native) {
 static c::Grid WrapSurface(c::Border const& card, bool shadow = true) {
     c::Grid surface;
     if (shadow && g_shadowSource) {
+        c::Grid motion;
+        motion.IsHitTestVisible(false);
         c::Border caster;
         caster.Name(L"StartSidecarShadow");
         caster.IsHitTestVisible(false);
@@ -1422,9 +1428,25 @@ static c::Grid WrapSurface(c::Border const& card, bool shadow = true) {
                             x::UIElement::ShadowProperty(), L"Shadow");
         BindSurfaceProperty(caster, g_shadowSource,
                             x::UIElement::VisibilityProperty(), L"Visibility");
-        BindSurfaceProperty(caster, g_shadowSource,
-                            x::UIElement::OpacityProperty(), L"Opacity");
-        surface.Children().Append(caster);
+        motion.Children().Append(caster);
+        surface.Children().Append(motion);
+        // The shell animates its shadow separately from the content. Reference
+        // the compositor's effective values, including independent animations,
+        // rather than sampling the UI-thread base properties every frame.
+        using x::Hosting::ElementCompositionPreview;
+        auto visual = ElementCompositionPreview::GetElementVisual(motion);
+        auto source =
+            ElementCompositionPreview::GetElementVisual(g_shadowSource);
+        auto compositor = visual.Compositor();
+        for (const wchar_t* property : {L"TransformMatrix", L"Opacity"}) {
+            auto expression = compositor.CreateExpressionAnimation(
+                std::wstring(L"source.") + property);
+            expression.SetReferenceParameter(L"source", source);
+            visual.StartAnimation(property, expression);
+        }
+        if (!g_shadowMotion)
+            g_shadowMotion.emplace();
+        g_shadowMotion->push_back(visual);
         if (!g_shadowCasters)
             g_shadowCasters.emplace();
         g_shadowCasters->push_back(caster);
@@ -1514,6 +1536,14 @@ static void RemoveCard() {
         if (g_update)
             g_update.Stop();
     } catch (...) {
+    }
+    if (g_shadowMotion) {
+        for (auto const& visual : *g_shadowMotion)
+            GuardUi([&] {
+                visual.StopAnimation(L"TransformMatrix");
+                visual.StopAnimation(L"Opacity");
+            });
+        g_shadowMotion.reset();
     }
     if (g_cardEvents) {
         for (auto const& unsubscribe : *g_cardEvents)
@@ -2170,7 +2200,9 @@ static void AttachRow(x::DependencyObject const& root,
     animation.Children().Append(bottom);
 }
 
-inline bool Build(x::DependencyObject const& root, c::Border const& native) {
+inline bool Build(x::DependencyObject const& root,
+                  c::Border const& native,
+                  double panelHeight) {
     auto settings = std::atomic_load(&svc::config);
     if (!HasCards(*settings))
         return true;
@@ -2182,12 +2214,16 @@ inline bool Build(x::DependencyObject const& root, c::Border const& native) {
     mainMenu = main;
     companion = Resolve(root, L"RightCompanionContainerGrid");
     tiles.emplace();
-    AttachRow(root, animation, main, frame, kPanelHeight);
+    AttachRow(root, animation, main, frame, panelHeight);
     c::Grid grid;
     tileGrid = grid;
     bottom.Child(grid);
     int column = 0;
     auto add = [&](c::Border const& card, double weight) {
+        auto padding = card.Padding();
+        padding.Top = padding.Bottom =
+            std::min(padding.Top, std::max(0.0, (panelHeight - 152) / 2));
+        card.Padding(padding);
         c::ColumnDefinition definition;
         definition.Width({200, x::GridUnitType::Pixel});
         grid.ColumnDefinitions().Append(definition);
@@ -2301,8 +2337,9 @@ static void UpdateBottom(svc::Data const& data) {
     cards::Update(data);
 }
 static bool BuildBottom(x::DependencyObject const& root,
-                        c::Border const& native) {
-    return cards::Build(root, native);
+                        c::Border const& native,
+                        double panelHeight) {
+    return cards::Build(root, native, panelHeight);
 }
 
 static x::FrameworkElement OverviewElement(const wchar_t* name) {
@@ -2761,16 +2798,25 @@ static void RefreshLayout(x::UIElement const& root,
             companionWidth =
                 std::max(companionWidth, companionContainer.Width());
         const bool bottomEnabled = cards::HasCards(*settings);
+        // FrameRoot's native trailing margins reserve room for shadow falloff.
+        // Keep that space outside the explicit height instead of overflowing
+        // its layout slot and activating XAML's implicit layout clip.
+        const auto frameMargin = frame.Margin();
+        const double marginWidth = frameMargin.Left + frameMargin.Right;
+        const double marginHeight = frameMargin.Top + frameMargin.Bottom;
         const double requiredWidth =
             std::max(oldWidth, main.ActualWidth() + companionWidth) +
             std::max(0.0, frame.ActualWidth() - oldWidth) +
-            (settings->overview ? width + gap : 0);
+            (settings->overview ? width + gap : 0) + marginWidth;
         const double nativeHeight =
             main.ActualHeight() +
-            std::max(0.0, frame.ActualHeight() - host.ActualHeight());
+            std::max(0.0, frame.ActualHeight() - host.ActualHeight()) +
+            marginHeight;
+        const double panelHeight = std::min(
+            cards::kPanelHeight, work.height - nativeHeight - cards::kGap);
         const double requiredHeight =
             nativeHeight +
-            (bottomEnabled ? cards::kPanelHeight + cards::kGap : 0);
+            (bottomEnabled ? std::max(164.0, panelHeight) + cards::kGap : 0);
         const bool portrait = work.height > work.width;
         const double flankWidth = std::clamp(width, 230.0, 290.0);
         const bool leftFlank =
@@ -2800,7 +2846,8 @@ static void RefreshLayout(x::UIElement const& root,
             const auto surface = mainBackground ? mainBackground : nativeBorder;
             const double widthBelow = std::min(
                 main.ActualWidth(),
-                work.width - std::max(0.0, frame.ActualWidth() - oldWidth));
+                work.width - std::max(0.0, frame.ActualWidth() - oldWidth) -
+                    marginWidth);
             const double heightBelow = work.height - nativeHeight - cards::kGap;
             if (heightBelow >= 164 && widthBelow >= 230)
                 BuildStackedRow(root, host, main, frame, surface, *settings,
@@ -2814,7 +2861,7 @@ static void RefreshLayout(x::UIElement const& root,
             return;
         }
         if (!settings->overview) {
-            g_layoutReady = BuildBottom(root, nativeBorder);
+            g_layoutReady = BuildBottom(root, nativeBorder, panelHeight);
             if (g_layoutReady) {
                 UpdateData();
                 if (g_update)
@@ -2845,7 +2892,7 @@ static void RefreshLayout(x::UIElement const& root,
         c::Grid::SetColumn(g_sideOverview, existing);
         c::Grid::SetRow(g_sideOverview, 0);
         host.Children().Append(g_sideOverview);
-        g_layoutReady = BuildBottom(root, nativeBorder);
+        g_layoutReady = BuildBottom(root, nativeBorder, panelHeight);
         if (!g_layoutReady) {
             RemoveCard();
             return;
