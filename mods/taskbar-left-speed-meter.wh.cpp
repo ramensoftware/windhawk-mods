@@ -13,6 +13,12 @@
 /*
 # Taskbar Left Speed Meter
 
+# Taskbar Left Speed Meter
+
+![Screenshot 1](https://i.imgur.com/QRkclYd.png)
+
+![Screenshot 2](https://i.imgur.com/Cnmik9I.png)
+
 A dedicated, lightweight network traffic monitor docked on the bottom-left corner of the Windows taskbar (specifically tailored for centered taskbars in Windows 11).
 
 ### Comparison with existing mods
