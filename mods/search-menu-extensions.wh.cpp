@@ -2455,8 +2455,8 @@ struct PipeClient : std::enable_shared_from_this<PipeClient> {
             UINT64 q = _wcstoui64(JStr(o, L"queryId").c_str(), nullptr, 10);
             bool done = !o.HasKey(L"done") || o.GetNamedValue(L"done").ValueType() != wdj::JsonValueType::Boolean ||
                         o.GetNamedBoolean(L"done");
+            // Not ours, or already finished (timed out, superseded): a late answer is normal, drop it.
             if (OwnsQuery(q)) SubmitResults(q, ItemsOf(o), done);
-            else Error(L"unknown query");
         } else if (op == L"setItems") {
             if (UINT64 h = Lookup(o)) SetStaticItems(h, ItemsOf(o));
             else Error(L"unknown provider");
