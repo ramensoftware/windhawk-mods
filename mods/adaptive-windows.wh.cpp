@@ -3733,7 +3733,10 @@ static void RefreshHookRects(bool force = false) {
     rects.reserve(g_items.size());
     for (const auto& it : g_items) {
         RECT r{};
-        if (IsIconic(it.h) || !GetWindowRect(it.h, &r)) continue;
+        // Só entram as janelas sobre as quais o mod de fato age: nem o menu radial nem o redimensionamento
+        // mexem em janela maximizada (que cobriria o monitor inteiro), e o menu radial ignora as soltas.
+        if (IsIconic(it.h) || IsZoomed(it.h) || !GetWindowRect(it.h, &r)) continue;
+        if (it.floating && !g_resizeMouse) continue;
         if (it.to.right > it.to.left) UnionRect(&r, &r, &it.to);
         rects.push_back(r);
     }
