@@ -26,7 +26,6 @@ While similar to [Win10 taskbar on Win11 24H2 or later](https://windhawk.net/mod
 * UWP apps display normally on the taskbar alongside Win32 applications.
 * The system tray is completely custom-built, meaning other mods targeting the notification area **will not work**.
 * The language indicator is currently unavailable, but will be added in a future update.
-* The Notification Center is not implemented.
 
 To restore the network icon, you can install the [Restore legacy network tray](https://windhawk.net/mods/restore-legacy-network-tray) mod, or use any other network indicator of your choice.
 
@@ -1919,7 +1918,7 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&g_origLoadMenuW);
     Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&g_origTrackPopupMenu);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerexe_hooks[] = {
         {{L"public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_DisableWin10Taskbar>::__private_IsEnabled(void)"},
          &g_origDisableWin10Taskbar, Hook_Feature_DisableWin10Taskbar_IsEnabled, false},
         {{L"private: long __cdecl CTray::InitializeTrayUIComponent(void)"},
@@ -1929,7 +1928,7 @@ BOOL Wh_ModInit() {
         {{L"struct CTrayStatic c_trayStatic"}, &g_pTrayStatic, nullptr, false},
     };
 
-    if (!WindhawkUtils::HookSymbols(g_hExplorer, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(g_hExplorer, explorerexe_hooks, ARRAYSIZE(explorerexe_hooks))) {
         Wh_Log(L"[ERROR] HookSymbols failed");
         return FALSE;
     }
