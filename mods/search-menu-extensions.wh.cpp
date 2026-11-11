@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              search-menu-extensions
-// @name            New Windows Search Extensions (library)
-// @description     For the NEW Windows 11 Insider search box (composer search, build 26320+), not classic Start/taskbar search. Lets other mods, scripts and programs add results, actions, toggles and cards, mixed in with the native results
+// @name            New Windows Search Extensions
+// @description     For the NEW Windows 11 Insider search box (composer search, build 26320+), not classic Start/taskbar search. Adds a calculator, unit converter, "kill <process>" and your own keyword commands and web searches to the results. Other mods and scripts can add results too
 // @version         0.1.0
 // @author          TurtlesMaster1
 // @github          https://github.com/TurtlesMaster1
@@ -15,7 +15,7 @@
 > **Updated for Build 26320.9876 (Windows 11 Insider Beta).** Insider builds
 > change quickly, so newer builds may break or move this.
 
-# New Windows Search Extensions (library)
+# New Windows Search Extensions
 
 **This is only for the NEW Windows search**: the compact "composer" search box
 on recent Windows 11 Insider builds (hosted by
@@ -24,12 +24,31 @@ actions like "Turn on dark mode" and the volume slider). It does **nothing** for
 the classic Start menu search, the old taskbar search flyout (`SearchHost.exe`)
 or Windows 10.
 
-![Demo provider items mixed into the new Windows search](https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/demo.png)
+Adds new kinds of results to the new search box, mixed in with the native ones:
 
-A **dependency mod**: on its own it only adds an optional demo provider (type
-`wh hello` to see an echo/copy item, a toggle, a "run" item and a card). Other mods (or any program/script) use it to put items into the new
-search box. Providers see every query and decide for themselves when to answer,
-so no prefix is needed.
+* **Calculator**: type `12*7.5`, `(3+4)^2`, `sqrt(2)`, `200 * 15%`, `50 + 10%` and press
+  Enter to copy the result. Supports `+ - * / ^ %`, brackets, `pi`, `e` and
+  `sqrt cbrt abs sin cos tan asin acos atan ln log log2 exp round floor ceil`.
+* **Unit converter**: `5 km in mi`, `72 f to c`, `1.5 gb in mb`, `3 cups to ml`.
+  Length, weight, volume, time, speed, data size and temperature.
+* **Kill process**: `kill note` lists running processes whose name contains
+  "note" with their memory use; Enter ends the selected one. `kill` on its own
+  lists the biggest processes.
+* **Custom commands**: your own keywords, set in the mod settings. A keyword can
+  open a program, file, folder or URL. Put `{query}` in the command to pass on
+  what you type after the keyword: with the default `g` command, `g windhawk`
+  searches Google for "windhawk".
+
+Each one can be turned off in the settings.
+
+## For developers: add your own results
+
+Other mods, and any program or script, can put items into the new search box
+through this mod. Providers see every query and decide for themselves when to
+answer, so no prefix is needed. The **Demo provider** setting adds sample items
+(type `wh hello`: an echo/copy item, a toggle, a "run" item and a card).
+
+![Demo provider items mixed into the new Windows search](https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/demo.png)
 
 ![A pipe client showing live weather with an Adaptive Card](https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/weather.png)
 
@@ -39,15 +58,15 @@ the named pipe.*
 Items are injected as genuine native search providers. Windows' own search is
 built from *Palette extensions* (`Windows.UI.Palettes`): Apps, Files, Settings,
 Windows Actions, Command Line and so on are each one extension. This mod adds
-one more extension per registered provider, so your items are real
-`PaletteItem`s. They mix into the native list with native ranking, keyboard
+one more extension per provider (the built-in ones included), so the items are
+real `PaletteItem`s. They mix into the native list with native ranking, keyboard
 navigation, icons, toggles and Adaptive Card content.
 
 ## Two ways to provide items
 
 ### 1. From another Windhawk mod (in-process)
 
-Your mod must also `@include shellhost.exe`. Find this library's DLL and call its
+Your mod must also `@include shellhost.exe`. Find this mod's DLL and call its
 exported C API (Windhawk exports every symbol of a mod DLL):
 
 ```cpp
@@ -92,8 +111,8 @@ session id of your process, e.g. `ProcessIdToSessionId`) and exchange
 number of providers. They're removed automatically when the connection closes.
 
 Only processes running as the same user can open the pipe. Any of them can
-register a provider, and a provider sees the text typed into search. Turn off
-**Named pipe API** if you don't use it.
+register a provider, and a provider sees the text typed into search. That's
+why the **Named pipe API** setting is off by default: turn it on to use the pipe.
 
 Client to library:
 
@@ -182,12 +201,37 @@ Library to client:
 
 // ==WindhawkModSettings==
 /*
-- demoProvider: true
-  $name: Demo provider
-  $description: Adds sample items when you type "wh" (echo, toggle, card, run). Handy to check the library works.
-- pipeServer: true
+- calculator: true
+  $name: Calculator and unit converter
+  $description: Type a sum ("12*7.5", "sqrt(2)") or a conversion ("5 km in mi", "72 f to c"). Enter copies the result
+- killProcess: true
+  $name: Kill process
+  $description: Type "kill" and part of a process name. Enter ends the selected process
+- commands:
+  - - keyword: g
+      $name: Keyword
+      $description: What to type in search
+    - title: Search Google for {query}
+      $name: Title
+      $description: Shown in the results
+    - command: https://www.google.com/search?q={query}
+      $name: Program, file, folder or URL
+      $description: "{query}" is replaced by the text typed after the keyword
+    - args: ""
+      $name: Arguments
+      $description: Optional, for programs. Can contain {query} too
+  - - keyword: yt
+    - title: Search YouTube for {query}
+    - command: https://www.youtube.com/results?search_query={query}
+    - args: ""
+  $name: Custom commands
+  $description: Your own keywords. Without {query}, the command also shows up when you type the start of the keyword or part of the title
+- demoProvider: false
+  $name: Demo provider (for developers)
+  $description: Adds sample items when you type "wh" (echo, toggle, card, run). Handy to check the API works.
+- pipeServer: false
   $name: Named pipe API
-  $description: Let other processes and scripts (same user only) add items through \\.\pipe\WindhawkSearchExtensions-<session id>
+  $description: For developers. Let other processes and scripts (same user only) add items through \\.\pipe\WindhawkSearchExtensions-<session id>
 - queryTimeoutMs: 2500
   $name: Provider timeout (ms)
   $description: How long to wait for a provider's results before showing what it has so far
@@ -204,8 +248,12 @@ Library to client:
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <sddl.h>
+#include <psapi.h>
+#include <tlhelp32.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <condition_variable>
 #include <functional>
 #include <map>
@@ -233,8 +281,10 @@ namespace wfc = winrt::Windows::Foundation::Collections;
 namespace wdj = winrt::Windows::Data::Json;
 
 struct Settings {
-    bool demoProvider = true;
-    bool pipeServer = true;
+    bool calculator = true;
+    bool killProcess = true;
+    bool demoProvider = false;
+    bool pipeServer = false;
     int queryTimeoutMs = 2500;
     bool restartIfLate = true;
 } g_settings;
@@ -2662,14 +2712,443 @@ static void UnregisterDemo() {
 }
 
 // ---------------------------------------------------------------------------
+// Built-in providers: calculator + unit converter, kill process, custom commands
+// ---------------------------------------------------------------------------
+static std::wstring Lower(std::wstring s) {
+    if (!s.empty()) CharLowerBuffW(s.data(), (DWORD)s.size());
+    return s;
+}
+static std::wstring Trim(std::wstring const& s) {
+    size_t a = 0, b = s.size();
+    while (a < b && s[a] == L' ') a++;
+    while (b > a && s[b - 1] == L' ') b--;
+    return s.substr(a, b - a);
+}
+static std::wstring Num(double v, int sig) {
+    if (v == 0) v = 0;  // no "-0"
+    wchar_t b[64];
+    if (v == std::floor(v) && std::fabs(v) < 1e15)
+        swprintf(b, 64, L"%.0f", v);
+    else
+        swprintf(b, 64, L"%.*g", sig, v);
+    return b;
+}
+
+// Recursive-descent arithmetic: + - * / ^ ( ), "%" as percent or modulo, a few functions.
+struct Calc {
+    const wchar_t* p;
+    bool ok = true;
+    int ops = 0;    // operators and function calls seen; 0 means it was just a number
+    int depth = 0;
+    bool percent = false;  // the term just parsed was a plain "N%"
+
+    void Ws() { while (*p == L' ') p++; }
+    static bool StartsOperand(wchar_t c) { return iswalnum(c) || c == L'(' || c == L'.'; }
+    double Expr() {
+        double v = Term();
+        for (;;) {
+            Ws();
+            bool minus = *p == L'-' || *p == 0x2212;
+            if (*p != L'+' && !minus) return v;
+            p++; ops++;
+            double t = Term();
+            if (percent) t *= v;  // "50 + 10%" is 55, like a pocket calculator
+            v = minus ? v - t : v + t;
+        }
+    }
+    double Term() {
+        double v = Unary();
+        percent = false;
+        for (int n = 0;; n++) {
+            Ws();
+            wchar_t c = *p;
+            if (c == L'*' || c == 0xD7) { p++; ops++; v *= Unary(); percent = false; }
+            else if (c == L'/' || c == 0xF7) { p++; ops++; v /= Unary(); percent = false; }
+            else if (c == L'%') {
+                p++; ops++;
+                const wchar_t* s = p;
+                while (*s == L' ') s++;
+                if (StartsOperand(*s)) { v = std::fmod(v, Unary()); percent = false; }  // "10 % 3"
+                else { v /= 100; percent = n == 0; }               // "15%"
+            } else return v;
+        }
+    }
+    double Unary() {
+        Ws();
+        if (++depth > 64) { ok = false; return 0; }
+        double v;
+        if (*p == L'-' || *p == 0x2212) { p++; v = -Unary(); }
+        else if (*p == L'+') { p++; v = Unary(); }
+        else {
+            v = Primary();
+            Ws();
+            if (*p == L'^') { p++; ops++; v = std::pow(v, Unary()); }
+        }
+        depth--;
+        return v;
+    }
+    double Primary() {
+        Ws();
+        if (*p == L'(') {
+            p++;
+            double v = Expr();
+            Ws();
+            if (*p == L')') p++; else ok = false;
+            return v;
+        }
+        if (iswdigit(*p) || *p == L'.') {
+            wchar_t* end = nullptr;
+            double v;
+            if (p[0] == L'0' && (p[1] == L'x' || p[1] == L'X')) v = (double)wcstoull(p + 2, &end, 16);
+            else v = wcstod(p, &end);
+            if (!end || end == p || (end == p + 2 && p[1] != L'.' && !iswdigit(p[1]))) { ok = false; return 0; }
+            p = end;
+            return v;
+        }
+        std::wstring name;
+        while (iswalpha(*p) || (!name.empty() && iswdigit(*p))) name += (wchar_t)towlower(*p++);
+        if (name.empty()) { ok = false; return 0; }
+        Ws();
+        if (*p != L'(') {
+            if (name == L"pi") return 3.14159265358979323846;
+            if (name == L"e") return 2.71828182845904523536;
+            ok = false;
+            return 0;
+        }
+        p++; ops++;
+        double a = Expr();
+        Ws();
+        if (*p == L')') p++; else ok = false;
+        if (name == L"sqrt") return std::sqrt(a);
+        if (name == L"cbrt") return std::cbrt(a);
+        if (name == L"abs") return std::fabs(a);
+        if (name == L"sin") return std::sin(a);
+        if (name == L"cos") return std::cos(a);
+        if (name == L"tan") return std::tan(a);
+        if (name == L"asin") return std::asin(a);
+        if (name == L"acos") return std::acos(a);
+        if (name == L"atan") return std::atan(a);
+        if (name == L"ln") return std::log(a);
+        if (name == L"log") return std::log10(a);
+        if (name == L"log2") return std::log2(a);
+        if (name == L"exp") return std::exp(a);
+        if (name == L"round") return std::round(a);
+        if (name == L"floor") return std::floor(a);
+        if (name == L"ceil") return std::ceil(a);
+        ok = false;
+        return 0;
+    }
+};
+
+// needOps: a bare number isn't worth a result row.
+static bool Evaluate(std::wstring const& text, bool needOps, double* out) {
+    if (text.empty() || text.size() > 200) return false;
+    Calc c{text.c_str()};
+    double v = c.Expr();
+    c.Ws();
+    if (!c.ok || *c.p || (needOps && !c.ops) || !std::isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
+// names: space-separated aliases (matched ignoring case), the first is shown. cat 'T' (temperature): f is 1=C, 2=F, 3=K.
+struct Unit { const wchar_t* names; char cat; double f; };
+static const Unit kUnits[] = {
+    {L"mm millimeter millimeters millimetre millimetres", 'L', 0.001},
+    {L"cm centimeter centimeters centimetre centimetres", 'L', 0.01},
+    {L"m meter meters metre metres", 'L', 1},
+    {L"km kilometer kilometers kilometre kilometres", 'L', 1000},
+    {L"in inch inches \"", 'L', 0.0254},
+    {L"ft foot feet '", 'L', 0.3048},
+    {L"yd yard yards", 'L', 0.9144},
+    {L"mi mile miles", 'L', 1609.344},
+    {L"nmi", 'L', 1852},
+    {L"mg milligram milligrams", 'M', 1e-6},
+    {L"g gram grams", 'M', 0.001},
+    {L"kg kilogram kilograms kilo kilos", 'M', 1},
+    {L"t tonne tonnes", 'M', 1000},
+    {L"oz ounce ounces", 'M', 0.028349523125},
+    {L"lb lbs pound pounds", 'M', 0.45359237},
+    {L"st stone", 'M', 6.35029318},
+    {L"ml milliliter milliliters millilitre millilitres", 'V', 0.001},
+    {L"l liter liters litre litres", 'V', 1},
+    {L"tsp teaspoon teaspoons", 'V', 0.00492892159375},
+    {L"tbsp tablespoon tablespoons", 'V', 0.01478676478125},
+    {L"floz", 'V', 0.0295735295625},
+    {L"cups cup", 'V', 0.2365882365},
+    {L"pt pint pints", 'V', 0.473176473},
+    {L"qt quart quarts", 'V', 0.946352946},
+    {L"gal gallon gallons", 'V', 3.785411784},
+    {L"ms millisecond milliseconds", 'D', 0.001},
+    {L"s sec secs second seconds", 'D', 1},
+    {L"min mins minute minutes", 'D', 60},
+    {L"h hr hrs hour hours", 'D', 3600},
+    {L"d day days", 'D', 86400},
+    {L"wk week weeks", 'D', 604800},
+    {L"yr year years", 'D', 31557600},
+    {L"m/s", 'S', 1},
+    {L"km/h kmh kph", 'S', 1 / 3.6},
+    {L"mph", 'S', 0.44704},
+    {L"kn knot knots", 'S', 1852.0 / 3600},
+    {L"ft/s", 'S', 0.3048},
+    {L"bit bits", 'B', 0.125},
+    {L"B byte bytes", 'B', 1},
+    {L"KB", 'B', 1024.0},
+    {L"MB", 'B', 1048576.0},
+    {L"GB", 'B', 1073741824.0},
+    {L"TB", 'B', 1099511627776.0},
+    {L"\u00b0C c celsius", 'T', 1},
+    {L"\u00b0F f fahrenheit", 'T', 2},
+    {L"K kelvin", 'T', 3},
+};
+
+static const Unit* FindUnit(std::wstring const& name, std::wstring* shown) {
+    for (auto& u : kUnits) {
+        const wchar_t* s = u.names;
+        while (*s) {
+            const wchar_t* e = wcschr(s, L' ');
+            size_t n = e ? (size_t)(e - s) : wcslen(s);
+            if (n == name.size() && !_wcsnicmp(s, name.c_str(), n)) {
+                const wchar_t* fe = wcschr(u.names, L' ');
+                *shown = fe ? std::wstring(u.names, fe) : std::wstring(u.names);
+                return &u;
+            }
+            s += n;
+            while (*s == L' ') s++;
+        }
+    }
+    return nullptr;
+}
+
+// "<number or expression> <unit> to|in <unit>"
+static bool ConvertUnits(std::wstring const& text, std::wstring* title, std::wstring* value) {
+    std::wstring t = Lower(text);
+    size_t a = t.rfind(L" to "), b = t.rfind(L" in ");
+    size_t pos = a == std::wstring::npos ? b : (b == std::wstring::npos ? a : std::max(a, b));
+    if (pos == std::wstring::npos) return false;
+    std::wstring left = Trim(t.substr(0, pos)), toName = Trim(t.substr(pos + 4));
+    size_t i = left.size();
+    while (i > 0 && !iswdigit(left[i - 1]) && left[i - 1] != L')' && left[i - 1] != L'.' && left[i - 1] != L' ') i--;
+    std::wstring fromName = left.substr(i), num = Trim(left.substr(0, i));
+    if (fromName.empty() || toName.empty() || num.empty()) return false;
+    std::wstring fromShown, toShown;
+    const Unit* from = FindUnit(fromName, &fromShown);
+    const Unit* to = FindUnit(toName, &toShown);
+    double x;
+    if (!from || !to || from->cat != to->cat || !Evaluate(num, false, &x)) return false;
+    double y;
+    if (from->cat == 'T') {
+        double k = from->f == 1 ? x + 273.15 : from->f == 2 ? (x - 32) * 5 / 9 + 273.15 : x;
+        y = to->f == 1 ? k - 273.15 : to->f == 2 ? (k - 273.15) * 9 / 5 + 32 : k;
+        if (std::fabs(y) < 1e-9) y = 0;
+    } else {
+        y = x * from->f / to->f;
+    }
+    *value = Num(y, 6);
+    *title = Num(x, 10) + L" " + fromShown + L" = " + *value + L" " + toShown;
+    return true;
+}
+
+static void CalcQuery(UINT64 q, std::wstring const& text) {
+    std::wstring t = Trim(text), title, value;
+    if (!t.empty() && t[0] == L'=') t = Trim(t.substr(1));
+    double v;
+    if (ConvertUnits(t, &title, &value)) {
+    } else if (Evaluate(t, true, &v)) {
+        value = Num(v, 12);
+        title = L"= " + value;
+    } else {
+        SubmitResults(q, L"[]", TRUE);
+        return;
+    }
+    SubmitResults(q,
+                  L"[{\"id\":\"result\",\"title\":" + JsonEscape(title) + L",\"subtitle\":" +
+                      JsonEscape(t + L" \u00b7 Enter to copy") +
+                      L",\"icon\":{\"glyph\":\"\\uE8EF\"},\"score\":1.0,\"action\":{\"type\":\"copy\",\"text\":" +
+                      JsonEscape(value) + L"}}]",
+                  TRUE);
+}
+
+// "kill <part of a process name>": Enter ends that process.
+static void KillQuery(UINT64 q, std::wstring const& text) {
+    std::wstring t = Lower(Trim(text));
+    if (t.rfind(L"kill", 0) != 0 || (t.size() > 4 && t[4] != L' ')) {
+        SubmitResults(q, L"[]", TRUE);
+        return;
+    }
+    std::wstring filter = Trim(t.substr(4));
+    struct Proc { DWORD pid; std::wstring name, path; SIZE_T mem; };
+    std::vector<Proc> procs;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{sizeof(pe)};
+        for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+            if (pe.th32ProcessID <= 4) continue;
+            if (!filter.empty() && !StrStrIW(pe.szExeFile, filter.c_str())) continue;
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+            if (!h) continue;  // not ours to end either
+            Proc p{pe.th32ProcessID, pe.szExeFile, L"", 0};
+            PROCESS_MEMORY_COUNTERS pmc{sizeof(pmc)};
+            if (K32GetProcessMemoryInfo(h, &pmc, sizeof(pmc))) p.mem = pmc.WorkingSetSize;
+            wchar_t path[MAX_PATH];
+            DWORD n = MAX_PATH;
+            if (QueryFullProcessImageNameW(h, 0, path, &n)) p.path = path;
+            CloseHandle(h);
+            procs.push_back(std::move(p));
+        }
+        CloseHandle(snap);
+    }
+    std::sort(procs.begin(), procs.end(), [](Proc const& a, Proc const& b) { return a.mem > b.mem; });
+    if (procs.size() > 8) procs.resize(8);
+    std::wstring json = L"[";
+    double score = 0.9;  // biggest first
+    for (auto& p : procs) {
+        wchar_t sub[128];
+        swprintf(sub, 128, L"PID %lu \u00b7 %.0f MB \u00b7 Enter to end it", p.pid, p.mem / 1048576.0);
+        if (json.size() > 1) json += L",";
+        json += L"{\"id\":\"" + std::to_wstring(p.pid) + L"\",\"title\":" + JsonEscape(L"End " + p.name) +
+                L",\"subtitle\":" + JsonEscape(sub) + L",\"icon\":" +
+                (p.path.empty() ? std::wstring(L"{\"glyph\":\"\\uE71A\"}") : L"{\"path\":" + JsonEscape(p.path) + L"}") +
+                L",\"score\":" + Num(score, 3) + L"}";
+        score -= 0.01;
+    }
+    SubmitResults(q, json + L"]", TRUE);
+}
+static void KillInvoke(std::wstring const& item) {
+    DWORD pid = wcstoul(item.c_str(), nullptr, 10);
+    if (pid <= 4) return;
+    HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    BOOL ok = h && TerminateProcess(h, 1);
+    if (h) CloseHandle(h);
+    Wh_Log(L"kill %lu: %s", pid, ok ? L"ok" : L"failed");
+}
+
+// Custom commands from the settings: keyword -> program, file or URL. "{query}" stands for
+// whatever is typed after the keyword.
+struct CustomCommand { std::wstring keyword, title, command, args; };
+static std::mutex g_commandsLock;
+[[clang::no_destroy]] static std::vector<CustomCommand> g_commands;
+
+static std::wstring UrlEncode(std::wstring const& s) {
+    int n = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0, nullptr, nullptr);
+    std::string u(n, 0);
+    WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), u.data(), n, nullptr, nullptr);
+    std::wstring r;
+    for (unsigned char c : u) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') r += (wchar_t)c;
+        else { wchar_t b[4]; swprintf(b, 4, L"%%%02X", c); r += b; }
+    }
+    return r;
+}
+static std::wstring FillQuery(std::wstring s, std::wstring const& query) {
+    for (size_t i = 0; (i = s.find(L"{query}", i)) != std::wstring::npos; i += query.size()) s.replace(i, 7, query);
+    return s;
+}
+static bool HasQuery(std::wstring const& s) { return s.find(L"{query}") != std::wstring::npos; }
+
+static void CommandsQuery(UINT64 q, std::wstring const& text) {
+    std::wstring t = Trim(text), lt = Lower(t), json = L"[";
+    std::vector<CustomCommand> cmds;
+    {
+        std::lock_guard l(g_commandsLock);
+        cmds = g_commands;
+    }
+    for (size_t i = 0; i < cmds.size() && !lt.empty(); i++) {
+        auto& c = cmds[i];
+        std::wstring kw = Lower(c.keyword), rest;
+        if (HasQuery(c.command) || HasQuery(c.args)) {
+            // "g cats": the keyword, then the text to pass on
+            if (lt != kw && lt.rfind(kw + L" ", 0) != 0) continue;
+            rest = Trim(t.substr(kw.size()));
+        } else if (lt != kw && (lt.size() < 2 || (kw.rfind(lt, 0) != 0 && !StrStrIW(c.title.c_str(), lt.c_str())))) {
+            continue;
+        }
+        bool url = c.command.find(L"://") != std::wstring::npos;
+        std::wstring command = FillQuery(c.command, url ? UrlEncode(rest) : rest), args = FillQuery(c.args, rest);
+        std::wstring title = FillQuery(c.title.empty() ? c.command : c.title, rest.empty() ? std::wstring(L"\u2026") : rest);
+        if (json.size() > 1) json += L",";
+        json += L"{\"id\":\"c" + std::to_wstring(i) + L"\",\"title\":" + JsonEscape(title) + L",\"subtitle\":" +
+                JsonEscape(args.empty() ? command : command + L" " + args) + L",\"icon\":{\"glyph\":\"" +
+                (url ? L"\\uE774" : L"\\uE756") + L"\"},\"score\":1.0,\"action\":{\"type\":\"run\",\"command\":" +
+                JsonEscape(command) + L",\"args\":" + JsonEscape(args) + L"}}";
+    }
+    SubmitResults(q, json + L"]", TRUE);
+}
+
+static std::wstring StringSetting(const wchar_t* fmt, int i) {
+    PCWSTR s = Wh_GetStringSetting(fmt, i);
+    std::wstring r = s ? s : L"";
+    Wh_FreeStringSetting(s);
+    return r;
+}
+static void LoadCommands() {
+    std::vector<CustomCommand> cmds;
+    for (int i = 0; i < 200; i++) {
+        CustomCommand c{Trim(StringSetting(L"commands[%d].keyword", i)), StringSetting(L"commands[%d].title", i),
+                        Trim(StringSetting(L"commands[%d].command", i)), StringSetting(L"commands[%d].args", i)};
+        if (c.keyword.empty() && c.command.empty()) break;
+        if (!c.keyword.empty() && !c.command.empty()) cmds.push_back(std::move(c));
+    }
+    std::lock_guard l(g_commandsLock);
+    g_commands.swap(cmds);
+}
+
+struct BuiltIn {
+    const wchar_t* json;
+    void (*query)(UINT64 q, std::wstring const& text);
+    void (*invoke)(std::wstring const& item);
+    std::atomic<UINT64> handle{0};
+};
+static BuiltIn g_calc{L"{\"id\":\"calc\",\"name\":\"Calculator\",\"description\":\"Sums and unit conversions\",\"glyph\":\"\\uE8EF\"}",
+                      CalcQuery, nullptr};
+static BuiltIn g_kill{L"{\"id\":\"kill\",\"name\":\"Kill process\",\"description\":\"kill <name> ends a process\",\"glyph\":\"\\uE71A\"}",
+                      KillQuery, KillInvoke};
+static BuiltIn g_custom{L"{\"id\":\"commands\",\"name\":\"Custom commands\",\"description\":\"Keywords from the mod settings\",\"glyph\":\"\\uE756\"}",
+                        CommandsQuery, nullptr};
+
+static void SyncBuiltIn(BuiltIn& b, bool want) {
+    if (want && !b.handle) {
+        ProviderCallbacks cb;
+        cb.onQuery = [&b](UINT64 q, std::wstring const& text, std::wstring const&) { b.query(q, text); };
+        if (b.invoke)
+            cb.onInvoke = [&b](std::wstring const& item, std::wstring const&, std::wstring const&, std::wstring const&) {
+                b.invoke(item);
+            };
+        std::wstring err;
+        UINT64 h = RegisterProvider(b.json, std::move(cb), &err);
+        if (!h) Wh_Log(L"built-in provider failed: %s", err.c_str());
+        b.handle = h;
+    } else if (!want) {
+        if (UINT64 h = b.handle.exchange(0)) UnregisterProvider(h);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Lifetime
 // ---------------------------------------------------------------------------
 static void LoadSettings() {
+    g_settings.calculator = Wh_GetIntSetting(L"calculator") != 0;
+    g_settings.killProcess = Wh_GetIntSetting(L"killProcess") != 0;
+    LoadCommands();
     g_settings.demoProvider = Wh_GetIntSetting(L"demoProvider") != 0;
     g_settings.pipeServer = Wh_GetIntSetting(L"pipeServer") != 0;
     g_settings.queryTimeoutMs = Wh_GetIntSetting(L"queryTimeoutMs");
     if (g_settings.queryTimeoutMs < 100 || g_settings.queryTimeoutMs > 60000) g_settings.queryTimeoutMs = 2500;
     g_settings.restartIfLate = Wh_GetIntSetting(L"restartIfLate") != 0;
+}
+
+// Registers or removes the built-in providers to match the settings.
+static void SyncProviders() {
+    SyncBuiltIn(g_calc, g_settings.calculator);
+    SyncBuiltIn(g_kill, g_settings.killProcess);
+    bool haveCommands;
+    {
+        std::lock_guard l(g_commandsLock);
+        haveCommands = !g_commands.empty();
+    }
+    SyncBuiltIn(g_custom, haveCommands);
+    if (g_settings.demoProvider) RegisterDemo();
+    else UnregisterDemo();
 }
 
 static bool IsComposerProcess() {
@@ -2711,7 +3190,7 @@ BOOL Wh_ModInit() {
     }
     g_changeTimer = PoolTimer(ChangeTimerCb, nullptr);
     bool lateLoad = GetModuleHandleW(L"RunUX.AOT.dll") != nullptr;
-    if (g_settings.demoProvider) RegisterDemo();
+    SyncProviders();
     if (g_settings.pipeServer) StartPipe();
     if (lateLoad && g_settings.restartIfLate)
         if (PTP_TIMER t = PoolTimer(LateLoadCheck, nullptr)) ArmTimer(t, 1500);
@@ -2733,6 +3212,9 @@ void Wh_ModBeforeUninit() {
     for (auto& p : ProvidersSnapshot()) hs.push_back(p->handle);
     for (auto h : hs) UnregisterProvider(h, true);  // in-process clients get onDetach
     g_demo = 0;
+    g_calc.handle = 0;
+    g_kill.handle = 0;
+    g_custom.handle = 0;
     std::vector<std::shared_ptr<Query>> qs;
     {
         std::lock_guard l(g_queriesLock);
@@ -2759,6 +3241,10 @@ void Wh_ModUninit() {
         std::lock_guard l(g_queriesLock);
         g_queries.clear();
     }
+    {
+        std::lock_guard l(g_commandsLock);
+        std::vector<CustomCommand>().swap(g_commands);
+    }
     ReleaseFactories();
     // Windows may still hold objects whose code lives in this DLL (definitions, items' delegates,
     // finished async operations). Give it a moment to drop them after the Changed event; if it
@@ -2777,11 +3263,10 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    bool oldDemo = g_settings.demoProvider, oldPipe = g_settings.pipeServer;
+    bool oldPipe = g_settings.pipeServer;
     LoadSettings();
     if (!g_started || g_stopped) return;
-    if (g_settings.demoProvider && !oldDemo) RegisterDemo();
-    if (!g_settings.demoProvider && oldDemo) UnregisterDemo();
+    SyncProviders();
     if (g_settings.pipeServer && !oldPipe) StartPipe();
     if (!g_settings.pipeServer && oldPipe) StopPipe();
 }
