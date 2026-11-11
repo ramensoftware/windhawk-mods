@@ -2,7 +2,7 @@
 // @id              lockscreen-background
 // @name            Animated Wallpaper for the Windows Lock Screen
 // @description     Use local videos, GIFs, and images as the Windows 11 lock screen and optional sign-in wallpaper.
-// @version         0.2.14
+// @version         0.2.16
 // @author          sunnyturtle01
 // @github          https://github.com/quyle231003
 // @license         GPL-3.0
@@ -17,77 +17,45 @@
 /*
 # Animated Wallpaper for the Windows Lock Screen
 
-In File Explorer, right-click a local MP4, GIF, PNG, JPG or JPEG and select
-**Copy as path**. Paste the path into **Background file path**, then save.
-MP4 plays muted and loops. Animated GIFs play automatically. Select **Fill**
-to cover the screen or **Fit** to show the whole file.
+Play local MP4 videos, animated GIFs, and images on the Windows lock screen.
+Copy a file's path from File Explorer, paste it in **Settings**, and save.
+Sign-in setup instructions are beside **Play animated wallpaper on the sign-in screen**.
 
-Turn **Enable custom background** off or clear the file path to use the Windows
-background. The mod stores a per-user copy in Windhawk-managed mod storage.
-LockApp receives read access to the copy. The source file and its permissions
-stay unchanged.
+![Lock screen and sign-in preview](https://raw.githubusercontent.com/quyle231003/windhawk-mods/lockscreen-preview/lockscreen-preview.gif)
 
-Limits (strictly smaller than): MP4 100 MiB, GIF 10 MiB, PNG/JPEG 20 MiB.
-MP4 playback depends on the codecs installed in Windows. If the video cannot
-start, the mod shows the Windows background and logs the playback state.
-The mod adds a background layer in LockApp. Windows handles the stock clock,
-widgets and sign-in UI.
+<details>
+<summary>Compatibility and storage</summary>
 
-Turn on **Hide lock screen overlays** to hide the clock and date, music controls,
-widgets, Spotlight tips, and recognized network and battery icons on the lock
-screen before sign-in. Turn it off to restore those overlays. The PIN screen
-and its controls are outside this setting.
+- **Clock Styler** also hides the default clock and widgets. When using both
+  mods, leave **Hide lock screen overlays** off here and let Clock Styler
+  manage them. Its custom clock can remain visible. If both mods manage the
+  same Windows elements, turning one option off may reveal them until the
+  other reapplies its settings. For a wallpaper-only view, disable Clock
+  Styler and enable this mod's hide switch. This guidance is based on source
+  inspection. The combination has not been tested across Windows builds.
+- **Files** must be smaller than 100 MiB for MP4, 10 MiB for GIF, or 20 MiB
+  for PNG/JPEG. MP4 support depends on installed Windows codecs.
+- **Sign-in playback** loops the complete prepared clip at 18 fps. The frame
+  cache uses up to 512 MiB. Long clips are downscaled, and Windows wallpaper
+  is used if preparation fails or the cache is unavailable.
+- **Storage** includes a per-user media copy and a sign-in cache in Windhawk
+  mod storage. The source file keeps its original permissions. Caches stay
+  when the mod is disabled and are intended to be removed with the mod.
+  The sign-in cache belongs to the first Windows account that creates it.
+  Earlier test builds may have left LockscreenMotionBackground folders in
+  Public Pictures or ProgramData.
+- The Windows visual tree can vary between builds. The first Win+L after
+  recompilation can sometimes open the PIN screen directly.
 
+</details>
 
-## Sign-in background
-
-To enable the experimental sign-in background, allow **LogonUI.exe** in
-Windhawk's **Process inclusion list** and turn on **Play animated wallpaper
-on the sign-in screen** in the mod. In **Windows Settings → Personalization →
-Lock screen**, also turn on **Show the lock screen background picture on the
-sign-in screen**. If the Windows switch is off, the background can appear black.
-These switches affect the optional sign-in wallpaper only. Use **Enable custom
-background** to control the lock screen before sign-in.
-
-
-Save a local file path while signed in. Explorer prepares the complete video or
-GIF at 18 fps, and the sign-in screen loops it silently from beginning to end.
-The sign-in cache uses up to 512 MiB. Longer clips are downscaled to fit, and
-Windows wallpaper is used if the complete clip cannot fit within the budget.
-Wait for **Sign-in wallpaper ready** in the mod log before testing the first
-time. The sign-in screen can use the prepared frames before the first sign-in
-after restart. If the cache is unavailable or belongs to another file selection,
-the mod leaves the Windows background in place.
-The sign-in screen shows the first cached frame as soon as the credential
-view is visible. Animation starts once the view has settled.
-
-
-The cache is shared by sign-in screens on this PC and contains no audio. Its
-folder in Windhawk-managed mod storage is created for the first Windows account that enables this feature.
-SYSTEM has read access. Anyone looking at the sign-in screen can see the
-selected wallpaper. Test this feature in a VM before using it elsewhere.
-
-An unchanged media copy is reused. Disabling the mod stops playback and retains
-the cache for reuse. Windhawk removes this version's cache when the mod is
-removed. Earlier test versions may still have files in Public Pictures or
-ProgramData in folders named LockscreenMotionBackground.
-
-## Credits and license
+## Credits
 
 Sign-in UI discovery and the writable-bitmap approach were informed by
 [Lock Screen Live Wallpaper](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/lock-screen-live-wallpaper.wh.cpp)
-by grn15RenS (GPL-3.0). This mod is distributed under
-[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html). Media decoding runs in
-Explorer as the signed-in user. LogonUI displays the prepared raw frames.
-
-
-
-Test in a VM. The visual tree can vary across Windows builds. A synchronous
-UI dispatch can delay unloading if Windows becomes unresponsive.
-
-Adapted from the original lock screen prototype. UI discovery
-informed by Lock Screen Clock Styler by ali0zdas (MIT).
-https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler
+by grn15RenS (GPL-3.0). UI discovery was also informed by
+[Lock Screen Clock Styler](https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler)
+by ali0zdas (MIT). Distributed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html).
 */
 // ==/WindhawkModReadme==
 
@@ -97,10 +65,11 @@ https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler
   $name: Enable custom background
 - BackgroundPath: ""
   $name: Background file path
-  $description: >-
-    In File Explorer, right-click a local MP4, GIF, PNG or JPG and select Copy as path.
-    Paste it here and save. Example C:\Users\Public\Pictures\wallpaper.mp4.
+  $description: |
+    In File Explorer, right-click a local MP4, GIF, PNG or JPEG and choose Copy as path.
+    Paste it here and click Save. Example C:\Users\Public\Pictures\wallpaper.mp4.
     Clear this field to use the Windows background.
+    Preparing the optional sign-in wallpaper can take a moment after saving.
 - BackgroundFit: fill
   $name: Background fit
   $options:
@@ -108,17 +77,19 @@ https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler
     - fit: Fit (show the entire file)
 - HideLockScreenOverlays: false
   $name: Hide lock screen overlays
-  $description: >-
-    Hide the clock, date, music controls, widgets, Spotlight tips, network and battery icons before sign-in.
-    Turn this off to restore them.
-
+  $description: |
+    Hide the Windows clock, date, widgets, music controls, Spotlight tips and status icons before sign-in.
+    Turn this off when using Lock Screen Clock Styler to manage the clock and widgets.
+    A custom clock from another mod can remain visible.
 - SignInBackground: false
   $name: Play animated wallpaper on the sign-in screen
-  $description: >-
-    Experimental. Save a local file path to prepare the sign-in wallpaper automatically.
-    In Windows Settings → Personalization → Lock screen, also turn on
-    Show the lock screen background picture on the sign-in screen.
-    If that Windows switch is off, the sign-in background can appear black.
+  $description: |
+    Optional. Complete these steps to show animated wallpaper behind the PIN box.
+    1. Windhawk Portable users must exit Windhawk and open windhawk.exe with Run as administrator.
+    2. In Windhawk Settings > Advanced settings > More advanced settings > Process inclusion list, add LogonUI.exe, then Save and restart Windhawk.
+    3. In Windows Settings > Personalization > Lock screen, turn on Show the lock screen background picture on the sign-in screen.
+    4. Turn this option on, click Save and allow time to prepare the video. The mod log shows Sign-in wallpaper ready when finished.
+    Windows wallpaper is shown while the prepared cache is unavailable.
 */
 // ==/WindhawkModSettings==
 
@@ -139,6 +110,11 @@ https://github.com/ali0zdas/windhawk-mod-lock-screen-clock-styler
 #include <algorithm>
 #include <atomic>
 #include <string>
+#include <memory>
+#include <chrono>
+#include <string_view>
+#include <utility>
+
 
 namespace x = winrt::Windows::UI::Xaml;
 namespace c = winrt::Windows::UI::Xaml::Controls;
@@ -242,16 +218,25 @@ bool isManagedCopy(std::wstring const& path, std::wstring const& folder) {
     const auto name = path.substr(prefix.size());
     return name.find_first_of(L"\\/:") == std::wstring::npos && isManagedFilename(name);
 }
+std::wstring mediaRecord(bool* legacy = nullptr) {
+    wchar_t value[32768]{};
+    Wh_GetStringValue(mediaKey.c_str(), value, ARRAYSIZE(value));
+    std::wstring record(value);
+    if (legacy) *legacy = record.find(L'\n') != std::wstring::npos;
+    // Read the installed version's old records during upgrade.
+    if (record.find(L'*') == std::wstring::npos) {
+        std::replace(record.begin(), record.end(), L'\n', L'*');
+    }
+    return record;
+}
 std::wstring chosenPath(
     std::wstring const& selectedSource
 ) {
-    wchar_t path[32768]{};
-    Wh_GetStringValue(mediaKey.c_str(), path, ARRAYSIZE(path));
-    std::wstring entry(path);
-    const auto first = entry.find(L'\n');
+    const auto entry = mediaRecord();
+    const auto first = entry.find(L'*');
     if (first == std::wstring::npos || entry.substr(0, first) != selectedSource) return {};
-    const auto second = entry.find(L'\n', first + 1);
-    if (second == std::wstring::npos) return {};
+    const auto second = entry.find(L'*', first + 1);
+    if (second == std::wstring::npos || entry.find(L'*', second + 1) != std::wstring::npos) return {};
     auto copy = entry.substr(second + 1);
     return isManagedCopy(copy, cacheFolder()) ? copy : L"";
 }
@@ -381,10 +366,10 @@ std::wstring importFile(std::wstring const& source, std::wstring const& folder
     FILETIME modified{};
     checkWin32(GetFileTime(input.value, nullptr, nullptr, &modified));
     const auto ticks = (static_cast<uint64_t>(modified.dwHighDateTime) << 32) | modified.dwLowDateTime;
-    record = source + L'\n' + std::to_wstring(size.QuadPart) + L':' + std::to_wstring(ticks) + L'\n';
-    wchar_t previous[32768]{};
-    Wh_GetStringValue(mediaKey.c_str(), previous, ARRAYSIZE(previous));
-    std::wstring cached(previous);
+    // '*' cannot occur in a validated source, copy filename or stamp.
+    record = source + L'*' + std::to_wstring(size.QuadPart) + L':' + std::to_wstring(ticks) + L'*';
+    bool legacy = false;
+    const auto cached = mediaRecord(&legacy);
     if (cached.starts_with(record)) {
         auto copy = cached.substr(record.size());
         WIN32_FILE_ATTRIBUTE_DATA info{};
@@ -392,6 +377,10 @@ std::wstring importFile(std::wstring const& source, std::wstring const& folder
             GetFileAttributesExW(copy.c_str(), GetFileExInfoStandard, &info) &&
             !(info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
             !info.nFileSizeHigh && info.nFileSizeLow == size.QuadPart) {
+            // Migrate validated legacy records without copying the media.
+            if (legacy && !Wh_SetStringValue(mediaKey.c_str(), cached.c_str())) {
+                winrt::throw_hresult(E_FAIL);
+            }
             record.clear();
             Wh_Log(L"Reusing unchanged lock screen media copy");
             return copy;
