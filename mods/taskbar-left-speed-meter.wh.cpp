@@ -260,7 +260,6 @@ void RefreshSpeed() {
     }
 
     ULONGLONG curTick = GetTickCount64();
-    bool textUpdated = false;
 
     if (!hasBaseline) {
         // First sample: only store the baseline, show 0.
@@ -268,6 +267,8 @@ void RefreshSpeed() {
         SampleDeltas(&dIn, &dOut);
         prevTickCount = curTick;
         hasBaseline = true;
+        wcscpy_s(displayText, ARRAYSIZE(displayText),
+                 L"▼ 0.0 KB/s\n▲ 0.0 KB/s");
     } else {
         ULONGLONG elapsedMs = curTick - prevTickCount;
 
@@ -292,8 +293,7 @@ void RefreshSpeed() {
             else
                 swprintf(upStr, 64, L"▲ %.1f KB/s", upSpeed);
 
-            swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
-            textUpdated = true;
+            swprintf(displayText, 128, L"%ls\n%ls", downStr, upStr);
         }
     }
 
@@ -310,10 +310,9 @@ void RefreshSpeed() {
 
     UpdatePosition(hTaskbar);
     if (hWnd) {
-        // Repaint on text update, or when settings (color/font) changed.
+        // Repaint on every tick and also when settings (color/font) changed.
         InvalidateRect(hWnd, NULL, TRUE);
     }
-    (void)textUpdated;
 }
 
 LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
