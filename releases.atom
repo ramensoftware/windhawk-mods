@@ -2,12 +2,173 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-11T05:03:02.000Z</updated>
+    <updated>2026-11-11T06:01:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Sleep Countdown Reset 1.0.0]]></title>
+        <id>https://windhawk.net/mods/sleep-countdown-reset#3502d843ba0e5f409fcdd45af40e70ed49edd041</id>
+        <link href="https://windhawk.net/mods/sleep-countdown-reset"/>
+        <updated>2026-11-11T06:01:32.000Z</updated>
+        <content type="html"><![CDATA[<h1>Sleep Countdown Reset</h1>
+<p>Media servers such as Plex keep the PC awake while streaming, but idle time still accumulates. When playback ends and the request is released, Windows checks the expired idle time and sleeps immediately, leaving no time to start the next episode/media/exchange.</p>
+<p>This mod hooks the keep-awake APIs inside each server process. Right before the server releases the request, the mod takes over with its own, for a configurable grace period or, by default, the active power plan's sleep timeout. After this period, if playback does not return, the PC sleeps normally.</p>
+<p>Display timer and monitor state stay under Windows' control. While the grace period runs, <code>powercfg /requests</code> lists the mod's request under SYSTEM.</p>
+<h2>Supported servers</h2>
+<p>Included by default:</p>
+<ul>
+<li><strong>Plex Media Server</strong></li>
+<li><strong>Emby Server</strong> (<code>EmbyServer.exe</code>)</li>
+<li><strong>Jellyfin</strong> (<code>jellyfin.exe</code>): only with the third-party <a href="https://github.com/jonschz/jellyfin-plugin-preventsleep">Prevent Sleep plugin</a>, since Jellyfin alone doesn't keep the PC awake. On PCs with Modern Standby the plugin switches power plans instead, which this mod can't see.</li>
+</ul>
+<p>Can be added (see below):</p>
+<ul>
+<li><strong>Universal Media Server</strong>: <code>javaw.exe</code>, with its &quot;Prevent sleep&quot; option set to <em>Playback</em>. That process name is shared by every Java program, so they all get the grace period.</li>
+<li><strong>qBittorrent</strong> (<code>qbittorrent.exe</code>), with &quot;Inhibit system sleep&quot; enabled: grace period after downloads finish.</li>
+</ul>
+<p>Not needed: remote desktop and game streaming hosts (Sunshine, Parsec, Steam Remote Play). They forward the remote keyboard and mouse as local input, so Windows already counts the user as present.</p>
+<p>Not covered: Windows file sharing (SMB). It runs inside the kernel, with no process to hook.</p>
+<h2>Adding a program</h2>
+<ol>
+<li>While the program is serving, run <code>powercfg /requests</code> in a terminal as administrator. The program must be listed under SYSTEM or EXECUTION.</li>
+<li>In Windhawk, open this mod's <strong>Advanced</strong> tab, add the executable name (e.g. <code>qbittorrent.exe</code>) to the <strong>custom process inclusion list</strong>, and save.</li>
+<li>With debug logging enabled, the log should show <code>hooked SetThreadExecutionState</code> for the new process. If the program runs as a Windows service and nothing shows up, check that Windhawk is allowed to inject into services.</li>
+</ol>
+<h2>Limitation</h2>
+<p>If the server process exits while holding the request, Windows drops it without any API call, and the mod can't see the release.</p>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mutelith 1.0]]></title>
+        <id>https://windhawk.net/mods/mutelith#96ae8af8587ea08e5b6b93f51fc38e894479d4d5</id>
+        <link href="https://windhawk.net/mods/mutelith"/>
+        <updated>2026-11-11T06:01:26.000Z</updated>
+        <content type="html"><![CDATA[<h1>Mutelith</h1>
+<p>Fixes <strong>Discord double audio when screen sharing</strong> on Windows setups that use
+virtual audio devices, where viewers hear the game or desktop audio twice, or
+hear their own microphone coming back with a delay.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Target device (Discord muted)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SteelSeries Sonar</td>
+<td><code>SteelSeries Sonar - Microphone</code></td>
+</tr>
+<tr>
+<td>FxSound</td>
+<td><code>FxSound Speakers</code></td>
+</tr>
+</tbody>
+</table>
+<p>The provider is detected from the <strong>default output device</strong>.</p>
+<p>While Discord is running, the mod:</p>
+<ol>
+<li>Mutes Discord on the provider's target device and on every device outside
+the provider (speakers, headphones). Only the mute changes, never the
+volume.</li>
+<li>Leaves the provider's other virtual devices alone.</li>
+<li>When the mod is disabled, or the default device switches to another
+provider, unmutes Discord on the devices the rule no longer covers.</li>
+</ol>
+<p>With FxSound, <code>FxSound Speakers</code> is usually the only FxSound device, so every
+other output device is outside the provider and Discord is muted on all of
+them, voice chat included.</p>
+<p>It reacts to Windows audio notifications right away (default device changed,
+device added or removed, new audio session such as a screen share, a muted
+session was unmuted) and also checks every 30 seconds.</p>
+<h2>Windows remembers the mute</h2>
+<p>The mute is Discord's per-app setting in the Volume Mixer, and Windows saves it
+for each output device, so it outlives the mod. The mod records each device it
+muted Discord on and unmutes Discord there once the rule no longer covers it,
+including after a crash. Windows only lets the mod do that while Discord is
+running and to have an audio session on that device. If Discord isn't listed
+for a device in the Volume Mixer when you disable the mod, Discord stays muted
+there: open the Volume Mixer and unmute Discord, or enable the mod again while
+Discord is playing audio on that device and switch the default device away from
+the provider. A mute you set yourself in the Volume Mixer is left alone.</p>
+<h2>Mutelith app</h2>
+<p>This is the same rule as the <a href="https://github.com/Faelayis/Mutelith">Mutelith app</a>.
+<strong>Use one or the other:</strong> while <code>Mutelith.exe</code> is running, the mod does nothing.</p>
+<p>Designed and tested for one virtual audio provider at a time.</p>
+]]></content>
+        <author>
+            <name>Faelayis</name>
+            <uri>https://github.com/Faelayis</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[OSD Custom Pill 4.9.11]]></title>
+        <id>https://windhawk.net/mods/osd-custom-pill#846566ad0a12e2c56705ffe9ce69c613eba3ee9d</id>
+        <link href="https://windhawk.net/mods/osd-custom-pill"/>
+        <updated>2026-11-11T06:01:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>OSD Custom Pill</h1>
+<p>An animated on-screen indicator for volume, brightness and virtual desktops on Windows 11.</p>
+<p><img src="https://raw.githubusercontent.com/yelloxygene/osd-custom-pill-assets/main/osd%20custom%20pill%20GIF.gif" alt="OSD Custom Pill preview"></p>
+<h2>Volume and brightness</h2>
+<p>Shows an icon, a progress bar and the current value. The indicator expands when it appears and retracts when it closes.</p>
+<h2>Elastic deformation</h2>
+<p>Increasing a value moves and stretches the pill to the right; decreasing it moves the pill to the left. Repeated changes build up the deformation. When you release the key, the pill returns with a spring effect.</p>
+<p>The <strong>movement</strong>, <strong>stretching</strong>, <strong>spring damping</strong> and <strong>return strength</strong> can be adjusted independently in the mod settings.</p>
+<h2>Compact mode</h2>
+<p>After several changes in a row, the indicator can become smaller to take up less space. You can choose how many changes activate this mode and when it returns to normal.</p>
+<h2>Size and position</h2>
+<p>Adjust the pill's width, height and distance from the bottom of the screen. Opening and closing delays can also be changed.</p>
+<h2>Virtual desktops</h2>
+<p>Displays the current virtual desktop name or number when switching desktops. This indicator has its own size, position, animation and duration settings.</p>
+<h2>Settings</h2>
+<p>All options are available in Windhawk's <strong>Settings</strong> tab, with translated labels in supported languages. The main groups are:</p>
+<p><strong>Appearance and position</strong> — dimensions and screen placement.</p>
+<p><strong>Opening and closing</strong> — delays and spring response.</p>
+<p><strong>Stretching and rebound</strong> — movement distance, deformation and elastic return.</p>
+<p><strong>Compact mode</strong> — activation threshold and return timing.</p>
+<p><strong>Virtual desktop indicator</strong> — label, dimensions, timing and animation.</p>
+<p>Timing values are in milliseconds. Size values are based on 100% display scaling.</p>
+]]></content>
+        <author>
+            <name>yelloxygene</name>
+            <uri>https://github.com/yelloxygene</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Arabic Keyboard Layout Fixer 1.3.0]]></title>
+        <id>https://windhawk.net/mods/arabic-keyboard-layout-fixer#ed1b621d1514b24642705f2855e0b48466c1afde</id>
+        <link href="https://windhawk.net/mods/arabic-keyboard-layout-fixer"/>
+        <updated>2026-11-11T06:01:15.000Z</updated>
+        <content type="html"><![CDATA[<h1>Arabic Keyboard Layout Fixer</h1>
+<p>Fixes the common frustration of typing Arabic text while the keyboard is accidentally set to English (or vice versa).</p>
+<h3>How to use:</h3>
+<ol>
+<li>Select/highlight any mistyped text in any app (Notepad, Word, Browser, ERP, etc.).</li>
+<li>Press <strong>Alt + Z</strong> (or your custom configured hotkey).</li>
+<li>The text instantly flips to the correct language!</li>
+</ol>
+<h3>Features:</h3>
+<ul>
+<li><strong>Bi-directional (AR &lt;-&gt; EN):</strong> Automatically detects language direction.</li>
+<li><strong>Smart Shift / Caps Lock fix:</strong> Resolves accidental Shift / Caps-Lock misfires.</li>
+<li><strong>Configurable hotkeys:</strong> Customize your hotkey from mod settings without conflicts.</li>
+<li><strong>Universal compatibility:</strong> Works in modern browsers, Office, and legacy Win32/ERP applications.</li>
+<li><strong>Dedicated tool process:</strong> Runs safely as an independent background tool mod.</li>
+<li><strong>Full clipboard preservation:</strong> Restores all clipboard formats (images, files, text) and keeps history clean.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Omar</name>
+            <uri>https://github.com/uomr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Translucent Menus 1.0.2]]></title>
         <id>https://windhawk.net/mods/explorer-translucent-menus#835b475ed345822f8b1527367ac17306e4b85c8e</id>
@@ -1974,331 +2135,6 @@ the drive. Use it only if you can't close the programs.</li>
         <author>
             <name>Ender</name>
             <uri>https://github.com/EnderDragonEP</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Automatic WhatsApp Audio Ducking 1.0]]></title>
-        <id>https://windhawk.net/mods/automatic-whatsapp-audio-ducking#0e5cd2eed2bcbee826399b14c5a77ce0306fd307</id>
-        <link href="https://windhawk.net/mods/automatic-whatsapp-audio-ducking"/>
-        <updated>2026-11-06T20:00:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Automatic WhatsApp Audio Ducking</h1>
-<p>While WhatsApp or other chosen apps (voice messages, videos, calls' media, ...) produce sound, the
-per-app volume of the configured target apps (default: Spotify) is lowered to
-a fixed percentage. When WhatsApp or the specified apps have been silent for a short moment, the
-original volume is restored.</p>
-<p>This only changes the per-app volume slider of the Windows volume mixer, not
-the system volume.</p>
-<h2>Choosing messengers</h2>
-<p>In the settings under &quot;Messengers&quot; you can switch on WhatsApp (default),
-Telegram, Signal, Discord, Microsoft Teams, Zoom, Slack, Viber and Element.
-Any other app can be added by its process name under &quot;Additional trigger apps&quot;
-(e.g. <code>Threema.exe</code>).</p>
-<h2>Calls</h2>
-<p>Windows lowers other apps by itself during calls (communication streams) unless
-&quot;Do nothing&quot; is selected in the Sound control panel (Communications tab). The
-mod detects such calls via the Windows ducking notification and stays out of
-the way, so the volume is not lowered twice (changeable with &quot;Also duck calls
-that Windows already ducks&quot;). If a call is not flagged by Windows but a
-selected messenger has an open microphone stream, the mod ducks for the whole
-call, also between ringtones and beeps. The log shows who handles the call.</p>
-<h2>Notes</h2>
-<ul>
-<li>Messengers are detected by process name. Audio from <code>msedgewebview2.exe</code>
-helper processes started by a selected messenger counts as well; other child
-processes (e.g. a browser opened from a link) do not.</li>
-<li>If nothing happens, check the Windhawk log: the mod logs the process name of
-every audio session it sees when a new one appears.</li>
-<li>If you change the volume of a target app yourself while it is ducked, your
-value is taken as the new &quot;original&quot; volume.</li>
-<li>All active playback devices are handled.</li>
-<li>The mod only works while audio is involved: it waits for Windows audio events
-and does not poll while no trigger app has an open audio stream.</li>
-<li>Windows remembers the volume of each app. While an app is ducked, the mod
-keeps a record of its original volume in Windhawk's storage, so the volume is
-restored after a restart of the mod, a closed and reopened app or a changed
-playback device. If an app stays closed while the mod is turned off, Windows
-can keep its lowered volume until you raise it in the volume mixer.</li>
-</ul>
-<h2>Warning:</h2>
-<p>I used AI (Claude Sonnet 5.5) to create this mod. I am not responsible for any damage using this mod may cause. Use at your own risk.
-However I did ask Claude to check for security vulnerabilities.</p>
-]]></content>
-        <author>
-            <name>wa0dim</name>
-            <uri>https://github.com/wa0dim</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Charging Animation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/charging-animation#e08adc83efe20a754ebb2e18bf528578b3822bf5</id>
-        <link href="https://windhawk.net/mods/charging-animation"/>
-        <updated>2026-11-06T04:00:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Charging Animation</h1>
-<p>Plays an animation, shows a battery stats card (optionally with sound) when the charger is plugged in or unplugged.</p>
-<p>The animation and the card are separate, and either one can be turned off. The settings are split into
-three groups (BackgroundEffect, Sounds and StatsPanel) plus a single Quiet mode switch at the bottom. Rows
-that your choices don't use hide themselves, so the list stays short.</p>
-<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/windows-charging-animation/main/assets/sample.gif" alt="Charging Animation in action"></p>
-<h2>Background Effect</h2>
-<p><code>When plugged in</code> and <code>When unplugged</code> decide which events play anything at all. The rest of the section is
-shared by both, apart from the two colors and the unplug direction. The sounds have a section of their own.</p>
-<p>There are six looks. <code>Animation</code> picks the one you want.</p>
-<p><strong>Wave</strong> is the default. It takes a picture of the desktop and bends it outward along an expanding ring,
-tinted with the event color. <code>Origin</code> moves where it starts, either one of nine spots on the screen under
-the pointer or <code>Cursor Position</code> to use the pointer itself.</p>
-<p><strong>Linear Wave</strong> is the same refraction with a straight front instead of a ring. A pair of fronts leave
-<code>Origin</code> together and run along the line it sits on, one each way, so <code>Top</code> washes the screen downward,
-<code>Left</code> sweeps it left to right and a corner sends it across at an angle. With <code>Center</code> the two fronts part
-in the middle and run out to either side. The band of light rides them and <code>Motion</code> shapes the speed in the
-same way. <code>Reverse</code> on an unplug runs them back in, so the desktop drains toward the origin instead of
-being pushed away from it.</p>
-<p><strong>Edge Glow</strong> never touches the desktop. A band of light swells out of the screen borders, and one bright
-spot travels around them while it's up, coming in from the border nearest <code>Origin</code>. Set the color to
-<code>rainbow</code> and the band becomes a gradient running around the screen; <code>Motion</code> sets how the spot speeds up
-and slows down.</p>
-<p><strong>Bezel</strong> presses the screen in. A dark frame grows out of all four edges, its inner lip catching a little
-light, and the desktop, captured once when the animation starts, is shrunk to fit inside it, so the whole
-picture slides inward instead of the edges being covered. Nothing on the picture is stretched: it shrinks
-by the same amount both ways, so the frame comes out a little thinner across the top and bottom. The
-picture sinks into the frame's shadow and creeps a little deeper as it settles, then holds and lets go.
-Because the shrunk picture is a still image, the effect gives up after about two seconds whatever <code>Duration</code>
-says. While it runs, the monitor keeps showing that still picture, so anything moving on screen looks
-frozen for those two seconds, even though clicks still reach the windows underneath. The frame is plain
-black and grey throughout, with no tint on it. <code>Strength</code> sets how far in it comes, about 16 pixels on the
-long edge at the default. It presses all four edges by the same amount, so it has no starting point and no
-direction of travel: <code>Origin</code> and <code>Unplug direction</code> are hidden while Bezel is chosen.</p>
-<p><strong>Circuit Trace</strong> is the quiet one. A circuit board wakes along the bottom of the screen, above the
-taskbar: a power rail steps across the width of the monitor at forty-five degrees, a bundle of thin signal
-lines runs beside one stretch of it and fans away at both ends, risers drop off the rail into drilled vias,
-and elbows turn up out of the bottom corners. A charge runs along each trace in turn, close to white at its
-head with a long tail of light behind it, and the via it is heading for rings as it arrives. Between pulses
-the copper only glows faintly, the way a board runs on standby power, and then the whole thing fades out.
-Nothing is captured from the desktop. <code>Strength</code> sets how thick the traces are and how far their glow
-spills, and the layout is different on every event. The board runs along the bottom edge rather than around
-a point, so it has no <code>Origin</code>; <code>Reverse</code> on an unplug sends each charge the other way, out of the far end
-and back into the rail, so the board drains instead of charging.</p>
-<p><strong>Matrix Code</strong> is the busy one. Columns of characters drop down the screen, each a bright head over a
-trail that dims as it falls, and some cells in a trail stay dark, which is what turns a solid bar into a
-stream of characters. The head of every column keeps flickering to a new character while it travels, and
-the columns are let go from the <code>Origin</code> outward, so the cascade spreads across the monitor in one sweep.
-The characters are the event color, with the head of each column close to white, and on <code>rainbow</code> the
-columns take different points of the gradient. Nothing is captured from the desktop. <code>Strength</code> sets how
-long the trails are. Like the bezel it is a burst rather than a slow move, so it gives up after about two
-seconds whatever <code>Duration</code> says. <code>Reverse</code> on an unplug turns the cascade around: the characters run
-upward, and the release starts at the edges and closes in on <code>Origin</code> instead of spreading out from it.</p>
-<p><strong>Colors.</strong> <code>Plugged-in color</code> and <code>Unplugged color</code> each tint their own event. Pick one from the list, or
-choose Custom and type into the field that appears underneath. On Windhawk 2.0 that field is a color
-picker. These all work:</p>
-<table>
-<thead>
-<tr>
-<th>Format</th>
-<th>Example</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>A name</td>
-<td><code>purple</code>, <code>mint</code>, <code>gold</code></td>
-</tr>
-<tr>
-<td>Short hex</td>
-<td><code>#48F</code></td>
-</tr>
-<tr>
-<td>Hex</td>
-<td><code>#4285F4</code></td>
-</tr>
-<tr>
-<td>RGB</td>
-<td><code>66,133,244</code></td>
-</tr>
-<tr>
-<td>Windows accent</td>
-<td><code>accent</code></td>
-</tr>
-<tr>
-<td>Rolling gradient</td>
-<td><code>rainbow</code></td>
-</tr>
-</tbody>
-</table>
-<p>A name that isn't recognized falls back to the event default, blue for plugging in and red for unplugging,
-so a typo doesn't break anything.</p>
-<p><strong>Strength, Duration, Motion and Opacity</strong> control the size and the timing. <code>Strength</code> (0-40) is how far
-the desktop bends, how wide the light band is, how deep the push goes, how thick the traces are, how long
-the cascade trails; at 0 the wave keeps only its glow. <code>Duration</code> (300-5000 ms) is how long the animation
-runs, though the bezel and the cascade stop well before it, <code>Opacity</code> (0-100) fades all of it, and <code>Motion</code>
-picks the easing used by Wave and Edge Glow.</p>
-<p><strong>Dim screen</strong> darkens the monitor the animation plays on, the way a phone dims its display when it starts
-charging. It fades in over the first quarter second, stays down for the length of the animation and fades
-back out at the end, so nothing snaps. The range is 0-90, so the screen is never fully black. The battery
-card sits above the dim and stays bright, only the monitor the animation plays on is dimmed, and with the
-animation turned off for an event there is nothing to dim.</p>
-<p><strong>Unplug direction</strong> picks which way the unplug travels. <code>Forwards</code> plays it exactly like a plug-in,
-expanding from the origin; <code>Reverse</code> starts at the screen edges and collapses back to the origin, like the
-charge being pulled away. Wave, Edge Glow, Circuit Trace and Matrix Code use it, and Bezel hides it because
-it has nowhere to travel.</p>
-<h2>Sounds</h2>
-<p>Both fields take a path to a .wav file, or a system sound alias such as <code>Notification.IM</code> or
-<code>WindowsBackground</code>. Leave a field empty for no sound. If you want the sound on its own, turn off the
-animation and the card for that event. If the Charging Sound mod is also set to play on the same event,
-both sounds will play.</p>
-<h2>Stats Panel</h2>
-<p><code>When plugged in</code> and <code>When unplugged</code> choose which events show the card, so you can keep it for plugging
-in only, for unplugging only, for both or for neither. The rest of the section applies either way.</p>
-<p><strong>Fluent (Windows 11-ish)</strong> is the default. It's an acrylic card: the desktop behind it is blurred once
-when the card appears and covered with the theme color, with a thin border and a soft shadow on top. A
-battery icon sits in a tinted tile next to the percentage, there's a status line under the number, and a
-level bar that fills from empty as the card slides in and turns red below 20% while on battery.</p>
-<p><strong>Fluent (Minimal)</strong> is the same card at badge size, with half the padding, a smaller number, no status
-line and a thinner bar.</p>
-<p><strong>PineApple (Card)</strong> is the plain system HUD: a rounded square, as wide as it is tall, black in dark mode
-and white in light mode, with a large battery icon on top, the percentage below it, the status line under that
-and a full-width capsule bar along the bottom. The accent color isn't used anywhere in it, and the icon and
-the bar turn red when the battery runs low. It fades and pops in quickly instead of sliding; <code>Center</code> is the
-usual place to put it.</p>
-<p><strong>Galaxy UI</strong> is the wide soft card with corners that take about a third of its height. The percentage is
-twice the normal size, with a bolt in a round tinted badge next to it, the status line underneath and one
-thin bar running the full width along the bottom edge. On an unplug the badge shows a battery instead of
-the bolt. The surface is nearly opaque, so the desktop behind only tints it.</p>
-<p><strong>PineApple (Circle)</strong> is the phone charging screen: a thick ring that fills clockwise to the battery
-level, a bolt and the percentage in the middle, and the status line on a small frosted pill underneath.
-The middle of the dial is a soft patch of the blurred desktop, so the number sits on a little frost
-instead of bare wallpaper, and the patch fades away before it reaches the ring, which keeps the dial
-floating instead of turning it into a card. The number and the bolt also carry a soft shadow that keeps
-them readable on a bright background. It springs in with a small overshoot, sweeps the ring once, and
-shrinks away when it closes.</p>
-<p>The Fluent and Galaxy cards follow the Windows app theme; the PineApple card flips between black and
-white with it, so it stays readable on either wallpaper. All five update once a second and fade out at the
-end.</p>
-<p><strong>Position, accent and the rest.</strong> <code>Position</code> is where the card appears: <code>Follow Effect Origin</code> keeps it
-where the animation started, and the other choices are the corners, the edges, <code>Center</code> and the cursor. It
-always stays inside the working area, so the taskbar isn't covered. <code>Accent color</code> sets the tint, with
-<code>Match Effect Color</code> taking the color from the event that brought the card up (the gradient included) and
-<code>Custom</code> reading the field below it in any of the formats above; the PineApple card has no tint to
-give it, so it ignores this one. Turning <code>Details</code> off drops the status line, and <code>Duration</code>, <code>Opacity</code> and
-<code>Font size</code> tune the rest.</p>
-<h2>Quiet Mode</h2>
-<p>While a full-screen app, a game or presentation mode is running, Quiet mode skips the animation, the sound
-and the card. On a locked screen or during the screen saver there is nobody to see the visuals, so the
-animation and the card are skipped then as well, whether Quiet mode is on or off, and only the sound plays.</p>
-<h2>Credits</h2>
-<p>Wave Effect inspired by <a href="https://windhawk.net/mods/magic-pointer">Magic Pointer Mod</a></p>
-<p>Power notification handling adapted from <a href="https://windhawk.net/mods/charging-sound">Charging Sound</a></p>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Centralizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-centralizer#877a07f2d63957f5bd9ce4329762e847731fdf8c</id>
-        <link href="https://windhawk.net/mods/window-centralizer"/>
-        <updated>2026-11-06T04:00:18.000Z</updated>
-        <content type="html"><![CDATA[<h1>Window Centralizer</h1>
-<p>New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.</p>
-<p>The window is placed <strong>before</strong> it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.</p>
-<h2>Modes</h2>
-<ul>
-<li><strong>Parent window / monitor</strong>: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.</li>
-<li><strong>Parent monitor only</strong>: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.</li>
-<li><strong>Mouse cursor</strong>: centered on the mouse cursor.</li>
-</ul>
-<p>In every mode the window is kept inside the monitor's work area.</p>
-<h2>Which windows are moved</h2>
-<ul>
-<li>Only windows with a title bar that are smaller than the <strong>window size limit to target</strong> setting (a percentage of the monitor's work area). Large main windows keep their assigned position.</li>
-<li>Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.</li>
-<li>Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, so they can be seen jumping after appearing.</li>
-<li>Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.</li>
-<li>A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.</li>
-<li>Some programs move their window again right after showing it (Firefox). The mod takes care of that. Initial moves by other tools (FancyZones), and the user's own dragging, are left alone.</li>
-</ul>
-<h2>Ignoring windows</h2>
-<p>Press <strong>Win+Alt+I</strong> while a window is active to stop centering that kind of window. Press it again to undo. A short notification confirms the option.</p>
-<p>It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.</p>
-<p>The <strong>Ignored windows</strong> list opens with <strong>Win+Ctrl+Alt+I</strong>, and entries can be reviewed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.</p>
-<p>Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.</p>
-<h2>Compatibility</h2>
-<p>Don't use this mod together with <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp">Center New Windows</a>. Both reposition windows as they are shown, so the same window would be moved twice, especially dialogs when that mod's &quot;Always center dialogs&quot; option is on.</p>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compiz Desktop Cube for Windows 11 5.9.0]]></title>
-        <id>https://windhawk.net/mods/compiz-desktop-cube#77263ff11741f7176db8df91469373cfffa6ee84</id>
-        <link href="https://windhawk.net/mods/compiz-desktop-cube"/>
-        <updated>2026-11-06T03:04:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Compiz Desktop Cube for Windows 11</h1>
-<p><img src="https://raw.githubusercontent.com/Soham-Barate/compiz-desktop-cube-windows11/main/images/cube-demo.gif" alt="Compiz Desktop Cube Preview"></p>
-<p>A Compiz / GNOME style 3D desktop prism for Windows 11 virtual desktops.
-Built on Windows.UI.Composition + Direct2D with a GPU blurred background.</p>
-<h2>How to use</h2>
-<ol>
-<li>Press and hold the <strong>left mouse button</strong> on <strong>empty space</strong> of the taskbar
-(works with an auto-hide taskbar too).</li>
-<li>Drag <strong>upward</strong>. The desktop shrinks gradually into the cube.</li>
-<li>Keep holding and drag <strong>left / right</strong> to turn it. After a moment <strong>up / down</strong> tilts it.</li>
-<li><strong>Mouse wheel</strong> zooms the cube in and out (scroll up = closer, scroll down = farther).
-(Optional: set &quot;Mouse Wheel Action&quot; to the window switcher to get the Alt+Tab style window cycling instead.)</li>
-<li><strong>Add / remove desktops:</strong> while the cube is open, <strong>right-click the right edge</strong> of the screen to add a desktop (+1) or
-<strong>right-click the left edge</strong> to remove one (-1). The frosted gray zones are hidden by default: move the pointer to the far left or
-far right edge and the matching zone (a - or a +) slides in. It stays while the pointer is inside it, flashes when
-you use it and hides again. &quot;-&quot; closes the LAST desktop (its windows move to the previous one). The cube rebuilds itself
-with a little spin and the new face fades in.</li>
-<li>Release. The cube snaps to the nearest face and switches desktop.
-A quick flick also switches. Press <strong>Escape</strong> to cancel.</li>
-</ol>
-<h2>Faces follow your desktop count</h2>
-<ul>
-<li>1 desktop: a single face with limited rotation.</li>
-<li>2 desktops: two faces (a flip card).</li>
-<li>3, 4, 5, 6 desktops: triangle, cube, pentagon, hexagon.</li>
-<li>More than 6 desktops: hexagon, faces are re-mapped while you turn it, so every desktop is reachable.</li>
-</ul>
-<h2>Live desktop</h2>
-<ul>
-<li>The desktop you are on is streamed LIVE (Desktop Duplication) into the front face
-and into the blurred background. A video that is playing keeps playing, blurred
-behind the cube and sharp on the face while it turns.</li>
-<li>The cube overlay is excluded from capture, so it never shows up inside itself.</li>
-<li>Desktops you are not on are rebuilt from your wallpaper plus a capture of each of
-their windows (PrintWindow). Windows that cannot be captured are simply left out
-(no more black placeholder cards). Those faces cannot be live, Windows does not
-render apps of other virtual desktops.</li>
-<li>If Desktop Duplication is not available (some hybrid GPU laptops), a slower GDI
-live capture is used automatically.</li>
-</ul>
-<h2>Smoothness</h2>
-<ul>
-<li>Persistent render thread, devices stay warm between gestures (pre-warmed as soon as you press the taskbar).</li>
-<li>Mouse input is read on the render thread, not on the busy taskbar thread.</li>
-<li>Rendering is locked to the monitor's vertical blank, so it follows 60 / 120 / 144 / 240 Hz by itself. All motion is time based.</li>
-<li>Live frames are presented without ever blocking the render thread, so a busy GPU can no longer make the cube miss a refresh.</li>
-<li>Power: no permanent 1 ms timer, normal-ish thread priorities, the blurred background refreshes at a low rate, and while the cube is held still the render loop drops to about 30 Hz (it jumps back to full refresh the instant you move the mouse).</li>
-<li>Turn on &quot;Enable Diagnostic Logging&quot; to see the measured fps and the monitor Hz in the Windhawk log.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The real taskbar is hidden from the capture, so every face is the full, uncropped desktop (wallpaper where the taskbar was). The taskbar is restored the moment the gesture ends. If Windows refuses to hide it, the old crop is used as a fallback.</li>
-<li>Window switcher: every window becomes a live thumbnail card (the selected one is refreshed every frame, the others a few times per second). It shows what is visible on screen, so a part hidden behind another window shows that other window.</li>
-<li>The GPU device is created on the graphics adapter that drives your monitor, so screen capture stays on the fast path.</li>
-<li>PrintWindow cannot render every app (some games, protected content). Those windows are left out of other desktops' faces.</li>
-<li>The overlay is hidden from screenshots and screen recorders on purpose (needed for the live capture).</li>
-<li>Desktop switching sends Win+Ctrl+Left/Right. No undocumented COM is used.</li>
-<li>Screen recording: turn on &quot;Screen Recording Mode&quot; in the mod settings to make the cube visible to recorders (it applies the next time you open the cube). The front face is a still picture while it is on.</li>
-<li>The Windows desktop slide animation is hidden only while the cube switches desktops (explorer is told &quot;animations off&quot; for that moment). Your Windows &quot;Animation effects&quot; setting is never changed.</li>
-<li>If you still see a slide on your build, raise &quot;Switch Settle Delay&quot;.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Soham</name>
-            <uri>https://github.com/Soham-Barate</uri>
         </author>
     </entry>
 </feed>

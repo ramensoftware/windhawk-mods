@@ -803,6 +803,31 @@
         "version": "1.0"
       }
     },
+    "arabic-keyboard-layout-fixer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794376875000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794376875000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Omar",
+        "compilerOptions": "-luser32",
+        "description": "Instantly converts mistyped Arabic/English text with Alt+Z across any application.",
+        "github": "https://github.com/uomr",
+        "homepage": "https://github.com/uomr/keyboard-layout-fixer",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Arabic Keyboard Layout Fixer",
+        "version": "1.3.0"
+      }
+    },
     "audio-hardware-volume-preset": {
       "details": {
         "defaultSorting": 480,
@@ -11551,6 +11576,31 @@
         "version": "0.9.14"
       }
     },
+    "mutelith": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794376886000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794376886000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Faelayis",
+        "compilerOptions": "-lole32 -lshell32 -lpowrprof -ladvapi32",
+        "description": "Stops Discord Screen Share echo with SteelSeries Sonar or FxSound: viewers no longer hear audio twice or their own voice",
+        "github": "https://github.com/Faelayis",
+        "homepage": "https://github.com/Faelayis/Mutelith",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Mutelith",
+        "version": "1.0"
+      }
+    },
     "native-brightness": {
       "details": {
         "defaultSorting": 480,
@@ -12671,6 +12721,36 @@
         "license": "MIT",
         "name": "Open in Admin Terminal",
         "version": "1.17.1"
+      }
+    },
+    "osd-custom-pill": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794376881000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794376881000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "yelloxygene",
+        "compilerOptions": "-lole32 -lgdi32 -luser32 -ldxva2 -luuid -ldwmapi -ladvapi32 -lshcore",
+        "description": "Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다",
+        "github": "https://github.com/yelloxygene",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "OSD Custom Pill",
+        "version": "4.9.11"
+      },
+      "metadataEnglish": {
+        "description": "Replaces the Windows volume, brightness, and virtual desktop OSD with an animated spring pill"
       }
     },
     "osu-tray-profile": {
@@ -15100,6 +15180,32 @@
         "license": "GPL-3.0",
         "name": "Siri Plus Launchpad",
         "version": "1.1.0"
+      }
+    },
+    "sleep-countdown-reset": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794376892000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794376892000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "3DDinosaur",
+        "compilerOptions": "-lpowrprof",
+        "description": "Delays idle timer countdown when external devices access the computer, avoiding shutdown between requests (media, data transfer, etc.)",
+        "github": "https://github.com/3DDinosaur",
+        "include": [
+          "Plex Media Server.exe",
+          "EmbyServer.exe",
+          "jellyfin.exe"
+        ],
+        "name": "Sleep Countdown Reset",
+        "version": "1.0.0"
       }
     },
     "slick-window-arrangement": {
