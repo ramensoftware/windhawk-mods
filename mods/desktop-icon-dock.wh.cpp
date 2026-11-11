@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              desktop-icon-dock
 // @name            Desktop Icon Dock
-// @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; six background styles from clear to Liquid Glass
+// @description     A standalone macOS-style desktop dock. Drag shortcuts, files and folders in, reorder them, or drag them back to the desktop. It keeps its own list and offers six background styles, from Clear to Liquid Glass.
 // @version         2.1.2
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
