@@ -875,7 +875,7 @@ RestartPromptText GetRestartPromptText(RestartPromptEvent event)
     default:
         return {
             L"Restart Explorer to restore the disabled shortcuts",
-            L"This mod is being disabled or reloaded, but Explorer is still holding back the shortcuts it blocked. Restart Explorer now to restore them?"
+            L"This mod is being disabled or reloaded, but Explorer is still holding back the shortcuts it blocked. Restart Explorer now to restore them? If the mod is only being updated, choose No."
         };
     }
 }
@@ -938,9 +938,10 @@ void PromptForExplorerRestart(RestartPromptEvent event)
 }
 
 // Windhawk keeps the enabled state of each mod in the "Disabled" value under this key.
-// The layout is not documented, so any failure is reported as "unknown" and the prompt
-// then simply behaves as if the mod could not be re-enabled while it is shown.
-constexpr WCHAR kModConfigKey[] = L"SOFTWARE\\Windhawk\\Engine\\Mods\\disable-windows-shortcuts";
+// WH_MOD_ID is the id of the running build (it includes the "local@" prefix of a local build).
+// The layout is not documented and does not exist in portable mode, so any failure is reported
+// as "unknown" and the prompt then simply waits as if the mod could not be re-enabled meanwhile.
+constexpr WCHAR kModConfigKey[] = L"SOFTWARE\\Windhawk\\Engine\\Mods\\" WH_MOD_ID;
 
 // Returns 1 if the mod is disabled, 0 if it is enabled, -1 if the state is unknown.
 int ReadModDisabledState()
@@ -1390,9 +1391,6 @@ BOOL Wh_ModInit()
         bool alreadyBlockedInThisProcess = (Wh_GetIntValue(L"blockedInPid", 0) == (int)GetCurrentProcessId());
         g_recordedBlock = alreadyBlockedInThisProcess;
 
-        // Marker used only to word the unload prompt: it is gone in Wh_ModUninit after an uninstall.
-        Wh_SetIntValue(L"loadedMarker", 1);
-
         if (IsExplorerMidSession() && !GetSystemMetrics(SM_SHUTTINGDOWN) &&
             HasAnyStandardShortcutsDisabled() && !alreadyBlockedInThisProcess)
         {
@@ -1444,9 +1442,10 @@ void Wh_ModUninit()
             // reloads where no blocking occurred (e.g. mid-session enable + "No" path).
             if (!GetSystemMetrics(SM_SHUTTINGDOWN) && g_recordedBlock.load())
             {
-                // The marker written in Wh_ModInit is missing only if the mod's storage was deleted.
-                // It affects the wording only, never whether the prompt is shown.
-                bool uninstalled = (Wh_GetIntValue(L"loadedMarker", 0) == 0);
+                // g_recordedBlock implies blockedInPid was stored for this process, so a mismatch
+                // means the mod's storage was deleted (uninstall). It affects the wording only,
+                // never whether the prompt is shown.
+                bool uninstalled = (Wh_GetIntValue(L"blockedInPid", 0) != (int)GetCurrentProcessId());
                 PromptForExplorerRestart(uninstalled ? RestartPromptEvent::ModUninstalled
                                                      : RestartPromptEvent::ModDisabled);
             }
@@ -1475,9 +1474,13 @@ void Wh_ModSettingsChanged()
             StopHookThread();
     }
     
-    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !StandardShortcutsEqual(oldSettings, g_settings))
+    // Restoring shortcuts only needs a restart if this Explorer actually had registrations blocked.
+    bool anyDisabled = HasAnyStandardShortcutsDisabled();
+    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) &&
+        !StandardShortcutsEqual(oldSettings, g_settings) &&
+        (anyDisabled || g_recordedBlock.load()))
     {
-        PromptForExplorerRestart(HasAnyStandardShortcutsDisabled() ? RestartPromptEvent::SettingsChanged
-                                                                    : RestartPromptEvent::SettingsRestored);
+        PromptForExplorerRestart(anyDisabled ? RestartPromptEvent::SettingsChanged
+                                             : RestartPromptEvent::SettingsRestored);
     }
 }
