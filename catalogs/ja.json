@@ -6381,6 +6381,35 @@
         "version": "4"
       }
     },
+    "explorer-fast-navigation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794380630000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794380630000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "gilnett",
+        "compilerOptions": "-lcomctl32",
+        "description": "Improves File Explorer navigation latency and eliminates redraw flicker",
+        "donateUrl": "https://buymeacoffee.com/gilnett",
+        "github": "https://github.com/gilnett",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Explorer Fast Navigation",
+        "version": "1.0.0"
+      }
+    },
     "explorer-folder-bookmarks-bar": {
       "details": {
         "defaultSorting": 2538,
@@ -20616,6 +20645,30 @@
         ],
         "name": "Volume HID Sendeer",
         "version": "0.1"
+      }
+    },
+    "volume-hotkeys-audio-router": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794380624000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794380624000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "neMik",
+        "compilerOptions": "-lole32 -luuid -lgdi32 -lgdiplus -luser32 -lshell32 -lversion -ldwmapi",
+        "description": "Volume hotkeys for the focused game or app, per-app output device routing, volume locks, Deafen background, a replacement volume OSD and a mixer popup with live VU meters.",
+        "github": "https://github.com/mykolazozul",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Volume Hotkeys & Audio Router",
+        "version": "2.6.1"
       }
     },
     "vscode-dark-nonclient-frame": {

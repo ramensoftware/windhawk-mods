@@ -2,12 +2,212 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-11T06:01:32.000Z</updated>
+    <updated>2026-11-11T07:03:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Fast Navigation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-fast-navigation#2dcb30a8ddc4a006602cc07657f173ef8ab5bfb6</id>
+        <link href="https://windhawk.net/mods/explorer-fast-navigation"/>
+        <updated>2026-11-11T07:03:50.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Fast Navigation</h1>
+<p>Makes folder navigation faster and less visually disruptive in File Explorer by removing intermediate redraw flicker
+and deferring toolbar updates until folder contents are loaded.</p>
+<h2>How it works</h2>
+<p>In Windows 10 and Windows 11, switching folders triggers intermediate window clearing (&quot;Working on it...&quot; placeholder)
+and multiple synchronous redraw events from the Ribbon and XAML command bar before files are enumerated.</p>
+<p>This mod optimizes the navigation pipeline:</p>
+<ul>
+<li><strong>Redraw suppression</strong>: Suppresses intermediate window clears and synchronous redraw flushes during folder transitions.</li>
+<li><strong>Deferred toolbar updates</strong>: Defers Ribbon and XAML command bar state notifications while files are being enumerated,
+flushing them once file enumeration completes (<code>DISPID_FILELISTENUMDONE</code>) or batch processing settles.</li>
+<li><strong>UI freeze reduction</strong>: Prevents the UI thread from locking up during folder switches and column grouping changes,
+lowering CPU repaint spikes.</li>
+<li><strong>Safety fallback</strong>: Incorporates a configurable safety ceiling to ensure pending UI updates always flush even on
+slow network drives or non-responsive storage.</li>
+</ul>
+<h2>Observed results</h2>
+<p>Real-world behavior varies depending on the storage medium and system load:</p>
+<ul>
+<li><strong>High-speed NVMe drives</strong>: Windows virtualizes viewports quickly, but the mod noticeably removes the transient white
+flicker, suppresses UI repaint churn, and keeps window headers responsive.</li>
+<li><strong>Mechanical hard drives and laptops</strong>: On rotational HDDs or resource-constrained mobile CPUs where disk seek times
+and background file enumeration can cause visible stalls, the mod eliminates the intermediate &quot;Working on it...&quot;
+freeze and keeps the Explorer interface smooth during heavy folder browsing and column grouping operations.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Defer immediate navigation paints</strong>: Defer immediate activation and layout paints while Explorer switches views.</li>
+<li><strong>Defer classic ribbon updates</strong>: Delay classic ribbon refreshes during navigation.</li>
+<li><strong>Defer XAML command bar updates</strong>: Delay modern command bar refreshes during navigation.</li>
+<li><strong>Defer navigation bar updates</strong>: Delay navigation state updates in classic and modern navigation bars.</li>
+<li><strong>Safety fallback ceiling (ms)</strong>: Maximum time (in ms) to wait before forcing a deferred UI update to flush if
+navigation stalls or on slow storage.</li>
+</ul>
+<h2>Compatibility</h2>
+<ul>
+<li>Windows 11 (21H2, 22H2, 23H2, 24H2)</li>
+<li>Windows 10 (1809 and later)</li>
+<li>Architectures: 64-bit (x86-64, ARM64)</li>
+</ul>
+<h2>Support</h2>
+<p>If you find this mod useful, you can support its development and maintenance:</p>
+<ul>
+<li><a href="https://buymeacoffee.com/gilnett">Support on Buy Me a Coffee</a></li>
+</ul>
+<h2>Credits</h2>
+<ul>
+<li>Based on the original implementation by <strong>Vivy</strong> (<a href="https://x.com/VivyVCCS">@VivyVCCS</a> / <a href="https://github.com/enginelesscc">enginelesscc</a>).</li>
+<li>Modernized, refactored, and maintained by <strong>gilnett</strong>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Volume Hotkeys & Audio Router 2.6.1]]></title>
+        <id>https://windhawk.net/mods/volume-hotkeys-audio-router#2e78355c5c7e99020f098512940e75feea9327dc</id>
+        <link href="https://windhawk.net/mods/volume-hotkeys-audio-router"/>
+        <updated>2026-11-11T07:03:44.000Z</updated>
+        <content type="html"><![CDATA[<h1>🔊 Volume Hotkeys &amp; Audio Router</h1>
+<p>Volume control for games and setups with several output devices, on Windows 11 and 10: hotkeys for the focused
+game or app, per-app audio routing, volume locks, Deafen and a replacement volume OSD. Its mixer popup opens on a
+hotkey on top of any window — including borderless and fullscreen games — without taking the keyboard focus, so
+games are never minimized. It runs in its own small Windhawk process, not inside Explorer.</p>
+<p><img src="https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/mixer.png" alt="Mixer popup (Fluent Flyout layout)"></p>
+<p><img src="https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/osd.png" alt="Volume OSD (Windows 11 capsule style)"></p>
+<h2>✨ Highlights</h2>
+<ul>
+<li><strong>Game hotkeys</strong> – change or mute the focused game/app on every device it plays to, without opening anything.
+UWP apps and protected/elevated games are recognized too.</li>
+<li><strong>Per-app audio routing</strong> – send any app to another output device with the ⇄ button or a right-click.</li>
+<li><strong>Volume lock</strong> – pin the volume of an app or device; a watchdog restores it when a game or Windows changes it.
+Locks are kept across restarts and marked with a padlock.</li>
+<li><strong>Deafen background (BETA)</strong> – one hotkey mutes or ducks everything except the focused app and your whitelist;
+pressing it again restores every app individually.</li>
+<li><strong>Custom volume OSD (BETA)</strong> – 9 styles, can replace the Windows volume flyout for the media keys and the volume
+tooltip of the taskbar, draggable. Like the Windows flyout, it stays while the pointer rests on it, and the mouse
+wheel or a click on its bar changes the volume.</li>
+<li><strong>Mixer popup</strong> – volume and mute of every app on every output device at once, with live VU meters (up to
+60 FPS while open); 17 layouts and 22 color themes.</li>
+<li><strong>Correct scaling</strong> – interface scale 30–300 % multiplied by the Windows display scaling of each monitor;
+the popup shrinks automatically when it would not fit on the screen.</li>
+<li><strong>Light on resources</strong> – nothing is polled while the popup is closed: the OSD and the volume locks react to
+Windows audio events, and the keyboard and mouse hooks are installed only while a feature needs them.</li>
+</ul>
+<h2>🎛️ Mixer layouts</h2>
+<p>Modern Cards · Compact Strip · Hi-Fi Studio Meters · Fluent Flyout · Cyber Radial HUD · Studio Mixing Desk ·
+Floating Minimal Pill · Cyberpunk Neon Grid · Retro Cassette · LED Meter Bridge · Arcade Panel ·
+Broadcast Console (dual VU) · Control Center Pills · Frosted Glass Tiles · Retro Terminal ·
+Soft Neumorphic · Vertical Channel Strips.</p>
+<h2>🎨 Themes</h2>
+<p>Windows 11 Mica · Modern Dark · Light Fluent · AMOLED Black · Frosted Glass · System Accent · Classic Blue ·
+Dracula · Nordic Frost · Cyberpunk Neon · Retro Amber · Tokyo Night · Sunset · Catppuccin Mocha · Forest ·
+Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Green · Midnight Gold.</p>
+<h2>📺 OSD styles (BETA)</h2>
+<p>Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
+frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.</p>
+<ul>
+<li>Once the pointer moves onto the OSD, it works like the Windows flyout and stays on screen until the pointer
+leaves. The mouse wheel or touchpad scrolling over it changes the volume it shows (the master volume or the
+app), a click or a drag on its bar sets the level, a click on its icon mutes, and a right-click closes it.
+Otherwise clicks pass through it (unless dragging is enabled), and a hidden pointer (games) is ignored.</li>
+<li><strong>Replace the Windows volume flyout</strong>: the media volume keys and the mouse wheel over the taskbar notification
+area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
+tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
+Windows itself; when Windows shows its flyout for one of them, the mod keeps that flyout invisible (it clips
+Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step,
+at 0 % and 100 % too. Only the very first flyout after Explorer starts can show for a moment, before the mod
+knows its window. Brightness and other Windows indicators use the same window and stay visible: Windows
+reports brightness changes, so the brightness indicator shows even at 0 % or 100 % volume, except when the
+brightness itself is already at its limit (then nothing changes and nothing is reported). Airplane mode and
+other rare indicators shown right after an outside volume change, or at 0 % or 100 %, can be hidden as well.
+While the option is on, other tray apps and mods
+that react to the wheel in the notification area (for example Taskbar Volume Control with the tray area as its
+scroll area) don't get it. Volume indicators of manufacturer utilities (laptop or keyboard software) are
+separate programs and aren't affected.</li>
+</ul>
+<h2>⌨️ Hotkeys</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Open / close mixer</td>
+<td><code>Win+Alt+V</code></td>
+</tr>
+<tr>
+<td>Active app volume up / down</td>
+<td>not assigned</td>
+</tr>
+<tr>
+<td>Active app mute / unmute</td>
+<td>not assigned</td>
+</tr>
+<tr>
+<td>Deafen background (when enabled)</td>
+<td>not assigned</td>
+</tr>
+<tr>
+<td>Master volume up / down / mute</td>
+<td>not assigned</td>
+</tr>
+</tbody>
+</table>
+<p>Only the mixer hotkey is set by default, so the mod doesn't take shortcuts that other apps use.</p>
+<p>Format: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code> + one key (<code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F24</code>, <code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>,
+<code>Space</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Num0</code>–<code>Num9</code>, <code>VolumeUp</code>, <code>VolumeDown</code>, <code>Mute</code>…), joined with <code>+</code>.
+Leave a hotkey empty to disable it. On keyboard layouts with AltGr, Right Alt doesn't count as <code>Ctrl+Alt</code>.</p>
+<h2>🖱️ Using the mixer</h2>
+<ul>
+<li>Drag a slider or scroll over it to change the volume.</li>
+<li>Click an app icon to mute or unmute it.</li>
+<li>Click ⇄ (or right-click a row) to route the app to another device or to lock its volume.</li>
+<li>Right-click or double-click a device header to make it the Windows default device.</li>
+<li>Press any key or click outside to close the mixer.</li>
+</ul>
+<h2>🌐 Language</h2>
+<p>The mixer, menus and OSD use <strong>Language → Mod interface language</strong> (automatic, English, Ukrainian, Polish,
+German, French, Spanish, Russian). The settings page is translated into the same languages and follows
+the language of Windhawk itself (<strong>Windhawk → Settings → Language</strong>); other languages show English.</p>
+<h2>⚠️ Notes</h2>
+<ul>
+<li>Features marked BETA (OSD, Deafen background) are off by default. The mod adds no tray icon: the mixer opens
+with its hotkey.</li>
+<li>&quot;Route audio to&quot; uses the same undocumented Windows API as the &quot;App volume and device preferences&quot;
+page of Windows and EarTrumpet; some apps only switch the device after their audio stream restarts.</li>
+<li>While a game or app running as administrator is focused, hotkeys work through standard Windows hotkeys:
+holding volume up/down doesn't repeat there, and <code>Ctrl+Alt</code> combinations don't work there.</li>
+</ul>
+<h2>🧹 What stays after the mod is disabled</h2>
+<p>Like the Windows volume mixer, the mod changes Windows' own audio preferences, and Windows keeps them:</p>
+<ul>
+<li><strong>Output device of an app</strong> chosen with &quot;Route audio to&quot;: stays until you pick &quot;Windows default device&quot; in
+the same menu, or use Settings → System → Sound → Volume mixer → Reset.</li>
+<li><strong>Default output device</strong> chosen in the mixer: stays, like a change made in the Windows sound settings.</li>
+<li><strong>Volume and mute levels</strong> of devices and apps: Windows remembers them, as with any mixer.</li>
+<li><strong>Deafen background</strong>: if the mod stops while Deafen is on (crash, shutdown, power loss), it restores the
+muted and ducked apps the next time it starts.</li>
+<li>Volume locks are stored by the mod and are no longer enforced while it's disabled.</li>
+<li><strong>Windows volume flyout</strong> (with &quot;Replace the Windows volume flyout&quot;): the mod gives Explorer's indicator window
+back its normal shape when it's disabled. If its process is killed instead, the Windows flyout stays invisible
+until Explorer restarts (for example after signing out).</li>
+</ul>
+]]></content>
+        <author>
+            <name>neMik</name>
+            <uri>https://github.com/mykolazozul</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Sleep Countdown Reset 1.0.0]]></title>
         <id>https://windhawk.net/mods/sleep-countdown-reset#3502d843ba0e5f409fcdd45af40e70ed49edd041</id>
@@ -726,36 +926,6 @@ This implementation is distributed under GPL-3.0-or-later.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7.7]]></title>
-        <id>https://windhawk.net/mods/desktop-draggable-widgets#b05e867c15812b2e80d29d6daafa19b16f1207c5</id>
-        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
-        <updated>2026-11-09T23:05:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The Music widget is now more interactive with buttons where user can play next or previous media file with a single click.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Jona like it, code it</name>
-            <uri>https://github.com/Stunning-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Utilities 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-utilities#15d44b0108ad149dc9432402390eff99e05a1950</id>
-        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
-        <updated>2026-11-09T23:05:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for grouping taskbar utilities into a customizable dropdown submenu (<code>MenuFlyoutSubItem</code>) to reduce root menu clutter.</li>
-<li>Added settings to configure submenu visibility, label text, and icon glyph.</li>
-<li>Added individual <code>inSubmenu</code> toggles for each utility in the settings.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Marco Petrucci</name>
-            <uri>https://github.com/marco00petrucci</uri>
         </author>
     </entry>
 </feed>
