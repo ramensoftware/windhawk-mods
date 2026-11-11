@@ -517,9 +517,8 @@ std::atomic<double> g_lastNextClickTime{0.0};
 
 std::atomic<bool> g_colorRainbowEnabled{false};
 std::atomic<float> g_colorRainbowSpeed{1.0f};
-std::vector<D2D1_COLOR_F> g_rainbowPalette = {
-    D2D1::ColorF(0x4cc9f0), D2D1::ColorF(0x7209b7), D2D1::ColorF(0xf72585)
-};
+// The morphing palette starts empty: only colors explicitly added by the user participate.
+std::vector<D2D1_COLOR_F> g_rainbowPalette;
 std::mutex g_rainbowMutex;
 
 std::atomic<bool> g_flushTop{false};
@@ -897,7 +896,8 @@ void SaveRainbowPalette() {
         swprintf_s(hex, L"#%02X%02X%02X%02X,", static_cast<int>(c.r * 255), static_cast<int>(c.g * 255), static_cast<int>(c.b * 255), static_cast<int>(c.a * 255));
         s += hex;
     }
-    Wh_SetStringValue(L"RainbowPalette", s.c_str());
+    // Keep an explicit marker so an intentionally empty palette survives a restart.
+    Wh_SetStringValue(L"RainbowPalette", s.empty() ? L"__EMPTY__" : s.c_str());
 }
 
 D2D1_COLOR_F ColorFromHex(std::wstring text, D2D1_COLOR_F fallback) {
@@ -1257,24 +1257,26 @@ void LoadSettings() {
     }
     next.idleTimeoutSec = g_idleTimeoutSec.load();
 
-    wchar_t palBuf[1024];
+    wchar_t palBuf[8192] = {};
     if (Wh_GetStringValue(L"RainbowPalette", palBuf, ARRAYSIZE(palBuf))) {
-        std::wstring s(palBuf);
+        std::wstring serialized(palBuf);
         std::vector<D2D1_COLOR_F> loaded;
         size_t pos = 0;
-        while (pos < s.size()) {
-            size_t comma = s.find(L',', pos);
-            if (comma == std::wstring::npos) comma = s.size();
-            std::wstring hex = s.substr(pos, comma - pos);
-            if (!hex.empty()) {
-                loaded.push_back(ColorFromHex(hex, D2D1::ColorF(0)));
+        if (serialized != L"__EMPTY__") {
+            while (pos < serialized.size()) {
+                size_t comma = serialized.find(L',', pos);
+                if (comma == std::wstring::npos) comma = serialized.size();
+                std::wstring hex = serialized.substr(pos, comma - pos);
+                if (!hex.empty()) {
+                    loaded.push_back(ColorFromHex(hex, D2D1::ColorF(0)));
+                }
+                pos = comma + 1;
             }
-            pos = comma + 1;
         }
-        if (!loaded.empty()) {
-            std::lock_guard lock(g_rainbowMutex);
-            g_rainbowPalette = std::move(loaded);
-        }
+
+        // An existing but empty value means the user explicitly cleared the palette.
+        std::lock_guard lock(g_rainbowMutex);
+        g_rainbowPalette = std::move(loaded);
     }
     int rSpeed = Wh_GetIntValue(L"RainbowSpeed", -1);
     if (rSpeed != -1) g_colorRainbowSpeed = rSpeed / 10.0f;
@@ -3363,6 +3365,7 @@ enum MenuId : UINT {
     ID_RAINBOW_SPEED_FAST,
     ID_ADD_RAINBOW_COLOR,
     ID_RESET_RAINBOW_COLORS,
+    ID_RAINBOW_COLOR_BASE = 4100,
 
     ID_BUTTON_STYLE_DEFAULT,
     ID_BUTTON_STYLE_CUBIC,
@@ -3426,7 +3429,10 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     addOpacityItem(ID_OPACITY_40,  40,  L"40%");
 
     HMENU colorMenu = CreatePopupMenu();
-    AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_ACCENT, Tr(L"Колір акценту...", L"Цвет акцента...", L"Accent color..."));
+    AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_ACCENT,
+                Tr(L"Основний колір (без переливання)...",
+                   L"Основной цвет (без переливания)...",
+                   L"Base color (without morphing)..."));
     AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_BACKGROUND, Tr(L"Колір фону...", L"Цвет фона...", L"Background color..."));
     AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_TEXT_PRIMARY, Tr(L"Основний текст...", L"Основной текст...", L"Primary text..."));
     AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_TEXT_SECONDARY, Tr(L"Вторинний текст...", L"Вторичный текст...", L"Secondary text..."));
@@ -3435,7 +3441,27 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowEnabled.load() ? MF_CHECKED : 0), ID_TOGGLE_RAINBOW, Tr(L"Увімкнути переливання", L"Включить переливание", L"Enable morphing"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(rainbowMenu, MF_STRING, ID_ADD_RAINBOW_COLOR, Tr(L"+ Додати колір у палітру...", L"+ Добавить цвет в палитру...", L"+ Add color to palette..."));
-    AppendMenuW(rainbowMenu, MF_STRING, ID_RESET_RAINBOW_COLORS, Tr(L"Скинути палітру переливання", L"Сбросить палитру перелива", L"Reset morphing palette"));
+
+    std::vector<D2D1_COLOR_F> paletteSnapshot;
+    {
+        std::lock_guard lock(g_rainbowMutex);
+        paletteSnapshot = g_rainbowPalette;
+    }
+    const size_t visiblePaletteCount = (std::min)(paletteSnapshot.size(), static_cast<size_t>(256));
+    for (size_t i = 0; i < visiblePaletteCount; ++i) {
+        const D2D1_COLOR_F& color = paletteSnapshot[i];
+        wchar_t hex[16];
+        swprintf_s(hex, L"#%02X%02X%02X", static_cast<int>(Clamp(color.r, 0.0f, 1.0f) * 255.0f + 0.5f),
+                   static_cast<int>(Clamp(color.g, 0.0f, 1.0f) * 255.0f + 0.5f),
+                   static_cast<int>(Clamp(color.b, 0.0f, 1.0f) * 255.0f + 0.5f));
+        const int opacity = static_cast<int>(Clamp(color.a, 0.0f, 1.0f) * 100.0f + 0.5f);
+        std::wstring label = Tr(L"Колір ", L"Цвет ", L"Color ");
+        label += std::to_wstring(i + 1) + L" — " + hex + L" (" + std::to_wstring(opacity) + L"%)";
+        AppendMenuW(rainbowMenu, MF_STRING | MF_GRAYED, ID_RAINBOW_COLOR_BASE + static_cast<UINT>(i), label.c_str());
+    }
+
+    AppendMenuW(rainbowMenu, MF_STRING | (paletteSnapshot.empty() ? MF_GRAYED : 0), ID_RESET_RAINBOW_COLORS,
+                Tr(L"Скинути палітру переливання", L"Сбросить палитру перелива", L"Reset morphing palette"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowSpeed.load() == 0.5f ? MF_CHECKED : 0), ID_RAINBOW_SPEED_SLOW, Tr(L"Повільно", L"Медленно", L"Slow"));
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowSpeed.load() == 1.0f ? MF_CHECKED : 0), ID_RAINBOW_SPEED_NORMAL, Tr(L"Звичайна", L"Обычная", L"Normal"));
@@ -3679,7 +3705,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         case ID_RESET_RAINBOW_COLORS: {
             {
                 std::lock_guard lock(g_rainbowMutex);
-                g_rainbowPalette = { D2D1::ColorF(0x4cc9f0), D2D1::ColorF(0x7209b7), D2D1::ColorF(0xf72585) };
+                g_rainbowPalette.clear();
             }
             SaveRainbowPalette();
             g_layoutDirty = true;
