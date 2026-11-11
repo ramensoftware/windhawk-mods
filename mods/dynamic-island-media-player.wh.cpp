@@ -42,30 +42,25 @@ SOFTWARE.
 
 ![Dynamic Island Preview](https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png)
 
-A lightweight, high-performance, standalone Dynamic Island media player built specifically for audio and video management on Windows 11. 
-This mod is a specialized, lightweight adaptation of the incredible **[Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows)**. It strips away the extra dashboard modules (weather, hardware monitor, etc.) to focus purely on delivering the ultimate media player experience with zero bloat.
-
-# Why a separate mod?
-
-Although the original Dynamic Island for Windows includes media playback functionality, disabling its other modules does not result in a dedicated media-player-only experience. Several unrelated interface elements remain, such as the microphone usage indicator, calendar, and media visualization.
-Dynamic Island Media Player was created to provide a complete, standalone media-focused experience without these unrelated elements.
-In addition to focusing exclusively on media playback, this mod introduces its own interface, customization options, playback controls, and additional functionality, along with various performance optimizations and improvements.
-The goal is to provide a more focused and customizable Dynamic Island experience for users who primarily want media playback integration, rather than a multi-module desktop overlay.
+A focused, customizable Dynamic Island overlay for Windows that becomes an interactive media player when music or video is playing. Based on the original **[Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows)**, this standalone mod removes unrelated dashboard modules and concentrates on media playback.
 
 ## Key Features
-- **Context Menu Priority:** The right-click context menu acts as the primary configuration source. Settings changed here persistently override default Windhawk configurations.
 
-- **Smart Media Tracking:** Real-time track metadata, album art, app badges, and progress scrubbing via Windows System Media Transport.
+- **Media integration:** Track title, artist, album, source-app badge, album artwork, playback state, and progress information through Windows System Media Transport Controls. Artwork is refreshed when metadata settles, stale provider thumbnails are rechecked briefly, and large covers are downscaled to reduce memory use.
+- **Playback controls:** Play/pause, previous/next track, and progress scrubbing.
+- **Track transitions:** Choose between crossfade (Fade) and horizontal slide animations. Track transitions work independently from the option that disables the island's hover and movement animations.
+- **Interactive island:** Expand on hover, click-through mode with Ctrl-to-interact, and configurable show/hide, next, previous, and play/pause hotkeys.
+- **Window behavior:** Always-on-top, above-games behavior, taskbar layering, fullscreen handling, and per-application saved positions.
+- **Context menu:** Right-click configuration with color and opacity dialogs, playback-related options, and persistent menu overrides.
+- **Color customization:** Theme presets, background/text colors, automatic/system/custom accent colors, and a user-managed color-morphing palette with speed controls.
+- **Appearance:** Multiple island shapes, adjustable size and text scale, custom font, button styles, shadow toggle, and monitor selection.
+- **Localization:** Ukrainian, Russian, and English interface languages.
+- **Media source filtering:** Optionally restrict the player to the currently selected media source.
 
-- **Optimized Rendering:** Throttled media-session polling and intelligent render pacing designed to minimize CPU/GPU consumption.
+## Credits
 
-- **Per-App Dynamic Screen Positioning:** Supports saving unique screen positions on a per-application basis.
-
-- **Trilingual Localized UI (UA / RU / EN):** Full native support for Ukrainian, Russian, and English.
-
-## Credits & Acknowledgements
-- **Himanshu (devcode90)** - For the original Dynamic Island for Windows framework, rendering physics, and core UI design.
-- **BOG090909** - Standalone media player adaptation, custom app-positioning logic, multilingual support, and optimization.
+- **Himanshu (devcode90):** Original Dynamic Island for Windows framework, rendering foundation, and core interface design.
+- **BOG090909:** Standalone media-player adaptation, per-app positioning, customization features, localization, playback integration, and performance improvements.
 */
 // ==/WindhawkModReadme==
 
@@ -147,6 +142,11 @@ The goal is to provide a more focused and customizable Dynamic Island experience
       - default: Default
       - bouncy: Bouncy
       - snappy: Snappy
+  - TrackTransition: crossfade
+    $name: Track transition animation
+    $options:
+      - crossfade: Fade
+      - slide: Horizontal slide
   - AnimationSpeed: normal
     $name: Animation speed
     $options:
@@ -245,6 +245,7 @@ constexpr UINT WM_APP_NEW_EVENT = WM_APP + 0x443;
 constexpr UINT WM_APP_WAKE = WM_APP + 0x446;
 constexpr UINT WM_APP_APPLY_HOTKEY = WM_APP + 0x447;
 constexpr UINT WM_APP_PERSIST_HOTKEY = WM_APP + 0x448;
+constexpr UINT WM_APP_START_HOTKEY_CAPTURE = WM_APP + 0x449;
 
 enum HotkeyId : int {
     kHotkeyHideShow = 1,
@@ -315,6 +316,7 @@ constexpr bool IsBottomPosition(Position p) {
 
 enum class AccentMode { Auto, System, Custom };
 enum class AnimationStyle { Smooth, Default, Bouncy, Snappy };
+enum class TrackTransitionStyle { Crossfade, Slide };
 enum class ButtonStyle { Default, Cubic };
 
 enum class LanguageSetting {
@@ -375,6 +377,7 @@ struct Settings {
     D2D1_COLOR_F customAccent = D2D1::ColorF(0x4cc9f0);
     int targetFps = 0;
     AnimationStyle animationStyle = AnimationStyle::Default;
+    TrackTransitionStyle trackTransitionStyle = TrackTransitionStyle::Crossfade;
     float animationSpeed = 1.0f;
     bool expandOnHover = true;
     bool hideInFullscreen = true;
@@ -407,7 +410,8 @@ struct MediaSnapshot {
     std::wstring sourceAppUserModelId;
     std::wstring sourceName;
     std::wstring sourceBadge;
-    std::wstring trackId; 
+    std::wstring trackId;
+    std::wstring artTrackKey;
     
 
     std::shared_ptr<const BitmapPixels> art;
@@ -415,6 +419,14 @@ struct MediaSnapshot {
     // Previous track artwork used during the crossfade.
     std::shared_ptr<const BitmapPixels> previousArt;
     double artTransitionStartedAt = 0.0;
+    bool hasPreviousTrack = false;
+    std::wstring previousTitle;
+    std::wstring previousArtist;
+    std::wstring previousAlbumTitle;
+    std::wstring previousSourceBadge;
+    std::shared_ptr<const BitmapPixels> previousSourceIcon;
+    double trackTransitionStartedAt = 0.0;
+    int trackTransitionDirection = 1; // +1: next (left), -1: previous (right)
     double titleChangedAt = 0.0;
     double metaChangedAt = 0.0;
     double pausedAt = 0.0;
@@ -481,6 +493,11 @@ std::atomic<HWND> g_hwnd{nullptr};
 HANDLE g_stopEvent = nullptr;
 HANDLE g_renderThread = nullptr;
 HANDLE g_mediaThread = nullptr;
+HANDLE g_settingsMenuThread = nullptr;
+std::mutex g_settingsMenuThreadMutex;
+std::atomic<HWND> g_settingsMenuOwner{nullptr};
+std::atomic<bool> g_settingsMenuOpen{false};
+std::atomic<HWND> g_foregroundBeforeSettingsMenu{nullptr};
 
 std::atomic<bool> g_layoutDirty{true};
 std::atomic<bool> g_clickExpanded{false};
@@ -514,6 +531,8 @@ std::wstring g_lastTargetAppExe;
 std::atomic<bool> g_confirmTrackChange{false};
 std::atomic<double> g_lastPrevClickTime{0.0};
 std::atomic<double> g_lastNextClickTime{0.0};
+std::atomic<int> g_trackNavigationDirection{1};
+std::atomic<double> g_trackNavigationCommandTime{0.0};
 
 std::atomic<bool> g_colorRainbowEnabled{false};
 std::atomic<float> g_colorRainbowSpeed{1.0f};
@@ -523,6 +542,7 @@ std::mutex g_rainbowMutex;
 
 std::atomic<bool> g_flushTop{false};
 std::atomic<bool> g_clickThrough{false};
+std::atomic<bool> g_forceForeground{false};
 std::atomic<bool> g_hidden{false};
 
 std::atomic<bool> g_disableAnimations{false};
@@ -596,7 +616,19 @@ std::wstring GetForegroundExeName() {
         }
     }
 
-    if (!fg || fg == hSelf) return g_lastTargetAppExe;
+    if (fg) {
+        DWORD foregroundPid = 0;
+        GetWindowThreadProcessId(fg, &foregroundPid);
+        if (foregroundPid == GetCurrentProcessId()) {
+            std::lock_guard lock(g_appPosMutex);
+            return g_lastTargetAppExe;
+        }
+    }
+
+    if (!fg || fg == hSelf) {
+        std::lock_guard lock(g_appPosMutex);
+        return g_lastTargetAppExe;
+    }
 
     wchar_t className[256] = {};
     GetClassNameW(fg, className, 256);
@@ -642,6 +674,10 @@ void TriggerMediaTransportCommandWithConfirmation(int cmd) {
             }
             g_lastNextClickTime.store(0.0);
         }
+    }
+    if (cmd == 0 || cmd == 2) {
+        g_trackNavigationDirection.store(cmd == 2 ? 1 : -1);
+        g_trackNavigationCommandTime.store(NowSeconds());
     }
     SendMediaTransportCommand(cmd);
 }
@@ -752,10 +788,17 @@ LRESULT CALLBACK OpacityDialogProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                     DestroyWindow(hwnd);
                     return 0;
                 }
-                if (controlId == kOpacityCancelId) {
+                if (controlId == kOpacityCancelId || controlId == IDCANCEL) {
                     DestroyWindow(hwnd);
                     return 0;
                 }
+            }
+            break;
+
+        case WM_KEYDOWN:
+            if (wParam == VK_ESCAPE) {
+                DestroyWindow(hwnd);
+                return 0;
             }
             break;
 
@@ -805,13 +848,33 @@ bool PickOpacityWithDialog(HWND owner, float& opacity) {
     GetWindowRect(dialog, &windowRect);
     const int width = windowRect.right - windowRect.left;
     const int height = windowRect.bottom - windowRect.top;
-    RECT ownerRect = {};
-    if (owner && GetWindowRect(owner, &ownerRect)) {
-        SetWindowPos(dialog, HWND_TOPMOST,
-                     ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2,
-                     ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2,
-                     0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    RECT anchorRect{};
+    HWND island = g_hwnd.load();
+    bool haveAnchor = island && IsWindow(island) && GetWindowRect(island, &anchorRect);
+    POINT anchorPoint{};
+    if (haveAnchor) {
+        anchorPoint.x = (anchorRect.left + anchorRect.right) / 2;
+        anchorPoint.y = (anchorRect.top + anchorRect.bottom) / 2;
+    } else {
+        GetCursorPos(&anchorPoint);
     }
+
+    HMONITOR monitor = MonitorFromPoint(anchorPoint, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+    RECT workArea{};
+    if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
+        workArea = monitorInfo.rcWork;
+    } else {
+        workArea = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+                    GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                    GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+    }
+
+    int x = anchorPoint.x - width / 2;
+    int y = anchorPoint.y - height / 2;
+    x = ClampInt(x, workArea.left, std::max(workArea.left, workArea.right - width));
+    y = ClampInt(y, workArea.top, std::max(workArea.top, workArea.bottom - height));
+    SetWindowPos(dialog, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (owner) EnableWindow(owner, FALSE);
     ShowWindow(dialog, SW_SHOW);
@@ -833,7 +896,7 @@ bool PickOpacityWithDialog(HWND owner, float& opacity) {
 
     if (owner) {
         EnableWindow(owner, TRUE);
-        SetForegroundWindow(owner);
+        if (IsWindow(owner)) SetForegroundWindow(owner);
     }
 
     if (state.accepted) {
@@ -1178,6 +1241,12 @@ void LoadSettings() {
     else if (EqualsNoCase(style, L"bouncy")) next.animationStyle = AnimationStyle::Bouncy;
     else if (EqualsNoCase(style, L"snappy")) next.animationStyle = AnimationStyle::Snappy;
 
+    const std::wstring trackTransition = GetStringSettingCopy(L"Animations.TrackTransition");
+    if (EqualsNoCase(trackTransition, L"slide")) next.trackTransitionStyle = TrackTransitionStyle::Slide;
+    const int transitionOverride = Wh_GetIntValue(L"TrackTransitionStyle", -1);
+    if (transitionOverride == 0) next.trackTransitionStyle = TrackTransitionStyle::Crossfade;
+    else if (transitionOverride == 1) next.trackTransitionStyle = TrackTransitionStyle::Slide;
+
     const std::wstring speed = GetStringSettingCopy(L"Animations.AnimationSpeed");
     if (EqualsNoCase(speed, L"slow")) next.animationSpeed = 0.75f;
     else if (EqualsNoCase(speed, L"fast")) next.animationSpeed = 1.35f;
@@ -1267,7 +1336,7 @@ void LoadSettings() {
                 size_t comma = serialized.find(L',', pos);
                 if (comma == std::wstring::npos) comma = serialized.size();
                 std::wstring hex = serialized.substr(pos, comma - pos);
-                if (!hex.empty()) {
+                if (!hex.empty() && loaded.size() < 256) {
                     loaded.push_back(ColorFromHex(hex, D2D1::ColorF(0)));
                 }
                 pos = comma + 1;
@@ -1376,7 +1445,13 @@ void PositionOverlayWindow(HWND hwnd, int width, int height, const Settings& s) 
         y += s.offsetY;
     }
 
-    SetWindowPos(hwnd, g_alwaysOnTop.load() ? HWND_TOPMOST : HWND_NOTOPMOST, x, y, width, height,
+    // Keep the overlay below its own popup menu, even when Always on top is enabled.
+    const bool menuOpen = g_settingsMenuOpen.load();
+    const bool forceForeground = g_forceForeground.load() && !menuOpen;
+    const HWND insertAfter = !menuOpen && (g_alwaysOnTop.load() || forceForeground)
+                                 ? HWND_TOPMOST
+                                 : HWND_NOTOPMOST;
+    SetWindowPos(hwnd, insertAfter, x, y, width, height,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 }
 
@@ -1412,16 +1487,39 @@ bool DecodeImageBytesToPixels(const std::vector<uint8_t>& bytes, BitmapPixels* o
         return false;
     }
 
-    UINT width = 0, height = 0;
-    converter->GetSize(&width, &height);
-    if (!width || !height || width > 2048 || height > 2048) return false;
+    UINT sourceWidth = 0, sourceHeight = 0;
+    converter->GetSize(&sourceWidth, &sourceHeight);
+    const uint64_t sourcePixelCount = static_cast<uint64_t>(sourceWidth) * sourceHeight;
+    if (!sourceWidth || !sourceHeight || sourceWidth > 16384 || sourceHeight > 16384 ||
+        sourcePixelCount > 64ull * 1024ull * 1024ull) {
+        return false;
+    }
+
+    // Album artwork is displayed at a small size by the island. Keep a 512 px
+    // ceiling for high-DPI / scaled layouts while limiting decode and cache memory.
+    constexpr UINT kMaxArtworkDimension = 512;
+    const double scale = std::min(1.0, static_cast<double>(kMaxArtworkDimension) /
+                                         std::max(sourceWidth, sourceHeight));
+    const UINT width = std::max<UINT>(1, static_cast<UINT>(std::lround(sourceWidth * scale)));
+    const UINT height = std::max<UINT>(1, static_cast<UINT>(std::lround(sourceHeight * scale)));
+
+    IWICBitmapSource* pixelSource = converter.Get();
+    ComPtr<IWICBitmapScaler> scaler;
+    if (width != sourceWidth || height != sourceHeight) {
+        if (FAILED(factory->CreateBitmapScaler(&scaler)) ||
+            FAILED(scaler->Initialize(converter.Get(), width, height,
+                                      WICBitmapInterpolationModeFant))) {
+            return false;
+        }
+        pixelSource = scaler.Get();
+    }
 
     BitmapPixels pixels;
     pixels.width = width;
     pixels.height = height;
     pixels.bgra.resize(static_cast<size_t>(width) * height * 4);
-    if (FAILED(converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.bgra.size()),
-                                     pixels.bgra.data()))) {
+    if (FAILED(pixelSource->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.bgra.size()),
+                                       pixels.bgra.data()))) {
         return false;
     }
 
@@ -1536,14 +1634,64 @@ bool IconToPixels(HICON icon, UINT size, BitmapPixels* outPixels) {
 
 bool ProcessImageNameForPid(DWORD pid, std::wstring* imageName) {
     if (!pid || !imageName) return false;
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+
+    struct ProcessImageCacheEntry {
+        HANDLE process = nullptr;
+        std::wstring imagePath;
+        ULONGLONG lastUsed = 0;
+    };
+    static std::mutex cacheMutex;
+    static std::unordered_map<DWORD, ProcessImageCacheEntry> cache;
+    constexpr size_t kMaxCachedProcesses = 128;
+
+    std::lock_guard lock(cacheMutex);
+    const ULONGLONG now = GetTickCount64();
+    auto cached = cache.find(pid);
+    if (cached != cache.end()) {
+        DWORD exitCode = 0;
+        if (cached->second.process &&
+            GetExitCodeProcess(cached->second.process, &exitCode) &&
+            exitCode == STILL_ACTIVE) {
+            cached->second.lastUsed = now;
+            *imageName = cached->second.imagePath;
+            return !imageName->empty();
+        }
+        if (cached->second.process) CloseHandle(cached->second.process);
+        cache.erase(cached);
+    }
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
+    if (!process) {
+        process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    }
     if (!process) return false;
-    wchar_t path[MAX_PATH] = {};
-    DWORD size = ARRAYSIZE(path);
-    const bool ok = QueryFullProcessImageNameW(process, 0, path, &size) != FALSE;
-    CloseHandle(process);
-    if (ok) *imageName = path;
-    return ok;
+
+    std::vector<wchar_t> path(32768, L'\0');
+    DWORD size = static_cast<DWORD>(path.size());
+    const bool ok = QueryFullProcessImageNameW(process, 0, path.data(), &size) != FALSE;
+    if (!ok || !path[0]) {
+        CloseHandle(process);
+        return false;
+    }
+
+    // Keep the process handle alive: it lets us detect process exit and PID reuse
+    // without reopening the process on every lookup.
+    if (cache.size() >= kMaxCachedProcesses) {
+        auto oldest = cache.begin();
+        for (auto it = cache.begin(); it != cache.end(); ++it) {
+            if (it->second.lastUsed < oldest->second.lastUsed) oldest = it;
+        }
+        if (oldest->second.process) CloseHandle(oldest->second.process);
+        cache.erase(oldest);
+    }
+
+    ProcessImageCacheEntry entry;
+    entry.process = process;
+    entry.imagePath = path.data();
+    entry.lastUsed = now;
+    *imageName = entry.imagePath;
+    cache.emplace(pid, std::move(entry));
+    return true;
 }
 
 bool ProcessImageNameForWindow(HWND hwnd, std::wstring* imageName) {
@@ -1678,6 +1826,8 @@ DWORD WINAPI MediaThreadProc(void*) {
     static double s_lastIconSearch = 0.0;
     static std::wstring s_preferredAumid;
     static double s_lastAvailableTime = 0.0;
+    static std::wstring s_candidateTrackId;
+    static double s_candidateTrackSince = 0.0;
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         MediaSnapshot prev;
@@ -1803,7 +1953,7 @@ DWORD WINAPI MediaThreadProc(void*) {
 
                 next.sourceAppUserModelId = session.SourceAppUserModelId().c_str();
                 next.sourceName = FriendlyMediaSourceName(next.sourceAppUserModelId);
-                next.trackId = next.sourceAppUserModelId + L"|" + next.title + L"|" + next.artist + L"|" + next.albumTitle;
+                next.trackId = next.sourceAppUserModelId + L"|" + next.title;
 
                 if (next.title.empty() && next.sourceName == L"VLC") {
                     if (now - s_lastVlcScan > 1.0) {
@@ -1834,14 +1984,53 @@ DWORD WINAPI MediaThreadProc(void*) {
                         }
                     }
                     next.title = s_cachedVlcTitle;
-                    next.trackId = next.sourceAppUserModelId + L"|VLC_HACK|" + next.title;
+                    next.trackId = next.sourceAppUserModelId + L"|" + next.title;
+                }
+
+                // Metadata providers can publish title and other fields in separate updates.
+                // Require a candidate identity to remain stable briefly before treating it
+                // as a real track change; artist/album updates do not restart transitions.
+                bool trackIdentityPending = false;
+                if (next.trackId == prev.trackId) {
+                    s_candidateTrackId.clear();
+                    s_candidateTrackSince = 0.0;
+                } else {
+                    if (s_candidateTrackId != next.trackId) {
+                        s_candidateTrackId = next.trackId;
+                        s_candidateTrackSince = now;
+                    }
+                    const double navAge = now - g_trackNavigationCommandTime.load();
+                    const bool recentNavigation = navAge >= 0.0 && navAge < 3.0;
+                    const bool hasStablePreviousIdentity = prev.available && !prev.trackId.empty();
+                    const double stableDelay = recentNavigation ? 0.0 : (next.title.empty() ? 1.2 : 0.4);
+                    if (hasStablePreviousIdentity && stableDelay > 0.0 &&
+                        now - s_candidateTrackSince < stableDelay) {
+                        trackIdentityPending = true;
+                        next.trackId = prev.trackId;
+                        // Keep the previous visible metadata until the new identity is stable.
+                        next.title = prev.title;
+                        next.artist = prev.artist;
+                        next.albumTitle = prev.albumTitle;
+                        next.sourceName = prev.sourceName;
+                    } else {
+                        s_candidateTrackId.clear();
+                        s_candidateTrackSince = 0.0;
+                    }
                 }
 
                 // Retrieve the current track artwork from the Windows Media Session.
-                // Do not request artwork on every 200 ms polling cycle. If it is
-                // temporarily unavailable, retry no more than once every 2 seconds.
-                const bool sameArtTrack = next.trackId == prev.trackId;
+                // Use a separate identity for artwork so artist/album changes can
+                // refresh the cover without restarting the track transition.
+                next.artTrackKey = next.sourceAppUserModelId + L"|" + next.title + L"|" +
+                                   next.artist + L"|" + next.albumTitle;
+                const bool sameArtTrack = next.artTrackKey == prev.artTrackKey;
                 if (sameArtTrack) {
+                    next.art = prev.art;
+                    next.previousArt = prev.previousArt;
+                    next.artTransitionStartedAt = prev.artTransitionStartedAt;
+                } else if (next.trackId == prev.trackId) {
+                    // Metadata such as artist/album can arrive after the title.
+                    // Keep the currently visible cover until the refreshed one is ready.
                     next.art = prev.art;
                     next.previousArt = prev.previousArt;
                     next.artTransitionStartedAt = prev.artTransitionStartedAt;
@@ -1851,15 +2040,27 @@ DWORD WINAPI MediaThreadProc(void*) {
                     next.artTransitionStartedAt = 0.0;
                 }
 
-                static std::wstring s_lastArtTrackId;
+                static std::wstring s_lastArtTrackKey;
                 static double s_lastArtAttempt = 0.0;
-                const bool artTrackChanged = next.trackId != s_lastArtTrackId;
+                static double s_artTrackFirstAttempt = 0.0;
+                const bool artTrackChanged = next.artTrackKey != s_lastArtTrackKey;
                 if (artTrackChanged) {
-                    s_lastArtTrackId = next.trackId;
+                    s_lastArtTrackKey = next.artTrackKey;
                     s_lastArtAttempt = 0.0;
+                    s_artTrackFirstAttempt = now;
                 }
 
-                if (!next.art && (artTrackChanged || now - s_lastArtAttempt >= 2.0)) {
+                // Some providers publish the title before the final thumbnail,
+                // or briefly return the previous track's cached thumbnail. Probe
+                // every 500 ms for the first 3 seconds and replace the image only
+                // when its decoded pixels actually differ.
+                const double artTrackAge = s_artTrackFirstAttempt > 0.0
+                    ? now - s_artTrackFirstAttempt : 1000.0;
+                const bool checkingForFreshArtwork = artTrackAge >= 0.0 && artTrackAge < 3.0;
+                const bool shouldProbeArtwork = artTrackChanged ||
+                    (checkingForFreshArtwork && now - s_lastArtAttempt >= 0.5) ||
+                    (!next.art && now - s_lastArtAttempt >= 2.0);
+                if (shouldProbeArtwork) {
                     s_lastArtAttempt = now;
                     try {
                         auto thumbnail = properties.Thumbnail();
@@ -1867,9 +2068,15 @@ DWORD WINAPI MediaThreadProc(void*) {
                             auto imageBytes = ReadWinRtStreamBytes(thumbnail);
                             BitmapPixels decodedArt;
                             if (DecodeImageBytesToPixels(imageBytes, &decodedArt)) {
-                                next.art = std::make_shared<const BitmapPixels>(std::move(decodedArt));
-                                if (next.previousArt) {
-                                    next.artTransitionStartedAt = now;
+                                const bool artworkChanged = !next.art ||
+                                    next.art->width != decodedArt.width ||
+                                    next.art->height != decodedArt.height ||
+                                    next.art->bgra != decodedArt.bgra;
+                                if (artworkChanged) {
+                                    next.art = std::make_shared<const BitmapPixels>(std::move(decodedArt));
+                                    if (next.previousArt && next.trackId != prev.trackId) {
+                                        next.artTransitionStartedAt = now;
+                                    }
                                 }
                             }
                         }
@@ -1880,12 +2087,15 @@ DWORD WINAPI MediaThreadProc(void*) {
 
                 // Release the previous artwork after the crossfade completes.
                 if (next.art && next.artTransitionStartedAt > 0.0 &&
-                    now - next.artTransitionStartedAt >= 0.5) {
+                    now - next.artTransitionStartedAt >= 0.65) {
                     next.previousArt.reset();
                     next.artTransitionStartedAt = 0.0;
                 }
 
-                if (next.sourceAppUserModelId == prev.sourceAppUserModelId) {
+                if (trackIdentityPending) {
+                    next.sourceBadge = prev.sourceBadge;
+                    next.sourceIcon = prev.sourceIcon;
+                } else if (next.sourceAppUserModelId == prev.sourceAppUserModelId) {
                     next.sourceBadge = prev.sourceBadge;
                     next.sourceIcon = prev.sourceIcon;
                     if (!next.sourceIcon && (now - s_lastIconSearch > 5.0)) {
@@ -1904,6 +2114,11 @@ DWORD WINAPI MediaThreadProc(void*) {
             next = MediaSnapshot{};
         }
 
+        if (!selectedSession) {
+            s_candidateTrackId.clear();
+            s_candidateTrackSince = 0.0;
+        }
+
         if (next.available) {
             s_lastAvailableTime = now;
         } else if (prev.available && s_lastAvailableTime > 0.0 &&
@@ -1918,13 +2133,41 @@ DWORD WINAPI MediaThreadProc(void*) {
         {
             std::lock_guard lock(g_stateMutex);
             const MediaSnapshot& cur = g_state.media;
+            const bool identityChanged = next.available && cur.available &&
+                                         !next.trackId.empty() && next.trackId != cur.trackId;
             trackChanged = next.available && !next.title.empty() && next.playing &&
                            (next.trackId != cur.trackId || !cur.playing);
+            if (identityChanged) {
+                next.hasPreviousTrack = cur.available;
+                next.previousTitle = cur.title;
+                next.previousArtist = cur.artist;
+                next.previousAlbumTitle = cur.albumTitle;
+                next.previousSourceBadge = cur.sourceBadge;
+                next.previousSourceIcon = cur.sourceIcon;
+                next.trackTransitionStartedAt = now;
+                const double navAge = now - g_trackNavigationCommandTime.load();
+                next.trackTransitionDirection = navAge >= 0.0 && navAge < 3.0
+                    ? g_trackNavigationDirection.load() : 1;
+            } else if (cur.trackTransitionStartedAt > 0.0 &&
+                       now - cur.trackTransitionStartedAt < 0.55) {
+                next.hasPreviousTrack = cur.hasPreviousTrack;
+                next.previousTitle = cur.previousTitle;
+                next.previousArtist = cur.previousArtist;
+                next.previousAlbumTitle = cur.previousAlbumTitle;
+                next.previousSourceBadge = cur.previousSourceBadge;
+                next.previousSourceIcon = cur.previousSourceIcon;
+                next.trackTransitionStartedAt = cur.trackTransitionStartedAt;
+                next.trackTransitionDirection = cur.trackTransitionDirection;
+            } else {
+                next.trackTransitionStartedAt = 0.0;
+                next.hasPreviousTrack = false;
+                next.previousSourceIcon.reset();
+            }
             next.titleChangedAt = trackChanged ? now : cur.titleChangedAt;
             anyChange = next.available != cur.available || next.playing != cur.playing ||
                         next.trackId != cur.trackId;
             
-            if (!next.art && prev.art && next.trackId == prev.trackId) {
+            if (!next.art && prev.art && next.artTrackKey == prev.artTrackKey) {
                 next.art = prev.art;
             }
             
@@ -1957,9 +2200,21 @@ DWORD WINAPI MediaThreadProc(void*) {
 }
 
 void SeekMediaToTicks(int64_t targetTicks) {
-    std::thread([targetTicks]() {
+    static std::atomic<uint64_t> seekGeneration{0};
+    static std::mutex seekMutex;
+    const uint64_t requestGeneration = seekGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+
+    std::thread([targetTicks, requestGeneration]() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         try {
+            // Serialize seek requests. A queued older mouse-move request is discarded
+            // if a newer position has already been requested by the user.
+            std::lock_guard seekLock(seekMutex);
+            if (requestGeneration != seekGeneration.load(std::memory_order_relaxed)) {
+                winrt::uninit_apartment();
+                return;
+            }
+
             winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
             {
                 std::lock_guard lock(g_stateMutex);
@@ -2036,27 +2291,31 @@ void SendMediaTransportCommand(int cmd) {
 struct WindowSearch {
     std::wstring targetTitle;
     std::wstring targetApp;
-    HWND foundHwnd = nullptr;
-    HWND fallbackHwnd = nullptr;
+    HWND appTitleHwnd = nullptr;
+    HWND appHwnd = nullptr;
+    HWND titleHwnd = nullptr;
 };
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     if (!IsWindowVisible(hwnd)) return TRUE;
     auto* search = reinterpret_cast<WindowSearch*>(lParam);
 
-    wchar_t title[512];
-    if (!search->targetTitle.empty() && GetWindowTextW(hwnd, title, ARRAYSIZE(title)) > 0) {
-        std::wstring wTitle(title);
-        auto it = std::search(wTitle.begin(), wTitle.end(), search->targetTitle.begin(),
-                              search->targetTitle.end(),
-                              [](wchar_t a, wchar_t b) { return towlower(a) == towlower(b); });
-        if (it != wTitle.end()) {
-            search->foundHwnd = hwnd;
-            return FALSE;
+    bool titleMatches = false;
+    if (!search->targetTitle.empty()) {
+        wchar_t title[512] = {};
+        if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) > 0) {
+            const std::wstring windowTitle(title);
+            const auto it = std::search(windowTitle.begin(), windowTitle.end(),
+                                        search->targetTitle.begin(), search->targetTitle.end(),
+                                        [](wchar_t a, wchar_t b) {
+                                            return towlower(a) == towlower(b);
+                                        });
+            titleMatches = it != windowTitle.end();
         }
     }
 
-    if (!search->fallbackHwnd && !search->targetApp.empty()) {
+    bool appMatches = false;
+    if (!search->targetApp.empty()) {
         std::wstring exePath;
         if (ProcessImageNameForWindow(hwnd, &exePath)) {
             std::wstring target = ToLowerCopy(search->targetApp);
@@ -2065,11 +2324,15 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
             }
             const std::wstring exeLower = ToLowerCopy(exePath);
             const std::wstring exeName = ToLowerCopy(BaseNameFromPath(exePath));
-            if (exeLower == target || exeName == target || exeName == target + L".exe") {
-                search->fallbackHwnd = hwnd;
-            }
+            appMatches = exeLower == target || exeName == target || exeName == target + L".exe";
         }
     }
+
+    if (appMatches) {
+        if (!search->appHwnd) search->appHwnd = hwnd;
+        if (titleMatches && !search->appTitleHwnd) search->appTitleHwnd = hwnd;
+    }
+    if (titleMatches && !search->titleHwnd) search->titleHwnd = hwnd;
     return TRUE;
 }
 
@@ -2086,7 +2349,10 @@ void OpenRelevantApp() {
         search.targetTitle = title;
         search.targetApp = app;
         EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&search));
-        HWND target = search.foundHwnd ? search.foundHwnd : search.fallbackHwnd;
+        // Prefer the source application's window whose title matches the current track.
+        // If none matches, use any window from that app, then a title-only match.
+        HWND target = search.appTitleHwnd ? search.appTitleHwnd
+                     : (search.appHwnd ? search.appHwnd : search.titleHwnd);
         if (target) {
             if (IsIconic(target)) ShowWindow(target, SW_RESTORE);
             SetForegroundWindow(target);
@@ -2292,6 +2558,9 @@ class Renderer {
         marqueeTitle_.layout.Reset();
         marqueeArtist_.layout.Reset();
         marqueeAlbum_.layout.Reset();
+        previousMarqueeTitle_.layout.Reset();
+        previousMarqueeArtist_.layout.Reset();
+        previousMarqueeAlbum_.layout.Reset();
         artBitmap_.Reset();
         transitionArtBitmap_.Reset();
         sourceIconBitmap_.Reset();
@@ -2374,6 +2643,9 @@ class Renderer {
         marqueeTitle_.layout.Reset();
         marqueeArtist_.layout.Reset();
         marqueeAlbum_.layout.Reset();
+        previousMarqueeTitle_.layout.Reset();
+        previousMarqueeArtist_.layout.Reset();
+        previousMarqueeAlbum_.layout.Reset();
 
         const wchar_t* defDisplay = L"Segoe UI Variable Display";
         const wchar_t* defSmall = L"Segoe UI Variable Small";
@@ -2432,24 +2704,41 @@ class Renderer {
 
     void EnsureBrushes(const Settings& settings, const SharedState& state, double now) {
         D2D1_COLOR_F target = settings.customAccent;
-
-        if (g_colorRainbowEnabled.load() && state.media.playing) {
+        bool hasPalette = false;
+        {
             std::lock_guard lock(g_rainbowMutex);
-            if (!g_rainbowPalette.empty()) {
-                const float speed = g_colorRainbowSpeed.load();
-                const float totalTime = static_cast<float>(now) * speed * 0.4f;
+            hasPalette = !g_rainbowPalette.empty();
+            if (g_colorRainbowEnabled.load() && state.media.playing && hasPalette) {
+                const double dt = (lastRainbowUpdateTime_ < 0.0)
+                    ? 0.0 : std::max(0.0, std::min(now - lastRainbowUpdateTime_, 0.1));
+                rainbowPhase_ += dt * static_cast<double>(g_colorRainbowSpeed.load()) * 0.4;
+                lastRainbowUpdateTime_ = now;
+                rainbowHasStarted_ = true;
+
                 const size_t count = g_rainbowPalette.size();
-                const float idxFloat = std::fmod(totalTime, static_cast<float>(count));
+                const double wrappedPhase = std::fmod(rainbowPhase_, static_cast<double>(count));
+                const float idxFloat = static_cast<float>(wrappedPhase);
                 const size_t idx1 = static_cast<size_t>(idxFloat) % count;
                 const size_t idx2 = (idx1 + 1) % count;
                 const float t = idxFloat - std::floor(idxFloat);
-
                 target = MixColor(g_rainbowPalette[idx1], g_rainbowPalette[idx2], t);
             }
-        } else if (settings.accentMode == AccentMode::System) {
-            target = GetSystemAccentColor();
-        } else if (settings.accentMode == AccentMode::Auto && state.media.art) {
-            target = state.media.art->sampledAccent;
+        }
+
+        const bool morphingPaused = g_colorRainbowEnabled.load() && hasPalette &&
+                                    !state.media.playing && rainbowHasStarted_;
+        if (morphingPaused) {
+            // Freeze the exact displayed morph color while playback is paused.
+            target = currentAccent_;
+            lastRainbowUpdateTime_ = -1.0;
+        } else if (!(g_colorRainbowEnabled.load() && state.media.playing && hasPalette)) {
+            // When morphing is inactive or the palette is empty, use the selected base accent.
+            lastRainbowUpdateTime_ = -1.0;
+            if (settings.accentMode == AccentMode::System) {
+                target = GetSystemAccentColor();
+            } else if (settings.accentMode == AccentMode::Auto && state.media.art) {
+                target = state.media.art->sampledAccent;
+            }
         }
 
         target = EnsureContrastAgainstBackground(target, settings.pillBgColor);
@@ -2722,9 +3011,55 @@ class Renderer {
             const float cy = (rect.top + rect.bottom) * 0.5f;
             const float artPadding = 6.0f;
             const float artSize = height - artPadding * 2.0f;
-            DrawAlbumArt(state.media, D2D1::RectF(rect.left + artPadding, cy - artSize * 0.5f,
-                                                  rect.left + artPadding + artSize, cy + artSize * 0.5f),
-                         artSize * 0.5f, false);
+            const D2D1_RECT_F collapsedArtRect = D2D1::RectF(
+                rect.left + artPadding, cy - artSize * 0.5f,
+                rect.left + artPadding + artSize, cy + artSize * 0.5f);
+            const MediaSnapshot& media = state.media;
+            const bool slideArt = cfg_ && cfg_->trackTransitionStyle == TrackTransitionStyle::Slide &&
+                media.trackTransitionStartedAt > 0.0 && now >= media.trackTransitionStartedAt &&
+                (now - media.trackTransitionStartedAt) < 0.55 && media.hasPreviousTrack;
+            if (slideArt) {
+                const float progress = Clamp(static_cast<float>(
+                    (now - media.trackTransitionStartedAt) / 0.55), 0.0f, 1.0f);
+                const float eased = progress * progress * (3.0f - 2.0f * progress);
+                const float direction = media.trackTransitionDirection >= 0 ? 1.0f : -1.0f;
+                MediaSnapshot oldMedia = media;
+                oldMedia.art = media.previousArt;
+                oldMedia.sourceIcon = media.previousSourceIcon;
+                oldMedia.sourceBadge = media.previousSourceBadge;
+                target_->PushAxisAlignedClip(collapsedArtRect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                D2D1_MATRIX_3X2_F original;
+                target_->GetTransform(&original);
+                target_->SetTransform(D2D1::Matrix3x2F::Translation(
+                    -direction * artSize * eased, 0.0f) * original);
+                DrawAlbumArt(oldMedia, collapsedArtRect, artSize * 0.5f, false, 1.0f, true);
+                target_->SetTransform(original);
+                target_->SetTransform(D2D1::Matrix3x2F::Translation(
+                    direction * artSize * (1.0f - eased), 0.0f) * original);
+                DrawAlbumArt(media, collapsedArtRect, artSize * 0.5f, false);
+                target_->SetTransform(original);
+                target_->PopAxisAlignedClip();
+            } else if (cfg_ && cfg_->trackTransitionStyle == TrackTransitionStyle::Crossfade &&
+                       media.hasPreviousTrack &&
+                       media.trackTransitionStartedAt > 0.0 && now >= media.trackTransitionStartedAt &&
+                       (now - media.trackTransitionStartedAt) < 0.55) {
+                const float progress = Clamp(static_cast<float>(
+                    (now - media.trackTransitionStartedAt) / 0.55), 0.0f, 1.0f);
+                MediaSnapshot oldMedia = media;
+                oldMedia.art = media.previousArt;
+                oldMedia.sourceIcon = media.previousSourceIcon;
+                oldMedia.sourceBadge = media.previousSourceBadge;
+                // If the new track has no cover, fade the previous one out
+                // together with the placeholder instead of keeping it fully
+                // visible until the placeholder suddenly takes over.
+                const float oldArtOpacity = media.art ? 1.0f : 1.0f - progress;
+                DrawAlbumArt(oldMedia, collapsedArtRect, artSize * 0.5f, false,
+                             oldArtOpacity, true);
+                DrawAlbumArt(media, collapsedArtRect, artSize * 0.5f, false,
+                             progress, false);
+            } else {
+                DrawAlbumArt(media, collapsedArtRect, artSize * 0.5f, false);
+            }
 
             const D2D1_RECT_F clockRect = D2D1::RectF(rect.right - 56.0f, cy - 12.0f, rect.right - 10.0f, cy + 12.0f);
             DrawSystemClock(clockRect);
@@ -2747,67 +3082,98 @@ class Renderer {
                                                 rect.left + MediaLayout::kArtInsetX + artSize,
                                                 rect.top + MediaLayout::kArtInsetY + artSize);
 
-        const bool artTransition =
-            media.previousArt &&
-            media.art &&
-            media.artTransitionStartedAt > 0.0 &&
-            now >= media.artTransitionStartedAt &&
-            (now - media.artTransitionStartedAt) < 0.5;
-
-        if (artTransition) {
-            const float progress = Clamp(
-                static_cast<float>(
-                    (now - media.artTransitionStartedAt) / 0.5),
-                0.0f, 1.0f);
-
-            MediaSnapshot oldMedia = media;
-            oldMedia.art = media.previousArt;
-
-            // Fade out the previous artwork.
-            DrawAlbumArt(oldMedia, artRect, 16.0f, false,
-                         1.0f - progress, true);
-
-            // Fade in the new artwork.
-            DrawAlbumArt(media, artRect, 16.0f, true,
-                         progress, false);
-        } else if (media.previousArt && !media.art) {
-            // Keep showing the previous artwork while the new image loads.
-            MediaSnapshot oldMedia = media;
-            oldMedia.art = media.previousArt;
-            DrawAlbumArt(oldMedia, artRect, 16.0f, false);
-        } else {
-            DrawAlbumArt(media, artRect, 16.0f, true);
-        }
-
         const float clockW = 50.0f, clockH = 20.0f;
         const D2D1_RECT_F clockRect = D2D1::RectF(rect.right - 24.0f - clockW,
                                                   rect.top + 20.0f + (artSize - clockH) * 0.5f + 8.0f,
                                                   rect.right - 24.0f,
                                                   rect.top + 20.0f + (artSize + clockH) * 0.5f + 8.0f);
-
         const float textLeft = artRect.right + 18.0f;
         const float textRight = clockRect.left - 16.0f;
+        const D2D1_RECT_F trackVisualRect = D2D1::RectF(artRect.left, artRect.top,
+                                                        textRight, artRect.bottom + 24.0f);
+        const bool slideTransition = cfg_ && cfg_->trackTransitionStyle == TrackTransitionStyle::Slide &&
+            media.trackTransitionStartedAt > 0.0 && now >= media.trackTransitionStartedAt &&
+            (now - media.trackTransitionStartedAt) < 0.55 && media.hasPreviousTrack;
 
-        const float textAlpha = artTransition
-            ? Clamp(static_cast<float>(
-                (now - media.artTransitionStartedAt) / 0.5), 0.0f, 1.0f)
-            : 1.0f;
+        auto drawTrackVisuals = [&](const MediaSnapshot& item, float offsetX, float opacity,
+                                    bool useTransitionCache, bool previousTrack) {
+            D2D1_MATRIX_3X2_F original;
+            target_->GetTransform(&original);
+            target_->SetTransform(D2D1::Matrix3x2F::Translation(offsetX, 0.0f) * original);
+            DrawAlbumArt(item, artRect, 16.0f, true, opacity, useTransitionCache);
+            textBrush_->SetOpacity(0.98f * opacity);
+            const std::wstring title = item.title.empty()
+                ? std::wstring(Tr(L"Невідомо", L"Неизвестно", L"Unknown")) : item.title;
+            DrawMarqueeText(title,
+                D2D1::RectF(textLeft, rect.top + 34.0f, textRight, rect.top + 54.0f),
+                textFormat_.Get(), textBrush_.Get(), now, 42.0f,
+                previousTrack ? previousMarqueeTitle_ : marqueeTitle_);
+            mutedBrush_->SetOpacity(0.80f * opacity);
+            DrawMarqueeText(item.artist,
+                D2D1::RectF(textLeft, rect.top + 54.0f, textRight, rect.top + 74.0f),
+                smallTextFormat_.Get(), mutedBrush_.Get(), now, 30.0f,
+                previousTrack ? previousMarqueeArtist_ : marqueeArtist_);
+            if (!item.albumTitle.empty()) {
+                mutedBrush_->SetOpacity(0.70f * opacity);
+                DrawMarqueeText(item.albumTitle,
+                    D2D1::RectF(textLeft, rect.top + 68.0f, textRight, rect.top + 84.0f),
+                    smallTextFormat_.Get(), mutedBrush_.Get(), now, 28.0f,
+                    previousTrack ? previousMarqueeAlbum_ : marqueeAlbum_);
+            }
+            textBrush_->SetOpacity(0.98f);
+            mutedBrush_->SetOpacity(0.90f);
+            target_->SetTransform(original);
+        };
 
-        textBrush_->SetOpacity(0.98f * textAlpha);
-        DrawMarqueeText(media.title.empty() ? std::wstring(Tr(L"Невідомо", L"Неизвестно", L"Unknown")) : media.title,
-                        D2D1::RectF(textLeft, rect.top + 34.0f, textRight, rect.top + 54.0f), textFormat_.Get(),
-                        textBrush_.Get(), now, 42.0f, marqueeTitle_);
+        const bool crossfadeTransition = !slideTransition && cfg_ &&
+            cfg_->trackTransitionStyle == TrackTransitionStyle::Crossfade &&
+            media.hasPreviousTrack && media.trackTransitionStartedAt > 0.0 &&
+            now >= media.trackTransitionStartedAt &&
+            (now - media.trackTransitionStartedAt) < 0.55;
 
-        mutedBrush_->SetOpacity(0.80f * textAlpha);
-        DrawMarqueeText(media.artist, D2D1::RectF(textLeft, rect.top + 54.0f, textRight, rect.top + 74.0f),
-                        smallTextFormat_.Get(), mutedBrush_.Get(), now, 30.0f, marqueeArtist_);
-        if (!media.albumTitle.empty()) {
-            mutedBrush_->SetOpacity(0.70f * textAlpha);
-            DrawMarqueeText(media.albumTitle, D2D1::RectF(textLeft, rect.top + 68.0f, textRight, rect.top + 84.0f),
-                            smallTextFormat_.Get(), mutedBrush_.Get(), now, 28.0f, marqueeAlbum_);
+        if (slideTransition || crossfadeTransition) {
+            const float progress = Clamp(static_cast<float>(
+                (now - media.trackTransitionStartedAt) / 0.55), 0.0f, 1.0f);
+            MediaSnapshot oldMedia = media;
+            oldMedia.title = media.previousTitle;
+            oldMedia.artist = media.previousArtist;
+            oldMedia.albumTitle = media.previousAlbumTitle;
+            oldMedia.sourceBadge = media.previousSourceBadge;
+            oldMedia.sourceIcon = media.previousSourceIcon;
+            oldMedia.art = media.previousArt;
+
+            target_->PushAxisAlignedClip(trackVisualRect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+            if (slideTransition) {
+                const float eased = progress * progress * (3.0f - 2.0f * progress);
+                const float width = trackVisualRect.right - trackVisualRect.left;
+                const float direction = media.trackTransitionDirection >= 0 ? 1.0f : -1.0f;
+                drawTrackVisuals(oldMedia, -direction * width * eased, 1.0f, true, true);
+                drawTrackVisuals(media, direction * width * (1.0f - eased), 1.0f, false, false);
+            } else {
+                // Fade the complete previous and current track visuals together.
+                // This uses the track-change timestamp, so it does not depend on
+                // when the media provider finishes loading the new thumbnail.
+                drawTrackVisuals(oldMedia, 0.0f, 1.0f - progress, true, true);
+                drawTrackVisuals(media, 0.0f, progress, false, false);
+            }
+            target_->PopAxisAlignedClip();
+        } else {
+            DrawAlbumArt(media, artRect, 16.0f, true);
+            textBrush_->SetOpacity(0.98f);
+            DrawMarqueeText(media.title.empty() ? std::wstring(Tr(L"Невідомо", L"Неизвестно", L"Unknown")) : media.title,
+                            D2D1::RectF(textLeft, rect.top + 34.0f, textRight, rect.top + 54.0f), textFormat_.Get(),
+                            textBrush_.Get(), now, 42.0f, marqueeTitle_);
+            mutedBrush_->SetOpacity(0.80f);
+            DrawMarqueeText(media.artist, D2D1::RectF(textLeft, rect.top + 54.0f, textRight, rect.top + 74.0f),
+                            smallTextFormat_.Get(), mutedBrush_.Get(), now, 30.0f, marqueeArtist_);
+            if (!media.albumTitle.empty()) {
+                mutedBrush_->SetOpacity(0.70f);
+                DrawMarqueeText(media.albumTitle, D2D1::RectF(textLeft, rect.top + 68.0f, textRight, rect.top + 84.0f),
+                                smallTextFormat_.Get(), mutedBrush_.Get(), now, 28.0f, marqueeAlbum_);
+            }
+            textBrush_->SetOpacity(0.98f);
+            mutedBrush_->SetOpacity(0.90f);
         }
-        textBrush_->SetOpacity(0.98f);
-        mutedBrush_->SetOpacity(0.90f);
 
         DrawSystemClock(clockRect);
 
@@ -3070,18 +3436,21 @@ class Renderer {
                                  artOpacity);
             }
         } else {
-            accentBrush_->SetOpacity(0.24f);
+            accentBrush_->SetOpacity(0.24f * artOpacity);
             target_->FillRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), accentBrush_.Get());
             accentBrush_->SetOpacity(1.0f);
             if (media.sourceIcon && !media.sourceIcon->bgra.empty() && (rect.right - rect.left) > 30.0f) {
                 DrawBitmapPixels(*media.sourceIcon,
                                   D2D1::RectF(rect.left + 11, rect.top + 11, rect.right - 11, rect.bottom - 11),
-                                  sourceIconBitmap_, sourceIconGeneration_, 0.95f);
+                                  sourceIconBitmap_, sourceIconGeneration_, 0.95f * artOpacity);
             } else if (textFormat_) {
                 const std::wstring badge = media.sourceBadge.empty() ? L"\u25b6" : media.sourceBadge;
+                const float oldTextOpacity = textBrush_->GetOpacity();
+                textBrush_->SetOpacity(oldTextOpacity * artOpacity);
                 textFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                 textFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                 target_->DrawTextW(badge.c_str(), static_cast<UINT32>(badge.size()), textFormat_.Get(), rect, textBrush_.Get());
+                textBrush_->SetOpacity(oldTextOpacity);
                 textFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                 textFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
             }
@@ -3094,7 +3463,7 @@ class Renderer {
             const D2D1_RECT_F badge = D2D1::RectF(rect.right - 24, rect.bottom - 22, rect.right - 3, rect.bottom - 3);
             DrawCircularBitmapPixels(*media.sourceIcon,
                                      D2D1::Point2F((badge.left + badge.right) * 0.5f, (badge.top + badge.bottom) * 0.5f),
-                                     9.5f, sourceIconBitmap_, sourceIconGeneration_, 0.98f);
+                                     9.5f, sourceIconBitmap_, sourceIconGeneration_, 0.98f * artOpacity);
         }
     }
 
@@ -3156,6 +3525,9 @@ class Renderer {
     MarqueeLayoutCache marqueeTitle_;
     MarqueeLayoutCache marqueeArtist_;
     MarqueeLayoutCache marqueeAlbum_;
+    MarqueeLayoutCache previousMarqueeTitle_;
+    MarqueeLayoutCache previousMarqueeArtist_;
+    MarqueeLayoutCache previousMarqueeAlbum_;
     ComPtr<ID2D1Bitmap> artBitmap_;
     ComPtr<ID2D1Bitmap> transitionArtBitmap_;
     ComPtr<ID2D1Bitmap> sourceIconBitmap_;
@@ -3167,6 +3539,9 @@ class Renderer {
     Material material_{};
     D2D1_COLOR_F currentAccent_ = D2D1::ColorF(0x4cc9f0);
     double lastAccentTime_ = -1.0;
+    double rainbowPhase_ = 0.0;
+    double lastRainbowUpdateTime_ = -1.0;
+    bool rainbowHasStarted_ = false;
     float mediaBtnPress_[3] = {0.0f, 0.0f, 0.0f};
     double lastMediaBtnTime_ = -1.0;
     float lastTextScale_ = 0.0f;
@@ -3297,6 +3672,7 @@ void StartHotkeyCapture(int target) {
     if (g_captureHook) {
         g_captureHotkey = true;
         g_captureDeadline = NowSeconds() + 10.0;
+        g_layoutDirty = true;
     }
 }
 
@@ -3366,6 +3742,11 @@ enum MenuId : UINT {
     ID_ADD_RAINBOW_COLOR,
     ID_RESET_RAINBOW_COLORS,
     ID_RAINBOW_COLOR_BASE = 4100,
+    ID_ACCENT_MODE_AUTO = 4400,
+    ID_ACCENT_MODE_SYSTEM,
+    ID_ACCENT_MODE_CUSTOM,
+    ID_TRACK_TRANSITION_CROSSFADE,
+    ID_TRACK_TRANSITION_SLIDE,
 
     ID_BUTTON_STYLE_DEFAULT,
     ID_BUTTON_STYLE_CUBIC,
@@ -3379,7 +3760,7 @@ enum MenuId : UINT {
     ID_RESET_OVERRIDES,
 };
 
-void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
+void ShowSettingsMenu(HWND hwnd, HWND menuOwner, POINT screenPoint) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING | (g_alwaysOnTop.load() ? MF_CHECKED : 0), ID_TOPMOST,
                 Tr(L"Поверх усіх вікон", L"Поверх всех окон", L"Always on top"));
@@ -3429,10 +3810,19 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     addOpacityItem(ID_OPACITY_40,  40,  L"40%");
 
     HMENU colorMenu = CreatePopupMenu();
-    AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_ACCENT,
-                Tr(L"Основний колір (без переливання)...",
-                   L"Основной цвет (без переливания)...",
-                   L"Base color (without morphing)..."));
+    HMENU accentModeMenu = CreatePopupMenu();
+    const Settings colorSettings = GetSettingsCopy();
+    AppendMenuW(accentModeMenu, MF_STRING | (colorSettings.accentMode == AccentMode::Auto ? MF_CHECKED : 0),
+                ID_ACCENT_MODE_AUTO,
+                Tr(L"Акцент із обкладинки треку", L"Акцент из обложки трека", L"Accent from track artwork"));
+    AppendMenuW(accentModeMenu, MF_STRING | (colorSettings.accentMode == AccentMode::System ? MF_CHECKED : 0),
+                ID_ACCENT_MODE_SYSTEM,
+                Tr(L"Акцентний колір Windows", L"Акцентный цвет Windows", L"Windows accent color"));
+    AppendMenuW(accentModeMenu, MF_STRING | (colorSettings.accentMode == AccentMode::Custom ? MF_CHECKED : 0),
+                ID_ACCENT_MODE_CUSTOM,
+                Tr(L"Визначений колір...", L"Определённый цвет...", L"Custom color..."));
+    AppendMenuW(colorMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(accentModeMenu),
+                Tr(L"Основний колір", L"Основной цвет", L"Base color"));
     AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_BACKGROUND, Tr(L"Колір фону...", L"Цвет фона...", L"Background color..."));
     AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_TEXT_PRIMARY, Tr(L"Основний текст...", L"Основной текст...", L"Primary text..."));
     AppendMenuW(colorMenu, MF_STRING, ID_SET_COLOR_TEXT_SECONDARY, Tr(L"Вторинний текст...", L"Вторичный текст...", L"Secondary text..."));
@@ -3440,14 +3830,15 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     HMENU rainbowMenu = CreatePopupMenu();
     AppendMenuW(rainbowMenu, MF_STRING | (g_colorRainbowEnabled.load() ? MF_CHECKED : 0), ID_TOGGLE_RAINBOW, Tr(L"Увімкнути переливання", L"Включить переливание", L"Enable morphing"));
     AppendMenuW(rainbowMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(rainbowMenu, MF_STRING, ID_ADD_RAINBOW_COLOR, Tr(L"+ Додати колір у палітру...", L"+ Добавить цвет в палитру...", L"+ Add color to palette..."));
-
     std::vector<D2D1_COLOR_F> paletteSnapshot;
     {
         std::lock_guard lock(g_rainbowMutex);
         paletteSnapshot = g_rainbowPalette;
     }
     const size_t visiblePaletteCount = (std::min)(paletteSnapshot.size(), static_cast<size_t>(256));
+    AppendMenuW(rainbowMenu, MF_STRING | (visiblePaletteCount >= 256 ? MF_GRAYED : 0),
+                ID_ADD_RAINBOW_COLOR,
+                Tr(L"+ Додати колір у палітру...", L"+ Добавить цвет в палитру...", L"+ Add color to palette..."));
     for (size_t i = 0; i < visiblePaletteCount; ++i) {
         const D2D1_COLOR_F& color = paletteSnapshot[i];
         wchar_t hex[16];
@@ -3457,7 +3848,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         const int opacity = static_cast<int>(Clamp(color.a, 0.0f, 1.0f) * 100.0f + 0.5f);
         std::wstring label = Tr(L"Колір ", L"Цвет ", L"Color ");
         label += std::to_wstring(i + 1) + L" — " + hex + L" (" + std::to_wstring(opacity) + L"%)";
-        AppendMenuW(rainbowMenu, MF_STRING | MF_GRAYED, ID_RAINBOW_COLOR_BASE + static_cast<UINT>(i), label.c_str());
+        AppendMenuW(rainbowMenu, MF_STRING, ID_RAINBOW_COLOR_BASE + static_cast<UINT>(i), label.c_str());
     }
 
     AppendMenuW(rainbowMenu, MF_STRING | (paletteSnapshot.empty() ? MF_GRAYED : 0), ID_RESET_RAINBOW_COLORS,
@@ -3483,11 +3874,22 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     HMENU customMenu = CreatePopupMenu();
     AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(colorMenu), Tr(L"Налаштування кольорів", L"Настройка цветов", L"Color settings"));
     AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(rainbowMenu), Tr(L"Переливання кольорів", L"Переливание цветов", L"Color morphing"));
+
+    HMENU trackTransitionMenu = CreatePopupMenu();
+    const bool slideTransition = GetSettingsCopy().trackTransitionStyle == TrackTransitionStyle::Slide;
+    AppendMenuW(trackTransitionMenu, MF_STRING | (!slideTransition ? MF_CHECKED : 0),
+                ID_TRACK_TRANSITION_CROSSFADE,
+                Tr(L"Плавне зникнення / поява", L"Плавное исчезновение / появление", L"Fade out / fade in"));
+    AppendMenuW(trackTransitionMenu, MF_STRING | (slideTransition ? MF_CHECKED : 0),
+                ID_TRACK_TRANSITION_SLIDE,
+                Tr(L"Перегортання вбік", L"Перелистывание вбок", L"Horizontal slide"));
+    AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(trackTransitionMenu),
+                Tr(L"Анімація зміни треку", L"Анимация смены трека", L"Track transition animation"));
     AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(buttonStyleMenu), Tr(L"Стиль кнопок", L"Стиль кнопок", L"Button style"));
     AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(langMenu), Tr(L"Мова", L"Язык", L"Language"));
     AppendMenuW(customMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(customMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(opacityMenu), Tr(L"Прозорість вікна", L"Прозрачность окна", L"Window opacity"));
-    AppendMenuW(customMenu, MF_STRING | (g_disableAnimations.load() ? MF_CHECKED : 0), ID_DISABLE_ANIMATIONS, Tr(L"Вимкнути анімації", L"Отключить анимации", L"Disable animations"));
+    AppendMenuW(customMenu, MF_STRING | (g_disableAnimations.load() ? MF_CHECKED : 0), ID_DISABLE_ANIMATIONS, Tr(L"Вимкнути анімації плеєра", L"Отключить анимации плеера", L"Disable player animations"));
     AppendMenuW(customMenu, MF_STRING | (g_disableShadow.load() ? MF_CHECKED : 0), ID_DISABLE_SHADOW, Tr(L"Вимкнути тінь", L"Отключить тень", L"Disable shadow"));
     AppendMenuW(customMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(customMenu, MF_STRING, ID_RESET_OVERRIDES, Tr(L"Скинути налаштування меню (до Windhawk)", L"Сбросить настройки меню (к Windhawk)", L"Reset menu overrides (to Windhawk)"));
@@ -3553,9 +3955,12 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING | (g_customPosSet.load() ? 0 : MF_GRAYED), ID_RESET,
                 Tr(L"Скинути базову позицію", L"Сбросить базовое положение", L"Reset default position"));
 
-    SetForegroundWindow(hwnd);
-    const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screenPoint.x, screenPoint.y, 0, hwnd, nullptr);
-    PostMessageW(hwnd, WM_NULL, 0, 0);
+    // The popup menu must be owned by a window created on this menu thread.
+    // hwnd belongs to the render thread, so using it here makes TrackPopupMenu fail.
+    SetForegroundWindow(menuOwner);
+    const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                    screenPoint.x, screenPoint.y, 0, menuOwner, nullptr);
+    PostMessageW(menuOwner, WM_NULL, 0, 0);
     DestroyMenu(menu);
 
     auto setOpacityVal = [](int val) {
@@ -3575,6 +3980,32 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         swprintf_s(hex, L"#%02X%02X%02X%02X", (int)(c.r * 255), (int)(c.g * 255), (int)(c.b * 255), (int)(c.a * 255));
         Wh_SetStringValue(key, hex);
     };
+
+    if (cmd >= ID_RAINBOW_COLOR_BASE && cmd < ID_RAINBOW_COLOR_BASE + 256) {
+        const size_t paletteIndex = static_cast<size_t>(cmd - ID_RAINBOW_COLOR_BASE);
+        D2D1_COLOR_F editedColor = D2D1::ColorF(0);
+        bool hasColor = false;
+        {
+            std::lock_guard lock(g_rainbowMutex);
+            if (paletteIndex < g_rainbowPalette.size()) {
+                editedColor = g_rainbowPalette[paletteIndex];
+                hasColor = true;
+            }
+        }
+
+        if (hasColor && PickColorAndOpacityWithDialog(menuOwner, editedColor)) {
+            {
+                std::lock_guard lock(g_rainbowMutex);
+                // Re-check the index in case the palette changed while the dialog was open.
+                if (paletteIndex < g_rainbowPalette.size()) {
+                    g_rainbowPalette[paletteIndex] = editedColor;
+                }
+            }
+            SaveRainbowPalette();
+            g_layoutDirty = true;
+        }
+        return;
+    }
 
     switch (cmd) {
         case ID_TOPMOST:
@@ -3652,9 +4083,34 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         case ID_OPACITY_60:  setOpacityVal(60);  break;
         case ID_OPACITY_50:  setOpacityVal(50);  break;
         case ID_OPACITY_40:  setOpacityVal(40);  break;
+        case ID_ACCENT_MODE_AUTO:
+            Wh_SetIntValue(L"OverrideAccentMode", static_cast<int>(AccentMode::Auto));
+            LoadSettings();
+            break;
+        case ID_ACCENT_MODE_SYSTEM:
+            Wh_SetIntValue(L"OverrideAccentMode", static_cast<int>(AccentMode::System));
+            LoadSettings();
+            break;
+        case ID_TRACK_TRANSITION_CROSSFADE:
+            Wh_SetIntValue(L"TrackTransitionStyle", 0);
+            LoadSettings();
+            break;
+        case ID_TRACK_TRANSITION_SLIDE:
+            Wh_SetIntValue(L"TrackTransitionStyle", 1);
+            LoadSettings();
+            break;
+        case ID_ACCENT_MODE_CUSTOM: {
+            Settings s = GetSettingsCopy();
+            if (PickColorAndOpacityWithDialog(menuOwner, s.customAccent)) {
+                Wh_SetIntValue(L"OverrideAccentMode", static_cast<int>(AccentMode::Custom));
+                saveColorOverride(L"OverrideCustomAccent", s.customAccent);
+                LoadSettings();
+            }
+            break;
+        }
         case ID_SET_COLOR_ACCENT: {
             Settings s = GetSettingsCopy();
-            if (PickColorAndOpacityWithDialog(hwnd, s.customAccent)) {
+            if (PickColorAndOpacityWithDialog(menuOwner, s.customAccent)) {
                 Wh_SetIntValue(L"OverrideAccentMode", static_cast<int>(AccentMode::Custom));
                 saveColorOverride(L"OverrideCustomAccent", s.customAccent);
                 LoadSettings();
@@ -3663,7 +4119,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         }
         case ID_SET_COLOR_BACKGROUND: {
             Settings s = GetSettingsCopy();
-            if (PickColorAndOpacityWithDialog(hwnd, s.pillBgColor)) {
+            if (PickColorAndOpacityWithDialog(menuOwner, s.pillBgColor)) {
                 saveColorOverride(L"OverrideBgColor", s.pillBgColor);
                 LoadSettings();
             }
@@ -3671,7 +4127,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         }
         case ID_SET_COLOR_TEXT_PRIMARY: {
             Settings s = GetSettingsCopy();
-            if (PickColorAndOpacityWithDialog(hwnd, s.textPrimaryColor)) {
+            if (PickColorAndOpacityWithDialog(menuOwner, s.textPrimaryColor)) {
                 saveColorOverride(L"OverrideTextPrimary", s.textPrimaryColor);
                 LoadSettings();
             }
@@ -3679,7 +4135,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         }
         case ID_SET_COLOR_TEXT_SECONDARY: {
             Settings s = GetSettingsCopy();
-            if (PickColorAndOpacityWithDialog(hwnd, s.textSecondaryColor)) {
+            if (PickColorAndOpacityWithDialog(menuOwner, s.textSecondaryColor)) {
                 saveColorOverride(L"OverrideTextSecondary", s.textSecondaryColor);
                 LoadSettings();
             }
@@ -3692,12 +4148,16 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
             break;
         case ID_ADD_RAINBOW_COLOR: {
             D2D1_COLOR_F newCol = D2D1::ColorF(0xff0000);
-            if (PickColorAndOpacityWithDialog(hwnd, newCol)) {
+            if (PickColorAndOpacityWithDialog(menuOwner, newCol)) {
+                bool added = false;
                 {
                     std::lock_guard lock(g_rainbowMutex);
-                    g_rainbowPalette.push_back(newCol);
+                    if (g_rainbowPalette.size() < 256) {
+                        g_rainbowPalette.push_back(newCol);
+                        added = true;
+                    }
                 }
-                SaveRainbowPalette();
+                if (added) SaveRainbowPalette();
                 g_layoutDirty = true;
             }
             break;
@@ -3744,6 +4204,7 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
             break;
         case ID_RESET_OVERRIDES:
             Wh_DeleteValue(L"OverrideAccentMode");
+            Wh_DeleteValue(L"TrackTransitionStyle");
             Wh_DeleteValue(L"OverrideCustomAccent");
             Wh_DeleteValue(L"OverrideBgColor");
             Wh_DeleteValue(L"OverrideTextPrimary");
@@ -3793,24 +4254,173 @@ void ShowSettingsMenu(HWND hwnd, POINT screenPoint) {
         case ID_HOTKEY_ENABLE_TOGGLE:
             g_hotkeyEnabled = !g_hotkeyEnabled.load();
             PersistHotkeys();
-            ApplyHideShowHotkey(hwnd);
+            PostMessageW(hwnd, WM_APP_APPLY_HOTKEY, 0, 0);
             break;
         case ID_HOTKEY_HIDESHOW_SET:
-            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(1); }
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; PostMessageW(hwnd, WM_APP_START_HOTKEY_CAPTURE, 1, 0); }
             break;
         case ID_HOTKEY_NEXT_SET:
-            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(2); }
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; PostMessageW(hwnd, WM_APP_START_HOTKEY_CAPTURE, 2, 0); }
             break;
         case ID_HOTKEY_PREV_SET:
-            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(3); }
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; PostMessageW(hwnd, WM_APP_START_HOTKEY_CAPTURE, 3, 0); }
             break;
         case ID_HOTKEY_PLAYPAUSE_SET:
-            if (g_hotkeyEnabled.load()) { g_moveMode = false; StartHotkeyCapture(4); }
+            if (g_hotkeyEnabled.load()) { g_moveMode = false; PostMessageW(hwnd, WM_APP_START_HOTKEY_CAPTURE, 4, 0); }
             break;
         default:
             return;
     }
     g_layoutDirty = true;
+}
+
+struct SettingsMenuThreadArgs {
+    HWND hwnd = nullptr;
+    POINT screenPoint{};
+};
+
+struct SettingsMenuWindowSet {
+    RECT bounds{};
+    std::vector<HWND> windows;
+};
+
+BOOL CALLBACK CollectThreadPopupMenus(HWND window, LPARAM parameter) {
+    auto* set = reinterpret_cast<SettingsMenuWindowSet*>(parameter);
+    if (!set || !IsWindowVisible(window)) return TRUE;
+
+    wchar_t className[32] = {};
+    if (!GetClassNameW(window, className, static_cast<int>(std::size(className))) ||
+        wcscmp(className, L"#32768") != 0) {
+        return TRUE;
+    }
+
+    DWORD processId = 0;
+    const DWORD threadId = GetWindowThreadProcessId(window, &processId);
+    if (threadId != GetCurrentThreadId() || processId != GetCurrentProcessId()) return TRUE;
+
+    RECT rect{};
+    if (!GetWindowRect(window, &rect)) return TRUE;
+    if (set->windows.empty()) {
+        set->bounds = rect;
+    } else {
+        RECT combined{};
+        UnionRect(&combined, &set->bounds, &rect);
+        set->bounds = combined;
+    }
+    set->windows.push_back(window);
+    return TRUE;
+}
+
+LRESULT CALLBACK SettingsMenuOwnerProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_TIMER && wParam == 1) {
+        SettingsMenuWindowSet menus;
+        EnumThreadWindows(GetCurrentThreadId(), CollectThreadPopupMenus,
+                          reinterpret_cast<LPARAM>(&menus));
+
+        // TrackPopupMenu creates its own popup windows. Keep the menu alive while
+        // the cursor is inside their combined bounds or within a 10 px margin.
+        if (!menus.windows.empty()) {
+            RECT allowed = menus.bounds;
+            InflateRect(&allowed, 10, 10);
+            POINT cursor{};
+            if (GetCursorPos(&cursor) && !PtInRect(&allowed, cursor)) {
+                EndMenu();
+            }
+        }
+        return 0;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+DWORD WINAPI SettingsMenuThreadProc(void* param) {
+    std::unique_ptr<SettingsMenuThreadArgs> args(
+        static_cast<SettingsMenuThreadArgs*>(param));
+    if (args && IsWindow(args->hwnd)) {
+        static constexpr wchar_t kMenuOwnerClass[] = L"DynamicIslandSettingsMenuOwner";
+        static std::once_flag registerClassOnce;
+        std::call_once(registerClassOnce, [] {
+            WNDCLASSEXW wc{};
+            wc.cbSize = sizeof(wc);
+            wc.lpfnWndProc = SettingsMenuOwnerProc;
+            wc.hInstance = GetModuleHandleW(nullptr);
+            wc.lpszClassName = kMenuOwnerClass;
+            RegisterClassExW(&wc);
+        });
+
+        // Keep menu ownership on this thread so TrackPopupMenu does not block
+        // the overlay's render thread. The owner also monitors cursor distance.
+        POINT ownerPoint{};
+        GetCursorPos(&ownerPoint);
+        HWND menuOwner = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kMenuOwnerClass, L"", WS_POPUP,
+            ownerPoint.x, ownerPoint.y, 1, 1, nullptr, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
+        if (menuOwner) {
+            g_settingsMenuOwner = menuOwner;
+            SetTimer(menuOwner, 1, 40, nullptr);
+            ShowWindow(menuOwner, SW_SHOWNOACTIVATE);
+            SetWindowPos(menuOwner, HWND_TOPMOST, ownerPoint.x, ownerPoint.y, 1, 1,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            ShowSettingsMenu(args->hwnd, menuOwner, args->screenPoint);
+
+            // Restore the previous foreground window only if the menu still
+            // owns the foreground (or focus is otherwise still within this
+            // process). A click on another application must keep its focus.
+            HWND foregroundBeforeDestroy = GetForegroundWindow();
+            DWORD foregroundProcessId = 0;
+            if (foregroundBeforeDestroy) {
+                GetWindowThreadProcessId(foregroundBeforeDestroy, &foregroundProcessId);
+            }
+            const bool shouldRestoreForeground = !foregroundBeforeDestroy ||
+                foregroundBeforeDestroy == menuOwner ||
+                foregroundProcessId == GetCurrentProcessId();
+
+            KillTimer(menuOwner, 1);
+            g_settingsMenuOwner = nullptr;
+            DestroyWindow(menuOwner);
+
+            if (shouldRestoreForeground) {
+                HWND restoreForeground = g_foregroundBeforeSettingsMenu.exchange(nullptr);
+                if (restoreForeground && IsWindow(restoreForeground)) {
+                    SetForegroundWindow(restoreForeground);
+                }
+            } else {
+                g_foregroundBeforeSettingsMenu = nullptr;
+            }
+        } else {
+            g_foregroundBeforeSettingsMenu = nullptr;
+        }
+    }
+    g_settingsMenuOpen = false;
+    g_layoutDirty = true;
+    return 0;
+}
+
+void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
+    if (g_settingsMenuOpen.exchange(true)) return;
+    HWND previousForeground = GetForegroundWindow();
+    if (previousForeground && previousForeground != hwnd && IsWindow(previousForeground)) {
+        g_foregroundBeforeSettingsMenu = previousForeground;
+    } else {
+        g_foregroundBeforeSettingsMenu = nullptr;
+    }
+    g_layoutDirty = true;
+
+    auto args = std::make_unique<SettingsMenuThreadArgs>();
+    args->hwnd = hwnd;
+    args->screenPoint = screenPoint;
+    HANDLE thread = CreateThread(nullptr, 0, SettingsMenuThreadProc,
+                                 args.get(), 0, nullptr);
+    if (!thread) {
+        g_settingsMenuOpen = false;
+        g_foregroundBeforeSettingsMenu = nullptr;
+        return;
+    }
+    args.release();
+
+    std::lock_guard lock(g_settingsMenuThreadMutex);
+    if (g_settingsMenuThread) CloseHandle(g_settingsMenuThread);
+    g_settingsMenuThread = thread;
 }
 
 void SaveCustomPositionFromWindow(HWND hwnd) {
@@ -4067,7 +4677,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (MediaGearHitTest(cp)) {
                 POINT pt = {x, y};
                 ClientToScreen(hwnd, &pt);
-                ShowSettingsMenu(hwnd, pt);
+                StartSettingsMenu(hwnd, pt);
                 return 0;
             }
 
@@ -4110,6 +4720,25 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             ApplyHideShowHotkey(hwnd);
             return 0;
 
+        case WM_APP_START_HOTKEY_CAPTURE:
+            StartHotkeyCapture(static_cast<int>(wParam));
+            return 0;
+
+        case WM_RBUTTONDOWN:
+            return 0;
+
+        case WM_CONTEXTMENU: {
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (pt.x == -1 && pt.y == -1) GetCursorPos(&pt);
+            if (g_moveMode.load()) {
+                g_moveMode = false;
+                g_layoutDirty = true;
+                return 0;
+            }
+            StartSettingsMenu(hwnd, pt);
+            return 0;
+        }
+
         case WM_RBUTTONUP: {
             if (g_moveMode.load()) {
                 g_moveMode = false;
@@ -4118,7 +4747,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ClientToScreen(hwnd, &pt);
-            ShowSettingsMenu(hwnd, pt);
+            StartSettingsMenu(hwnd, pt);
             return 0;
         }
     }
@@ -4169,6 +4798,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     double lastFullscreenCheck = -1.0;
     double lastTopmostCheck = 0.0;
     bool prevHover = false, prevPinned = false;
+    bool prevTransitionAnimating = false;
     uint64_t prevArtPtr = 0;
     std::wstring prevTitle;
     bool prevPlaying = false;
@@ -4270,10 +4900,10 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
 
         const bool wantVisible = g_hidden.load() ? false : (moveMode ? true : (mediaPresent && !fullscreenSuppressed && !idleExpired));
-        const bool pinned = moveMode;
+        const bool pinned = moveMode || g_settingsMenuOpen.load();
 
-        if (wantVisible && isAnyFullscreen && g_overGames.load() && !isBrowserFullscreen && g_alwaysOnTop.load() &&
-            now - lastTopmostCheck > 1.0) {
+        if (wantVisible && isAnyFullscreen && g_overGames.load() && !isBrowserFullscreen &&
+            g_alwaysOnTop.load() && !g_settingsMenuOpen.load() && now - lastTopmostCheck > 1.0) {
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             lastTopmostCheck = now;
         }
@@ -4311,11 +4941,28 @@ DWORD WINAPI RenderThreadProc(void*) {
         if (clickThrough) hover = false;
         SetClickThrough(hwnd, clickThrough);
 
+        const bool forceForeground = g_clickThrough.load() && ctrlHeld && hover &&
+                                     !moveMode && !g_settingsMenuOpen.load();
+        if (g_forceForeground.exchange(forceForeground) != forceForeground) {
+            g_layoutDirty = true;
+        }
+
         const bool isInteracting = (g_clickThrough.load() && ctrlHeld && hover) ||
                                    g_dragging.load() || g_scrubbing.load() ||
                                    (g_pressedMediaButton.load() != -1);
 
         bool needsRender = false;
+        const bool transitionAnimating =
+            snapshot.media.hasPreviousTrack &&
+            snapshot.media.trackTransitionStartedAt > 0.0 &&
+            now >= snapshot.media.trackTransitionStartedAt &&
+            now - snapshot.media.trackTransitionStartedAt < 0.55;
+        if (transitionAnimating || (prevTransitionAnimating && !transitionAnimating)) {
+            // Force one final render after the transition expires so progress=1
+            // is committed instead of leaving a fractional last animation frame.
+            needsRender = true;
+        }
+        prevTransitionAnimating = transitionAnimating;
         
         const bool hoverExpanded = cfg.expandOnHover ? hover : (hover && g_clickExpanded.load());
         const bool recentTrackChange = g_autoExpand.load() && mediaPresent && snapshot.media.playing &&
@@ -4514,6 +5161,20 @@ bool StartThreads() {
 
 void StopThreads() {
     if (g_stopEvent) SetEvent(g_stopEvent);
+
+    // The settings menu runs on its own thread so TrackPopupMenu cannot pause
+    // the render loop. Cancel it before unloading the mod or destroying HWND.
+    HWND menuOwner = g_settingsMenuOwner.load();
+    if (menuOwner) PostMessageW(menuOwner, WM_CANCELMODE, 0, 0);
+    {
+        std::lock_guard lock(g_settingsMenuThreadMutex);
+        if (g_settingsMenuThread) {
+            WaitForSingleObject(g_settingsMenuThread, 2000);
+            CloseHandle(g_settingsMenuThread);
+            g_settingsMenuThread = nullptr;
+        }
+    }
+    g_settingsMenuOpen = false;
 
     HANDLE handles[] = {g_renderThread, g_mediaThread};
     for (HANDLE h : handles) {
@@ -4716,3 +5377,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
