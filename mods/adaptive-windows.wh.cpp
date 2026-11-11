@@ -126,7 +126,7 @@ receives it. The hook runs in a thread of its own, exists only while the mod run
 combinations that were already taken.
 
 ### Radial menu: moving a window with the mouse
-![Radial menu](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu.gif)
+![Radial menu](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu-glass.gif)
 
 Off by default. In the settings, choose which button opens it: the right button, the middle button,
 or Alt / Win + the left button. Then press and hold that button over a window of the grid. A ring
@@ -313,7 +313,7 @@ Windows deixa de recebê-la. O gancho roda numa thread própria, só existe enqu
 e só para as combinações que já estavam ocupadas.
 
 ### Menu radial: mover a janela com o mouse
-![Menu radial](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu.gif)
+![Menu radial](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu-glass.gif)
 
 Desligado por padrão. Nas configurações, escolha o botão que o abre: o botão direito, o do meio, ou
 Alt / Win + botão esquerdo. Depois pressione e segure esse botão sobre uma janela da grade. Um anel
