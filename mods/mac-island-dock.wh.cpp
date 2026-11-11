@@ -7013,10 +7013,14 @@ bool OnRenderingUnsafe(double now, double dt) {
         }
         // (As big as it's drawn: last frame's size, see BigAppIcon.)
         if (icon.app) {
-            UseBigIcon(icon, item.button,
-                       (int)std::ceil(item.iconHeight * item.base *
-                                      std::max(1.0, icon.magnification) *
-                                      scale));
+            const int pixels = (int)std::ceil(
+                item.iconHeight * item.base *
+                std::max(1.0, icon.magnification) * scale);
+            if (icon.magnification > 1.001) {
+                UseBigIcon(icon, item.button, pixels);
+            } else {
+                RestoreDockIcon(icon);
+            }
             UseBigOverlay(icon, item.button,
                           item.base * std::max(1.0, icon.magnification) *
                               scale);
