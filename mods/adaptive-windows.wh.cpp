@@ -17,14 +17,14 @@
 
 *(Português do Brasil logo abaixo / Brazilian Portuguese below)*
 
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/adaptive-windows-demo.gif)
-
-![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/Navegacaolivre.gif)
+![Adaptive Windows demo](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/overview.gif)
 
 ## English
 
-An automatic tiling window manager for Windows 11, inspired by the **Nava OS** concept videos.
-It arranges the windows of each monitor in a grid, animates every change with fluid transitions,
+An automatic tiling window manager for Windows 11, inspired by the **Nava OS** concept videos
+and by four tools: **tacky-borders** (focus border), **komorebi** (tiling), **AltSnap** (moving
+and resizing windows with Alt + mouse) and **Loop** (radial menu). Here you get all of it in one
+place. It arranges the windows of each monitor in a grid, animates every change with fluid transitions,
 and works together with minimize / restore / open animation mods: a window is animated
 **straight to the new place assigned by the grid**, not to where it used to be.
 
@@ -64,6 +64,8 @@ problem in it cannot take down the taskbar or File Explorer.
   to the same slots and order, without replaying the entrance animation.
 
 ### Free resizing: when it works
+![Resizing with Alt + right button](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/mouse-resize.gif)
+
 Dragging a window border adapts the grid only when all of these are true:
 - The window is in the grid: not taken out with the float hotkey, not maximized and not minimized.
 - There are at least two windows in the grid on the same monitor.
@@ -87,6 +89,10 @@ is opened, closed or minimized, when the layout changes and when you re-arrange 
 (Win + Alt + Home).
 
 ### Hotkeys
+![Moving windows with the keyboard](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/keyboard-move.gif)
+
+![Layouts](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/layouts.gif)
+
 | Hotkey | Action |
 |--------|--------|
 | Win + Ctrl + G | Cycle the layout: auto, columns, rows, grid, main left, main top |
@@ -120,6 +126,8 @@ receives it. The hook runs in a thread of its own, exists only while the mod run
 combinations that were already taken.
 
 ### Radial menu: moving a window with the mouse
+![Radial menu](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu.gif)
+
 Off by default. In the settings, choose which button opens it: the right button, the middle button,
 or Alt / Win + the left button. Then press and hold that button over a window of the grid. A ring
 appears where the cursor is (after a brief hold, so a quick click does not flash it). Move the mouse out of the ring to the left, right, up or down: that
@@ -144,11 +152,11 @@ Adaptive Windows works together with these two mods:
 
 - **MacOS Minimize Animation** (genie effect for minimize, restore and open).
 
-![Adaptive Windows with MacOS Minimize Animation](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
+![Adaptive Windows with MacOS Minimize Animation](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macos-minimize-animation.gif)
 
 - **Windows Animations**.
 
-![Adaptive Windows with Windows Animations](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
+![Adaptive Windows with Windows Animations](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windows-animations.gif)
 
 Those mods hide the window and play their own animation. With the *sync with open/close
 animations* option on, Adaptive Windows notices this, puts the window in its final slot while it
@@ -202,7 +210,9 @@ Radius"), leave this option on "do not touch" so the two do not fight over the c
 ## Português (Brasil)
 
 Gerenciador de janelas em grade automática para o Windows 11, inspirado nos vídeos de conceito
-do **Nava OS**. Ele organiza as janelas de cada monitor, anima as mudanças com transições fluidas
+do **Nava OS** e em quatro ferramentas: **tacky-borders** (borda na janela em foco), **komorebi**
+(grade de janelas), **AltSnap** (mover e redimensionar janelas com Alt + mouse) e **Loop** (menu
+radial). Aqui você tem tudo isso em um único lugar. Ele organiza as janelas de cada monitor, anima as mudanças com transições fluidas
 e funciona junto com os mods de animação de minimizar, restaurar e abrir janelas: a janela
 é animada **já para o novo lugar definido pela grade**, e não para onde ela estava antes.
 
@@ -242,6 +252,8 @@ Explorer, então um problema nele não derruba a barra de tarefas nem o Explorad
   retomam os mesmos espaços e a mesma ordem, sem repetir a animação de entrada.
 
 ### Redimensionamento livre: quando funciona
+![Redimensionar com Alt + botão direito](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/mouse-resize.gif)
+
 Arrastar a borda de uma janela adapta a grade apenas quando todas estas condições são verdadeiras:
 - A janela está na grade: não foi tirada com o atalho de soltar, nem está maximizada ou minimizada.
 - Há pelo menos duas janelas na grade no mesmo monitor.
@@ -264,6 +276,10 @@ escolhidos são descartados quando uma janela é aberta, fechada ou minimizada, 
 e quando você reorganiza tudo (Win + Alt + Home).
 
 ### Atalhos
+![Mover janelas pelo teclado](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/keyboard-move.gif)
+
+![Layouts](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/layouts.gif)
+
 | Atalho | Ação |
 |--------|------|
 | Win + Ctrl + G | Troca o layout: automático, colunas, linhas, grade, principal à esquerda, principal em cima |
@@ -297,6 +313,8 @@ Windows deixa de recebê-la. O gancho roda numa thread própria, só existe enqu
 e só para as combinações que já estavam ocupadas.
 
 ### Menu radial: mover a janela com o mouse
+![Menu radial](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu.gif)
+
 Desligado por padrão. Nas configurações, escolha o botão que o abre: o botão direito, o do meio, ou
 Alt / Win + botão esquerdo. Depois pressione e segure esse botão sobre uma janela da grade. Um anel
 aparece onde o cursor está (depois de um instante, para não piscar num clique rápido). Mova o mouse para fora do anel, para a esquerda, direita, cima ou
@@ -322,11 +340,11 @@ O Adaptive Windows funciona junto com estes dois mods:
 
 - **MacOS Minimize Animation** (efeito genie ao minimizar, restaurar e abrir).
 
-![Adaptive Windows com o MacOS Minimize Animation](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macosminimize.gif)
+![Adaptive Windows com o MacOS Minimize Animation](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macos-minimize-animation.gif)
 
 - **Windows Animations**.
 
-![Adaptive Windows com o Windows Animations](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windowsanimation.gif)
+![Adaptive Windows com o Windows Animations](https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windows-animations.gif)
 
 Esses mods escondem a janela e tocam a animação sozinhos. Com *Sincronizar com animações de
 abrir/fechar* ligado, o Adaptive Windows percebe isso, posiciona a janela no espaço final enquanto
