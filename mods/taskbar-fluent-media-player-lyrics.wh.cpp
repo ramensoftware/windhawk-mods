@@ -5504,7 +5504,11 @@ static std::string Decode(const std::wstring& hex) {
     uint8_t schedule[3][16][6]{};
     const uint8_t key[] = "!@#)(*$%123ZXC!@!@#)(NHL";
     keySchedule(key,16,schedule[0],false); keySchedule(key,8,schedule[1],true); keySchedule(key,0,schedule[2],false);
-    for(size_t i=0;i<bytes.size();i+=8) { crypt(bytes.data()+i,bytes.data()+i,schedule[0]); crypt(bytes.data()+i,bytes.data()+i,schedule[1]); crypt(bytes.data()+i,bytes.data()+i,schedule[2]); }
+    for (size_t i = 0; i < bytes.size(); i += 8) {
+        crypt(bytes.data() + i, bytes.data() + i, schedule[0]);
+        crypt(bytes.data() + i, bytes.data() + i, schedule[1]);
+        crypt(bytes.data() + i, bytes.data() + i, schedule[2]);
+    }
     if(bytes.size()<6 || (bytes[0]&15)!=8 || ((bytes[0]<<8)+bytes[1])%31 || (bytes[1]&32)) return {};
     std::string text(2*1024*1024,'\0');
     unsigned long outputSize=(unsigned long)text.size(), inputSize=(unsigned long)bytes.size()-2;
